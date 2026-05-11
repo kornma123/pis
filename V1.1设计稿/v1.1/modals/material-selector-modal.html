@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>选择物料 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="material-selector-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">选择物料</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="material-selector-header">
+                <div class="search-box material-selector-search">
+                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" placeholder="搜索物料名称/编号...">
+                </div>
+                <div class="material-selector-filters">
+                    <select class="filter-select">
+                        <option>全部类型</option>
+                        <option>试剂</option>
+                        <option>耗材</option>
+                        <option>设备</option>
+                    </select>
+                    <select class="filter-select">
+                        <option>全部供应商</option>
+                        <option>供应商A</option>
+                        <option>供应商B</option>
+                    </select>
+                    <select class="filter-select">
+                        <option>全部状态</option>
+                        <option>在用</option>
+                        <option>停用</option>
+                    </select>
+                </div>
+            </div>
+            <div class="material-selector-table">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th width="40">
+                                <input type="checkbox" class="material-checkbox" id="select-all-materials">
+                            </th>
+                            <th>物料编号</th>
+                            <th>物料名称</th>
+                            <th>规格型号</th>
+                            <th>类型</th>
+                            <th>参考单价</th>
+                            <th>库存</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><input type="checkbox" class="material-checkbox"></td>
+                            <td class="mono-text">MAT-001</td>
+                            <td><strong>DNA提取试剂盒</strong></td>
+                            <td>v2.0，96次反应</td>
+                            <td>试剂</td>
+                            <td>¥1,280</td>
+                            <td>50盒</td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" class="material-checkbox"></td>
+                            <td class="mono-text">MAT-002</td>
+                            <td><strong>PCR Master Mix</strong></td>
+                            <td>2X，500次反应</td>
+                            <td>试剂</td>
+                            <td>¥850</td>
+                            <td>30盒</td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" class="material-checkbox"></td>
+                            <td class="mono-text">MAT-003</td>
+                            <td><strong>磁珠纯化试剂</strong></td>
+                            <td>5ml/瓶</td>
+                            <td>试剂</td>
+                            <td>¥180</td>
+                            <td>100瓶</td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" class="material-checkbox"></td>
+                            <td class="mono-text">MAT-004</td>
+                            <td><strong>离心管 1.5ml</strong></td>
+                            <td>无DNA酶，500个/包</td>
+                            <td>耗材</td>
+                            <td>¥45</td>
+                            <td>200包</td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" class="material-checkbox"></td>
+                            <td class="mono-text">MAT-005</td>
+                            <td><strong>移液器吸头 200μl</strong></td>
+                            <td>盒装，96个/盒</td>
+                            <td>耗材</td>
+                            <td>¥25</td>
+                            <td>150盒</td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" class="material-checkbox"></td>
+                            <td class="mono-text">MAT-006</td>
+                            <td><strong>样本采集卡</strong></td>
+                            <td>100张/包</td>
+                            <td>耗材</td>
+                            <td>¥120</td>
+                            <td>80包</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center;">
+                <div class="selected-count">
+                    已选择: <span id="selected-material-count">0</span> 项
+                </div>
+                <div class="pagination-info">
+                    共 156 条记录，第 1/16 页
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">取消</button>
+            <button class="btn btn-primary">确定添加</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

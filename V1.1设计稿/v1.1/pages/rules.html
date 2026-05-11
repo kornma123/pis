@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>规则配置 - COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="scrap.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>报废管理</span>
+            </a>
+            <a href="stocktaking.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>库存盘点</span>
+            </a>
+            <a href="projects.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测服�?/span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-analysis.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+            <a href="categories.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>物料分类</span>
+            </a>
+            <a href="consumable-config.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                </svg>
+                <span>耗材配置</span>
+            </a>
+            <a href="rules.html" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>规则配置</span>
+            </a>
+            <a href="alerts.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span>预警中心</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>供应商管�?/span>
+            </a>
+            <a href="locations.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span>库位管理</span>
+            </a>
+            <a href="users.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>用户管理</span>
+            </a>
+            <a href="roles.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>角色管理</span>
+            </a>
+            <a href="logs.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <span>操作日志</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">规则配置</h1>
+                <p class="page-subtitle">配置库存预警规则，自动监控物料状�?/p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="showModal('create-rule-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    新建规则
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card stat-card-primary">
+                <div class="stat-value">15</div>
+                <div class="stat-label">规则总数</div>
+            </div>
+            <div class="stat-card stat-card-success">
+                <div class="stat-value">12</div>
+                <div class="stat-label">已启�?/div>
+            </div>
+            <div class="stat-card stat-card-muted">
+                <div class="stat-value">3</div>
+                <div class="stat-label">已停�?/div>
+            </div>
+            <div class="stat-card stat-card-warning">
+                <div class="stat-value">35</div>
+                <div class="stat-label">本月触发</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">预警规则列表</span>
+                <div class="filter-bar">
+                    <div class="search-box">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" placeholder="搜索规则名称...">
+                    </div>
+                    <select class="filter-select">
+                        <option>全部状�?/option>
+                        <option>已启�?/option>
+                        <option>已停�?/option>
+                    </select>
+                    <select class="filter-select">
+                        <option>全部类型</option>
+                        <option>库存预警</option>
+                        <option>过期预警</option>
+                        <option>消耗异�?/option>
+                    </select>
+                    <button class="btn btn-secondary btn-sm">查询</button>
+                    <button class="btn btn-ghost btn-sm">重置</button>
+                </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>规则编号</th>
+                            <th>规则名称</th>
+                            <th>预警类型</th>
+                            <th>触发条件</th>
+                            <th>监控范围</th>
+                            <th>状�?/th>
+                            <th>更新时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="mono-text">RULE-001</td>
+                            <td>
+                                <div style="font-weight: 500;">DNA提取试剂库存预警</div>
+                                <div style="font-size: 12px; color: var(--text-muted);">监控所有DNA提取试剂库存</div>
+                            </td>
+                            <td><span class="status-badge" style="background: #fef2f2; color: #dc2626;">库存预警</span></td>
+                            <td>库存 �?10�?/td>
+                            <td>全部物料</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>2024-01-15 14:30</td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('edit-rule-modal')">编辑</button>
+                                <button class="btn btn-sm btn-ghost">停用</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">RULE-002</td>
+                            <td>
+                                <div style="font-weight: 500;">PCR试剂过期预警</div>
+                                <div style="font-size: 12px; color: var(--text-muted);">提前30天预警即将过�?/div>
+                            </td>
+                            <td><span class="status-badge" style="background: #fffbeb; color: #f59e0b;">过期预警</span></td>
+                            <td>有效�?�?30�?/td>
+                            <td>全部物料</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>2024-01-14 09:15</td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('edit-rule-modal')">编辑</button>
+                                <button class="btn btn-sm btn-ghost">停用</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">RULE-003</td>
+                            <td>
+                                <div style="font-weight: 500;">分化液消耗异常偏�?/div>
+                                <div style="font-size: 12px; color: var(--text-muted);">监控消耗量异常偏高情况</div>
+                            </td>
+                            <td><span class="status-badge" style="background: #f0fdf4; color: #16a34a;">消耗异�?/span></td>
+                            <td>消耗量 > 均�?2σ</td>
+                            <td>分子病理检�?/td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>2024-01-13 16:45</td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('edit-rule-modal')">编辑</button>
+                                <button class="btn btn-sm btn-ghost">停用</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">RULE-004</td>
+                            <td>
+                                <div style="font-weight: 500;">载玻片消耗异常偏�?/div>
+                                <div style="font-size: 12px; color: var(--text-muted);">监控消耗量异常偏低情况</div>
+                            </td>
+                            <td><span class="status-badge" style="background: #f0fdf4; color: #16a34a;">消耗异�?/span></td>
+                            <td>消耗量 < 均�?2σ</td>
+                            <td>HE制片</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>2024-01-12 11:20</td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('edit-rule-modal')">编辑</button>
+                                <button class="btn btn-sm btn-ghost">停用</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">RULE-005</td>
+                            <td>
+                                <div style="font-weight: 500;">苏木精染液消耗波�?/div>
+                                <div style="font-size: 12px; color: var(--text-muted);">监控消耗量波动异常</div>
+                            </td>
+                            <td><span class="status-badge" style="background: #f0fdf4; color: #16a34a;">消耗异�?/span></td>
+                            <td>波动系数 > 0.25</td>
+                            <td>全部检测项�?/td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>2024-01-11 13:30</td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('edit-rule-modal')">编辑</button>
+                                <button class="btn btn-sm btn-ghost">停用</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">RULE-006</td>
+                            <td>
+                                <div style="font-weight: 500;">磁珠试剂库存预警</div>
+                                <div style="font-size: 12px; color: var(--text-muted);">监控磁珠纯化试剂</div>
+                            </td>
+                            <td><span class="status-badge" style="background: #fef2f2; color: #dc2626;">库存预警</span></td>
+                            <td>库存 �?5�?/td>
+                            <td>全部物料</td>
+                            <td><span class="status-badge status-secondary">已停�?/span></td>
+                            <td>2024-01-10 11:20</td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('edit-rule-modal')">编辑</button>
+                                <button class="btn btn-sm btn-ghost">启用</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination-info">�?15 条记录，�?1/3 �?/span>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm btn-secondary" disabled>上一�?/button>
+                    <button class="btn btn-sm btn-primary">1</button>
+                    <button class="btn btn-sm btn-ghost">2</button>
+                    <button class="btn btn-sm btn-ghost">3</button>
+                    <button class="btn btn-sm btn-secondary">下一�?/button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal" id="create-rule-modal">
+        <div class="modal-overlay" onclick="hideModal('create-rule-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">新建预警规则</h3>
+                <button class="modal-close" onclick="hideModal('create-rule-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-section">
+                    <div class="form-row">
+                        <div class="form-group form-group-lg">
+                            <label class="form-label">规则名称 <span class="required">*</span></label>
+                            <input type="text" class="form-input" placeholder="输入规则名称">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">预警类型 <span class="required">*</span></label>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px;">
+                            <div class="rule-type-card" data-type="stock" onclick="selectRuleType(this)">
+                                <div class="type-icon stock">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                                    </svg>
+                                </div>
+                                <div class="type-title">库存预警</div>
+                                <div class="type-desc">监控库存数量</div>
+                            </div>
+                            <div class="rule-type-card" data-type="expiry" onclick="selectRuleType(this)">
+                                <div class="type-icon expiry">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <polyline points="12 6 12 12 16 14"/>
+                                    </svg>
+                                </div>
+                                <div class="type-title">过期预警</div>
+                                <div class="type-desc">监控有效�?/div>
+                            </div>
+                            <div class="rule-type-card" data-type="consumption" onclick="selectRuleType(this)">
+                                <div class="type-icon consumption">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                                        <polyline points="17 6 23 6 23 12"/>
+                                    </svg>
+                                </div>
+                                <div class="type-title">消耗异�?/div>
+                                <div class="type-desc">监控消耗量异常</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="stock-condition" class="condition-group" style="display: none;">
+                        <div class="condition-row">
+                            <span class="condition-label">触发条件</span>
+                            <select class="form-select" style="width: 120px;">
+                                <option>库存 �?/option>
+                                <option>库存 �?/option>
+                            </select>
+                            <input type="number" class="form-input" style="width: 100px;" placeholder="阈�?>
+                            <select class="form-select" style="width: 80px;">
+                                <option>�?/option>
+                                <option>�?/option>
+                                <option>�?/option>
+                                <option>�?/option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="expiry-condition" class="condition-group" style="display: none;">
+                        <div class="condition-row">
+                            <span class="condition-label">触发条件</span>
+                            <span style="font-size: 13px;">有效期剩�?/span>
+                            <select class="form-select" style="width: 80px;">
+                                <option>�?/option>
+                            </select>
+                            <input type="number" class="form-input" style="width: 100px;" placeholder="天数" value="30">
+                            <span style="font-size: 13px; color: var(--text-muted);">�?/span>
+                        </div>
+                    </div>
+
+                    <div id="consumption-condition" class="condition-group" style="display: none;">
+                        <div class="condition-row">
+                            <span class="condition-label">异常类型</span>
+                            <select class="form-select" style="width: 150px;" id="consumption-type" onchange="toggleConsumptionOptions()">
+                                <option value="high">消耗量偏高</option>
+                                <option value="low">消耗量偏低</option>
+                                <option value="fluctuation">消耗量波动</option>
+                            </select>
+                        </div>
+                        <div id="high-low-options">
+                            <div class="condition-row">
+                                <span class="condition-label">计算方式</span>
+                                <select class="form-select" style="width: 180px;" id="calc-method" onchange="toggleCalcMethod()">
+                                    <option value="auto">智能计算（推荐）</option>
+                                    <option value="fixed">固定百分�?/option>
+                                </select>
+                                <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">基于历史数据自动分析</span>
+                            </div>
+                            <div id="auto-calc-options">
+                                <div class="condition-row">
+                                    <span class="condition-label">敏感�?/span>
+                                    <select class="form-select" style="width: 120px;">
+                                        <option value="low">低敏�?/option>
+                                        <option value="medium" selected>中等敏感</option>
+                                        <option value="high">高敏�?/option>
+                                    </select>
+                                    <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">
+                                        �?仅预警极端异�?| �?平衡模式 | �?预警轻微异常
+                                    </span>
+                                </div>
+                            </div>
+                            <div id="fixed-calc-options" style="display: none;">
+                                <div class="condition-row">
+                                    <span class="condition-label">阈值设�?/span>
+                                    <span style="font-size: 13px;">消耗量</span>
+                                    <select class="form-select" style="width: 80px;">
+                                        <option>></option>
+                                        <option>�?/option>
+                                    </select>
+                                    <span style="font-size: 13px;">历史平均�?/span>
+                                    <input type="number" class="form-input" style="width: 60px;" value="50">
+                                    <span style="font-size: 13px;">%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="fluctuation-options" style="display: none;">
+                            <div class="condition-row">
+                                <span class="condition-label">敏感�?/span>
+                                <select class="form-select" style="width: 120px;">
+                                    <option value="low">低敏�?/option>
+                                    <option value="medium" selected>中等敏感</option>
+                                    <option value="high">高敏�?/option>
+                                </select>
+                                <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">
+                                    检测消耗量是否出现异常波动
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row" style="margin-top: 16px;">
+                        <div class="form-group">
+                            <label class="form-label">监控物料</label>
+                            <select class="form-select">
+                                <option>全部物料</option>
+                                <option>分化�?/option>
+                                <option>载玻�?/option>
+                                <option>苏木精染�?/option>
+                                <option>NGS建库试剂�?/option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">关联检测项�?/label>
+                            <select class="form-select">
+                                <option>全部检测项�?/option>
+                                <option>分子病理检�?/option>
+                                <option>HE制片</option>
+                                <option>免疫组化-IHC</option>
+                                <option>特殊染色</option>
+                                <option>细胞学检�?/option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group form-group-lg">
+                            <label class="form-label">通知方式</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label"><input type="checkbox" checked> 站内�?/label>
+                                <label class="checkbox-label"><input type="checkbox" checked> 邮件</label>
+                                <label class="checkbox-label"><input type="checkbox"> 短信</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('create-rule-modal')">取消</button>
+                <button class="btn btn-primary">创建规则</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="edit-rule-modal">
+        <div class="modal-overlay" onclick="hideModal('edit-rule-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">编辑预警规则</h3>
+                <button class="modal-close" onclick="hideModal('edit-rule-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-section">
+                    <div class="form-row">
+                        <div class="form-group form-group-lg">
+                            <label class="form-label">规则名称 <span class="required">*</span></label>
+                            <input type="text" class="form-input" value="分化液消耗异常偏�?>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">规则编号</label>
+                            <input type="text" class="form-input mono-text" value="RULE-003" disabled>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">状�?/label>
+                            <select class="form-select">
+                                <option selected>已启�?/option>
+                                <option>已停�?/option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">预警类型</label>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px;">
+                            <div class="rule-type-card" data-type="stock">
+                                <div class="type-icon stock">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                                    </svg>
+                                </div>
+                                <div class="type-title">库存预警</div>
+                                <div class="type-desc">监控库存数量</div>
+                            </div>
+                            <div class="rule-type-card" data-type="expiry">
+                                <div class="type-icon expiry">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <polyline points="12 6 12 12 16 14"/>
+                                    </svg>
+                                </div>
+                                <div class="type-title">过期预警</div>
+                                <div class="type-desc">监控有效�?/div>
+                            </div>
+                            <div class="rule-type-card selected" data-type="consumption">
+                                <div class="type-icon consumption">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                                        <polyline points="17 6 23 6 23 12"/>
+                                    </svg>
+                                </div>
+                                <div class="type-title">消耗异�?/div>
+                                <div class="type-desc">监控消耗量异常</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="condition-group">
+                        <div class="condition-row">
+                            <span class="condition-label">异常类型</span>
+                            <select class="form-select" style="width: 150px;">
+                                <option selected>消耗量偏高</option>
+                                <option>消耗量偏低</option>
+                                <option>消耗量波动</option>
+                            </select>
+                        </div>
+                        <div class="condition-row">
+                            <span class="condition-label">计算方式</span>
+                            <select class="form-select" style="width: 150px;">
+                                <option selected>历史均�?+ 标准�?/option>
+                                <option>固定阈�?/option>
+                            </select>
+                        </div>
+                        <div class="condition-row">
+                            <span class="condition-label">阈值设�?/span>
+                            <span style="font-size: 13px;">消耗量</span>
+                            <select class="form-select" style="width: 80px;">
+                                <option selected>></option>
+                            </select>
+                            <span style="font-size: 13px;">均�?+</span>
+                            <input type="number" class="form-input" style="width: 60px;" value="2">
+                            <span style="font-size: 13px; color: var(--text-muted);">σ (标准�?</span>
+                        </div>
+                    </div>
+
+                    <div class="form-row" style="margin-top: 16px;">
+                        <div class="form-group">
+                            <label class="form-label">监控物料</label>
+                            <select class="form-select">
+                                <option selected>分化�?/option>
+                                <option>全部物料</option>
+                                <option>载玻�?/option>
+                                <option>苏木精染�?/option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">关联检测项�?/label>
+                            <select class="form-select">
+                                <option selected>分子病理检�?/option>
+                                <option>全部检测项�?/option>
+                                <option>HE制片</option>
+                                <option>免疫组化-IHC</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group form-group-lg">
+                            <label class="form-label">通知方式</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label"><input type="checkbox" checked> 站内�?/label>
+                                <label class="checkbox-label"><input type="checkbox" checked> 邮件</label>
+                                <label class="checkbox-label"><input type="checkbox"> 短信</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger btn-sm" style="margin-right: auto;">删除规则</button>
+                <button class="btn btn-secondary" onclick="hideModal('edit-rule-modal')">取消</button>
+                <button class="btn btn-primary">保存修改</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/scripts.js"></script>
+    <script>
+        function selectRuleType(card) {
+            document.querySelectorAll('.rule-type-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            
+            var type = card.dataset.type;
+            document.getElementById('stock-condition').style.display = type === 'stock' ? 'block' : 'none';
+            document.getElementById('expiry-condition').style.display = type === 'expiry' ? 'block' : 'none';
+            document.getElementById('consumption-condition').style.display = type === 'consumption' ? 'block' : 'none';
+        }
+
+        function toggleConsumptionOptions() {
+            var type = document.getElementById('consumption-type').value;
+            document.getElementById('high-low-options').style.display = type === 'fluctuation' ? 'none' : 'block';
+            document.getElementById('fluctuation-options').style.display = type === 'fluctuation' ? 'block' : 'none';
+        }
+
+        function toggleCalcMethod() {
+            var method = document.getElementById('calc-method').value;
+            document.getElementById('auto-calc-options').style.display = method === 'auto' ? 'block' : 'none';
+            document.getElementById('fixed-calc-options').style.display = method === 'fixed' ? 'block' : 'none';
+        }
+    </script>
+</body>
+</html>

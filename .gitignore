@@ -1,0 +1,34 @@
+# Dependencies
+前端代码/node_modules/
+后端代码/server/node_modules/
+
+# Build output
+前端代码/dist/
+后端代码/server/dist/
+
+# Database files
+后端代码/server/data/*.db
+后端代码/server/data/*.db-journal
+
+# Logs
+*.log
+后端代码/server/*.log
+后端代码/server/logs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/settings.json
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak

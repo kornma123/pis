@@ -1,0 +1,290 @@
+import { Router } from 'express'
+import { v4 as uuidv4 } from 'uuid'
+import { getDatabase } from '../database/DatabaseManager.js'
+import { success, successList, error } from '../utils/response.js'
+
+const router = Router()
+
+function generateInboundNo(): string {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
+  return `IB-${date}-${random}`
+}
+
+router.get('/', (req, res) => {
+  try {
+    const { page = 1, pageSize = 20, status, startDate, endDate } = req.query
+    const db = getDatabase()
+    let where = 'r.is_deleted = 0'
+    const params: any[] = []
+    if (status) { where += ' AND r.status = ?'; params.push(status) }
+    if (startDate) { where += ' AND r.created_at >= ?'; params.push(startDate) }
+    if (endDate) { where += ' AND r.created_at <= ?'; params.push(`${endDate}T23:59:59`) }
+
+    const count = (db.prepare(`SELECT COUNT(*) as total FROM inbound_records r WHERE ${where}`).get(...params) as any)?.total || 0
+    const offset = (Number(page) - 1) * Number(pageSize)
+
+    const sql = `
+      SELECT r.*, m.name as material_name, s.name as supplier_name, l.name as location_name
+      FROM inbound_records r
+      LEFT JOIN materials m ON r.material_id = m.id
+      LEFT JOIN suppliers s ON r.supplier_id = s.id
+      LEFT JOIN locations l ON r.location_id = l.id
+      WHERE ${where}
+      ORDER BY r.created_at DESC
+      LIMIT ? OFFSET ?
+    `
+    const list = db.prepare(sql).all(...params, Number(pageSize), offset) as any[]
+
+    successList(res, list.map((r: any) => ({
+      id: r.id, inboundNo: r.inbound_no, type: r.type, materialId: r.material_id,
+      materialName: r.material_name, batchNo: r.batch_no, quantity: r.quantity,
+      unit: r.unit, price: r.price, amount: r.amount, supplierId: r.supplier_id,
+      supplierName: r.supplier_name, locationId: r.location_id, locationName: r.location_name,
+      productionDate: r.production_date, expiryDate: r.expiry_date, operator: r.operator,
+      status: r.status, remark: r.remark, createdAt: r.created_at,
+      purchaseOrderId: r.purchase_order_id,
+      purchaseOrderNo: r.purchase_order_no,
+    })), Number(page), Number(pageSize), count)
+  } catch (err: any) { error(res, err.message) }
+})
+
+// 检查入库记录是否可删除
+router.get('/:id/check-deletable', (req, res) => {
+  try {
+    const db = getDatabase()
+    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ?').get(req.params.id) as any
+    if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
+
+    const reasons: string[] = []
+    let canDelete = true
+
+    if (record.status === 'completed') {
+      // 1. 检查是否有出库记录
+      const outboundExists = db.prepare(
+        'SELECT COALESCE(SUM(quantity),0) as total FROM outbound_items WHERE material_id = ? AND batch_no = ?'
+      ).get(record.material_id, record.batch_no) as any
+      if (outboundExists && outboundExists.total > 0) {
+        canDelete = false
+        reasons.push(`该批次已有出库记录 ${outboundExists.total} ${record.unit}`)
+      }
+
+      // 2. 检查是否有使用中的消耗跟踪
+      const inUseExists = db.prepare(
+        "SELECT 1 FROM batch_usage_tracking WHERE material_id = ? AND batch = ? AND status = 'in-use' LIMIT 1"
+      ).get(record.material_id, record.batch_no)
+      if (inUseExists) {
+        canDelete = false
+        reasons.push('该批次库存正在使用中')
+      }
+
+      // 3. 检查删除后库存是否为负
+      const totalInbound = (db.prepare(
+        "SELECT COALESCE(SUM(quantity),0) as total FROM inbound_records WHERE material_id = ? AND batch_no = ? AND status = 'completed' AND is_deleted = 0 AND id != ?"
+      ).get(record.material_id, record.batch_no, record.id) as any)?.total || 0
+      const totalOutbound = outboundExists?.total || 0
+      if (totalInbound < totalOutbound) {
+        canDelete = false
+        reasons.push(`删除后该批次库存将变为负数（剩余 ${totalInbound}，已出库 ${totalOutbound}）`)
+      }
+    }
+
+    success(res, {
+      canDelete,
+      reasons,
+      record: {
+        id: record.id,
+        inboundNo: record.inbound_no,
+        materialId: record.material_id,
+        quantity: record.quantity,
+        batchNo: record.batch_no,
+        unit: record.unit,
+      }
+    })
+  } catch (err: any) { error(res, err.message) }
+})
+
+router.post('/', (req, res) => {
+  try {
+    const { type, materialId, batchNo, quantity, price, supplierId, locationId, purchaseOrderId, productionDate, expiryDate, remark } = req.body
+    if (!type || !materialId || !quantity || !locationId) {
+      error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
+    }
+
+    const db = getDatabase()
+    const inboundNo = generateInboundNo()
+    const id = uuidv4()
+    const operator = req.body.operator || 'system'
+
+    const material = db.prepare('SELECT unit FROM materials WHERE id = ?').get(materialId) as any
+    if (!material) { error(res, 'Material not found', 'NOT_FOUND', 404); return }
+
+    const unit = material.unit
+    const amount = (price || 0) * quantity
+
+    // 查询采购订单信息
+    let purchaseOrderNo: string | null = null
+    if (purchaseOrderId) {
+      const po = db.prepare('SELECT order_no FROM purchase_orders WHERE id = ?').get(purchaseOrderId) as any
+      if (po) purchaseOrderNo = po.order_no
+    }
+
+    db.prepare(`
+      INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_no, quantity, unit, price, amount, supplier_id, location_id, production_date, expiry_date, operator, status, remark, purchase_order_id, purchase_order_no)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)
+    `).run(id, inboundNo, type, materialId, batchNo || null, quantity, unit, price || 0, amount, supplierId || null, locationId, productionDate || null, expiryDate || null, operator, remark || null, purchaseOrderId || null, purchaseOrderNo)
+
+    if (batchNo) {
+      const existingBatch = db.prepare('SELECT * FROM batches WHERE material_id = ? AND batch_no = ? AND status = 1').get(materialId, batchNo) as any
+      if (existingBatch) {
+        db.prepare('UPDATE batches SET quantity = quantity + ?, remaining = remaining + ? WHERE id = ?')
+          .run(quantity, quantity, existingBatch.id)
+      } else {
+        const batchId = uuidv4()
+        db.prepare(`
+          INSERT INTO batches (id, material_id, batch_no, quantity, remaining, production_date, expiry_date, inbound_id, inbound_price, supplier_id, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `).run(batchId, materialId, batchNo, quantity, quantity, productionDate || null, expiryDate, id, price || 0, supplierId || null)
+      }
+    }
+
+    // 更新采购订单收货数量
+    if (purchaseOrderId) {
+      const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(purchaseOrderId) as any
+      if (order) {
+        const newReceived = Number(order.received_qty) + quantity
+        const orderedQty = Number(order.ordered_qty)
+        const poStatus = newReceived >= orderedQty ? 'completed' : 'partial'
+        db.prepare('UPDATE purchase_orders SET received_qty = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(newReceived, poStatus, purchaseOrderId)
+      }
+    }
+
+    const existingInv = db.prepare('SELECT * FROM inventory WHERE material_id = ?').get(materialId) as any
+    if (existingInv) {
+      db.prepare("UPDATE inventory SET stock = stock + ?, location_id = ?, last_inbound_id = ?, last_inbound_date = date('now','localtime'), update_time = CURRENT_TIMESTAMP WHERE material_id = ?")
+        .run(quantity, locationId, id, materialId)
+    } else {
+      db.prepare(`
+        INSERT INTO inventory (id, material_id, stock, locked_stock, location_id, last_inbound_id, last_inbound_date, update_time)
+        VALUES (?, ?, ?, 0, ?, ?, date('now','localtime'), CURRENT_TIMESTAMP)
+      `).run(uuidv4(), materialId, quantity, locationId, id)
+    }
+
+    const logId = uuidv4()
+    db.prepare(`
+      INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
+      VALUES (?, 'inbound', ?, ?, COALESCE((SELECT stock FROM inventory WHERE material_id = ?), 0) - ?, COALESCE((SELECT stock FROM inventory WHERE material_id = ?), 0), ?, 'inbound', ?)
+    `).run(logId, materialId, quantity, materialId, quantity, materialId, id, operator)
+
+    success(res, { id, inboundNo, type, materialId, quantity, status: 'completed', purchaseOrderId, purchaseOrderNo }, 'Inbound created')
+  } catch (err: any) { error(res, err.message) }
+})
+
+router.put('/:id', (req, res) => {
+  try {
+    const { id } = req.params
+    const { batchNo, quantity, price, supplierId, locationId, productionDate, expiryDate, remark } = req.body
+    const db = getDatabase()
+    const fields: string[] = []; const params: any[] = []
+    if (batchNo !== undefined) { fields.push('batch_no = ?'); params.push(batchNo || null) }
+    if (quantity !== undefined) { fields.push('quantity = ?'); params.push(quantity) }
+    if (price !== undefined) { fields.push('price = ?'); params.push(price || 0) }
+    if (supplierId !== undefined) { fields.push('supplier_id = ?'); params.push(supplierId || null) }
+    if (locationId !== undefined) { fields.push('location_id = ?'); params.push(locationId) }
+    if (productionDate !== undefined) { fields.push('production_date = ?'); params.push(productionDate || null) }
+    if (expiryDate !== undefined) { fields.push('expiry_date = ?'); params.push(expiryDate || null) }
+    if (remark !== undefined) { fields.push('remark = ?'); params.push(remark || '') }
+    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE inbound_records SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params) }
+    success(res, { id }, 'Updated')
+  } catch (err: any) { error(res, err.message) }
+})
+
+router.delete('/:id', (req, res) => {
+  try {
+    const { id } = req.params
+    const db = getDatabase()
+    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ?').get(id) as any
+    if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
+
+    if (record.status === 'completed') {
+      // 1. 检查是否有出库记录
+      const outboundExists = db.prepare(
+        'SELECT COALESCE(SUM(quantity),0) as total FROM outbound_items WHERE material_id = ? AND batch_no = ?'
+      ).get(record.material_id, record.batch_no) as any
+      if (outboundExists && outboundExists.total > 0) {
+        error(res, `该入库记录对应的批次已有出库记录 ${outboundExists.total} ${record.unit}，不可删除。请先作废关联的出库单`, 'BUSINESS_RULE', 400)
+        return
+      }
+
+      // 2. 检查是否有使用中的消耗跟踪
+      const inUseExists = db.prepare(
+        "SELECT 1 FROM batch_usage_tracking WHERE material_id = ? AND batch = ? AND status = 'in-use' LIMIT 1"
+      ).get(record.material_id, record.batch_no)
+      if (inUseExists) {
+        error(res, '该批次库存正在使用中，请先确认耗尽后再删除', 'BUSINESS_RULE', 400)
+        return
+      }
+
+      // 3. 检查删除后库存是否为负
+      const totalInbound = (db.prepare(
+        "SELECT COALESCE(SUM(quantity),0) as total FROM inbound_records WHERE material_id = ? AND batch_no = ? AND status = 'completed' AND is_deleted = 0 AND id != ?"
+      ).get(record.material_id, record.batch_no, id) as any)?.total || 0
+      const totalOutbound = outboundExists?.total || 0
+      if (totalInbound < totalOutbound) {
+        error(res, `删除后该批次库存将变为负数（剩余 ${totalInbound}，已出库 ${totalOutbound}），不可删除`, 'BUSINESS_RULE', 400)
+        return
+      }
+
+      // 4. 回退采购订单收货数量
+      if (record.purchase_order_id) {
+        const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(record.purchase_order_id) as any
+        if (order) {
+          const newReceived = Math.max(0, Number(order.received_qty) - record.quantity)
+          const poStatus = newReceived === 0 ? 'pending' : 'partial'
+          db.prepare('UPDATE purchase_orders SET received_qty = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+            .run(newReceived, poStatus, record.purchase_order_id)
+        }
+      }
+
+      // 5. 扣减批次数量
+      if (record.batch_no) {
+        db.prepare('UPDATE batches SET quantity = quantity - ?, remaining = remaining - ? WHERE material_id = ? AND batch_no = ?')
+          .run(record.quantity, record.quantity, record.material_id, record.batch_no)
+        const batch = db.prepare('SELECT remaining FROM batches WHERE material_id = ? AND batch_no = ?')
+          .get(record.material_id, record.batch_no) as any
+        if (batch && batch.remaining <= 0) {
+          db.prepare('UPDATE batches SET status = 0 WHERE material_id = ? AND batch_no = ?')
+            .run(record.material_id, record.batch_no)
+        }
+      }
+    }
+
+    // 6. 软删除入库记录
+    db.prepare('UPDATE inbound_records SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+
+    // 7. 记录操作日志
+    const totalInboundAfter = (db.prepare(
+      "SELECT COALESCE(SUM(quantity),0) as total FROM inbound_records WHERE material_id = ? AND batch_no = ? AND status = 'completed' AND is_deleted = 0"
+    ).get(record.material_id, record.batch_no) as any)?.total || 0
+    const logId = uuidv4()
+    db.prepare(`
+      INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
+      VALUES (?, 'delete', ?, ?, ?, ?, ?, 'inbound_delete', ?, '删除入库记录')
+    `).run(logId, record.material_id, record.quantity, totalInboundAfter + record.quantity, totalInboundAfter, id, req.body.operator || 'system')
+
+    success(res, null, '删除成功，库存已同步扣减')
+  } catch (err: any) { error(res, err.message) }
+})
+
+router.post('/:id/cancel', (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+    const db = getDatabase()
+    db.prepare('UPDATE inbound_records SET status = "cancelled", cancel_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(reason || '', id)
+    success(res, null, 'Cancelled')
+  } catch (err: any) { error(res, err.message) }
+})
+
+export default router

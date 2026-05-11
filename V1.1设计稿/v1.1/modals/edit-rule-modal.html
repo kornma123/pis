@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑预警规则 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="edit-rule-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">编辑预警规则</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">规则名称 <span class="required">*</span></label>
+                        <input type="text" class="form-input" value="低库存预警-通用试剂">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">规则类型</label>
+                        <input type="text" class="form-input" value="库存预警" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">预警级别 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="info">提示</option>
+                            <option value="warning" selected>警告</option>
+                            <option value="urgent">紧急</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">规则状态</label>
+                        <select class="form-select">
+                            <option value="active" selected>已启用</option>
+                            <option value="disabled">已停用</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">触发次数</label>
+                        <input type="text" class="form-input" value="156 次" disabled>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">触发条件 <span class="required">*</span></label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <select class="form-select" style="width: 150px;">
+                                <option value="<">小于</option>
+                                <option value="<=" selected>小于等于</option>
+                                <option value="=">等于</option>
+                                <option value=">=">大于等于</option>
+                                <option value=">">大于</option>
+                            </select>
+                            <input type="number" class="form-input" value="1.2" style="width: 120px;">
+                            <select class="form-select" style="width: 150px;">
+                                <option value="fixed">固定值</option>
+                                <option value="safe" selected>安全库存倍数</option>
+                                <option value="max">最大库存比例</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">通知方式</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" checked>
+                                <span>系统消息</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" checked>
+                                <span>邮件通知</span>
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox">
+                                <span>短信通知</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-danger btn-sm" style="margin-right: auto;">删除规则</button>
+            <button class="btn btn-secondary">取消</button>
+            <button class="btn btn-primary">保存修改</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

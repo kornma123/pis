@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>出库详情 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="outbound-detail-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">出库详情</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="detail-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="detail-title">OUT-2024-0156</div>
+                    <span class="status-badge status-success">已完成</span>
+                </div>
+                <div class="detail-subtitle">出库时间: 2024-01-15 10:30:25</div>
+            </div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">出库类型</div>
+                    <div class="detail-value">项目领用</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">关联项目</div>
+                    <div class="detail-value">新生儿遗传代谢病筛查</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">领用人</div>
+                    <div class="detail-value">张三</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">操作人</div>
+                    <div class="detail-value">李四</div>
+                </div>
+            </div>
+            <table class="data-table" style="margin-top: 24px;">
+                <thead>
+                    <tr>
+                        <th>物料名称</th>
+                        <th>规格型号</th>
+                        <th>批次号</th>
+                        <th>出库数量</th>
+                        <th>单位</th>
+                        <th>单价</th>
+                        <th>金额</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>PCR试剂盒</td>
+                        <td>96孔/盒</td>
+                        <td class="mono-text">LOT-2024-0156</td>
+                        <td>2</td>
+                        <td>盒</td>
+                        <td>¥850.00</td>
+                        <td>¥1,700.00</td>
+                    </tr>
+                    <tr>
+                        <td>离心管</td>
+                        <td>1.5ml</td>
+                        <td class="mono-text">LOT-2024-0089</td>
+                        <td>50</td>
+                        <td>个</td>
+                        <td>¥0.50</td>
+                        <td>¥25.00</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr style="background: var(--bg-page); font-weight: 600;">
+                        <td colspan="6" style="text-align: right;">合计:</td>
+                        <td>¥1,725.00</td>
+                    </tr>
+                </tfoot>
+            </table>
+            <div style="margin-top: 16px; padding: 12px; background: var(--bg-page); border-radius: 6px;">
+                <div class="detail-label" style="margin-bottom: 4px;">备注</div>
+                <div style="font-size: 14px; color: var(--text-primary);">用于新生儿遗传代谢病筛查项目第一批次检测</div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">关闭</button>
+            <button class="btn btn-secondary">打印</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

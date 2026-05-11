@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物料耗尽跟踪 - COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .page-tabs {
+            display: flex; gap: 0;
+            border-bottom: 2px solid var(--border-default);
+            margin-bottom: 24px;
+        }
+        .page-tab {
+            padding: 14px 28px;
+            font-size: 14px; font-weight: 600;
+            color: var(--text-muted);
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            font-family: var(--font-sans);
+            margin-bottom: -2px;
+        }
+        .page-tab:hover { color: var(--text-primary); }
+        .page-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .deplete-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .deplete-header {
+            padding: 16px 20px;
+            background: var(--bg-page);
+            border-bottom: 1px solid var(--border-default);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .deplete-title { font-weight: 600; font-size: 15px; }
+        .deplete-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+        .usage-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: var(--radius-full);
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .usage-self { background: #E3F2FD; color: #1565C0; }
+        .usage-external { background: #FFF3E0; color: #E65100; }
+
+        .deplete-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1.5fr 100px;
+            gap: 12px;
+            padding: 12px 20px;
+            align-items: center;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .deplete-row:last-child { border-bottom: none; }
+        .deplete-row:hover { background: var(--bg-hover); }
+        .deplete-header-row {
+            background: var(--bg-page);
+            font-size: 12px; font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .progress-bar {
+            width: 100%; height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        .progress-fill.safe { background: #22c55e; }
+        .progress-fill.warn { background: #f59e0b; }
+        .progress-fill.danger { background: #ef4444; }
+
+        .batch-id { font-family: var(--font-mono); font-weight: 600; }
+
+        .confirm-btn {
+            padding: 4px 12px; font-size: 12px;
+            color: var(--success); background: var(--success-bg);
+            border: 1px solid #86EFAC; border-radius: var(--radius-md);
+            cursor: pointer; font-weight: 500;
+        }
+        .confirm-btn:hover { background: #DCFCE7; }
+        .confirm-btn.confirmed {
+            color: #9CA3AF; background: #F3F4F6;
+            border-color: #E5E7EB; cursor: default;
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .prompt-box {
+            background: #EFF6FF;
+            border: 1px solid #BFDBFE;
+            border-radius: var(--radius-md);
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .prompt-text { font-size: 14px; color: #1E40AF; }
+        .prompt-actions { display: flex; gap: 8px; }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存中心</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">库存中心</h1>
+                <p class="page-subtitle">在库物料 · 使用中批次 · 已耗尽批次</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    导出库存
+                </button>
+            </div>
+        </div>
+
+        <!-- 下次出库时的耗尽确认提示（示例） -->
+        <div class="prompt-box">
+            <div class="prompt-text">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" style="vertical-align:middle;margin-right:6px;">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                </svg>
+                上次领取的 <strong>苏木精染液（LOT-2024-001）</strong> 是否已耗尽？
+            </div>
+            <div class="prompt-actions">
+                <button class="btn btn-primary btn-sm">是，已耗尽</button>
+                <button class="btn btn-secondary btn-sm">仍在使用</button>
+                <button class="btn btn-ghost btn-sm">部分剩余</button>
+            </div>
+        </div>
+
+        <div class="page-tabs">
+            <button class="page-tab" onclick="switchTab('in-stock')">在库</button>
+            <button class="page-tab active" onclick="switchTab('in-use')">使用中</button>
+            <button class="page-tab" onclick="switchTab('depleted')">已耗尽</button>
+        </div>
+
+        <!-- Tab 1: 在库 -->
+        <div id="tab-in-stock" class="tab-content">
+            <div class="card">
+                <div class="card-body" style="padding:0;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>物料</th>
+                                <th>批次号</th>
+                                <th>规格</th>
+                                <th>在库数量</th>
+                                <th>入库时间</th>
+                                <th>效期</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>苏木精染液</strong></td>
+                                <td class="batch-id">LOT-2024-005</td>
+                                <td>500ml/瓶</td>
+                                <td>3 瓶</td>
+                                <td>2026-04-10</td>
+                                <td><span class="status-badge status-success">2027-04-09</span></td>
+                                <td><button class="btn btn-primary btn-sm">出库</button></td>
+                            </tr>
+                            <tr>
+                                <td><strong>伊红染液</strong></td>
+                                <td class="batch-id">LOT-2024-012</td>
+                                <td>500ml/瓶</td>
+                                <td>5 瓶</td>
+                                <td>2026-04-15</td>
+                                <td><span class="status-badge status-success">2027-04-14</span></td>
+                                <td><button class="btn btn-primary btn-sm">出库</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: 使用中 -->
+        <div id="tab-in-use" class="tab-content active">
+            <div class="deplete-card">
+                <div class="deplete-header">
+                    <div>
+                        <div class="deplete-title">苏木精染液</div>
+                        <div class="deplete-meta">当前有 2 个批次在使用中</div>
+                    </div>
+                </div>
+                <div style="padding: 0 20px;">
+                    <div class="deplete-row deplete-header-row">
+                        <div>批次号 / 用途</div>
+                        <div style="text-align:center">出库时间</div>
+                        <div style="text-align:center">领用人</div>
+                        <div style="text-align:center">预计剩余</div>
+                        <div style="text-align:center">消耗进度</div>
+                        <div style="text-align:center">操作</div>
+                    </div>
+                    <!-- 批次1：自用 -->
+                    <div class="deplete-row">
+                        <div>
+                            <div class="batch-id">LOT-2024-001</div>
+                            <div style="margin-top:4px;">
+                                <span class="usage-tag usage-self">自用</span>
+                                <span style="font-size:12px;color:#6b7280;margin-left:8px;">HE制片使用</span>
+                            </div>
+                        </div>
+                        <div style="text-align:center;">2026-04-01</div>
+                        <div style="text-align:center;">张三</div>
+                        <div style="text-align:center;font-weight:600;color:#f59e0b;">约 45ml</div>
+                        <div style="text-align:center;">
+                            <div class="progress-bar">
+                                <div class="progress-fill warn" style="width:91%;"></div>
+                            </div>
+                            <div style="font-size:11px;color:#6b7280;margin-top:2px;">已用 455/500ml</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <button class="confirm-btn">确认耗尽</button>
+                        </div>
+                    </div>
+                    <!-- 批次2：外给 -->
+                    <div class="deplete-row">
+                        <div>
+                            <div class="batch-id">LOT-2024-002</div>
+                            <div style="margin-top:4px;">
+                                <span class="usage-tag usage-external">外给</span>
+                                <span style="font-size:12px;color:#6b7280;margin-left:8px;">XX合作医院</span>
+                            </div>
+                        </div>
+                        <div style="text-align:center;">2026-04-05</div>
+                        <div style="text-align:center;">李四</div>
+                        <div style="text-align:center;font-weight:600;color:#9ca3af;">—</div>
+                        <div style="text-align:center;">
+                            <div class="progress-bar">
+                                <div class="progress-fill safe" style="width:0%;"></div>
+                            </div>
+                            <div style="font-size:11px;color:#6b7280;margin-top:2px;">交付客户，不统计消耗</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <button class="confirm-btn confirmed">已交付</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="deplete-card">
+                <div class="deplete-header">
+                    <div>
+                        <div class="deplete-title">一抗（CK7）</div>
+                        <div class="deplete-meta">当前有 1 个批次在使用中</div>
+                    </div>
+                </div>
+                <div style="padding: 0 20px;">
+                    <div class="deplete-row deplete-header-row">
+                        <div>批次号 / 用途</div>
+                        <div style="text-align:center">出库时间</div>
+                        <div style="text-align:center">领用人</div>
+                        <div style="text-align:center">预计剩余</div>
+                        <div style="text-align:center">消耗进度</div>
+                        <div style="text-align:center">操作</div>
+                    </div>
+                    <div class="deplete-row">
+                        <div>
+                            <div class="batch-id">LOT-2024-008</div>
+                            <div style="margin-top:4px;">
+                                <span class="usage-tag usage-self">自用</span>
+                                <span style="font-size:12px;color:#6b7280;margin-left:8px;">免疫组化使用</span>
+                            </div>
+                        </div>
+                        <div style="text-align:center;">2026-04-10</div>
+                        <div style="text-align:center;">王五</div>
+                        <div style="text-align:center;font-weight:600;color:#22c55e;">约 0.6ml</div>
+                        <div style="text-align:center;">
+                            <div class="progress-bar">
+                                <div class="progress-fill safe" style="width:40%;"></div>
+                            </div>
+                            <div style="font-size:11px;color:#6b7280;margin-top:2px;">已用 0.4/1ml</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <button class="confirm-btn">确认耗尽</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: 已耗尽 -->
+        <div id="tab-depleted" class="tab-content">
+            <div class="card">
+                <div class="card-body" style="padding:0;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>物料</th>
+                                <th>批次号</th>
+                                <th>用途</th>
+                                <th>出库时间</th>
+                                <th>领用人</th>
+                                <th>确认耗尽时间</th>
+                                <th>使用时长</th>
+                                <th>确认人</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>苏木精染液</strong></td>
+                                <td class="batch-id">LOT-2024-001</td>
+                                <td><span class="usage-tag usage-self">自用</span></td>
+                                <td>2026-04-01</td>
+                                <td>张三</td>
+                                <td>2026-04-20 14:30</td>
+                                <td>19 天</td>
+                                <td>张三</td>
+                            </tr>
+                            <tr>
+                                <td><strong>分化液</strong></td>
+                                <td class="batch-id">LOT-2024-003</td>
+                                <td><span class="usage-tag usage-self">自用</span></td>
+                                <td>2026-03-15</td>
+                                <td>李四</td>
+                                <td>2026-04-05 09:00</td>
+                                <td>21 天</td>
+                                <td>李四</td>
+                            </tr>
+                            <tr>
+                                <td><strong>甲醛固定液</strong></td>
+                                <td class="batch-id">LOT-2024-004</td>
+                                <td><span class="usage-tag usage-external">外给</span></td>
+                                <td>2026-03-20</td>
+                                <td>王五</td>
+                                <td>2026-03-20 10:00</td>
+                                <td>—</td>
+                                <td>系统</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 确认耗尽弹窗 -->
+    <div id="confirm-deplete-modal" class="modal active" style="display:block;">
+        <div class="modal-overlay" onclick="hideModal('confirm-deplete-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">确认物料耗尽</h3>
+                <button class="modal-close" onclick="hideModal('confirm-deplete-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="background:var(--bg-page);padding:16px;border-radius:var(--radius-md);margin-bottom:20px;">
+                    <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">当前物料</div>
+                    <div style="font-weight:600;">苏木精染液（LOT-2024-001）</div>
+                    <div style="font-size:12px;color:var(--text-muted);">500ml/瓶 · 出库时间：2026-04-01 · 已用19天</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">实际剩余量</label>
+                    <div style="display:flex;gap:8px;">
+                        <input type="number" class="form-input" value="0" style="flex:1;">
+                        <select class="form-select" style="width:100px;">
+                            <option>ml</option>
+                            <option>μl</option>
+                        </select>
+                    </div>
+                    <div style="font-size:12px;color:#6b7280;margin-top:4px;">输入 0 表示完全耗尽，如有剩余请输入具体数量</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">备注（可选）</label>
+                    <textarea class="form-textarea" rows="2" placeholder="如有特殊情况请备注"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('confirm-deplete-modal')">取消</button>
+                <button class="btn btn-primary">确认耗尽</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabId).classList.add('active');
+        }
+        function hideModal(id) {
+            document.getElementById(id).classList.remove('active');
+            document.getElementById(id).style.display = 'none';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>处理盘点差异 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="stocktaking-adjust-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">处理盘点差异</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="alert-detail" style="background: var(--warning-bg); border: 1px solid var(--warning); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span style="font-weight: 600; color: var(--warning);">发现12项盘点差异</span>
+                </div>
+                <div style="font-size: 14px; color: var(--text-secondary);">
+                    <div>盘亏: 8项 | 盘盈: 4项</div>
+                </div>
+            </div>
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">处理方式 <span class="required">*</span></label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="adjust-type" value="adjust" checked>
+                                <span>调整库存</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="adjust-type" value="recheck">
+                                <span>重新盘点</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="adjust-type" value="ignore">
+                                <span>忽略差异</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">调整说明 <span class="required">*</span></label>
+                        <textarea class="form-textarea" rows="3" placeholder="请输入差异原因分析和处理说明..."></textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">附件上传</label>
+                        <div style="border: 1px dashed var(--border-default); border-radius: 6px; padding: 20px; text-align: center; color: var(--text-muted);">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 8px;">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            <div style="font-size: 13px;">点击或拖拽上传相关凭证</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <table class="data-table" style="margin-top: 16px;">
+                <thead>
+                    <tr>
+                        <th>物料名称</th>
+                        <th>系统库存</th>
+                        <th>实际库存</th>
+                        <th>差异</th>
+                        <th>处理</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>DNA提取试剂盒</td>
+                        <td>25 盒</td>
+                        <td>24 盒</td>
+                        <td style="color: var(--error);">-1 盒</td>
+                        <td>
+                            <select class="form-select form-select-sm">
+                                <option value="adjust">调整库存</option>
+                                <option value="ignore">忽略</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>磁珠纯化试剂</td>
+                        <td>12 瓶</td>
+                        <td>10 瓶</td>
+                        <td style="color: var(--error);">-2 瓶</td>
+                        <td>
+                            <select class="form-select form-select-sm">
+                                <option value="adjust">调整库存</option>
+                                <option value="ignore">忽略</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">取消</button>
+            <button class="btn btn-primary">确认处理</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

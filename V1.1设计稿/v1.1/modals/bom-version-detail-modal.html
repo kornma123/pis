@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>版本详情 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="version-detail-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-xl" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">版本详情</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="version-header">
+                <div class="version-title">
+                    <span class="version-number">v2.3</span>
+                    <span class="version-badge current">当前版本</span>
+                </div>
+                <div style="font-size: 13px; color: var(--text-muted);">
+                    发布于 2024-03-15 10:30
+                </div>
+            </div>
+            
+            <div class="version-info-grid">
+                <div class="version-info-item">
+                    <div class="version-info-label">BOM名称</div>
+                    <div class="version-info-value">NGS建库试剂套装</div>
+                </div>
+                <div class="version-info-item">
+                    <div class="version-info-label">发布人</div>
+                    <div class="version-info-value">张三</div>
+                </div>
+                <div class="version-info-item">
+                    <div class="version-info-label">物料数量</div>
+                    <div class="version-info-value">24 项</div>
+                </div>
+                <div class="version-info-item">
+                    <div class="version-info-label">单样本成本</div>
+                    <div class="version-info-value" style="color: var(--primary);">¥103.01</div>
+                </div>
+            </div>
+
+            <div class="change-section">
+                <div class="change-section-title">版本说明</div>
+                <p style="font-size: 14px; color: var(--text-primary); line-height: 1.6;">
+                    优化物料配置，新增试剂D，调整耗材C用量，提升检测效率。
+                </p>
+            </div>
+
+            <div class="change-section">
+                <div class="change-section-title">变更内容</div>
+                <div class="change-list">
+                    <div class="change-item">
+                        <span class="change-type-badge added">新增</span>
+                        <div class="change-detail">
+                            <strong>试剂D</strong> - 用量: 3ml/样本，单价: ¥0.35/ml，成本: ¥1.05
+                        </div>
+                    </div>
+                    <div class="change-item">
+                        <span class="change-type-badge modified">修改</span>
+                        <div class="change-detail">
+                            <strong>耗材C</strong> - 用量: 3个 → 2个，成本: ¥1.50 → ¥1.00
+                        </div>
+                    </div>
+                    <div class="change-item">
+                        <span class="change-type-badge deleted">删除</span>
+                        <div class="change-detail">
+                            <strong>耗材E</strong> - 原用量: 1个/样本，原成本: ¥2.45
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="material-list-section">
+                <div class="change-section-title">物料清单</div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>序号</th>
+                            <th>物料名称</th>
+                            <th>规格型号</th>
+                            <th>用量/样本</th>
+                            <th>参考单价</th>
+                            <th>单样本成本</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1</td>
+                            <td><strong>DNA提取试剂盒</strong></td>
+                            <td>v2.0，96次反应</td>
+                            <td>0.0104 盒</td>
+                            <td>¥1,280</td>
+                            <td>¥13.33</td>
+                        </tr>
+                        <tr>
+                            <td>2</td>
+                            <td><strong>PCR Master Mix</strong></td>
+                            <td>2X，500次反应</td>
+                            <td>0.002 盒</td>
+                            <td>¥850</td>
+                            <td>¥1.70</td>
+                        </tr>
+                        <tr>
+                            <td>3</td>
+                            <td><strong>磁珠纯化试剂</strong></td>
+                            <td>5ml/瓶</td>
+                            <td>0.05 瓶</td>
+                            <td>¥180</td>
+                            <td>¥9.00</td>
+                        </tr>
+                        <tr>
+                            <td>4</td>
+                            <td><strong>离心管 1.5ml</strong></td>
+                            <td>无DNA酶，500个/包</td>
+                            <td>0.1 包</td>
+                            <td>¥45</td>
+                            <td>¥4.50</td>
+                        </tr>
+                        <tr>
+                            <td>5</td>
+                            <td><strong>移液器吸头 200μl</strong></td>
+                            <td>盒装，96个/盒</td>
+                            <td>0.2 盒</td>
+                            <td>¥25</td>
+                            <td>¥5.00</td>
+                        </tr>
+                        <tr style="background: #E8F5E9;">
+                            <td>6</td>
+                            <td><strong>试剂D</strong> <span style="color: #2E7D32; font-size: 11px;">(新增)</span></td>
+                            <td>10ml/瓶</td>
+                            <td>3 ml</td>
+                            <td>¥0.35/ml</td>
+                            <td>¥1.05</td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: var(--bg-page); font-weight: 600;">
+                            <td colspan="5" style="text-align: right;">单样本物料成本合计:</td>
+                            <td>¥103.01</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="cost-summary">
+                <div>
+                    <div class="cost-label">成本变化</div>
+                    <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+                        相比上一版本 (v2.2): ¥101.96 → ¥103.01
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 14px; color: var(--text-muted);">变化幅度</div>
+                    <div style="font-size: 18px; font-weight: 600; color: #E65100;">+1.0%</div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">关闭</button>
+            <button class="btn btn-primary">导出PDF</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

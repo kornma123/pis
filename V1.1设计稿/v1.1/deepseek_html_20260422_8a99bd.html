@@ -1,0 +1,757 @@
+<script>
+    // ==================== 全局状态 ====================
+    const dataStore = new CoreDataStore();
+    let allInventory = [];           // 原始库存数据（含物料详情）
+    let filteredInventory = [];      // 当前筛选后的数据
+    let currentFilter = 'all';       // 当前状态筛选
+    let currentSearch = '';
+    let currentCategory = '全部分类';
+    let currentLocation = '全部库位';
+    let sortColumn = null;
+    let sortDirection = 'asc';
+    
+    // 物料选择器临时数据
+    let tempSelectedMaterials = {};
+    let outboundMaterialList = [];
+    let materialRowId = 0;
+    
+    // 当前打开的弹窗
+    let currentOpenModal = null;
+    
+    // ==================== 初始化 ====================
+    document.addEventListener('DOMContentLoaded', function() {
+        loadInventoryData();
+        initMaterialList();
+        initProjectDropdown();
+    });
+    
+    function loadInventoryData() {
+        // 从 data-store 获取合并后的库存数据
+        allInventory = dataStore.getInventoryWithDetails() || [];
+        
+        // 如果数据为空，补充一些 mock 数据
+        if (allInventory.length === 0) {
+            allInventory = generateMockInventory();
+        }
+        
+        applyFilters();
+        updateStats();
+        updateQuickFilterCounts();
+    }
+    
+    function generateMockInventory() {
+        // 返回与原始 mock 一致的库存数据
+        return [
+            { id: 'INV-001', materialId: 'MAT-001', code: 'MAT-001', name: 'Harris苏木素染液', spec: '500ml/瓶', unit: '瓶', batch: 'LOT-2024-001', stock: 24, minStock: 5, location: 'A区-试剂冷藏', supplier: '北京病理科技', expiry: '2025-06-15', status: 'normal' },
+            { id: 'INV-002', materialId: 'MAT-002', code: 'MAT-002', name: 'Gill苏木素染液', spec: '500ml/瓶', unit: '瓶', batch: 'LOT-2024-002', stock: 8, minStock: 10, location: 'A区-试剂冷藏', supplier: '上海生化试剂', expiry: '2024-12-20', status: 'low-stock' },
+            { id: 'INV-003', materialId: 'MAT-011', code: 'MAT-011', name: '伊红Y染液', spec: '500ml/瓶', unit: '瓶', batch: 'LOT-2024-011', stock: 36, minStock: 10, location: 'A区-试剂冷藏', supplier: '北京病理科技', expiry: '2024-04-10', status: 'warning' },
+            { id: 'INV-004', materialId: 'MAT-101', code: 'MAT-101', name: 'Ki-67抗体', spec: '1ml/支', unit: '支', batch: 'LOT-2023-0892', stock: 2, minStock: 5, location: 'B区-常温耗材', supplier: 'DAKO', expiry: '2024-04-01', status: 'expired' },
+            { id: 'INV-005', materialId: 'MAT-201', code: 'MAT-201', name: '包埋盒', spec: '标准型', unit: '个', batch: 'LOT-2024-201', stock: 500, minStock: 100, location: 'C区-设备配件', supplier: '徕卡', expiry: '2026-12-31', status: 'normal' },
+            { id: 'INV-006', materialId: 'MAT-202', code: 'MAT-202', name: '载玻片', spec: '25x75mm', unit: '盒', batch: 'LOT-2024-202', stock: 0, minStock: 20, location: 'C区-设备配件', supplier: '康宁', expiry: '2025-08-15', status: 'out-of-stock' }
+        ];
+    }
+    
+    // ==================== 表格渲染 ====================
+    function renderTable(data) {
+        const tbody = document.getElementById('inventory-tbody');
+        const emptyState = document.getElementById('empty-state');
+        const table = document.getElementById('inventory-table');
+        
+        if (!data || data.length === 0) {
+            table.style.display = 'none';
+            emptyState.style.display = 'flex';
+            document.getElementById('pagination-info').textContent = '共 0 条记录';
+            return;
+        }
+        
+        table.style.display = 'table';
+        emptyState.style.display = 'none';
+        
+        tbody.innerHTML = data.map(item => {
+            const statusInfo = getStatusInfo(item);
+            const rowClass = getRowClass(item.status);
+            
+            return `
+                <tr class="table-row ${rowClass}" data-id="${item.id}" data-status="${item.status}">
+                    <td><input type="checkbox" class="checkbox row-checkbox" value="${item.id}" onchange="updateSelection()"></td>
+                    <td>
+                        <div>
+                            <strong>${item.name}</strong>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${item.spec || ''}</div>
+                        </div>
+                    </td>
+                    <td class="mono-text">${item.batch || '-'}</td>
+                    <td>${item.location || '-'}</td>
+                    <td>
+                        <span class="stock-quantity">${item.stock}</span>
+                        ${getStockLevelIndicator(item)}
+                    </td>
+                    <td>
+                        <span class="expiry-date ${statusInfo.expiryClass}">${item.expiry || '-'}</span>
+                        ${getExpiryTag(item)}
+                    </td>
+                    <td><span class="status-badge ${statusInfo.badgeClass}">${statusInfo.label}</span></td>
+                    <td>
+                        <button class="btn btn-ghost btn-sm" onclick="viewInventoryDetail('${item.id}')">详情</button>
+                        <button class="btn btn-ghost btn-sm" onclick="openSingleOutbound('${item.id}')">出库</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        
+        document.getElementById('pagination-info').textContent = `共 ${data.length} 条记录`;
+    }
+    
+    function getStatusInfo(item) {
+        const today = new Date();
+        const expiry = item.expiry ? new Date(item.expiry) : null;
+        const daysLeft = expiry ? Math.ceil((expiry - today) / (1000 * 60 * 60 * 24)) : 999;
+        
+        if (item.stock === 0) {
+            return { label: '已缺货', badgeClass: 'status-error', expiryClass: '' };
+        }
+        if (expiry && daysLeft < 0) {
+            return { label: '已过期', badgeClass: 'status-error', expiryClass: 'expiry-expired' };
+        }
+        if (item.stock <= item.minStock) {
+            return { label: '库存不足', badgeClass: 'status-warning', expiryClass: '' };
+        }
+        if (expiry && daysLeft <= 30) {
+            return { label: '即将过期', badgeClass: 'status-warning', expiryClass: daysLeft <= 7 ? 'expiry-danger' : 'expiry-warning' };
+        }
+        return { label: '正常', badgeClass: 'status-success', expiryClass: '' };
+    }
+    
+    function getRowClass(status) {
+        if (status === 'expired') return 'table-row-expired';
+        if (status === 'low-stock') return 'table-row-low-stock';
+        if (status === 'out-of-stock') return 'table-row-out-of-stock';
+        return '';
+    }
+    
+    function getStockLevelIndicator(item) {
+        if (item.stock === 0) {
+            return '<span class="stock-level-indicator level-out">缺货</span>';
+        }
+        if (item.stock <= item.minStock) {
+            return '<span class="stock-level-indicator level-low">偏低</span>';
+        }
+        if (item.stock < item.minStock * 2) {
+            return '<span class="stock-level-indicator level-normal">正常</span>';
+        }
+        return '<span class="stock-level-indicator level-normal">充足</span>';
+    }
+    
+    function getExpiryTag(item) {
+        const today = new Date();
+        const expiry = item.expiry ? new Date(item.expiry) : null;
+        if (!expiry) return '';
+        const daysLeft = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+        if (daysLeft < 0) {
+            return '<span class="expiry-tag expiry-tag-expired">已过期</span>';
+        }
+        if (daysLeft <= 7) {
+            return `<span class="expiry-tag expiry-tag-danger">剩${daysLeft}天</span>`;
+        }
+        if (daysLeft <= 30) {
+            return `<span class="expiry-tag">剩${daysLeft}天</span>`;
+        }
+        return '';
+    }
+    
+    // ==================== 筛选与搜索 ====================
+    function applyFilters() {
+        let result = [...allInventory];
+        
+        // 搜索
+        if (currentSearch) {
+            result = result.filter(item => 
+                item.name.toLowerCase().includes(currentSearch) ||
+                (item.batch && item.batch.toLowerCase().includes(currentSearch)) ||
+                (item.supplier && item.supplier.toLowerCase().includes(currentSearch))
+            );
+        }
+        
+        // 分类筛选
+        if (currentCategory !== '全部分类') {
+            result = result.filter(item => {
+                if (currentCategory === '试剂') return item.code?.startsWith('MAT-') && !item.code?.startsWith('MAT-2');
+                if (currentCategory === '耗材') return item.code?.startsWith('MAT-2');
+                if (currentCategory === '设备') return item.code?.startsWith('MAT-3');
+                return true;
+            });
+        }
+        
+        // 库位筛选
+        if (currentLocation !== '全部库位') {
+            result = result.filter(item => item.location && item.location.includes(currentLocation.replace('全部库位', '').trim()));
+        }
+        
+        // 状态筛选
+        if (currentFilter !== 'all') {
+            result = result.filter(item => item.status === currentFilter);
+        }
+        
+        filteredInventory = result;
+        renderTable(filteredInventory);
+    }
+    
+    function filterInventoryList() {
+        currentSearch = document.getElementById('inventory-search-input').value.toLowerCase().trim();
+        currentCategory = document.getElementById('category-filter').value;
+        currentLocation = document.getElementById('location-filter').value;
+        applyFilters();
+        updateQuickFilterCounts();
+    }
+    
+    function resetFilters() {
+        document.getElementById('inventory-search-input').value = '';
+        document.getElementById('category-filter').selectedIndex = 0;
+        document.getElementById('location-filter').selectedIndex = 0;
+        currentSearch = '';
+        currentCategory = '全部分类';
+        currentLocation = '全部库位';
+        currentFilter = 'all';
+        document.querySelectorAll('.quick-filter-tag').forEach(tag => tag.classList.remove('active'));
+        document.querySelector('.quick-filter-tag').classList.add('active');
+        applyFilters();
+        updateQuickFilterCounts();
+    }
+    
+    function filterByStatus(status) {
+        currentFilter = status;
+        document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('active'));
+        document.querySelector(`.stat-card[data-status="${status}"]`)?.classList.add('active');
+        document.querySelectorAll('.quick-filter-tag').forEach(tag => tag.classList.remove('active'));
+        applyFilters();
+    }
+    
+    function quickFilter(filter, element) {
+        document.querySelectorAll('.quick-filter-tag').forEach(tag => tag.classList.remove('active'));
+        if (element) element.classList.add('active');
+        
+        if (filter === 'all') currentFilter = 'all';
+        else if (filter === 'low-stock') currentFilter = 'low-stock';
+        else if (filter === 'expired') currentFilter = 'expired';
+        else if (filter === 'out-of-stock') currentFilter = 'out-of-stock';
+        else if (filter === 'expiring-soon') currentFilter = 'warning';
+        else if (filter === 'expiring-month') currentFilter = 'warning';
+        else currentFilter = filter;
+        
+        applyFilters();
+    }
+    
+    function sortBy(column, element) {
+        if (sortColumn === column) {
+            sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortColumn = column;
+            sortDirection = 'asc';
+        }
+        
+        document.querySelectorAll('.sort-indicator').forEach(ind => {
+            ind.classList.remove('asc', 'desc');
+        });
+        element.classList.add(sortDirection);
+        
+        filteredInventory.sort((a, b) => {
+            let aVal, bVal;
+            if (column === 'quantity') {
+                aVal = a.stock || 0;
+                bVal = b.stock || 0;
+            } else if (column === 'expiry') {
+                aVal = a.expiry || '9999-12-31';
+                bVal = b.expiry || '9999-12-31';
+            }
+            if (sortDirection === 'asc') {
+                return aVal > bVal ? 1 : -1;
+            } else {
+                return aVal < bVal ? 1 : -1;
+            }
+        });
+        
+        renderTable(filteredInventory);
+    }
+    
+    // ==================== 统计数据 ====================
+    function updateStats() {
+        const total = allInventory.length;
+        const normal = allInventory.filter(i => i.status === 'normal').length;
+        const low = allInventory.filter(i => i.status === 'low-stock').length;
+        const warning = allInventory.filter(i => i.status === 'warning').length;
+        const expired = allInventory.filter(i => i.status === 'expired').length;
+        
+        document.getElementById('stat-total').textContent = total;
+        document.getElementById('stat-normal').textContent = normal;
+        document.getElementById('stat-low').textContent = low;
+        document.getElementById('stat-warning').textContent = warning;
+        document.getElementById('stat-expired').textContent = expired;
+    }
+    
+    function updateQuickFilterCounts() {
+        document.getElementById('filter-count-all').textContent = allInventory.length;
+        document.getElementById('filter-count-low').textContent = allInventory.filter(i => i.status === 'low-stock').length;
+        document.getElementById('filter-count-soon').textContent = allInventory.filter(i => i.status === 'warning' && getDaysLeft(i.expiry) <= 7).length;
+        document.getElementById('filter-count-month').textContent = allInventory.filter(i => i.status === 'warning' && getDaysLeft(i.expiry) <= 30).length;
+        document.getElementById('filter-count-expired').textContent = allInventory.filter(i => i.status === 'expired').length;
+        document.getElementById('filter-count-out').textContent = allInventory.filter(i => i.stock === 0).length;
+    }
+    
+    function getDaysLeft(expiry) {
+        if (!expiry) return 999;
+        const today = new Date();
+        const exp = new Date(expiry);
+        return Math.ceil((exp - today) / (1000 * 60 * 60 * 24));
+    }
+    
+    // ==================== 批量选择 ====================
+    function toggleSelectAll() {
+        const checked = document.getElementById('header-checkbox').checked;
+        document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = checked);
+        updateSelection();
+    }
+    
+    function updateSelection() {
+        const checked = document.querySelectorAll('.row-checkbox:checked');
+        document.getElementById('selected-count').textContent = checked.length;
+        document.getElementById('batch-actions-bar').style.display = checked.length > 0 ? 'flex' : 'none';
+        document.getElementById('header-checkbox').checked = checked.length === document.querySelectorAll('.row-checkbox').length;
+    }
+    
+    function clearSelection() {
+        document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+        document.getElementById('header-checkbox').checked = false;
+        updateSelection();
+    }
+    
+    function batchOutbound() {
+        const checked = document.querySelectorAll('.row-checkbox:checked');
+        if (checked.length === 0) {
+            showToast('请选择要出库的物料', 'warning');
+            return;
+        }
+        // 将选中物料添加到出库列表
+        checked.forEach(cb => {
+            const row = cb.closest('tr');
+            const id = row.dataset.id;
+            const item = allInventory.find(i => i.id === id);
+            if (item && item.stock > 0) {
+                addToOutboundList(item);
+            }
+        });
+        showModal('outbound-modal');
+        clearSelection();
+    }
+    
+    function batchScrap() {
+        const checked = document.querySelectorAll('.row-checkbox:checked');
+        if (checked.length === 0) {
+            showToast('请选择要报废的物料', 'warning');
+            return;
+        }
+        showModal('batch-scrap-modal');
+    }
+    
+    // ==================== 出库相关 ====================
+    function openSingleOutbound(id) {
+        const item = allInventory.find(i => i.id === id);
+        if (item) {
+            addToOutboundList(item);
+            showModal('outbound-modal');
+        }
+    }
+    
+    function addToOutboundList(item) {
+        const existing = outboundMaterialList.find(m => m.materialId === item.materialId);
+        if (existing) {
+            showToast('该物料已在出库列表中', 'warning');
+            return;
+        }
+        
+        materialRowId++;
+        outboundMaterialList.push({
+            rowId: materialRowId,
+            materialId: item.materialId,
+            name: item.name,
+            spec: item.spec,
+            batch: item.batch,
+            stock: item.stock,
+            quantity: 1,
+            unit: item.unit,
+            projects: [],
+            project: '',
+            user: ''
+        });
+        
+        renderOutboundMaterialList();
+    }
+    
+    function renderOutboundMaterialList() {
+        const tbody = document.getElementById('outbound-materials-list');
+        const emptyTip = document.getElementById('empty-materials-tip');
+        
+        if (outboundMaterialList.length === 0) {
+            tbody.innerHTML = '';
+            emptyTip.style.display = 'block';
+            return;
+        }
+        
+        emptyTip.style.display = 'none';
+        tbody.innerHTML = outboundMaterialList.map(m => {
+            const projects = m.projects || [];
+            let projectOptions = '<option value="">公共成本</option>';
+            projects.forEach(p => {
+                projectOptions += `<option value="${p}" ${m.project === p ? 'selected' : ''}>${p}</option>`;
+            });
+            
+            return `
+                <tr>
+                    <td><strong>${m.name}</strong><br><span style="font-size: 12px; color: var(--text-muted);">${m.spec}</span></td>
+                    <td>
+                        <select class="form-select outbound-project" style="height: 28px; font-size: 12px;" data-row-id="${m.rowId}" onchange="updateOutboundProject(${m.rowId}, this.value)">
+                            ${projectOptions}
+                        </select>
+                    </td>
+                    <td>${m.batch || '-'}</td>
+                    <td>${m.stock}</td>
+                    <td>
+                        <input type="number" class="form-input outbound-quantity" style="width: 70px; height: 28px;" 
+                               value="${m.quantity}" min="1" max="${m.stock}" data-row-id="${m.rowId}"
+                               onchange="updateOutboundQuantity(${m.rowId}, this.value)">
+                    </td>
+                    <td>
+                        <select class="form-select outbound-user" style="height: 28px; font-size: 12px;" data-row-id="${m.rowId}" onchange="updateOutboundUser(${m.rowId}, this.value)">
+                            <option value="">选择领用人</option>
+                            <option value="张三">张三</option>
+                            <option value="李四">李四</option>
+                            <option value="王五">王五</option>
+                        </select>
+                    </td>
+                    <td style="text-align: center;">
+                        <button type="button" class="btn btn-sm btn-ghost" style="color: var(--error);" onclick="removeOutboundItem(${m.rowId})">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                            </svg>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    function updateOutboundProject(rowId, value) {
+        const item = outboundMaterialList.find(m => m.rowId === rowId);
+        if (item) item.project = value === '__public__' ? '' : value;
+    }
+    
+    function updateOutboundQuantity(rowId, value) {
+        const item = outboundMaterialList.find(m => m.rowId === rowId);
+        if (item) {
+            const qty = parseInt(value) || 1;
+            if (qty > item.stock) {
+                showToast('出库数量不能超过库存', 'error');
+                item.quantity = item.stock;
+                document.querySelector(`.outbound-quantity[data-row-id="${rowId}"]`).value = item.stock;
+            } else {
+                item.quantity = qty;
+            }
+        }
+    }
+    
+    function updateOutboundUser(rowId, value) {
+        const item = outboundMaterialList.find(m => m.rowId === rowId);
+        if (item) item.user = value;
+    }
+    
+    function removeOutboundItem(rowId) {
+        outboundMaterialList = outboundMaterialList.filter(m => m.rowId !== rowId);
+        renderOutboundMaterialList();
+    }
+    
+    function confirmOutbound() {
+        if (outboundMaterialList.length === 0) {
+            showToast('请添加出库物料', 'error');
+            return;
+        }
+        
+        // 校验
+        for (let item of outboundMaterialList) {
+            if (!item.quantity || item.quantity <= 0) {
+                showToast(`${item.name} 出库数量无效`, 'error');
+                return;
+            }
+            if (item.quantity > item.stock) {
+                showToast(`${item.name} 库存不足`, 'error');
+                return;
+            }
+            if (!item.user) {
+                showToast(`${item.name} 请选择领用人`, 'error');
+                return;
+            }
+        }
+        
+        // 执行出库
+        outboundMaterialList.forEach(item => {
+            dataStore.createOutboundRecord({
+                materialId: item.materialId,
+                materialName: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                projectId: item.project || null,
+                projectName: item.project || '公共成本',
+                operator: item.user,
+                batch: item.batch
+            });
+        });
+        
+        showToast(`成功出库 ${outboundMaterialList.length} 种物料`, 'success');
+        
+        // 重置
+        outboundMaterialList = [];
+        materialRowId = 0;
+        document.getElementById('outbound-remark').value = '';
+        hideModal('outbound-modal');
+        
+        // 刷新数据
+        loadInventoryData();
+    }
+    
+    function confirmBatchOutbound() {
+        // 类似 confirmOutbound 但处理批量选择
+        showToast('批量出库成功', 'success');
+        hideModal('batch-outbound-modal');
+        loadInventoryData();
+    }
+    
+    function confirmBatchScrap() {
+        showToast('批量报废成功', 'success');
+        hideModal('batch-scrap-modal');
+        loadInventoryData();
+    }
+    
+    // ==================== 物料选择器 ====================
+    function initMaterialList() {
+        const tbody = document.getElementById('material-list-tbody');
+        const materials = dataStore.getAllMaterials() || [];
+        
+        tbody.innerHTML = materials.map(m => `
+            <tr class="material-row" data-id="${m.id}" data-name="${m.name}" data-spec="${m.spec}" data-stock="${m.stock}" data-projects='${JSON.stringify(m.projects || [])}'>
+                <td><input type="checkbox" class="checkbox material-list-cb" onchange="onMaterialCheck(this)"></td>
+                <td>
+                    <strong>${m.name}</strong>
+                    <div style="font-size: 11px; color: var(--text-muted);">${m.code || ''}</div>
+                </td>
+                <td>${m.spec}</td>
+                <td><span class="stock-num">${m.stock}</span></td>
+            </tr>
+        `).join('');
+    }
+    
+    function initProjectDropdown() {
+        const projects = dataStore.getProjects() || [
+            { id: '1', name: '新生儿遗传代谢病筛查' },
+            { id: '2', name: '产前筛查' },
+            { id: '3', name: 'HE制片' }
+        ];
+        
+        const list = document.getElementById('project-dropdown-list');
+        list.innerHTML = projects.map(p => `
+            <div class="dropdown-item" data-value="${p.id}" data-name="${p.name}" onclick="selectProject(this)">
+                <div class="item-name">${p.name}</div>
+            </div>
+        `).join('');
+    }
+    
+    function switchMaterialTab(tab, element) {
+        document.querySelectorAll('.material-tab').forEach(t => t.classList.remove('active'));
+        element.classList.add('active');
+        document.getElementById('tab-list-content').style.display = tab === 'list' ? 'flex' : 'none';
+        document.getElementById('tab-bom-content').style.display = tab === 'bom' ? 'flex' : 'none';
+    }
+    
+    function onMaterialCheck(cb) {
+        const row = cb.closest('.material-row');
+        row.classList.toggle('checked', cb.checked);
+        updateListSelectedCount();
+    }
+    
+    function updateListSelectedCount() {
+        const count = document.querySelectorAll('.material-list-cb:checked').length;
+        document.getElementById('list-selected-count').innerHTML = `已勾选 <strong>${count}</strong> 项`;
+    }
+    
+    function toggleSelectAllList(headerCb) {
+        document.querySelectorAll('.material-list-cb').forEach(cb => {
+            cb.checked = headerCb.checked;
+            cb.closest('.material-row').classList.toggle('checked', headerCb.checked);
+        });
+        updateListSelectedCount();
+    }
+    
+    function filterMaterialsList() {
+        const search = document.getElementById('material-search-input').value.toLowerCase();
+        document.querySelectorAll('.material-row').forEach(row => {
+            const name = row.dataset.name.toLowerCase();
+            row.style.display = name.includes(search) ? '' : 'none';
+        });
+    }
+    
+    function addListToSelected() {
+        const checked = document.querySelectorAll('.material-list-cb:checked');
+        checked.forEach(cb => {
+            const row = cb.closest('.material-row');
+            const id = row.dataset.id;
+            if (!tempSelectedMaterials[id]) {
+                tempSelectedMaterials[id] = {
+                    id: id,
+                    name: row.dataset.name,
+                    spec: row.dataset.spec,
+                    stock: parseInt(row.dataset.stock),
+                    quantity: 1,
+                    projects: JSON.parse(row.dataset.projects || '[]'),
+                    project: ''
+                };
+            }
+        });
+        renderSelectedList();
+        showToast(`已添加 ${checked.length} 种物料`, 'success');
+    }
+    
+    function renderSelectedList() {
+        const container = document.getElementById('selected-materials-list');
+        const summary = document.getElementById('selected-summary');
+        const countBadge = document.getElementById('selected-count-badge');
+        const summaryTypes = document.getElementById('summary-types');
+        const summaryTotal = document.getElementById('summary-total');
+        
+        const materials = Object.values(tempSelectedMaterials);
+        const count = materials.length;
+        
+        countBadge.textContent = count + ' 项';
+        
+        if (count === 0) {
+            document.getElementById('selected-empty-tip').style.display = 'flex';
+            container.innerHTML = '';
+            summary.style.display = 'none';
+            return;
+        }
+        
+        document.getElementById('selected-empty-tip').style.display = 'none';
+        summary.style.display = 'block';
+        summaryTypes.textContent = count;
+        
+        let totalQty = 0;
+        container.innerHTML = materials.map(m => {
+            totalQty += m.quantity;
+            const projects = m.projects || [];
+            let options = '<option value="">公共成本</option>';
+            projects.forEach(p => options += `<option value="${p}">${p}</option>`);
+            
+            return `
+                <div class="selected-item">
+                    <div class="selected-item-header">
+                        <div class="selected-item-info">
+                            <div class="selected-item-name">${m.name}</div>
+                            <div class="selected-item-spec">${m.spec}</div>
+                        </div>
+                        <button class="selected-item-remove" onclick="removeSelectedItem('${m.id}')">×</button>
+                    </div>
+                    <div class="selected-item-footer">
+                        <div class="selected-item-qty">
+                            <label>数量:</label>
+                            <input type="number" class="form-input" value="${m.quantity}" min="1" max="${m.stock}" onchange="updateSelectedQty('${m.id}', this.value)">
+                        </div>
+                        <div class="selected-item-project">
+                            <label>关联:</label>
+                            <select class="form-select" onchange="updateSelectedProject('${m.id}', this.value)">${options}</select>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        summaryTotal.textContent = totalQty;
+    }
+    
+    function updateSelectedQty(id, value) {
+        if (tempSelectedMaterials[id]) {
+            tempSelectedMaterials[id].quantity = parseInt(value) || 1;
+            renderSelectedList();
+        }
+    }
+    
+    function updateSelectedProject(id, value) {
+        if (tempSelectedMaterials[id]) {
+            tempSelectedMaterials[id].project = value;
+        }
+    }
+    
+    function removeSelectedItem(id) {
+        delete tempSelectedMaterials[id];
+        renderSelectedList();
+    }
+    
+    function confirmAddMaterials() {
+        const materials = Object.values(tempSelectedMaterials);
+        materials.forEach(m => {
+            const inventoryItem = allInventory.find(i => i.materialId === m.id);
+            if (inventoryItem) {
+                addToOutboundList(inventoryItem);
+            }
+        });
+        
+        tempSelectedMaterials = {};
+        renderSelectedList();
+        hideModal('add-material-modal');
+    }
+    
+    // ==================== 详情 ====================
+    function viewInventoryDetail(id) {
+        const item = allInventory.find(i => i.id === id);
+        if (item) {
+            // 渲染详情弹窗
+            showModal('inventory-detail-modal');
+        }
+    }
+    
+    // ==================== 工具函数 ====================
+    function showModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        currentOpenModal = modalId;
+    }
+    
+    function hideModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+        currentOpenModal = null;
+    }
+    
+    function showToast(message, type = 'info') {
+        // 使用全局 showToast
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        } else {
+            alert(message);
+        }
+    }
+    
+    // 监听 ESC 关闭弹窗
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && currentOpenModal) {
+            hideModal(currentOpenModal);
+        }
+    });
+    
+    // 点击遮罩关闭
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            if (modal) hideModal(modal.id);
+        });
+    });
+</script>

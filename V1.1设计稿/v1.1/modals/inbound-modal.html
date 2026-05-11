@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>入库登记 - COREONE</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(17, 24, 39, 0.6);
+            z-index: 50;
+        }
+        .modal-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 20px 25px rgba(0,0,0,0.1);
+            z-index: 51;
+            width: 720px;
+            max-width: 95vw;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #111827;
+        }
+        .modal-close {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: none;
+            color: #6b7280;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 150ms ease;
+        }
+        .modal-close:hover {
+            background: #f3f4f6;
+            color: #111827;
+        }
+        .modal-body {
+            padding: 24px;
+            flex: 1;
+            overflow-y: auto;
+        }
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            background: #f9fafb;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .form-group-full {
+            grid-column: 1 / -1;
+        }
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+        .form-label .required {
+            color: #ef4444;
+        }
+        .form-label .hint {
+            color: #9ca3af;
+            font-size: 12px;
+            font-weight: 400;
+            margin-left: 4px;
+        }
+        .form-control {
+            width: 100%;
+            height: 40px;
+            padding: 0 12px;
+            font-size: 14px;
+            color: #111827;
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            outline: none;
+            transition: all 150ms ease;
+            font-family: inherit;
+        }
+        .form-control:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .form-control::placeholder {
+            color: #9ca3af;
+        }
+        textarea.form-control {
+            height: auto;
+            min-height: 80px;
+            padding: 10px 12px;
+            resize: vertical;
+        }
+        select.form-control {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 32px;
+            cursor: pointer;
+        }
+        .combobox-wrapper {
+            position: relative;
+        }
+        .combobox-wrapper .form-control {
+            padding-right: 32px;
+        }
+        .combobox-arrow {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6b7280;
+            pointer-events: none;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-family: inherit;
+            font-weight: 500;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 150ms ease;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .btn-md { height: 40px; padding: 0 16px; font-size: 14px; }
+        .btn-primary {
+            background: #3b82f6;
+            color: #ffffff;
+        }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary {
+            background: #ffffff;
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+        .btn-secondary:hover { background: #f9fafb; }
+        .order-hint {
+            background: #f9fafb;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            border: 1px solid #e5e7eb;
+        }
+        .order-hint-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+        .order-hint-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+        .order-hint-row span {
+            color: #111827;
+        }
+        .order-hint-row button {
+            color: #3b82f6;
+            font-size: 12px;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="modal-overlay"></div>
+<div class="modal-container">
+    <div class="modal-header">
+        <h3 class="modal-title">新增入库</h3>
+        <button class="modal-close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+    </div>
+    <div class="modal-body">
+        <div class="form-row">
+            <div>
+                <label class="form-label">入库来源 <span class="required">*</span></label>
+                <select class="form-control">
+                    <option value="">请选择来源</option>
+                    <option value="purchase" selected>采购入库</option>
+                    <option value="return">退库入库</option>
+                    <option value="direct">直接入库</option>
+                    <option value="transfer">调拨入库</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label">采购订单 <span class="hint">(可选，选择后自动填充)</span></label>
+                <select class="form-control">
+                    <option value="">不关联采购订单</option>
+                    <option value="po1" selected>PO20260511-0001 · 一次性手套 · 待入:90个</option>
+                    <option value="po2">PO20260510-0002 · DNA提取试剂盒 · 待入:50盒</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 选择采购订单后显示待入库物料提示 -->
+        <div class="order-hint">
+            <div class="order-hint-title">待入库物料：</div>
+            <div class="order-hint-row">
+                <span>一次性手套 · 待入 90 个</span>
+                <button>选择此物料</button>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div>
+                <label class="form-label">耗材名称 <span class="required">*</span></label>
+                <select class="form-control">
+                    <option value="">请选择耗材</option>
+                    <option value="1" selected>一次性手套 (REA-00001) · 规格:100/盒 · 单位:个</option>
+                    <option value="2">DNA提取试剂盒 v2.0 (REA-00002) · 规格:50次反应 · 单位:盒</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div>
+                <label class="form-label">批号</label>
+                <input type="text" class="form-control" value="2312312321" placeholder="请输入批号">
+            </div>
+            <div>
+                <label class="form-label">数量 <span class="required">*</span> <span class="hint">(个)</span></label>
+                <input type="number" class="form-control" value="100" step="0.01">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div>
+                <label class="form-label">规格单价 (¥) <span class="hint">按包装规格计价</span></label>
+                <input type="number" class="form-control" value="25.00" step="0.01" placeholder="0.00">
+            </div>
+            <div>
+                <label class="form-label">库位 <span class="required">*</span></label>
+                <select class="form-control">
+                    <option value="">请选择库位</option>
+                    <option value="1" selected>403仓库-库区1-货架2-库位3 · 库位</option>
+                    <option value="2">402仓库-库区1-货架1-库位1 · 库位</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div>
+                <label class="form-label">生产日期</label>
+                <input type="date" class="form-control">
+            </div>
+            <div>
+                <label class="form-label">有效期至</label>
+                <input type="date" class="form-control">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div>
+                <label class="form-label">供应商</label>
+                <select class="form-control">
+                    <option value="">请选择供应商</option>
+                    <option value="1" selected>康湾耀东</option>
+                    <option value="2">北京病理科技</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 调拨入库时显示来源库位 -->
+        <div class="form-row" style="display: none;">
+            <div class="form-group-full">
+                <label class="form-label">来源库位 <span class="required">*</span></label>
+                <div class="combobox-wrapper">
+                    <input type="text" class="form-control" value="外部仓库A" placeholder="请选择或输入来源库位">
+                    <svg class="combobox-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+                <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">支持外部仓库手动输入，或选择现有库位</div>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group-full">
+                <label class="form-label">备注</label>
+                <textarea class="form-control" rows="2" placeholder="请输入备注信息（可选）"></textarea>
+            </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-md btn-secondary">取消</button>
+        <button class="btn btn-md btn-primary">确认入库</button>
+    </div>
+</div>
+
+</body>
+</html>

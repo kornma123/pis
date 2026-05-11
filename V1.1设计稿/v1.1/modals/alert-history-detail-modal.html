@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>预警历史详情 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="alert-history-detail-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">预警历史详情</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="alert-detail" style="background: var(--success-bg); border: 1px solid var(--success); border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <span style="font-weight: 600; color: var(--success);">已处理 - 已采购补货</span>
+                </div>
+                <div style="font-size: 14px; color: var(--text-secondary);">
+                    <div style="margin-bottom: 8px;"><strong>预警编号:</strong> ALT-2024-001</div>
+                    <div style="margin-bottom: 8px;"><strong>预警类型:</strong> 库存不足</div>
+                    <div style="margin-bottom: 8px;"><strong>物料:</strong> DNA提取试剂盒 (LOT-2024-A001)</div>
+                    <div><strong>触发时间:</strong> 2024-01-15 14:30:00</div>
+                </div>
+            </div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">触发条件</div>
+                    <div class="detail-value">库存 3盒 ≤ 阈值10盒</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">预警级别</div>
+                    <div class="detail-value"><span class="status-badge status-danger">紧急</span></div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">处理人</div>
+                    <div class="detail-value">张医生</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">处理时间</div>
+                    <div class="detail-value">2024-01-15 15:45</div>
+                </div>
+            </div>
+            <div class="detail-section" style="margin-top: 24px;">
+                <h4 class="detail-title">处理记录</h4>
+                <div style="padding: 16px; background: var(--bg-page); border-radius: 8px;">
+                    <div style="margin-bottom: 12px;">
+                        <div class="detail-label">处理意见</div>
+                        <div style="font-size: 14px; color: var(--text-primary); margin-top: 4px;">已联系供应商紧急采购，预计3天内到货。临时从其他项目调配2盒应急使用。</div>
+                    </div>
+                    <div>
+                        <div class="detail-label">处理结果</div>
+                        <div style="font-size: 14px; color: var(--text-primary); margin-top: 4px;">已采购补货 - 采购单号: PO-2024-0156</div>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 16px;">
+                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px;">处理时效</div>
+                <div style="display: flex; gap: 24px; padding: 12px; background: var(--bg-page); border-radius: 8px;">
+                    <div>
+                        <span style="font-size: 12px; color: var(--text-muted);">响应时间:</span>
+                        <span style="font-size: 14px; color: var(--text-primary); margin-left: 8px;">1小时15分钟</span>
+                    </div>
+                    <div>
+                        <span style="font-size: 12px; color: var(--text-muted);">处理时长:</span>
+                        <span style="font-size: 14px; color: var(--text-primary); margin-left: 8px;">1小时15分钟</span>
+                    </div>
+                    <div>
+                        <span style="font-size: 12px; color: var(--text-muted);">时效要求:</span>
+                        <span style="font-size: 14px; color: var(--success); margin-left: 8px;">符合要求 (≤4小时)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">关闭</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

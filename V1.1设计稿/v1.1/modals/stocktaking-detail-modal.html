@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>盘点详情 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="stocktaking-detail-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-xl" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">盘点详情</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="detail-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="detail-title">2024年第一季度盘点</div>
+                    <span class="status-badge status-warning">进行中</span>
+                </div>
+                <div class="detail-subtitle">盘点编号: ST-2024-001 | 创建时间: 2024-01-15 10:30</div>
+            </div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">盘点范围</div>
+                    <div class="detail-value">全部物料</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">盘点方式</div>
+                    <div class="detail-value">全盘</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">负责人</div>
+                    <div class="detail-value">张三</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">盘点进度</div>
+                    <div class="detail-value">156/200</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">差异数量</div>
+                    <div class="detail-value" style="color: var(--error);">12项</div>
+                </div>
+            </div>
+            <table class="data-table" style="margin-top: 24px;">
+                <thead>
+                    <tr>
+                        <th>物料名称</th>
+                        <th>批次号</th>
+                        <th>系统库存</th>
+                        <th>实际库存</th>
+                        <th>差异</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>DNA提取试剂盒</td>
+                        <td class="mono-text">LOT-2024-0156</td>
+                        <td>25 盒</td>
+                        <td>24 盒</td>
+                        <td style="color: var(--error);">-1 盒</td>
+                        <td><span class="status-badge status-danger">盘亏</span></td>
+                    </tr>
+                    <tr>
+                        <td>PCR Master Mix</td>
+                        <td class="mono-text">LOT-2024-0234</td>
+                        <td>18 盒</td>
+                        <td>18 盒</td>
+                        <td style="color: var(--success);">0</td>
+                        <td><span class="status-badge status-success">一致</span></td>
+                    </tr>
+                    <tr>
+                        <td>离心管 1.5ml</td>
+                        <td class="mono-text">LOT-2024-0089</td>
+                        <td>500 个</td>
+                        <td>520 个</td>
+                        <td style="color: var(--success);">+20 个</td>
+                        <td><span class="status-badge status-success">盘盈</span></td>
+                    </tr>
+                    <tr>
+                        <td>磁珠纯化试剂</td>
+                        <td class="mono-text">LOT-2024-0145</td>
+                        <td>12 瓶</td>
+                        <td>10 瓶</td>
+                        <td style="color: var(--error);">-2 瓶</td>
+                        <td><span class="status-badge status-danger">盘亏</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">关闭</button>
+            <button class="btn btn-secondary">导出报告</button>
+            <button class="btn btn-primary">处理差异</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

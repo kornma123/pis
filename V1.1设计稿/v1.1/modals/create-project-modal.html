@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新建检测项目 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="create-project-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">新建检测项目</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">项目名称 <span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="输入项目名称">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">项目编号</label>
+                        <input type="text" class="form-input mono-text" placeholder="系统自动生成" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">负责人 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="">选择负责人</option>
+                            <option value="1">张博士</option>
+                            <option value="2">李实验员</option>
+                            <option value="3">王主管</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">预计样本数</label>
+                        <input type="number" class="form-input" placeholder="输入预计样本数量">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">计划周期</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="date" class="form-input">
+                            <span style="line-height: 40px;">至</span>
+                            <input type="date" class="form-input">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">关联BOM</label>
+                        <select class="form-select">
+                            <option value="">选择BOM模板（可选）</option>
+                            <option value="BOM-001">NGS建库试剂套装</option>
+                            <option value="BOM-002">PCR扩增试剂套装</option>
+                            <option value="BOM-003">qPCR定量试剂套装</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">项目描述</label>
+                        <textarea class="form-textarea" rows="3" placeholder="可选填"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">取消</button>
+            <button class="btn btn-primary">创建项目</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

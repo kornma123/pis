@@ -1,0 +1,57 @@
+
+> coreone-backend@1.1.0 dev
+> tsx watch src/app.ts
+
+Database initialized successfully
+(node:14628) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+COREONE Backend Server running on port 3001
+API Base URL: http://localhost:3001/api/v1
+15:07:24 [tsx] change in ./src\routes\inventory-v1.1.ts Restarting...
+cDatabase initialized successfully
+(node:6516) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+COREONE Backend Server running on port 3001
+API Base URL: http://localhost:3001/api/v1
+[2026-05-11T07:14:51.274Z] GET /api/v1/inventory/stats
+[2026-05-11T07:15:08.387Z] GET /api/v1/inventory
+[2026-05-11T07:19:49.660Z] GET /api/v1/inventory
+[2026-05-11T07:19:49.662Z] GET /api/v1/inventory/stats
+[2026-05-11T07:19:49.664Z] GET /api/v1/projects
+[2026-05-11T07:19:49.666Z] GET /api/v1/users
+[2026-05-11T07:19:49.668Z] GET /api/v1/depletion/tracking
+[2026-05-11T07:19:49.670Z] GET /api/v1/inventory
+[2026-05-11T07:19:49.671Z] GET /api/v1/inventory/stats
+[2026-05-11T07:19:49.672Z] GET /api/v1/projects
+[2026-05-11T07:19:49.673Z] GET /api/v1/users
+[2026-05-11T07:19:49.674Z] GET /api/v1/depletion/depletion
+[2026-05-11T07:19:49.675Z] GET /api/v1/depletion/tracking
+[2026-05-11T07:19:49.676Z] GET /api/v1/depletion/depletion
+[2026-05-11T07:19:56.207Z] GET /api/v1/materials
+[2026-05-11T07:21:25.481Z] GET /api/v1/materials
+[2026-05-11T07:22:07.066Z] GET /api/v1/inventory
+[2026-05-11T07:22:07.068Z] GET /api/v1/inventory/stats
+[2026-05-11T07:22:07.070Z] GET /api/v1/projects
+[2026-05-11T07:22:07.072Z] GET /api/v1/users
+[2026-05-11T07:22:07.074Z] GET /api/v1/depletion/tracking
+[2026-05-11T07:22:07.074Z] GET /api/v1/depletion/depletion
+[2026-05-11T07:24:32.317Z] GET /api/v1/materials
+[2026-05-11T07:24:41.427Z] GET /api/v1/materials
+[2026-05-11T07:24:58.325Z] GET /api/v1/inventory/stats
+[2026-05-11T07:24:58.328Z] GET /api/v1/inbound
+[2026-05-11T07:24:58.330Z] GET /api/v1/outbound
+[2026-05-11T07:24:58.333Z] GET /api/v1/inventory/stats
+[2026-05-11T07:24:58.336Z] GET /api/v1/inbound
+[2026-05-11T07:24:58.337Z] GET /api/v1/outbound
+[2026-05-11T07:25:00.522Z] GET /api/v1/users
+[2026-05-11T07:25:00.524Z] GET /api/v1/roles
+[2026-05-11T07:25:00.560Z] GET /api/v1/users
+[2026-05-11T07:25:00.561Z] GET /api/v1/roles
+[2026-05-11T07:25:13.012Z] GET /api/v1/roles
+[2026-05-11T07:25:13.014Z] GET /api/v1/roles
+[2026-05-11T07:25:23.076Z] GET /api/v1/logs
+[2026-05-11T07:25:23.078Z] GET /api/v1/logs
+[2026-05-11T07:28:05.080Z] GET /api/v1/boms
+[2026-05-11T07:28:23.425Z] GET /api/v1/materials
+[2026-05-11T08:20:57.937Z] GET /api/v1/outbound
+[2026-05-11T08:20:57.941Z] GET /api/v1/outbound

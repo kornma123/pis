@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>供应商管�?- COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="scrap.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>报废管理</span>
+            </a>
+            <a href="stocktaking.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>库存盘点</span>
+            </a>
+            <a href="projects.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测服�?/span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-analysis.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+            <a href="categories.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>物料分类</span>
+            </a>
+            <a href="consumable-config.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                </svg>
+                <span>耗材配置</span>
+            </a>
+            <a href="rules.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>规则配置</span>
+            </a>
+            <a href="alerts.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span>预警中心</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>供应商管�?/span>
+            </a>
+            <a href="locations.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span>库位管理</span>
+            </a>
+            <a href="users.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>用户管理</span>
+            </a>
+            <a href="roles.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>角色管理</span>
+            </a>
+            <a href="logs.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <span>操作日志</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">供应商管�?/h1>
+                <p class="page-subtitle">管理供应商信息，维护采购渠道</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="showModal('supplier-add-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    新增供应�?
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">24</div>
+                <div class="stat-label">合作供应�?/div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">18</div>
+                <div class="stat-label">活跃供应�?/div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">6</div>
+                <div class="stat-label">暂停合作</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">¥128.5�?/div>
+                <div class="stat-label">年度采购�?/div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">供应商列�?/span>
+                <div class="filter-bar">
+                    <select class="filter-select">
+                        <option>全部状�?/option>
+                        <option>合作�?/option>
+                        <option>已暂�?/option>
+                    </select>
+                    <div class="search-box">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" placeholder="搜索供应商名�?..">
+                    </div>
+                    <button class="btn btn-secondary btn-sm">查询</button>
+                    <button class="btn btn-ghost btn-sm">重置</button>
+                </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>供应商名�?/th>
+                            <th>联系�?/th>
+                            <th>联系电话</th>
+                            <th>供应品类</th>
+                            <th>合作状�?/th>
+                            <th>年度采购�?/th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suppliers-tbody">
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <div class="pagination-info">�?24 条记�?/div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm btn-secondary" disabled>上一�?/button>
+                    <button class="btn btn-sm btn-ghost">1</button>
+                    <button class="btn btn-sm btn-ghost">2</button>
+                    <button class="btn btn-sm btn-ghost">3</button>
+                    <button class="btn btn-sm btn-secondary">下一�?/button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal" id="supplier-add-modal">
+        <div class="modal-overlay" onclick="hideModal('supplier-add-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">新增供应�?/h3>
+                <button class="modal-close" onclick="hideModal('supplier-add-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">供应商名�?<span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="请输入供应商名称">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">供应商编�?/label>
+                        <input type="text" class="form-input" placeholder="系统自动生成" readonly style="background: var(--bg-page);">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">联系�?<span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="请输入联系人姓名">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">联系电话 <span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="请输入联系电�?>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">电子邮箱</label>
+                        <input type="email" class="form-input" placeholder="请输入电子邮�?>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">供应品类 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="">请选择品类</option>
+                            <option value="reagent">试剂</option>
+                            <option value="consumable">耗材</option>
+                            <option value="equipment">设备</option>
+                            <option value="multiple">多品�?/option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">公司地址</label>
+                    <input type="text" class="form-input" placeholder="请输入公司地址">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">备注</label>
+                    <textarea class="form-textarea" rows="2" placeholder="请输入备注信�?></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('supplier-add-modal')">取消</button>
+                <button class="btn btn-primary" onclick="saveNewSupplier()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="supplier-detail-modal">
+        <div class="modal-overlay" onclick="hideModal('supplier-detail-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">供应商详�?/h3>
+                <button class="modal-close" onclick="hideModal('supplier-detail-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-header" style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
+                    <div style="width: 60px; height: 60px; background: #e0e7ff; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #4f46e5; font-weight: 600; font-size: 24px;">�?/div>
+                    <div>
+                        <div style="font-size: 18px; font-weight: 600;">华东生物科技有限公司</div>
+                        <div style="font-size: 13px; color: var(--text-muted);">SUP2024001</div>
+                    </div>
+                    <span class="status-badge status-success" style="margin-left: auto;">合作�?/span>
+                </div>
+                <div class="detail-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="detail-item">
+                        <div class="detail-label">联系�?/div>
+                        <div class="detail-value">张明�?/div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">联系电话</div>
+                        <div class="detail-value">138-0000-1234</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">电子邮箱</div>
+                        <div class="detail-value">zhangmh@huadong.com</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">供应品类</div>
+                        <div class="detail-value">试剂、耗材</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">公司地址</div>
+                        <div class="detail-value">上海市浦东新区张江高科技园区</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">合作时间</div>
+                        <div class="detail-value">2022-03-15</div>
+                    </div>
+                </div>
+                <div style="margin-top: 24px;">
+                    <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">采购统计</h4>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+                        <div style="background: var(--bg-page); padding: 16px; border-radius: var(--radius-md); text-align: center;">
+                            <div style="font-size: 20px; font-weight: 600; color: var(--primary);">¥45.2�?/div>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">年度采购�?/div>
+                        </div>
+                        <div style="background: var(--bg-page); padding: 16px; border-radius: var(--radius-md); text-align: center;">
+                            <div style="font-size: 20px; font-weight: 600; color: var(--text-primary);">156</div>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">采购订单�?/div>
+                        </div>
+                        <div style="background: var(--bg-page); padding: 16px; border-radius: var(--radius-md); text-align: center;">
+                            <div style="font-size: 20px; font-weight: 600; color: var(--text-primary);">89</div>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">供应物料�?/div>
+                        </div>
+                        <div style="background: var(--bg-page); padding: 16px; border-radius: var(--radius-md); text-align: center;">
+                            <div style="font-size: 20px; font-weight: 600; color: var(--success);">98%</div>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">准时交付�?/div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('supplier-detail-modal')">关闭</button>
+                <button class="btn btn-primary" onclick="hideModal('supplier-detail-modal'); showModal('supplier-edit-modal');">编辑</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="supplier-edit-modal">
+        <div class="modal-overlay" onclick="hideModal('supplier-edit-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">编辑供应�?/h3>
+                <button class="modal-close" onclick="hideModal('supplier-edit-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">供应商名�?<span class="required">*</span></label>
+                        <input type="text" class="form-input" value="华东生物科技有限公司">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">供应商编�?/label>
+                        <input type="text" class="form-input" value="SUP2024001" readonly style="background: var(--bg-page);">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">联系�?<span class="required">*</span></label>
+                        <input type="text" class="form-input" value="张明�?>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">联系电话 <span class="required">*</span></label>
+                        <input type="text" class="form-input" value="138-0000-1234">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">电子邮箱</label>
+                        <input type="email" class="form-input" value="zhangmh@huadong.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">合作状�?<span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="active" selected>合作�?/option>
+                            <option value="paused">已暂�?/option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">供应品类 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="reagent">试剂</option>
+                            <option value="consumable">耗材</option>
+                            <option value="equipment">设备</option>
+                            <option value="multiple" selected>多品�?/option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">公司地址</label>
+                        <input type="text" class="form-input" value="上海市浦东新区张江高科技园区">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">备注</label>
+                    <textarea class="form-textarea" rows="2">优质供应商，交付准时率高</textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('supplier-edit-modal')">取消</button>
+                <button class="btn btn-primary">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/scripts.js"></script>
+    <script src="../shared/data-store.js"></script>
+    <script>
+        let currentOpenModal = null;
+        const dataStore = new CoreDataStore();
+        
+        const suppliersData = [
+            { id: 'SUP-001', name: '赛默飞世�?, contact: '张经�?, phone: '400-888-1234', address: '上海市浦东新�?, category: '试剂、耗材', status: 'active', amount: 452000 },
+            { id: 'SUP-002', name: '艾本�?, contact: '李经�?, phone: '400-888-2345', address: '北京市朝阳区', category: '设备、耗材', status: 'active', amount: 328000 },
+            { id: 'SUP-003', name: '赛多利斯', contact: '王经�?, phone: '400-888-3456', address: '广州市天河区', category: '设备', status: 'active', amount: 185000 },
+            { id: 'SUP-004', name: '康宁', contact: '赵经�?, phone: '400-888-4567', address: '上海市闵行区', category: '耗材', status: 'active', amount: 120000 },
+            { id: 'SUP-005', name: '徕卡', contact: '刘经�?, phone: '400-888-5678', address: '北京市海淀�?, category: '设备', status: 'active', amount: 98000 },
+            { id: 'SUP-006', name: '北京病理科技', contact: '孙经�?, phone: '010-12345678', address: '北京市昌平区', category: '试剂', status: 'active', amount: 75000 },
+            { id: 'SUP-007', name: 'DAKO', contact: '陈经�?, phone: '400-888-6789', address: '上海市徐汇区', category: '试剂', status: 'active', amount: 62000 },
+            { id: 'SUP-008', name: '罗氏诊断', contact: '周经�?, phone: '400-888-7890', address: '上海市静安区', category: '试剂', status: 'inactive', amount: 0 },
+            { id: 'SUP-009', name: '达安基因', contact: '吴经�?, phone: '400-888-8901', address: '广州市黄埔区', category: '试剂', status: 'active', amount: 45000 },
+            { id: 'SUP-010', name: '华大基因', contact: '郑经�?, phone: '400-888-9012', address: '深圳市南山区', category: '试剂', status: 'active', amount: 38000 }
+        ];
+        
+        const categoryOptions = [
+            { value: 'reagent', label: '试剂' },
+            { value: 'consumable', label: '耗材' },
+            { value: 'equipment', label: '设备' },
+            { value: 'multiple', label: '多品�? }
+        ];
+        
+        const statusOptions = [
+            { value: 'active', label: '合作�?, class: 'status-success' },
+            { value: 'inactive', label: '已暂�?, class: 'status-secondary' }
+        ];
+        
+        function getAvatarColor(name) {
+            const colors = [
+                { bg: '#e0e7ff', text: '#4f46e5' },
+                { bg: '#fef3c7', text: '#d97706' },
+                { bg: '#dbeafe', text: '#2563eb' },
+                { bg: '#dcfce7', text: '#16a34a' },
+                { bg: '#fce7f3', text: '#db2777' },
+                { bg: '#f3e8ff', text: '#9333ea' }
+            ];
+            const index = name.charCodeAt(0) % colors.length;
+            return colors[index];
+        }
+        
+        function formatAmount(amount) {
+            if (!amount || amount === 0) return '-';
+            if (amount >= 10000) {
+                return '¥' + (amount / 10000).toFixed(1) + '�?;
+            }
+            return '¥' + amount.toLocaleString();
+        }
+        
+        function renderSuppliersTable(data) {
+            const tbody = document.getElementById('suppliers-tbody');
+            if (!tbody) return;
+            
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 48px 20px;">
+                            <div style="color: var(--text-muted); font-size: 14px;">暂无供应商数�?/div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = data.map(supplier => {
+                const avatarColor = getAvatarColor(supplier.name);
+                const status = statusOptions.find(s => s.value === supplier.status) || statusOptions[0];
+                const firstChar = supplier.name.charAt(0);
+                
+                return `
+                    <tr>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <div style="width: 40px; height: 40px; background: ${avatarColor.bg}; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: ${avatarColor.text}; font-weight: 600;">${firstChar}</div>
+                                <div>
+                                    <div style="font-weight: 500;">${supplier.name}</div>
+                                    <div style="font-size: 12px; color: #6b7280;">${supplier.id}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>${supplier.contact}</td>
+                        <td>${supplier.phone}</td>
+                        <td>${supplier.category}</td>
+                        <td><span class="status-badge ${status.class}">${status.label}</span></td>
+                        <td>${formatAmount(supplier.amount)}</td>
+                        <td>
+                            <div class="action-btns">
+                                <button class="btn btn-ghost btn-sm" onclick="showSupplierDetail('${supplier.id}')">详情</button>
+                                <button class="btn btn-ghost btn-sm" onclick="showSupplierEdit('${supplier.id}')">编辑</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function updateStats() {
+            const total = suppliersData.length;
+            const active = suppliersData.filter(s => s.status === 'active').length;
+            const inactive = suppliersData.filter(s => s.status === 'inactive').length;
+            const totalAmount = suppliersData.reduce((sum, s) => sum + (s.amount || 0), 0);
+            
+            const statCards = document.querySelectorAll('.stat-card .stat-value');
+            if (statCards.length >= 4) {
+                statCards[0].textContent = total;
+                statCards[1].textContent = active;
+                statCards[2].textContent = inactive;
+                statCards[3].textContent = formatAmount(totalAmount);
+            }
+        }
+        
+        function showSupplierDetail(id) {
+            const supplier = suppliersData.find(s => s.id === id);
+            if (!supplier) return;
+            showModal('supplier-detail-modal');
+        }
+        
+        function showSupplierEdit(id) {
+            const supplier = suppliersData.find(s => s.id === id);
+            if (!supplier) return;
+            showModal('supplier-edit-modal');
+        }
+        
+        function saveNewSupplier() {
+            const modal = document.getElementById('supplier-add-modal');
+            
+            const nameInput = modal.querySelector('input[placeholder="请输入供应商名称"]');
+            const contactInput = modal.querySelector('input[placeholder="请输入联系人姓名"]');
+            const phoneInput = modal.querySelector('input[placeholder="请输入联系电�?]');
+            const emailInput = modal.querySelector('input[placeholder="请输入电子邮�?]');
+            const categorySelect = modal.querySelector('.form-select');
+            const addressInput = modal.querySelector('input[placeholder="请输入公司地址"]');
+            const remarkInput = modal.querySelector('textarea');
+            
+            const name = nameInput ? nameInput.value.trim() : '';
+            const contact = contactInput ? contactInput.value.trim() : '';
+            const phone = phoneInput ? phoneInput.value.trim() : '';
+            const email = emailInput ? emailInput.value.trim() : '';
+            const category = categorySelect ? categorySelect.value : '';
+            const address = addressInput ? addressInput.value.trim() : '';
+            const remark = remarkInput ? remarkInput.value.trim() : '';
+            
+            if (!name) {
+                showToast('请输入供应商名称', 'error');
+                return;
+            }
+            if (!contact) {
+                showToast('请输入联系人', 'error');
+                return;
+            }
+            if (!phone) {
+                showToast('请输入联系电�?, 'error');
+                return;
+            }
+            if (!category) {
+                showToast('请选择供应品类', 'error');
+                return;
+            }
+            
+            const categoryLabel = { reagent: '试剂', consumable: '耗材', equipment: '设备', multiple: '多品�? };
+            
+            const newId = 'SUP-' + String(suppliersData.length + 1).padStart(3, '0');
+            const newSupplier = {
+                id: newId,
+                name: name,
+                contact: contact,
+                phone: phone,
+                address: address,
+                category: categoryLabel[category] || category,
+                status: 'active',
+                amount: 0,
+                email: email,
+                remark: remark
+            };
+            
+            suppliersData.push(newSupplier);
+            renderSuppliersTable(suppliersData);
+            updateStats();
+            
+            if (nameInput) nameInput.value = '';
+            if (contactInput) contactInput.value = '';
+            if (phoneInput) phoneInput.value = '';
+            if (emailInput) emailInput.value = '';
+            if (categorySelect) categorySelect.selectedIndex = 0;
+            if (addressInput) addressInput.value = '';
+            if (remarkInput) remarkInput.value = '';
+            
+            hideModal('supplier-add-modal');
+            showToast('供应�?"' + name + '" 添加成功', 'success');
+        }
+        
+        function showModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            currentOpenModal = modalId;
+            
+            setTimeout(() => {
+                const firstInput = modal.querySelector('input:not([type="hidden"]):not([readonly]), select:not([disabled]), textarea');
+                if (firstInput) firstInput.focus();
+            }, 100);
+        }
+        
+        function hideModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            currentOpenModal = null;
+        }
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && currentOpenModal) {
+                hideModal(currentOpenModal);
+            }
+        });
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            renderSuppliersTable(suppliersData);
+            updateStats();
+            
+            // 搜索功能
+            document.querySelector('.search-box input').addEventListener('input', function() {
+                const searchText = this.value.toLowerCase().trim();
+                const tableRows = document.querySelectorAll('.table-row');
+                
+                tableRows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 1) {
+                        const name = cells[0] ? cells[0].textContent.toLowerCase() : '';
+                        const contact = cells[1] ? cells[1].textContent.toLowerCase() : '';
+                        
+                        if (searchText === '' || name.includes(searchText) || contact.includes(searchText)) {
+                            row.style.display = '';
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

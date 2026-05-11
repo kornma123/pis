@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户管理 - COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="scrap.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>报废管理</span>
+            </a>
+            <a href="stocktaking.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>库存盘点</span>
+            </a>
+            <a href="projects.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测服�?/span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-analysis.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+            <a href="categories.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>物料分类</span>
+            </a>
+            <a href="consumable-config.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                </svg>
+                <span>耗材配置</span>
+            </a>
+            <a href="rules.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>规则配置</span>
+            </a>
+            <a href="alerts.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span>预警中心</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>供应商管�?/span>
+            </a>
+            <a href="locations.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span>库位管理</span>
+            </a>
+            <a href="users.html" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>用户管理</span>
+            </a>
+            <a href="roles.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>角色管理</span>
+            </a>
+            <a href="logs.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <span>操作日志</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">用户管理</h1>
+                <p class="page-subtitle">管理系统用户、角色和权限分配</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="showModal('user-add-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    新建用户
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">15</div>
+                <div class="stat-label">用户总数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">12</div>
+                <div class="stat-label">活跃用户</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">4</div>
+                <div class="stat-label">角色数量</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">3</div>
+                <div class="stat-label">本月新增</div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 300px 1fr; gap: 20px;">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">角色列表</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 12px; padding: 16px;">
+                    <div class="role-card active" onclick="selectRole(this)">
+                        <div class="role-actions">
+                            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); showModal('role-detail-modal')" title="查看">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="role-header">
+                            <span class="role-name">系统管理�?span class="system-role-badge">系统角色</span></span>
+                            <span class="role-count">2 �?/span>
+                        </div>
+                        <div class="role-desc">拥有系统全部权限，不可修�?/div>
+                        <div>
+                            <span class="permission-tag admin">全部权限</span>
+                        </div>
+                    </div>
+                    <div class="role-card" onclick="selectRole(this)">
+                        <div class="role-header">
+                            <span class="role-name">科室主任</span>
+                            <span class="role-count">3 �?/span>
+                        </div>
+                        <div class="role-desc">可查看和管理本科室数�?/div>
+                        <div>
+                            <span class="permission-tag view">查看</span>
+                            <span class="permission-tag edit">编辑</span>
+                            <span class="permission-tag edit">导出</span>
+                        </div>
+                    </div>
+                    <div class="role-card" onclick="selectRole(this)">
+                        <div class="role-header">
+                            <span class="role-name">耗材管理�?/span>
+                            <span class="role-count">5 �?/span>
+                        </div>
+                        <div class="role-desc">负责库存出入库管�?/div>
+                        <div>
+                            <span class="permission-tag view">查看</span>
+                            <span class="permission-tag edit">入库</span>
+                            <span class="permission-tag edit">出库</span>
+                        </div>
+                    </div>
+                    <div class="role-card" onclick="selectRole(this)">
+                        <div class="role-header">
+                            <span class="role-name">普通技�?/span>
+                            <span class="role-count">5 �?/span>
+                        </div>
+                        <div class="role-desc">可领用物料和查看库存</div>
+                        <div>
+                            <span class="permission-tag view">查看</span>
+                            <span class="permission-tag view">领用</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">用户列表</span>
+                    <div class="filter-bar">
+                        <select class="filter-select">
+                            <option>全部角色</option>
+                            <option>系统管理�?/option>
+                            <option>科室主任</option>
+                            <option>耗材管理�?/option>
+                            <option>普通技�?/option>
+                        </select>
+                        <select class="filter-select">
+                            <option>全部状�?/option>
+                            <option>正常</option>
+                            <option>禁用</option>
+                        </select>
+                        <div class="search-box">
+                            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                            <input type="text" placeholder="搜索用户�?姓名...">
+                        </div>
+                        <button class="btn btn-secondary btn-sm">查询</button>
+                    </div>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>用户�?/th>
+                                <th>姓名</th>
+                                <th>角色</th>
+                                <th>部门</th>
+                                <th>联系电话</th>
+                                <th>状�?/th>
+                                <th>最后登�?/th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>admin</strong></td>
+                                <td>系统管理�?/td>
+                                <td>系统管理�?/td>
+                                <td>信息�?/td>
+                                <td>-</td>
+                                <td><span class="status-badge status-success">正常</span></td>
+                                <td>2024-01-15 16:30</td>
+                                <td>
+                                    <div class="action-btns">
+                                        <button class="btn btn-ghost btn-sm" onclick="showModal('user-detail-modal')">详情</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="showModal('user-edit-modal')">编辑</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>zhangsan</strong></td>
+                                <td>张三</td>
+                                <td>耗材管理�?/td>
+                                <td>病理�?/td>
+                                <td>138****1234</td>
+                                <td><span class="status-badge status-success">正常</span></td>
+                                <td>2024-01-15 14:20</td>
+                                <td>
+                                    <div class="action-btns">
+                                        <button class="btn btn-ghost btn-sm" onclick="showModal('user-detail-modal')">详情</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="showModal('user-edit-modal')">编辑</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>lisi</strong></td>
+                                <td>李四</td>
+                                <td>科室主任</td>
+                                <td>病理�?/td>
+                                <td>139****5678</td>
+                                <td><span class="status-badge status-success">正常</span></td>
+                                <td>2024-01-15 11:45</td>
+                                <td>
+                                    <div class="action-btns">
+                                        <button class="btn btn-ghost btn-sm" onclick="showModal('user-detail-modal')">详情</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="showModal('user-edit-modal')">编辑</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>wangwu</strong></td>
+                                <td>王五</td>
+                                <td>普通技�?/td>
+                                <td>病理�?/td>
+                                <td>137****9012</td>
+                                <td><span class="status-badge status-success">正常</span></td>
+                                <td>2024-01-15 09:30</td>
+                                <td>
+                                    <div class="action-btns">
+                                        <button class="btn btn-ghost btn-sm" onclick="showModal('user-detail-modal')">详情</button>
+                                        <button class="btn btn-ghost btn-sm" onclick="showModal('user-edit-modal')">编辑</button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>zhaoliu</strong></td>
+                                <td>赵六</td>
+                                <td>耗材管理�?/td>
+                                <td>病理�?/td>
+                                <td>136****3456</td>
+                                <td><span class="status-badge status-error">禁用</span></td>
+                                <td>2024-01-10 16:00</td>
+                                <td>
+                                    <div class="action-btns">
+                                        <button class="btn btn-ghost btn-sm" onclick="showModal('user-detail-modal')">详情</button>
+                                        <button class="btn btn-ghost btn-sm">启用</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <div class="pagination-info">�?15 条记录，�?1/2 �?/div>
+                    <div class="pagination-controls">
+                        <button class="btn btn-sm btn-secondary" disabled>上一�?/button>
+                        <button class="btn btn-sm btn-ghost">1</button>
+                        <button class="btn btn-sm btn-ghost">2</button>
+                        <button class="btn btn-sm btn-secondary">下一�?/button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal" id="user-add-modal">
+        <div class="modal-overlay" onclick="hideModal('user-add-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">新建用户</h3>
+                <button class="modal-close" onclick="hideModal('user-add-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">用户�?<span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="请输入用户名">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">姓名 <span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="请输入姓�?>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">角色 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="">请选择角色</option>
+                            <option value="admin">系统管理�?/option>
+                            <option value="director">科室主任</option>
+                            <option value="manager">耗材管理�?/option>
+                            <option value="technician">普通技�?/option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">部门 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="">请选择部门</option>
+                            <option value="pathology">病理�?/option>
+                            <option value="lab">检验科</option>
+                            <option value="it">信息�?/option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">联系电话</label>
+                        <input type="text" class="form-input" placeholder="请输入联系电�?>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">电子邮箱</label>
+                        <input type="email" class="form-input" placeholder="请输入电子邮�?>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">初始密码 <span class="required">*</span></label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" class="form-input" value="Abc@123456" readonly style="flex: 1; background: var(--bg-page);">
+                        <button class="btn btn-secondary">随机生成</button>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">初始密码将在用户首次登录时要求修�?/div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('user-add-modal')">取消</button>
+                <button class="btn btn-primary">创建用户</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="user-edit-modal">
+        <div class="modal-overlay" onclick="hideModal('user-edit-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">编辑用户</h3>
+                <button class="modal-close" onclick="hideModal('user-edit-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">用户�?/label>
+                        <input type="text" class="form-input" value="zhangsan" readonly style="background: var(--bg-page);">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">姓名 <span class="required">*</span></label>
+                        <input type="text" class="form-input" value="张三">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">角色 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="admin">系统管理�?/option>
+                            <option value="director">科室主任</option>
+                            <option value="manager" selected>耗材管理�?/option>
+                            <option value="technician">普通技�?/option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">部门 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="pathology" selected>病理�?/option>
+                            <option value="lab">检验科</option>
+                            <option value="it">信息�?/option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">联系电话</label>
+                        <input type="text" class="form-input" value="13812341234">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">状�?/label>
+                        <select class="form-select">
+                            <option value="active" selected>正常</option>
+                            <option value="disabled">禁用</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">电子邮箱</label>
+                    <input type="email" class="form-input" value="zhangsan@hospital.com">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('user-edit-modal')">取消</button>
+                <button class="btn btn-secondary">重置密码</button>
+                <button class="btn btn-primary">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="user-detail-modal">
+        <div class="modal-overlay" onclick="hideModal('user-detail-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">用户详情</h3>
+                <button class="modal-close" onclick="hideModal('user-detail-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
+                    <div style="width: 60px; height: 60px; background: var(--primary-light); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--primary); font-weight: 600; font-size: 20px;">�?/div>
+                    <div>
+                        <div style="font-size: 18px; font-weight: 600;">张三</div>
+                        <div style="font-size: 13px; color: var(--text-muted);">用户�? zhangsan</div>
+                    </div>
+                    <span class="status-badge status-success" style="margin-left: auto;">正常</span>
+                </div>
+                <div class="detail-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="detail-item">
+                        <div class="detail-label">角色</div>
+                        <div class="detail-value">耗材管理�?/div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">部门</div>
+                        <div class="detail-value">病理�?/div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">联系电话</div>
+                        <div class="detail-value">138****1234</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">电子邮箱</div>
+                        <div class="detail-value">zhangsan@hospital.com</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">创建时间</div>
+                        <div class="detail-value">2023-06-15 10:30</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">最后登�?/div>
+                        <div class="detail-value">2024-01-15 14:20</div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h4 style="font-size: 14px; font-weight: 600;">权限列表</h4>
+                        <span style="font-size: 12px; color: var(--text-muted);">数据范围: 本部门数�?/span>
+                    </div>
+                    <div class="permission-group">
+                        <div class="permission-group-header">
+                            <span class="permission-group-title">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                                </svg>
+                                库存管理
+                            </span>
+                            <span class="permission-group-count">4/5 项权�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">库存查看</div>
+                                <div class="permission-item-desc">查看库存列表和详�?/div>
+                            </div>
+                            <span class="status-badge status-success">已授�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">入库操作</div>
+                                <div class="permission-item-desc">执行入库登记操作</div>
+                            </div>
+                            <span class="status-badge status-success">已授�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">出库操作</div>
+                                <div class="permission-item-desc">执行出库登记操作</div>
+                            </div>
+                            <span class="status-badge status-success">已授�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">库存导出</div>
+                                <div class="permission-item-desc">导出库存数据</div>
+                            </div>
+                            <span class="status-badge status-success">已授�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">库存调整</div>
+                                <div class="permission-item-desc">调整库存数量</div>
+                            </div>
+                            <span class="status-badge status-muted">未授�?/span>
+                        </div>
+                    </div>
+                    <div class="permission-group">
+                        <div class="permission-group-header">
+                            <span class="permission-group-title">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 11l3 3L22 4"/>
+                                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                                </svg>
+                                盘点管理
+                            </span>
+                            <span class="permission-group-count">2/3 项权�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">盘点查看</div>
+                                <div class="permission-item-desc">查看盘点记录和详�?/div>
+                            </div>
+                            <span class="status-badge status-success">已授�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">盘点操作</div>
+                                <div class="permission-item-desc">执行盘点录入操作</div>
+                            </div>
+                            <span class="status-badge status-success">已授�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">盘点删除</div>
+                                <div class="permission-item-desc">删除盘点记录</div>
+                            </div>
+                            <span class="status-badge status-muted">未授�?/span>
+                        </div>
+                    </div>
+                    <div class="permission-group">
+                        <div class="permission-group-header">
+                            <span class="permission-group-title">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                                </svg>
+                                系统设置
+                            </span>
+                            <span class="permission-group-count">0/4 项权�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">用户管理</div>
+                                <div class="permission-item-desc">管理系统用户</div>
+                            </div>
+                            <span class="status-badge status-muted">未授�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">角色管理</div>
+                                <div class="permission-item-desc">管理角色和权�?/div>
+                            </div>
+                            <span class="status-badge status-muted">未授�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">系统配置</div>
+                                <div class="permission-item-desc">管理系统参数</div>
+                            </div>
+                            <span class="status-badge status-muted">未授�?/span>
+                        </div>
+                        <div class="permission-item">
+                            <div>
+                                <div class="permission-item-label">操作日志</div>
+                                <div class="permission-item-desc">查看系统操作日志</div>
+                            </div>
+                            <span class="status-badge status-muted">未授�?/span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('user-detail-modal')">关闭</button>
+                <button class="btn btn-secondary">重置密码</button>
+                <button class="btn btn-primary" onclick="hideModal('user-detail-modal'); showModal('user-edit-modal');">编辑</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="role-detail-modal">
+        <div class="modal-overlay" onclick="hideModal('role-detail-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">角色详情</h3>
+                <button class="modal-close" onclick="hideModal('role-detail-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
+                    <div style="width: 56px; height: 56px; background: var(--primary-light); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: var(--primary);">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div style="font-size: 18px; font-weight: 600;">系统管理�?/div>
+                        <div style="font-size: 13px; color: var(--text-muted);">标识: admin</div>
+                    </div>
+                    <span class="system-role-badge" style="margin-left: auto; padding: 4px 8px; font-size: 12px;">系统角色</span>
+                </div>
+                <div class="detail-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="detail-item">
+                        <div class="detail-label">用户数量</div>
+                        <div class="detail-value">2 �?/div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">数据权限</div>
+                        <div class="detail-value">全部数据</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">创建时间</div>
+                        <div class="detail-value">2023-01-01</div>
+                    </div>
+                </div>
+                <div style="margin-top: 24px;">
+                    <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">权限列表</h4>
+                    <div style="background: var(--success-bg); color: var(--success); padding: 12px 16px; border-radius: var(--radius-md); font-size: 14px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 8px;">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                        拥有系统全部权限
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('role-detail-modal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelector('.search-box input').addEventListener('input', function() {
+                const searchText = this.value.toLowerCase().trim();
+                const tableRows = document.querySelectorAll('.data-table tbody tr');
+                
+                tableRows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 2) {
+                        const username = cells[0] ? cells[0].textContent.toLowerCase() : '';
+                        const realName = cells[1] ? cells[1].textContent.toLowerCase() : '';
+                        
+                        if (searchText === '' || username.includes(searchText) || realName.includes(searchText)) {
+                            row.style.display = '';
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    }
+                });
+            });
+        });
+        function hideModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+        
+        function selectRole(element) {
+            document.querySelectorAll('.role-card').forEach(card => card.classList.remove('active'));
+            element.classList.add('active');
+        }
+        
+        function togglePermissionGroup(header) {
+            const content = header.nextElementSibling;
+            const icon = header.querySelector('svg:last-child');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                content.style.display = 'none';
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+        
+        document.querySelectorAll('.data-scope-option').forEach(option => {
+            option.addEventListener('click', function() {
+                this.closest('.data-scope-options').querySelectorAll('.data-scope-option').forEach(opt => opt.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

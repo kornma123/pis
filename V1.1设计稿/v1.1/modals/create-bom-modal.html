@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新建BOM - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="create-bom-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-xl" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">新建BOM</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">BOM名称 <span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="输入BOM名称">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">所属项目</label>
+                        <select class="form-select">
+                            <option value="">选择关联项目（可选）</option>
+                            <option value="PRJ-001">全外显子组测序</option>
+                            <option value="PRJ-002">肿瘤基因突变检测</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">版本号</label>
+                        <input type="text" class="form-input" value="v1.0" placeholder="v1.0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">版本说明</label>
+                        <input type="text" class="form-input" placeholder="描述本次BOM版本的主要变更">
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-header">
+                    <h4 class="card-title">物料配置清单</h4>
+                    <button class="btn btn-primary btn-sm" onclick="showModal('material-selector-modal')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        添加物料
+                    </button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>序号</th>
+                            <th>物料名称</th>
+                            <th>规格型号</th>
+                            <th>用量/样本</th>
+                            <th>单位</th>
+                            <th>参考单价</th>
+                            <th>单样本成本</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1</td>
+                            <td><strong>DNA提取试剂盒</strong></td>
+                            <td>v2.0，96次反应</td>
+                            <td>
+                                <input type="number" class="form-input form-input-sm" value="0.0104" step="0.0001" style="width: 80px;">
+                            </td>
+                            <td>盒</td>
+                            <td>¥1,280</td>
+                            <td>¥13.33</td>
+                            <td><button class="btn btn-ghost btn-sm" style="color: var(--danger);">删除</button></td>
+                        </tr>
+                        <tr>
+                            <td>2</td>
+                            <td><strong>PCR Master Mix</strong></td>
+                            <td>2X，500次反应</td>
+                            <td>
+                                <input type="number" class="form-input form-input-sm" value="0.002" step="0.0001" style="width: 80px;">
+                            </td>
+                            <td>盒</td>
+                            <td>¥850</td>
+                            <td>¥1.70</td>
+                            <td><button class="btn btn-ghost btn-sm" style="color: var(--danger);">删除</button></td>
+                        </tr>
+                        <tr>
+                            <td>3</td>
+                            <td><strong>磁珠纯化试剂</strong></td>
+                            <td>5ml/瓶</td>
+                            <td>
+                                <input type="number" class="form-input form-input-sm" value="0.05" step="0.01" style="width: 80px;">
+                            </td>
+                            <td>瓶</td>
+                            <td>¥180</td>
+                            <td>¥9.00</td>
+                            <td><button class="btn btn-ghost btn-sm" style="color: var(--danger);">删除</button></td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: var(--bg-page); font-weight: 600;">
+                            <td colspan="6" style="text-align: right;">单样本物料成本合计:</td>
+                            <td>¥24.03</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">取消</button>
+            <button class="btn btn-secondary">保存草稿</button>
+            <button class="btn btn-primary">创建BOM</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

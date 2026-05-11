@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消耗对账 - COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .page-tabs {
+            display: flex; gap: 0;
+            border-bottom: 2px solid var(--border-default);
+            margin-bottom: 24px;
+        }
+        .page-tab {
+            padding: 14px 28px;
+            font-size: 14px; font-weight: 600;
+            color: var(--text-muted);
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            font-family: var(--font-sans);
+            margin-bottom: -2px;
+        }
+        .page-tab:hover { color: var(--text-primary); }
+        .page-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .period-selector {
+            display: flex; gap: 8px; align-items: center;
+        }
+        .period-btn {
+            padding: 6px 16px; font-size: 13px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-default);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        .period-btn.active {
+            background: var(--primary); color: white;
+            border-color: var(--primary);
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .summary-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            border: 1px solid var(--border-default);
+        }
+        .summary-card .label { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+        .summary-card .value { font-size: 28px; font-weight: 700; color: var(--text-primary); }
+        .summary-card .value.success { color: var(--success); }
+        .summary-card .value.warning { color: var(--warning-text); }
+        .summary-card .value.danger { color: var(--error-text); }
+        .summary-card .meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+        .project-reconcile-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+        .project-header {
+            padding: 16px 20px;
+            background: var(--bg-page);
+            border-bottom: 1px solid var(--border-default);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .project-name { font-weight: 600; font-size: 15px; }
+        .project-meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .project-bom-tags { display: flex; gap: 6px; }
+        .bom-tag {
+            padding: 3px 10px;
+            border-radius: var(--radius-full);
+            font-size: 11px; font-weight: 500;
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .material-comparison {
+            padding: 0 20px;
+        }
+        .comp-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1.5fr 100px;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-light);
+            align-items: center;
+        }
+        .comp-row:last-child { border-bottom: none; }
+        .comp-header {
+            background: var(--bg-page);
+            font-size: 12px; font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .col-mat { font-weight: 500; }
+        .col-mat .spec { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .col-theory {
+            text-align: center; color: #1565C0; font-weight: 600;
+            background: #EFF6FF; border-radius: var(--radius-sm); padding: 4px 0;
+        }
+        .col-actual {
+            text-align: center; color: #9A3412; font-weight: 600;
+            background: #FFF7ED; border-radius: var(--radius-sm); padding: 4px 0;
+        }
+        .col-diff {
+            text-align: center; font-weight: 600;
+        }
+        .col-diff.match { color: #16A34A; background: #F0FDF4; border-radius: var(--radius-sm); padding: 4px 0; }
+        .col-diff.warn { color: #CA8A04; background: #FEFCE8; border-radius: var(--radius-sm); padding: 4px 0; }
+        .col-diff.danger { color: #DC2626; background: #FEF2F2; border-radius: var(--radius-sm); padding: 4px 0; }
+
+        .fix-btn {
+            padding: 4px 12px; font-size: 12px;
+            color: var(--primary); background: var(--primary-light);
+            border: 1px solid #BFDBFE; border-radius: var(--radius-md);
+            cursor: pointer; font-weight: 500;
+        }
+        .fix-btn:hover { background: #DBEAFE; }
+
+        .upload-zone {
+            border: 2px dashed var(--border-strong);
+            border-radius: var(--radius-lg);
+            padding: 40px; text-align: center;
+            background: var(--bg-page);
+            transition: all var(--transition-fast);
+            cursor: pointer;
+        }
+        .upload-zone:hover {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+        .upload-title { font-size: 15px; font-weight: 500; margin: 8px 0 4px; }
+        .upload-desc { font-size: 13px; color: var(--text-muted); }
+
+        .timeline-item-compact {
+            display: flex; gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .timeline-item-compact:last-child { border-bottom: none; }
+        .timeline-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+        .timeline-info { flex: 1; }
+        .timeline-action { font-size: 13px; color: var(--text-primary); }
+        .timeline-time { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+        .warn-box {
+            background: #FFFBEB;
+            border: 1px solid #FED7AA;
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            font-size: 13px; color: #92400E;
+        }
+
+        .case-row {
+            display: grid;
+            grid-template-columns: 140px 1fr 160px 140px 120px 100px 100px;
+            gap: 12px;
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border-light);
+            align-items: center;
+        }
+        .case-row:last-child { border-bottom: none; }
+        .case-row:hover { background: var(--bg-hover); }
+        .case-header-row {
+            background: var(--bg-page);
+            font-size: 12px; font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .case-id { font-family: var(--font-mono); font-weight: 600; }
+        .case-project { font-weight: 500; }
+        .case-boms { font-size: 12px; color: var(--text-muted); }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="consumption-reconciliation.html" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                    <line x1="12" y1="8" x2="12" y2="16"/>
+                    <line x1="8" y1="12" x2="16" y2="12"/>
+                </svg>
+                <span>消耗对账</span>
+            </a>
+            <a href="projects.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测项目</span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-analysis.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">消耗对账</h1>
+                <p class="page-subtitle">期间内 BOM理论消耗总量 vs 实际出库总量 对比（不关联具体病例）</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="showModal('import-lis-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    导入LIS数据
+                </button>
+            </div>
+        </div>
+
+        <div class="warn-box">
+            <strong>对账说明：</strong>出库按规格单位（瓶/支/盒）记录，无法精确关联到每个病理号。对账以"期间总量"为维度，对比"病例数×BOM理论"与"实际出库"的差异。
+        </div>
+
+        <div class="page-tabs">
+            <button class="page-tab active" onclick="switchTab('reconcile')">按项目对账</button>
+            <button class="page-tab" onclick="switchTab('material')">按物料汇总</button>
+            <button class="page-tab" onclick="switchTab('case')">按病理号查看</button>
+            <button class="page-tab" onclick="switchTab('log')">修正日志</button>
+        </div>
+
+        <!-- Tab 1: 按项目对账 -->
+        <div id="tab-reconcile" class="tab-content active">
+            <!-- 期间选择 + 汇总 -->
+            <div class="card" style="margin-bottom: 20px;">
+                <div class="card-body">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                        <div class="period-selector">
+                            <button class="period-btn">本周</button>
+                            <button class="period-btn active">本月</button>
+                            <button class="period-btn">本季</button>
+                            <button class="period-btn">本年</button>
+                            <span style="color:var(--border-strong);">|</span>
+                            <input type="date" class="filter-select" style="width:130px;" value="2026-04-01">
+                            <span style="color:var(--text-muted);">至</span>
+                            <input type="date" class="filter-select" style="width:130px;" value="2026-04-30">
+                        </div>
+                        <button class="btn btn-secondary btn-sm">导出报表</button>
+                    </div>
+                    <div class="summary-grid" style="margin-bottom:0;">
+                        <div class="summary-card">
+                            <div class="label">LIS病例总数</div>
+                            <div class="value">386</div>
+                            <div class="meta">4月全部检测项目</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="label">系统出库关联数</div>
+                            <div class="value success">382</div>
+                            <div class="meta">出库时关联了项目</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="label">未关联出库</div>
+                            <div class="value warning">4</div>
+                            <div class="meta">通用领用/损耗</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="label">病例缺失</div>
+                            <div class="value danger">4</div>
+                            <div class="meta">有出库无LIS记录</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- HE制片 -->
+            <div class="project-reconcile-card">
+                <div class="project-header">
+                    <div>
+                        <div class="project-name">HE制片</div>
+                        <div class="project-meta">LIS病例：128例 | 关联出库：128例 | 涉及物料：6种</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <div class="project-bom-tags">
+                            <span class="bom-tag">脱水-BOM</span>
+                            <span class="bom-tag">染色-BOM</span>
+                            <span class="bom-tag">封片-BOM</span>
+                        </div>
+                        <span class="status-badge status-warning">差异率 +6.7%</span>
+                    </div>
+                </div>
+                <div class="material-comparison">
+                    <div class="comp-row comp-header">
+                        <div>物料</div>
+                        <div style="text-align:center">理论消耗<br><span style="font-size:11px;color:#9CA3AF;">(128例×BOM)</span></div>
+                        <div style="text-align:center">实际出库<br><span style="font-size:11px;color:#9CA3AF;">(期间总量)</span></div>
+                        <div style="text-align:center">差异</div>
+                        <div style="text-align:center">原因分析</div>
+                        <div style="text-align:center">操作</div>
+                    </div>
+                    <div class="comp-row">
+                        <div class="col-mat">
+                            苏木精染液
+                            <div class="spec">500ml/瓶 · 0.5ml/例</div>
+                        </div>
+                        <div class="col-theory">64 ml</div>
+                        <div class="col-actual">1 瓶<br><span style="font-size:11px;">(500ml)</span></div>
+                        <div class="col-diff warn">+436ml<br><span style="font-size:11px;">库存余436ml</span></div>
+                        <div style="text-align:center;font-size:12px;color:#92400E;">按瓶出库，剩余在库</div>
+                        <div style="text-align:center;">—</div>
+                    </div>
+                    <div class="comp-row" style="background:#FFFBEB;">
+                        <div class="col-mat">
+                            伊红染液
+                            <div class="spec">500ml/瓶 · 0.3ml/例</div>
+                        </div>
+                        <div class="col-theory">38.4 ml</div>
+                        <div class="col-actual">1 瓶<br><span style="font-size:11px;">(500ml)</span></div>
+                        <div class="col-diff warn">+461.6ml<br><span style="font-size:11px;">库存余461ml</span></div>
+                        <div style="text-align:center;font-size:12px;color:#92400E;">按瓶出库，剩余在库</div>
+                        <div style="text-align:center;">
+                            <button class="fix-btn" onclick="showModal('fix-bom-modal')">修正BOM</button>
+                        </div>
+                    </div>
+                    <div class="comp-row">
+                        <div class="col-mat">
+                            载玻片
+                            <div class="spec">50片/盒 · 2片/例</div>
+                        </div>
+                        <div class="col-theory">256 片</div>
+                        <div class="col-actual">6 盒<br><span style="font-size:11px;">(300片)</span></div>
+                        <div class="col-diff match">+44片<br><span style="font-size:11px;">库存余44片</span></div>
+                        <div style="text-align:center;font-size:12px;color:#16A34A;">按盒出库，正常余量</div>
+                        <div style="text-align:center;">—</div>
+                    </div>
+                    <div class="comp-row" style="background:#FFFBEB;">
+                        <div class="col-mat">
+                            中性树胶
+                            <div class="spec">100g/瓶 · 0.1g/例</div>
+                        </div>
+                        <div class="col-theory">12.8 g</div>
+                        <div class="col-actual">1 瓶<br><span style="font-size:11px;">(100g)</span></div>
+                        <div class="col-diff warn">+87.2g<br><span style="font-size:11px;">库存余87g</span></div>
+                        <div style="text-align:center;font-size:12px;color:#92400E;">实际封片用量偏大</div>
+                        <div style="text-align:center;">
+                            <button class="fix-btn" onclick="showModal('fix-bom-modal')">修正BOM</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 免疫组化-IHC -->
+            <div class="project-reconcile-card">
+                <div class="project-header">
+                    <div>
+                        <div class="project-name">免疫组化-IHC</div>
+                        <div class="project-meta">LIS病例：86例 | 关联出库：86例 | 涉及物料：8种</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <div class="project-bom-tags">
+                            <span class="bom-tag">脱蜡-BOM</span>
+                            <span class="bom-tag">修复-BOM</span>
+                            <span class="bom-tag">IHC染色-BOM</span>
+                            <span class="bom-tag">显色-BOM</span>
+                        </div>
+                        <span class="status-badge status-success">差异率 -2.1%</span>
+                    </div>
+                </div>
+                <div class="material-comparison">
+                    <div class="comp-row comp-header">
+                        <div>物料</div>
+                        <div style="text-align:center">理论消耗</div>
+                        <div style="text-align:center">实际出库</div>
+                        <div style="text-align:center">差异</div>
+                        <div style="text-align:center">原因分析</div>
+                        <div style="text-align:center">操作</div>
+                    </div>
+                    <div class="comp-row">
+                        <div class="col-mat">
+                            一抗（CK7）
+                            <div class="spec">1ml/支 · 50μl/例</div>
+                        </div>
+                        <div class="col-theory">4.3 ml</div>
+                        <div class="col-actual">5 支<br><span style="font-size:11px;">(5ml)</span></div>
+                        <div class="col-diff match">+0.7ml<br><span style="font-size:11px;">库存余0.7ml</span></div>
+                        <div style="text-align:center;font-size:12px;color:#16A34A;">按支出库，正常余量</div>
+                        <div style="text-align:center;">—</div>
+                    </div>
+                    <div class="comp-row">
+                        <div class="col-mat">
+                            DAB显色液
+                            <div class="spec">5ml/套 · 100μl/例</div>
+                        </div>
+                        <div class="col-theory">8.6 ml</div>
+                        <div class="col-actual">2 套<br><span style="font-size:11px;">(10ml)</span></div>
+                        <div class="col-diff match">+1.4ml<br><span style="font-size:11px;">库存余1.4ml</span></div>
+                        <div style="text-align:center;font-size:12px;color:#16A34A;">按套出库，正常余量</div>
+                        <div style="text-align:center;">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 特殊染色-PAS（未关联BOM） -->
+            <div class="project-reconcile-card" style="border-left: 4px solid var(--error);">
+                <div class="project-header">
+                    <div>
+                        <div class="project-name">特殊染色-PAS</div>
+                        <div class="project-meta">LIS病例：12例 | 关联出库：0例 | <span style="color:#DC2626;">未配置BOM</span></div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="showModal('project-bom-modal')">去BOM页面配置</button>
+                </div>
+                <div style="padding:16px 20px;color:var(--text-muted);font-size:13px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;">
+                        <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                    </svg>
+                    该检测项目尚未关联BOM，无法计算理论消耗。请到 <strong>BOM清单</strong> 页面配置。
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: 按物料汇总 -->
+        <div id="tab-material" class="tab-content">
+            <div class="card" style="margin-bottom: 20px;">
+                <div class="card-body">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div class="period-selector">
+                            <button class="period-btn">本周</button>
+                            <button class="period-btn active">本月</button>
+                            <button class="period-btn">本季</button>
+                            <span style="color:var(--border-strong);">|</span>
+                            <input type="date" class="filter-select" style="width:130px;" value="2026-04-01">
+                            <span style="color:var(--text-muted);">至</span>
+                            <input type="date" class="filter-select" style="width:130px;" value="2026-04-30">
+                        </div>
+                        <button class="btn btn-secondary btn-sm">导出报表</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="label">BOM理论总消耗（金额）</div>
+                    <div class="value">¥12,580</div>
+                    <div class="meta">按病例×BOM计算</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">实际出库总成本</div>
+                    <div class="value warning">¥13,420</div>
+                    <div class="meta">仓库实际出库</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">差异金额</div>
+                    <div class="value danger">+¥840</div>
+                    <div class="meta">差异率 +6.7%</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">本月修正BOM</div>
+                    <div class="value success">3 项</div>
+                    <div class="meta">已记录修正日志</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">按物料维度差异汇总</span>
+                </div>
+                <div class="card-body" style="padding:0;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>物料名称</th>
+                                <th>规格</th>
+                                <th>涉及项目</th>
+                                <th>BOM理论</th>
+                                <th>实际出库</th>
+                                <th>差异量</th>
+                                <th>差异率</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>伊红染液</strong></td>
+                                <td>500ml/瓶</td>
+                                <td>HE制片</td>
+                                <td>38.4 ml</td>
+                                <td>1 瓶 (500ml)</td>
+                                <td style="color:#DC2626;font-weight:600;">+461.6 ml</td>
+                                <td><span class="status-badge status-warning">剩余在库</span></td>
+                                <td><button class="fix-btn">调整BOM</button></td>
+                            </tr>
+                            <tr>
+                                <td><strong>中性树胶</strong></td>
+                                <td>100g/瓶</td>
+                                <td>HE制片</td>
+                                <td>12.8 g</td>
+                                <td>1 瓶 (100g)</td>
+                                <td style="color:#DC2626;font-weight:600;">+87.2 g</td>
+                                <td><span class="status-badge status-warning">用量偏大</span></td>
+                                <td><button class="fix-btn">调整BOM</button></td>
+                            </tr>
+                            <tr>
+                                <td><strong>苏木精染液</strong></td>
+                                <td>500ml/瓶</td>
+                                <td>HE制片、IHC</td>
+                                <td>89.4 ml</td>
+                                <td>1 瓶 (500ml)</td>
+                                <td style="color:#16A34A;font-weight:600;">+410.6 ml</td>
+                                <td><span class="status-badge status-success">剩余在库</span></td>
+                                <td>—</td>
+                            </tr>
+                            <tr>
+                                <td><strong>一抗（CK7）</strong></td>
+                                <td>1ml/支</td>
+                                <td>IHC</td>
+                                <td>4.3 ml</td>
+                                <td>5 支 (5ml)</td>
+                                <td style="color:#16A34A;font-weight:600;">+0.7 ml</td>
+                                <td><span class="status-badge status-success">正常余量</span></td>
+                                <td>—</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: 按病理号查看 -->
+        <div id="tab-case" class="tab-content">
+            <div class="card" style="margin-bottom: 20px;">
+                <div class="card-body">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div class="filter-bar">
+                            <div class="search-box">
+                                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                </svg>
+                                <input type="text" placeholder="搜索病理号...">
+                            </div>
+                            <select class="filter-select">
+                                <option>全部检测项目</option>
+                                <option>HE制片</option>
+                                <option>免疫组化-IHC</option>
+                                <option>特殊染色</option>
+                            </select>
+                            <select class="filter-select">
+                                <option>全部状态</option>
+                                <option>正常</option>
+                                <option>已修改</option>
+                                <option>未关联BOM</option>
+                            </select>
+                            <button class="btn btn-secondary btn-sm">查询</button>
+                            <button class="btn btn-ghost btn-sm">重置</button>
+                        </div>
+                        <button class="btn btn-secondary btn-sm">导出</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body" style="padding:0;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>病理号</th>
+                                <th>检测项目</th>
+                                <th>操作时间</th>
+                                <th>操作人</th>
+                                <th>理论成本</th>
+                                <th>状态</th>
+                                <th width="100">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 病例1：单个检测项目 -->
+                            <tr>
+                                <td class="mono-text" style="font-weight:600;">P24050187</td>
+                                <td>
+                                    <span class="status-badge status-info" style="margin-bottom:4px;display:inline-block;">HE制片</span>
+                                    <div style="font-size:11px;color:#6b7280;">脱水-BOM · 染色-BOM · 封片-BOM</div>
+                                </td>
+                                <td>2026-04-15 14:30</td>
+                                <td>张三</td>
+                                <td>¥12.50</td>
+                                <td><span class="status-badge status-success">正常</span></td>
+                                <td>
+                                    <button class="fix-btn" onclick="showModal('edit-case-modal')">修改</button>
+                                </td>
+                            </tr>
+                            <!-- 病例2：单个检测项目，已修改 -->
+                            <tr style="background:#FFFBEB;">
+                                <td class="mono-text" style="font-weight:600;">P24050188</td>
+                                <td>
+                                    <span class="status-badge status-info" style="margin-bottom:4px;display:inline-block;">免疫组化-IHC</span>
+                                    <div style="font-size:11px;color:#6b7280;">脱蜡-BOM · 修复-BOM · IHC染色-BOM · 显色-BOM</div>
+                                </td>
+                                <td>2026-04-15 15:00</td>
+                                <td>李四</td>
+                                <td>¥28.60</td>
+                                <td><span class="status-badge status-warning">已修改</span></td>
+                                <td>
+                                    <button class="fix-btn" onclick="showModal('edit-case-modal')">修改</button>
+                                </td>
+                            </tr>
+                            <!-- 病例3：多个检测项目 -->
+                            <tr>
+                                <td class="mono-text" style="font-weight:600;">P24050195</td>
+                                <td>
+                                    <div style="display:flex;flex-direction:column;gap:4px;">
+                                        <div>
+                                            <span class="status-badge status-info">HE制片</span>
+                                            <span style="font-size:11px;color:#6b7280;margin-left:4px;">脱水-BOM · 染色-BOM · 封片-BOM</span>
+                                        </div>
+                                        <div>
+                                            <span class="status-badge status-info">免疫组化-IHC</span>
+                                            <span style="font-size:11px;color:#6b7280;margin-left:4px;">脱蜡-BOM · 修复-BOM · IHC染色-BOM</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>2026-04-16 09:00</td>
+                                <td>王五</td>
+                                <td>¥41.10</td>
+                                <td><span class="status-badge status-success">正常</span></td>
+                                <td>
+                                    <button class="fix-btn" onclick="showModal('edit-case-modal')">修改</button>
+                                </td>
+                            </tr>
+                            <!-- 病例4：多个检测项目，部分修改 -->
+                            <tr style="background:#FFFBEB;">
+                                <td class="mono-text" style="font-weight:600;">P24050203</td>
+                                <td>
+                                    <div style="display:flex;flex-direction:column;gap:4px;">
+                                        <div>
+                                            <span class="status-badge status-info">HE制片</span>
+                                            <span style="font-size:11px;color:#6b7280;margin-left:4px;">脱水-BOM · 染色-BOM · 封片-BOM</span>
+                                        </div>
+                                        <div>
+                                            <span class="status-badge status-info">特殊染色-PAS</span>
+                                            <span style="font-size:11px;color:#DC2626;margin-left:4px;">未关联BOM</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>2026-04-16 14:30</td>
+                                <td>赵六</td>
+                                <td>¥12.50</td>
+                                <td><span class="status-badge status-warning">部分异常</span></td>
+                                <td>
+                                    <button class="fix-btn" onclick="showModal('edit-case-modal')">修改</button>
+                                </td>
+                            </tr>
+                            <!-- 病例5：未关联BOM -->
+                            <tr style="background:#FEF2F2;">
+                                <td class="mono-text" style="font-weight:600;">P24050210</td>
+                                <td>
+                                    <span class="status-badge status-info" style="margin-bottom:4px;display:inline-block;">FISH检测</span>
+                                    <div style="font-size:11px;color:#DC2626;">未关联BOM</div>
+                                </td>
+                                <td>2026-04-17 10:00</td>
+                                <td>孙七</td>
+                                <td>—</td>
+                                <td><span class="status-badge status-error">未关联</span></td>
+                                <td>
+                                    <button class="fix-btn" onclick="showModal('edit-case-modal')">修改</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <span class="pagination-info">共 386 条记录，第 1/39 页</span>
+                    <div class="pagination-controls">
+                        <button class="btn btn-sm btn-secondary" disabled>上一页</button>
+                        <button class="btn btn-sm btn-primary">1</button>
+                        <button class="btn btn-sm btn-ghost">2</button>
+                        <button class="btn btn-sm btn-ghost">3</button>
+                        <span>...</span>
+                        <button class="btn btn-sm btn-ghost">39</button>
+                        <button class="btn btn-sm btn-secondary">下一页</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 4: 修正日志 -->
+        <div id="tab-log" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">BOM修正记录</span>
+                </div>
+                <div class="card-body">
+                    <div class="timeline-item-compact">
+                        <div class="timeline-dot" style="background:var(--primary);"></div>
+                        <div class="timeline-info">
+                            <div class="timeline-action">
+                                <strong>修正 BOM【HE染色-BOM】</strong>：伊红染液 用量从 <span style="text-decoration:line-through;color:#9CA3AF;">0.3ml/例</span> 调整为 <strong>0.6ml/例</strong>
+                            </div>
+                            <div class="timeline-time">2026-04-20 14:30 · 管理员A · 原因：复染操作实际消耗为2次</div>
+                        </div>
+                    </div>
+                    <div class="timeline-item-compact">
+                        <div class="timeline-dot" style="background:var(--primary);"></div>
+                        <div class="timeline-info">
+                            <div class="timeline-action">
+                                <strong>修正 BOM【封片-BOM】</strong>：中性树胶 用量从 <span style="text-decoration:line-through;color:#9CA3AF;">0.1g/例</span> 调整为 <strong>0.2g/例</strong>
+                            </div>
+                            <div class="timeline-time">2026-04-18 10:15 · 管理员B · 原因：封片用量实测偏大</div>
+                        </div>
+                    </div>
+                    <div class="timeline-item-compact">
+                        <div class="timeline-dot" style="background:var(--success);"></div>
+                        <div class="timeline-info">
+                            <div class="timeline-action">
+                                <strong>新增 BOM关联</strong>：检测项目【特殊染色-PAS】关联 BOM【PAS染色-BOM】
+                            </div>
+                            <div class="timeline-time">2026-04-10 09:00 · 管理员A · 原因：新项目上线</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 导入LIS数据弹窗 -->
+    <div id="import-lis-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('import-lis-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">导入LIS病例数据</h3>
+                <button class="modal-close" onclick="hideModal('import-lis-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-zone" onclick="alert('选择LIS导出文件')">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <div class="upload-title">点击或拖拽上传LIS导出文件</div>
+                    <div class="upload-desc">支持 Excel (.xlsx)、CSV (.csv) 格式<br>文件需包含：病理号、检测项目、操作时间</div>
+                </div>
+                <div style="margin-top:16px;padding:12px;background:var(--bg-page);border-radius:var(--radius-md);">
+                    <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">LIS数据格式示例：</div>
+                    <table class="data-table" style="font-size:12px;">
+                        <thead><tr><th>病理号</th><th>检测项目</th><th>操作时间</th><th>操作人</th></tr></thead>
+                        <tbody>
+                            <tr><td>P24050187</td><td>HE制片</td><td>2026-04-15 14:30</td><td>张三</td></tr>
+                            <tr><td>P24050188</td><td>免疫组化-IHC</td><td>2026-04-15 15:00</td><td>李四</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('import-lis-modal')">取消</button>
+                <button class="btn btn-primary" onclick="alert('LIS数据导入成功！已生成386例病例对账数据')">确认导入</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 修正BOM弹窗 -->
+    <div id="fix-bom-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('fix-bom-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">修正BOM用量</h3>
+                <button class="modal-close" onclick="hideModal('fix-bom-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="background:var(--bg-page);padding:16px;border-radius:var(--radius-md);margin-bottom:20px;">
+                    <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">当前物料</div>
+                    <div style="font-weight:600;">伊红染液（HE染色-BOM）</div>
+                    <div style="font-size:12px;color:var(--text-muted);">规格：500ml/瓶</div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">原用量/例</label>
+                        <input type="text" class="form-input" value="0.3 ml" disabled style="background:var(--bg-hover);">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">建议用量/例</label>
+                        <input type="text" class="form-input" value="0.6 ml" disabled style="background:var(--bg-hover);color:#9A3412;">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">修正为 <span class="required">*</span></label>
+                    <div style="display:flex;gap:8px;">
+                        <input type="number" class="form-input" value="0.6" style="flex:1;">
+                        <select class="form-select" style="width:100px;">
+                            <option>ml</option>
+                            <option>μl</option>
+                            <option>L</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">修正原因 <span class="required">*</span></label>
+                    <textarea class="form-textarea" rows="2" placeholder="请说明修正原因"></textarea>
+                </div>
+                <div style="background:#FFFBEB;padding:12px;border-radius:var(--radius-md);border:1px solid #FED7AA;">
+                    <div style="font-size:12px;color:#92400E;">
+                        <strong>提示：</strong>修正后，该BOM的历史对账数据将同步更新，差异记录保留在日志中。
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('fix-bom-modal')">取消</button>
+                <button class="btn btn-primary" onclick="alert('BOM用量已修正！')">确认修正</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 修改病例消耗弹窗 -->
+    <div id="edit-case-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('edit-case-modal')"></div>
+        <div class="modal-container modal-xl">
+            <div class="modal-header">
+                <h3 class="modal-title">修改病例消耗信息</h3>
+                <button class="modal-close" onclick="hideModal('edit-case-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- 病例基本信息卡片 -->
+                <div class="card" style="background:#f9fafb;margin-bottom:24px;">
+                    <div class="card-body" style="padding:20px;">
+                        <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:20px;">
+                            <div>
+                                <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">病理号</div>
+                                <div style="font-family:var(--font-mono);font-weight:600;font-size:16px;color:#111827;">P24050195</div>
+                            </div>
+                            <div>
+                                <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">操作时间</div>
+                                <div style="font-weight:500;font-size:14px;color:#111827;">2026-04-16 09:00</div>
+                            </div>
+                            <div>
+                                <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">操作人</div>
+                                <div style="font-weight:500;font-size:14px;color:#111827;">王五</div>
+                            </div>
+                            <div>
+                                <div style="font-size:12px;color:#6b7280;margin-bottom:4px;">状态</div>
+                                <div><span class="status-badge status-success">正常</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 检测项目1：HE制片 -->
+                <div style="margin-bottom:24px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                        <span class="status-badge status-info">HE制片</span>
+                        <span style="font-size:12px;color:#6b7280;">关联BOM：脱水-BOM · 染色-BOM · 封片-BOM</span>
+                    </div>
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                        <!-- 标本产出 1：蜡块 -->
+                        <div style="border-bottom:1px solid #e5e7eb;">
+                            <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:#f9fafb;cursor:pointer;" onclick="toggleTree('tree-1')">
+                                <svg id="icon-tree-1" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" style="transition:transform 0.2s;">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                                <div style="font-weight:600;font-size:14px;">蜡块</div>
+                                <div style="font-size:12px;color:#6b7280;">组织包埋后产出 · BOM标准：1块/例 · 本例：1块</div>
+                                <div style="margin-left:auto;">
+                                    <input type="number" class="form-input" value="1" style="width:70px;height:32px;text-align:center;">
+                                    <select class="form-select" style="width:70px;height:32px;font-size:13px;margin-left:4px;">
+                                        <option>块</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="tree-1" style="padding:0 20px 16px 48px;">
+                                <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">该标本产出消耗的物料：</div>
+                                <table class="data-table" style="font-size:13px;border:1px solid #e5e7eb;border-radius:6px;">
+                                    <thead style="background:#f3f4f6;">
+                                        <tr>
+                                            <th style="padding:8px 12px;">物料</th>
+                                            <th style="text-align:center;padding:8px 12px;">BOM标准</th>
+                                            <th style="text-align:center;padding:8px 12px;">本例用量</th>
+                                            <th style="text-align:center;padding:8px 12px;">单位</th>
+                                            <th style="text-align:center;padding:8px 12px;">原因</th>
+                                            <th style="text-align:center;padding:8px 12px;">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td style="padding:8px 12px;">甲醛固定液</td>
+                                            <td style="text-align:center;">10 ml</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="10" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>ml</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:8px 12px;">脱水乙醇（梯度）</td>
+                                            <td style="text-align:center;">50 ml</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="50" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>ml</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:8px 12px;">石蜡</td>
+                                            <td style="text-align:center;">5 g</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="5" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>g</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <!-- 标本产出 2：白片 -->
+                        <div style="border-bottom:1px solid #e5e7eb;">
+                            <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:#f9fafb;cursor:pointer;" onclick="toggleTree('tree-2')">
+                                <svg id="icon-tree-2" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" style="transition:transform 0.2s;">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                                <div style="font-weight:600;font-size:14px;">白片</div>
+                                <div style="font-size:12px;color:#6b7280;">未染色切片 · BOM标准：2张/例 · 本例：2张</div>
+                                <div style="margin-left:auto;">
+                                    <input type="number" class="form-input" value="2" style="width:70px;height:32px;text-align:center;">
+                                    <select class="form-select" style="width:70px;height:32px;font-size:13px;margin-left:4px;">
+                                        <option>张</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="tree-2" style="padding:0 20px 16px 48px;display:none;">
+                                <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">该标本产出消耗的物料：</div>
+                                <table class="data-table" style="font-size:13px;border:1px solid #e5e7eb;border-radius:6px;">
+                                    <thead style="background:#f3f4f6;">
+                                        <tr>
+                                            <th style="padding:8px 12px;">物料</th>
+                                            <th style="text-align:center;padding:8px 12px;">BOM标准</th>
+                                            <th style="text-align:center;padding:8px 12px;">本例用量</th>
+                                            <th style="text-align:center;padding:8px 12px;">单位</th>
+                                            <th style="text-align:center;padding:8px 12px;">原因</th>
+                                            <th style="text-align:center;padding:8px 12px;">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td style="padding:8px 12px;">载玻片</td>
+                                            <td style="text-align:center;">2 片</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="2" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>片</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <!-- 标本产出 3：HE切片 -->
+                        <div style="border-bottom:1px solid #e5e7eb;">
+                            <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:#f9fafb;cursor:pointer;" onclick="toggleTree('tree-3')">
+                                <svg id="icon-tree-3" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" style="transition:transform 0.2s;">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                                <div style="font-weight:600;font-size:14px;">HE切片</div>
+                                <div style="font-size:12px;color:#6b7280;">HE染色完成片 · BOM标准：1张/例 · 本例：1张</div>
+                                <div style="margin-left:auto;">
+                                    <input type="number" class="form-input" value="1" style="width:70px;height:32px;text-align:center;">
+                                    <select class="form-select" style="width:70px;height:32px;font-size:13px;margin-left:4px;">
+                                        <option>张</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="tree-3" style="padding:0 20px 16px 48px;display:none;">
+                                <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">该标本产出消耗的物料：</div>
+                                <table class="data-table" style="font-size:13px;border:1px solid #e5e7eb;border-radius:6px;">
+                                    <thead style="background:#f3f4f6;">
+                                        <tr>
+                                            <th style="padding:8px 12px;">物料</th>
+                                            <th style="text-align:center;padding:8px 12px;">BOM标准</th>
+                                            <th style="text-align:center;padding:8px 12px;">本例用量</th>
+                                            <th style="text-align:center;padding:8px 12px;">单位</th>
+                                            <th style="text-align:center;padding:8px 12px;">原因</th>
+                                            <th style="text-align:center;padding:8px 12px;">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td style="padding:8px 12px;">苏木精染液</td>
+                                            <td style="text-align:center;">0.5 ml</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="0.5" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>ml</option><option>μl</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:8px 12px;">伊红染液</td>
+                                            <td style="text-align:center;">0.3 ml</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="0.3" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>ml</option><option>μl</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:8px 12px;">中性树胶</td>
+                                            <td style="text-align:center;">0.1 g</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="0.1" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>g</option><option>mg</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:8px 12px;">盖玻片</td>
+                                            <td style="text-align:center;">1 片</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="1" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>片</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 检测项目2：免疫组化-IHC -->
+                <div style="margin-bottom:24px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                        <span class="status-badge status-info">免疫组化-IHC</span>
+                        <span style="font-size:12px;color:#6b7280;">关联BOM：脱蜡-BOM · 修复-BOM · IHC染色-BOM</span>
+                    </div>
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                        <!-- 标本产出 1：IHC切片 -->
+                        <div style="border-bottom:1px solid #e5e7eb;">
+                            <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:#f9fafb;cursor:pointer;" onclick="toggleTree('tree-4')">
+                                <svg id="icon-tree-4" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" style="transition:transform 0.2s;">
+                                    <polyline points="6 9 12 15 18 9"/>
+                                </svg>
+                                <div style="font-weight:600;font-size:14px;">IHC切片</div>
+                                <div style="font-size:12px;color:#6b7280;">免疫组化染色完成片 · BOM标准：1张/例 · 本例：2张</div>
+                                <div style="margin-left:auto;">
+                                    <input type="number" class="form-input" value="2" style="width:70px;height:32px;text-align:center;border-color:#f59e0b;">
+                                    <select class="form-select" style="width:70px;height:32px;font-size:13px;margin-left:4px;">
+                                        <option>张</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="tree-4" style="padding:0 20px 16px 48px;display:none;">
+                                <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">该标本产出消耗的物料：</div>
+                                <table class="data-table" style="font-size:13px;border:1px solid #e5e7eb;border-radius:6px;">
+                                    <thead style="background:#f3f4f6;">
+                                        <tr>
+                                            <th style="padding:8px 12px;">物料</th>
+                                            <th style="text-align:center;padding:8px 12px;">BOM标准</th>
+                                            <th style="text-align:center;padding:8px 12px;">本例用量</th>
+                                            <th style="text-align:center;padding:8px 12px;">单位</th>
+                                            <th style="text-align:center;padding:8px 12px;">原因</th>
+                                            <th style="text-align:center;padding:8px 12px;">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td style="padding:8px 12px;">一抗（CK7）</td>
+                                            <td style="text-align:center;">50 μl</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="50" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>μl</option><option>ml</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:8px 12px;">二抗</td>
+                                            <td style="text-align:center;">30 μl</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="30" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>μl</option><option>ml</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="padding:8px 12px;">DAB显色液</td>
+                                            <td style="text-align:center;">100 μl</td>
+                                            <td style="text-align:center;"><input type="number" class="form-input" value="100" style="width:70px;height:28px;text-align:center;"></td>
+                                            <td style="text-align:center;">
+                                                <select class="form-select" style="width:70px;height:28px;font-size:12px;"><option>μl</option><option>ml</option></select>
+                                            </td>
+                                            <td style="text-align:center;"><input type="text" class="form-input" placeholder="可选" style="width:100px;height:28px;font-size:12px;"></td>
+                                            <td style="text-align:center;"><button class="btn btn-ghost btn-sm" style="height:28px;">重置</button></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac;">
+                    <div style="font-size:13px;color:#166534;line-height:1.6;">
+                        <strong>说明：</strong>修改仅影响本病例的成本归集，不会修改BOM标准。如需修改标准用量，请使用"修正BOM"功能或前往BOM清单页面。
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('edit-case-modal')">取消</button>
+                <button class="btn btn-primary" onclick="alert('病例消耗信息已修改！')">保存修改</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.page-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabId).classList.add('active');
+        }
+        function showModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+        function hideModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+        function toggleTree(id) {
+            const el = document.getElementById(id);
+            const icon = document.getElementById('icon-' + id);
+            if (el.style.display === 'none') {
+                el.style.display = 'block';
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                el.style.display = 'none';
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+    </script>
+</body>
+</html>

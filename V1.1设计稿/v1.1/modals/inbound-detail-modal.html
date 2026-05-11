@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>入库详情 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="inbound-detail-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">入库详情</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="detail-header">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="detail-title">IN-2024-001</div>
+                    <span class="status-badge status-success">已完成</span>
+                </div>
+                <div class="detail-subtitle">入库时间: 2024-01-15 10:30:25</div>
+            </div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">物料名称</div>
+                    <div class="detail-value">DNA提取试剂盒</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">批次号</div>
+                    <div class="detail-value mono-text">LOT-2024-001</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">入库数量</div>
+                    <div class="detail-value">200 盒</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">入库单价</div>
+                    <div class="detail-value">¥75.00</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">入库金额</div>
+                    <div class="detail-value">¥15,000.00</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">供应商</div>
+                    <div class="detail-value">Thermo Fisher</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">生产日期</div>
+                    <div class="detail-value">2024-01-01</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">有效期至</div>
+                    <div class="detail-value">2025-01-01</div>
+                </div>
+            </div>
+            <div style="margin-top: 16px; padding: 12px; background: var(--bg-page); border-radius: 6px;">
+                <div class="detail-label" style="margin-bottom: 4px;">备注</div>
+                <div style="font-size: 14px; color: var(--text-primary);">第一季度常规采购入库</div>
+            </div>
+            <div style="margin-top: 16px; padding: 12px; background: var(--bg-page); border-radius: 6px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                    <div>
+                        <span style="color: var(--text-muted);">操作人:</span>
+                        <span style="margin-left: 8px;">张医生</span>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted);">审核人:</span>
+                        <span style="margin-left: 8px;">李主管</span>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-muted);">入库类型:</span>
+                        <span style="margin-left: 8px;">采购入库</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">关闭</button>
+            <button class="btn btn-secondary">打印</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

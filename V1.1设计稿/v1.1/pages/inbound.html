@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>入库记录 - COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#3b82f6"/><path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/><path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/></svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg><span>库存列表</span></a>
+            <a href="inbound.html" class="nav-item active"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>入库记录</span></a>
+            <a href="outbound.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>出库记录</span></a>
+            <a href="scrap.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg><span>报废管理</span></a>
+            <a href="stocktaking.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>库存盘点</span></a>
+            <a href="projects.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>检测服�?/span></a>
+            <a href="bom.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>BOM清单</span></a>
+            <a href="cost-analysis.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg><span>物料成本分析</span></a>
+            <a href="categories.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span>物料分类</span></a>
+            <a href="consumable-config.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg><span>耗材配置</span></a>
+            <a href="rules.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>规则配置</span></a>
+            <a href="alerts.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span>预警中心</span></a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>供应商管�?/span></a>
+            <a href="locations.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><span>库位管理</span></a>
+            <a href="users.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>用户管理</span></a>
+            <a href="roles.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>角色管理</span></a>
+            <a href="logs.html" class="nav-item"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>操作日志</span></a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">入库记录</h1>
+                <p class="page-subtitle">管理物料入库记录，跟踪采购入库流�?/p>
+            </div>
+
+        </div>
+
+        <div class="quick-action-bar">
+            <button class="quick-action-btn primary" onclick="showModal('inbound-modal')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                采购入库
+            </button>
+            <button class="quick-action-btn" onclick="showModal('scan-modal')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="8" x2="12" y2="16"/></svg>
+                扫码入库
+            </button>
+            <button class="quick-action-btn" onclick="showModal('import-modal')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                批量导入
+            </button>
+            <button class="quick-action-btn" onclick="showModal('print-modal')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                打印记录
+            </button>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card stat-card-primary" onclick="filterByStatus('all')" data-status="all" style="cursor: pointer;"><div class="stat-value">156</div><div class="stat-label">本月入库</div></div>
+            <div class="stat-card stat-card-success" onclick="filterByStatus('completed')" data-status="completed" style="cursor: pointer;"><div class="stat-value">¥45,230</div><div class="stat-label">入库金额</div></div>
+            <div class="stat-card stat-card-warning" onclick="filterByStatus('pending')" data-status="pending" style="cursor: pointer;"><div class="stat-value">3</div><div class="stat-label">待入�?/div></div>
+            <div class="stat-card stat-card-muted" onclick="filterByStatus('cancelled')" data-status="cancelled" style="cursor: pointer;"><div class="stat-value">12</div><div class="stat-label">供应�?/div></div>
+        </div>
+
+        <div class="quick-filters">
+            <span class="quick-filter-tag active" onclick="quickFilter('all')">
+                全部
+                <span class="count">156</span>
+            </span>
+            <span class="quick-filter-tag" onclick="quickFilter('today')">
+                今日
+                <span class="count">12</span>
+            </span>
+            <span class="quick-filter-tag" onclick="quickFilter('week')">
+                本周
+                <span class="count">45</span>
+            </span>
+            <span class="quick-filter-tag" onclick="quickFilter('month')">
+                本月
+                <span class="count">156</span>
+            </span>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">入库记录</span>
+                <div class="filter-bar">
+                    <div class="search-box">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" placeholder="搜索入库单号/耗材名称/批号...">
+                    </div>
+                    <select class="filter-select"><option>全部耗材</option><option>试剂</option><option>耗材</option></select>
+                    <select class="filter-select"><option>全部状�?/option><option>已完�?/option><option>待入�?/option><option>已取�?/option></select>
+                    <input type="date" class="filter-select">
+                    <span style="color: var(--text-muted);">�?/span>
+                    <input type="date" class="filter-select">
+                    <button class="btn btn-secondary btn-sm">查询</button>
+                    <button class="btn btn-ghost btn-sm">重置</button>
+                </div>
+            </div>
+            <div class="batch-actions-bar" id="batch-actions-bar" style="display: none;">
+                <div class="batch-actions-info">
+                    <span>已选择 <strong id="selected-count">0</strong> �?/span>
+                </div>
+                <div class="batch-actions-buttons">
+                    <button class="btn btn-sm btn-ghost" onclick="batchExport()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        导出
+                    </button>
+                    <button class="btn btn-sm btn-ghost" onclick="batchPrint()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 6 2 18 2 18 9"/>
+                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                            <rect x="6" y="14" width="12" height="8"/>
+                        </svg>
+                        打印
+                    </button>
+                    <button class="btn btn-sm btn-ghost" onclick="clearSelection()">取消选择</button>
+                </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th width="40">
+                                <input type="checkbox" class="checkbox" id="header-checkbox" onchange="toggleSelectAll()">
+                            </th>
+                            <th>入库单号</th>
+                            <th>耗材名称</th>
+                            <th>批号</th>
+                            <th>入库来源</th>
+                            <th>数量</th>
+                            <th>金额</th>
+                            <th>供应�?/th>
+                            <th>入库时间</th>
+                            <th>状�?/th>
+                            <th width="160">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="table-row" data-id="IN20241210-001" data-status="completed">
+                            <td><input type="checkbox" class="checkbox row-checkbox" value="IN20241210-001" onchange="updateSelection()"></td>
+                            <td class="mono-text">IN20241210-001</td>
+                            <td><strong>PCR试剂�?/strong></td>
+                            <td class="mono-text">LOT-2024-001</td>
+                            <td><span class="status-badge status-success">采购入库</span></td>
+                            <td>200</td>
+                            <td>¥15,000</td>
+                            <td>Thermo Fisher</td>
+                            <td>2024-12-10 10:30</td>
+                            <td><span class="inbound-status inbound-status-completed">已完�?/span></td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('inbound-detail-modal')">详情</button>
+                                <button class="btn btn-ghost btn-sm" onclick="printInbound('IN20241210-001')">打印</button>
+                            </td>
+                        </tr>
+                        <tr class="table-row" data-id="IN20241209-002" data-status="completed">
+                            <td><input type="checkbox" class="checkbox row-checkbox" value="IN20241209-002" onchange="updateSelection()"></td>
+                            <td class="mono-text">IN20241209-002</td>
+                            <td><strong>离心�?1.5ml</strong></td>
+                            <td class="mono-text">LOT-2024-089</td>
+                            <td><span class="status-badge status-info">退库入�?/span></td>
+                            <td>50</td>
+                            <td>¥8,500</td>
+                            <td>Qiagen</td>
+                            <td>2024-12-09 14:20</td>
+                            <td><span class="inbound-status inbound-status-completed">已完�?/span></td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('inbound-detail-modal')">详情</button>
+                                <button class="btn btn-ghost btn-sm" onclick="printInbound('IN20241209-002')">打印</button>
+                            </td>
+                        </tr>
+                        <tr class="table-row" data-id="IN20241208-003" data-status="pending">
+                            <td><input type="checkbox" class="checkbox row-checkbox" value="IN20241208-003" onchange="updateSelection()"></td>
+                            <td class="mono-text">IN20241208-003</td>
+                            <td><strong>移液器吸�?200μl</strong></td>
+                            <td class="mono-text">LOT-2024-156</td>
+                            <td><span class="status-badge status-success">采购入库</span></td>
+                            <td>20 <span style="color: var(--warning-text); font-size: 11px;">(部分到货 15)</span></td>
+                            <td>¥6,400</td>
+                            <td>Invitrogen</td>
+                            <td>2024-12-08 09:15</td>
+                            <td><span class="inbound-status inbound-status-pending">部分到货</span></td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('inbound-detail-modal')">详情</button>
+                                <button class="btn btn-primary btn-sm" onclick="showModal('confirm-inbound-modal')">确认入库</button>
+                            </td>
+                        </tr>
+                        <tr class="table-row" data-id="IN20241207-004" data-status="completed">
+                            <td><input type="checkbox" class="checkbox row-checkbox" value="IN20241207-004" onchange="updateSelection()"></td>
+                            <td class="mono-text">IN20241207-004</td>
+                            <td><strong>DNA提取试剂�?/strong></td>
+                            <td class="mono-text">LOT-2024-234</td>
+                            <td><span class="status-badge status-warning">调拨入库</span></td>
+                            <td>1000</td>
+                            <td>¥500</td>
+                            <td>Sigma-Aldrich</td>
+                            <td>2024-12-07 16:45</td>
+                            <td><span class="inbound-status inbound-status-completed">已完�?/span></td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('inbound-detail-modal')">详情</button>
+                                <button class="btn btn-ghost btn-sm" onclick="printInbound('IN20241207-004')">打印</button>
+                            </td>
+                        </tr>
+                        <tr class="table-row" data-id="IN20241206-005" data-status="cancelled">
+                            <td><input type="checkbox" class="checkbox row-checkbox" value="IN20241206-005" onchange="updateSelection()"></td>
+                            <td class="mono-text">IN20241206-005</td>
+                            <td><strong>测序引物套装</strong></td>
+                            <td class="mono-text">LOT-2024-312</td>
+                            <td><span class="status-badge status-muted">盘盈入库</span></td>
+                            <td>5000</td>
+                            <td>¥400</td>
+                            <td>Thermo Fisher</td>
+                            <td>2024-12-06 11:20</td>
+                            <td><span class="inbound-status inbound-status-cancelled">已取�?/span></td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('inbound-detail-modal')">详情</button>
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('restore-inbound-modal')">恢复</button>
+                            </td>
+                        </tr>
+                        <!-- 验收测试入库记录 -->
+                        <tr class="table-row" data-id="IB-TEST-2026-001" data-status="completed">
+                            <td><input type="checkbox" class="checkbox row-checkbox" value="IB-TEST-2026-001" onchange="updateSelection()"></td>
+                            <td class="mono-text">IB-TEST-2026-001</td>
+                            <td><strong>验收测试试剂�?/strong></td>
+                            <td class="mono-text">VAL-20260422</td>
+                            <td><span class="status-badge status-success">采购入库</span></td>
+                            <td>10</td>
+                            <td>¥5,000</td>
+                            <td>云深生物</td>
+                            <td>2026-04-22 09:00</td>
+                            <td><span class="inbound-status inbound-status-completed">已完�?/span></td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('inbound-detail-modal')">详情</button>
+                                <button class="btn btn-ghost btn-sm" onclick="printInbound('IB-TEST-2026-001')">打印</button>
+                            </td>
+                        </tr>
+                        <tr class="table-row" data-id="IB-TEST-2026-002" data-status="completed">
+                            <td><input type="checkbox" class="checkbox row-checkbox" value="IB-TEST-2026-002" onchange="updateSelection()"></td>
+                            <td class="mono-text">IB-TEST-2026-002</td>
+                            <td><strong>验收测试试剂�?/strong></td>
+                            <td class="mono-text">VAL-20260423</td>
+                            <td><span class="status-badge status-success">采购入库</span></td>
+                            <td>20</td>
+                            <td>¥10,200</td>
+                            <td>云深生物</td>
+                            <td>2026-04-23 10:00</td>
+                            <td><span class="inbound-status inbound-status-completed">已完�?/span></td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('inbound-detail-modal')">详情</button>
+                                <button class="btn btn-ghost btn-sm" onclick="printInbound('IB-TEST-2026-002')">打印</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination-info">�?45 条记录，�?1/5 �?/span>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm btn-secondary" disabled>上一�?/button>
+                    <button class="btn btn-sm btn-primary">1</button>
+                    <button class="btn btn-sm btn-ghost">2</button>
+                    <button class="btn btn-sm btn-ghost">3</button>
+                    <button class="btn btn-sm btn-ghost">5</button>
+                    <button class="btn btn-sm btn-secondary">下一�?/button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Inbound Modal -->
+    <div class="modal" id="inbound-modal">
+        <div class="modal-overlay" onclick="hideModal('inbound-modal')"></div>
+        <div class="modal-container modal-xl">
+            <div class="modal-header">
+                <h3 class="modal-title">新增入库</h3>
+                <button class="modal-close" onclick="hideModal('inbound-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="inbound-form">
+                    <!-- 入库来源选择 -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">入库来源 <span class="required">*</span></label>
+                            <select class="form-select" id="inbound-source" onchange="onInboundSourceChange()">
+                                <option value="">请选择入库来源</option>
+                                <option value="purchase" selected>采购入库</option>
+                                <option value="return">退库入�?/option>
+                                <option value="transfer">调拨入库</option>
+                                <option value="surplus">盘盈入库</option>
+                                <option value="other">其他入库</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="related-order-group" style="display: none;">
+                            <label class="form-label">关联订单</label>
+                            <select class="form-select">
+                                <option value="">请选择关联订单</option>
+                                <option value="PO-2024-0156">PO-2024-0156 - PCR试剂盒采�?/option>
+                                <option value="PO-2024-0157">PO-2024-0157 - 离心管采�?/option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 入库方式选择（仅采购入库时显示） -->
+                    <div class="form-row" id="inbound-method-row">
+                        <div class="form-group form-group-lg">
+                            <label class="form-label">入库方式 <span class="required">*</span></label>
+                            <div class="inbound-type-selector">
+                                <label class="inbound-type-option active" onclick="selectInboundType('direct')">
+                                    <input type="radio" name="inbound-type" value="direct" checked>
+                                    <div class="type-icon">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                            <polyline points="7 10 12 15 17 10"/>
+                                            <line x1="12" y1="15" x2="12" y2="3"/>
+                                        </svg>
+                                    </div>
+                                    <div class="type-info">
+                                        <div class="type-name">直接入库</div>
+                                        <div class="type-desc">货物已到，立即入库更新库�?/div>
+                                    </div>
+                                </label>
+                                <label class="inbound-type-option" onclick="selectInboundType('order')">
+                                    <input type="radio" name="inbound-type" value="order">
+                                    <div class="type-icon">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                            <polyline points="14 2 14 8 20 8"/>
+                                            <line x1="16" y1="13" x2="8" y2="13"/>
+                                            <line x1="16" y1="17" x2="8" y2="17"/>
+                                        </svg>
+                                    </div>
+                                    <div class="type-info">
+                                        <div class="type-name">待收货后入库</div>
+                                        <div class="type-desc">货物未到，先创建订单待入�?/div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 冲突提示 -->
+                    <div id="conflict-warning" style="display: none; background: var(--warning-bg); border: 1px solid var(--warning); border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px;">
+                        <div style="display: flex; align-items: flex-start; gap: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning-text)" stroke-width="2" style="flex-shrink: 0; margin-top: 2px;">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                <line x1="12" y1="9" x2="12" y2="13"/>
+                                <line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                            <div>
+                                <div style="font-size: 13px; font-weight: 500; color: var(--warning-text); margin-bottom: 4px;">检测到待入库订�?/div>
+                                <div style="font-size: 12px; color: var(--text-secondary);">该耗材已有待入库订单（订单号：PO-2024-0156），请确认是否重复入库�?/div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 入库明细表格 -->
+                    <div class="form-section">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <label class="form-label" style="margin: 0;">入库明细 <span class="required">*</span></label>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="addInboundItem()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"/>
+                                    <line x1="5" y1="12" x2="19" y2="12"/>
+                                </svg>
+                                添加耗材
+                            </button>
+                        </div>
+                        <table class="data-table" style="font-size: 13px;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 20%;">耗材名称</th>
+                                    <th style="width: 12%;">批号</th>
+                                    <th style="width: 10%;">数量</th>
+                                    <th style="width: 10%;">单价</th>
+                                    <th style="width: 12%;">有效�?/th>
+                                    <th style="width: 14%;">供应�?/th>
+                                    <th style="width: 8%;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inbound-items">
+                                <tr>
+                                    <td>
+                                        <select class="form-select" style="height: 32px;" onchange="checkConflict(this)">
+                                            <option value="">请选择耗材</option>
+                                            <option value="1">PCR试剂�?/option>
+                                            <option value="2">离心�?1.5ml</option>
+                                            <option value="3">移液器吸�?200μl</option>
+                                            <option value="4">DNA提取试剂�?/option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" class="form-input mono-text" style="height: 32px;" placeholder="批号"></td>
+                                    <td><input type="number" class="form-input" style="height: 32px; width: 70px;" value="1" min="1"></td>
+                                    <td><input type="number" class="form-input" style="height: 32px; width: 80px;" placeholder="0.00" step="0.01"></td>
+                                    <td><input type="date" class="form-input" style="height: 32px;"></td>
+                                    <td>
+                                        <select class="form-select supplier-select" style="height: 32px;">
+                                            <option value="">请选择供应�?/option>
+                                        </select>
+                                    </td>
+                                    <td><button type="button" class="btn btn-sm btn-ghost" style="color: var(--error);" onclick="removeInboundItem(this)">删除</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group form-group-lg">
+                            <label class="form-label">备注</label>
+                            <textarea class="form-textarea" rows="2" placeholder="请输入备注信息（可选）"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('inbound-modal')">取消</button>
+                <button class="btn btn-primary" onclick="submitInbound()">确认入库</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scan Modal -->
+    <div class="modal" id="scan-modal">
+        <div class="modal-overlay" onclick="hideModal('scan-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">扫码入库</h3>
+                <button class="modal-close" onclick="hideModal('scan-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="scan-area" id="scan-area" onclick="startScan()">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-muted);"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="8" x2="12" y2="16"/></svg>
+                    <div style="font-size: 14px; color: var(--text-secondary);">点击开始扫�?/div>
+                    <div style="font-size: 12px; color: var(--text-muted);">请将条码对准扫描�?/div>
+                </div>
+                <div style="margin-top: 16px; padding: 12px; background: var(--bg-page); border-radius: var(--radius-md);">
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">支持以下条码类型�?/div>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <span style="padding: 4px 8px; background: white; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-muted);">Code 128</span>
+                        <span style="padding: 4px 8px; background: white; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-muted);">Code 39</span>
+                        <span style="padding: 4px 8px; background: white; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-muted);">EAN-13</span>
+                        <span style="padding: 4px 8px; background: white; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-muted);">QR Code</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" onclick="hideModal('scan-modal')">取消</button>
+                <button class="btn btn-primary btn-sm" onclick="manualInput()">手动输入</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div class="modal" id="import-modal">
+        <div class="modal-overlay" onclick="hideModal('import-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">批量导入入库</h3>
+                <button class="modal-close" onclick="hideModal('import-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="import-dropzone" id="import-dropzone" onclick="selectFile()">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-muted); margin-bottom: 12px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <div style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">点击或拖拽文件到此处</div>
+                    <div style="font-size: 13px; color: var(--text-muted);">支持 Excel (.xlsx, .xls) �?CSV 格式</div>
+                </div>
+                <div style="margin-top: 16px;">
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">模板下载�?/div>
+                    <button class="btn btn-ghost btn-sm">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        入库导入模板.xlsx
+                    </button>
+                </div>
+                <div style="margin-top: 16px; padding: 12px; background: var(--bg-page); border-radius: var(--radius-md);">
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">导入说明�?/div>
+                    <ul style="font-size: 12px; color: var(--text-muted); margin: 0; padding-left: 16px; line-height: 1.8;">
+                        <li>请使用提供的模板格式填写数据</li>
+                        <li>必填字段：耗材编码、批号、入库数量、有效期</li>
+                        <li>日期格式：YYYY-MM-DD</li>
+                        <li>单次导入最多支�?1000 条记�?/li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" onclick="hideModal('import-modal')">取消</button>
+                <button class="btn btn-primary btn-sm" onclick="startImport()">开始导�?/button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inbound Detail Modal -->
+    <div class="modal" id="inbound-detail-modal">
+        <div class="modal-overlay" onclick="hideModal('inbound-detail-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">入库详情</h3>
+                <button class="modal-close" onclick="hideModal('inbound-detail-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-header">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="detail-title">IN20241210-001</div>
+                        <span class="inbound-status inbound-status-completed">已完�?/span>
+                    </div>
+                    <div class="detail-subtitle">入库时间: 2024-12-10 10:30:25</div>
+                </div>
+                <div class="detail-grid">
+                    <div class="detail-item"><div class="detail-label">物料名称</div><div class="detail-value">DNA提取试剂�?/div></div>
+                    <div class="detail-item"><div class="detail-label">物料编码</div><div class="detail-value mono-text">CON-2024-001</div></div>
+                    <div class="detail-item"><div class="detail-label">批次�?/div><div class="detail-value mono-text">LOT-2024-001</div></div>
+                    <div class="detail-item"><div class="detail-label">入库来源</div><div class="detail-value"><span class="status-badge status-success">采购入库</span></div></div>
+                    <div class="detail-item"><div class="detail-label">入库数量</div><div class="detail-value">200 �?/div></div>
+                    <div class="detail-item"><div class="detail-label">入库单价</div><div class="detail-value">¥75.00</div></div>
+                    <div class="detail-item"><div class="detail-label">入库金额</div><div class="detail-value">¥15,000.00</div></div>
+                    <div class="detail-item"><div class="detail-label">供应�?/div><div class="detail-value">Thermo Fisher</div></div>
+                    <div class="detail-item"><div class="detail-label">生产日期</div><div class="detail-value">2024-01-01</div></div>
+                    <div class="detail-item"><div class="detail-label">有效期至</div><div class="detail-value">2025-01-01</div></div>
+                </div>
+                <div style="margin-top: 16px; padding: 12px; background: var(--bg-page); border-radius: var(--radius-md);">
+                    <div class="detail-label" style="margin-bottom: 4px;">备注</div>
+                    <div style="font-size: 14px; color: var(--text-primary);">第一季度常规采购入库</div>
+                </div>
+                <div style="margin-top: 16px; padding: 12px; background: var(--bg-page); border-radius: var(--radius-md);">
+                    <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                        <div><span style="color: var(--text-muted);">操作�?</span><span style="margin-left: 8px;">张医�?/span></div>
+                        <div><span style="color: var(--text-muted);">审核�?</span><span style="margin-left: 8px;">李主�?/span></div>
+                        <div><span style="color: var(--text-muted);">入库时间:</span><span style="margin-left: 8px;">2024-12-10 10:30:25</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" onclick="hideModal('inbound-detail-modal')">关闭</button>
+                <button class="btn btn-secondary btn-sm" onclick="hideModal('inbound-detail-modal'); showModal('print-modal')">打印入库�?/button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Inbound Modal -->
+    <div class="modal" id="confirm-inbound-modal">
+        <div class="modal-overlay" onclick="hideModal('confirm-inbound-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">确认入库</h3>
+                <button class="modal-close" onclick="hideModal('confirm-inbound-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="text-align: center; padding: 20px 0;">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" style="margin-bottom: 16px;">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <h4 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">确认入库此采购订单？</h4>
+                    <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 20px;">入库单号: <span class="mono-text">IN20241208-003</span></p>
+                    <div style="background: var(--bg-page); border-radius: var(--radius-md); padding: 16px; text-align: left; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-muted);">耗材名称</span>
+                            <span style="font-weight: 500;">移液器吸�?200μl</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-muted);">订单数量</span>
+                            <span style="font-weight: 500;">20</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-muted);">已到货数�?/span>
+                            <span style="font-weight: 500; color: var(--success);">15</span>
+                        </div>
+                    </div>
+                    <div class="form-group" style="text-align: left;">
+                        <label class="form-label">本次入库数量 <span class="required">*</span></label>
+                        <input type="number" class="form-input" value="15" min="1" max="20" style="width: 100%;">
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">剩余待入�? 5</div>
+                    </div>
+                    <div class="form-group" style="text-align: left; margin-top: 12px;">
+                        <label class="form-label">入库后处�?/label>
+                        <div style="display: flex; gap: 12px;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="radio" name="after-inbound" value="keep" checked>
+                                <span style="font-size: 13px;">保持订单，等待剩余到�?/span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="radio" name="after-inbound" value="complete">
+                                <span style="font-size: 13px;">完成订单</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" onclick="hideModal('confirm-inbound-modal')">取消</button>
+                <button class="btn btn-primary btn-sm" onclick="doConfirmInbound()">确认入库</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cancel Inbound Modal -->
+    <div class="modal" id="cancel-inbound-modal">
+        <div class="modal-overlay" onclick="hideModal('cancel-inbound-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">取消入库</h3>
+                <button class="modal-close" onclick="hideModal('cancel-inbound-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--warning-bg); border-radius: var(--radius-md); margin-bottom: 16px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warning-text)" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        <span style="font-size: 13px; color: var(--warning-text);">取消入库将回滚库存，此操作不可恢�?/span>
+                    </div>
+                    <div style="background: var(--bg-page); border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-muted); font-size: 13px;">入库单号</span>
+                            <span class="mono-text" style="font-size: 13px;">IN20241210-001</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-muted); font-size: 13px;">入库数量</span>
+                            <span style="font-size: 13px; font-weight: 500;">200</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">取消原因 <span class="required">*</span></label>
+                    <select class="form-select" id="cancel-reason">
+                        <option value="">请选择取消原因</option>
+                        <option value="1">入库信息错误</option>
+                        <option value="2">货物质量问题</option>
+                        <option value="3">供应商取�?/option>
+                        <option value="4">其他原因</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-top: 12px;">
+                    <label class="form-label">详细说明</label>
+                    <textarea class="form-textarea" rows="3" placeholder="请输入详细说明（可选）"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" onclick="hideModal('cancel-inbound-modal')">取消</button>
+                <button class="btn btn-error btn-sm" onclick="doCancelInbound()">确认取消入库</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restore Inbound Modal -->
+    <div class="modal" id="restore-inbound-modal">
+        <div class="modal-overlay" onclick="hideModal('restore-inbound-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">恢复入库</h3>
+                <button class="modal-close" onclick="hideModal('restore-inbound-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="text-align: center; padding: 20px 0;">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="margin-bottom: 16px;">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                        <path d="M3 3v5h5"/>
+                    </svg>
+                    <h4 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">恢复此入库记录？</h4>
+                    <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 20px;">入库单号: <span class="mono-text">IN20241206-005</span></p>
+                    <div class="cancel-reason-box" style="text-align: left; margin-bottom: 16px;">
+                        <div class="cancel-reason-label">原取消原�?/div>
+                        <div class="cancel-reason-text">入库信息错误</div>
+                    </div>
+                    <div style="background: var(--bg-page); border-radius: var(--radius-md); padding: 16px; text-align: left;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-muted);">耗材名称</span>
+                            <span style="font-weight: 500;">测序引物套装</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-muted);">入库数量</span>
+                            <span style="font-weight: 500;">5000</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-muted);">恢复后库�?/span>
+                            <span style="font-weight: 500; color: var(--success);">5400</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" onclick="hideModal('restore-inbound-modal')">取消</button>
+                <button class="btn btn-primary btn-sm" onclick="doRestoreInbound()">确认恢复</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print Preview Modal -->
+    <div class="modal" id="print-modal">
+        <div class="modal-overlay" onclick="hideModal('print-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">打印预览</h3>
+                <button class="modal-close" onclick="hideModal('print-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="print-preview" id="print-content">
+                    <div class="print-header">
+                        <div class="print-title">入库记录报表</div>
+                        <div class="print-meta">
+                            <div>生成时间: 2024-12-10 15:30:25</div>
+                            <div>操作�? 张医�?/div>
+                        </div>
+                    </div>
+                    <table class="print-table">
+                        <thead>
+                            <tr>
+                                <th>入库单号</th>
+                                <th>耗材名称</th>
+                                <th>批号</th>
+                                <th>数量</th>
+                                <th>单价</th>
+                                <th>金额</th>
+                                <th>供应�?/th>
+                                <th>入库时间</th>
+                                <th>状�?/th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>IN20241210-001</td>
+                                <td>DNA提取试剂�?/td>
+                                <td>LOT-2024-001</td>
+                                <td>200</td>
+                                <td>¥75.00</td>
+                                <td>¥15,000</td>
+                                <td>Thermo Fisher</td>
+                                <td>2024-12-10 10:30</td>
+                                <td>已完�?/td>
+                            </tr>
+                            <tr>
+                                <td>IN20241209-002</td>
+                                <td>PCR反应�?96�?/td>
+                                <td>LOT-2024-089</td>
+                                <td>50</td>
+                                <td>¥170.00</td>
+                                <td>¥8,500</td>
+                                <td>Qiagen</td>
+                                <td>2024-12-09 14:20</td>
+                                <td>已完�?/td>
+                            </tr>
+                            <tr>
+                                <td>IN20241208-003</td>
+                                <td>测序引物套装</td>
+                                <td>LOT-2024-156</td>
+                                <td>20</td>
+                                <td>¥320.00</td>
+                                <td>¥6,400</td>
+                                <td>Invitrogen</td>
+                                <td>2024-12-08 09:15</td>
+                                <td>待入�?/td>
+                            </tr>
+                            <tr>
+                                <td>IN20241207-004</td>
+                                <td>离心�?1.5ml</td>
+                                <td>LOT-2024-234</td>
+                                <td>1000</td>
+                                <td>¥0.50</td>
+                                <td>¥500</td>
+                                <td>Sigma-Aldrich</td>
+                                <td>2024-12-07 16:45</td>
+                                <td>已完�?/td>
+                            </tr>
+                            <tr>
+                                <td>IN20241206-005</td>
+                                <td>移液器吸�?200μl</td>
+                                <td>LOT-2024-312</td>
+                                <td>5000</td>
+                                <td>¥0.08</td>
+                                <td>¥400</td>
+                                <td>Thermo Fisher</td>
+                                <td>2024-12-06 11:20</td>
+                                <td>已取�?/td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="print-footer">
+                        <div>本报表由 COREONE 系统自动生成</div>
+                        <div>�?1 �?/ �?1 �?/div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary btn-sm" onclick="hideModal('print-modal')">取消</button>
+                <button class="btn btn-primary btn-sm" onclick="doPrint()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    打印
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/scripts.js"></script>
+    <script src="../shared/data-store.js"></script>
+    <script>
+        let currentOpenModal = null;
+        
+        // 供应商数�?- 与suppliers.html和mock-config.js保持一致（包含验收测试供应商）
+        const suppliersData = [
+            { id: 'SUP-001', name: '赛默飞世�?, contact: '张经�?, phone: '400-888-1234', address: '上海市浦东新�?, status: 'active' },
+            { id: 'SUP-002', name: '艾本�?, contact: '李经�?, phone: '400-888-2345', address: '北京市朝阳区', status: 'active' },
+            { id: 'SUP-003', name: '赛多利斯', contact: '王经�?, phone: '400-888-3456', address: '广州市天河区', status: 'active' },
+            { id: 'SUP-004', name: '康宁', contact: '赵经�?, phone: '400-888-4567', address: '上海市闵行区', status: 'active' },
+            { id: 'SUP-005', name: '徕卡', contact: '刘经�?, phone: '400-888-5678', address: '北京市海淀�?, status: 'active' },
+            { id: 'SUP-006', name: '北京病理科技', contact: '孙经�?, phone: '010-12345678', address: '北京市昌平区', status: 'active' },
+            { id: 'SUP-007', name: 'DAKO', contact: '陈经�?, phone: '400-888-6789', address: '上海市徐汇区', status: 'active' },
+            { id: 'SUP-008', name: '罗氏诊断', contact: '周经�?, phone: '400-888-7890', address: '上海市静安区', status: 'active' },
+            { id: 'SUP-009', name: '达安基因', contact: '吴经�?, phone: '400-888-8901', address: '广州市黄埔区', status: 'active' },
+            { id: 'SUP-010', name: '华大基因', contact: '郑经�?, phone: '400-888-9012', address: '深圳市南山区', status: 'active' },
+            // ==================== 验收测试供应�?====================
+            { id: 'SUP-TEST-001', name: '云深生物', contact: '赵经�?, phone: '400-999-8888', address: '深圳市南山区科技�?, status: 'active' }
+        ];
+        
+        // 初始化供应商下拉�?
+        function initSupplierSelects() {
+            const supplierSelects = document.querySelectorAll('.supplier-select');
+            supplierSelects.forEach(select => {
+                select.innerHTML = '<option value="">请选择供应�?/option>';
+                suppliersData.forEach(supplier => {
+                    const option = document.createElement('option');
+                    option.value = supplier.id;
+                    option.textContent = supplier.name;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        function showModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            currentOpenModal = modalId;
+            
+            setTimeout(() => {
+                const firstInput = modal.querySelector('input:not([type="hidden"]), button:not(.modal-close), select, textarea');
+                if (firstInput) {
+                    firstInput.focus();
+                }
+            }, 100);
+        }
+
+        function hideModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            currentOpenModal = null;
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && currentOpenModal) {
+                hideModal(currentOpenModal);
+            }
+        });
+
+        // Inbound Type Selection
+        function selectInboundType(type) {
+            const options = document.querySelectorAll('.inbound-type-option');
+            options.forEach(opt => opt.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            event.currentTarget.querySelector('input[type="radio"]').checked = true;
+            
+            // Update submit button text
+            const submitBtn = document.querySelector('#inbound-modal .btn-primary');
+            if (submitBtn) {
+                submitBtn.textContent = type === 'direct' ? '新增入库' : '创建订单';
+            }
+        }
+
+        function showConsumableDropdown() {
+            document.getElementById('consumable-dropdown').classList.add('show');
+        }
+
+        function selectConsumable(name, code, category, spec, unit, supplier, price, stock) {
+            document.getElementById('selected-name').textContent = name;
+            document.getElementById('selected-meta').textContent = `编码: ${code} | 规格: ${spec} | 当前库存: ${stock}`;
+            document.getElementById('selected-consumable').style.display = 'flex';
+            document.getElementById('consumable-dropdown').classList.remove('show');
+            document.querySelector('.consumable-search').value = name;
+            // Auto-fill supplier and price from consumable config
+            if (supplier) {
+                const supplierSelect = document.querySelector('.inbound-form select.form-select');
+                if (supplierSelect) {
+                    // Try to match supplier
+                    for (let i = 0; i < supplierSelect.options.length; i++) {
+                        if (supplierSelect.options[i].text.includes(supplier)) {
+                            supplierSelect.selectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (price) {
+                const priceInput = document.getElementById('price-input');
+                if (priceInput) {
+                    priceInput.value = price.replace('¥', '').replace(',', '');
+                }
+            }
+            // Update stock preview
+            const stockAfter = document.getElementById('stock-after');
+            if (stockAfter) {
+                stockAfter.textContent = parseInt(stock) + 1;
+            }
+        }
+
+        function clearSelectedConsumable() {
+            document.getElementById('selected-consumable').style.display = 'none';
+            document.querySelector('.consumable-search').value = '';
+        }
+
+        // Confirm Inbound
+        function doConfirmInbound() {
+            hideModal('confirm-inbound-modal');
+            showToast('入库成功', 'success', '采购订单已确认入库，库存已更�?);
+        }
+
+        // Cancel Inbound
+        function doCancelInbound() {
+            const reason = document.getElementById('cancel-reason').value;
+            if (!reason) {
+                showToast('请选择取消原因', 'error', '');
+                return;
+            }
+            hideModal('cancel-inbound-modal');
+            showToast('已取消入�?, 'success', '入库已取消，库存已回�?);
+        }
+
+        // Restore Inbound
+        function doRestoreInbound() {
+            hideModal('restore-inbound-modal');
+            showToast('已恢复入�?, 'success', '入库记录已恢复，库存已更�?);
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.consumable-selector')) {
+                document.getElementById('consumable-dropdown').classList.remove('show');
+            }
+        });
+
+        function setExpiryDate(months) {
+            const date = new Date();
+            date.setMonth(date.getMonth() + months);
+            document.getElementById('expiry-date').value = date.toISOString().split('T')[0];
+        }
+
+        document.getElementById('quantity-input')?.addEventListener('input', function() {
+            const qty = parseInt(this.value) || 0;
+            const stockAfter = document.getElementById('stock-after');
+            if (stockAfter) stockAfter.textContent = 50 + qty;
+        });
+
+        function onInboundSourceChange() {
+            const source = document.getElementById('inbound-source');
+            const sourceValue = source ? source.value : '';
+            const relatedOrderGroup = document.getElementById('related-order-group');
+            const inboundMethodRow = document.getElementById('inbound-method-row');
+            
+            if (relatedOrderGroup) {
+                relatedOrderGroup.style.display = (sourceValue === 'purchase') ? 'block' : 'none';
+            }
+            if (inboundMethodRow) {
+                inboundMethodRow.style.display = (sourceValue === 'purchase') ? 'flex' : 'none';
+            }
+        }
+
+        function submitInbound() {
+            const tbody = document.getElementById('inbound-items');
+            if (!tbody || tbody.children.length === 0) {
+                showToast('请添加入库物�?, 'error');
+                return;
+            }
+            
+            let hasError = false;
+            const rows = tbody.querySelectorAll('tr');
+            
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                const consumableSelect = cells[0] ? cells[0].querySelector('select') : null;
+                const quantityInput = cells[2] ? cells[2].querySelector('input[type="number"]') : null;
+                const supplierSelect = cells[5] ? cells[5].querySelector('select') : null;
+                
+                if (!consumableSelect || !consumableSelect.value) {
+                    showToast('请选择入库耗材', 'error');
+                    hasError = true;
+                    return;
+                }
+                
+                const quantity = parseInt(quantityInput?.value) || 0;
+                if (quantity <= 0) {
+                    showToast('请输入有效的入库数量', 'error');
+                    hasError = true;
+                    return;
+                }
+                
+                if (!supplierSelect || !supplierSelect.value) {
+                    showToast('请选择供应�?, 'error');
+                    hasError = true;
+                    return;
+                }
+            });
+            
+            if (hasError) return;
+            
+            hideModal('inbound-modal');
+            showToast('入库成功', 'success', '入库记录已创建，库存已更�?);
+        }
+
+        // Multi-item Inbound Functions
+        function addInboundItem() {
+            const tbody = document.getElementById('inbound-items');
+            const newRow = document.createElement('tr');
+            
+            // 生成供应商选项
+            let supplierOptions = '<option value="">请选择供应�?/option>';
+            suppliersData.forEach(supplier => {
+                supplierOptions += `<option value="${supplier.id}">${supplier.name}</option>`;
+            });
+            
+            newRow.innerHTML = `
+                <td>
+                    <select class="form-select" style="height: 32px;" onchange="checkConflict(this)">
+                        <option value="">请选择耗材</option>
+                        <option value="1">PCR试剂�?/option>
+                        <option value="2">离心�?1.5ml</option>
+                        <option value="3">移液器吸�?200μl</option>
+                        <option value="4">DNA提取试剂�?/option>
+                    </select>
+                </td>
+                <td><input type="text" class="form-input mono-text" style="height: 32px;" placeholder="批号"></td>
+                <td><input type="number" class="form-input" style="height: 32px; width: 70px;" value="1" min="1"></td>
+                <td><input type="number" class="form-input" style="height: 32px; width: 80px;" placeholder="0.00" step="0.01"></td>
+                <td><input type="date" class="form-input" style="height: 32px;"></td>
+                <td>
+                    <select class="form-select supplier-select" style="height: 32px;">
+                        ${supplierOptions}
+                    </select>
+                </td>
+                <td><button type="button" class="btn btn-sm btn-ghost" style="color: var(--error);" onclick="removeInboundItem(this)">删除</button></td>
+            `;
+            tbody.appendChild(newRow);
+        }
+
+        function removeInboundItem(btn) {
+            const tbody = document.getElementById('inbound-items');
+            if (tbody.children.length > 1) {
+                btn.closest('tr').remove();
+            } else {
+                showToast('提示', 'info', '至少需要保留一条入库明�?);
+            }
+        }
+
+        function checkConflict(select) {
+            const warning = document.getElementById('conflict-warning');
+            // 模拟检测冲突：如果选择了PCR试剂盒，显示冲突提示
+            if (select.value === '1') {
+                warning.style.display = 'block';
+            } else {
+                warning.style.display = 'none';
+            }
+        }
+
+        function confirmInbound() {
+            showToast('入库确认', 'success', '入库单已确认，库存已更新');
+        }
+
+        function startScan() {
+            const scanArea = document.getElementById('scan-area');
+            scanArea.style.borderColor = 'var(--primary)';
+            scanArea.style.background = 'var(--primary-light)';
+            scanArea.querySelector('div').textContent = '正在扫描...';
+            setTimeout(() => {
+                scanArea.style.borderColor = '';
+                scanArea.style.background = '';
+                scanArea.querySelector('div').textContent = '扫描成功';
+                showToast('扫码成功', 'success', '已识别耗材：DNA提取试剂�?);
+                setTimeout(() => {
+                    hideModal('scan-modal');
+                    showModal('inbound-modal');
+                }, 1000);
+            }, 2000);
+        }
+
+        function manualInput() {
+            hideModal('scan-modal');
+            showModal('inbound-modal');
+        }
+
+        function selectFile() {
+            showToast('选择文件', 'info', '请在选择文件后点击开始导�?);
+        }
+
+        function startImport() {
+            hideModal('import-modal');
+            showToast('导入成功', 'success', '成功导入 50 条入库记�?);
+        }
+
+        function doPrint() {
+            window.print();
+        }
+
+        // Checkbox Functions
+        function toggleSelectAll() {
+            const headerCheckbox = document.getElementById('header-checkbox');
+            const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+            const isChecked = headerCheckbox.checked;
+
+            rowCheckboxes.forEach(checkbox => {
+                checkbox.checked = isChecked;
+                const row = checkbox.closest('.table-row');
+                if (isChecked) {
+                    row.classList.add('selected');
+                } else {
+                    row.classList.remove('selected');
+                }
+            });
+
+            updateBatchActionsBar();
+        }
+
+        function updateSelection() {
+            const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+            const headerCheckbox = document.getElementById('header-checkbox');
+            let checkedCount = 0;
+
+            rowCheckboxes.forEach(checkbox => {
+                const row = checkbox.closest('.table-row');
+                if (checkbox.checked) {
+                    checkedCount++;
+                    row.classList.add('selected');
+                } else {
+                    row.classList.remove('selected');
+                }
+            });
+
+            headerCheckbox.checked = checkedCount === rowCheckboxes.length;
+            updateBatchActionsBar();
+        }
+
+        function updateBatchActionsBar() {
+            const checkedCount = document.querySelectorAll('.row-checkbox:checked').length;
+            const batchBar = document.getElementById('batch-actions-bar');
+            const selectedCountEl = document.getElementById('selected-count');
+
+            selectedCountEl.textContent = checkedCount;
+
+            if (checkedCount > 0) {
+                batchBar.style.display = 'flex';
+            } else {
+                batchBar.style.display = 'none';
+            }
+        }
+
+        function clearSelection() {
+            const headerCheckbox = document.getElementById('header-checkbox');
+            const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+
+            headerCheckbox.checked = false;
+            rowCheckboxes.forEach(checkbox => {
+                checkbox.checked = false;
+                checkbox.closest('.table-row').classList.remove('selected');
+            });
+
+            updateBatchActionsBar();
+        }
+
+        function batchExport() {
+            const selectedCount = document.querySelectorAll('.row-checkbox:checked').length;
+            showToast('导出成功', 'success', `正在导出 ${selectedCount} 条入库记�?..`);
+        }
+
+        function batchPrint() {
+            const selectedCount = document.querySelectorAll('.row-checkbox:checked').length;
+            showModal('print-modal');
+        }
+
+        function printInbound(id) {
+            showToast('打印预览', 'info', `正在生成入库�?${id} 的打印预�?..`);
+            showModal('print-modal');
+        }
+
+        // Filter Functions
+        function filterByStatus(status) {
+            document.querySelectorAll('.stat-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            const activeCard = document.querySelector(`.stat-card[data-status="${status}"]`);
+            if (activeCard) {
+                activeCard.classList.add('active');
+            }
+            
+            document.querySelectorAll('.quick-filter-tag').forEach(tag => {
+                tag.classList.remove('active');
+            });
+            
+            const statusNames = {
+                'all': '全部',
+                'completed': '已完�?,
+                'pending': '待入�?,
+                'cancelled': '已取�?
+            };
+            showToast('筛选状�?, 'info', `已筛选：${statusNames[status]}`);
+        }
+
+        function quickFilter(filter) {
+            document.querySelectorAll('.quick-filter-tag').forEach(tag => {
+                tag.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            const filterNames = {
+                'all': '全部',
+                'today': '今日',
+                'week': '本周',
+                'month': '本月'
+            };
+            showToast('快捷筛�?, 'info', `已筛选：${filterNames[filter]}`);
+        }
+
+        function showToast(title, type, message) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            let borderColor = type === 'success' ? 'var(--success)' : type === 'error' ? 'var(--error)' : 'var(--info)';
+            toast.style.borderLeftColor = borderColor;
+            let iconSvg = type === 'success' ? '<polyline points="20 6 9 17 4 12"/>' : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>';
+            toast.innerHTML = `
+                <div class="toast-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">${iconSvg}</svg></div>
+                <div class="toast-content"><div class="toast-title">${title}</div>${message ? `<div class="toast-message">${message}</div>` : ''}</div>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initSupplierSelects();
+            
+            // 搜索框功�?
+            document.querySelector('.card-header .search-box input').addEventListener('input', function() {
+                const searchText = this.value.toLowerCase().trim();
+                const tableRows = document.querySelectorAll('.data-table tbody tr');
+                
+                tableRows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 4) {
+                        const inboundNo = cells[1] ? cells[1].textContent.toLowerCase() : '';
+                        const materialName = cells[2] ? cells[2].textContent.toLowerCase() : '';
+                        const batchNo = cells[3] ? cells[3].textContent.toLowerCase() : '';
+                        
+                        if (searchText === '' || inboundNo.includes(searchText) || materialName.includes(searchText) || batchNo.includes(searchText)) {
+                            row.style.display = '';
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

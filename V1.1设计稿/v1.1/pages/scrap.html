@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>报废管理 - COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="scrap.html" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>报废管理</span>
+            </a>
+            <a href="stocktaking.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>库存盘点</span>
+            </a>
+            <a href="projects.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测服�?/span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-analysis.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+            <a href="categories.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>物料分类</span>
+            </a>
+            <a href="consumable-config.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                </svg>
+                <span>耗材配置</span>
+            </a>
+            <a href="rules.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>规则配置</span>
+            </a>
+            <a href="alerts.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span>预警中心</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>供应商管�?/span>
+            </a>
+            <a href="locations.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span>库位管理</span>
+            </a>
+            <a href="users.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>用户管理</span>
+            </a>
+            <a href="roles.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>角色管理</span>
+            </a>
+            <a href="logs.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <span>操作日志</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">报废管理</h1>
+                <p class="page-subtitle">处理物料过期、损坏、质量问题等报废操作</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="showModal('scrap-apply-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    新建报废
+                </button>
+                <button class="btn btn-secondary" onclick="showModal('expired-materials-modal'); renderExpiredMaterialsTable();">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                    </svg>
+                    过期物料
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card stat-card-primary">
+                <div class="stat-value">15</div>
+                <div class="stat-label">本月报废</div>
+            </div>
+            <div class="stat-card stat-card-danger">
+                <div class="stat-value">¥12,350</div>
+                <div class="stat-label">本月报废金额</div>
+            </div>
+            <div class="stat-card stat-card-warning">
+                <div class="stat-value">8</div>
+                <div class="stat-label">过期待报�?/div>
+            </div>
+            <div class="stat-card stat-card-muted">
+                <div class="stat-value">2.3%</div>
+                <div class="stat-label">报废�?/div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">报废记录</span>
+                <div class="filter-bar">
+                    <div class="search-box">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" placeholder="搜索报废单号/物料名称/批号...">
+                    </div>
+                    <select class="filter-select">
+                        <option>全部原因</option>
+                        <option>已过�?/option>
+                        <option>质量问题</option>
+                        <option>物理损坏</option>
+                        <option>其他</option>
+                    </select>
+                    <input type="date" class="filter-select" placeholder="开始日�?>
+                    <span style="color: var(--text-muted);">�?/span>
+                    <input type="date" class="filter-select" placeholder="结束日期">
+                    <button class="btn btn-secondary btn-sm">查询</button>
+                    <button class="btn btn-ghost btn-sm">重置</button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>报废单号</th>
+                            <th>物料名称</th>
+                            <th>批号</th>
+                            <th>报废数量</th>
+                            <th>报废金额</th>
+                            <th>报废原因</th>
+                            <th>操作�?/th>
+                            <th>报废时间</th>
+                            <th width="100">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="mono-text">SCR-2024-0015</td>
+                            <td><strong>Ki-67抗体</strong></td>
+                            <td class="mono-text">LOT-2023-0892</td>
+                            <td>2 �?/td>
+                            <td style="color: var(--danger); font-weight: 600;">¥1,100.00</td>
+                            <td>已过�?/td>
+                            <td>张三</td>
+                            <td>2024-01-15 16:30</td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('scrap-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">SCR-2024-0014</td>
+                            <td><strong>离心�?/strong></td>
+                            <td class="mono-text">LOT-2024-0156</td>
+                            <td>50 �?/td>
+                            <td style="color: var(--danger); font-weight: 600;">¥25.00</td>
+                            <td>质量问题</td>
+                            <td>李四</td>
+                            <td>2024-01-15 11:20</td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('scrap-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">SCR-2024-0013</td>
+                            <td><strong>苏木素染�?/strong></td>
+                            <td class="mono-text">LOT-2023-0789</td>
+                            <td>1 �?/td>
+                            <td style="color: var(--danger); font-weight: 600;">¥280.00</td>
+                            <td>物理损坏</td>
+                            <td>王五</td>
+                            <td>2024-01-14 14:45</td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('scrap-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">SCR-2024-0012</td>
+                            <td><strong>PAS染色试剂</strong></td>
+                            <td class="mono-text">LOT-2023-0654</td>
+                            <td>3 �?/td>
+                            <td style="color: var(--danger); font-weight: 600;">¥180.00</td>
+                            <td>过期报废</td>
+                            <td>张三</td>
+                            <td>2024-01-14 10:30</td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('scrap-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">SCR-2024-0011</td>
+                            <td><strong>载玻�?/strong></td>
+                            <td class="mono-text">LOT-2024-0023</td>
+                            <td>100 �?/td>
+                            <td style="color: var(--danger); font-weight: 600;">¥50.00</td>
+                            <td>质量问题</td>
+                            <td>李四</td>
+                            <td>2024-01-13 15:20</td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-ghost btn-sm" onclick="showModal('scrap-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination-info">�?15 条记录，�?1/2 �?/span>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm btn-secondary" disabled>上一�?/button>
+                    <button class="btn btn-sm btn-primary">1</button>
+                    <button class="btn btn-sm btn-secondary">2</button>
+                    <button class="btn btn-sm btn-secondary">下一�?/button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 报损申请弹窗 -->
+    <div id="scrap-apply-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('scrap-apply-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">新建报废</h3>
+                <button class="modal-close" onclick="hideModal('scrap-apply-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form class="form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">物料名称 <span class="required">*</span></label>
+                            <select class="form-control" id="scrap-material-select" onchange="updateMaterialInfo()">
+                                <option value="">请选择物料</option>
+                                <option value="MAT-001">Harris苏木素染�?/option>
+                                <option value="MAT-101">Ki-67抗体</option>
+                                <option value="MAT-201">包埋盒（标准型）</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">报废数量 <span class="required">*</span></label>
+                            <div style="position: relative;">
+                                <input type="number" class="form-control" id="scrap-quantity" placeholder="请输入报废数�? oninput="validateQuantity()">
+                                <span id="quantity-hint" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--text-muted);">最�? 24</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="material-info-panel" style="display: none; margin-bottom: 16px; padding: 12px 16px; background: var(--bg-page); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 16v-4"/>
+                                <path d="M12 8h.01"/>
+                            </svg>
+                            <span style="font-size: 13px; color: var(--text-muted);">物料库存信息</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-muted);">规格型号</div>
+                                <div style="font-size: 14px; font-weight: 500;" id="material-spec">500ml/�?/div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-muted);">当前库存</div>
+                                <div style="font-size: 14px; font-weight: 500; color: var(--primary);" id="material-stock">24 �?/div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-muted);">库位</div>
+                                <div style="font-size: 14px; font-weight: 500;" id="material-location">A-01-01</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-muted);">单价</div>
+                                <div style="font-size: 14px; font-weight: 500;" id="material-price">¥280.00</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">报废原因 <span class="required">*</span></label>
+                            <select class="form-control" id="scrap-reason">
+                                <option value="">请选择报废原因</option>
+                                <option value="expired">已过�?/option>
+                                <option value="quality">质量问题</option>
+                                <option value="damaged">物理损坏</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">批次�?/label>
+                            <input type="text" class="form-control" placeholder="请输入批次号">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">详细说明</label>
+                        <textarea class="form-control" rows="3" placeholder="请详细说明报废原因和情况（选填�?></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">附件上传</label>
+                        <div style="border: 2px dashed var(--border-default); border-radius: var(--radius-md); padding: 24px; text-align: center; cursor: pointer; transition: all var(--transition-fast);" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border-default)'">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" style="margin-bottom: 8px;">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            <div style="color: var(--text-muted); font-size: 14px;">点击或拖拽上传图�?/div>
+                            <div style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">支持 JPG、PNG 格式，最�?5MB</div>
+                        </div>
+                        <div id="uploaded-files" style="margin-top: 12px; display: none;">
+                            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">已上传文�?/div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-page); border-radius: var(--radius-sm); border: 1px solid var(--border-default);">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                                        <polyline points="21 15 16 10 5 21"/>
+                                    </svg>
+                                    <span style="font-size: 13px;">过期标签照片.jpg</span>
+                                    <button type="button" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: none; background: transparent; cursor: pointer; color: var(--text-muted);">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="18" y1="6" x2="6" y2="18"/>
+                                            <line x1="6" y1="6" x2="18" y2="18"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('scrap-apply-modal')">取消</button>
+                <button class="btn btn-danger" onclick="confirmScrap()">确认报废</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 报废详情弹窗 -->
+    <div id="scrap-detail-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('scrap-detail-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">报废详情</h3>
+                <button class="modal-close" onclick="hideModal('scrap-detail-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-header">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="detail-title">SCR-2024-0015</div>
+                    </div>
+                    <div class="detail-subtitle">报废时间: 2024-01-15 16:30:45</div>
+                </div>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">物料名称</div>
+                        <div class="detail-value">Ki-67抗体</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">规格型号</div>
+                        <div class="detail-value">1ml/�?/div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">批次�?/div>
+                        <div class="detail-value mono-text">LOT-2023-0892</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">报废数量</div>
+                        <div class="detail-value">2 �?/div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">报废金额</div>
+                        <div class="detail-value" style="color: #ef4444; font-weight: 600;">¥1,100.00</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">报废原因</div>
+                        <div class="detail-value">已过�?/div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">操作�?/div>
+                        <div class="detail-value">张三</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">所属部�?/div>
+                        <div class="detail-value">病理�?/div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px; padding: 12px; background: var(--bg-page); border-radius: 6px;">
+                    <div class="detail-label" style="margin-bottom: 4px;">详细说明</div>
+                    <div style="font-size: 14px; color: var(--text-primary);">该批次抗体已�?024�?�?0日过期，按照实验室管理规定进行报废处理�?/div>
+                </div>
+                <div style="margin-top: 16px;">
+                    <div class="detail-label" style="margin-bottom: 8px;">附件图片</div>
+                    <div style="display: flex; gap: 8px;">
+                        <div style="width: 80px; height: 80px; background: var(--bg-page); border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('scrap-detail-modal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 过期物料弹窗 -->
+    <div id="expired-materials-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('expired-materials-modal')"></div>
+        <div class="modal-container modal-xl">
+            <div class="modal-header">
+                <h3 class="modal-title">过期物料</h3>
+                <button class="modal-close" onclick="hideModal('expired-materials-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 16px; padding: 12px 16px; background: #fef3c7; border-radius: var(--radius-md); display: flex; align-items: center; gap: 12px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 8v4"/>
+                        <path d="M12 16h.01"/>
+                    </svg>
+                    <div>
+                        <div style="font-weight: 500; color: #92400e;">�?8 种物料已过期</div>
+                        <div style="font-size: 13px; color: #b45309;">过期物料建议尽快处理，避免误用风�?/div>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <div class="search-box" style="width: 220px;">
+                            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                            <input type="text" placeholder="搜索物料名称/批号...">
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button class="btn btn-secondary btn-sm" onclick="selectAllExpired()">全�?/button>
+                        <button class="btn btn-danger btn-sm" onclick="batchScrapExpired()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18"/>
+                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                            </svg>
+                            批量报废
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                    <table class="data-table">
+                        <thead style="position: sticky; top: 0; background: var(--bg-page); z-index: 1;">
+                            <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="select-all-expired" onchange="toggleSelectAllExpired(this)"></th>
+                                <th>物料名称</th>
+                                <th>批号</th>
+                                <th>库存</th>
+                                <th>单价</th>
+                                <th>过期日期</th>
+                                <th>过期天数</th>
+                                <th>库位</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><input type="checkbox" class="expired-checkbox"></td>
+                                <td><strong>Ki-67抗体</strong></td>
+                                <td class="mono-text">LOT-2023-0892</td>
+                                <td>2 �?/td>
+                                <td>¥550.00</td>
+                                <td style="color: var(--danger);">2024-01-10</td>
+                                <td><span style="color: var(--danger); font-weight: 600;">已过�?4 �?/span></td>
+                                <td>B-02-01</td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="expired-checkbox"></td>
+                                <td><strong>PAS染色试剂</strong></td>
+                                <td class="mono-text">LOT-2023-0654</td>
+                                <td>3 �?/td>
+                                <td>¥60.00</td>
+                                <td style="color: var(--danger);">2024-01-08</td>
+                                <td><span style="color: var(--danger); font-weight: 600;">已过�?6 �?/span></td>
+                                <td>A-03-02</td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="expired-checkbox"></td>
+                                <td><strong>CEA抗体</strong></td>
+                                <td class="mono-text">LOT-2023-0721</td>
+                                <td>1 �?/td>
+                                <td>¥480.00</td>
+                                <td style="color: var(--danger);">2024-01-05</td>
+                                <td><span style="color: var(--danger); font-weight: 600;">已过�?9 �?/span></td>
+                                <td>B-02-03</td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="expired-checkbox"></td>
+                                <td><strong>苏木素染�?/strong></td>
+                                <td class="mono-text">LOT-2023-0589</td>
+                                <td>5 �?/td>
+                                <td>¥280.00</td>
+                                <td style="color: var(--danger);">2024-01-01</td>
+                                <td><span style="color: var(--danger); font-weight: 600;">已过�?13 �?/span></td>
+                                <td>A-01-01</td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="expired-checkbox"></td>
+                                <td><strong>免疫组化缓冲�?/strong></td>
+                                <td class="mono-text">LOT-2023-0456</td>
+                                <td>2 �?/td>
+                                <td>¥150.00</td>
+                                <td style="color: var(--danger);">2023-12-28</td>
+                                <td><span style="color: var(--danger); font-weight: 600;">已过�?17 �?/span></td>
+                                <td>B-01-02</td>
+                            </tr>
+                            <tr>
+                                <td><input type="checkbox" class="expired-checkbox"></td>
+                                <td><strong>酶标抗体</strong></td>
+                                <td class="mono-text">LOT-2023-0398</td>
+                                <td>4 �?/td>
+                                <td>¥320.00</td>
+                                <td style="color: var(--danger);">2023-12-20</td>
+                                <td><span style="color: var(--danger); font-weight: 600;">已过�?25 �?/span></td>
+                                <td>B-02-04</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 12px; padding: 12px 16px; background: var(--bg-page); border-radius: var(--radius-md);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 13px; color: var(--text-muted);">已选择 <strong id="expired-selected-count">0</strong> �?/span>
+                        <span style="font-size: 14px; font-weight: 600;">预计报废金额: <span style="color: var(--danger);">¥0.00</span></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('expired-materials-modal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/scripts.js"></script>
+    <script>
+        const mockData = {
+            materials: {
+                '111': [
+                    { id: 'MAT-001', code: 'MAT-001', name: 'Harris苏木素染�?, spec: '500ml/�?, unit: '�?, price: 168.00, stock: 24, location: 'A�?3-101', supplier: '北京病理科技', status: 'active' },
+                    { id: 'MAT-002', code: 'MAT-002', name: 'Gill苏木素染�?, spec: '500ml/�?, unit: '�?, price: 185.00, stock: 12, location: 'A�?3-102', supplier: '上海生化试剂', status: 'active' },
+                    { id: 'MAT-003', code: 'MAT-003', name: 'Mayer苏木素染�?, spec: '500ml/�?, unit: '�?, price: 145.00, stock: 18, location: 'A�?3-103', supplier: '广州医学材料', status: 'active' },
+                    { id: 'MAT-004', code: 'MAT-004', name: '改良苏木素染�?, spec: '250ml/�?, unit: '�?, price: 98.00, stock: 30, location: 'A�?3-104', supplier: '北京病理科技', status: 'active' },
+                    { id: 'MAT-005', code: 'MAT-005', name: '铁苏木素染液', spec: '100ml/�?, unit: '�?, price: 128.00, stock: 8, location: 'A�?3-105', supplier: '上海生化试剂', status: 'active' }
+                ],
+                '112': [
+                    { id: 'MAT-011', code: 'MAT-011', name: '伊红Y染液', spec: '500ml/�?, unit: '�?, price: 85.00, stock: 36, location: 'A�?3-201', supplier: '北京病理科技', status: 'active' },
+                    { id: 'MAT-012', code: 'MAT-012', name: '醇溶性伊�?, spec: '500ml/�?, unit: '�?, price: 92.00, stock: 24, location: 'A�?3-202', supplier: '上海生化试剂', status: 'active' },
+                    { id: 'MAT-013', code: 'MAT-013', name: '水溶性伊�?, spec: '500ml/�?, unit: '�?, price: 78.00, stock: 20, location: 'A�?3-203', supplier: '广州医学材料', status: 'active' },
+                    { id: 'MAT-014', code: 'MAT-014', name: '伊红醇溶�?, spec: '250ml/�?, unit: '�?, price: 58.00, stock: 28, location: 'A�?3-204', supplier: '北京病理科技', status: 'active' }
+                ],
+                '121': [
+                    { id: 'MAT-101', code: 'MAT-101', name: 'Ki-67抗体', spec: '1ml/�?, unit: '�?, price: 680.00, stock: 15, location: 'B�?1-101', supplier: 'DAKO', status: 'active' },
+                    { id: 'MAT-102', code: 'MAT-102', name: 'P53抗体', spec: '1ml/�?, unit: '�?, price: 520.00, stock: 12, location: 'B�?1-102', supplier: 'DAKO', status: 'active' },
+                    { id: 'MAT-103', code: 'MAT-103', name: 'ER抗体', spec: '1ml/�?, unit: '�?, price: 450.00, stock: 18, location: 'B�?1-103', supplier: '罗氏诊断', status: 'active' },
+                    { id: 'MAT-104', code: 'MAT-104', name: 'PR抗体', spec: '1ml/�?, unit: '�?, price: 450.00, stock: 16, location: 'B�?1-104', supplier: '罗氏诊断', status: 'active' }
+                ]
+            },
+            categoryMap: {
+                '111': { name: '苏木素染�?, path: '试剂�?> HE染色试剂 > 苏木素染�? },
+                '112': { name: '伊红染液', path: '试剂�?> HE染色试剂 > 伊红染液' },
+                '121': { name: '一�?, path: '试剂�?> 免疫组化试剂 > 一�? }
+            }
+        };
+        
+        let currentOpenModal = null;
+        let currentScrapDetail = null;
+
+        function showModal(modalId, data = null) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            currentOpenModal = modalId;
+            
+            if (modalId === 'scrap-detail-modal' && data) {
+                renderScrapDetail(data);
+            }
+            
+            setTimeout(() => {
+                const firstInput = modal.querySelector('input:not([type="hidden"]):not([type="checkbox"]), button:not(.modal-close), select, textarea');
+                if (firstInput) {
+                    firstInput.focus();
+                }
+            }, 100);
+        }
+
+        function hideModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            currentOpenModal = null;
+            
+            if (modalId === 'scrap-apply-modal') {
+                resetScrapForm();
+                populateMaterialSelect();
+            }
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && currentOpenModal) {
+                hideModal(currentOpenModal);
+            }
+        });
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 12px 20px; background: white; border-radius: 8px; box-shadow: 0 10px 15px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 8px; font-size: 14px; z-index: 1000; opacity: 0; transform: translateX(100%); transition: all 0.15s ease;';
+            toast.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    ${type === 'success' ? '<polyline points="20 6 9 17 4 12"/>' : type === 'error' ? '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>' : type === 'warning' ? '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>' : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'}
+                </svg>
+                <span>${message}</span>
+            `;
+            if (type === 'success') toast.style.borderLeft = '4px solid #22c55e';
+            else if (type === 'error') toast.style.borderLeft = '4px solid #ef4444';
+            else if (type === 'warning') toast.style.borderLeft = '4px solid #f59e0b';
+            else toast.style.borderLeft = '4px solid #3b82f6';
+            
+            document.body.appendChild(toast);
+            setTimeout(() => toast.style.cssText += 'opacity: 1; transform: translateX(0);', 10);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+        
+        const allMaterials = [];
+        
+        function initMaterialsData() {
+            Object.keys(mockData.materials).forEach(categoryId => {
+                mockData.materials[categoryId].forEach(mat => {
+                    allMaterials.push({
+                        ...mat,
+                        categoryId: categoryId,
+                        expiryDate: generateExpiryDate(mat)
+                    });
+                });
+            });
+        }
+        
+        function generateExpiryDate(material) {
+            const today = new Date();
+            const randomDays = Math.floor(Math.random() * 730) - 365;
+            const expiryDate = new Date(today.getTime() + randomDays * 24 * 60 * 60 * 1000);
+            return expiryDate.toISOString().split('T')[0];
+        }
+        
+        function populateMaterialSelect() {
+            const select = document.getElementById('scrap-material-select');
+            select.innerHTML = '<option value="">请选择物料</option>';
+            
+            allMaterials.forEach(mat => {
+                const option = document.createElement('option');
+                option.value = mat.id;
+                option.textContent = mat.name;
+                option.dataset.spec = mat.spec;
+                option.dataset.stock = mat.stock;
+                option.dataset.location = mat.location;
+                option.dataset.price = mat.price;
+                option.dataset.unit = mat.unit;
+                select.appendChild(option);
+            });
+        }
+        
+        function updateMaterialInfo() {
+            const select = document.getElementById('scrap-material-select');
+            const panel = document.getElementById('material-info-panel');
+            
+            if (select.value) {
+                const selectedOption = select.options[select.selectedIndex];
+                panel.style.display = 'block';
+                
+                const spec = selectedOption.dataset.spec || '';
+                const stock = parseInt(selectedOption.dataset.stock) || 0;
+                const location = selectedOption.dataset.location || '';
+                const price = selectedOption.dataset.price || '';
+                const unit = selectedOption.dataset.unit || '�?;
+                
+                document.getElementById('material-spec').textContent = spec;
+                document.getElementById('material-stock').textContent = stock + ' ' + unit;
+                document.getElementById('material-location').textContent = location;
+                document.getElementById('material-price').textContent = '¥' + parseFloat(price).toFixed(2);
+                document.getElementById('quantity-hint').textContent = '最�? ' + stock;
+            } else {
+                panel.style.display = 'none';
+            }
+        }
+        
+        function validateQuantity() {
+            const input = document.getElementById('scrap-quantity');
+            const hint = document.getElementById('quantity-hint');
+            const maxMatch = hint.textContent.match(/最�?\s*(\d+)/);
+            if (maxMatch) {
+                const max = parseInt(maxMatch[1]);
+                if (parseInt(input.value) > max) {
+                    input.style.borderColor = 'var(--danger)';
+                    hint.style.color = 'var(--danger)';
+                } else {
+                    input.style.borderColor = 'var(--border-default)';
+                    hint.style.color = 'var(--text-muted)';
+                }
+            }
+        }
+        
+        function resetScrapForm() {
+            document.getElementById('scrap-material-select').selectedIndex = 0;
+            document.getElementById('scrap-quantity').value = '';
+            document.getElementById('scrap-reason').selectedIndex = 0;
+            document.getElementById('material-info-panel').style.display = 'none';
+        }
+        
+        let isSubmitting = false;
+        
+        function confirmScrap() {
+            if (isSubmitting) return;
+            
+            const materialSelect = document.getElementById('scrap-material-select');
+            const quantity = document.getElementById('scrap-quantity').value;
+            const reasonSelect = document.getElementById('scrap-reason');
+            
+            if (!materialSelect.value) {
+                showToast('请选择要报废的物料', 'error');
+                return;
+            }
+            if (!quantity || parseInt(quantity) <= 0) {
+                showToast('请输入有效的报废数量', 'error');
+                return;
+            }
+            if (!reasonSelect.value) {
+                showToast('请选择报废原因', 'error');
+                return;
+            }
+            
+            const selectedOption = materialSelect.options[materialSelect.selectedIndex];
+            const maxStock = parseInt(selectedOption.dataset.stock) || 0;
+            if (parseInt(quantity) > maxStock) {
+                showToast('报废数量不能超过当前库存', 'error');
+                return;
+            }
+            
+            isSubmitting = true;
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '提交�?..';
+            
+            setTimeout(() => {
+                const materialName = selectedOption.textContent;
+                const unit = selectedOption.dataset.unit || '�?;
+                const price = parseFloat(selectedOption.dataset.price) || 0;
+                const materialId = materialSelect.value;
+                
+                const matIndex = allMaterials.findIndex(m => m.id === materialId);
+                if (matIndex !== -1) {
+                    allMaterials[matIndex].stock -= parseInt(quantity);
+                    updateMaterialStockInMock(materialId, allMaterials[matIndex].stock);
+                }
+                
+                const newRecord = {
+                    id: 'SCR-2024-' + String(scrapRecords.length + 16).padStart(4, '0'),
+                    name: materialName,
+                    materialId: materialId,
+                    batch: 'LOT-' + new Date().getFullYear() + '-' + String(Math.floor(Math.random() * 1000)).padStart(4, '0'),
+                    qty: parseInt(quantity),
+                    qtyText: quantity + ' ' + unit,
+                    amount: '¥' + (price * parseInt(quantity)).toFixed(2),
+                    amountValue: price * parseInt(quantity),
+                    reason: reasonSelect.options[reasonSelect.selectedIndex].text,
+                    operator: '当前用户',
+                    time: new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-'),
+                    spec: selectedOption.dataset.spec,
+                    location: selectedOption.dataset.location
+                };
+                scrapRecords.unshift(newRecord);
+                renderTable(scrapRecords);
+                updateStats();
+                
+                isSubmitting = false;
+                btn.disabled = false;
+                btn.textContent = '确认报废';
+                
+                hideModal('scrap-apply-modal');
+                showToast('报废登记成功，已从库存中移除', 'success');
+            }, 500);
+        }
+        
+        function updateMaterialStockInMock(materialId, newStock) {
+            Object.keys(mockData.materials).forEach(categoryId => {
+                const matIndex = mockData.materials[categoryId].findIndex(m => m.id === materialId);
+                if (matIndex !== -1) {
+                    mockData.materials[categoryId][matIndex].stock = newStock;
+                }
+            });
+        }
+        
+        function updateStats() {
+            const monthScrap = scrapRecords.filter(r => {
+                const recordDate = new Date(r.time.replace(/-/g, '/'));
+                const now = new Date();
+                return recordDate.getMonth() === now.getMonth() && recordDate.getFullYear() === now.getFullYear();
+            });
+            
+            document.querySelector('.stat-card-primary .stat-value').textContent = monthScrap.length;
+            
+            const monthAmount = monthScrap.reduce((sum, r) => sum + (r.amountValue || 0), 0);
+            document.querySelector('.stat-card-danger .stat-value').textContent = '¥' + monthAmount.toLocaleString();
+            
+            const expiredCount = getExpiredMaterials().length;
+            document.querySelector('.stat-card-warning .stat-value').textContent = expiredCount;
+        }
+        
+        function getExpiredMaterials() {
+            const today = new Date();
+            return allMaterials.filter(mat => {
+                const expiryDate = new Date(mat.expiryDate);
+                return expiryDate < today && mat.stock > 0;
+            });
+        }
+        
+        function renderExpiredMaterialsTable() {
+            const expiredMats = getExpiredMaterials();
+            const tbody = document.querySelector('#expired-materials-modal tbody');
+            const today = new Date();
+            
+            if (expiredMats.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 48px 20px;">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" style="margin-bottom: 12px;">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M9 12l2 2 4-4"/>
+                            </svg>
+                            <div style="color: var(--text-muted); font-size: 14px;">暂无过期物料</div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = expiredMats.map(mat => {
+                const expiryDate = new Date(mat.expiryDate);
+                const diffTime = today.getTime() - expiryDate.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                return `
+                    <tr data-material-id="${mat.id}">
+                        <td><input type="checkbox" class="expired-checkbox" data-price="${mat.price}" data-stock="${mat.stock}"></td>
+                        <td><strong>${mat.name}</strong></td>
+                        <td class="mono-text">${mat.code || mat.id}</td>
+                        <td>${mat.stock} ${mat.unit}</td>
+                        <td>¥${mat.price.toFixed(2)}</td>
+                        <td style="color: var(--danger);">${mat.expiryDate}</td>
+                        <td><span style="color: var(--danger); font-weight: 600;">已过�?${diffDays} �?/span></td>
+                        <td>${mat.location}</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            document.querySelectorAll('.expired-checkbox').forEach(cb => {
+                cb.addEventListener('change', updateExpiredSelection);
+            });
+            
+            const warningDiv = document.querySelector('#expired-materials-modal .modal-body > div:first-child');
+            if (warningDiv) {
+                warningDiv.innerHTML = `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 8v4"/>
+                        <path d="M12 16h.01"/>
+                    </svg>
+                    <div>
+                        <div style="font-weight: 500; color: #92400e;">�?${expiredMats.length} 种物料已过期</div>
+                        <div style="font-size: 13px; color: #b45309;">过期物料建议尽快处理，避免误用风�?/div>
+                    </div>
+                `;
+            }
+        }
+        
+        function selectAllExpired() {
+            const checkboxes = document.querySelectorAll('.expired-checkbox');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => cb.checked = !allChecked);
+            updateExpiredSelection();
+        }
+        
+        function toggleSelectAllExpired(checkbox) {
+            const checkboxes = document.querySelectorAll('.expired-checkbox');
+            checkboxes.forEach(cb => cb.checked = checkbox.checked);
+            updateExpiredSelection();
+        }
+        
+        function updateExpiredSelection() {
+            const checkboxes = document.querySelectorAll('.expired-checkbox:checked');
+            const count = checkboxes.length;
+            document.getElementById('expired-selected-count').textContent = count;
+            
+            let totalAmount = 0;
+            checkboxes.forEach(cb => {
+                const price = parseFloat(cb.dataset.price) || 0;
+                const stock = parseInt(cb.dataset.stock) || 0;
+                totalAmount += price * stock;
+            });
+            
+            const amountSpan = document.querySelector('#expired-materials-modal .modal-body > div:last-child strong:last-child');
+            if (amountSpan) {
+                amountSpan.textContent = '¥' + totalAmount.toFixed(2);
+            }
+        }
+        
+        function batchScrapExpired() {
+            const checkboxes = document.querySelectorAll('.expired-checkbox:checked');
+            if (checkboxes.length === 0) {
+                showToast('请选择要报废的物料', 'error');
+                return;
+            }
+            
+            if (confirm(`确定要报废选中�?${checkboxes.length} 种物料吗？`)) {
+                const scrappedIds = [];
+                let totalAmount = 0;
+                
+                checkboxes.forEach(cb => {
+                    const row = cb.closest('tr');
+                    const materialId = row.dataset.materialId;
+                    const mat = allMaterials.find(m => m.id === materialId);
+                    
+                    if (mat) {
+                        const amount = mat.price * mat.stock;
+                        totalAmount += amount;
+                        
+                        const newRecord = {
+                            id: 'SCR-2024-' + String(scrapRecords.length + 16).padStart(4, '0'),
+                            name: mat.name,
+                            materialId: mat.id,
+                            batch: mat.code || mat.id,
+                            qty: mat.stock,
+                            qtyText: mat.stock + ' ' + mat.unit,
+                            amount: '¥' + amount.toFixed(2),
+                            amountValue: amount,
+                            reason: '已过�?,
+                            operator: '当前用户',
+                            time: new Date().toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-'),
+                            spec: mat.spec,
+                            location: mat.location
+                        };
+                        scrapRecords.unshift(newRecord);
+                        
+                        mat.stock = 0;
+                        updateMaterialStockInMock(materialId, 0);
+                        scrappedIds.push(materialId);
+                    }
+                    
+                    row.style.transition = 'all 0.3s ease';
+                    row.style.opacity = '0';
+                    row.style.transform = 'translateX(-20px)';
+                    setTimeout(() => row.remove(), 300);
+                });
+                
+                setTimeout(() => {
+                    showToast(`成功报废 ${checkboxes.length} 种物料，共计 ¥${totalAmount.toFixed(2)}`, 'success');
+                    renderTable(scrapRecords);
+                    updateStats();
+                    renderExpiredMaterialsTable();
+                    updateExpiredSelection();
+                }, 350);
+            }
+        }
+        
+        function renderScrapDetail(record) {
+            const modal = document.getElementById('scrap-detail-modal');
+            if (!modal || !record) return;
+            
+            modal.querySelector('.detail-title').textContent = record.id;
+            modal.querySelector('.detail-subtitle').textContent = '报废时间: ' + record.time;
+            
+            const detailGrid = modal.querySelector('.detail-grid');
+            detailGrid.innerHTML = `
+                <div class="detail-item">
+                    <div class="detail-label">物料名称</div>
+                    <div class="detail-value">${record.name}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">规格型号</div>
+                    <div class="detail-value">${record.spec || '-'}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">批次�?/div>
+                    <div class="detail-value mono-text">${record.batch}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">报废数量</div>
+                    <div class="detail-value">${record.qtyText || record.qty}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">报废金额</div>
+                    <div class="detail-value" style="color: #ef4444; font-weight: 600;">${record.amount}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">报废原因</div>
+                    <div class="detail-value">${record.reason}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">操作�?/div>
+                    <div class="detail-value">${record.operator}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">库位</div>
+                    <div class="detail-value">${record.location || '-'}</div>
+                </div>
+            `;
+        }
+        
+        const scrapRecords = [
+            { id: 'SCR-2024-0015', name: 'Ki-67抗体', materialId: 'MAT-101', batch: 'LOT-2023-0892', qty: 2, qtyText: '2 �?, amount: '¥1,100.00', amountValue: 1100, reason: '已过�?, operator: '张三', time: '2024-01-15 16:30', spec: '1ml/�?, location: 'B�?1-101' },
+            { id: 'SCR-2024-0014', name: '离心�?, materialId: 'CON-2024-002', batch: 'LOT-2024-0156', qty: 50, qtyText: '50 �?, amount: '¥25.00', amountValue: 25, reason: '质量问题', operator: '李四', time: '2024-01-15 11:20', spec: '1.5ml', location: 'A�?3-201' },
+            { id: 'SCR-2024-0013', name: '苏木素染�?, materialId: 'MAT-001', batch: 'LOT-2023-0789', qty: 1, qtyText: '1 �?, amount: '¥280.00', amountValue: 280, reason: '物理损坏', operator: '王五', time: '2024-01-14 14:45', spec: '500ml/�?, location: 'A�?3-101' },
+            { id: 'SCR-2024-0012', name: 'PAS染色试剂', materialId: 'MAT-021', batch: 'LOT-2023-0654', qty: 3, qtyText: '3 �?, amount: '¥180.00', amountValue: 180, reason: '过期报废', operator: '张三', time: '2024-01-14 10:30', spec: '500ml/�?, location: 'A�?3-301' },
+            { id: 'SCR-2024-0011', name: '载玻�?, materialId: 'CON-2024-005', batch: 'LOT-2024-0023', qty: 100, qtyText: '100 �?, amount: '¥50.00', amountValue: 50, reason: '质量问题', operator: '李四', time: '2024-01-13 15:20', spec: '25x75mm', location: 'A�?3-201' }
+        ];
+        
+        let isLoading = false;
+        
+        function showLoading() {
+            isLoading = true;
+            const tbody = document.querySelector('.data-table tbody');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 48px 20px;">
+                        <div style="display: inline-flex; align-items: center; gap: 12px;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="animation: spin 1s linear infinite;">
+                                <circle cx="12" cy="12" r="10" stroke-dasharray="31.4" stroke-dashoffset="10"/>
+                            </svg>
+                            <span style="color: var(--text-muted);">加载�?..</span>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+        
+        function renderTable(data) {
+            isLoading = false;
+            const tbody = document.querySelector('.data-table tbody');
+            
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" style="text-align: center; padding: 48px 20px;">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" style="margin-bottom: 12px;">
+                                <path d="M3 6h18"/>
+                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                            </svg>
+                            <div style="color: var(--text-muted); font-size: 14px;">暂无报废记录</div>
+                            <div style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">点击"新建报废"添加报废记录</div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = data.map((record, index) => `
+                <tr>
+                    <td class="mono-text">${record.id}</td>
+                    <td><strong>${record.name}</strong></td>
+                    <td class="mono-text">${record.batch}</td>
+                    <td>${record.qtyText || record.qty}</td>
+                    <td style="color: var(--danger); font-weight: 600;">${record.amount}</td>
+                    <td>${record.reason}</td>
+                    <td>${record.operator}</td>
+                    <td>${record.time}</td>
+                    <td style="white-space: nowrap;">
+                        <button class="btn btn-ghost btn-sm" onclick="showScrapDetail(${index})">详情</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        window.showScrapDetail = function(index) {
+            const record = scrapRecords[index];
+            if (record) {
+                currentScrapDetail = record;
+                showModal('scrap-detail-modal', record);
+            }
+        };
+        
+        function filterRecords() {
+            const searchInput = document.querySelector('.search-box input');
+            const reasonSelect = document.querySelector('.filter-select');
+            
+            const searchTerm = searchInput.value.toLowerCase();
+            const reasonFilter = reasonSelect.value;
+            
+            let filtered = scrapRecords.filter(record => {
+                const matchSearch = !searchTerm || 
+                    record.id.toLowerCase().includes(searchTerm) ||
+                    record.name.toLowerCase().includes(searchTerm) ||
+                    record.batch.toLowerCase().includes(searchTerm);
+                
+                const matchReason = reasonFilter === '全部原因' || 
+                    record.reason.includes(reasonFilter.replace('�?, ''));
+                
+                return matchSearch && matchReason;
+            });
+            
+            renderTable(filtered);
+            
+            const paginationInfo = document.querySelector('.pagination-info');
+            if (paginationInfo) {
+                paginationInfo.textContent = `�?${filtered.length} 条记录`;
+            }
+        }
+        
+        function resetFilters() {
+            const searchInput = document.querySelector('.search-box input');
+            const selects = document.querySelectorAll('.filter-select');
+            const dateInputs = document.querySelectorAll('input[type="date"]');
+            
+            searchInput.value = '';
+            selects.forEach(s => s.selectedIndex = 0);
+            dateInputs.forEach(d => d.value = '');
+            
+            renderTable(scrapRecords);
+            
+            const paginationInfo = document.querySelector('.pagination-info');
+            if (paginationInfo) {
+                paginationInfo.textContent = '�?' + scrapRecords.length + ' 条记�?;
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            initMaterialsData();
+            populateMaterialSelect();
+            renderTable(scrapRecords);
+            updateStats();
+            
+            document.querySelector('.search-box input').addEventListener('input', filterRecords);
+            document.querySelector('.filter-select').addEventListener('change', filterRecords);
+            document.querySelector('.btn-secondary.btn-sm').addEventListener('click', filterRecords);
+            document.querySelector('.btn-ghost.btn-sm').addEventListener('click', resetFilters);
+        });
+        
+        document.querySelector('#expired-materials-modal .search-box input').addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#expired-materials-modal tbody tr');
+            rows.forEach(row => {
+                if (row.cells.length < 3) return;
+                const name = row.cells[1].textContent.toLowerCase();
+                const batch = row.cells[2].textContent.toLowerCase();
+                row.style.display = (name.includes(searchTerm) || batch.includes(searchTerm)) ? '' : 'none';
+            });
+        });
+        
+        window.showModal = showModal;
+        window.hideModal = hideModal;
+        window.updateMaterialInfo = updateMaterialInfo;
+        window.validateQuantity = validateQuantity;
+        window.confirmScrap = confirmScrap;
+        window.selectAllExpired = selectAllExpired;
+        window.toggleSelectAllExpired = toggleSelectAllExpired;
+        window.batchScrapExpired = batchScrapExpired;
+        window.renderExpiredMaterialsTable = renderExpiredMaterialsTable;
+    </script>
+</body>
+</html>

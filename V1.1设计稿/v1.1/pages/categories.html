@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物料分类 - COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="scrap.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>报废管理</span>
+            </a>
+            <a href="stocktaking.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>库存盘点</span>
+            </a>
+            <a href="projects.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测服�?/span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-analysis.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+            <a href="categories.html" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>物料分类</span>
+            </a>
+            <a href="consumable-config.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                </svg>
+                <span>耗材配置</span>
+            </a>
+            <a href="rules.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>规则配置</span>
+            </a>
+            <a href="alerts.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span>预警中心</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>供应商管�?/span>
+            </a>
+            <a href="locations.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span>库位管理</span>
+            </a>
+            <a href="users.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>用户管理</span>
+            </a>
+            <a href="roles.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>角色管理</span>
+            </a>
+            <a href="logs.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <span>操作日志</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">物料分类</h1>
+                <p class="page-subtitle">病理实验室物料三级分类管�?/p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary btn-md" onclick="expandAll()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                    展开全部
+                </button>
+                <button class="btn btn-secondary btn-md" onclick="collapseAll()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="18 15 12 9 6 15"/>
+                    </svg>
+                    收起全部
+                </button>
+                <button class="btn btn-primary btn-md" onclick="showModal('create-category-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    新建分类
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card stat-card-primary">
+                <div class="stat-value">3</div>
+                <div class="stat-label">一级分�?/div>
+            </div>
+            <div class="stat-card stat-card-success">
+                <div class="stat-value">10</div>
+                <div class="stat-label">二级分类</div>
+            </div>
+            <div class="stat-card stat-card-warning">
+                <div class="stat-value">28</div>
+                <div class="stat-label">三级分类</div>
+            </div>
+            <div class="stat-card stat-card-primary">
+                <div class="stat-value">156</div>
+                <div class="stat-label">关联物料</div>
+            </div>
+        </div>
+
+        <div class="category-layout">
+            <div class="category-tree-card">
+                <div class="category-tree-header">
+                    <h3>分类目录</h3>
+                    <div class="category-tree-actions">
+                        <button onclick="expandAll()" title="展开全部">展开</button>
+                        <button onclick="collapseAll()" title="收起全部">收起</button>
+                    </div>
+                </div>
+                <div class="category-tree-search">
+                    <div class="search-box-wrapper">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <path d="M21 21l-4.35-4.35"/>
+                        </svg>
+                        <input type="text" id="category-search" placeholder="搜索分类名称..." oninput="filterCategories(this.value)">
+                        <button class="search-clear" onclick="clearSearch()">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="category-tree-content" id="category-tree">
+                    <div id="tree-empty-state" class="empty-state" style="display: none; padding: 40px 20px; text-align: center;">
+                        <div class="empty-state-icon-wrapper">
+                            <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        </div>
+                        <div class="empty-state-title">暂无分类数据</div>
+                        <p class="empty-state-desc">点击上方"新建分类"按钮创建第一个分�?/p>
+                    </div>
+                    <div id="tree-search-empty" class="empty-state" style="display: none; padding: 40px 20px; text-align: center;">
+                        <div class="empty-state-icon-wrapper">
+                            <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="11" cy="11" r="8"/>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                        </div>
+                        <div class="empty-state-title">未找到匹配分�?/div>
+                        <p class="empty-state-desc">请尝试其他搜索关键词</p>
+                    </div>
+                    <div id="tree-loading" class="loading-state" style="display: none; padding: 40px 20px; text-align: center;">
+                        <div class="loading-spinner" style="width: 32px; height: 32px; border: 3px solid var(--border-default); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto;"></div>
+                        <div style="margin-top: 12px; font-size: 14px; color: var(--text-muted);">加载�?..</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-panel" id="detail-panel">
+                <div class="empty-state">
+                    <div class="empty-state-icon-wrapper">
+                        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            <circle cx="12" cy="12" r="3" stroke-dasharray="4 2"/>
+                        </svg>
+                    </div>
+                    <div class="empty-state-title">选择分类查看详情</div>
+                    <p class="empty-state-desc">从左侧分类树中点击任意分类，查看该分类下的物料信息和统计数据</p>
+                    <div class="empty-state-hint">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="16" x2="12" y2="12"/>
+                            <line x1="12" y1="8" x2="12.01" y2="8"/>
+                        </svg>
+                        <span>提示：右键点击分类可快速添加子分类或编�?/span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="context-menu">
+        <button type="button" class="context-menu-item" onclick="handleContextAction('add')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            添加子分�?
+        </button>
+        <button type="button" class="context-menu-item" onclick="handleContextAction('edit')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            编辑分类
+        </button>
+        <div class="context-menu-divider"></div>
+        <button type="button" class="context-menu-item delete" onclick="handleContextAction('delete')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            删除分类
+        </button>
+    </div>
+
+    <!-- Create Category Modal -->
+    <div id="create-category-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('create-category-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">新建分类</h3>
+                <button class="modal-close" onclick="hideModal('create-category-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form class="form" id="create-category-form">
+                    <div class="form-group" id="form-group-name">
+                        <label class="form-label">分类名称 <span class="required">*</span></label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="new-category-name" 
+                               placeholder="请输入分类名称，如：HE染色试剂"
+                               maxlength="50"
+                               onblur="validateCategoryName(this.value)"
+                               oninput="clearFieldError('form-group-name')">
+                        <div class="form-error" id="error-name" style="display: none;"></div>
+                        <div class="form-hint">支持中文、英文、数字，最�?0个字�?/div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">上级分类</label>
+                        <select class="form-control" id="new-category-parent">
+                            <option value="">无（作为一级分类）</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">分类编码</label>
+                        <input type="text" class="form-control" id="new-category-code" placeholder="系统自动生成" readonly>
+                        <div class="form-hint">编码将根据分类层级自动生�?/div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">排序�?/label>
+                        <input type="number" class="form-control" id="new-category-sort" value="0" min="0" placeholder="数字越小越靠�?>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">备注</label>
+                        <textarea class="form-control" id="new-category-remark" rows="2" placeholder="请输入备注信�?></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('create-category-modal')">取消</button>
+                <button class="btn btn-primary" onclick="createCategory()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Category Modal -->
+    <div id="edit-category-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('edit-category-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">编辑分类</h3>
+                <button class="modal-close" onclick="hideModal('edit-category-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form class="form" id="edit-category-form">
+                    <input type="hidden" id="edit-category-id">
+                    <div class="form-group">
+                        <label class="form-label">分类名称 <span class="required">*</span></label>
+                        <input type="text" class="form-control" id="edit-category-name" placeholder="请输入分类名�? required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">分类编码</label>
+                        <input type="text" class="form-control" id="edit-category-code" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">排序�?/label>
+                        <input type="number" class="form-control" id="edit-category-sort" min="0" placeholder="数字越小越靠�?>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">状�?/label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="edit-category-status" value="active" checked>
+                                <span>启用</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="edit-category-status" value="inactive">
+                                <span>停用</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">备注</label>
+                        <textarea class="form-control" id="edit-category-remark" rows="2" placeholder="请输入备注信�?></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('edit-category-modal')">取消</button>
+                <button class="btn btn-primary" onclick="updateCategory()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirm Modal -->
+    <div id="delete-confirm-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('delete-confirm-modal')"></div>
+        <div class="modal-container modal-sm">
+            <div class="modal-header">
+                <h3 class="modal-title">确认删除</h3>
+                <button class="modal-close" onclick="hideModal('delete-confirm-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <div class="alert-content">
+                        <div class="alert-title">删除确认</div>
+                        <p>确定要删除分�?"<span id="delete-category-name"></span>" 吗？</p>
+                        <p id="delete-category-warning" style="margin-top: 8px; font-size: 13px;"></p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('delete-confirm-modal')">取消</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">确认删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Material Detail Modal -->
+    <div id="material-detail-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('material-detail-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">物料详情</h3>
+                <button class="modal-close" onclick="hideModal('material-detail-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-section">
+                    <h4 class="detail-section-title">基本信息</h4>
+                    <div class="detail-grid" id="material-basic-info">
+                        <!-- Will be populated by JS -->
+                    </div>
+                </div>
+                <div class="detail-section">
+                    <h4 class="detail-section-title">库存信息</h4>
+                    <div class="detail-grid" id="material-stock-info">
+                        <!-- Will be populated by JS -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('material-detail-modal')">关闭</button>
+                <button class="btn btn-primary" onclick="viewInventory()">查看库存</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/scripts.js"></script>
+    <script>
+        // Category Data Structure
+        const categoryData = [
+            {
+                id: 1,
+                name: '试剂�?,
+                code: 'CAT-REAGENT',
+                level: 1,
+                count: 68,
+                expanded: true,
+                children: [
+                    {
+                        id: 11,
+                        name: 'HE染色试剂',
+                        code: 'CAT-REAGENT-HE',
+                        level: 2,
+                        count: 12,
+                        expanded: true,
+                        children: [
+                            { id: 111, name: '苏木素染�?, code: 'CAT-REAGENT-HE-001', level: 3, count: 5 },
+                            { id: 112, name: '伊红染液', code: 'CAT-REAGENT-HE-002', level: 3, count: 4 },
+                            { id: 113, name: '分化�?返蓝�?, code: 'CAT-REAGENT-HE-003', level: 3, count: 3 }
+                        ]
+                    },
+                    {
+                        id: 12,
+                        name: '免疫组化试剂',
+                        code: 'CAT-REAGENT-IHC',
+                        level: 2,
+                        count: 32,
+                        expanded: false,
+                        children: [
+                            { id: 121, name: '一�?, code: 'CAT-REAGENT-IHC-001', level: 3, count: 18 },
+                            { id: 122, name: '二抗试剂�?, code: 'CAT-REAGENT-IHC-002', level: 3, count: 8 },
+                            { id: 123, name: 'DAB显色�?, code: 'CAT-REAGENT-IHC-003', level: 3, count: 6 }
+                        ]
+                    },
+                    {
+                        id: 13,
+                        name: '特殊染色试剂',
+                        code: 'CAT-REAGENT-SS',
+                        level: 2,
+                        count: 12,
+                        expanded: false,
+                        children: [
+                            { id: 131, name: 'PAS染色试剂', code: 'CAT-REAGENT-SS-001', level: 3, count: 4 },
+                            { id: 132, name: '抗酸染色试剂', code: 'CAT-REAGENT-SS-002', level: 3, count: 5 }
+                        ]
+                    },
+                    {
+                        id: 14,
+                        name: '分子检测试�?,
+                        code: 'CAT-REAGENT-MP',
+                        level: 2,
+                        count: 12,
+                        expanded: false,
+                        children: [
+                            { id: 141, name: 'DNA提取试剂', code: 'CAT-REAGENT-MP-001', level: 3, count: 4 },
+                            { id: 142, name: 'PCR试剂', code: 'CAT-REAGENT-MP-002', level: 3, count: 5 }
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 2,
+                name: '耗材�?,
+                code: 'CAT-CONSUMABLE',
+                level: 1,
+                count: 62,
+                expanded: false,
+                children: [
+                    { id: 21, name: '制片耗材', code: 'CAT-CONSUMABLE-SLIDE', level: 2, count: 28 },
+                    { id: 22, name: '染色耗材', code: 'CAT-CONSUMABLE-STAIN', level: 2, count: 18 },
+                    { id: 23, name: '包装耗材', code: 'CAT-CONSUMABLE-PACK', level: 2, count: 16 }
+                ]
+            },
+            {
+                id: 3,
+                name: '设备配件�?,
+                code: 'CAT-EQUIPMENT',
+                level: 1,
+                count: 26,
+                expanded: false,
+                children: [
+                    { id: 31, name: '切片机配�?, code: 'CAT-EQUIPMENT-MICROTOME', level: 2, count: 12 },
+                    { id: 32, name: '染色机配�?, code: 'CAT-EQUIPMENT-STAINER', level: 2, count: 8 },
+                    { id: 33, name: '其他设备配件', code: 'CAT-EQUIPMENT-OTHER', level: 2, count: 6 }
+                ]
+            }
+        ];
+
+        // Mock Materials Data
+        const materialsData = {
+            111: [
+                { code: 'MAT-001', name: 'Harris苏木素染�?, spec: '500ml/�?, unit: '�?, price: '¥168.00', stock: 24, location: 'A�?3-101', supplier: '北京病理科技' },
+                { code: 'MAT-002', name: 'Gill苏木素染�?, spec: '500ml/�?, unit: '�?, price: '¥185.00', stock: 12, location: 'A�?3-102', supplier: '上海生化试剂' },
+                { code: 'MAT-003', name: 'Mayer苏木素染�?, spec: '500ml/�?, unit: '�?, price: '¥145.00', stock: 18, location: 'A�?3-103', supplier: '广州医学材料' },
+                { code: 'MAT-004', name: '改良苏木素染�?, spec: '250ml/�?, unit: '�?, price: '¥98.00', stock: 30, location: 'A�?3-104', supplier: '北京病理科技' },
+                { code: 'MAT-005', name: '铁苏木素染液', spec: '100ml/�?, unit: '�?, price: '¥128.00', stock: 8, location: 'A�?3-105', supplier: '上海生化试剂' }
+            ],
+            112: [
+                { code: 'MAT-011', name: '伊红Y染液', spec: '500ml/�?, unit: '�?, price: '¥85.00', stock: 36, location: 'A�?3-201', supplier: '北京病理科技' },
+                { code: 'MAT-012', name: '醇溶性伊�?, spec: '500ml/�?, unit: '�?, price: '¥92.00', stock: 24, location: 'A�?3-202', supplier: '上海生化试剂' },
+                { code: 'MAT-013', name: '水溶性伊�?, spec: '500ml/�?, unit: '�?, price: '¥78.00', stock: 20, location: 'A�?3-203', supplier: '广州医学材料' },
+                { code: 'MAT-014', name: '伊红醇溶�?, spec: '250ml/�?, unit: '�?, price: '¥58.00', stock: 28, location: 'A�?3-204', supplier: '北京病理科技' }
+            ],
+            113: [
+                { code: 'MAT-021', name: '盐酸酒精分化�?, spec: '500ml/�?, unit: '�?, price: '¥45.00', stock: 42, location: 'A�?3-301', supplier: '北京病理科技' },
+                { code: 'MAT-022', name: '氨水返蓝�?, spec: '500ml/�?, unit: '�?, price: '¥38.00', stock: 35, location: 'A�?3-302', supplier: '上海生化试剂' },
+                { code: 'MAT-023', name: 'Scott返蓝�?, spec: '500ml/�?, unit: '�?, price: '¥52.00', stock: 18, location: 'A�?3-303', supplier: '广州医学材料' }
+            ],
+            121: [
+                { code: 'MAT-101', name: 'Ki-67抗体', spec: '1ml/�?, unit: '�?, price: '¥680.00', stock: 15, location: 'B�?1-101', supplier: 'DAKO' },
+                { code: 'MAT-102', name: 'P53抗体', spec: '1ml/�?, unit: '�?, price: '¥520.00', stock: 12, location: 'B�?1-102', supplier: 'DAKO' },
+                { code: 'MAT-103', name: 'ER抗体', spec: '1ml/�?, unit: '�?, price: '¥450.00', stock: 18, location: 'B�?1-103', supplier: '罗氏诊断' },
+                { code: 'MAT-104', name: 'PR抗体', spec: '1ml/�?, unit: '�?, price: '¥450.00', stock: 16, location: 'B�?1-104', supplier: '罗氏诊断' }
+            ]
+        };
+
+        let selectedCategoryId = null;
+        let contextMenuTarget = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            showTreeLoading();
+            setTimeout(() => {
+                renderCategoryTree();
+                populateParentSelect();
+                setupContextMenu();
+                hideTreeLoading();
+            }, 500);
+        });
+
+        // Tree State Functions
+        function showTreeLoading() {
+            document.getElementById('tree-loading').style.display = 'block';
+            document.getElementById('tree-empty-state').style.display = 'none';
+            document.getElementById('tree-search-empty').style.display = 'none';
+        }
+
+        function hideTreeLoading() {
+            document.getElementById('tree-loading').style.display = 'none';
+        }
+
+        function showTreeEmpty() {
+            document.getElementById('tree-empty-state').style.display = 'block';
+        }
+
+        function showSearchEmpty() {
+            document.getElementById('tree-search-empty').style.display = 'block';
+        }
+
+        function hideAllEmptyStates() {
+            document.getElementById('tree-empty-state').style.display = 'none';
+            document.getElementById('tree-search-empty').style.display = 'none';
+        }
+
+        // Render Category Tree
+        function renderCategoryTree() {
+            const treeContainer = document.getElementById('category-tree');
+            
+            if (!categoryData || categoryData.length === 0) {
+                hideAllEmptyStates();
+                showTreeEmpty();
+                return;
+            }
+            
+            hideAllEmptyStates();
+            hideTreeLoading();
+            
+            // 保留空状态和加载状态元素，只渲染分类树
+            const emptyState = document.getElementById('tree-empty-state');
+            const searchEmpty = document.getElementById('tree-search-empty');
+            const loadingState = document.getElementById('tree-loading');
+            
+            // 清除之前的分类项，但保留空状态元�?
+            const existingItems = treeContainer.querySelectorAll('.category-item');
+            existingItems.forEach(item => item.remove());
+            
+            // 在加载状态之前插入新的分类树
+            const categoryHtml = renderCategoryItems(categoryData);
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = categoryHtml;
+            
+            // 将新的分类项插入到加载状态之�?
+            while (tempDiv.firstChild) {
+                treeContainer.insertBefore(tempDiv.firstChild, loadingState);
+            }
+        }
+
+        function renderCategoryItems(items, parentId = null) {
+            return items.map(item => {
+                const hasChildren = item.children && item.children.length > 0;
+                const isExpanded = item.expanded;
+                const levelClass = `level-${item.level}`;
+                const expandedClass = isExpanded ? 'expanded' : '';
+                
+                return `
+                    <div class="category-item" data-id="${item.id}" data-parent="${parentId || ''}">
+                        <div class="category-row ${levelClass}" 
+                             onclick="selectCategory(${item.id}, '${item.name}', '${item.code}', ${item.level}, this)"
+                             oncontextmenu="showContextMenu(event, ${item.id}, '${item.name}')">
+                            <div class="category-toggle ${hasChildren ? '' : 'empty'} ${expandedClass}" 
+                                 onclick="event.stopPropagation(); toggleCategory(${item.id})">
+                                ${hasChildren ? `
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="9 18 15 12 9 6"/>
+                                    </svg>
+                                ` : ''}
+                            </div>
+                            <svg class="category-icon" width="${item.level === 3 ? 14 : 18}" height="${item.level === 3 ? 14 : 18}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                ${item.level === 3 
+                                    ? '<circle cx="12" cy="12" r="4"/>'
+                                    : '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>'
+                                }
+                            </svg>
+                            <span class="category-name">${item.name}</span>
+                            <span class="category-count">${item.count}</span>
+                            <div class="category-actions">
+                                ${hasChildren ? `
+                                    <button class="category-action-btn" onclick="event.stopPropagation(); showModal('create-category-modal', '${item.name}')" title="添加子分�?>
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="12" y1="5" x2="12" y2="19"/>
+                                            <line x1="5" y1="12" x2="19" y2="12"/>
+                                        </svg>
+                                    </button>
+                                ` : ''}
+                                <button class="category-action-btn" onclick="event.stopPropagation(); editCategory(${item.id}, '${item.name}')" title="编辑">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                    </svg>
+                                </button>
+                                ${!hasChildren ? `
+                                    <button class="category-action-btn delete" onclick="event.stopPropagation(); deleteCategory(${item.id}, '${item.name}')" title="删除">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="3 6 5 6 21 6"/>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                        </svg>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                        ${hasChildren ? `
+                            <div class="category-children ${expandedClass}" id="children-${item.id}">
+                                ${renderCategoryItems(item.children, item.id)}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Toggle Category
+        function toggleCategory(id) {
+            const children = document.getElementById(`children-${id}`);
+            const toggle = children.previousElementSibling.querySelector('.category-toggle');
+            
+            if (children.classList.contains('expanded')) {
+                children.classList.remove('expanded');
+                toggle.classList.remove('expanded');
+            } else {
+                children.classList.add('expanded');
+                toggle.classList.add('expanded');
+            }
+        }
+
+        // Expand/Collapse All
+        function expandAll() {
+            document.querySelectorAll('.category-children').forEach(el => el.classList.add('expanded'));
+            document.querySelectorAll('.category-toggle:not(.empty)').forEach(el => el.classList.add('expanded'));
+        }
+
+        function collapseAll() {
+            document.querySelectorAll('.category-children').forEach(el => el.classList.remove('expanded'));
+            document.querySelectorAll('.category-toggle:not(.empty)').forEach(el => el.classList.remove('expanded'));
+        }
+
+        // Select Category
+        function selectCategory(id, name, code, level, element) {
+            selectedCategoryId = id;
+            
+            // Update selection UI
+            document.querySelectorAll('.category-row').forEach(row => row.classList.remove('selected'));
+            if (element) element.classList.add('selected');
+            
+            // Render detail panel
+            renderDetailPanel(id, name, code, level);
+        }
+
+        // Render Detail Panel
+        function renderDetailPanel(id, name, code, level) {
+            const detailPanel = document.getElementById('detail-panel');
+            const levelNames = ['', '一级分�?, '二级分类', '三级分类'];
+            const materials = materialsData[id] || [];
+            
+            const breadcrumb = generateBreadcrumb(id);
+            
+            detailPanel.innerHTML = `
+                <div class="detail-panel-header">
+                    <h3>${name}</h3>
+                    <div class="quick-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="editCategory(${id}, '${name}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                            编辑
+                        </button>
+                        ${level < 3 ? `
+                            <button class="btn btn-sm btn-primary" onclick="showModal('create-category-modal', '${name}')">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                                    <line x1="12" y1="5" x2="12" y2="19"/>
+                                    <line x1="5" y1="12" x2="19" y2="12"/>
+                                </svg>
+                                添加子分�?
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+                <div class="detail-panel-content">
+                    <div class="detail-path">
+                        ${breadcrumb}
+                    </div>
+                    
+                    <div class="detail-section">
+                        <div class="detail-section-title">基本信息</div>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <div class="detail-label">分类名称</div>
+                                <div class="detail-value">${name}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">分类编码</div>
+                                <div class="detail-value" style="font-family: var(--font-mono);">${code}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">分类层级</div>
+                                <div class="detail-value">${levelNames[level]}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">物料数量</div>
+                                <div class="detail-value">${materials.length > 0 ? materials.length : '无关�?}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">创建时间</div>
+                                <div class="detail-value">2024-01-10</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">更新时间</div>
+                                <div class="detail-value">2024-01-15</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${materials.length > 0 ? `
+                        <div class="detail-section">
+                            <div class="detail-section-title">
+                                <span>关联物料 (${materials.length})</span>
+                                <button class="btn btn-xs btn-ghost" onclick="location.href='inventory-list.html'">查看全部</button>
+                            </div>
+                            <div style="overflow-x: auto; border: 1px solid var(--border-default); border-radius: var(--radius-lg);">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>物料编码</th>
+                                            <th>物料名称</th>
+                                            <th>规格型号</th>
+                                            <th>单位</th>
+                                            <th>参考单�?/th>
+                                            <th>库存数量</th>
+                                            <th>存放位置</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${materials.map(m => `
+                                            <tr>
+                                                <td style="font-family: var(--font-mono); font-size: var(--text-xs);">${m.code}</td>
+                                                <td style="font-weight: 500;">${m.name}</td>
+                                                <td>${m.spec}</td>
+                                                <td>${m.unit}</td>
+                                                <td style="font-weight: 600; color: var(--primary-600);">${m.price}</td>
+                                                <td>
+                                                    <span class="badge ${m.stock < 10 ? 'badge-error' : m.stock < 20 ? 'badge-warning' : 'badge-success'}">
+                                                        ${m.stock}
+                                                    </span>
+                                                </td>
+                                                <td style="font-family: var(--font-mono); font-size: var(--text-xs);">${m.location}</td>
+                                                <td>
+                                                    <button class="btn btn-xs btn-ghost" onclick="showMaterialDetail('${m.code}')">详情</button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="detail-section">
+                            <div class="detail-section-title">关联物料</div>
+                            <div class="empty-state" style="padding: 40px 20px; background: var(--bg-page); border-radius: var(--radius-lg);">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--gray-300); margin-bottom: var(--space-3);">
+                                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                                </svg>
+                                <p style="color: var(--text-muted); margin-bottom: var(--space-3);">该分类下暂无物料</p>
+                                <button class="btn btn-sm btn-primary" onclick="location.href='inventory-list.html'">添加物料</button>
+                            </div>
+                        </div>
+                    `}
+                </div>
+            `;
+        }
+
+        // Generate Breadcrumb
+        function generateBreadcrumb(categoryId) {
+            const path = findCategoryPath(categoryData, categoryId);
+            if (!path || path.length === 0) return '';
+            
+            return path.map((item, index) => {
+                const isLast = index === path.length - 1;
+                if (isLast) {
+                    return `<span class="detail-path-current">${item.name}</span>`;
+                }
+                return `<a href="#" onclick="selectCategoryById(${item.id}); return false;">${item.name}</a><span class="detail-path-separator">/</span>`;
+            }).join('');
+        }
+
+        function findCategoryPath(items, targetId, currentPath = []) {
+            for (const item of items) {
+                const newPath = [...currentPath, item];
+                if (item.id === targetId) {
+                    return newPath;
+                }
+                if (item.children) {
+                    const found = findCategoryPath(item.children, targetId, newPath);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+
+        function selectCategoryById(id) {
+            // Find and click the category row
+            const row = document.querySelector(`.category-row[onclick*="selectCategory(${id},"]`);
+            if (row) {
+                row.click();
+                // Expand parent if needed
+                const parent = row.closest('.category-children');
+                if (parent && !parent.classList.contains('expanded')) {
+                    const parentToggle = parent.previousElementSibling.querySelector('.category-toggle');
+                    if (parentToggle) {
+                        parent.classList.add('expanded');
+                        parentToggle.classList.add('expanded');
+                    }
+                }
+            }
+        }
+
+        // Filter Categories
+        function filterCategories(keyword) {
+            hideAllEmptyStates();
+            
+            if (!keyword) {
+                document.querySelectorAll('.category-item').forEach(item => {
+                    item.style.display = '';
+                    item.querySelector('.category-row')?.classList.remove('highlight');
+                });
+                return;
+            }
+            
+            const lowerKeyword = keyword.toLowerCase();
+            let matchCount = 0;
+            let firstMatch = null;
+            
+            document.querySelectorAll('.category-item').forEach(item => {
+                const name = item.querySelector('.category-name').textContent.toLowerCase();
+                const row = item.querySelector('.category-row');
+                
+                if (name.includes(lowerKeyword)) {
+                    item.style.display = '';
+                    row.classList.add('highlight');
+                    matchCount++;
+                    // Expand parents
+                    let parent = item.parentElement;
+                    while (parent && parent.classList.contains('category-children')) {
+                        parent.classList.add('expanded');
+                        const toggle = parent.previousElementSibling?.querySelector('.category-toggle');
+                        if (toggle) toggle.classList.add('expanded');
+                        parent = parent.parentElement.closest('.category-children');
+                    }
+                    // Track first match for auto-select
+                    if (!firstMatch) {
+                        firstMatch = row;
+                    }
+                } else {
+                    item.style.display = 'none';
+                    row.classList.remove('highlight');
+                }
+            });
+            
+            // Show empty state if no matches
+            if (matchCount === 0) {
+                showSearchEmpty();
+            } else if (firstMatch) {
+                // Auto-select first match after a short delay
+                setTimeout(() => {
+                    firstMatch.click();
+                    firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300);
+            }
+        }
+
+        function clearSearch() {
+            const input = document.getElementById('category-search');
+            input.value = '';
+            filterCategories('');
+            input.focus();
+        }
+
+        // Form Validation
+        function validateCategoryName(value) {
+            const formGroup = document.getElementById('form-group-name');
+            const errorEl = document.getElementById('error-name');
+            
+            // Clear previous states
+            formGroup.classList.remove('has-error', 'has-success');
+            errorEl.style.display = 'none';
+            
+            if (!value || value.trim() === '') {
+                showFieldError('form-group-name', 'error-name', '分类名称不能为空');
+                return false;
+            }
+            
+            if (value.trim().length < 2) {
+                showFieldError('form-group-name', 'error-name', '分类名称至少需�?个字�?);
+                return false;
+            }
+            
+            // Check for duplicates (mock check)
+            const existingNames = [];
+            function collectNames(items) {
+                items.forEach(item => {
+                    existingNames.push(item.name);
+                    if (item.children) collectNames(item.children);
+                });
+            }
+            collectNames(categoryData);
+            
+            if (existingNames.includes(value.trim())) {
+                showFieldError('form-group-name', 'error-name', '该分类名称已存在');
+                return false;
+            }
+            
+            // Success state
+            formGroup.classList.add('has-success');
+            return true;
+        }
+
+        function showFieldError(formGroupId, errorId, message) {
+            const formGroup = document.getElementById(formGroupId);
+            const errorEl = document.getElementById(errorId);
+            
+            formGroup.classList.add('has-error');
+            formGroup.classList.remove('has-success');
+            errorEl.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>${message}</span>
+            `;
+            errorEl.style.display = 'flex';
+        }
+
+        function clearFieldError(formGroupId) {
+            const formGroup = document.getElementById(formGroupId);
+            const errorEl = formGroup.querySelector('.form-error');
+            
+            formGroup.classList.remove('has-error');
+            if (errorEl) errorEl.style.display = 'none';
+        }
+
+        // Context Menu
+        function setupContextMenu() {
+            document.addEventListener('click', function(e) {
+                const menu = document.getElementById('context-menu');
+                if (!e.target.closest('.context-menu')) {
+                    menu.classList.remove('active');
+                }
+            });
+        }
+
+        function showContextMenu(event, id, name) {
+            event.preventDefault();
+            contextMenuTarget = { id, name };
+            
+            const menu = document.getElementById('context-menu');
+            menu.style.left = event.pageX + 'px';
+            menu.style.top = event.pageY + 'px';
+            menu.classList.add('active');
+        }
+
+        function handleContextAction(action) {
+            const menu = document.getElementById('context-menu');
+            menu.classList.remove('active');
+            
+            if (!contextMenuTarget) return;
+            
+            const { id, name } = contextMenuTarget;
+            
+            switch(action) {
+                case 'add':
+                    showModal('create-category-modal', name);
+                    break;
+                case 'edit':
+                    editCategory(id, name);
+                    break;
+                case 'delete':
+                    deleteCategory(id, name);
+                    break;
+            }
+        }
+
+        // Modal Functions
+        let currentOpenModal = null;
+
+        function showModal(modalId, parentName) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            currentOpenModal = modalId;
+            
+            if (parentName && modalId === 'create-category-modal') {
+                const parentSelect = document.getElementById('new-category-parent');
+                for (let i = 0; i < parentSelect.options.length; i++) {
+                    if (parentSelect.options[i].text === parentName) {
+                        parentSelect.value = parentSelect.options[i].value;
+                        break;
+                    }
+                }
+            }
+            
+            setTimeout(() => {
+                const firstInput = modal.querySelector('input:not([type="hidden"]), button:not(.modal-close), select, textarea');
+                if (firstInput) {
+                    firstInput.focus();
+                }
+            }, 100);
+        }
+
+        function hideModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            currentOpenModal = null;
+        }
+
+        // Populate Parent Select
+        function populateParentSelect() {
+            const select = document.getElementById('new-category-parent');
+            select.innerHTML = '<option value="">无（作为一级分类）</option>';
+            
+            function addOptions(items, prefix = '') {
+                items.forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = item.id;
+                    option.textContent = prefix + item.name;
+                    select.appendChild(option);
+                    
+                    if (item.children && item.level < 2) {
+                        addOptions(item.children, prefix + '　　');
+                    }
+                });
+            }
+            
+            addOptions(categoryData);
+        }
+
+        // CRUD Operations
+        function createCategory() {
+            const nameInput = document.getElementById('new-category-name');
+            const name = nameInput.value;
+            
+            if (!validateCategoryName(name)) {
+                nameInput.focus();
+                return;
+            }
+            
+            const submitBtn = document.querySelector('#create-category-modal .btn-primary');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+                    <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-dashoffset="20"/>
+                </svg>
+                保存�?..
+            `;
+            
+            setTimeout(() => {
+                const parentId = document.getElementById('new-category-parent').value;
+                const newId = Date.now();
+                const level = parentId ? (getParentLevel(parentId) + 1) : 1;
+                
+                const newCategory = {
+                    id: newId,
+                    name: name,
+                    code: 'CAT-' + name.toUpperCase().replace(/\s+/g, '-'),
+                    level: level,
+                    count: 0,
+                    expanded: false
+                };
+                
+                if (parentId) {
+                    const parent = findCategoryById(categoryData, parseInt(parentId));
+                    if (parent) {
+                        if (!parent.children) parent.children = [];
+                        parent.children.push(newCategory);
+                        parent.count++;
+                    }
+                } else {
+                    categoryData.push(newCategory);
+                }
+                
+                renderCategoryTree();
+                populateParentSelect();
+                updateCategoryStats();
+                
+                document.getElementById('create-category-form').reset();
+                document.getElementById('form-group-name').classList.remove('has-success');
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+                
+                hideModal('create-category-modal');
+                showToast('分类创建成功', 'success');
+            }, 800);
+        }
+
+        function getParentLevel(parentId) {
+            const parent = findCategoryById(categoryData, parseInt(parentId));
+            return parent ? parent.level : 0;
+        }
+
+        function editCategory(id, name) {
+            document.getElementById('edit-category-id').value = id;
+            document.getElementById('edit-category-name').value = name;
+            document.getElementById('edit-category-code').value = 'CAT-' + name.toUpperCase().replace(/\s+/g, '-');
+            showModal('edit-category-modal');
+        }
+
+        function updateCategory() {
+            const id = parseInt(document.getElementById('edit-category-id').value);
+            const name = document.getElementById('edit-category-name').value;
+            
+            if (!name || name.trim() === '') {
+                showFieldError('edit-form-group-name', 'edit-error-name', '分类名称不能为空');
+                return;
+            }
+            
+            const item = findCategoryById(categoryData, id);
+            if (item) {
+                item.name = name;
+                item.code = 'CAT-' + name.toUpperCase().replace(/\s+/g, '-');
+            }
+            
+            renderCategoryTree();
+            populateParentSelect();
+            
+            if (selectedCategoryId === id) {
+                renderDetailPanel(id, name, item?.code || '', item?.level || 1);
+            }
+            
+            hideModal('edit-category-modal');
+            showToast('分类更新成功', 'success');
+        }
+
+        let deleteTargetId = null;
+        let deleteTargetName = null;
+
+        function deleteCategory(id, name) {
+            deleteTargetId = id;
+            deleteTargetName = name;
+            
+            document.getElementById('delete-category-name').textContent = name;
+            
+            const item = findCategoryById(categoryData, id);
+            const warning = document.getElementById('delete-category-warning');
+            const confirmBtn = document.querySelector('#delete-confirm-modal .btn-danger');
+            
+            if (item && item.children && item.children.length > 0) {
+                warning.textContent = `⚠️ 该分类下�?${item.children.length} 个子分类，请先删除子分类。`;
+                warning.style.color = 'var(--error)';
+                confirmBtn.disabled = true;
+                confirmBtn.style.opacity = '0.5';
+            } else if (item && item.count > 0) {
+                warning.textContent = `⚠️ 该分类下有关联物料，删除后物料将变为未分类状态。`;
+                warning.style.color = 'var(--warning)';
+                confirmBtn.disabled = false;
+                confirmBtn.style.opacity = '1';
+            } else {
+                warning.textContent = '确定要删除该分类吗？此操作不可恢复�?;
+                warning.style.color = 'var(--text-muted)';
+                confirmBtn.disabled = false;
+                confirmBtn.style.opacity = '1';
+            }
+            
+            showModal('delete-confirm-modal');
+        }
+
+        function confirmDelete() {
+            if (!deleteTargetId) return;
+            
+            function removeFromArray(items, id) {
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].id === id) {
+                        items.splice(i, 1);
+                        return true;
+                    }
+                    if (items[i].children && removeFromArray(items[i].children, id)) {
+                        items[i].count = items[i].children.length;
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
+            removeFromArray(categoryData, deleteTargetId);
+            
+            renderCategoryTree();
+            populateParentSelect();
+            updateCategoryStats();
+            
+            if (selectedCategoryId === deleteTargetId) {
+                document.getElementById('detail-panel').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon-wrapper">
+                            <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                                <circle cx="12" cy="12" r="3" stroke-dasharray="4 2"/>
+                            </svg>
+                        </div>
+                        <div class="empty-state-title">选择分类查看详情</div>
+                        <p class="empty-state-desc">从左侧分类树中点击任意分类，查看该分类下的物料信息和统计数据</p>
+                    </div>
+                `;
+                selectedCategoryId = null;
+            }
+            
+            hideModal('delete-confirm-modal');
+            showToast(`分类 "${deleteTargetName}" 已删除`, 'success');
+            deleteTargetId = null;
+            deleteTargetName = null;
+        }
+
+        function updateCategoryStats() {
+            let level1Count = 0, level2Count = 0, level3Count = 0, totalMaterials = 0;
+            
+            function countCategories(items) {
+                items.forEach(item => {
+                    if (item.level === 1) level1Count++;
+                    else if (item.level === 2) level2Count++;
+                    else if (item.level === 3) level3Count++;
+                    totalMaterials += item.count || 0;
+                    if (item.children) countCategories(item.children);
+                });
+            }
+            
+            countCategories(categoryData);
+            
+            const statCards = document.querySelectorAll('.stat-card .stat-value');
+            if (statCards.length >= 4) {
+                statCards[0].textContent = level1Count;
+                statCards[1].textContent = level2Count;
+                statCards[2].textContent = level3Count;
+                statCards[3].textContent = totalMaterials;
+            }
+        }
+
+        function findCategoryById(items, id) {
+            for (const item of items) {
+                if (item.id === id) return item;
+                if (item.children) {
+                    const found = findCategoryById(item.children, id);
+                    if (found) return found;
+                }
+            }
+            return null;
+        }
+
+        // Material Detail
+        function showMaterialDetail(code) {
+            // Find material
+            let material = null;
+            for (const key in materialsData) {
+                const found = materialsData[key].find(m => m.code === code);
+                if (found) {
+                    material = found;
+                    break;
+                }
+            }
+            
+            if (!material) return;
+            
+            document.getElementById('material-basic-info').innerHTML = `
+                <div class="detail-item">
+                    <div class="detail-label">物料编码</div>
+                    <div class="detail-value" style="font-family: var(--font-mono);">${material.code}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">物料名称</div>
+                    <div class="detail-value">${material.name}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">规格型号</div>
+                    <div class="detail-value">${material.spec}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">计量单位</div>
+                    <div class="detail-value">${material.unit}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">参考单�?/div>
+                    <div class="detail-value" style="color: var(--primary-600);">${material.price}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">供应�?/div>
+                    <div class="detail-value">${material.supplier}</div>
+                </div>
+            `;
+            
+            document.getElementById('material-stock-info').innerHTML = `
+                <div class="detail-item">
+                    <div class="detail-label">当前库存</div>
+                    <div class="detail-value">${material.stock} ${material.unit}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">安全库存</div>
+                    <div class="detail-value">10 ${material.unit}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">存放位置</div>
+                    <div class="detail-value" style="font-family: var(--font-mono);">${material.location}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">最近入�?/div>
+                    <div class="detail-value">2024-01-15</div>
+                </div>
+            `;
+            
+            showModal('material-detail-modal');
+        }
+
+        function viewInventory() {
+            hideModal('material-detail-modal');
+            location.href = 'inventory-list.html';
+        }
+
+        // Toast Notification
+        function showToast(message, type = 'info') {
+            const container = document.querySelector('.toast-container') || createToastContainer();
+            
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    ${type === 'success' 
+                        ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'
+                        : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'
+                    }
+                </svg>
+                <span>${message}</span>
+            `;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function createToastContainer() {
+            const container = document.createElement('div');
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+            return container;
+        }
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', function(e) {
+            // ESC to close modals
+            if (e.key === 'Escape') {
+                if (currentOpenModal) {
+                    hideModal(currentOpenModal);
+                }
+                document.getElementById('context-menu').classList.remove('active');
+            }
+            
+            // Ctrl/Cmd + F to focus search
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                document.getElementById('category-search').focus();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物料成本分析 - COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        .page-tabs {
+            display: flex; gap: 0;
+            border-bottom: 2px solid var(--border-default);
+            margin-bottom: 24px;
+        }
+        .page-tab {
+            padding: 14px 28px;
+            font-size: 14px; font-weight: 600;
+            color: var(--text-muted);
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            font-family: var(--font-sans);
+            margin-bottom: -2px;
+        }
+        .page-tab:hover { color: var(--text-primary); }
+        .page-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .summary-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            border: 1px solid var(--border-default);
+        }
+        .summary-card .label { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+        .summary-card .value { font-size: 28px; font-weight: 700; color: var(--text-primary); }
+        .summary-card .value.success { color: var(--success); }
+        .summary-card .value.warning { color: var(--warning-text); }
+        .summary-card .value.danger { color: var(--error-text); }
+        .summary-card .meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+        .cost-trend-chart {
+            height: 300px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-muted);
+            background: var(--bg-page);
+            border-radius: var(--radius-md);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="scrap.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>报废管理</span>
+            </a>
+            <a href="stocktaking.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>库存盘点</span>
+            </a>
+            <a href="projects.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测服务</span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-reconciliation.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>成本对账</span>
+            </a>
+            <a href="cost-report.html" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+            <a href="categories.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>物料分类</span>
+            </a>
+            <a href="consumable-config.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                </svg>
+                <span>耗材配置</span>
+            </a>
+            <a href="rules.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>规则配置</span>
+            </a>
+            <a href="alerts.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span>预警中心</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>供应商管理</span>
+            </a>
+            <a href="locations.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span>库位管理</span>
+            </a>
+            <a href="users.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>用户管理</span>
+            </a>
+            <a href="roles.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>角色管理</span>
+            </a>
+            <a href="logs.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>操作日志</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">物料成本分析</h1>
+                <p class="page-subtitle">按项目、物料、公共成本、供应商多维度查看成本分布与趋势</p>
+            </div>
+        </div>
+
+        <div class="page-tabs">
+            <button class="page-tab active" onclick="switchTab('project')">项目成本</button>
+            <button class="page-tab" onclick="switchTab('material')">物料成本</button>
+            <button class="page-tab" onclick="switchTab('public')">公共成本</button>
+            <button class="page-tab" onclick="switchTab('supplier')">供应商成本</button>
+        </div>
+
+        <!-- Tab: 项目成本 -->
+        <div id="tab-project" class="tab-content active">
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="label">本月项目总成本</div>
+                    <div class="value">¥128,450</div>
+                    <div class="meta">较上月 +12.3%</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">检测病例总数</div>
+                    <div class="value success">1,280</div>
+                    <div class="meta">本月累计</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">平均单例成本</div>
+                    <div class="value">¥100.35</div>
+                    <div class="meta">较上月 -2.1%</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">TOP3项目成本占比</div>
+                    <div class="value warning">62.4%</div>
+                    <div class="meta">肺癌基因/乳腺/结直肠</div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="card-header">
+                    <h3 class="card-title">项目成本趋势（近6个月）</h3>
+                    <div class="filter-bar">
+                        <select class="form-select" style="width: 120px;">
+                            <option>2026年</option>
+                            <option>2025年</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="cost-trend-chart">
+                        [成本趋势图表区域]
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">项目成本明细</h3>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary btn-sm">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            导出
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>项目名称</th>
+                                <th>检测数量</th>
+                                <th>试剂成本</th>
+                                <th>耗材成本</th>
+                                <th>总成本</th>
+                                <th>单例成本</th>
+                                <th>成本占比</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>肺癌基因检测</strong></td>
+                                <td>156</td>
+                                <td>¥12,480</td>
+                                <td>¥3,120</td>
+                                <td>¥15,600</td>
+                                <td>¥100</td>
+                                <td>12.1%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>乳腺癌基因检测</strong></td>
+                                <td>128</td>
+                                <td>¥10,240</td>
+                                <td>¥2,560</td>
+                                <td>¥12,800</td>
+                                <td>¥100</td>
+                                <td>10.0%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>结直肠癌基因检测</strong></td>
+                                <td>98</td>
+                                <td>¥7,840</td>
+                                <td>¥1,960</td>
+                                <td>¥9,800</td>
+                                <td>¥100</td>
+                                <td>7.6%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: 物料成本 -->
+        <div id="tab-material" class="tab-content">
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="label">本月物料总成本</div>
+                    <div class="value">¥98,650</div>
+                    <div class="meta">较上月 +8.5%</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">试剂类成本</div>
+                    <div class="value">¥45,230</div>
+                    <div class="meta">占比 45.9%</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">耗材类成本</div>
+                    <div class="value">¥38,120</div>
+                    <div class="meta">占比 38.6%</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">设备配件成本</div>
+                    <div class="value">¥15,300</div>
+                    <div class="meta">占比 15.5%</div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="card-header">
+                    <h3 class="card-title">物料成本分布</h3>
+                </div>
+                <div class="card-body">
+                    <div class="cost-trend-chart">
+                        [饼图：试剂/耗材/设备/其他]
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">物料成本明细</h3>
+                </div>
+                <div class="card-body">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>物料名称</th>
+                                <th>规格</th>
+                                <th>分类</th>
+                                <th>消耗数量</th>
+                                <th>总成本</th>
+                                <th>占总成本比</th>
+                                <th>环比变化</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>DNA提取试剂盒</strong></td>
+                                <td>v2.0，96次</td>
+                                <td>试剂</td>
+                                <td>12盒</td>
+                                <td>¥15,360</td>
+                                <td>15.6%</td>
+                                <td>+5.2%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>PCR Master Mix</strong></td>
+                                <td>2X，500次</td>
+                                <td>试剂</td>
+                                <td>8盒</td>
+                                <td>¥6,800</td>
+                                <td>6.9%</td>
+                                <td>-2.1%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: 公共成本 -->
+        <div id="tab-public" class="tab-content">
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="label">本月公共总成本</div>
+                    <div class="value">¥29,800</div>
+                    <div class="meta">占比 23.2%</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">防护用品成本</div>
+                    <div class="value">¥12,000</div>
+                    <div class="meta">占比 40.3%</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">消毒用品成本</div>
+                    <div class="value">¥8,500</div>
+                    <div class="meta">占比 28.5%</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">其他公共耗材</div>
+                    <div class="value">¥9,300</div>
+                    <div class="meta">占比 31.2%</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">公共成本明细</h3>
+                </div>
+                <div class="card-body">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>公共耗材名称</th>
+                                <th>分类</th>
+                                <th>消耗数量</th>
+                                <th>总成本</th>
+                                <th>占比</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>一次性手套</strong></td>
+                                <td>防护用品</td>
+                                <td>1,200双</td>
+                                <td>¥12,000</td>
+                                <td>40.3%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>消毒液</strong></td>
+                                <td>消毒用品</td>
+                                <td>150瓶</td>
+                                <td>¥7,500</td>
+                                <td>25.2%</td>
+                            </tr>
+                            <tr>
+                                <td><strong>酒精棉球</strong></td>
+                                <td>消毒用品</td>
+                                <td>230包</td>
+                                <td>¥8,100</td>
+                                <td>27.2%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: 供应商成本 -->
+        <div id="tab-supplier" class="tab-content">
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="label">本月供应商总成本</div>
+                    <div class="value">¥128,450</div>
+                    <div class="meta">合作供应商 12 家</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">TOP1 供应商占比</div>
+                    <div class="value warning">35.2%</div>
+                    <div class="meta">罗氏诊断</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">长期合作供应商</div>
+                    <div class="value success">8 家</div>
+                    <div class="meta">占比 78.5%</div>
+                </div>
+                <div class="summary-card">
+                    <div class="label">新供应商数量</div>
+                    <div class="value">2 家</div>
+                    <div class="meta">本月新增</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">供应商成本排行</h3>
+                </div>
+                <div class="card-body">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>排名</th>
+                                <th>供应商名称</th>
+                                <th>订单数量</th>
+                                <th>总金额</th>
+                                <th>占比</th>
+                                <th>合作状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td><strong>罗氏诊断</strong></td>
+                                <td>12</td>
+                                <td>¥45,200</td>
+                                <td>35.2%</td>
+                                <td><span class="status-badge status-success">长期合作</span></td>
+                            </tr>
+                            <tr>
+                                <td>2</td>
+                                <td><strong>赛默飞世尔</strong></td>
+                                <td>8</td>
+                                <td>¥32,800</td>
+                                <td>25.5%</td>
+                                <td><span class="status-badge status-success">长期合作</span></td>
+                            </tr>
+                            <tr>
+                                <td>3</td>
+                                <td><strong>达安基因</strong></td>
+                                <td>5</td>
+                                <td>¥18,500</td>
+                                <td>14.4%</td>
+                                <td><span class="status-badge status-success">长期合作</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="../shared/scripts.js"></script>
+</body>
+</html>

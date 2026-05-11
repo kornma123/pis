@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>预警历史 - COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="scrap.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>报废管理</span>
+            </a>
+            <a href="stocktaking.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>库存盘点</span>
+            </a>
+            <a href="projects.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测服�?/span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-analysis.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+            <a href="categories.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>物料分类</span>
+            </a>
+            <a href="consumable-config.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                </svg>
+                <span>耗材配置</span>
+            </a>
+            <a href="rules.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>规则配置</span>
+            </a>
+            <a href="alerts.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span>预警中心</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>供应商管�?/span>
+            </a>
+            <a href="locations.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span>库位管理</span>
+            </a>
+            <a href="users.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>用户管理</span>
+            </a>
+            <a href="roles.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>角色管理</span>
+            </a>
+            <a href="logs.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>操作日志</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <div class="breadcrumb">
+                    <a href="alerts.html">预警中心</a>
+                    <span>/</span>
+                    <span>预警历史</span>
+                </div>
+                <h1 class="page-title">预警历史记录</h1>
+                <p class="page-subtitle">查看已处理的预警记录和处理详�?/p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    导出记录
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">328</div>
+                <div class="stat-label">历史预警总数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">312</div>
+                <div class="stat-label">已处�?/div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">16</div>
+                <div class="stat-label">已忽�?/div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">98.5%</div>
+                <div class="stat-label">处理�?/div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">预警记录</span>
+                <div class="filter-bar">
+                    <select class="filter-select">
+                        <option value="">全部类型</option>
+                        <option value="stock">库存预警</option>
+                        <option value="expire">过期预警</option>
+                        <option value="usage">用量异常</option>
+                    </select>
+                    <select class="filter-select">
+                        <option value="">全部状�?/option>
+                        <option value="processed">已处�?/option>
+                        <option value="ignored">已忽�?/option>
+                    </select>
+                    <input type="date" class="filter-select" placeholder="开始日�?>
+                    <input type="date" class="filter-select" placeholder="结束日期">
+                    <div class="search-box">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" placeholder="搜索耗材名称或预警内�?..">
+                    </div>
+                    <button class="btn btn-secondary btn-sm">查询</button>
+                    <button class="btn btn-ghost btn-sm">重置</button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>预警时间</th>
+                            <th>预警类型</th>
+                            <th>耗材名称</th>
+                            <th>预警内容</th>
+                            <th>处理�?/th>
+                            <th>处理时间</th>
+                            <th>处理结果</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>2024-01-15 09:30</td>
+                            <td><span class="badge badge-warning">库存预警</span></td>
+                            <td>PCR试剂�?/td>
+                            <td>库存低于安全阈�?(当前: 8, 阈�? 20)</td>
+                            <td>张三</td>
+                            <td>2024-01-15 10:15</td>
+                            <td><span class="status-badge status-success">已采�?/span></td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('alert-history-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>2024-01-14 16:45</td>
+                            <td><span class="badge badge-danger">过期预警</span></td>
+                            <td>培养�?/td>
+                            <td>耗材即将过期 (过期日期: 2024-01-20)</td>
+                            <td>李四</td>
+                            <td>2024-01-14 17:00</td>
+                            <td><span class="status-badge status-success">已处�?/span></td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('alert-history-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>2024-01-14 11:20</td>
+                            <td><span class="badge badge-info">用量异常</span></td>
+                            <td>离心�?/td>
+                            <td>日用量超过平均�?00% (今日: 50, 平均: 20)</td>
+                            <td>王五</td>
+                            <td>2024-01-14 14:30</td>
+                            <td><span class="status-badge status-secondary">已忽�?/span></td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('alert-history-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>2024-01-13 08:00</td>
+                            <td><span class="badge badge-warning">库存预警</span></td>
+                            <td>移液器吸�?/td>
+                            <td>库存低于安全阈�?(当前: 15, 阈�? 30)</td>
+                            <td>张三</td>
+                            <td>2024-01-13 09:30</td>
+                            <td><span class="status-badge status-success">已采�?/span></td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('alert-history-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>2024-01-12 14:15</td>
+                            <td><span class="badge badge-danger">过期预警</span></td>
+                            <td>抗体试剂</td>
+                            <td>耗材已过�?(过期日期: 2024-01-10)</td>
+                            <td>李四</td>
+                            <td>2024-01-12 15:00</td>
+                            <td><span class="status-badge status-success">已报�?/span></td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('alert-history-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>2024-01-11 10:30</td>
+                            <td><span class="badge badge-warning">库存预警</span></td>
+                            <td>滤纸�?/td>
+                            <td>库存低于安全阈�?(当前: 50, 阈�? 100)</td>
+                            <td>王五</td>
+                            <td>2024-01-11 11:00</td>
+                            <td><span class="status-badge status-success">已采�?/span></td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('alert-history-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>2024-01-10 16:00</td>
+                            <td><span class="badge badge-info">用量异常</span></td>
+                            <td>密封�?/td>
+                            <td>日用量超过平均�?50% (今日: 35, 平均: 15)</td>
+                            <td>张三</td>
+                            <td>2024-01-10 16:30</td>
+                            <td><span class="status-badge status-secondary">已忽�?/span></td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('alert-history-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination-info">�?328 条记�?/span>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm btn-secondary" disabled>上一�?/button>
+                    <button class="btn btn-sm btn-primary">1</button>
+                    <button class="btn btn-sm btn-secondary">2</button>
+                    <button class="btn btn-sm btn-secondary">3</button>
+                    <span>...</span>
+                    <button class="btn btn-sm btn-secondary">33</button>
+                    <button class="btn btn-sm btn-secondary">下一�?/button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 预警历史详情弹窗 -->
+    <div id="alert-history-detail-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('alert-history-detail-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">预警处理详情</h3>
+                <button class="modal-close" onclick="hideModal('alert-history-detail-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-section">
+                    <h4 class="detail-title">预警信息</h4>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">预警时间</span>
+                            <span class="detail-value">2024-01-15 09:30</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预警类型</span>
+                            <span class="detail-value"><span class="badge badge-warning">库存预警</span></span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">耗材名称</span>
+                            <span class="detail-value">PCR试剂�?/span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">耗材编码</span>
+                            <span class="detail-value">CON-2024-001</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">预警内容</span>
+                            <span class="detail-value">库存低于安全阈�?/span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">当前库存</span>
+                            <span class="detail-value">8 �?/span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">安全阈�?/span>
+                            <span class="detail-value">20 �?/span>
+                        </div>
+                    </div>
+                </div>
+                <div class="detail-section">
+                    <h4 class="detail-title">处理信息</h4>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <span class="detail-label">处理�?/span>
+                            <span class="detail-value">张三</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">处理时间</span>
+                            <span class="detail-value">2024-01-15 10:15</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">处理方式</span>
+                            <span class="detail-value">创建采购申请</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">处理结果</span>
+                            <span class="detail-value"><span class="status-badge status-success">已采�?/span></span>
+                        </div>
+                    </div>
+                    <div class="detail-item full-width">
+                        <span class="detail-label">处理备注</span>
+                        <span class="detail-value">已提交采购申请，预计3个工作日内到货。采购数�? 50盒�?/span>
+                    </div>
+                </div>
+                <div class="detail-section">
+                    <h4 class="detail-title">关联单据</h4>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>单据类型</th>
+                                <th>单据编号</th>
+                                <th>创建时间</th>
+                                <th>状�?/th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>采购申请</td>
+                                <td>PO-2024-0156</td>
+                                <td>2024-01-15 10:20</td>
+                                <td><span class="status-badge status-warning">审批�?/span></td>
+                                <td><button class="btn btn-sm btn-ghost">查看</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('alert-history-detail-modal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+        function hideModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelector('.search-box input').addEventListener('input', function() {
+                const searchText = this.value.toLowerCase().trim();
+                const tableRows = document.querySelectorAll('.data-table tbody tr');
+                
+                tableRows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 4) {
+                        const materialName = cells[2] ? cells[2].textContent.toLowerCase() : '';
+                        const alertContent = cells[3] ? cells[3].textContent.toLowerCase() : '';
+                        
+                        if (searchText === '' || materialName.includes(searchText) || alertContent.includes(searchText)) {
+                            row.style.display = '';
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

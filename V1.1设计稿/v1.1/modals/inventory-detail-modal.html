@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物料详情 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="inventory-detail-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">物料详情</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="detail-header">
+                <div class="detail-title">DNA提取试剂盒 v2.0</div>
+                <div class="detail-subtitle">物料编号: MAT-2024-001 | 批次: LOT-2024-0156</div>
+            </div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">当前库存</div>
+                    <div class="detail-value">25 盒</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">安全库存</div>
+                    <div class="detail-value">10 盒</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">最大库存</div>
+                    <div class="detail-value">50 盒</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">库存状态</div>
+                    <div class="detail-value"><span class="status-badge status-success">正常</span></div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">入库单价</div>
+                    <div class="detail-value">¥1,280.00</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">库存总值</div>
+                    <div class="detail-value">¥32,000.00</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">生产日期</div>
+                    <div class="detail-value">2024-01-15</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">有效期至</div>
+                    <div class="detail-value">2025-01-14</div>
+                </div>
+            </div>
+            <table class="data-table" style="margin-top: 24px;">
+                <thead>
+                    <tr>
+                        <th>批次号</th>
+                        <th>入库日期</th>
+                        <th>有效期至</th>
+                        <th>库存数量</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="mono-text">LOT-2024-0156</span></td>
+                        <td>2024-03-15</td>
+                        <td>2025-01-14</td>
+                        <td>15 盒</td>
+                        <td><span class="status-badge status-success">正常</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="mono-text">LOT-2024-0157</span></td>
+                        <td>2024-03-10</td>
+                        <td>2025-01-14</td>
+                        <td>10 盒</td>
+                        <td><span class="status-badge status-warning">临期</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">关闭</button>
+            <button class="btn btn-primary">入库</button>
+            <button class="btn btn-primary">出库</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

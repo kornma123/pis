@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>批次消耗跟踪设计稿</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+    <style>
+        body { padding: 40px; max-width: 900px; }
+        h2 { font-size: 20px; margin: 24px 0 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+        th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }
+        th { background: #f9fafb; font-weight: 600; }
+        .status-used { color: #22c55e; }
+        .status-est { color: #f59e0b; }
+        .status-empty { color: #ef4444; }
+        .code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>批次消耗跟踪 · 设计讨论稿</h1>
+    <p style="color:#6b7280;">目标：追踪同一物料从出库到实际消耗完的时间节点</p>
+
+    <h2>核心矛盾</h2>
+    <p>一瓶 500ml 苏木精染液出库后，系统知道"何时出库"，但不知道"何时真正用完"。</p>
+
+    <h2>方案对比</h2>
+    <table>
+        <tr>
+            <th>方案</th>
+            <th>原理</th>
+            <th>优点</th>
+            <th>缺点</th>
+        </tr>
+        <tr>
+            <td>1. 库存归零触发</td>
+            <td>库存从>0变为0时认为用完</td>
+            <td>自动触发</td>
+            <td>多批次并行时永远不会归零</td>
+        </tr>
+        <tr>
+            <td>2. 批次FIFO推算</td>
+            <td>按先进先出累积出库量，达容量时自动标记</td>
+            <td>全自动</td>
+            <td>挥发/浪费/报废导致不准确</td>
+        </tr>
+        <tr>
+            <td>3. 人工标记空瓶</td>
+            <td>技术员用完一瓶后点击"已空"</td>
+            <td>最准确</td>
+            <td>依赖人工习惯，易漏</td>
+        </tr>
+        <tr>
+            <td>4. 定期盘点校准</td>
+            <td>每周盘点时更新各瓶剩余量</td>
+            <td>校准理论值</td>
+            <td>操作成本高</td>
+        </tr>
+    </table>
+
+    <h2>建议方案：批次消耗跟踪 + 人工确认</h2>
+    <ol>
+        <li><strong>入库时</strong>：记录批次号和初始数量（如 <span class="code">LOT-2024-001</span>，500ml）</li>
+        <li><strong>出库时</strong>：系统自动按FIFO分配批次，记录"从批次X消耗了Y ml"</li>
+        <li><strong>系统自动推算</strong>：
+            <ul>
+                <li>累积计算每个批次的剩余量</li>
+                <li>剩余量 ≤ 0 时，标记"预计已用完"，给出预计时间点</li>
+                <li>库存列表显示：<strong>批次 LOT-2024-001 · 剩余约 23ml · 预计 3 天后用完</strong></li>
+            </ul>
+        </li>
+        <li><strong>人工确认</strong>：
+            <ul>
+                <li>提供"标记为空瓶"按钮（1秒操作）</li>
+                <li>与系统推算对比，逐步优化BOM准确度</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>需要新增的数据结构</h2>
+    <pre style="background:#111827;color:#e5e7eb;padding:16px;border-radius:8px;font-size:12px;overflow:auto;">
+CREATE TABLE batch_consumption (
+    batch_id TEXT PRIMARY KEY,      -- 批次号
+    material_id TEXT,               -- 物料ID
+    initial_qty DECIMAL(18,4),      -- 初始数量
+    remaining_qty DECIMAL(18,4),    -- 剩余数量（系统推算）
+    estimated_empty_date DATE,      -- 预计用完日期
+    actual_empty_date DATE,         -- 实际确认用完日期
+    empty_confirmed_by TEXT,        -- 确认人
+    status TEXT                     -- in_use / estimated_empty / confirmed_empty
+);
+    </pre>
+
+    <h2>待讨论</h2>
+    <p>请确认以下问题：</p>
+    <ul>
+        <li>是否接受"系统估算 + 人工确认"的模式？</li>
+        <li>是否需要增加"空瓶确认"的入口（如在库存列表页）？</li>
+        <li>是否需要"近效期/即将用完"的预警提醒？</li>
+    </ul>
+</body>
+</html>

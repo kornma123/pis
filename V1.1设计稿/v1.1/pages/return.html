@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>退库管�?- COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="scrap.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>报废管理</span>
+            </a>
+            <a href="stocktaking.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>库存盘点</span>
+            </a>
+            <a href="projects.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测服�?/span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-analysis.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+            <a href="categories.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>物料分类</span>
+            </a>
+            <a href="consumable-config.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                </svg>
+                <span>耗材配置</span>
+            </a>
+            <a href="rules.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>规则配置</span>
+            </a>
+            <a href="alerts.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span>预警中心</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>供应商管�?/span>
+            </a>
+            <a href="locations.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span>库位管理</span>
+            </a>
+            <a href="users.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>用户管理</span>
+            </a>
+            <a href="roles.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>角色管理</span>
+            </a>
+            <a href="logs.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <span>操作日志</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">退库管�?/h1>
+                <p class="page-subtitle">处理已领用物料的退库登�?/p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="showModal('return-apply-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    退库登�?                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">23</div>
+                <div class="stat-label">本月退�?/div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">156</div>
+                <div class="stat-label">本年退�?/div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">¥8,560</div>
+                <div class="stat-label">本月退库金�?/div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">¥45,230</div>
+                <div class="stat-label">本年退库金�?/div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">退库记�?/span>
+                <div class="filter-bar">
+                    <div class="search-box">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" placeholder="搜索退库单�?物料名称...">
+                    </div>
+                    <select class="filter-select">
+                        <option>全部退库原�?/option>
+                        <option>项目取消</option>
+                        <option>物料多余</option>
+                        <option>质量问题</option>
+                        <option>其他原因</option>
+                    </select>
+                    <input type="date" class="filter-select" style="width: 130px;">
+                    <span style="color: #6b7280;">�?/span>
+                    <input type="date" class="filter-select" style="width: 130px;">
+                    <button class="btn btn-secondary btn-sm">查询</button>
+                    <button class="btn btn-ghost btn-sm">重置</button>
+                </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>退库单�?/th>
+                            <th>退库日�?/th>
+                            <th>物料名称</th>
+                            <th>规格型号</th>
+                            <th>退库数�?/th>
+                            <th>退库原�?/th>
+                            <th>退库人</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="mono-text">RET-2024-0023</td>
+                            <td>2024-01-15 14:30</td>
+                            <td>
+                                <div style="font-weight: 500;">PCR试剂�?/div>
+                                <div style="font-size: 12px; color: var(--text-muted);">PCR-001</div>
+                            </td>
+                            <td>50�?�?/td>
+                            <td>1 �?/td>
+                            <td>项目取消</td>
+                            <td>张三</td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('return-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">RET-2024-0022</td>
+                            <td>2024-01-15 10:15</td>
+                            <td>
+                                <div style="font-weight: 500;">苏木精染�?/div>
+                                <div style="font-size: 12px; color: var(--text-muted);">DYE-002</div>
+                            </td>
+                            <td>500ml/�?/td>
+                            <td>2 �?/td>
+                            <td>物料多余</td>
+                            <td>李四</td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('return-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">RET-2024-0021</td>
+                            <td>2024-01-14 16:45</td>
+                            <td>
+                                <div style="font-weight: 500;">抗体试剂</div>
+                                <div style="font-size: 12px; color: var(--text-muted);">AB-003</div>
+                            </td>
+                            <td>1ml/�?/td>
+                            <td>3 �?/td>
+                            <td>质量问题</td>
+                            <td>王五</td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('return-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="mono-text">RET-2024-0020</td>
+                            <td>2024-01-14 11:20</td>
+                            <td>
+                                <div style="font-weight: 500;">载玻�?/div>
+                                <div style="font-size: 12px; color: var(--text-muted);">SLD-001</div>
+                            </td>
+                            <td>50�?�?/td>
+                            <td>5 �?/td>
+                            <td>物料多余</td>
+                            <td>赵六</td>
+                            <td>
+                                <button class="btn btn-sm btn-ghost" onclick="showModal('return-detail-modal')">详情</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="pagination">
+                    <div class="pagination-info">�?156 条记录，�?1/16 �?/div>
+                    <div class="pagination-controls">
+                        <button class="btn btn-sm btn-secondary" disabled>上一�?/button>
+                        <button class="btn btn-sm btn-ghost">1</button>
+                        <button class="btn btn-sm btn-ghost">2</button>
+                        <button class="btn btn-sm btn-ghost">3</button>
+                        <button class="btn btn-sm btn-secondary">下一�?/button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal" id="return-apply-modal">
+        <div class="modal-overlay" onclick="hideModal('return-apply-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">退库登�?/h3>
+                <button class="modal-close" onclick="hideModal('return-apply-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">选择物料 <span class="required">*</span></label>
+                    <select class="form-select">
+                        <option value="">请选择要退库的物料</option>
+                        <option value="1">PCR试剂�?(PCR-001) - 库存: 15�?/option>
+                        <option value="2">苏木精染�?(DYE-002) - 库存: 28�?/option>
+                        <option value="3">抗体试剂 (AB-003) - 库存: 42�?/option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">退库数�?<span class="required">*</span></label>
+                        <input type="number" class="form-input" placeholder="请输入退库数�? min="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">退库原�?<span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="">请选择退库原�?/option>
+                            <option value="cancel">项目取消</option>
+                            <option value="excess">物料多余</option>
+                            <option value="quality">质量问题</option>
+                            <option value="other">其他原因</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">退库库�?/label>
+                    <select class="form-select">
+                        <option value="">请选择退库目标库�?/option>
+                        <option value="A-01-01">A-01-01 (试剂�?</option>
+                        <option value="A-01-02">A-01-02 (试剂�?</option>
+                        <option value="B-01-01">B-01-01 (抗体�?</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">备注</label>
+                    <textarea class="form-textarea" rows="2" placeholder="请输入备注信�?></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('return-apply-modal')">取消</button>
+                <button class="btn btn-primary">确认退�?/button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="return-detail-modal">
+        <div class="modal-overlay" onclick="hideModal('return-detail-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">退库详�?/h3>
+                <button class="modal-close" onclick="hideModal('return-detail-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-grid" style="grid-template-columns: repeat(2, 1fr);">
+                    <div class="detail-item">
+                        <div class="detail-label">退库单�?/div>
+                        <div class="detail-value mono-text">RET-2024-0023</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">退库日�?/div>
+                        <div class="detail-value">2024-01-15 14:30</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">物料名称</div>
+                        <div class="detail-value">PCR试剂�?/div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">物料编号</div>
+                        <div class="detail-value mono-text">PCR-001</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">规格型号</div>
+                        <div class="detail-value">50�?�?/div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">退库数�?/div>
+                        <div class="detail-value">1 �?/div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">退库原�?/div>
+                        <div class="detail-value">项目取消</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">退库库�?/div>
+                        <div class="detail-value">A-01-01</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">退库人</div>
+                        <div class="detail-value">张三</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">备注</div>
+                        <div class="detail-value">-</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('return-detail-modal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+        function hideModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelector('.search-box input').addEventListener('input', function() {
+                const searchText = this.value.toLowerCase().trim();
+                const tableRows = document.querySelectorAll('.data-table tbody tr');
+                
+                tableRows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 3) {
+                        const returnNo = cells[0] ? cells[0].textContent.toLowerCase() : '';
+                        const materialName = cells[2] ? cells[2].textContent.toLowerCase() : '';
+                        
+                        if (searchText === '' || returnNo.includes(searchText) || materialName.includes(searchText)) {
+                            row.style.display = '';
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

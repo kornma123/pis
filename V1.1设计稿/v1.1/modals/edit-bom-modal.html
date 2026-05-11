@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑BOM - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="edit-bom-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-xl" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">编辑BOM</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">BOM名称 <span class="required">*</span></label>
+                        <input type="text" class="form-input" value="NGS建库试剂套装">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">BOM编号</label>
+                        <input type="text" class="form-input mono-text" value="BOM-2024-001" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">当前版本</label>
+                        <input type="text" class="form-input" value="v2.3" disabled>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">所属项目</label>
+                        <select class="form-select">
+                            <option value="PRJ-001" selected>全外显子组测序</option>
+                            <option value="PRJ-002">肿瘤基因突变检测</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">状态</label>
+                        <select class="form-select">
+                            <option value="active" selected>已启用</option>
+                            <option value="draft">草稿</option>
+                            <option value="archived">已归档</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-header">
+                    <h4 class="card-title">物料配置清单 (24项)</h4>
+                    <button class="btn btn-ghost btn-sm">+ 添加物料</button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>序号</th>
+                            <th>物料名称</th>
+                            <th>规格型号</th>
+                            <th>用量/样本</th>
+                            <th>单位</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1</td>
+                            <td>DNA提取试剂盒</td>
+                            <td>v2.0，96次反应</td>
+                            <td><input type="number" class="form-input form-input-sm" value="0.0104" step="0.0001"></td>
+                            <td>盒</td>
+                            <td><button class="btn btn-ghost btn-sm">删除</button></td>
+                        </tr>
+                        <tr>
+                            <td>2</td>
+                            <td>PCR Master Mix</td>
+                            <td>2X，500次反应</td>
+                            <td><input type="number" class="form-input form-input-sm" value="0.002" step="0.0001"></td>
+                            <td>盒</td>
+                            <td><button class="btn btn-ghost btn-sm">删除</button></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-danger btn-sm" style="margin-right: auto;">删除BOM</button>
+            <button class="btn btn-secondary">取消</button>
+            <button class="btn btn-secondary">保存修改</button>
+            <button class="btn btn-primary">发布新版本</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

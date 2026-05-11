@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>添加BOM物料 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="add-bom-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">添加BOM物料</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">选择物料 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="">请选择物料</option>
+                            <option value="1">DNA提取试剂盒 - v2.0，96次反应</option>
+                            <option value="2">PCR Master Mix - 2X，500次反应</option>
+                            <option value="3">磁珠纯化试剂 - 5ml/瓶</option>
+                            <option value="4">测序引物套装 - 标准型</option>
+                            <option value="5">离心管 1.5ml - 无菌，1000个/包</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">单例用量 <span class="required">*</span></label>
+                        <input type="number" class="form-input" placeholder="输入单例用量" step="0.0001" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">单位 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="box">盒</option>
+                            <option value="piece">个</option>
+                            <option value="ml">ml</option>
+                            <option value="set">套</option>
+                            <option value="bag">包</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">备注</label>
+                        <input type="text" class="form-input" placeholder="可选填">
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="margin-top: 16px; background: var(--bg-page);">
+                <div class="card-header" style="padding: 12px 16px;">
+                    <span style="font-size: 13px; color: var(--text-muted);">已选物料信息预览</span>
+                </div>
+                <div class="card-body" style="padding: 16px;">
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; font-size: 13px;">
+                        <div>
+                            <span style="color: var(--text-muted);">物料名称:</span>
+                            <span style="margin-left: 8px;">-</span>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-muted);">规格型号:</span>
+                            <span style="margin-left: 8px;">-</span>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-muted);">参考单价:</span>
+                            <span style="margin-left: 8px;">-</span>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-muted);">当前库存:</span>
+                            <span style="margin-left: 8px;">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">取消</button>
+            <button class="btn btn-primary">确认添加</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

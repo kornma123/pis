@@ -1,0 +1,1904 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>检测服�?- COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="scrap.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>报废管理</span>
+            </a>
+            <a href="stocktaking.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>库存盘点</span>
+            </a>
+            <a href="projects.html" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测服�?/span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-analysis.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+            <a href="categories.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>物料分类</span>
+            </a>
+            <a href="consumable-config.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                </svg>
+                <span>耗材配置</span>
+            </a>
+            <a href="rules.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>规则配置</span>
+            </a>
+            <a href="alerts.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span>预警中心</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>供应商管�?/span>
+            </a>
+            <a href="locations.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span>库位管理</span>
+            </a>
+            <a href="users.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>用户管理</span>
+            </a>
+            <a href="roles.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>角色管理</span>
+            </a>
+            <a href="logs.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <span>操作日志</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">检测服�?/h1>
+                <p class="page-subtitle">管理病理实验室检测服务类型和BOM清单关联，监控物料成本与库存支撑能力</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="showModal('import-project-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    导入
+                </button>
+                <button class="btn btn-primary" onclick="showModal('create-project-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    新建服务
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card stat-card-primary">
+                <div class="stat-value">48</div>
+                <div class="stat-label">检测服务总数</div>
+            </div>
+            <div class="stat-card stat-card-success">
+                <div class="stat-value">42</div>
+                <div class="stat-label">已启�?/div>
+            </div>
+            <div class="stat-card stat-card-muted">
+                <div class="stat-value">6</div>
+                <div class="stat-label">已停�?/div>
+            </div>
+            <div class="stat-card stat-card-warning">
+                <div class="stat-value">3</div>
+                <div class="stat-label">BOM未配�?/div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">服务列表</span>
+                <div class="filter-bar">
+                    <div class="search-box">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" placeholder="搜索服务名称/编号...">
+                    </div>
+                    <select class="filter-select">
+                        <option>全部类型</option>
+                        <option>病理技�?/option>
+                        <option>分子诊断</option>
+                        <option>病理诊断</option>
+                    </select>
+                    <select class="filter-select">
+                        <option>全部状�?/option>
+                        <option>已启�?/option>
+                        <option>已停�?/option>
+                    </select>
+                    <select class="filter-select">
+                        <option>BOM配置</option>
+                        <option>已配�?/option>
+                        <option>未配�?/option>
+                    </select>
+                    <button class="btn btn-secondary btn-sm">查询</button>
+                    <button class="btn btn-ghost btn-sm">重置</button>
+                </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+                <div class="batch-actions" id="batch-actions">
+                    <span class="batch-actions-text">已选择 <span id="selected-count">0</span> �?/span>
+                    <button class="btn btn-sm btn-secondary" onclick="batchEnable()">批量启用</button>
+                    <button class="btn btn-sm btn-secondary" onclick="batchDisable()">批量停用</button>
+                    <button class="btn btn-ghost btn-sm" onclick="cancelSelection()">取消选择</button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-cell">
+                                <input type="checkbox" id="select-all" onchange="toggleSelectAll()">
+                            </th>
+                            <th>服务编号</th>
+                            <th>服务名称</th>
+                            <th>服务类型</th>
+                            <th>检测周�?/th>
+                            <th>BOM配置</th>
+                            <th>可支撑样本数</th>
+                            <th>状�?/th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr data-type="he">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">HE-001</td>
+                            <td><strong>HE常规制片</strong></td>
+                            <td><span class="type-badge he">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">HE制片标准套装</span>
+                                    <span class="bom-version">v2.3</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">150</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="he">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">HE-002</td>
+                            <td><strong>快速冰冻切�?/strong></td>
+                            <td><span class="type-badge he">病理技�?/span></td>
+                            <td>30分钟</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">冰冻切片套装</span>
+                                    <span class="bom-version">v1.8</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples warning">25</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-KI67</td>
+                            <td><strong>Ki-67免疫组化染色</strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">免疫组化标准套装</span>
+                                    <span class="bom-version">v1.5</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">120</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-ER</td>
+                            <td><strong>ER雌激素受体检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">免疫组化标准套装</span>
+                                    <span class="bom-version">v1.5</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">120</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-PR</td>
+                            <td><strong>PR孕激素受体检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">免疫组化标准套装</span>
+                                    <span class="bom-version">v1.5</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">120</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-HER2</td>
+                            <td><strong>HER2/neu检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">HER2检测套�?/span>
+                                    <span class="bom-version">v2.0</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">85</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-P53</td>
+                            <td><strong>P53抑癌基因检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">免疫组化标准套装</span>
+                                    <span class="bom-version">v1.5</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">120</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-CK</td>
+                            <td><strong>细胞角蛋�?CK)检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">免疫组化标准套装</span>
+                                    <span class="bom-version">v1.5</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">120</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-VIM</td>
+                            <td><strong>Vimentin波形蛋白检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">免疫组化标准套装</span>
+                                    <span class="bom-version">v1.5</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">120</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-SYN</td>
+                            <td><strong>Synaptophysin突触素检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">神经内分泌标记套�?/span>
+                                    <span class="bom-version">v1.2</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">60</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-CD45</td>
+                            <td><strong>CD45淋巴细胞共同抗原检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">淋巴标记套装</span>
+                                    <span class="bom-version">v1.3</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">75</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-CD20</td>
+                            <td><strong>CD20 B细胞标记检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">淋巴标记套装</span>
+                                    <span class="bom-version">v1.3</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">75</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-CD3</td>
+                            <td><strong>CD3 T细胞标记检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">淋巴标记套装</span>
+                                    <span class="bom-version">v1.3</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">75</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-PD1</td>
+                            <td><strong>PD-1/PD-L1检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">PD-L1检测套�?/span>
+                                    <span class="bom-version">v2.1</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples warning">45</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ihc">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">IHC-ERPR</td>
+                            <td><strong>ER/PR双染检�?/strong></td>
+                            <td><span class="type-badge ihc">病理技�?/span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">ER/PR双染套装</span>
+                                    <span class="bom-version">v2.0</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples warning">35</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ss">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">SS-PAS</td>
+                            <td><strong>PAS染色(糖原染色)</strong></td>
+                            <td><span class="type-badge ss">病理技�?/span></td>
+                            <td>1个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">PAS染色套装</span>
+                                    <span class="bom-version">v1.2</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples danger">0</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ss">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">SS-MASSON</td>
+                            <td><strong>Masson三色染色</strong></td>
+                            <td><span class="type-badge ss">病理技�?/span></td>
+                            <td>1个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">Masson染色套装</span>
+                                    <span class="bom-version">v1.0</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">200</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ss">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">SS-AB</td>
+                            <td><strong>AB染色(阿尔辛蓝染色)</strong></td>
+                            <td><span class="type-badge ss">病理技�?/span></td>
+                            <td>1个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">AB染色套装</span>
+                                    <span class="bom-version">v1.1</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">150</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ss">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">SS-PASM</td>
+                            <td><strong>PASM染色(六胺银染�?</strong></td>
+                            <td><span class="type-badge ss">病理技�?/span></td>
+                            <td>1个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">PASM染色套装</span>
+                                    <span class="bom-version">v1.0</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">80</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ss">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">SS-VG</td>
+                            <td><strong>VG染色(范吉森染�?</strong></td>
+                            <td><span class="type-badge ss">病理技�?/span></td>
+                            <td>1个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">VG染色套装</span>
+                                    <span class="bom-version">v1.0</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">180</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ss">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">SS-PTAH</td>
+                            <td><strong>PTAH染色(磷钨酸苏木素染色)</strong></td>
+                            <td><span class="type-badge ss">病理技�?/span></td>
+                            <td>1个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">PTAH染色套装</span>
+                                    <span class="bom-version">v1.0</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">120</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ss">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">SS-GRAM</td>
+                            <td><strong>革兰氏染�?/strong></td>
+                            <td><span class="type-badge ss">病理技�?/span></td>
+                            <td>1个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">细菌染色套装</span>
+                                    <span class="bom-version">v1.2</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">250</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ss">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">SS-ZN</td>
+                            <td><strong>抗酸染色(齐尼染色)</strong></td>
+                            <td><span class="type-badge ss">病理技�?/span></td>
+                            <td>1个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">抗酸染色套装</span>
+                                    <span class="bom-version">v1.1</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">180</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ss">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">SS-RETIC</td>
+                            <td><strong>网状纤维染色</strong></td>
+                            <td><span class="type-badge ss">病理技�?/span></td>
+                            <td>1个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">网状纤维染色套装</span>
+                                    <span class="bom-version">v1.0</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">90</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="ss">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">SS-FAT</td>
+                            <td><strong>脂肪染色(苏丹III/油红O)</strong></td>
+                            <td><span class="type-badge ss">病理技�?/span></td>
+                            <td>1个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">脂肪染色套装</span>
+                                    <span class="bom-version">v1.0</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">100</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="mp">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">MP-EGFR</td>
+                            <td><strong>EGFR基因突变检�?/strong></td>
+                            <td><span class="type-badge mp">分子诊断</span></td>
+                            <td>5-7个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">分子检测标准套�?/span>
+                                    <span class="bom-version">v3.0</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples danger">5</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="mp">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">MP-NGS</td>
+                            <td><strong>NGS高通量测序</strong></td>
+                            <td><span class="type-badge mp">分子诊断</span></td>
+                            <td>10-15个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">NGS建库试剂套装</span>
+                                    <span class="bom-version">v2.3</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">80</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="mp">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">MP-FISH</td>
+                            <td><strong>FISH荧光原位杂交</strong></td>
+                            <td><span class="type-badge mp">分子诊断</span></td>
+                            <td>3-5个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name" style="color: var(--text-muted);">未配�?/span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples" style="color: var(--text-muted);">-</td>
+                            <td><span class="status-badge status-secondary">已停�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="cyto">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">CYTO-TCT</td>
+                            <td><strong>液基薄层细胞学检�?TCT)</strong></td>
+                            <td><span class="type-badge cyto">病理诊断</span></td>
+                            <td>2-3个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">液基细胞学套�?/span>
+                                    <span class="bom-version">v2.0</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">200</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="cyto">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">CYTO-FNA</td>
+                            <td><strong>细针穿刺细胞学检�?/strong></td>
+                            <td><span class="type-badge cyto">病理诊断</span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">穿刺细胞学套�?/span>
+                                    <span class="bom-version">v1.5</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">150</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr data-type="cyto">
+                            <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                            <td class="mono-text">CYTO-EXF</td>
+                            <td><strong>脱落细胞学检�?/strong></td>
+                            <td><span class="type-badge cyto">病理诊断</span></td>
+                            <td>1-2个工作日</td>
+                            <td>
+                                <div class="bom-info">
+                                    <span class="bom-name">脱落细胞学套�?/span>
+                                    <span class="bom-version">v1.2</span>
+                                </div>
+                            </td>
+                            <td class="supportable-samples">180</td>
+                            <td><span class="status-badge status-success">已启�?/span></td>
+                            <td>
+                                <div class="action-btns">
+                                    <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="pagination">
+                    <div class="pagination-info">�?48 条记录，�?1/5 �?/div>
+                    <div class="pagination-controls">
+                        <button class="btn btn-secondary btn-sm" disabled>上一�?/button>
+                        <button class="btn btn-ghost btn-sm">1</button>
+                        <button class="btn btn-ghost btn-sm">2</button>
+                        <button class="btn btn-ghost btn-sm">3</button>
+                        <button class="btn btn-ghost btn-sm">...</button>
+                        <button class="btn btn-ghost btn-sm">5</button>
+                        <button class="btn btn-secondary btn-sm">下一�?/button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal" id="create-project-modal">
+        <div class="modal-overlay" onclick="hideModal('create-project-modal')"></div>
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title">新建检测服�?/h3>
+                <button class="modal-close" onclick="hideModal('create-project-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="step-indicator">
+                    <div class="step-item active" id="step1-indicator">
+                        <span class="step-number">1</span>
+                        <span class="step-text">基本信息</span>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step-item" id="step2-indicator">
+                        <span class="step-number">2</span>
+                        <span class="step-text">BOM配置</span>
+                    </div>
+                    <div class="step-line"></div>
+                    <div class="step-item" id="step3-indicator">
+                        <span class="step-number">3</span>
+                        <span class="step-text">完成</span>
+                    </div>
+                </div>
+                
+                <div id="step1-content">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">服务类型 <span class="required">*</span></label>
+                            <select class="form-select">
+                                <option value="">请选择服务类型</option>
+                                <option value="he">病理技�?HE制片</option>
+                                <option value="ihc">病理技�?免疫组化</option>
+                                <option value="ss">病理技�?特殊染色</option>
+                                <option value="mp">分子诊断</option>
+                                <option value="cyto">病理诊断-细胞学检�?/option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">服务编号 <span class="required">*</span></label>
+                            <input type="text" class="form-input" placeholder="自动生成" readonly>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">服务名称 <span class="required">*</span></label>
+                            <input type="text" class="form-input" placeholder="请输入服务名�?>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">检测周�?/label>
+                            <input type="text" class="form-input" placeholder="如：1-2个工作日">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">负责�?/label>
+                            <select class="form-select">
+                                <option value="">请选择负责�?/option>
+                                <option value="zhang">张医�?/option>
+                                <option value="li">李医�?/option>
+                                <option value="wang">王医�?/option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">状�?/label>
+                            <select class="form-select">
+                                <option value="active">已启�?/option>
+                                <option value="paused">已停�?/option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">服务描述</label>
+                        <textarea class="form-textarea" rows="3" placeholder="请输入服务描�?></textarea>
+                    </div>
+                </div>
+
+                <div id="step2-content" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label">BOM清单配置</label>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">配置该检测服务所需的物料清单，可选择已有BOM或新建BOM</p>
+                    </div>
+                    <div class="radio-group" style="margin-bottom: 16px;">
+                        <label class="radio-label">
+                            <input type="radio" name="bom-option" value="select" checked onchange="toggleBomOption('select')">
+                            选择已有BOM
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="bom-option" value="create" onchange="toggleBomOption('create')">
+                            新建BOM
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="bom-option" value="skip" onchange="toggleBomOption('skip')">
+                            稍后配置
+                        </label>
+                    </div>
+                    <div id="select-bom-section">
+                        <select class="form-select" style="margin-bottom: 12px;" id="bom-select">
+                            <option value="">请选择BOM清单</option>
+                        </select>
+                        <div class="bom-preview">
+                            <div class="bom-preview-header">
+                                <span class="bom-preview-title">BOM预览</span>
+                                <a href="bom.html" style="font-size: 13px; color: var(--primary);">查看详情</a>
+                            </div>
+                            <div class="bom-list-mini">
+                                <span class="bom-item-mini">苏木精染�?/span>
+                                <span class="bom-item-mini">伊红染液</span>
+                                <span class="bom-item-mini">分化�?/span>
+                                <span class="bom-item-mini">蓝化�?/span>
+                                <span class="bom-item-mini">封片�?/span>
+                                <span style="font-size: 12px; color: var(--text-muted);">+3�?/span>
+                            </div>
+                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center;">
+                                <div style="display: flex; gap: 16px; font-size: 13px;">
+                                    <span style="color: var(--text-muted);">�?项物�?/span>
+                                    <span style="color: var(--text-muted);">可支撑样本数: <span style="color: #2E7D32; font-weight: 500;">150</span></span>
+                                    <span style="color: var(--text-muted);">单样本成�? <span style="color: var(--primary); font-weight: 500;">¥12.50</span></span>
+                                </div>
+                                <span class="material-status-badge material-status-sufficient">🟢 充足</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="create-bom-section" style="display: none;">
+                        <div class="card" style="border: 1px dashed var(--border-strong);">
+                            <div class="card-body" style="text-align: center; padding: 40px;">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" style="margin-bottom: 12px;">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
+                                    <line x1="12" y1="18" x2="12" y2="12"/>
+                                    <line x1="9" y1="15" x2="15" y2="15"/>
+                                </svg>
+                                <p style="color: var(--text-muted); margin-bottom: 16px;">创建完成后，在编辑页面配置BOM清单</p>
+                                <button class="btn btn-secondary btn-sm">前往BOM管理</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="skip-bom-section" style="display: none;">
+                        <div style="background: var(--warning-bg); padding: 16px; border-radius: var(--radius-md);">
+                            <p style="font-size: 14px; color: var(--warning-text);">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 8px;">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <line x1="12" y1="8" x2="12" y2="12"/>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                                </svg>
+                                未配置BOM的检测服务将无法计算成本和自动扣减库存，请尽快完成配�?
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="step3-content" style="display: none; text-align: center; padding: 40px 0;">
+                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" style="margin-bottom: 16px;">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <h3 style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">创建成功�?/h3>
+                    <p style="color: var(--text-muted); margin-bottom: 24px;">检测服务已创建完成</p>
+                    <div style="display: flex; gap: 12px; justify-content: center;">
+                        <button class="btn btn-secondary" onclick="hideModal('create-project-modal')">返回列表</button>
+                        <a href="project-detail.html" class="btn btn-primary">查看详情</a>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" id="create-modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('create-project-modal')">取消</button>
+                <button class="btn btn-secondary" id="prev-step-btn" style="display: none;" onclick="prevStep()">上一�?/button>
+                <button class="btn btn-primary" id="next-step-btn" onclick="nextStep()">下一�?/button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="edit-project-modal">
+        <div class="modal-overlay" onclick="hideModal('edit-project-modal')"></div>
+        <div class="modal-container modal-xl">
+            <div class="modal-header">
+                <h3 class="modal-title">编辑检测服�?/h3>
+                <button class="modal-close" onclick="hideModal('edit-project-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="tab-group">
+                    <button class="tab active" onclick="switchEditTab('basic')">基本信息</button>
+                    <button class="tab" onclick="switchEditTab('bom')">BOM配置</button>
+                </div>
+                
+                <div id="edit-basic-tab">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">服务类型</label>
+                            <select class="form-select">
+                                <option value="he" selected>病理技�?HE制片</option>
+                                <option value="ihc">病理技�?免疫组化</option>
+                                <option value="ss">病理技�?特殊染色</option>
+                                <option value="mp">分子诊断</option>
+                                <option value="cyto">病理诊断-细胞学检�?/option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">服务编号</label>
+                            <input type="text" class="form-input" value="HE-001" readonly>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">服务名称 <span class="required">*</span></label>
+                            <input type="text" class="form-input" value="HE常规制片">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">检测周�?/label>
+                            <input type="text" class="form-input" value="1-2个工作日">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">负责�?/label>
+                            <select class="form-select">
+                                <option value="zhang" selected>张医�?/option>
+                                <option value="li">李医�?/option>
+                                <option value="wang">王医�?/option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">状�?/label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="edit-status" value="active" checked>
+                                    <span>已启�?/span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="edit-status" value="paused">
+                                    <span>已停�?/span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">服务描述</label>
+                        <textarea class="form-textarea" rows="3">常规HE染色制片，包括取材、包埋、切片、染色、封片全流程�?/textarea>
+                    </div>
+                </div>
+
+                <div id="edit-bom-tab" style="display: none;">
+                    <div class="bom-preview">
+                        <div class="bom-preview-header">
+                            <span class="bom-preview-title">当前BOM: BOM-001 HE制片标准套装</span>
+                            <a href="bom.html" style="font-size: 13px; color: var(--primary);">前往BOM管理</a>
+                        </div>
+                    </div>
+                    <table class="data-table" style="margin-top: 16px;">
+                        <thead>
+                            <tr>
+                                <th>序号</th>
+                                <th>物料名称</th>
+                                <th>规格型号</th>
+                                <th>用量/样本</th>
+                                <th>单位</th>
+                                <th>单价</th>
+                                <th>库存状�?/th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td><strong>苏木精染�?/strong></td>
+                                <td>500ml/�?/td>
+                                <td>0.5</td>
+                                <td>ml</td>
+                                <td>¥0.08/ml</td>
+                                <td><span class="status-badge status-success">充足</span></td>
+                            </tr>
+                            <tr>
+                                <td>2</td>
+                                <td><strong>伊红染液</strong></td>
+                                <td>500ml/�?/td>
+                                <td>0.3</td>
+                                <td>ml</td>
+                                <td>¥0.06/ml</td>
+                                <td><span class="status-badge status-success">充足</span></td>
+                            </tr>
+                            <tr>
+                                <td>3</td>
+                                <td><strong>分化�?/strong></td>
+                                <td>500ml/�?/td>
+                                <td>0.2</td>
+                                <td>ml</td>
+                                <td>¥0.05/ml</td>
+                                <td><span class="status-badge status-warning">偏低</span></td>
+                            </tr>
+                            <tr>
+                                <td>4</td>
+                                <td><strong>蓝化�?/strong></td>
+                                <td>500ml/�?/td>
+                                <td>0.2</td>
+                                <td>ml</td>
+                                <td>¥0.04/ml</td>
+                                <td><span class="status-badge status-success">充足</span></td>
+                            </tr>
+                            <tr>
+                                <td>5</td>
+                                <td><strong>封片�?/strong></td>
+                                <td>100ml/�?/td>
+                                <td>0.1</td>
+                                <td>ml</td>
+                                <td>¥0.15/ml</td>
+                                <td><span class="status-badge status-success">充足</span></td>
+                            </tr>
+                        </tbody>
+                        <tfoot class="table-footer">
+                            <tr>
+                                <td colspan="7" style="text-align: right;">
+                                    �?8 项物�?
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    <div style="margin-top: 16px; display: flex; gap: 12px;">
+                        <button class="btn btn-secondary btn-sm">更换BOM</button>
+                        <button class="btn btn-ghost btn-sm" onclick="window.location.href='bom.html'">编辑BOM详情</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger btn-sm" style="margin-right: auto;" onclick="showModal('delete-project-modal')">删除服务</button>
+                <button class="btn btn-secondary" onclick="hideModal('edit-project-modal')">取消</button>
+                <button class="btn btn-primary" onclick="saveEditService()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="copy-project-modal">
+        <div class="modal-overlay" onclick="hideModal('copy-project-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">复制检测服�?/h3>
+                <button class="modal-close" onclick="hideModal('copy-project-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="background: var(--bg-page); padding: 16px; border-radius: var(--radius-md); margin-bottom: 20px;">
+                    <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">原服�?/div>
+                    <div style="font-weight: 600;">HE-001 HE常规制片</div>
+                    <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">BOM: 8项物�?/div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">新服务名�?<span class="required">*</span></label>
+                    <input type="text" class="form-input" placeholder="请输入新服务名称" value="HE常规制片(副本)">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">复制内容</label>
+                    <div class="checkbox-group" style="flex-direction: column; gap: 12px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" checked>
+                            <span>基本信息（类型、周期、负责人�?/span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" checked>
+                            <span>BOM配置（物料清单关联）</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('copy-project-modal')">取消</button>
+                <button class="btn btn-primary">确认复制</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="delete-project-modal">
+        <div class="modal-overlay" onclick="hideModal('delete-project-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">确认删除</h3>
+                <button class="modal-close" onclick="hideModal('delete-project-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="text-align: center; padding: 20px 0;">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--error)" stroke-width="2" style="margin-bottom: 16px;">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">确定要删除该检测服务吗�?/h3>
+                    <p style="color: var(--text-muted); font-size: 14px;">删除后将无法恢复，关联的BOM配置将解除关�?/p>
+                    <div style="background: var(--bg-page); padding: 12px; border-radius: var(--radius-md); margin-top: 16px; text-align: left;">
+                        <div style="font-size: 12px; color: var(--text-muted);">待删除服�?/div>
+                        <div style="font-weight: 600;">HE-001 HE常规制片</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('delete-project-modal')">取消</button>
+                <button class="btn btn-danger">确认删除</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="import-project-modal">
+        <div class="modal-overlay" onclick="hideModal('import-project-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">导入检测服�?/h3>
+                <button class="modal-close" onclick="hideModal('import-project-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">选择文件</label>
+                    <div style="border: 2px dashed var(--border-strong); border-radius: var(--radius-md); padding: 40px; text-align: center;">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" style="margin-bottom: 12px;">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <p style="color: var(--text-muted); margin-bottom: 12px;">拖拽文件到此处，或点击选择文件</p>
+                        <button class="btn btn-secondary btn-sm">选择文件</button>
+                    </div>
+                </div>
+                <div style="background: var(--bg-page); padding: 12px; border-radius: var(--radius-md);">
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">支持格式�?xlsx, .csv</p>
+                    <a href="#" style="font-size: 13px; color: var(--primary);">下载导入模板</a>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('import-project-modal')">取消</button>
+                <button class="btn btn-primary">开始导�?/button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../shared/scripts.js"></script>
+    <script>
+        let currentOpenModal = null;
+        let currentStep = 1;
+        let isSubmitting = false;
+        
+        const servicesData = [
+            { id: 'HE-001', name: 'HE常规制片', type: 'he', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: 'HE制片标准套装', version: 'v2.3' }, supportable: 150, status: 'active' },
+            { id: 'HE-002', name: '快速冰冻切�?, type: 'he', typeName: '病理技�?, cycle: '30分钟', bom: { name: '冰冻切片套装', version: 'v1.8' }, supportable: 25, status: 'active', supportWarning: true },
+            { id: 'IHC-KI67', name: 'Ki-67免疫组化染色', type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: '免疫组化标准套装', version: 'v1.5' }, supportable: 120, status: 'active' },
+            { id: 'IHC-ER', name: 'ER雌激素受体检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: '免疫组化标准套装', version: 'v1.5' }, supportable: 120, status: 'active' },
+            { id: 'IHC-PR', name: 'PR孕激素受体检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: '免疫组化标准套装', version: 'v1.5' }, supportable: 120, status: 'active' },
+            { id: 'IHC-HER2', name: 'HER2/neu检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: 'HER2检测套�?, version: 'v2.0' }, supportable: 85, status: 'active' },
+            { id: 'IHC-P53', name: 'P53抑癌基因检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: '免疫组化标准套装', version: 'v1.5' }, supportable: 120, status: 'active' },
+            { id: 'IHC-CK', name: '细胞角蛋�?CK)检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: '免疫组化标准套装', version: 'v1.5' }, supportable: 120, status: 'active' },
+            { id: 'IHC-VIM', name: 'Vimentin波形蛋白检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: '免疫组化标准套装', version: 'v1.5' }, supportable: 120, status: 'active' },
+            { id: 'IHC-SYN', name: 'Synaptophysin突触素检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: '神经内分泌标记套�?, version: 'v1.2' }, supportable: 60, status: 'active' },
+            { id: 'IHC-CD45', name: 'CD45淋巴细胞共同抗原检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: '淋巴标记套装', version: 'v1.3' }, supportable: 75, status: 'active' },
+            { id: 'IHC-CD20', name: 'CD20 B细胞标记检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: '淋巴标记套装', version: 'v1.3' }, supportable: 75, status: 'active' },
+            { id: 'IHC-CD3', name: 'CD3 T细胞标记检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: '淋巴标记套装', version: 'v1.3' }, supportable: 75, status: 'active' },
+            { id: 'IHC-PD1', name: 'PD-1/PD-L1检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: 'PD-L1检测套�?, version: 'v2.1' }, supportable: 45, status: 'active', supportWarning: true },
+            { id: 'IHC-ERPR', name: 'ER/PR双染检�?, type: 'ihc', typeName: '病理技�?, cycle: '1-2个工作日', bom: { name: 'ER/PR双染套装', version: 'v2.0' }, supportable: 35, status: 'active', supportWarning: true },
+            { id: 'SS-PAS', name: 'PAS染色(糖原染色)', type: 'ss', typeName: '病理技�?, cycle: '1个工作日', bom: { name: 'PAS染色套装', version: 'v1.2' }, supportable: 0, status: 'active', supportDanger: true },
+            { id: 'SS-MASSON', name: 'Masson三色染色', type: 'ss', typeName: '病理技�?, cycle: '1个工作日', bom: { name: 'Masson染色套装', version: 'v1.0' }, supportable: 200, status: 'active' },
+            { id: 'SS-AB', name: 'AB染色(阿尔辛蓝染色)', type: 'ss', typeName: '病理技�?, cycle: '1个工作日', bom: { name: 'AB染色套装', version: 'v1.1' }, supportable: 150, status: 'active' },
+            { id: 'SS-PASM', name: 'PASM染色(六胺银染�?', type: 'ss', typeName: '病理技�?, cycle: '1个工作日', bom: { name: 'PASM染色套装', version: 'v1.0' }, supportable: 80, status: 'active' },
+            { id: 'SS-VG', name: 'VG染色(范吉森染�?', type: 'ss', typeName: '病理技�?, cycle: '1个工作日', bom: { name: 'VG染色套装', version: 'v1.0' }, supportable: 180, status: 'active' },
+            { id: 'SS-PTAH', name: 'PTAH染色(磷钨酸苏木素染色)', type: 'ss', typeName: '病理技�?, cycle: '1个工作日', bom: { name: 'PTAH染色套装', version: 'v1.0' }, supportable: 120, status: 'active' },
+            { id: 'SS-GRAM', name: '革兰氏染�?, type: 'ss', typeName: '病理技�?, cycle: '1个工作日', bom: { name: '细菌染色套装', version: 'v1.2' }, supportable: 250, status: 'active' },
+            { id: 'SS-ZN', name: '抗酸染色(齐尼染色)', type: 'ss', typeName: '病理技�?, cycle: '1个工作日', bom: { name: '抗酸染色套装', version: 'v1.1' }, supportable: 180, status: 'active' },
+            { id: 'SS-RETIC', name: '网状纤维染色', type: 'ss', typeName: '病理技�?, cycle: '1个工作日', bom: { name: '网状纤维染色套装', version: 'v1.0' }, supportable: 90, status: 'active' },
+            { id: 'SS-FAT', name: '脂肪染色(苏丹III/油红O)', type: 'ss', typeName: '病理技�?, cycle: '1个工作日', bom: { name: '脂肪染色套装', version: 'v1.0' }, supportable: 100, status: 'active' },
+            { id: 'MP-EGFR', name: 'EGFR基因突变检�?, type: 'mp', typeName: '分子诊断', cycle: '5-7个工作日', bom: { name: '分子检测标准套�?, version: 'v3.0' }, supportable: 5, status: 'active', supportDanger: true },
+            { id: 'MP-NGS', name: 'NGS高通量测序', type: 'mp', typeName: '分子诊断', cycle: '10-15个工作日', bom: { name: 'NGS建库试剂套装', version: 'v2.3' }, supportable: 80, status: 'active' },
+            { id: 'MP-FISH', name: 'FISH荧光原位杂交', type: 'mp', typeName: '分子诊断', cycle: '3-5个工作日', bom: null, supportable: null, status: 'paused' },
+            { id: 'CYTO-TCT', name: '液基薄层细胞学检�?TCT)', type: 'cyto', typeName: '病理诊断', cycle: '2-3个工作日', bom: { name: '液基细胞学套�?, version: 'v2.0' }, supportable: 200, status: 'active' },
+            { id: 'CYTO-FNA', name: '细针穿刺细胞学检�?, type: 'cyto', typeName: '病理诊断', cycle: '1-2个工作日', bom: { name: '穿刺细胞学套�?, version: 'v1.5' }, supportable: 150, status: 'active' },
+            { id: 'CYTO-EXF', name: '脱落细胞学检�?, type: 'cyto', typeName: '病理诊断', cycle: '1-2个工作日', bom: { name: '脱落细胞学套�?, version: 'v1.2' }, supportable: 180, status: 'active' }
+        ];
+        
+        const bomsData = [
+            { id: 'BOM-001', code: 'BOM-001', name: 'HE制片标准套装', version: 'v2.3', materialStatus: 'sufficient', unitCost: 12.50, supportableSamples: 150, materialCount: 8 },
+            { id: 'BOM-002', code: 'BOM-002', name: '冰冻切片套装', version: 'v1.8', materialStatus: 'low', unitCost: 45.00, supportableSamples: 25, materialCount: 6 },
+            { id: 'BOM-003', code: 'BOM-003', name: '免疫组化标准套装', version: 'v1.5', materialStatus: 'sufficient', unitCost: 35.00, supportableSamples: 120, materialCount: 7 },
+            { id: 'BOM-004', code: 'BOM-004', name: 'HER2检测套�?, version: 'v2.0', materialStatus: 'sufficient', unitCost: 68.00, supportableSamples: 85, materialCount: 5 },
+            { id: 'BOM-005', code: 'BOM-005', name: '分子检测标准套�?, version: 'v3.0', materialStatus: 'insufficient', unitCost: 185.00, supportableSamples: 5, materialCount: 12 },
+            { id: 'BOM-006', code: 'BOM-006', name: 'NGS建库试剂套装', version: 'v2.3', materialStatus: 'sufficient', unitCost: 320.00, supportableSamples: 80, materialCount: 24 },
+            { id: 'BOM-007', code: 'BOM-007', name: '细菌染色套装', version: 'v1.2', materialStatus: 'sufficient', unitCost: 8.50, supportableSamples: 250, materialCount: 4 },
+            { id: 'BOM-008', code: 'BOM-008', name: '液基细胞学套�?, version: 'v2.0', materialStatus: 'sufficient', unitCost: 28.00, supportableSamples: 200, materialCount: 6 }
+        ];
+        
+        function getMaterialStatusIcon(status) {
+            switch(status) {
+                case 'sufficient': return '🟢 充足';
+                case 'low': return '🟡 偏低';
+                case 'insufficient': return '🔴 不足';
+                default: return '�?未知';
+            }
+        }
+        
+        function renderBomSelect() {
+            const bomSelect = document.getElementById('bom-select');
+            if (!bomSelect) return;
+            
+            bomSelect.innerHTML = '<option value="">请选择BOM清单</option>';
+            
+            bomsData.forEach(bom => {
+                const option = document.createElement('option');
+                option.value = bom.id;
+                option.textContent = `${bom.code} - ${bom.name} (${bom.version} | ${getMaterialStatusIcon(bom.materialStatus)} | ¥${bom.unitCost.toFixed(2)}/样本)`;
+                bomSelect.appendChild(option);
+            });
+        }
+        
+        function showToast(message, type = 'info') {
+            let container = document.querySelector('.toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+            
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <svg class="toast-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    ${type === 'success' ? '<polyline points="20 6 9 17 4 12"/>' : type === 'error' ? '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>' : type === 'warning' ? '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>' : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'}
+                </svg>
+                <span>${message}</span>
+                <button class="toast-close" onclick="this.parentElement.remove()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+        
+        function showModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            currentOpenModal = modalId;
+            
+            setTimeout(() => {
+                const firstInput = modal.querySelector('input:not([type="hidden"]):not([type="checkbox"]):not([readonly]), select:not([disabled]), textarea');
+                if (firstInput) firstInput.focus();
+            }, 100);
+            
+            if (modalId === 'create-project-modal') {
+                currentStep = 1;
+                updateStepUI();
+            }
+        }
+        
+        function hideModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            currentOpenModal = null;
+            
+            if (modalId === 'create-project-modal') {
+                resetCreateForm();
+            }
+        }
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && currentOpenModal) {
+                hideModal(currentOpenModal);
+            }
+        });
+        
+        function resetCreateForm() {
+            currentStep = 1;
+            updateStepUI();
+            const form = document.querySelector('#create-project-modal form');
+            if (form) form.reset();
+        }
+        
+        function nextStep() {
+            if (currentStep === 1) {
+                const typeSelect = document.querySelector('#step1-content select');
+                const nameInput = document.querySelector('#step1-content input[placeholder="请输入服务名�?]');
+                if (!typeSelect.value) {
+                    showToast('请选择服务类型', 'error');
+                    return;
+                }
+                if (!nameInput.value.trim()) {
+                    showToast('请输入服务名�?, 'error');
+                    nameInput.focus();
+                    return;
+                }
+            }
+            
+            if (currentStep === 2) {
+                createService();
+                return;
+            }
+            
+            if (currentStep < 3) {
+                currentStep++;
+                updateStepUI();
+            }
+        }
+        
+        function prevStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                updateStepUI();
+            }
+        }
+        
+        function updateStepUI() {
+            document.getElementById('step1-content').style.display = currentStep === 1 ? 'block' : 'none';
+            document.getElementById('step2-content').style.display = currentStep === 2 ? 'block' : 'none';
+            document.getElementById('step3-content').style.display = currentStep === 3 ? 'block' : 'none';
+            
+            document.getElementById('step1-indicator').className = 'step-item' + (currentStep >= 1 ? (currentStep === 1 ? ' active' : ' completed') : '');
+            document.getElementById('step2-indicator').className = 'step-item' + (currentStep >= 2 ? (currentStep === 2 ? ' active' : ' completed') : '');
+            document.getElementById('step3-indicator').className = 'step-item' + (currentStep >= 3 ? ' active' : '');
+            
+            document.querySelectorAll('.step-line')[0].className = 'step-line' + (currentStep > 1 ? ' completed' : '');
+            document.querySelectorAll('.step-line')[1].className = 'step-line' + (currentStep > 2 ? ' completed' : '');
+            
+            document.getElementById('prev-step-btn').style.display = currentStep > 1 && currentStep < 3 ? 'inline-flex' : 'none';
+            document.getElementById('next-step-btn').textContent = currentStep === 2 ? '创建' : (currentStep === 3 ? '完成' : '下一�?);
+            document.getElementById('create-modal-footer').style.display = currentStep === 3 ? 'none' : 'flex';
+            
+            if (currentStep === 3) {
+                showToast('检测服务创建成�?, 'success');
+            }
+        }
+        
+        function toggleBomOption(option) {
+            document.getElementById('select-bom-section').style.display = option === 'select' ? 'block' : 'none';
+            document.getElementById('create-bom-section').style.display = option === 'create' ? 'block' : 'none';
+            document.getElementById('skip-bom-section').style.display = option === 'skip' ? 'block' : 'none';
+        }
+        
+        function switchEditTab(tab) {
+            document.querySelectorAll('#edit-project-modal .tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('edit-basic-tab').style.display = tab === 'basic' ? 'block' : 'none';
+            document.getElementById('edit-bom-tab').style.display = tab === 'bom' ? 'block' : 'none';
+        }
+        
+        function toggleSelectAll() {
+            const selectAll = document.getElementById('select-all');
+            document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = selectAll.checked);
+            updateSelection();
+        }
+        
+        function updateSelection() {
+            const checkboxes = document.querySelectorAll('.row-checkbox');
+            const checked = document.querySelectorAll('.row-checkbox:checked');
+            document.getElementById('selected-count').textContent = checked.length;
+            document.getElementById('batch-actions').classList.toggle('show', checked.length > 0);
+            document.getElementById('select-all').checked = checked.length === checkboxes.length && checkboxes.length > 0;
+        }
+        
+        function cancelSelection() {
+            document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+            document.getElementById('select-all').checked = false;
+            updateSelection();
+        }
+        
+        function batchEnable() {
+            const checked = document.querySelectorAll('.row-checkbox:checked');
+            if (checked.length === 0) {
+                showToast('请选择要启用的服务', 'warning');
+                return;
+            }
+            const checkedRows = Array.from(checked).map(cb => cb.closest('tr'));
+            const checkedIds = checkedRows.map(row => row.querySelector('.mono-text').textContent);
+            
+            checkedIds.forEach(id => {
+                const service = servicesData.find(s => s.id === id);
+                if (service) service.status = 'active';
+            });
+            
+            showToast(`已启�?${checked.length} 个检测服务`, 'success');
+            renderTable(servicesData);
+            updateStats();
+            cancelSelection();
+        }
+        
+        function batchDisable() {
+            const checked = document.querySelectorAll('.row-checkbox:checked');
+            if (checked.length === 0) {
+                showToast('请选择要停用的服务', 'warning');
+                return;
+            }
+            const checkedRows = Array.from(checked).map(cb => cb.closest('tr'));
+            const checkedIds = checkedRows.map(row => row.querySelector('.mono-text').textContent);
+            
+            checkedIds.forEach(id => {
+                const service = servicesData.find(s => s.id === id);
+                if (service) service.status = 'paused';
+            });
+            
+            showToast(`已停�?${checked.length} 个检测服务`, 'success');
+            renderTable(servicesData);
+            updateStats();
+            cancelSelection();
+        }
+        
+        function createService() {
+            if (isSubmitting) return;
+            
+            const typeSelect = document.querySelector('#step1-content select');
+            const nameInput = document.querySelector('#step1-content input[placeholder="请输入服务名�?]');
+            const cycleInput = document.querySelector('#step1-content input[placeholder="请输入检测周�?]');
+            
+            if (!typeSelect.value || !nameInput.value.trim()) {
+                showToast('请填写必填信�?, 'error');
+                return;
+            }
+            
+            isSubmitting = true;
+            const nextBtn = document.getElementById('next-step-btn');
+            nextBtn.disabled = true;
+            nextBtn.innerHTML = '<span class="spinner"></span> 创建�?..';
+            
+            setTimeout(() => {
+                const typeMap = {
+                    '病理技�?HE': 'he',
+                    '病理技�?IHC': 'ihc', 
+                    '病理技�?特殊染色': 'ss',
+                    '分子诊断': 'mp',
+                    '病理诊断': 'cyto'
+                };
+                
+                const typeNameMap = {
+                    'he': '病理技�?,
+                    'ihc': '病理技�?,
+                    'ss': '病理技�?,
+                    'mp': '分子诊断',
+                    'cyto': '病理诊断'
+                };
+                
+                const type = typeMap[typeSelect.value] || 'he';
+                const newId = `${type.toUpperCase()}-${String(servicesData.length + 1).padStart(3, '0')}`;
+                
+                const newService = {
+                    id: newId,
+                    name: nameInput.value.trim(),
+                    type: type,
+                    typeName: typeNameMap[type],
+                    cycle: cycleInput.value.trim() || '1-2个工作日',
+                    bom: null,
+                    supportable: 100,
+                    status: 'active'
+                };
+                
+                servicesData.push(newService);
+                
+                isSubmitting = false;
+                nextBtn.disabled = false;
+                nextBtn.textContent = '创建';
+                
+                currentStep = 3;
+                updateStepUI();
+                renderTable(servicesData);
+                updateStats();
+                
+                setTimeout(() => {
+                    hideModal('create-project-modal');
+                }, 1500);
+            }, 800);
+        }
+        
+        function switchEditTab(evt, tab) {
+            document.querySelectorAll('#edit-project-modal .tab').forEach(t => t.classList.remove('active'));
+            evt.target.classList.add('active');
+            document.getElementById('edit-basic-tab').style.display = tab === 'basic' ? 'block' : 'none';
+            document.getElementById('edit-bom-tab').style.display = tab === 'bom' ? 'block' : 'none';
+        }
+        
+        function saveEditService() {
+            if (isSubmitting) return;
+            isSubmitting = true;
+            
+            showToast('正在保存...', 'info');
+            
+            setTimeout(() => {
+                showToast('检测服务已更新', 'success');
+                isSubmitting = false;
+                hideModal('edit-project-modal');
+                renderTable(servicesData);
+            }, 500);
+        }
+        
+        function renderTable(data) {
+            const tbody = document.querySelector('.data-table tbody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" style="text-align: center; padding: 48px 20px;">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" style="margin-bottom: 12px;">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                            <div style="color: var(--text-muted); font-size: 14px;">暂无检测服�?/div>
+                            <div style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">点击"新建服务"添加检测服�?/div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            const typeBadgeClass = {
+                'he': 'he', 'ihc': 'ihc', 'ss': 'ss', 'mp': 'mp', 'cyto': 'cyto'
+            };
+            
+            tbody.innerHTML = data.map(service => `
+                <tr data-type="${service.type}">
+                    <td class="checkbox-cell"><input type="checkbox" class="row-checkbox" onchange="updateSelection()"></td>
+                    <td class="mono-text">${service.id}</td>
+                    <td><strong>${service.name}</strong></td>
+                    <td><span class="type-badge ${typeBadgeClass[service.type] || ''}">${service.typeName}</span></td>
+                    <td>${service.cycle}</td>
+                    <td>
+                        <div class="bom-info">
+                            ${service.bom 
+                                ? `<span class="bom-name">${service.bom.name}</span><span class="bom-version">${service.bom.version}</span>` 
+                                : `<span class="bom-name" style="color: var(--text-muted);">未配�?/span>`}
+                        </div>
+                    </td>
+                    <td class="supportable-samples${service.supportDanger ? ' danger' : service.supportWarning ? ' warning' : ''}">${service.supportable !== null ? service.supportable : '-'}</td>
+                    <td><span class="status-badge ${service.status === 'active' ? 'status-success' : 'status-secondary'}">${service.status === 'active' ? '已启�? : '已停�?}</span></td>
+                    <td>
+                        <div class="action-btns">
+                            <a href="project-detail.html" class="btn btn-ghost btn-sm">详情</a>
+                            <button class="btn btn-ghost btn-sm" onclick="showModal('edit-project-modal')">编辑</button>
+                            <button class="btn btn-ghost btn-sm" onclick="showModal('copy-project-modal')">复制</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        function updateStats() {
+            const total = servicesData.length;
+            const active = servicesData.filter(s => s.status === 'active').length;
+            const paused = servicesData.filter(s => s.status === 'paused').length;
+            const noBom = servicesData.filter(s => !s.bom).length;
+            
+            document.querySelector('.stat-card-primary .stat-value').textContent = total;
+            document.querySelector('.stat-card-success .stat-value').textContent = active;
+            document.querySelector('.stat-card-muted .stat-value').textContent = paused;
+            document.querySelector('.stat-card-warning .stat-value').textContent = noBom;
+        }
+        
+        function filterServices() {
+            const searchInput = document.querySelector('.search-box input');
+            const typeSelect = document.querySelectorAll('.filter-select')[0];
+            const statusSelect = document.querySelectorAll('.filter-select')[1];
+            const bomSelect = document.querySelectorAll('.filter-select')[2];
+            
+            const searchTerm = searchInput.value.toLowerCase();
+            const typeFilter = typeSelect.value;
+            const statusFilter = statusSelect.value;
+            const bomFilter = bomSelect.value;
+            
+            let filtered = servicesData.filter(service => {
+                const matchSearch = !searchTerm || 
+                    service.id.toLowerCase().includes(searchTerm) ||
+                    service.name.toLowerCase().includes(searchTerm);
+                
+                const matchType = typeFilter === '全部类型' || 
+                    (typeFilter === '病理技�? && ['he', 'ihc', 'ss'].includes(service.type)) ||
+                    (typeFilter === '分子诊断' && service.type === 'mp') ||
+                    (typeFilter === '病理诊断' && service.type === 'cyto');
+                
+                const matchStatus = statusFilter === '全部状�? ||
+                    (statusFilter === '已启�? && service.status === 'active') ||
+                    (statusFilter === '已停�? && service.status === 'paused');
+                
+                const matchBom = bomFilter === 'BOM配置' ||
+                    (bomFilter === '已配�? && service.bom) ||
+                    (bomFilter === '未配�? && !service.bom);
+                
+                return matchSearch && matchType && matchStatus && matchBom;
+            });
+            
+            renderTable(filtered);
+            
+            const paginationInfo = document.querySelector('.pagination-info');
+            if (paginationInfo) {
+                paginationInfo.textContent = `�?${filtered.length} 条记录`;
+            }
+        }
+        
+        function resetFilters() {
+            document.querySelector('.search-box input').value = '';
+            document.querySelectorAll('.filter-select').forEach(s => s.selectedIndex = 0);
+            renderTable(servicesData);
+            document.querySelector('.pagination-info').textContent = `�?${servicesData.length} 条记录`;
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            renderTable(servicesData);
+            updateStats();
+            renderBomSelect();
+            
+            document.querySelector('.search-box input').addEventListener('input', filterServices);
+            document.querySelectorAll('.filter-select').forEach(s => s.addEventListener('change', filterServices));
+            
+            const filterBar = document.querySelector('.filter-bar');
+            if (filterBar) {
+                const queryBtn = filterBar.querySelector('.btn-secondary.btn-sm');
+                const resetBtn = filterBar.querySelector('.btn-ghost.btn-sm');
+                if (queryBtn) queryBtn.addEventListener('click', filterServices);
+                if (resetBtn) resetBtn.addEventListener('click', resetFilters);
+            }
+        });
+        
+        window.showModal = showModal;
+        window.hideModal = hideModal;
+        window.nextStep = nextStep;
+        window.prevStep = prevStep;
+        window.toggleBomOption = toggleBomOption;
+        window.switchEditTab = switchEditTab;
+        window.toggleSelectAll = toggleSelectAll;
+        window.updateSelection = updateSelection;
+        window.cancelSelection = cancelSelection;
+        window.batchEnable = batchEnable;
+        window.batchDisable = batchDisable;
+        window.createService = createService;
+        window.saveEditService = saveEditService;
+    </script>
+</body>
+</html>

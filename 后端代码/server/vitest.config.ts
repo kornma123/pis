@@ -1,0 +1,19 @@
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
+    globals: true,
+    environment: 'node',
+  },
+  resolve: {
+    alias: {
+      'node:sqlite': 'node:sqlite',
+    },
+  },
+  build: {
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
+  },
+})

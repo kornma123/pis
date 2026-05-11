@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>批量出库 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="batch-outbound-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-xl" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">批量出库</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">关联项目 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="">请选择项目</option>
+                            <option value="PRJ-001">全外显子组测序</option>
+                            <option value="PRJ-002">肿瘤基因突变检测</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">样本数量</label>
+                        <input type="number" class="form-input" value="96" min="1">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">选择BOM模板</label>
+                        <select class="form-select">
+                            <option value="">不套用模板，手动选择</option>
+                            <option value="BOM-001">NGS建库试剂套装 (v2.3)</option>
+                            <option value="BOM-002">PCR扩增试剂套装 (v1.5)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-header">
+                    <h4 class="card-title">出库物料清单</h4>
+                    <button class="btn btn-ghost btn-sm">+ 添加物料</button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>物料名称</th>
+                            <th>规格型号</th>
+                            <th>批次号</th>
+                            <th>可用库存</th>
+                            <th>出库数量</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>DNA提取试剂盒</td>
+                            <td>v2.0，96次反应</td>
+                            <td>
+                                <select class="form-select form-select-sm">
+                                    <option>LOT-2024-0156</option>
+                                    <option>LOT-2024-0157</option>
+                                </select>
+                            </td>
+                            <td>25盒</td>
+                            <td>
+                                <div class="number-stepper">
+                                    <button class="stepper-btn">−</button>
+                                    <input type="number" class="stepper-input" value="1" min="1">
+                                    <button class="stepper-btn">+</button>
+                                </div>
+                            </td>
+                            <td><button class="btn btn-ghost btn-sm">删除</button></td>
+                        </tr>
+                        <tr>
+                            <td>PCR Master Mix</td>
+                            <td>2X，500次反应</td>
+                            <td>
+                                <select class="form-select form-select-sm">
+                                    <option>LOT-2024-0234</option>
+                                </select>
+                            </td>
+                            <td>18盒</td>
+                            <td>
+                                <div class="number-stepper">
+                                    <button class="stepper-btn">−</button>
+                                    <input type="number" class="stepper-input" value="1" min="1">
+                                    <button class="stepper-btn">+</button>
+                                </div>
+                            </td>
+                            <td><button class="btn btn-ghost btn-sm">删除</button></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">取消</button>
+            <button class="btn btn-primary">确认批量出库</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

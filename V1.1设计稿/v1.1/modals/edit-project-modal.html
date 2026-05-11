@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑项目 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="edit-project-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">编辑项目</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">项目名称 <span class="required">*</span></label>
+                        <input type="text" class="form-input" value="全外显子组测序项目">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">项目编号</label>
+                        <input type="text" class="form-input mono-text" value="PRJ-2024-001" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">负责人 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="1" selected>张博士</option>
+                            <option value="2">李实验员</option>
+                            <option value="3">王主管</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">项目状态</label>
+                        <select class="form-select">
+                            <option value="active" selected>进行中</option>
+                            <option value="pending">待开始</option>
+                            <option value="completed">已完成</option>
+                            <option value="paused">已暂停</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">实际完成样本数</label>
+                        <input type="number" class="form-input" value="1247">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">项目描述</label>
+                        <textarea class="form-textarea" rows="3">全外显子组测序项目，用于遗传病筛查研究</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-danger btn-sm" style="margin-right: auto;">删除项目</button>
+            <button class="btn btn-secondary">取消</button>
+            <button class="btn btn-primary">保存修改</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

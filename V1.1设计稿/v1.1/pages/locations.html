@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>库位管理 - COREONE v1.1</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="inventory-list.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <span>库存列表</span>
+            </a>
+            <a href="inbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>入库记录</span>
+            </a>
+            <a href="outbound.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>出库记录</span>
+            </a>
+            <a href="scrap.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>报废管理</span>
+            </a>
+            <a href="stocktaking.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+                <span>库存盘点</span>
+            </a>
+            <a href="projects.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>检测服�?/span>
+            </a>
+            <a href="bom.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>BOM清单</span>
+            </a>
+            <a href="cost-analysis.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="20" x2="12" y2="10"/>
+                    <line x1="18" y1="20" x2="18" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="16"/>
+                </svg>
+                <span>物料成本分析</span>
+            </a>
+            <a href="categories.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="8" y1="6" x2="21" y2="6"/>
+                    <line x1="8" y1="12" x2="21" y2="12"/>
+                    <line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/>
+                    <line x1="3" y1="12" x2="3.01" y2="12"/>
+                    <line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                <span>物料分类</span>
+            </a>
+            <a href="consumable-config.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                </svg>
+                <span>耗材配置</span>
+            </a>
+            <a href="rules.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>规则配置</span>
+            </a>
+            <a href="alerts.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span>预警中心</span>
+            </a>
+            <div class="nav-divider"></div>
+            <a href="suppliers.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>供应商管�?/span>
+            </a>
+            <a href="locations.html" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span>库位管理</span>
+            </a>
+            <a href="users.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>用户管理</span>
+            </a>
+            <a href="roles.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>角色管理</span>
+            </a>
+            <a href="logs.html" class="nav-item">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <span>操作日志</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">库位管理</h1>
+                <p class="page-subtitle">管理仓库库位，支持自定义多层级库位结�?/p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="showModal('level-config-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                    层级配置
+                </button>
+                <button class="btn btn-primary" onclick="showModal('location-add-modal')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    新建库位
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">3</div>
+                <div class="stat-label">层级数量</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">3</div>
+                <div class="stat-label">库区数量</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">12</div>
+                <div class="stat-label">货架数量</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">48</div>
+                <div class="stat-label">库位数量</div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 280px 1fr; gap: 20px;">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">库位结构</span>
+                </div>
+                <div class="location-tree">
+                    <div class="location-tree-item active">
+                        <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                        <span class="item-name">A区（试剂区）</span>
+                        <span class="item-count">16</span>
+                    </div>
+                    <div class="location-tree-item" style="padding-left: 32px;">
+                        <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                        <span class="item-name">A-01货架</span>
+                        <span class="item-count">4</span>
+                    </div>
+                    <div class="location-tree-item" style="padding-left: 48px;">
+                        <span style="width: 16px;"></span>
+                        <span class="item-name">A-01-01</span>
+                    </div>
+                    <div class="location-tree-item" style="padding-left: 48px;">
+                        <span style="width: 16px;"></span>
+                        <span class="item-name">A-01-02</span>
+                    </div>
+                    <div class="location-tree-item" style="padding-left: 32px;">
+                        <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                        <span class="item-name">A-02货架</span>
+                        <span class="item-count">4</span>
+                    </div>
+                    <div class="location-tree-item">
+                        <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                        <span class="item-name">B区（抗体区）</span>
+                        <span class="item-count">16</span>
+                    </div>
+                    <div class="location-tree-item">
+                        <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                        <span class="item-name">C区（耗材区）</span>
+                        <span class="item-count">16</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">A区（试剂区）- 库位详情</span>
+                    <div class="filter-bar">
+                        <select class="filter-select">
+                            <option>全部状�?/option>
+                            <option>在用</option>
+                            <option>空闲</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm">查询</button>
+                    </div>
+                </div>
+                <div class="location-grid">
+                    <div class="location-card active">
+                        <div class="location-header">
+                            <span class="location-code">A-01-01</span>
+                            <span class="location-status active">在用</span>
+                        </div>
+                        <div class="location-info">
+                            <div class="location-info-item">
+                                <span>物料数量</span>
+                                <span>8 �?/span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>库存总量</span>
+                                <span>156</span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>容量利用�?/span>
+                                <span>78%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="location-card">
+                        <div class="location-header">
+                            <span class="location-code">A-01-02</span>
+                            <span class="location-status active">在用</span>
+                        </div>
+                        <div class="location-info">
+                            <div class="location-info-item">
+                                <span>物料数量</span>
+                                <span>5 �?/span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>库存总量</span>
+                                <span>89</span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>容量利用�?/span>
+                                <span>45%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="location-card">
+                        <div class="location-header">
+                            <span class="location-code">A-01-03</span>
+                            <span class="location-status active">在用</span>
+                        </div>
+                        <div class="location-info">
+                            <div class="location-info-item">
+                                <span>物料数量</span>
+                                <span>12 �?/span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>库存总量</span>
+                                <span>234</span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>容量利用�?/span>
+                                <span>92%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="location-card">
+                        <div class="location-header">
+                            <span class="location-code">A-01-04</span>
+                            <span class="location-status inactive">空闲</span>
+                        </div>
+                        <div class="location-info">
+                            <div class="location-info-item">
+                                <span>物料数量</span>
+                                <span>0 �?/span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>库存总量</span>
+                                <span>0</span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>容量利用�?/span>
+                                <span>0%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="location-card">
+                        <div class="location-header">
+                            <span class="location-code">A-02-01</span>
+                            <span class="location-status active">在用</span>
+                        </div>
+                        <div class="location-info">
+                            <div class="location-info-item">
+                                <span>物料数量</span>
+                                <span>6 �?/span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>库存总量</span>
+                                <span>178</span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>容量利用�?/span>
+                                <span>67%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="location-card">
+                        <div class="location-header">
+                            <span class="location-code">A-02-02</span>
+                            <span class="location-status active">在用</span>
+                        </div>
+                        <div class="location-info">
+                            <div class="location-info-item">
+                                <span>物料数量</span>
+                                <span>3 �?/span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>库存总量</span>
+                                <span>45</span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>容量利用�?/span>
+                                <span>23%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="level-config-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('level-config-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">库位层级配置</h3>
+                <button class="modal-close" onclick="hideModal('level-config-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 16px; padding: 12px; background: var(--primary-light); border-radius: var(--radius-md); font-size: 13px; color: var(--primary);">
+                    <strong>提示�?/strong>层级配置修改后，需要重新调整库位结构。建议在初始化时设置好层级�?
+                </div>
+                <div class="form-group">
+                    <label class="form-label">当前层级结构</label>
+                    <div id="level-list">
+                        <div class="level-config-item">
+                            <svg class="level-drag" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+                                <circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+                            </svg>
+                            <span style="font-weight: 500; min-width: 60px;">�?�?/span>
+                            <input type="text" class="form-input level-name-input" value="库区" placeholder="层级名称">
+                            <div class="level-actions">
+                                <button class="btn btn-ghost btn-sm" disabled title="无法删除第一�?>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="level-config-item">
+                            <svg class="level-drag" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+                                <circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+                            </svg>
+                            <span style="font-weight: 500; min-width: 60px;">�?�?/span>
+                            <input type="text" class="form-input level-name-input" value="货架" placeholder="层级名称">
+                            <div class="level-actions">
+                                <button class="btn btn-ghost btn-sm" title="删除此层�?>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="level-config-item">
+                            <svg class="level-drag" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+                                <circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+                            </svg>
+                            <span style="font-weight: 500; min-width: 60px;">�?�?/span>
+                            <input type="text" class="form-input level-name-input" value="库位" placeholder="层级名称">
+                            <div class="level-actions">
+                                <button class="btn btn-ghost btn-sm" title="删除此层�?>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" onclick="addLevel()" style="width: 100%;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    添加层级
+                </button>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('level-config-modal')">取消</button>
+                <button class="btn btn-primary">保存配置</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="location-add-modal" class="modal">
+        <div class="modal-overlay" onclick="hideModal('location-add-modal')"></div>
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3 class="modal-title">新建库位</h3>
+                <button class="modal-close" onclick="hideModal('location-add-modal')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form class="form">
+                    <div class="form-group">
+                        <label class="form-label">所属层�?<span class="required">*</span></label>
+                        <select class="form-select" id="level-select" onchange="updateParentOptions()">
+                            <option value="">请选择层级</option>
+                            <option value="1">库区（第1层）</option>
+                            <option value="2">货架（第2层）</option>
+                            <option value="3">库位（第3层）</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="parent-group" style="display: none;">
+                        <label class="form-label">上级库位 <span class="required">*</span></label>
+                        <select class="form-select" id="parent-select">
+                            <option value="">请选择上级库位</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">库位编码 <span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="请输入库位编�?>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+                            编码将自动拼接上级编码，如：A-01-01
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">库位名称 <span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="请输入库位名�?>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">容量限制</label>
+                            <input type="number" class="form-input" placeholder="请输入容�?>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">温度要求</label>
+                            <select class="form-select">
+                                <option value="">无特殊要�?/option>
+                                <option value="cold">冷藏 (2-8°C)</option>
+                                <option value="frozen">冷冻 (-20°C)</option>
+                                <option value="deep-frozen">超低�?(-80°C)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">备注</label>
+                        <textarea class="form-textarea" rows="2" placeholder="请输入备�?></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('location-add-modal')">取消</button>
+                <button class="btn btn-primary">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentOpenModal = null;
+        
+        const locationsData = [
+            { id: 'LOC-001', name: 'A�?3-101', zone: 'A�?, zoneName: '试剂�?, shelf: '3�?, position: '101', status: 'active', materialCount: 8, stockTotal: 156, utilization: 78 },
+            { id: 'LOC-002', name: 'A�?3-102', zone: 'A�?, zoneName: '试剂�?, shelf: '3�?, position: '102', status: 'active', materialCount: 5, stockTotal: 89, utilization: 45 },
+            { id: 'LOC-003', name: 'A�?3-103', zone: 'A�?, zoneName: '试剂�?, shelf: '3�?, position: '103', status: 'active', materialCount: 12, stockTotal: 234, utilization: 92 },
+            { id: 'LOC-004', name: 'A�?3-104', zone: 'A�?, zoneName: '试剂�?, shelf: '3�?, position: '104', status: 'inactive', materialCount: 0, stockTotal: 0, utilization: 0 },
+            { id: 'LOC-005', name: 'B�?1-101', zone: 'B�?, zoneName: '抗体�?, shelf: '1�?, position: '101', status: 'active', materialCount: 6, stockTotal: 178, utilization: 67 },
+            { id: 'LOC-006', name: 'B�?1-102', zone: 'B�?, zoneName: '抗体�?, shelf: '1�?, position: '102', status: 'active', materialCount: 3, stockTotal: 45, utilization: 23 }
+        ];
+        
+        const zonesData = [
+            { id: 'A', name: 'A区（试剂区）', count: 16 },
+            { id: 'B', name: 'B区（抗体区）', count: 16 },
+            { id: 'C', name: 'C区（耗材区）', count: 16 }
+        ];
+        
+        const statusOptions = [
+            { value: 'active', label: '在用', class: 'active' },
+            { value: 'inactive', label: '空闲', class: 'inactive' }
+        ];
+        
+        function renderLocationTree() {
+            const treeContainer = document.querySelector('.location-tree');
+            if (!treeContainer) return;
+            
+            treeContainer.innerHTML = zonesData.map((zone, index) => {
+                const isActive = index === 0 ? 'active' : '';
+                const expandIcon = index === 0 
+                    ? '<svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>'
+                    : '<svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>';
+                
+                let html = `
+                    <div class="location-tree-item ${isActive}" onclick="selectZone('${zone.id}')">
+                        ${expandIcon}
+                        <span class="item-name">${zone.name}</span>
+                        <span class="item-count">${zone.count}</span>
+                    </div>
+                `;
+                
+                if (index === 0) {
+                    const zoneLocations = locationsData.filter(l => l.zone === zone.id);
+                    html += zoneLocations.map(loc => `
+                        <div class="location-tree-item" style="padding-left: 32px;" onclick="selectLocation('${loc.id}')">
+                            <span style="width: 16px;"></span>
+                            <span class="item-name">${loc.name}</span>
+                        </div>
+                    `).join('');
+                }
+                
+                return html;
+            }).join('');
+        }
+        
+        function renderLocationGrid(zoneId) {
+            const gridContainer = document.querySelector('.location-grid');
+            if (!gridContainer) return;
+            
+            const zoneLocations = locationsData.filter(l => l.zone === zoneId);
+            
+            if (zoneLocations.length === 0) {
+                gridContainer.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 48px 20px; color: var(--text-muted);">
+                        该区域暂无库位数�?
+                    </div>
+                `;
+                return;
+            }
+            
+            gridContainer.innerHTML = zoneLocations.map(loc => {
+                const status = statusOptions.find(s => s.value === loc.status) || statusOptions[0];
+                return `
+                    <div class="location-card" onclick="selectLocation('${loc.id}')">
+                        <div class="location-header">
+                            <span class="location-code">${loc.name}</span>
+                            <span class="location-status ${status.class}">${status.label}</span>
+                        </div>
+                        <div class="location-info">
+                            <div class="location-info-item">
+                                <span>物料数量</span>
+                                <span>${loc.materialCount} �?/span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>库存总量</span>
+                                <span>${loc.stockTotal}</span>
+                            </div>
+                            <div class="location-info-item">
+                                <span>容量利用�?/span>
+                                <span>${loc.utilization}%</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateStats() {
+            const zones = new Set(locationsData.map(l => l.zone));
+            const shelves = new Set(locationsData.map(l => l.zone + '-' + l.shelf));
+            
+            const statCards = document.querySelectorAll('.stat-card .stat-value');
+            if (statCards.length >= 4) {
+                statCards[0].textContent = '3';
+                statCards[1].textContent = zones.size;
+                statCards[2].textContent = shelves.size;
+                statCards[3].textContent = locationsData.length;
+            }
+        }
+        
+        function selectZone(zoneId) {
+            const zone = zonesData.find(z => z.id === zoneId);
+            if (zone) {
+                document.querySelector('.card-title').textContent = zone.name + ' - 库位详情';
+            }
+            renderLocationGrid(zoneId);
+            
+            document.querySelectorAll('.location-tree-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+        }
+        
+        function selectLocation(locationId) {
+            const location = locationsData.find(l => l.id === locationId);
+        }
+        
+        function showModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            currentOpenModal = modalId;
+            
+            setTimeout(() => {
+                const firstInput = modal.querySelector('input:not([type="hidden"]):not([readonly]), select:not([disabled]), textarea');
+                if (firstInput) firstInput.focus();
+            }, 100);
+        }
+        
+        function hideModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (!modal) return;
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            currentOpenModal = null;
+        }
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && currentOpenModal) {
+                hideModal(currentOpenModal);
+            }
+        });
+        
+        function updateParentOptions() {
+            const levelSelect = document.getElementById('level-select');
+            const parentGroup = document.getElementById('parent-group');
+            const parentSelect = document.getElementById('parent-select');
+            
+            if (levelSelect.value === '1') {
+                parentGroup.style.display = 'none';
+            } else {
+                parentGroup.style.display = 'block';
+                parentSelect.innerHTML = '<option value="">请选择上级库位</option>';
+                
+                if (levelSelect.value === '2') {
+                    zonesData.forEach(zone => {
+                        parentSelect.innerHTML += `<option value="${zone.id}">${zone.name}</option>`;
+                    });
+                } else if (levelSelect.value === '3') {
+                    const shelves = [...new Set(locationsData.map(l => l.zone + '-' + l.shelf))];
+                    shelves.forEach(shelf => {
+                        parentSelect.innerHTML += `<option value="${shelf}">${shelf}货架</option>`;
+                    });
+                }
+            }
+        }
+        
+        let levelCount = 3;
+        function addLevel() {
+            levelCount++;
+            const levelList = document.getElementById('level-list');
+            const newLevel = document.createElement('div');
+            newLevel.className = 'level-config-item';
+            newLevel.innerHTML = `
+                <svg class="level-drag" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+                    <circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+                </svg>
+                <span style="font-weight: 500; min-width: 60px;">�?{levelCount}�?/span>
+                <input type="text" class="form-input level-name-input" placeholder="层级名称">
+                <div class="level-actions">
+                    <button class="btn btn-ghost btn-sm" title="删除此层�?>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                        </svg>
+                    </button>
+                </div>
+            `;
+            levelList.appendChild(newLevel);
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            renderLocationTree();
+            renderLocationGrid('A');
+            updateStats();
+        });
+    </script>
+</body>
+</html>

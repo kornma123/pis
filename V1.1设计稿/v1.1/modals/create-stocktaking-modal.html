@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新建盘点 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="create-stocktaking-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-lg" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">新建盘点</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">盘点名称 <span class="required">*</span></label>
+                        <input type="text" class="form-input" placeholder="如: 2024年第一季度盘点">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">盘点范围 <span class="required">*</span></label>
+                        <select class="form-select">
+                            <option value="all">全部物料</option>
+                            <option value="category">指定分类</option>
+                            <option value="location">指定库位</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">盘点方式</label>
+                        <select class="form-select">
+                            <option value="full">全盘</option>
+                            <option value="sample">抽盘</option>
+                            <option value="cycle">循环盘点</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">选择分类（盘点范围为"指定分类"时）</label>
+                        <select class="form-select">
+                            <option value="">请选择分类</option>
+                            <option value="1">试剂</option>
+                            <option value="2">耗材</option>
+                            <option value="3">设备</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">计划开始日期</label>
+                        <input type="date" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">负责人</label>
+                        <select class="form-select">
+                            <option value="">请选择负责人</option>
+                            <option value="1">张三</option>
+                            <option value="2">李四</option>
+                            <option value="3">王五</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-group-lg">
+                        <label class="form-label">备注</label>
+                        <textarea class="form-textarea" rows="2" placeholder="可选填"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 16px; padding: 12px; background: #eff6ff; border-radius: 6px; font-size: 13px; color: var(--text-secondary);">
+                <strong>提示：</strong>创建盘点后，系统将生成盘点清单，您可以在盘点详情页面逐项录入实际库存数量。
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">取消</button>
+            <button class="btn btn-primary">创建盘点</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>

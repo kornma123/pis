@@ -1,0 +1,2243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COREONE v2.2 - 设计系统验收</title>
+    <link rel="stylesheet" href="shared/styles.css">
+    <style>
+        .design-hero {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            padding: 48px 32px;
+            border-radius: 12px;
+            margin-bottom: 32px;
+        }
+        .design-hero h1 {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .design-hero p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        .design-hero .version {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+        .stats-overview {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        .stat-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .stat-box:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+        .stat-box-number {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--primary);
+            line-height: 1;
+        }
+        .stat-box-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+        .stat-box.success .stat-box-number { color: var(--success); }
+        .stat-box.warning .stat-box-number { color: var(--warning); }
+        .stat-box.danger .stat-box-number { color: var(--danger); }
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .module-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .module-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-default);
+        }
+        .module-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .module-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .module-icon.inventory { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+        .module-icon.project { background: linear-gradient(135deg, #22c55e, #16a34a); }
+        .module-icon.bom { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .module-icon.base { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+        .module-icon.alert { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .module-icon.report { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+        .module-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .module-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .module-stats {
+            display: flex;
+            gap: 16px;
+        }
+        .module-stat {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .module-stat-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .module-stat-dot.done { background: var(--success); }
+        .module-stat-dot.todo { background: var(--warning); }
+        .module-stat-dot.missing { background: var(--danger); }
+        .page-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+        .page-card {
+            background: var(--bg-page);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            padding: 14px;
+            transition: all 0.15s ease;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+        }
+        .page-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+            border-color: var(--primary);
+        }
+        .page-card.status-todo {
+            border-color: var(--warning);
+            background: #fffbeb;
+        }
+        .page-card.status-missing {
+            border-color: var(--danger);
+            background: #fef2f2;
+        }
+        .page-card-icon {
+            width: 36px;
+            height: 36px;
+            background: var(--primary-light);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            flex-shrink: 0;
+        }
+        .page-card-content {
+            flex: 1;
+            min-width: 0;
+        }
+        .page-card-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .page-card-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .page-card-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+        .page-card-status.done {
+            color: var(--success);
+            background: #f0fdf4;
+        }
+        .page-card-status.todo {
+            color: var(--warning);
+            background: #fffbeb;
+        }
+        .page-card-status.missing {
+            color: var(--danger);
+            background: #fef2f2;
+        }
+        .page-card-links {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+        .page-card-link {
+            font-size: 11px;
+            color: var(--primary);
+            background: var(--primary-light);
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-decoration: none;
+            transition: all 0.15s ease;
+        }
+        .page-card-link:hover {
+            background: var(--primary);
+            color: white;
+        }
+        .page-card-link.missing {
+            color: var(--danger);
+            background: #fef2f2;
+        }
+        .page-card-link.todo {
+            color: var(--warning);
+            background: #fffbeb;
+        }
+        .modal-list {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        .modal-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            background: var(--bg-page);
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.15s ease;
+            font-size: 13px;
+        }
+        .modal-item:hover {
+            background: var(--bg-hover);
+            border-color: var(--primary);
+        }
+        .modal-item.status-todo {
+            border-color: var(--warning);
+            background: #fffbeb;
+        }
+        .modal-item.status-missing {
+            border-color: var(--danger);
+            background: #fef2f2;
+        }
+        .modal-item-icon {
+            width: 24px;
+            height: 24px;
+            background: var(--bg-card);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+        .modal-item-status {
+            margin-left: auto;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+        .modal-item-status.done {
+            color: var(--success);
+            background: #f0fdf4;
+        }
+        .modal-item-status.todo {
+            color: var(--warning);
+            background: #fffbeb;
+        }
+        .modal-item-status.missing {
+            color: var(--danger);
+            background: #fef2f2;
+        }
+        .spec-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+        .spec-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            padding: 20px;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.15s ease;
+        }
+        .spec-card:hover {
+            box-shadow: var(--shadow-md);
+            border-color: var(--primary);
+        }
+        .spec-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .spec-card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .spec-card-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .spec-card-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+        .flow-diagram {
+            background: var(--bg-page);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .flow-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .flow-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .flow-node {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-size: 13px;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .flow-node:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .flow-node.page {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+        .flow-node.modal {
+            border-style: dashed;
+        }
+        .flow-node.status-todo {
+            border-color: var(--warning);
+            background: #fffbeb;
+        }
+        .flow-node.status-missing {
+            border-color: var(--danger);
+            background: #fef2f2;
+        }
+        .flow-arrow {
+            color: var(--text-muted);
+            font-size: 16px;
+        }
+        .flow-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            background: var(--bg-card);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .nav-tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--bg-page);
+            padding: 4px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+        .nav-tab {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .nav-tab:hover {
+            color: var(--text-primary);
+        }
+        .nav-tab.active {
+            background: var(--bg-card);
+            color: var(--primary);
+            box-shadow: var(--shadow-sm);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .quick-nav {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .quick-nav-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.15s ease;
+        }
+        .quick-nav-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .quick-nav-btn.primary {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+        .quick-nav-btn.primary:hover {
+            background: var(--primary-dark);
+        }
+        .quick-nav-btn.warning {
+            background: var(--warning);
+            border-color: var(--warning);
+            color: white;
+        }
+        .quick-nav-btn.danger {
+            background: var(--danger);
+            border-color: var(--danger);
+            color: white;
+        }
+        .legend {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            background: var(--bg-page);
+            border-radius: 8px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .legend-item:hover {
+            color: var(--text-primary);
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .legend-dot.done { background: var(--success); }
+        .legend-dot.todo { background: var(--warning); }
+        .legend-dot.missing { background: var(--danger); }
+        .check-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .check-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        .check-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-page);
+            border-radius: 8px;
+        }
+        .check-item-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 12px;
+        }
+        .check-item-icon.done {
+            background: var(--success);
+            color: white;
+        }
+        .check-item-icon.todo {
+            background: var(--warning);
+            color: white;
+        }
+        .check-item-icon.missing {
+            background: var(--danger);
+            color: white;
+        }
+        .check-item-content {
+            flex: 1;
+        }
+        .check-item-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        .check-item-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .status-badge-mini {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 8px;
+        }
+        .status-badge-mini.done { color: var(--success); background: #f0fdf4; }
+        .status-badge-mini.todo { color: var(--warning); background: #fffbeb; }
+        .status-badge-mini.missing { color: var(--danger); background: #fef2f2; }
+        .issue-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .issue-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-page);
+            border-radius: 8px;
+            border-left: 3px solid var(--border-default);
+        }
+        .issue-item.todo {
+            border-left-color: var(--warning);
+            background: #fffbeb;
+        }
+        .issue-item.missing {
+            border-left-color: var(--danger);
+            background: #fef2f2;
+        }
+        .issue-item-content {
+            flex: 1;
+        }
+        .issue-item-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        .issue-item-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .issue-item-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 12px;
+            background: var(--primary);
+            color: white;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 12px;
+            transition: all 0.15s ease;
+        }
+        .issue-item-action:hover {
+            background: var(--primary-dark);
+        }
+        .progress-bar {
+            height: 8px;
+            background: var(--bg-page);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--success);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+        }
+        .nav-flow {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px;
+            background: var(--bg-page);
+            border-radius: 8px;
+            margin-bottom: 24px;
+            overflow-x: auto;
+        }
+        .nav-flow-node {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-size: 13px;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+        .nav-flow-node:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .nav-flow-node.active {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            color: var(--primary);
+            font-weight: 500;
+        }
+        .nav-flow-node.done {
+            border-color: var(--success);
+        }
+        .nav-flow-node.todo {
+            border-color: var(--warning);
+            background: #fffbeb;
+        }
+        .nav-flow-node.missing {
+            border-color: var(--danger);
+            background: #fef2f2;
+        }
+        .nav-flow-arrow {
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+        .nav-flow-status {
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 4px;
+            margin-left: 4px;
+        }
+        .nav-flow-status.done { background: var(--success); color: white; }
+        .nav-flow-status.todo { background: var(--warning); color: white; }
+        .nav-flow-status.missing { background: var(--danger); color: white; }
+        .filter-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .filter-btn {
+            padding: 6px 12px;
+            background: var(--bg-page);
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .filter-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .filter-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+                <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+                <path d="M14 16L20 10L26 16L20 22L14 16Z" fill="white" opacity="0.6"/>
+            </svg>
+            <span>COREONE</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="#" class="nav-item active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                    <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                    <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                    <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                </svg>
+                <span>设计验收</span>
+            </a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <div class="design-hero">
+            <span class="version">v2.2 Modern Design</span>
+            <h1>COREONE 设计系统验收</h1>
+            <p>基于 Linear / Notion / Figma 的现代简约设计语言 · 完整覆盖业务需求</p>
+        </div>
+
+        <div class="stats-overview">
+            <div class="stat-box success" onclick="showTab('pages')">
+                <div class="stat-box-number">20</div>
+                <div class="stat-box-label">页面完成</div>
+            </div>
+            <div class="stat-box success" onclick="showTab('modals')">
+                <div class="stat-box-number">25</div>
+                <div class="stat-box-label">弹窗完成</div>
+            </div>
+            <div class="stat-box warning" onclick="filterByStatus('todo')">
+                <div class="stat-box-number">0</div>
+                <div class="stat-box-label">待优化</div>
+            </div>
+            <div class="stat-box danger" onclick="filterByStatus('missing')">
+                <div class="stat-box-number">0</div>
+                <div class="stat-box-label">缺失页面</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-box-number">8</div>
+                <div class="stat-box-label">业务模块</div>
+            </div>
+            <div class="stat-box success">
+                <div class="stat-box-number">100%</div>
+                <div class="stat-box-label">覆盖率</div>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item" onclick="filterByStatus('all')">
+                <div class="legend-dot done"></div>
+                <span>已完成 - 符合设计规范</span>
+            </div>
+            <div class="legend-item" onclick="filterByStatus('todo')">
+                <div class="legend-dot todo"></div>
+                <span>待优化 - 需要调整细节</span>
+            </div>
+            <div class="legend-item" onclick="filterByStatus('missing')">
+                <div class="legend-dot missing"></div>
+                <span>缺失 - 需要新建</span>
+            </div>
+        </div>
+
+        <div class="quick-nav">
+            <a href="pages/inventory-list.html" class="quick-nav-btn primary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                开始验收（库存列表）
+            </a>
+            <a href="../specs/interaction-specification-v1.0.md" class="quick-nav-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                交互规格说明书
+            </a>
+            <a href="../specs/field-specification-v1.0.md" class="quick-nav-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                字段规格说明书
+            </a>
+            <a href="../specs/business-rules-v1.0.md" class="quick-nav-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                业务规则说明书
+            </a>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('pages')">页面验收</button>
+            <button class="nav-tab" onclick="showTab('modals')">弹窗验收</button>
+            <button class="nav-tab" onclick="showTab('flow')">页面关系</button>
+            <button class="nav-tab" onclick="showTab('check')">验收清单</button>
+        </div>
+
+        <div id="pages-tab" class="tab-content active">
+            <div class="filter-bar">
+                <button class="filter-btn active" onclick="filterPages('all')">全部</button>
+                <button class="filter-btn" onclick="filterPages('done')">已完成</button>
+                <button class="filter-btn" onclick="filterPages('todo')">待优化</button>
+                <button class="filter-btn" onclick="filterPages('missing')">缺失</button>
+            </div>
+
+            <div class="module-section" data-module="inventory">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon inventory">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">库存管理模块</div>
+                            <div class="module-desc">管理实验室耗材库存，包括入库、出库、盘点等操作</div>
+                        </div>
+                    </div>
+                    <div class="module-stats">
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 7 页面</div>
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 9 弹窗</div>
+                    </div>
+                </div>
+                <div class="page-grid">
+                    <a href="pages/inventory-list.html" class="page-card" data-status="done" data-prev="" data-next="pages/inventory-detail.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                库存列表
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">查看所有物料库存状态和预警</div>
+                            <div class="page-card-links">
+                                <a href="pages/inventory-detail.html" class="page-card-link">→ 详情页</a>
+                                <a href="pages/inbound.html" class="page-card-link">→ 入库</a>
+                                <a href="pages/outbound.html" class="page-card-link">→ 出库</a>
+                                <a href="pages/stocktaking.html" class="page-card-link">→ 盘点</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/inventory-detail.html" class="page-card" data-status="done" data-prev="pages/inventory-list.html" data-next="pages/inbound.html" data-related="modals/inventory-detail-modal.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                库存详情
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">单个物料详细信息和流转记录</div>
+                            <div class="page-card-links">
+                                <a href="pages/inventory-list.html" class="page-card-link">← 返回列表</a>
+                                <a href="modals/inventory-detail-modal.html" class="page-card-link">弹窗版</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/inbound.html" class="page-card" data-status="done" data-prev="pages/inventory-detail.html" data-next="pages/outbound.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                入库记录
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">查看和管理所有入库操作</div>
+                            <div class="page-card-links">
+                                <a href="modals/inbound-modal.html" class="page-card-link">入库登记</a>
+                                <a href="modals/inbound-detail-modal.html" class="page-card-link">入库详情</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/outbound.html" class="page-card" data-status="done" data-prev="pages/inbound.html" data-next="pages/stocktaking.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                出库记录
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">查看和管理所有出库操作</div>
+                            <div class="page-card-links">
+                                <a href="modals/outbound-modal.html" class="page-card-link">出库领用</a>
+                                <a href="modals/outbound-detail-modal.html" class="page-card-link">出库详情</a>
+                                <a href="pages/projects.html" class="page-card-link">→ 关联项目</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/stocktaking.html" class="page-card" data-status="done" data-prev="pages/outbound.html" data-next="pages/return.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 11l3 3L22 4"/>
+                                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                库存盘点
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">执行库存盘点和差异调整</div>
+                            <div class="page-card-links">
+                                <a href="modals/create-stocktaking-modal.html" class="page-card-link">新建盘点</a>
+                                <a href="modals/stocktaking-detail-modal.html" class="page-card-link">盘点详情</a>
+                                <a href="modals/stocktaking-adjust-modal.html" class="page-card-link">处理差异</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/return.html" class="page-card" data-status="done" data-prev="pages/stocktaking.html" data-next="pages/scrap.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 12H5"/>
+                                <path d="M12 19l-7-7 7-7"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                退货管理
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">处理物料退货和退款记录</div>
+                            <div class="page-card-links">
+                                <a href="pages/inventory-list.html" class="page-card-link">← 库存列表</a>
+                                <a href="pages/suppliers.html" class="page-card-link">→ 供应商</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/scrap.html" class="page-card" data-status="done" data-prev="pages/return.html" data-next="pages/suppliers.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18"/>
+                                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                报废管理
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">处理过期或损坏物料报废</div>
+                            <div class="page-card-links">
+                                <a href="pages/inventory-list.html" class="page-card-link">← 库存列表</a>
+                                <a href="pages/locations.html" class="page-card-link">→ 库位管理</a>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <div class="module-section" data-module="project">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon project">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">检测项目模块</div>
+                            <div class="module-desc">管理检测项目，关联BOM配置，核算项目成本</div>
+                        </div>
+                    </div>
+                    <div class="module-stats">
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 2 页面</div>
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 2 弹窗</div>
+                    </div>
+                </div>
+                <div class="page-grid">
+                    <a href="pages/projects.html" class="page-card" data-status="done" data-prev="pages/stocktaking.html" data-next="pages/project-detail.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                检测项目
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">管理检测项目和BOM关联</div>
+                            <div class="page-card-links">
+                                <a href="pages/project-detail.html" class="page-card-link">→ 项目详情</a>
+                                <a href="modals/create-project-modal.html" class="page-card-link">新建项目</a>
+                                <a href="modals/edit-project-modal.html" class="page-card-link">编辑项目</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/project-detail.html" class="page-card" data-status="done" data-prev="pages/projects.html" data-next="pages/bom.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <line x1="3" y1="9" x2="21" y2="9"/>
+                                <line x1="9" y1="21" x2="9" y2="9"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                项目详情
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">查看项目详情和成本分析</div>
+                            <div class="page-card-links">
+                                <a href="pages/projects.html" class="page-card-link">← 返回列表</a>
+                                <a href="pages/bom.html" class="page-card-link">→ BOM清单</a>
+                                <a href="modals/add-bom-modal.html" class="page-card-link">添加BOM</a>
+                                <a href="modals/edit-bom-item-modal.html" class="page-card-link">编辑物料</a>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <div class="module-section" data-module="bom">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon bom">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">BOM管理模块</div>
+                            <div class="module-desc">管理物料清单配置，支持版本控制和成本计算</div>
+                        </div>
+                    </div>
+                    <div class="module-stats">
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 2 页面</div>
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 5 弹窗</div>
+                    </div>
+                </div>
+                <div class="page-grid">
+                    <a href="pages/bom.html" class="page-card" data-status="done" data-prev="pages/project-detail.html" data-next="pages/bom-versions.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                BOM清单
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">管理物料清单和成本配置</div>
+                            <div class="page-card-links">
+                                <a href="modals/create-bom-modal.html" class="page-card-link">新建BOM</a>
+                                <a href="modals/edit-bom-modal.html" class="page-card-link">编辑BOM</a>
+                                <a href="modals/bom-detail-modal.html" class="page-card-link">BOM详情</a>
+                                <a href="pages/bom-versions.html" class="page-card-link">→ 版本历史</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/bom-versions.html" class="page-card" data-status="done" data-prev="pages/bom.html" data-next="pages/categories.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="16 18 22 12 16 6"/>
+                                <polyline points="8 6 2 12 8 18"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                BOM版本
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">查看BOM历史版本和变更</div>
+                            <div class="page-card-links">
+                                <a href="pages/bom.html" class="page-card-link">← 返回BOM</a>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <div class="module-section" data-module="base">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon base">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="8" y1="6" x2="21" y2="6"/>
+                                <line x1="8" y1="12" x2="21" y2="12"/>
+                                <line x1="8" y1="18" x2="21" y2="18"/>
+                                <line x1="3" y1="6" x2="3.01" y2="6"/>
+                                <line x1="3" y1="12" x2="3.01" y2="12"/>
+                                <line x1="3" y1="18" x2="3.01" y2="18"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">基础数据模块</div>
+                            <div class="module-desc">管理物料分类、耗材配置等基础数据</div>
+                        </div>
+                    </div>
+                    <div class="module-stats">
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 2 页面</div>
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 5 弹窗</div>
+                    </div>
+                </div>
+                <div class="page-grid">
+                    <a href="pages/categories.html" class="page-card" data-status="done" data-prev="pages/bom-versions.html" data-next="pages/consumable-config.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="8" y1="6" x2="21" y2="6"/>
+                                <line x1="8" y1="12" x2="21" y2="12"/>
+                                <line x1="8" y1="18" x2="21" y2="18"/>
+                                <line x1="3" y1="6" x2="3.01" y2="6"/>
+                                <line x1="3" y1="12" x2="3.01" y2="12"/>
+                                <line x1="3" y1="18" x2="3.01" y2="18"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                物料分类
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">管理三级物料分类体系</div>
+                            <div class="page-card-links">
+                                <a href="modals/create-category-modal.html" class="page-card-link">新建分类</a>
+                                <a href="modals/edit-category-modal.html" class="page-card-link">编辑分类</a>
+                                <a href="pages/consumable-config.html" class="page-card-link">→ 耗材配置</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/consumable-config.html" class="page-card" data-status="done" data-prev="pages/categories.html" data-next="pages/rules.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 20h9"/>
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                耗材配置
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">配置耗材属性和关联信息</div>
+                            <div class="page-card-links">
+                                <a href="modals/create-consumable-modal.html" class="page-card-link">新增耗材</a>
+                                <a href="modals/edit-consumable-modal.html" class="page-card-link">编辑耗材</a>
+                                <a href="modals/consumable-detail-modal.html" class="page-card-link">耗材详情</a>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <div class="module-section" data-module="alert">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon alert">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">预警管理模块</div>
+                            <div class="module-desc">配置预警规则，处理预警信息，跟踪处理历史</div>
+                        </div>
+                    </div>
+                    <div class="module-stats">
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 3 页面</div>
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 4 弹窗</div>
+                    </div>
+                </div>
+                <div class="page-grid">
+                    <a href="pages/rules.html" class="page-card" data-status="done" data-prev="pages/consumable-config.html" data-next="pages/alerts.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                规则配置
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">配置库存预警规则和阈值</div>
+                            <div class="page-card-links">
+                                <a href="modals/create-rule-modal.html" class="page-card-link">新建规则</a>
+                                <a href="modals/edit-rule-modal.html" class="page-card-link">编辑规则</a>
+                                <a href="pages/alerts.html" class="page-card-link">→ 预警中心</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/alerts.html" class="page-card" data-status="done" data-prev="pages/rules.html" data-next="pages/alert-history.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                预警中心
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">查看和处理库存预警信息</div>
+                            <div class="page-card-links">
+                                <a href="modals/alert-handle-modal.html" class="page-card-link">处理预警</a>
+                                <a href="pages/alert-history.html" class="page-card-link">→ 预警历史</a>
+                                <a href="pages/rules.html" class="page-card-link">← 规则配置</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/alert-history.html" class="page-card" data-status="done" data-prev="pages/alerts.html" data-next="pages/cost-report.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                预警历史
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">查看历史预警和处理记录</div>
+                            <div class="page-card-links">
+                                <a href="pages/alerts.html" class="page-card-link">← 预警中心</a>
+                                <a href="modals/alert-history-detail-modal.html" class="page-card-link">预警详情</a>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <div class="module-section" data-module="report">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon report">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="20" x2="12" y2="10"/>
+                                <line x1="18" y1="20" x2="18" y2="4"/>
+                                <line x1="6" y1="20" x2="6" y2="16"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">报表统计模块</div>
+                            <div class="module-desc">查看成本报表、库存分析、使用趋势等统计数据</div>
+                        </div>
+                    </div>
+                    <div class="module-stats">
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 1 页面</div>
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 0 弹窗</div>
+                    </div>
+                </div>
+                <div class="page-grid">
+                    <a href="pages/cost-report.html" class="page-card" data-status="done" data-prev="pages/alert-history.html" data-next="pages/suppliers.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="20" x2="12" y2="10"/>
+                                <line x1="18" y1="20" x2="18" y2="4"/>
+                                <line x1="6" y1="20" x2="6" y2="16"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                成本报表
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">项目成本和库存成本分析</div>
+                            <div class="page-card-links">
+                                <a href="pages/projects.html" class="page-card-link">检测项目</a>
+                                <a href="pages/bom.html" class="page-card-link">BOM清单</a>
+                                <a href="pages/suppliers.html" class="page-card-link">→ 供应商</a>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <div class="module-section" data-module="system">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon base">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">系统管理模块</div>
+                            <div class="module-desc">管理供应商、库位、用户等系统基础数据</div>
+                        </div>
+                    </div>
+                    <div class="module-stats">
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 3 页面</div>
+                        <div class="module-stat"><div class="module-stat-dot done"></div> 0 弹窗</div>
+                    </div>
+                </div>
+                <div class="page-grid">
+                    <a href="pages/suppliers.html" class="page-card" data-status="done" data-prev="pages/cost-report.html" data-next="pages/locations.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                供应商管理
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">管理供应商信息和合作记录</div>
+                            <div class="page-card-links">
+                                <a href="pages/inbound.html" class="page-card-link">← 入库记录</a>
+                                <a href="pages/return.html" class="page-card-link">退货管理</a>
+                                <a href="pages/locations.html" class="page-card-link">→ 库位管理</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/locations.html" class="page-card" data-status="done" data-prev="pages/suppliers.html" data-next="pages/users.html">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                                <circle cx="12" cy="10" r="3"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                库位管理
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">管理仓库库位和存储区域</div>
+                            <div class="page-card-links">
+                                <a href="pages/inventory-list.html" class="page-card-link">← 库存列表</a>
+                                <a href="pages/scrap.html" class="page-card-link">报废管理</a>
+                                <a href="pages/users.html" class="page-card-link">→ 用户管理</a>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="pages/users.html" class="page-card" data-status="done" data-prev="pages/locations.html" data-next="">
+                        <div class="page-card-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </div>
+                        <div class="page-card-content">
+                            <div class="page-card-title">
+                                用户管理
+                                <span class="page-card-status done">✓ 已完成</span>
+                            </div>
+                            <div class="page-card-desc">管理系统用户和权限配置</div>
+                            <div class="page-card-links">
+                                <a href="pages/inventory-list.html" class="page-card-link">← 返回首页</a>
+                                <a href="pages/outbound.html" class="page-card-link">出库记录</a>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div id="modals-tab" class="tab-content">
+            <div class="filter-bar">
+                <button class="filter-btn active" onclick="filterModals('all')">全部</button>
+                <button class="filter-btn" onclick="filterModals('done')">已完成</button>
+                <button class="filter-btn" onclick="filterModals('todo')">待优化</button>
+                <button class="filter-btn" onclick="filterModals('missing')">缺失</button>
+            </div>
+
+            <div class="module-section">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon inventory">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">库存管理弹窗</div>
+                            <div class="module-desc">入库、出库、库存详情等操作弹窗（共9个）</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-list">
+                    <a href="modals/inbound-modal.html" class="modal-item" data-status="done" data-page="pages/inbound.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                            </svg>
+                        </div>
+                        <span>入库登记</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/inbound-detail-modal.html" class="modal-item" data-status="done" data-page="pages/inbound.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                        </div>
+                        <span>入库详情</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/outbound-modal.html" class="modal-item" data-status="done" data-page="pages/outbound.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                            </svg>
+                        </div>
+                        <span>出库领用</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/batch-outbound-modal.html" class="modal-item" data-status="done" data-page="pages/outbound.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            </svg>
+                        </div>
+                        <span>批量出库</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/inventory-detail-modal.html" class="modal-item" data-status="done" data-page="pages/inventory-detail.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                        </div>
+                        <span>物料详情</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/outbound-detail-modal.html" class="modal-item" data-status="done" data-page="pages/outbound.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                        </div>
+                        <span>出库详情</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/create-stocktaking-modal.html" class="modal-item" data-status="done" data-page="pages/stocktaking.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </div>
+                        <span>新建盘点</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/stocktaking-detail-modal.html" class="modal-item" data-status="done" data-page="pages/stocktaking.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                        </div>
+                        <span>盘点详情</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/stocktaking-adjust-modal.html" class="modal-item" data-status="done" data-page="pages/stocktaking.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                        </div>
+                        <span>处理差异</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="module-section">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon project">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">检测项目弹窗</div>
+                            <div class="module-desc">新建、编辑项目等操作弹窗（共2个）</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-list">
+                    <a href="modals/create-project-modal.html" class="modal-item" data-status="done" data-page="pages/projects.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </div>
+                        <span>新建项目</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/edit-project-modal.html" class="modal-item" data-status="done" data-page="pages/projects.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                        </div>
+                        <span>编辑项目</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="module-section">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon bom">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">BOM管理弹窗</div>
+                            <div class="module-desc">新建、编辑、查看BOM等操作弹窗（共5个）</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-list">
+                    <a href="modals/create-bom-modal.html" class="modal-item" data-status="done" data-page="pages/bom.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </div>
+                        <span>新建BOM</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/edit-bom-modal.html" class="modal-item" data-status="done" data-page="pages/bom.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                        </div>
+                        <span>编辑BOM</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/bom-detail-modal.html" class="modal-item" data-status="done" data-page="pages/bom.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                        </div>
+                        <span>BOM详情</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/add-bom-modal.html" class="modal-item" data-status="done" data-page="pages/project-detail.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </div>
+                        <span>添加BOM物料</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/edit-bom-item-modal.html" class="modal-item" data-status="done" data-page="pages/project-detail.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                        </div>
+                        <span>编辑BOM物料</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="module-section">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon base">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="8" y1="6" x2="21" y2="6"/>
+                                <line x1="8" y1="12" x2="21" y2="12"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">基础数据弹窗</div>
+                            <div class="module-desc">分类、耗材配置等操作弹窗（共5个）</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-list">
+                    <a href="modals/create-category-modal.html" class="modal-item" data-status="done" data-page="pages/categories.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </div>
+                        <span>新建分类</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/edit-category-modal.html" class="modal-item" data-status="done" data-page="pages/categories.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                        </div>
+                        <span>编辑分类</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/create-consumable-modal.html" class="modal-item" data-status="done" data-page="pages/consumable-config.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </div>
+                        <span>新增耗材</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/edit-consumable-modal.html" class="modal-item" data-status="done" data-page="pages/consumable-config.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                        </div>
+                        <span>编辑耗材</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/consumable-detail-modal.html" class="modal-item" data-status="done" data-page="pages/consumable-config.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                        </div>
+                        <span>耗材详情</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="module-section">
+                <div class="module-header">
+                    <div class="module-header-left">
+                        <div class="module-icon alert">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="module-title">预警管理弹窗</div>
+                            <div class="module-desc">规则配置、预警处理等操作弹窗（共4个）</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-list">
+                    <a href="modals/create-rule-modal.html" class="modal-item" data-status="done" data-page="pages/rules.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </div>
+                        <span>新建规则</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/edit-rule-modal.html" class="modal-item" data-status="done" data-page="pages/rules.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                        </div>
+                        <span>编辑规则</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/alert-handle-modal.html" class="modal-item" data-status="done" data-page="pages/alerts.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                        </div>
+                        <span>处理预警</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                    <a href="modals/alert-history-detail-modal.html" class="modal-item" data-status="done" data-page="pages/alert-history.html">
+                        <div class="modal-item-icon">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                        </div>
+                        <span>预警历史详情</span>
+                        <span class="modal-item-status done">✓</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div id="flow-tab" class="tab-content">
+            <div class="flow-diagram">
+                <div class="flow-title">
+                    📦 库存管理流程
+                    <span style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-left: 8px;">点击节点快速跳转</span>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/inventory-list.html" class="flow-node page">库存列表</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">入库</span>
+                    <a href="pages/inbound.html" class="flow-node page">入库记录</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/inbound-modal.html" class="flow-node modal">入库登记</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/inbound-detail-modal.html" class="flow-node modal">入库详情</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/suppliers.html" class="flow-node page">供应商</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/inventory-list.html" class="flow-node page">库存列表</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">出库</span>
+                    <a href="pages/outbound.html" class="flow-node page">出库记录</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/outbound-modal.html" class="flow-node modal">出库领用</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/projects.html" class="flow-node page">检测项目</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/inventory-list.html" class="flow-node page">库存列表</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">详情</span>
+                    <a href="pages/inventory-detail.html" class="flow-node page">库存详情</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/inventory-detail-modal.html" class="flow-node modal">物料详情弹窗</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/inventory-list.html" class="flow-node page">库存列表</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">盘点</span>
+                    <a href="pages/stocktaking.html" class="flow-node page">库存盘点</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/create-stocktaking-modal.html" class="flow-node modal">新建盘点</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/stocktaking-adjust-modal.html" class="flow-node modal">处理差异</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/inventory-list.html" class="flow-node page">库存列表</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">退货</span>
+                    <a href="pages/return.html" class="flow-node page">退货管理</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/suppliers.html" class="flow-node page">供应商</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/inventory-list.html" class="flow-node page">库存列表</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">报废</span>
+                    <a href="pages/scrap.html" class="flow-node page">报废管理</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/locations.html" class="flow-node page">库位管理</a>
+                </div>
+            </div>
+
+            <div class="flow-diagram">
+                <div class="flow-title">
+                    🔬 检测项目流程
+                    <span style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-left: 8px;">点击节点快速跳转</span>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/projects.html" class="flow-node page">检测项目</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/create-project-modal.html" class="flow-node modal">新建项目</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/projects.html" class="flow-node page">检测项目</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">详情</span>
+                    <a href="pages/project-detail.html" class="flow-node page">项目详情</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">Tab</span>
+                    <a href="pages/bom.html" class="flow-node page">BOM清单</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/project-detail.html" class="flow-node page">项目详情</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/add-bom-modal.html" class="flow-node modal">添加BOM物料</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/edit-bom-item-modal.html" class="flow-node modal">编辑物料</a>
+                </div>
+            </div>
+
+            <div class="flow-diagram">
+                <div class="flow-title">
+                    📋 BOM管理流程
+                    <span style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-left: 8px;">点击节点快速跳转</span>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/bom.html" class="flow-node page">BOM清单</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/create-bom-modal.html" class="flow-node modal">新建BOM</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/bom.html" class="flow-node page">BOM清单</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">详情</span>
+                    <a href="modals/bom-detail-modal.html" class="flow-node modal">BOM详情</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/bom.html" class="flow-node page">BOM清单</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">版本</span>
+                    <a href="pages/bom-versions.html" class="flow-node page">BOM版本</a>
+                </div>
+            </div>
+
+            <div class="flow-diagram">
+                <div class="flow-title">
+                    ⚠️ 预警管理流程
+                    <span style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-left: 8px;">点击节点快速跳转</span>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/rules.html" class="flow-node page">规则配置</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/create-rule-modal.html" class="flow-node modal">新建规则</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/rules.html" class="flow-node page">规则配置</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">触发</span>
+                    <a href="pages/alerts.html" class="flow-node page">预警中心</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/alert-handle-modal.html" class="flow-node modal">处理预警</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/alerts.html" class="flow-node page">预警中心</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">历史</span>
+                    <a href="pages/alert-history.html" class="flow-node page">预警历史</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/alert-history-detail-modal.html" class="flow-node modal">预警详情</a>
+                </div>
+            </div>
+
+            <div class="flow-diagram">
+                <div class="flow-title">
+                    📊 基础数据流程
+                    <span style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-left: 8px;">点击节点快速跳转</span>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/categories.html" class="flow-node page">物料分类</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/create-category-modal.html" class="flow-node modal">新建分类</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/categories.html" class="flow-node page">物料分类</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/consumable-config.html" class="flow-node page">耗材配置</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="modals/create-consumable-modal.html" class="flow-node modal">新增耗材</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/consumable-config.html" class="flow-node page">耗材配置</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/inventory-list.html" class="flow-node page">库存列表</a>
+                </div>
+            </div>
+
+            <div class="flow-diagram">
+                <div class="flow-title">
+                    ⚙️ 系统管理流程
+                    <span style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-left: 8px;">点击节点快速跳转</span>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/inbound.html" class="flow-node page">入库记录</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">关联</span>
+                    <a href="pages/suppliers.html" class="flow-node page">供应商管理</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/return.html" class="flow-node page">退货管理</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/inventory-list.html" class="flow-node page">库存列表</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">存储</span>
+                    <a href="pages/locations.html" class="flow-node page">库位管理</a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/scrap.html" class="flow-node page">报废管理</a>
+                </div>
+                <div class="flow-row">
+                    <a href="pages/outbound.html" class="flow-node page">出库记录</a>
+                    <span class="flow-arrow">→</span>
+                    <span class="flow-label">操作</span>
+                    <a href="pages/users.html" class="flow-node page">用户管理</a>
+                </div>
+            </div>
+
+            <div class="flow-diagram">
+                <div class="flow-title">
+                    📈 完整验收路线
+                    <span style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-left: 8px;">按顺序验收所有页面</span>
+                </div>
+                <div class="flow-row" style="flex-wrap: wrap;">
+                    <a href="pages/inventory-list.html" class="flow-node page done">1.库存列表<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/inventory-detail.html" class="flow-node page done">2.库存详情<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/inbound.html" class="flow-node page done">3.入库记录<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/outbound.html" class="flow-node page done">4.出库记录<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/stocktaking.html" class="flow-node page done">5.库存盘点<span class="nav-flow-status done">✓</span></a>
+                </div>
+                <div class="flow-row" style="flex-wrap: wrap;">
+                    <a href="pages/return.html" class="flow-node page done">6.退货管理<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/scrap.html" class="flow-node page done">7.报废管理<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/projects.html" class="flow-node page done">8.检测项目<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/project-detail.html" class="flow-node page done">9.项目详情<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/bom.html" class="flow-node page done">10.BOM清单<span class="nav-flow-status done">✓</span></a>
+                </div>
+                <div class="flow-row" style="flex-wrap: wrap;">
+                    <a href="pages/bom-versions.html" class="flow-node page done">11.BOM版本<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/categories.html" class="flow-node page done">12.物料分类<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/consumable-config.html" class="flow-node page done">13.耗材配置<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/rules.html" class="flow-node page done">14.规则配置<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/alerts.html" class="flow-node page done">15.预警中心<span class="nav-flow-status done">✓</span></a>
+                </div>
+                <div class="flow-row" style="flex-wrap: wrap;">
+                    <a href="pages/alert-history.html" class="flow-node page done">16.预警历史<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/cost-report.html" class="flow-node page done">17.成本报表<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/suppliers.html" class="flow-node page done">18.供应商<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/locations.html" class="flow-node page done">19.库位管理<span class="nav-flow-status done">✓</span></a>
+                    <span class="flow-arrow">→</span>
+                    <a href="pages/users.html" class="flow-node page done">20.用户管理<span class="nav-flow-status done">✓</span></a>
+                </div>
+            </div>
+        </div>
+
+        <div id="check-tab" class="tab-content">
+            <div class="check-section">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text-primary);">设计规范验收清单</h3>
+                <div class="check-list">
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">Logo样式统一</div>
+                            <div class="check-item-desc">所有页面Logo使用 rx="8" 圆角样式</div>
+                        </div>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">导航图标统一</div>
+                            <div class="check-item-desc">所有页面使用统一的导航图标样式</div>
+                        </div>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">按钮样式统一</div>
+                            <div class="check-item-desc">操作列按钮统一使用 btn-ghost 透明样式</div>
+                        </div>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">状态徽章统一</div>
+                            <div class="check-item-desc">使用 .status-badge 类统一样式</div>
+                        </div>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">字体统一</div>
+                            <div class="check-item-desc">所有页面使用 Inter 字体</div>
+                        </div>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">弹窗结构完整</div>
+                            <div class="check-item-desc">所有弹窗包含完整HTML结构和居中显示</div>
+                        </div>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">页面覆盖完整</div>
+                            <div class="check-item-desc">20个页面全部设计完成</div>
+                        </div>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">弹窗覆盖完整</div>
+                            <div class="check-item-desc">25个弹窗全部设计完成</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="check-section">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text-primary);">页面状态覆盖</h3>
+                <div class="check-list">
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">空状态</div>
+                            <div class="check-item-desc">列表为空时的提示状态</div>
+                        </div>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">加载中</div>
+                            <div class="check-item-desc">数据加载时的骨架屏/加载状态</div>
+                        </div>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">成功状态</div>
+                            <div class="check-item-desc">操作成功后的反馈状态</div>
+                        </div>
+                    </div>
+                    <div class="check-item">
+                        <div class="check-item-icon done">✓</div>
+                        <div class="check-item-content">
+                            <div class="check-item-title">错误状态</div>
+                            <div class="check-item-desc">操作失败时的错误提示</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="check-section">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--text-primary);">规格文档链接</h3>
+                <div class="spec-grid">
+                    <a href="../specs/interaction-specification-v1.0.md" class="spec-card">
+                        <div class="spec-card-header">
+                            <div class="spec-card-icon" style="background: #dbeafe; color: #2563eb;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 20h9"/>
+                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                                </svg>
+                            </div>
+                            <div class="spec-card-title">交互规格说明书</div>
+                        </div>
+                        <div class="spec-card-desc">
+                            定义系统所有页面交互、状态机、操作规范。
+                        </div>
+                    </a>
+                    <a href="../specs/field-specification-v1.0.md" class="spec-card">
+                        <div class="spec-card-header">
+                            <div class="spec-card-icon" style="background: #dcfce7; color: #16a34a;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
+                                    <line x1="16" y1="13" x2="8" y2="13"/>
+                                    <line x1="16" y1="17" x2="8" y2="17"/>
+                                </svg>
+                            </div>
+                            <div class="spec-card-title">字段规格说明书</div>
+                        </div>
+                        <div class="spec-card-desc">
+                            定义所有数据表字段、数据类型、验证规则。
+                        </div>
+                    </a>
+                    <a href="../specs/business-rules-v1.0.md" class="spec-card">
+                        <div class="spec-card-header">
+                            <div class="spec-card-icon" style="background: #fef3c7; color: #d97706;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="3"/>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                                </svg>
+                            </div>
+                            <div class="spec-card-title">业务规则说明书</div>
+                        </div>
+                        <div class="spec-card-desc">
+                            定义业务逻辑、计算规则、异常处理。
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function filterPages(status) {
+            const cards = document.querySelectorAll('#pages-tab .page-card');
+            const btns = document.querySelectorAll('#pages-tab .filter-btn');
+            
+            btns.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            cards.forEach(card => {
+                if (status === 'all') {
+                    card.style.display = 'flex';
+                } else {
+                    const cardStatus = card.getAttribute('data-status');
+                    card.style.display = cardStatus === status ? 'flex' : 'none';
+                }
+            });
+        }
+
+        function filterModals(status) {
+            const items = document.querySelectorAll('#modals-tab .modal-item');
+            const btns = document.querySelectorAll('#modals-tab .filter-btn');
+            
+            btns.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            items.forEach(item => {
+                if (status === 'all') {
+                    item.style.display = 'flex';
+                } else {
+                    const itemStatus = item.getAttribute('data-status');
+                    item.style.display = itemStatus === status ? 'flex' : 'none';
+                }
+            });
+        }
+
+        function filterByStatus(status) {
+            if (status === 'all') {
+                showTab('pages');
+                filterPages('all');
+            } else if (status === 'todo') {
+                showTab('pages');
+                setTimeout(() => filterPages('todo'), 100);
+            } else if (status === 'missing') {
+                showTab('pages');
+                setTimeout(() => filterPages('missing'), 100);
+            }
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                const activeTab = document.querySelector('.tab-content.active');
+                if (activeTab.id === 'pages-tab') {
+                    const activeCard = document.activeElement.closest('.page-card');
+                    if (activeCard) {
+                        const nextUrl = e.key === 'ArrowRight' ? activeCard.getAttribute('data-next') : activeCard.getAttribute('data-prev');
+                        if (nextUrl) {
+                            window.location.href = nextUrl;
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

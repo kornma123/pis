@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOM详情 - COREONE v2.2</title>
+    <link rel="stylesheet" href="../shared/styles.css">
+</head>
+<body style="background: var(--bg-page); min-height: 100vh; display: flex; align-items: center; justify-content: center;">
+<div class="modal" id="bom-detail-modal" style="position: relative; opacity: 1; visibility: visible;">
+    <div class="modal-container modal-xl" style="position: relative; transform: none;">
+        <div class="modal-header">
+            <h3 class="modal-title">BOM详情</h3>
+            <button class="modal-close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="detail-header">
+                <div class="detail-title">NGS建库试剂套装</div>
+                <div class="detail-subtitle">BOM编号: BOM-2024-001 | 版本: v2.3 | 状态: <span class="status-badge status-success">已启用</span></div>
+            </div>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <div class="detail-label">所属项目</div>
+                    <div class="detail-value">全外显子组测序</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">物料数量</div>
+                    <div class="detail-value">24 项</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">单样本成本</div>
+                    <div class="detail-value" style="font-weight: 600; color: var(--primary);">¥103.01</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">可支撑样本数</div>
+                    <div class="detail-value" style="font-weight: 600; color: #2E7D32;">80</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">物料状态</div>
+                    <div class="detail-value">
+                        <span class="material-status-badge material-status-sufficient">🟢 充足</span>
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">创建时间</div>
+                    <div class="detail-value">2024-01-15</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">最后更新</div>
+                    <div class="detail-value">2024-03-15</div>
+                </div>
+            </div>
+<table class="data-table" style="margin-top: 24px;">
+                <thead>
+                    <tr>
+                        <th>序号</th>
+                        <th>物料名称</th>
+                        <th>规格型号</th>
+                        <th>用量/样本</th>
+                        <th>单位</th>
+                        <th>参考单价</th>
+                        <th>单样本成本</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>DNA提取试剂盒</td>
+                        <td>v2.0，96次反应</td>
+                        <td>0.0104</td>
+                        <td>盒</td>
+                        <td>¥1,280</td>
+                        <td>¥13.33</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td>PCR Master Mix</td>
+                        <td>2X，500次反应</td>
+                        <td>0.002</td>
+                        <td>盒</td>
+                        <td>¥850</td>
+                        <td>¥1.70</td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td>磁珠纯化试剂</td>
+                        <td>5ml/瓶</td>
+                        <td>0.05</td>
+                        <td>瓶</td>
+                        <td>¥180</td>
+                        <td>¥9.00</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr style="background: var(--bg-page); font-weight: 600;">
+                        <td colspan="6" style="text-align: right;">单样本物料成本合计:</td>
+                        <td>¥103.01</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary">关闭</button>
+            <button class="btn btn-secondary">查看版本历史</button>
+            <button class="btn btn-primary">编辑BOM</button>
+        </div>
+    </div>
+</div>
+<script src="../shared/scripts.js"></script>
+</body>
+</html>
