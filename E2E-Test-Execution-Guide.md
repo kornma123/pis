@@ -22,12 +22,15 @@
 
 | 角色 | 用户名 | 密码 | 说明 |
 |:---|:---|:---|:---|
-| admin | `admin` | `123456` | 系统管理员，全部权限 |
-| warehouse_manager | `warehouse_manager` | `123456` | 仓库管理员 |
-| technician | `technician` | `123456` | 病理技术员 |
-| pathologist | `pathologist` | `123456` | 病理医师 |
-| procurement | `procurement` | `123456` | 采购专员 |
-| finance | `finance` | `123456` | 财务专员 |
+| admin | `admin` | `admin123` | 系统管理员，全部权限 |
+| warehouse_manager | `cangguan` | `CoreOne2026!` | 仓库管理员 |
+| technician | `jishuyuan1` | `CoreOne2026!` | 病理技术员 |
+| pathologist | `yishi1` | `CoreOne2026!` | 病理医师 |
+| procurement | `caigou` | `CoreOne2026!` | 采购专员 |
+| finance | `caiwu` | `CoreOne2026!` | 财务专员 |
+
+> ⚠️ **警告：禁止在修复过程中使用 PowerShell 的 `Get-ChildItem | ForEach-Object { Set-Content ... }` 进行批量文本替换。**  
+> PowerShell `Set-Content` 默认使用系统编码（中文 Windows 为 GB2312/GBK），而非 UTF-8。这会导致所有中文字符被替换为 `�`（U+FFFD），彻底破坏 TypeScript 源文件。此前已发生一次全量 18 个 spec 文件被毁坏的事故。如需批量替换，请使用 Node.js 脚本并显式指定 `utf-8` 编码，或逐文件使用 `apply_diff` 工具进行精准编辑。
 
 ---
 
@@ -82,18 +85,18 @@ npx playwright install chromium
 | 批次 0 | 1 | `auth.spec.ts` | 认证与登录 | `/login` | 175 | 无依赖，最优先 |
 | 批次 0 | 2 | `dashboard.spec.ts` | 仪表盘 | `/` | 112 | 仅依赖登录状态 |
 | 批次 1 | 3 | `categories.spec.ts` | 物料分类 | `/categories` | 141 | 无依赖，基础主数据 |
-| 批次 1 | 4 | `materials.spec.ts` | 耗材管理 | `/materials` | 120 | 依赖 categories |
-| 批次 1 | 5 | `suppliers.spec.ts` | 供应商管理 | `/suppliers` | 95 | 无依赖，基础主数据 |
-| 批次 1 | 6 | `locations.spec.ts` | 库位管理 | `/locations` | 101 | 无依赖，基础主数据 |
+| 批次 1 | 4 | `materials.spec.ts` | 耗材管理 | `/materials` | 136 | 依赖 categories |
+| 批次 1 | 5 | `suppliers.spec.ts` | 供应商管理 | `/suppliers` | 113 | 无依赖，基础主数据 |
+| 批次 1 | 6 | `locations.spec.ts` | 库位管理 | `/locations` | 121 | 无依赖，基础主数据 |
 | 批次 2 | 7 | `roles.spec.ts` | 角色权限 | `/roles` | 88 | 无依赖，系统管理 |
 | 批次 2 | 8 | `users.spec.ts` | 用户管理 | `/users` | 97 | 依赖 roles 数据 |
-| 批次 3 | 9 | `inbound.spec.ts` | 入库管理 | `/inbound` | 194 | 依赖 materials/suppliers/locations |
-| 批次 3 | 10 | `outbound.spec.ts` | 出库管理 | `/outbound` | 129 | 依赖 materials/inventory |
-| 批次 3 | 11 | `inventory-list.spec.ts` | 库存列表 | `/inventory` | 114 | 依赖 inbound/outbound 产生的库存 |
-| 批次 3 | 12 | `stocktaking.spec.ts` | 库存盘点 | `/stocktaking` | 89 | 依赖 inventory 数据 |
-| 批次 4 | 13 | `projects.spec.ts` | 检测项目 | `/projects` | 106 | 依赖 materials |
-| 批次 4 | 14 | `bom.spec.ts` | BOM清单 | `/bom` | 120 | 依赖 materials |
-| 批次 5 | 15 | `alerts.spec.ts` | 预警中心 | `/alerts` | 100 | 依赖 inventory 数据 |
+| 批次 3 | 9 | `inbound.spec.ts` | 入库管理 | `/inbound` | 228 | 依赖 materials/suppliers/locations |
+| 批次 3 | 10 | `outbound.spec.ts` | 出库管理 | `/outbound` | 138 | 依赖 materials/inventory |
+| 批次 3 | 11 | `inventory-list.spec.ts` | 库存列表 | `/inventory` | 120 | 依赖 inbound/outbound 产生的库存 |
+| 批次 3 | 12 | `stocktaking.spec.ts` | 库存盘点 | `/stocktaking` | 104 | 依赖 inventory 数据 |
+| 批次 4 | 13 | `projects.spec.ts` | 检测项目 | `/projects` | 120 | 依赖 materials |
+| 批次 4 | 14 | `bom.spec.ts` | BOM清单 | `/bom` | 119 | 依赖 materials |
+| 批次 5 | 15 | `alerts.spec.ts` | 预警中心 | `/alerts` | 97 | 依赖 inventory 数据 |
 | 批次 5 | 16 | `cost-analysis.spec.ts` | 物料成本分析 | `/cost-analysis` | 98 | 依赖 inbound/outbound 数据 |
 | 批次 5 | 17 | `reconciliation.spec.ts` | 消耗对账 | `/reconciliation` | 104 | 依赖 projects/outbound 数据 |
 | 批次 6 | 18 | `logs.spec.ts` | 操作日志 | `/logs` | 77 | 依赖其他操作产生的日志 |
