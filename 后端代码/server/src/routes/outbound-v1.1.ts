@@ -106,6 +106,18 @@ router.post('/', (req, res) => {
         }
       }
 
+      // 自用物料创建使用中跟踪记录
+      if ((oi.usage || 'self') === 'self' && oi.batchId) {
+        const mat = db.prepare('SELECT name, spec FROM materials WHERE id = ?').get(oi.materialId) as any
+        const trkId = `TRK-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+        const today = new Date().toISOString().split('T')[0]
+        db.prepare(`
+          INSERT INTO batch_usage_tracking
+          (id, material_id, material_name, batch, spec, total_qty, remaining, unit, start_date, days_used, expected_days, progress, usage, receiver, status, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, 'in-use', datetime('now'), datetime('now'))
+        `).run(trkId, oi.materialId, mat?.name || '', oi.batchNo || '', mat?.spec || '', oi.quantity, oi.quantity, unitMap.get(oi.materialId) || 'pcs', today, 30, 'self', null)
+      }
+
       const logId = uuidv4()
       const beforeStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(oi.materialId) as any)?.stock || 0
       db.prepare(`

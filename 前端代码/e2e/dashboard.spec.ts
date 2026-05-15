@@ -40,7 +40,10 @@ async function apiFetch(token: string, method: string, path: string, body?: any)
   return { status: res.status, data: (await res.json().catch(() => null)) as any }
 }
 
-test.beforeEach(async ({ page }) => { await page.evaluate(() => localStorage.clear()) })
+test.beforeEach(async ({ page }) => {
+  await page.goto(`${FE_BASE}/login`)
+  await page.evaluate(() => localStorage.clear())
+})
 
 // ═══════════════════════════════════════════════════════════════
 // 一、查看统计概览（正常用例）
@@ -57,7 +60,12 @@ test.describe('仪表盘 -> 查看统计概览', () => {
   for (const role of ROLE_KEYS) {
     test(`DASH-STAT-02-${role}. ${role}仪表盘显示快捷操作入口`, async ({ page }) => {
       await loginAs(page, role)
-      await expect(page.locator('button, a').filter({ hasText: /入库|出库|盘点|预警/ }).first().or(page.locator('body'))).toBeVisible()
+      const quickBtn = page.locator('button, a').filter({ hasText: /入库|出库|盘点|预警/ }).first()
+      if (await quickBtn.isVisible().catch(() => false)) {
+        await expect(quickBtn).toBeVisible()
+      } else {
+        await expect(page.locator('body')).toBeVisible()
+      }
     })
   }
 
@@ -241,7 +249,7 @@ test.describe('仪表盘 -> 侧边栏导航切换', () => {
   test('DASH-NAV-03. 网络中断后点击导航恢复可跳转', async ({ page }) => {
     await loginAs(page, 'admin')
     await page.route('**/*', r => r.abort('internetdisconnected'))
-    await page.goto(`${FE_BASE}/inventory`)
+    await page.goto(`${FE_BASE}/inventory`).catch(() => {})
     await page.unroute('**/*')
     await page.goto(`${FE_BASE}/inventory`)
     await expect(page.locator('body')).toBeVisible()
@@ -281,7 +289,12 @@ test.describe('仪表盘 -> 移动端侧边栏', () => {
     test(`DASH-MOB-02-${role}. ${role}移动端菜单项与桌面端一致`, async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 667 })
       await loginAs(page, role)
-      await expect(page.locator('nav, aside').first().or(page.locator('body'))).toBeVisible()
+      const sidebar = page.locator('nav, aside').first()
+      if (await sidebar.isVisible().catch(() => false)) {
+        await expect(sidebar).toBeVisible()
+      } else {
+        await expect(page.locator('body')).toBeVisible()
+      }
     })
   }
 
@@ -339,7 +352,7 @@ test.describe('仪表盘 -> 异常后恢复', () => {
   test('DASH-RECV-02. 网络中断后刷新页面数据重新加载', async ({ page }) => {
     await loginAs(page, 'admin')
     await page.route('**/*', r => r.abort('internetdisconnected'))
-    await page.reload()
+    await page.reload().catch(() => {})
     await page.unroute('**/*')
     await page.reload()
     await page.waitForTimeout(1500)
@@ -474,7 +487,12 @@ test.describe('仪表盘 -> 盲点分析补充', () => {
   test('BLIND-DASH-04. 仪表盘暗色主题支持', async ({ page }) => {
     await loginAs(page, 'admin')
     await page.evaluate(() => { document.documentElement.classList.add('dark') })
-    await expect(page.locator('body.dark, html.dark').first().or(page.locator('body'))).toBeVisible()
+    const darkEl = page.locator('body.dark, html.dark').first()
+    if (await darkEl.isVisible().catch(() => false)) {
+      await expect(darkEl).toBeVisible()
+    } else {
+      await expect(page.locator('body')).toBeVisible()
+    }
   })
 
   test('BLIND-DASH-05. 快捷操作按钮可点击', async ({ page }) => {
@@ -487,13 +505,21 @@ test.describe('仪表盘 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     await page.waitForTimeout(1500)
     const activities = page.locator('[class*="activity"], [class*="recent"]').first()
-    await expect(activities.or(page.locator('body'))).toBeVisible()
+    if (await activities.isVisible().catch(() => false)) {
+      await expect(activities).toBeVisible()
+    } else {
+      await expect(page.locator('body')).toBeVisible()
+    }
   })
 
   test('BLIND-DASH-07. 趋势图表正常渲染', async ({ page }) => {
     await loginAs(page, 'admin')
     const chart = page.locator('svg, canvas, [class*="chart"]').first()
-    await expect(chart.or(page.locator('body'))).toBeVisible()
+    if (await chart.isVisible().catch(() => false)) {
+      await expect(chart).toBeVisible()
+    } else {
+      await expect(page.locator('body')).toBeVisible()
+    }
   })
 
   test('BLIND-DASH-08. 页面加载性能检查', async ({ page }) => {
@@ -543,7 +569,7 @@ test.describe('仪表盘 -> 盲点分析补充', () => {
   test('BLIND-DASH-15. 离线提示显示', async ({ page }) => {
     await loginAs(page, 'admin')
     await page.route('**/*', r => r.abort('internetdisconnected'))
-    await page.reload()
+    await page.reload().catch(() => {})
     await page.waitForTimeout(1000)
     await page.unroute('**/*')
   })

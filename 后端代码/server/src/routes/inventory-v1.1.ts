@@ -4,52 +4,59 @@ import { success, successList, error } from '../utils/response.js'
 
 const router = Router()
 
+// Helper: 获取最早过期批次的 batch_no 和 expiry_date
+function getBatchSubQuery(field: string): string {
+  return `(SELECT b.${field} FROM batches b WHERE b.material_id = i.material_id AND b.status = 1 AND b.remaining > 0 ORDER BY b.expiry_date ASC LIMIT 1)`
+}
+
 router.get('/', (req, res) => {
   try {
     const { page = 1, pageSize = 20, status, categoryId, locationId, keyword } = req.query
     const db = getDatabase()
 
-    let where = "m.is_deleted = 0 AND ir.status = 'completed' AND ir.is_deleted = 0"
+    let where = "m.is_deleted = 0 AND i.stock > 0"
     const params: any[] = []
 
     if (keyword) { where += ' AND (m.name LIKE ? OR m.code LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`) }
     if (categoryId) { where += ' AND m.category_id = ?'; params.push(categoryId) }
-    if (locationId) { where += ' AND ir.location_id = ?'; params.push(locationId) }
+    if (locationId) { where += ' AND i.location_id = ?'; params.push(locationId) }
 
     let having = ''
     if (status === 'low-stock') {
-      having = ' HAVING SUM(ir.quantity) <= m.min_stock AND m.min_stock > 0'
+      having = ' HAVING i.stock <= m.min_stock AND m.min_stock > 0'
+    } else if (status === 'expired') {
+      having = ' HAVING expiry IS NOT NULL AND expiry != \'\' AND expiry <= date(\'now\')'
+    } else if (status === 'expiring-soon') {
+      having = ' HAVING expiry IS NOT NULL AND expiry != \'\' AND expiry > date(\'now\') AND expiry <= date(\'now\', \'+30 days\')'
     }
 
     const countSql = `
       SELECT COUNT(*) as total FROM (
-        SELECT ir.material_id, COALESCE(ir.batch_no, '') as batch_no, ir.location_id
-        FROM inbound_records ir
-        JOIN materials m ON ir.material_id = m.id
+        SELECT i.material_id
+        FROM inventory i
+        JOIN materials m ON i.material_id = m.id
         WHERE ${where}
-        GROUP BY ir.material_id, COALESCE(ir.batch_no, ''), ir.location_id
         ${having}
       ) t
     `
     const count = (db.prepare(countSql).get(...params) as any)?.total || 0
 
-    let sql = `
+    const sql = `
       SELECT
-        m.id as material_id, m.code, m.name, m.spec, m.unit, m.min_stock, m.max_stock,
-        COALESCE(ir.batch_no, '') as batch_no,
-        SUM(ir.quantity) as stock,
-        ir.location_id,
+        i.material_id, i.stock, i.location_id,
+        m.code, m.name, m.spec, m.unit, m.min_stock, m.max_stock,
+        m.category_id, m.supplier_id,
+        s.name as supplier_name,
         l.name as location_name,
-        MAX(ir.expiry_date) as expiry,
-        m.supplier_id, s.name as supplier_name
-      FROM inbound_records ir
-      JOIN materials m ON ir.material_id = m.id
-      LEFT JOIN locations l ON ir.location_id = l.id
+        ${getBatchSubQuery('batch_no')} as batch_no,
+        ${getBatchSubQuery('expiry_date')} as expiry
+      FROM inventory i
+      JOIN materials m ON i.material_id = m.id
+      LEFT JOIN locations l ON i.location_id = l.id
       LEFT JOIN suppliers s ON m.supplier_id = s.id
       WHERE ${where}
-      GROUP BY ir.material_id, COALESCE(ir.batch_no, ''), ir.location_id
       ${having}
-      ORDER BY MAX(ir.created_at) DESC
+      ORDER BY i.update_time DESC
       LIMIT ? OFFSET ?
     `
     const offset = (Number(page) - 1) * Number(pageSize)
@@ -104,16 +111,15 @@ router.get('/stats', (_req, res) => {
   try {
     const db = getDatabase()
 
-    // 按批次统计：有库存的批次
     const batchStats = db.prepare(`
       SELECT
         COUNT(*) as total,
         SUM(CASE
-          WHEN batch_stock > min_stock AND (expiry IS NULL OR expiry = '' OR expiry > date('now', '+30 days'))
+          WHEN stock > min_stock AND (expiry IS NULL OR expiry = '' OR expiry > date('now', '+30 days'))
           THEN 1 ELSE 0
         END) as normal,
         SUM(CASE
-          WHEN min_stock > 0 AND batch_stock <= min_stock
+          WHEN min_stock > 0 AND stock <= min_stock
           THEN 1 ELSE 0
         END) as low_stock,
         SUM(CASE
@@ -126,24 +132,22 @@ router.get('/stats', (_req, res) => {
         END) as expired
       FROM (
         SELECT
+          i.stock,
           m.min_stock,
-          SUM(ir.quantity) as batch_stock,
-          MAX(ir.expiry_date) as expiry
-        FROM inbound_records ir
-        JOIN materials m ON ir.material_id = m.id
-        WHERE m.is_deleted = 0 AND ir.status = 'completed' AND ir.is_deleted = 0
-        GROUP BY m.id, COALESCE(ir.batch_no, '')
-        HAVING SUM(ir.quantity) > 0
+          ${getBatchSubQuery('expiry_date')} as expiry
+        FROM inventory i
+        JOIN materials m ON i.material_id = m.id
+        WHERE m.is_deleted = 0 AND i.stock > 0
       ) t
     `).get() as any
 
     const totalMaterials = (db.prepare('SELECT COUNT(*) as c FROM materials WHERE is_deleted = 0').get() as any)?.c || 0
 
     const totalStockValue = (db.prepare(`
-      SELECT SUM(ir.quantity * COALESCE(m.price, 0)) as v
-      FROM inbound_records ir
-      JOIN materials m ON ir.material_id = m.id
-      WHERE ir.status = 'completed' AND ir.is_deleted = 0 AND m.is_deleted = 0
+      SELECT SUM(i.stock * COALESCE(m.price, 0)) as v
+      FROM inventory i
+      JOIN materials m ON i.material_id = m.id
+      WHERE m.is_deleted = 0
     `).get() as any)?.v || 0
 
     const catDist = db.prepare(`

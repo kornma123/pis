@@ -275,11 +275,14 @@ async function runTests() {
     const adminRole = data.data.list.find((r: any) => r.code === 'admin')
     if (!adminRole) throw new Error('Admin role not found')
     let perms: string[] = []
-    try {
-      perms = JSON.parse(adminRole.permissions || '[]')
-    } catch (_e) {
-      // 某些角色权限可能不是 JSON 格式，跳过解析
-      perms = adminRole.permissions ? [adminRole.permissions] : []
+    if (Array.isArray(adminRole.permissions)) {
+      perms = adminRole.permissions
+    } else {
+      try {
+        perms = JSON.parse(adminRole.permissions || '[]')
+      } catch (_e) {
+        perms = adminRole.permissions ? [adminRole.permissions] : []
+      }
     }
     // admin 角色有 '*' 通配符权限
     if (!perms.includes('users') && !perms.includes('*')) throw new Error('Missing users permission')

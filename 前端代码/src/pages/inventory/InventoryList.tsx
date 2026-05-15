@@ -184,7 +184,10 @@ export default function InventoryList() {
   const fetchUsers = useCallback(async () => {
     try {
       const res: any = await userApi.getList({ pageSize: 999 })
-      setUserList(res?.list || [])
+      setUserList((res?.list || []).map((u: any) => ({
+        id: u.id,
+        real_name: u.realName || u.real_name || u.username,
+      })))
     } catch (e) {
       console.error(e)
     }
@@ -540,10 +543,20 @@ export default function InventoryList() {
   }, [materialList, materialKeyword])
 
   const addCheckedToSelected = () => {
-    const checked = materialList.filter(m => checkedMaterialIds.has(m.id))
+    const allMaterials = [...materialList, ...bomMaterials]
+    const checked = allMaterials.filter(m => checkedMaterialIds.has(m.id))
     const newItems = checked.filter(m => !selectedMaterials.find(sm => sm.id === m.id))
-    setSelectedMaterials(prev => [...prev, ...newItems])
+    const mapped = newItems.map(m => ({
+      id: m.id,
+      code: m.code || '-',
+      name: m.name,
+      spec: m.spec || '-',
+      unit: m.unit || '-',
+      stock: m.stock || 0,
+    }))
+    setSelectedMaterials(prev => [...prev, ...mapped])
     setCheckedMaterialIds(new Set())
+    return mapped
   }
 
   const removeSelectedMaterial = (id: string) => {
@@ -551,7 +564,10 @@ export default function InventoryList() {
   }
 
   const confirmAddMaterials = () => {
-    const newItems = selectedMaterials
+    // 合并已选物料和当前勾选的物料
+    const newlyAdded = addCheckedToSelected()
+    const allSelected = [...selectedMaterials, ...newlyAdded]
+    const newItems = allSelected
       .filter(m => !outboundMaterials.find(om => om.materialId === m.id))
       .map(m => ({
         rowId: Date.now() + Math.random(),
@@ -1526,7 +1542,7 @@ export default function InventoryList() {
                                       <input
                                         type="checkbox"
                                         checked={checkedMaterialIds.has(m.id)}
-                                        onChange={() => {}}
+                                        onChange={() => toggleCheckMaterial(m.id)}
                                         className="w-4 h-4 rounded border-gray-300 text-[#3b82f6]"
                                       />
                                       <span className="font-medium text-gray-900">{m.name}</span>
@@ -1605,7 +1621,7 @@ export default function InventoryList() {
               </button>
               <button
                 onClick={confirmAddMaterials}
-                disabled={selectedMaterials.length === 0}
+                disabled={selectedMaterials.length === 0 && checkedMaterialIds.size === 0}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-[#3b82f6] text-white rounded-md text-sm font-medium hover:bg-[#2563eb] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 ease shadow-[0_1px_2px_rgba(59,130,246,0.1)]"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>

@@ -12,7 +12,12 @@ router.get('/', (req, res) => {
   const offset = (page - 1) * pageSize
 
   const stmt = database.prepare('SELECT * FROM roles WHERE is_deleted = 0 ORDER BY created_at DESC LIMIT ? OFFSET ?')
-  const list = stmt.all(pageSize, offset)
+  const list = (stmt.all(pageSize, offset) as any[]).map((r: any) => ({
+    ...r,
+    permissions: (() => {
+      try { return JSON.parse(r.permissions || '[]') } catch { return [] }
+    })()
+  }))
 
   const countStmt = database.prepare('SELECT COUNT(*) as total FROM roles WHERE is_deleted = 0')
   const { total } = countStmt.get() as any

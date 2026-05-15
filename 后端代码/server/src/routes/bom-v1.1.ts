@@ -17,9 +17,13 @@ router.get('/', (req, res) => {
     const offset = (Number(page) - 1) * Number(pageSize)
     const list = db.prepare(`SELECT * FROM boms WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, Number(pageSize), offset) as any[]
 
+    // 统计每个BOM的物料数量
+    const counts = db.prepare('SELECT bom_id, COUNT(*) as cnt FROM bom_items GROUP BY bom_id').all() as any[]
+    const countMap = new Map(counts.map((c: any) => [c.bom_id, c.cnt]))
+
     successList(res, list.map((r: any) => ({
       id: r.id, code: r.code, name: r.name, version: r.version, type: r.type,
-      serviceId: r.service_id, materialCount: 0, supportableSamples: r.supportable_samples,
+      serviceId: r.service_id, materialCount: countMap.get(r.id) || 0, supportableSamples: r.supportable_samples,
       unitCost: r.unit_cost, status: r.status === 1 ? 'active' : 'inactive',
       createdAt: r.created_at, updatedAt: r.updated_at,
     })), Number(page), Number(pageSize), count)

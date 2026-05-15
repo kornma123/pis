@@ -170,6 +170,37 @@ export function initializeDatabase(): void {
     )
   `)
 
+  // 成本对账：LIS病例数据
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS lis_cases (
+      id TEXT PRIMARY KEY,
+      case_no TEXT NOT NULL UNIQUE,
+      project_id TEXT,
+      project_name TEXT,
+      operator TEXT,
+      operate_time TEXT,
+      status TEXT NOT NULL DEFAULT 'normal',
+      import_batch TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // 成本对账：修正日志
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS reconciliation_logs (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      target_name TEXT,
+      field TEXT,
+      old_value TEXT,
+      new_value TEXT,
+      reason TEXT NOT NULL,
+      operator TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
   // 插入默认用户 (密码: admin123)
   const stmt = database.prepare('SELECT * FROM users WHERE username = ?')
   const defaultUser = stmt.get('admin') as any

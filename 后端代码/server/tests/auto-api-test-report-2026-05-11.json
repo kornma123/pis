@@ -1,1139 +1,1139 @@
 {
-  "timestamp": "2026-05-12T00:48:38.172Z",
+  "timestamp": "2026-05-12T06:32:51.904Z",
   "summary": {
     "total": 161,
     "passed": 161,
     "failed": 0,
     "skipped": 0,
-    "duration": 5145
+    "duration": 7232
   },
   "results": [
     {
-      "id": "ALERT-1778546916477-xnrq",
+      "id": "ALERT-1778567569302-evl7",
       "category": "ALERT",
       "name": "ADMIN-获取预警规则",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "ALERT-1778546916479-vtw1",
+      "id": "ALERT-1778567569304-tys7",
       "category": "ALERT",
       "name": "ADMIN-获取预警记录",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "ALERT-1778546916485-ulm4",
+      "id": "ALERT-1778567569312-a7um",
       "category": "ALERT",
       "name": "DOC-获取预警记录",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "ALERT-1778546916489-oqt6",
+      "id": "ALERT-1778567569316-s15s",
       "category": "ALERT",
       "name": "FIN-无法访问预警",
       "status": "PASS",
-      "duration": 1
+      "duration": 2
     },
     {
-      "id": "ALERT-1778546916487-q5l2",
+      "id": "ALERT-1778567569314-wipz",
       "category": "ALERT",
       "name": "PRO-获取预警记录",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "ALERT-1778546916483-auw9",
+      "id": "ALERT-1778567569308-uw6j",
       "category": "ALERT",
       "name": "TECH-获取预警记录",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "ALERT-1778546916481-fgxt",
+      "id": "ALERT-1778567569306-b7pb",
       "category": "ALERT",
       "name": "WHM-获取预警规则",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "AUTH-1778546915450-jj6q",
+      "id": "AUTH-1778567567947-s9ho",
       "category": "AUTH",
       "name": "不存在用户-登录失败",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "AUTH-1778546915190-qu1h",
+      "id": "AUTH-1778567567601-woz8",
       "category": "AUTH",
       "name": "错误密码-登录失败",
       "status": "PASS",
-      "duration": 260
+      "duration": 346
     },
     {
-      "id": "AUTH-1778546915459-3819",
+      "id": "AUTH-1778567567958-5nzs",
       "category": "AUTH",
       "name": "登出接口",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "AUTH-1778546915455-2uqd",
+      "id": "AUTH-1778567567952-3bl3",
       "category": "AUTH",
       "name": "空密码-验证失败",
       "status": "PASS",
-      "duration": 1
+      "duration": 2
     },
     {
-      "id": "AUTH-1778546915453-hpzs",
+      "id": "AUTH-1778567567950-iy40",
       "category": "AUTH",
       "name": "空用户名-验证失败",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "AUTH-1778546913031-nc7g",
+      "id": "AUTH-1778567564675-wiji",
       "category": "AUTH",
       "name": "ADMIN-登录成功",
       "status": "PASS",
-      "duration": 421
+      "duration": 497
     },
     {
-      "id": "AUTH-1778546914207-2ns9",
+      "id": "AUTH-1778567566219-76hp",
       "category": "AUTH",
       "name": "DOC1-登录成功",
       "status": "PASS",
-      "duration": 242
+      "duration": 328
     },
     {
-      "id": "AUTH-1778546914449-8kpy",
+      "id": "AUTH-1778567566547-l5fr",
       "category": "AUTH",
       "name": "DOC2-登录成功",
       "status": "PASS",
-      "duration": 243
+      "duration": 327
     },
     {
-      "id": "AUTH-1778546914940-o7ue",
+      "id": "AUTH-1778567567219-8usg",
       "category": "AUTH",
       "name": "FIN-登录成功",
       "status": "PASS",
-      "duration": 250
+      "duration": 382
     },
     {
-      "id": "AUTH-1778546914692-7evk",
+      "id": "AUTH-1778567566874-6vf1",
       "category": "AUTH",
       "name": "PRO-登录成功",
       "status": "PASS",
-      "duration": 248
+      "duration": 345
     },
     {
-      "id": "AUTH-1778546913701-kmv0",
+      "id": "AUTH-1778567565536-kmb7",
       "category": "AUTH",
       "name": "TECH1-登录成功",
       "status": "PASS",
-      "duration": 262
+      "duration": 346
     },
     {
-      "id": "AUTH-1778546913963-lo5l",
+      "id": "AUTH-1778567565882-lv2z",
       "category": "AUTH",
       "name": "TECH2-登录成功",
       "status": "PASS",
-      "duration": 244
+      "duration": 337
     },
     {
-      "id": "AUTH-1778546915456-wpdv",
+      "id": "AUTH-1778567567954-tv0v",
       "category": "AUTH",
       "name": "TOKEN刷新",
       "status": "PASS",
-      "duration": 3
+      "duration": 4
     },
     {
-      "id": "AUTH-1778546913452-znuy",
+      "id": "AUTH-1778567565172-4d22",
       "category": "AUTH",
       "name": "WHM-登录成功",
       "status": "PASS",
-      "duration": 249
+      "duration": 364
     },
     {
-      "id": "BOM-1778546916470-4ees",
+      "id": "BOM-1778567569292-dbb0",
       "category": "BOM",
       "name": "ADMIN-按类型筛选BOM",
       "status": "PASS",
-      "duration": 2
+      "duration": 4
     },
     {
-      "id": "BOM-1778546916464-kfj1",
+      "id": "BOM-1778567569287-k4pl",
       "category": "BOM",
       "name": "ADMIN-获取BOM列表",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "BOM-1778546916467-c2ak",
+      "id": "BOM-1778567569290-n09k",
       "category": "BOM",
       "name": "ADMIN-搜索BOM",
       "status": "PASS",
-      "duration": 3
+      "duration": 2
     },
     {
-      "id": "BOM-1778546916474-iwn3",
+      "id": "BOM-1778567569298-izhy",
       "category": "BOM",
       "name": "DOC-获取BOM列表",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "BOM-1778546916476-r7gf",
+      "id": "BOM-1778567569300-pl1q",
       "category": "BOM",
       "name": "FIN-无法访问BOM",
       "status": "PASS",
-      "duration": 1
+      "duration": 2
     },
     {
-      "id": "BOM-1778546916472-un4n",
+      "id": "BOM-1778567569296-3fno",
       "category": "BOM",
       "name": "TECH-获取BOM列表",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "BOUNDARY-1778546916912-y7gd",
+      "id": "BOUNDARY-1778567569835-9pze",
       "category": "BOUNDARY",
       "name": "超大数据量分页",
-      "status": "PASS",
-      "duration": 3
-    },
-    {
-      "id": "BOUNDARY-1778546916853-3wy0",
-      "category": "BOUNDARY",
-      "name": "创建物料负价格被拒绝",
-      "status": "PASS",
-      "duration": 23
-    },
-    {
-      "id": "BOUNDARY-1778546916826-soq1",
-      "category": "BOUNDARY",
-      "name": "创建物料价格=0",
-      "status": "PASS",
-      "duration": 27
-    },
-    {
-      "id": "BOUNDARY-1778546916815-6qk7",
-      "category": "BOUNDARY",
-      "name": "分页page=0处理",
-      "status": "PASS",
-      "duration": 2
-    },
-    {
-      "id": "BOUNDARY-1778546916817-ii63",
-      "category": "BOUNDARY",
-      "name": "分页pageSize=1000",
       "status": "PASS",
       "duration": 4
     },
     {
-      "id": "BOUNDARY-1778546916878-fzpd",
+      "id": "BOUNDARY-1778567569791-pfor",
+      "category": "BOUNDARY",
+      "name": "创建物料负价格被拒绝",
+      "status": "PASS",
+      "duration": 4
+    },
+    {
+      "id": "BOUNDARY-1778567569766-107z",
+      "category": "BOUNDARY",
+      "name": "创建物料价格=0",
+      "status": "PASS",
+      "duration": 25
+    },
+    {
+      "id": "BOUNDARY-1778567569747-kra3",
+      "category": "BOUNDARY",
+      "name": "分页page=0处理",
+      "status": "PASS",
+      "duration": 4
+    },
+    {
+      "id": "BOUNDARY-1778567569751-a6gx",
+      "category": "BOUNDARY",
+      "name": "分页pageSize=1000",
+      "status": "PASS",
+      "duration": 6
+    },
+    {
+      "id": "BOUNDARY-1778567569797-zti1",
       "category": "BOUNDARY",
       "name": "入库负数数量被拒绝",
       "status": "PASS",
-      "duration": 34
+      "duration": 38
     },
     {
-      "id": "BOUNDARY-1778546916876-d354",
+      "id": "BOUNDARY-1778567569795-d4yq",
       "category": "BOUNDARY",
       "name": "入库数量=0",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "BOUNDARY-1778546916821-bcbv",
+      "id": "BOUNDARY-1778567569757-x2je",
       "category": "BOUNDARY",
       "name": "搜索空字符串",
       "status": "PASS",
-      "duration": 2
+      "duration": 5
     },
     {
-      "id": "BOUNDARY-1778546916823-srm8",
+      "id": "BOUNDARY-1778567569762-appy",
       "category": "BOUNDARY",
       "name": "搜索特殊字符",
       "status": "PASS",
-      "duration": 2
+      "duration": 4
     },
     {
-      "id": "BOUNDARY-1778546916915-7jm8",
+      "id": "BOUNDARY-1778567569839-pf1u",
       "category": "BOUNDARY",
       "name": "无效日期格式",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "CATEGORY-1778546916079-6cx1",
+      "id": "CATEGORY-1778567568830-tm3j",
       "category": "CATEGORY",
       "name": "ADMIN-分类搜索-免疫组化",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "CATEGORY-1778546916082-vd8h",
+      "id": "CATEGORY-1778567568833-efwq",
       "category": "CATEGORY",
       "name": "ADMIN-分类搜索-HER2",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "CATEGORY-1778546916074-ayzf",
+      "id": "CATEGORY-1778567568823-vvbi",
       "category": "CATEGORY",
       "name": "ADMIN-获取分类列表",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "CATEGORY-1778546916077-n4yw",
+      "id": "CATEGORY-1778567568826-06lm",
       "category": "CATEGORY",
       "name": "ADMIN-三级分类结构",
       "status": "PASS",
-      "duration": 2
+      "duration": 4
     },
     {
-      "id": "CATEGORY-1778546916086-ytdb",
+      "id": "CATEGORY-1778567568839-buiu",
       "category": "CATEGORY",
       "name": "PRO-获取分类列表",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "CATEGORY-1778546916088-71mg",
+      "id": "CATEGORY-1778567568841-2z6m",
       "category": "CATEGORY",
       "name": "TECH-可访问分类",
       "status": "PASS",
-      "duration": 2
+      "duration": 4
     },
     {
-      "id": "CATEGORY-1778546916085-z1n2",
+      "id": "CATEGORY-1778567568836-bame",
       "category": "CATEGORY",
       "name": "WHM-获取分类列表",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "COST-1778546916501-pigg",
-      "category": "COST",
-      "name": "ADMIN-获取成本分析",
-      "status": "PASS",
-      "duration": 2
-    },
-    {
-      "id": "COST-1778546916503-9320",
-      "category": "COST",
-      "name": "DOC-获取成本分析",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "COST-1778546916504-dwes",
-      "category": "COST",
-      "name": "FIN-获取成本分析",
-      "status": "PASS",
-      "duration": 2
-    },
-    {
-      "id": "COST-1778546916508-5eab",
-      "category": "COST",
-      "name": "PRO-无法访问成本分析",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "COST-1778546916507-z6br",
-      "category": "COST",
-      "name": "TECH-无法访问成本分析",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "COST-1778546916506-k0lz",
-      "category": "COST",
-      "name": "WHM-无法访问成本分析",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "DATA-1778546916542-b5ae",
-      "category": "DATA",
-      "name": "采购订单-收货数量正确",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "DATA-1778546916551-pjyf",
+      "id": "COST-1778567569331-mrk4",
+      "category": "COST",
+      "name": "ADMIN-获取成本分析",
+      "status": "PASS",
+      "duration": 3
+    },
+    {
+      "id": "COST-1778567569334-igsx",
+      "category": "COST",
+      "name": "DOC-获取成本分析",
+      "status": "PASS",
+      "duration": 2
+    },
+    {
+      "id": "COST-1778567569336-1d5d",
+      "category": "COST",
+      "name": "FIN-获取成本分析",
+      "status": "PASS",
+      "duration": 1
+    },
+    {
+      "id": "COST-1778567569341-rxtx",
+      "category": "COST",
+      "name": "PRO-无法访问成本分析",
+      "status": "PASS",
+      "duration": 3
+    },
+    {
+      "id": "COST-1778567569339-l49n",
+      "category": "COST",
+      "name": "TECH-无法访问成本分析",
+      "status": "PASS",
+      "duration": 2
+    },
+    {
+      "id": "COST-1778567569337-ib1o",
+      "category": "COST",
+      "name": "WHM-无法访问成本分析",
+      "status": "PASS",
+      "duration": 2
+    },
+    {
+      "id": "DATA-1778567569383-5u19",
+      "category": "DATA",
+      "name": "采购订单-收货数量正确",
+      "status": "PASS",
+      "duration": 4
+    },
+    {
+      "id": "DATA-1778567569393-ajmg",
       "category": "DATA",
       "name": "出库成本计算正确",
       "status": "PASS",
       "duration": 1
     },
     {
-      "id": "DATA-1778546916548-i6w3",
+      "id": "DATA-1778567569390-iqrc",
       "category": "DATA",
       "name": "低库存物料状态=low-stock",
       "status": "PASS",
-      "duration": 2
+      "duration": 1
     },
     {
-      "id": "DATA-1778546916545-zfgz",
+      "id": "DATA-1778567569387-0rvy",
       "category": "DATA",
       "name": "过期物料状态=expired",
       "status": "PASS",
       "duration": 1
     },
     {
-      "id": "DATA-1778546916546-8pin",
+      "id": "DATA-1778567569389-ns2c",
       "category": "DATA",
       "name": "临期物料状态=warning",
       "status": "PASS",
-      "duration": 2
+      "duration": 1
     },
     {
-      "id": "DATA-1778546916550-3ven",
+      "id": "DATA-1778567569391-kdsc",
       "category": "DATA",
       "name": "盘点差异计算正确",
       "status": "PASS",
       "duration": 1
     },
     {
-      "id": "DATA-1778546916520-n9p1",
+      "id": "DATA-1778567569356-9hr3",
       "category": "DATA",
       "name": "入库总量=库存+出库",
       "status": "PASS",
-      "duration": 21
+      "duration": 25
     },
     {
-      "id": "DATA-1778546916541-nxo3",
+      "id": "DATA-1778567569381-okbf",
       "category": "DATA",
       "name": "苏木素染液-多批次FIFO",
       "status": "PASS",
-      "duration": 1
+      "duration": 2
     },
     {
-      "id": "DATA-1778546916553-4sqd",
+      "id": "DATA-1778567569395-u5ne",
       "category": "DATA",
       "name": "物料分类层级正确",
       "status": "PASS",
       "duration": 1
     },
     {
-      "id": "DATA-1778546916552-3ky7",
+      "id": "DATA-1778567569394-h7bk",
       "category": "DATA",
       "name": "用户角色与权限匹配",
       "status": "PASS",
       "duration": 1
     },
     {
-      "id": "INBOUND-1778546916168-7qo2",
+      "id": "INBOUND-1778567568945-y8sk",
       "category": "INBOUND",
       "name": "ADMIN-按日期筛选入库",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "INBOUND-1778546916171-5f5o",
+      "id": "INBOUND-1778567568948-3qu0",
       "category": "INBOUND",
       "name": "ADMIN-按状态筛选",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "INBOUND-1778546916174-cvmn",
+      "id": "INBOUND-1778567568951-z0v0",
       "category": "INBOUND",
       "name": "ADMIN-创建入库单",
       "status": "PASS",
-      "duration": 50
+      "duration": 51
     },
     {
-      "id": "INBOUND-1778546916164-gvaq",
+      "id": "INBOUND-1778567568938-xlsx",
       "category": "INBOUND",
       "name": "ADMIN-获取入库列表",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "INBOUND-1778546916224-acxg",
+      "id": "INBOUND-1778567569002-mhs5",
       "category": "INBOUND",
       "name": "ADMIN-入库单详情",
       "status": "PASS",
-      "duration": 5
+      "duration": 6
     },
     {
-      "id": "INBOUND-1778546916166-dzqm",
+      "id": "INBOUND-1778567568941-einx",
       "category": "INBOUND",
       "name": "ADMIN-入库搜索",
-      "status": "PASS",
-      "duration": 2
-    },
-    {
-      "id": "INBOUND-1778546916284-it8u",
-      "category": "INBOUND",
-      "name": "DOC-无法创建入库单",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "INBOUND-1778546916278-t9sz",
-      "category": "INBOUND",
-      "name": "PRO-获取入库列表",
       "status": "PASS",
       "duration": 4
     },
     {
-      "id": "INBOUND-1778546916282-bb0f",
+      "id": "INBOUND-1778567569070-3oqh",
+      "category": "INBOUND",
+      "name": "DOC-无法创建入库单",
+      "status": "PASS",
+      "duration": 3
+    },
+    {
+      "id": "INBOUND-1778567569063-xfj1",
+      "category": "INBOUND",
+      "name": "PRO-获取入库列表",
+      "status": "PASS",
+      "duration": 3
+    },
+    {
+      "id": "INBOUND-1778567569066-j2no",
       "category": "INBOUND",
       "name": "TECH-无法创建入库单",
       "status": "PASS",
-      "duration": 2
+      "duration": 4
     },
     {
-      "id": "INBOUND-1778546916232-2c55",
+      "id": "INBOUND-1778567569012-37r0",
       "category": "INBOUND",
       "name": "WHM-创建入库单",
       "status": "PASS",
-      "duration": 46
+      "duration": 51
     },
     {
-      "id": "INBOUND-1778546916229-qszj",
+      "id": "INBOUND-1778567569008-6kq0",
       "category": "INBOUND",
       "name": "WHM-获取入库列表",
       "status": "PASS",
-      "duration": 3
+      "duration": 4
     },
     {
-      "id": "INVENTORY-1778546916148-q274",
+      "id": "INVENTORY-1778567568916-a2lc",
       "category": "INVENTORY",
       "name": "ADMIN-按分类筛选库存",
       "status": "PASS",
-      "duration": 1
+      "duration": 2
     },
     {
-      "id": "INVENTORY-1778546916149-vupy",
+      "id": "INVENTORY-1778567568918-4prr",
       "category": "INVENTORY",
       "name": "ADMIN-按库位筛选库存",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "INVENTORY-1778546916143-edq8",
+      "id": "INVENTORY-1778567568909-t13x",
       "category": "INVENTORY",
       "name": "ADMIN-低库存筛选",
       "status": "PASS",
-      "duration": 2
+      "duration": 4
     },
     {
-      "id": "INVENTORY-1778546916136-t9km",
+      "id": "INVENTORY-1778567568901-lael",
       "category": "INVENTORY",
       "name": "ADMIN-获取库存列表",
       "status": "PASS",
-      "duration": 3
+      "duration": 4
     },
     {
-      "id": "INVENTORY-1778546916145-79e6",
+      "id": "INVENTORY-1778567568913-gmlm",
       "category": "INVENTORY",
       "name": "ADMIN-库存搜索",
       "status": "PASS",
-      "duration": 3
+      "duration": 2
     },
     {
-      "id": "INVENTORY-1778546916139-c9va",
+      "id": "INVENTORY-1778567568905-eovz",
       "category": "INVENTORY",
       "name": "ADMIN-库存统计",
       "status": "PASS",
       "duration": 4
     },
     {
-      "id": "INVENTORY-1778546916156-vx4y",
+      "id": "INVENTORY-1778567568929-uq1y",
       "category": "INVENTORY",
       "name": "DOC-获取库存列表",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "INVENTORY-1778546916162-twhm",
+      "id": "INVENTORY-1778567568935-5qo0",
       "category": "INVENTORY",
       "name": "FIN-无法访问库存",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "INVENTORY-1778546916159-npja",
+      "id": "INVENTORY-1778567568932-d2ba",
       "category": "INVENTORY",
       "name": "PRO-获取库存列表",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "INVENTORY-1778546916154-b3ko",
+      "id": "INVENTORY-1778567568925-kdaz",
       "category": "INVENTORY",
       "name": "TECH-获取库存列表",
       "status": "PASS",
-      "duration": 2
+      "duration": 4
     },
     {
-      "id": "INVENTORY-1778546916151-8yx3",
+      "id": "INVENTORY-1778567568921-2cc3",
       "category": "INVENTORY",
       "name": "WHM-获取库存列表",
+      "status": "PASS",
+      "duration": 4
+    },
+    {
+      "id": "LOCATION-1778567569255-cvz0",
+      "category": "LOCATION",
+      "name": "ADMIN-创建库位",
+      "status": "PASS",
+      "duration": 14
+    },
+    {
+      "id": "LOCATION-1778567569247-zj6t",
+      "category": "LOCATION",
+      "name": "ADMIN-获取库位列表",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "LOCATION-1778546916434-nr6i",
-      "category": "LOCATION",
-      "name": "ADMIN-创建库位",
-      "status": "PASS",
-      "duration": 16
-    },
-    {
-      "id": "LOCATION-1778546916430-dmpg",
-      "category": "LOCATION",
-      "name": "ADMIN-获取库位列表",
-      "status": "PASS",
-      "duration": 2
-    },
-    {
-      "id": "LOCATION-1778546916432-xugt",
+      "id": "LOCATION-1778567569250-ikco",
       "category": "LOCATION",
       "name": "ADMIN-搜索库位",
       "status": "PASS",
-      "duration": 2
+      "duration": 5
     },
     {
-      "id": "LOCATION-1778546916453-hz47",
+      "id": "LOCATION-1778567569272-0vvj",
       "category": "LOCATION",
       "name": "PRO-无法访问库位",
       "status": "PASS",
-      "duration": 1
+      "duration": 2
     },
     {
-      "id": "LOCATION-1778546916450-dk7e",
+      "id": "LOCATION-1778567569269-4sef",
       "category": "LOCATION",
       "name": "WHM-获取库位列表",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "LOG-1778546916512-q0ba",
+      "id": "LOG-1778567569348-ibyh",
       "category": "LOG",
       "name": "ADMIN-按用户筛选日志",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "LOG-1778546916509-l0ml",
+      "id": "LOG-1778567569344-6mw2",
       "category": "LOG",
       "name": "ADMIN-获取操作日志",
-      "status": "PASS",
-      "duration": 3
-    },
-    {
-      "id": "LOG-1778546916514-2ox3",
-      "category": "LOG",
-      "name": "FIN-获取操作日志",
-      "status": "PASS",
-      "duration": 3
-    },
-    {
-      "id": "LOG-1778546916519-uon2",
-      "category": "LOG",
-      "name": "TECH-无法访问日志",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "LOG-1778546916517-ysn8",
-      "category": "LOG",
-      "name": "WHM-无法访问日志",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "MATERIAL-1778546916097-c5v4",
-      "category": "MATERIAL",
-      "name": "ADMIN-按分类筛选",
-      "status": "PASS",
-      "duration": 2
-    },
-    {
-      "id": "MATERIAL-1778546916099-m6aj",
-      "category": "MATERIAL",
-      "name": "ADMIN-按供应商筛选",
-      "status": "PASS",
-      "duration": 2
-    },
-    {
-      "id": "MATERIAL-1778546916104-popo",
-      "category": "MATERIAL",
-      "name": "ADMIN-创建新物料",
-      "status": "PASS",
-      "duration": 26
-    },
-    {
-      "id": "MATERIAL-1778546916090-w1yp",
-      "category": "MATERIAL",
-      "name": "ADMIN-获取物料列表",
       "status": "PASS",
       "duration": 4
     },
     {
-      "id": "MATERIAL-1778546916094-ttcj",
+      "id": "LOG-1778567569350-xx2b",
+      "category": "LOG",
+      "name": "FIN-获取操作日志",
+      "status": "PASS",
+      "duration": 2
+    },
+    {
+      "id": "LOG-1778567569354-cz7z",
+      "category": "LOG",
+      "name": "TECH-无法访问日志",
+      "status": "PASS",
+      "duration": 2
+    },
+    {
+      "id": "LOG-1778567569352-4jz9",
+      "category": "LOG",
+      "name": "WHM-无法访问日志",
+      "status": "PASS",
+      "duration": 2
+    },
+    {
+      "id": "MATERIAL-1778567568853-3gii",
+      "category": "MATERIAL",
+      "name": "ADMIN-按分类筛选",
+      "status": "PASS",
+      "duration": 3
+    },
+    {
+      "id": "MATERIAL-1778567568856-ohpb",
+      "category": "MATERIAL",
+      "name": "ADMIN-按供应商筛选",
+      "status": "PASS",
+      "duration": 3
+    },
+    {
+      "id": "MATERIAL-1778567568863-tice",
+      "category": "MATERIAL",
+      "name": "ADMIN-创建新物料",
+      "status": "PASS",
+      "duration": 27
+    },
+    {
+      "id": "MATERIAL-1778567568845-uqy8",
+      "category": "MATERIAL",
+      "name": "ADMIN-获取物料列表",
+      "status": "PASS",
+      "duration": 5
+    },
+    {
+      "id": "MATERIAL-1778567568850-jond",
       "category": "MATERIAL",
       "name": "ADMIN-搜索苏木素",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "MATERIAL-1778546916130-cnu1",
+      "id": "MATERIAL-1778567568890-9etm",
       "category": "MATERIAL",
       "name": "ADMIN-物料编码唯一性",
       "status": "PASS",
-      "duration": 2
+      "duration": 4
     },
     {
-      "id": "MATERIAL-1778546916101-nh74",
+      "id": "MATERIAL-1778567568859-x2xe",
       "category": "MATERIAL",
       "name": "ADMIN-物料分页",
       "status": "PASS",
-      "duration": 3
+      "duration": 4
     },
     {
-      "id": "MATERIAL-1778546916133-5wq6",
+      "id": "MATERIAL-1778567568898-ir1u",
       "category": "MATERIAL",
       "name": "PRO-获取物料列表",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "MATERIAL-1778546916132-auvg",
+      "id": "MATERIAL-1778567568894-7y8f",
       "category": "MATERIAL",
       "name": "WHM-获取物料列表",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "OUTBOUND-1778546916289-rdad",
-      "category": "OUTBOUND",
-      "name": "ADMIN-出库搜索",
       "status": "PASS",
       "duration": 4
     },
     {
-      "id": "OUTBOUND-1778546916293-zh1o",
+      "id": "OUTBOUND-1778567569081-a42w",
+      "category": "OUTBOUND",
+      "name": "ADMIN-出库搜索",
+      "status": "PASS",
+      "duration": 8
+    },
+    {
+      "id": "OUTBOUND-1778567569089-2apj",
       "category": "OUTBOUND",
       "name": "ADMIN-创建出库单",
       "status": "PASS",
-      "duration": 61
+      "duration": 73
     },
     {
-      "id": "OUTBOUND-1778546916286-mhjq",
+      "id": "OUTBOUND-1778567569073-uykz",
       "category": "OUTBOUND",
       "name": "ADMIN-获取出库列表",
+      "status": "PASS",
+      "duration": 8
+    },
+    {
+      "id": "OUTBOUND-1778567569236-csyc",
+      "category": "OUTBOUND",
+      "name": "DOC-获取出库列表",
+      "status": "PASS",
+      "duration": 7
+    },
+    {
+      "id": "OUTBOUND-1778567569246-85qd",
+      "category": "OUTBOUND",
+      "name": "FIN-无法访问出库",
+      "status": "PASS",
+      "duration": 1
+    },
+    {
+      "id": "OUTBOUND-1778567569243-yq4l",
+      "category": "OUTBOUND",
+      "name": "PRO-无法创建出库单",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "OUTBOUND-1778546916423-jlg2",
+      "id": "OUTBOUND-1778567569176-xu8z",
       "category": "OUTBOUND",
-      "name": "DOC-获取出库列表",
+      "name": "TECH-创建出库单",
+      "status": "PASS",
+      "duration": 60
+    },
+    {
+      "id": "OUTBOUND-1778567569168-31o1",
+      "category": "OUTBOUND",
+      "name": "TECH-获取出库列表",
+      "status": "PASS",
+      "duration": 8
+    },
+    {
+      "id": "OUTBOUND-1778567569162-1or9",
+      "category": "OUTBOUND",
+      "name": "WHM-获取出库列表",
+      "status": "PASS",
+      "duration": 6
+    },
+    {
+      "id": "PROJECT-1778567569274-npa6",
+      "category": "PROJECT",
+      "name": "ADMIN-获取项目列表",
+      "status": "PASS",
+      "duration": 3
+    },
+    {
+      "id": "PROJECT-1778567569277-nde5",
+      "category": "PROJECT",
+      "name": "ADMIN-搜索项目",
       "status": "PASS",
       "duration": 4
     },
     {
-      "id": "OUTBOUND-1778546916428-mps5",
-      "category": "OUTBOUND",
-      "name": "FIN-无法访问出库",
-      "status": "PASS",
-      "duration": 2
-    },
-    {
-      "id": "OUTBOUND-1778546916427-ugk7",
-      "category": "OUTBOUND",
-      "name": "PRO-无法创建出库单",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "OUTBOUND-1778546916364-eg55",
-      "category": "OUTBOUND",
-      "name": "TECH-创建出库单",
-      "status": "PASS",
-      "duration": 58
-    },
-    {
-      "id": "OUTBOUND-1778546916359-39lh",
-      "category": "OUTBOUND",
-      "name": "TECH-获取出库列表",
-      "status": "PASS",
-      "duration": 5
-    },
-    {
-      "id": "OUTBOUND-1778546916354-149s",
-      "category": "OUTBOUND",
-      "name": "WHM-获取出库列表",
-      "status": "PASS",
-      "duration": 5
-    },
-    {
-      "id": "PROJECT-1778546916454-iq74",
-      "category": "PROJECT",
-      "name": "ADMIN-获取项目列表",
-      "status": "PASS",
-      "duration": 2
-    },
-    {
-      "id": "PROJECT-1778546916457-4uvk",
-      "category": "PROJECT",
-      "name": "ADMIN-搜索项目",
-      "status": "PASS",
-      "duration": 1
-    },
-    {
-      "id": "PROJECT-1778546916460-814s",
+      "id": "PROJECT-1778567569283-rm6m",
       "category": "PROJECT",
       "name": "DOC-获取项目列表",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "PROJECT-1778546916463-m2io",
+      "id": "PROJECT-1778567569286-qxsx",
       "category": "PROJECT",
       "name": "PRO-无法访问项目",
       "status": "PASS",
       "duration": 1
     },
     {
-      "id": "PROJECT-1778546916458-nxbt",
+      "id": "PROJECT-1778567569281-bmes",
       "category": "PROJECT",
       "name": "TECH-获取项目列表",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "PURCHASE-1778546916494-5tlj",
+      "id": "PURCHASE-1778567569323-r5mv",
       "category": "PURCHASE",
       "name": "ADMIN-按状态筛选",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "PURCHASE-1778546916490-uykh",
+      "id": "PURCHASE-1778567569318-tlv8",
       "category": "PURCHASE",
       "name": "ADMIN-获取采购订单",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "PURCHASE-1778546916492-tv0g",
+      "id": "PURCHASE-1778567569321-xa6g",
       "category": "PURCHASE",
       "name": "ADMIN-搜索采购订单",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "PURCHASE-1778546916496-55al",
+      "id": "PURCHASE-1778567569326-674z",
       "category": "PURCHASE",
       "name": "PRO-获取采购订单",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "PURCHASE-1778546916498-2kt3",
+      "id": "PURCHASE-1778567569329-tlmn",
       "category": "PURCHASE",
       "name": "WHM-无法创建采购订单",
       "status": "PASS",
-      "duration": 3
+      "duration": 2
     },
     {
-      "id": "ROLE-1778546916014-k5p6",
+      "id": "ROLE-1778567568735-lue2",
       "category": "ROLE",
       "name": "ADMIN-编辑角色权限",
       "status": "PASS",
-      "duration": 15
+      "duration": 14
     },
     {
-      "id": "ROLE-1778546915996-kmk7",
+      "id": "ROLE-1778567568719-w5ee",
       "category": "ROLE",
       "name": "ADMIN-创建新角色",
       "status": "PASS",
-      "duration": 15
+      "duration": 14
     },
     {
-      "id": "ROLE-1778546916011-ad15",
+      "id": "ROLE-1778567568733-m249",
       "category": "ROLE",
       "name": "ADMIN-创建重复角色编码",
-      "status": "PASS",
-      "duration": 3
-    },
-    {
-      "id": "ROLE-1778546915992-tfbp",
-      "category": "ROLE",
-      "name": "ADMIN-获取角色列表",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "ROLE-1778546915994-2fpy",
+      "id": "ROLE-1778567568714-masa",
+      "category": "ROLE",
+      "name": "ADMIN-获取角色列表",
+      "status": "PASS",
+      "duration": 3
+    },
+    {
+      "id": "ROLE-1778567568717-3975",
       "category": "ROLE",
       "name": "ADMIN-角色详情-含权限",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "ROLE-1778546916029-j71j",
+      "id": "ROLE-1778567568749-ntyn",
       "category": "ROLE",
       "name": "ADMIN-删除角色",
       "status": "PASS",
-      "duration": 12
+      "duration": 14
     },
     {
-      "id": "SECURITY-1778546916950-zbym",
+      "id": "SECURITY-1778567569876-hoek",
       "category": "SECURITY",
       "name": "并发登录测试",
       "status": "PASS",
-      "duration": 1216
+      "duration": 2020
     },
     {
-      "id": "SECURITY-1778546918169-dt8e",
+      "id": "SECURITY-1778567571901-k30d",
       "category": "SECURITY",
       "name": "敏感数据不暴露密码",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "SECURITY-1778546916918-xw72",
+      "id": "SECURITY-1778567569843-d6to",
       "category": "SECURITY",
       "name": "无效Token被拒绝",
       "status": "PASS",
-      "duration": 1
+      "duration": 3
     },
     {
-      "id": "SECURITY-1778546916917-1tga",
+      "id": "SECURITY-1778567569841-n9u7",
       "category": "SECURITY",
       "name": "无Token访问被拒绝",
       "status": "PASS",
-      "duration": 1
+      "duration": 2
     },
     {
-      "id": "SECURITY-1778546918167-3zpa",
+      "id": "SECURITY-1778567571899-4wgy",
       "category": "SECURITY",
       "name": "越权访问-PRO修改其他用户",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "SECURITY-1778546918166-imoj",
+      "id": "SECURITY-1778567571896-kwlf",
       "category": "SECURITY",
       "name": "越权访问-TECH访问admin接口",
       "status": "PASS",
-      "duration": 1
+      "duration": 2
     },
     {
-      "id": "SECURITY-1778546916919-l8og",
+      "id": "SECURITY-1778567569846-oz7e",
       "category": "SECURITY",
       "name": "SQL注入尝试被防御",
       "status": "PASS",
       "duration": 5
     },
     {
-      "id": "SECURITY-1778546916924-ofcm",
+      "id": "SECURITY-1778567569852-n4qd",
       "category": "SECURITY",
       "name": "XSS脚本尝试被防御",
       "status": "PASS",
-      "duration": 26
+      "duration": 24
     },
     {
-      "id": "SUPPLIER-1778546916061-6qnm",
+      "id": "SUPPLIER-1778567568783-6l7s",
       "category": "SUPPLIER",
       "name": "ADMIN-编辑供应商",
       "status": "PASS",
-      "duration": 5
+      "duration": 17
     },
     {
-      "id": "SUPPLIER-1778546916046-v02m",
+      "id": "SUPPLIER-1778567568768-r5h5",
       "category": "SUPPLIER",
       "name": "ADMIN-创建供应商",
       "status": "PASS",
       "duration": 15
     },
     {
-      "id": "SUPPLIER-1778546916041-hnts",
+      "id": "SUPPLIER-1778567568763-0c67",
       "category": "SUPPLIER",
       "name": "ADMIN-获取供应商列表",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "SUPPLIER-1778546916066-q1z8",
+      "id": "SUPPLIER-1778567568800-j584",
       "category": "SUPPLIER",
       "name": "ADMIN-删除供应商",
       "status": "PASS",
-      "duration": 4
+      "duration": 16
     },
     {
-      "id": "SUPPLIER-1778546916044-bwoi",
+      "id": "SUPPLIER-1778567568766-bjyt",
       "category": "SUPPLIER",
       "name": "ADMIN-搜索供应商",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "SUPPLIER-1778546916072-lyw0",
+      "id": "SUPPLIER-1778567568820-zjuj",
       "category": "SUPPLIER",
       "name": "PRO-获取供应商列表",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "SUPPLIER-1778546916070-xjpo",
+      "id": "SUPPLIER-1778567568816-7gne",
       "category": "SUPPLIER",
       "name": "WHM-获取供应商列表",
-      "status": "PASS",
-      "duration": 2
-    },
-    {
-      "id": "USER-1778546915967-whme",
-      "category": "USER",
-      "name": "ADMIN-编辑用户角色",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "USER-1778546915469-kew0",
+      "id": "USER-1778567568658-st8k",
+      "category": "USER",
+      "name": "ADMIN-编辑用户角色",
+      "status": "PASS",
+      "duration": 17
+    },
+    {
+      "id": "USER-1778567567971-ji1n",
       "category": "USER",
       "name": "ADMIN-创建新用户",
       "status": "PASS",
-      "duration": 253
+      "duration": 345
     },
     {
-      "id": "USER-1778546915466-ndsr",
+      "id": "USER-1778567567968-2oaf",
       "category": "USER",
       "name": "ADMIN-分页功能",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "USER-1778546915461-9axy",
+      "id": "USER-1778567567960-cgqc",
       "category": "USER",
       "name": "ADMIN-获取用户列表",
       "status": "PASS",
-      "duration": 3
+      "duration": 6
     },
     {
-      "id": "USER-1778546915970-vwqb",
+      "id": "USER-1778567568675-ik63",
       "category": "USER",
       "name": "ADMIN-禁用用户",
       "status": "PASS",
-      "duration": 2
+      "duration": 18
     },
     {
-      "id": "USER-1778546915972-y8of",
+      "id": "USER-1778567568693-eixx",
       "category": "USER",
       "name": "ADMIN-删除用户",
       "status": "PASS",
-      "duration": 17
+      "duration": 16
     },
     {
-      "id": "USER-1778546915464-ib6p",
+      "id": "USER-1778567567966-64v3",
       "category": "USER",
       "name": "ADMIN-搜索用户",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "USER-1778546915722-uk3f",
+      "id": "USER-1778567568316-bhuo",
       "category": "USER",
       "name": "ADMIN-用户名唯一性",
       "status": "PASS",
-      "duration": 245
+      "duration": 342
     },
     {
-      "id": "USER-1778546915990-4c9g",
+      "id": "USER-1778567568712-4bm9",
       "category": "USER",
       "name": "TECH-无法访问用户列表",
       "status": "PASS",
       "duration": 2
     },
     {
-      "id": "USER-1778546915989-jed6",
+      "id": "USER-1778567568709-y0da",
       "category": "USER",
       "name": "WHM-无法访问用户列表",
       "status": "PASS",
-      "duration": 1
+      "duration": 3
     },
     {
-      "id": "UX-1778546916799-n01u",
+      "id": "UX-1778567569723-wn83",
       "category": "UX",
       "name": "成功响应包含success标志",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "UX-1778546916807-4uv8",
+      "id": "UX-1778567569738-vd8h",
       "category": "UX",
       "name": "出库单包含项目关联",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "UX-1778546916797-f5px",
+      "id": "UX-1778567569720-8w9c",
       "category": "UX",
       "name": "错误响应包含错误码",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "UX-1778546916554-88w0",
+      "id": "UX-1778567569397-bldg",
       "category": "UX",
       "name": "登录页-返回用户信息",
       "status": "PASS",
-      "duration": 240
+      "duration": 319
     },
     {
-      "id": "UX-1778546916812-gh70",
+      "id": "UX-1778567569744-zex3",
       "category": "UX",
       "name": "分类数据包含层级",
       "status": "PASS",
       "duration": 3
     },
     {
-      "id": "UX-1778546916810-yxde",
+      "id": "UX-1778567569741-m3f9",
       "category": "UX",
       "name": "供应商数据包含评级",
       "status": "PASS",
-      "duration": 2
+      "duration": 3
     },
     {
-      "id": "UX-1778546916804-y0mg",
+      "id": "UX-1778567569730-mc4j",
       "category": "UX",
       "name": "库存数据包含状态字段",
       "status": "PASS",
-      "duration": 1
+      "duration": 4
     },
     {
-      "id": "UX-1778546916794-7tfs",
+      "id": "UX-1778567569716-052e",
       "category": "UX",
       "name": "列表响应包含分页信息",
       "status": "PASS",
-      "duration": 3
+      "duration": 4
     },
     {
-      "id": "UX-1778546916806-oac8",
+      "id": "UX-1778567569734-dbd3",
       "category": "UX",
       "name": "入库单包含批次信息",
       "status": "PASS",
-      "duration": 1
+      "duration": 4
     },
     {
-      "id": "UX-1778546916801-s2v9",
+      "id": "UX-1778567569726-w9kh",
       "category": "UX",
       "name": "物料数据包含关键字段",
       "status": "PASS",
-      "duration": 3
+      "duration": 4
     }
   ]
 }

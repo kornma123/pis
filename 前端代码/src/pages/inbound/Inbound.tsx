@@ -238,7 +238,7 @@ export default function Inbound() {
   const [selectedOrderId, setSelectedOrderId] = useState<string>('')
   const [form, setForm] = useState<FormData>({
     type: 'purchase', materialId: '', batchNo: '', quantity: 0, price: 0,
-    supplierId: '', locationId: '', fromLocationId: '', fromLocationName: '', productionDate: '', expiryDate: '', remark: ''
+    supplierId: '', locationId: '', fromLocationId: '', fromLocationName: '', productionDate: '', expiryDate: '', remark: '', purchaseOrderId: ''
   })
 
   // 统计数据（模拟）
@@ -1009,12 +1009,15 @@ export default function Inbound() {
                         if (order) {
                           setForm(prev => ({
                             ...prev,
+                            purchaseOrderId: orderId,
                             supplierId: order.supplier_id || '',
                             materialId: order.material_id || prev.materialId,
                             price: order.unit_price || prev.price,
                             quantity: order.remainingQty || prev.quantity,
                           }));
                         }
+                      } else {
+                        setForm(prev => ({ ...prev, purchaseOrderId: '' }));
                       }
                     }}
                     className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"

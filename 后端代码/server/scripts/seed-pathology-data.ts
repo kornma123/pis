@@ -819,25 +819,135 @@ function seedProjects(db: any) {
   }
 
   const projects = [
-    { id: 'PRJ-HE-001', code: 'HE-001', name: '常规HE染色', type: 'he', cycle: '1天', manager: '刘医师', description: '常规苏木素-伊红染色，用于组织切片常规诊断' },
-    { id: 'PRJ-IHC-001', code: 'IHC-001', name: '免疫组化检测（广谱CK）', type: 'ihc', cycle: '2天', manager: '刘医师', description: '广谱细胞角蛋白免疫组化染色，用于上皮源性肿瘤诊断' },
-    { id: 'PRJ-IHC-002', code: 'IHC-002', name: '免疫组化检测（CD20）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD20免疫组化染色，用于B细胞淋巴瘤诊断' },
-    { id: 'PRJ-IHC-003', code: 'IHC-003', name: '免疫组化检测（Ki-67）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'Ki-67增殖指数检测，用于肿瘤增殖活性评估' },
-    { id: 'PRJ-IHC-004', code: 'IHC-004', name: '免疫组化检测（HER2）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'HER2蛋白表达检测，用于乳腺癌靶向治疗评估' },
-    { id: 'PRJ-IHC-005', code: 'IHC-005', name: '免疫组化检测（PD-L1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'PD-L1表达检测，用于免疫治疗疗效预测' },
-    { id: 'PRJ-MP-001', code: 'MP-001', name: '肿瘤425基因NGS检测', type: 'mp', cycle: '7天', manager: '陈医师', description: '基于二代测序技术的425基因靶向Panel检测' },
-    { id: 'PRJ-MP-002', code: 'MP-002', name: 'HER2 FISH检测', type: 'mp', cycle: '3天', manager: '陈医师', description: 'HER2基因扩增FISH检测，用于乳腺癌/胃癌靶向治疗评估' },
-    { id: 'PRJ-MP-003', code: 'MP-003', name: 'ALK FISH检测', type: 'mp', cycle: '3天', manager: '陈医师', description: 'ALK基因重排FISH检测，用于非小细胞肺癌靶向治疗评估' },
-    { id: 'PRJ-SS-001', code: 'SS-001', name: 'PAS特殊染色', type: 'ss', cycle: '1天', manager: '刘医师', description: '过碘酸-Schiff染色，用于糖原/黏液检测' },
-    { id: 'PRJ-CYTO-001', code: 'CYTO-001', name: '液基薄层细胞学检测（TCT）', type: 'cyto', cycle: '2天', manager: '刘医师', description: '宫颈液基薄层细胞学检测，用于宫颈癌筛查' },
-    { id: 'PRJ-CYTO-002', code: 'CYTO-002', name: '细针穿刺细胞学检测', type: 'cyto', cycle: '1天', manager: '刘医师', description: '细针穿刺标本细胞学诊断' },
+    // HE制片
+    { id: 'PRJ-HE-001', code: 'HE-001', name: '常规HE染色', type: 'he', cycle: '1天', manager: '刘医师', description: '常规苏木素-伊红染色，用于组织切片常规诊断', bom_id: 'BOM-HE-001', supportable_samples: 100 },
+    { id: 'PRJ-HE-002', code: 'HE-002', name: '冰冻切片HE染色', type: 'he', cycle: '1天', manager: '刘医师', description: '术中冰冻切片快速HE染色', bom_id: 'BOM-HE-002', supportable_samples: 50 },
+
+    // IHC检测（每个抗体对应一个检测项目）
+    { id: 'PRJ-IHC-001', code: 'IHC-001', name: '免疫组化检测（广谱CK）', type: 'ihc', cycle: '2天', manager: '刘医师', description: '广谱细胞角蛋白免疫组化染色，用于上皮源性肿瘤诊断', bom_id: 'BOM-IHC-CK', supportable_samples: 30 },
+    { id: 'PRJ-IHC-002', code: 'IHC-002', name: '免疫组化检测（CK7）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CK7免疫组化染色，用于鉴别腺癌来源', bom_id: 'BOM-IHC-CK7', supportable_samples: 30 },
+    { id: 'PRJ-IHC-003', code: 'IHC-003', name: '免疫组化检测（CK20）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CK20免疫组化染色，用于胃肠道肿瘤诊断', bom_id: 'BOM-IHC-CK20', supportable_samples: 30 },
+    { id: 'PRJ-IHC-004', code: 'IHC-004', name: '免疫组化检测（CK5/6）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CK5/6免疫组化染色，用于鳞癌诊断', bom_id: 'BOM-IHC-CK56', supportable_samples: 30 },
+    { id: 'PRJ-IHC-005', code: 'IHC-005', name: '免疫组化检测（TTF-1）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'TTF-1免疫组化染色，用于肺腺癌诊断', bom_id: 'BOM-IHC-TTF1', supportable_samples: 30 },
+    { id: 'PRJ-IHC-006', code: 'IHC-006', name: '免疫组化检测（Napsin A）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'Napsin A免疫组化染色，用于肺腺癌诊断', bom_id: 'BOM-IHC-NapsinA', supportable_samples: 30 },
+    { id: 'PRJ-IHC-007', code: 'IHC-007', name: '免疫组化检测（GATA3）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'GATA3免疫组化染色，用于尿路上皮癌/乳腺癌诊断', bom_id: 'BOM-IHC-GATA3', supportable_samples: 30 },
+    { id: 'PRJ-IHC-008', code: 'IHC-008', name: '免疫组化检测（PAX8）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'PAX8免疫组化染色，用于肾/卵巢/甲状腺癌诊断', bom_id: 'BOM-IHC-PAX8', supportable_samples: 30 },
+    { id: 'PRJ-IHC-009', code: 'IHC-009', name: '免疫组化检测（Vimentin）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'Vimentin免疫组化染色，用于间叶源性肿瘤诊断', bom_id: 'BOM-IHC-Vim', supportable_samples: 30 },
+    { id: 'PRJ-IHC-010', code: 'IHC-010', name: '免疫组化检测（S-100）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'S-100免疫组化染色，用于黑色素瘤/神经源性肿瘤诊断', bom_id: 'BOM-IHC-S100', supportable_samples: 30 },
+    { id: 'PRJ-IHC-011', code: 'IHC-011', name: '免疫组化检测（Desmin）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'Desmin免疫组化染色，用于肌源性肿瘤诊断', bom_id: 'BOM-IHC-DES', supportable_samples: 30 },
+    { id: 'PRJ-IHC-012', code: 'IHC-012', name: '免疫组化检测（SMA）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'SMA免疫组化染色，用于平滑肌/肌纤维母细胞瘤诊断', bom_id: 'BOM-IHC-SMA', supportable_samples: 30 },
+    { id: 'PRJ-IHC-013', code: 'IHC-013', name: '免疫组化检测（CD34）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD34免疫组化染色，用于血管源性肿瘤诊断', bom_id: 'BOM-IHC-CD34', supportable_samples: 30 },
+    { id: 'PRJ-IHC-014', code: 'IHC-014', name: '免疫组化检测（CD31）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD31免疫组化染色，用于血管内皮肿瘤诊断', bom_id: 'BOM-IHC-CD31', supportable_samples: 30 },
+    { id: 'PRJ-IHC-015', code: 'IHC-015', name: '免疫组化检测（ERG）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'ERG免疫组化染色，用于血管源性肿瘤诊断', bom_id: 'BOM-IHC-ERG', supportable_samples: 30 },
+    { id: 'PRJ-IHC-016', code: 'IHC-016', name: '免疫组化检测（CD117）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD117(c-Kit)免疫组化染色，用于GIST诊断', bom_id: 'BOM-IHC-CD117', supportable_samples: 30 },
+    { id: 'PRJ-IHC-017', code: 'IHC-017', name: '免疫组化检测（DOG1）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'DOG1免疫组化染色，用于GIST诊断', bom_id: 'BOM-IHC-DOG1', supportable_samples: 30 },
+    { id: 'PRJ-IHC-018', code: 'IHC-018', name: '免疫组化检测（CD3）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD3免疫组化染色，用于T细胞标记', bom_id: 'BOM-IHC-CD3', supportable_samples: 30 },
+    { id: 'PRJ-IHC-019', code: 'IHC-019', name: '免疫组化检测（CD20）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD20免疫组化染色，用于B细胞淋巴瘤诊断', bom_id: 'BOM-IHC-CD20', supportable_samples: 30 },
+    { id: 'PRJ-IHC-020', code: 'IHC-020', name: '免疫组化检测（CD30）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD30免疫组化染色，用于霍奇金淋巴瘤诊断', bom_id: 'BOM-IHC-CD30', supportable_samples: 30 },
+    { id: 'PRJ-IHC-021', code: 'IHC-021', name: '免疫组化检测（CD21）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD21免疫组化染色，用于滤泡树突状细胞标记', bom_id: 'BOM-IHC-CD21', supportable_samples: 30 },
+    { id: 'PRJ-IHC-022', code: 'IHC-022', name: '免疫组化检测（CD23）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD23免疫组化染色，用于CLL/SLL诊断', bom_id: 'BOM-IHC-CD23', supportable_samples: 30 },
+    { id: 'PRJ-IHC-023', code: 'IHC-023', name: '免疫组化检测（CD10）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD10免疫组化染色，用于滤泡中心细胞标记', bom_id: 'BOM-IHC-CD10', supportable_samples: 30 },
+    { id: 'PRJ-IHC-024', code: 'IHC-024', name: '免疫组化检测（CD15）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD15免疫组化染色，用于霍奇金淋巴瘤诊断', bom_id: 'BOM-IHC-CD15', supportable_samples: 30 },
+    { id: 'PRJ-IHC-025', code: 'IHC-025', name: '免疫组化检测（CD45/LCA）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD45免疫组化染色，用于白细胞共同抗原标记', bom_id: 'BOM-IHC-CD45', supportable_samples: 30 },
+    { id: 'PRJ-IHC-026', code: 'IHC-026', name: '免疫组化检测（BCL-2）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'BCL-2免疫组化染色，用于滤泡性淋巴瘤诊断', bom_id: 'BOM-IHC-BCL2', supportable_samples: 30 },
+    { id: 'PRJ-IHC-027', code: 'IHC-027', name: '免疫组化检测（BCL-6）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'BCL-6免疫组化染色，用于生发中心标记', bom_id: 'BOM-IHC-BCL6', supportable_samples: 30 },
+    { id: 'PRJ-IHC-028', code: 'IHC-028', name: '免疫组化检测（MUM1）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'MUM1免疫组化染色，用于活化B细胞标记', bom_id: 'BOM-IHC-MUM1', supportable_samples: 30 },
+    { id: 'PRJ-IHC-029', code: 'IHC-029', name: '免疫组化检测（Cyclin D1）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'Cyclin D1免疫组化染色，用于套细胞淋巴瘤诊断', bom_id: 'BOM-IHC-CyclinD1', supportable_samples: 30 },
+    { id: 'PRJ-IHC-030', code: 'IHC-030', name: '免疫组化检测（SOX11）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'SOX11免疫组化染色，用于套细胞淋巴瘤诊断', bom_id: 'BOM-IHC-SOX11', supportable_samples: 30 },
+    { id: 'PRJ-IHC-031', code: 'IHC-031', name: '免疫组化检测（CD68）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD68免疫组化染色，用于组织细胞标记', bom_id: 'BOM-IHC-CD68', supportable_samples: 30 },
+    { id: 'PRJ-IHC-032', code: 'IHC-032', name: '免疫组化检测（CD163）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD163免疫组化染色，用于M2型巨噬细胞标记', bom_id: 'BOM-IHC-CD163', supportable_samples: 30 },
+    { id: 'PRJ-IHC-033', code: 'IHC-033', name: '免疫组化检测（CD138）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'CD138免疫组化染色，用于浆细胞标记', bom_id: 'BOM-IHC-CD138', supportable_samples: 30 },
+    { id: 'PRJ-IHC-034', code: 'IHC-034', name: '免疫组化检测（Kappa轻链）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'Kappa轻链免疫组化染色，用于克隆性分析', bom_id: 'BOM-IHC-Kappa', supportable_samples: 30 },
+    { id: 'PRJ-IHC-035', code: 'IHC-035', name: '免疫组化检测（Lambda轻链）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'Lambda轻链免疫组化染色，用于克隆性分析', bom_id: 'BOM-IHC-Lambda', supportable_samples: 30 },
+    { id: 'PRJ-IHC-036', code: 'IHC-036', name: '免疫组化检测（MPO）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'MPO免疫组化染色，用于髓系白血病诊断', bom_id: 'BOM-IHC-MPO', supportable_samples: 30 },
+    { id: 'PRJ-IHC-037', code: 'IHC-037', name: '免疫组化检测（Ki-67）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'Ki-67增殖指数检测，用于肿瘤增殖活性评估', bom_id: 'BOM-IHC-Ki67', supportable_samples: 30 },
+    { id: 'PRJ-IHC-038', code: 'IHC-038', name: '免疫组化检测（P53）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'P53免疫组化染色，用于突变型p53检测', bom_id: 'BOM-IHC-P53', supportable_samples: 30 },
+    { id: 'PRJ-IHC-039', code: 'IHC-039', name: '免疫组化检测（P16）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'P16免疫组化染色，用于HPV相关病变诊断', bom_id: 'BOM-IHC-P16', supportable_samples: 30 },
+    { id: 'PRJ-IHC-040', code: 'IHC-040', name: '免疫组化检测（P21）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'P21免疫组化染色，用于细胞周期调控评估', bom_id: 'BOM-IHC-P21', supportable_samples: 30 },
+    { id: 'PRJ-IHC-041', code: 'IHC-041', name: '免疫组化检测（P27）', type: 'ihc', cycle: '2天', manager: '刘医师', description: 'P27免疫组化染色，用于细胞周期抑制评估', bom_id: 'BOM-IHC-P27', supportable_samples: 30 },
+    { id: 'PRJ-IHC-042', code: 'IHC-042', name: '免疫组化检测（HER2）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'HER2蛋白表达检测，用于乳腺癌靶向治疗评估', bom_id: 'BOM-IHC-HER2', supportable_samples: 30 },
+    { id: 'PRJ-IHC-043', code: 'IHC-043', name: '免疫组化检测（ER）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'ER免疫组化染色，用于乳腺癌内分泌治疗评估', bom_id: 'BOM-IHC-ER', supportable_samples: 30 },
+    { id: 'PRJ-IHC-044', code: 'IHC-044', name: '免疫组化检测（PR）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'PR免疫组化染色，用于乳腺癌内分泌治疗评估', bom_id: 'BOM-IHC-PR', supportable_samples: 30 },
+    { id: 'PRJ-IHC-045', code: 'IHC-045', name: '免疫组化检测（AR）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'AR免疫组化染色，用于前列腺癌诊断', bom_id: 'BOM-IHC-AR', supportable_samples: 30 },
+    { id: 'PRJ-IHC-046', code: 'IHC-046', name: '免疫组化检测（PD-L1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'PD-L1表达检测，用于免疫治疗疗效预测', bom_id: 'BOM-IHC-PDL1', supportable_samples: 20 },
+    { id: 'PRJ-IHC-047', code: 'IHC-047', name: '免疫组化检测（ALK D5F3）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'ALK(D5F3)免疫组化染色，用于肺癌靶向治疗评估', bom_id: 'BOM-IHC-ALK', supportable_samples: 30 },
+    { id: 'PRJ-IHC-048', code: 'IHC-048', name: '免疫组化检测（EGFR）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'EGFR免疫组化染色，用于肺癌靶向治疗评估', bom_id: 'BOM-IHC-EGFR', supportable_samples: 30 },
+    { id: 'PRJ-IHC-049', code: 'IHC-049', name: '免疫组化检测（ROS1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'ROS1免疫组化染色，用于肺癌靶向治疗评估', bom_id: 'BOM-IHC-ROS1', supportable_samples: 30 },
+    { id: 'PRJ-IHC-050', code: 'IHC-050', name: '免疫组化检测（RET）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'RET免疫组化染色，用于甲状腺癌/肺癌诊断', bom_id: 'BOM-IHC-RET', supportable_samples: 30 },
+    { id: 'PRJ-IHC-051', code: 'IHC-051', name: '免疫组化检测（MET）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'MET免疫组化染色，用于肺癌靶向治疗评估', bom_id: 'BOM-IHC-MET', supportable_samples: 30 },
+    { id: 'PRJ-IHC-052', code: 'IHC-052', name: '免疫组化检测（Syn）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'Synaptophysin免疫组化染色，用于神经内分泌肿瘤诊断', bom_id: 'BOM-IHC-Syn', supportable_samples: 30 },
+    { id: 'PRJ-IHC-053', code: 'IHC-053', name: '免疫组化检测（CgA）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'Chromogranin A免疫组化染色，用于神经内分泌肿瘤诊断', bom_id: 'BOM-IHC-CgA', supportable_samples: 30 },
+    { id: 'PRJ-IHC-054', code: 'IHC-054', name: '免疫组化检测（CD56）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'CD56免疫组化染色，用于NK细胞/神经内分泌肿瘤诊断', bom_id: 'BOM-IHC-CD56', supportable_samples: 30 },
+    { id: 'PRJ-IHC-055', code: 'IHC-055', name: '免疫组化检测（NSE）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'NSE免疫组化染色，用于神经内分泌肿瘤诊断', bom_id: 'BOM-IHC-NSE', supportable_samples: 30 },
+    { id: 'PRJ-IHC-056', code: 'IHC-056', name: '免疫组化检测（INSM1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'INSM1免疫组化染色，用于神经内分泌肿瘤诊断', bom_id: 'BOM-IHC-INSM1', supportable_samples: 30 },
+    { id: 'PRJ-IHC-057', code: 'IHC-057', name: '免疫组化检测（PSA）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'PSA免疫组化染色，用于前列腺癌诊断', bom_id: 'BOM-IHC-PSA', supportable_samples: 30 },
+    { id: 'PRJ-IHC-058', code: 'IHC-058', name: '免疫组化检测（NKX3.1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'NKX3.1免疫组化染色，用于前列腺癌诊断', bom_id: 'BOM-IHC-NKX31', supportable_samples: 30 },
+    { id: 'PRJ-IHC-059', code: 'IHC-059', name: '免疫组化检测（WT1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'WT1免疫组化染色，用于间皮瘤/卵巢癌诊断', bom_id: 'BOM-IHC-WT1', supportable_samples: 30 },
+    { id: 'PRJ-IHC-060', code: 'IHC-060', name: '免疫组化检测（Calretinin）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'Calretinin免疫组化染色，用于间皮瘤诊断', bom_id: 'BOM-IHC-Calret', supportable_samples: 30 },
+    { id: 'PRJ-IHC-061', code: 'IHC-061', name: '免疫组化检测（Inhibin）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'Inhibin免疫组化染色，用于性索间质肿瘤诊断', bom_id: 'BOM-IHC-Inhibin', supportable_samples: 30 },
+    { id: 'PRJ-IHC-062', code: 'IHC-062', name: '免疫组化检测（HepPar-1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'HepPar-1免疫组化染色，用于肝细胞癌诊断', bom_id: 'BOM-IHC-HepPar', supportable_samples: 30 },
+    { id: 'PRJ-IHC-063', code: 'IHC-063', name: '免疫组化检测（Arginase-1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'Arginase-1免疫组化染色，用于肝细胞癌诊断', bom_id: 'BOM-IHC-Arg1', supportable_samples: 30 },
+    { id: 'PRJ-IHC-064', code: 'IHC-064', name: '免疫组化检测（CDX2）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'CDX2免疫组化染色，用于肠道分化标记', bom_id: 'BOM-IHC-CDX2', supportable_samples: 30 },
+    { id: 'PRJ-IHC-065', code: 'IHC-065', name: '免疫组化检测（SATB2）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'SATB2免疫组化染色，用于结直肠癌诊断', bom_id: 'BOM-IHC-SATB2', supportable_samples: 30 },
+    { id: 'PRJ-IHC-066', code: 'IHC-066', name: '免疫组化检测（Villin）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'Villin免疫组化染色，用于肠道分化标记', bom_id: 'BOM-IHC-Villin', supportable_samples: 30 },
+    { id: 'PRJ-IHC-067', code: 'IHC-067', name: '免疫组化检测（RCC）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'RCC免疫组化染色，用于肾细胞癌诊断', bom_id: 'BOM-IHC-RCC', supportable_samples: 30 },
+    { id: 'PRJ-IHC-068', code: 'IHC-068', name: '免疫组化检测（MLH1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'MLH1免疫组化染色，用于林奇综合征筛查', bom_id: 'BOM-IHC-MLH1', supportable_samples: 30 },
+    { id: 'PRJ-IHC-069', code: 'IHC-069', name: '免疫组化检测（MSH2）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'MSH2免疫组化染色，用于林奇综合征筛查', bom_id: 'BOM-IHC-MSH2', supportable_samples: 30 },
+    { id: 'PRJ-IHC-070', code: 'IHC-070', name: '免疫组化检测（MSH6）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'MSH6免疫组化染色，用于林奇综合征筛查', bom_id: 'BOM-IHC-MSH6', supportable_samples: 30 },
+    { id: 'PRJ-IHC-071', code: 'IHC-071', name: '免疫组化检测（PMS2）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'PMS2免疫组化染色，用于林奇综合征筛查', bom_id: 'BOM-IHC-PMS2', supportable_samples: 30 },
+    { id: 'PRJ-IHC-072', code: 'IHC-072', name: '免疫组化检测（KRAS）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'KRAS免疫组化染色，用于结直肠癌靶向治疗评估', bom_id: 'BOM-IHC-KRAS', supportable_samples: 30 },
+    { id: 'PRJ-IHC-073', code: 'IHC-073', name: '免疫组化检测（BRAF V600E）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'BRAF(V600E)免疫组化染色，用于黑色素瘤/结直肠癌诊断', bom_id: 'BOM-IHC-BRAF', supportable_samples: 30 },
+    { id: 'PRJ-IHC-074', code: 'IHC-074', name: '免疫组化检测（IDH1 R132H）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'IDH1(R132H)免疫组化染色，用于胶质瘤诊断', bom_id: 'BOM-IHC-IDH1', supportable_samples: 30 },
+    { id: 'PRJ-IHC-075', code: 'IHC-075', name: '免疫组化检测（ATRX）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'ATRX免疫组化染色，用于胶质瘤分子分型', bom_id: 'BOM-IHC-ATRX', supportable_samples: 30 },
+    { id: 'PRJ-IHC-076', code: 'IHC-076', name: '免疫组化检测（GFAP）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'GFAP免疫组化染色，用于星形细胞肿瘤诊断', bom_id: 'BOM-IHC-GFAP', supportable_samples: 30 },
+    { id: 'PRJ-IHC-077', code: 'IHC-077', name: '免疫组化检测（Olig2）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'Olig2免疫组化染色，用于少突胶质细胞瘤诊断', bom_id: 'BOM-IHC-Olig2', supportable_samples: 30 },
+    { id: 'PRJ-IHC-078', code: 'IHC-078', name: '免疫组化检测（NeuN）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'NeuN免疫组化染色，用于神经元标记', bom_id: 'BOM-IHC-NeuN', supportable_samples: 30 },
+    { id: 'PRJ-IHC-079', code: 'IHC-079', name: '免疫组化检测（EMA）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'EMA免疫组化染色，用于脑膜瘤诊断', bom_id: 'BOM-IHC-EMA', supportable_samples: 30 },
+    { id: 'PRJ-IHC-080', code: 'IHC-080', name: '免疫组化检测（BerEP4）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'BerEP4免疫组化染色，用于上皮源性肿瘤诊断', bom_id: 'BOM-IHC-BerEP4', supportable_samples: 30 },
+    { id: 'PRJ-IHC-081', code: 'IHC-081', name: '免疫组化检测（Caspase-3）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'Caspase-3免疫组化染色，用于细胞凋亡检测', bom_id: 'BOM-IHC-Casp3', supportable_samples: 30 },
+    { id: 'PRJ-IHC-082', code: 'IHC-082', name: '免疫组化检测（HPV L1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'HPV(L1)免疫组化染色，用于HPV感染检测', bom_id: 'BOM-IHC-HPV', supportable_samples: 30 },
+    { id: 'PRJ-IHC-083', code: 'IHC-083', name: '免疫组化检测（EBV LMP-1）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'EBV(LMP-1)免疫组化染色，用于EBV相关淋巴瘤诊断', bom_id: 'BOM-IHC-EBV', supportable_samples: 30 },
+    { id: 'PRJ-IHC-084', code: 'IHC-084', name: '免疫组化检测（HHV-8）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'HHV-8免疫组化染色，用于卡波西肉瘤诊断', bom_id: 'BOM-IHC-HHV8', supportable_samples: 30 },
+    { id: 'PRJ-IHC-085', code: 'IHC-085', name: '免疫组化检测（Brachyury）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'Brachyury免疫组化染色，用于脊索瘤诊断', bom_id: 'BOM-IHC-Brachyury', supportable_samples: 30 },
+    { id: 'PRJ-IHC-086', code: 'IHC-086', name: '免疫组化检测（SALL4）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'SALL4免疫组化染色，用于生殖细胞肿瘤诊断', bom_id: 'BOM-IHC-SALL4', supportable_samples: 30 },
+    { id: 'PRJ-IHC-087', code: 'IHC-087', name: '免疫组化检测（OCT3/4）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'OCT3/4免疫组化染色，用于生殖细胞肿瘤诊断', bom_id: 'BOM-IHC-OCT34', supportable_samples: 30 },
+    { id: 'PRJ-IHC-088', code: 'IHC-088', name: '免疫组化检测（PLAP）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'PLAP免疫组化染色，用于生殖细胞肿瘤诊断', bom_id: 'BOM-IHC-PLAP', supportable_samples: 30 },
+    { id: 'PRJ-IHC-089', code: 'IHC-089', name: '免疫组化检测（AFP）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'AFP免疫组化染色，用于卵黄囊瘤诊断', bom_id: 'BOM-IHC-AFP', supportable_samples: 30 },
+    { id: 'PRJ-IHC-090', code: 'IHC-090', name: '免疫组化检测（HCG）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'HCG免疫组化染色，用于绒毛膜癌诊断', bom_id: 'BOM-IHC-HCG', supportable_samples: 30 },
+    { id: 'PRJ-IHC-091', code: 'IHC-091', name: '免疫组化检测（MUC2）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'MUC2免疫组化染色，用于肠道黏液分泌评估', bom_id: 'BOM-IHC-MUC2', supportable_samples: 30 },
+    { id: 'PRJ-IHC-092', code: 'IHC-092', name: '免疫组化检测（MUC5AC）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'MUC5AC免疫组化染色，用于胃型黏液分泌评估', bom_id: 'BOM-IHC-MUC5AC', supportable_samples: 30 },
+    { id: 'PRJ-IHC-093', code: 'IHC-093', name: '免疫组化检测（MUC6）', type: 'ihc', cycle: '2天', manager: '陈医师', description: 'MUC6免疫组化染色，用于胃颈细胞标记', bom_id: 'BOM-IHC-MUC6', supportable_samples: 30 },
+
+    // 特殊染色
+    { id: 'PRJ-SS-001', code: 'SS-001', name: 'PAS特殊染色', type: 'ss', cycle: '1天', manager: '刘医师', description: '过碘酸-Schiff染色，用于糖原/黏液检测', bom_id: 'BOM-SS-001', supportable_samples: 50 },
+    { id: 'PRJ-SS-002', code: 'SS-002', name: '网状纤维银染', type: 'ss', cycle: '1天', manager: '刘医师', description: '网状纤维银染，用于网状纤维框架评估', bom_id: 'BOM-SS-002', supportable_samples: 50 },
+    { id: 'PRJ-SS-003', code: 'SS-003', name: 'Masson三色染色', type: 'ss', cycle: '1天', manager: '刘医师', description: 'Masson三色染色，用于胶原纤维评估', bom_id: 'BOM-SS-003', supportable_samples: 50 },
+    { id: 'PRJ-SS-004', code: 'SS-004', name: '抗酸染色', type: 'ss', cycle: '1天', manager: '刘医师', description: '抗酸染色，用于结核分枝杆菌检测', bom_id: 'BOM-SS-004', supportable_samples: 50 },
+    { id: 'PRJ-SS-005', code: 'SS-005', name: '革兰氏染色', type: 'ss', cycle: '1天', manager: '刘医师', description: '革兰氏染色，用于细菌分类', bom_id: 'BOM-SS-005', supportable_samples: 50 },
+    { id: 'PRJ-SS-006', code: 'SS-006', name: '油红O染色', type: 'ss', cycle: '1天', manager: '刘医师', description: '油红O染色，用于脂肪组织检测', bom_id: 'BOM-SS-006', supportable_samples: 50 },
+
+    // 分子诊断
+    { id: 'PRJ-MP-001', code: 'MP-001', name: '肿瘤425基因NGS检测', type: 'mp', cycle: '7天', manager: '陈医师', description: '基于二代测序技术的425基因靶向Panel检测', bom_id: 'BOM-MP-001', supportable_samples: 16 },
+    { id: 'PRJ-MP-002', code: 'MP-002', name: 'HER2 FISH检测', type: 'mp', cycle: '3天', manager: '陈医师', description: 'HER2基因扩增FISH检测，用于乳腺癌/胃癌靶向治疗评估', bom_id: 'BOM-MP-002', supportable_samples: 20 },
+    { id: 'PRJ-MP-003', code: 'MP-003', name: 'ALK FISH检测', type: 'mp', cycle: '3天', manager: '陈医师', description: 'ALK基因重排FISH检测，用于非小细胞肺癌靶向治疗评估', bom_id: 'BOM-MP-003', supportable_samples: 48 },
+    { id: 'PRJ-MP-004', code: 'MP-004', name: 'PCR检测', type: 'mp', cycle: '2天', manager: '陈医师', description: '常规PCR扩增检测', bom_id: 'BOM-MP-003', supportable_samples: 48 },
+    { id: 'PRJ-MP-005', code: 'MP-005', name: 'Sanger测序', type: 'mp', cycle: '3天', manager: '陈医师', description: 'Sanger测序用于基因突变验证', bom_id: 'BOM-MP-004', supportable_samples: 24 },
+    { id: 'PRJ-MP-006', code: 'MP-006', name: 'FFPE DNA提取', type: 'mp', cycle: '1天', manager: '陈医师', description: 'FFPE样本DNA提取', bom_id: 'BOM-MP-005', supportable_samples: 50 },
+    { id: 'PRJ-MP-007', code: 'MP-007', name: '血液DNA提取', type: 'mp', cycle: '1天', manager: '陈医师', description: '血液样本DNA提取', bom_id: 'BOM-MP-006', supportable_samples: 50 },
+    { id: 'PRJ-MP-008', code: 'MP-008', name: 'RNA提取', type: 'mp', cycle: '1天', manager: '陈医师', description: '总RNA提取', bom_id: 'BOM-MP-007', supportable_samples: 50 },
+
+    // 细胞学
+    { id: 'PRJ-CYTO-001', code: 'CYTO-001', name: '液基薄层细胞学检测（TCT）', type: 'cyto', cycle: '2天', manager: '刘医师', description: '宫颈液基薄层细胞学检测，用于宫颈癌筛查', bom_id: 'BOM-CYTO-001', supportable_samples: 100 },
+    { id: 'PRJ-CYTO-002', code: 'CYTO-002', name: '细针穿刺细胞学检测', type: 'cyto', cycle: '1天', manager: '刘医师', description: '细针穿刺标本细胞学诊断', bom_id: 'BOM-CYTO-002', supportable_samples: 50 },
+    { id: 'PRJ-CYTO-003', code: 'CYTO-003', name: '尿液细胞学检测', type: 'cyto', cycle: '1天', manager: '刘医师', description: '尿液脱落细胞学检测', bom_id: 'BOM-CYTO-003', supportable_samples: 50 },
+    { id: 'PRJ-CYTO-004', code: 'CYTO-004', name: '胸腹水细胞学检测', type: 'cyto', cycle: '1天', manager: '刘医师', description: '胸腹水脱落细胞学检测', bom_id: 'BOM-CYTO-004', supportable_samples: 50 },
   ]
 
   const insert = db.prepare(
-    'INSERT INTO projects (id, code, name, type, cycle, manager, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO projects (id, code, name, type, cycle, bom_id, supportable_samples, manager, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   )
   for (const p of projects) {
-    insert.run(p.id, p.code, p.name, p.type, p.cycle, p.manager, p.description, 1, now, now)
+    insert.run(p.id, p.code, p.name, p.type, p.cycle, p.bom_id, p.supportable_samples, p.manager, p.description, 1, now, now)
   }
   log(`检测项目初始化完成: ${projects.length} 个`)
 }
@@ -861,7 +971,6 @@ function seedBOMs(db: any) {
     { id: 'BOM-HE-002', code: 'BOM-HE-002', name: '冰冻切片HE染色BOM', version: 'v1.0', type: 'he', supportable_samples: 50, unit_cost: 0 },
 
     // 免疫组化 - 按检测项目细分
-    { id: 'BOM-IHC-001', code: 'BOM-IHC-001', name: 'IHC基础通用耗材BOM', version: 'v1.0', type: 'ihc', supportable_samples: 50, unit_cost: 0 },
     { id: 'BOM-IHC-CK', code: 'BOM-IHC-CK', name: 'IHC-广谱CK检测BOM', version: 'v1.0', type: 'ihc', supportable_samples: 30, unit_cost: 0 },
     { id: 'BOM-IHC-CK7', code: 'BOM-IHC-CK7', name: 'IHC-CK7检测BOM', version: 'v1.0', type: 'ihc', supportable_samples: 30, unit_cost: 0 },
     { id: 'BOM-IHC-CK20', code: 'BOM-IHC-CK20', name: 'IHC-CK20检测BOM', version: 'v1.0', type: 'ihc', supportable_samples: 30, unit_cost: 0 },
@@ -1000,29 +1109,7 @@ function seedBOMs(db: any) {
     { bom_id: 'BOM-HE-002', material_id: 'MAT-GLASS-001', usage_per_sample: 1, unit: '片' },
     { bom_id: 'BOM-HE-002', material_id: 'MAT-GLASS-003', usage_per_sample: 1, unit: '片' },
 
-    // === IHC基础通用耗材（所有IHC检测共用） ===
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-097', usage_per_sample: 0.1, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-098', usage_per_sample: 0.05, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-101', usage_per_sample: 0.05, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-102', usage_per_sample: 0.03, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-106', usage_per_sample: 0.15, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-107', usage_per_sample: 0.15, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-111', usage_per_sample: 0.05, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-112', usage_per_sample: 0.05, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-113', usage_per_sample: 0.3, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-114', usage_per_sample: 0.3, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-115', usage_per_sample: 0.01, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-119', usage_per_sample: 0.05, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-120', usage_per_sample: 0.02, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-121', usage_per_sample: 0.02, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-122', usage_per_sample: 0.05, unit: 'ml' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-IHC-123', usage_per_sample: 1, unit: '片' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-GLASS-003', usage_per_sample: 1, unit: '片' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-LAB-010', usage_per_sample: 1, unit: '只' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-LAB-011', usage_per_sample: 1, unit: '只' },
-    { bom_id: 'BOM-IHC-001', material_id: 'MAT-LAB-012', usage_per_sample: 1, unit: '只' },
-
-    // === 各抗体检测BOM（每个包含：特定一抗 + 基础通用耗材引用） ===
+    // === 各抗体检测BOM（每个包含：特定一抗 + 基础通用耗材） ===
     // 广谱CK
     { bom_id: 'BOM-IHC-CK', material_id: 'MAT-IHC-001', usage_per_sample: 0.05, unit: 'ml' },
     { bom_id: 'BOM-IHC-CK7', material_id: 'MAT-IHC-002', usage_per_sample: 0.05, unit: 'ml' },
@@ -1221,6 +1308,36 @@ function seedBOMs(db: any) {
   )
   for (const b of boms) {
     insertBom.run(b.id, b.code, b.name, b.version, b.type, b.supportable_samples, b.unit_cost, 1, now, now)
+  }
+
+  // IHC通用耗材（自动添加到每个IHC具体BOM）
+  const commonIhcMaterials = [
+    { material_id: 'MAT-IHC-097', usage_per_sample: 0.1, unit: 'ml' },
+    { material_id: 'MAT-IHC-098', usage_per_sample: 0.05, unit: 'ml' },
+    { material_id: 'MAT-IHC-101', usage_per_sample: 0.05, unit: 'ml' },
+    { material_id: 'MAT-IHC-102', usage_per_sample: 0.03, unit: 'ml' },
+    { material_id: 'MAT-IHC-106', usage_per_sample: 0.15, unit: 'ml' },
+    { material_id: 'MAT-IHC-107', usage_per_sample: 0.15, unit: 'ml' },
+    { material_id: 'MAT-IHC-111', usage_per_sample: 0.05, unit: 'ml' },
+    { material_id: 'MAT-IHC-112', usage_per_sample: 0.05, unit: 'ml' },
+    { material_id: 'MAT-IHC-113', usage_per_sample: 0.3, unit: 'ml' },
+    { material_id: 'MAT-IHC-114', usage_per_sample: 0.3, unit: 'ml' },
+    { material_id: 'MAT-IHC-115', usage_per_sample: 0.01, unit: 'ml' },
+    { material_id: 'MAT-IHC-119', usage_per_sample: 0.05, unit: 'ml' },
+    { material_id: 'MAT-IHC-120', usage_per_sample: 0.02, unit: 'ml' },
+    { material_id: 'MAT-IHC-121', usage_per_sample: 0.02, unit: 'ml' },
+    { material_id: 'MAT-IHC-122', usage_per_sample: 0.05, unit: 'ml' },
+    { material_id: 'MAT-IHC-123', usage_per_sample: 1, unit: '片' },
+    { material_id: 'MAT-GLASS-003', usage_per_sample: 1, unit: '片' },
+    { material_id: 'MAT-LAB-010', usage_per_sample: 1, unit: '只' },
+    { material_id: 'MAT-LAB-011', usage_per_sample: 1, unit: '只' },
+    { material_id: 'MAT-LAB-012', usage_per_sample: 1, unit: '只' },
+  ]
+  const ihcBomIds = boms.filter(b => b.id.startsWith('BOM-IHC-')).map(b => b.id)
+  for (const bomId of ihcBomIds) {
+    for (const m of commonIhcMaterials) {
+      bomItems.push({ bom_id: bomId, material_id: m.material_id, usage_per_sample: m.usage_per_sample, unit: m.unit })
+    }
   }
 
   const insertItem = db.prepare(

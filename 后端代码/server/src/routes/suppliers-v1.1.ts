@@ -28,9 +28,15 @@ router.get('/', (req, res) => {
 })
 
 function generateSupplierCode(db: any): string {
-  const max = db.prepare("SELECT MAX(CAST(SUBSTR(code, 4) AS INTEGER)) as max FROM suppliers WHERE code LIKE 'SUP-%' AND is_deleted = 0").get() as any
-  const num = (Number(max?.max) || 0) + 1
-  return `SUP-${String(num).padStart(5, '0')}`
+  const max = db.prepare("SELECT MAX(CAST(SUBSTR(code, 4) AS INTEGER)) as max FROM suppliers WHERE code LIKE 'SUP-%'").get() as any
+  let num = (Number(max?.max) || 0) + 1
+  if (num <= 0) num = 11
+  let code = `SUP-${String(num).padStart(5, '0')}`
+  while (db.prepare('SELECT 1 FROM suppliers WHERE code = ?').get(code)) {
+    num++
+    code = `SUP-${String(num).padStart(5, '0')}`
+  }
+  return code
 }
 
 router.post('/', (req, res) => {

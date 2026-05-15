@@ -27,6 +27,7 @@ import scrapRoutes from './routes/scraps-v1.1.js'
 import depletionRoutes from './routes/depletion-v1.1.js'
 import purchaseOrderRoutes from './routes/purchase-orders-v1.1.js'
 import transferRoutes from './routes/transfers-v1.1.js'
+import reconciliationRoutes from './routes/reconciliation-v1.1.js'
 
 dotenv.config()
 
@@ -79,6 +80,9 @@ app.use('/api/v1/transfers', authenticateToken, requireRole('admin', 'warehouse_
 // 路由注册 - technician/pathologist共享
 app.use('/api/v1/projects', authenticateToken, requireRole('admin', 'technician', 'pathologist'), projectRoutes)
 app.use('/api/v1/boms', authenticateToken, requireRole('admin', 'technician', 'pathologist'), bomRoutes)
+
+// 路由注册 - 成本对账 (admin/finance/pathologist可访问)
+app.use('/api/v1/reconciliation', authenticateToken, requireRole('admin', 'pathologist', 'finance'), reconciliationRoutes)
 
 // 路由注册 - 通用主数据 (所有已认证角色可查看)
 app.use('/api/v1/categories', authenticateToken, categoryRoutes)

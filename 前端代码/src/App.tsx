@@ -13,6 +13,7 @@ import Locations from './pages/master/Locations'
 import Projects from './pages/master/Projects'
 import BOM from './pages/bom/BOM'
 import CostAnalysis from './pages/report/CostAnalysis'
+import Reconciliation from './pages/reconciliation/Reconciliation'
 import Alerts from './pages/alerts/Alerts'
 import Users from './pages/system/Users'
 import Roles from './pages/system/Roles'
@@ -38,6 +39,7 @@ function App() {
           <Route path="/projects" element={<Projects />} />
           <Route path="/bom" element={<BOM />} />
           <Route path="/cost-analysis" element={<CostAnalysis />} />
+          <Route path="/reconciliation" element={<Reconciliation />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/users" element={<Users />} />
           <Route path="/roles" element={<Roles />} />

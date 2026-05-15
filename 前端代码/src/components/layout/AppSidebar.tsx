@@ -39,7 +39,7 @@ const mainMenuItems: MenuItem[] = [
   { label: '库存盘点', path: '/stocktaking', icon: ClipboardCheck },
   { label: '检测项目', path: '/projects', icon: FlaskConical },
   { label: 'BOM清单', path: '/bom', icon: ClipboardList },
-  { label: '成本对账', path: '/cost-reconciliation', icon: Activity },
+  { label: '消耗对账', path: '/reconciliation', icon: Activity },
   { label: '物料成本分析', path: '/cost-analysis', icon: BarChart3 },
   { label: '物料分类', path: '/categories', icon: FolderTree },
   { label: '耗材管理', path: '/materials', icon: Boxes },
