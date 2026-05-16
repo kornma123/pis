@@ -2,10 +2,14 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { authenticateToken, requireRole } from '../middleware/auth.js'
 
 const router = Router()
 
-router.get('/', (req, res) => {
+const requireLocationRead = requireRole('admin', 'warehouse_manager')
+const requireLocationWrite = requireRole('admin', 'warehouse_manager')
+
+router.get('/', authenticateToken, requireLocationRead, (req, res) => {
   try {
     const { page = 1, pageSize = 20, zone, status, type } = req.query
     const db = getDatabase()
@@ -26,7 +30,7 @@ router.get('/', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.get('/tree', (_req, res) => {
+router.get('/tree', authenticateToken, requireLocationRead, (_req, res) => {
   try {
     const db = getDatabase()
     const rows = db.prepare('SELECT id, code, name, type, parent_id as parentId, zone, shelf, position FROM locations WHERE is_deleted = 0 ORDER BY zone, name').all() as any[]
@@ -51,7 +55,7 @@ function generateLocationCode(db: any): string {
   return `LOC-${String(num).padStart(5, '0')}`
 }
 
-router.post('/', (req, res) => {
+router.post('/', authenticateToken, requireLocationWrite, (req, res) => {
   try {
     const { name, type, parentId, zone, shelf, position, capacity } = req.body
     if (!name || !zone) { error(res, 'Name and zone required', 'INVALID_PARAMETER', 400); return }
@@ -67,7 +71,7 @@ router.post('/', (req, res) => {
   }
 })
 
-router.put('/:id', (req, res) => {
+router.put('/:id', authenticateToken, requireLocationWrite, (req, res) => {
   try {
     const { id } = req.params
     const data = req.body
@@ -87,10 +91,12 @@ router.put('/:id', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', authenticateToken, requireLocationWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
+    const existing = db.prepare('SELECT * FROM locations WHERE id = ? AND is_deleted = 0').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     db.prepare('UPDATE locations SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
     success(res, null, 'Deleted')
   } catch (err: any) { error(res, err.message) }

@@ -2,10 +2,14 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { authenticateToken, requireRole } from '../middleware/auth.js'
 
 const router = Router()
 
-router.get('/', (req, res) => {
+const requireSupplierRead = requireRole('admin', 'warehouse_manager', 'procurement')
+const requireSupplierWrite = requireRole('admin', 'procurement')
+
+router.get('/', authenticateToken, requireSupplierRead, (req, res) => {
   try {
     const { page = 1, pageSize = 20, keyword, status } = req.query
     const db = getDatabase()
@@ -39,7 +43,7 @@ function generateSupplierCode(db: any): string {
   return code
 }
 
-router.post('/', (req, res) => {
+router.post('/', authenticateToken, requireSupplierWrite, (req, res) => {
   try {
     const { name, contact, phone, email, address } = req.body
     if (!name) { error(res, 'Name required', 'INVALID_PARAMETER', 400); return }
@@ -55,7 +59,7 @@ router.post('/', (req, res) => {
   }
 })
 
-router.put('/:id', (req, res) => {
+router.put('/:id', authenticateToken, requireSupplierWrite, (req, res) => {
   try {
     const { id } = req.params
     const data = req.body
@@ -73,10 +77,12 @@ router.put('/:id', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', authenticateToken, requireSupplierWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
+    const existing = db.prepare('SELECT * FROM suppliers WHERE id = ? AND is_deleted = 0').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     db.prepare('UPDATE suppliers SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
     success(res, null, 'Deleted')
   } catch (err: any) { error(res, err.message) }

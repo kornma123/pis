@@ -2,8 +2,12 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { requireRole } from '../middleware/auth.js'
 
 const router = Router()
+
+// 物料分类写入权限：仅 admin / warehouse_manager / procurement 可操作
+const requireCategoryWrite = requireRole('admin', 'warehouse_manager', 'procurement')
 
 router.get('/tree', (_req, res) => {
   try {
@@ -87,7 +91,7 @@ function generateCategoryCode(db: any, parentId: string | null, level: number): 
   }
 }
 
-router.post('/', (req, res) => {
+router.post('/', requireCategoryWrite, (req, res) => {
   try {
     const { name, parentId, level, sortOrder = 0 } = req.body
     if (!name || !level) {
@@ -114,7 +118,7 @@ router.post('/', (req, res) => {
   }
 })
 
-router.put('/:id', (req, res) => {
+router.put('/:id', requireCategoryWrite, (req, res) => {
   try {
     const { id } = req.params
     const { code, name, parentId, level, sortOrder, status } = req.body
@@ -147,7 +151,7 @@ router.put('/:id', (req, res) => {
   }
 })
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireCategoryWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()

@@ -2,8 +2,12 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { requireRole } from '../middleware/auth.js'
 
 const router = Router()
+
+// 项目写入权限：仅 admin 可操作
+const requireProjectWrite = requireRole('admin')
 
 router.get('/', (req, res) => {
   try {
@@ -55,7 +59,7 @@ router.get('/:id', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.post('/', (req, res) => {
+router.post('/', requireProjectWrite, (req, res) => {
   try {
     const { code, name, type, cycle, manager, description } = req.body
     if (!code || !name || !type) { error(res, 'Code, name and type required', 'INVALID_PARAMETER', 400); return }
@@ -70,7 +74,7 @@ router.post('/', (req, res) => {
   }
 })
 
-router.put('/:id', (req, res) => {
+router.put('/:id', requireProjectWrite, (req, res) => {
   try {
     const { id } = req.params
     const data = req.body
@@ -88,10 +92,12 @@ router.put('/:id', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireProjectWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
+    const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND is_deleted = 0').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     db.prepare('UPDATE projects SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
     success(res, null, 'Deleted')
   } catch (err: any) { error(res, err.message) }

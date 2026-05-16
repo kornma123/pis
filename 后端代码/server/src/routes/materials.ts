@@ -2,8 +2,12 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { requireRole } from '../middleware/auth.js'
 
 const router = Router()
+
+// 物料写入权限：仅 admin / warehouse_manager / procurement 可操作
+const requireMaterialWrite = requireRole('admin', 'warehouse_manager', 'procurement')
 
 router.get('/', (req, res) => {
   try {
@@ -122,7 +126,7 @@ router.get('/next-code', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.post('/', (req, res) => {
+router.post('/', requireMaterialWrite, (req, res) => {
   try {
     const { name, spec, unit, specQty, specUnit, categoryId, supplierId, price, minStock, maxStock, safetyStock, locationId, remark, code: userCode } = req.body
     if (!name || !unit || !categoryId) {
@@ -157,7 +161,7 @@ router.post('/', (req, res) => {
   }
 })
 
-router.put('/:id', (req, res) => {
+router.put('/:id', requireMaterialWrite, (req, res) => {
   try {
     const { id } = req.params
     const data = req.body
@@ -194,10 +198,13 @@ router.put('/:id', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireMaterialWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
+
+    const existing = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
 
     const hasStock = (db.prepare('SELECT COALESCE(stock, 0) as stock FROM inventory WHERE material_id = ?').get(id) as any)?.stock || 0
     if (hasStock > 0) { error(res, 'Stock exists', 'CONFLICT', 409); return }
@@ -207,7 +214,7 @@ router.delete('/:id', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.patch('/batch-status', (req, res) => {
+router.patch('/batch-status', requireMaterialWrite, (req, res) => {
   try {
     const { ids, status } = req.body
     if (!Array.isArray(ids) || ids.length === 0 || !status) {

@@ -17,8 +17,9 @@ function requireWriteAccess(req: any, res: any, next: any) {
 
 function generateInboundNo(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const timestamp = Date.now().toString().slice(-6)
   const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-  return `IB-${date}-${random}`
+  return `IB-${date}-${timestamp}-${random}`
 }
 
 router.get('/', (req, res) => {
@@ -154,7 +155,7 @@ router.post('/', requireWriteAccess, (req, res) => {
         db.prepare(`
           INSERT INTO batches (id, material_id, batch_no, quantity, remaining, production_date, expiry_date, inbound_id, inbound_price, supplier_id, status)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-        `).run(batchId, materialId, batchNo, quantity, quantity, productionDate || null, expiryDate, id, price || 0, supplierId || null)
+        `).run(batchId, materialId, batchNo, quantity, quantity, productionDate || null, expiryDate || null, id, price || 0, supplierId || null)
       }
     }
 

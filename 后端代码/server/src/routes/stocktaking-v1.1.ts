@@ -41,8 +41,8 @@ router.post('/', (req, res) => {
     if (difference !== 0) {
       db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(actualStock, materialId)
       const logId = uuidv4()
-      db.prepare('INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator) VALUES (?, "adjust", ?, ?, ?, ?, ?, "stocktaking", ?)')
-        .run(logId, materialId, difference, systemStock, actualStock, id, operator || 'system')
+      db.prepare('INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(logId, 'adjust', materialId, difference, systemStock, actualStock, id, 'stocktaking', operator || 'system')
     }
 
     success(res, { id }, 'Stocktaking done')
