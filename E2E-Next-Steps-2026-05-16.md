@@ -639,6 +639,7 @@ npx playwright test e2e/auth.spec.ts --debug
 | v1.26 | 2026-05-18 | 第26批修复：reconciliation GET /projects/:id/materials SQL注入(2处)、GET /materials SQL注入(2处) |
 | v1.27 | 2026-05-18 | 第27批修复：returns POST / 物料存在性+NaN校验、scraps POST / 物料存在性+NaN校验 |
 | v1.28 | 2026-05-18 | 第28批修复：stocktaking POST / actualStock负数+物料存在性、inbound POST / purchaseOrder is_deleted=0、logs GET / page=0修复 |
+| v1.29 | 2026-05-18 | 第29批修复（7个）：inbound POST/DELETE purchaseOrder is_deleted=0、outbound POST quantity NaN+batches is_deleted=0、purchase-orders POST/PUT quantity NaN、reconciliation GET /projects SQL注入 |
 
 ---
 

@@ -69,7 +69,7 @@ router.post('/', (req, res) => {
 
     for (const item of items) {
       const { materialId, quantity } = item
-      if (!materialId || quantity === undefined || quantity === null || quantity <= 0) {
+      if (!materialId || quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0) {
         error(res, 'Invalid quantity', 'INVALID_PARAMETER', 400); return
       }
       const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
@@ -77,7 +77,12 @@ router.post('/', (req, res) => {
         error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
       }
 
-      const batch = db.prepare('SELECT * FROM batches WHERE material_id = ? AND remaining > 0 AND status = 1 ORDER BY expiry_date ASC').get(materialId) as any
+      const batch = db.prepare(`
+        SELECT b.* FROM batches b
+        JOIN materials m ON b.material_id = m.id
+        WHERE b.material_id = ? AND b.remaining > 0 AND b.status = 1 AND m.is_deleted = 0
+        ORDER BY b.expiry_date ASC
+      `).get(materialId) as any
       const unitCost = batch?.inbound_price || 0
       const itemCost = unitCost * quantity
       totalCost += itemCost

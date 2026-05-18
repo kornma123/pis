@@ -79,26 +79,22 @@ router.get('/projects', (req, res) => {
       error(res, 'Invalid date format', 'INVALID_PARAMETER', 400); return
     }
 
-    const dateCond = startDate && endDate
-      ? `AND operate_time >= '${startDate}' AND operate_time <= '${endDate} 23:59:59'`
-      : ''
-    const outDateCond = startDate && endDate
-      ? `AND o.created_at >= '${startDate}' AND o.created_at <= '${endDate} 23:59:59'`
-      : ''
+    const hasDate = startDate && endDate
+    const endDateTime = hasDate ? `${endDate} 23:59:59` : ''
 
     const projects = db.prepare(`
       SELECT p.id, p.code, p.name, p.bom_id, p.type,
         (SELECT COUNT(*) FROM lis_cases WHERE project_id = p.id
-          ${dateCond}
+          ${hasDate ? 'AND operate_time >= ? AND operate_time <= ?' : ''}
         ) as case_count,
         (SELECT COUNT(DISTINCT o.id) FROM outbound_records o
           WHERE o.project_id = p.id AND o.status = 'completed' AND o.is_deleted = 0
-          ${outDateCond}
+          ${hasDate ? 'AND o.created_at >= ? AND o.created_at <= ?' : ''}
         ) as outbound_count
       FROM projects p
       WHERE p.is_deleted = 0 AND p.status = 1
       ORDER BY case_count DESC
-    `).all() as any[]
+    `).all(...(hasDate ? [startDate, endDateTime, startDate, endDateTime] : [])) as any[]
 
     const result = projects.map((p: any) => {
       const boms = db.prepare(`

@@ -61,7 +61,7 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const { materialId, materialName, supplierId, orderedQty, unit, unitPrice, expectedDate, remark } = req.body
-    if (!materialId || !orderedQty || orderedQty <= 0) {
+    if (!materialId || orderedQty === undefined || orderedQty === null || isNaN(Number(orderedQty)) || Number(orderedQty) <= 0) {
       error(res, '物料和采购数量必填', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
@@ -80,7 +80,7 @@ router.post('/', (req, res) => {
 router.put('/:id/receive', (req, res) => {
   try {
     const { quantity } = req.body
-    if (!quantity || quantity <= 0) {
+    if (quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0) {
       error(res, '入库数量必填', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()

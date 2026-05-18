@@ -161,7 +161,7 @@ router.post('/', requireWriteAccess, (req, res) => {
 
     // 更新采购订单收货数量
     if (purchaseOrderId) {
-      const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(purchaseOrderId) as any
+      const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(purchaseOrderId) as any
       if (order) {
         const newReceived = Number(order.received_qty) + quantity
         const orderedQty = Number(order.ordered_qty)
@@ -220,9 +220,12 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
 
     if (record.status === 'completed') {
       // 1. 检查是否有出库记录
-      const outboundExists = db.prepare(
-        'SELECT COALESCE(SUM(quantity),0) as total FROM outbound_items WHERE material_id = ? AND batch_no = ?'
-      ).get(record.material_id, record.batch_no) as any
+      const outboundExists = db.prepare(`
+        SELECT COALESCE(SUM(oi.quantity),0) as total
+        FROM outbound_items oi
+        JOIN outbound_records o ON oi.outbound_id = o.id
+        WHERE oi.material_id = ? AND oi.batch_no = ? AND o.is_deleted = 0
+      `).get(record.material_id, record.batch_no) as any
       if (outboundExists && outboundExists.total > 0) {
         error(res, `该入库记录对应的批次已有出库记录 ${outboundExists.total} ${record.unit}，不可删除。请先作废关联的出库单`, 'BUSINESS_RULE', 400)
         return
@@ -241,7 +244,12 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
       const totalInbound = (db.prepare(
         "SELECT COALESCE(SUM(quantity),0) as total FROM inbound_records WHERE material_id = ? AND batch_no = ? AND status = 'completed' AND is_deleted = 0 AND id != ?"
       ).get(record.material_id, record.batch_no, id) as any)?.total || 0
-      const totalOutbound = outboundExists?.total || 0
+      const totalOutbound = (db.prepare(`
+        SELECT COALESCE(SUM(oi.quantity),0) as total
+        FROM outbound_items oi
+        JOIN outbound_records o ON oi.outbound_id = o.id
+        WHERE oi.material_id = ? AND oi.batch_no = ? AND o.is_deleted = 0
+      `).get(record.material_id, record.batch_no) as any)?.total || 0
       if (totalInbound < totalOutbound) {
         error(res, `删除后该批次库存将变为负数（剩余 ${totalInbound}，已出库 ${totalOutbound}），不可删除`, 'BUSINESS_RULE', 400)
         return
@@ -249,7 +257,7 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
 
       // 4. 回退采购订单收货数量
       if (record.purchase_order_id) {
-        const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(record.purchase_order_id) as any
+        const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(record.purchase_order_id) as any
         if (order) {
           const newReceived = Math.max(0, Number(order.received_qty) - record.quantity)
           const poStatus = newReceived === 0 ? 'pending' : 'partial'

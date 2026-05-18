@@ -103,7 +103,7 @@ router.get('/:id', (req, res) => {
 })
 
 function generateMaterialCode(db: any, categoryId: string): string {
-  const category = db.prepare('SELECT code FROM material_categories WHERE id = ?').get(categoryId) as any
+  const category = db.prepare('SELECT code FROM material_categories WHERE id = ? AND is_deleted = 0').get(categoryId) as any
   let prefix = 'MAT'
   if (category) {
     const c = Math.floor(Number(category.code) / 100)

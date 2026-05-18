@@ -112,11 +112,13 @@ router.post('/tracking/:id/deplete', (req, res) => {
     `).run(id)
 
     // 更新批次库存
-    db.prepare(`
-      UPDATE batches 
-      SET remaining = ?, status = 2, updated_at = datetime('now')
-      WHERE batch_no = ? AND material_id = ?
-    `).run(remain_qty, tracking.batch, tracking.material_id)
+    if (tracking.batch && tracking.material_id) {
+      db.prepare(`
+        UPDATE batches
+        SET remaining = ?, status = 2, updated_at = datetime('now')
+        WHERE batch_no = ? AND material_id = ?
+      `).run(remain_qty, tracking.batch, tracking.material_id)
+    }
 
     success(res, { id: depletionId })
   } catch (err: any) { error(res, err.message) }
