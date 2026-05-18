@@ -24,10 +24,20 @@ router.post('/tracking', (req, res) => {
   try {
     const db = getDatabase()
     const { material_id, material_name, batch, spec, total_qty, remaining, unit, start_date, expected_days, usage, receiver } = req.body
+    if (!material_id || !batch || total_qty === undefined || remaining === undefined) {
+      error(res, 'material_id, batch, total_qty, remaining 必填', 'INVALID_PARAMETER', 400); return
+    }
+    if (isNaN(Number(total_qty)) || Number(total_qty) <= 0 || isNaN(Number(remaining)) || Number(remaining) < 0) {
+      error(res, 'total_qty 和 remaining 必须为非负数且 total_qty > 0', 'INVALID_PARAMETER', 400); return
+    }
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+    if (start_date && !dateRegex.test(start_date)) {
+      error(res, 'start_date 格式必须为 YYYY-MM-DD', 'INVALID_PARAMETER', 400); return
+    }
 
     const id = `TRK-${Date.now()}`
     db.prepare(`
-      INSERT INTO batch_usage_tracking 
+      INSERT INTO batch_usage_tracking
       (id, material_id, material_name, batch, spec, total_qty, remaining, unit, start_date, days_used, expected_days, progress, usage, receiver, status, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, 'in-use', datetime('now'), datetime('now'))
     `).run(id, material_id, material_name, batch, spec, total_qty, remaining, unit, start_date, expected_days, usage, receiver)
@@ -42,9 +52,15 @@ router.put('/tracking/:id/remain', (req, res) => {
     const db = getDatabase()
     const { id } = req.params
     const { remaining, reason } = req.body
+    if (remaining === undefined || isNaN(Number(remaining)) || Number(remaining) < 0) {
+      error(res, 'remaining 必填且必须为非负数', 'INVALID_PARAMETER', 400); return
+    }
+
+    const existing = db.prepare('SELECT * FROM batch_usage_tracking WHERE id = ?').get(id) as any
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
 
     db.prepare(`
-      UPDATE batch_usage_tracking 
+      UPDATE batch_usage_tracking
       SET remaining = ?, updated_at = datetime('now')
       WHERE id = ?
     `).run(remaining, id)
@@ -59,11 +75,17 @@ router.post('/tracking/:id/deplete', (req, res) => {
     const db = getDatabase()
     const { id } = req.params
     const { remain_qty, deplete_type, deplete_reason, operator } = req.body
+    if (remain_qty === undefined || isNaN(Number(remain_qty)) || Number(remain_qty) < 0) {
+      error(res, 'remain_qty 必填且必须为非负数', 'INVALID_PARAMETER', 400); return
+    }
 
     // 获取当前跟踪记录
     const tracking = db.prepare(`SELECT * FROM batch_usage_tracking WHERE id = ?`).get(id) as any
     if (!tracking) {
-      return error(res, '跟踪记录不存在')
+      return error(res, '跟踪记录不存在', 'NOT_FOUND', 404)
+    }
+    if (tracking.status === 'depleted') {
+      return error(res, '该跟踪记录已耗尽，不可重复操作', 'ALREADY_DEPLETED', 400)
     }
 
     // 计算使用天数
@@ -119,9 +141,9 @@ router.get('/batches/:materialId', (req, res) => {
     const db = getDatabase()
     const { materialId } = req.params
     const list = db.prepare(`
-      SELECT b.*, m.name as material_name, m.spec, m.unit 
+      SELECT b.*, m.name as material_name, m.spec, m.unit
       FROM batches b
-      JOIN materials m ON b.material_id = m.id
+      JOIN materials m ON b.material_id = m.id AND m.is_deleted = 0
       WHERE b.material_id = ? AND b.status = 1 AND b.remaining > 0
       ORDER BY b.expiry_date ASC
     `).all(materialId) as any[]

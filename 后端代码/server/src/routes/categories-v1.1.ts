@@ -6,8 +6,8 @@ import { requireRole } from '../middleware/auth.js'
 
 const router = Router()
 
-// 物料分类写入权限：仅 admin / warehouse_manager / procurement 可操作
-const requireCategoryWrite = requireRole('admin', 'warehouse_manager', 'procurement')
+// 物料分类写入权限：仅 admin 可操作（与 E2E 权限矩阵一致）
+const requireCategoryWrite = requireRole('admin')
 
 router.get('/tree', (_req, res) => {
   try {
@@ -124,7 +124,7 @@ router.put('/:id', requireCategoryWrite, (req, res) => {
     const { code, name, parentId, level, sortOrder, status } = req.body
 
     const db = getDatabase()
-    const existing = db.prepare('SELECT * FROM material_categories WHERE id = ?').get(id) as any
+    const existing = db.prepare('SELECT * FROM material_categories WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!existing) {
       error(res, 'Not found', 'NOT_FOUND', 404)
       return
@@ -142,7 +142,7 @@ router.put('/:id', requireCategoryWrite, (req, res) => {
 
     if (fields.length > 0) {
       params.push(id)
-      db.prepare(`UPDATE material_categories SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params)
+      db.prepare(`UPDATE material_categories SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params)
     }
 
     success(res, { id }, 'Updated')
@@ -155,6 +155,12 @@ router.delete('/:id', requireCategoryWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
+
+    const existing = db.prepare('SELECT * FROM material_categories WHERE id = ? AND is_deleted = 0').get(id)
+    if (!existing) {
+      error(res, 'Not found', 'NOT_FOUND', 404)
+      return
+    }
 
     const hasChildren = (db.prepare('SELECT COUNT(*) as count FROM material_categories WHERE parent_id = ? AND is_deleted = 0').get(id) as any)?.count > 0
     if (hasChildren) {

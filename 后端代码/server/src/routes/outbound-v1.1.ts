@@ -7,8 +7,9 @@ const router = Router()
 
 function generateOutboundNo(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const timestamp = Date.now().toString().slice(-6)
   const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-  return `OB-${date}-${random}`
+  return `OB-${date}-${timestamp}-${random}`
 }
 
 router.get('/', (req, res) => {
@@ -26,14 +27,14 @@ router.get('/', (req, res) => {
     const records = db.prepare(`
       SELECT r.*, p.name as project_name
       FROM outbound_records r
-      LEFT JOIN projects p ON r.project_id = p.id
+      LEFT JOIN projects p ON r.project_id = p.id AND p.is_deleted = 0
       WHERE ${where}
       ORDER BY r.created_at DESC
       LIMIT ? OFFSET ?
     `).all(...params, Number(pageSize), offset) as any[]
 
     const result = records.map((r: any) => {
-      const items = db.prepare('SELECT oi.*, m.name as material_name FROM outbound_items oi LEFT JOIN materials m ON oi.material_id = m.id WHERE oi.outbound_id = ?').all(r.id) as any[]
+      const items = db.prepare('SELECT oi.*, m.name as material_name FROM outbound_items oi LEFT JOIN materials m ON oi.material_id = m.id AND m.is_deleted = 0 WHERE oi.outbound_id = ?').all(r.id) as any[]
       return {
         id: r.id, outboundNo: r.outbound_no, type: r.type, projectId: r.project_id,
         projectName: r.project_name,
@@ -68,6 +69,9 @@ router.post('/', (req, res) => {
 
     for (const item of items) {
       const { materialId, quantity } = item
+      if (!materialId || quantity === undefined || quantity === null || quantity <= 0) {
+        error(res, 'Invalid quantity', 'INVALID_PARAMETER', 400); return
+      }
       const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
       if (!inv || inv.stock < quantity) {
         error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
@@ -108,7 +112,7 @@ router.post('/', (req, res) => {
 
       // 自用物料创建使用中跟踪记录
       if ((oi.usage || 'self') === 'self' && oi.batchId) {
-        const mat = db.prepare('SELECT name, spec FROM materials WHERE id = ?').get(oi.materialId) as any
+        const mat = db.prepare('SELECT name, spec FROM materials WHERE id = ? AND is_deleted = 0').get(oi.materialId) as any
         const trkId = `TRK-${Date.now()}-${Math.floor(Math.random() * 1000)}`
         const today = new Date().toISOString().split('T')[0]
         db.prepare(`
@@ -120,10 +124,11 @@ router.post('/', (req, res) => {
 
       const logId = uuidv4()
       const beforeStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(oi.materialId) as any)?.stock || 0
+      const afterStock = beforeStock - oi.quantity
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
         VALUES (?, 'outbound', ?, ?, ?, ?, ?, 'outbound', ?)
-      `).run(logId, oi.materialId, -oi.quantity, beforeStock + oi.quantity, beforeStock, id, operator)
+      `).run(logId, oi.materialId, -oi.quantity, beforeStock, afterStock, id, operator)
     }
 
     success(res, { id, outboundNo, type, projectId, totalCost, status: 'completed' }, 'Outbound created')

@@ -11,7 +11,8 @@ function getBatchSubQuery(field: string): string {
 
 router.get('/', (req, res) => {
   try {
-    const { page = 1, pageSize = 20, status, categoryId, locationId, keyword } = req.query
+    let { page = 1, pageSize = 20, status, categoryId, locationId, keyword } = req.query
+    pageSize = Math.min(Number(pageSize), 200)
     const db = getDatabase()
 
     let where = "m.is_deleted = 0 AND i.stock > 0"
@@ -51,9 +52,9 @@ router.get('/', (req, res) => {
         ${getBatchSubQuery('batch_no')} as batch_no,
         ${getBatchSubQuery('expiry_date')} as expiry
       FROM inventory i
-      JOIN materials m ON i.material_id = m.id
-      LEFT JOIN locations l ON i.location_id = l.id
-      LEFT JOIN suppliers s ON m.supplier_id = s.id
+      JOIN materials m ON i.material_id = m.id AND m.is_deleted = 0
+      LEFT JOIN locations l ON i.location_id = l.id AND l.is_deleted = 0
+      LEFT JOIN suppliers s ON m.supplier_id = s.id AND s.is_deleted = 0
       WHERE ${where}
       ${having}
       ORDER BY i.update_time DESC

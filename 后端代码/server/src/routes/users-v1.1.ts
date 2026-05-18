@@ -58,7 +58,7 @@ router.put('/:id', (req, res) => {
     if (data.email !== undefined) { fields.push('email = ?'); params.push(data.email) }
     if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status === 'active' ? 1 : 0) }
     if (data.password) { fields.push('password = ?'); params.push(bcrypt.hashSync(data.password, 12)) }
-    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE users SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params) }
+    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE users SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params) }
     success(res, { id }, 'Updated')
   } catch (err: any) { error(res, err.message) }
 })
@@ -67,6 +67,8 @@ router.delete('/:id', (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
+    const existing = db.prepare('SELECT * FROM users WHERE id = ? AND is_deleted = 0').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     db.prepare('UPDATE users SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
     success(res, null, 'Deleted')
   } catch (err: any) { error(res, err.message) }

@@ -16,9 +16,10 @@ function generateOrderNo(): string {
 // 获取采购订单列表
 router.get('/', (req, res) => {
   try {
-    const { status, supplierId, keyword, page = '1', pageSize = '20' } = req.query
+    let { status, supplierId, keyword, page = '1', pageSize = '20' } = req.query
+    pageSize = String(Math.min(Number(pageSize), 200))
     const db = getDatabase()
-    let sql = 'SELECT * FROM purchase_orders WHERE 1=1'
+    let sql = 'SELECT * FROM purchase_orders WHERE is_deleted = 0'
     const params: any[] = []
     if (status) { sql += ' AND status = ?'; params.push(status) }
     if (supplierId) { sql += ' AND supplier_id = ?'; params.push(supplierId) }
@@ -29,7 +30,7 @@ router.get('/', (req, res) => {
     sql += ' LIMIT ? OFFSET ?'
     params.push(limit, offset)
     const list = db.prepare(sql).all(...params) as any[]
-    const total = (db.prepare('SELECT COUNT(*) as count FROM purchase_orders').get() as any).count
+    const total = (db.prepare('SELECT COUNT(*) as count FROM purchase_orders WHERE is_deleted = 0').get() as any).count
     successList(res, list.map(r => ({
       ...r,
       totalAmount: Number(r.total_amount),
@@ -44,7 +45,7 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   try {
     const db = getDatabase()
-    const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(req.params.id) as any
+    const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!order) { error(res, '订单不存在', 'NOT_FOUND', 404); return }
     success(res, {
       ...order,
@@ -83,7 +84,7 @@ router.put('/:id/receive', (req, res) => {
       error(res, '入库数量必填', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
-    const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(req.params.id) as any
+    const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!order) { error(res, '订单不存在', 'NOT_FOUND', 404); return }
     const orderedQty = Number(order.ordered_qty)
     const receivedQty = Number(order.received_qty)
@@ -92,7 +93,7 @@ router.put('/:id/receive', (req, res) => {
       error(res, '入库数量超过订单数量', 'INVALID_PARAMETER', 400); return
     }
     const status = newReceived >= orderedQty ? 'completed' : 'partial'
-    db.prepare('UPDATE purchase_orders SET received_qty = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    db.prepare('UPDATE purchase_orders SET received_qty = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0')
       .run(newReceived, status, req.params.id)
     success(res, { id: req.params.id, receivedQty: newReceived, status }, '更新成功')
   } catch (err: any) { error(res, err.message) }
@@ -102,12 +103,12 @@ router.put('/:id/receive', (req, res) => {
 router.put('/:id/cancel', (req, res) => {
   try {
     const db = getDatabase()
-    const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(req.params.id) as any
+    const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!order) { error(res, '订单不存在', 'NOT_FOUND', 404); return }
     if (order.status === 'completed') {
       error(res, '已完成的订单不能取消', 'INVALID_PARAMETER', 400); return
     }
-    db.prepare("UPDATE purchase_orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id)
+    db.prepare("UPDATE purchase_orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0").run(req.params.id)
     success(res, { id: req.params.id }, '订单已取消')
   } catch (err: any) { error(res, err.message) }
 })

@@ -1,0 +1,4368 @@
+{
+  "config": {
+    "configFile": "d:\\Git\\COREONE\\最新代码\\前端代码\\playwright.config.ts",
+    "rootDir": "d:/Git/COREONE/最新代码/前端代码/e2e",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "d:/Git/COREONE/最新代码/前端代码/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "d:/Git/COREONE/最新代码/前端代码/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.59.1",
+    "workers": 1,
+    "webServer": {
+      "command": "npx vite --host",
+      "url": "http://localhost:8080",
+      "reuseExistingServer": true,
+      "timeout": 120000
+    }
+  },
+  "suites": [
+    {
+      "title": "dashboard.spec.ts",
+      "file": "dashboard.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "仪表盘 -> 查看统计概览",
+          "file": "dashboard.spec.ts",
+          "line": 51,
+          "column": 6,
+          "specs": [
+            {
+              "title": "DASH-STAT-01-admin. admin登录后仪表盘显示统计卡片",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4353,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:20:37.882Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-ca295242298cb9f2b291",
+              "file": "dashboard.spec.ts",
+              "line": 53,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-01-warehouse_manager. warehouse_manager登录后仪表盘显示统计卡片",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3105,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:20:43.142Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-de441088644c47a577c4",
+              "file": "dashboard.spec.ts",
+              "line": 53,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-01-technician. technician登录后仪表盘显示统计卡片",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3369,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:20:46.268Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-bb56121a651bc2191492",
+              "file": "dashboard.spec.ts",
+              "line": 53,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-01-pathologist. pathologist登录后仪表盘显示统计卡片",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3885,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:20:49.668Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-cd4723afb5cbd0e70e37",
+              "file": "dashboard.spec.ts",
+              "line": 53,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-01-procurement. procurement登录后仪表盘显示统计卡片",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4109,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:20:53.576Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-12ac9bdd15a46613146e",
+              "file": "dashboard.spec.ts",
+              "line": 53,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-01-finance. finance登录后仪表盘显示统计卡片",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3472,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:20:57.716Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-328e06bccf33dd07165c",
+              "file": "dashboard.spec.ts",
+              "line": 53,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-02-admin. admin仪表盘显示快捷操作入口",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1787,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:01.205Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-efd7b61c875186342879",
+              "file": "dashboard.spec.ts",
+              "line": 61,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-02-warehouse_manager. warehouse_manager仪表盘显示快捷操作入口",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1639,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:03.007Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-6502a1cbda930af16ae2",
+              "file": "dashboard.spec.ts",
+              "line": 61,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-02-technician. technician仪表盘显示快捷操作入口",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1756,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:04.664Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-4a445371bfa7059a27f2",
+              "file": "dashboard.spec.ts",
+              "line": 61,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-02-pathologist. pathologist仪表盘显示快捷操作入口",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1745,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:06.435Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-5a57ed48de196f50ac9e",
+              "file": "dashboard.spec.ts",
+              "line": 61,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-02-procurement. procurement仪表盘显示快捷操作入口",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2361,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:08.201Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-9543046f8094f21bc94e",
+              "file": "dashboard.spec.ts",
+              "line": 61,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-02-finance. finance仪表盘显示快捷操作入口",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2048,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:10.590Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-550df9a488a18ff98763",
+              "file": "dashboard.spec.ts",
+              "line": 61,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-03-admin. admin仪表盘显示今日日期",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1951,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:12.661Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-b06e50fbe8e2657a0bc5",
+              "file": "dashboard.spec.ts",
+              "line": 73,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-03-warehouse_manager. warehouse_manager仪表盘显示今日日期",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2061,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:14.630Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-b5eae434a60a69ff439e",
+              "file": "dashboard.spec.ts",
+              "line": 73,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-03-technician. technician仪表盘显示今日日期",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2115,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:16.709Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-adf123dd44757516812f",
+              "file": "dashboard.spec.ts",
+              "line": 73,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-03-pathologist. pathologist仪表盘显示今日日期",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1741,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:18.839Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-628fc4c9f7eebd960ec5",
+              "file": "dashboard.spec.ts",
+              "line": 73,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-03-procurement. procurement仪表盘显示今日日期",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2730,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:20.593Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-34743c8fe7afcbd92cf0",
+              "file": "dashboard.spec.ts",
+              "line": 73,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-03-finance. finance仪表盘显示今日日期",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2727,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:23.341Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-f3cbba5c39b880855106",
+              "file": "dashboard.spec.ts",
+              "line": 73,
+              "column": 5
+            },
+            {
+              "title": "DASH-STAT-04. admin显示全部统计卡片",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2586,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:26.087Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-8e2cba90c20a9cfef67f",
+              "file": "dashboard.spec.ts",
+              "line": 80,
+              "column": 3
+            },
+            {
+              "title": "DASH-STAT-05. 统计卡片可点击跳转",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1537,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:28.687Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-be6fa91c6876452b7c15",
+              "file": "dashboard.spec.ts",
+              "line": 88,
+              "column": 3
+            },
+            {
+              "title": "DASH-STAT-06. 统计卡片hover效果",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2010,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:30.241Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-e10cde6e346c8d474742",
+              "file": "dashboard.spec.ts",
+              "line": 97,
+              "column": 3
+            },
+            {
+              "title": "DASH-STAT-07. 统计数字为数值格式",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3716,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:32.269Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-fc64154e961099352ea6",
+              "file": "dashboard.spec.ts",
+              "line": 105,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "仪表盘 -> 空数据/边界",
+          "file": "dashboard.spec.ts",
+          "line": 116,
+          "column": 6,
+          "specs": [
+            {
+              "title": "DASH-BOUND-01-admin. admin系统初始化无数据时计数为0",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2564,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:35.997Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-228e2303f4651732c5fe",
+              "file": "dashboard.spec.ts",
+              "line": 118,
+              "column": 5
+            },
+            {
+              "title": "DASH-BOUND-01-warehouse_manager. warehouse_manager系统初始化无数据时计数为0",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2821,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:38.571Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-b90bd426ce96b09b4e75",
+              "file": "dashboard.spec.ts",
+              "line": 118,
+              "column": 5
+            },
+            {
+              "title": "DASH-BOUND-01-technician. technician系统初始化无数据时计数为0",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3824,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:41.408Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-3e16cc7645947a4b4d69",
+              "file": "dashboard.spec.ts",
+              "line": 118,
+              "column": 5
+            },
+            {
+              "title": "DASH-BOUND-01-pathologist. pathologist系统初始化无数据时计数为0",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3586,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:45.253Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-de468334a912111a0c19",
+              "file": "dashboard.spec.ts",
+              "line": 118,
+              "column": 5
+            },
+            {
+              "title": "DASH-BOUND-01-procurement. procurement系统初始化无数据时计数为0",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2947,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:48.859Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-8cc464362deff5a2dc1a",
+              "file": "dashboard.spec.ts",
+              "line": 118,
+              "column": 5
+            },
+            {
+              "title": "DASH-BOUND-01-finance. finance系统初始化无数据时计数为0",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3285,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:51.822Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-7107e63dffac1da571c7",
+              "file": "dashboard.spec.ts",
+              "line": 118,
+              "column": 5
+            },
+            {
+              "title": "DASH-BOUND-02. 预警数为0时点击卡片显示空状态",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2102,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:55.126Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-bb44407df2f0fa6de312",
+              "file": "dashboard.spec.ts",
+              "line": 125,
+              "column": 3
+            },
+            {
+              "title": "DASH-BOUND-03. 无出入库记录时本月入库=0",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4471,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:21:57.249Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-f8211f91882810debe44",
+              "file": "dashboard.spec.ts",
+              "line": 131,
+              "column": 3
+            },
+            {
+              "title": "DASH-BOUND-04. 无出入库记录时本月出库=0",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 7296,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:22:01.737Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-a26c4399fea4d003dd43",
+              "file": "dashboard.spec.ts",
+              "line": 136,
+              "column": 3
+            },
+            {
+              "title": "DASH-BOUND-05. 库存总量为0时显示",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2967,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:22:09.053Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-d2c46b5c501bdfbf757c",
+              "file": "dashboard.spec.ts",
+              "line": 141,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "仪表盘 -> 权限",
+          "file": "dashboard.spec.ts",
+          "line": 150,
+          "column": 6,
+          "specs": [
+            {
+              "title": "DASH-PERM-01. 无Token访问仪表盘重定向到登录页",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 8403,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:22:12.038Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-8ee30f9d8d044bcd3dee",
+              "file": "dashboard.spec.ts",
+              "line": 151,
+              "column": 3
+            },
+            {
+              "title": "DASH-PERM-02. 无Token直接访问/inventory重定向到登录",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 12343,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:22:20.455Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-7cdbae157dc6efb61073",
+              "file": "dashboard.spec.ts",
+              "line": 156,
+              "column": 3
+            },
+            {
+              "title": "DASH-PERM-03-admin. admin访问仪表盘允许",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2709,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:22:32.814Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-8774f08e8d8025cfce6c",
+              "file": "dashboard.spec.ts",
+              "line": 162,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-03-warehouse_manager. warehouse_manager访问仪表盘允许",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 12482,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:22:35.539Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-6f5769cf66c95e10a6c5",
+              "file": "dashboard.spec.ts",
+              "line": 162,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-03-technician. technician访问仪表盘允许",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3846,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:22:48.034Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-42295a7ebdaf212491fd",
+              "file": "dashboard.spec.ts",
+              "line": 162,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-03-pathologist. pathologist访问仪表盘允许",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6023,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:22:51.891Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-a1aa454c76342f387a7d",
+              "file": "dashboard.spec.ts",
+              "line": 162,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-03-procurement. procurement访问仪表盘允许",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1792,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:22:57.926Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-3d2f6654d0adf7d8b5a8",
+              "file": "dashboard.spec.ts",
+              "line": 162,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-03-finance. finance访问仪表盘允许",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3860,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:22:59.732Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-9d93c4d03a3be72d47f9",
+              "file": "dashboard.spec.ts",
+              "line": 162,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-04-admin. admin侧边栏菜单与权限匹配",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6489,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:23:03.610Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-0065ecf2e0ecf27ddfb3",
+              "file": "dashboard.spec.ts",
+              "line": 169,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-04-warehouse_manager. warehouse_manager侧边栏菜单与权限匹配",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6857,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:23:10.112Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-ba47e317fe9b35ed32cb",
+              "file": "dashboard.spec.ts",
+              "line": 169,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-04-technician. technician侧边栏菜单与权限匹配",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4914,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:23:16.979Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-369d6108183fd74f1e53",
+              "file": "dashboard.spec.ts",
+              "line": 169,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-04-pathologist. pathologist侧边栏菜单与权限匹配",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 9391,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:23:21.906Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-aeaadd659d090ae97143",
+              "file": "dashboard.spec.ts",
+              "line": 169,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-04-procurement. procurement侧边栏菜单与权限匹配",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2743,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:23:31.319Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-ee1b07bb4d36aa70a2b6",
+              "file": "dashboard.spec.ts",
+              "line": 169,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-04-finance. finance侧边栏菜单与权限匹配",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3371,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:23:34.074Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-81315d6aa0ef77316d42",
+              "file": "dashboard.spec.ts",
+              "line": 169,
+              "column": 5
+            },
+            {
+              "title": "DASH-PERM-05. admin显示全部17个菜单项",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3374,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:23:37.455Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-ac72b33c03b434232fa7",
+              "file": "dashboard.spec.ts",
+              "line": 175,
+              "column": 3
+            },
+            {
+              "title": "DASH-PERM-06. finance仅显示3个菜单",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 12234,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=入库').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=入库').first()\u001b[22m\n\u001b[2m    8 × locator resolved to <span class=\"text-sm font-medium truncate\">入库记录</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=入库').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=入库').first()\u001b[22m\n\u001b[2m    8 × locator resolved to <span class=\"text-sm font-medium truncate\">入库记录</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:183:62",
+                        "location": {
+                          "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                          "column": 62,
+                          "line": 183
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 181 |\u001b[39m   test(\u001b[32m'DASH-PERM-06. finance仅显示3个菜单'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\n \u001b[90m 182 |\u001b[39m     \u001b[36mawait\u001b[39m loginAs(page\u001b[33m,\u001b[39m \u001b[32m'finance'\u001b[39m)\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 183 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=入库'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\n \u001b[90m     |\u001b[39m                                                              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 184 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=出库'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\n \u001b[90m 185 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=盘点'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\n \u001b[90m 186 |\u001b[39m   })\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                            "column": 62,
+                            "line": 183
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=入库').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=入库').first()\u001b[22m\n\u001b[2m    8 × locator resolved to <span class=\"text-sm font-medium truncate\">入库记录</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n\n  181 |   test('DASH-PERM-06. finance仅显示3个菜单', async ({ page }) => {\n  182 |     await loginAs(page, 'finance')\n> 183 |     await expect(page.locator('nav >> text=入库').first()).not.toBeVisible()\n      |                                                              ^\n  184 |     await expect(page.locator('nav >> text=出库').first()).not.toBeVisible()\n  185 |     await expect(page.locator('nav >> text=盘点').first()).not.toBeVisible()\n  186 |   })\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:183:62"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:23:40.842Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---权限-DASH-PERM-06-finance仅显示3个菜单-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---权限-DASH-PERM-06-finance仅显示3个菜单-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---权限-DASH-PERM-06-finance仅显示3个菜单-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                        "column": 62,
+                        "line": 183
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-7840deff8c64890c427e",
+              "file": "dashboard.spec.ts",
+              "line": 181,
+              "column": 3
+            },
+            {
+              "title": "DASH-PERM-07. technician仅显示6个菜单",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 6384,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=入库').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=入库').first()\u001b[22m\n\u001b[2m    9 × locator resolved to <span class=\"text-sm font-medium truncate\">入库记录</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=入库').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=入库').first()\u001b[22m\n\u001b[2m    9 × locator resolved to <span class=\"text-sm font-medium truncate\">入库记录</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:190:62",
+                        "location": {
+                          "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                          "column": 62,
+                          "line": 190
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 188 |\u001b[39m   test(\u001b[32m'DASH-PERM-07. technician仅显示6个菜单'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\n \u001b[90m 189 |\u001b[39m     \u001b[36mawait\u001b[39m loginAs(page\u001b[33m,\u001b[39m \u001b[32m'technician'\u001b[39m)\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 190 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=入库'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\n \u001b[90m     |\u001b[39m                                                              \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 191 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=用户'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\n \u001b[90m 192 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=角色'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\n \u001b[90m 193 |\u001b[39m   })\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                            "column": 62,
+                            "line": 190
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=入库').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=入库').first()\u001b[22m\n\u001b[2m    9 × locator resolved to <span class=\"text-sm font-medium truncate\">入库记录</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n\n  188 |   test('DASH-PERM-07. technician仅显示6个菜单', async ({ page }) => {\n  189 |     await loginAs(page, 'technician')\n> 190 |     await expect(page.locator('nav >> text=入库').first()).not.toBeVisible()\n      |                                                              ^\n  191 |     await expect(page.locator('nav >> text=用户').first()).not.toBeVisible()\n  192 |     await expect(page.locator('nav >> text=角色').first()).not.toBeVisible()\n  193 |   })\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:190:62"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:23:54.348Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---权限-DASH-PERM-07-technician仅显示6个菜单-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---权限-DASH-PERM-07-technician仅显示6个菜单-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---权限-DASH-PERM-07-technician仅显示6个菜单-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                        "column": 62,
+                        "line": 190
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-cfcabe5b903590a62147",
+              "file": "dashboard.spec.ts",
+              "line": 188,
+              "column": 3
+            },
+            {
+              "title": "DASH-PERM-08. warehouse_manager可访问库存操作菜单",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1331,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:02.517Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-222eadd387364f2393d4",
+              "file": "dashboard.spec.ts",
+              "line": 195,
+              "column": 3
+            },
+            {
+              "title": "DASH-PERM-09. procurement可访问采购相关菜单",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 1197,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first())\nExpected: visible\nError: strict mode violation: locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first()) resolved to 2 elements:\n    1) <span class=\"text-sm font-medium truncate\">物料成本分析</span> aka getByRole('link', { name: '物料成本分析' })\n    2) <span class=\"text-sm font-medium truncate\">耗材管理</span> aka getByRole('link', { name: '耗材管理' })\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first())\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first())\nExpected: visible\nError: strict mode violation: locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first()) resolved to 2 elements:\n    1) <span class=\"text-sm font-medium truncate\">物料成本分析</span> aka getByRole('link', { name: '物料成本分析' })\n    2) <span class=\"text-sm font-medium truncate\">耗材管理</span> aka getByRole('link', { name: '耗材管理' })\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first())\u001b[22m\n\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:205:101",
+                        "location": {
+                          "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                          "column": 101,
+                          "line": 205
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 203 |\u001b[39m     \u001b[36mawait\u001b[39m loginAs(page\u001b[33m,\u001b[39m \u001b[32m'procurement'\u001b[39m)\n \u001b[90m 204 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=供应商'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mtoBeVisible()\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 205 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=物料'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m.\u001b[39mor(page\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=耗材'\u001b[39m)\u001b[33m.\u001b[39mfirst()))\u001b[33m.\u001b[39mtoBeVisible()\n \u001b[90m     |\u001b[39m                                                                                                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 206 |\u001b[39m   })\n \u001b[90m 207 |\u001b[39m\n \u001b[90m 208 |\u001b[39m   test(\u001b[32m'DASH-PERM-10. pathologist可访问诊断相关菜单'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                            "column": 101,
+                            "line": 205
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first())\nExpected: visible\nError: strict mode violation: locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first()) resolved to 2 elements:\n    1) <span class=\"text-sm font-medium truncate\">物料成本分析</span> aka getByRole('link', { name: '物料成本分析' })\n    2) <span class=\"text-sm font-medium truncate\">耗材管理</span> aka getByRole('link', { name: '耗材管理' })\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first())\u001b[22m\n\n\n  203 |     await loginAs(page, 'procurement')\n  204 |     await expect(page.locator('nav >> text=供应商').first()).toBeVisible()\n> 205 |     await expect(page.locator('nav >> text=物料').first().or(page.locator('nav >> text=耗材').first())).toBeVisible()\n      |                                                                                                     ^\n  206 |   })\n  207 |\n  208 |   test('DASH-PERM-10. pathologist可访问诊断相关菜单', async ({ page }) => {\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:205:101"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:04.383Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---权限-DASH-PERM-09-procurement可访问采购相关菜单-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---权限-DASH-PERM-09-procurement可访问采购相关菜单-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---权限-DASH-PERM-09-procurement可访问采购相关菜单-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                        "column": 101,
+                        "line": 205
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-1c254a3537cf34f64cff",
+              "file": "dashboard.spec.ts",
+              "line": 202,
+              "column": 3
+            },
+            {
+              "title": "DASH-PERM-10. pathologist可访问诊断相关菜单",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1287,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:06.832Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-20b771d9f28f2ee02434",
+              "file": "dashboard.spec.ts",
+              "line": 208,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "仪表盘 -> 侧边栏导航切换",
+          "file": "dashboard.spec.ts",
+          "line": 218,
+          "column": 6,
+          "specs": [
+            {
+              "title": "DASH-NAV-01-库存. admin点击库存正确跳转",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1273,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:08.685Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-4761ff4727930871884a",
+              "file": "dashboard.spec.ts",
+              "line": 228,
+              "column": 5
+            },
+            {
+              "title": "DASH-NAV-01-入库. admin点击入库正确跳转",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1272,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:09.972Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-a82b1613e1b298972acd",
+              "file": "dashboard.spec.ts",
+              "line": 228,
+              "column": 5
+            },
+            {
+              "title": "DASH-NAV-01-出库. admin点击出库正确跳转",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1210,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:11.256Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-04460ff888b30f3a6d6a",
+              "file": "dashboard.spec.ts",
+              "line": 228,
+              "column": 5
+            },
+            {
+              "title": "DASH-NAV-01-盘点. admin点击盘点正确跳转",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1391,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:12.477Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-1ecfc0077e91ef403e68",
+              "file": "dashboard.spec.ts",
+              "line": 228,
+              "column": 5
+            },
+            {
+              "title": "DASH-NAV-01-预警. admin点击预警正确跳转",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1462,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:13.880Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-d42734e46c96c9a56ec5",
+              "file": "dashboard.spec.ts",
+              "line": 228,
+              "column": 5
+            },
+            {
+              "title": "DASH-NAV-02. 当前页面菜单项高亮",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1479,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:15.357Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-7ea125449a09cd6bd0c9",
+              "file": "dashboard.spec.ts",
+              "line": 238,
+              "column": 3
+            },
+            {
+              "title": "DASH-NAV-03. 网络中断后点击导航恢复可跳转",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1954,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:16.850Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-d6b4860d6c378512a027",
+              "file": "dashboard.spec.ts",
+              "line": 249,
+              "column": 3
+            },
+            {
+              "title": "DASH-NAV-04. 侧边栏折叠展开功能",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1578,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:18.817Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-6a8bda95c4a0670adc86",
+              "file": "dashboard.spec.ts",
+              "line": 258,
+              "column": 3
+            },
+            {
+              "title": "DASH-NAV-05. 侧边栏搜索功能",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1991,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:20.408Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-8726101feb569b953eb2",
+              "file": "dashboard.spec.ts",
+              "line": 264,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "仪表盘 -> 移动端侧边栏",
+          "file": "dashboard.spec.ts",
+          "line": 274,
+          "column": 6,
+          "specs": [
+            {
+              "title": "DASH-MOB-01-admin. admin移动端点击汉堡菜单侧边栏滑入",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1439,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:22.412Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-8552cc7c4e4897e2f277",
+              "file": "dashboard.spec.ts",
+              "line": 276,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-01-warehouse_manager. warehouse_manager移动端点击汉堡菜单侧边栏滑入",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1425,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:23.870Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-d3c693eb8b6f6256adcb",
+              "file": "dashboard.spec.ts",
+              "line": 276,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-01-technician. technician移动端点击汉堡菜单侧边栏滑入",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1616,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:25.306Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-36497f643f7ec591442e",
+              "file": "dashboard.spec.ts",
+              "line": 276,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-01-pathologist. pathologist移动端点击汉堡菜单侧边栏滑入",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1319,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:26.936Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-a89a28a00104f9ca3000",
+              "file": "dashboard.spec.ts",
+              "line": 276,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-01-procurement. procurement移动端点击汉堡菜单侧边栏滑入",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1369,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:28.268Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-b5da08dac37f119ab78a",
+              "file": "dashboard.spec.ts",
+              "line": 276,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-01-finance. finance移动端点击汉堡菜单侧边栏滑入",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1352,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:29.648Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-8c17cd6d12ef62280bd1",
+              "file": "dashboard.spec.ts",
+              "line": 276,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-02-admin. admin移动端菜单项与桌面端一致",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6503,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:31.011Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-877349d867931a92bd1e",
+              "file": "dashboard.spec.ts",
+              "line": 289,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-02-warehouse_manager. warehouse_manager移动端菜单项与桌面端一致",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 7119,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:37.525Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-1417e5f29eef6010e001",
+              "file": "dashboard.spec.ts",
+              "line": 289,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-02-technician. technician移动端菜单项与桌面端一致",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 7191,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:44.656Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-2de2cea9a3e647f9c3d1",
+              "file": "dashboard.spec.ts",
+              "line": 289,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-02-pathologist. pathologist移动端菜单项与桌面端一致",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 11051,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:24:51.860Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-2769d9625e6797e5c998",
+              "file": "dashboard.spec.ts",
+              "line": 289,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-02-procurement. procurement移动端菜单项与桌面端一致",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6673,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:25:02.925Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-abb9ab998356400365dc",
+              "file": "dashboard.spec.ts",
+              "line": 289,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-02-finance. finance移动端菜单项与桌面端一致",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4597,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:25:09.616Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-f64d43e935695a7312a9",
+              "file": "dashboard.spec.ts",
+              "line": 289,
+              "column": 5
+            },
+            {
+              "title": "DASH-MOB-03. 超小屏幕<768px打开侧边栏遮罩层覆盖",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5480,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:25:14.227Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-8e33b4cb772a30b105e6",
+              "file": "dashboard.spec.ts",
+              "line": 301,
+              "column": 3
+            },
+            {
+              "title": "DASH-MOB-04. 点击遮罩层关闭侧边栏",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4675,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:25:19.729Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-f3ec885f84d3309297d8",
+              "file": "dashboard.spec.ts",
+              "line": 313,
+              "column": 3
+            },
+            {
+              "title": "DASH-MOB-05. 移动端点击菜单项后自动关闭侧边栏",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2808,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:25:24.418Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-d39b89ad3d42162e0677",
+              "file": "dashboard.spec.ts",
+              "line": 325,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "仪表盘 -> 异常后恢复",
+          "file": "dashboard.spec.ts",
+          "line": 341,
+          "column": 6,
+          "specs": [
+            {
+              "title": "DASH-RECV-01-admin. adminAPI 500时显示错误提示",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 8445,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:25:27.238Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-cfdd2db29a1cab49b1df",
+              "file": "dashboard.spec.ts",
+              "line": 343,
+              "column": 5
+            },
+            {
+              "title": "DASH-RECV-01-warehouse_manager. warehouse_managerAPI 500时显示错误提示",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2142,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:25:35.695Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-24a3e6172b17f2e6932e",
+              "file": "dashboard.spec.ts",
+              "line": 343,
+              "column": 5
+            },
+            {
+              "title": "DASH-RECV-01-technician. technicianAPI 500时显示错误提示",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5002,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:25:37.849Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-8e4b91e5fb43aa9cd5bf",
+              "file": "dashboard.spec.ts",
+              "line": 343,
+              "column": 5
+            },
+            {
+              "title": "DASH-RECV-01-pathologist. pathologistAPI 500时显示错误提示",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 14409,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:25:42.862Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-dc6be9706d2554a0986e",
+              "file": "dashboard.spec.ts",
+              "line": 343,
+              "column": 5
+            },
+            {
+              "title": "DASH-RECV-01-procurement. procurementAPI 500时显示错误提示",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6445,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:25:57.281Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-3e44da06d1e750ffc9a9",
+              "file": "dashboard.spec.ts",
+              "line": 343,
+              "column": 5
+            },
+            {
+              "title": "DASH-RECV-01-finance. financeAPI 500时显示错误提示",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3405,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:03.736Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-e1b9465978ee31c563ed",
+              "file": "dashboard.spec.ts",
+              "line": 343,
+              "column": 5
+            },
+            {
+              "title": "DASH-RECV-02. 网络中断后刷新页面数据重新加载",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4959,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:07.154Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-298cee66b0c66f59f5c8",
+              "file": "dashboard.spec.ts",
+              "line": 352,
+              "column": 3
+            },
+            {
+              "title": "DASH-RECV-03. 部分API失败时其他数据正常显示",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3890,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:12.126Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-6f28c0a55d7fbb609b76",
+              "file": "dashboard.spec.ts",
+              "line": 362,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "仪表盘 -> 不同角色UI差异",
+          "file": "dashboard.spec.ts",
+          "line": 374,
+          "column": 6,
+          "specs": [
+            {
+              "title": "DASH-UI-01-admin. admin侧边栏菜单数量在15-20之间",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 9935,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:16.027Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-05d95641313b4b9992c5",
+              "file": "dashboard.spec.ts",
+              "line": 385,
+              "column": 5
+            },
+            {
+              "title": "DASH-UI-01-warehouse_manager. warehouse_manager侧边栏菜单数量在8-12之间",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 1706,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m12\u001b[39m\nReceived:    \u001b[31m18\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m12\u001b[39m\nReceived:    \u001b[31m18\u001b[39m\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:390:21",
+                        "location": {
+                          "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                          "column": 21,
+                          "line": 390
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 388 |\u001b[39m       \u001b[36mconst\u001b[39m count \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m links\u001b[33m.\u001b[39mcount()\n \u001b[90m 389 |\u001b[39m       expect(count)\u001b[33m.\u001b[39mtoBeGreaterThanOrEqual(min)\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 390 |\u001b[39m       expect(count)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(max)\n \u001b[90m     |\u001b[39m                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 391 |\u001b[39m     })\n \u001b[90m 392 |\u001b[39m   }\n \u001b[90m 393 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                            "column": 21,
+                            "line": 390
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m12\u001b[39m\nReceived:    \u001b[31m18\u001b[39m\n\n  388 |       const count = await links.count()\n  389 |       expect(count).toBeGreaterThanOrEqual(min)\n> 390 |       expect(count).toBeLessThanOrEqual(max)\n      |                     ^\n  391 |     })\n  392 |   }\n  393 |\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:390:21"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:25.973Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-129e1-house-manager侧边栏菜单数量在8-12之间-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-129e1-house-manager侧边栏菜单数量在8-12之间-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-129e1-house-manager侧边栏菜单数量在8-12之间-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                        "column": 21,
+                        "line": 390
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-f52bb4c2564b40b267a2",
+              "file": "dashboard.spec.ts",
+              "line": 385,
+              "column": 5
+            },
+            {
+              "title": "DASH-UI-01-technician. technician侧边栏菜单数量在4-8之间",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 3109,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m8\u001b[39m\nReceived:    \u001b[31m18\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m8\u001b[39m\nReceived:    \u001b[31m18\u001b[39m\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:390:21",
+                        "location": {
+                          "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                          "column": 21,
+                          "line": 390
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 388 |\u001b[39m       \u001b[36mconst\u001b[39m count \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m links\u001b[33m.\u001b[39mcount()\n \u001b[90m 389 |\u001b[39m       expect(count)\u001b[33m.\u001b[39mtoBeGreaterThanOrEqual(min)\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 390 |\u001b[39m       expect(count)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(max)\n \u001b[90m     |\u001b[39m                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 391 |\u001b[39m     })\n \u001b[90m 392 |\u001b[39m   }\n \u001b[90m 393 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                            "column": 21,
+                            "line": 390
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m8\u001b[39m\nReceived:    \u001b[31m18\u001b[39m\n\n  388 |       const count = await links.count()\n  389 |       expect(count).toBeGreaterThanOrEqual(min)\n> 390 |       expect(count).toBeLessThanOrEqual(max)\n      |                     ^\n  391 |     })\n  392 |   }\n  393 |\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:390:21"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:29.685Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-4db42-ian-technician侧边栏菜单数量在4-8之间-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-4db42-ian-technician侧边栏菜单数量在4-8之间-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-4db42-ian-technician侧边栏菜单数量在4-8之间-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                        "column": 21,
+                        "line": 390
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-9191c6687e1405f2c66b",
+              "file": "dashboard.spec.ts",
+              "line": 385,
+              "column": 5
+            },
+            {
+              "title": "DASH-UI-01-pathologist. pathologist侧边栏菜单数量在6-10之间",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 2423,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m10\u001b[39m\nReceived:    \u001b[31m18\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m10\u001b[39m\nReceived:    \u001b[31m18\u001b[39m\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:390:21",
+                        "location": {
+                          "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                          "column": 21,
+                          "line": 390
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 388 |\u001b[39m       \u001b[36mconst\u001b[39m count \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m links\u001b[33m.\u001b[39mcount()\n \u001b[90m 389 |\u001b[39m       expect(count)\u001b[33m.\u001b[39mtoBeGreaterThanOrEqual(min)\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 390 |\u001b[39m       expect(count)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(max)\n \u001b[90m     |\u001b[39m                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 391 |\u001b[39m     })\n \u001b[90m 392 |\u001b[39m   }\n \u001b[90m 393 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                            "column": 21,
+                            "line": 390
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m10\u001b[39m\nReceived:    \u001b[31m18\u001b[39m\n\n  388 |       const count = await links.count()\n  389 |       expect(count).toBeGreaterThanOrEqual(min)\n> 390 |       expect(count).toBeLessThanOrEqual(max)\n      |                     ^\n  391 |     })\n  392 |   }\n  393 |\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:390:21"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:36.353Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-9f623-t-pathologist侧边栏菜单数量在6-10之间-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-9f623-t-pathologist侧边栏菜单数量在6-10之间-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-9f623-t-pathologist侧边栏菜单数量在6-10之间-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                        "column": 21,
+                        "line": 390
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-e51595d469bdea865fc7",
+              "file": "dashboard.spec.ts",
+              "line": 385,
+              "column": 5
+            },
+            {
+              "title": "DASH-UI-01-procurement. procurement侧边栏菜单数量在6-10之间",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 3103,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m10\u001b[39m\nReceived:    \u001b[31m18\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m10\u001b[39m\nReceived:    \u001b[31m18\u001b[39m\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:390:21",
+                        "location": {
+                          "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                          "column": 21,
+                          "line": 390
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 388 |\u001b[39m       \u001b[36mconst\u001b[39m count \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m links\u001b[33m.\u001b[39mcount()\n \u001b[90m 389 |\u001b[39m       expect(count)\u001b[33m.\u001b[39mtoBeGreaterThanOrEqual(min)\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 390 |\u001b[39m       expect(count)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(max)\n \u001b[90m     |\u001b[39m                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 391 |\u001b[39m     })\n \u001b[90m 392 |\u001b[39m   }\n \u001b[90m 393 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                            "column": 21,
+                            "line": 390
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m10\u001b[39m\nReceived:    \u001b[31m18\u001b[39m\n\n  388 |       const count = await links.count()\n  389 |       expect(count).toBeGreaterThanOrEqual(min)\n> 390 |       expect(count).toBeLessThanOrEqual(max)\n      |                     ^\n  391 |     })\n  392 |   }\n  393 |\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:390:21"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:41.512Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-ace77-t-procurement侧边栏菜单数量在6-10之间-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-ace77-t-procurement侧边栏菜单数量在6-10之间-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-ace77-t-procurement侧边栏菜单数量在6-10之间-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                        "column": 21,
+                        "line": 390
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-3900269469ab342fcdb2",
+              "file": "dashboard.spec.ts",
+              "line": 385,
+              "column": 5
+            },
+            {
+              "title": "DASH-UI-01-finance. finance侧边栏菜单数量在3-6之间",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 2632,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m6\u001b[39m\nReceived:    \u001b[31m18\u001b[39m",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m6\u001b[39m\nReceived:    \u001b[31m18\u001b[39m\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:390:21",
+                        "location": {
+                          "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                          "column": 21,
+                          "line": 390
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 388 |\u001b[39m       \u001b[36mconst\u001b[39m count \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m links\u001b[33m.\u001b[39mcount()\n \u001b[90m 389 |\u001b[39m       expect(count)\u001b[33m.\u001b[39mtoBeGreaterThanOrEqual(min)\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 390 |\u001b[39m       expect(count)\u001b[33m.\u001b[39mtoBeLessThanOrEqual(max)\n \u001b[90m     |\u001b[39m                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 391 |\u001b[39m     })\n \u001b[90m 392 |\u001b[39m   }\n \u001b[90m 393 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                            "column": 21,
+                            "line": 390
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBeLessThanOrEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m\n\nExpected: <= \u001b[32m6\u001b[39m\nReceived:    \u001b[31m18\u001b[39m\n\n  388 |       const count = await links.count()\n  389 |       expect(count).toBeGreaterThanOrEqual(min)\n> 390 |       expect(count).toBeLessThanOrEqual(max)\n      |                     ^\n  391 |     })\n  392 |   }\n  393 |\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:390:21"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:48.273Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-277ff-inance-finance侧边栏菜单数量在3-6之间-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-277ff-inance-finance侧边栏菜单数量在3-6之间-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-D-277ff-inance-finance侧边栏菜单数量在3-6之间-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                        "column": 21,
+                        "line": 390
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-9afdbeebabdf4319e711",
+              "file": "dashboard.spec.ts",
+              "line": 385,
+              "column": 5
+            },
+            {
+              "title": "DASH-UI-02. admin显示系统管理菜单",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 8,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2837,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:53.249Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-3b0e30873c8f65b60626",
+              "file": "dashboard.spec.ts",
+              "line": 394,
+              "column": 3
+            },
+            {
+              "title": "DASH-UI-03. 非admin隐藏系统管理菜单",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 8,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 7094,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=用户').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=用户').first()\u001b[22m\n\u001b[2m    8 × locator resolved to <span class=\"text-sm font-medium truncate\">用户管理</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=用户').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=用户').first()\u001b[22m\n\u001b[2m    8 × locator resolved to <span class=\"text-sm font-medium truncate\">用户管理</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:404:64",
+                        "location": {
+                          "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                          "column": 64,
+                          "line": 404
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 402 |\u001b[39m     \u001b[36mfor\u001b[39m (\u001b[36mconst\u001b[39m role \u001b[36mof\u001b[39m [\u001b[32m'technician'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m'pathologist'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m'procurement'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m'finance'\u001b[39m] \u001b[36mas\u001b[39m \u001b[33mRoleKey\u001b[39m[]) {\n \u001b[90m 403 |\u001b[39m       \u001b[36mawait\u001b[39m loginAs(page\u001b[33m,\u001b[39m role)\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 404 |\u001b[39m       \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=用户'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\n \u001b[90m     |\u001b[39m                                                                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 405 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`${FE_BASE}/login`\u001b[39m)\n \u001b[90m 406 |\u001b[39m       \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mevaluate(() \u001b[33m=>\u001b[39m localStorage\u001b[33m.\u001b[39mclear())\n \u001b[90m 407 |\u001b[39m     }\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                            "column": 64,
+                            "line": 404
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=用户').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=用户').first()\u001b[22m\n\u001b[2m    8 × locator resolved to <span class=\"text-sm font-medium truncate\">用户管理</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n\n  402 |     for (const role of ['technician', 'pathologist', 'procurement', 'finance'] as RoleKey[]) {\n  403 |       await loginAs(page, role)\n> 404 |       await expect(page.locator('nav >> text=用户').first()).not.toBeVisible()\n      |                                                                ^\n  405 |       await page.goto(`${FE_BASE}/login`)\n  406 |       await page.evaluate(() => localStorage.clear())\n  407 |     }\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:404:64"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:26:56.949Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-DASH-UI-03-非admin隐藏系统管理菜单-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-DASH-UI-03-非admin隐藏系统管理菜单-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---不同角色UI差异-DASH-UI-03-非admin隐藏系统管理菜单-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                        "column": 64,
+                        "line": 404
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-4cda3dfdbcc456a82aee",
+              "file": "dashboard.spec.ts",
+              "line": 401,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "仪表盘 -> 业务流程树",
+          "file": "dashboard.spec.ts",
+          "line": 414,
+          "column": 6,
+          "specs": [
+            {
+              "title": "BF-DASH-01. 采购入库流主路径：登录后进入仪表盘",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3503,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:06.186Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-c452e4d4992f37f62f9e",
+              "file": "dashboard.spec.ts",
+              "line": 415,
+              "column": 3
+            },
+            {
+              "title": "BF-DASH-02. 项目领用出库流主路径：技术员登录查看仪表盘",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2839,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:10.684Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-1fbc98c8f6242e38ef50",
+              "file": "dashboard.spec.ts",
+              "line": 423,
+              "column": 3
+            },
+            {
+              "title": "BF-DASH-03. 预警处理流主路径：仪表盘显示预警数量",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1992,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:13.545Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-89e6eaa1ef14008d0313",
+              "file": "dashboard.spec.ts",
+              "line": 429,
+              "column": 3
+            },
+            {
+              "title": "BF-DASH-04. 刷新页面状态保持：刷新后仍显示仪表盘数据",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5019,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:15.557Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-ed4883f17a682a7ba66d",
+              "file": "dashboard.spec.ts",
+              "line": 434,
+              "column": 3
+            },
+            {
+              "title": "BF-DASH-05. 多标签页切换：打开新标签页保持登录状态",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4122,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:20.612Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-371089fe656a133bec08",
+              "file": "dashboard.spec.ts",
+              "line": 444,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "仪表盘 -> 盲点分析补充",
+          "file": "dashboard.spec.ts",
+          "line": 458,
+          "column": 6,
+          "specs": [
+            {
+              "title": "BLIND-DASH-01. 统计卡片hover效果正常",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3215,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:24.776Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-f6f82e555371f642f808",
+              "file": "dashboard.spec.ts",
+              "line": 459,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-02. 刷新页面后统计数据重新加载",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3745,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:28.017Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-022f05d15727d3a9e241",
+              "file": "dashboard.spec.ts",
+              "line": 467,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-03. 多浏览器上下文数据隔离",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 9042,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=用户').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=用户').first()\u001b[22m\n\u001b[2m    9 × locator resolved to <span class=\"text-sm font-medium truncate\">用户管理</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=用户').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=用户').first()\u001b[22m\n\u001b[2m    9 × locator resolved to <span class=\"text-sm font-medium truncate\">用户管理</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:482:60",
+                        "location": {
+                          "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                          "column": 60,
+                          "line": 482
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 480 |\u001b[39m     \u001b[36mawait\u001b[39m loginAs(p2\u001b[33m,\u001b[39m \u001b[32m'finance'\u001b[39m)\n \u001b[90m 481 |\u001b[39m     \u001b[36mawait\u001b[39m expect(p1\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=用户'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mtoBeVisible()\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 482 |\u001b[39m     \u001b[36mawait\u001b[39m expect(p2\u001b[33m.\u001b[39mlocator(\u001b[32m'nav >> text=用户'\u001b[39m)\u001b[33m.\u001b[39mfirst())\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\n \u001b[90m     |\u001b[39m                                                            \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 483 |\u001b[39m     \u001b[36mawait\u001b[39m ctx1\u001b[33m.\u001b[39mclose()\n \u001b[90m 484 |\u001b[39m     \u001b[36mawait\u001b[39m ctx2\u001b[33m.\u001b[39mclose()\n \u001b[90m 485 |\u001b[39m   })\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                            "column": 60,
+                            "line": 482
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('nav').locator('text=用户').first()\nExpected: not visible\nReceived: visible\nTimeout:  5000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('nav').locator('text=用户').first()\u001b[22m\n\u001b[2m    9 × locator resolved to <span class=\"text-sm font-medium truncate\">用户管理</span>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n\n  480 |     await loginAs(p2, 'finance')\n  481 |     await expect(p1.locator('nav >> text=用户').first()).toBeVisible()\n> 482 |     await expect(p2.locator('nav >> text=用户').first()).not.toBeVisible()\n      |                                                            ^\n  483 |     await ctx1.close()\n  484 |     await ctx2.close()\n  485 |   })\n    at d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts:482:60"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:31.779Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---盲点分析补充-BLIND-DASH-03-多浏览器上下文数据隔离-chromium\\test-failed-2.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---盲点分析补充-BLIND-DASH-03-多浏览器上下文数据隔离-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---盲点分析补充-BLIND-DASH-03-多浏览器上下文数据隔离-chromium\\test-failed-3.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---盲点分析补充-BLIND-DASH-03-多浏览器上下文数据隔离-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "d:\\Git\\COREONE\\最新代码\\前端代码\\test-results\\dashboard-仪表盘---盲点分析补充-BLIND-DASH-03-多浏览器上下文数据隔离-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "d:\\Git\\COREONE\\最新代码\\前端代码\\e2e\\dashboard.spec.ts",
+                        "column": 60,
+                        "line": 482
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-066ea6fbaddafdcc219a",
+              "file": "dashboard.spec.ts",
+              "line": 474,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-04. 仪表盘暗色主题支持",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2186,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:42.785Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-2fd8e632224d689175f3",
+              "file": "dashboard.spec.ts",
+              "line": 487,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-05. 快捷操作按钮可点击",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1756,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:45.683Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-9d4b7074713ef13266ea",
+              "file": "dashboard.spec.ts",
+              "line": 498,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-06. 最近活动列表按时间排序",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4141,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:47.459Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-6501224bac2ba04766b1",
+              "file": "dashboard.spec.ts",
+              "line": 504,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-07. 趋势图表正常渲染",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2483,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:51.617Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-b4b6ba897ec14dbd707b",
+              "file": "dashboard.spec.ts",
+              "line": 515,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-08. 页面加载性能检查",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2553,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:54.120Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-f14cca533ddf4f6fe5e9",
+              "file": "dashboard.spec.ts",
+              "line": 525,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-09. 仪表盘标题显示正确",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2182,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:56.714Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-973b943f8878b830f16a",
+              "file": "dashboard.spec.ts",
+              "line": 532,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-10. 页面滚动行为正常",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2650,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:27:58.924Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-ec6e9b9b4c5b6635f49f",
+              "file": "dashboard.spec.ts",
+              "line": 538,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-11. 仪表盘响应式-平板尺寸",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2387,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:28:01.611Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-3d970d617181c3473a0a",
+              "file": "dashboard.spec.ts",
+              "line": 544,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-12. 仪表盘响应式-手机尺寸",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1735,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:28:04.021Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-d8d0a93ec2170b7b2e0e",
+              "file": "dashboard.spec.ts",
+              "line": 550,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-13. 数据自动刷新机制",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4872,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:28:05.800Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-9d40eef13740c819fce5",
+              "file": "dashboard.spec.ts",
+              "line": 556,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-14. 键盘导航支持",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2119,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:28:10.685Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-e9dee75a2415c1cf790c",
+              "file": "dashboard.spec.ts",
+              "line": 562,
+              "column": 3
+            },
+            {
+              "title": "BLIND-DASH-15. 离线提示显示",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2947,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-05-15T03:28:12.825Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "90cda532ab82d274b30b-7a6c359adf6703b41039",
+              "file": "dashboard.spec.ts",
+              "line": 569,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-05-15T03:20:35.925Z",
+    "duration": 460374.34599999996,
+    "expected": 102,
+    "skipped": 0,
+    "unexpected": 10,
+    "flaky": 0
+  }
+}

@@ -74,7 +74,7 @@ router.post('/refresh', (req, res) => {
     }
 
     const db = getDatabase()
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(decoded.userId) as any
+    const user = db.prepare('SELECT * FROM users WHERE id = ? AND is_deleted = 0').get(decoded.userId) as any
 
     if (!user || user.status !== 1) {
       error(res, 'User not found or disabled', 'UNAUTHORIZED', 401)

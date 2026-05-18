@@ -64,6 +64,8 @@ router.put('/:id', authenticateToken, requireSupplierWrite, (req, res) => {
     const { id } = req.params
     const data = req.body
     const db = getDatabase()
+    const existing = db.prepare('SELECT * FROM suppliers WHERE id = ? AND is_deleted = 0').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     const fields: string[] = []; const params: any[] = []
     if (data.code !== undefined) { fields.push('code = ?'); params.push(data.code) }
     if (data.name !== undefined) { fields.push('name = ?'); params.push(data.name) }
@@ -72,7 +74,7 @@ router.put('/:id', authenticateToken, requireSupplierWrite, (req, res) => {
     if (data.email !== undefined) { fields.push('email = ?'); params.push(data.email) }
     if (data.address !== undefined) { fields.push('address = ?'); params.push(data.address) }
     if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status === 'active' ? 1 : 0) }
-    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE suppliers SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params) }
+    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE suppliers SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params) }
     success(res, { id }, 'Updated')
   } catch (err: any) { error(res, err.message) }
 })

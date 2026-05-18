@@ -40,7 +40,7 @@ router.get('/:id', (req, res) => {
     const items = db.prepare(`
       SELECT bi.*, m.name, m.spec, m.price, COALESCE(i.stock, 0) as stock
       FROM bom_items bi
-      LEFT JOIN materials m ON bi.material_id = m.id
+      LEFT JOIN materials m ON bi.material_id = m.id AND m.is_deleted = 0
       LEFT JOIN inventory i ON m.id = i.material_id
       WHERE bi.bom_id = ?
     `).all(id) as any[]
@@ -67,7 +67,7 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const { code, name, type, serviceId, description, supportableSamples, materials } = req.body
-    if (!code || !name || !type || !Array.isArray(materials) || materials.length === 0) {
+    if (!code || !name || !type) {
       error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
@@ -79,8 +79,12 @@ router.post('/', (req, res) => {
 
     for (const m of materials) {
       const itemId = uuidv4()
+      const usage = Number(m.usagePerSample)
+      if (isNaN(usage) || usage <= 0) {
+        error(res, 'Invalid usage_per_sample', 'INVALID_PARAMETER', 400); return
+      }
       db.prepare('INSERT INTO bom_items (id, bom_id, material_id, usage_per_sample, unit) VALUES (?, ?, ?, ?, ?)')
-        .run(itemId, id, m.materialId, m.usagePerSample, m.unit)
+        .run(itemId, id, m.materialId, usage, m.unit)
     }
 
     success(res, { id }, 'Created', 201)
@@ -96,7 +100,7 @@ router.put('/:id', (req, res) => {
     const { name, description, supportableSamples, materials } = req.body
     const db = getDatabase()
 
-    const existing = db.prepare('SELECT * FROM boms WHERE id = ?').get(id) as any
+    const existing = db.prepare('SELECT * FROM boms WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
 
     const versionParts = existing.version.replace('v', '').split('.').map(Number)
@@ -110,8 +114,12 @@ router.put('/:id', (req, res) => {
       db.prepare('DELETE FROM bom_items WHERE bom_id = ?').run(id)
       for (const m of materials) {
         const itemId = uuidv4()
+        const usage = Number(m.usagePerSample)
+        if (isNaN(usage) || usage <= 0) {
+          error(res, 'Invalid usage_per_sample', 'INVALID_PARAMETER', 400); return
+        }
         db.prepare('INSERT INTO bom_items (id, bom_id, material_id, usage_per_sample, unit) VALUES (?, ?, ?, ?, ?)')
-          .run(itemId, id, m.materialId, m.usagePerSample, m.unit)
+          .run(itemId, id, m.materialId, usage, m.unit)
       }
     }
 
@@ -123,6 +131,8 @@ router.delete('/:id', (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
+    const existing = db.prepare('SELECT * FROM boms WHERE id = ? AND is_deleted = 0').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     db.prepare('UPDATE boms SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
     success(res, null, 'Deleted')
   } catch (err: any) { error(res, err.message) }

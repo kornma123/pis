@@ -7,8 +7,9 @@ const router = Router()
 
 function generateNo(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const timestamp = Date.now().toString().slice(-6)
   const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-  return `ST-${date}-${random}`
+  return `ST-${date}-${timestamp}-${random}`
 }
 
 router.get('/', (req, res) => {
@@ -31,7 +32,11 @@ router.post('/', (req, res) => {
   try {
     const { materialId, actualStock, operator, remark } = req.body
     if (!materialId || actualStock === undefined) { error(res, 'Missing fields', 'INVALID_PARAMETER', 400); return }
+    if (isNaN(Number(actualStock))) { error(res, 'Invalid actual stock', 'INVALID_PARAMETER', 400); return }
+    if (Number(actualStock) < 0) { error(res, 'actualStock 不能为负数', 'INVALID_PARAMETER', 400); return }
     const db = getDatabase()
+    const material = db.prepare('SELECT 1 FROM materials WHERE id = ? AND is_deleted = 0').get(materialId)
+    if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
     const systemStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock || 0
     const difference = actualStock - systemStock
     const id = uuidv4()

@@ -9,7 +9,7 @@ const router = Router()
 router.post('/inbound', (req, res) => {
   try {
     const { materialId, batchNo, quantity, fromLocationId, fromLocationName, toLocationId, operator, remark } = req.body
-    if (!materialId || !toLocationId || quantity <= 0) {
+    if (!materialId || !toLocationId || quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0) {
       error(res, '物料、目标库位和数量必填', 'INVALID_PARAMETER', 400)
       return
     }
@@ -18,6 +18,12 @@ router.post('/inbound', (req, res) => {
       return
     }
     const db = getDatabase()
+
+    // 校验物料和目标库位是否存在且未删除
+    const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
+    if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
+    const location = db.prepare('SELECT * FROM locations WHERE id = ? AND is_deleted = 0').get(toLocationId) as any
+    if (!location) { error(res, '目标库位不存在或已删除', 'NOT_FOUND', 404); return }
 
     // 创建入库记录
     const inboundNo = `TF-${Date.now()}`

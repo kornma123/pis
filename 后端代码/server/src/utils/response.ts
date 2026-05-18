@@ -16,13 +16,14 @@ export function successList<T>(
   total: number,
   extra?: Record<string, unknown>
 ): void {
+  const normalizedPage = Math.max(1, page || 1)
   const totalPages = Math.ceil(total / pageSize)
   res.status(200).json({
     success: true,
     data: {
       list,
       pagination: {
-        page,
+        page: normalizedPage,
         pageSize,
         total,
         totalPages,

@@ -24,6 +24,8 @@ router.put('/rules/:id', (req, res) => {
     const { id } = req.params
     const { threshold, thresholdDays, enabled } = req.body
     const db = getDatabase()
+    const existing = db.prepare('SELECT * FROM alert_rules WHERE id = ?').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     const fields: string[] = []; const params: any[] = []
     if (threshold !== undefined) { fields.push('threshold = ?'); params.push(threshold) }
     if (thresholdDays !== undefined) { fields.push('threshold_days = ?'); params.push(thresholdDays) }
@@ -60,6 +62,9 @@ router.post('/:id/handle', (req, res) => {
     const { id } = req.params
     const { action, remark } = req.body
     const db = getDatabase()
+    const existing = db.prepare('SELECT * FROM alerts WHERE id = ?').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (existing.status !== 'pending') { error(res, '预警已处理，不可重复操作', 'ALREADY_HANDLED', 400); return }
     db.prepare('UPDATE alerts SET status = ?, remark = ?, handled_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(action || 'processed', remark || '', id)
     success(res, null, 'Handled')
@@ -92,13 +97,18 @@ router.post('/generate', (_req, res) => {
     }
 
     const expiryRule = db.prepare("SELECT * FROM alert_rules WHERE type = 'expiry' AND enabled = 1").get() as any
-    if (expiryRule) {
+    if (expiryRule && expiryRule.threshold_days != null) {
+      // 计算预警截止日期，避免SQL字符串插值
+      const thresholdDate = new Date()
+      thresholdDate.setDate(thresholdDate.getDate() + Number(expiryRule.threshold_days))
+      const thresholdStr = thresholdDate.toISOString().split('T')[0]
+
       const expItems = db.prepare(`
         SELECT b.id as batch_id, m.id, m.name, b.batch_no, b.expiry_date
         FROM batches b
-        JOIN materials m ON b.material_id = m.id
-        WHERE b.status = 1 AND b.expiry_date <= date('now', '+${expiryRule.threshold_days} days')
-      `).all() as any[]
+        JOIN materials m ON b.material_id = m.id AND m.is_deleted = 0
+        WHERE b.status = 1 AND b.expiry_date <= ?
+      `).all(thresholdStr) as any[]
 
       for (const item of expItems) {
         const exists = db.prepare('SELECT COUNT(*) as c FROM alerts WHERE material_id = ? AND type = ? AND status = "pending"').get(item.id, 'expiry') as any

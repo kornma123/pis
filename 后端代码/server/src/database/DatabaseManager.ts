@@ -92,6 +92,15 @@ export function initializeDatabase(): void {
       database.exec("ALTER TABLE inbound_records ADD COLUMN purchase_order_no TEXT")
     }
   } catch (_e) { /* ignore */ }
+
+  // 兼容旧数据库：添加 purchase_orders.is_deleted 字段
+  try {
+    const poCols = database.prepare("PRAGMA table_info(purchase_orders)").all() as any[]
+    if (!poCols.find(c => c.name === 'is_deleted')) {
+      database.exec("ALTER TABLE purchase_orders ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
+      console.log('Migrated purchase_orders table: added is_deleted column')
+    }
+  } catch (_e) { /* ignore */ }
   database.exec(`
     CREATE TABLE IF NOT EXISTS outbound_records (id TEXT PRIMARY KEY, outbound_no TEXT NOT NULL UNIQUE, type TEXT NOT NULL, project_id TEXT, total_cost DECIMAL(18, 4) NOT NULL DEFAULT 0, operator TEXT NOT NULL, approver TEXT, approved_at TEXT, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)

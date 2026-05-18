@@ -11,7 +11,8 @@ const requireMaterialWrite = requireRole('admin', 'warehouse_manager', 'procurem
 
 router.get('/', (req, res) => {
   try {
-    const { page = 1, pageSize = 20, keyword, categoryId, supplierId, status } = req.query
+    let { page = 1, pageSize = 20, keyword, categoryId, supplierId, status } = req.query
+    pageSize = Math.min(Number(pageSize), 200)
     const db = getDatabase()
 
     let where = 'm.is_deleted = 0'
@@ -69,9 +70,9 @@ router.get('/:id', (req, res) => {
     const row = db.prepare(`
       SELECT m.*, c.name as category_name, s.name as supplier_name, l.name as location_name, COALESCE(i.stock, 0) as stock
       FROM materials m
-      LEFT JOIN material_categories c ON m.category_id = c.id
-      LEFT JOIN suppliers s ON m.supplier_id = s.id
-      LEFT JOIN locations l ON m.location_id = l.id
+      LEFT JOIN material_categories c ON m.category_id = c.id AND c.is_deleted = 0
+      LEFT JOIN suppliers s ON m.supplier_id = s.id AND s.is_deleted = 0
+      LEFT JOIN locations l ON m.location_id = l.id AND l.is_deleted = 0
       LEFT JOIN inventory i ON m.id = i.material_id
       WHERE m.id = ? AND m.is_deleted = 0
     `).get(id) as any
@@ -191,7 +192,7 @@ router.put('/:id', requireMaterialWrite, (req, res) => {
 
     if (fields.length > 0) {
       params.push(id)
-      db.prepare(`UPDATE materials SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params)
+      db.prepare(`UPDATE materials SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params)
     }
 
     success(res, { id }, 'Updated')
@@ -223,14 +224,24 @@ router.patch('/batch-status', requireMaterialWrite, (req, res) => {
     }
 
     const db = getDatabase()
-    const stmt = db.prepare('UPDATE materials SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    const stmt = db.prepare('UPDATE materials SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0')
     const newStatus = status === 'active' ? 1 : 0
+    let updatedCount = 0
     const transaction = db.transaction((idList: string[]) => {
-      for (const id of idList) { stmt.run(newStatus, id) }
+      for (const id of idList) {
+        const existing = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(id)
+        if (existing) {
+          stmt.run(newStatus, id)
+          updatedCount++
+        }
+      }
     })
     transaction(ids)
 
-    success(res, { updatedCount: ids.length }, 'Status updated')
+    if (updatedCount === 0) {
+      error(res, 'No valid materials found', 'NOT_FOUND', 404); return
+    }
+    success(res, { updatedCount }, 'Status updated')
   } catch (err: any) { error(res, err.message) }
 })
 

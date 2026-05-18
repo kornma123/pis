@@ -629,6 +629,16 @@ npx playwright test e2e/auth.spec.ts --debug
 | 版本 | 时间 | 变更内容 |
 |:---|:---|:---|
 | v1.0 | 2026-05-16 | 初始版本，整合 18 个 spec 修复结果，建立 4 阶段后续路线 |
+| v1.19 | 2026-05-18 | 第19批修复：purchase-orders is_deleted=0 过滤(4处)、transfers 物料/库位存在性校验、depletion 批次查询 JOIN 已删除物料过滤 |
+| v1.20 | 2026-05-18 | 第20批修复：purchase_orders 表添加 is_deleted 迁移、alerts expiry SQL注入+is_deleted=0、outbound LEFT JOIN projects is_deleted=0 |
+| v1.21 | 2026-05-18 | 第21批修复：reconciliation GET /cases SQL注入+分页page=0+projects is_deleted=0、PUT /cases/:id 404检查 |
+| v1.22 | 2026-05-18 | 第22批修复：inbound cancel 404+is_deleted=0、purchase-orders UPDATE is_deleted=0、reconciliation logs projects is_deleted=0 |
+| v1.23 | 2026-05-18 | 第23批修复：depletion remaining NaN/负数校验、reports amount null求和修复、alerts 重复处理拦截 |
+| v1.24 | 2026-05-18 | 第24批修复：reconciliation summary/projectsWithoutBom is_deleted=0、reconciliation boms is_deleted=0、outbound materials is_deleted=0、bom LEFT JOIN materials is_deleted=0 |
+| v1.25 | 2026-05-18 | 第25批修复：materials GET /:id JOIN 已删除 categories/suppliers/locations、depletion POST /tracking NaN/负数+日期校验、POST /:id/deplete 重复耗尽拦截+remain_qty校验 |
+| v1.26 | 2026-05-18 | 第26批修复：reconciliation GET /projects/:id/materials SQL注入(2处)、GET /materials SQL注入(2处) |
+| v1.27 | 2026-05-18 | 第27批修复：returns POST / 物料存在性+NaN校验、scraps POST / 物料存在性+NaN校验 |
+| v1.28 | 2026-05-18 | 第28批修复：stocktaking POST / actualStock负数+物料存在性、inbound POST / purchaseOrder is_deleted=0、logs GET / page=0修复 |
 
 ---
 

@@ -8,7 +8,7 @@ router.get('/cost-by-project', (req, res) => {
   try {
     const { startDate, endDate } = req.query
     const db = getDatabase()
-    let where = "r.status = 'completed'"
+    let where = "r.status = 'completed' AND r.is_deleted = 0 AND (p.is_deleted = 0 OR p.id IS NULL)"
     const params: any[] = []
     if (startDate) { where += ' AND r.created_at >= ?'; params.push(startDate) }
     if (endDate) { where += ' AND r.created_at <= ?'; params.push(`${endDate}T23:59:59`) }
@@ -43,7 +43,7 @@ router.get('/cost-by-material', (req, res) => {
   try {
     const { startDate, endDate, categoryId } = req.query
     const db = getDatabase()
-    let where = "o.status = 'completed'"
+    let where = "o.status = 'completed' AND o.is_deleted = 0 AND m.is_deleted = 0"
     const params: any[] = []
     if (startDate) { where += ' AND o.created_at >= ?'; params.push(startDate) }
     if (endDate) { where += ' AND o.created_at <= ?'; params.push(`${endDate}T23:59:59`) }
@@ -78,7 +78,7 @@ router.get('/cost-by-supplier', (req, res) => {
   try {
     const { startDate, endDate } = req.query
     const db = getDatabase()
-    let where = "r.status = 'completed'"
+    let where = "r.status = 'completed' AND r.is_deleted = 0 AND (s.is_deleted = 0 OR s.id IS NULL)"
     const params: any[] = []
     if (startDate) { where += ' AND r.created_at >= ?'; params.push(startDate) }
     if (endDate) { where += ' AND r.created_at <= ?'; params.push(`${endDate}T23:59:59`) }
@@ -92,7 +92,7 @@ router.get('/cost-by-supplier', (req, res) => {
       ORDER BY amount DESC
     `).all(...params) as any[]
 
-    const totalAmount = rows.reduce((sum: number, r: any) => sum + r.amount, 0)
+    const totalAmount = rows.reduce((sum: number, r: any) => sum + (r.amount || 0), 0)
 
     success(res, {
       suppliers: rows.map((r: any) => ({

@@ -67,7 +67,7 @@ router.post('/', requireProjectWrite, (req, res) => {
     const id = uuidv4()
     db.prepare('INSERT INTO projects (id, code, name, type, cycle, manager, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, 1)')
       .run(id, code, name, type, cycle || null, manager || null, description || null)
-    success(res, { id }, 'Created', 201)
+    success(res, { id, status: 'active' }, 'Created', 201)
   } catch (err: any) {
     if (err.message.includes('UNIQUE')) { error(res, 'Code exists', 'RESOURCE_CONFLICT', 409); return }
     error(res, err.message)
@@ -79,6 +79,11 @@ router.put('/:id', requireProjectWrite, (req, res) => {
     const { id } = req.params
     const data = req.body
     const db = getDatabase()
+    const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND is_deleted = 0').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (data.code === '' || data.name === '' || data.type === '') {
+      error(res, 'Code, name and type cannot be empty', 'INVALID_PARAMETER', 400); return
+    }
     const fields: string[] = []; const params: any[] = []
     if (data.code !== undefined) { fields.push('code = ?'); params.push(data.code) }
     if (data.name !== undefined) { fields.push('name = ?'); params.push(data.name) }
@@ -87,7 +92,7 @@ router.put('/:id', requireProjectWrite, (req, res) => {
     if (data.manager !== undefined) { fields.push('manager = ?'); params.push(data.manager) }
     if (data.description !== undefined) { fields.push('description = ?'); params.push(data.description) }
     if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status === 'active' ? 1 : 0) }
-    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE projects SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params) }
+    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE projects SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params) }
     success(res, { id }, 'Updated')
   } catch (err: any) { error(res, err.message) }
 })

@@ -86,7 +86,7 @@ router.put('/:id', authenticateToken, requireLocationWrite, (req, res) => {
     if (data.position !== undefined) { fields.push('position = ?'); params.push(data.position) }
     if (data.capacity !== undefined) { fields.push('capacity = ?'); params.push(data.capacity) }
     if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status === 'active' ? 1 : 0) }
-    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE locations SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params) }
+    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE locations SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params) }
     success(res, { id }, 'Updated')
   } catch (err: any) { error(res, err.message) }
 })

@@ -7,8 +7,9 @@ const router = Router()
 
 function generateNo(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const timestamp = Date.now().toString().slice(-6)
   const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-  return `RT-${date}-${random}`
+  return `RT-${date}-${timestamp}-${random}`
 }
 
 router.get('/', (req, res) => {
@@ -29,8 +30,14 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const { materialId, quantity, reason, operator, remark } = req.body
-    if (!materialId || !quantity || !reason) { error(res, 'Missing fields', 'INVALID_PARAMETER', 400); return }
+    if (!materialId || quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0 || !reason) {
+      error(res, 'Missing or invalid fields', 'INVALID_PARAMETER', 400); return
+    }
     const db = getDatabase()
+    const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
+    if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
+    const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
+    if (!inv || inv.stock < quantity) { error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return }
     const id = uuidv4()
     db.prepare('INSERT INTO return_records (id, return_no, material_id, quantity, reason, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, generateNo(), materialId, quantity, reason, operator || 'system', remark || null)

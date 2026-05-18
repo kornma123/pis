@@ -64,7 +64,7 @@ router.get('/', (req, res) => {
 router.get('/:id/check-deletable', (req, res) => {
   try {
     const db = getDatabase()
-    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ?').get(req.params.id) as any
+    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
 
     const reasons: string[] = []
@@ -127,7 +127,7 @@ router.post('/', requireWriteAccess, (req, res) => {
     const id = uuidv4()
     const operator = req.body.operator || 'system'
 
-    const material = db.prepare('SELECT unit FROM materials WHERE id = ?').get(materialId) as any
+    const material = db.prepare('SELECT unit FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, 'Material not found', 'NOT_FOUND', 404); return }
 
     const unit = material.unit
@@ -136,7 +136,7 @@ router.post('/', requireWriteAccess, (req, res) => {
     // 查询采购订单信息
     let purchaseOrderNo: string | null = null
     if (purchaseOrderId) {
-      const po = db.prepare('SELECT order_no FROM purchase_orders WHERE id = ?').get(purchaseOrderId) as any
+      const po = db.prepare('SELECT order_no FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(purchaseOrderId) as any
       if (po) purchaseOrderNo = po.order_no
     }
 
@@ -206,7 +206,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     if (productionDate !== undefined) { fields.push('production_date = ?'); params.push(productionDate || null) }
     if (expiryDate !== undefined) { fields.push('expiry_date = ?'); params.push(expiryDate || null) }
     if (remark !== undefined) { fields.push('remark = ?'); params.push(remark || '') }
-    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE inbound_records SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params) }
+    if (fields.length > 0) { params.push(id); db.prepare(`UPDATE inbound_records SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params) }
     success(res, { id }, 'Updated')
   } catch (err: any) { error(res, err.message) }
 })
@@ -215,7 +215,7 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
-    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ?').get(id) as any
+    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
 
     if (record.status === 'completed') {
@@ -293,7 +293,9 @@ router.post('/:id/cancel', requireWriteAccess, (req, res) => {
     const { id } = req.params
     const { reason } = req.body
     const db = getDatabase()
-    db.prepare('UPDATE inbound_records SET status = "cancelled", cancel_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(reason || '', id)
+    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
+    db.prepare('UPDATE inbound_records SET status = "cancelled", cancel_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0').run(reason || '', id)
     success(res, null, 'Cancelled')
   } catch (err: any) { error(res, err.message) }
 })

@@ -44,19 +44,31 @@ router.put('/:id', (req, res) => {
     const database = getDatabase()
     const { id } = req.params
     const { code, name, description, permissions, status } = req.body
+    database.exec('BEGIN IMMEDIATE')
     const role = database.prepare('SELECT 1 FROM roles WHERE id = ? AND is_deleted = 0').get(id)
-    if (!role) { error(res, 'Role not found', 'NOT_FOUND', 404); return }
+    if (!role) {
+      database.exec('ROLLBACK')
+      error(res, 'Role not found', 'NOT_FOUND', 404); return
+    }
     database.prepare('UPDATE roles SET code = ?, name = ?, description = ?, permissions = ?, status = ? WHERE id = ?')
       .run(code, name, description || '', JSON.stringify(permissions || []), status === 'active' ? 1 : 0, id)
+    database.exec('COMMIT')
     success(res, { id }, 'Updated')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    try { getDatabase().exec('ROLLBACK') } catch {}
+    error(res, err.message)
+  }
 })
 
 router.delete('/:id', (req, res) => {
-  const database = getDatabase()
-  const { id } = req.params
-  database.prepare('UPDATE roles SET is_deleted = 1 WHERE id = ?').run(id)
-  success(res, { id }, 'Deleted')
+  try {
+    const database = getDatabase()
+    const { id } = req.params
+    const existing = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id)
+    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    database.prepare('UPDATE roles SET is_deleted = 1 WHERE id = ?').run(id)
+    success(res, { id }, 'Deleted')
+  } catch (err: any) { error(res, err.message) }
 })
 
 export default router
