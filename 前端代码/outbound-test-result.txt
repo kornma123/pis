@@ -1,0 +1,677 @@
+
+Running 138 tests using 1 worker
+
+  ok   1 [chromium] › e2e\outbound.spec.ts:90:5 › 出库管理 -> 查看出库列表 › OUT-LIST-01-admin. 正常用例：admin可查看出库列表 (2.3s)
+  x    2 [chromium] › e2e\outbound.spec.ts:90:5 › 出库管理 -> 查看出库列表 › OUT-LIST-01-warehouse_manager. 正常用例：warehouse_manager可查看出库列表 (12.0s)
+  x    3 [chromium] › e2e\outbound.spec.ts:90:5 › 出库管理 -> 查看出库列表 › OUT-LIST-01-technician. 正常用例：technician可查看出库列表 (12.0s)
+  x    4 [chromium] › e2e\outbound.spec.ts:90:5 › 出库管理 -> 查看出库列表 › OUT-LIST-01-pathologist. 正常用例：pathologist可查看出库列表 (12.1s)
+  ok   5 [chromium] › e2e\outbound.spec.ts:96:3 › 出库管理 -> 查看出库列表 › OUT-LIST-02. 空数据边界：无出库记录显示空状态 (2.9s)
+  x    6 [chromium] › e2e\outbound.spec.ts:101:3 › 出库管理 -> 查看出库列表 › OUT-LIST-03. 权限：procurement访问返回403 (329ms)
+  x    7 [chromium] › e2e\outbound.spec.ts:105:3 › 出库管理 -> 查看出库列表 › OUT-LIST-04. 权限：finance访问返回403 (349ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  ok   8 [chromium] › e2e\outbound.spec.ts:109:3 › 出库管理 -> 查看出库列表 › OUT-LIST-05. 异常恢复：API 500显示错误Toast (2.8s)
+  ok   9 [chromium] › e2e\outbound.spec.ts:114:3 › 出库管理 -> 查看出库列表 › OUT-LIST-06. UI差异：admin显示新增出库按钮 (2.9s)
+  x   10 [chromium] › e2e\outbound.spec.ts:119:3 › 出库管理 -> 查看出库列表 › OUT-LIST-07. UI差异：technician显示新增出库按钮 (11.9s)
+  x   11 [chromium] › e2e\outbound.spec.ts:124:3 › 出库管理 -> 查看出库列表 › OUT-LIST-08. UI差异：procurement不显示新增出库按钮 (12.2s)
+  ok  12 [chromium] › e2e\outbound.spec.ts:129:3 › 出库管理 -> 查看出库列表 › OUT-LIST-09. 正常用例：列表显示单号项目物料成本状态 (3.0s)
+  ok  13 [chromium] › e2e\outbound.spec.ts:134:3 › 出库管理 -> 查看出库列表 › OUT-LIST-10. 并发：快速刷新页面多次 (2.2s)
+  -   14 [chromium] › e2e\outbound.spec.ts:147:3 › 出库管理 -> 按项目筛选 › OUT-PROJ-01. 正常用例：选择项目筛选
+  ok  15 [chromium] › e2e\outbound.spec.ts:154:3 › 出库管理 -> 按项目筛选 › OUT-PROJ-02. 空数据边界：项目无出库记录 (925ms)
+  ok  16 [chromium] › e2e\outbound.spec.ts:159:3 › 出库管理 -> 按项目筛选 › OUT-PROJ-03. 正常用例：重置项目筛选 (2.4s)
+  x   17 [chromium] › e2e\outbound.spec.ts:164:3 › 出库管理 -> 按项目筛选 › OUT-PROJ-04. UI差异：各角色项目筛选可见 (12.8s)
+  ok  18 [chromium] › e2e\outbound.spec.ts:171:3 › 出库管理 -> 按项目筛选 › OUT-PROJ-05. 并发：快速切换项目筛选 (1.1s)
+  ok  19 [chromium] › e2e\outbound.spec.ts:177:3 › 出库管理 -> 按项目筛选 › OUT-PROJ-06. 异常恢复：项目筛选时API错误 (2.6s)
+  -   20 [chromium] › e2e\outbound.spec.ts:188:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-01. 正常用例：admin创建项目领用出库
+  -   21 [chromium] › e2e\outbound.spec.ts:199:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-02. 正常用例：technician创建项目领用出库
+  -   22 [chromium] › e2e\outbound.spec.ts:211:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-03. 空数据边界：库存恰好等于出库数量
+  -   23 [chromium] › e2e\outbound.spec.ts:223:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-04. 表单校验：未传type返回400
+  -   24 [chromium] › e2e\outbound.spec.ts:233:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-05. 表单校验：未传items返回400
+  -   25 [chromium] › e2e\outbound.spec.ts:242:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-06. 表单校验：空items数组返回400
+  -   26 [chromium] › e2e\outbound.spec.ts:251:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-07. 权限：procurement创建出库返回403
+  -   27 [chromium] › e2e\outbound.spec.ts:262:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-08. 权限：finance创建出库返回403
+  -   28 [chromium] › e2e\outbound.spec.ts:273:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-09. 业务冲突：库存不足返回422
+  -   29 [chromium] › e2e\outbound.spec.ts:283:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-10. 并发：快速双击提交
+  -   30 [chromium] › e2e\outbound.spec.ts:292:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-11. 异常恢复：提交时网络中断后重试
+  ok  31 [chromium] › e2e\outbound.spec.ts:302:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-12. UI差异：admin显示新增出库按钮 (2.7s)
+  x   32 [chromium] › e2e\outbound.spec.ts:307:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-13. UI差异：technician显示新增出库按钮 (11.7s)
+  x   33 [chromium] › e2e\outbound.spec.ts:312:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-14. UI差异：pathologist显示新增出库按钮 (12.0s)
+  -   34 [chromium] › e2e\outbound.spec.ts:317:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-15. 正常用例：出库后库存扣减
+  -   35 [chromium] › e2e\outbound.spec.ts:330:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-16. 正常用例：出库单号格式OB-YYYYMMDD-XXX
+  -   36 [chromium] › e2e\outbound.spec.ts:342:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-17. 边界：quantity=0
+  -   37 [chromium] › e2e\outbound.spec.ts:352:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-18. 边界：负数quantity
+  -   38 [chromium] › e2e\outbound.spec.ts:362:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-19. 业务冲突：出库后成本归集到项目
+  -   39 [chromium] › e2e\outbound.spec.ts:372:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-20. 并发：多物料同时出库
+  ok  40 [chromium] › e2e\outbound.spec.ts:386:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-21. 正常用例：出库后刷新页面状态保持 (3.3s)
+  -   41 [chromium] › e2e\outbound.spec.ts:393:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-22. 表单校验：materialId不存在
+  -   42 [chromium] › e2e\outbound.spec.ts:408:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-01. 正常用例：admin创建调拨出库
+  -   43 [chromium] › e2e\outbound.spec.ts:419:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-02. 空数据边界：调出库位库存=0
+  -   44 [chromium] › e2e\outbound.spec.ts:428:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-03. 业务冲突：调出库位库存不足返回422
+  -   45 [chromium] › e2e\outbound.spec.ts:437:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-04. 权限：procurement创建调拨返回403
+  -   46 [chromium] › e2e\outbound.spec.ts:447:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-05. 权限：finance创建调拨返回403
+  -   47 [chromium] › e2e\outbound.spec.ts:457:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-06. 并发：并发调拨同一物料
+  -   48 [chromium] › e2e\outbound.spec.ts:465:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-07. 异常恢复：调拨后检查库存
+  -   49 [chromium] › e2e\outbound.spec.ts:474:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-08. 边界：调拨数量=0
+  -   50 [chromium] › e2e\outbound.spec.ts:483:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-09. 正常用例：调拨出库后来源库位减
+  -   51 [chromium] › e2e\outbound.spec.ts:494:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-10. 异常恢复：网络中断后重试调拨
+  x   52 [chromium] › e2e\outbound.spec.ts:503:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-11. UI差异：调拨出库前端入口 (11.7s)
+  -   53 [chromium] › e2e\outbound.spec.ts:508:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-12. 表单校验：缺少type
+  -   54 [chromium] › e2e\outbound.spec.ts:523:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-01. 正常用例：admin创建报废出库
+  -   55 [chromium] › e2e\outbound.spec.ts:533:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-02. 空数据边界：报废数量=0
+  -   56 [chromium] › e2e\outbound.spec.ts:542:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-03. 业务冲突：报废数量超过库存返回422
+  -   57 [chromium] › e2e\outbound.spec.ts:551:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-04. 权限：procurement创建报废返回403
+  -   58 [chromium] › e2e\outbound.spec.ts:561:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-05. 权限：finance创建报废返回403
+  -   59 [chromium] › e2e\outbound.spec.ts:571:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-06. 并发：并发报废同一物料
+  -   60 [chromium] › e2e\outbound.spec.ts:579:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-07. 异常恢复：报废后检查库存
+  -   61 [chromium] › e2e\outbound.spec.ts:588:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-08. 边界：负数报废数量
+  -   62 [chromium] › e2e\outbound.spec.ts:597:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-09. 正常用例：报废出库后库存扣减
+  -   63 [chromium] › e2e\outbound.spec.ts:608:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-10. 异常恢复：网络中断后重试报废
+  x   64 [chromium] › e2e\outbound.spec.ts:617:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-11. UI差异：报废出库前端入口 (12.0s)
+  -   65 [chromium] › e2e\outbound.spec.ts:622:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-12. 表单校验：报废原因字段
+  -   66 [chromium] › e2e\outbound.spec.ts:637:3 › 出库管理 -> BOM一键出库 › OUT-BOM-01. 正常用例：admin执行BOM一键出库
+  -   67 [chromium] › e2e\outbound.spec.ts:647:3 › 出库管理 -> BOM一键出库 › OUT-BOM-02. 空数据边界：BOM中某物料库存不足
+  -   68 [chromium] › e2e\outbound.spec.ts:657:3 › 出库管理 -> BOM一键出库 › OUT-BOM-03. 表单校验：未传bomId返回400
+  -   69 [chromium] › e2e\outbound.spec.ts:666:3 › 出库管理 -> BOM一键出库 › OUT-BOM-04. 表单校验：未传sampleCount返回400
+  -   70 [chromium] › e2e\outbound.spec.ts:676:3 › 出库管理 -> BOM一键出库 › OUT-BOM-05. 业务冲突：项目已停用
+  -   71 [chromium] › e2e\outbound.spec.ts:686:3 › 出库管理 -> BOM一键出库 › OUT-BOM-06. 边界：sampleCount=0
+  -   72 [chromium] › e2e\outbound.spec.ts:696:3 › 出库管理 -> BOM一键出库 › OUT-BOM-07. 权限：procurement执行BOM出库返回403
+  -   73 [chromium] › e2e\outbound.spec.ts:707:3 › 出库管理 -> BOM一键出库 › OUT-BOM-08. 权限：finance执行BOM出库返回403
+  -   74 [chromium] › e2e\outbound.spec.ts:718:3 › 出库管理 -> BOM一键出库 › OUT-BOM-09. 并发：快速双击BOM出库
+  -   75 [chromium] › e2e\outbound.spec.ts:727:3 › 出库管理 -> BOM一键出库 › OUT-BOM-10. 正常用例：BOM出库后按FIFO分配批次
+  -   76 [chromium] › e2e\outbound.spec.ts:737:3 › 出库管理 -> BOM一键出库 › OUT-BOM-11. 异常恢复：网络中断后重试BOM出库
+  ok  77 [chromium] › e2e\outbound.spec.ts:747:3 › 出库管理 -> BOM一键出库 › OUT-BOM-12. UI差异：admin显示BOM出库入口 (3.0s)
+  x   78 [chromium] › e2e\outbound.spec.ts:752:3 › 出库管理 -> BOM一键出库 › OUT-BOM-13. UI差异：technician显示BOM出库入口 (11.8s)
+  -   79 [chromium] › e2e\outbound.spec.ts:757:3 › 出库管理 -> BOM一键出库 › OUT-BOM-14. 边界：超大sampleCount
+  -   80 [chromium] › e2e\outbound.spec.ts:774:5 › 出库管理 -> 查看出库详情 › OUT-DETAIL-01-admin. 正常用例：admin可查看出库详情
+  -   81 [chromium] › e2e\outbound.spec.ts:774:5 › 出库管理 -> 查看出库详情 › OUT-DETAIL-01-warehouse_manager. 正常用例：warehouse_manager可查看出库详情
+  -   82 [chromium] › e2e\outbound.spec.ts:774:5 › 出库管理 -> 查看出库详情 › OUT-DETAIL-01-technician. 正常用例：technician可查看出库详情
+  -   83 [chromium] › e2e\outbound.spec.ts:774:5 › 出库管理 -> 查看出库详情 › OUT-DETAIL-01-pathologist. 正常用例：pathologist可查看出库详情
+  ok  84 [chromium] › e2e\outbound.spec.ts:782:3 › 出库管理 -> 查看出库详情 › OUT-DETAIL-02. 表单校验：查看不存在的出库单返回404 (590ms)
+  ok  85 [chromium] › e2e\outbound.spec.ts:787:3 › 出库管理 -> 查看出库详情 › OUT-DETAIL-03. UI差异：admin可点击查看详情弹窗 (3.0s)
+  ok  86 [chromium] › e2e\outbound.spec.ts:798:3 › 出库管理 -> 分页切换 › OUT-PAGE-01. 正常用例：切换到第2页 (2.4s)
+  ok  87 [chromium] › e2e\outbound.spec.ts:803:3 › 出库管理 -> 分页切换 › OUT-PAGE-02. 空数据边界：仅1页分页器隐藏 (2.4s)
+  ok  88 [chromium] › e2e\outbound.spec.ts:808:3 › 出库管理 -> 分页切换 › OUT-PAGE-03. 表单校验：page=0后端修正为1 (641ms)
+  ok  89 [chromium] › e2e\outbound.spec.ts:815:3 › 出库管理 -> 分页切换 › OUT-PAGE-04. 边界：page=999返回空列表 (593ms)
+  ok  90 [chromium] › e2e\outbound.spec.ts:820:3 › 出库管理 -> 分页切换 › OUT-PAGE-05. 边界：pageSize=1 (628ms)
+  ok  91 [chromium] › e2e\outbound.spec.ts:827:3 › 出库管理 -> 分页切换 › OUT-PAGE-06. 边界：pageSize=100 (625ms)
+  ok  92 [chromium] › e2e\outbound.spec.ts:832:3 › 出库管理 -> 分页切换 › OUT-PAGE-07. 并发：快速切换分页 (2.7s)
+  x   93 [chromium] › e2e\outbound.spec.ts:839:3 › 出库管理 -> 分页切换 › OUT-PAGE-08. UI差异：各角色分页一致 (12.9s)
+  x   94 [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-069. procurement GET /outbound 返回403 (731ms)
+  x   95 [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-070. finance GET /outbound 返回403 (646ms)
+  x   96 [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-071. procurement POST /outbound 返回403 (645ms)
+  x   97 [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-072. finance POST /outbound 返回403 (716ms)
+  ok  98 [chromium] › e2e\outbound.spec.ts:869:3 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-OUT-EXTRA-01. admin GET /outbound 返回200 (628ms)
+  x   99 [chromium] › e2e\outbound.spec.ts:874:3 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-OUT-EXTRA-02. technician GET /outbound 返回200 (303ms)
+  x  100 [chromium] › e2e\outbound.spec.ts:879:3 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-OUT-EXTRA-03. pathologist GET /outbound 返回200 (338ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  -  101 [chromium] › e2e\outbound.spec.ts:884:3 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-OUT-EXTRA-04. admin POST /outbound 返回201
+  -  102 [chromium] › e2e\outbound.spec.ts:894:3 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-OUT-EXTRA-05. technician POST /outbound 返回201或403
+  -  103 [chromium] › e2e\outbound.spec.ts:911:3 › 出库管理 -> 业务流程树 › BF-OUT-01. 项目领用主路径：选项目→选物料→提交→库存扣减→成本归集
+  ok 104 [chromium] › e2e\outbound.spec.ts:923:3 › 出库管理 -> 业务流程树 › BF-OUT-02. 分支：关闭出库弹窗不保存 (3.0s)
+  -  105 [chromium] › e2e\outbound.spec.ts:928:3 › 出库管理 -> 业务流程树 › BF-OUT-03. 分支：未选项目直接提交
+  -  106 [chromium] › e2e\outbound.spec.ts:937:3 › 出库管理 -> 业务流程树 › BF-OUT-04. 分支：库存不足返回422
+  -  107 [chromium] › e2e\outbound.spec.ts:947:3 › 出库管理 -> 业务流程树 › BF-OUT-05. 分支：网络中断后重试
+  ok 108 [chromium] › e2e\outbound.spec.ts:957:3 › 出库管理 -> 业务流程树 › BF-OUT-06. 分支：刷新页面后状态保持 (3.2s)
+  ok 109 [chromium] › e2e\outbound.spec.ts:964:3 › 出库管理 -> 业务流程树 › BF-OUT-07. 分支：选择项目后切换BOM (2.8s)
+  -  110 [chromium] › e2e\outbound.spec.ts:969:3 › 出库管理 -> 业务流程树 › BF-OUT-08. 分支：样本数为0
+  -  111 [chromium] › e2e\outbound.spec.ts:979:3 › 出库管理 -> 业务流程树 › BF-OUT-09. 分支：出库后取消关联入库单
+  -  112 [chromium] › e2e\outbound.spec.ts:986:3 › 出库管理 -> 业务流程树 › BF-OUT-10. 分支：procurement尝试出库被403拦截
+  -  113 [chromium] › e2e\outbound.spec.ts:997:3 › 出库管理 -> 业务流程树 › BF-OUT-11. 调拨出库主路径：选来源→目标→物料→提交
+  -  114 [chromium] › e2e\outbound.spec.ts:1006:3 › 出库管理 -> 业务流程树 › BF-OUT-12. 报废出库主路径：选物料→数量→原因→提交
+  -  115 [chromium] › e2e\outbound.spec.ts:1015:3 › 出库管理 -> 业务流程树 › BF-OUT-13. 分支：BOM一键出库后检查项目成本
+  ok 116 [chromium] › e2e\outbound.spec.ts:1025:3 › 出库管理 -> 业务流程树 › BF-OUT-14. 分支：批量操作后检查出库列表 (2.5s)
+  -  117 [chromium] › e2e\outbound.spec.ts:1036:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-01. 出库单号唯一性验证
+  -  118 [chromium] › e2e\outbound.spec.ts:1051:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-02. 出库时间字段自动填充
+  -  119 [chromium] › e2e\outbound.spec.ts:1061:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-03. 出库操作人字段记录
+  -  120 [chromium] › e2e\outbound.spec.ts:1071:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-04. 出库成本自动计算totalCost
+  ok 121 [chromium] › e2e\outbound.spec.ts:1081:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-05. 出库列表排序默认按时间倒序 (597ms)
+  ok 122 [chromium] › e2e\outbound.spec.ts:1092:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-06. 出库单关联项目信息显示 (617ms)
+  ok 123 [chromium] › e2e\outbound.spec.ts:1099:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-07. 出库物料明细完整性 (594ms)
+  -  124 [chromium] › e2e\outbound.spec.ts:1106:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-08. 出库数量小数精度处理
+  ok 125 [chromium] › e2e\outbound.spec.ts:1116:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-09. 出库API响应格式验证 (599ms)
+  -  126 [chromium] › e2e\outbound.spec.ts:1126:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-10. 出库单状态流转验证
+  -  127 [chromium] › e2e\outbound.spec.ts:1138:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-11. 出库后库存日志生成
+  ok 128 [chromium] › e2e\outbound.spec.ts:1147:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-12. 出库页面响应式布局 (2.7s)
+  ok 129 [chromium] › e2e\outbound.spec.ts:1153:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-13. 出库页面搜索框防抖 (3.3s)
+  ok 130 [chromium] › e2e\outbound.spec.ts:1165:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-14. 出库导出功能入口 (2.9s)
+  ok 131 [chromium] › e2e\outbound.spec.ts:1170:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-15. 出库打印功能入口 (2.7s)
+  -  132 [chromium] › e2e\outbound.spec.ts:1175:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-16. 出库批次FIFO分配验证
+  -  133 [chromium] › e2e\outbound.spec.ts:1185:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-17. 出库取消功能检查
+  ok 134 [chromium] › e2e\outbound.spec.ts:1192:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-18. 出库页面加载性能 (2.6s)
+  ok 135 [chromium] › e2e\outbound.spec.ts:1199:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-19. 出库类型下拉选项完整性 (3.2s)
+  -  136 [chromium] › e2e\outbound.spec.ts:1204:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-20. 出库后项目成本统计更新
+  x  137 [chromium] › e2e\outbound.spec.ts:1214:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-21. 多角色同时出库互不影响 (12.3s)
+  ok 138 [chromium] › e2e\outbound.spec.ts:1228:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-22. 出库页面URL参数保持 (2.9s)
+
+
+  1) [chromium] › e2e\outbound.spec.ts:90:5 › 出库管理 -> 查看出库列表 › OUT-LIST-01-warehouse_manager. 正常用例：warehouse_manager可查看出库列表 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:91:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---查看出库列表-OUT-95d4d-用例：warehouse-manager可查看出库列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---查看出库列表-OUT-95d4d-用例：warehouse-manager可查看出库列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---查看出库列表-OUT-95d4d-用例：warehouse-manager可查看出库列表-chromium\error-context.md
+
+  2) [chromium] › e2e\outbound.spec.ts:90:5 › 出库管理 -> 查看出库列表 › OUT-LIST-01-technician. 正常用例：technician可查看出库列表 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:91:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---查看出库列表-OUT-d99e3-cian-正常用例：technician可查看出库列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---查看出库列表-OUT-d99e3-cian-正常用例：technician可查看出库列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---查看出库列表-OUT-d99e3-cian-正常用例：technician可查看出库列表-chromium\error-context.md
+
+  3) [chromium] › e2e\outbound.spec.ts:90:5 › 出库管理 -> 查看出库列表 › OUT-LIST-01-pathologist. 正常用例：pathologist可查看出库列表 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:91:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---查看出库列表-OUT-15e8e-ist-正常用例：pathologist可查看出库列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---查看出库列表-OUT-15e8e-ist-正常用例：pathologist可查看出库列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---查看出库列表-OUT-15e8e-ist-正常用例：pathologist可查看出库列表-chromium\error-context.md
+
+  4) [chromium] › e2e\outbound.spec.ts:101:3 › 出库管理 -> 查看出库列表 › OUT-LIST-03. 权限：procurement访问返回403 ─
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m401[39m
+
+      101 |   test('OUT-LIST-03. 权限：procurement访问返回403', async () => {
+      102 |     const res = await apiFetch(await apiLogin('procurement'), 'GET', '/outbound')
+    > 103 |     expect(res.status).toBe(403)
+          |                        ^
+      104 |   })
+      105 |   test('OUT-LIST-04. 权限：finance访问返回403', async () => {
+      106 |     const res = await apiFetch(await apiLogin('finance'), 'GET', '/outbound')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:103:24
+
+    Error Context: test-results\outbound-出库管理---查看出库列表-OUT-LIST-03-权限：procurement访问返回403-chromium\error-context.md
+
+  5) [chromium] › e2e\outbound.spec.ts:105:3 › 出库管理 -> 查看出库列表 › OUT-LIST-04. 权限：finance访问返回403 ─────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m401[39m
+
+      105 |   test('OUT-LIST-04. 权限：finance访问返回403', async () => {
+      106 |     const res = await apiFetch(await apiLogin('finance'), 'GET', '/outbound')
+    > 107 |     expect(res.status).toBe(403)
+          |                        ^
+      108 |   })
+      109 |   test('OUT-LIST-05. 异常恢复：API 500显示错误Toast', async ({ page }) => {
+      110 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:107:24
+
+    Error Context: test-results\outbound-出库管理---查看出库列表-OUT-LIST-04-权限：finance访问返回403-chromium\error-context.md
+
+  6) [chromium] › e2e\outbound.spec.ts:119:3 › 出库管理 -> 查看出库列表 › OUT-LIST-07. UI差异：technician显示新增出库按钮 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:120:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---查看出库列表-OUT-LIST-07-UI差异：technician显示新增出库按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---查看出库列表-OUT-LIST-07-UI差异：technician显示新增出库按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---查看出库列表-OUT-LIST-07-UI差异：technician显示新增出库按钮-chromium\error-context.md
+
+  7) [chromium] › e2e\outbound.spec.ts:124:3 › 出库管理 -> 查看出库列表 › OUT-LIST-08. UI差异：procurement不显示新增出库按钮 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:125:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---查看出库列表-OUT-LIST-08-UI差异：procurement不显示新增出库按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---查看出库列表-OUT-LIST-08-UI差异：procurement不显示新增出库按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---查看出库列表-OUT-LIST-08-UI差异：procurement不显示新增出库按钮-chromium\error-context.md
+
+  8) [chromium] › e2e\outbound.spec.ts:164:3 › 出库管理 -> 按项目筛选 › OUT-PROJ-04. UI差异：各角色项目筛选可见 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:166:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---按项目筛选-OUT-PROJ-04-UI差异：各角色项目筛选可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---按项目筛选-OUT-PROJ-04-UI差异：各角色项目筛选可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---按项目筛选-OUT-PROJ-04-UI差异：各角色项目筛选可见-chromium\error-context.md
+
+  9) [chromium] › e2e\outbound.spec.ts:307:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-13. UI差异：technician显示新增出库按钮 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:308:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---创建项目领用出库单--131ff--13-UI差异：technician显示新增出库按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---创建项目领用出库单--131ff--13-UI差异：technician显示新增出库按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---创建项目领用出库单--131ff--13-UI差异：technician显示新增出库按钮-chromium\error-context.md
+
+  10) [chromium] › e2e\outbound.spec.ts:312:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-14. UI差异：pathologist显示新增出库按钮 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:313:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---创建项目领用出库单--d1531-14-UI差异：pathologist显示新增出库按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---创建项目领用出库单--d1531-14-UI差异：pathologist显示新增出库按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---创建项目领用出库单--d1531-14-UI差异：pathologist显示新增出库按钮-chromium\error-context.md
+
+  11) [chromium] › e2e\outbound.spec.ts:503:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-11. UI差异：调拨出库前端入口 ─
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:504:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---创建调拨出库单-OUT-CREATE-TRF-11-UI差异：调拨出库前端入口-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---创建调拨出库单-OUT-CREATE-TRF-11-UI差异：调拨出库前端入口-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---创建调拨出库单-OUT-CREATE-TRF-11-UI差异：调拨出库前端入口-chromium\error-context.md
+
+  12) [chromium] › e2e\outbound.spec.ts:617:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-11. UI差异：报废出库前端入口 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:618:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---创建报废出库单-OUT-CREATE-SCRAP-11-UI差异：报废出库前端入口-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---创建报废出库单-OUT-CREATE-SCRAP-11-UI差异：报废出库前端入口-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---创建报废出库单-OUT-CREATE-SCRAP-11-UI差异：报废出库前端入口-chromium\error-context.md
+
+  13) [chromium] › e2e\outbound.spec.ts:752:3 › 出库管理 -> BOM一键出库 › OUT-BOM-13. UI差异：technician显示BOM出库入口 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:753:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---BOM一键出库-OUT-BOM-13-UI差异：technician显示BOM出库入口-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---BOM一键出库-OUT-BOM-13-UI差异：technician显示BOM出库入口-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---BOM一键出库-OUT-BOM-13-UI差异：technician显示BOM出库入口-chromium\error-context.md
+
+  14) [chromium] › e2e\outbound.spec.ts:839:3 › 出库管理 -> 分页切换 › OUT-PAGE-08. UI差异：各角色分页一致 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:841:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---分页切换-OUT-PAGE-08-UI差异：各角色分页一致-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---分页切换-OUT-PAGE-08-UI差异：各角色分页一致-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---分页切换-OUT-PAGE-08-UI差异：各角色分页一致-chromium\error-context.md
+
+  15) [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-069. procurement GET /outbound 返回403 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m401[39m
+
+      864 |       if (s.method === 'GET') res = await apiFetch(token, 'GET', '/outbound')
+      865 |       else res = await apiFetch(token, 'POST', '/outbound', { type: 'project', items: [{ materialId: mid || 'x', quantity: 1 }] })
+    > 866 |       expect(res.status).toBe(s.expect)
+          |                          ^
+      867 |     })
+      868 |   }
+      869 |   test('TC-PERM-OUT-EXTRA-01. admin GET /outbound 返回200', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:866:26
+
+    Error Context: test-results\outbound-出库管理---角色权限矩阵补充-T-4bc00-curement-GET-outbound-返回403-chromium\error-context.md
+
+  16) [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-070. finance GET /outbound 返回403 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m401[39m
+
+      864 |       if (s.method === 'GET') res = await apiFetch(token, 'GET', '/outbound')
+      865 |       else res = await apiFetch(token, 'POST', '/outbound', { type: 'project', items: [{ materialId: mid || 'x', quantity: 1 }] })
+    > 866 |       expect(res.status).toBe(s.expect)
+          |                          ^
+      867 |     })
+      868 |   }
+      869 |   test('TC-PERM-OUT-EXTRA-01. admin GET /outbound 返回200', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:866:26
+
+    Error Context: test-results\outbound-出库管理---角色权限矩阵补充-T-a1d97--finance-GET-outbound-返回403-chromium\error-context.md
+
+  17) [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-071. procurement POST /outbound 返回403 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m401[39m
+
+      864 |       if (s.method === 'GET') res = await apiFetch(token, 'GET', '/outbound')
+      865 |       else res = await apiFetch(token, 'POST', '/outbound', { type: 'project', items: [{ materialId: mid || 'x', quantity: 1 }] })
+    > 866 |       expect(res.status).toBe(s.expect)
+          |                          ^
+      867 |     })
+      868 |   }
+      869 |   test('TC-PERM-OUT-EXTRA-01. admin GET /outbound 返回200', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:866:26
+
+    Error Context: test-results\outbound-出库管理---角色权限矩阵补充-T-4f948-urement-POST-outbound-返回403-chromium\error-context.md
+
+  18) [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-072. finance POST /outbound 返回403 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m401[39m
+
+      864 |       if (s.method === 'GET') res = await apiFetch(token, 'GET', '/outbound')
+      865 |       else res = await apiFetch(token, 'POST', '/outbound', { type: 'project', items: [{ materialId: mid || 'x', quantity: 1 }] })
+    > 866 |       expect(res.status).toBe(s.expect)
+          |                          ^
+      867 |     })
+      868 |   }
+      869 |   test('TC-PERM-OUT-EXTRA-01. admin GET /outbound 返回200', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:866:26
+
+    Error Context: test-results\outbound-出库管理---角色权限矩阵补充-T-e8c32-finance-POST-outbound-返回403-chromium\error-context.md
+
+  19) [chromium] › e2e\outbound.spec.ts:874:3 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-OUT-EXTRA-02. technician GET /outbound 返回200 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      875 |     const token = await apiLogin('technician')
+      876 |     const res = await apiFetch(token, 'GET', '/outbound')
+    > 877 |     expect(res.status).toBe(200)
+          |                        ^
+      878 |   })
+      879 |   test('TC-PERM-OUT-EXTRA-03. pathologist GET /outbound 返回200', async () => {
+      880 |     const token = await apiLogin('pathologist')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:877:24
+
+    Error Context: test-results\outbound-出库管理---角色权限矩阵补充-T-313bf-chnician-GET-outbound-返回200-chromium\error-context.md
+
+  20) [chromium] › e2e\outbound.spec.ts:879:3 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-OUT-EXTRA-03. pathologist GET /outbound 返回200 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      880 |     const token = await apiLogin('pathologist')
+      881 |     const res = await apiFetch(token, 'GET', '/outbound')
+    > 882 |     expect(res.status).toBe(200)
+          |                        ^
+      883 |   })
+      884 |   test('TC-PERM-OUT-EXTRA-04. admin POST /outbound 返回201', async () => {
+      885 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:882:24
+
+    Error Context: test-results\outbound-出库管理---角色权限矩阵补充-T-0ed25-hologist-GET-outbound-返回200-chromium\error-context.md
+
+  21) [chromium] › e2e\outbound.spec.ts:1214:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-21. 多角色同时出库互不影响 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      25 |   await page.fill('input[type="password"]', cred.password)
+      26 |   await page.click('button[type="submit"]')
+    > 27 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      28 | }
+      29 |
+      30 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:27:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\outbound.spec.ts:1220:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---盲点分析补充-BLIND-OUT-21-多角色同时出库互不影响-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\outbound-出库管理---盲点分析补充-BLIND-OUT-21-多角色同时出库互不影响-chromium\test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\outbound-出库管理---盲点分析补充-BLIND-OUT-21-多角色同时出库互不影响-chromium\error-context.md
+
+  21 failed
+    [chromium] › e2e\outbound.spec.ts:90:5 › 出库管理 -> 查看出库列表 › OUT-LIST-01-warehouse_manager. 正常用例：warehouse_manager可查看出库列表 
+    [chromium] › e2e\outbound.spec.ts:90:5 › 出库管理 -> 查看出库列表 › OUT-LIST-01-technician. 正常用例：technician可查看出库列表 
+    [chromium] › e2e\outbound.spec.ts:90:5 › 出库管理 -> 查看出库列表 › OUT-LIST-01-pathologist. 正常用例：pathologist可查看出库列表 
+    [chromium] › e2e\outbound.spec.ts:101:3 › 出库管理 -> 查看出库列表 › OUT-LIST-03. 权限：procurement访问返回403 ──
+    [chromium] › e2e\outbound.spec.ts:105:3 › 出库管理 -> 查看出库列表 › OUT-LIST-04. 权限：finance访问返回403 ──────
+    [chromium] › e2e\outbound.spec.ts:119:3 › 出库管理 -> 查看出库列表 › OUT-LIST-07. UI差异：technician显示新增出库按钮 
+    [chromium] › e2e\outbound.spec.ts:124:3 › 出库管理 -> 查看出库列表 › OUT-LIST-08. UI差异：procurement不显示新增出库按钮 
+    [chromium] › e2e\outbound.spec.ts:164:3 › 出库管理 -> 按项目筛选 › OUT-PROJ-04. UI差异：各角色项目筛选可见 ──────────
+    [chromium] › e2e\outbound.spec.ts:307:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-13. UI差异：technician显示新增出库按钮 
+    [chromium] › e2e\outbound.spec.ts:312:3 › 出库管理 -> 创建项目领用出库单 › OUT-CREATE-PROJ-14. UI差异：pathologist显示新增出库按钮 
+    [chromium] › e2e\outbound.spec.ts:503:3 › 出库管理 -> 创建调拨出库单 › OUT-CREATE-TRF-11. UI差异：调拨出库前端入口 ───
+    [chromium] › e2e\outbound.spec.ts:617:3 › 出库管理 -> 创建报废出库单 › OUT-CREATE-SCRAP-11. UI差异：报废出库前端入口 ─
+    [chromium] › e2e\outbound.spec.ts:752:3 › 出库管理 -> BOM一键出库 › OUT-BOM-13. UI差异：technician显示BOM出库入口 
+    [chromium] › e2e\outbound.spec.ts:839:3 › 出库管理 -> 分页切换 › OUT-PAGE-08. UI差异：各角色分页一致 ─────────────
+    [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-069. procurement GET /outbound 返回403 
+    [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-070. finance GET /outbound 返回403 
+    [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-071. procurement POST /outbound 返回403 
+    [chromium] › e2e\outbound.spec.ts:859:5 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-072. finance POST /outbound 返回403 
+    [chromium] › e2e\outbound.spec.ts:874:3 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-OUT-EXTRA-02. technician GET /outbound 返回200 
+    [chromium] › e2e\outbound.spec.ts:879:3 › 出库管理 -> 角色权限矩阵补充 › TC-PERM-OUT-EXTRA-03. pathologist GET /outbound 返回200 
+    [chromium] › e2e\outbound.spec.ts:1214:3 › 出库管理 -> 盲点分析补充 › BLIND-OUT-21. 多角色同时出库互不影响 ──────────
+  79 skipped
+  38 passed (5.5m)

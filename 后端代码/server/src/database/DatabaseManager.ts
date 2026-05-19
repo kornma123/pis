@@ -245,6 +245,22 @@ export function initializeDatabase(): void {
       .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
   }
 
+  // 插入 E2E 测试所需的标准角色用户 (密码: CoreOne2026!)
+  const testUsers = [
+    { id: 'USER-WHM', username: 'cangguan', realName: '王仓库', role: 'warehouse_manager', department: '病理科' },
+    { id: 'USER-TECH1', username: 'jishuyuan1', realName: '张技术', role: 'technician', department: '病理科' },
+    { id: 'USER-DOC1', username: 'yishi1', realName: '刘医师', role: 'pathologist', department: '病理科' },
+    { id: 'USER-PRO', username: 'caigou', realName: '赵采购', role: 'procurement', department: '设备科' },
+    { id: 'USER-FIN', username: 'caiwu', realName: '孙财务', role: 'finance', department: '财务科' },
+  ]
+  const hashedTestPw = bcrypt.hashSync('CoreOne2026!', 12)
+  const insertUser = database.prepare(
+    'INSERT OR IGNORE INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  )
+  for (const u of testUsers) {
+    insertUser.run(u.id, u.username, hashedTestPw, u.realName, u.role, u.department, 1)
+  }
+
   // 插入默认预警规则
   const countRules = database.prepare('SELECT COUNT(*) as count FROM alert_rules').get() as any
   if (!countRules || countRules.count === 0) {
