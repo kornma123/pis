@@ -242,7 +242,7 @@ Step 6: 重复 Step 1~5，直到所有文件修复完毕
 
 | # | TS 文件 | 对应 Spec | 修复批次 | 修复缺陷数 | 补测状态 |
 |:---|:---|:---|:---:|:---:|:---:|
-| 1 | `alerts-v1.1.ts` | `alerts.spec.ts` | v1.20, v1.23, v1.35 | 4 | ⏸️ 待补测 |
+| 1 | `alerts-v1.1.ts` | `alerts.spec.ts` | v1.20, v1.23, v1.35, v1.37 | 5 | ✅ 已通过 |
 | 2 | `auth.ts` | `auth.spec.ts` | —（未修改） | 0 | ✅ 基线通过 |
 | 3 | `bom-v1.1.ts` | `bom.spec.ts` | v1.24 | 1 | ⏸️ 待补测 |
 | 4 | `categories-v1.1.ts` | `categories.spec.ts` | v1.31 | 1 | ⏸️ 待补测 |
