@@ -56,7 +56,7 @@ app.use('/api/v1/users', authenticateToken, requireRole('admin'), userRoutes)
 app.use('/api/v1/roles', authenticateToken, requireRole('admin'), roleRoutes)
 
 // 路由注册 - finance可访问
-app.use('/api/v1/logs', authenticateToken, requireRole('admin', 'finance'), logRoutes)
+app.use('/api/v1/logs', authenticateToken, requireRole('admin'), logRoutes)
 app.use('/api/v1/reports', authenticateToken, requireRole('admin', 'pathologist', 'finance'), reportRoutes)
 app.use('/api/v1/depletion', authenticateToken, requireRole('admin', 'pathologist', 'finance'), depletionRoutes)
 

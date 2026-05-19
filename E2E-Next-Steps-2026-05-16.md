@@ -250,7 +250,7 @@ Step 6: 重复 Step 1~5，直到所有文件修复完毕
 | 6 | `inbound-v1.1.ts` | `inbound.spec.ts` | v1.28, v1.29, v1.32 | 5 | ⏸️ 待补测 |
 | 7 | `inventory-v1.1.ts` | `inventory-list.spec.ts` | v1.25 | 1 | ⏸️ 待补测 |
 | 8 | `locations-v1.1.ts` | `locations.spec.ts` | —（未修改） | 0 | ⏸️ 待补测 |
-| 9 | `logs-v1.1.ts` | `logs.spec.ts` | v1.28 | 1 | ⏸️ 待补测 |
+| 9 | `logs-v1.1.ts` | `logs.spec.ts` | v1.28, v1.36 | 2 | ✅ 已通过 |
 | 10 | `materials.ts` | `materials.spec.ts` | v1.25, v1.30 | 2 | ⏸️ 待补测 |
 | 11 | `outbound-v1.1.ts` | `outbound.spec.ts` | v1.20, v1.29 | 3 | ⏸️ 待补测 |
 | 12 | `projects-v1.1.ts` | `projects.spec.ts` | v1.31 | 1 | ✅ 已通过 |
@@ -702,6 +702,19 @@ npx playwright test e2e/auth.spec.ts --debug
 
 > **按 3.6 E2E 回归测试执行规则，每次修复后运行测试并记录结果。**
 
+### 2026-05-19 logs.spec.ts 补测结果（文件级隔离）
+
+| 模块 | 用例数 | 通过 | 失败 | 结果判定 |
+|:---|:---:|:---:|:---:|:---:|
+| logs.spec.ts | 77 | 77 | 0 | ✅ 通过 |
+
+**补测说明：**
+- `logs-v1.1.ts` 修复（v1.28 page=0）验证通过
+- 测试过程中发现 `app.ts` 中 `/api/v1/logs` 路由权限配置错误：finance 被错误地加入了允许角色列表
+- 修复：将 `requireRole('admin', 'finance')` 改为 `requireRole('admin')`
+- 修复后 TC-PERM-LOG-04 finance GET /logs 返回403 通过
+- **logs-v1.1.ts 补测完成，标记为 ✅ 已通过**
+
 ### 2026-05-19 Batch 29~31 回归测试结果
 
 | 模块 | 用例数 | 通过 | 失败 | 结果判定 |
@@ -747,6 +760,7 @@ npx playwright test e2e/auth.spec.ts --debug
 | v1.33 | 2026-05-19 | 第32批修复（3个）：inbound GET / JOIN materials/suppliers/locations is_deleted=0、inbound check-deletable outboundExists is_deleted=0、reconciliation GET /materials actual outbound is_deleted=0 |
 | v1.34 | 2026-05-19 | 修订 3.6 E2E 回归测试执行规则：改为「文件级隔离」模式（按 TS 文件逐个修复后测试），添加已修复但未补测的文件清单 |
 | v1.35 | 2026-05-19 | 第33批修复（1个）：alerts PUT /rules/:id threshold/thresholdDays NaN/负数校验 |
+| v1.36 | 2026-05-19 | 补测 logs-v1.1.ts：发现 app.ts 中 /logs 路由 finance 权限配置错误并修复，logs.spec.ts 77/77 通过 |
 
 ---
 
