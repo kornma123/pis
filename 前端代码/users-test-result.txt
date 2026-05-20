@@ -1,0 +1,1956 @@
+
+Running 97 tests using 1 worker
+
+  x   1 [chromium] › e2e\users.spec.ts:64:3 › 用户管理 -> 查看用户列表 › USER-LIST-01. 正常用例：admin可查看用户列表 (3.7s)
+  x   2 [chromium] › e2e\users.spec.ts:68:3 › 用户管理 -> 查看用户列表 › USER-LIST-02. 正常用例：用户列表显示列标题 (3.3s)
+  x   3 [chromium] › e2e\users.spec.ts:72:3 › 用户管理 -> 查看用户列表 › USER-LIST-03. 正常用例：用户列表显示统计卡片 (3.2s)
+  x   4 [chromium] › e2e\users.spec.ts:76:3 › 用户管理 -> 查看用户列表 › USER-LIST-04. 正常用例：左侧显示角色列表面板 (3.2s)
+  x   5 [chromium] › e2e\users.spec.ts:80:3 › 用户管理 -> 查看用户列表 › USER-LIST-05. 空数据边界：无用户数据显示空状态 (3.5s)
+  x   6 [chromium] › e2e\users.spec.ts:86:3 › 用户管理 -> 查看用户列表 › USER-LIST-06. 异常恢复：API 500显示错误 (3.4s)
+  x   7 [chromium] › e2e\users.spec.ts:91:3 › 用户管理 -> 查看用户列表 › USER-LIST-07. 权限：technician访问返回403 (3.2s)
+  x   8 [chromium] › e2e\users.spec.ts:95:3 › 用户管理 -> 查看用户列表 › USER-LIST-08. 并发：快速刷新页面多次 (3.2s)
+  x   9 [chromium] › e2e\users.spec.ts:100:3 › 用户管理 -> 查看用户列表 › USER-LIST-09. UI差异：admin显示新建用户按钮 (3.2s)
+  x  10 [chromium] › e2e\users.spec.ts:104:3 › 用户管理 -> 查看用户列表 › USER-LIST-10. 正常用例：用户状态标签显示正常/禁用 (3.4s)
+  x  11 [chromium] › e2e\users.spec.ts:114:3 › 用户管理 -> 筛选功能 › USER-FILTER-01. 正常用例：按关键词搜索用户名 (3.2s)
+  x  12 [chromium] › e2e\users.spec.ts:119:3 › 用户管理 -> 筛选功能 › USER-FILTER-02. 正常用例：按角色筛选 (3.2s)
+  x  13 [chromium] › e2e\users.spec.ts:124:3 › 用户管理 -> 筛选功能 › USER-FILTER-03. 正常用例：按状态筛选 (3.3s)
+  x  14 [chromium] › e2e\users.spec.ts:129:3 › 用户管理 -> 筛选功能 › USER-FILTER-04. 正常用例：点击查询按钮 (3.3s)
+  x  15 [chromium] › e2e\users.spec.ts:134:3 › 用户管理 -> 筛选功能 › USER-FILTER-05. 正常用例：点击重置按钮恢复全部 (3.2s)
+  x  16 [chromium] › e2e\users.spec.ts:139:3 › 用户管理 -> 筛选功能 › USER-FILTER-06. 空数据边界：筛选无结果 (3.2s)
+  x  17 [chromium] › e2e\users.spec.ts:144:3 › 用户管理 -> 筛选功能 › USER-FILTER-07. 并发：快速切换筛选条件 (3.4s)
+  x  18 [chromium] › e2e\users.spec.ts:151:3 › 用户管理 -> 筛选功能 › USER-FILTER-08. 正常用例：点击左侧角色筛选用户 (3.3s)
+  x  19 [chromium] › e2e\users.spec.ts:162:3 › 用户管理 -> 新建用户 › USER-CREATE-01. 正常用例：admin新建用户成功 (3.3s)
+  x  20 [chromium] › e2e\users.spec.ts:174:3 › 用户管理 -> 新建用户 › USER-CREATE-02. 正常用例：新建用户选择角色 (3.2s)
+  x  21 [chromium] › e2e\users.spec.ts:186:3 › 用户管理 -> 新建用户 › USER-CREATE-03. 正常用例：新建用户选择部门 (3.2s)
+  x  22 [chromium] › e2e\users.spec.ts:198:3 › 用户管理 -> 新建用户 › USER-CREATE-04. 空数据边界：必填项为空提交被阻止 (3.2s)
+  ok 23 [chromium] › e2e\users.spec.ts:204:3 › 用户管理 -> 新建用户 › USER-CREATE-05. 表单校验：未传必填字段返回400 (1.3s)
+  ok 24 [chromium] › e2e\users.spec.ts:209:3 › 用户管理 -> 新建用户 › USER-CREATE-06. 表单校验：缺少用户名返回400 (1.0s)
+  ok 25 [chromium] › e2e\users.spec.ts:214:3 › 用户管理 -> 新建用户 › USER-CREATE-07. 业务冲突：username已存在返回409 (1.6s)
+  ok 26 [chromium] › e2e\users.spec.ts:222:5 › 用户管理 -> 新建用户 › USER-CREATE-08-technician. 权限：technician新建用户返回403 (628ms)
+  ok 27 [chromium] › e2e\users.spec.ts:222:5 › 用户管理 -> 新建用户 › USER-CREATE-08-pathologist. 权限：pathologist新建用户返回403 (632ms)
+  ok 28 [chromium] › e2e\users.spec.ts:222:5 › 用户管理 -> 新建用户 › USER-CREATE-08-procurement. 权限：procurement新建用户返回403 (645ms)
+  ok 29 [chromium] › e2e\users.spec.ts:222:5 › 用户管理 -> 新建用户 › USER-CREATE-08-finance. 权限：finance新建用户返回403 (619ms)
+  ok 30 [chromium] › e2e\users.spec.ts:222:5 › 用户管理 -> 新建用户 › USER-CREATE-08-warehouse_manager. 权限：warehouse_manager新建用户返回403 (620ms)
+  x  31 [chromium] › e2e\users.spec.ts:228:3 › 用户管理 -> 新建用户 › USER-CREATE-09. 并发：快速双击新建按钮 (3.2s)
+  x  32 [chromium] › e2e\users.spec.ts:233:3 › 用户管理 -> 新建用户 › USER-CREATE-10. UI差异：admin前端显示新建按钮 (3.2s)
+  x  33 [chromium] › e2e\users.spec.ts:243:3 › 用户管理 -> 编辑用户 › USER-EDIT-01. 正常用例：admin编辑用户姓名保存成功 (3.1s)
+  x  34 [chromium] › e2e\users.spec.ts:253:3 › 用户管理 -> 编辑用户 › USER-EDIT-02. 正常用例：admin修改用户状态 (3.9s)
+  x  35 [chromium] › e2e\users.spec.ts:266:3 › 用户管理 -> 编辑用户 › USER-EDIT-03. 空数据边界：编辑后姓名为空被阻止 (3.3s)
+  ok 36 [chromium] › e2e\users.spec.ts:275:3 › 用户管理 -> 编辑用户 › USER-EDIT-04. 表单校验：编辑不存在的用户返回404 (1.4s)
+  ok 37 [chromium] › e2e\users.spec.ts:281:5 › 用户管理 -> 编辑用户 › USER-EDIT-05-technician. 权限：technician编辑用户返回403 (1.0s)
+  ok 38 [chromium] › e2e\users.spec.ts:281:5 › 用户管理 -> 编辑用户 › USER-EDIT-05-pathologist. 权限：pathologist编辑用户返回403 (774ms)
+  ok 39 [chromium] › e2e\users.spec.ts:281:5 › 用户管理 -> 编辑用户 › USER-EDIT-05-procurement. 权限：procurement编辑用户返回403 (813ms)
+  ok 40 [chromium] › e2e\users.spec.ts:281:5 › 用户管理 -> 编辑用户 › USER-EDIT-05-finance. 权限：finance编辑用户返回403 (676ms)
+  ok 41 [chromium] › e2e\users.spec.ts:281:5 › 用户管理 -> 编辑用户 › USER-EDIT-05-warehouse_manager. 权限：warehouse_manager编辑用户返回403 (789ms)
+  ok 42 [chromium] › e2e\users.spec.ts:287:3 › 用户管理 -> 编辑用户 › USER-EDIT-06. 并发：并发编辑同一用户 (1.2s)
+  x  43 [chromium] › e2e\users.spec.ts:296:3 › 用户管理 -> 编辑用户 › USER-EDIT-07. 异常恢复：编辑时API 500后重试 (4.1s)
+  x  44 [chromium] › e2e\users.spec.ts:303:3 › 用户管理 -> 编辑用户 › USER-EDIT-08. UI差异：admin显示编辑按钮 (4.5s)
+  x  45 [chromium] › e2e\users.spec.ts:307:3 › 用户管理 -> 编辑用户 › USER-EDIT-09. 正常用例：编辑后列表数据更新 (3.5s)
+  x  46 [chromium] › e2e\users.spec.ts:312:3 › 用户管理 -> 编辑用户 › USER-EDIT-10. 正常用例：用户名编辑时为只读 (3.3s)
+  x  47 [chromium] › e2e\users.spec.ts:331:3 › 用户管理 -> 删除用户 › USER-DELETE-01. 正常用例：admin删除用户成功 (4.3s)
+  x  48 [chromium] › e2e\users.spec.ts:340:3 › 用户管理 -> 删除用户 › USER-DELETE-02. 业务冲突：删除admin自己被阻止 (1.3s)
+  ok 49 [chromium] › e2e\users.spec.ts:348:3 › 用户管理 -> 删除用户 › USER-DELETE-03. 并发：并发删除同一用户 (697ms)
+  ok 50 [chromium] › e2e\users.spec.ts:358:5 › 用户管理 -> 删除用户 › USER-DELETE-04-technician. 权限：technician删除用户返回403 (382ms)
+  ok 51 [chromium] › e2e\users.spec.ts:358:5 › 用户管理 -> 删除用户 › USER-DELETE-04-pathologist. 权限：pathologist删除用户返回403 (346ms)
+  ok 52 [chromium] › e2e\users.spec.ts:358:5 › 用户管理 -> 删除用户 › USER-DELETE-04-procurement. 权限：procurement删除用户返回403 (325ms)
+  ok 53 [chromium] › e2e\users.spec.ts:358:5 › 用户管理 -> 删除用户 › USER-DELETE-04-finance. 权限：finance删除用户返回403 (317ms)
+  ok 54 [chromium] › e2e\users.spec.ts:358:5 › 用户管理 -> 删除用户 › USER-DELETE-04-warehouse_manager. 权限：warehouse_manager删除用户返回403 (312ms)
+  x  55 [chromium] › e2e\users.spec.ts:364:3 › 用户管理 -> 删除用户 › USER-DELETE-05. UI差异：admin显示删除按钮 (2.9s)
+  x  56 [chromium] › e2e\users.spec.ts:374:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-01. 正常用例：admin停用用户成功 (3.0s)
+  x  57 [chromium] › e2e\users.spec.ts:382:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-02. 正常用例：admin启用已停用用户 (2.9s)
+  ok 58 [chromium] › e2e\users.spec.ts:387:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-03. 业务冲突：停用自己账户被阻止 (643ms)
+  x  59 [chromium] › e2e\users.spec.ts:395:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-04. UI差异：admin显示停用/启用按钮 (2.8s)
+  x  60 [chromium] › e2e\users.spec.ts:405:3 › 用户管理 -> 重置密码 › USER-RESET-01. 正常用例：admin重置用户密码成功 (2.9s)
+  x  61 [chromium] › e2e\users.spec.ts:410:3 › 用户管理 -> 重置密码 › USER-RESET-02. 正常用例：编辑弹窗内重置密码 (3.0s)
+  ok 62 [chromium] › e2e\users.spec.ts:421:3 › 用户管理 -> 重置密码 › USER-RESET-03. 权限：非admin重置密码返回403 (426ms)
+  x  63 [chromium] › e2e\users.spec.ts:432:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-01. 正常用例：点击详情打开弹窗 (2.9s)
+  x  64 [chromium] › e2e\users.spec.ts:442:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-02. 正常用例：详情弹窗显示用户头像 (3.1s)
+  x  65 [chromium] › e2e\users.spec.ts:452:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-03. 正常用例：详情弹窗显示权限列表 (3.1s)
+  x  66 [chromium] › e2e\users.spec.ts:462:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-04. 正常用例：详情弹窗点击编辑跳转 (2.9s)
+  x  67 [chromium] › e2e\users.spec.ts:477:3 › 用户管理 -> 分页功能 › USER-PAGE-01. 正常用例：多页数据切页 (3.0s)
+  x  68 [chromium] › e2e\users.spec.ts:482:3 › 用户管理 -> 分页功能 › USER-PAGE-02. 边界：仅1页时下一页禁用 (3.1s)
+  x  69 [chromium] › e2e\users.spec.ts:487:3 › 用户管理 -> 分页功能 › USER-PAGE-03. 并发：快速切换分页 (3.0s)
+  x  70 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-01. technician GET /users 返回403 (360ms)
+  x  71 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-02. pathologist GET /users 返回403 (370ms)
+  x  72 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-03. procurement GET /users 返回403 (366ms)
+  x  73 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-04. finance GET /users 返回403 (366ms)
+  x  74 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-05. warehouse_manager GET /users 返回403 (371ms)
+  x  75 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-06. admin GET /users 返回200 (33ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  ok 76 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-07. technician POST /users 返回403 (370ms)
+  ok 77 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-08. technician PUT /users/test-id 返回403 (328ms)
+  ok 78 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-09. technician DELETE /users/test-id 返回403 (326ms)
+  x  79 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-10. admin PUT /users/test-id 返回404 (9ms)
+  x  80 [chromium] › e2e\users.spec.ts:524:3 › 用户管理 -> 业务流程树 › BF-USER-01. 主路径：创建用户→配置角色→保存 (3.0s)
+  x  81 [chromium] › e2e\users.spec.ts:534:3 › 用户管理 -> 业务流程树 › BF-USER-02. 分支：创建用户时不填必填项被阻止 (2.9s)
+  x  82 [chromium] › e2e\users.spec.ts:540:3 › 用户管理 -> 业务流程树 › BF-USER-03. 分支：编辑用户后取消不保存 (3.0s)
+  x  83 [chromium] › e2e\users.spec.ts:545:3 › 用户管理 -> 业务流程树 › BF-USER-04. 分支：停用用户后重新启用 (2.9s)
+  x  84 [chromium] › e2e\users.spec.ts:550:3 › 用户管理 -> 业务流程树 › BF-USER-05. 分支：重置用户密码 (3.1s)
+  x  85 [chromium] › e2e\users.spec.ts:555:3 › 用户管理 -> 业务流程树 › BF-USER-06. 分支：筛选后查看用户详情 (3.2s)
+  x  86 [chromium] › e2e\users.spec.ts:562:3 › 用户管理 -> 业务流程树 › BF-USER-07. 分支：无权限用户访问被拦截 (3.2s)
+  x  87 [chromium] › e2e\users.spec.ts:566:3 › 用户管理 -> 业务流程树 › BF-USER-08. 分支：点击左侧角色筛选用户 (3.1s)
+  x  88 [chromium] › e2e\users.spec.ts:577:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-01. 用户头像显示首字母 (3.0s)
+  x  89 [chromium] › e2e\users.spec.ts:581:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-02. 状态标签颜色区分 (2.9s)
+  x  90 [chromium] › e2e\users.spec.ts:585:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-03. 新建用户初始密码默认显示 (3.0s)
+  x  91 [chromium] › e2e\users.spec.ts:592:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-04. 角色下拉选项完整性 (2.9s)
+  x  92 [chromium] › e2e\users.spec.ts:603:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-05. 用户全选checkbox功能 (2.9s)
+  x  93 [chromium] › e2e\users.spec.ts:608:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-06. 分页页码按钮样式 (3.1s)
+  x  94 [chromium] › e2e\users.spec.ts:612:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-07. 响应式布局检查 (2.9s)
+  x  95 [chromium] › e2e\users.spec.ts:618:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-08. 用户API响应格式验证 (721ms)
+  x  96 [chromium] › e2e\users.spec.ts:624:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-09. 页面加载性能检查 (2.9s)
+  x  97 [chromium] › e2e\users.spec.ts:630:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-10. 用户详情权限列表展示 (2.9s)
+
+
+  1) [chromium] › e2e\users.spec.ts:64:3 › 用户管理 -> 查看用户列表 › USER-LIST-01. 正常用例：admin可查看用户列表 ────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:65:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-01-正常用例：admin可查看用户列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-01-正常用例：admin可查看用户列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-01-正常用例：admin可查看用户列表-chromium\error-context.md
+
+  2) [chromium] › e2e\users.spec.ts:68:3 › 用户管理 -> 查看用户列表 › USER-LIST-02. 正常用例：用户列表显示列标题 ───────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:69:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-02-正常用例：用户列表显示列标题-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-02-正常用例：用户列表显示列标题-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-02-正常用例：用户列表显示列标题-chromium\error-context.md
+
+  3) [chromium] › e2e\users.spec.ts:72:3 › 用户管理 -> 查看用户列表 › USER-LIST-03. 正常用例：用户列表显示统计卡片 ──────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:73:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-03-正常用例：用户列表显示统计卡片-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-03-正常用例：用户列表显示统计卡片-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-03-正常用例：用户列表显示统计卡片-chromium\error-context.md
+
+  4) [chromium] › e2e\users.spec.ts:76:3 › 用户管理 -> 查看用户列表 › USER-LIST-04. 正常用例：左侧显示角色列表面板 ──────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:77:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-04-正常用例：左侧显示角色列表面板-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-04-正常用例：左侧显示角色列表面板-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-04-正常用例：左侧显示角色列表面板-chromium\error-context.md
+
+  5) [chromium] › e2e\users.spec.ts:80:3 › 用户管理 -> 查看用户列表 › USER-LIST-05. 空数据边界：无用户数据显示空状态 ─────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:82:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-05-空数据边界：无用户数据显示空状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-05-空数据边界：无用户数据显示空状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-05-空数据边界：无用户数据显示空状态-chromium\error-context.md
+
+  6) [chromium] › e2e\users.spec.ts:86:3 › 用户管理 -> 查看用户列表 › USER-LIST-06. 异常恢复：API 500显示错误 ─────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:88:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-06-异常恢复：API-500显示错误-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-06-异常恢复：API-500显示错误-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-06-异常恢复：API-500显示错误-chromium\error-context.md
+
+  7) [chromium] › e2e\users.spec.ts:91:3 › 用户管理 -> 查看用户列表 › USER-LIST-07. 权限：technician访问返回403 ─────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:92:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-07-权限：technician访问返回403-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-07-权限：technician访问返回403-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-07-权限：technician访问返回403-chromium\error-context.md
+
+  8) [chromium] › e2e\users.spec.ts:95:3 › 用户管理 -> 查看用户列表 › USER-LIST-08. 并发：快速刷新页面多次 ──────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:96:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-08-并发：快速刷新页面多次-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-08-并发：快速刷新页面多次-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-08-并发：快速刷新页面多次-chromium\error-context.md
+
+  9) [chromium] › e2e\users.spec.ts:100:3 › 用户管理 -> 查看用户列表 › USER-LIST-09. UI差异：admin显示新建用户按钮 ──────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:101:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-09-UI差异：admin显示新建用户按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-09-UI差异：admin显示新建用户按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-09-UI差异：admin显示新建用户按钮-chromium\error-context.md
+
+  10) [chromium] › e2e\users.spec.ts:104:3 › 用户管理 -> 查看用户列表 › USER-LIST-10. 正常用例：用户状态标签显示正常/禁用 ─────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:105:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-10-正常用例：用户状态标签显示正常-禁用-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-10-正常用例：用户状态标签显示正常-禁用-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-10-正常用例：用户状态标签显示正常-禁用-chromium\error-context.md
+
+  11) [chromium] › e2e\users.spec.ts:114:3 › 用户管理 -> 筛选功能 › USER-FILTER-01. 正常用例：按关键词搜索用户名 ─────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:115:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-01-正常用例：按关键词搜索用户名-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-01-正常用例：按关键词搜索用户名-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-01-正常用例：按关键词搜索用户名-chromium\error-context.md
+
+  12) [chromium] › e2e\users.spec.ts:119:3 › 用户管理 -> 筛选功能 › USER-FILTER-02. 正常用例：按角色筛选 ─────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:120:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-02-正常用例：按角色筛选-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-02-正常用例：按角色筛选-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-02-正常用例：按角色筛选-chromium\error-context.md
+
+  13) [chromium] › e2e\users.spec.ts:124:3 › 用户管理 -> 筛选功能 › USER-FILTER-03. 正常用例：按状态筛选 ─────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:125:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-03-正常用例：按状态筛选-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-03-正常用例：按状态筛选-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-03-正常用例：按状态筛选-chromium\error-context.md
+
+  14) [chromium] › e2e\users.spec.ts:129:3 › 用户管理 -> 筛选功能 › USER-FILTER-04. 正常用例：点击查询按钮 ────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:130:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-04-正常用例：点击查询按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-04-正常用例：点击查询按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-04-正常用例：点击查询按钮-chromium\error-context.md
+
+  15) [chromium] › e2e\users.spec.ts:134:3 › 用户管理 -> 筛选功能 › USER-FILTER-05. 正常用例：点击重置按钮恢复全部 ────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:135:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-05-正常用例：点击重置按钮恢复全部-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-05-正常用例：点击重置按钮恢复全部-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-05-正常用例：点击重置按钮恢复全部-chromium\error-context.md
+
+  16) [chromium] › e2e\users.spec.ts:139:3 › 用户管理 -> 筛选功能 › USER-FILTER-06. 空数据边界：筛选无结果 ────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:140:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-06-空数据边界：筛选无结果-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-06-空数据边界：筛选无结果-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-06-空数据边界：筛选无结果-chromium\error-context.md
+
+  17) [chromium] › e2e\users.spec.ts:144:3 › 用户管理 -> 筛选功能 › USER-FILTER-07. 并发：快速切换筛选条件 ────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:145:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-07-并发：快速切换筛选条件-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-07-并发：快速切换筛选条件-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-07-并发：快速切换筛选条件-chromium\error-context.md
+
+  18) [chromium] › e2e\users.spec.ts:151:3 › 用户管理 -> 筛选功能 › USER-FILTER-08. 正常用例：点击左侧角色筛选用户 ────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:152:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-08-正常用例：点击左侧角色筛选用户-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-08-正常用例：点击左侧角色筛选用户-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-08-正常用例：点击左侧角色筛选用户-chromium\error-context.md
+
+  19) [chromium] › e2e\users.spec.ts:162:3 › 用户管理 -> 新建用户 › USER-CREATE-01. 正常用例：admin新建用户成功 ───────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:163:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-01-正常用例：admin新建用户成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-01-正常用例：admin新建用户成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-01-正常用例：admin新建用户成功-chromium\error-context.md
+
+  20) [chromium] › e2e\users.spec.ts:174:3 › 用户管理 -> 新建用户 › USER-CREATE-02. 正常用例：新建用户选择角色 ──────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:175:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-02-正常用例：新建用户选择角色-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-02-正常用例：新建用户选择角色-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-02-正常用例：新建用户选择角色-chromium\error-context.md
+
+  21) [chromium] › e2e\users.spec.ts:186:3 › 用户管理 -> 新建用户 › USER-CREATE-03. 正常用例：新建用户选择部门 ──────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:187:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-03-正常用例：新建用户选择部门-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-03-正常用例：新建用户选择部门-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-03-正常用例：新建用户选择部门-chromium\error-context.md
+
+  22) [chromium] › e2e\users.spec.ts:198:3 › 用户管理 -> 新建用户 › USER-CREATE-04. 空数据边界：必填项为空提交被阻止 ───────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:199:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-04-空数据边界：必填项为空提交被阻止-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-04-空数据边界：必填项为空提交被阻止-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-04-空数据边界：必填项为空提交被阻止-chromium\error-context.md
+
+  23) [chromium] › e2e\users.spec.ts:228:3 › 用户管理 -> 新建用户 › USER-CREATE-09. 并发：快速双击新建按钮 ────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:229:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-09-并发：快速双击新建按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-09-并发：快速双击新建按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-09-并发：快速双击新建按钮-chromium\error-context.md
+
+  24) [chromium] › e2e\users.spec.ts:233:3 › 用户管理 -> 新建用户 › USER-CREATE-10. UI差异：admin前端显示新建按钮 ─────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:234:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-10-UI差异：admin前端显示新建按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-10-UI差异：admin前端显示新建按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-10-UI差异：admin前端显示新建按钮-chromium\error-context.md
+
+  25) [chromium] › e2e\users.spec.ts:243:3 › 用户管理 -> 编辑用户 › USER-EDIT-01. 正常用例：admin编辑用户姓名保存成功 ─────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:244:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-01-正常用例：admin编辑用户姓名保存成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-01-正常用例：admin编辑用户姓名保存成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-01-正常用例：admin编辑用户姓名保存成功-chromium\error-context.md
+
+  26) [chromium] › e2e\users.spec.ts:253:3 › 用户管理 -> 编辑用户 › USER-EDIT-02. 正常用例：admin修改用户状态 ─────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:257:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-02-正常用例：admin修改用户状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-02-正常用例：admin修改用户状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-02-正常用例：admin修改用户状态-chromium\error-context.md
+
+  27) [chromium] › e2e\users.spec.ts:266:3 › 用户管理 -> 编辑用户 › USER-EDIT-03. 空数据边界：编辑后姓名为空被阻止 ─────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:267:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-03-空数据边界：编辑后姓名为空被阻止-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-03-空数据边界：编辑后姓名为空被阻止-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-03-空数据边界：编辑后姓名为空被阻止-chromium\error-context.md
+
+  28) [chromium] › e2e\users.spec.ts:296:3 › 用户管理 -> 编辑用户 › USER-EDIT-07. 异常恢复：编辑时API 500后重试 ───────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:297:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-07-异常恢复：编辑时API-500后重试-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-07-异常恢复：编辑时API-500后重试-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-07-异常恢复：编辑时API-500后重试-chromium\error-context.md
+
+  29) [chromium] › e2e\users.spec.ts:303:3 › 用户管理 -> 编辑用户 › USER-EDIT-08. UI差异：admin显示编辑按钮 ─────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:304:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-08-UI差异：admin显示编辑按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-08-UI差异：admin显示编辑按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-08-UI差异：admin显示编辑按钮-chromium\error-context.md
+
+  30) [chromium] › e2e\users.spec.ts:307:3 › 用户管理 -> 编辑用户 › USER-EDIT-09. 正常用例：编辑后列表数据更新 ───────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:308:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-09-正常用例：编辑后列表数据更新-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-09-正常用例：编辑后列表数据更新-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-09-正常用例：编辑后列表数据更新-chromium\error-context.md
+
+  31) [chromium] › e2e\users.spec.ts:312:3 › 用户管理 -> 编辑用户 › USER-EDIT-10. 正常用例：用户名编辑时为只读 ───────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:313:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-10-正常用例：用户名编辑时为只读-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-10-正常用例：用户名编辑时为只读-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-10-正常用例：用户名编辑时为只读-chromium\error-context.md
+
+  32) [chromium] › e2e\users.spec.ts:331:3 › 用户管理 -> 删除用户 › USER-DELETE-01. 正常用例：admin删除用户成功 ───────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:336:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---删除用户-USER-DELETE-01-正常用例：admin删除用户成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---删除用户-USER-DELETE-01-正常用例：admin删除用户成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---删除用户-USER-DELETE-01-正常用例：admin删除用户成功-chromium\error-context.md
+
+  33) [chromium] › e2e\users.spec.ts:340:3 › 用户管理 -> 删除用户 › USER-DELETE-02. 业务冲突：删除admin自己被阻止 ──────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m200[39m
+    Received array: [31m[400, 403][39m
+
+      344 |     if (!adminUser) return
+      345 |     const delRes = await apiFetch(token, 'DELETE', `/users/${adminUser.id}`)
+    > 346 |     expect([400, 403]).toContain(delRes.status)
+          |                        ^
+      347 |   })
+      348 |   test('USER-DELETE-03. 并发：并发删除同一用户', async ({ page }) => {
+      349 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:346:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---删除用户-USER-DELETE-02-业务冲突：删除admin自己被阻止-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---删除用户-USER-DELETE-02-业务冲突：删除admin自己被阻止-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---删除用户-USER-DELETE-02-业务冲突：删除admin自己被阻止-chromium\error-context.md
+
+  34) [chromium] › e2e\users.spec.ts:364:3 › 用户管理 -> 删除用户 › USER-DELETE-05. UI差异：admin显示删除按钮 ───────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:365:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---删除用户-USER-DELETE-05-UI差异：admin显示删除按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---删除用户-USER-DELETE-05-UI差异：admin显示删除按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---删除用户-USER-DELETE-05-UI差异：admin显示删除按钮-chromium\error-context.md
+
+  35) [chromium] › e2e\users.spec.ts:374:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-01. 正常用例：admin停用用户成功 ─────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:378:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-01-正常用例：admin停用用户成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-01-正常用例：admin停用用户成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---启用停用用户-USER-TOGGLE-01-正常用例：admin停用用户成功-chromium\error-context.md
+
+  36) [chromium] › e2e\users.spec.ts:382:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-02. 正常用例：admin启用已停用用户 ────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:383:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-02-正常用例：admin启用已停用用户-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-02-正常用例：admin启用已停用用户-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---启用停用用户-USER-TOGGLE-02-正常用例：admin启用已停用用户-chromium\error-context.md
+
+  37) [chromium] › e2e\users.spec.ts:395:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-04. UI差异：admin显示停用/启用按钮 ──
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:396:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-04-UI差异：admin显示停用-启用按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-04-UI差异：admin显示停用-启用按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---启用停用用户-USER-TOGGLE-04-UI差异：admin显示停用-启用按钮-chromium\error-context.md
+
+  38) [chromium] › e2e\users.spec.ts:405:3 › 用户管理 -> 重置密码 › USER-RESET-01. 正常用例：admin重置用户密码成功 ──────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:406:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---重置密码-USER-RESET-01-正常用例：admin重置用户密码成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---重置密码-USER-RESET-01-正常用例：admin重置用户密码成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---重置密码-USER-RESET-01-正常用例：admin重置用户密码成功-chromium\error-context.md
+
+  39) [chromium] › e2e\users.spec.ts:410:3 › 用户管理 -> 重置密码 › USER-RESET-02. 正常用例：编辑弹窗内重置密码 ──────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:411:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---重置密码-USER-RESET-02-正常用例：编辑弹窗内重置密码-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---重置密码-USER-RESET-02-正常用例：编辑弹窗内重置密码-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---重置密码-USER-RESET-02-正常用例：编辑弹窗内重置密码-chromium\error-context.md
+
+  40) [chromium] › e2e\users.spec.ts:432:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-01. 正常用例：点击详情打开弹窗 ────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:433:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-01-正常用例：点击详情打开弹窗-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-01-正常用例：点击详情打开弹窗-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---用户详情弹窗-USER-DETAIL-01-正常用例：点击详情打开弹窗-chromium\error-context.md
+
+  41) [chromium] › e2e\users.spec.ts:442:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-02. 正常用例：详情弹窗显示用户头像 ──────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:443:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-02-正常用例：详情弹窗显示用户头像-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-02-正常用例：详情弹窗显示用户头像-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---用户详情弹窗-USER-DETAIL-02-正常用例：详情弹窗显示用户头像-chromium\error-context.md
+
+  42) [chromium] › e2e\users.spec.ts:452:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-03. 正常用例：详情弹窗显示权限列表 ──────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:453:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-03-正常用例：详情弹窗显示权限列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-03-正常用例：详情弹窗显示权限列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---用户详情弹窗-USER-DETAIL-03-正常用例：详情弹窗显示权限列表-chromium\error-context.md
+
+  43) [chromium] › e2e\users.spec.ts:462:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-04. 正常用例：详情弹窗点击编辑跳转 ──────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:463:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-04-正常用例：详情弹窗点击编辑跳转-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-04-正常用例：详情弹窗点击编辑跳转-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---用户详情弹窗-USER-DETAIL-04-正常用例：详情弹窗点击编辑跳转-chromium\error-context.md
+
+  44) [chromium] › e2e\users.spec.ts:477:3 › 用户管理 -> 分页功能 › USER-PAGE-01. 正常用例：多页数据切页 ──────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:478:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-01-正常用例：多页数据切页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-01-正常用例：多页数据切页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---分页功能-USER-PAGE-01-正常用例：多页数据切页-chromium\error-context.md
+
+  45) [chromium] › e2e\users.spec.ts:482:3 › 用户管理 -> 分页功能 › USER-PAGE-02. 边界：仅1页时下一页禁用 ─────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:483:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-02-边界：仅1页时下一页禁用-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-02-边界：仅1页时下一页禁用-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---分页功能-USER-PAGE-02-边界：仅1页时下一页禁用-chromium\error-context.md
+
+  46) [chromium] › e2e\users.spec.ts:487:3 › 用户管理 -> 分页功能 › USER-PAGE-03. 并发：快速切换分页 ────────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:488:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-03-并发：快速切换分页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-03-并发：快速切换分页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---分页功能-USER-PAGE-03-并发：快速切换分页-chromium\error-context.md
+
+  47) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-01. technician GET /users 返回403 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-d97c7--technician-GET-users-返回403-chromium\error-context.md
+
+  48) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-02. pathologist GET /users 返回403 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-710dc-pathologist-GET-users-返回403-chromium\error-context.md
+
+  49) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-03. procurement GET /users 返回403 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-41e68-procurement-GET-users-返回403-chromium\error-context.md
+
+  50) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-04. finance GET /users 返回403 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-fd22a--04-finance-GET-users-返回403-chromium\error-context.md
+
+  51) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-05. warehouse_manager GET /users 返回403 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-02463-use-manager-GET-users-返回403-chromium\error-context.md
+
+  52) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-06. admin GET /users 返回200 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-PERM-USER-06-admin-GET-users-返回200-chromium\error-context.md
+
+  53) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-10. admin PUT /users/test-id 返回404 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      513 |       const token = await apiLogin(scene.role)
+      514 |       const res = await apiFetch(token, scene.method, scene.path, scene.method === 'POST' ? { username: 'TEST', password: 'pass', realName: 'test' } : { realName: 'test' })
+    > 515 |       expect(res.status).toBe(scene.expect)
+          |                          ^
+      516 |     })
+      517 |   }
+      518 | })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:515:26
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-ff3a0-min-PUT-users-test-id-返回404-chromium\error-context.md
+
+  54) [chromium] › e2e\users.spec.ts:524:3 › 用户管理 -> 业务流程树 › BF-USER-01. 主路径：创建用户→配置角色→保存 ──────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:525:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-01-主路径：创建用户→配置角色→保存-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-01-主路径：创建用户→配置角色→保存-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-01-主路径：创建用户→配置角色→保存-chromium\error-context.md
+
+  55) [chromium] › e2e\users.spec.ts:534:3 › 用户管理 -> 业务流程树 › BF-USER-02. 分支：创建用户时不填必填项被阻止 ──────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:535:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-02-分支：创建用户时不填必填项被阻止-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-02-分支：创建用户时不填必填项被阻止-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-02-分支：创建用户时不填必填项被阻止-chromium\error-context.md
+
+  56) [chromium] › e2e\users.spec.ts:540:3 › 用户管理 -> 业务流程树 › BF-USER-03. 分支：编辑用户后取消不保存 ─────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:541:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-03-分支：编辑用户后取消不保存-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-03-分支：编辑用户后取消不保存-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-03-分支：编辑用户后取消不保存-chromium\error-context.md
+
+  57) [chromium] › e2e\users.spec.ts:545:3 › 用户管理 -> 业务流程树 › BF-USER-04. 分支：停用用户后重新启用 ──────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:546:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-04-分支：停用用户后重新启用-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-04-分支：停用用户后重新启用-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-04-分支：停用用户后重新启用-chromium\error-context.md
+
+  58) [chromium] › e2e\users.spec.ts:550:3 › 用户管理 -> 业务流程树 › BF-USER-05. 分支：重置用户密码 ─────────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:551:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-05-分支：重置用户密码-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-05-分支：重置用户密码-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-05-分支：重置用户密码-chromium\error-context.md
+
+  59) [chromium] › e2e\users.spec.ts:555:3 › 用户管理 -> 业务流程树 › BF-USER-06. 分支：筛选后查看用户详情 ──────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:556:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-06-分支：筛选后查看用户详情-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-06-分支：筛选后查看用户详情-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-06-分支：筛选后查看用户详情-chromium\error-context.md
+
+  60) [chromium] › e2e\users.spec.ts:562:3 › 用户管理 -> 业务流程树 › BF-USER-07. 分支：无权限用户访问被拦截 ─────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:563:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-07-分支：无权限用户访问被拦截-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-07-分支：无权限用户访问被拦截-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-07-分支：无权限用户访问被拦截-chromium\error-context.md
+
+  61) [chromium] › e2e\users.spec.ts:566:3 › 用户管理 -> 业务流程树 › BF-USER-08. 分支：点击左侧角色筛选用户 ─────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:567:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-08-分支：点击左侧角色筛选用户-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-08-分支：点击左侧角色筛选用户-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-08-分支：点击左侧角色筛选用户-chromium\error-context.md
+
+  62) [chromium] › e2e\users.spec.ts:577:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-01. 用户头像显示首字母 ─────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:578:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-01-用户头像显示首字母-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-01-用户头像显示首字母-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-01-用户头像显示首字母-chromium\error-context.md
+
+  63) [chromium] › e2e\users.spec.ts:581:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-02. 状态标签颜色区分 ──────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:582:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-02-状态标签颜色区分-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-02-状态标签颜色区分-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-02-状态标签颜色区分-chromium\error-context.md
+
+  64) [chromium] › e2e\users.spec.ts:585:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-03. 新建用户初始密码默认显示 ──────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:586:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-03-新建用户初始密码默认显示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-03-新建用户初始密码默认显示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-03-新建用户初始密码默认显示-chromium\error-context.md
+
+  65) [chromium] › e2e\users.spec.ts:592:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-04. 角色下拉选项完整性 ─────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:593:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-04-角色下拉选项完整性-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-04-角色下拉选项完整性-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-04-角色下拉选项完整性-chromium\error-context.md
+
+  66) [chromium] › e2e\users.spec.ts:603:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-05. 用户全选checkbox功能 ────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:604:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-05-用户全选checkbox功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-05-用户全选checkbox功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-05-用户全选checkbox功能-chromium\error-context.md
+
+  67) [chromium] › e2e\users.spec.ts:608:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-06. 分页页码按钮样式 ──────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:609:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-06-分页页码按钮样式-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-06-分页页码按钮样式-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-06-分页页码按钮样式-chromium\error-context.md
+
+  68) [chromium] › e2e\users.spec.ts:612:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-07. 响应式布局检查 ───────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:614:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-07-响应式布局检查-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-07-响应式布局检查-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-07-响应式布局检查-chromium\error-context.md
+
+  69) [chromium] › e2e\users.spec.ts:618:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-08. 用户API响应格式验证 ───────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      619 |     const token = await apiLogin('admin')
+      620 |     const res = await apiFetch(token, 'GET', '/users?page=1&pageSize=1')
+    > 621 |     expect(res.status).toBe(200)
+          |                        ^
+      622 |     if (res.data?.data?.list) { expect(Array.isArray(res.data.data.list)).toBe(true) }
+      623 |   })
+      624 |   test('BLIND-USER-09. 页面加载性能检查', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:621:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-08-用户API响应格式验证-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-08-用户API响应格式验证-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-08-用户API响应格式验证-chromium\error-context.md
+
+  70) [chromium] › e2e\users.spec.ts:624:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-09. 页面加载性能检查 ──────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:626:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-09-页面加载性能检查-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-09-页面加载性能检查-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-09-页面加载性能检查-chromium\error-context.md
+
+  71) [chromium] › e2e\users.spec.ts:630:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-10. 用户详情权限列表展示 ────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/login
+    Call log:
+    [2m  - navigating to "http://localhost:8080/login", waiting until "load"[22m
+
+
+      16 |
+      17 | async function loginAs(page: Page, role: RoleKey) {
+    > 18 |   await page.goto(`${FE_BASE}/login`)
+         |              ^
+      19 |   await page.evaluate(() => localStorage.clear())
+      20 |   const cred = ROLES[role]
+      21 |   await page.fill('input[type="text"]', cred.username)
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:18:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:631:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-10-用户详情权限列表展示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-10-用户详情权限列表展示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-10-用户详情权限列表展示-chromium\error-context.md
+
+  71 failed
+    [chromium] › e2e\users.spec.ts:64:3 › 用户管理 -> 查看用户列表 › USER-LIST-01. 正常用例：admin可查看用户列表 ─────────
+    [chromium] › e2e\users.spec.ts:68:3 › 用户管理 -> 查看用户列表 › USER-LIST-02. 正常用例：用户列表显示列标题 ────────────
+    [chromium] › e2e\users.spec.ts:72:3 › 用户管理 -> 查看用户列表 › USER-LIST-03. 正常用例：用户列表显示统计卡片 ───────────
+    [chromium] › e2e\users.spec.ts:76:3 › 用户管理 -> 查看用户列表 › USER-LIST-04. 正常用例：左侧显示角色列表面板 ───────────
+    [chromium] › e2e\users.spec.ts:80:3 › 用户管理 -> 查看用户列表 › USER-LIST-05. 空数据边界：无用户数据显示空状态 ──────────
+    [chromium] › e2e\users.spec.ts:86:3 › 用户管理 -> 查看用户列表 › USER-LIST-06. 异常恢复：API 500显示错误 ──────────
+    [chromium] › e2e\users.spec.ts:91:3 › 用户管理 -> 查看用户列表 › USER-LIST-07. 权限：technician访问返回403 ──────
+    [chromium] › e2e\users.spec.ts:95:3 › 用户管理 -> 查看用户列表 › USER-LIST-08. 并发：快速刷新页面多次 ───────────────
+    [chromium] › e2e\users.spec.ts:100:3 › 用户管理 -> 查看用户列表 › USER-LIST-09. UI差异：admin显示新建用户按钮 ───────
+    [chromium] › e2e\users.spec.ts:104:3 › 用户管理 -> 查看用户列表 › USER-LIST-10. 正常用例：用户状态标签显示正常/禁用 ───────
+    [chromium] › e2e\users.spec.ts:114:3 › 用户管理 -> 筛选功能 › USER-FILTER-01. 正常用例：按关键词搜索用户名 ───────────
+    [chromium] › e2e\users.spec.ts:119:3 › 用户管理 -> 筛选功能 › USER-FILTER-02. 正常用例：按角色筛选 ───────────────
+    [chromium] › e2e\users.spec.ts:124:3 › 用户管理 -> 筛选功能 › USER-FILTER-03. 正常用例：按状态筛选 ───────────────
+    [chromium] › e2e\users.spec.ts:129:3 › 用户管理 -> 筛选功能 › USER-FILTER-04. 正常用例：点击查询按钮 ──────────────
+    [chromium] › e2e\users.spec.ts:134:3 › 用户管理 -> 筛选功能 › USER-FILTER-05. 正常用例：点击重置按钮恢复全部 ──────────
+    [chromium] › e2e\users.spec.ts:139:3 › 用户管理 -> 筛选功能 › USER-FILTER-06. 空数据边界：筛选无结果 ──────────────
+    [chromium] › e2e\users.spec.ts:144:3 › 用户管理 -> 筛选功能 › USER-FILTER-07. 并发：快速切换筛选条件 ──────────────
+    [chromium] › e2e\users.spec.ts:151:3 › 用户管理 -> 筛选功能 › USER-FILTER-08. 正常用例：点击左侧角色筛选用户 ──────────
+    [chromium] › e2e\users.spec.ts:162:3 › 用户管理 -> 新建用户 › USER-CREATE-01. 正常用例：admin新建用户成功 ─────────
+    [chromium] › e2e\users.spec.ts:174:3 › 用户管理 -> 新建用户 › USER-CREATE-02. 正常用例：新建用户选择角色 ────────────
+    [chromium] › e2e\users.spec.ts:186:3 › 用户管理 -> 新建用户 › USER-CREATE-03. 正常用例：新建用户选择部门 ────────────
+    [chromium] › e2e\users.spec.ts:198:3 › 用户管理 -> 新建用户 › USER-CREATE-04. 空数据边界：必填项为空提交被阻止 ─────────
+    [chromium] › e2e\users.spec.ts:228:3 › 用户管理 -> 新建用户 › USER-CREATE-09. 并发：快速双击新建按钮 ──────────────
+    [chromium] › e2e\users.spec.ts:233:3 › 用户管理 -> 新建用户 › USER-CREATE-10. UI差异：admin前端显示新建按钮 ───────
+    [chromium] › e2e\users.spec.ts:243:3 › 用户管理 -> 编辑用户 › USER-EDIT-01. 正常用例：admin编辑用户姓名保存成功 ───────
+    [chromium] › e2e\users.spec.ts:253:3 › 用户管理 -> 编辑用户 › USER-EDIT-02. 正常用例：admin修改用户状态 ───────────
+    [chromium] › e2e\users.spec.ts:266:3 › 用户管理 -> 编辑用户 › USER-EDIT-03. 空数据边界：编辑后姓名为空被阻止 ───────────
+    [chromium] › e2e\users.spec.ts:296:3 › 用户管理 -> 编辑用户 › USER-EDIT-07. 异常恢复：编辑时API 500后重试 ─────────
+    [chromium] › e2e\users.spec.ts:303:3 › 用户管理 -> 编辑用户 › USER-EDIT-08. UI差异：admin显示编辑按钮 ───────────
+    [chromium] › e2e\users.spec.ts:307:3 › 用户管理 -> 编辑用户 › USER-EDIT-09. 正常用例：编辑后列表数据更新 ─────────────
+    [chromium] › e2e\users.spec.ts:312:3 › 用户管理 -> 编辑用户 › USER-EDIT-10. 正常用例：用户名编辑时为只读 ─────────────
+    [chromium] › e2e\users.spec.ts:331:3 › 用户管理 -> 删除用户 › USER-DELETE-01. 正常用例：admin删除用户成功 ─────────
+    [chromium] › e2e\users.spec.ts:340:3 › 用户管理 -> 删除用户 › USER-DELETE-02. 业务冲突：删除admin自己被阻止 ────────
+    [chromium] › e2e\users.spec.ts:364:3 › 用户管理 -> 删除用户 › USER-DELETE-05. UI差异：admin显示删除按钮 ─────────
+    [chromium] › e2e\users.spec.ts:374:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-01. 正常用例：admin停用用户成功 ───────
+    [chromium] › e2e\users.spec.ts:382:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-02. 正常用例：admin启用已停用用户 ──────
+    [chromium] › e2e\users.spec.ts:395:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-04. UI差异：admin显示停用/启用按钮 ────
+    [chromium] › e2e\users.spec.ts:405:3 › 用户管理 -> 重置密码 › USER-RESET-01. 正常用例：admin重置用户密码成功 ────────
+    [chromium] › e2e\users.spec.ts:410:3 › 用户管理 -> 重置密码 › USER-RESET-02. 正常用例：编辑弹窗内重置密码 ────────────
+    [chromium] › e2e\users.spec.ts:432:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-01. 正常用例：点击详情打开弹窗 ──────────
+    [chromium] › e2e\users.spec.ts:442:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-02. 正常用例：详情弹窗显示用户头像 ────────
+    [chromium] › e2e\users.spec.ts:452:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-03. 正常用例：详情弹窗显示权限列表 ────────
+    [chromium] › e2e\users.spec.ts:462:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-04. 正常用例：详情弹窗点击编辑跳转 ────────
+    [chromium] › e2e\users.spec.ts:477:3 › 用户管理 -> 分页功能 › USER-PAGE-01. 正常用例：多页数据切页 ────────────────
+    [chromium] › e2e\users.spec.ts:482:3 › 用户管理 -> 分页功能 › USER-PAGE-02. 边界：仅1页时下一页禁用 ───────────────
+    [chromium] › e2e\users.spec.ts:487:3 › 用户管理 -> 分页功能 › USER-PAGE-03. 并发：快速切换分页 ──────────────────
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-01. technician GET /users 返回403 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-02. pathologist GET /users 返回403 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-03. procurement GET /users 返回403 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-04. finance GET /users 返回403 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-05. warehouse_manager GET /users 返回403 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-06. admin GET /users 返回200 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-10. admin PUT /users/test-id 返回404 
+    [chromium] › e2e\users.spec.ts:524:3 › 用户管理 -> 业务流程树 › BF-USER-01. 主路径：创建用户→配置角色→保存 ────────────
+    [chromium] › e2e\users.spec.ts:534:3 › 用户管理 -> 业务流程树 › BF-USER-02. 分支：创建用户时不填必填项被阻止 ────────────
+    [chromium] › e2e\users.spec.ts:540:3 › 用户管理 -> 业务流程树 › BF-USER-03. 分支：编辑用户后取消不保存 ───────────────
+    [chromium] › e2e\users.spec.ts:545:3 › 用户管理 -> 业务流程树 › BF-USER-04. 分支：停用用户后重新启用 ────────────────
+    [chromium] › e2e\users.spec.ts:550:3 › 用户管理 -> 业务流程树 › BF-USER-05. 分支：重置用户密码 ───────────────────
+    [chromium] › e2e\users.spec.ts:555:3 › 用户管理 -> 业务流程树 › BF-USER-06. 分支：筛选后查看用户详情 ────────────────
+    [chromium] › e2e\users.spec.ts:562:3 › 用户管理 -> 业务流程树 › BF-USER-07. 分支：无权限用户访问被拦截 ───────────────
+    [chromium] › e2e\users.spec.ts:566:3 › 用户管理 -> 业务流程树 › BF-USER-08. 分支：点击左侧角色筛选用户 ───────────────
+    [chromium] › e2e\users.spec.ts:577:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-01. 用户头像显示首字母 ───────────────
+    [chromium] › e2e\users.spec.ts:581:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-02. 状态标签颜色区分 ────────────────
+    [chromium] › e2e\users.spec.ts:585:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-03. 新建用户初始密码默认显示 ────────────
+    [chromium] › e2e\users.spec.ts:592:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-04. 角色下拉选项完整性 ───────────────
+    [chromium] › e2e\users.spec.ts:603:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-05. 用户全选checkbox功能 ──────────
+    [chromium] › e2e\users.spec.ts:608:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-06. 分页页码按钮样式 ────────────────
+    [chromium] › e2e\users.spec.ts:612:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-07. 响应式布局检查 ─────────────────
+    [chromium] › e2e\users.spec.ts:618:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-08. 用户API响应格式验证 ─────────────
+    [chromium] › e2e\users.spec.ts:624:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-09. 页面加载性能检查 ────────────────
+    [chromium] › e2e\users.spec.ts:630:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-10. 用户详情权限列表展示 ──────────────
+  26 passed (6.2m)

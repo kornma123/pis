@@ -1,0 +1,1821 @@
+
+Running 120 tests using 1 worker
+
+  x    1 [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-admin. 正常用例：admin可查看项目列表 (11.5s)
+  ok   2 [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-technician. 正常用例：technician可查看项目列表 (1.3s)
+  ok   3 [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-pathologist. 正常用例：pathologist可查看项目列表 (1.3s)
+  x    4 [chromium] › e2e\projects.spec.ts:82:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-02. 空数据边界：无项目数据 (11.1s)
+  ok   5 [chromium] › e2e\projects.spec.ts:87:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-03. 权限：warehouse_manager访问返回403 (264ms)
+  ok   6 [chromium] › e2e\projects.spec.ts:91:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-04. 权限：procurement访问返回403 (239ms)
+  ok   7 [chromium] › e2e\projects.spec.ts:95:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-05. 权限：finance访问返回403 (243ms)
+  x    8 [chromium] › e2e\projects.spec.ts:99:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-06. 异常恢复：API 500 (11.5s)
+  x    9 [chromium] › e2e\projects.spec.ts:104:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-07. UI差异：admin显示新增编辑删除 (11.2s)
+  ok  10 [chromium] › e2e\projects.spec.ts:109:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-08. UI差异：technician仅显示查看 (2.3s)
+  x   11 [chromium] › e2e\projects.spec.ts:114:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-09. 正常用例：显示编码名称类型周期BOM样本数 (11.1s)
+  x   12 [chromium] › e2e\projects.spec.ts:119:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-10. 并发：快速刷新 (11.4s)
+  x   13 [chromium] › e2e\projects.spec.ts:131:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-01. 正常用例：选择ihc仅显示免疫组化 (522ms)
+  x   14 [chromium] › e2e\projects.spec.ts:136:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-02. 空数据边界：该类型无项目 (606ms)
+  x   15 [chromium] › e2e\projects.spec.ts:141:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-03. 正常用例：重置筛选 (11.9s)
+  x   16 [chromium] › e2e\projects.spec.ts:146:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-04. UI差异：各角色类型筛选可见 (11.4s)
+  x   17 [chromium] › e2e\projects.spec.ts:153:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-05. 并发：快速切换类型 (11.6s)
+  x   18 [chromium] › e2e\projects.spec.ts:160:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-06. 异常恢复：类型筛选API错误 (11.2s)
+  x   19 [chromium] › e2e\projects.spec.ts:171:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-01. 正常用例：选择active仅显示启用 (457ms)
+  x   20 [chromium] › e2e\projects.spec.ts:176:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-02. 空数据边界：无active项目 (450ms)
+  x   21 [chromium] › e2e\projects.spec.ts:181:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-03. 正常用例：重置筛选 (11.5s)
+  x   22 [chromium] › e2e\projects.spec.ts:186:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-04. UI差异：各角色状态筛选可见 (11.3s)
+  x   23 [chromium] › e2e\projects.spec.ts:193:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-05. 并发：快速切换状态 (11.4s)
+  x   24 [chromium] › e2e\projects.spec.ts:200:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-06. 异常恢复：状态筛选API错误 (11.7s)
+  x   25 [chromium] › e2e\projects.spec.ts:211:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-01. 正常用例：搜索HER2 (593ms)
+  x   26 [chromium] › e2e\projects.spec.ts:216:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-02. 空数据边界：无结果 (619ms)
+  x   27 [chromium] › e2e\projects.spec.ts:222:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-03. 并发：快速连续输入 (11.8s)
+  x   28 [chromium] › e2e\projects.spec.ts:233:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-04. 异常恢复：搜索网络断 (11.3s)
+  x   29 [chromium] › e2e\projects.spec.ts:238:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-05. 边界：超长字符串 (465ms)
+  x   30 [chromium] › e2e\projects.spec.ts:243:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-06. UI差异：各角色搜索可见 (11.3s)
+  x   31 [chromium] › e2e\projects.spec.ts:256:3 › 检测项目 -> 新建项目 › PROJ-CREATE-01. 正常用例：admin新建项目成功 (32ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   32 [chromium] › e2e\projects.spec.ts:265:3 › 检测项目 -> 新建项目 › PROJ-CREATE-02. 空数据边界：cycle留空 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   33 [chromium] › e2e\projects.spec.ts:272:3 › 检测项目 -> 新建项目 › PROJ-CREATE-03. 表单校验：未传code返回400 (29ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   34 [chromium] › e2e\projects.spec.ts:277:3 › 检测项目 -> 新建项目 › PROJ-CREATE-04. 表单校验：未传name返回400 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   35 [chromium] › e2e\projects.spec.ts:282:3 › 检测项目 -> 新建项目 › PROJ-CREATE-05. 表单校验：未传type返回400 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  ok  36 [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-technician. 权限：technician新建返回403 (265ms)
+  ok  37 [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-pathologist. 权限：pathologist新建返回403 (252ms)
+  ok  38 [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-warehouse_manager. 权限：warehouse_manager新建返回403 (248ms)
+  ok  39 [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-procurement. 权限：procurement新建返回403 (245ms)
+  ok  40 [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-finance. 权限：finance新建返回403 (241ms)
+  x   41 [chromium] › e2e\projects.spec.ts:296:3 › 检测项目 -> 新建项目 › PROJ-CREATE-07. 业务冲突：code已存在返回409 (8ms)
+  x   42 [chromium] › e2e\projects.spec.ts:303:3 › 检测项目 -> 新建项目 › PROJ-CREATE-08. 并发：快速双击 (31ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   43 [chromium] › e2e\projects.spec.ts:309:3 › 检测项目 -> 新建项目 › PROJ-CREATE-09. 异常恢复：网络中断后重试 (31ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   44 [chromium] › e2e\projects.spec.ts:316:3 › 检测项目 -> 新建项目 › PROJ-CREATE-10. UI差异：admin显示新增按钮 (11.3s)
+  ok  45 [chromium] › e2e\projects.spec.ts:321:3 › 检测项目 -> 新建项目 › PROJ-CREATE-11. UI差异：technician不显示新增按钮 (2.2s)
+  ok  46 [chromium] › e2e\projects.spec.ts:326:3 › 检测项目 -> 新建项目 › PROJ-CREATE-12. UI差异：pathologist不显示新增按钮 (2.3s)
+  ok  47 [chromium] › e2e\projects.spec.ts:331:3 › 检测项目 -> 新建项目 › PROJ-CREATE-13. 正常用例：新建后status=active (10ms)
+  x   48 [chromium] › e2e\projects.spec.ts:338:3 › 检测项目 -> 新建项目 › PROJ-CREATE-14. 边界：超长code (10ms)
+  x   49 [chromium] › e2e\projects.spec.ts:345:3 › 检测项目 -> 新建项目 › PROJ-CREATE-15. 边界：非法type值 (29ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   50 [chromium] › e2e\projects.spec.ts:352:3 › 检测项目 -> 新建项目 › PROJ-CREATE-16. 正常用例：关联BOM创建项目 (34ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  -   51 [chromium] › e2e\projects.spec.ts:366:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-01. 正常用例：admin编辑项目名称成功
+  -   52 [chromium] › e2e\projects.spec.ts:373:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-02. 空数据边界：清空必填字段
+  -   53 [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-technician. 权限：technician编辑返回403
+  -   54 [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-pathologist. 权限：pathologist编辑返回403
+  -   55 [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-warehouse_manager. 权限：warehouse_manager编辑返回403
+  -   56 [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-procurement. 权限：procurement编辑返回403
+  -   57 [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-finance. 权限：finance编辑返回403
+  -   58 [chromium] › e2e\projects.spec.ts:390:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-04. 业务冲突：编辑status不影响历史记录
+  -   59 [chromium] › e2e\projects.spec.ts:397:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-05. 并发：并发编辑同一项目
+  -   60 [chromium] › e2e\projects.spec.ts:407:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-06. 异常恢复：API 500后重试
+  x   61 [chromium] › e2e\projects.spec.ts:414:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-07. UI差异：admin显示编辑按钮 (11.3s)
+  ok  62 [chromium] › e2e\projects.spec.ts:419:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-08. UI差异：technician不显示编辑按钮 (2.5s)
+  -   63 [chromium] › e2e\projects.spec.ts:424:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-09. 正常用例：编辑后列表更新
+  x   64 [chromium] › e2e\projects.spec.ts:430:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-10. 表单校验：编辑不存在返回404 (10ms)
+  -   65 [chromium] › e2e\projects.spec.ts:435:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-11. 业务冲突：编辑已停用项目
+  -   66 [chromium] › e2e\projects.spec.ts:442:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-12. 异常恢复：网络中断
+  x   67 [chromium] › e2e\projects.spec.ts:455:3 › 检测项目 -> 删除项目 › PROJ-DEL-01. 正常用例：admin删除无出库记录项目 (18ms)
+  -   68 [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-technician. 权限：technician删除返回403
+  -   69 [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-pathologist. 权限：pathologist删除返回403
+  -   70 [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-warehouse_manager. 权限：warehouse_manager删除返回403
+  -   71 [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-procurement. 权限：procurement删除返回403
+  -   72 [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-finance. 权限：finance删除返回403
+  -   73 [chromium] › e2e\projects.spec.ts:475:3 › 检测项目 -> 删除项目 › PROJ-DEL-03. 业务冲突：有关联出库删除后悬空引用
+  -   74 [chromium] › e2e\projects.spec.ts:482:3 › 检测项目 -> 删除项目 › PROJ-DEL-04. 并发：并发删除
+  ok  75 [chromium] › e2e\projects.spec.ts:495:3 › 检测项目 -> 删除项目 › PROJ-DEL-05. 异常恢复：API 500后重试 (4ms)
+  x   76 [chromium] › e2e\projects.spec.ts:506:3 › 检测项目 -> 删除项目 › PROJ-DEL-06. UI差异：admin显示删除按钮 (11.8s)
+  ok  77 [chromium] › e2e\projects.spec.ts:511:3 › 检测项目 -> 删除项目 › PROJ-DEL-07. UI差异：pathologist不显示删除按钮 (2.5s)
+  x   78 [chromium] › e2e\projects.spec.ts:516:3 › 检测项目 -> 删除项目 › PROJ-DEL-08. 表单校验：删除不存在返回404 (18ms)
+  -   79 [chromium] › e2e\projects.spec.ts:521:3 › 检测项目 -> 删除项目 › PROJ-DEL-09. 业务冲突：再次删除返回404
+  ok  80 [chromium] › e2e\projects.spec.ts:532:3 › 检测项目 -> 删除项目 › PROJ-DEL-10. 正常用例：删除后列表刷新 (748ms)
+  x   81 [chromium] › e2e\projects.spec.ts:546:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-01. 正常用例：点击项目跳转详情 (11.3s)
+  -   82 [chromium] › e2e\projects.spec.ts:553:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-02. 正常用例：详情显示编码名称类型周期
+  ok  83 [chromium] › e2e\projects.spec.ts:560:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-03. UI差异：pathologist显示成本统计 (2.5s)
+  ok  84 [chromium] › e2e\projects.spec.ts:565:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-04. UI差异：technician隐藏成本统计 (2.1s)
+  x   85 [chromium] › e2e\projects.spec.ts:576:3 › 检测项目 -> 分页切换 › PROJ-PAGE-01. 正常用例：切换到第2页 (11.2s)
+  x   86 [chromium] › e2e\projects.spec.ts:581:3 › 检测项目 -> 分页切换 › PROJ-PAGE-02. 边界：仅1页分页器隐藏 (11.4s)
+  x   87 [chromium] › e2e\projects.spec.ts:586:3 › 检测项目 -> 分页切换 › PROJ-PAGE-03. 表单校验：page=0修正为1 (33ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   88 [chromium] › e2e\projects.spec.ts:592:3 › 检测项目 -> 分页切换 › PROJ-PAGE-04. 边界：page=999 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   89 [chromium] › e2e\projects.spec.ts:597:3 › 检测项目 -> 分页切换 › PROJ-PAGE-05. 边界：pageSize=1 (36ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   90 [chromium] › e2e\projects.spec.ts:602:3 › 检测项目 -> 分页切换 › PROJ-PAGE-06. 边界：pageSize=100 (33ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   91 [chromium] › e2e\projects.spec.ts:607:3 › 检测项目 -> 分页切换 › PROJ-PAGE-07. 并发：快速切换分页 (11.9s)
+  x   92 [chromium] › e2e\projects.spec.ts:614:3 › 检测项目 -> 分页切换 › PROJ-PAGE-08. UI差异：各角色分页一致 (11.5s)
+  ok  93 [chromium] › e2e\projects.spec.ts:627:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-100. warehouse_manager GET /projects 返回403 (295ms)
+  ok  94 [chromium] › e2e\projects.spec.ts:631:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-101. procurement GET /projects 返回403 (265ms)
+  ok  95 [chromium] › e2e\projects.spec.ts:635:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-102. finance GET /projects 返回403 (266ms)
+  ok  96 [chromium] › e2e\projects.spec.ts:639:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-103. warehouse_manager POST /projects 返回403 (256ms)
+  ok  97 [chromium] › e2e\projects.spec.ts:643:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-104. technician POST /projects 返回403 (260ms)
+  ok  98 [chromium] › e2e\projects.spec.ts:647:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-105. pathologist POST /projects 返回403 (267ms)
+  ok  99 [chromium] › e2e\projects.spec.ts:651:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-106. procurement POST /projects 返回403 (244ms)
+  ok 100 [chromium] › e2e\projects.spec.ts:655:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-107. finance POST /projects 返回403 (250ms)
+  x  101 [chromium] › e2e\projects.spec.ts:665:3 › 检测项目 -> 业务流程树 › BF-PROJ-01. 主路径：登录→进入项目→新建→填写→提交→列表刷新 (11ms)
+  x  102 [chromium] › e2e\projects.spec.ts:672:3 › 检测项目 -> 业务流程树 › BF-PROJ-02. 分支：关闭弹窗不保存 (11.8s)
+  x  103 [chromium] › e2e\projects.spec.ts:677:3 › 检测项目 -> 业务流程树 › BF-PROJ-03. 分支：code已存在 (33ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  104 [chromium] › e2e\projects.spec.ts:684:3 › 检测项目 -> 业务流程树 › BF-PROJ-04. 分支：必填漏填 (34ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  105 [chromium] › e2e\projects.spec.ts:689:3 › 检测项目 -> 业务流程树 › BF-PROJ-05. 分支：刷新后新项目仍在 (11.6s)
+  -  106 [chromium] › e2e\projects.spec.ts:696:3 › 检测项目 -> 业务流程树 › BF-PROJ-06. 分支：删除有关联出库
+  ok 107 [chromium] › e2e\projects.spec.ts:703:3 › 检测项目 -> 业务流程树 › BF-PROJ-07. 分支：technician尝试新建被403 (251ms)
+  x  108 [chromium] › e2e\projects.spec.ts:707:3 › 检测项目 -> 业务流程树 › BF-PROJ-08. 分支：筛选后分页 (11.8s)
+  x  109 [chromium] › e2e\projects.spec.ts:718:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-01. 项目编码唯一性 (32ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  110 [chromium] › e2e\projects.spec.ts:726:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-02. 项目类型下拉选项 (11.2s)
+  x  111 [chromium] › e2e\projects.spec.ts:731:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-03. 项目BOM选择器 (11.3s)
+  -  112 [chromium] › e2e\projects.spec.ts:736:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-04. 项目成本统计
+  x  113 [chromium] › e2e\projects.spec.ts:743:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-05. 项目导出功能 (11.3s)
+  x  114 [chromium] › e2e\projects.spec.ts:748:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-06. 项目打印功能 (11.4s)
+  x  115 [chromium] › e2e\projects.spec.ts:753:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-07. 项目页面响应式 (11.3s)
+  x  116 [chromium] › e2e\projects.spec.ts:759:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-08. 项目页面加载性能 (11.3s)
+  x  117 [chromium] › e2e\projects.spec.ts:766:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-09. 项目字段XSS防护 (31ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  118 [chromium] › e2e\projects.spec.ts:773:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-10. 项目字段SQL注入防护 (31ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  119 [chromium] › e2e\projects.spec.ts:780:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-11. 项目API响应格式 (31ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  120 [chromium] › e2e\projects.spec.ts:787:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-12. 多角色同时操作 (11.4s)
+
+
+  1) [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-admin. 正常用例：admin可查看项目列表 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:77:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-01-admin-正常用例：admin可查看项目列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-01-admin-正常用例：admin可查看项目列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---查看项目列表-PROJ-LIST-01-admin-正常用例：admin可查看项目列表-chromium\error-context.md
+
+  2) [chromium] › e2e\projects.spec.ts:82:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-02. 空数据边界：无项目数据 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:83:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-02-空数据边界：无项目数据-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-02-空数据边界：无项目数据-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---查看项目列表-PROJ-LIST-02-空数据边界：无项目数据-chromium\error-context.md
+
+  3) [chromium] › e2e\projects.spec.ts:99:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-06. 异常恢复：API 500 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:100:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-06-异常恢复：API-500-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-06-异常恢复：API-500-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---查看项目列表-PROJ-LIST-06-异常恢复：API-500-chromium\error-context.md
+
+  4) [chromium] › e2e\projects.spec.ts:104:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-07. UI差异：admin显示新增编辑删除 ───
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:105:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-07-UI差异：admin显示新增编辑删除-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-07-UI差异：admin显示新增编辑删除-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---查看项目列表-PROJ-LIST-07-UI差异：admin显示新增编辑删除-chromium\error-context.md
+
+  5) [chromium] › e2e\projects.spec.ts:114:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-09. 正常用例：显示编码名称类型周期BOM样本数 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:115:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-09-正常用例：显示编码名称类型周期BOM样本数-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-09-正常用例：显示编码名称类型周期BOM样本数-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---查看项目列表-PROJ-LIST-09-正常用例：显示编码名称类型周期BOM样本数-chromium\error-context.md
+
+  6) [chromium] › e2e\projects.spec.ts:119:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-10. 并发：快速刷新 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:120:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-10-并发：快速刷新-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---查看项目列表-PROJ-LIST-10-并发：快速刷新-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---查看项目列表-PROJ-LIST-10-并发：快速刷新-chromium\error-context.md
+
+  7) [chromium] › e2e\projects.spec.ts:131:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-01. 正常用例：选择ihc仅显示免疫组化 ─────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      132 |     const token = await apiLogin('admin')
+      133 |     const res = await apiFetch(token, 'GET', '/projects?type=ihc')
+    > 134 |     expect(res.status).toBe(200)
+          |                        ^
+      135 |   })
+      136 |   test('PROJ-TYPE-02. 空数据边界：该类型无项目', async ({ page }) => {
+      137 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:134:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-01-正常用例：选择ihc仅显示免疫组化-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-01-正常用例：选择ihc仅显示免疫组化-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按类型筛选-PROJ-TYPE-01-正常用例：选择ihc仅显示免疫组化-chromium\error-context.md
+
+  8) [chromium] › e2e\projects.spec.ts:136:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-02. 空数据边界：该类型无项目 ──────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      137 |     const token = await apiLogin('admin')
+      138 |     const res = await apiFetch(token, 'GET', '/projects?type=nonexistent')
+    > 139 |     expect(res.status).toBe(200)
+          |                        ^
+      140 |   })
+      141 |   test('PROJ-TYPE-03. 正常用例：重置筛选', async ({ page }) => {
+      142 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:139:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-02-空数据边界：该类型无项目-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-02-空数据边界：该类型无项目-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按类型筛选-PROJ-TYPE-02-空数据边界：该类型无项目-chromium\error-context.md
+
+  9) [chromium] › e2e\projects.spec.ts:141:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-03. 正常用例：重置筛选 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:142:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-03-正常用例：重置筛选-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-03-正常用例：重置筛选-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按类型筛选-PROJ-TYPE-03-正常用例：重置筛选-chromium\error-context.md
+
+  10) [chromium] › e2e\projects.spec.ts:146:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-04. UI差异：各角色类型筛选可见 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:148:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-04-UI差异：各角色类型筛选可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-04-UI差异：各角色类型筛选可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按类型筛选-PROJ-TYPE-04-UI差异：各角色类型筛选可见-chromium\error-context.md
+
+  11) [chromium] › e2e\projects.spec.ts:153:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-05. 并发：快速切换类型 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:154:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-05-并发：快速切换类型-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-05-并发：快速切换类型-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按类型筛选-PROJ-TYPE-05-并发：快速切换类型-chromium\error-context.md
+
+  12) [chromium] › e2e\projects.spec.ts:160:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-06. 异常恢复：类型筛选API错误 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:161:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-06-异常恢复：类型筛选API错误-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按类型筛选-PROJ-TYPE-06-异常恢复：类型筛选API错误-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按类型筛选-PROJ-TYPE-06-异常恢复：类型筛选API错误-chromium\error-context.md
+
+  13) [chromium] › e2e\projects.spec.ts:171:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-01. 正常用例：选择active仅显示启用 ─
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      172 |     const token = await apiLogin('admin')
+      173 |     const res = await apiFetch(token, 'GET', '/projects?status=active')
+    > 174 |     expect(res.status).toBe(200)
+          |                        ^
+      175 |   })
+      176 |   test('PROJ-STATUS-02. 空数据边界：无active项目', async ({ page }) => {
+      177 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:174:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-01-正常用例：选择active仅显示启用-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-01-正常用例：选择active仅显示启用-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按状态筛选-PROJ-STATUS-01-正常用例：选择active仅显示启用-chromium\error-context.md
+
+  14) [chromium] › e2e\projects.spec.ts:176:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-02. 空数据边界：无active项目 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      177 |     const token = await apiLogin('admin')
+      178 |     const res = await apiFetch(token, 'GET', '/projects?status=inactive')
+    > 179 |     expect(res.status).toBe(200)
+          |                        ^
+      180 |   })
+      181 |   test('PROJ-STATUS-03. 正常用例：重置筛选', async ({ page }) => {
+      182 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:179:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-02-空数据边界：无active项目-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-02-空数据边界：无active项目-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按状态筛选-PROJ-STATUS-02-空数据边界：无active项目-chromium\error-context.md
+
+  15) [chromium] › e2e\projects.spec.ts:181:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-03. 正常用例：重置筛选 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:182:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-03-正常用例：重置筛选-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-03-正常用例：重置筛选-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按状态筛选-PROJ-STATUS-03-正常用例：重置筛选-chromium\error-context.md
+
+  16) [chromium] › e2e\projects.spec.ts:186:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-04. UI差异：各角色状态筛选可见 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:188:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-04-UI差异：各角色状态筛选可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-04-UI差异：各角色状态筛选可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按状态筛选-PROJ-STATUS-04-UI差异：各角色状态筛选可见-chromium\error-context.md
+
+  17) [chromium] › e2e\projects.spec.ts:193:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-05. 并发：快速切换状态 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:194:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-05-并发：快速切换状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-05-并发：快速切换状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按状态筛选-PROJ-STATUS-05-并发：快速切换状态-chromium\error-context.md
+
+  18) [chromium] › e2e\projects.spec.ts:200:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-06. 异常恢复：状态筛选API错误 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:201:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-06-异常恢复：状态筛选API错误-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---按状态筛选-PROJ-STATUS-06-异常恢复：状态筛选API错误-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---按状态筛选-PROJ-STATUS-06-异常恢复：状态筛选API错误-chromium\error-context.md
+
+  19) [chromium] › e2e\projects.spec.ts:211:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-01. 正常用例：搜索HER2 ─────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      212 |     const token = await apiLogin('admin')
+      213 |     const res = await apiFetch(token, 'GET', '/projects?keyword=HER2')
+    > 214 |     expect(res.status).toBe(200)
+          |                        ^
+      215 |   })
+      216 |   test('PROJ-SEARCH-02. 空数据边界：无结果', async ({ page }) => {
+      217 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:214:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-01-正常用例：搜索HER2-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-01-正常用例：搜索HER2-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---搜索项目-PROJ-SEARCH-01-正常用例：搜索HER2-chromium\error-context.md
+
+  20) [chromium] › e2e\projects.spec.ts:216:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-02. 空数据边界：无结果 ───────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      217 |     const token = await apiLogin('admin')
+      218 |     const res = await apiFetch(token, 'GET', '/projects?keyword=XYZ999')
+    > 219 |     expect(res.status).toBe(200)
+          |                        ^
+      220 |     expect(res.data?.data?.list?.length || 0).toBe(0)
+      221 |   })
+      222 |   test('PROJ-SEARCH-03. 并发：快速连续输入', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:219:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-02-空数据边界：无结果-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-02-空数据边界：无结果-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---搜索项目-PROJ-SEARCH-02-空数据边界：无结果-chromium\error-context.md
+
+  21) [chromium] › e2e\projects.spec.ts:222:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-03. 并发：快速连续输入 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:223:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-03-并发：快速连续输入-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-03-并发：快速连续输入-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---搜索项目-PROJ-SEARCH-03-并发：快速连续输入-chromium\error-context.md
+
+  22) [chromium] › e2e\projects.spec.ts:233:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-04. 异常恢复：搜索网络断 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:234:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-04-异常恢复：搜索网络断-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-04-异常恢复：搜索网络断-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---搜索项目-PROJ-SEARCH-04-异常恢复：搜索网络断-chromium\error-context.md
+
+  23) [chromium] › e2e\projects.spec.ts:238:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-05. 边界：超长字符串 ────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      239 |     const token = await apiLogin('admin')
+      240 |     const res = await apiFetch(token, 'GET', '/projects?keyword=' + 'X'.repeat(300))
+    > 241 |     expect(res.status).toBe(200)
+          |                        ^
+      242 |   })
+      243 |   test('PROJ-SEARCH-06. UI差异：各角色搜索可见', async ({ page }) => {
+      244 |     for (const role of PROJ_READ_ROLES) {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:241:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-05-边界：超长字符串-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-05-边界：超长字符串-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---搜索项目-PROJ-SEARCH-05-边界：超长字符串-chromium\error-context.md
+
+  24) [chromium] › e2e\projects.spec.ts:243:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-06. UI差异：各角色搜索可见 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:245:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-06-UI差异：各角色搜索可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---搜索项目-PROJ-SEARCH-06-UI差异：各角色搜索可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---搜索项目-PROJ-SEARCH-06-UI差异：各角色搜索可见-chromium\error-context.md
+
+  25) [chromium] › e2e\projects.spec.ts:256:3 › 检测项目 -> 新建项目 › PROJ-CREATE-01. 正常用例：admin新建项目成功 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      261 |       bomId: bid || undefined, status: 'active', remark: 'E2E新增',
+      262 |     })
+    > 263 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      264 |   })
+      265 |   test('PROJ-CREATE-02. 空数据边界：cycle留空', async () => {
+      266 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:263:24
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-01-正常用例：admin新建项目成功-chromium\error-context.md
+
+  26) [chromium] › e2e\projects.spec.ts:265:3 › 检测项目 -> 新建项目 › PROJ-CREATE-02. 空数据边界：cycle留空 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      268 |       code: `TEST-NOCYCLE-${Date.now()}`, name: '无周期', type: 'ihc',
+      269 |     })
+    > 270 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      271 |   })
+      272 |   test('PROJ-CREATE-03. 表单校验：未传code返回400', async () => {
+      273 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:270:29
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-02-空数据边界：cycle留空-chromium\error-context.md
+
+  27) [chromium] › e2e\projects.spec.ts:272:3 › 检测项目 -> 新建项目 › PROJ-CREATE-03. 表单校验：未传code返回400 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      273 |     const token = await apiLogin('admin')
+      274 |     const res = await apiFetch(token, 'POST', '/projects', { name: '无编码', type: 'ihc' })
+    > 275 |     expect(res.status).toBe(400)
+          |                        ^
+      276 |   })
+      277 |   test('PROJ-CREATE-04. 表单校验：未传name返回400', async () => {
+      278 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:275:24
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-03-表单校验：未传code返回400-chromium\error-context.md
+
+  28) [chromium] › e2e\projects.spec.ts:277:3 › 检测项目 -> 新建项目 › PROJ-CREATE-04. 表单校验：未传name返回400 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      278 |     const token = await apiLogin('admin')
+      279 |     const res = await apiFetch(token, 'POST', '/projects', { code: 'NONAME', type: 'ihc' })
+    > 280 |     expect(res.status).toBe(400)
+          |                        ^
+      281 |   })
+      282 |   test('PROJ-CREATE-05. 表单校验：未传type返回400', async () => {
+      283 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:280:24
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-04-表单校验：未传name返回400-chromium\error-context.md
+
+  29) [chromium] › e2e\projects.spec.ts:282:3 › 检测项目 -> 新建项目 › PROJ-CREATE-05. 表单校验：未传type返回400 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      283 |     const token = await apiLogin('admin')
+      284 |     const res = await apiFetch(token, 'POST', '/projects', { code: 'NOTYPE', name: '无类型' })
+    > 285 |     expect(res.status).toBe(400)
+          |                        ^
+      286 |   })
+      287 |   for (const role of ['technician', 'pathologist', 'warehouse_manager', 'procurement', 'finance'] as RoleKey[]) {
+      288 |     test(`PROJ-CREATE-06-${role}. 权限：${role}新建返回403`, async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:285:24
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-05-表单校验：未传type返回400-chromium\error-context.md
+
+  30) [chromium] › e2e\projects.spec.ts:296:3 › 检测项目 -> 新建项目 › PROJ-CREATE-07. 业务冲突：code已存在返回409 ───
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m409[39m
+    Received: [31m401[39m
+
+      299 |     await apiFetch(token, 'POST', '/projects', { code, name: '重复1', type: 'ihc' })
+      300 |     const res = await apiFetch(token, 'POST', '/projects', { code, name: '重复2', type: 'ihc' })
+    > 301 |     expect(res.status).toBe(409)
+          |                        ^
+      302 |   })
+      303 |   test('PROJ-CREATE-08. 并发：快速双击', async () => {
+      304 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:301:24
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-07-业务冲突：code已存在返回409-chromium\error-context.md
+
+  31) [chromium] › e2e\projects.spec.ts:303:3 › 检测项目 -> 新建项目 › PROJ-CREATE-08. 并发：快速双击 ─────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32mtrue[39m
+    Received: [31mfalse[39m
+
+      305 |     const body = { code: `TEST-CON-${Date.now()}`, name: '并发', type: 'ihc' }
+      306 |     const [r1, r2] = await Promise.all([apiFetch(token, 'POST', '/projects', body), apiFetch(token, 'POST', '/projects', body)])
+    > 307 |     expect(r1.status === 201 || r2.status === 201).toBe(true)
+          |                                                    ^
+      308 |   })
+      309 |   test('PROJ-CREATE-09. 异常恢复：网络中断后重试', async () => {
+      310 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:307:52
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-08-并发：快速双击-chromium\error-context.md
+
+  32) [chromium] › e2e\projects.spec.ts:309:3 › 检测项目 -> 新建项目 › PROJ-CREATE-09. 异常恢复：网络中断后重试 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      312 |       code: `TEST-RET-${Date.now()}`, name: '恢复', type: 'ihc', remark: 'E2E',
+      313 |     })
+    > 314 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      315 |   })
+      316 |   test('PROJ-CREATE-10. UI差异：admin显示新增按钮', async ({ page }) => {
+      317 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:314:24
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-09-异常恢复：网络中断后重试-chromium\error-context.md
+
+  33) [chromium] › e2e\projects.spec.ts:316:3 › 检测项目 -> 新建项目 › PROJ-CREATE-10. UI差异：admin显示新增按钮 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:317:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---新建项目-PROJ-CREATE-10-UI差异：admin显示新增按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---新建项目-PROJ-CREATE-10-UI差异：admin显示新增按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-10-UI差异：admin显示新增按钮-chromium\error-context.md
+
+  34) [chromium] › e2e\projects.spec.ts:338:3 › 检测项目 -> 新建项目 › PROJ-CREATE-14. 边界：超长code ───────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      341 |       code: 'TEST-' + 'X'.repeat(200), name: '超长', type: 'ihc',
+      342 |     })
+    > 343 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      344 |   })
+      345 |   test('PROJ-CREATE-15. 边界：非法type值', async () => {
+      346 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:343:29
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-14-边界：超长code-chromium\error-context.md
+
+  35) [chromium] › e2e\projects.spec.ts:345:3 › 检测项目 -> 新建项目 › PROJ-CREATE-15. 边界：非法type值 ──────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      348 |       code: `TEST-ILLEGAL-${Date.now()}`, name: '非法类型', type: 'xxx',
+      349 |     })
+    > 350 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      351 |   })
+      352 |   test('PROJ-CREATE-16. 正常用例：关联BOM创建项目', async () => {
+      353 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:350:29
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-15-边界：非法type值-chromium\error-context.md
+
+  36) [chromium] › e2e\projects.spec.ts:352:3 › 检测项目 -> 新建项目 › PROJ-CREATE-16. 正常用例：关联BOM创建项目 ──────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      356 |       code: `TEST-BOM-${Date.now()}`, name: 'BOM项目', type: 'ihc', bomId: bid || undefined,
+      357 |     })
+    > 358 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      359 |   })
+      360 | })
+      361 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:358:24
+
+    Error Context: test-results\projects-检测项目---新建项目-PROJ-CREATE-16-正常用例：关联BOM创建项目-chromium\error-context.md
+
+  37) [chromium] › e2e\projects.spec.ts:414:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-07. UI差异：admin显示编辑按钮 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:415:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---编辑项目-PROJ-EDIT-07-UI差异：admin显示编辑按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---编辑项目-PROJ-EDIT-07-UI差异：admin显示编辑按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---编辑项目-PROJ-EDIT-07-UI差异：admin显示编辑按钮-chromium\error-context.md
+
+  38) [chromium] › e2e\projects.spec.ts:430:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-10. 表单校验：编辑不存在返回404 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      431 |     const token = await apiLogin('admin')
+      432 |     const res = await apiFetch(token, 'PUT', '/projects/non-existent', { name: '不存在' })
+    > 433 |     expect(res.status).toBe(404)
+          |                        ^
+      434 |   })
+      435 |   test('PROJ-EDIT-11. 业务冲突：编辑已停用项目', async () => {
+      436 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:433:24
+
+    Error Context: test-results\projects-检测项目---编辑项目-PROJ-EDIT-10-表单校验：编辑不存在返回404-chromium\error-context.md
+
+  39) [chromium] › e2e\projects.spec.ts:455:3 › 检测项目 -> 删除项目 › PROJ-DEL-01. 正常用例：admin删除无出库记录项目 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m201[39m
+    Received: [31m401[39m
+
+      458 |       code: `TEST-DEL-${Date.now()}`, name: '删除测试', type: 'ihc',
+      459 |     })
+    > 460 |     expect(create.status).toBe(201)
+          |                           ^
+      461 |     const id = create.data?.data?.id
+      462 |     const res = await apiFetch(token, 'DELETE', `/projects/${id}`)
+      463 |     expect([200, 404]).toContain(res.status)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:460:27
+
+    Error Context: test-results\projects-检测项目---删除项目-PROJ-DEL-01-正常用例：admin删除无出库记录项目-chromium\error-context.md
+
+  40) [chromium] › e2e\projects.spec.ts:506:3 › 检测项目 -> 删除项目 › PROJ-DEL-06. UI差异：admin显示删除按钮 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:507:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---删除项目-PROJ-DEL-06-UI差异：admin显示删除按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---删除项目-PROJ-DEL-06-UI差异：admin显示删除按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---删除项目-PROJ-DEL-06-UI差异：admin显示删除按钮-chromium\error-context.md
+
+  41) [chromium] › e2e\projects.spec.ts:516:3 › 检测项目 -> 删除项目 › PROJ-DEL-08. 表单校验：删除不存在返回404 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      517 |     const token = await apiLogin('admin')
+      518 |     const res = await apiFetch(token, 'DELETE', '/projects/non-existent')
+    > 519 |     expect(res.status).toBe(404)
+          |                        ^
+      520 |   })
+      521 |   test('PROJ-DEL-09. 业务冲突：再次删除返回404', async () => {
+      522 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:519:24
+
+    Error Context: test-results\projects-检测项目---删除项目-PROJ-DEL-08-表单校验：删除不存在返回404-chromium\error-context.md
+
+  42) [chromium] › e2e\projects.spec.ts:546:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-01. 正常用例：点击项目跳转详情 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:547:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---跳转项目详情-PROJ-DETAIL-01-正常用例：点击项目跳转详情-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---跳转项目详情-PROJ-DETAIL-01-正常用例：点击项目跳转详情-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---跳转项目详情-PROJ-DETAIL-01-正常用例：点击项目跳转详情-chromium\error-context.md
+
+  43) [chromium] › e2e\projects.spec.ts:576:3 › 检测项目 -> 分页切换 › PROJ-PAGE-01. 正常用例：切换到第2页 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:577:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---分页切换-PROJ-PAGE-01-正常用例：切换到第2页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---分页切换-PROJ-PAGE-01-正常用例：切换到第2页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---分页切换-PROJ-PAGE-01-正常用例：切换到第2页-chromium\error-context.md
+
+  44) [chromium] › e2e\projects.spec.ts:581:3 › 检测项目 -> 分页切换 › PROJ-PAGE-02. 边界：仅1页分页器隐藏 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:582:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---分页切换-PROJ-PAGE-02-边界：仅1页分页器隐藏-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---分页切换-PROJ-PAGE-02-边界：仅1页分页器隐藏-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---分页切换-PROJ-PAGE-02-边界：仅1页分页器隐藏-chromium\error-context.md
+
+  45) [chromium] › e2e\projects.spec.ts:586:3 › 检测项目 -> 分页切换 › PROJ-PAGE-03. 表单校验：page=0修正为1 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      587 |     const token = await apiLogin('admin')
+      588 |     const res = await apiFetch(token, 'GET', '/projects?page=0')
+    > 589 |     expect(res.status).toBe(200)
+          |                        ^
+      590 |     expect(res.data?.data?.pagination?.page).toBeGreaterThanOrEqual(1)
+      591 |   })
+      592 |   test('PROJ-PAGE-04. 边界：page=999', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:589:24
+
+    Error Context: test-results\projects-检测项目---分页切换-PROJ-PAGE-03-表单校验：page-0修正为1-chromium\error-context.md
+
+  46) [chromium] › e2e\projects.spec.ts:592:3 › 检测项目 -> 分页切换 › PROJ-PAGE-04. 边界：page=999 ───────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      593 |     const token = await apiLogin('admin')
+      594 |     const res = await apiFetch(token, 'GET', '/projects?page=999')
+    > 595 |     expect(res.status).toBe(200)
+          |                        ^
+      596 |   })
+      597 |   test('PROJ-PAGE-05. 边界：pageSize=1', async () => {
+      598 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:595:24
+
+    Error Context: test-results\projects-检测项目---分页切换-PROJ-PAGE-04-边界：page-999-chromium\error-context.md
+
+  47) [chromium] › e2e\projects.spec.ts:597:3 › 检测项目 -> 分页切换 › PROJ-PAGE-05. 边界：pageSize=1 ─────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      598 |     const token = await apiLogin('admin')
+      599 |     const res = await apiFetch(token, 'GET', '/projects?page=1&pageSize=1')
+    > 600 |     expect(res.status).toBe(200)
+          |                        ^
+      601 |   })
+      602 |   test('PROJ-PAGE-06. 边界：pageSize=100', async () => {
+      603 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:600:24
+
+    Error Context: test-results\projects-检测项目---分页切换-PROJ-PAGE-05-边界：pageSize-1-chromium\error-context.md
+
+  48) [chromium] › e2e\projects.spec.ts:602:3 › 检测项目 -> 分页切换 › PROJ-PAGE-06. 边界：pageSize=100 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      603 |     const token = await apiLogin('admin')
+      604 |     const res = await apiFetch(token, 'GET', '/projects?page=1&pageSize=100')
+    > 605 |     expect(res.status).toBe(200)
+          |                        ^
+      606 |   })
+      607 |   test('PROJ-PAGE-07. 并发：快速切换分页', async ({ page }) => {
+      608 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:605:24
+
+    Error Context: test-results\projects-检测项目---分页切换-PROJ-PAGE-06-边界：pageSize-100-chromium\error-context.md
+
+  49) [chromium] › e2e\projects.spec.ts:607:3 › 检测项目 -> 分页切换 › PROJ-PAGE-07. 并发：快速切换分页 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:608:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---分页切换-PROJ-PAGE-07-并发：快速切换分页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---分页切换-PROJ-PAGE-07-并发：快速切换分页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---分页切换-PROJ-PAGE-07-并发：快速切换分页-chromium\error-context.md
+
+  50) [chromium] › e2e\projects.spec.ts:614:3 › 检测项目 -> 分页切换 › PROJ-PAGE-08. UI差异：各角色分页一致 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:616:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---分页切换-PROJ-PAGE-08-UI差异：各角色分页一致-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---分页切换-PROJ-PAGE-08-UI差异：各角色分页一致-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---分页切换-PROJ-PAGE-08-UI差异：各角色分页一致-chromium\error-context.md
+
+  51) [chromium] › e2e\projects.spec.ts:665:3 › 检测项目 -> 业务流程树 › BF-PROJ-01. 主路径：登录→进入项目→新建→填写→提交→列表刷新 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      668 |       code: `TEST-BF-${Date.now()}`, name: '业务流程', type: 'ihc', remark: 'E2E',
+      669 |     })
+    > 670 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      671 |   })
+      672 |   test('BF-PROJ-02. 分支：关闭弹窗不保存', async ({ page }) => {
+      673 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:670:24
+
+    Error Context: test-results\projects-检测项目---业务流程树-BF-PROJ-01-主路径：登录→进入项目→新建→填写→提交→列表刷新-chromium\error-context.md
+
+  52) [chromium] › e2e\projects.spec.ts:672:3 › 检测项目 -> 业务流程树 › BF-PROJ-02. 分支：关闭弹窗不保存 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:673:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---业务流程树-BF-PROJ-02-分支：关闭弹窗不保存-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---业务流程树-BF-PROJ-02-分支：关闭弹窗不保存-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---业务流程树-BF-PROJ-02-分支：关闭弹窗不保存-chromium\error-context.md
+
+  53) [chromium] › e2e\projects.spec.ts:677:3 › 检测项目 -> 业务流程树 › BF-PROJ-03. 分支：code已存在 ─────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m409[39m
+    Received: [31m401[39m
+
+      680 |     await apiFetch(token, 'POST', '/projects', { code, name: '重复1', type: 'ihc' })
+      681 |     const res = await apiFetch(token, 'POST', '/projects', { code, name: '重复2', type: 'ihc' })
+    > 682 |     expect(res.status).toBe(409)
+          |                        ^
+      683 |   })
+      684 |   test('BF-PROJ-04. 分支：必填漏填', async () => {
+      685 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:682:24
+
+    Error Context: test-results\projects-检测项目---业务流程树-BF-PROJ-03-分支：code已存在-chromium\error-context.md
+
+  54) [chromium] › e2e\projects.spec.ts:684:3 › 检测项目 -> 业务流程树 › BF-PROJ-04. 分支：必填漏填 ────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      685 |     const token = await apiLogin('admin')
+      686 |     const res = await apiFetch(token, 'POST', '/projects', { name: '漏填' })
+    > 687 |     expect(res.status).toBe(400)
+          |                        ^
+      688 |   })
+      689 |   test('BF-PROJ-05. 分支：刷新后新项目仍在', async ({ page }) => {
+      690 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:687:24
+
+    Error Context: test-results\projects-检测项目---业务流程树-BF-PROJ-04-分支：必填漏填-chromium\error-context.md
+
+  55) [chromium] › e2e\projects.spec.ts:689:3 › 检测项目 -> 业务流程树 › BF-PROJ-05. 分支：刷新后新项目仍在 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:690:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---业务流程树-BF-PROJ-05-分支：刷新后新项目仍在-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---业务流程树-BF-PROJ-05-分支：刷新后新项目仍在-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---业务流程树-BF-PROJ-05-分支：刷新后新项目仍在-chromium\error-context.md
+
+  56) [chromium] › e2e\projects.spec.ts:707:3 › 检测项目 -> 业务流程树 › BF-PROJ-08. 分支：筛选后分页 ───────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:708:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---业务流程树-BF-PROJ-08-分支：筛选后分页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---业务流程树-BF-PROJ-08-分支：筛选后分页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---业务流程树-BF-PROJ-08-分支：筛选后分页-chromium\error-context.md
+
+  57) [chromium] › e2e\projects.spec.ts:718:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-01. 项目编码唯一性 ────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m201[39m
+    Received: [31m401[39m
+
+      721 |     const r1 = await apiFetch(token, 'POST', '/projects', { code, name: '唯一1', type: 'ihc' })
+      722 |     const r2 = await apiFetch(token, 'POST', '/projects', { code, name: '唯一2', type: 'ihc' })
+    > 723 |     expect(r1.status).toBe(201)
+          |                       ^
+      724 |     expect(r2.status).toBe(409)
+      725 |   })
+      726 |   test('BLIND-PROJ-02. 项目类型下拉选项', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:723:23
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-01-项目编码唯一性-chromium\error-context.md
+
+  58) [chromium] › e2e\projects.spec.ts:726:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-02. 项目类型下拉选项 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:727:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-02-项目类型下拉选项-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-02-项目类型下拉选项-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-02-项目类型下拉选项-chromium\error-context.md
+
+  59) [chromium] › e2e\projects.spec.ts:731:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-03. 项目BOM选择器 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:732:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-03-项目BOM选择器-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-03-项目BOM选择器-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-03-项目BOM选择器-chromium\error-context.md
+
+  60) [chromium] › e2e\projects.spec.ts:743:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-05. 项目导出功能 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:744:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-05-项目导出功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-05-项目导出功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-05-项目导出功能-chromium\error-context.md
+
+  61) [chromium] › e2e\projects.spec.ts:748:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-06. 项目打印功能 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:749:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-06-项目打印功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-06-项目打印功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-06-项目打印功能-chromium\error-context.md
+
+  62) [chromium] › e2e\projects.spec.ts:753:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-07. 项目页面响应式 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:754:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-07-项目页面响应式-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-07-项目页面响应式-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-07-项目页面响应式-chromium\error-context.md
+
+  63) [chromium] › e2e\projects.spec.ts:759:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-08. 项目页面加载性能 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:760:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-08-项目页面加载性能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-08-项目页面加载性能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-08-项目页面加载性能-chromium\error-context.md
+
+  64) [chromium] › e2e\projects.spec.ts:766:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-09. 项目字段XSS防护 ──────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      769 |       code: `TEST-XSS-${Date.now()}`, name: '<script>alert(1)</script>', type: 'ihc',
+      770 |     })
+    > 771 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      772 |   })
+      773 |   test('BLIND-PROJ-10. 项目字段SQL注入防护', async () => {
+      774 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:771:24
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-09-项目字段XSS防护-chromium\error-context.md
+
+  65) [chromium] › e2e\projects.spec.ts:773:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-10. 项目字段SQL注入防护 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      776 |       code: `TEST-SQL-${Date.now()}`, name: "' OR '1'='1", type: 'ihc',
+      777 |     })
+    > 778 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      779 |   })
+      780 |   test('BLIND-PROJ-11. 项目API响应格式', async () => {
+      781 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:778:24
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-10-项目字段SQL注入防护-chromium\error-context.md
+
+  66) [chromium] › e2e\projects.spec.ts:780:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-11. 项目API响应格式 ──────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      781 |     const token = await apiLogin('admin')
+      782 |     const res = await apiFetch(token, 'GET', '/projects?page=1&pageSize=1')
+    > 783 |     expect(res.status).toBe(200)
+          |                        ^
+      784 |     expect(res.data).toHaveProperty('data')
+      785 |     expect(res.data?.data).toHaveProperty('list')
+      786 |   })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:783:24
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-11-项目API响应格式-chromium\error-context.md
+
+  67) [chromium] › e2e\projects.spec.ts:787:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-12. 多角色同时操作 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\projects.spec.ts:792:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-12-多角色同时操作-chromium\test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-12-多角色同时操作-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\projects-检测项目---盲点分析补充-BLIND-PROJ-12-多角色同时操作-chromium\error-context.md
+
+  67 failed
+    [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-admin. 正常用例：admin可查看项目列表 
+    [chromium] › e2e\projects.spec.ts:82:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-02. 空数据边界：无项目数据 ────────────
+    [chromium] › e2e\projects.spec.ts:99:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-06. 异常恢复：API 500 ───────────
+    [chromium] › e2e\projects.spec.ts:104:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-07. UI差异：admin显示新增编辑删除 ────
+    [chromium] › e2e\projects.spec.ts:114:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-09. 正常用例：显示编码名称类型周期BOM样本数 ─
+    [chromium] › e2e\projects.spec.ts:119:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-10. 并发：快速刷新 ───────────────
+    [chromium] › e2e\projects.spec.ts:131:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-01. 正常用例：选择ihc仅显示免疫组化 ──────
+    [chromium] › e2e\projects.spec.ts:136:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-02. 空数据边界：该类型无项目 ───────────
+    [chromium] › e2e\projects.spec.ts:141:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-03. 正常用例：重置筛选 ──────────────
+    [chromium] › e2e\projects.spec.ts:146:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-04. UI差异：各角色类型筛选可见 ─────────
+    [chromium] › e2e\projects.spec.ts:153:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-05. 并发：快速切换类型 ──────────────
+    [chromium] › e2e\projects.spec.ts:160:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-06. 异常恢复：类型筛选API错误 ─────────
+    [chromium] › e2e\projects.spec.ts:171:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-01. 正常用例：选择active仅显示启用 ───
+    [chromium] › e2e\projects.spec.ts:176:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-02. 空数据边界：无active项目 ──────
+    [chromium] › e2e\projects.spec.ts:181:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-03. 正常用例：重置筛选 ────────────
+    [chromium] › e2e\projects.spec.ts:186:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-04. UI差异：各角色状态筛选可见 ───────
+    [chromium] › e2e\projects.spec.ts:193:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-05. 并发：快速切换状态 ────────────
+    [chromium] › e2e\projects.spec.ts:200:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-06. 异常恢复：状态筛选API错误 ───────
+    [chromium] › e2e\projects.spec.ts:211:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-01. 正常用例：搜索HER2 ───────────
+    [chromium] › e2e\projects.spec.ts:216:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-02. 空数据边界：无结果 ─────────────
+    [chromium] › e2e\projects.spec.ts:222:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-03. 并发：快速连续输入 ─────────────
+    [chromium] › e2e\projects.spec.ts:233:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-04. 异常恢复：搜索网络断 ────────────
+    [chromium] › e2e\projects.spec.ts:238:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-05. 边界：超长字符串 ──────────────
+    [chromium] › e2e\projects.spec.ts:243:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-06. UI差异：各角色搜索可见 ──────────
+    [chromium] › e2e\projects.spec.ts:256:3 › 检测项目 -> 新建项目 › PROJ-CREATE-01. 正常用例：admin新建项目成功 ──────
+    [chromium] › e2e\projects.spec.ts:265:3 › 检测项目 -> 新建项目 › PROJ-CREATE-02. 空数据边界：cycle留空 ─────────
+    [chromium] › e2e\projects.spec.ts:272:3 › 检测项目 -> 新建项目 › PROJ-CREATE-03. 表单校验：未传code返回400 ──────
+    [chromium] › e2e\projects.spec.ts:277:3 › 检测项目 -> 新建项目 › PROJ-CREATE-04. 表单校验：未传name返回400 ──────
+    [chromium] › e2e\projects.spec.ts:282:3 › 检测项目 -> 新建项目 › PROJ-CREATE-05. 表单校验：未传type返回400 ──────
+    [chromium] › e2e\projects.spec.ts:296:3 › 检测项目 -> 新建项目 › PROJ-CREATE-07. 业务冲突：code已存在返回409 ─────
+    [chromium] › e2e\projects.spec.ts:303:3 › 检测项目 -> 新建项目 › PROJ-CREATE-08. 并发：快速双击 ───────────────
+    [chromium] › e2e\projects.spec.ts:309:3 › 检测项目 -> 新建项目 › PROJ-CREATE-09. 异常恢复：网络中断后重试 ──────────
+    [chromium] › e2e\projects.spec.ts:316:3 › 检测项目 -> 新建项目 › PROJ-CREATE-10. UI差异：admin显示新增按钮 ──────
+    [chromium] › e2e\projects.spec.ts:338:3 › 检测项目 -> 新建项目 › PROJ-CREATE-14. 边界：超长code ─────────────
+    [chromium] › e2e\projects.spec.ts:345:3 › 检测项目 -> 新建项目 › PROJ-CREATE-15. 边界：非法type值 ────────────
+    [chromium] › e2e\projects.spec.ts:352:3 › 检测项目 -> 新建项目 › PROJ-CREATE-16. 正常用例：关联BOM创建项目 ────────
+    [chromium] › e2e\projects.spec.ts:414:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-07. UI差异：admin显示编辑按钮 ────────
+    [chromium] › e2e\projects.spec.ts:430:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-10. 表单校验：编辑不存在返回404 ─────────
+    [chromium] › e2e\projects.spec.ts:455:3 › 检测项目 -> 删除项目 › PROJ-DEL-01. 正常用例：admin删除无出库记录项目 ──────
+    [chromium] › e2e\projects.spec.ts:506:3 › 检测项目 -> 删除项目 › PROJ-DEL-06. UI差异：admin显示删除按钮 ─────────
+    [chromium] › e2e\projects.spec.ts:516:3 › 检测项目 -> 删除项目 › PROJ-DEL-08. 表单校验：删除不存在返回404 ──────────
+    [chromium] › e2e\projects.spec.ts:546:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-01. 正常用例：点击项目跳转详情 ───────
+    [chromium] › e2e\projects.spec.ts:576:3 › 检测项目 -> 分页切换 › PROJ-PAGE-01. 正常用例：切换到第2页 ─────────────
+    [chromium] › e2e\projects.spec.ts:581:3 › 检测项目 -> 分页切换 › PROJ-PAGE-02. 边界：仅1页分页器隐藏 ─────────────
+    [chromium] › e2e\projects.spec.ts:586:3 › 检测项目 -> 分页切换 › PROJ-PAGE-03. 表单校验：page=0修正为1 ─────────
+    [chromium] › e2e\projects.spec.ts:592:3 › 检测项目 -> 分页切换 › PROJ-PAGE-04. 边界：page=999 ─────────────
+    [chromium] › e2e\projects.spec.ts:597:3 › 检测项目 -> 分页切换 › PROJ-PAGE-05. 边界：pageSize=1 ───────────
+    [chromium] › e2e\projects.spec.ts:602:3 › 检测项目 -> 分页切换 › PROJ-PAGE-06. 边界：pageSize=100 ─────────
+    [chromium] › e2e\projects.spec.ts:607:3 › 检测项目 -> 分页切换 › PROJ-PAGE-07. 并发：快速切换分页 ───────────────
+    [chromium] › e2e\projects.spec.ts:614:3 › 检测项目 -> 分页切换 › PROJ-PAGE-08. UI差异：各角色分页一致 ────────────
+    [chromium] › e2e\projects.spec.ts:665:3 › 检测项目 -> 业务流程树 › BF-PROJ-01. 主路径：登录→进入项目→新建→填写→提交→列表刷新 
+    [chromium] › e2e\projects.spec.ts:672:3 › 检测项目 -> 业务流程树 › BF-PROJ-02. 分支：关闭弹窗不保存 ───────────────
+    [chromium] › e2e\projects.spec.ts:677:3 › 检测项目 -> 业务流程树 › BF-PROJ-03. 分支：code已存在 ───────────────
+    [chromium] › e2e\projects.spec.ts:684:3 › 检测项目 -> 业务流程树 › BF-PROJ-04. 分支：必填漏填 ──────────────────
+    [chromium] › e2e\projects.spec.ts:689:3 › 检测项目 -> 业务流程树 › BF-PROJ-05. 分支：刷新后新项目仍在 ──────────────
+    [chromium] › e2e\projects.spec.ts:707:3 › 检测项目 -> 业务流程树 › BF-PROJ-08. 分支：筛选后分页 ─────────────────
+    [chromium] › e2e\projects.spec.ts:718:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-01. 项目编码唯一性 ──────────────
+    [chromium] › e2e\projects.spec.ts:726:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-02. 项目类型下拉选项 ─────────────
+    [chromium] › e2e\projects.spec.ts:731:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-03. 项目BOM选择器 ─────────────
+    [chromium] › e2e\projects.spec.ts:743:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-05. 项目导出功能 ───────────────
+    [chromium] › e2e\projects.spec.ts:748:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-06. 项目打印功能 ───────────────
+    [chromium] › e2e\projects.spec.ts:753:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-07. 项目页面响应式 ──────────────
+    [chromium] › e2e\projects.spec.ts:759:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-08. 项目页面加载性能 ─────────────
+    [chromium] › e2e\projects.spec.ts:766:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-09. 项目字段XSS防护 ────────────
+    [chromium] › e2e\projects.spec.ts:773:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-10. 项目字段SQL注入防护 ──────────
+    [chromium] › e2e\projects.spec.ts:780:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-11. 项目API响应格式 ────────────
+    [chromium] › e2e\projects.spec.ts:787:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-12. 多角色同时操作 ──────────────
+  24 skipped
+  29 passed (8.9m)

@@ -24,7 +24,9 @@ function generateInboundNo(): string {
 
 router.get('/', (req, res) => {
   try {
-    const { page = 1, pageSize = 20, status, startDate, endDate } = req.query
+    let { page = 1, pageSize = 20, status, startDate, endDate } = req.query
+    page = Math.max(1, Number(page) || 1)
+    pageSize = Math.max(1, Math.min(100, Number(pageSize) || 20))
     const db = getDatabase()
     let where = 'r.is_deleted = 0'
     const params: any[] = []
@@ -33,7 +35,7 @@ router.get('/', (req, res) => {
     if (endDate) { where += ' AND r.created_at <= ?'; params.push(`${endDate}T23:59:59`) }
 
     const count = (db.prepare(`SELECT COUNT(*) as total FROM inbound_records r WHERE ${where}`).get(...params) as any)?.total || 0
-    const offset = (Number(page) - 1) * Number(pageSize)
+    const offset = (page - 1) * pageSize
 
     const sql = `
       SELECT r.*, m.name as material_name, s.name as supplier_name, l.name as location_name
@@ -45,7 +47,7 @@ router.get('/', (req, res) => {
       ORDER BY r.created_at DESC
       LIMIT ? OFFSET ?
     `
-    const list = db.prepare(sql).all(...params, Number(pageSize), offset) as any[]
+    const list = db.prepare(sql).all(...params, pageSize, offset) as any[]
 
     successList(res, list.map((r: any) => ({
       id: r.id, inboundNo: r.inbound_no, type: r.type, materialId: r.material_id,
@@ -56,7 +58,7 @@ router.get('/', (req, res) => {
       status: r.status, remark: r.remark, createdAt: r.created_at,
       purchaseOrderId: r.purchase_order_id,
       purchaseOrderNo: r.purchase_order_no,
-    })), Number(page), Number(pageSize), count)
+    })), page, pageSize, count)
   } catch (err: any) { error(res, err.message) }
 })
 

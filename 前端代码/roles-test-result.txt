@@ -1,0 +1,1652 @@
+
+Running 88 tests using 1 worker
+
+  x   1 [chromium] › e2e\roles.spec.ts:64:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-01. 正常用例：admin可查看角色列表 (11.3s)
+  x   2 [chromium] › e2e\roles.spec.ts:68:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-02. 正常用例：角色列表显示统计卡片 (11.2s)
+  x   3 [chromium] › e2e\roles.spec.ts:72:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-03. 正常用例：角色以卡片形式展示 (11.3s)
+  x   4 [chromium] › e2e\roles.spec.ts:77:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-04. 空数据边界：无角色数据卡片显示空状态 (11.3s)
+  x   5 [chromium] › e2e\roles.spec.ts:84:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-05. 异常恢复：API 500显示错误提示 (11.8s)
+  ok  6 [chromium] › e2e\roles.spec.ts:89:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-06. 权限：technician访问返回403 (2.4s)
+  x   7 [chromium] › e2e\roles.spec.ts:94:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-07. 并发：快速刷新页面多次 (11.4s)
+  x   8 [chromium] › e2e\roles.spec.ts:99:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-08. UI差异：admin显示新建角色按钮 (11.2s)
+  ok  9 [chromium] › e2e\roles.spec.ts:103:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-09. UI差异：非admin不显示新建按钮 (2.4s)
+  x  10 [chromium] › e2e\roles.spec.ts:113:3 › 角色权限 -> Tab切换 › ROLE-TAB-01. 正常用例：默认显示全部角色Tab (11.5s)
+  x  11 [chromium] › e2e\roles.spec.ts:117:3 › 角色权限 -> Tab切换 › ROLE-TAB-02. 正常用例：切换到系统角色Tab (11.2s)
+  x  12 [chromium] › e2e\roles.spec.ts:122:3 › 角色权限 -> Tab切换 › ROLE-TAB-03. 正常用例：切换到自定义角色Tab (11.2s)
+  x  13 [chromium] › e2e\roles.spec.ts:127:3 › 角色权限 -> Tab切换 › ROLE-TAB-04. 并发：快速切换Tab多次 (11.3s)
+  x  14 [chromium] › e2e\roles.spec.ts:140:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-01. 正常用例：按角色名称搜索 (11.3s)
+  x  15 [chromium] › e2e\roles.spec.ts:145:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-02. 空数据边界：搜索无结果 (11.3s)
+  x  16 [chromium] › e2e\roles.spec.ts:150:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-03. 边界：搜索关键词为空恢复全部 (11.2s)
+  x  17 [chromium] › e2e\roles.spec.ts:161:3 › 角色权限 -> 新建角色 › ROLE-CREATE-01. 正常用例：admin新建角色成功 (11.5s)
+  x  18 [chromium] › e2e\roles.spec.ts:170:3 › 角色权限 -> 新建角色 › ROLE-CREATE-02. 正常用例：新建角色时配置权限 (11.3s)
+  x  19 [chromium] › e2e\roles.spec.ts:181:3 › 角色权限 -> 新建角色 › ROLE-CREATE-03. 正常用例：新建角色时选择数据权限范围 (11.5s)
+  x  20 [chromium] › e2e\roles.spec.ts:192:3 › 角色权限 -> 新建角色 › ROLE-CREATE-04. 空数据边界：名称为空提交被阻止 (11.3s)
+  x  21 [chromium] › e2e\roles.spec.ts:198:3 › 角色权限 -> 新建角色 › ROLE-CREATE-05. 表单校验：未传必填字段返回400 (409ms)
+  ok 22 [chromium] › e2e\roles.spec.ts:204:5 › 角色权限 -> 新建角色 › ROLE-CREATE-06-technician. 权限：technician新建角色返回403 (263ms)
+  ok 23 [chromium] › e2e\roles.spec.ts:204:5 › 角色权限 -> 新建角色 › ROLE-CREATE-06-pathologist. 权限：pathologist新建角色返回403 (242ms)
+  ok 24 [chromium] › e2e\roles.spec.ts:204:5 › 角色权限 -> 新建角色 › ROLE-CREATE-06-procurement. 权限：procurement新建角色返回403 (243ms)
+  ok 25 [chromium] › e2e\roles.spec.ts:204:5 › 角色权限 -> 新建角色 › ROLE-CREATE-06-finance. 权限：finance新建角色返回403 (240ms)
+  ok 26 [chromium] › e2e\roles.spec.ts:204:5 › 角色权限 -> 新建角色 › ROLE-CREATE-06-warehouse_manager. 权限：warehouse_manager新建角色返回403 (240ms)
+  x  27 [chromium] › e2e\roles.spec.ts:210:3 › 角色权限 -> 新建角色 › ROLE-CREATE-07. 并发：快速双击新建按钮 (11.4s)
+  x  28 [chromium] › e2e\roles.spec.ts:215:3 › 角色权限 -> 新建角色 › ROLE-CREATE-08. 异常恢复：网络中断后重试新建 (12.5s)
+  x  29 [chromium] › e2e\roles.spec.ts:223:3 › 角色权限 -> 新建角色 › ROLE-CREATE-09. UI差异：admin前端显示新建按钮 (11.4s)
+  x  30 [chromium] › e2e\roles.spec.ts:233:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-01. 正常用例：admin编辑角色权限保存成功 (11.3s)
+  x  31 [chromium] › e2e\roles.spec.ts:244:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-02. 正常用例：admin修改角色名称保存成功 (11.2s)
+  x  32 [chromium] › e2e\roles.spec.ts:256:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-03. 空数据边界：编辑后名称为空被阻止 (11.3s)
+  x  33 [chromium] › e2e\roles.spec.ts:265:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-04. 表单校验：编辑不存在的角色返回404 (400ms)
+  ok 34 [chromium] › e2e\roles.spec.ts:271:5 › 角色权限 -> 编辑角色 › ROLE-EDIT-05-technician. 权限：technician编辑角色返回403 (271ms)
+  ok 35 [chromium] › e2e\roles.spec.ts:271:5 › 角色权限 -> 编辑角色 › ROLE-EDIT-05-pathologist. 权限：pathologist编辑角色返回403 (239ms)
+  ok 36 [chromium] › e2e\roles.spec.ts:271:5 › 角色权限 -> 编辑角色 › ROLE-EDIT-05-procurement. 权限：procurement编辑角色返回403 (245ms)
+  ok 37 [chromium] › e2e\roles.spec.ts:271:5 › 角色权限 -> 编辑角色 › ROLE-EDIT-05-finance. 权限：finance编辑角色返回403 (240ms)
+  ok 38 [chromium] › e2e\roles.spec.ts:271:5 › 角色权限 -> 编辑角色 › ROLE-EDIT-05-warehouse_manager. 权限：warehouse_manager编辑角色返回403 (242ms)
+  ok 39 [chromium] › e2e\roles.spec.ts:277:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-06. 并发：并发编辑同一角色 (378ms)
+  x  40 [chromium] › e2e\roles.spec.ts:286:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-07. 异常恢复：编辑时API 500后重试 (11.1s)
+  x  41 [chromium] › e2e\roles.spec.ts:293:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-08. UI差异：admin显示编辑按钮 (11.5s)
+  x  42 [chromium] › e2e\roles.spec.ts:298:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-09. 正常用例：编辑后列表数据更新 (11.4s)
+  ok 43 [chromium] › e2e\roles.spec.ts:303:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-10. 业务冲突：编辑系统角色admin被阻止 (692ms)
+  ok 44 [chromium] › e2e\roles.spec.ts:317:3 › 角色权限 -> 删除角色 › ROLE-DELETE-01. 正常用例：admin删除自定义角色成功 (443ms)
+  ok 45 [chromium] › e2e\roles.spec.ts:330:3 › 角色权限 -> 删除角色 › ROLE-DELETE-02. 业务冲突：删除admin角色被阻止 (388ms)
+  ok 46 [chromium] › e2e\roles.spec.ts:338:3 › 角色权限 -> 删除角色 › ROLE-DELETE-03. 并发：并发删除同一角色 (365ms)
+  ok 47 [chromium] › e2e\roles.spec.ts:347:3 › 角色权限 -> 删除角色 › ROLE-DELETE-04. 异常恢复：删除时API 500后重试 (297ms)
+  ok 48 [chromium] › e2e\roles.spec.ts:357:5 › 角色权限 -> 删除角色 › ROLE-DELETE-05-technician. 权限：technician删除角色返回403 (306ms)
+  ok 49 [chromium] › e2e\roles.spec.ts:357:5 › 角色权限 -> 删除角色 › ROLE-DELETE-05-pathologist. 权限：pathologist删除角色返回403 (288ms)
+  ok 50 [chromium] › e2e\roles.spec.ts:357:5 › 角色权限 -> 删除角色 › ROLE-DELETE-05-procurement. 权限：procurement删除角色返回403 (251ms)
+  ok 51 [chromium] › e2e\roles.spec.ts:357:5 › 角色权限 -> 删除角色 › ROLE-DELETE-05-finance. 权限：finance删除角色返回403 (258ms)
+  ok 52 [chromium] › e2e\roles.spec.ts:357:5 › 角色权限 -> 删除角色 › ROLE-DELETE-05-warehouse_manager. 权限：warehouse_manager删除角色返回403 (259ms)
+  x  53 [chromium] › e2e\roles.spec.ts:363:3 › 角色权限 -> 删除角色 › ROLE-DELETE-06. UI差异：admin显示删除按钮 (11.2s)
+  ok 54 [chromium] › e2e\roles.spec.ts:368:3 › 角色权限 -> 删除角色 › ROLE-DELETE-07. 正常用例：删除后列表自动刷新 (422ms)
+  x  55 [chromium] › e2e\roles.spec.ts:383:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-01. 正常用例：点击查看详情打开弹窗 (11.2s)
+  x  56 [chromium] › e2e\roles.spec.ts:392:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-02. 正常用例：详情弹窗显示用户数量 (11.3s)
+  x  57 [chromium] › e2e\roles.spec.ts:403:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-03. 正常用例：admin角色详情显示全部权限 (11.2s)
+  x  58 [chromium] › e2e\roles.spec.ts:413:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-04. 正常用例：详情弹窗关闭后恢复列表 (11.3s)
+  ok 59 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-01. technician GET /roles 返回403 (370ms)
+  ok 60 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-02. pathologist GET /roles 返回403 (250ms)
+  ok 61 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-03. procurement GET /roles 返回403 (249ms)
+  ok 62 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-04. finance GET /roles 返回403 (245ms)
+  ok 63 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-05. warehouse_manager GET /roles 返回403 (246ms)
+  x  64 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-06. admin GET /roles 返回200 (9ms)
+  ok 65 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-07. technician POST /roles 返回403 (268ms)
+  ok 66 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-08. technician PUT /roles/test-id 返回403 (243ms)
+  ok 67 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-09. technician DELETE /roles/test-id 返回403 (249ms)
+  x  68 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-10. admin PUT /roles/test-id 返回404 (8ms)
+  x  69 [chromium] › e2e\roles.spec.ts:454:3 › 角色权限 -> 业务流程树 › BF-ROLE-01. 主路径：创建角色→配置权限→保存 (11.5s)
+  x  70 [chromium] › e2e\roles.spec.ts:460:3 › 角色权限 -> 业务流程树 › BF-ROLE-02. 分支：创建角色时不填名称被阻止 (11.3s)
+  x  71 [chromium] › e2e\roles.spec.ts:466:3 › 角色权限 -> 业务流程树 › BF-ROLE-03. 分支：编辑角色后取消不保存 (11.4s)
+  x  72 [chromium] › e2e\roles.spec.ts:471:3 › 角色权限 -> 业务流程树 › BF-ROLE-04. 分支：删除角色弹窗点击取消 (11.7s)
+  x  73 [chromium] › e2e\roles.spec.ts:476:3 › 角色权限 -> 业务流程树 › BF-ROLE-05. 分支：搜索角色后查看详情 (11.3s)
+  x  74 [chromium] › e2e\roles.spec.ts:483:3 › 角色权限 -> 业务流程树 › BF-ROLE-06. 分支：切换Tab后编辑角色 (11.6s)
+  ok 75 [chromium] › e2e\roles.spec.ts:488:3 › 角色权限 -> 业务流程树 › BF-ROLE-07. 分支：无权限用户访问被拦截 (2.6s)
+  x  76 [chromium] › e2e\roles.spec.ts:492:3 › 角色权限 -> 业务流程树 › BF-ROLE-08. 分支：查看角色详情后点击编辑 (11.2s)
+  x  77 [chromium] › e2e\roles.spec.ts:507:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-01. 权限树形表格渲染正确 (11.3s)
+  x  78 [chromium] › e2e\roles.spec.ts:515:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-02. 角色与用户关联数显示 (11.3s)
+  x  79 [chromium] › e2e\roles.spec.ts:520:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-03. 系统角色和自定义角色标签区分 (11.3s)
+  x  80 [chromium] › e2e\roles.spec.ts:525:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-04. 角色数据权限范围选项 (11.4s)
+  x  81 [chromium] › e2e\roles.spec.ts:533:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-05. 角色编码自动生成或只读 (11.4s)
+  x  82 [chromium] › e2e\roles.spec.ts:543:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-06. 角色状态active/inactive (11.3s)
+  x  83 [chromium] › e2e\roles.spec.ts:547:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-07. 分页功能正确 (11.3s)
+  x  84 [chromium] › e2e\roles.spec.ts:552:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-08. 角色权限checkbox联动 (11.4s)
+  x  85 [chromium] › e2e\roles.spec.ts:560:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-09. 响应式布局检查 (11.3s)
+  x  86 [chromium] › e2e\roles.spec.ts:566:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-10. 角色API响应格式验证 (470ms)
+  x  87 [chromium] › e2e\roles.spec.ts:572:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-11. 页面加载性能检查 (11.6s)
+  x  88 [chromium] › e2e\roles.spec.ts:578:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-12. 角色卡片hover效果 (11.6s)
+
+
+  1) [chromium] › e2e\roles.spec.ts:64:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-01. 正常用例：admin可查看角色列表 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:65:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-01-正常用例：admin可查看角色列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-01-正常用例：admin可查看角色列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---查看角色列表-ROLE-LIST-01-正常用例：admin可查看角色列表-chromium\error-context.md
+
+  2) [chromium] › e2e\roles.spec.ts:68:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-02. 正常用例：角色列表显示统计卡片 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:69:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-02-正常用例：角色列表显示统计卡片-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-02-正常用例：角色列表显示统计卡片-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---查看角色列表-ROLE-LIST-02-正常用例：角色列表显示统计卡片-chromium\error-context.md
+
+  3) [chromium] › e2e\roles.spec.ts:72:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-03. 正常用例：角色以卡片形式展示 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:73:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-03-正常用例：角色以卡片形式展示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-03-正常用例：角色以卡片形式展示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---查看角色列表-ROLE-LIST-03-正常用例：角色以卡片形式展示-chromium\error-context.md
+
+  4) [chromium] › e2e\roles.spec.ts:77:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-04. 空数据边界：无角色数据卡片显示空状态 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:79:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-04-空数据边界：无角色数据卡片显示空状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-04-空数据边界：无角色数据卡片显示空状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---查看角色列表-ROLE-LIST-04-空数据边界：无角色数据卡片显示空状态-chromium\error-context.md
+
+  5) [chromium] › e2e\roles.spec.ts:84:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-05. 异常恢复：API 500显示错误提示 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:86:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-05-异常恢复：API-500显示错误提示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-05-异常恢复：API-500显示错误提示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---查看角色列表-ROLE-LIST-05-异常恢复：API-500显示错误提示-chromium\error-context.md
+
+  6) [chromium] › e2e\roles.spec.ts:94:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-07. 并发：快速刷新页面多次 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:95:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-07-并发：快速刷新页面多次-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-07-并发：快速刷新页面多次-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---查看角色列表-ROLE-LIST-07-并发：快速刷新页面多次-chromium\error-context.md
+
+  7) [chromium] › e2e\roles.spec.ts:99:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-08. UI差异：admin显示新建角色按钮 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:100:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-08-UI差异：admin显示新建角色按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-08-UI差异：admin显示新建角色按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---查看角色列表-ROLE-LIST-08-UI差异：admin显示新建角色按钮-chromium\error-context.md
+
+  8) [chromium] › e2e\roles.spec.ts:113:3 › 角色权限 -> Tab切换 › ROLE-TAB-01. 正常用例：默认显示全部角色Tab ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:114:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---Tab切换-ROLE-TAB-01-正常用例：默认显示全部角色Tab-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---Tab切换-ROLE-TAB-01-正常用例：默认显示全部角色Tab-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---Tab切换-ROLE-TAB-01-正常用例：默认显示全部角色Tab-chromium\error-context.md
+
+  9) [chromium] › e2e\roles.spec.ts:117:3 › 角色权限 -> Tab切换 › ROLE-TAB-02. 正常用例：切换到系统角色Tab ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:118:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---Tab切换-ROLE-TAB-02-正常用例：切换到系统角色Tab-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---Tab切换-ROLE-TAB-02-正常用例：切换到系统角色Tab-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---Tab切换-ROLE-TAB-02-正常用例：切换到系统角色Tab-chromium\error-context.md
+
+  10) [chromium] › e2e\roles.spec.ts:122:3 › 角色权限 -> Tab切换 › ROLE-TAB-03. 正常用例：切换到自定义角色Tab ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:123:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---Tab切换-ROLE-TAB-03-正常用例：切换到自定义角色Tab-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---Tab切换-ROLE-TAB-03-正常用例：切换到自定义角色Tab-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---Tab切换-ROLE-TAB-03-正常用例：切换到自定义角色Tab-chromium\error-context.md
+
+  11) [chromium] › e2e\roles.spec.ts:127:3 › 角色权限 -> Tab切换 › ROLE-TAB-04. 并发：快速切换Tab多次 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:128:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---Tab切换-ROLE-TAB-04-并发：快速切换Tab多次-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---Tab切换-ROLE-TAB-04-并发：快速切换Tab多次-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---Tab切换-ROLE-TAB-04-并发：快速切换Tab多次-chromium\error-context.md
+
+  12) [chromium] › e2e\roles.spec.ts:140:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-01. 正常用例：按角色名称搜索 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:141:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---搜索功能-ROLE-SEARCH-01-正常用例：按角色名称搜索-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---搜索功能-ROLE-SEARCH-01-正常用例：按角色名称搜索-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---搜索功能-ROLE-SEARCH-01-正常用例：按角色名称搜索-chromium\error-context.md
+
+  13) [chromium] › e2e\roles.spec.ts:145:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-02. 空数据边界：搜索无结果 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:146:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---搜索功能-ROLE-SEARCH-02-空数据边界：搜索无结果-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---搜索功能-ROLE-SEARCH-02-空数据边界：搜索无结果-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---搜索功能-ROLE-SEARCH-02-空数据边界：搜索无结果-chromium\error-context.md
+
+  14) [chromium] › e2e\roles.spec.ts:150:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-03. 边界：搜索关键词为空恢复全部 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:151:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---搜索功能-ROLE-SEARCH-03-边界：搜索关键词为空恢复全部-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---搜索功能-ROLE-SEARCH-03-边界：搜索关键词为空恢复全部-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---搜索功能-ROLE-SEARCH-03-边界：搜索关键词为空恢复全部-chromium\error-context.md
+
+  15) [chromium] › e2e\roles.spec.ts:161:3 › 角色权限 -> 新建角色 › ROLE-CREATE-01. 正常用例：admin新建角色成功 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:162:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-01-正常用例：admin新建角色成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-01-正常用例：admin新建角色成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---新建角色-ROLE-CREATE-01-正常用例：admin新建角色成功-chromium\error-context.md
+
+  16) [chromium] › e2e\roles.spec.ts:170:3 › 角色权限 -> 新建角色 › ROLE-CREATE-02. 正常用例：新建角色时配置权限 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:171:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-02-正常用例：新建角色时配置权限-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-02-正常用例：新建角色时配置权限-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---新建角色-ROLE-CREATE-02-正常用例：新建角色时配置权限-chromium\error-context.md
+
+  17) [chromium] › e2e\roles.spec.ts:181:3 › 角色权限 -> 新建角色 › ROLE-CREATE-03. 正常用例：新建角色时选择数据权限范围 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:182:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-03-正常用例：新建角色时选择数据权限范围-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-03-正常用例：新建角色时选择数据权限范围-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---新建角色-ROLE-CREATE-03-正常用例：新建角色时选择数据权限范围-chromium\error-context.md
+
+  18) [chromium] › e2e\roles.spec.ts:192:3 › 角色权限 -> 新建角色 › ROLE-CREATE-04. 空数据边界：名称为空提交被阻止 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:193:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-04-空数据边界：名称为空提交被阻止-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-04-空数据边界：名称为空提交被阻止-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---新建角色-ROLE-CREATE-04-空数据边界：名称为空提交被阻止-chromium\error-context.md
+
+  19) [chromium] › e2e\roles.spec.ts:198:3 › 角色权限 -> 新建角色 › ROLE-CREATE-05. 表单校验：未传必填字段返回400 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[400, 422][39m
+
+      199 |     const token = await apiLogin('admin')
+      200 |     const res = await apiFetch(token, 'POST', '/roles', {})
+    > 201 |     expect([400, 422]).toContain(res.status)
+          |                        ^
+      202 |   })
+      203 |   for (const role of ['technician', 'pathologist', 'procurement', 'finance', 'warehouse_manager'] as RoleKey[]) {
+      204 |     test(`ROLE-CREATE-06-${role}. 权限：${role}新建角色返回403`, async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:201:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-05-表单校验：未传必填字段返回400-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-05-表单校验：未传必填字段返回400-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---新建角色-ROLE-CREATE-05-表单校验：未传必填字段返回400-chromium\error-context.md
+
+  20) [chromium] › e2e\roles.spec.ts:210:3 › 角色权限 -> 新建角色 › ROLE-CREATE-07. 并发：快速双击新建按钮 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:211:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-07-并发：快速双击新建按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-07-并发：快速双击新建按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---新建角色-ROLE-CREATE-07-并发：快速双击新建按钮-chromium\error-context.md
+
+  21) [chromium] › e2e\roles.spec.ts:215:3 › 角色权限 -> 新建角色 › ROLE-CREATE-08. 异常恢复：网络中断后重试新建 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:216:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-08-异常恢复：网络中断后重试新建-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-08-异常恢复：网络中断后重试新建-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---新建角色-ROLE-CREATE-08-异常恢复：网络中断后重试新建-chromium\error-context.md
+
+  22) [chromium] › e2e\roles.spec.ts:223:3 › 角色权限 -> 新建角色 › ROLE-CREATE-09. UI差异：admin前端显示新建按钮 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:224:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-09-UI差异：admin前端显示新建按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---新建角色-ROLE-CREATE-09-UI差异：admin前端显示新建按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---新建角色-ROLE-CREATE-09-UI差异：admin前端显示新建按钮-chromium\error-context.md
+
+  23) [chromium] › e2e\roles.spec.ts:233:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-01. 正常用例：admin编辑角色权限保存成功 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:234:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-01-正常用例：admin编辑角色权限保存成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-01-正常用例：admin编辑角色权限保存成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---编辑角色-ROLE-EDIT-01-正常用例：admin编辑角色权限保存成功-chromium\error-context.md
+
+  24) [chromium] › e2e\roles.spec.ts:244:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-02. 正常用例：admin修改角色名称保存成功 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:245:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-02-正常用例：admin修改角色名称保存成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-02-正常用例：admin修改角色名称保存成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---编辑角色-ROLE-EDIT-02-正常用例：admin修改角色名称保存成功-chromium\error-context.md
+
+  25) [chromium] › e2e\roles.spec.ts:256:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-03. 空数据边界：编辑后名称为空被阻止 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:257:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-03-空数据边界：编辑后名称为空被阻止-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-03-空数据边界：编辑后名称为空被阻止-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---编辑角色-ROLE-EDIT-03-空数据边界：编辑后名称为空被阻止-chromium\error-context.md
+
+  26) [chromium] › e2e\roles.spec.ts:265:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-04. 表单校验：编辑不存在的角色返回404 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      266 |     const token = await apiLogin('admin')
+      267 |     const res = await apiFetch(token, 'PUT', '/roles/non-existent-id', { name: 'test' })
+    > 268 |     expect(res.status).toBe(404)
+          |                        ^
+      269 |   })
+      270 |   for (const role of ['technician', 'pathologist', 'procurement', 'finance', 'warehouse_manager'] as RoleKey[]) {
+      271 |     test(`ROLE-EDIT-05-${role}. 权限：${role}编辑角色返回403`, async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:268:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-04-表单校验：编辑不存在的角色返回404-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-04-表单校验：编辑不存在的角色返回404-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---编辑角色-ROLE-EDIT-04-表单校验：编辑不存在的角色返回404-chromium\error-context.md
+
+  27) [chromium] › e2e\roles.spec.ts:286:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-07. 异常恢复：编辑时API 500后重试 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:287:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-07-异常恢复：编辑时API-500后重试-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-07-异常恢复：编辑时API-500后重试-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---编辑角色-ROLE-EDIT-07-异常恢复：编辑时API-500后重试-chromium\error-context.md
+
+  28) [chromium] › e2e\roles.spec.ts:293:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-08. UI差异：admin显示编辑按钮 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:294:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-08-UI差异：admin显示编辑按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-08-UI差异：admin显示编辑按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---编辑角色-ROLE-EDIT-08-UI差异：admin显示编辑按钮-chromium\error-context.md
+
+  29) [chromium] › e2e\roles.spec.ts:298:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-09. 正常用例：编辑后列表数据更新 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:299:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-09-正常用例：编辑后列表数据更新-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-09-正常用例：编辑后列表数据更新-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---编辑角色-ROLE-EDIT-09-正常用例：编辑后列表数据更新-chromium\error-context.md
+
+  30) [chromium] › e2e\roles.spec.ts:363:3 › 角色权限 -> 删除角色 › ROLE-DELETE-06. UI差异：admin显示删除按钮 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:364:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---删除角色-ROLE-DELETE-06-UI差异：admin显示删除按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---删除角色-ROLE-DELETE-06-UI差异：admin显示删除按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---删除角色-ROLE-DELETE-06-UI差异：admin显示删除按钮-chromium\error-context.md
+
+  31) [chromium] › e2e\roles.spec.ts:383:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-01. 正常用例：点击查看详情打开弹窗 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:384:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-01-正常用例：点击查看详情打开弹窗-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-01-正常用例：点击查看详情打开弹窗-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-01-正常用例：点击查看详情打开弹窗-chromium\error-context.md
+
+  32) [chromium] › e2e\roles.spec.ts:392:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-02. 正常用例：详情弹窗显示用户数量 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:393:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-02-正常用例：详情弹窗显示用户数量-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-02-正常用例：详情弹窗显示用户数量-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-02-正常用例：详情弹窗显示用户数量-chromium\error-context.md
+
+  33) [chromium] › e2e\roles.spec.ts:403:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-03. 正常用例：admin角色详情显示全部权限 ─
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:404:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-03-正常用例：admin角色详情显示全部权限-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-03-正常用例：admin角色详情显示全部权限-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-03-正常用例：admin角色详情显示全部权限-chromium\error-context.md
+
+  34) [chromium] › e2e\roles.spec.ts:413:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-04. 正常用例：详情弹窗关闭后恢复列表 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:414:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-04-正常用例：详情弹窗关闭后恢复列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-04-正常用例：详情弹窗关闭后恢复列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-04-正常用例：详情弹窗关闭后恢复列表-chromium\error-context.md
+
+  35) [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-06. admin GET /roles 返回200 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      443 |       const token = await apiLogin(scene.role)
+      444 |       const res = await apiFetch(token, scene.method, scene.path, scene.method === 'POST' ? { name: 'TEST', code: 'test' } : { name: 'test' })
+    > 445 |       expect(res.status).toBe(scene.expect)
+          |                          ^
+      446 |     })
+      447 |   }
+      448 | })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:445:26
+
+    Error Context: test-results\roles-角色权限---角色权限矩阵补充-TC-PERM-ROLE-06-admin-GET-roles-返回200-chromium\error-context.md
+
+  36) [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-10. admin PUT /roles/test-id 返回404 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      443 |       const token = await apiLogin(scene.role)
+      444 |       const res = await apiFetch(token, scene.method, scene.path, scene.method === 'POST' ? { name: 'TEST', code: 'test' } : { name: 'test' })
+    > 445 |       expect(res.status).toBe(scene.expect)
+          |                          ^
+      446 |     })
+      447 |   }
+      448 | })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:445:26
+
+    Error Context: test-results\roles-角色权限---角色权限矩阵补充-TC-P-113be-min-PUT-roles-test-id-返回404-chromium\error-context.md
+
+  37) [chromium] › e2e\roles.spec.ts:454:3 › 角色权限 -> 业务流程树 › BF-ROLE-01. 主路径：创建角色→配置权限→保存 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:455:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-01-主路径：创建角色→配置权限→保存-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-01-主路径：创建角色→配置权限→保存-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---业务流程树-BF-ROLE-01-主路径：创建角色→配置权限→保存-chromium\error-context.md
+
+  38) [chromium] › e2e\roles.spec.ts:460:3 › 角色权限 -> 业务流程树 › BF-ROLE-02. 分支：创建角色时不填名称被阻止 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:461:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-02-分支：创建角色时不填名称被阻止-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-02-分支：创建角色时不填名称被阻止-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---业务流程树-BF-ROLE-02-分支：创建角色时不填名称被阻止-chromium\error-context.md
+
+  39) [chromium] › e2e\roles.spec.ts:466:3 › 角色权限 -> 业务流程树 › BF-ROLE-03. 分支：编辑角色后取消不保存 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:467:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-03-分支：编辑角色后取消不保存-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-03-分支：编辑角色后取消不保存-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---业务流程树-BF-ROLE-03-分支：编辑角色后取消不保存-chromium\error-context.md
+
+  40) [chromium] › e2e\roles.spec.ts:471:3 › 角色权限 -> 业务流程树 › BF-ROLE-04. 分支：删除角色弹窗点击取消 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:472:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-04-分支：删除角色弹窗点击取消-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-04-分支：删除角色弹窗点击取消-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---业务流程树-BF-ROLE-04-分支：删除角色弹窗点击取消-chromium\error-context.md
+
+  41) [chromium] › e2e\roles.spec.ts:476:3 › 角色权限 -> 业务流程树 › BF-ROLE-05. 分支：搜索角色后查看详情 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:477:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-05-分支：搜索角色后查看详情-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-05-分支：搜索角色后查看详情-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---业务流程树-BF-ROLE-05-分支：搜索角色后查看详情-chromium\error-context.md
+
+  42) [chromium] › e2e\roles.spec.ts:483:3 › 角色权限 -> 业务流程树 › BF-ROLE-06. 分支：切换Tab后编辑角色 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:484:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-06-分支：切换Tab后编辑角色-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-06-分支：切换Tab后编辑角色-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---业务流程树-BF-ROLE-06-分支：切换Tab后编辑角色-chromium\error-context.md
+
+  43) [chromium] › e2e\roles.spec.ts:492:3 › 角色权限 -> 业务流程树 › BF-ROLE-08. 分支：查看角色详情后点击编辑 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:493:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-08-分支：查看角色详情后点击编辑-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---业务流程树-BF-ROLE-08-分支：查看角色详情后点击编辑-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---业务流程树-BF-ROLE-08-分支：查看角色详情后点击编辑-chromium\error-context.md
+
+  44) [chromium] › e2e\roles.spec.ts:507:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-01. 权限树形表格渲染正确 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:508:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-01-权限树形表格渲染正确-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-01-权限树形表格渲染正确-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-01-权限树形表格渲染正确-chromium\error-context.md
+
+  45) [chromium] › e2e\roles.spec.ts:515:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-02. 角色与用户关联数显示 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:516:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-02-角色与用户关联数显示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-02-角色与用户关联数显示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-02-角色与用户关联数显示-chromium\error-context.md
+
+  46) [chromium] › e2e\roles.spec.ts:520:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-03. 系统角色和自定义角色标签区分 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:521:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-03-系统角色和自定义角色标签区分-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-03-系统角色和自定义角色标签区分-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-03-系统角色和自定义角色标签区分-chromium\error-context.md
+
+  47) [chromium] › e2e\roles.spec.ts:525:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-04. 角色数据权限范围选项 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:526:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-04-角色数据权限范围选项-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-04-角色数据权限范围选项-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-04-角色数据权限范围选项-chromium\error-context.md
+
+  48) [chromium] › e2e\roles.spec.ts:533:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-05. 角色编码自动生成或只读 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:534:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-05-角色编码自动生成或只读-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-05-角色编码自动生成或只读-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-05-角色编码自动生成或只读-chromium\error-context.md
+
+  49) [chromium] › e2e\roles.spec.ts:543:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-06. 角色状态active/inactive ───
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:544:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-06-角色状态active-inactive-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-06-角色状态active-inactive-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-06-角色状态active-inactive-chromium\error-context.md
+
+  50) [chromium] › e2e\roles.spec.ts:547:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-07. 分页功能正确 ────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:548:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-07-分页功能正确-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-07-分页功能正确-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-07-分页功能正确-chromium\error-context.md
+
+  51) [chromium] › e2e\roles.spec.ts:552:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-08. 角色权限checkbox联动 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:553:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-08-角色权限checkbox联动-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-08-角色权限checkbox联动-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-08-角色权限checkbox联动-chromium\error-context.md
+
+  52) [chromium] › e2e\roles.spec.ts:560:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-09. 响应式布局检查 ───────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:562:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-09-响应式布局检查-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-09-响应式布局检查-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-09-响应式布局检查-chromium\error-context.md
+
+  53) [chromium] › e2e\roles.spec.ts:566:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-10. 角色API响应格式验证 ───────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      567 |     const token = await apiLogin('admin')
+      568 |     const res = await apiFetch(token, 'GET', '/roles?page=1&pageSize=1')
+    > 569 |     expect(res.status).toBe(200)
+          |                        ^
+      570 |     if (res.data?.data?.list) { expect(Array.isArray(res.data.data.list)).toBe(true) }
+      571 |   })
+      572 |   test('BLIND-ROLE-11. 页面加载性能检查', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:569:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-10-角色API响应格式验证-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-10-角色API响应格式验证-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-10-角色API响应格式验证-chromium\error-context.md
+
+  54) [chromium] › e2e\roles.spec.ts:572:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-11. 页面加载性能检查 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:574:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-11-页面加载性能检查-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-11-页面加载性能检查-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-11-页面加载性能检查-chromium\error-context.md
+
+  55) [chromium] › e2e\roles.spec.ts:578:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-12. 角色卡片hover效果 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:579:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-12-角色卡片hover效果-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-12-角色卡片hover效果-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-12-角色卡片hover效果-chromium\error-context.md
+
+  55 failed
+    [chromium] › e2e\roles.spec.ts:64:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-01. 正常用例：admin可查看角色列表 ─────────
+    [chromium] › e2e\roles.spec.ts:68:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-02. 正常用例：角色列表显示统计卡片 ───────────
+    [chromium] › e2e\roles.spec.ts:72:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-03. 正常用例：角色以卡片形式展示 ────────────
+    [chromium] › e2e\roles.spec.ts:77:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-04. 空数据边界：无角色数据卡片显示空状态 ────────
+    [chromium] › e2e\roles.spec.ts:84:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-05. 异常恢复：API 500显示错误提示 ────────
+    [chromium] › e2e\roles.spec.ts:94:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-07. 并发：快速刷新页面多次 ───────────────
+    [chromium] › e2e\roles.spec.ts:99:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-08. UI差异：admin显示新建角色按钮 ────────
+    [chromium] › e2e\roles.spec.ts:113:3 › 角色权限 -> Tab切换 › ROLE-TAB-01. 正常用例：默认显示全部角色Tab ───────────
+    [chromium] › e2e\roles.spec.ts:117:3 › 角色权限 -> Tab切换 › ROLE-TAB-02. 正常用例：切换到系统角色Tab ────────────
+    [chromium] › e2e\roles.spec.ts:122:3 › 角色权限 -> Tab切换 › ROLE-TAB-03. 正常用例：切换到自定义角色Tab ───────────
+    [chromium] › e2e\roles.spec.ts:127:3 › 角色权限 -> Tab切换 › ROLE-TAB-04. 并发：快速切换Tab多次 ───────────────
+    [chromium] › e2e\roles.spec.ts:140:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-01. 正常用例：按角色名称搜索 ─────────────
+    [chromium] › e2e\roles.spec.ts:145:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-02. 空数据边界：搜索无结果 ──────────────
+    [chromium] › e2e\roles.spec.ts:150:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-03. 边界：搜索关键词为空恢复全部 ───────────
+    [chromium] › e2e\roles.spec.ts:161:3 › 角色权限 -> 新建角色 › ROLE-CREATE-01. 正常用例：admin新建角色成功 ─────────
+    [chromium] › e2e\roles.spec.ts:170:3 › 角色权限 -> 新建角色 › ROLE-CREATE-02. 正常用例：新建角色时配置权限 ───────────
+    [chromium] › e2e\roles.spec.ts:181:3 › 角色权限 -> 新建角色 › ROLE-CREATE-03. 正常用例：新建角色时选择数据权限范围 ───────
+    [chromium] › e2e\roles.spec.ts:192:3 › 角色权限 -> 新建角色 › ROLE-CREATE-04. 空数据边界：名称为空提交被阻止 ──────────
+    [chromium] › e2e\roles.spec.ts:198:3 › 角色权限 -> 新建角色 › ROLE-CREATE-05. 表单校验：未传必填字段返回400 ─────────
+    [chromium] › e2e\roles.spec.ts:210:3 › 角色权限 -> 新建角色 › ROLE-CREATE-07. 并发：快速双击新建按钮 ──────────────
+    [chromium] › e2e\roles.spec.ts:215:3 › 角色权限 -> 新建角色 › ROLE-CREATE-08. 异常恢复：网络中断后重试新建 ───────────
+    [chromium] › e2e\roles.spec.ts:223:3 › 角色权限 -> 新建角色 › ROLE-CREATE-09. UI差异：admin前端显示新建按钮 ───────
+    [chromium] › e2e\roles.spec.ts:233:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-01. 正常用例：admin编辑角色权限保存成功 ───────
+    [chromium] › e2e\roles.spec.ts:244:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-02. 正常用例：admin修改角色名称保存成功 ───────
+    [chromium] › e2e\roles.spec.ts:256:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-03. 空数据边界：编辑后名称为空被阻止 ───────────
+    [chromium] › e2e\roles.spec.ts:265:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-04. 表单校验：编辑不存在的角色返回404 ─────────
+    [chromium] › e2e\roles.spec.ts:286:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-07. 异常恢复：编辑时API 500后重试 ─────────
+    [chromium] › e2e\roles.spec.ts:293:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-08. UI差异：admin显示编辑按钮 ───────────
+    [chromium] › e2e\roles.spec.ts:298:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-09. 正常用例：编辑后列表数据更新 ─────────────
+    [chromium] › e2e\roles.spec.ts:363:3 › 角色权限 -> 删除角色 › ROLE-DELETE-06. UI差异：admin显示删除按钮 ─────────
+    [chromium] › e2e\roles.spec.ts:383:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-01. 正常用例：点击查看详情打开弹窗 ────────
+    [chromium] › e2e\roles.spec.ts:392:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-02. 正常用例：详情弹窗显示用户数量 ────────
+    [chromium] › e2e\roles.spec.ts:403:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-03. 正常用例：admin角色详情显示全部权限 ───
+    [chromium] › e2e\roles.spec.ts:413:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-04. 正常用例：详情弹窗关闭后恢复列表 ───────
+    [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-06. admin GET /roles 返回200 
+    [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-10. admin PUT /roles/test-id 返回404 
+    [chromium] › e2e\roles.spec.ts:454:3 › 角色权限 -> 业务流程树 › BF-ROLE-01. 主路径：创建角色→配置权限→保存 ────────────
+    [chromium] › e2e\roles.spec.ts:460:3 › 角色权限 -> 业务流程树 › BF-ROLE-02. 分支：创建角色时不填名称被阻止 ─────────────
+    [chromium] › e2e\roles.spec.ts:466:3 › 角色权限 -> 业务流程树 › BF-ROLE-03. 分支：编辑角色后取消不保存 ───────────────
+    [chromium] › e2e\roles.spec.ts:471:3 › 角色权限 -> 业务流程树 › BF-ROLE-04. 分支：删除角色弹窗点击取消 ───────────────
+    [chromium] › e2e\roles.spec.ts:476:3 › 角色权限 -> 业务流程树 › BF-ROLE-05. 分支：搜索角色后查看详情 ────────────────
+    [chromium] › e2e\roles.spec.ts:483:3 › 角色权限 -> 业务流程树 › BF-ROLE-06. 分支：切换Tab后编辑角色 ───────────────
+    [chromium] › e2e\roles.spec.ts:492:3 › 角色权限 -> 业务流程树 › BF-ROLE-08. 分支：查看角色详情后点击编辑 ──────────────
+    [chromium] › e2e\roles.spec.ts:507:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-01. 权限树形表格渲染正确 ──────────────
+    [chromium] › e2e\roles.spec.ts:515:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-02. 角色与用户关联数显示 ──────────────
+    [chromium] › e2e\roles.spec.ts:520:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-03. 系统角色和自定义角色标签区分 ──────────
+    [chromium] › e2e\roles.spec.ts:525:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-04. 角色数据权限范围选项 ──────────────
+    [chromium] › e2e\roles.spec.ts:533:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-05. 角色编码自动生成或只读 ─────────────
+    [chromium] › e2e\roles.spec.ts:543:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-06. 角色状态active/inactive ─────
+    [chromium] › e2e\roles.spec.ts:547:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-07. 分页功能正确 ──────────────────
+    [chromium] › e2e\roles.spec.ts:552:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-08. 角色权限checkbox联动 ──────────
+    [chromium] › e2e\roles.spec.ts:560:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-09. 响应式布局检查 ─────────────────
+    [chromium] › e2e\roles.spec.ts:566:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-10. 角色API响应格式验证 ─────────────
+    [chromium] › e2e\roles.spec.ts:572:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-11. 页面加载性能检查 ────────────────
+    [chromium] › e2e\roles.spec.ts:578:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-12. 角色卡片hover效果 ─────────────
+  33 passed (11.2m)

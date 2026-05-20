@@ -2,8 +2,10 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { authenticateToken, requireRole } from '../middleware/auth.js'
 
 const router = Router()
+const requireBomWrite = requireRole('admin')
 
 router.get('/', (req, res) => {
   try {
@@ -64,7 +66,7 @@ router.get('/:id', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.post('/', (req, res) => {
+router.post('/', authenticateToken, requireBomWrite, (req, res) => {
   try {
     const { code, name, type, serviceId, description, supportableSamples, materials } = req.body
     if (!code || !name || !type) {
@@ -94,7 +96,7 @@ router.post('/', (req, res) => {
   }
 })
 
-router.put('/:id', (req, res) => {
+router.put('/:id', authenticateToken, requireBomWrite, (req, res) => {
   try {
     const { id } = req.params
     const { name, description, supportableSamples, materials } = req.body
@@ -127,7 +129,7 @@ router.put('/:id', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', authenticateToken, requireBomWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()

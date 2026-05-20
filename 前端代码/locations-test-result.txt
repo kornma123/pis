@@ -1,0 +1,1877 @@
+
+Running 121 tests using 1 worker
+
+  x    1 [chromium] › e2e\locations.spec.ts:72:5 › 库位管理 -> 查看库位树 › LOC-LIST-01-admin. 正常用例：admin可查看库位列表 (11.7s)
+  ok   2 [chromium] › e2e\locations.spec.ts:72:5 › 库位管理 -> 查看库位树 › LOC-LIST-01-warehouse_manager. 正常用例：warehouse_manager可查看库位列表 (1.5s)
+  x    3 [chromium] › e2e\locations.spec.ts:78:3 › 库位管理 -> 查看库位树 › LOC-LIST-02. 空数据边界：无库位数据显示空状态 (11.3s)
+  ok   4 [chromium] › e2e\locations.spec.ts:83:3 › 库位管理 -> 查看库位树 › LOC-LIST-03. 权限：technician访问返回403 (266ms)
+  ok   5 [chromium] › e2e\locations.spec.ts:87:3 › 库位管理 -> 查看库位树 › LOC-LIST-04. 权限：pathologist访问返回403 (281ms)
+  ok   6 [chromium] › e2e\locations.spec.ts:91:3 › 库位管理 -> 查看库位树 › LOC-LIST-05. 权限：procurement访问返回403 (275ms)
+  ok   7 [chromium] › e2e\locations.spec.ts:95:3 › 库位管理 -> 查看库位树 › LOC-LIST-06. 权限：finance访问返回403 (256ms)
+  x    8 [chromium] › e2e\locations.spec.ts:99:3 › 库位管理 -> 查看库位树 › LOC-LIST-07. 异常恢复：API 500显示错误Toast (11.3s)
+  x    9 [chromium] › e2e\locations.spec.ts:104:3 › 库位管理 -> 查看库位树 › LOC-LIST-08. UI差异：admin显示新增编辑删除按钮 (11.2s)
+  ok  10 [chromium] › e2e\locations.spec.ts:109:3 › 库位管理 -> 查看库位树 › LOC-LIST-09. UI差异：warehouse_manager仅显示查看 (2.9s)
+  x   11 [chromium] › e2e\locations.spec.ts:114:3 › 库位管理 -> 查看库位树 › LOC-LIST-10. 正常用例：列表按区域显示树形结构 (11.1s)
+  x   12 [chromium] › e2e\locations.spec.ts:125:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-01. 正常用例：选择refrigerator仅显示冷藏柜 (514ms)
+  x   13 [chromium] › e2e\locations.spec.ts:130:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-02. 空数据边界：该类型无库位 (448ms)
+  x   14 [chromium] › e2e\locations.spec.ts:135:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-03. 正常用例：重置类型筛选 (11.2s)
+  x   15 [chromium] › e2e\locations.spec.ts:140:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-04. UI差异：各角色类型筛选可见 (11.4s)
+  x   16 [chromium] › e2e\locations.spec.ts:147:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-05. 并发：快速切换类型 (11.5s)
+  x   17 [chromium] › e2e\locations.spec.ts:154:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-06. 异常恢复：类型筛选时API错误 (11.3s)
+  x   18 [chromium] › e2e\locations.spec.ts:165:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-01. 正常用例：选择A区仅显示A区库位 (461ms)
+  x   19 [chromium] › e2e\locations.spec.ts:170:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-02. 空数据边界：该区域无库位 (418ms)
+  x   20 [chromium] › e2e\locations.spec.ts:175:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-03. 正常用例：重置区域筛选 (11.3s)
+  x   21 [chromium] › e2e\locations.spec.ts:180:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-04. UI差异：各角色区域筛选可见 (11.5s)
+  x   22 [chromium] › e2e\locations.spec.ts:187:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-05. 并发：快速切换区域 (11.3s)
+  x   23 [chromium] › e2e\locations.spec.ts:194:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-06. 异常恢复：区域筛选时API错误 (11.3s)
+  x   24 [chromium] › e2e\locations.spec.ts:205:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-01. 正常用例：选择active仅显示在用的库位 (472ms)
+  x   25 [chromium] › e2e\locations.spec.ts:210:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-02. 空数据边界：无active库位 (428ms)
+  x   26 [chromium] › e2e\locations.spec.ts:215:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-03. 正常用例：重置状态筛选 (11.3s)
+  x   27 [chromium] › e2e\locations.spec.ts:220:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-04. UI差异：各角色状态筛选可见 (11.3s)
+  x   28 [chromium] › e2e\locations.spec.ts:227:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-05. 并发：快速切换状态 (11.5s)
+  x   29 [chromium] › e2e\locations.spec.ts:234:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-06. 异常恢复：状态筛选时API错误 (11.2s)
+  x   30 [chromium] › e2e\locations.spec.ts:245:3 › 库位管理 -> 新增库位 › LOC-CREATE-01. 正常用例：admin新增库位成功 (31ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   31 [chromium] › e2e\locations.spec.ts:252:3 › 库位管理 -> 新增库位 › LOC-CREATE-02. 空数据边界：capacity=0合法 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   32 [chromium] › e2e\locations.spec.ts:259:3 › 库位管理 -> 新增库位 › LOC-CREATE-03. 表单校验：未传name返回400 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   33 [chromium] › e2e\locations.spec.ts:264:3 › 库位管理 -> 新增库位 › LOC-CREATE-04. 表单校验：未传zone返回400 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  ok  34 [chromium] › e2e\locations.spec.ts:270:5 › 库位管理 -> 新增库位 › LOC-CREATE-05-technician. 权限：technician新增库位返回403 (267ms)
+  ok  35 [chromium] › e2e\locations.spec.ts:270:5 › 库位管理 -> 新增库位 › LOC-CREATE-05-pathologist. 权限：pathologist新增库位返回403 (244ms)
+  ok  36 [chromium] › e2e\locations.spec.ts:270:5 › 库位管理 -> 新增库位 › LOC-CREATE-05-procurement. 权限：procurement新增库位返回403 (244ms)
+  ok  37 [chromium] › e2e\locations.spec.ts:270:5 › 库位管理 -> 新增库位 › LOC-CREATE-05-finance. 权限：finance新增库位返回403 (243ms)
+  x   38 [chromium] › e2e\locations.spec.ts:278:3 › 库位管理 -> 新增库位 › LOC-CREATE-06. 并发：快速双击提交 (7ms)
+  x   39 [chromium] › e2e\locations.spec.ts:284:3 › 库位管理 -> 新增库位 › LOC-CREATE-07. 异常恢复：提交时网络中断后重试 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   40 [chromium] › e2e\locations.spec.ts:291:3 › 库位管理 -> 新增库位 › LOC-CREATE-08. UI差异：admin显示新增库位按钮 (11.4s)
+  ok  41 [chromium] › e2e\locations.spec.ts:296:3 › 库位管理 -> 新增库位 › LOC-CREATE-09. UI差异：warehouse_manager不显示新增按钮 (2.2s)
+  ok  42 [chromium] › e2e\locations.spec.ts:301:3 › 库位管理 -> 新增库位 › LOC-CREATE-10. 正常用例：新增库位后code自动生成 (8ms)
+  ok  43 [chromium] › e2e\locations.spec.ts:308:3 › 库位管理 -> 新增库位 › LOC-CREATE-11. 正常用例：新增库位后used=0 (6ms)
+  x   44 [chromium] › e2e\locations.spec.ts:315:3 › 库位管理 -> 新增库位 › LOC-CREATE-12. 边界：超长name (9ms)
+  x   45 [chromium] › e2e\locations.spec.ts:322:3 › 库位管理 -> 新增库位 › LOC-CREATE-13. 边界：负数capacity (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   46 [chromium] › e2e\locations.spec.ts:329:3 › 库位管理 -> 新增库位 › LOC-CREATE-14. 正常用例：入库单库位下拉同步 (28ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  -   47 [chromium] › e2e\locations.spec.ts:340:3 › 库位管理 -> 编辑库位 › LOC-EDIT-01. 正常用例：admin编辑库位capacity成功
+  -   48 [chromium] › e2e\locations.spec.ts:347:3 › 库位管理 -> 编辑库位 › LOC-EDIT-02. 空数据边界：capacity=0
+  -   49 [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-warehouse_manager. 权限：warehouse_manager编辑库位返回403
+  -   50 [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-technician. 权限：technician编辑库位返回403
+  -   51 [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-pathologist. 权限：pathologist编辑库位返回403
+  -   52 [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-procurement. 权限：procurement编辑库位返回403
+  -   53 [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-finance. 权限：finance编辑库位返回403
+  -   54 [chromium] › e2e\locations.spec.ts:364:3 › 库位管理 -> 编辑库位 › LOC-EDIT-04. 业务冲突：编辑used字段不被更新
+  -   55 [chromium] › e2e\locations.spec.ts:371:3 › 库位管理 -> 编辑库位 › LOC-EDIT-05. 并发：并发编辑同一库位
+  -   56 [chromium] › e2e\locations.spec.ts:381:3 › 库位管理 -> 编辑库位 › LOC-EDIT-06. 异常恢复：编辑时API 500后重试
+  x   57 [chromium] › e2e\locations.spec.ts:388:3 › 库位管理 -> 编辑库位 › LOC-EDIT-07. UI差异：admin显示编辑按钮 (11.4s)
+  ok  58 [chromium] › e2e\locations.spec.ts:393:3 › 库位管理 -> 编辑库位 › LOC-EDIT-08. UI差异：warehouse_manager不显示编辑按钮 (2.2s)
+  -   59 [chromium] › e2e\locations.spec.ts:398:3 › 库位管理 -> 编辑库位 › LOC-EDIT-09. 正常用例：编辑后列表数据更新
+  x   60 [chromium] › e2e\locations.spec.ts:404:3 › 库位管理 -> 编辑库位 › LOC-EDIT-10. 表单校验：编辑不存在的库位返回404 (12ms)
+  -   61 [chromium] › e2e\locations.spec.ts:409:3 › 库位管理 -> 编辑库位 › LOC-EDIT-11. 边界：编辑name为空字符串
+  -   62 [chromium] › e2e\locations.spec.ts:416:3 › 库位管理 -> 编辑库位 › LOC-EDIT-12. 异常恢复：编辑时网络中断
+  x   63 [chromium] › e2e\locations.spec.ts:429:3 › 库位管理 -> 删除库位 › LOC-DEL-01. 正常用例：admin删除无库存关联库位 (15ms)
+  -   64 [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-warehouse_manager. 权限：warehouse_manager删除库位返回403
+  -   65 [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-technician. 权限：technician删除库位返回403
+  -   66 [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-pathologist. 权限：pathologist删除库位返回403
+  -   67 [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-procurement. 权限：procurement删除库位返回403
+  -   68 [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-finance. 权限：finance删除库位返回403
+  -   69 [chromium] › e2e\locations.spec.ts:449:3 › 库位管理 -> 删除库位 › LOC-DEL-03. 业务冲突：有关联inventory删除后悬空引用
+  -   70 [chromium] › e2e\locations.spec.ts:456:3 › 库位管理 -> 删除库位 › LOC-DEL-04. 并发：并发删除同一库位
+  ok  71 [chromium] › e2e\locations.spec.ts:469:3 › 库位管理 -> 删除库位 › LOC-DEL-05. 异常恢复：删除时API 500后重试 (4ms)
+  x   72 [chromium] › e2e\locations.spec.ts:480:3 › 库位管理 -> 删除库位 › LOC-DEL-06. UI差异：admin显示删除按钮 (11.5s)
+  ok  73 [chromium] › e2e\locations.spec.ts:485:3 › 库位管理 -> 删除库位 › LOC-DEL-07. UI差异：warehouse_manager不显示删除按钮 (2.3s)
+  x   74 [chromium] › e2e\locations.spec.ts:490:3 › 库位管理 -> 删除库位 › LOC-DEL-08. 表单校验：删除不存在的库位返回404 (15ms)
+  -   75 [chromium] › e2e\locations.spec.ts:495:3 › 库位管理 -> 删除库位 › LOC-DEL-09. 业务冲突：删除后再次删除返回404
+  ok  76 [chromium] › e2e\locations.spec.ts:506:3 › 库位管理 -> 删除库位 › LOC-DEL-10. 正常用例：删除后列表刷新 (582ms)
+  ok  77 [chromium] › e2e\locations.spec.ts:514:3 › 库位管理 -> 删除库位 › LOC-DEL-11. 异常恢复：删除时网络中断 (11ms)
+  ok  78 [chromium] › e2e\locations.spec.ts:522:3 › 库位管理 -> 删除库位 › LOC-DEL-12. 边界：删除后其他角色查看 (2.3s)
+  x   79 [chromium] › e2e\locations.spec.ts:539:3 › 库位管理 -> 分页切换 › LOC-PAGE-01. 正常用例：切换到第2页 (11.9s)
+  x   80 [chromium] › e2e\locations.spec.ts:544:3 › 库位管理 -> 分页切换 › LOC-PAGE-02. 边界：仅1页分页器隐藏 (11.6s)
+  x   81 [chromium] › e2e\locations.spec.ts:549:3 › 库位管理 -> 分页切换 › LOC-PAGE-03. 表单校验：page=0后端修正为1 (48ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   82 [chromium] › e2e\locations.spec.ts:557:3 › 库位管理 -> 分页切换 › LOC-PAGE-04. 边界：page=999返回空列表 (33ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   83 [chromium] › e2e\locations.spec.ts:562:3 › 库位管理 -> 分页切换 › LOC-PAGE-05. 边界：pageSize=1 (41ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   84 [chromium] › e2e\locations.spec.ts:568:3 › 库位管理 -> 分页切换 › LOC-PAGE-06. 边界：pageSize=100 (35ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   85 [chromium] › e2e\locations.spec.ts:573:3 › 库位管理 -> 分页切换 › LOC-PAGE-07. 并发：快速切换分页 (11.6s)
+  x   86 [chromium] › e2e\locations.spec.ts:580:3 › 库位管理 -> 分页切换 › LOC-PAGE-08. UI差异：各角色分页一致 (11.4s)
+  ok  87 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-049. technician GET /locations 返回403 (287ms)
+  ok  88 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-050. pathologist GET /locations 返回403 (420ms)
+  ok  89 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-051. procurement GET /locations 返回403 (416ms)
+  ok  90 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-052. finance GET /locations 返回403 (437ms)
+  x   91 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-053. warehouse_manager POST /locations 返回403 (318ms)
+  ok  92 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-054. technician POST /locations 返回403 (397ms)
+  ok  93 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-055. pathologist POST /locations 返回403 (304ms)
+  ok  94 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-056. procurement POST /locations 返回403 (377ms)
+  ok  95 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-057. finance POST /locations 返回403 (311ms)
+  x   96 [chromium] › e2e\locations.spec.ts:613:3 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-LOC-EXTRA-01. admin GET /locations 返回200 (10ms)
+  ok  97 [chromium] › e2e\locations.spec.ts:618:3 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-LOC-EXTRA-02. warehouse_manager GET /locations 返回200 (325ms)
+  x   98 [chromium] › e2e\locations.spec.ts:629:3 › 库位管理 -> 业务流程树 › BF-LOC-01. 主路径：登录→进入库位管理→新增库位→填写信息→提交→列表刷新 (10ms)
+  x   99 [chromium] › e2e\locations.spec.ts:636:3 › 库位管理 -> 业务流程树 › BF-LOC-02. 分支：关闭弹窗不保存 (11.4s)
+  x  100 [chromium] › e2e\locations.spec.ts:641:3 › 库位管理 -> 业务流程树 › BF-LOC-03. 分支：必填字段漏填 (42ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  101 [chromium] › e2e\locations.spec.ts:646:3 › 库位管理 -> 业务流程树 › BF-LOC-04. 分支：刷新页面后新库位仍在列表 (11.3s)
+  -  102 [chromium] › e2e\locations.spec.ts:653:3 › 库位管理 -> 业务流程树 › BF-LOC-05. 分支：删除有库存关联的库位
+  -  103 [chromium] › e2e\locations.spec.ts:660:3 › 库位管理 -> 业务流程树 › BF-LOC-06. 分支：编辑库位后入库单下拉同步
+  x  104 [chromium] › e2e\locations.spec.ts:666:3 › 库位管理 -> 业务流程树 › BF-LOC-07. 分支：warehouse_manager尝试新增被403拦截 (288ms)
+  x  105 [chromium] › e2e\locations.spec.ts:673:3 › 库位管理 -> 业务流程树 › BF-LOC-08. 分支：快速筛选后分页 (11.3s)
+  ok 106 [chromium] › e2e\locations.spec.ts:684:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-01. 库位编码自动生成规则 (23ms)
+  x  107 [chromium] › e2e\locations.spec.ts:691:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-02. 库位容量使用率计算 (400ms)
+  x  108 [chromium] › e2e\locations.spec.ts:696:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-03. 库位树形结构展示 (11.3s)
+  x  109 [chromium] › e2e\locations.spec.ts:701:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-04. 库位列表导出功能 (11.3s)
+  x  110 [chromium] › e2e\locations.spec.ts:706:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-05. 库位打印功能 (11.8s)
+  x  111 [chromium] › e2e\locations.spec.ts:711:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-06. 库位页面响应式布局 (11.6s)
+  x  112 [chromium] › e2e\locations.spec.ts:717:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-07. 库位页面加载性能 (11.6s)
+  x  113 [chromium] › e2e\locations.spec.ts:724:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-08. 库位搜索功能 (11.6s)
+  x  114 [chromium] › e2e\locations.spec.ts:734:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-09. 库位详情弹窗 (11.8s)
+  x  115 [chromium] › e2e\locations.spec.ts:741:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-10. 库位字段XSS防护 (35ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  116 [chromium] › e2e\locations.spec.ts:748:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-11. 库位字段SQL注入防护 (67ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  117 [chromium] › e2e\locations.spec.ts:755:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-12. 库位API响应格式验证 (32ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  118 [chromium] › e2e\locations.spec.ts:770:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-13. 库位容量预警 (688ms)
+  x  119 [chromium] › e2e\locations.spec.ts:783:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-14. 库位状态颜色标签 (11.4s)
+  x  120 [chromium] › e2e\locations.spec.ts:788:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-15. 库位排序功能 (459ms)
+  x  121 [chromium] › e2e\locations.spec.ts:793:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-16. 多角色同时操作互不影响 (11.3s)
+
+
+  1) [chromium] › e2e\locations.spec.ts:72:5 › 库位管理 -> 查看库位树 › LOC-LIST-01-admin. 正常用例：admin可查看库位列表 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:73:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---查看库位树-LOC-LIST-01-admin-正常用例：admin可查看库位列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---查看库位树-LOC-LIST-01-admin-正常用例：admin可查看库位列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---查看库位树-LOC-LIST-01-admin-正常用例：admin可查看库位列表-chromium\error-context.md
+
+  2) [chromium] › e2e\locations.spec.ts:78:3 › 库位管理 -> 查看库位树 › LOC-LIST-02. 空数据边界：无库位数据显示空状态 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:79:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---查看库位树-LOC-LIST-02-空数据边界：无库位数据显示空状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---查看库位树-LOC-LIST-02-空数据边界：无库位数据显示空状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---查看库位树-LOC-LIST-02-空数据边界：无库位数据显示空状态-chromium\error-context.md
+
+  3) [chromium] › e2e\locations.spec.ts:99:3 › 库位管理 -> 查看库位树 › LOC-LIST-07. 异常恢复：API 500显示错误Toast ──
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:100:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---查看库位树-LOC-LIST-07-异常恢复：API-500显示错误Toast-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---查看库位树-LOC-LIST-07-异常恢复：API-500显示错误Toast-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---查看库位树-LOC-LIST-07-异常恢复：API-500显示错误Toast-chromium\error-context.md
+
+  4) [chromium] › e2e\locations.spec.ts:104:3 › 库位管理 -> 查看库位树 › LOC-LIST-08. UI差异：admin显示新增编辑删除按钮 ──
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:105:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---查看库位树-LOC-LIST-08-UI差异：admin显示新增编辑删除按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---查看库位树-LOC-LIST-08-UI差异：admin显示新增编辑删除按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---查看库位树-LOC-LIST-08-UI差异：admin显示新增编辑删除按钮-chromium\error-context.md
+
+  5) [chromium] › e2e\locations.spec.ts:114:3 › 库位管理 -> 查看库位树 › LOC-LIST-10. 正常用例：列表按区域显示树形结构 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:115:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---查看库位树-LOC-LIST-10-正常用例：列表按区域显示树形结构-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---查看库位树-LOC-LIST-10-正常用例：列表按区域显示树形结构-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---查看库位树-LOC-LIST-10-正常用例：列表按区域显示树形结构-chromium\error-context.md
+
+  6) [chromium] › e2e\locations.spec.ts:125:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-01. 正常用例：选择refrigerator仅显示冷藏柜 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      126 |     const token = await apiLogin('admin')
+      127 |     const res = await apiFetch(token, 'GET', '/locations?type=refrigerator')
+    > 128 |     expect(res.status).toBe(200)
+          |                        ^
+      129 |   })
+      130 |   test('LOC-TYPE-02. 空数据边界：该类型无库位', async ({ page }) => {
+      131 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:128:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-01-正常用例：选择refrigerator仅显示冷藏柜-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-01-正常用例：选择refrigerator仅显示冷藏柜-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按类型筛选-LOC-TYPE-01-正常用例：选择refrigerator仅显示冷藏柜-chromium\error-context.md
+
+  7) [chromium] › e2e\locations.spec.ts:130:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-02. 空数据边界：该类型无库位 ──────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      131 |     const token = await apiLogin('admin')
+      132 |     const res = await apiFetch(token, 'GET', '/locations?type=nonexistent')
+    > 133 |     expect(res.status).toBe(200)
+          |                        ^
+      134 |   })
+      135 |   test('LOC-TYPE-03. 正常用例：重置类型筛选', async ({ page }) => {
+      136 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:133:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-02-空数据边界：该类型无库位-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-02-空数据边界：该类型无库位-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按类型筛选-LOC-TYPE-02-空数据边界：该类型无库位-chromium\error-context.md
+
+  8) [chromium] › e2e\locations.spec.ts:135:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-03. 正常用例：重置类型筛选 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:136:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-03-正常用例：重置类型筛选-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-03-正常用例：重置类型筛选-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按类型筛选-LOC-TYPE-03-正常用例：重置类型筛选-chromium\error-context.md
+
+  9) [chromium] › e2e\locations.spec.ts:140:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-04. UI差异：各角色类型筛选可见 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:142:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-04-UI差异：各角色类型筛选可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-04-UI差异：各角色类型筛选可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按类型筛选-LOC-TYPE-04-UI差异：各角色类型筛选可见-chromium\error-context.md
+
+  10) [chromium] › e2e\locations.spec.ts:147:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-05. 并发：快速切换类型 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:148:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-05-并发：快速切换类型-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-05-并发：快速切换类型-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按类型筛选-LOC-TYPE-05-并发：快速切换类型-chromium\error-context.md
+
+  11) [chromium] › e2e\locations.spec.ts:154:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-06. 异常恢复：类型筛选时API错误 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:155:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-06-异常恢复：类型筛选时API错误-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按类型筛选-LOC-TYPE-06-异常恢复：类型筛选时API错误-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按类型筛选-LOC-TYPE-06-异常恢复：类型筛选时API错误-chromium\error-context.md
+
+  12) [chromium] › e2e\locations.spec.ts:165:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-01. 正常用例：选择A区仅显示A区库位 ─────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      166 |     const token = await apiLogin('admin')
+      167 |     const res = await apiFetch(token, 'GET', '/locations?zone=A区')
+    > 168 |     expect(res.status).toBe(200)
+          |                        ^
+      169 |   })
+      170 |   test('LOC-ZONE-02. 空数据边界：该区域无库位', async ({ page }) => {
+      171 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:168:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-01-正常用例：选择A区仅显示A区库位-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-01-正常用例：选择A区仅显示A区库位-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按区域筛选-LOC-ZONE-01-正常用例：选择A区仅显示A区库位-chromium\error-context.md
+
+  13) [chromium] › e2e\locations.spec.ts:170:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-02. 空数据边界：该区域无库位 ─────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      171 |     const token = await apiLogin('admin')
+      172 |     const res = await apiFetch(token, 'GET', '/locations?zone=nonexistent')
+    > 173 |     expect(res.status).toBe(200)
+          |                        ^
+      174 |   })
+      175 |   test('LOC-ZONE-03. 正常用例：重置区域筛选', async ({ page }) => {
+      176 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:173:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-02-空数据边界：该区域无库位-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-02-空数据边界：该区域无库位-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按区域筛选-LOC-ZONE-02-空数据边界：该区域无库位-chromium\error-context.md
+
+  14) [chromium] › e2e\locations.spec.ts:175:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-03. 正常用例：重置区域筛选 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:176:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-03-正常用例：重置区域筛选-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-03-正常用例：重置区域筛选-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按区域筛选-LOC-ZONE-03-正常用例：重置区域筛选-chromium\error-context.md
+
+  15) [chromium] › e2e\locations.spec.ts:180:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-04. UI差异：各角色区域筛选可见 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:182:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-04-UI差异：各角色区域筛选可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-04-UI差异：各角色区域筛选可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按区域筛选-LOC-ZONE-04-UI差异：各角色区域筛选可见-chromium\error-context.md
+
+  16) [chromium] › e2e\locations.spec.ts:187:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-05. 并发：快速切换区域 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:188:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-05-并发：快速切换区域-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-05-并发：快速切换区域-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按区域筛选-LOC-ZONE-05-并发：快速切换区域-chromium\error-context.md
+
+  17) [chromium] › e2e\locations.spec.ts:194:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-06. 异常恢复：区域筛选时API错误 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:195:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-06-异常恢复：区域筛选时API错误-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按区域筛选-LOC-ZONE-06-异常恢复：区域筛选时API错误-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按区域筛选-LOC-ZONE-06-异常恢复：区域筛选时API错误-chromium\error-context.md
+
+  18) [chromium] › e2e\locations.spec.ts:205:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-01. 正常用例：选择active仅显示在用的库位 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      206 |     const token = await apiLogin('admin')
+      207 |     const res = await apiFetch(token, 'GET', '/locations?status=active')
+    > 208 |     expect(res.status).toBe(200)
+          |                        ^
+      209 |   })
+      210 |   test('LOC-STATUS-02. 空数据边界：无active库位', async ({ page }) => {
+      211 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:208:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-01-正常用例：选择active仅显示在用的库位-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-01-正常用例：选择active仅显示在用的库位-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按状态筛选-LOC-STATUS-01-正常用例：选择active仅显示在用的库位-chromium\error-context.md
+
+  19) [chromium] › e2e\locations.spec.ts:210:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-02. 空数据边界：无active库位 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      211 |     const token = await apiLogin('admin')
+      212 |     const res = await apiFetch(token, 'GET', '/locations?status=inactive')
+    > 213 |     expect(res.status).toBe(200)
+          |                        ^
+      214 |   })
+      215 |   test('LOC-STATUS-03. 正常用例：重置状态筛选', async ({ page }) => {
+      216 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:213:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-02-空数据边界：无active库位-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-02-空数据边界：无active库位-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按状态筛选-LOC-STATUS-02-空数据边界：无active库位-chromium\error-context.md
+
+  20) [chromium] › e2e\locations.spec.ts:215:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-03. 正常用例：重置状态筛选 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:216:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-03-正常用例：重置状态筛选-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-03-正常用例：重置状态筛选-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按状态筛选-LOC-STATUS-03-正常用例：重置状态筛选-chromium\error-context.md
+
+  21) [chromium] › e2e\locations.spec.ts:220:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-04. UI差异：各角色状态筛选可见 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:222:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-04-UI差异：各角色状态筛选可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-04-UI差异：各角色状态筛选可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按状态筛选-LOC-STATUS-04-UI差异：各角色状态筛选可见-chromium\error-context.md
+
+  22) [chromium] › e2e\locations.spec.ts:227:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-05. 并发：快速切换状态 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:228:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-05-并发：快速切换状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-05-并发：快速切换状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按状态筛选-LOC-STATUS-05-并发：快速切换状态-chromium\error-context.md
+
+  23) [chromium] › e2e\locations.spec.ts:234:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-06. 异常恢复：状态筛选时API错误 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:235:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-06-异常恢复：状态筛选时API错误-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---按状态筛选-LOC-STATUS-06-异常恢复：状态筛选时API错误-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---按状态筛选-LOC-STATUS-06-异常恢复：状态筛选时API错误-chromium\error-context.md
+
+  24) [chromium] › e2e\locations.spec.ts:245:3 › 库位管理 -> 新增库位 › LOC-CREATE-01. 正常用例：admin新增库位成功 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      248 |       name: `E2E测试库位-${Date.now()}`, zone: 'A区', type: 'shelf', capacity: 100, remark: 'E2E新增',
+      249 |     })
+    > 250 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      251 |   })
+      252 |   test('LOC-CREATE-02. 空数据边界：capacity=0合法', async () => {
+      253 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:250:24
+
+    Error Context: test-results\locations-库位管理---新增库位-LOC-CREATE-01-正常用例：admin新增库位成功-chromium\error-context.md
+
+  25) [chromium] › e2e\locations.spec.ts:252:3 › 库位管理 -> 新增库位 › LOC-CREATE-02. 空数据边界：capacity=0合法 ──
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      255 |       name: `E2E零容量-${Date.now()}`, zone: 'A区', type: 'shelf', capacity: 0,
+      256 |     })
+    > 257 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      258 |   })
+      259 |   test('LOC-CREATE-03. 表单校验：未传name返回400', async () => {
+      260 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:257:24
+
+    Error Context: test-results\locations-库位管理---新增库位-LOC-CREATE-02-空数据边界：capacity-0合法-chromium\error-context.md
+
+  26) [chromium] › e2e\locations.spec.ts:259:3 › 库位管理 -> 新增库位 › LOC-CREATE-03. 表单校验：未传name返回400 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      260 |     const token = await apiLogin('admin')
+      261 |     const res = await apiFetch(token, 'POST', '/locations', { zone: 'A区', type: 'shelf' })
+    > 262 |     expect(res.status).toBe(400)
+          |                        ^
+      263 |   })
+      264 |   test('LOC-CREATE-04. 表单校验：未传zone返回400', async () => {
+      265 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:262:24
+
+    Error Context: test-results\locations-库位管理---新增库位-LOC-CREATE-03-表单校验：未传name返回400-chromium\error-context.md
+
+  27) [chromium] › e2e\locations.spec.ts:264:3 › 库位管理 -> 新增库位 › LOC-CREATE-04. 表单校验：未传zone返回400 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      265 |     const token = await apiLogin('admin')
+      266 |     const res = await apiFetch(token, 'POST', '/locations', { name: '无区域', type: 'shelf' })
+    > 267 |     expect(res.status).toBe(400)
+          |                        ^
+      268 |   })
+      269 |   for (const role of LOC_FORBIDDEN) {
+      270 |     test(`LOC-CREATE-05-${role}. 权限：${role}新增库位返回403`, async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:267:24
+
+    Error Context: test-results\locations-库位管理---新增库位-LOC-CREATE-04-表单校验：未传zone返回400-chromium\error-context.md
+
+  28) [chromium] › e2e\locations.spec.ts:278:3 › 库位管理 -> 新增库位 › LOC-CREATE-06. 并发：快速双击提交 ───────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32mtrue[39m
+    Received: [31mfalse[39m
+
+      280 |     const body = { name: `E2E并发-${Date.now()}`, zone: 'A区', type: 'shelf' }
+      281 |     const [r1, r2] = await Promise.all([apiFetch(token, 'POST', '/locations', body), apiFetch(token, 'POST', '/locations', body)])
+    > 282 |     expect(r1.status === 201 || r2.status === 201).toBe(true)
+          |                                                    ^
+      283 |   })
+      284 |   test('LOC-CREATE-07. 异常恢复：提交时网络中断后重试', async () => {
+      285 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:282:52
+
+    Error Context: test-results\locations-库位管理---新增库位-LOC-CREATE-06-并发：快速双击提交-chromium\error-context.md
+
+  29) [chromium] › e2e\locations.spec.ts:284:3 › 库位管理 -> 新增库位 › LOC-CREATE-07. 异常恢复：提交时网络中断后重试 ─────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      287 |       name: `E2E恢复-${Date.now()}`, zone: 'A区', type: 'shelf', remark: 'E2E',
+      288 |     })
+    > 289 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      290 |   })
+      291 |   test('LOC-CREATE-08. UI差异：admin显示新增库位按钮', async ({ page }) => {
+      292 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:289:24
+
+    Error Context: test-results\locations-库位管理---新增库位-LOC-CREATE-07-异常恢复：提交时网络中断后重试-chromium\error-context.md
+
+  30) [chromium] › e2e\locations.spec.ts:291:3 › 库位管理 -> 新增库位 › LOC-CREATE-08. UI差异：admin显示新增库位按钮 ──
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:292:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---新增库位-LOC-CREATE-08-UI差异：admin显示新增库位按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---新增库位-LOC-CREATE-08-UI差异：admin显示新增库位按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---新增库位-LOC-CREATE-08-UI差异：admin显示新增库位按钮-chromium\error-context.md
+
+  31) [chromium] › e2e\locations.spec.ts:315:3 › 库位管理 -> 新增库位 › LOC-CREATE-12. 边界：超长name ───────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      318 |       name: 'E2E-' + 'X'.repeat(200), zone: 'A区', type: 'shelf',
+      319 |     })
+    > 320 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      321 |   })
+      322 |   test('LOC-CREATE-13. 边界：负数capacity', async () => {
+      323 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:320:29
+
+    Error Context: test-results\locations-库位管理---新增库位-LOC-CREATE-12-边界：超长name-chromium\error-context.md
+
+  32) [chromium] › e2e\locations.spec.ts:322:3 › 库位管理 -> 新增库位 › LOC-CREATE-13. 边界：负数capacity ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      325 |       name: `E2E负容量-${Date.now()}`, zone: 'A区', type: 'shelf', capacity: -10,
+      326 |     })
+    > 327 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      328 |   })
+      329 |   test('LOC-CREATE-14. 正常用例：入库单库位下拉同步', async () => {
+      330 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:327:29
+
+    Error Context: test-results\locations-库位管理---新增库位-LOC-CREATE-13-边界：负数capacity-chromium\error-context.md
+
+  33) [chromium] › e2e\locations.spec.ts:329:3 › 库位管理 -> 新增库位 › LOC-CREATE-14. 正常用例：入库单库位下拉同步 ──────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      330 |     const token = await apiLogin('admin')
+      331 |     const res = await apiFetch(token, 'GET', '/locations?page=1&pageSize=5')
+    > 332 |     expect(res.status).toBe(200)
+          |                        ^
+      333 |   })
+      334 | })
+      335 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:332:24
+
+    Error Context: test-results\locations-库位管理---新增库位-LOC-CREATE-14-正常用例：入库单库位下拉同步-chromium\error-context.md
+
+  34) [chromium] › e2e\locations.spec.ts:388:3 › 库位管理 -> 编辑库位 › LOC-EDIT-07. UI差异：admin显示编辑按钮 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:389:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---编辑库位-LOC-EDIT-07-UI差异：admin显示编辑按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---编辑库位-LOC-EDIT-07-UI差异：admin显示编辑按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---编辑库位-LOC-EDIT-07-UI差异：admin显示编辑按钮-chromium\error-context.md
+
+  35) [chromium] › e2e\locations.spec.ts:404:3 › 库位管理 -> 编辑库位 › LOC-EDIT-10. 表单校验：编辑不存在的库位返回404 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      405 |     const token = await apiLogin('admin')
+      406 |     const res = await apiFetch(token, 'PUT', '/locations/non-existent-id', { name: '不存在' })
+    > 407 |     expect(res.status).toBe(404)
+          |                        ^
+      408 |   })
+      409 |   test('LOC-EDIT-11. 边界：编辑name为空字符串', async () => {
+      410 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:407:24
+
+    Error Context: test-results\locations-库位管理---编辑库位-LOC-EDIT-10-表单校验：编辑不存在的库位返回404-chromium\error-context.md
+
+  36) [chromium] › e2e\locations.spec.ts:429:3 › 库位管理 -> 删除库位 › LOC-DEL-01. 正常用例：admin删除无库存关联库位 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m201[39m
+    Received: [31m401[39m
+
+      432 |       name: `E2E删除-${Date.now()}`, zone: 'A区', type: 'shelf',
+      433 |     })
+    > 434 |     expect(create.status).toBe(201)
+          |                           ^
+      435 |     const id = create.data?.data?.id
+      436 |     const res = await apiFetch(token, 'DELETE', `/locations/${id}`)
+      437 |     expect([200, 409, 404]).toContain(res.status)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:434:27
+
+    Error Context: test-results\locations-库位管理---删除库位-LOC-DEL-01-正常用例：admin删除无库存关联库位-chromium\error-context.md
+
+  37) [chromium] › e2e\locations.spec.ts:480:3 › 库位管理 -> 删除库位 › LOC-DEL-06. UI差异：admin显示删除按钮 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:481:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---删除库位-LOC-DEL-06-UI差异：admin显示删除按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---删除库位-LOC-DEL-06-UI差异：admin显示删除按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---删除库位-LOC-DEL-06-UI差异：admin显示删除按钮-chromium\error-context.md
+
+  38) [chromium] › e2e\locations.spec.ts:490:3 › 库位管理 -> 删除库位 › LOC-DEL-08. 表单校验：删除不存在的库位返回404 ─────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      491 |     const token = await apiLogin('admin')
+      492 |     const res = await apiFetch(token, 'DELETE', '/locations/non-existent-id')
+    > 493 |     expect(res.status).toBe(404)
+          |                        ^
+      494 |   })
+      495 |   test('LOC-DEL-09. 业务冲突：删除后再次删除返回404', async () => {
+      496 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:493:24
+
+    Error Context: test-results\locations-库位管理---删除库位-LOC-DEL-08-表单校验：删除不存在的库位返回404-chromium\error-context.md
+
+  39) [chromium] › e2e\locations.spec.ts:539:3 › 库位管理 -> 分页切换 › LOC-PAGE-01. 正常用例：切换到第2页 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:540:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---分页切换-LOC-PAGE-01-正常用例：切换到第2页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---分页切换-LOC-PAGE-01-正常用例：切换到第2页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---分页切换-LOC-PAGE-01-正常用例：切换到第2页-chromium\error-context.md
+
+  40) [chromium] › e2e\locations.spec.ts:544:3 › 库位管理 -> 分页切换 › LOC-PAGE-02. 边界：仅1页分页器隐藏 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:545:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---分页切换-LOC-PAGE-02-边界：仅1页分页器隐藏-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---分页切换-LOC-PAGE-02-边界：仅1页分页器隐藏-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---分页切换-LOC-PAGE-02-边界：仅1页分页器隐藏-chromium\error-context.md
+
+  41) [chromium] › e2e\locations.spec.ts:549:3 › 库位管理 -> 分页切换 › LOC-PAGE-03. 表单校验：page=0后端修正为1 ─────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[200, 500][39m
+
+      550 |     const token = await apiLogin('admin')
+      551 |     const res = await apiFetch(token, 'GET', '/locations?page=0')
+    > 552 |     expect([200, 500]).toContain(res.status)
+          |                        ^
+      553 |     if (res.status === 200) {
+      554 |       expect(res.data?.data?.pagination?.page ?? res.data?.data?.page).toBeGreaterThanOrEqual(1)
+      555 |     }
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:552:24
+
+    Error Context: test-results\locations-库位管理---分页切换-LOC-PAGE-03-表单校验：page-0后端修正为1-chromium\error-context.md
+
+  42) [chromium] › e2e\locations.spec.ts:557:3 › 库位管理 -> 分页切换 › LOC-PAGE-04. 边界：page=999返回空列表 ──────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      558 |     const token = await apiLogin('admin')
+      559 |     const res = await apiFetch(token, 'GET', '/locations?page=999')
+    > 560 |     expect(res.status).toBe(200)
+          |                        ^
+      561 |   })
+      562 |   test('LOC-PAGE-05. 边界：pageSize=1', async () => {
+      563 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:560:24
+
+    Error Context: test-results\locations-库位管理---分页切换-LOC-PAGE-04-边界：page-999返回空列表-chromium\error-context.md
+
+  43) [chromium] › e2e\locations.spec.ts:562:3 › 库位管理 -> 分页切换 › LOC-PAGE-05. 边界：pageSize=1 ─────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      563 |     const token = await apiLogin('admin')
+      564 |     const res = await apiFetch(token, 'GET', '/locations?page=1&pageSize=1')
+    > 565 |     expect(res.status).toBe(200)
+          |                        ^
+      566 |     expect(res.data?.data?.list?.length || 0).toBeLessThanOrEqual(1)
+      567 |   })
+      568 |   test('LOC-PAGE-06. 边界：pageSize=100', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:565:24
+
+    Error Context: test-results\locations-库位管理---分页切换-LOC-PAGE-05-边界：pageSize-1-chromium\error-context.md
+
+  44) [chromium] › e2e\locations.spec.ts:568:3 › 库位管理 -> 分页切换 › LOC-PAGE-06. 边界：pageSize=100 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      569 |     const token = await apiLogin('admin')
+      570 |     const res = await apiFetch(token, 'GET', '/locations?page=1&pageSize=100')
+    > 571 |     expect(res.status).toBe(200)
+          |                        ^
+      572 |   })
+      573 |   test('LOC-PAGE-07. 并发：快速切换分页', async ({ page }) => {
+      574 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:571:24
+
+    Error Context: test-results\locations-库位管理---分页切换-LOC-PAGE-06-边界：pageSize-100-chromium\error-context.md
+
+  45) [chromium] › e2e\locations.spec.ts:573:3 › 库位管理 -> 分页切换 › LOC-PAGE-07. 并发：快速切换分页 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:574:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---分页切换-LOC-PAGE-07-并发：快速切换分页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---分页切换-LOC-PAGE-07-并发：快速切换分页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---分页切换-LOC-PAGE-07-并发：快速切换分页-chromium\error-context.md
+
+  46) [chromium] › e2e\locations.spec.ts:580:3 › 库位管理 -> 分页切换 › LOC-PAGE-08. UI差异：各角色分页一致 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:582:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---分页切换-LOC-PAGE-08-UI差异：各角色分页一致-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---分页切换-LOC-PAGE-08-UI差异：各角色分页一致-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---分页切换-LOC-PAGE-08-UI差异：各角色分页一致-chromium\error-context.md
+
+  47) [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-053. warehouse_manager POST /locations 返回403 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m201[39m
+
+      608 |       if (s.method === 'GET') res = await apiFetch(token, 'GET', '/locations')
+      609 |       else res = await apiFetch(token, 'POST', '/locations', { name: '权限', zone: 'A区', type: 'shelf' })
+    > 610 |       expect(res.status).toBe(s.expect)
+          |                          ^
+      611 |     })
+      612 |   }
+      613 |   test('TC-PERM-LOC-EXTRA-01. admin GET /locations 返回200', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:610:26
+
+    Error Context: test-results\locations-库位管理---角色权限矩阵补充--bd4b9-anager-POST-locations-返回403-chromium\error-context.md
+
+  48) [chromium] › e2e\locations.spec.ts:613:3 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-LOC-EXTRA-01. admin GET /locations 返回200 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      614 |     const token = await apiLogin('admin')
+      615 |     const res = await apiFetch(token, 'GET', '/locations')
+    > 616 |     expect(res.status).toBe(200)
+          |                        ^
+      617 |   })
+      618 |   test('TC-PERM-LOC-EXTRA-02. warehouse_manager GET /locations 返回200', async () => {
+      619 |     const token = await apiLogin('warehouse_manager')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:616:24
+
+    Error Context: test-results\locations-库位管理---角色权限矩阵补充--24b18-1-admin-GET-locations-返回200-chromium\error-context.md
+
+  49) [chromium] › e2e\locations.spec.ts:629:3 › 库位管理 -> 业务流程树 › BF-LOC-01. 主路径：登录→进入库位管理→新增库位→填写信息→提交→列表刷新 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      632 |       name: `E2E主路径-${Date.now()}`, zone: 'A区', type: 'shelf', remark: 'E2E',
+      633 |     })
+    > 634 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      635 |   })
+      636 |   test('BF-LOC-02. 分支：关闭弹窗不保存', async ({ page }) => {
+      637 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:634:24
+
+    Error Context: test-results\locations-库位管理---业务流程树-BF--1745f-登录→进入库位管理→新增库位→填写信息→提交→列表刷新-chromium\error-context.md
+
+  50) [chromium] › e2e\locations.spec.ts:636:3 › 库位管理 -> 业务流程树 › BF-LOC-02. 分支：关闭弹窗不保存 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:637:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---业务流程树-BF-LOC-02-分支：关闭弹窗不保存-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---业务流程树-BF-LOC-02-分支：关闭弹窗不保存-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---业务流程树-BF-LOC-02-分支：关闭弹窗不保存-chromium\error-context.md
+
+  51) [chromium] › e2e\locations.spec.ts:641:3 › 库位管理 -> 业务流程树 › BF-LOC-03. 分支：必填字段漏填 ──────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      642 |     const token = await apiLogin('admin')
+      643 |     const res = await apiFetch(token, 'POST', '/locations', { name: '漏填' })
+    > 644 |     expect(res.status).toBe(400)
+          |                        ^
+      645 |   })
+      646 |   test('BF-LOC-04. 分支：刷新页面后新库位仍在列表', async ({ page }) => {
+      647 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:644:24
+
+    Error Context: test-results\locations-库位管理---业务流程树-BF-LOC-03-分支：必填字段漏填-chromium\error-context.md
+
+  52) [chromium] › e2e\locations.spec.ts:646:3 › 库位管理 -> 业务流程树 › BF-LOC-04. 分支：刷新页面后新库位仍在列表 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:647:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---业务流程树-BF-LOC-04-分支：刷新页面后新库位仍在列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---业务流程树-BF-LOC-04-分支：刷新页面后新库位仍在列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---业务流程树-BF-LOC-04-分支：刷新页面后新库位仍在列表-chromium\error-context.md
+
+  53) [chromium] › e2e\locations.spec.ts:666:3 › 库位管理 -> 业务流程树 › BF-LOC-07. 分支：warehouse_manager尝试新增被403拦截 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m201[39m
+
+      669 |       name: '越权', zone: 'A区', type: 'shelf',
+      670 |     })
+    > 671 |     expect(res.status).toBe(403)
+          |                        ^
+      672 |   })
+      673 |   test('BF-LOC-08. 分支：快速筛选后分页', async ({ page }) => {
+      674 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:671:24
+
+    Error Context: test-results\locations-库位管理---业务流程树-BF--101f4-warehouse-manager尝试新增被403拦截-chromium\error-context.md
+
+  54) [chromium] › e2e\locations.spec.ts:673:3 › 库位管理 -> 业务流程树 › BF-LOC-08. 分支：快速筛选后分页 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:674:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---业务流程树-BF-LOC-08-分支：快速筛选后分页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---业务流程树-BF-LOC-08-分支：快速筛选后分页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---业务流程树-BF-LOC-08-分支：快速筛选后分页-chromium\error-context.md
+
+  55) [chromium] › e2e\locations.spec.ts:691:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-02. 库位容量使用率计算 ──────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      692 |     const token = await apiLogin('admin')
+      693 |     const res = await apiFetch(token, 'GET', '/locations?page=1&pageSize=1')
+    > 694 |     expect(res.status).toBe(200)
+          |                        ^
+      695 |   })
+      696 |   test('BLIND-LOC-03. 库位树形结构展示', async ({ page }) => {
+      697 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:694:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-02-库位容量使用率计算-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-02-库位容量使用率计算-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-02-库位容量使用率计算-chromium\error-context.md
+
+  56) [chromium] › e2e\locations.spec.ts:696:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-03. 库位树形结构展示 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:697:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-03-库位树形结构展示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-03-库位树形结构展示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-03-库位树形结构展示-chromium\error-context.md
+
+  57) [chromium] › e2e\locations.spec.ts:701:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-04. 库位列表导出功能 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:702:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-04-库位列表导出功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-04-库位列表导出功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-04-库位列表导出功能-chromium\error-context.md
+
+  58) [chromium] › e2e\locations.spec.ts:706:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-05. 库位打印功能 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:707:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-05-库位打印功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-05-库位打印功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-05-库位打印功能-chromium\error-context.md
+
+  59) [chromium] › e2e\locations.spec.ts:711:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-06. 库位页面响应式布局 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:712:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-06-库位页面响应式布局-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-06-库位页面响应式布局-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-06-库位页面响应式布局-chromium\error-context.md
+
+  60) [chromium] › e2e\locations.spec.ts:717:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-07. 库位页面加载性能 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:718:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-07-库位页面加载性能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-07-库位页面加载性能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-07-库位页面加载性能-chromium\error-context.md
+
+  61) [chromium] › e2e\locations.spec.ts:724:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-08. 库位搜索功能 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:725:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-08-库位搜索功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-08-库位搜索功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-08-库位搜索功能-chromium\error-context.md
+
+  62) [chromium] › e2e\locations.spec.ts:734:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-09. 库位详情弹窗 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:735:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-09-库位详情弹窗-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-09-库位详情弹窗-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-09-库位详情弹窗-chromium\error-context.md
+
+  63) [chromium] › e2e\locations.spec.ts:741:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-10. 库位字段XSS防护 ──────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      744 |       name: '<script>alert(1)</script>', zone: 'A区', type: 'shelf',
+      745 |     })
+    > 746 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      747 |   })
+      748 |   test('BLIND-LOC-11. 库位字段SQL注入防护', async () => {
+      749 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:746:24
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-10-库位字段XSS防护-chromium\error-context.md
+
+  64) [chromium] › e2e\locations.spec.ts:748:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-11. 库位字段SQL注入防护 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      751 |       name: "' OR '1'='1", zone: 'A区', type: 'shelf',
+      752 |     })
+    > 753 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      754 |   })
+      755 |   test('BLIND-LOC-12. 库位API响应格式验证', async () => {
+      756 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:753:24
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-11-库位字段SQL注入防护-chromium\error-context.md
+
+  65) [chromium] › e2e\locations.spec.ts:755:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-12. 库位API响应格式验证 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      756 |     const token = await apiLogin('admin')
+      757 |     const res = await apiFetch(token, 'GET', '/locations?page=1&pageSize=1')
+    > 758 |     expect(res.status).toBe(200)
+          |                        ^
+      759 |     expect(res.data).toHaveProperty('data')
+      760 |     expect(res.data?.data).toHaveProperty('list')
+      761 |     const hasPagination = res.data?.data?.pagination !== undefined
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:758:24
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-12-库位API响应格式验证-chromium\error-context.md
+
+  66) [chromium] › e2e\locations.spec.ts:770:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-13. 库位容量预警 ─────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      771 |     const token = await apiLogin('admin')
+      772 |     const res = await apiFetch(token, 'GET', '/locations?page=1&pageSize=1')
+    > 773 |     expect(res.status).toBe(200)
+          |                        ^
+      774 |     const item = res.data?.data?.list?.[0]
+      775 |     if (item) {
+      776 |       const used = item.used || 0
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:773:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-13-库位容量预警-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-13-库位容量预警-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-13-库位容量预警-chromium\error-context.md
+
+  67) [chromium] › e2e\locations.spec.ts:783:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-14. 库位状态颜色标签 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:784:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-14-库位状态颜色标签-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-14-库位状态颜色标签-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-14-库位状态颜色标签-chromium\error-context.md
+
+  68) [chromium] › e2e\locations.spec.ts:788:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-15. 库位排序功能 ─────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      789 |     const token = await apiLogin('admin')
+      790 |     const res = await apiFetch(token, 'GET', '/locations?sort=code&order=asc')
+    > 791 |     expect(res.status).toBe(200)
+          |                        ^
+      792 |   })
+      793 |   test('BLIND-LOC-16. 多角色同时操作互不影响', async ({ browser }) => {
+      794 |     const ctx1 = await browser.newContext()
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:791:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-15-库位排序功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-15-库位排序功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-15-库位排序功能-chromium\error-context.md
+
+  69) [chromium] › e2e\locations.spec.ts:793:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-16. 多角色同时操作互不影响 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:798:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-16-多角色同时操作互不影响-chromium\test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\locations-库位管理---盲点分析补充-BLIND-LOC-16-多角色同时操作互不影响-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\locations-库位管理---盲点分析补充-BLIND-LOC-16-多角色同时操作互不影响-chromium\error-context.md
+
+  69 failed
+    [chromium] › e2e\locations.spec.ts:72:5 › 库位管理 -> 查看库位树 › LOC-LIST-01-admin. 正常用例：admin可查看库位列表 ─
+    [chromium] › e2e\locations.spec.ts:78:3 › 库位管理 -> 查看库位树 › LOC-LIST-02. 空数据边界：无库位数据显示空状态 ────────
+    [chromium] › e2e\locations.spec.ts:99:3 › 库位管理 -> 查看库位树 › LOC-LIST-07. 异常恢复：API 500显示错误Toast ───
+    [chromium] › e2e\locations.spec.ts:104:3 › 库位管理 -> 查看库位树 › LOC-LIST-08. UI差异：admin显示新增编辑删除按钮 ───
+    [chromium] › e2e\locations.spec.ts:114:3 › 库位管理 -> 查看库位树 › LOC-LIST-10. 正常用例：列表按区域显示树形结构 ───────
+    [chromium] › e2e\locations.spec.ts:125:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-01. 正常用例：选择refrigerator仅显示冷藏柜 
+    [chromium] › e2e\locations.spec.ts:130:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-02. 空数据边界：该类型无库位 ───────────
+    [chromium] › e2e\locations.spec.ts:135:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-03. 正常用例：重置类型筛选 ────────────
+    [chromium] › e2e\locations.spec.ts:140:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-04. UI差异：各角色类型筛选可见 ─────────
+    [chromium] › e2e\locations.spec.ts:147:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-05. 并发：快速切换类型 ──────────────
+    [chromium] › e2e\locations.spec.ts:154:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-06. 异常恢复：类型筛选时API错误 ────────
+    [chromium] › e2e\locations.spec.ts:165:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-01. 正常用例：选择A区仅显示A区库位 ───────
+    [chromium] › e2e\locations.spec.ts:170:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-02. 空数据边界：该区域无库位 ───────────
+    [chromium] › e2e\locations.spec.ts:175:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-03. 正常用例：重置区域筛选 ────────────
+    [chromium] › e2e\locations.spec.ts:180:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-04. UI差异：各角色区域筛选可见 ─────────
+    [chromium] › e2e\locations.spec.ts:187:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-05. 并发：快速切换区域 ──────────────
+    [chromium] › e2e\locations.spec.ts:194:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-06. 异常恢复：区域筛选时API错误 ────────
+    [chromium] › e2e\locations.spec.ts:205:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-01. 正常用例：选择active仅显示在用的库位 
+    [chromium] › e2e\locations.spec.ts:210:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-02. 空数据边界：无active库位 ──────
+    [chromium] › e2e\locations.spec.ts:215:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-03. 正常用例：重置状态筛选 ──────────
+    [chromium] › e2e\locations.spec.ts:220:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-04. UI差异：各角色状态筛选可见 ───────
+    [chromium] › e2e\locations.spec.ts:227:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-05. 并发：快速切换状态 ────────────
+    [chromium] › e2e\locations.spec.ts:234:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-06. 异常恢复：状态筛选时API错误 ──────
+    [chromium] › e2e\locations.spec.ts:245:3 › 库位管理 -> 新增库位 › LOC-CREATE-01. 正常用例：admin新增库位成功 ──────
+    [chromium] › e2e\locations.spec.ts:252:3 › 库位管理 -> 新增库位 › LOC-CREATE-02. 空数据边界：capacity=0合法 ────
+    [chromium] › e2e\locations.spec.ts:259:3 › 库位管理 -> 新增库位 › LOC-CREATE-03. 表单校验：未传name返回400 ──────
+    [chromium] › e2e\locations.spec.ts:264:3 › 库位管理 -> 新增库位 › LOC-CREATE-04. 表单校验：未传zone返回400 ──────
+    [chromium] › e2e\locations.spec.ts:278:3 › 库位管理 -> 新增库位 › LOC-CREATE-06. 并发：快速双击提交 ─────────────
+    [chromium] › e2e\locations.spec.ts:284:3 › 库位管理 -> 新增库位 › LOC-CREATE-07. 异常恢复：提交时网络中断后重试 ───────
+    [chromium] › e2e\locations.spec.ts:291:3 › 库位管理 -> 新增库位 › LOC-CREATE-08. UI差异：admin显示新增库位按钮 ────
+    [chromium] › e2e\locations.spec.ts:315:3 › 库位管理 -> 新增库位 › LOC-CREATE-12. 边界：超长name ─────────────
+    [chromium] › e2e\locations.spec.ts:322:3 › 库位管理 -> 新增库位 › LOC-CREATE-13. 边界：负数capacity ─────────
+    [chromium] › e2e\locations.spec.ts:329:3 › 库位管理 -> 新增库位 › LOC-CREATE-14. 正常用例：入库单库位下拉同步 ────────
+    [chromium] › e2e\locations.spec.ts:388:3 › 库位管理 -> 编辑库位 › LOC-EDIT-07. UI差异：admin显示编辑按钮 ────────
+    [chromium] › e2e\locations.spec.ts:404:3 › 库位管理 -> 编辑库位 › LOC-EDIT-10. 表单校验：编辑不存在的库位返回404 ──────
+    [chromium] › e2e\locations.spec.ts:429:3 › 库位管理 -> 删除库位 › LOC-DEL-01. 正常用例：admin删除无库存关联库位 ──────
+    [chromium] › e2e\locations.spec.ts:480:3 › 库位管理 -> 删除库位 › LOC-DEL-06. UI差异：admin显示删除按钮 ─────────
+    [chromium] › e2e\locations.spec.ts:490:3 › 库位管理 -> 删除库位 › LOC-DEL-08. 表单校验：删除不存在的库位返回404 ───────
+    [chromium] › e2e\locations.spec.ts:539:3 › 库位管理 -> 分页切换 › LOC-PAGE-01. 正常用例：切换到第2页 ─────────────
+    [chromium] › e2e\locations.spec.ts:544:3 › 库位管理 -> 分页切换 › LOC-PAGE-02. 边界：仅1页分页器隐藏 ─────────────
+    [chromium] › e2e\locations.spec.ts:549:3 › 库位管理 -> 分页切换 › LOC-PAGE-03. 表单校验：page=0后端修正为1 ───────
+    [chromium] › e2e\locations.spec.ts:557:3 › 库位管理 -> 分页切换 › LOC-PAGE-04. 边界：page=999返回空列表 ────────
+    [chromium] › e2e\locations.spec.ts:562:3 › 库位管理 -> 分页切换 › LOC-PAGE-05. 边界：pageSize=1 ───────────
+    [chromium] › e2e\locations.spec.ts:568:3 › 库位管理 -> 分页切换 › LOC-PAGE-06. 边界：pageSize=100 ─────────
+    [chromium] › e2e\locations.spec.ts:573:3 › 库位管理 -> 分页切换 › LOC-PAGE-07. 并发：快速切换分页 ───────────────
+    [chromium] › e2e\locations.spec.ts:580:3 › 库位管理 -> 分页切换 › LOC-PAGE-08. UI差异：各角色分页一致 ────────────
+    [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-053. warehouse_manager POST /locations 返回403 
+    [chromium] › e2e\locations.spec.ts:613:3 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-LOC-EXTRA-01. admin GET /locations 返回200 
+    [chromium] › e2e\locations.spec.ts:629:3 › 库位管理 -> 业务流程树 › BF-LOC-01. 主路径：登录→进入库位管理→新增库位→填写信息→提交→列表刷新 
+    [chromium] › e2e\locations.spec.ts:636:3 › 库位管理 -> 业务流程树 › BF-LOC-02. 分支：关闭弹窗不保存 ───────────────
+    [chromium] › e2e\locations.spec.ts:641:3 › 库位管理 -> 业务流程树 › BF-LOC-03. 分支：必填字段漏填 ────────────────
+    [chromium] › e2e\locations.spec.ts:646:3 › 库位管理 -> 业务流程树 › BF-LOC-04. 分支：刷新页面后新库位仍在列表 ──────────
+    [chromium] › e2e\locations.spec.ts:666:3 › 库位管理 -> 业务流程树 › BF-LOC-07. 分支：warehouse_manager尝试新增被403拦截 
+    [chromium] › e2e\locations.spec.ts:673:3 › 库位管理 -> 业务流程树 › BF-LOC-08. 分支：快速筛选后分页 ───────────────
+    [chromium] › e2e\locations.spec.ts:691:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-02. 库位容量使用率计算 ────────────
+    [chromium] › e2e\locations.spec.ts:696:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-03. 库位树形结构展示 ─────────────
+    [chromium] › e2e\locations.spec.ts:701:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-04. 库位列表导出功能 ─────────────
+    [chromium] › e2e\locations.spec.ts:706:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-05. 库位打印功能 ───────────────
+    [chromium] › e2e\locations.spec.ts:711:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-06. 库位页面响应式布局 ────────────
+    [chromium] › e2e\locations.spec.ts:717:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-07. 库位页面加载性能 ─────────────
+    [chromium] › e2e\locations.spec.ts:724:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-08. 库位搜索功能 ───────────────
+    [chromium] › e2e\locations.spec.ts:734:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-09. 库位详情弹窗 ───────────────
+    [chromium] › e2e\locations.spec.ts:741:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-10. 库位字段XSS防护 ────────────
+    [chromium] › e2e\locations.spec.ts:748:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-11. 库位字段SQL注入防护 ──────────
+    [chromium] › e2e\locations.spec.ts:755:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-12. 库位API响应格式验证 ──────────
+    [chromium] › e2e\locations.spec.ts:770:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-13. 库位容量预警 ───────────────
+    [chromium] › e2e\locations.spec.ts:783:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-14. 库位状态颜色标签 ─────────────
+    [chromium] › e2e\locations.spec.ts:788:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-15. 库位排序功能 ───────────────
+    [chromium] › e2e\locations.spec.ts:793:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-16. 多角色同时操作互不影响 ──────────
+  23 skipped
+  29 passed (9.2m)

@@ -1,0 +1,1906 @@
+
+Running 112 tests using 1 worker
+
+  x    1 [chromium] › e2e\dashboard.spec.ts:53:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-01-admin. admin登录后仪表盘显示统计卡片 (12.3s)
+  ok   2 [chromium] › e2e\dashboard.spec.ts:53:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-01-warehouse_manager. warehouse_manager登录后仪表盘显示统计卡片 (3.4s)
+  ok   3 [chromium] › e2e\dashboard.spec.ts:53:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-01-technician. technician登录后仪表盘显示统计卡片 (3.4s)
+  ok   4 [chromium] › e2e\dashboard.spec.ts:53:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-01-pathologist. pathologist登录后仪表盘显示统计卡片 (3.0s)
+  ok   5 [chromium] › e2e\dashboard.spec.ts:53:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-01-procurement. procurement登录后仪表盘显示统计卡片 (3.1s)
+  ok   6 [chromium] › e2e\dashboard.spec.ts:53:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-01-finance. finance登录后仪表盘显示统计卡片 (3.3s)
+  x    7 [chromium] › e2e\dashboard.spec.ts:61:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-02-admin. admin仪表盘显示快捷操作入口 (11.5s)
+  ok   8 [chromium] › e2e\dashboard.spec.ts:61:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-02-warehouse_manager. warehouse_manager仪表盘显示快捷操作入口 (2.0s)
+  ok   9 [chromium] › e2e\dashboard.spec.ts:61:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-02-technician. technician仪表盘显示快捷操作入口 (1.6s)
+  ok  10 [chromium] › e2e\dashboard.spec.ts:61:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-02-pathologist. pathologist仪表盘显示快捷操作入口 (1.8s)
+  ok  11 [chromium] › e2e\dashboard.spec.ts:61:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-02-procurement. procurement仪表盘显示快捷操作入口 (1.5s)
+  ok  12 [chromium] › e2e\dashboard.spec.ts:61:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-02-finance. finance仪表盘显示快捷操作入口 (2.3s)
+  x   13 [chromium] › e2e\dashboard.spec.ts:73:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-03-admin. admin仪表盘显示今日日期 (11.5s)
+  ok  14 [chromium] › e2e\dashboard.spec.ts:73:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-03-warehouse_manager. warehouse_manager仪表盘显示今日日期 (2.0s)
+  ok  15 [chromium] › e2e\dashboard.spec.ts:73:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-03-technician. technician仪表盘显示今日日期 (1.8s)
+  ok  16 [chromium] › e2e\dashboard.spec.ts:73:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-03-pathologist. pathologist仪表盘显示今日日期 (2.0s)
+  ok  17 [chromium] › e2e\dashboard.spec.ts:73:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-03-procurement. procurement仪表盘显示今日日期 (1.7s)
+  ok  18 [chromium] › e2e\dashboard.spec.ts:73:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-03-finance. finance仪表盘显示今日日期 (2.0s)
+  x   19 [chromium] › e2e\dashboard.spec.ts:80:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-04. admin显示全部统计卡片 (11.8s)
+  x   20 [chromium] › e2e\dashboard.spec.ts:88:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-05. 统计卡片可点击跳转 (11.7s)
+  x   21 [chromium] › e2e\dashboard.spec.ts:97:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-06. 统计卡片hover效果 (11.4s)
+  x   22 [chromium] › e2e\dashboard.spec.ts:105:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-07. 统计数字为数值格式 (11.4s)
+  x   23 [chromium] › e2e\dashboard.spec.ts:118:5 › 仪表盘 -> 空数据/边界 › DASH-BOUND-01-admin. admin系统初始化无数据时计数为0 (11.4s)
+  ok  24 [chromium] › e2e\dashboard.spec.ts:118:5 › 仪表盘 -> 空数据/边界 › DASH-BOUND-01-warehouse_manager. warehouse_manager系统初始化无数据时计数为0 (3.0s)
+  ok  25 [chromium] › e2e\dashboard.spec.ts:118:5 › 仪表盘 -> 空数据/边界 › DASH-BOUND-01-technician. technician系统初始化无数据时计数为0 (2.6s)
+  ok  26 [chromium] › e2e\dashboard.spec.ts:118:5 › 仪表盘 -> 空数据/边界 › DASH-BOUND-01-pathologist. pathologist系统初始化无数据时计数为0 (2.8s)
+  ok  27 [chromium] › e2e\dashboard.spec.ts:118:5 › 仪表盘 -> 空数据/边界 › DASH-BOUND-01-procurement. procurement系统初始化无数据时计数为0 (2.7s)
+  ok  28 [chromium] › e2e\dashboard.spec.ts:118:5 › 仪表盘 -> 空数据/边界 › DASH-BOUND-01-finance. finance系统初始化无数据时计数为0 (2.7s)
+  x   29 [chromium] › e2e\dashboard.spec.ts:125:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-02. 预警数为0时点击卡片显示空状态 (11.6s)
+  x   30 [chromium] › e2e\dashboard.spec.ts:131:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-03. 无出入库记录时本月入库=0 (11.7s)
+  x   31 [chromium] › e2e\dashboard.spec.ts:136:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-04. 无出入库记录时本月出库=0 (11.4s)
+  x   32 [chromium] › e2e\dashboard.spec.ts:141:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-05. 库存总量为0时显示 (11.5s)
+  ok  33 [chromium] › e2e\dashboard.spec.ts:151:3 › 仪表盘 -> 权限 › DASH-PERM-01. 无Token访问仪表盘重定向到登录页 (1.3s)
+  ok  34 [chromium] › e2e\dashboard.spec.ts:156:3 › 仪表盘 -> 权限 › DASH-PERM-02. 无Token直接访问/inventory重定向到登录 (1.2s)
+  x   35 [chromium] › e2e\dashboard.spec.ts:162:5 › 仪表盘 -> 权限 › DASH-PERM-03-admin. admin访问仪表盘允许 (11.3s)
+  ok  36 [chromium] › e2e\dashboard.spec.ts:162:5 › 仪表盘 -> 权限 › DASH-PERM-03-warehouse_manager. warehouse_manager访问仪表盘允许 (1.4s)
+  ok  37 [chromium] › e2e\dashboard.spec.ts:162:5 › 仪表盘 -> 权限 › DASH-PERM-03-technician. technician访问仪表盘允许 (1.6s)
+  ok  38 [chromium] › e2e\dashboard.spec.ts:162:5 › 仪表盘 -> 权限 › DASH-PERM-03-pathologist. pathologist访问仪表盘允许 (1.1s)
+  ok  39 [chromium] › e2e\dashboard.spec.ts:162:5 › 仪表盘 -> 权限 › DASH-PERM-03-procurement. procurement访问仪表盘允许 (1.2s)
+  ok  40 [chromium] › e2e\dashboard.spec.ts:162:5 › 仪表盘 -> 权限 › DASH-PERM-03-finance. finance访问仪表盘允许 (1.4s)
+  x   41 [chromium] › e2e\dashboard.spec.ts:169:5 › 仪表盘 -> 权限 › DASH-PERM-04-admin. admin侧边栏菜单与权限匹配 (11.3s)
+  ok  42 [chromium] › e2e\dashboard.spec.ts:169:5 › 仪表盘 -> 权限 › DASH-PERM-04-warehouse_manager. warehouse_manager侧边栏菜单与权限匹配 (1.3s)
+  ok  43 [chromium] › e2e\dashboard.spec.ts:169:5 › 仪表盘 -> 权限 › DASH-PERM-04-technician. technician侧边栏菜单与权限匹配 (1.5s)
+  ok  44 [chromium] › e2e\dashboard.spec.ts:169:5 › 仪表盘 -> 权限 › DASH-PERM-04-pathologist. pathologist侧边栏菜单与权限匹配 (1.3s)
+  ok  45 [chromium] › e2e\dashboard.spec.ts:169:5 › 仪表盘 -> 权限 › DASH-PERM-04-procurement. procurement侧边栏菜单与权限匹配 (1.5s)
+  ok  46 [chromium] › e2e\dashboard.spec.ts:169:5 › 仪表盘 -> 权限 › DASH-PERM-04-finance. finance侧边栏菜单与权限匹配 (1.6s)
+  x   47 [chromium] › e2e\dashboard.spec.ts:175:3 › 仪表盘 -> 权限 › DASH-PERM-05. admin显示全部17个菜单项 (11.5s)
+  x   48 [chromium] › e2e\dashboard.spec.ts:181:3 › 仪表盘 -> 权限 › DASH-PERM-06. finance仅显示3个菜单 (6.3s)
+  x   49 [chromium] › e2e\dashboard.spec.ts:188:3 › 仪表盘 -> 权限 › DASH-PERM-07. technician仅显示6个菜单 (6.2s)
+  ok  50 [chromium] › e2e\dashboard.spec.ts:195:3 › 仪表盘 -> 权限 › DASH-PERM-08. warehouse_manager可访问库存操作菜单 (1.4s)
+  x   51 [chromium] › e2e\dashboard.spec.ts:202:3 › 仪表盘 -> 权限 › DASH-PERM-09. procurement可访问采购相关菜单 (1.4s)
+  ok  52 [chromium] › e2e\dashboard.spec.ts:208:3 › 仪表盘 -> 权限 › DASH-PERM-10. pathologist可访问诊断相关菜单 (1.6s)
+  x   53 [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-库存. admin点击库存正确跳转 (11.6s)
+  x   54 [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-入库. admin点击入库正确跳转 (11.7s)
+  x   55 [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-出库. admin点击出库正确跳转 (11.5s)
+  x   56 [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-盘点. admin点击盘点正确跳转 (12.2s)
+  x   57 [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-预警. admin点击预警正确跳转 (11.8s)
+  x   58 [chromium] › e2e\dashboard.spec.ts:238:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-02. 当前页面菜单项高亮 (11.8s)
+  x   59 [chromium] › e2e\dashboard.spec.ts:249:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-03. 网络中断后点击导航恢复可跳转 (11.7s)
+  x   60 [chromium] › e2e\dashboard.spec.ts:258:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-04. 侧边栏折叠展开功能 (11.5s)
+  x   61 [chromium] › e2e\dashboard.spec.ts:264:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-05. 侧边栏搜索功能 (11.3s)
+  x   62 [chromium] › e2e\dashboard.spec.ts:276:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-01-admin. admin移动端点击汉堡菜单侧边栏滑入 (12.1s)
+  ok  63 [chromium] › e2e\dashboard.spec.ts:276:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-01-warehouse_manager. warehouse_manager移动端点击汉堡菜单侧边栏滑入 (1.3s)
+  ok  64 [chromium] › e2e\dashboard.spec.ts:276:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-01-technician. technician移动端点击汉堡菜单侧边栏滑入 (1.4s)
+  ok  65 [chromium] › e2e\dashboard.spec.ts:276:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-01-pathologist. pathologist移动端点击汉堡菜单侧边栏滑入 (2.1s)
+  ok  66 [chromium] › e2e\dashboard.spec.ts:276:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-01-procurement. procurement移动端点击汉堡菜单侧边栏滑入 (1.6s)
+  ok  67 [chromium] › e2e\dashboard.spec.ts:276:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-01-finance. finance移动端点击汉堡菜单侧边栏滑入 (1.8s)
+  x   68 [chromium] › e2e\dashboard.spec.ts:289:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-02-admin. admin移动端菜单项与桌面端一致 (11.9s)
+  ok  69 [chromium] › e2e\dashboard.spec.ts:289:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-02-warehouse_manager. warehouse_manager移动端菜单项与桌面端一致 (1.7s)
+  ok  70 [chromium] › e2e\dashboard.spec.ts:289:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-02-technician. technician移动端菜单项与桌面端一致 (2.2s)
+  ok  71 [chromium] › e2e\dashboard.spec.ts:289:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-02-pathologist. pathologist移动端菜单项与桌面端一致 (2.7s)
+  ok  72 [chromium] › e2e\dashboard.spec.ts:289:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-02-procurement. procurement移动端菜单项与桌面端一致 (2.4s)
+  ok  73 [chromium] › e2e\dashboard.spec.ts:289:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-02-finance. finance移动端菜单项与桌面端一致 (2.0s)
+  x   74 [chromium] › e2e\dashboard.spec.ts:301:3 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-03. 超小屏幕<768px打开侧边栏遮罩层覆盖 (11.8s)
+  x   75 [chromium] › e2e\dashboard.spec.ts:313:3 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-04. 点击遮罩层关闭侧边栏 (11.4s)
+  x   76 [chromium] › e2e\dashboard.spec.ts:325:3 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-05. 移动端点击菜单项后自动关闭侧边栏 (11.9s)
+  x   77 [chromium] › e2e\dashboard.spec.ts:343:5 › 仪表盘 -> 异常后恢复 › DASH-RECV-01-admin. adminAPI 500时显示错误提示 (12.1s)
+  ok  78 [chromium] › e2e\dashboard.spec.ts:343:5 › 仪表盘 -> 异常后恢复 › DASH-RECV-01-warehouse_manager. warehouse_managerAPI 500时显示错误提示 (2.6s)
+  ok  79 [chromium] › e2e\dashboard.spec.ts:343:5 › 仪表盘 -> 异常后恢复 › DASH-RECV-01-technician. technicianAPI 500时显示错误提示 (2.4s)
+  ok  80 [chromium] › e2e\dashboard.spec.ts:343:5 › 仪表盘 -> 异常后恢复 › DASH-RECV-01-pathologist. pathologistAPI 500时显示错误提示 (2.1s)
+  ok  81 [chromium] › e2e\dashboard.spec.ts:343:5 › 仪表盘 -> 异常后恢复 › DASH-RECV-01-procurement. procurementAPI 500时显示错误提示 (2.6s)
+  ok  82 [chromium] › e2e\dashboard.spec.ts:343:5 › 仪表盘 -> 异常后恢复 › DASH-RECV-01-finance. financeAPI 500时显示错误提示 (2.4s)
+  x   83 [chromium] › e2e\dashboard.spec.ts:352:3 › 仪表盘 -> 异常后恢复 › DASH-RECV-02. 网络中断后刷新页面数据重新加载 (11.5s)
+  x   84 [chromium] › e2e\dashboard.spec.ts:362:3 › 仪表盘 -> 异常后恢复 › DASH-RECV-03. 部分API失败时其他数据正常显示 (11.5s)
+  x   85 [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-admin. admin侧边栏菜单数量在15-20之间 (11.5s)
+  x   86 [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-warehouse_manager. warehouse_manager侧边栏菜单数量在8-12之间 (1.5s)
+  x   87 [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-technician. technician侧边栏菜单数量在4-8之间 (1.3s)
+  x   88 [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-pathologist. pathologist侧边栏菜单数量在6-10之间 (1.3s)
+  x   89 [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-procurement. procurement侧边栏菜单数量在6-10之间 (1.4s)
+  x   90 [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-finance. finance侧边栏菜单数量在3-6之间 (1.5s)
+  x   91 [chromium] › e2e\dashboard.spec.ts:394:3 › 仪表盘 -> 不同角色UI差异 › DASH-UI-02. admin显示系统管理菜单 (11.6s)
+  x   92 [chromium] › e2e\dashboard.spec.ts:401:3 › 仪表盘 -> 不同角色UI差异 › DASH-UI-03. 非admin隐藏系统管理菜单 (6.4s)
+  ok  93 [chromium] › e2e\dashboard.spec.ts:415:3 › 仪表盘 -> 业务流程树 › BF-DASH-01. 采购入库流主路径：登录后进入仪表盘 (2.7s)
+  ok  94 [chromium] › e2e\dashboard.spec.ts:423:3 › 仪表盘 -> 业务流程树 › BF-DASH-02. 项目领用出库流主路径：技术员登录查看仪表盘 (2.3s)
+  x   95 [chromium] › e2e\dashboard.spec.ts:429:3 › 仪表盘 -> 业务流程树 › BF-DASH-03. 预警处理流主路径：仪表盘显示预警数量 (11.6s)
+  x   96 [chromium] › e2e\dashboard.spec.ts:434:3 › 仪表盘 -> 业务流程树 › BF-DASH-04. 刷新页面状态保持：刷新后仍显示仪表盘数据 (11.3s)
+  x   97 [chromium] › e2e\dashboard.spec.ts:444:3 › 仪表盘 -> 业务流程树 › BF-DASH-05. 多标签页切换：打开新标签页保持登录状态 (12.2s)
+  x   98 [chromium] › e2e\dashboard.spec.ts:459:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-01. 统计卡片hover效果正常 (11.9s)
+  x   99 [chromium] › e2e\dashboard.spec.ts:467:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-02. 刷新页面后统计数据重新加载 (11.3s)
+  x  100 [chromium] › e2e\dashboard.spec.ts:474:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-03. 多浏览器上下文数据隔离 (12.3s)
+  x  101 [chromium] › e2e\dashboard.spec.ts:487:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-04. 仪表盘暗色主题支持 (11.6s)
+  x  102 [chromium] › e2e\dashboard.spec.ts:498:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-05. 快捷操作按钮可点击 (11.6s)
+  x  103 [chromium] › e2e\dashboard.spec.ts:504:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-06. 最近活动列表按时间排序 (11.6s)
+  x  104 [chromium] › e2e\dashboard.spec.ts:515:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-07. 趋势图表正常渲染 (11.2s)
+  x  105 [chromium] › e2e\dashboard.spec.ts:525:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-08. 页面加载性能检查 (11.3s)
+  x  106 [chromium] › e2e\dashboard.spec.ts:532:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-09. 仪表盘标题显示正确 (11.5s)
+  x  107 [chromium] › e2e\dashboard.spec.ts:538:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-10. 页面滚动行为正常 (11.4s)
+  x  108 [chromium] › e2e\dashboard.spec.ts:544:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-11. 仪表盘响应式-平板尺寸 (11.4s)
+  x  109 [chromium] › e2e\dashboard.spec.ts:550:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-12. 仪表盘响应式-手机尺寸 (11.8s)
+  x  110 [chromium] › e2e\dashboard.spec.ts:556:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-13. 数据自动刷新机制 (11.3s)
+  x  111 [chromium] › e2e\dashboard.spec.ts:562:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-14. 键盘导航支持 (11.3s)
+  x  112 [chromium] › e2e\dashboard.spec.ts:569:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-15. 离线提示显示 (11.4s)
+
+
+  1) [chromium] › e2e\dashboard.spec.ts:53:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-01-admin. admin登录后仪表盘显示统计卡片 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:54:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-01-admin-admin登录后仪表盘显示统计卡片-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-01-admin-admin登录后仪表盘显示统计卡片-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-01-admin-admin登录后仪表盘显示统计卡片-chromium\error-context.md
+
+  2) [chromium] › e2e\dashboard.spec.ts:61:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-02-admin. admin仪表盘显示快捷操作入口 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:62:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-02-admin-admin仪表盘显示快捷操作入口-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-02-admin-admin仪表盘显示快捷操作入口-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-02-admin-admin仪表盘显示快捷操作入口-chromium\error-context.md
+
+  3) [chromium] › e2e\dashboard.spec.ts:73:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-03-admin. admin仪表盘显示今日日期 ──
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:74:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-03-admin-admin仪表盘显示今日日期-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-03-admin-admin仪表盘显示今日日期-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-03-admin-admin仪表盘显示今日日期-chromium\error-context.md
+
+  4) [chromium] › e2e\dashboard.spec.ts:80:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-04. admin显示全部统计卡片 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:81:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-04-admin显示全部统计卡片-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-04-admin显示全部统计卡片-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-04-admin显示全部统计卡片-chromium\error-context.md
+
+  5) [chromium] › e2e\dashboard.spec.ts:88:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-05. 统计卡片可点击跳转 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:89:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-05-统计卡片可点击跳转-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-05-统计卡片可点击跳转-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-05-统计卡片可点击跳转-chromium\error-context.md
+
+  6) [chromium] › e2e\dashboard.spec.ts:97:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-06. 统计卡片hover效果 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:98:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-06-统计卡片hover效果-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-06-统计卡片hover效果-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-06-统计卡片hover效果-chromium\error-context.md
+
+  7) [chromium] › e2e\dashboard.spec.ts:105:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-07. 统计数字为数值格式 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:106:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-07-统计数字为数值格式-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-07-统计数字为数值格式-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---查看统计概览-DASH-STAT-07-统计数字为数值格式-chromium\error-context.md
+
+  8) [chromium] › e2e\dashboard.spec.ts:118:5 › 仪表盘 -> 空数据/边界 › DASH-BOUND-01-admin. admin系统初始化无数据时计数为0 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:119:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---空数据-边界-DAS-8a657-01-admin-admin系统初始化无数据时计数为0-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---空数据-边界-DAS-8a657-01-admin-admin系统初始化无数据时计数为0-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---空数据-边界-DAS-8a657-01-admin-admin系统初始化无数据时计数为0-chromium\error-context.md
+
+  9) [chromium] › e2e\dashboard.spec.ts:125:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-02. 预警数为0时点击卡片显示空状态 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:126:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-02-预警数为0时点击卡片显示空状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-02-预警数为0时点击卡片显示空状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-02-预警数为0时点击卡片显示空状态-chromium\error-context.md
+
+  10) [chromium] › e2e\dashboard.spec.ts:131:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-03. 无出入库记录时本月入库=0 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:132:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-03-无出入库记录时本月入库-0-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-03-无出入库记录时本月入库-0-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-03-无出入库记录时本月入库-0-chromium\error-context.md
+
+  11) [chromium] › e2e\dashboard.spec.ts:136:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-04. 无出入库记录时本月出库=0 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:137:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-04-无出入库记录时本月出库-0-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-04-无出入库记录时本月出库-0-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-04-无出入库记录时本月出库-0-chromium\error-context.md
+
+  12) [chromium] › e2e\dashboard.spec.ts:141:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-05. 库存总量为0时显示 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:142:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-05-库存总量为0时显示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-05-库存总量为0时显示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---空数据-边界-DASH-BOUND-05-库存总量为0时显示-chromium\error-context.md
+
+  13) [chromium] › e2e\dashboard.spec.ts:162:5 › 仪表盘 -> 权限 › DASH-PERM-03-admin. admin访问仪表盘允许 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:163:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-03-admin-admin访问仪表盘允许-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-03-admin-admin访问仪表盘允许-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---权限-DASH-PERM-03-admin-admin访问仪表盘允许-chromium\error-context.md
+
+  14) [chromium] › e2e\dashboard.spec.ts:169:5 › 仪表盘 -> 权限 › DASH-PERM-04-admin. admin侧边栏菜单与权限匹配 ───
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:170:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-04-admin-admin侧边栏菜单与权限匹配-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-04-admin-admin侧边栏菜单与权限匹配-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---权限-DASH-PERM-04-admin-admin侧边栏菜单与权限匹配-chromium\error-context.md
+
+  15) [chromium] › e2e\dashboard.spec.ts:175:3 › 仪表盘 -> 权限 › DASH-PERM-05. admin显示全部17个菜单项 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:176:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-05-admin显示全部17个菜单项-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-05-admin显示全部17个菜单项-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---权限-DASH-PERM-05-admin显示全部17个菜单项-chromium\error-context.md
+
+  16) [chromium] › e2e\dashboard.spec.ts:181:3 › 仪表盘 -> 权限 › DASH-PERM-06. finance仅显示3个菜单 ──────────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).not.[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator:  locator('nav').locator('text=入库').first()
+    Expected: not visible
+    Received: visible
+    Timeout:  5000ms
+
+    Call log:
+    [2m  - Expect "not toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('nav').locator('text=入库').first()[22m
+    [2m    9 × locator resolved to <span class="text-sm font-medium truncate">入库记录</span>[22m
+    [2m      - unexpected value "visible"[22m
+
+
+      181 |   test('DASH-PERM-06. finance仅显示3个菜单', async ({ page }) => {
+      182 |     await loginAs(page, 'finance')
+    > 183 |     await expect(page.locator('nav >> text=入库').first()).not.toBeVisible()
+          |                                                              ^
+      184 |     await expect(page.locator('nav >> text=出库').first()).not.toBeVisible()
+      185 |     await expect(page.locator('nav >> text=盘点').first()).not.toBeVisible()
+      186 |   })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:183:62
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-06-finance仅显示3个菜单-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-06-finance仅显示3个菜单-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---权限-DASH-PERM-06-finance仅显示3个菜单-chromium\error-context.md
+
+  17) [chromium] › e2e\dashboard.spec.ts:188:3 › 仪表盘 -> 权限 › DASH-PERM-07. technician仅显示6个菜单 ───────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).not.[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator:  locator('nav').locator('text=入库').first()
+    Expected: not visible
+    Received: visible
+    Timeout:  5000ms
+
+    Call log:
+    [2m  - Expect "not toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('nav').locator('text=入库').first()[22m
+    [2m    9 × locator resolved to <span class="text-sm font-medium truncate">入库记录</span>[22m
+    [2m      - unexpected value "visible"[22m
+
+
+      188 |   test('DASH-PERM-07. technician仅显示6个菜单', async ({ page }) => {
+      189 |     await loginAs(page, 'technician')
+    > 190 |     await expect(page.locator('nav >> text=入库').first()).not.toBeVisible()
+          |                                                              ^
+      191 |     await expect(page.locator('nav >> text=用户').first()).not.toBeVisible()
+      192 |     await expect(page.locator('nav >> text=角色').first()).not.toBeVisible()
+      193 |   })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:190:62
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-07-technician仅显示6个菜单-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-07-technician仅显示6个菜单-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---权限-DASH-PERM-07-technician仅显示6个菜单-chromium\error-context.md
+
+  18) [chromium] › e2e\dashboard.spec.ts:202:3 › 仪表盘 -> 权限 › DASH-PERM-09. procurement可访问采购相关菜单 ────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first())
+    Expected: visible
+    Error: strict mode violation: locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first()) resolved to 2 elements:
+        1) <span class="text-sm font-medium truncate">物料成本分析</span> aka getByRole('link', { name: '物料成本分析' })
+        2) <span class="text-sm font-medium truncate">耗材管理</span> aka getByRole('link', { name: '耗材管理' })
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('nav').locator('text=物料').first().or(locator('nav').locator('text=耗材').first())[22m
+
+
+      203 |     await loginAs(page, 'procurement')
+      204 |     await expect(page.locator('nav >> text=供应商').first()).toBeVisible()
+    > 205 |     await expect(page.locator('nav >> text=物料').first().or(page.locator('nav >> text=耗材').first())).toBeVisible()
+          |                                                                                                     ^
+      206 |   })
+      207 |
+      208 |   test('DASH-PERM-10. pathologist可访问诊断相关菜单', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:205:101
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-09-procurement可访问采购相关菜单-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---权限-DASH-PERM-09-procurement可访问采购相关菜单-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---权限-DASH-PERM-09-procurement可访问采购相关菜单-chromium\error-context.md
+
+  19) [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-库存. admin点击库存正确跳转 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:229:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-库存-admin点击库存正确跳转-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-库存-admin点击库存正确跳转-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-库存-admin点击库存正确跳转-chromium\error-context.md
+
+  20) [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-入库. admin点击入库正确跳转 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:229:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-入库-admin点击入库正确跳转-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-入库-admin点击入库正确跳转-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-入库-admin点击入库正确跳转-chromium\error-context.md
+
+  21) [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-出库. admin点击出库正确跳转 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:229:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-出库-admin点击出库正确跳转-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-出库-admin点击出库正确跳转-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-出库-admin点击出库正确跳转-chromium\error-context.md
+
+  22) [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-盘点. admin点击盘点正确跳转 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:229:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-盘点-admin点击盘点正确跳转-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-盘点-admin点击盘点正确跳转-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-盘点-admin点击盘点正确跳转-chromium\error-context.md
+
+  23) [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-预警. admin点击预警正确跳转 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:229:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-预警-admin点击预警正确跳转-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-预警-admin点击预警正确跳转-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-01-预警-admin点击预警正确跳转-chromium\error-context.md
+
+  24) [chromium] › e2e\dashboard.spec.ts:238:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-02. 当前页面菜单项高亮 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:239:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-02-当前页面菜单项高亮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-02-当前页面菜单项高亮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-02-当前页面菜单项高亮-chromium\error-context.md
+
+  25) [chromium] › e2e\dashboard.spec.ts:249:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-03. 网络中断后点击导航恢复可跳转 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:250:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-03-网络中断后点击导航恢复可跳转-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-03-网络中断后点击导航恢复可跳转-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-03-网络中断后点击导航恢复可跳转-chromium\error-context.md
+
+  26) [chromium] › e2e\dashboard.spec.ts:258:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-04. 侧边栏折叠展开功能 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:259:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-04-侧边栏折叠展开功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-04-侧边栏折叠展开功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-04-侧边栏折叠展开功能-chromium\error-context.md
+
+  27) [chromium] › e2e\dashboard.spec.ts:264:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-05. 侧边栏搜索功能 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:265:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-05-侧边栏搜索功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-05-侧边栏搜索功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---侧边栏导航切换-DASH-NAV-05-侧边栏搜索功能-chromium\error-context.md
+
+  28) [chromium] › e2e\dashboard.spec.ts:276:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-01-admin. admin移动端点击汉堡菜单侧边栏滑入 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:278:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-01-admin-admin移动端点击汉堡菜单侧边栏滑入-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-01-admin-admin移动端点击汉堡菜单侧边栏滑入-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-01-admin-admin移动端点击汉堡菜单侧边栏滑入-chromium\error-context.md
+
+  29) [chromium] › e2e\dashboard.spec.ts:289:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-02-admin. admin移动端菜单项与桌面端一致 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:291:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-02-admin-admin移动端菜单项与桌面端一致-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-02-admin-admin移动端菜单项与桌面端一致-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-02-admin-admin移动端菜单项与桌面端一致-chromium\error-context.md
+
+  30) [chromium] › e2e\dashboard.spec.ts:301:3 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-03. 超小屏幕<768px打开侧边栏遮罩层覆盖 ─
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:303:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-03-超小屏幕-768px打开侧边栏遮罩层覆盖-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-03-超小屏幕-768px打开侧边栏遮罩层覆盖-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-03-超小屏幕-768px打开侧边栏遮罩层覆盖-chromium\error-context.md
+
+  31) [chromium] › e2e\dashboard.spec.ts:313:3 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-04. 点击遮罩层关闭侧边栏 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:315:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-04-点击遮罩层关闭侧边栏-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-04-点击遮罩层关闭侧边栏-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-04-点击遮罩层关闭侧边栏-chromium\error-context.md
+
+  32) [chromium] › e2e\dashboard.spec.ts:325:3 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-05. 移动端点击菜单项后自动关闭侧边栏 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:327:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-05-移动端点击菜单项后自动关闭侧边栏-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-05-移动端点击菜单项后自动关闭侧边栏-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---移动端侧边栏-DASH-MOB-05-移动端点击菜单项后自动关闭侧边栏-chromium\error-context.md
+
+  33) [chromium] › e2e\dashboard.spec.ts:343:5 › 仪表盘 -> 异常后恢复 › DASH-RECV-01-admin. adminAPI 500时显示错误提示 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:345:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---异常后恢复-DASH-RECV-01-admin-adminAPI-500时显示错误提示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---异常后恢复-DASH-RECV-01-admin-adminAPI-500时显示错误提示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---异常后恢复-DASH-RECV-01-admin-adminAPI-500时显示错误提示-chromium\error-context.md
+
+  34) [chromium] › e2e\dashboard.spec.ts:352:3 › 仪表盘 -> 异常后恢复 › DASH-RECV-02. 网络中断后刷新页面数据重新加载 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:353:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---异常后恢复-DASH-RECV-02-网络中断后刷新页面数据重新加载-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---异常后恢复-DASH-RECV-02-网络中断后刷新页面数据重新加载-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---异常后恢复-DASH-RECV-02-网络中断后刷新页面数据重新加载-chromium\error-context.md
+
+  35) [chromium] › e2e\dashboard.spec.ts:362:3 › 仪表盘 -> 异常后恢复 › DASH-RECV-03. 部分API失败时其他数据正常显示 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:363:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---异常后恢复-DASH-RECV-03-部分API失败时其他数据正常显示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---异常后恢复-DASH-RECV-03-部分API失败时其他数据正常显示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---异常后恢复-DASH-RECV-03-部分API失败时其他数据正常显示-chromium\error-context.md
+
+  36) [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-admin. admin侧边栏菜单数量在15-20之间 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:386:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-c508c--admin-admin侧边栏菜单数量在15-20之间-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-c508c--admin-admin侧边栏菜单数量在15-20之间-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---不同角色UI差异-D-c508c--admin-admin侧边栏菜单数量在15-20之间-chromium\error-context.md
+
+  37) [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-warehouse_manager. warehouse_manager侧边栏菜单数量在8-12之间 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: <= [32m12[39m
+    Received:    [31m18[39m
+
+      388 |       const count = await links.count()
+      389 |       expect(count).toBeGreaterThanOrEqual(min)
+    > 390 |       expect(count).toBeLessThanOrEqual(max)
+          |                     ^
+      391 |     })
+      392 |   }
+      393 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:390:21
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-129e1-house-manager侧边栏菜单数量在8-12之间-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-129e1-house-manager侧边栏菜单数量在8-12之间-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---不同角色UI差异-D-129e1-house-manager侧边栏菜单数量在8-12之间-chromium\error-context.md
+
+  38) [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-technician. technician侧边栏菜单数量在4-8之间 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: <= [32m8[39m
+    Received:    [31m18[39m
+
+      388 |       const count = await links.count()
+      389 |       expect(count).toBeGreaterThanOrEqual(min)
+    > 390 |       expect(count).toBeLessThanOrEqual(max)
+          |                     ^
+      391 |     })
+      392 |   }
+      393 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:390:21
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-4db42-ian-technician侧边栏菜单数量在4-8之间-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-4db42-ian-technician侧边栏菜单数量在4-8之间-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---不同角色UI差异-D-4db42-ian-technician侧边栏菜单数量在4-8之间-chromium\error-context.md
+
+  39) [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-pathologist. pathologist侧边栏菜单数量在6-10之间 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: <= [32m10[39m
+    Received:    [31m18[39m
+
+      388 |       const count = await links.count()
+      389 |       expect(count).toBeGreaterThanOrEqual(min)
+    > 390 |       expect(count).toBeLessThanOrEqual(max)
+          |                     ^
+      391 |     })
+      392 |   }
+      393 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:390:21
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-9f623-t-pathologist侧边栏菜单数量在6-10之间-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-9f623-t-pathologist侧边栏菜单数量在6-10之间-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---不同角色UI差异-D-9f623-t-pathologist侧边栏菜单数量在6-10之间-chromium\error-context.md
+
+  40) [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-procurement. procurement侧边栏菜单数量在6-10之间 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: <= [32m10[39m
+    Received:    [31m18[39m
+
+      388 |       const count = await links.count()
+      389 |       expect(count).toBeGreaterThanOrEqual(min)
+    > 390 |       expect(count).toBeLessThanOrEqual(max)
+          |                     ^
+      391 |     })
+      392 |   }
+      393 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:390:21
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-ace77-t-procurement侧边栏菜单数量在6-10之间-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-ace77-t-procurement侧边栏菜单数量在6-10之间-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---不同角色UI差异-D-ace77-t-procurement侧边栏菜单数量在6-10之间-chromium\error-context.md
+
+  41) [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-finance. finance侧边栏菜单数量在3-6之间 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThanOrEqual[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: <= [32m6[39m
+    Received:    [31m18[39m
+
+      388 |       const count = await links.count()
+      389 |       expect(count).toBeGreaterThanOrEqual(min)
+    > 390 |       expect(count).toBeLessThanOrEqual(max)
+          |                     ^
+      391 |     })
+      392 |   }
+      393 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:390:21
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-277ff-inance-finance侧边栏菜单数量在3-6之间-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-D-277ff-inance-finance侧边栏菜单数量在3-6之间-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---不同角色UI差异-D-277ff-inance-finance侧边栏菜单数量在3-6之间-chromium\error-context.md
+
+  42) [chromium] › e2e\dashboard.spec.ts:394:3 › 仪表盘 -> 不同角色UI差异 › DASH-UI-02. admin显示系统管理菜单 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:395:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-DASH-UI-02-admin显示系统管理菜单-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-DASH-UI-02-admin显示系统管理菜单-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---不同角色UI差异-DASH-UI-02-admin显示系统管理菜单-chromium\error-context.md
+
+  43) [chromium] › e2e\dashboard.spec.ts:401:3 › 仪表盘 -> 不同角色UI差异 › DASH-UI-03. 非admin隐藏系统管理菜单 ──────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).not.[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator:  locator('nav').locator('text=用户').first()
+    Expected: not visible
+    Received: visible
+    Timeout:  5000ms
+
+    Call log:
+    [2m  - Expect "not toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('nav').locator('text=用户').first()[22m
+    [2m    9 × locator resolved to <span class="text-sm font-medium truncate">用户管理</span>[22m
+    [2m      - unexpected value "visible"[22m
+
+
+      402 |     for (const role of ['technician', 'pathologist', 'procurement', 'finance'] as RoleKey[]) {
+      403 |       await loginAs(page, role)
+    > 404 |       await expect(page.locator('nav >> text=用户').first()).not.toBeVisible()
+          |                                                                ^
+      405 |       await page.goto(`${FE_BASE}/login`)
+      406 |       await page.evaluate(() => localStorage.clear())
+      407 |     }
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:404:64
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-DASH-UI-03-非admin隐藏系统管理菜单-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---不同角色UI差异-DASH-UI-03-非admin隐藏系统管理菜单-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---不同角色UI差异-DASH-UI-03-非admin隐藏系统管理菜单-chromium\error-context.md
+
+  44) [chromium] › e2e\dashboard.spec.ts:429:3 › 仪表盘 -> 业务流程树 › BF-DASH-03. 预警处理流主路径：仪表盘显示预警数量 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:430:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---业务流程树-BF-DASH-03-预警处理流主路径：仪表盘显示预警数量-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---业务流程树-BF-DASH-03-预警处理流主路径：仪表盘显示预警数量-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---业务流程树-BF-DASH-03-预警处理流主路径：仪表盘显示预警数量-chromium\error-context.md
+
+  45) [chromium] › e2e\dashboard.spec.ts:434:3 › 仪表盘 -> 业务流程树 › BF-DASH-04. 刷新页面状态保持：刷新后仍显示仪表盘数据 ───
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:435:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---业务流程树-BF-DASH-04-刷新页面状态保持：刷新后仍显示仪表盘数据-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---业务流程树-BF-DASH-04-刷新页面状态保持：刷新后仍显示仪表盘数据-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---业务流程树-BF-DASH-04-刷新页面状态保持：刷新后仍显示仪表盘数据-chromium\error-context.md
+
+  46) [chromium] › e2e\dashboard.spec.ts:444:3 › 仪表盘 -> 业务流程树 › BF-DASH-05. 多标签页切换：打开新标签页保持登录状态 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:447:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---业务流程树-BF-DASH-05-多标签页切换：打开新标签页保持登录状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---业务流程树-BF-DASH-05-多标签页切换：打开新标签页保持登录状态-chromium\test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---业务流程树-BF-DASH-05-多标签页切换：打开新标签页保持登录状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---业务流程树-BF-DASH-05-多标签页切换：打开新标签页保持登录状态-chromium\error-context.md
+
+  47) [chromium] › e2e\dashboard.spec.ts:459:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-01. 统计卡片hover效果正常 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:460:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-01-统计卡片hover效果正常-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-01-统计卡片hover效果正常-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-01-统计卡片hover效果正常-chromium\error-context.md
+
+  48) [chromium] › e2e\dashboard.spec.ts:467:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-02. 刷新页面后统计数据重新加载 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:468:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-02-刷新页面后统计数据重新加载-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-02-刷新页面后统计数据重新加载-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-02-刷新页面后统计数据重新加载-chromium\error-context.md
+
+  49) [chromium] › e2e\dashboard.spec.ts:474:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-03. 多浏览器上下文数据隔离 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:479:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-03-多浏览器上下文数据隔离-chromium\test-failed-3.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-03-多浏览器上下文数据隔离-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-03-多浏览器上下文数据隔离-chromium\test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-03-多浏览器上下文数据隔离-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-03-多浏览器上下文数据隔离-chromium\error-context.md
+
+  50) [chromium] › e2e\dashboard.spec.ts:487:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-04. 仪表盘暗色主题支持 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:488:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-04-仪表盘暗色主题支持-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-04-仪表盘暗色主题支持-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-04-仪表盘暗色主题支持-chromium\error-context.md
+
+  51) [chromium] › e2e\dashboard.spec.ts:498:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-05. 快捷操作按钮可点击 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:499:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-05-快捷操作按钮可点击-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-05-快捷操作按钮可点击-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-05-快捷操作按钮可点击-chromium\error-context.md
+
+  52) [chromium] › e2e\dashboard.spec.ts:504:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-06. 最近活动列表按时间排序 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:505:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-06-最近活动列表按时间排序-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-06-最近活动列表按时间排序-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-06-最近活动列表按时间排序-chromium\error-context.md
+
+  53) [chromium] › e2e\dashboard.spec.ts:515:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-07. 趋势图表正常渲染 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:516:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-07-趋势图表正常渲染-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-07-趋势图表正常渲染-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-07-趋势图表正常渲染-chromium\error-context.md
+
+  54) [chromium] › e2e\dashboard.spec.ts:525:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-08. 页面加载性能检查 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:527:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-08-页面加载性能检查-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-08-页面加载性能检查-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-08-页面加载性能检查-chromium\error-context.md
+
+  55) [chromium] › e2e\dashboard.spec.ts:532:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-09. 仪表盘标题显示正确 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:533:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-09-仪表盘标题显示正确-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-09-仪表盘标题显示正确-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-09-仪表盘标题显示正确-chromium\error-context.md
+
+  56) [chromium] › e2e\dashboard.spec.ts:538:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-10. 页面滚动行为正常 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:539:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-10-页面滚动行为正常-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-10-页面滚动行为正常-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-10-页面滚动行为正常-chromium\error-context.md
+
+  57) [chromium] › e2e\dashboard.spec.ts:544:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-11. 仪表盘响应式-平板尺寸 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:546:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-11-仪表盘响应式-平板尺寸-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-11-仪表盘响应式-平板尺寸-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-11-仪表盘响应式-平板尺寸-chromium\error-context.md
+
+  58) [chromium] › e2e\dashboard.spec.ts:550:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-12. 仪表盘响应式-手机尺寸 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:552:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-12-仪表盘响应式-手机尺寸-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-12-仪表盘响应式-手机尺寸-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-12-仪表盘响应式-手机尺寸-chromium\error-context.md
+
+  59) [chromium] › e2e\dashboard.spec.ts:556:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-13. 数据自动刷新机制 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:557:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-13-数据自动刷新机制-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-13-数据自动刷新机制-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-13-数据自动刷新机制-chromium\error-context.md
+
+  60) [chromium] › e2e\dashboard.spec.ts:562:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-14. 键盘导航支持 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:563:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-14-键盘导航支持-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-14-键盘导航支持-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-14-键盘导航支持-chromium\error-context.md
+
+  61) [chromium] › e2e\dashboard.spec.ts:569:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-15. 离线提示显示 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\dashboard.spec.ts:570:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-15-离线提示显示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-15-离线提示显示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\dashboard-仪表盘---盲点分析补充-BLIND-DASH-15-离线提示显示-chromium\error-context.md
+
+  61 failed
+    [chromium] › e2e\dashboard.spec.ts:53:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-01-admin. admin登录后仪表盘显示统计卡片 
+    [chromium] › e2e\dashboard.spec.ts:61:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-02-admin. admin仪表盘显示快捷操作入口 ─
+    [chromium] › e2e\dashboard.spec.ts:73:5 › 仪表盘 -> 查看统计概览 › DASH-STAT-03-admin. admin仪表盘显示今日日期 ───
+    [chromium] › e2e\dashboard.spec.ts:80:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-04. admin显示全部统计卡片 ──────────
+    [chromium] › e2e\dashboard.spec.ts:88:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-05. 统计卡片可点击跳转 ──────────────
+    [chromium] › e2e\dashboard.spec.ts:97:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-06. 统计卡片hover效果 ────────────
+    [chromium] › e2e\dashboard.spec.ts:105:3 › 仪表盘 -> 查看统计概览 › DASH-STAT-07. 统计数字为数值格式 ─────────────
+    [chromium] › e2e\dashboard.spec.ts:118:5 › 仪表盘 -> 空数据/边界 › DASH-BOUND-01-admin. admin系统初始化无数据时计数为0 
+    [chromium] › e2e\dashboard.spec.ts:125:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-02. 预警数为0时点击卡片显示空状态 ──────
+    [chromium] › e2e\dashboard.spec.ts:131:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-03. 无出入库记录时本月入库=0 ────────
+    [chromium] › e2e\dashboard.spec.ts:136:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-04. 无出入库记录时本月出库=0 ────────
+    [chromium] › e2e\dashboard.spec.ts:141:3 › 仪表盘 -> 空数据/边界 › DASH-BOUND-05. 库存总量为0时显示 ────────────
+    [chromium] › e2e\dashboard.spec.ts:162:5 › 仪表盘 -> 权限 › DASH-PERM-03-admin. admin访问仪表盘允许 ────────
+    [chromium] › e2e\dashboard.spec.ts:169:5 › 仪表盘 -> 权限 › DASH-PERM-04-admin. admin侧边栏菜单与权限匹配 ─────
+    [chromium] › e2e\dashboard.spec.ts:175:3 › 仪表盘 -> 权限 › DASH-PERM-05. admin显示全部17个菜单项 ───────────
+    [chromium] › e2e\dashboard.spec.ts:181:3 › 仪表盘 -> 权限 › DASH-PERM-06. finance仅显示3个菜单 ────────────
+    [chromium] › e2e\dashboard.spec.ts:188:3 › 仪表盘 -> 权限 › DASH-PERM-07. technician仅显示6个菜单 ─────────
+    [chromium] › e2e\dashboard.spec.ts:202:3 › 仪表盘 -> 权限 › DASH-PERM-09. procurement可访问采购相关菜单 ──────
+    [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-库存. admin点击库存正确跳转 ──────
+    [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-入库. admin点击入库正确跳转 ──────
+    [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-出库. admin点击出库正确跳转 ──────
+    [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-盘点. admin点击盘点正确跳转 ──────
+    [chromium] › e2e\dashboard.spec.ts:228:5 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-01-预警. admin点击预警正确跳转 ──────
+    [chromium] › e2e\dashboard.spec.ts:238:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-02. 当前页面菜单项高亮 ─────────────
+    [chromium] › e2e\dashboard.spec.ts:249:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-03. 网络中断后点击导航恢复可跳转 ────────
+    [chromium] › e2e\dashboard.spec.ts:258:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-04. 侧边栏折叠展开功能 ─────────────
+    [chromium] › e2e\dashboard.spec.ts:264:3 › 仪表盘 -> 侧边栏导航切换 › DASH-NAV-05. 侧边栏搜索功能 ───────────────
+    [chromium] › e2e\dashboard.spec.ts:276:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-01-admin. admin移动端点击汉堡菜单侧边栏滑入 
+    [chromium] › e2e\dashboard.spec.ts:289:5 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-02-admin. admin移动端菜单项与桌面端一致 
+    [chromium] › e2e\dashboard.spec.ts:301:3 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-03. 超小屏幕<768px打开侧边栏遮罩层覆盖 ───
+    [chromium] › e2e\dashboard.spec.ts:313:3 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-04. 点击遮罩层关闭侧边栏 ─────────────
+    [chromium] › e2e\dashboard.spec.ts:325:3 › 仪表盘 -> 移动端侧边栏 › DASH-MOB-05. 移动端点击菜单项后自动关闭侧边栏 ───────
+    [chromium] › e2e\dashboard.spec.ts:343:5 › 仪表盘 -> 异常后恢复 › DASH-RECV-01-admin. adminAPI 500时显示错误提示 
+    [chromium] › e2e\dashboard.spec.ts:352:3 › 仪表盘 -> 异常后恢复 › DASH-RECV-02. 网络中断后刷新页面数据重新加载 ────────
+    [chromium] › e2e\dashboard.spec.ts:362:3 › 仪表盘 -> 异常后恢复 › DASH-RECV-03. 部分API失败时其他数据正常显示 ───────
+    [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-admin. admin侧边栏菜单数量在15-20之间 
+    [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-warehouse_manager. warehouse_manager侧边栏菜单数量在8-12之间 
+    [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-technician. technician侧边栏菜单数量在4-8之间 
+    [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-pathologist. pathologist侧边栏菜单数量在6-10之间 
+    [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-procurement. procurement侧边栏菜单数量在6-10之间 
+    [chromium] › e2e\dashboard.spec.ts:385:5 › 仪表盘 -> 不同角色UI差异 › DASH-UI-01-finance. finance侧边栏菜单数量在3-6之间 
+    [chromium] › e2e\dashboard.spec.ts:394:3 › 仪表盘 -> 不同角色UI差异 › DASH-UI-02. admin显示系统管理菜单 ─────────
+    [chromium] › e2e\dashboard.spec.ts:401:3 › 仪表盘 -> 不同角色UI差异 › DASH-UI-03. 非admin隐藏系统管理菜单 ────────
+    [chromium] › e2e\dashboard.spec.ts:429:3 › 仪表盘 -> 业务流程树 › BF-DASH-03. 预警处理流主路径：仪表盘显示预警数量 ───────
+    [chromium] › e2e\dashboard.spec.ts:434:3 › 仪表盘 -> 业务流程树 › BF-DASH-04. 刷新页面状态保持：刷新后仍显示仪表盘数据 ─────
+    [chromium] › e2e\dashboard.spec.ts:444:3 › 仪表盘 -> 业务流程树 › BF-DASH-05. 多标签页切换：打开新标签页保持登录状态 ──────
+    [chromium] › e2e\dashboard.spec.ts:459:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-01. 统计卡片hover效果正常 ────────
+    [chromium] › e2e\dashboard.spec.ts:467:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-02. 刷新页面后统计数据重新加载 ────────
+    [chromium] › e2e\dashboard.spec.ts:474:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-03. 多浏览器上下文数据隔离 ──────────
+    [chromium] › e2e\dashboard.spec.ts:487:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-04. 仪表盘暗色主题支持 ────────────
+    [chromium] › e2e\dashboard.spec.ts:498:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-05. 快捷操作按钮可点击 ────────────
+    [chromium] › e2e\dashboard.spec.ts:504:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-06. 最近活动列表按时间排序 ──────────
+    [chromium] › e2e\dashboard.spec.ts:515:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-07. 趋势图表正常渲染 ─────────────
+    [chromium] › e2e\dashboard.spec.ts:525:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-08. 页面加载性能检查 ─────────────
+    [chromium] › e2e\dashboard.spec.ts:532:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-09. 仪表盘标题显示正确 ────────────
+    [chromium] › e2e\dashboard.spec.ts:538:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-10. 页面滚动行为正常 ─────────────
+    [chromium] › e2e\dashboard.spec.ts:544:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-11. 仪表盘响应式-平板尺寸 ──────────
+    [chromium] › e2e\dashboard.spec.ts:550:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-12. 仪表盘响应式-手机尺寸 ──────────
+    [chromium] › e2e\dashboard.spec.ts:556:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-13. 数据自动刷新机制 ─────────────
+    [chromium] › e2e\dashboard.spec.ts:562:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-14. 键盘导航支持 ───────────────
+    [chromium] › e2e\dashboard.spec.ts:569:3 › 仪表盘 -> 盲点分析补充 › BLIND-DASH-15. 离线提示显示 ───────────────
+  51 passed (14.4m)

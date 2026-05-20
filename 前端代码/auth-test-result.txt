@@ -1,0 +1,425 @@
+
+Running 175 tests using 1 worker
+
+  ok   1 [chromium] › e2e\auth.spec.ts:54:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-01-admin. 正常用例：admin使用正确用户名密码登录成功 (2.1s)
+  ok   2 [chromium] › e2e\auth.spec.ts:54:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-01-warehouse_manager. 正常用例：warehouse_manager使用正确用户名密码登录成功 (1.5s)
+  ok   3 [chromium] › e2e\auth.spec.ts:54:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-01-technician. 正常用例：technician使用正确用户名密码登录成功 (1.5s)
+  ok   4 [chromium] › e2e\auth.spec.ts:54:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-01-pathologist. 正常用例：pathologist使用正确用户名密码登录成功 (1.4s)
+  ok   5 [chromium] › e2e\auth.spec.ts:54:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-01-procurement. 正常用例：procurement使用正确用户名密码登录成功 (1.5s)
+  ok   6 [chromium] › e2e\auth.spec.ts:54:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-01-finance. 正常用例：finance使用正确用户名密码登录成功 (1.5s)
+  ok   7 [chromium] › e2e\auth.spec.ts:61:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-02-admin. 正常用例：admin登录后localStorage存储token (1.7s)
+  ok   8 [chromium] › e2e\auth.spec.ts:61:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-02-warehouse_manager. 正常用例：warehouse_manager登录后localStorage存储token (1.6s)
+  ok   9 [chromium] › e2e\auth.spec.ts:61:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-02-technician. 正常用例：technician登录后localStorage存储token (1.5s)
+  ok  10 [chromium] › e2e\auth.spec.ts:61:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-02-pathologist. 正常用例：pathologist登录后localStorage存储token (1.6s)
+  ok  11 [chromium] › e2e\auth.spec.ts:61:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-02-procurement. 正常用例：procurement登录后localStorage存储token (1.6s)
+  ok  12 [chromium] › e2e\auth.spec.ts:61:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-02-finance. 正常用例：finance登录后localStorage存储token (1.5s)
+  ok  13 [chromium] › e2e\auth.spec.ts:70:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-03-admin. 正常用例：admin登录后显示对应权限菜单 (1.5s)
+  ok  14 [chromium] › e2e\auth.spec.ts:70:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-03-warehouse_manager. 正常用例：warehouse_manager登录后显示对应权限菜单 (2.1s)
+  ok  15 [chromium] › e2e\auth.spec.ts:70:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-03-technician. 正常用例：technician登录后显示对应权限菜单 (1.5s)
+  ok  16 [chromium] › e2e\auth.spec.ts:70:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-03-pathologist. 正常用例：pathologist登录后显示对应权限菜单 (1.5s)
+  ok  17 [chromium] › e2e\auth.spec.ts:70:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-03-procurement. 正常用例：procurement登录后显示对应权限菜单 (1.5s)
+  ok  18 [chromium] › e2e\auth.spec.ts:70:5 › 认证与登录 -> 正常登录 › AUTH-LOGIN-03-finance. 正常用例：finance登录后显示对应权限菜单 (2.3s)
+  ok  19 [chromium] › e2e\auth.spec.ts:76:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-04. 正常用例：admin登录后显示全部17个菜单项 (1.5s)
+  x   20 [chromium] › e2e\auth.spec.ts:84:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-05. 正常用例：finance登录后仅显示允许菜单 (6.5s)
+  x   21 [chromium] › e2e\auth.spec.ts:91:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-06. 正常用例：technician登录后显示技术相关菜单 (6.7s)
+  ok  22 [chromium] › e2e\auth.spec.ts:98:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-07. 正常用例：warehouse_manager登录后显示仓库管理菜单 (1.8s)
+  x   23 [chromium] › e2e\auth.spec.ts:105:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-08. 正常用例：pathologist登录后显示诊断相关菜单 (6.6s)
+  x   24 [chromium] › e2e\auth.spec.ts:111:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-09. 正常用例：procurement登录后显示采购相关菜单 (7.4s)
+  ok  25 [chromium] › e2e\auth.spec.ts:117:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-10. 边界：使用大写用户名登录 (2.1s)
+  ok  26 [chromium] › e2e\auth.spec.ts:124:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-11. 边界：用户名前后带空格 (2.0s)
+  ok  27 [chromium] › e2e\auth.spec.ts:131:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-12. 边界：记住用户名功能开启 (1.5s)
+  ok  28 [chromium] › e2e\auth.spec.ts:143:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-13. 边界：记住用户名功能关闭 (1.4s)
+  ok  29 [chromium] › e2e\auth.spec.ts:153:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-14. 正常用例：回车键提交表单 (2.1s)
+  ok  30 [chromium] › e2e\auth.spec.ts:160:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-15. 正常用例：点击提交按钮登录 (1.3s)
+  ok  31 [chromium] › e2e\auth.spec.ts:172:3 › 认证与登录 -> 空数据/边界 › AUTH-BOUND-01. 空数据：用户名和密码都为空 (970ms)
+  ok  32 [chromium] › e2e\auth.spec.ts:179:3 › 认证与登录 -> 空数据/边界 › AUTH-BOUND-02. 空数据：用户名为空密码非空 (1.0s)
+  ok  33 [chromium] › e2e\auth.spec.ts:185:3 › 认证与登录 -> 空数据/边界 › AUTH-BOUND-03. 空数据：密码为空用户名非空 (1.5s)
+  ok  34 [chromium] › e2e\auth.spec.ts:191:3 › 认证与登录 -> 空数据/边界 › AUTH-BOUND-04. 空数据：密码为空格字符串 (1.5s)
+  ok  35 [chromium] › e2e\auth.spec.ts:198:3 › 认证与登录 -> 空数据/边界 › AUTH-BOUND-05. 边界：超长用户名（>50字符） (858ms)
+  ok  36 [chromium] › e2e\auth.spec.ts:207:3 › 认证与登录 -> 空数据/边界 › AUTH-BOUND-06. 边界：超长密码（>100字符） (1.2s)
+  ok  37 [chromium] › e2e\auth.spec.ts:216:3 › 认证与登录 -> 空数据/边界 › AUTH-BOUND-07. 边界：特殊字符用户名 (1.9s)
+  ok  38 [chromium] › e2e\auth.spec.ts:223:3 › 认证与登录 -> 空数据/边界 › AUTH-BOUND-08. 边界：Unicode用户名 (1.9s)
+  ok  39 [chromium] › e2e\auth.spec.ts:230:3 › 认证与登录 -> 空数据/边界 › AUTH-BOUND-09. 边界：密码包含特殊字符 (2.1s)
+  ok  40 [chromium] › e2e\auth.spec.ts:237:3 › 认证与登录 -> 空数据/边界 › AUTH-BOUND-10. 边界：单字符用户名 (2.0s)
+  ok  41 [chromium] › e2e\auth.spec.ts:249:3 › 认证与登录 -> 表单校验错误 › AUTH-VALID-01. 密码错误返回401 (1.2s)
+  ok  42 [chromium] › e2e\auth.spec.ts:258:3 › 认证与登录 -> 表单校验错误 › AUTH-VALID-02. 不存在的用户登录 (887ms)
+  ok  43 [chromium] › e2e\auth.spec.ts:267:3 › 认证与登录 -> 表单校验错误 › AUTH-VALID-03. 已禁用用户登录 (828ms)
+  ok  44 [chromium] › e2e\auth.spec.ts:276:3 › 认证与登录 -> 表单校验错误 › AUTH-VALID-04. 密码大小写错误 (1.2s)
+  ok  45 [chromium] › e2e\auth.spec.ts:285:3 › 认证与登录 -> 表单校验错误 › AUTH-VALID-05. API直接调用缺少字段返回400 (930ms)
+  ok  46 [chromium] › e2e\auth.spec.ts:293:3 › 认证与登录 -> 表单校验错误 › AUTH-VALID-06. API直接调用缺少密码返回400 (865ms)
+  ok  47 [chromium] › e2e\auth.spec.ts:301:3 › 认证与登录 -> 表单校验错误 › AUTH-VALID-07. API直接调用缺少用户名返回400 (873ms)
+  ok  48 [chromium] › e2e\auth.spec.ts:314:3 › 认证与登录 -> Token刷新 › AUTH-REFRESH-01. 正常用例：有效refreshToken获取新access token (1.6s)
+  ok  49 [chromium] › e2e\auth.spec.ts:324:3 › 认证与登录 -> Token刷新 › AUTH-REFRESH-02. 边界：refreshToken过期返回401 (921ms)
+  ok  50 [chromium] › e2e\auth.spec.ts:329:3 › 认证与登录 -> Token刷新 › AUTH-REFRESH-03. 边界：使用accessToken调用刷新返回401 (1.1s)
+  ok  51 [chromium] › e2e\auth.spec.ts:335:3 › 认证与登录 -> Token刷新 › AUTH-REFRESH-04. 边界：无refreshToken调用刷新返回400 (966ms)
+  ok  52 [chromium] › e2e\auth.spec.ts:340:3 › 认证与登录 -> Token刷新 › AUTH-REFRESH-05. 并发：并发调用刷新接口 (1.1s)
+  ok  53 [chromium] › e2e\auth.spec.ts:352:3 › 认证与登录 -> Token刷新 › AUTH-REFRESH-06. 异常恢复：刷新时网络中断后重试 (1.1s)
+  ok  54 [chromium] › e2e\auth.spec.ts:365:3 › 认证与登录 -> Token刷新 › AUTH-REFRESH-07. 正常用例：刷新后新token可访问受保护接口 (1.0s)
+  ok  55 [chromium] › e2e\auth.spec.ts:377:3 › 认证与登录 -> Token刷新 › AUTH-REFRESH-08. 边界：刷新响应格式验证 (1.0s)
+  ok  56 [chromium] › e2e\auth.spec.ts:394:3 › 认证与登录 -> 用户登出 › AUTH-LOGOUT-01. 正常用例：已登录用户调用登出成功 (1.5s)
+  ok  57 [chromium] › e2e\auth.spec.ts:401:3 › 认证与登录 -> 用户登出 › AUTH-LOGOUT-02. 并发：重复点击登出按钮 (1.4s)
+  ok  58 [chromium] › e2e\auth.spec.ts:412:3 › 认证与登录 -> 用户登出 › AUTH-LOGOUT-03. 异常恢复：登出时网络中断后重试 (2.0s)
+  ok  59 [chromium] › e2e\auth.spec.ts:419:3 › 认证与登录 -> 用户登出 › AUTH-LOGOUT-04. 正常用例：登出后清除localStorage中的token (2.3s)
+  ok  60 [chromium] › e2e\auth.spec.ts:426:3 › 认证与登录 -> 用户登出 › AUTH-LOGOUT-05. 正常用例：登出后访问受保护页面重定向到登录 (2.2s)
+  ok  61 [chromium] › e2e\auth.spec.ts:433:3 › 认证与登录 -> 用户登出 › AUTH-LOGOUT-06. 边界：无token调用登出API (925ms)
+  ok  62 [chromium] › e2e\auth.spec.ts:438:3 › 认证与登录 -> 用户登出 › AUTH-LOGOUT-07. 正常用例：登出后refreshToken也清除 (1.6s)
+  ok  63 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-. 未登录访问/应重定向到登录页 (1.7s)
+  ok  64 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-inventory. 未登录访问/inventory应重定向到登录页 (1.5s)
+  ok  65 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-inbound. 未登录访问/inbound应重定向到登录页 (1.9s)
+  ok  66 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-outbound. 未登录访问/outbound应重定向到登录页 (1.3s)
+  ok  67 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-stocktaking. 未登录访问/stocktaking应重定向到登录页 (1.3s)
+  ok  68 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-categories. 未登录访问/categories应重定向到登录页 (1.4s)
+  ok  69 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-materials. 未登录访问/materials应重定向到登录页 (1.2s)
+  ok  70 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-suppliers. 未登录访问/suppliers应重定向到登录页 (1.3s)
+  ok  71 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-locations. 未登录访问/locations应重定向到登录页 (1.2s)
+  ok  72 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-projects. 未登录访问/projects应重定向到登录页 (1.3s)
+  ok  73 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-bom. 未登录访问/bom应重定向到登录页 (1.2s)
+  ok  74 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-cost-analysis. 未登录访问/cost-analysis应重定向到登录页 (2.3s)
+  ok  75 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-reconciliation. 未登录访问/reconciliation应重定向到登录页 (2.3s)
+  ok  76 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-alerts. 未登录访问/alerts应重定向到登录页 (1.2s)
+  ok  77 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-users. 未登录访问/users应重定向到登录页 (1.2s)
+  ok  78 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-roles. 未登录访问/roles应重定向到登录页 (1.3s)
+  ok  79 [chromium] › e2e\auth.spec.ts:453:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-01-logs. 未登录访问/logs应重定向到登录页 (1.3s)
+  ok  80 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-. 错误Token访问/返回401 (866ms)
+  ok  81 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-inventory. 错误Token访问/inventory返回401 (854ms)
+  ok  82 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-inbound. 错误Token访问/inbound返回401 (1.4s)
+  ok  83 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-outbound. 错误Token访问/outbound返回401 (848ms)
+  ok  84 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-stocktaking. 错误Token访问/stocktaking返回401 (1.0s)
+  ok  85 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-categories. 错误Token访问/categories返回401 (816ms)
+  ok  86 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-materials. 错误Token访问/materials返回401 (2.0s)
+  ok  87 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-suppliers. 错误Token访问/suppliers返回401 (892ms)
+  ok  88 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-locations. 错误Token访问/locations返回401 (833ms)
+  ok  89 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-projects. 错误Token访问/projects返回401 (1.1s)
+  ok  90 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-bom. 错误Token访问/bom返回401 (833ms)
+  ok  91 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-cost-analysis. 错误Token访问/cost-analysis返回401 (854ms)
+  ok  92 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-reconciliation. 错误Token访问/reconciliation返回401 (853ms)
+  ok  93 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-alerts. 错误Token访问/alerts返回401 (883ms)
+  ok  94 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-users. 错误Token访问/users返回401 (845ms)
+  ok  95 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-roles. 错误Token访问/roles返回401 (866ms)
+  ok  96 [chromium] › e2e\auth.spec.ts:460:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-02-logs. 错误Token访问/logs返回401 (876ms)
+  ok  97 [chromium] › e2e\auth.spec.ts:474:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-03-admin. admin无Token直接调用API返回401 (844ms)
+  ok  98 [chromium] › e2e\auth.spec.ts:474:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-03-warehouse_manager. warehouse_manager无Token直接调用API返回401 (824ms)
+  ok  99 [chromium] › e2e\auth.spec.ts:474:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-03-technician. technician无Token直接调用API返回401 (1.1s)
+  ok 100 [chromium] › e2e\auth.spec.ts:474:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-03-pathologist. pathologist无Token直接调用API返回401 (1.0s)
+  ok 101 [chromium] › e2e\auth.spec.ts:474:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-03-procurement. procurement无Token直接调用API返回401 (991ms)
+  ok 102 [chromium] › e2e\auth.spec.ts:474:5 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-03-finance. finance无Token直接调用API返回401 (863ms)
+  ok 103 [chromium] › e2e\auth.spec.ts:480:3 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-04. admin可访问全部页面 (5.2s)
+  ok 104 [chromium] › e2e\auth.spec.ts:488:3 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-05. technician不可访问入库/用户/角色/日志 (4.3s)
+  ok 105 [chromium] › e2e\auth.spec.ts:496:3 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-06. finance不可访问入库/出库/盘点 (4.3s)
+  ok 106 [chromium] › e2e\auth.spec.ts:504:3 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-07. procurement不可访问出库/盘点/成本 (3.3s)
+  ok 107 [chromium] › e2e\auth.spec.ts:512:3 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-08. warehouse_manager不可访问项目/BOM/用户/角色 (4.0s)
+  ok 108 [chromium] › e2e\auth.spec.ts:520:3 › 认证与登录 -> 角色权限矩阵补充 › TC-PERM-AUTH-09. pathologist不可访问系统管理页面 (3.3s)
+  ok 109 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-technician-inbound. technician尝试访问/inbound应被拦截 (1.6s)
+  ok 110 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-technician-outbound. technician尝试访问/outbound应被拦截 (1.9s)
+  ok 111 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-technician-stocktaking. technician尝试访问/stocktaking应被拦截 (1.7s)
+  ok 112 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-technician-users. technician尝试访问/users应被拦截 (3.8s)
+  ok 113 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-technician-roles. technician尝试访问/roles应被拦截 (4.9s)
+  ok 114 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-procurement-outbound. procurement尝试访问/outbound应被拦截 (3.4s)
+  ok 115 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-procurement-stocktaking. procurement尝试访问/stocktaking应被拦截 (12.0s)
+  ok 116 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-procurement-cost-analysis. procurement尝试访问/cost-analysis应被拦截 (8.3s)
+  ok 117 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-finance-inbound. finance尝试访问/inbound应被拦截 (12.1s)
+  ok 118 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-finance-outbound. finance尝试访问/outbound应被拦截 (10.0s)
+  ok 119 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-finance-stocktaking. finance尝试访问/stocktaking应被拦截 (9.1s)
+  ok 120 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-warehouse_manager-projects. warehouse_manager尝试访问/projects应被拦截 (2.5s)
+  ok 121 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-warehouse_manager-bom. warehouse_manager尝试访问/bom应被拦截 (5.2s)
+  ok 122 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-warehouse_manager-users. warehouse_manager尝试访问/users应被拦截 (8.3s)
+  ok 123 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-pathologist-users. pathologist尝试访问/users应被拦截 (8.9s)
+  ok 124 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-pathologist-roles. pathologist尝试访问/roles应被拦截 (1.7s)
+  ok 125 [chromium] › e2e\auth.spec.ts:543:7 › 认证与登录 -> 业务流程树 › BF-PERM-pathologist-logs. pathologist尝试访问/logs应被拦截 (2.8s)
+  ok 126 [chromium] › e2e\auth.spec.ts:557:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-01. localStorage正确存储token和refreshToken (8.9s)
+  x  127 [chromium] › e2e\auth.spec.ts:565:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-02. 已登录用户回退到登录页应自动重定向到首页 (19.5s)
+  ok 128 [chromium] › e2e\auth.spec.ts:571:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-03. Token过期且refreshToken无效后应重定向登录 (2.3s)
+  x  129 [chromium] › e2e\auth.spec.ts:580:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-04. 多浏览器上下文数据隔离 (9.0s)
+  ok 130 [chromium] › e2e\auth.spec.ts:593:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-05. XSS防护：登录输入特殊字符不执行脚本 (1.4s)
+  ok 131 [chromium] › e2e\auth.spec.ts:602:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-06. SQL注入防护：用户名输入SQL语句 (1.6s)
+  ok 132 [chromium] › e2e\auth.spec.ts:611:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-07. 暴力破解防护：连续错误登录10次后正常用户仍可登录 (8.2s)
+  ok 133 [chromium] › e2e\auth.spec.ts:626:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-08. 移动端响应式布局正常显示 (1.3s)
+  ok 134 [chromium] › e2e\auth.spec.ts:633:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-09. 登录按钮在提交时显示loading状态 (1.4s)
+  ok 135 [chromium] › e2e\auth.spec.ts:640:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-10. 密码输入框类型切换 (985ms)
+  ok 136 [chromium] › e2e\auth.spec.ts:646:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-11. 登录页面显示品牌信息 (1.1s)
+  ok 137 [chromium] › e2e\auth.spec.ts:651:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-12. 登录页面显示版本号 (1.3s)
+  ok 138 [chromium] › e2e\auth.spec.ts:656:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-13. Token过期时间验证 (1.5s)
+  ok 139 [chromium] › e2e\auth.spec.ts:667:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-14. 不同用户同时登录互不影响 (4.6s)
+  ok 140 [chromium] › e2e\auth.spec.ts:680:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-15. 登录页面响应式-平板尺寸 (1.2s)
+  ok 141 [chromium] › e2e\auth.spec.ts:686:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-16. 登录页面响应式-桌面尺寸 (1.4s)
+  ok 142 [chromium] › e2e\auth.spec.ts:692:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-17. 密码输入框焦点状态 (988ms)
+  ok 143 [chromium] › e2e\auth.spec.ts:699:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-18. 用户名输入框占位符文本 (2.1s)
+  ok 144 [chromium] › e2e\auth.spec.ts:706:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-19. 登录表单自动完成功能 (5.6s)
+  ok 145 [chromium] › e2e\auth.spec.ts:713:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-20. 登录按钮默认禁用状态检查 (11.6s)
+  ok 146 [chromium] › e2e\auth.spec.ts:719:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-21. 登录成功Toast提示验证 (2.3s)
+  ok 147 [chromium] › e2e\auth.spec.ts:727:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-22. 刷新Token过期时间7天 (2.5s)
+  ok 148 [chromium] › e2e\auth.spec.ts:734:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-23. 登录请求Content-Type验证 (6.1s)
+  ok 149 [chromium] › e2e\auth.spec.ts:742:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-24. Token中携带userId信息 (3.0s)
+  ok 150 [chromium] › e2e\auth.spec.ts:750:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-25. 登录失败不设置localStorage (3.9s)
+  ok 151 [chromium] › e2e\auth.spec.ts:759:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-26. 并发登录同一账户两个上下文 (11.2s)
+  x  152 [chromium] › e2e\auth.spec.ts:774:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-27. 登录页面加载性能检查 (14.0s)
+  ok 153 [chromium] › e2e\auth.spec.ts:782:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-28. 登出API返回正确消息结构 (2.0s)
+  ok 154 [chromium] › e2e\auth.spec.ts:790:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-29. 登录页面输入框tab切换 (1.2s)
+  ok 155 [chromium] › e2e\auth.spec.ts:798:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-30. 使用无效HTTP方法访问登录API (861ms)
+  ok 156 [chromium] › e2e\auth.spec.ts:803:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-31. 登录API缺少请求体 (933ms)
+  ok 157 [chromium] › e2e\auth.spec.ts:810:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-32. Token中role字段与登录用户一致 (3.0s)
+  ok 158 [chromium] › e2e\auth.spec.ts:819:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-33. 登录成功后页面标题验证 (1.7s)
+  ok 159 [chromium] › e2e\auth.spec.ts:825:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-34. 登出后刷新页面保持未登录状态 (3.1s)
+  ok 160 [chromium] › e2e\auth.spec.ts:833:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-35. 登录按钮点击后防止重复提交 (1.9s)
+  ok 161 [chromium] › e2e\auth.spec.ts:841:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-36. 浏览器前进后退按钮行为 (2.1s)
+  ok 162 [chromium] › e2e\auth.spec.ts:848:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-37. 登录URL直接带参数处理 (1.6s)
+  ok 163 [chromium] › e2e\auth.spec.ts:856:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-38. 登录页面favicon加载 (1.1s)
+  ok 164 [chromium] › e2e\auth.spec.ts:866:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-39. 登出后sessionStorage也应清除 (2.4s)
+  ok 165 [chromium] › e2e\auth.spec.ts:873:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-40. 登录API支持CORS预检 (941ms)
+  ok 166 [chromium] › e2e\auth.spec.ts:878:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-41. 使用已过期token访问受保护资源 (2.1s)
+  ok 167 [chromium] › e2e\auth.spec.ts:885:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-42. 登录页面meta标签验证 (3.2s)
+  ok 168 [chromium] › e2e\auth.spec.ts:891:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-43. 登录页面viewport设置 (2.4s)
+  ok 169 [chromium] › e2e\auth.spec.ts:897:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-44. 登录成功后导航到多个页面保持状态 (11.0s)
+  ok 170 [chromium] › e2e\auth.spec.ts:905:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-45. Token刷新后旧token仍短暂有效 (10.1s)
+  ok 171 [chromium] › e2e\auth.spec.ts:915:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-46. 登录页面样式文件加载 (9.0s)
+  ok 172 [chromium] › e2e\auth.spec.ts:921:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-47. 使用伪造的JWT格式token (3.4s)
+  ok 173 [chromium] › e2e\auth.spec.ts:928:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-48. 登录页面JavaScript文件加载 (3.2s)
+  ok 174 [chromium] › e2e\auth.spec.ts:934:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-49. 登录后localStorage键名验证 (7.6s)
+  ok 175 [chromium] › e2e\auth.spec.ts:941:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-50. 多次刷新Token产生不同token (7.3s)
+
+
+  1) [chromium] › e2e\auth.spec.ts:84:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-05. 正常用例：finance登录后仅显示允许菜单 ────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).not.[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator:  locator('nav').locator('text=入库').first()
+    Expected: not visible
+    Received: visible
+    Timeout:  5000ms
+
+    Call log:
+    [2m  - Expect "not toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('nav').locator('text=入库').first()[22m
+    [2m    9 × locator resolved to <span class="text-sm font-medium truncate">入库记录</span>[22m
+    [2m      - unexpected value "visible"[22m
+
+
+      84 |   test('AUTH-LOGIN-05. 正常用例：finance登录后仅显示允许菜单', async ({ page }) => {
+      85 |     await loginAs(page, 'finance')
+    > 86 |     await expect(page.locator('nav >> text=入库').first()).not.toBeVisible()
+         |                                                              ^
+      87 |     await expect(page.locator('nav >> text=出库').first()).not.toBeVisible()
+      88 |     await expect(page.locator('nav >> text=盘点').first()).not.toBeVisible()
+      89 |   })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\auth.spec.ts:86:62
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---正常登录-AUTH-LOGIN-05-正常用例：finance登录后仅显示允许菜单-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---正常登录-AUTH-LOGIN-05-正常用例：finance登录后仅显示允许菜单-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\auth-认证与登录---正常登录-AUTH-LOGIN-05-正常用例：finance登录后仅显示允许菜单-chromium\error-context.md
+
+  2) [chromium] › e2e\auth.spec.ts:91:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-06. 正常用例：technician登录后显示技术相关菜单 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).not.[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator:  locator('nav').locator('text=入库').first()
+    Expected: not visible
+    Received: visible
+    Timeout:  5000ms
+
+    Call log:
+    [2m  - Expect "not toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('nav').locator('text=入库').first()[22m
+    [2m    9 × locator resolved to <span class="text-sm font-medium truncate">入库记录</span>[22m
+    [2m      - unexpected value "visible"[22m
+
+
+      92 |     await loginAs(page, 'technician')
+      93 |     await expect(page.locator('nav >> text=库存').first()).toBeVisible()
+    > 94 |     await expect(page.locator('nav >> text=入库').first()).not.toBeVisible()
+         |                                                              ^
+      95 |     await expect(page.locator('nav >> text=用户').first()).not.toBeVisible()
+      96 |   })
+      97 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\auth.spec.ts:94:62
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---正常登录-AUTH-LOGIN-06-正常用例：technician登录后显示技术相关菜单-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---正常登录-AUTH-LOGIN-06-正常用例：technician登录后显示技术相关菜单-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\auth-认证与登录---正常登录-AUTH-LOGIN-06-正常用例：technician登录后显示技术相关菜单-chromium\error-context.md
+
+  3) [chromium] › e2e\auth.spec.ts:105:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-08. 正常用例：pathologist登录后显示诊断相关菜单 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).not.[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator:  locator('nav').locator('text=用户').first()
+    Expected: not visible
+    Received: visible
+    Timeout:  5000ms
+
+    Call log:
+    [2m  - Expect "not toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('nav').locator('text=用户').first()[22m
+    [2m    9 × locator resolved to <span class="text-sm font-medium truncate">用户管理</span>[22m
+    [2m      - unexpected value "visible"[22m
+
+
+      106 |     await loginAs(page, 'pathologist')
+      107 |     await expect(page.locator('nav >> text=项目').first()).toBeVisible()
+    > 108 |     await expect(page.locator('nav >> text=用户').first()).not.toBeVisible()
+          |                                                              ^
+      109 |   })
+      110 |
+      111 |   test('AUTH-LOGIN-09. 正常用例：procurement登录后显示采购相关菜单', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\auth.spec.ts:108:62
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---正常登录-AUTH-LOGIN-08-正常用例：pathologist登录后显示诊断相关菜单-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---正常登录-AUTH-LOGIN-08-正常用例：pathologist登录后显示诊断相关菜单-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\auth-认证与登录---正常登录-AUTH-LOGIN-08-正常用例：pathologist登录后显示诊断相关菜单-chromium\error-context.md
+
+  4) [chromium] › e2e\auth.spec.ts:111:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-09. 正常用例：procurement登录后显示采购相关菜单 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).not.[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator:  locator('nav').locator('text=出库').first()
+    Expected: not visible
+    Received: visible
+    Timeout:  5000ms
+
+    Call log:
+    [2m  - Expect "not toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('nav').locator('text=出库').first()[22m
+    [2m    9 × locator resolved to <span class="text-sm font-medium truncate">出库记录</span>[22m
+    [2m      - unexpected value "visible"[22m
+
+
+      112 |     await loginAs(page, 'procurement')
+      113 |     await expect(page.locator('nav >> text=供应商').first()).toBeVisible()
+    > 114 |     await expect(page.locator('nav >> text=出库').first()).not.toBeVisible()
+          |                                                              ^
+      115 |   })
+      116 |
+      117 |   test('AUTH-LOGIN-10. 边界：使用大写用户名登录', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\auth.spec.ts:114:62
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---正常登录-AUTH-LOGIN-09-正常用例：procurement登录后显示采购相关菜单-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---正常登录-AUTH-LOGIN-09-正常用例：procurement登录后显示采购相关菜单-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\auth-认证与登录---正常登录-AUTH-LOGIN-09-正常用例：procurement登录后显示采购相关菜单-chromium\error-context.md
+
+  5) [chromium] › e2e\auth.spec.ts:565:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-02. 已登录用户回退到登录页应自动重定向到首页 ───
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      566 |     await loginAs(page, 'admin')
+      567 |     await page.goto(`${FE_BASE}/login`)
+    > 568 |     await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+          |                ^
+      569 |   })
+      570 |
+      571 |   test('BLIND-AUTH-03. Token过期且refreshToken无效后应重定向登录', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\auth.spec.ts:568:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-02-已登录用户回退到登录页应自动重定向到首页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-02-已登录用户回退到登录页应自动重定向到首页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-02-已登录用户回退到登录页应自动重定向到首页-chromium\error-context.md
+
+  6) [chromium] › e2e\auth.spec.ts:580:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-04. 多浏览器上下文数据隔离 ────────────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).not.[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator:  locator('nav').locator('text=用户').first()
+    Expected: not visible
+    Received: visible
+    Timeout:  5000ms
+
+    Call log:
+    [2m  - Expect "not toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('nav').locator('text=用户').first()[22m
+    [2m    9 × locator resolved to <span class="text-sm font-medium truncate">用户管理</span>[22m
+    [2m      - unexpected value "visible"[22m
+
+
+      586 |     await loginAs(p2, 'finance')
+      587 |     await expect(p1.locator('nav >> text=用户').first()).toBeVisible()
+    > 588 |     await expect(p2.locator('nav >> text=用户').first()).not.toBeVisible()
+          |                                                            ^
+      589 |     await ctx1.close()
+      590 |     await ctx2.close()
+      591 |   })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\auth.spec.ts:588:60
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-04-多浏览器上下文数据隔离-chromium\test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-04-多浏览器上下文数据隔离-chromium\test-failed-3.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-04-多浏览器上下文数据隔离-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-04-多浏览器上下文数据隔离-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-04-多浏览器上下文数据隔离-chromium\error-context.md
+
+  7) [chromium] › e2e\auth.spec.ts:774:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-27. 登录页面加载性能检查 ─────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThan[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: < [32m5000[39m
+    Received:   [31m6708[39m
+
+      777 |     await page.waitForLoadState('networkidle')
+      778 |     const duration = Date.now() - start
+    > 779 |     expect(duration).toBeLessThan(5000)
+          |                      ^
+      780 |   })
+      781 |
+      782 |   test('BLIND-AUTH-28. 登出API返回正确消息结构', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\auth.spec.ts:779:22
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-27-登录页面加载性能检查-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-27-登录页面加载性能检查-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\auth-认证与登录---盲点分析补充-BLIND-AUTH-27-登录页面加载性能检查-chromium\error-context.md
+
+  7 failed
+    [chromium] › e2e\auth.spec.ts:84:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-05. 正常用例：finance登录后仅显示允许菜单 ─────
+    [chromium] › e2e\auth.spec.ts:91:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-06. 正常用例：technician登录后显示技术相关菜单 ─
+    [chromium] › e2e\auth.spec.ts:105:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-08. 正常用例：pathologist登录后显示诊断相关菜单 
+    [chromium] › e2e\auth.spec.ts:111:3 › 认证与登录 -> 正常登录 › AUTH-LOGIN-09. 正常用例：procurement登录后显示采购相关菜单 
+    [chromium] › e2e\auth.spec.ts:565:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-02. 已登录用户回退到登录页应自动重定向到首页 ────
+    [chromium] › e2e\auth.spec.ts:580:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-04. 多浏览器上下文数据隔离 ─────────────
+    [chromium] › e2e\auth.spec.ts:774:3 › 认证与登录 -> 盲点分析补充 › BLIND-AUTH-27. 登录页面加载性能检查 ──────────────
+  168 passed (8.6m)

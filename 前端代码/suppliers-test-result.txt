@@ -1,0 +1,1665 @@
+
+Running 113 tests using 1 worker
+
+  x    1 [chromium] › e2e\suppliers.spec.ts:73:5 › 供应商管理 -> 查看供应商列表 › SUP-LIST-01-admin. 正常用例：admin可查看供应商列表 (11.6s)
+  ok   2 [chromium] › e2e\suppliers.spec.ts:73:5 › 供应商管理 -> 查看供应商列表 › SUP-LIST-01-warehouse_manager. 正常用例：warehouse_manager可查看供应商列表 (1.5s)
+  ok   3 [chromium] › e2e\suppliers.spec.ts:73:5 › 供应商管理 -> 查看供应商列表 › SUP-LIST-01-procurement. 正常用例：procurement可查看供应商列表 (1.7s)
+  x    4 [chromium] › e2e\suppliers.spec.ts:79:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-02. 空数据边界：无供应商显示空状态 (11.2s)
+  ok   5 [chromium] › e2e\suppliers.spec.ts:84:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-03. 权限：technician访问返回403 (275ms)
+  ok   6 [chromium] › e2e\suppliers.spec.ts:88:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-04. 权限：pathologist访问返回403 (248ms)
+  ok   7 [chromium] › e2e\suppliers.spec.ts:92:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-05. 权限：finance访问返回403 (251ms)
+  x    8 [chromium] › e2e\suppliers.spec.ts:96:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-06. 异常恢复：API 500显示错误Toast (11.4s)
+  x    9 [chromium] › e2e\suppliers.spec.ts:101:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-07. UI差异：admin显示新增编辑删除按钮 (11.2s)
+  ok  10 [chromium] › e2e\suppliers.spec.ts:106:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-08. UI差异：procurement显示新增编辑 (2.2s)
+  x   11 [chromium] › e2e\suppliers.spec.ts:111:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-09. 正常用例：列表显示编码名称联系人合作次数累计金额 (11.3s)
+  x   12 [chromium] › e2e\suppliers.spec.ts:116:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-10. 并发：快速刷新页面 (11.4s)
+  x   13 [chromium] › e2e\suppliers.spec.ts:128:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-01. 正常用例：选择active仅显示合作中供应商 (461ms)
+  x   14 [chromium] › e2e\suppliers.spec.ts:133:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-02. 空数据边界：无active供应商 (456ms)
+  x   15 [chromium] › e2e\suppliers.spec.ts:138:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-03. 正常用例：重置状态筛选 (11.4s)
+  x   16 [chromium] › e2e\suppliers.spec.ts:143:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-04. UI差异：各角色状态筛选可见 (11.5s)
+  x   17 [chromium] › e2e\suppliers.spec.ts:150:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-05. 并发：快速切换状态 (11.9s)
+  x   18 [chromium] › e2e\suppliers.spec.ts:157:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-06. 异常恢复：状态筛选时API错误 (11.2s)
+  x   19 [chromium] › e2e\suppliers.spec.ts:168:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-01. 正常用例：搜索"SUP-00001"返回匹配 (486ms)
+  x   20 [chromium] › e2e\suppliers.spec.ts:173:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-02. 空数据边界：搜索无结果 (436ms)
+  x   21 [chromium] › e2e\suppliers.spec.ts:179:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-03. 并发：快速连续输入 (11.4s)
+  x   22 [chromium] › e2e\suppliers.spec.ts:190:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-04. 异常恢复：搜索时网络断 (11.3s)
+  x   23 [chromium] › e2e\suppliers.spec.ts:195:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-05. 边界：搜索超长字符串 (391ms)
+  x   24 [chromium] › e2e\suppliers.spec.ts:200:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-06. UI差异：各角色搜索可见 (11.3s)
+  x   25 [chromium] › e2e\suppliers.spec.ts:213:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-01. 正常用例：admin新增供应商成功 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  ok  26 [chromium] › e2e\suppliers.spec.ts:220:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-02. 正常用例：procurement新增供应商成功 (280ms)
+  x   27 [chromium] › e2e\suppliers.spec.ts:227:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-03. 空数据边界：name留空返回400 (8ms)
+  x   28 [chromium] › e2e\suppliers.spec.ts:232:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-04. 表单校验：email格式不校验 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  ok  29 [chromium] › e2e\suppliers.spec.ts:240:5 › 供应商管理 -> 新增供应商 › SUP-CREATE-05-technician. 权限：technician新增供应商返回403 (269ms)
+  ok  30 [chromium] › e2e\suppliers.spec.ts:240:5 › 供应商管理 -> 新增供应商 › SUP-CREATE-05-pathologist. 权限：pathologist新增供应商返回403 (252ms)
+  ok  31 [chromium] › e2e\suppliers.spec.ts:240:5 › 供应商管理 -> 新增供应商 › SUP-CREATE-05-finance. 权限：finance新增供应商返回403 (248ms)
+  ok  32 [chromium] › e2e\suppliers.spec.ts:240:5 › 供应商管理 -> 新增供应商 › SUP-CREATE-05-warehouse_manager. 权限：warehouse_manager新增供应商返回403 (241ms)
+  x   33 [chromium] › e2e\suppliers.spec.ts:246:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-06. 并发：快速双击提交 (8ms)
+  x   34 [chromium] › e2e\suppliers.spec.ts:252:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-07. 异常恢复：提交时网络中断后重试 (29ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   35 [chromium] › e2e\suppliers.spec.ts:259:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-08. UI差异：admin显示新增供应商按钮 (11.3s)
+  ok  36 [chromium] › e2e\suppliers.spec.ts:264:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-09. UI差异：procurement显示新增供应商按钮 (2.3s)
+  ok  37 [chromium] › e2e\suppliers.spec.ts:269:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-10. UI差异：warehouse_manager不显示新增按钮 (2.3s)
+  ok  38 [chromium] › e2e\suppliers.spec.ts:274:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-11. 正常用例：新增后code自动生成 (8ms)
+  x   39 [chromium] › e2e\suppliers.spec.ts:281:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-12. 边界：超长name (12ms)
+  x   40 [chromium] › e2e\suppliers.spec.ts:288:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-13. 边界：特殊字符name (29ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   41 [chromium] › e2e\suppliers.spec.ts:295:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-14. 正常用例：新增后入库单供应商下拉同步 (28ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  -   42 [chromium] › e2e\suppliers.spec.ts:306:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-01. 正常用例：admin编辑联系方式成功
+  -   43 [chromium] › e2e\suppliers.spec.ts:313:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-02. 正常用例：procurement编辑供应商成功
+  -   44 [chromium] › e2e\suppliers.spec.ts:321:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-03. 空数据边界：清空所有字段
+  -   45 [chromium] › e2e\suppliers.spec.ts:329:5 › 供应商管理 -> 编辑供应商 › SUP-EDIT-04-technician. 权限：technician编辑供应商返回403
+  -   46 [chromium] › e2e\suppliers.spec.ts:329:5 › 供应商管理 -> 编辑供应商 › SUP-EDIT-04-pathologist. 权限：pathologist编辑供应商返回403
+  -   47 [chromium] › e2e\suppliers.spec.ts:329:5 › 供应商管理 -> 编辑供应商 › SUP-EDIT-04-finance. 权限：finance编辑供应商返回403
+  -   48 [chromium] › e2e\suppliers.spec.ts:329:5 › 供应商管理 -> 编辑供应商 › SUP-EDIT-04-warehouse_manager. 权限：warehouse_manager编辑供应商返回403
+  -   49 [chromium] › e2e\suppliers.spec.ts:338:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-05. 业务冲突：编辑code历史入库记录supplier_id不更新
+  -   50 [chromium] › e2e\suppliers.spec.ts:345:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-06. 并发：并发编辑同一供应商
+  -   51 [chromium] › e2e\suppliers.spec.ts:355:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-07. 异常恢复：编辑时API 500后重试
+  x   52 [chromium] › e2e\suppliers.spec.ts:362:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-08. UI差异：admin显示编辑按钮 (11.4s)
+  ok  53 [chromium] › e2e\suppliers.spec.ts:367:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-09. UI差异：procurement显示编辑按钮 (2.3s)
+  ok  54 [chromium] › e2e\suppliers.spec.ts:372:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-10. UI差异：warehouse_manager不显示编辑按钮 (2.1s)
+  -   55 [chromium] › e2e\suppliers.spec.ts:377:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-11. 正常用例：编辑后列表数据更新
+  x   56 [chromium] › e2e\suppliers.spec.ts:383:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-12. 表单校验：编辑不存在的供应商返回404 (9ms)
+  x   57 [chromium] › e2e\suppliers.spec.ts:394:3 › 供应商管理 -> 删除供应商 › SUP-DEL-01. 正常用例：admin删除无物料关联供应商 (29ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  -   58 [chromium] › e2e\suppliers.spec.ts:405:5 › 供应商管理 -> 删除供应商 › SUP-DEL-02-technician. 权限：technician删除供应商返回403
+  -   59 [chromium] › e2e\suppliers.spec.ts:405:5 › 供应商管理 -> 删除供应商 › SUP-DEL-02-pathologist. 权限：pathologist删除供应商返回403
+  -   60 [chromium] › e2e\suppliers.spec.ts:405:5 › 供应商管理 -> 删除供应商 › SUP-DEL-02-finance. 权限：finance删除供应商返回403
+  -   61 [chromium] › e2e\suppliers.spec.ts:405:5 › 供应商管理 -> 删除供应商 › SUP-DEL-02-warehouse_manager. 权限：warehouse_manager删除供应商返回403
+  -   62 [chromium] › e2e\suppliers.spec.ts:414:3 › 供应商管理 -> 删除供应商 › SUP-DEL-03. 业务冲突：有关联物料删除后悬空引用
+  -   63 [chromium] › e2e\suppliers.spec.ts:421:3 › 供应商管理 -> 删除供应商 › SUP-DEL-04. 并发：并发删除同一供应商
+  ok  64 [chromium] › e2e\suppliers.spec.ts:434:3 › 供应商管理 -> 删除供应商 › SUP-DEL-05. 异常恢复：删除时API 500后重试 (4ms)
+  x   65 [chromium] › e2e\suppliers.spec.ts:445:3 › 供应商管理 -> 删除供应商 › SUP-DEL-06. UI差异：admin显示删除按钮 (11.6s)
+  ok  66 [chromium] › e2e\suppliers.spec.ts:450:3 › 供应商管理 -> 删除供应商 › SUP-DEL-07. UI差异：procurement隐藏删除按钮 (2.5s)
+  x   67 [chromium] › e2e\suppliers.spec.ts:455:3 › 供应商管理 -> 删除供应商 › SUP-DEL-08. 表单校验：删除不存在的供应商返回404 (38ms)
+  -   68 [chromium] › e2e\suppliers.spec.ts:460:3 › 供应商管理 -> 删除供应商 › SUP-DEL-09. 业务冲突：删除后再次删除返回404
+  ok  69 [chromium] › e2e\suppliers.spec.ts:471:3 › 供应商管理 -> 删除供应商 › SUP-DEL-10. 正常用例：删除后列表刷新 (561ms)
+  ok  70 [chromium] › e2e\suppliers.spec.ts:479:3 › 供应商管理 -> 删除供应商 › SUP-DEL-11. 异常恢复：删除时网络中断 (13ms)
+  ok  71 [chromium] › e2e\suppliers.spec.ts:487:3 › 供应商管理 -> 删除供应商 › SUP-DEL-12. 边界：删除后其他角色查看 (2.7s)
+  x   72 [chromium] › e2e\suppliers.spec.ts:504:3 › 供应商管理 -> 分页切换 › SUP-PAGE-01. 正常用例：切换到第2页 (11.3s)
+  x   73 [chromium] › e2e\suppliers.spec.ts:509:3 › 供应商管理 -> 分页切换 › SUP-PAGE-02. 边界：仅1页分页器隐藏 (11.2s)
+  x   74 [chromium] › e2e\suppliers.spec.ts:514:3 › 供应商管理 -> 分页切换 › SUP-PAGE-03. 表单校验：page=0后端修正为1 (35ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   75 [chromium] › e2e\suppliers.spec.ts:522:3 › 供应商管理 -> 分页切换 › SUP-PAGE-04. 边界：page=999返回空列表 (28ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   76 [chromium] › e2e\suppliers.spec.ts:527:3 › 供应商管理 -> 分页切换 › SUP-PAGE-05. 边界：pageSize=1 (29ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   77 [chromium] › e2e\suppliers.spec.ts:533:3 › 供应商管理 -> 分页切换 › SUP-PAGE-06. 边界：pageSize=100 (30ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   78 [chromium] › e2e\suppliers.spec.ts:538:3 › 供应商管理 -> 分页切换 › SUP-PAGE-07. 并发：快速切换分页 (11.3s)
+  x   79 [chromium] › e2e\suppliers.spec.ts:545:3 › 供应商管理 -> 分页切换 › SUP-PAGE-08. UI差异：各角色分页一致 (11.5s)
+  ok  80 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-026. technician GET /suppliers 返回403 (554ms)
+  ok  81 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-027. pathologist GET /suppliers 返回403 (377ms)
+  ok  82 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-028. finance GET /suppliers 返回403 (601ms)
+  ok  83 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-029. warehouse_manager POST /suppliers 返回403 (421ms)
+  ok  84 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-030. technician POST /suppliers 返回403 (331ms)
+  ok  85 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-031. pathologist POST /suppliers 返回403 (306ms)
+  ok  86 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-032. procurement POST /suppliers 返回201 (308ms)
+  ok  87 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-033. finance POST /suppliers 返回403 (294ms)
+  x   88 [chromium] › e2e\suppliers.spec.ts:577:3 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-SUP-EXTRA-01. admin GET /suppliers 返回200 (9ms)
+  ok  89 [chromium] › e2e\suppliers.spec.ts:582:3 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-SUP-EXTRA-02. warehouse_manager GET /suppliers 返回200 (317ms)
+  x   90 [chromium] › e2e\suppliers.spec.ts:593:3 › 供应商管理 -> 业务流程树 › BF-SUP-01. 主路径：登录→进入供应商→新增→填写信息→提交→列表刷新 (10ms)
+  x   91 [chromium] › e2e\suppliers.spec.ts:600:3 › 供应商管理 -> 业务流程树 › BF-SUP-02. 分支：关闭弹窗不保存 (11.6s)
+  x   92 [chromium] › e2e\suppliers.spec.ts:605:3 › 供应商管理 -> 业务流程树 › BF-SUP-03. 分支：必填字段漏填 (29ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   93 [chromium] › e2e\suppliers.spec.ts:610:3 › 供应商管理 -> 业务流程树 › BF-SUP-04. 分支：刷新页面后新供应商仍在列表 (11.5s)
+  -   94 [chromium] › e2e\suppliers.spec.ts:617:3 › 供应商管理 -> 业务流程树 › BF-SUP-05. 分支：删除有关联物料的供应商
+  -   95 [chromium] › e2e\suppliers.spec.ts:624:3 › 供应商管理 -> 业务流程树 › BF-SUP-06. 分支：编辑供应商后入库单下拉同步
+  ok  96 [chromium] › e2e\suppliers.spec.ts:630:3 › 供应商管理 -> 业务流程树 › BF-SUP-07. 分支：warehouse_manager尝试新增被403拦截 (315ms)
+  x   97 [chromium] › e2e\suppliers.spec.ts:635:3 › 供应商管理 -> 业务流程树 › BF-SUP-08. 分支：快速筛选后分页 (11.9s)
+  ok  98 [chromium] › e2e\suppliers.spec.ts:646:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-01. 供应商编码自动生成规则 (27ms)
+  x   99 [chromium] › e2e\suppliers.spec.ts:653:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-02. 供应商合作次数统计 (564ms)
+  x  100 [chromium] › e2e\suppliers.spec.ts:658:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-03. 供应商累计金额统计 (545ms)
+  x  101 [chromium] › e2e\suppliers.spec.ts:663:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-04. 供应商列表导出功能 (11.5s)
+  x  102 [chromium] › e2e\suppliers.spec.ts:668:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-05. 供应商打印功能 (11.4s)
+  x  103 [chromium] › e2e\suppliers.spec.ts:673:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-06. 供应商页面响应式布局 (11.7s)
+  x  104 [chromium] › e2e\suppliers.spec.ts:679:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-07. 供应商页面加载性能 (11.6s)
+  x  105 [chromium] › e2e\suppliers.spec.ts:686:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-08. 供应商搜索防抖 (11.7s)
+  x  106 [chromium] › e2e\suppliers.spec.ts:697:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-09. 供应商详情弹窗 (11.4s)
+  x  107 [chromium] › e2e\suppliers.spec.ts:704:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-10. 供应商字段XSS防护 (36ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  108 [chromium] › e2e\suppliers.spec.ts:711:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-11. 供应商字段SQL注入防护 (37ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  109 [chromium] › e2e\suppliers.spec.ts:718:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-12. 供应商API响应格式验证 (48ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  110 [chromium] › e2e\suppliers.spec.ts:733:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-13. 供应商状态颜色标签 (11.4s)
+  x  111 [chromium] › e2e\suppliers.spec.ts:738:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-14. 供应商排序功能 (411ms)
+  x  112 [chromium] › e2e\suppliers.spec.ts:743:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-15. 供应商联系信息完整性 (489ms)
+  x  113 [chromium] › e2e\suppliers.spec.ts:750:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-16. 多角色同时操作互不影响 (11.1s)
+
+
+  1) [chromium] › e2e\suppliers.spec.ts:73:5 › 供应商管理 -> 查看供应商列表 › SUP-LIST-01-admin. 正常用例：admin可查看供应商列表 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:74:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表--890e8-01-admin-正常用例：admin可查看供应商列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表--890e8-01-admin-正常用例：admin可查看供应商列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---查看供应商列表--890e8-01-admin-正常用例：admin可查看供应商列表-chromium\error-context.md
+
+  2) [chromium] › e2e\suppliers.spec.ts:79:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-02. 空数据边界：无供应商显示空状态 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:80:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-02-空数据边界：无供应商显示空状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-02-空数据边界：无供应商显示空状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-02-空数据边界：无供应商显示空状态-chromium\error-context.md
+
+  3) [chromium] › e2e\suppliers.spec.ts:96:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-06. 异常恢复：API 500显示错误Toast 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:97:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-06-异常恢复：API-500显示错误Toast-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-06-异常恢复：API-500显示错误Toast-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-06-异常恢复：API-500显示错误Toast-chromium\error-context.md
+
+  4) [chromium] › e2e\suppliers.spec.ts:101:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-07. UI差异：admin显示新增编辑删除按钮 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:102:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-07-UI差异：admin显示新增编辑删除按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-07-UI差异：admin显示新增编辑删除按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-07-UI差异：admin显示新增编辑删除按钮-chromium\error-context.md
+
+  5) [chromium] › e2e\suppliers.spec.ts:111:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-09. 正常用例：列表显示编码名称联系人合作次数累计金额 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:112:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表--f1774-09-正常用例：列表显示编码名称联系人合作次数累计金额-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表--f1774-09-正常用例：列表显示编码名称联系人合作次数累计金额-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---查看供应商列表--f1774-09-正常用例：列表显示编码名称联系人合作次数累计金额-chromium\error-context.md
+
+  6) [chromium] › e2e\suppliers.spec.ts:116:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-10. 并发：快速刷新页面 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:117:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-10-并发：快速刷新页面-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-10-并发：快速刷新页面-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---查看供应商列表-SUP-LIST-10-并发：快速刷新页面-chromium\error-context.md
+
+  7) [chromium] › e2e\suppliers.spec.ts:128:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-01. 正常用例：选择active仅显示合作中供应商 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      129 |     const token = await apiLogin('admin')
+      130 |     const res = await apiFetch(token, 'GET', '/suppliers?status=active')
+    > 131 |     expect(res.status).toBe(200)
+          |                        ^
+      132 |   })
+      133 |   test('SUP-STATUS-02. 空数据边界：无active供应商', async ({ page }) => {
+      134 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:131:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-01-正常用例：选择active仅显示合作中供应商-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-01-正常用例：选择active仅显示合作中供应商-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-01-正常用例：选择active仅显示合作中供应商-chromium\error-context.md
+
+  8) [chromium] › e2e\suppliers.spec.ts:133:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-02. 空数据边界：无active供应商 ───
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      134 |     const token = await apiLogin('admin')
+      135 |     const res = await apiFetch(token, 'GET', '/suppliers?status=inactive')
+    > 136 |     expect(res.status).toBe(200)
+          |                        ^
+      137 |   })
+      138 |   test('SUP-STATUS-03. 正常用例：重置状态筛选', async ({ page }) => {
+      139 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:136:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-02-空数据边界：无active供应商-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-02-空数据边界：无active供应商-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-02-空数据边界：无active供应商-chromium\error-context.md
+
+  9) [chromium] › e2e\suppliers.spec.ts:138:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-03. 正常用例：重置状态筛选 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:139:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-03-正常用例：重置状态筛选-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-03-正常用例：重置状态筛选-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-03-正常用例：重置状态筛选-chromium\error-context.md
+
+  10) [chromium] › e2e\suppliers.spec.ts:143:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-04. UI差异：各角色状态筛选可见 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:145:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-04-UI差异：各角色状态筛选可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-04-UI差异：各角色状态筛选可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-04-UI差异：各角色状态筛选可见-chromium\error-context.md
+
+  11) [chromium] › e2e\suppliers.spec.ts:150:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-05. 并发：快速切换状态 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:151:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-05-并发：快速切换状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-05-并发：快速切换状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-05-并发：快速切换状态-chromium\error-context.md
+
+  12) [chromium] › e2e\suppliers.spec.ts:157:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-06. 异常恢复：状态筛选时API错误 ───
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:158:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-06-异常恢复：状态筛选时API错误-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-06-异常恢复：状态筛选时API错误-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---按状态筛选-SUP-STATUS-06-异常恢复：状态筛选时API错误-chromium\error-context.md
+
+  13) [chromium] › e2e\suppliers.spec.ts:168:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-01. 正常用例：搜索"SUP-00001"返回匹配 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      169 |     const token = await apiLogin('admin')
+      170 |     const res = await apiFetch(token, 'GET', '/suppliers?keyword=SUP')
+    > 171 |     expect(res.status).toBe(200)
+          |                        ^
+      172 |   })
+      173 |   test('SUP-SEARCH-02. 空数据边界：搜索无结果', async ({ page }) => {
+      174 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:171:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-01-正常用例：搜索-SUP-00001-返回匹配-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-01-正常用例：搜索-SUP-00001-返回匹配-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-01-正常用例：搜索-SUP-00001-返回匹配-chromium\error-context.md
+
+  14) [chromium] › e2e\suppliers.spec.ts:173:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-02. 空数据边界：搜索无结果 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      174 |     const token = await apiLogin('admin')
+      175 |     const res = await apiFetch(token, 'GET', '/suppliers?keyword=XYZ999')
+    > 176 |     expect(res.status).toBe(200)
+          |                        ^
+      177 |     expect(res.data?.data?.list?.length || 0).toBe(0)
+      178 |   })
+      179 |   test('SUP-SEARCH-03. 并发：快速连续输入', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:176:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-02-空数据边界：搜索无结果-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-02-空数据边界：搜索无结果-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-02-空数据边界：搜索无结果-chromium\error-context.md
+
+  15) [chromium] › e2e\suppliers.spec.ts:179:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-03. 并发：快速连续输入 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:180:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-03-并发：快速连续输入-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-03-并发：快速连续输入-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-03-并发：快速连续输入-chromium\error-context.md
+
+  16) [chromium] › e2e\suppliers.spec.ts:190:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-04. 异常恢复：搜索时网络断 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:191:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-04-异常恢复：搜索时网络断-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-04-异常恢复：搜索时网络断-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-04-异常恢复：搜索时网络断-chromium\error-context.md
+
+  17) [chromium] › e2e\suppliers.spec.ts:195:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-05. 边界：搜索超长字符串 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      196 |     const token = await apiLogin('admin')
+      197 |     const res = await apiFetch(token, 'GET', '/suppliers?keyword=' + 'X'.repeat(300))
+    > 198 |     expect(res.status).toBe(200)
+          |                        ^
+      199 |   })
+      200 |   test('SUP-SEARCH-06. UI差异：各角色搜索可见', async ({ page }) => {
+      201 |     for (const role of SUP_READ_ROLES) {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:198:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-05-边界：搜索超长字符串-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-05-边界：搜索超长字符串-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-05-边界：搜索超长字符串-chromium\error-context.md
+
+  18) [chromium] › e2e\suppliers.spec.ts:200:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-06. UI差异：各角色搜索可见 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:202:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-06-UI差异：各角色搜索可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-06-UI差异：各角色搜索可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---搜索供应商-SUP-SEARCH-06-UI差异：各角色搜索可见-chromium\error-context.md
+
+  19) [chromium] › e2e\suppliers.spec.ts:213:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-01. 正常用例：admin新增供应商成功 ─
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      216 |       name: `E2E供应商-${Date.now()}`, contact: '张三', phone: '13800138000', email: 'test@example.com', remark: 'E2E新增',
+      217 |     })
+    > 218 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      219 |   })
+      220 |   test('SUP-CREATE-02. 正常用例：procurement新增供应商成功', async () => {
+      221 |     const token = await apiLogin('procurement')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:218:24
+
+    Error Context: test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-01-正常用例：admin新增供应商成功-chromium\error-context.md
+
+  20) [chromium] › e2e\suppliers.spec.ts:227:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-03. 空数据边界：name留空返回400 ─
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      228 |     const token = await apiLogin('admin')
+      229 |     const res = await apiFetch(token, 'POST', '/suppliers', { contact: '无名', phone: '13800138000' })
+    > 230 |     expect(res.status).toBe(400)
+          |                        ^
+      231 |   })
+      232 |   test('SUP-CREATE-04. 表单校验：email格式不校验', async () => {
+      233 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:230:24
+
+    Error Context: test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-03-空数据边界：name留空返回400-chromium\error-context.md
+
+  21) [chromium] › e2e\suppliers.spec.ts:232:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-04. 表单校验：email格式不校验 ───
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      235 |       name: `E2E邮箱-${Date.now()}`, contact: '王五', phone: '13800138000', email: 'invalid-email',
+      236 |     })
+    > 237 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      238 |   })
+      239 |   for (const role of ['technician', 'pathologist', 'finance', 'warehouse_manager'] as RoleKey[]) {
+      240 |     test(`SUP-CREATE-05-${role}. 权限：${role}新增供应商返回403`, async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:237:24
+
+    Error Context: test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-04-表单校验：email格式不校验-chromium\error-context.md
+
+  22) [chromium] › e2e\suppliers.spec.ts:246:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-06. 并发：快速双击提交 ─────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32mtrue[39m
+    Received: [31mfalse[39m
+
+      248 |     const body = { name: `E2E并发-${Date.now()}`, contact: '并发', phone: '13800138000' }
+      249 |     const [r1, r2] = await Promise.all([apiFetch(token, 'POST', '/suppliers', body), apiFetch(token, 'POST', '/suppliers', body)])
+    > 250 |     expect(r1.status === 201 || r2.status === 201).toBe(true)
+          |                                                    ^
+      251 |   })
+      252 |   test('SUP-CREATE-07. 异常恢复：提交时网络中断后重试', async () => {
+      253 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:250:52
+
+    Error Context: test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-06-并发：快速双击提交-chromium\error-context.md
+
+  23) [chromium] › e2e\suppliers.spec.ts:252:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-07. 异常恢复：提交时网络中断后重试 ───
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      255 |       name: `E2E恢复-${Date.now()}`, contact: '恢复', phone: '13800138000', remark: 'E2E',
+      256 |     })
+    > 257 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      258 |   })
+      259 |   test('SUP-CREATE-08. UI差异：admin显示新增供应商按钮', async ({ page }) => {
+      260 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:257:24
+
+    Error Context: test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-07-异常恢复：提交时网络中断后重试-chromium\error-context.md
+
+  24) [chromium] › e2e\suppliers.spec.ts:259:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-08. UI差异：admin显示新增供应商按钮 
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:260:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-08-UI差异：admin显示新增供应商按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-08-UI差异：admin显示新增供应商按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-08-UI差异：admin显示新增供应商按钮-chromium\error-context.md
+
+  25) [chromium] › e2e\suppliers.spec.ts:281:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-12. 边界：超长name ─────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      284 |       name: 'E2E-' + 'X'.repeat(200), contact: '长', phone: '13800138000',
+      285 |     })
+    > 286 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      287 |   })
+      288 |   test('SUP-CREATE-13. 边界：特殊字符name', async () => {
+      289 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:286:29
+
+    Error Context: test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-12-边界：超长name-chromium\error-context.md
+
+  26) [chromium] › e2e\suppliers.spec.ts:288:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-13. 边界：特殊字符name ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      291 |       name: '!@#$$%^&*()测试-' + Date.now(), contact: '特', phone: '13800138000',
+      292 |     })
+    > 293 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      294 |   })
+      295 |   test('SUP-CREATE-14. 正常用例：新增后入库单供应商下拉同步', async () => {
+      296 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:293:24
+
+    Error Context: test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-13-边界：特殊字符name-chromium\error-context.md
+
+  27) [chromium] › e2e\suppliers.spec.ts:295:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-14. 正常用例：新增后入库单供应商下拉同步 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      296 |     const token = await apiLogin('admin')
+      297 |     const res = await apiFetch(token, 'GET', '/suppliers?page=1&pageSize=5')
+    > 298 |     expect(res.status).toBe(200)
+          |                        ^
+      299 |   })
+      300 | })
+      301 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:298:24
+
+    Error Context: test-results\suppliers-供应商管理---新增供应商-SUP-CREATE-14-正常用例：新增后入库单供应商下拉同步-chromium\error-context.md
+
+  28) [chromium] › e2e\suppliers.spec.ts:362:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-08. UI差异：admin显示编辑按钮 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:363:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---编辑供应商-SUP-EDIT-08-UI差异：admin显示编辑按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---编辑供应商-SUP-EDIT-08-UI差异：admin显示编辑按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---编辑供应商-SUP-EDIT-08-UI差异：admin显示编辑按钮-chromium\error-context.md
+
+  29) [chromium] › e2e\suppliers.spec.ts:383:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-12. 表单校验：编辑不存在的供应商返回404 ─
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      384 |     const token = await apiLogin('admin')
+      385 |     const res = await apiFetch(token, 'PUT', '/suppliers/non-existent-id', { name: '不存在' })
+    > 386 |     expect(res.status).toBe(404)
+          |                        ^
+      387 |   })
+      388 | })
+      389 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:386:24
+
+    Error Context: test-results\suppliers-供应商管理---编辑供应商-SUP-EDIT-12-表单校验：编辑不存在的供应商返回404-chromium\error-context.md
+
+  30) [chromium] › e2e\suppliers.spec.ts:394:3 › 供应商管理 -> 删除供应商 › SUP-DEL-01. 正常用例：admin删除无物料关联供应商 ─
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m201[39m
+    Received: [31m401[39m
+
+      397 |       name: `E2E删除-${Date.now()}`, contact: '删除', phone: '13800138000',
+      398 |     })
+    > 399 |     expect(create.status).toBe(201)
+          |                           ^
+      400 |     const id = create.data?.data?.id
+      401 |     const res = await apiFetch(token, 'DELETE', `/suppliers/${id}`)
+      402 |     expect([200, 409, 404]).toContain(res.status)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:399:27
+
+    Error Context: test-results\suppliers-供应商管理---删除供应商-SUP-DEL-01-正常用例：admin删除无物料关联供应商-chromium\error-context.md
+
+  31) [chromium] › e2e\suppliers.spec.ts:445:3 › 供应商管理 -> 删除供应商 › SUP-DEL-06. UI差异：admin显示删除按钮 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:446:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---删除供应商-SUP-DEL-06-UI差异：admin显示删除按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---删除供应商-SUP-DEL-06-UI差异：admin显示删除按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---删除供应商-SUP-DEL-06-UI差异：admin显示删除按钮-chromium\error-context.md
+
+  32) [chromium] › e2e\suppliers.spec.ts:455:3 › 供应商管理 -> 删除供应商 › SUP-DEL-08. 表单校验：删除不存在的供应商返回404 ──
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      456 |     const token = await apiLogin('admin')
+      457 |     const res = await apiFetch(token, 'DELETE', '/suppliers/non-existent-id')
+    > 458 |     expect(res.status).toBe(404)
+          |                        ^
+      459 |   })
+      460 |   test('SUP-DEL-09. 业务冲突：删除后再次删除返回404', async () => {
+      461 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:458:24
+
+    Error Context: test-results\suppliers-供应商管理---删除供应商-SUP-DEL-08-表单校验：删除不存在的供应商返回404-chromium\error-context.md
+
+  33) [chromium] › e2e\suppliers.spec.ts:504:3 › 供应商管理 -> 分页切换 › SUP-PAGE-01. 正常用例：切换到第2页 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:505:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---分页切换-SUP-PAGE-01-正常用例：切换到第2页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---分页切换-SUP-PAGE-01-正常用例：切换到第2页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---分页切换-SUP-PAGE-01-正常用例：切换到第2页-chromium\error-context.md
+
+  34) [chromium] › e2e\suppliers.spec.ts:509:3 › 供应商管理 -> 分页切换 › SUP-PAGE-02. 边界：仅1页分页器隐藏 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:510:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---分页切换-SUP-PAGE-02-边界：仅1页分页器隐藏-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---分页切换-SUP-PAGE-02-边界：仅1页分页器隐藏-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---分页切换-SUP-PAGE-02-边界：仅1页分页器隐藏-chromium\error-context.md
+
+  35) [chromium] › e2e\suppliers.spec.ts:514:3 › 供应商管理 -> 分页切换 › SUP-PAGE-03. 表单校验：page=0后端修正为1 ────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[200, 500][39m
+
+      515 |     const token = await apiLogin('admin')
+      516 |     const res = await apiFetch(token, 'GET', '/suppliers?page=0')
+    > 517 |     expect([200, 500]).toContain(res.status)
+          |                        ^
+      518 |     if (res.status === 200) {
+      519 |       expect(res.data?.data?.pagination?.page ?? res.data?.data?.page).toBeGreaterThanOrEqual(1)
+      520 |     }
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:517:24
+
+    Error Context: test-results\suppliers-供应商管理---分页切换-SUP-PAGE-03-表单校验：page-0后端修正为1-chromium\error-context.md
+
+  36) [chromium] › e2e\suppliers.spec.ts:522:3 › 供应商管理 -> 分页切换 › SUP-PAGE-04. 边界：page=999返回空列表 ─────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      523 |     const token = await apiLogin('admin')
+      524 |     const res = await apiFetch(token, 'GET', '/suppliers?page=999')
+    > 525 |     expect(res.status).toBe(200)
+          |                        ^
+      526 |   })
+      527 |   test('SUP-PAGE-05. 边界：pageSize=1', async () => {
+      528 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:525:24
+
+    Error Context: test-results\suppliers-供应商管理---分页切换-SUP-PAGE-04-边界：page-999返回空列表-chromium\error-context.md
+
+  37) [chromium] › e2e\suppliers.spec.ts:527:3 › 供应商管理 -> 分页切换 › SUP-PAGE-05. 边界：pageSize=1 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      528 |     const token = await apiLogin('admin')
+      529 |     const res = await apiFetch(token, 'GET', '/suppliers?page=1&pageSize=1')
+    > 530 |     expect(res.status).toBe(200)
+          |                        ^
+      531 |     expect(res.data?.data?.list?.length || 0).toBeLessThanOrEqual(1)
+      532 |   })
+      533 |   test('SUP-PAGE-06. 边界：pageSize=100', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:530:24
+
+    Error Context: test-results\suppliers-供应商管理---分页切换-SUP-PAGE-05-边界：pageSize-1-chromium\error-context.md
+
+  38) [chromium] › e2e\suppliers.spec.ts:533:3 › 供应商管理 -> 分页切换 › SUP-PAGE-06. 边界：pageSize=100 ──────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      534 |     const token = await apiLogin('admin')
+      535 |     const res = await apiFetch(token, 'GET', '/suppliers?page=1&pageSize=100')
+    > 536 |     expect(res.status).toBe(200)
+          |                        ^
+      537 |   })
+      538 |   test('SUP-PAGE-07. 并发：快速切换分页', async ({ page }) => {
+      539 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:536:24
+
+    Error Context: test-results\suppliers-供应商管理---分页切换-SUP-PAGE-06-边界：pageSize-100-chromium\error-context.md
+
+  39) [chromium] › e2e\suppliers.spec.ts:538:3 › 供应商管理 -> 分页切换 › SUP-PAGE-07. 并发：快速切换分页 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:539:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---分页切换-SUP-PAGE-07-并发：快速切换分页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---分页切换-SUP-PAGE-07-并发：快速切换分页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---分页切换-SUP-PAGE-07-并发：快速切换分页-chromium\error-context.md
+
+  40) [chromium] › e2e\suppliers.spec.ts:545:3 › 供应商管理 -> 分页切换 › SUP-PAGE-08. UI差异：各角色分页一致 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:547:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---分页切换-SUP-PAGE-08-UI差异：各角色分页一致-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---分页切换-SUP-PAGE-08-UI差异：各角色分页一致-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---分页切换-SUP-PAGE-08-UI差异：各角色分页一致-chromium\error-context.md
+
+  41) [chromium] › e2e\suppliers.spec.ts:577:3 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-SUP-EXTRA-01. admin GET /suppliers 返回200 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      578 |     const token = await apiLogin('admin')
+      579 |     const res = await apiFetch(token, 'GET', '/suppliers')
+    > 580 |     expect(res.status).toBe(200)
+          |                        ^
+      581 |   })
+      582 |   test('TC-PERM-SUP-EXTRA-02. warehouse_manager GET /suppliers 返回200', async () => {
+      583 |     const token = await apiLogin('warehouse_manager')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:580:24
+
+    Error Context: test-results\suppliers-供应商管理---角色权限矩阵补充-5434d-1-admin-GET-suppliers-返回200-chromium\error-context.md
+
+  42) [chromium] › e2e\suppliers.spec.ts:593:3 › 供应商管理 -> 业务流程树 › BF-SUP-01. 主路径：登录→进入供应商→新增→填写信息→提交→列表刷新 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      596 |       name: `E2E主路径-${Date.now()}`, contact: '主', phone: '13800138000', remark: 'E2E',
+      597 |     })
+    > 598 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      599 |   })
+      600 |   test('BF-SUP-02. 分支：关闭弹窗不保存', async ({ page }) => {
+      601 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:598:24
+
+    Error Context: test-results\suppliers-供应商管理---业务流程树-BF-b9dee-路径：登录→进入供应商→新增→填写信息→提交→列表刷新-chromium\error-context.md
+
+  43) [chromium] › e2e\suppliers.spec.ts:600:3 › 供应商管理 -> 业务流程树 › BF-SUP-02. 分支：关闭弹窗不保存 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:601:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---业务流程树-BF-SUP-02-分支：关闭弹窗不保存-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---业务流程树-BF-SUP-02-分支：关闭弹窗不保存-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---业务流程树-BF-SUP-02-分支：关闭弹窗不保存-chromium\error-context.md
+
+  44) [chromium] › e2e\suppliers.spec.ts:605:3 › 供应商管理 -> 业务流程树 › BF-SUP-03. 分支：必填字段漏填 ─────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      606 |     const token = await apiLogin('admin')
+      607 |     const res = await apiFetch(token, 'POST', '/suppliers', { contact: '漏填' })
+    > 608 |     expect(res.status).toBe(400)
+          |                        ^
+      609 |   })
+      610 |   test('BF-SUP-04. 分支：刷新页面后新供应商仍在列表', async ({ page }) => {
+      611 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:608:24
+
+    Error Context: test-results\suppliers-供应商管理---业务流程树-BF-SUP-03-分支：必填字段漏填-chromium\error-context.md
+
+  45) [chromium] › e2e\suppliers.spec.ts:610:3 › 供应商管理 -> 业务流程树 › BF-SUP-04. 分支：刷新页面后新供应商仍在列表 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:611:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---业务流程树-BF-SUP-04-分支：刷新页面后新供应商仍在列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---业务流程树-BF-SUP-04-分支：刷新页面后新供应商仍在列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---业务流程树-BF-SUP-04-分支：刷新页面后新供应商仍在列表-chromium\error-context.md
+
+  46) [chromium] › e2e\suppliers.spec.ts:635:3 › 供应商管理 -> 业务流程树 › BF-SUP-08. 分支：快速筛选后分页 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:636:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---业务流程树-BF-SUP-08-分支：快速筛选后分页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---业务流程树-BF-SUP-08-分支：快速筛选后分页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---业务流程树-BF-SUP-08-分支：快速筛选后分页-chromium\error-context.md
+
+  47) [chromium] › e2e\suppliers.spec.ts:653:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-02. 供应商合作次数统计 ─────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      654 |     const token = await apiLogin('admin')
+      655 |     const res = await apiFetch(token, 'GET', '/suppliers?page=1&pageSize=1')
+    > 656 |     expect(res.status).toBe(200)
+          |                        ^
+      657 |   })
+      658 |   test('BLIND-SUP-03. 供应商累计金额统计', async ({ page }) => {
+      659 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:656:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-02-供应商合作次数统计-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-02-供应商合作次数统计-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-02-供应商合作次数统计-chromium\error-context.md
+
+  48) [chromium] › e2e\suppliers.spec.ts:658:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-03. 供应商累计金额统计 ─────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      659 |     const token = await apiLogin('admin')
+      660 |     const res = await apiFetch(token, 'GET', '/suppliers?page=1&pageSize=1')
+    > 661 |     expect(res.status).toBe(200)
+          |                        ^
+      662 |   })
+      663 |   test('BLIND-SUP-04. 供应商列表导出功能', async ({ page }) => {
+      664 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:661:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-03-供应商累计金额统计-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-03-供应商累计金额统计-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-03-供应商累计金额统计-chromium\error-context.md
+
+  49) [chromium] › e2e\suppliers.spec.ts:663:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-04. 供应商列表导出功能 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:664:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-04-供应商列表导出功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-04-供应商列表导出功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-04-供应商列表导出功能-chromium\error-context.md
+
+  50) [chromium] › e2e\suppliers.spec.ts:668:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-05. 供应商打印功能 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:669:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-05-供应商打印功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-05-供应商打印功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-05-供应商打印功能-chromium\error-context.md
+
+  51) [chromium] › e2e\suppliers.spec.ts:673:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-06. 供应商页面响应式布局 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:674:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-06-供应商页面响应式布局-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-06-供应商页面响应式布局-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-06-供应商页面响应式布局-chromium\error-context.md
+
+  52) [chromium] › e2e\suppliers.spec.ts:679:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-07. 供应商页面加载性能 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:680:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-07-供应商页面加载性能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-07-供应商页面加载性能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-07-供应商页面加载性能-chromium\error-context.md
+
+  53) [chromium] › e2e\suppliers.spec.ts:686:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-08. 供应商搜索防抖 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:687:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-08-供应商搜索防抖-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-08-供应商搜索防抖-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-08-供应商搜索防抖-chromium\error-context.md
+
+  54) [chromium] › e2e\suppliers.spec.ts:697:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-09. 供应商详情弹窗 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:698:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-09-供应商详情弹窗-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-09-供应商详情弹窗-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-09-供应商详情弹窗-chromium\error-context.md
+
+  55) [chromium] › e2e\suppliers.spec.ts:704:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-10. 供应商字段XSS防护 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      707 |       name: '<script>alert(1)</script>', contact: 'XSS', phone: '13800138000',
+      708 |     })
+    > 709 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      710 |   })
+      711 |   test('BLIND-SUP-11. 供应商字段SQL注入防护', async () => {
+      712 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:709:24
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-10-供应商字段XSS防护-chromium\error-context.md
+
+  56) [chromium] › e2e\suppliers.spec.ts:711:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-11. 供应商字段SQL注入防护 ──────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      714 |       name: "' OR '1'='1", contact: 'SQL', phone: '13800138000',
+      715 |     })
+    > 716 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      717 |   })
+      718 |   test('BLIND-SUP-12. 供应商API响应格式验证', async () => {
+      719 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:716:24
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-11-供应商字段SQL注入防护-chromium\error-context.md
+
+  57) [chromium] › e2e\suppliers.spec.ts:718:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-12. 供应商API响应格式验证 ──────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      719 |     const token = await apiLogin('admin')
+      720 |     const res = await apiFetch(token, 'GET', '/suppliers?page=1&pageSize=1')
+    > 721 |     expect(res.status).toBe(200)
+          |                        ^
+      722 |     expect(res.data).toHaveProperty('data')
+      723 |     expect(res.data?.data).toHaveProperty('list')
+      724 |     const hasPagination = res.data?.data?.pagination !== undefined
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:721:24
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-12-供应商API响应格式验证-chromium\error-context.md
+
+  58) [chromium] › e2e\suppliers.spec.ts:733:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-13. 供应商状态颜色标签 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:734:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-13-供应商状态颜色标签-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-13-供应商状态颜色标签-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-13-供应商状态颜色标签-chromium\error-context.md
+
+  59) [chromium] › e2e\suppliers.spec.ts:738:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-14. 供应商排序功能 ───────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      739 |     const token = await apiLogin('admin')
+      740 |     const res = await apiFetch(token, 'GET', '/suppliers?sort=code&order=asc')
+    > 741 |     expect(res.status).toBe(200)
+          |                        ^
+      742 |   })
+      743 |   test('BLIND-SUP-15. 供应商联系信息完整性', async ({ page }) => {
+      744 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:741:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-14-供应商排序功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-14-供应商排序功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-14-供应商排序功能-chromium\error-context.md
+
+  60) [chromium] › e2e\suppliers.spec.ts:743:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-15. 供应商联系信息完整性 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      744 |     const token = await apiLogin('admin')
+      745 |     const res = await apiFetch(token, 'GET', '/suppliers?page=1&pageSize=1')
+    > 746 |     expect(res.status).toBe(200)
+          |                        ^
+      747 |     const item = res.data?.data?.list?.[0]
+      748 |     if (item) expect(item.name).toBeDefined()
+      749 |   })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:746:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-15-供应商联系信息完整性-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-15-供应商联系信息完整性-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-15-供应商联系信息完整性-chromium\error-context.md
+
+  61) [chromium] › e2e\suppliers.spec.ts:750:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-16. 多角色同时操作互不影响 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      24 |   await page.fill('input[type="password"]', cred.password)
+      25 |   await page.click('button[type="submit"]')
+    > 26 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      27 | }
+      28 |
+      29 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:26:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\suppliers.spec.ts:755:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-16-多角色同时操作互不影响-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-16-多角色同时操作互不影响-chromium\test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\suppliers-供应商管理---盲点分析补充-BLIND-SUP-16-多角色同时操作互不影响-chromium\error-context.md
+
+  61 failed
+    [chromium] › e2e\suppliers.spec.ts:73:5 › 供应商管理 -> 查看供应商列表 › SUP-LIST-01-admin. 正常用例：admin可查看供应商列表 
+    [chromium] › e2e\suppliers.spec.ts:79:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-02. 空数据边界：无供应商显示空状态 ──────
+    [chromium] › e2e\suppliers.spec.ts:96:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-06. 异常恢复：API 500显示错误Toast 
+    [chromium] › e2e\suppliers.spec.ts:101:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-07. UI差异：admin显示新增编辑删除按钮 
+    [chromium] › e2e\suppliers.spec.ts:111:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-09. 正常用例：列表显示编码名称联系人合作次数累计金额 
+    [chromium] › e2e\suppliers.spec.ts:116:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-10. 并发：快速刷新页面 ───────────
+    [chromium] › e2e\suppliers.spec.ts:128:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-01. 正常用例：选择active仅显示合作中供应商 
+    [chromium] › e2e\suppliers.spec.ts:133:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-02. 空数据边界：无active供应商 ────
+    [chromium] › e2e\suppliers.spec.ts:138:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-03. 正常用例：重置状态筛选 ─────────
+    [chromium] › e2e\suppliers.spec.ts:143:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-04. UI差异：各角色状态筛选可见 ──────
+    [chromium] › e2e\suppliers.spec.ts:150:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-05. 并发：快速切换状态 ───────────
+    [chromium] › e2e\suppliers.spec.ts:157:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-06. 异常恢复：状态筛选时API错误 ─────
+    [chromium] › e2e\suppliers.spec.ts:168:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-01. 正常用例：搜索"SUP-00001"返回匹配 
+    [chromium] › e2e\suppliers.spec.ts:173:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-02. 空数据边界：搜索无结果 ─────────
+    [chromium] › e2e\suppliers.spec.ts:179:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-03. 并发：快速连续输入 ───────────
+    [chromium] › e2e\suppliers.spec.ts:190:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-04. 异常恢复：搜索时网络断 ─────────
+    [chromium] › e2e\suppliers.spec.ts:195:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-05. 边界：搜索超长字符串 ──────────
+    [chromium] › e2e\suppliers.spec.ts:200:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-06. UI差异：各角色搜索可见 ────────
+    [chromium] › e2e\suppliers.spec.ts:213:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-01. 正常用例：admin新增供应商成功 ───
+    [chromium] › e2e\suppliers.spec.ts:227:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-03. 空数据边界：name留空返回400 ───
+    [chromium] › e2e\suppliers.spec.ts:232:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-04. 表单校验：email格式不校验 ─────
+    [chromium] › e2e\suppliers.spec.ts:246:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-06. 并发：快速双击提交 ───────────
+    [chromium] › e2e\suppliers.spec.ts:252:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-07. 异常恢复：提交时网络中断后重试 ─────
+    [chromium] › e2e\suppliers.spec.ts:259:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-08. UI差异：admin显示新增供应商按钮 ─
+    [chromium] › e2e\suppliers.spec.ts:281:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-12. 边界：超长name ───────────
+    [chromium] › e2e\suppliers.spec.ts:288:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-13. 边界：特殊字符name ─────────
+    [chromium] › e2e\suppliers.spec.ts:295:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-14. 正常用例：新增后入库单供应商下拉同步 ──
+    [chromium] › e2e\suppliers.spec.ts:362:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-08. UI差异：admin显示编辑按钮 ──────
+    [chromium] › e2e\suppliers.spec.ts:383:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-12. 表单校验：编辑不存在的供应商返回404 ───
+    [chromium] › e2e\suppliers.spec.ts:394:3 › 供应商管理 -> 删除供应商 › SUP-DEL-01. 正常用例：admin删除无物料关联供应商 ───
+    [chromium] › e2e\suppliers.spec.ts:445:3 › 供应商管理 -> 删除供应商 › SUP-DEL-06. UI差异：admin显示删除按钮 ───────
+    [chromium] › e2e\suppliers.spec.ts:455:3 › 供应商管理 -> 删除供应商 › SUP-DEL-08. 表单校验：删除不存在的供应商返回404 ────
+    [chromium] › e2e\suppliers.spec.ts:504:3 › 供应商管理 -> 分页切换 › SUP-PAGE-01. 正常用例：切换到第2页 ────────────
+    [chromium] › e2e\suppliers.spec.ts:509:3 › 供应商管理 -> 分页切换 › SUP-PAGE-02. 边界：仅1页分页器隐藏 ────────────
+    [chromium] › e2e\suppliers.spec.ts:514:3 › 供应商管理 -> 分页切换 › SUP-PAGE-03. 表单校验：page=0后端修正为1 ──────
+    [chromium] › e2e\suppliers.spec.ts:522:3 › 供应商管理 -> 分页切换 › SUP-PAGE-04. 边界：page=999返回空列表 ───────
+    [chromium] › e2e\suppliers.spec.ts:527:3 › 供应商管理 -> 分页切换 › SUP-PAGE-05. 边界：pageSize=1 ──────────
+    [chromium] › e2e\suppliers.spec.ts:533:3 › 供应商管理 -> 分页切换 › SUP-PAGE-06. 边界：pageSize=100 ────────
+    [chromium] › e2e\suppliers.spec.ts:538:3 › 供应商管理 -> 分页切换 › SUP-PAGE-07. 并发：快速切换分页 ──────────────
+    [chromium] › e2e\suppliers.spec.ts:545:3 › 供应商管理 -> 分页切换 › SUP-PAGE-08. UI差异：各角色分页一致 ───────────
+    [chromium] › e2e\suppliers.spec.ts:577:3 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-SUP-EXTRA-01. admin GET /suppliers 返回200 
+    [chromium] › e2e\suppliers.spec.ts:593:3 › 供应商管理 -> 业务流程树 › BF-SUP-01. 主路径：登录→进入供应商→新增→填写信息→提交→列表刷新 
+    [chromium] › e2e\suppliers.spec.ts:600:3 › 供应商管理 -> 业务流程树 › BF-SUP-02. 分支：关闭弹窗不保存 ──────────────
+    [chromium] › e2e\suppliers.spec.ts:605:3 › 供应商管理 -> 业务流程树 › BF-SUP-03. 分支：必填字段漏填 ───────────────
+    [chromium] › e2e\suppliers.spec.ts:610:3 › 供应商管理 -> 业务流程树 › BF-SUP-04. 分支：刷新页面后新供应商仍在列表 ────────
+    [chromium] › e2e\suppliers.spec.ts:635:3 › 供应商管理 -> 业务流程树 › BF-SUP-08. 分支：快速筛选后分页 ──────────────
+    [chromium] › e2e\suppliers.spec.ts:653:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-02. 供应商合作次数统计 ───────────
+    [chromium] › e2e\suppliers.spec.ts:658:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-03. 供应商累计金额统计 ───────────
+    [chromium] › e2e\suppliers.spec.ts:663:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-04. 供应商列表导出功能 ───────────
+    [chromium] › e2e\suppliers.spec.ts:668:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-05. 供应商打印功能 ─────────────
+    [chromium] › e2e\suppliers.spec.ts:673:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-06. 供应商页面响应式布局 ──────────
+    [chromium] › e2e\suppliers.spec.ts:679:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-07. 供应商页面加载性能 ───────────
+    [chromium] › e2e\suppliers.spec.ts:686:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-08. 供应商搜索防抖 ─────────────
+    [chromium] › e2e\suppliers.spec.ts:697:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-09. 供应商详情弹窗 ─────────────
+    [chromium] › e2e\suppliers.spec.ts:704:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-10. 供应商字段XSS防护 ──────────
+    [chromium] › e2e\suppliers.spec.ts:711:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-11. 供应商字段SQL注入防护 ────────
+    [chromium] › e2e\suppliers.spec.ts:718:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-12. 供应商API响应格式验证 ────────
+    [chromium] › e2e\suppliers.spec.ts:733:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-13. 供应商状态颜色标签 ───────────
+    [chromium] › e2e\suppliers.spec.ts:738:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-14. 供应商排序功能 ─────────────
+    [chromium] › e2e\suppliers.spec.ts:743:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-15. 供应商联系信息完整性 ──────────
+    [chromium] › e2e\suppliers.spec.ts:750:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-16. 多角色同时操作互不影响 ─────────
+  20 skipped
+  32 passed (8.0m)

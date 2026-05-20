@@ -14,7 +14,9 @@ function generateOutboundNo(): string {
 
 router.get('/', (req, res) => {
   try {
-    const { page = 1, pageSize = 20, projectId, status } = req.query
+    let { page = 1, pageSize = 20, projectId, status } = req.query
+    page = Math.max(1, Number(page) || 1)
+    pageSize = Math.max(1, Math.min(100, Number(pageSize) || 20))
     const db = getDatabase()
     let where = 'r.is_deleted = 0'
     const params: any[] = []

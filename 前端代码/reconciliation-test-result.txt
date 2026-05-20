@@ -1,0 +1,149 @@
+
+Running 104 tests using 1 worker
+
+  ok   1 [chromium] › e2e\reconciliation.spec.ts:60:3 › 消耗对账 -> 查看对账列表与统计卡片 › RECON-LIST-01. 正常用例：admin进入对账页显示列表 (2.2s)
+  ok   2 [chromium] › e2e\reconciliation.spec.ts:67:3 › 消耗对账 -> 查看对账列表与统计卡片 › RECON-LIST-02. 正常用例：统计卡片显示4项指标 (2.0s)
+  ok   3 [chromium] › e2e\reconciliation.spec.ts:76:3 › 消耗对账 -> 查看对账列表与统计卡片 › RECON-LIST-03. 正常用例：统计卡片数字为数值格式 (2.2s)
+  ok   4 [chromium] › e2e\reconciliation.spec.ts:88:3 › 消耗对账 -> 查看对账列表与统计卡片 › RECON-LIST-04. 正常用例：页面显示对账说明提示 (1.9s)
+  ok   5 [chromium] › e2e\reconciliation.spec.ts:94:3 › 消耗对账 -> 查看对账列表与统计卡片 › RECON-LIST-05. 正常用例：显示导入LIS数据按钮 (2.2s)
+  ok   6 [chromium] › e2e\reconciliation.spec.ts:100:3 › 消耗对账 -> 查看对账列表与统计卡片 › RECON-LIST-06. 空数据边界：无对账数据显示空状态 (3.5s)
+  ok   7 [chromium] › e2e\reconciliation.spec.ts:111:3 › 消耗对账 -> 查看对账列表与统计卡片 › RECON-LIST-07. 权限：非admin/finance访问返回403 (1.6s)
+  ok   8 [chromium] › e2e\reconciliation.spec.ts:117:3 › 消耗对账 -> 查看对账列表与统计卡片 › RECON-LIST-08. 权限：warehouse_manager访问返回403 (1.8s)
+  ok   9 [chromium] › e2e\reconciliation.spec.ts:123:3 › 消耗对账 -> 查看对账列表与统计卡片 › RECON-LIST-09. 异常恢复：API 500显示错误 (4.2s)
+  ok  10 [chromium] › e2e\reconciliation.spec.ts:131:3 › 消耗对账 -> 查看对账列表与统计卡片 › RECON-LIST-10. 并发：快速刷新页面多次 (4.0s)
+  ok  11 [chromium] › e2e\reconciliation.spec.ts:144:3 › 消耗对账 -> Tab切换 › RECON-TAB-01. 正常用例：默认显示按项目对账Tab (2.0s)
+  ok  12 [chromium] › e2e\reconciliation.spec.ts:153:3 › 消耗对账 -> Tab切换 › RECON-TAB-02. 正常用例：切换到按物料汇总Tab (3.0s)
+  ok  13 [chromium] › e2e\reconciliation.spec.ts:161:3 › 消耗对账 -> Tab切换 › RECON-TAB-03. 正常用例：切换到按病理号查看Tab (1.9s)
+  ok  14 [chromium] › e2e\reconciliation.spec.ts:168:3 › 消耗对账 -> Tab切换 › RECON-TAB-04. 正常用例：切换到修正日志Tab (1.8s)
+  ok  15 [chromium] › e2e\reconciliation.spec.ts:175:3 › 消耗对账 -> Tab切换 › RECON-TAB-05. 并发：快速切换Tab多次 (2.8s)
+  ok  16 [chromium] › e2e\reconciliation.spec.ts:189:3 › 消耗对账 -> Tab切换 › RECON-TAB-06. UI差异：Tab高亮样式正确 (1.8s)
+  ok  17 [chromium] › e2e\reconciliation.spec.ts:200:3 › 消耗对账 -> 时间段筛选 › RECON-PERIOD-01. 正常用例：点击本周筛选 (1.9s)
+  ok  18 [chromium] › e2e\reconciliation.spec.ts:207:3 › 消耗对账 -> 时间段筛选 › RECON-PERIOD-02. 正常用例：点击本月筛选 (2.0s)
+  ok  19 [chromium] › e2e\reconciliation.spec.ts:214:3 › 消耗对账 -> 时间段筛选 › RECON-PERIOD-03. 正常用例：点击本季筛选 (1.8s)
+  ok  20 [chromium] › e2e\reconciliation.spec.ts:221:3 › 消耗对账 -> 时间段筛选 › RECON-PERIOD-04. 正常用例：点击本年筛选 (1.8s)
+  ok  21 [chromium] › e2e\reconciliation.spec.ts:228:3 › 消耗对账 -> 时间段筛选 › RECON-PERIOD-05. 正常用例：自定义日期范围筛选 (2.2s)
+  ok  22 [chromium] › e2e\reconciliation.spec.ts:238:3 › 消耗对账 -> 时间段筛选 › RECON-PERIOD-06. 边界：开始日期大于结束日期 (2.3s)
+  ok  23 [chromium] › e2e\reconciliation.spec.ts:248:3 › 消耗对账 -> 时间段筛选 › RECON-PERIOD-07. 并发：快速切换时间段 (2.0s)
+  ok  24 [chromium] › e2e\reconciliation.spec.ts:258:3 › 消耗对账 -> 时间段筛选 › RECON-PERIOD-08. 正常用例：导出报表按钮存在 (1.8s)
+  ok  25 [chromium] › e2e\reconciliation.spec.ts:267:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-01. 正常用例：展开项目查看物料明细 (4.3s)
+  ok  26 [chromium] › e2e\reconciliation.spec.ts:279:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-02. 正常用例：项目显示LIS病例数和关联出库数 (2.8s)
+  ok  27 [chromium] › e2e\reconciliation.spec.ts:291:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-03. 正常用例：差异标记为match显示绿色 (2.7s)
+  ok  28 [chromium] › e2e\reconciliation.spec.ts:299:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-04. 正常用例：差异标记为warn显示黄色 (2.7s)
+  ok  29 [chromium] › e2e\reconciliation.spec.ts:308:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-05. 正常用例：差异标记为danger显示红色 (2.6s)
+  ok  30 [chromium] › e2e\reconciliation.spec.ts:317:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-06. 空数据边界：无项目数据 (3.3s)
+  ok  31 [chromium] › e2e\reconciliation.spec.ts:327:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-07. 正常用例：未配置BOM项目显示红色标签 (2.8s)
+  ok  32 [chromium] › e2e\reconciliation.spec.ts:336:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-08. 正常用例：修正BOM按钮显示 (2.6s)
+  ok  33 [chromium] › e2e\reconciliation.spec.ts:345:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-09. 正常用例：再次点击项目折叠明细 (2.7s)
+  ok  34 [chromium] › e2e\reconciliation.spec.ts:359:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-10. 正常用例：项目显示BOM标签 (2.6s)
+  ok  35 [chromium] › e2e\reconciliation.spec.ts:368:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-11. 并发：快速展开折叠多个项目 (3.0s)
+  ok  36 [chromium] › e2e\reconciliation.spec.ts:381:3 › 消耗对账 -> 按项目对账 › RECON-PROJ-12. 正常用例：物料明细表格列完整 (3.3s)
+  ok  37 [chromium] › e2e\reconciliation.spec.ts:396:3 › 消耗对账 -> 按物料汇总 › RECON-MAT-01. 正常用例：切换到物料汇总显示表格 (2.8s)
+  ok  38 [chromium] › e2e\reconciliation.spec.ts:404:3 › 消耗对账 -> 按物料汇总 › RECON-MAT-02. 正常用例：物料显示BOM理论和实际出库 (2.7s)
+  ok  39 [chromium] › e2e\reconciliation.spec.ts:412:3 › 消耗对账 -> 按物料汇总 › RECON-MAT-03. 正常用例：差异率列显示百分比 (2.8s)
+  ok  40 [chromium] › e2e\reconciliation.spec.ts:420:3 › 消耗对账 -> 按物料汇总 › RECON-MAT-04. 正常用例：调整BOM按钮在差异行显示 (2.3s)
+  ok  41 [chromium] › e2e\reconciliation.spec.ts:430:3 › 消耗对账 -> 按物料汇总 › RECON-MAT-05. 正常用例：匹配行显示横线无操作 (2.4s)
+  ok  42 [chromium] › e2e\reconciliation.spec.ts:440:3 › 消耗对账 -> 按物料汇总 › RECON-MAT-06. 空数据边界：无物料数据显示空状态 (2.9s)
+  ok  43 [chromium] › e2e\reconciliation.spec.ts:451:3 › 消耗对账 -> 按物料汇总 › RECON-MAT-07. 正常用例：物料差异颜色标签 (2.3s)
+  ok  44 [chromium] › e2e\reconciliation.spec.ts:465:3 › 消耗对账 -> 按物料汇总 › RECON-MAT-08. 正常用例：物料表格hover效果 (2.4s)
+  ok  45 [chromium] › e2e\reconciliation.spec.ts:480:3 › 消耗对账 -> 按病理号查看 › RECON-CASE-01. 正常用例：切换到病理号查看显示表格 (1.8s)
+  ok  46 [chromium] › e2e\reconciliation.spec.ts:488:3 › 消耗对账 -> 按病理号查看 › RECON-CASE-02. 正常用例：搜索病理号过滤结果 (2.4s)
+  ok  47 [chromium] › e2e\reconciliation.spec.ts:498:3 › 消耗对账 -> 按病理号查看 › RECON-CASE-03. 正常用例：按检测项目筛选 (2.1s)
+  ok  48 [chromium] › e2e\reconciliation.spec.ts:510:3 › 消耗对账 -> 按病理号查看 › RECON-CASE-04. 正常用例：按状态筛选 (1.9s)
+  ok  49 [chromium] › e2e\reconciliation.spec.ts:522:3 › 消耗对账 -> 按病理号查看 › RECON-CASE-05. 正常用例：点击重置按钮恢复全部 (1.9s)
+  ok  50 [chromium] › e2e\reconciliation.spec.ts:531:3 › 消耗对账 -> 按病理号查看 › RECON-CASE-06. 空数据边界：筛选无结果 (2.5s)
+  ok  51 [chromium] › e2e\reconciliation.spec.ts:541:3 › 消耗对账 -> 按病理号查看 › RECON-CASE-07. 正常用例：状态标签颜色区分 (2.2s)
+  ok  52 [chromium] › e2e\reconciliation.spec.ts:551:3 › 消耗对账 -> 按病理号查看 › RECON-CASE-08. 正常用例：修改按钮显示 (2.5s)
+  ok  53 [chromium] › e2e\reconciliation.spec.ts:561:3 › 消耗对账 -> 按病理号查看 › RECON-CASE-09. 正常用例：分页控件存在 (2.5s)
+  ok  54 [chromium] › e2e\reconciliation.spec.ts:571:3 › 消耗对账 -> 按病理号查看 › RECON-CASE-10. 正常用例：未关联BOM显示红色提示 (2.4s)
+  ok  55 [chromium] › e2e\reconciliation.spec.ts:584:3 › 消耗对账 -> 修正日志 › RECON-LOG-01. 正常用例：切换到修正日志显示记录 (1.9s)
+  ok  56 [chromium] › e2e\reconciliation.spec.ts:591:3 › 消耗对账 -> 修正日志 › RECON-LOG-02. 正常用例：日志显示时间操作人信息 (2.3s)
+  ok  57 [chromium] › e2e\reconciliation.spec.ts:601:3 › 消耗对账 -> 修正日志 › RECON-LOG-03. 正常用例：日志类型图标颜色区分 (2.5s)
+  ok  58 [chromium] › e2e\reconciliation.spec.ts:613:3 › 消耗对账 -> 修正日志 › RECON-LOG-04. 空数据边界：无修正记录显示空状态 (2.3s)
+  ok  59 [chromium] › e2e\reconciliation.spec.ts:626:3 › 消耗对账 -> 修正日志 › RECON-LOG-05. 正常用例：日志显示旧值新值对比 (2.4s)
+  ok  60 [chromium] › e2e\reconciliation.spec.ts:636:3 › 消耗对账 -> 修正日志 › RECON-LOG-06. 正常用例：日志显示修正原因 (2.3s)
+  ok  61 [chromium] › e2e\reconciliation.spec.ts:649:3 › 消耗对账 -> 导入LIS数据 › RECON-IMPORT-01. 正常用例：打开导入弹窗 (2.0s)
+  ok  62 [chromium] › e2e\reconciliation.spec.ts:656:3 › 消耗对账 -> 导入LIS数据 › RECON-IMPORT-02. 正常用例：关闭导入弹窗 (1.9s)
+  ok  63 [chromium] › e2e\reconciliation.spec.ts:664:3 › 消耗对账 -> 导入LIS数据 › RECON-IMPORT-03. 正常用例：粘贴数据到textarea (1.9s)
+  ok  64 [chromium] › e2e\reconciliation.spec.ts:673:3 › 消耗对账 -> 导入LIS数据 › RECON-IMPORT-04. 空数据边界：空数据导入被阻止 (2.4s)
+  ok  65 [chromium] › e2e\reconciliation.spec.ts:683:3 › 消耗对账 -> 导入LIS数据 › RECON-IMPORT-05. 表单校验：格式错误数据提示 (2.3s)
+  ok  66 [chromium] › e2e\reconciliation.spec.ts:693:3 › 消耗对账 -> 导入LIS数据 › RECON-IMPORT-06. 并发：快速点击导入按钮多次 (3.5s)
+  ok  67 [chromium] › e2e\reconciliation.spec.ts:707:3 › 消耗对账 -> 导入LIS数据 › RECON-IMPORT-07. 权限：非admin导入返回403 (591ms)
+  ok  68 [chromium] › e2e\reconciliation.spec.ts:715:3 › 消耗对账 -> 导入LIS数据 › RECON-IMPORT-08. 异常恢复：导入时网络中断 (2.3s)
+  ok  69 [chromium] › e2e\reconciliation.spec.ts:729:3 › 消耗对账 -> 修正BOM弹窗 › RECON-FIX-01. 正常用例：打开修正BOM弹窗 (7.1s)
+  ok  70 [chromium] › e2e\reconciliation.spec.ts:741:3 › 消耗对账 -> 修正BOM弹窗 › RECON-FIX-02. 正常用例：弹窗显示当前物料信息 (9.1s)
+  ok  71 [chromium] › e2e\reconciliation.spec.ts:754:3 › 消耗对账 -> 修正BOM弹窗 › RECON-FIX-03. 正常用例：关闭修正BOM弹窗 (2.9s)
+  ok  72 [chromium] › e2e\reconciliation.spec.ts:767:3 › 消耗对账 -> 修正BOM弹窗 › RECON-FIX-04. 空数据边界：必填项为空提交被阻止 (6.0s)
+  ok  73 [chromium] › e2e\reconciliation.spec.ts:784:3 › 消耗对账 -> 修正BOM弹窗 › RECON-FIX-05. 正常用例：弹窗显示修正原因输入框 (2.7s)
+  ok  74 [chromium] › e2e\reconciliation.spec.ts:796:3 › 消耗对账 -> 修正BOM弹窗 › RECON-FIX-06. 正常用例：弹窗显示单位下拉选择 (2.8s)
+  ok  75 [chromium] › e2e\reconciliation.spec.ts:809:3 › 消耗对账 -> 修正BOM弹窗 › RECON-FIX-07. 正常用例：弹窗显示提示信息 (4.9s)
+  ok  76 [chromium] › e2e\reconciliation.spec.ts:821:3 › 消耗对账 -> 修正BOM弹窗 › RECON-FIX-08. 并发：快速打开关闭修正弹窗 (11.2s)
+  ok  77 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-01. technician GET /reconciliation/summary 返回403 (631ms)
+  ok  78 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-02. warehouse_manager GET /reconciliation/summary 返回403 (619ms)
+  x   79 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-03. pathologist GET /reconciliation/summary 返回403 (666ms)
+  ok  80 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-04. procurement GET /reconciliation/summary 返回403 (655ms)
+  ok  81 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-05. finance GET /reconciliation/summary 返回200 (601ms)
+  ok  82 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-06. admin GET /reconciliation/summary 返回200 (654ms)
+  ok  83 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-07. technician POST /reconciliation/cases/import 返回403 (651ms)
+  ok  84 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-08. technician POST /reconciliation/logs 返回403 (706ms)
+  x   85 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-09. finance POST /reconciliation/cases/import 返回403 (788ms)
+  ok  86 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-10. admin POST /reconciliation/cases/import 返回200 (631ms)
+  ok  87 [chromium] › e2e\reconciliation.spec.ts:863:3 › 消耗对账 -> 业务流程树 › BF-RECON-01. 主路径：查看对账→切换Tab→导出报表 (2.2s)
+  ok  88 [chromium] › e2e\reconciliation.spec.ts:871:3 › 消耗对账 -> 业务流程树 › BF-RECON-02. 分支：导入LIS数据后查看病例 (3.1s)
+  ok  89 [chromium] › e2e\reconciliation.spec.ts:882:3 › 消耗对账 -> 业务流程树 › BF-RECON-03. 分支：筛选时间段后查看项目对账 (2.2s)
+  ok  90 [chromium] › e2e\reconciliation.spec.ts:889:3 › 消耗对账 -> 业务流程树 › BF-RECON-04. 分支：展开项目查看物料差异 (2.8s)
+  ok  91 [chromium] › e2e\reconciliation.spec.ts:901:3 › 消耗对账 -> 业务流程树 › BF-RECON-05. 分支：无权限用户访问被拦截 (1.9s)
+  ok  92 [chromium] › e2e\reconciliation.spec.ts:907:3 › 消耗对账 -> 业务流程树 › BF-RECON-06. 分支：切换Tab后修正日志 (2.0s)
+  ok  93 [chromium] › e2e\reconciliation.spec.ts:914:3 › 消耗对账 -> 业务流程树 › BF-RECON-07. 分支：按病理号搜索后重置 (2.1s)
+  ok  94 [chromium] › e2e\reconciliation.spec.ts:923:3 › 消耗对账 -> 业务流程树 › BF-RECON-08. 分支：修正BOM后查看日志 (2.2s)
+  ok  95 [chromium] › e2e\reconciliation.spec.ts:934:3 › 消耗对账 -> 盲点分析补充 › BLIND-RECON-01. 差异颜色标签样式正确 (2.4s)
+  ok  96 [chromium] › e2e\reconciliation.spec.ts:945:3 › 消耗对账 -> 盲点分析补充 › BLIND-RECON-02. 对账说明提示框样式 (1.7s)
+  ok  97 [chromium] › e2e\reconciliation.spec.ts:952:3 › 消耗对账 -> 盲点分析补充 › BLIND-RECON-03. 统计卡片hover效果 (1.9s)
+  ok  98 [chromium] › e2e\reconciliation.spec.ts:960:3 › 消耗对账 -> 盲点分析补充 › BLIND-RECON-04. 响应式布局检查 (1.8s)
+  ok  99 [chromium] › e2e\reconciliation.spec.ts:967:3 › 消耗对账 -> 盲点分析补充 › BLIND-RECON-05. 页面加载性能检查 (2.3s)
+  ok 100 [chromium] › e2e\reconciliation.spec.ts:976:3 › 消耗对账 -> 盲点分析补充 › BLIND-RECON-06. Tab切换时数据重新加载 (3.0s)
+  ok 101 [chromium] › e2e\reconciliation.spec.ts:986:3 › 消耗对账 -> 盲点分析补充 › BLIND-RECON-07. 导出按钮存在且可点击 (1.8s)
+  ok 102 [chromium] › e2e\reconciliation.spec.ts:995:3 › 消耗对账 -> 盲点分析补充 › BLIND-RECON-08. 时间段按钮组样式 (1.9s)
+  ok 103 [chromium] › e2e\reconciliation.spec.ts:1003:3 › 消耗对账 -> 盲点分析补充 › BLIND-RECON-09. API响应格式验证 (638ms)
+  ok 104 [chromium] › e2e\reconciliation.spec.ts:1014:3 › 消耗对账 -> 盲点分析补充 › BLIND-RECON-10. 病理号表格列完整 (1.9s)
+
+
+  1) [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-03. pathologist GET /reconciliation/summary 返回403 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m"403"[39m
+    Received: [31m"200"[39m
+
+      854 |       const token = await apiLogin(scene.role as RoleKey)
+      855 |       const res = await apiFetch(token, scene.method, scene.path, scene.method === 'POST' ? { items: [{ caseNo: 'TEST' }] } : undefined)
+    > 856 |       expect(res.status.toString()).toBe(scene.expect)
+          |                                     ^
+      857 |     })
+      858 |   }
+      859 | })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\reconciliation.spec.ts:856:37
+
+    Error Context: test-results\reconciliation-消耗对账---角色权限-c4195-econciliation-summary-返回403-chromium\error-context.md
+
+  2) [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-09. finance POST /reconciliation/cases/import 返回403 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m"403"[39m
+    Received: [31m"200"[39m
+
+      854 |       const token = await apiLogin(scene.role as RoleKey)
+      855 |       const res = await apiFetch(token, scene.method, scene.path, scene.method === 'POST' ? { items: [{ caseNo: 'TEST' }] } : undefined)
+    > 856 |       expect(res.status.toString()).toBe(scene.expect)
+          |                                     ^
+      857 |     })
+      858 |   }
+      859 | })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\reconciliation.spec.ts:856:37
+
+    Error Context: test-results\reconciliation-消耗对账---角色权限-74728-iliation-cases-import-返回403-chromium\error-context.md
+
+  2 failed
+    [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-03. pathologist GET /reconciliation/summary 返回403 
+    [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-09. finance POST /reconciliation/cases/import 返回403 
+  102 passed (4.4m)

@@ -1,0 +1,2006 @@
+
+Running 97 tests using 1 worker
+
+  x   1 [chromium] › e2e\users.spec.ts:64:3 › 用户管理 -> 查看用户列表 › USER-LIST-01. 正常用例：admin可查看用户列表 (11.8s)
+  x   2 [chromium] › e2e\users.spec.ts:68:3 › 用户管理 -> 查看用户列表 › USER-LIST-02. 正常用例：用户列表显示列标题 (11.8s)
+  x   3 [chromium] › e2e\users.spec.ts:72:3 › 用户管理 -> 查看用户列表 › USER-LIST-03. 正常用例：用户列表显示统计卡片 (11.9s)
+  x   4 [chromium] › e2e\users.spec.ts:76:3 › 用户管理 -> 查看用户列表 › USER-LIST-04. 正常用例：左侧显示角色列表面板 (11.8s)
+  x   5 [chromium] › e2e\users.spec.ts:80:3 › 用户管理 -> 查看用户列表 › USER-LIST-05. 空数据边界：无用户数据显示空状态 (11.8s)
+  x   6 [chromium] › e2e\users.spec.ts:86:3 › 用户管理 -> 查看用户列表 › USER-LIST-06. 异常恢复：API 500显示错误 (11.9s)
+  ok  7 [chromium] › e2e\users.spec.ts:91:3 › 用户管理 -> 查看用户列表 › USER-LIST-07. 权限：technician访问返回403 (3.0s)
+  x   8 [chromium] › e2e\users.spec.ts:95:3 › 用户管理 -> 查看用户列表 › USER-LIST-08. 并发：快速刷新页面多次 (11.5s)
+  x   9 [chromium] › e2e\users.spec.ts:100:3 › 用户管理 -> 查看用户列表 › USER-LIST-09. UI差异：admin显示新建用户按钮 (11.7s)
+  x  10 [chromium] › e2e\users.spec.ts:104:3 › 用户管理 -> 查看用户列表 › USER-LIST-10. 正常用例：用户状态标签显示正常/禁用 (11.8s)
+  x  11 [chromium] › e2e\users.spec.ts:114:3 › 用户管理 -> 筛选功能 › USER-FILTER-01. 正常用例：按关键词搜索用户名 (11.7s)
+  x  12 [chromium] › e2e\users.spec.ts:119:3 › 用户管理 -> 筛选功能 › USER-FILTER-02. 正常用例：按角色筛选 (11.9s)
+  x  13 [chromium] › e2e\users.spec.ts:124:3 › 用户管理 -> 筛选功能 › USER-FILTER-03. 正常用例：按状态筛选 (11.8s)
+  x  14 [chromium] › e2e\users.spec.ts:129:3 › 用户管理 -> 筛选功能 › USER-FILTER-04. 正常用例：点击查询按钮 (11.9s)
+  x  15 [chromium] › e2e\users.spec.ts:134:3 › 用户管理 -> 筛选功能 › USER-FILTER-05. 正常用例：点击重置按钮恢复全部 (11.8s)
+  x  16 [chromium] › e2e\users.spec.ts:139:3 › 用户管理 -> 筛选功能 › USER-FILTER-06. 空数据边界：筛选无结果 (12.0s)
+  x  17 [chromium] › e2e\users.spec.ts:144:3 › 用户管理 -> 筛选功能 › USER-FILTER-07. 并发：快速切换筛选条件 (12.1s)
+  x  18 [chromium] › e2e\users.spec.ts:151:3 › 用户管理 -> 筛选功能 › USER-FILTER-08. 正常用例：点击左侧角色筛选用户 (11.7s)
+  x  19 [chromium] › e2e\users.spec.ts:162:3 › 用户管理 -> 新建用户 › USER-CREATE-01. 正常用例：admin新建用户成功 (11.8s)
+  x  20 [chromium] › e2e\users.spec.ts:174:3 › 用户管理 -> 新建用户 › USER-CREATE-02. 正常用例：新建用户选择角色 (11.8s)
+  x  21 [chromium] › e2e\users.spec.ts:186:3 › 用户管理 -> 新建用户 › USER-CREATE-03. 正常用例：新建用户选择部门 (11.9s)
+  x  22 [chromium] › e2e\users.spec.ts:198:3 › 用户管理 -> 新建用户 › USER-CREATE-04. 空数据边界：必填项为空提交被阻止 (11.7s)
+  x  23 [chromium] › e2e\users.spec.ts:204:3 › 用户管理 -> 新建用户 › USER-CREATE-05. 表单校验：未传必填字段返回400 (635ms)
+  x  24 [chromium] › e2e\users.spec.ts:209:3 › 用户管理 -> 新建用户 › USER-CREATE-06. 表单校验：缺少用户名返回400 (597ms)
+  x  25 [chromium] › e2e\users.spec.ts:214:3 › 用户管理 -> 新建用户 › USER-CREATE-07. 业务冲突：username已存在返回409 (688ms)
+  ok 26 [chromium] › e2e\users.spec.ts:222:5 › 用户管理 -> 新建用户 › USER-CREATE-08-technician. 权限：technician新建用户返回403 (413ms)
+  ok 27 [chromium] › e2e\users.spec.ts:222:5 › 用户管理 -> 新建用户 › USER-CREATE-08-pathologist. 权限：pathologist新建用户返回403 (340ms)
+  ok 28 [chromium] › e2e\users.spec.ts:222:5 › 用户管理 -> 新建用户 › USER-CREATE-08-procurement. 权限：procurement新建用户返回403 (319ms)
+  ok 29 [chromium] › e2e\users.spec.ts:222:5 › 用户管理 -> 新建用户 › USER-CREATE-08-finance. 权限：finance新建用户返回403 (301ms)
+  ok 30 [chromium] › e2e\users.spec.ts:222:5 › 用户管理 -> 新建用户 › USER-CREATE-08-warehouse_manager. 权限：warehouse_manager新建用户返回403 (301ms)
+  x  31 [chromium] › e2e\users.spec.ts:228:3 › 用户管理 -> 新建用户 › USER-CREATE-09. 并发：快速双击新建按钮 (11.7s)
+  x  32 [chromium] › e2e\users.spec.ts:233:3 › 用户管理 -> 新建用户 › USER-CREATE-10. UI差异：admin前端显示新建按钮 (12.1s)
+  x  33 [chromium] › e2e\users.spec.ts:243:3 › 用户管理 -> 编辑用户 › USER-EDIT-01. 正常用例：admin编辑用户姓名保存成功 (11.7s)
+  x  34 [chromium] › e2e\users.spec.ts:253:3 › 用户管理 -> 编辑用户 › USER-EDIT-02. 正常用例：admin修改用户状态 (12.2s)
+  x  35 [chromium] › e2e\users.spec.ts:266:3 › 用户管理 -> 编辑用户 › USER-EDIT-03. 空数据边界：编辑后姓名为空被阻止 (12.3s)
+  x  36 [chromium] › e2e\users.spec.ts:275:3 › 用户管理 -> 编辑用户 › USER-EDIT-04. 表单校验：编辑不存在的用户返回404 (698ms)
+  ok 37 [chromium] › e2e\users.spec.ts:281:5 › 用户管理 -> 编辑用户 › USER-EDIT-05-technician. 权限：technician编辑用户返回403 (667ms)
+  ok 38 [chromium] › e2e\users.spec.ts:281:5 › 用户管理 -> 编辑用户 › USER-EDIT-05-pathologist. 权限：pathologist编辑用户返回403 (555ms)
+  ok 39 [chromium] › e2e\users.spec.ts:281:5 › 用户管理 -> 编辑用户 › USER-EDIT-05-procurement. 权限：procurement编辑用户返回403 (365ms)
+  ok 40 [chromium] › e2e\users.spec.ts:281:5 › 用户管理 -> 编辑用户 › USER-EDIT-05-finance. 权限：finance编辑用户返回403 (369ms)
+  ok 41 [chromium] › e2e\users.spec.ts:281:5 › 用户管理 -> 编辑用户 › USER-EDIT-05-warehouse_manager. 权限：warehouse_manager编辑用户返回403 (322ms)
+  ok 42 [chromium] › e2e\users.spec.ts:287:3 › 用户管理 -> 编辑用户 › USER-EDIT-06. 并发：并发编辑同一用户 (635ms)
+  x  43 [chromium] › e2e\users.spec.ts:296:3 › 用户管理 -> 编辑用户 › USER-EDIT-07. 异常恢复：编辑时API 500后重试 (11.9s)
+  x  44 [chromium] › e2e\users.spec.ts:303:3 › 用户管理 -> 编辑用户 › USER-EDIT-08. UI差异：admin显示编辑按钮 (12.2s)
+  x  45 [chromium] › e2e\users.spec.ts:307:3 › 用户管理 -> 编辑用户 › USER-EDIT-09. 正常用例：编辑后列表数据更新 (12.2s)
+  x  46 [chromium] › e2e\users.spec.ts:312:3 › 用户管理 -> 编辑用户 › USER-EDIT-10. 正常用例：用户名编辑时为只读 (12.1s)
+  ok 47 [chromium] › e2e\users.spec.ts:331:3 › 用户管理 -> 删除用户 › USER-DELETE-01. 正常用例：admin删除用户成功 (777ms)
+  ok 48 [chromium] › e2e\users.spec.ts:340:3 › 用户管理 -> 删除用户 › USER-DELETE-02. 业务冲突：删除admin自己被阻止 (404ms)
+  ok 49 [chromium] › e2e\users.spec.ts:348:3 › 用户管理 -> 删除用户 › USER-DELETE-03. 并发：并发删除同一用户 (449ms)
+  ok 50 [chromium] › e2e\users.spec.ts:358:5 › 用户管理 -> 删除用户 › USER-DELETE-04-technician. 权限：technician删除用户返回403 (439ms)
+  ok 51 [chromium] › e2e\users.spec.ts:358:5 › 用户管理 -> 删除用户 › USER-DELETE-04-pathologist. 权限：pathologist删除用户返回403 (392ms)
+  ok 52 [chromium] › e2e\users.spec.ts:358:5 › 用户管理 -> 删除用户 › USER-DELETE-04-procurement. 权限：procurement删除用户返回403 (751ms)
+  ok 53 [chromium] › e2e\users.spec.ts:358:5 › 用户管理 -> 删除用户 › USER-DELETE-04-finance. 权限：finance删除用户返回403 (562ms)
+  ok 54 [chromium] › e2e\users.spec.ts:358:5 › 用户管理 -> 删除用户 › USER-DELETE-04-warehouse_manager. 权限：warehouse_manager删除用户返回403 (418ms)
+  x  55 [chromium] › e2e\users.spec.ts:364:3 › 用户管理 -> 删除用户 › USER-DELETE-05. UI差异：admin显示删除按钮 (12.0s)
+  x  56 [chromium] › e2e\users.spec.ts:374:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-01. 正常用例：admin停用用户成功 (12.3s)
+  x  57 [chromium] › e2e\users.spec.ts:382:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-02. 正常用例：admin启用已停用用户 (11.9s)
+  ok 58 [chromium] › e2e\users.spec.ts:387:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-03. 业务冲突：停用自己账户被阻止 (647ms)
+  x  59 [chromium] › e2e\users.spec.ts:395:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-04. UI差异：admin显示停用/启用按钮 (11.6s)
+  x  60 [chromium] › e2e\users.spec.ts:405:3 › 用户管理 -> 重置密码 › USER-RESET-01. 正常用例：admin重置用户密码成功 (13.2s)
+  x  61 [chromium] › e2e\users.spec.ts:410:3 › 用户管理 -> 重置密码 › USER-RESET-02. 正常用例：编辑弹窗内重置密码 (12.1s)
+  ok 62 [chromium] › e2e\users.spec.ts:421:3 › 用户管理 -> 重置密码 › USER-RESET-03. 权限：非admin重置密码返回403 (346ms)
+  x  63 [chromium] › e2e\users.spec.ts:432:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-01. 正常用例：点击详情打开弹窗 (11.7s)
+  x  64 [chromium] › e2e\users.spec.ts:442:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-02. 正常用例：详情弹窗显示用户头像 (11.6s)
+  x  65 [chromium] › e2e\users.spec.ts:452:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-03. 正常用例：详情弹窗显示权限列表 (11.7s)
+  x  66 [chromium] › e2e\users.spec.ts:462:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-04. 正常用例：详情弹窗点击编辑跳转 (11.3s)
+  x  67 [chromium] › e2e\users.spec.ts:477:3 › 用户管理 -> 分页功能 › USER-PAGE-01. 正常用例：多页数据切页 (12.0s)
+  x  68 [chromium] › e2e\users.spec.ts:482:3 › 用户管理 -> 分页功能 › USER-PAGE-02. 边界：仅1页时下一页禁用 (11.5s)
+  x  69 [chromium] › e2e\users.spec.ts:487:3 › 用户管理 -> 分页功能 › USER-PAGE-03. 并发：快速切换分页 (11.4s)
+  x  70 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-01. technician GET /users 返回403 (266ms)
+  x  71 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-02. pathologist GET /users 返回403 (266ms)
+  x  72 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-03. procurement GET /users 返回403 (285ms)
+  x  73 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-04. finance GET /users 返回403 (273ms)
+  x  74 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-05. warehouse_manager GET /users 返回403 (336ms)
+  x  75 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-06. admin GET /users 返回200 (31ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  ok 76 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-07. technician POST /users 返回403 (302ms)
+  ok 77 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-08. technician PUT /users/test-id 返回403 (274ms)
+  ok 78 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-09. technician DELETE /users/test-id 返回403 (371ms)
+  x  79 [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-10. admin PUT /users/test-id 返回404 (10ms)
+  x  80 [chromium] › e2e\users.spec.ts:524:3 › 用户管理 -> 业务流程树 › BF-USER-01. 主路径：创建用户→配置角色→保存 (11.7s)
+  x  81 [chromium] › e2e\users.spec.ts:534:3 › 用户管理 -> 业务流程树 › BF-USER-02. 分支：创建用户时不填必填项被阻止 (11.3s)
+  x  82 [chromium] › e2e\users.spec.ts:540:3 › 用户管理 -> 业务流程树 › BF-USER-03. 分支：编辑用户后取消不保存 (11.4s)
+  x  83 [chromium] › e2e\users.spec.ts:545:3 › 用户管理 -> 业务流程树 › BF-USER-04. 分支：停用用户后重新启用 (11.3s)
+  x  84 [chromium] › e2e\users.spec.ts:550:3 › 用户管理 -> 业务流程树 › BF-USER-05. 分支：重置用户密码 (11.5s)
+  x  85 [chromium] › e2e\users.spec.ts:555:3 › 用户管理 -> 业务流程树 › BF-USER-06. 分支：筛选后查看用户详情 (11.4s)
+  ok 86 [chromium] › e2e\users.spec.ts:562:3 › 用户管理 -> 业务流程树 › BF-USER-07. 分支：无权限用户访问被拦截 (2.6s)
+  x  87 [chromium] › e2e\users.spec.ts:566:3 › 用户管理 -> 业务流程树 › BF-USER-08. 分支：点击左侧角色筛选用户 (11.1s)
+  x  88 [chromium] › e2e\users.spec.ts:577:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-01. 用户头像显示首字母 (11.3s)
+  x  89 [chromium] › e2e\users.spec.ts:581:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-02. 状态标签颜色区分 (11.2s)
+  x  90 [chromium] › e2e\users.spec.ts:585:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-03. 新建用户初始密码默认显示 (11.6s)
+  x  91 [chromium] › e2e\users.spec.ts:592:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-04. 角色下拉选项完整性 (11.3s)
+  x  92 [chromium] › e2e\users.spec.ts:603:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-05. 用户全选checkbox功能 (11.3s)
+  x  93 [chromium] › e2e\users.spec.ts:608:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-06. 分页页码按钮样式 (11.5s)
+  x  94 [chromium] › e2e\users.spec.ts:612:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-07. 响应式布局检查 (11.1s)
+  x  95 [chromium] › e2e\users.spec.ts:618:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-08. 用户API响应格式验证 (393ms)
+  x  96 [chromium] › e2e\users.spec.ts:624:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-09. 页面加载性能检查 (11.4s)
+  x  97 [chromium] › e2e\users.spec.ts:630:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-10. 用户详情权限列表展示 (11.2s)
+
+
+  1) [chromium] › e2e\users.spec.ts:64:3 › 用户管理 -> 查看用户列表 › USER-LIST-01. 正常用例：admin可查看用户列表 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:65:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-01-正常用例：admin可查看用户列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-01-正常用例：admin可查看用户列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-01-正常用例：admin可查看用户列表-chromium\error-context.md
+
+  2) [chromium] › e2e\users.spec.ts:68:3 › 用户管理 -> 查看用户列表 › USER-LIST-02. 正常用例：用户列表显示列标题 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:69:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-02-正常用例：用户列表显示列标题-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-02-正常用例：用户列表显示列标题-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-02-正常用例：用户列表显示列标题-chromium\error-context.md
+
+  3) [chromium] › e2e\users.spec.ts:72:3 › 用户管理 -> 查看用户列表 › USER-LIST-03. 正常用例：用户列表显示统计卡片 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:73:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-03-正常用例：用户列表显示统计卡片-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-03-正常用例：用户列表显示统计卡片-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-03-正常用例：用户列表显示统计卡片-chromium\error-context.md
+
+  4) [chromium] › e2e\users.spec.ts:76:3 › 用户管理 -> 查看用户列表 › USER-LIST-04. 正常用例：左侧显示角色列表面板 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:77:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-04-正常用例：左侧显示角色列表面板-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-04-正常用例：左侧显示角色列表面板-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-04-正常用例：左侧显示角色列表面板-chromium\error-context.md
+
+  5) [chromium] › e2e\users.spec.ts:80:3 › 用户管理 -> 查看用户列表 › USER-LIST-05. 空数据边界：无用户数据显示空状态 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:82:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-05-空数据边界：无用户数据显示空状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-05-空数据边界：无用户数据显示空状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-05-空数据边界：无用户数据显示空状态-chromium\error-context.md
+
+  6) [chromium] › e2e\users.spec.ts:86:3 › 用户管理 -> 查看用户列表 › USER-LIST-06. 异常恢复：API 500显示错误 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:88:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-06-异常恢复：API-500显示错误-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-06-异常恢复：API-500显示错误-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-06-异常恢复：API-500显示错误-chromium\error-context.md
+
+  7) [chromium] › e2e\users.spec.ts:95:3 › 用户管理 -> 查看用户列表 › USER-LIST-08. 并发：快速刷新页面多次 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:96:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-08-并发：快速刷新页面多次-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-08-并发：快速刷新页面多次-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-08-并发：快速刷新页面多次-chromium\error-context.md
+
+  8) [chromium] › e2e\users.spec.ts:100:3 › 用户管理 -> 查看用户列表 › USER-LIST-09. UI差异：admin显示新建用户按钮 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:101:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-09-UI差异：admin显示新建用户按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-09-UI差异：admin显示新建用户按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-09-UI差异：admin显示新建用户按钮-chromium\error-context.md
+
+  9) [chromium] › e2e\users.spec.ts:104:3 › 用户管理 -> 查看用户列表 › USER-LIST-10. 正常用例：用户状态标签显示正常/禁用 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:105:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-10-正常用例：用户状态标签显示正常-禁用-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---查看用户列表-USER-LIST-10-正常用例：用户状态标签显示正常-禁用-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---查看用户列表-USER-LIST-10-正常用例：用户状态标签显示正常-禁用-chromium\error-context.md
+
+  10) [chromium] › e2e\users.spec.ts:114:3 › 用户管理 -> 筛选功能 › USER-FILTER-01. 正常用例：按关键词搜索用户名 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:115:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-01-正常用例：按关键词搜索用户名-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-01-正常用例：按关键词搜索用户名-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-01-正常用例：按关键词搜索用户名-chromium\error-context.md
+
+  11) [chromium] › e2e\users.spec.ts:119:3 › 用户管理 -> 筛选功能 › USER-FILTER-02. 正常用例：按角色筛选 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:120:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-02-正常用例：按角色筛选-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-02-正常用例：按角色筛选-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-02-正常用例：按角色筛选-chromium\error-context.md
+
+  12) [chromium] › e2e\users.spec.ts:124:3 › 用户管理 -> 筛选功能 › USER-FILTER-03. 正常用例：按状态筛选 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:125:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-03-正常用例：按状态筛选-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-03-正常用例：按状态筛选-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-03-正常用例：按状态筛选-chromium\error-context.md
+
+  13) [chromium] › e2e\users.spec.ts:129:3 › 用户管理 -> 筛选功能 › USER-FILTER-04. 正常用例：点击查询按钮 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:130:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-04-正常用例：点击查询按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-04-正常用例：点击查询按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-04-正常用例：点击查询按钮-chromium\error-context.md
+
+  14) [chromium] › e2e\users.spec.ts:134:3 › 用户管理 -> 筛选功能 › USER-FILTER-05. 正常用例：点击重置按钮恢复全部 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:135:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-05-正常用例：点击重置按钮恢复全部-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-05-正常用例：点击重置按钮恢复全部-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-05-正常用例：点击重置按钮恢复全部-chromium\error-context.md
+
+  15) [chromium] › e2e\users.spec.ts:139:3 › 用户管理 -> 筛选功能 › USER-FILTER-06. 空数据边界：筛选无结果 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:140:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-06-空数据边界：筛选无结果-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-06-空数据边界：筛选无结果-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-06-空数据边界：筛选无结果-chromium\error-context.md
+
+  16) [chromium] › e2e\users.spec.ts:144:3 › 用户管理 -> 筛选功能 › USER-FILTER-07. 并发：快速切换筛选条件 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:145:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-07-并发：快速切换筛选条件-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-07-并发：快速切换筛选条件-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-07-并发：快速切换筛选条件-chromium\error-context.md
+
+  17) [chromium] › e2e\users.spec.ts:151:3 › 用户管理 -> 筛选功能 › USER-FILTER-08. 正常用例：点击左侧角色筛选用户 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:152:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-08-正常用例：点击左侧角色筛选用户-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---筛选功能-USER-FILTER-08-正常用例：点击左侧角色筛选用户-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---筛选功能-USER-FILTER-08-正常用例：点击左侧角色筛选用户-chromium\error-context.md
+
+  18) [chromium] › e2e\users.spec.ts:162:3 › 用户管理 -> 新建用户 › USER-CREATE-01. 正常用例：admin新建用户成功 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:163:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-01-正常用例：admin新建用户成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-01-正常用例：admin新建用户成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-01-正常用例：admin新建用户成功-chromium\error-context.md
+
+  19) [chromium] › e2e\users.spec.ts:174:3 › 用户管理 -> 新建用户 › USER-CREATE-02. 正常用例：新建用户选择角色 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:175:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-02-正常用例：新建用户选择角色-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-02-正常用例：新建用户选择角色-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-02-正常用例：新建用户选择角色-chromium\error-context.md
+
+  20) [chromium] › e2e\users.spec.ts:186:3 › 用户管理 -> 新建用户 › USER-CREATE-03. 正常用例：新建用户选择部门 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:187:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-03-正常用例：新建用户选择部门-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-03-正常用例：新建用户选择部门-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-03-正常用例：新建用户选择部门-chromium\error-context.md
+
+  21) [chromium] › e2e\users.spec.ts:198:3 › 用户管理 -> 新建用户 › USER-CREATE-04. 空数据边界：必填项为空提交被阻止 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:199:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-04-空数据边界：必填项为空提交被阻止-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-04-空数据边界：必填项为空提交被阻止-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-04-空数据边界：必填项为空提交被阻止-chromium\error-context.md
+
+  22) [chromium] › e2e\users.spec.ts:204:3 › 用户管理 -> 新建用户 › USER-CREATE-05. 表单校验：未传必填字段返回400 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[400, 422][39m
+
+      205 |     const token = await apiLogin('admin')
+      206 |     const res = await apiFetch(token, 'POST', '/users', {})
+    > 207 |     expect([400, 422]).toContain(res.status)
+          |                        ^
+      208 |   })
+      209 |   test('USER-CREATE-06. 表单校验：缺少用户名返回400', async ({ page }) => {
+      210 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:207:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-05-表单校验：未传必填字段返回400-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-05-表单校验：未传必填字段返回400-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-05-表单校验：未传必填字段返回400-chromium\error-context.md
+
+  23) [chromium] › e2e\users.spec.ts:209:3 › 用户管理 -> 新建用户 › USER-CREATE-06. 表单校验：缺少用户名返回400 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[400, 422][39m
+
+      210 |     const token = await apiLogin('admin')
+      211 |     const res = await apiFetch(token, 'POST', '/users', { password: 'pass', realName: 'test' })
+    > 212 |     expect([400, 422]).toContain(res.status)
+          |                        ^
+      213 |   })
+      214 |   test('USER-CREATE-07. 业务冲突：username已存在返回409', async ({ page }) => {
+      215 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:212:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-06-表单校验：缺少用户名返回400-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-06-表单校验：缺少用户名返回400-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-06-表单校验：缺少用户名返回400-chromium\error-context.md
+
+  24) [chromium] › e2e\users.spec.ts:214:3 › 用户管理 -> 新建用户 › USER-CREATE-07. 业务冲突：username已存在返回409 ──
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[409, 400][39m
+
+      217 |     await apiFetch(token, 'POST', '/users', { username, password: 'pass', realName: 'test', role: 'technician' })
+      218 |     const res = await apiFetch(token, 'POST', '/users', { username, password: 'pass', realName: 'test2', role: 'technician' })
+    > 219 |     expect([409, 400]).toContain(res.status)
+          |                        ^
+      220 |   })
+      221 |   for (const role of ['technician', 'pathologist', 'procurement', 'finance', 'warehouse_manager'] as RoleKey[]) {
+      222 |     test(`USER-CREATE-08-${role}. 权限：${role}新建用户返回403`, async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:219:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-07-业务冲突：username已存在返回409-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-07-业务冲突：username已存在返回409-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-07-业务冲突：username已存在返回409-chromium\error-context.md
+
+  25) [chromium] › e2e\users.spec.ts:228:3 › 用户管理 -> 新建用户 › USER-CREATE-09. 并发：快速双击新建按钮 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:229:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-09-并发：快速双击新建按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-09-并发：快速双击新建按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-09-并发：快速双击新建按钮-chromium\error-context.md
+
+  26) [chromium] › e2e\users.spec.ts:233:3 › 用户管理 -> 新建用户 › USER-CREATE-10. UI差异：admin前端显示新建按钮 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:234:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-10-UI差异：admin前端显示新建按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---新建用户-USER-CREATE-10-UI差异：admin前端显示新建按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---新建用户-USER-CREATE-10-UI差异：admin前端显示新建按钮-chromium\error-context.md
+
+  27) [chromium] › e2e\users.spec.ts:243:3 › 用户管理 -> 编辑用户 › USER-EDIT-01. 正常用例：admin编辑用户姓名保存成功 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:244:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-01-正常用例：admin编辑用户姓名保存成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-01-正常用例：admin编辑用户姓名保存成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-01-正常用例：admin编辑用户姓名保存成功-chromium\error-context.md
+
+  28) [chromium] › e2e\users.spec.ts:253:3 › 用户管理 -> 编辑用户 › USER-EDIT-02. 正常用例：admin修改用户状态 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:257:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-02-正常用例：admin修改用户状态-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-02-正常用例：admin修改用户状态-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-02-正常用例：admin修改用户状态-chromium\error-context.md
+
+  29) [chromium] › e2e\users.spec.ts:266:3 › 用户管理 -> 编辑用户 › USER-EDIT-03. 空数据边界：编辑后姓名为空被阻止 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:267:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-03-空数据边界：编辑后姓名为空被阻止-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-03-空数据边界：编辑后姓名为空被阻止-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-03-空数据边界：编辑后姓名为空被阻止-chromium\error-context.md
+
+  30) [chromium] › e2e\users.spec.ts:275:3 › 用户管理 -> 编辑用户 › USER-EDIT-04. 表单校验：编辑不存在的用户返回404 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      276 |     const token = await apiLogin('admin')
+      277 |     const res = await apiFetch(token, 'PUT', '/users/non-existent-id', { realName: 'test' })
+    > 278 |     expect(res.status).toBe(404)
+          |                        ^
+      279 |   })
+      280 |   for (const role of ['technician', 'pathologist', 'procurement', 'finance', 'warehouse_manager'] as RoleKey[]) {
+      281 |     test(`USER-EDIT-05-${role}. 权限：${role}编辑用户返回403`, async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:278:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-04-表单校验：编辑不存在的用户返回404-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-04-表单校验：编辑不存在的用户返回404-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-04-表单校验：编辑不存在的用户返回404-chromium\error-context.md
+
+  31) [chromium] › e2e\users.spec.ts:296:3 › 用户管理 -> 编辑用户 › USER-EDIT-07. 异常恢复：编辑时API 500后重试 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:297:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-07-异常恢复：编辑时API-500后重试-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-07-异常恢复：编辑时API-500后重试-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-07-异常恢复：编辑时API-500后重试-chromium\error-context.md
+
+  32) [chromium] › e2e\users.spec.ts:303:3 › 用户管理 -> 编辑用户 › USER-EDIT-08. UI差异：admin显示编辑按钮 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:304:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-08-UI差异：admin显示编辑按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-08-UI差异：admin显示编辑按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-08-UI差异：admin显示编辑按钮-chromium\error-context.md
+
+  33) [chromium] › e2e\users.spec.ts:307:3 › 用户管理 -> 编辑用户 › USER-EDIT-09. 正常用例：编辑后列表数据更新 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:308:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-09-正常用例：编辑后列表数据更新-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-09-正常用例：编辑后列表数据更新-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-09-正常用例：编辑后列表数据更新-chromium\error-context.md
+
+  34) [chromium] › e2e\users.spec.ts:312:3 › 用户管理 -> 编辑用户 › USER-EDIT-10. 正常用例：用户名编辑时为只读 ───────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:313:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-10-正常用例：用户名编辑时为只读-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---编辑用户-USER-EDIT-10-正常用例：用户名编辑时为只读-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---编辑用户-USER-EDIT-10-正常用例：用户名编辑时为只读-chromium\error-context.md
+
+  35) [chromium] › e2e\users.spec.ts:364:3 › 用户管理 -> 删除用户 › USER-DELETE-05. UI差异：admin显示删除按钮 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:365:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---删除用户-USER-DELETE-05-UI差异：admin显示删除按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---删除用户-USER-DELETE-05-UI差异：admin显示删除按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---删除用户-USER-DELETE-05-UI差异：admin显示删除按钮-chromium\error-context.md
+
+  36) [chromium] › e2e\users.spec.ts:374:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-01. 正常用例：admin停用用户成功 ─────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:378:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-01-正常用例：admin停用用户成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-01-正常用例：admin停用用户成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---启用停用用户-USER-TOGGLE-01-正常用例：admin停用用户成功-chromium\error-context.md
+
+  37) [chromium] › e2e\users.spec.ts:382:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-02. 正常用例：admin启用已停用用户 ────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:383:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-02-正常用例：admin启用已停用用户-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-02-正常用例：admin启用已停用用户-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---启用停用用户-USER-TOGGLE-02-正常用例：admin启用已停用用户-chromium\error-context.md
+
+  38) [chromium] › e2e\users.spec.ts:395:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-04. UI差异：admin显示停用/启用按钮 ──
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:396:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-04-UI差异：admin显示停用-启用按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---启用停用用户-USER-TOGGLE-04-UI差异：admin显示停用-启用按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---启用停用用户-USER-TOGGLE-04-UI差异：admin显示停用-启用按钮-chromium\error-context.md
+
+  39) [chromium] › e2e\users.spec.ts:405:3 › 用户管理 -> 重置密码 › USER-RESET-01. 正常用例：admin重置用户密码成功 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:406:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---重置密码-USER-RESET-01-正常用例：admin重置用户密码成功-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---重置密码-USER-RESET-01-正常用例：admin重置用户密码成功-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---重置密码-USER-RESET-01-正常用例：admin重置用户密码成功-chromium\error-context.md
+
+  40) [chromium] › e2e\users.spec.ts:410:3 › 用户管理 -> 重置密码 › USER-RESET-02. 正常用例：编辑弹窗内重置密码 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:411:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---重置密码-USER-RESET-02-正常用例：编辑弹窗内重置密码-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---重置密码-USER-RESET-02-正常用例：编辑弹窗内重置密码-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---重置密码-USER-RESET-02-正常用例：编辑弹窗内重置密码-chromium\error-context.md
+
+  41) [chromium] › e2e\users.spec.ts:432:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-01. 正常用例：点击详情打开弹窗 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:433:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-01-正常用例：点击详情打开弹窗-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-01-正常用例：点击详情打开弹窗-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---用户详情弹窗-USER-DETAIL-01-正常用例：点击详情打开弹窗-chromium\error-context.md
+
+  42) [chromium] › e2e\users.spec.ts:442:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-02. 正常用例：详情弹窗显示用户头像 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:443:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-02-正常用例：详情弹窗显示用户头像-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-02-正常用例：详情弹窗显示用户头像-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---用户详情弹窗-USER-DETAIL-02-正常用例：详情弹窗显示用户头像-chromium\error-context.md
+
+  43) [chromium] › e2e\users.spec.ts:452:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-03. 正常用例：详情弹窗显示权限列表 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:453:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-03-正常用例：详情弹窗显示权限列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-03-正常用例：详情弹窗显示权限列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---用户详情弹窗-USER-DETAIL-03-正常用例：详情弹窗显示权限列表-chromium\error-context.md
+
+  44) [chromium] › e2e\users.spec.ts:462:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-04. 正常用例：详情弹窗点击编辑跳转 ──────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:463:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-04-正常用例：详情弹窗点击编辑跳转-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---用户详情弹窗-USER-DETAIL-04-正常用例：详情弹窗点击编辑跳转-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---用户详情弹窗-USER-DETAIL-04-正常用例：详情弹窗点击编辑跳转-chromium\error-context.md
+
+  45) [chromium] › e2e\users.spec.ts:477:3 › 用户管理 -> 分页功能 › USER-PAGE-01. 正常用例：多页数据切页 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:478:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-01-正常用例：多页数据切页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-01-正常用例：多页数据切页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---分页功能-USER-PAGE-01-正常用例：多页数据切页-chromium\error-context.md
+
+  46) [chromium] › e2e\users.spec.ts:482:3 › 用户管理 -> 分页功能 › USER-PAGE-02. 边界：仅1页时下一页禁用 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:483:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-02-边界：仅1页时下一页禁用-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-02-边界：仅1页时下一页禁用-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---分页功能-USER-PAGE-02-边界：仅1页时下一页禁用-chromium\error-context.md
+
+  47) [chromium] › e2e\users.spec.ts:487:3 › 用户管理 -> 分页功能 › USER-PAGE-03. 并发：快速切换分页 ────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:488:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-03-并发：快速切换分页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---分页功能-USER-PAGE-03-并发：快速切换分页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---分页功能-USER-PAGE-03-并发：快速切换分页-chromium\error-context.md
+
+  48) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-01. technician GET /users 返回403 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-d97c7--technician-GET-users-返回403-chromium\error-context.md
+
+  49) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-02. pathologist GET /users 返回403 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-710dc-pathologist-GET-users-返回403-chromium\error-context.md
+
+  50) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-03. procurement GET /users 返回403 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-41e68-procurement-GET-users-返回403-chromium\error-context.md
+
+  51) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-04. finance GET /users 返回403 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-fd22a--04-finance-GET-users-返回403-chromium\error-context.md
+
+  52) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-05. warehouse_manager GET /users 返回403 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-02463-use-manager-GET-users-返回403-chromium\error-context.md
+
+  53) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-06. admin GET /users 返回200 
+
+    TypeError: Request with GET/HEAD method cannot have body.
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-PERM-USER-06-admin-GET-users-返回200-chromium\error-context.md
+
+  54) [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-10. admin PUT /users/test-id 返回404 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      513 |       const token = await apiLogin(scene.role)
+      514 |       const res = await apiFetch(token, scene.method, scene.path, scene.method === 'POST' ? { username: 'TEST', password: 'pass', realName: 'test' } : { realName: 'test' })
+    > 515 |       expect(res.status).toBe(scene.expect)
+          |                          ^
+      516 |     })
+      517 |   }
+      518 | })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:515:26
+
+    Error Context: test-results\users-用户管理---角色权限矩阵补充-TC-P-ff3a0-min-PUT-users-test-id-返回404-chromium\error-context.md
+
+  55) [chromium] › e2e\users.spec.ts:524:3 › 用户管理 -> 业务流程树 › BF-USER-01. 主路径：创建用户→配置角色→保存 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:525:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-01-主路径：创建用户→配置角色→保存-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-01-主路径：创建用户→配置角色→保存-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-01-主路径：创建用户→配置角色→保存-chromium\error-context.md
+
+  56) [chromium] › e2e\users.spec.ts:534:3 › 用户管理 -> 业务流程树 › BF-USER-02. 分支：创建用户时不填必填项被阻止 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:535:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-02-分支：创建用户时不填必填项被阻止-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-02-分支：创建用户时不填必填项被阻止-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-02-分支：创建用户时不填必填项被阻止-chromium\error-context.md
+
+  57) [chromium] › e2e\users.spec.ts:540:3 › 用户管理 -> 业务流程树 › BF-USER-03. 分支：编辑用户后取消不保存 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:541:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-03-分支：编辑用户后取消不保存-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-03-分支：编辑用户后取消不保存-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-03-分支：编辑用户后取消不保存-chromium\error-context.md
+
+  58) [chromium] › e2e\users.spec.ts:545:3 › 用户管理 -> 业务流程树 › BF-USER-04. 分支：停用用户后重新启用 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:546:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-04-分支：停用用户后重新启用-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-04-分支：停用用户后重新启用-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-04-分支：停用用户后重新启用-chromium\error-context.md
+
+  59) [chromium] › e2e\users.spec.ts:550:3 › 用户管理 -> 业务流程树 › BF-USER-05. 分支：重置用户密码 ─────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:551:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-05-分支：重置用户密码-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-05-分支：重置用户密码-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-05-分支：重置用户密码-chromium\error-context.md
+
+  60) [chromium] › e2e\users.spec.ts:555:3 › 用户管理 -> 业务流程树 › BF-USER-06. 分支：筛选后查看用户详情 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:556:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-06-分支：筛选后查看用户详情-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-06-分支：筛选后查看用户详情-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-06-分支：筛选后查看用户详情-chromium\error-context.md
+
+  61) [chromium] › e2e\users.spec.ts:566:3 › 用户管理 -> 业务流程树 › BF-USER-08. 分支：点击左侧角色筛选用户 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:567:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-08-分支：点击左侧角色筛选用户-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---业务流程树-BF-USER-08-分支：点击左侧角色筛选用户-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---业务流程树-BF-USER-08-分支：点击左侧角色筛选用户-chromium\error-context.md
+
+  62) [chromium] › e2e\users.spec.ts:577:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-01. 用户头像显示首字母 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:578:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-01-用户头像显示首字母-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-01-用户头像显示首字母-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-01-用户头像显示首字母-chromium\error-context.md
+
+  63) [chromium] › e2e\users.spec.ts:581:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-02. 状态标签颜色区分 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:582:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-02-状态标签颜色区分-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-02-状态标签颜色区分-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-02-状态标签颜色区分-chromium\error-context.md
+
+  64) [chromium] › e2e\users.spec.ts:585:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-03. 新建用户初始密码默认显示 ──────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:586:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-03-新建用户初始密码默认显示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-03-新建用户初始密码默认显示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-03-新建用户初始密码默认显示-chromium\error-context.md
+
+  65) [chromium] › e2e\users.spec.ts:592:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-04. 角色下拉选项完整性 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:593:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-04-角色下拉选项完整性-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-04-角色下拉选项完整性-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-04-角色下拉选项完整性-chromium\error-context.md
+
+  66) [chromium] › e2e\users.spec.ts:603:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-05. 用户全选checkbox功能 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:604:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-05-用户全选checkbox功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-05-用户全选checkbox功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-05-用户全选checkbox功能-chromium\error-context.md
+
+  67) [chromium] › e2e\users.spec.ts:608:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-06. 分页页码按钮样式 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:609:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-06-分页页码按钮样式-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-06-分页页码按钮样式-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-06-分页页码按钮样式-chromium\error-context.md
+
+  68) [chromium] › e2e\users.spec.ts:612:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-07. 响应式布局检查 ───────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:614:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-07-响应式布局检查-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-07-响应式布局检查-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-07-响应式布局检查-chromium\error-context.md
+
+  69) [chromium] › e2e\users.spec.ts:618:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-08. 用户API响应格式验证 ───────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      619 |     const token = await apiLogin('admin')
+      620 |     const res = await apiFetch(token, 'GET', '/users?page=1&pageSize=1')
+    > 621 |     expect(res.status).toBe(200)
+          |                        ^
+      622 |     if (res.data?.data?.list) { expect(Array.isArray(res.data.data.list)).toBe(true) }
+      623 |   })
+      624 |   test('BLIND-USER-09. 页面加载性能检查', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:621:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-08-用户API响应格式验证-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-08-用户API响应格式验证-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-08-用户API响应格式验证-chromium\error-context.md
+
+  70) [chromium] › e2e\users.spec.ts:624:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-09. 页面加载性能检查 ──────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:626:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-09-页面加载性能检查-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-09-页面加载性能检查-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-09-页面加载性能检查-chromium\error-context.md
+
+  71) [chromium] › e2e\users.spec.ts:630:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-10. 用户详情权限列表展示 ────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      22 |   await page.fill('input[type="password"]', cred.password)
+      23 |   await page.click('button[type="submit"]')
+    > 24 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      25 | }
+      26 |
+      27 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:24:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\users.spec.ts:631:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-10-用户详情权限列表展示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\users-用户管理---盲点分析补充-BLIND-USER-10-用户详情权限列表展示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\users-用户管理---盲点分析补充-BLIND-USER-10-用户详情权限列表展示-chromium\error-context.md
+
+  71 failed
+    [chromium] › e2e\users.spec.ts:64:3 › 用户管理 -> 查看用户列表 › USER-LIST-01. 正常用例：admin可查看用户列表 ─────────
+    [chromium] › e2e\users.spec.ts:68:3 › 用户管理 -> 查看用户列表 › USER-LIST-02. 正常用例：用户列表显示列标题 ────────────
+    [chromium] › e2e\users.spec.ts:72:3 › 用户管理 -> 查看用户列表 › USER-LIST-03. 正常用例：用户列表显示统计卡片 ───────────
+    [chromium] › e2e\users.spec.ts:76:3 › 用户管理 -> 查看用户列表 › USER-LIST-04. 正常用例：左侧显示角色列表面板 ───────────
+    [chromium] › e2e\users.spec.ts:80:3 › 用户管理 -> 查看用户列表 › USER-LIST-05. 空数据边界：无用户数据显示空状态 ──────────
+    [chromium] › e2e\users.spec.ts:86:3 › 用户管理 -> 查看用户列表 › USER-LIST-06. 异常恢复：API 500显示错误 ──────────
+    [chromium] › e2e\users.spec.ts:95:3 › 用户管理 -> 查看用户列表 › USER-LIST-08. 并发：快速刷新页面多次 ───────────────
+    [chromium] › e2e\users.spec.ts:100:3 › 用户管理 -> 查看用户列表 › USER-LIST-09. UI差异：admin显示新建用户按钮 ───────
+    [chromium] › e2e\users.spec.ts:104:3 › 用户管理 -> 查看用户列表 › USER-LIST-10. 正常用例：用户状态标签显示正常/禁用 ───────
+    [chromium] › e2e\users.spec.ts:114:3 › 用户管理 -> 筛选功能 › USER-FILTER-01. 正常用例：按关键词搜索用户名 ───────────
+    [chromium] › e2e\users.spec.ts:119:3 › 用户管理 -> 筛选功能 › USER-FILTER-02. 正常用例：按角色筛选 ───────────────
+    [chromium] › e2e\users.spec.ts:124:3 › 用户管理 -> 筛选功能 › USER-FILTER-03. 正常用例：按状态筛选 ───────────────
+    [chromium] › e2e\users.spec.ts:129:3 › 用户管理 -> 筛选功能 › USER-FILTER-04. 正常用例：点击查询按钮 ──────────────
+    [chromium] › e2e\users.spec.ts:134:3 › 用户管理 -> 筛选功能 › USER-FILTER-05. 正常用例：点击重置按钮恢复全部 ──────────
+    [chromium] › e2e\users.spec.ts:139:3 › 用户管理 -> 筛选功能 › USER-FILTER-06. 空数据边界：筛选无结果 ──────────────
+    [chromium] › e2e\users.spec.ts:144:3 › 用户管理 -> 筛选功能 › USER-FILTER-07. 并发：快速切换筛选条件 ──────────────
+    [chromium] › e2e\users.spec.ts:151:3 › 用户管理 -> 筛选功能 › USER-FILTER-08. 正常用例：点击左侧角色筛选用户 ──────────
+    [chromium] › e2e\users.spec.ts:162:3 › 用户管理 -> 新建用户 › USER-CREATE-01. 正常用例：admin新建用户成功 ─────────
+    [chromium] › e2e\users.spec.ts:174:3 › 用户管理 -> 新建用户 › USER-CREATE-02. 正常用例：新建用户选择角色 ────────────
+    [chromium] › e2e\users.spec.ts:186:3 › 用户管理 -> 新建用户 › USER-CREATE-03. 正常用例：新建用户选择部门 ────────────
+    [chromium] › e2e\users.spec.ts:198:3 › 用户管理 -> 新建用户 › USER-CREATE-04. 空数据边界：必填项为空提交被阻止 ─────────
+    [chromium] › e2e\users.spec.ts:204:3 › 用户管理 -> 新建用户 › USER-CREATE-05. 表单校验：未传必填字段返回400 ─────────
+    [chromium] › e2e\users.spec.ts:209:3 › 用户管理 -> 新建用户 › USER-CREATE-06. 表单校验：缺少用户名返回400 ──────────
+    [chromium] › e2e\users.spec.ts:214:3 › 用户管理 -> 新建用户 › USER-CREATE-07. 业务冲突：username已存在返回409 ────
+    [chromium] › e2e\users.spec.ts:228:3 › 用户管理 -> 新建用户 › USER-CREATE-09. 并发：快速双击新建按钮 ──────────────
+    [chromium] › e2e\users.spec.ts:233:3 › 用户管理 -> 新建用户 › USER-CREATE-10. UI差异：admin前端显示新建按钮 ───────
+    [chromium] › e2e\users.spec.ts:243:3 › 用户管理 -> 编辑用户 › USER-EDIT-01. 正常用例：admin编辑用户姓名保存成功 ───────
+    [chromium] › e2e\users.spec.ts:253:3 › 用户管理 -> 编辑用户 › USER-EDIT-02. 正常用例：admin修改用户状态 ───────────
+    [chromium] › e2e\users.spec.ts:266:3 › 用户管理 -> 编辑用户 › USER-EDIT-03. 空数据边界：编辑后姓名为空被阻止 ───────────
+    [chromium] › e2e\users.spec.ts:275:3 › 用户管理 -> 编辑用户 › USER-EDIT-04. 表单校验：编辑不存在的用户返回404 ─────────
+    [chromium] › e2e\users.spec.ts:296:3 › 用户管理 -> 编辑用户 › USER-EDIT-07. 异常恢复：编辑时API 500后重试 ─────────
+    [chromium] › e2e\users.spec.ts:303:3 › 用户管理 -> 编辑用户 › USER-EDIT-08. UI差异：admin显示编辑按钮 ───────────
+    [chromium] › e2e\users.spec.ts:307:3 › 用户管理 -> 编辑用户 › USER-EDIT-09. 正常用例：编辑后列表数据更新 ─────────────
+    [chromium] › e2e\users.spec.ts:312:3 › 用户管理 -> 编辑用户 › USER-EDIT-10. 正常用例：用户名编辑时为只读 ─────────────
+    [chromium] › e2e\users.spec.ts:364:3 › 用户管理 -> 删除用户 › USER-DELETE-05. UI差异：admin显示删除按钮 ─────────
+    [chromium] › e2e\users.spec.ts:374:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-01. 正常用例：admin停用用户成功 ───────
+    [chromium] › e2e\users.spec.ts:382:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-02. 正常用例：admin启用已停用用户 ──────
+    [chromium] › e2e\users.spec.ts:395:3 › 用户管理 -> 启用停用用户 › USER-TOGGLE-04. UI差异：admin显示停用/启用按钮 ────
+    [chromium] › e2e\users.spec.ts:405:3 › 用户管理 -> 重置密码 › USER-RESET-01. 正常用例：admin重置用户密码成功 ────────
+    [chromium] › e2e\users.spec.ts:410:3 › 用户管理 -> 重置密码 › USER-RESET-02. 正常用例：编辑弹窗内重置密码 ────────────
+    [chromium] › e2e\users.spec.ts:432:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-01. 正常用例：点击详情打开弹窗 ──────────
+    [chromium] › e2e\users.spec.ts:442:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-02. 正常用例：详情弹窗显示用户头像 ────────
+    [chromium] › e2e\users.spec.ts:452:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-03. 正常用例：详情弹窗显示权限列表 ────────
+    [chromium] › e2e\users.spec.ts:462:3 › 用户管理 -> 用户详情弹窗 › USER-DETAIL-04. 正常用例：详情弹窗点击编辑跳转 ────────
+    [chromium] › e2e\users.spec.ts:477:3 › 用户管理 -> 分页功能 › USER-PAGE-01. 正常用例：多页数据切页 ────────────────
+    [chromium] › e2e\users.spec.ts:482:3 › 用户管理 -> 分页功能 › USER-PAGE-02. 边界：仅1页时下一页禁用 ───────────────
+    [chromium] › e2e\users.spec.ts:487:3 › 用户管理 -> 分页功能 › USER-PAGE-03. 并发：快速切换分页 ──────────────────
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-01. technician GET /users 返回403 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-02. pathologist GET /users 返回403 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-03. procurement GET /users 返回403 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-04. finance GET /users 返回403 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-05. warehouse_manager GET /users 返回403 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-06. admin GET /users 返回200 
+    [chromium] › e2e\users.spec.ts:512:5 › 用户管理 -> 角色权限矩阵补充 › TC-PERM-USER-10. admin PUT /users/test-id 返回404 
+    [chromium] › e2e\users.spec.ts:524:3 › 用户管理 -> 业务流程树 › BF-USER-01. 主路径：创建用户→配置角色→保存 ────────────
+    [chromium] › e2e\users.spec.ts:534:3 › 用户管理 -> 业务流程树 › BF-USER-02. 分支：创建用户时不填必填项被阻止 ────────────
+    [chromium] › e2e\users.spec.ts:540:3 › 用户管理 -> 业务流程树 › BF-USER-03. 分支：编辑用户后取消不保存 ───────────────
+    [chromium] › e2e\users.spec.ts:545:3 › 用户管理 -> 业务流程树 › BF-USER-04. 分支：停用用户后重新启用 ────────────────
+    [chromium] › e2e\users.spec.ts:550:3 › 用户管理 -> 业务流程树 › BF-USER-05. 分支：重置用户密码 ───────────────────
+    [chromium] › e2e\users.spec.ts:555:3 › 用户管理 -> 业务流程树 › BF-USER-06. 分支：筛选后查看用户详情 ────────────────
+    [chromium] › e2e\users.spec.ts:566:3 › 用户管理 -> 业务流程树 › BF-USER-08. 分支：点击左侧角色筛选用户 ───────────────
+    [chromium] › e2e\users.spec.ts:577:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-01. 用户头像显示首字母 ───────────────
+    [chromium] › e2e\users.spec.ts:581:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-02. 状态标签颜色区分 ────────────────
+    [chromium] › e2e\users.spec.ts:585:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-03. 新建用户初始密码默认显示 ────────────
+    [chromium] › e2e\users.spec.ts:592:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-04. 角色下拉选项完整性 ───────────────
+    [chromium] › e2e\users.spec.ts:603:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-05. 用户全选checkbox功能 ──────────
+    [chromium] › e2e\users.spec.ts:608:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-06. 分页页码按钮样式 ────────────────
+    [chromium] › e2e\users.spec.ts:612:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-07. 响应式布局检查 ─────────────────
+    [chromium] › e2e\users.spec.ts:618:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-08. 用户API响应格式验证 ─────────────
+    [chromium] › e2e\users.spec.ts:624:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-09. 页面加载性能检查 ────────────────
+    [chromium] › e2e\users.spec.ts:630:3 › 用户管理 -> 盲点分析补充 › BLIND-USER-10. 用户详情权限列表展示 ──────────────
+  26 passed (14.2m)

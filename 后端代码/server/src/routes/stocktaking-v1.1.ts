@@ -14,11 +14,13 @@ function generateNo(): string {
 
 router.get('/', (req, res) => {
   try {
-    const { page = 1, pageSize = 20 } = req.query
+    let { page = 1, pageSize = 20 } = req.query
+    page = Math.max(1, Number(page) || 1)
+    pageSize = Math.max(1, Math.min(100, Number(pageSize) || 20))
     const db = getDatabase()
     const count = (db.prepare('SELECT COUNT(*) as total FROM stocktaking_records').get() as any)?.total || 0
-    const offset = (Number(page) - 1) * Number(pageSize)
-    const list = db.prepare('SELECT * FROM stocktaking_records ORDER BY created_at DESC LIMIT ? OFFSET ?').all(Number(pageSize), offset) as any[]
+    const offset = (page - 1) * pageSize
+    const list = db.prepare('SELECT * FROM stocktaking_records ORDER BY created_at DESC LIMIT ? OFFSET ?').all(pageSize, offset) as any[]
     successList(res, list.map((r: any) => ({
       id: r.id, stocktakingNo: r.stocktaking_no, materialId: r.material_id,
       systemStock: r.system_stock, actualStock: r.actual_stock,
