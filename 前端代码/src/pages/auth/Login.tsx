@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LogIn, Lock, User, Eye, EyeOff } from 'lucide-react'
 import request from '@/api/request'
@@ -12,6 +12,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{ username?: string; password?: string }>({})
   const navigate = useNavigate()
+
+  // 已登录用户自动重定向到首页
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (token) {
+      navigate('/')
+    }
+  }, [navigate])
 
   const validate = () => {
     const newErrors: { username?: string; password?: string } = {}
@@ -35,6 +43,9 @@ export default function Login() {
       if (res.token) {
         localStorage.setItem('token', res.token)
         localStorage.setItem('refreshToken', res.refreshToken)
+        if (res.user) {
+          localStorage.setItem('user', JSON.stringify(res.user))
+        }
         if (rememberMe) {
           localStorage.setItem('rememberUsername', username)
         } else {

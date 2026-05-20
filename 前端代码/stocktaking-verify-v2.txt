@@ -1,0 +1,110 @@
+
+Running 104 tests using 1 worker
+
+  ok   1 [chromium] › e2e\stocktaking.spec.ts:80:5 › 库存盘点 -> 查看盘点列表 › ST-LIST-01-admin. 正常用例：admin可查看盘点列表 (2.3s)
+  ok   2 [chromium] › e2e\stocktaking.spec.ts:80:5 › 库存盘点 -> 查看盘点列表 › ST-LIST-01-warehouse_manager. 正常用例：warehouse_manager可查看盘点列表 (2.0s)
+  ok   3 [chromium] › e2e\stocktaking.spec.ts:86:3 › 库存盘点 -> 查看盘点列表 › ST-LIST-02. 空数据边界：无盘点记录显示空状态 (2.5s)
+  ok   4 [chromium] › e2e\stocktaking.spec.ts:91:3 › 库存盘点 -> 查看盘点列表 › ST-LIST-03. 权限：technician访问返回403 (620ms)
+  ok   5 [chromium] › e2e\stocktaking.spec.ts:95:3 › 库存盘点 -> 查看盘点列表 › ST-LIST-04. 权限：pathologist访问返回403 (608ms)
+  ok   6 [chromium] › e2e\stocktaking.spec.ts:99:3 › 库存盘点 -> 查看盘点列表 › ST-LIST-05. 权限：procurement访问返回403 (673ms)
+  ok   7 [chromium] › e2e\stocktaking.spec.ts:103:3 › 库存盘点 -> 查看盘点列表 › ST-LIST-06. 权限：finance访问返回403 (610ms)
+  ok   8 [chromium] › e2e\stocktaking.spec.ts:107:3 › 库存盘点 -> 查看盘点列表 › ST-LIST-07. 异常恢复：API 500显示错误Toast (2.6s)
+  ok   9 [chromium] › e2e\stocktaking.spec.ts:112:3 › 库存盘点 -> 查看盘点列表 › ST-LIST-08. UI差异：admin显示新建盘点按钮 (2.7s)
+  ok  10 [chromium] › e2e\stocktaking.spec.ts:117:3 › 库存盘点 -> 查看盘点列表 › ST-LIST-09. UI差异：warehouse_manager显示新建盘点按钮 (2.8s)
+  ok  11 [chromium] › e2e\stocktaking.spec.ts:122:3 › 库存盘点 -> 查看盘点列表 › ST-LIST-10. 正常用例：列表显示单号物料系统库存实盘差异状态 (2.7s)
+  -   12 [chromium] › e2e\stocktaking.spec.ts:133:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-01. 正常用例：admin新建盘点单
+  -   13 [chromium] › e2e\stocktaking.spec.ts:142:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-02. 正常用例：warehouse_manager新建盘点单
+  -   14 [chromium] › e2e\stocktaking.spec.ts:152:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-03. 空数据边界：actualStock=0差异为负
+  ok  15 [chromium] › e2e\stocktaking.spec.ts:161:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-04. 表单校验：未传materialId返回400 (603ms)
+  -   16 [chromium] › e2e\stocktaking.spec.ts:166:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-05. 表单校验：未传actualStock返回400
+  -   17 [chromium] › e2e\stocktaking.spec.ts:174:5 › 库存盘点 -> 新建盘点单 › ST-CREATE-06-technician. 权限：technician新建盘点返回403
+  -   18 [chromium] › e2e\stocktaking.spec.ts:174:5 › 库存盘点 -> 新建盘点单 › ST-CREATE-06-pathologist. 权限：pathologist新建盘点返回403
+  -   19 [chromium] › e2e\stocktaking.spec.ts:174:5 › 库存盘点 -> 新建盘点单 › ST-CREATE-06-procurement. 权限：procurement新建盘点返回403
+  -   20 [chromium] › e2e\stocktaking.spec.ts:174:5 › 库存盘点 -> 新建盘点单 › ST-CREATE-06-finance. 权限：finance新建盘点返回403
+  -   21 [chromium] › e2e\stocktaking.spec.ts:183:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-07. 业务冲突：该物料正在盘点中仍可创建
+  -   22 [chromium] › e2e\stocktaking.spec.ts:191:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-08. 并发：快速双击提交
+  -   23 [chromium] › e2e\stocktaking.spec.ts:199:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-09. 异常恢复：提交时网络中断后重试
+  ok  24 [chromium] › e2e\stocktaking.spec.ts:206:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-10. UI差异：admin显示新建盘点按钮 (2.8s)
+  ok  25 [chromium] › e2e\stocktaking.spec.ts:211:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-11. UI差异：warehouse_manager显示新建盘点按钮 (2.6s)
+  ok  26 [chromium] › e2e\stocktaking.spec.ts:216:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-12. UI差异：technician不显示新建盘点按钮 (3.1s)
+  -   27 [chromium] › e2e\stocktaking.spec.ts:221:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-13. 正常用例：新建盘点后库存更新为实际数量
+  -   28 [chromium] › e2e\stocktaking.spec.ts:230:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-14. 边界：负数actualStock
+  -   29 [chromium] › e2e\stocktaking.spec.ts:239:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-15. 边界：小数actualStock
+  -   30 [chromium] › e2e\stocktaking.spec.ts:248:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-16. 正常用例：盘点差异正确计算
+  ok  31 [chromium] › e2e\stocktaking.spec.ts:259:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-17. 表单校验：materialId不存在 (606ms)
+  -   32 [chromium] › e2e\stocktaking.spec.ts:266:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-18. 正常用例：盘点单号格式
+  -   33 [chromium] › e2e\stocktaking.spec.ts:277:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-19. 异常恢复：盘点后检查库存日志
+  -   34 [chromium] › e2e\stocktaking.spec.ts:286:3 › 库存盘点 -> 新建盘点单 › ST-CREATE-20. 并发：并发盘点不同物料
+  -   35 [chromium] › e2e\stocktaking.spec.ts:304:5 › 库存盘点 -> 查看盘点详情 › ST-DETAIL-01-admin. 正常用例：admin可查看盘点详情
+  -   36 [chromium] › e2e\stocktaking.spec.ts:304:5 › 库存盘点 -> 查看盘点详情 › ST-DETAIL-01-warehouse_manager. 正常用例：warehouse_manager可查看盘点详情
+  ok  37 [chromium] › e2e\stocktaking.spec.ts:312:3 › 库存盘点 -> 查看盘点详情 › ST-DETAIL-02. 表单校验：查看不存在的盘点单返回404 (610ms)
+  ok  38 [chromium] › e2e\stocktaking.spec.ts:317:3 › 库存盘点 -> 查看盘点详情 › ST-DETAIL-03. UI差异：admin可点击查看详情 (2.7s)
+  -   39 [chromium] › e2e\stocktaking.spec.ts:330:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-01. 正常用例：admin确认差异库存调整
+  -   40 [chromium] › e2e\stocktaking.spec.ts:342:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-02. 空数据边界：差异=0不更新库存仅记录日志
+  -   41 [chromium] › e2e\stocktaking.spec.ts:353:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-03. 业务冲突：已确认的盘点单再次确认
+  -   42 [chromium] › e2e\stocktaking.spec.ts:360:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-04. 异常恢复：确认时网络中断后检查状态
+  -   43 [chromium] › e2e\stocktaking.spec.ts:367:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-05. 正常用例：盘盈库存增加
+  -   44 [chromium] › e2e\stocktaking.spec.ts:378:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-06. 正常用例：盘亏库存减少
+  -   45 [chromium] › e2e\stocktaking.spec.ts:391:5 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-07-technician. 权限：technician确认盘点返回403
+  -   46 [chromium] › e2e\stocktaking.spec.ts:391:5 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-07-pathologist. 权限：pathologist确认盘点返回403
+  -   47 [chromium] › e2e\stocktaking.spec.ts:391:5 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-07-procurement. 权限：procurement确认盘点返回403
+  -   48 [chromium] › e2e\stocktaking.spec.ts:391:5 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-07-finance. 权限：finance确认盘点返回403
+  ok  49 [chromium] › e2e\stocktaking.spec.ts:400:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-08. 表单校验：确认不存在的盘点单返回404 (589ms)
+  -   50 [chromium] › e2e\stocktaking.spec.ts:405:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-09. 并发：并发确认同一盘点单
+  ok  51 [chromium] › e2e\stocktaking.spec.ts:420:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-10. UI差异：admin显示确认按钮 (2.7s)
+  ok  52 [chromium] › e2e\stocktaking.spec.ts:425:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-11. UI差异：warehouse_manager显示确认按钮 (2.6s)
+  ok  53 [chromium] › e2e\stocktaking.spec.ts:430:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-12. 异常恢复：确认后刷新页面状态保持 (3.1s)
+  -   54 [chromium] › e2e\stocktaking.spec.ts:437:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-13. 正常用例：确认后生成stock_logs
+  -   55 [chromium] › e2e\stocktaking.spec.ts:446:3 › 库存盘点 -> 处理盘点差异 › ST-ADJUST-14. 边界：确认后盘点状态变为completed
+  ok  56 [chromium] › e2e\stocktaking.spec.ts:461:3 › 库存盘点 -> 分页切换 › ST-PAGE-01. 正常用例：切换到第2页 (2.6s)
+  ok  57 [chromium] › e2e\stocktaking.spec.ts:466:3 › 库存盘点 -> 分页切换 › ST-PAGE-02. 边界：仅1页分页器隐藏 (2.6s)
+  ok  58 [chromium] › e2e\stocktaking.spec.ts:471:3 › 库存盘点 -> 分页切换 › ST-PAGE-03. 表单校验：page=0后端修正为1 (631ms)
+  ok  59 [chromium] › e2e\stocktaking.spec.ts:477:3 › 库存盘点 -> 分页切换 › ST-PAGE-04. 边界：page=999返回空列表 (606ms)
+  ok  60 [chromium] › e2e\stocktaking.spec.ts:482:3 › 库存盘点 -> 分页切换 › ST-PAGE-05. 边界：pageSize=1 (621ms)
+  ok  61 [chromium] › e2e\stocktaking.spec.ts:487:3 › 库存盘点 -> 分页切换 › ST-PAGE-06. 边界：pageSize=100 (645ms)
+  ok  62 [chromium] › e2e\stocktaking.spec.ts:492:3 › 库存盘点 -> 分页切换 › ST-PAGE-07. 并发：快速切换分页 (3.4s)
+  ok  63 [chromium] › e2e\stocktaking.spec.ts:499:3 › 库存盘点 -> 分页切换 › ST-PAGE-08. UI差异：各角色分页一致 (3.6s)
+  ok  64 [chromium] › e2e\stocktaking.spec.ts:523:5 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-073. technician GET /stocktaking 返回403 (723ms)
+  ok  65 [chromium] › e2e\stocktaking.spec.ts:523:5 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-074. pathologist GET /stocktaking 返回403 (610ms)
+  ok  66 [chromium] › e2e\stocktaking.spec.ts:523:5 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-075. procurement GET /stocktaking 返回403 (619ms)
+  ok  67 [chromium] › e2e\stocktaking.spec.ts:523:5 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-076. finance GET /stocktaking 返回403 (697ms)
+  ok  68 [chromium] › e2e\stocktaking.spec.ts:523:5 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-077. technician POST /stocktaking 返回403 (1.0s)
+  ok  69 [chromium] › e2e\stocktaking.spec.ts:523:5 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-078. pathologist POST /stocktaking 返回403 (905ms)
+  ok  70 [chromium] › e2e\stocktaking.spec.ts:523:5 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-079. procurement POST /stocktaking 返回403 (1.0s)
+  ok  71 [chromium] › e2e\stocktaking.spec.ts:523:5 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-080. finance POST /stocktaking 返回403 (1.2s)
+  ok  72 [chromium] › e2e\stocktaking.spec.ts:535:3 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-ST-EXTRA-01. admin GET /stocktaking 返回200 (640ms)
+  ok  73 [chromium] › e2e\stocktaking.spec.ts:540:3 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-ST-EXTRA-02. warehouse_manager GET /stocktaking 返回200 (602ms)
+  -   74 [chromium] › e2e\stocktaking.spec.ts:545:3 › 库存盘点 -> 角色权限矩阵补充 › TC-PERM-ST-EXTRA-03. admin POST /stocktaking 返回201
+  -   75 [chromium] › e2e\stocktaking.spec.ts:558:3 › 库存盘点 -> 业务流程树 › BF-ST-01. 主路径：登录→进入盘点→新建→选物料→输入实盘→确认差异→库存更新
+  ok  76 [chromium] › e2e\stocktaking.spec.ts:567:3 › 库存盘点 -> 业务流程树 › BF-ST-02. 分支：关闭盘点弹窗不保存 (2.6s)
+  ok  77 [chromium] › e2e\stocktaking.spec.ts:572:3 › 库存盘点 -> 业务流程树 › BF-ST-03. 分支：未选物料提交 (620ms)
+  -   78 [chromium] › e2e\stocktaking.spec.ts:577:3 › 库存盘点 -> 业务流程树 › BF-ST-04. 分支：实盘=系统数量无差异
+  -   79 [chromium] › e2e\stocktaking.spec.ts:588:3 › 库存盘点 -> 业务流程树 › BF-ST-05. 分支：盘盈
+  -   80 [chromium] › e2e\stocktaking.spec.ts:599:3 › 库存盘点 -> 业务流程树 › BF-ST-06. 分支：盘亏触发低库存预警
+  -   81 [chromium] › e2e\stocktaking.spec.ts:611:3 › 库存盘点 -> 业务流程树 › BF-ST-07. 分支：网络中断后重试
+  ok  82 [chromium] › e2e\stocktaking.spec.ts:620:3 › 库存盘点 -> 业务流程树 › BF-ST-08. 分支：刷新页面后盘点状态保持 (3.2s)
+  ok  83 [chromium] › e2e\stocktaking.spec.ts:627:3 › 库存盘点 -> 业务流程树 › BF-ST-09. 分支：确认时取消 (2.6s)
+  -   84 [chromium] › e2e\stocktaking.spec.ts:632:3 › 库存盘点 -> 业务流程树 › BF-ST-10. 分支：technician尝试盘点被403拦截
+  ok  85 [chromium] › e2e\stocktaking.spec.ts:640:3 › 库存盘点 -> 业务流程树 › BF-ST-11. 分支：确认盘点后刷新列表 (3.0s)
+  ok  86 [chromium] › e2e\stocktaking.spec.ts:647:3 › 库存盘点 -> 业务流程树 › BF-ST-12. 分支：批量创建多个盘点单 (631ms)
+  -   87 [chromium] › e2e\stocktaking.spec.ts:663:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-01. 盘点单号唯一性验证
+  -   88 [chromium] › e2e\stocktaking.spec.ts:673:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-02. 盘点时间字段自动填充
+  -   89 [chromium] › e2e\stocktaking.spec.ts:680:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-03. 盘点操作人字段记录
+  -   90 [chromium] › e2e\stocktaking.spec.ts:687:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-04. 盘点差异计算精度
+  ok  91 [chromium] › e2e\stocktaking.spec.ts:694:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-05. 盘点列表排序默认按时间倒序 (614ms)
+  ok  92 [chromium] › e2e\stocktaking.spec.ts:705:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-06. 盘点单关联物料信息显示 (607ms)
+  ok  93 [chromium] › e2e\stocktaking.spec.ts:710:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-07. 盘点单状态字段完整性 (594ms)
+  ok  94 [chromium] › e2e\stocktaking.spec.ts:717:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-08. 盘点API响应格式验证 (634ms)
+  ok  95 [chromium] › e2e\stocktaking.spec.ts:726:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-09. 盘点页面响应式布局 (2.7s)
+  ok  96 [chromium] › e2e\stocktaking.spec.ts:732:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-10. 盘点页面搜索框防抖 (3.0s)
+  ok  97 [chromium] › e2e\stocktaking.spec.ts:743:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-11. 盘点导出功能入口 (2.7s)
+  ok  98 [chromium] › e2e\stocktaking.spec.ts:748:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-12. 盘点打印功能入口 (3.0s)
+  -   99 [chromium] › e2e\stocktaking.spec.ts:753:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-13. 盘点差异报告生成
+  ok 100 [chromium] › e2e\stocktaking.spec.ts:760:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-14. 盘点页面加载性能 (2.1s)
+  ok 101 [chromium] › e2e\stocktaking.spec.ts:767:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-15. 盘点物料选择器搜索 (9.0s)
+  ok 102 [chromium] › e2e\stocktaking.spec.ts:772:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-16. 盘点表单自动填充系统库存 (5.0s)
+  ok 103 [chromium] › e2e\stocktaking.spec.ts:777:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-17. 盘点历史记录查看 (1.0s)
+  ok 104 [chromium] › e2e\stocktaking.spec.ts:782:3 › 库存盘点 -> 盲点分析补充 › BLIND-ST-18. 多角色同时盘点互不影响 (15.6s)
+
+  45 skipped
+  59 passed (2.7m)

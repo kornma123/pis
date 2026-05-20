@@ -1,0 +1,102 @@
+
+Running 97 tests using 1 worker
+
+[1A[2K[1/97] [chromium] › e2e\alerts.spec.ts:58:5 › 预警中心 -> 查看预警列表 › ALERT-LIST-01-admin. 正常用例：admin可查看预警列表
+[1A[2K[2/97] [chromium] › e2e\alerts.spec.ts:58:5 › 预警中心 -> 查看预警列表 › ALERT-LIST-01-warehouse_manager. 正常用例：warehouse_manager可查看预警列表
+[1A[2K[3/97] [chromium] › e2e\alerts.spec.ts:58:5 › 预警中心 -> 查看预警列表 › ALERT-LIST-01-technician. 正常用例：technician可查看预警列表
+[1A[2K[4/97] [chromium] › e2e\alerts.spec.ts:58:5 › 预警中心 -> 查看预警列表 › ALERT-LIST-01-pathologist. 正常用例：pathologist可查看预警列表
+[1A[2K[5/97] [chromium] › e2e\alerts.spec.ts:58:5 › 预警中心 -> 查看预警列表 › ALERT-LIST-01-procurement. 正常用例：procurement可查看预警列表
+[1A[2K[6/97] [chromium] › e2e\alerts.spec.ts:58:5 › 预警中心 -> 查看预警列表 › ALERT-LIST-01-finance. 正常用例：finance可查看预警列表
+[1A[2K[7/97] [chromium] › e2e\alerts.spec.ts:64:3 › 预警中心 -> 查看预警列表 › ALERT-LIST-02. 空数据边界：无预警显示空状态
+[1A[2K[8/97] [chromium] › e2e\alerts.spec.ts:69:3 › 预警中心 -> 查看预警列表 › ALERT-LIST-03. 异常恢复：API 500
+[1A[2K[9/97] [chromium] › e2e\alerts.spec.ts:74:3 › 预警中心 -> 查看预警列表 › ALERT-LIST-04. UI差异：admin显示处理按钮
+[1A[2K[10/97] [chromium] › e2e\alerts.spec.ts:79:3 › 预警中心 -> 查看预警列表 › ALERT-LIST-05. 正常用例：显示类型级别物料库存阈值
+[1A[2K[11/97] [chromium] › e2e\alerts.spec.ts:84:3 › 预警中心 -> 查看预警列表 › ALERT-LIST-06. 并发：快速刷新
+[1A[2K[12/97] [chromium] › e2e\alerts.spec.ts:96:3 › 预警中心 -> 按状态筛选 › ALERT-STATUS-01. 正常用例：pending筛选
+[1A[2K[13/97] [chromium] › e2e\alerts.spec.ts:101:3 › 预警中心 -> 按状态筛选 › ALERT-STATUS-02. 正常用例：handled筛选
+[1A[2K[14/97] [chromium] › e2e\alerts.spec.ts:106:3 › 预警中心 -> 按状态筛选 › ALERT-STATUS-03. 空数据边界：无pending
+[1A[2K[15/97] [chromium] › e2e\alerts.spec.ts:111:3 › 预警中心 -> 按状态筛选 › ALERT-STATUS-04. 正常用例：重置筛选
+[1A[2K[16/97] [chromium] › e2e\alerts.spec.ts:116:3 › 预警中心 -> 按状态筛选 › ALERT-STATUS-05. UI差异：各角色可见
+[1A[2K[17/97] [chromium] › e2e\alerts.spec.ts:123:3 › 预警中心 -> 按状态筛选 › ALERT-STATUS-06. 并发：快速切换
+[1A[2K[18/97] [chromium] › e2e\alerts.spec.ts:130:3 › 预警中心 -> 按状态筛选 › ALERT-STATUS-07. 异常恢复：筛选API错误
+[1A[2K[19/97] [chromium] › e2e\alerts.spec.ts:135:3 › 预警中心 -> 按状态筛选 › ALERT-STATUS-08. 边界：非法状态值
+[1A[2K[20/97] [chromium] › e2e\alerts.spec.ts:146:3 › 预警中心 -> 按类型筛选 › ALERT-TYPE-01. 正常用例：low-stock筛选
+[1A[2K[21/97] [chromium] › e2e\alerts.spec.ts:151:3 › 预警中心 -> 按类型筛选 › ALERT-TYPE-02. 正常用例：expiry筛选
+[1A[2K[22/97] [chromium] › e2e\alerts.spec.ts:156:3 › 预警中心 -> 按类型筛选 › ALERT-TYPE-03. 空数据边界：无该类型
+[1A[2K[23/97] [chromium] › e2e\alerts.spec.ts:161:3 › 预警中心 -> 按类型筛选 › ALERT-TYPE-04. 正常用例：重置
+[1A[2K[24/97] [chromium] › e2e\alerts.spec.ts:166:3 › 预警中心 -> 按类型筛选 › ALERT-TYPE-05. UI差异：各角色可见
+[1A[2K[25/97] [chromium] › e2e\alerts.spec.ts:173:3 › 预警中心 -> 按类型筛选 › ALERT-TYPE-06. 异常恢复：API错误
+[1A[2K[26/97] [chromium] › e2e\alerts.spec.ts:184:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-01. 正常用例：admin处理预警
+[1A[2K[27/97] [chromium] › e2e\alerts.spec.ts:191:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-02. 正常用例：warehouse_manager处理
+[1A[2K[28/97] [chromium] › e2e\alerts.spec.ts:199:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-03. 表单校验：处理不存在的预警返回404
+[1A[2K[29/97] [chromium] › e2e\alerts.spec.ts:204:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-04. 业务冲突：已handled再次处理
+[1A[2K[30/97] [chromium] › e2e\alerts.spec.ts:211:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-05. 并发：并发处理同一预警
+[1A[2K[31/97] [chromium] › e2e\alerts.spec.ts:221:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-06. 异常恢复：网络中断后重试
+[1A[2K[32/97] [chromium] › e2e\alerts.spec.ts:228:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-07. UI差异：admin显示处理按钮
+[1A[2K[33/97] [chromium] › e2e\alerts.spec.ts:233:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-08. UI差异：technician显示处理按钮
+[1A[2K[34/97] [chromium] › e2e\alerts.spec.ts:238:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-09. 正常用例：处理后状态变为handled
+[1A[2K[35/97] [chromium] › e2e\alerts.spec.ts:245:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-10. 正常用例：处理后handled_at有值
+[1A[2K[36/97] [chromium] › e2e\alerts.spec.ts:252:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-11. 边界：空remark
+[1A[2K[37/97] [chromium] › e2e\alerts.spec.ts:259:3 › 预警中心 -> 处理预警 › ALERT-HANDLE-12. 异常恢复：处理后刷新状态保持
+[1A[2K[38/97] [chromium] › e2e\alerts.spec.ts:272:3 › 预警中心 -> 批量处理预警 › ALERT-BATCH-01. 正常用例：批量处理多条预警
+[1A[2K[39/97] [chromium] › e2e\alerts.spec.ts:281:3 › 预警中心 -> 批量处理预警 › ALERT-BATCH-02. 空数据边界：未选择点击批量处理
+[1A[2K[40/97] [chromium] › e2e\alerts.spec.ts:288:3 › 预警中心 -> 批量处理预警 › ALERT-BATCH-03. 并发：快速点击批量多次
+[1A[2K[41/97] [chromium] › e2e\alerts.spec.ts:293:3 › 预警中心 -> 批量处理预警 › ALERT-BATCH-04. 异常恢复：部分API 500
+[1A[2K[42/97] [chromium] › e2e\alerts.spec.ts:301:3 › 预警中心 -> 批量处理预警 › ALERT-BATCH-05. UI差异：admin显示批量按钮
+[1A[2K[43/97] [chromium] › e2e\alerts.spec.ts:306:3 › 预警中心 -> 批量处理预警 › ALERT-BATCH-06. 正常用例：全选后批量
+[1A[2K[44/97] [chromium] › e2e\alerts.spec.ts:313:3 › 预警中心 -> 批量处理预警 › ALERT-BATCH-07. 异常恢复：批量后刷新
+[1A[2K[45/97] [chromium] › e2e\alerts.spec.ts:320:3 › 预警中心 -> 批量处理预警 › ALERT-BATCH-08. 边界：单页全选翻页
+[1A[2K[46/97] [chromium] › e2e\alerts.spec.ts:331:3 › 预警中心 -> 预警规则 › ALERT-RULE-01. 正常用例：admin查看规则列表
+[1A[2K[47/97] [chromium] › e2e\alerts.spec.ts:336:3 › 预警中心 -> 预警规则 › ALERT-RULE-02. 正常用例：admin修改低库存阈值
+[1A[2K[48/97] [chromium] › e2e\alerts.spec.ts:343:3 › 预警中心 -> 预警规则 › ALERT-RULE-03. 空数据边界：threshold=0
+[1A[2K[49/97] [chromium] › e2e\alerts.spec.ts:350:3 › 预警中心 -> 预警规则 › ALERT-RULE-04. 边界：负数threshold
+[1A[2K[50/97] [chromium] › e2e\alerts.spec.ts:357:3 › 预警中心 -> 预警规则 › ALERT-RULE-05. 权限：warehouse_manager修改返回403
+[1A[2K[51/97] [chromium] › e2e\alerts.spec.ts:365:3 › 预警中心 -> 预警规则 › ALERT-RULE-06. 并发：并发修改同一规则
+[1A[2K[52/97] [chromium] › e2e\alerts.spec.ts:375:3 › 预警中心 -> 预警规则 › ALERT-RULE-07. 异常恢复：修改时API 500
+[1A[2K[53/97] [chromium] › e2e\alerts.spec.ts:382:3 › 预警中心 -> 预警规则 › ALERT-RULE-08. UI差异：admin显示编辑开关
+[1A[2K[54/97] [chromium] › e2e\alerts.spec.ts:387:3 › 预警中心 -> 预警规则 › ALERT-RULE-09. UI差异：technician显示只读
+[1A[2K[55/97] [chromium] › e2e\alerts.spec.ts:392:3 › 预警中心 -> 预警规则 › ALERT-RULE-10. 正常用例：修改thresholdDays
+[1A[2K[56/97] [chromium] › e2e\alerts.spec.ts:405:3 › 预警中心 -> 分页切换 › ALERT-PAGE-01. 正常用例：切换到第2页
+[1A[2K[57/97] [chromium] › e2e\alerts.spec.ts:410:3 › 预警中心 -> 分页切换 › ALERT-PAGE-02. 边界：仅1页
+[1A[2K[58/97] [chromium] › e2e\alerts.spec.ts:415:3 › 预警中心 -> 分页切换 › ALERT-PAGE-03. 表单校验：page=0
+[1A[2K[59/97] [chromium] › e2e\alerts.spec.ts:420:3 › 预警中心 -> 分页切换 › ALERT-PAGE-04. 边界：page=999
+[1A[2K[60/97] [chromium] › e2e\alerts.spec.ts:425:3 › 预警中心 -> 分页切换 › ALERT-PAGE-05. 边界：pageSize=1
+[1A[2K[61/97] [chromium] › e2e\alerts.spec.ts:430:3 › 预警中心 -> 分页切换 › ALERT-PAGE-06. 边界：pageSize=100
+[1A[2K[62/97] [chromium] › e2e\alerts.spec.ts:435:3 › 预警中心 -> 分页切换 › ALERT-PAGE-07. 并发：快速切换
+[1A[2K[63/97] [chromium] › e2e\alerts.spec.ts:442:3 › 预警中心 -> 分页切换 › ALERT-PAGE-08. UI差异：各角色一致
+[1A[2K[64/97] [chromium] › e2e\alerts.spec.ts:455:3 › 预警中心 -> 角色权限矩阵补充 › TC-PERM-116. warehouse_manager PUT /alerts/rules 返回403
+[1A[2K[65/97] [chromium] › e2e\alerts.spec.ts:463:3 › 预警中心 -> 角色权限矩阵补充 › TC-PERM-117. technician PUT /alerts/rules 返回403
+[1A[2K[66/97] [chromium] › e2e\alerts.spec.ts:471:3 › 预警中心 -> 角色权限矩阵补充 › TC-PERM-118. pathologist PUT /alerts/rules 返回403
+[1A[2K[67/97] [chromium] › e2e\alerts.spec.ts:479:3 › 预警中心 -> 角色权限矩阵补充 › TC-PERM-119. procurement PUT /alerts/rules 返回403
+[1A[2K[68/97] [chromium] › e2e\alerts.spec.ts:487:3 › 预警中心 -> 角色权限矩阵补充 › TC-PERM-120. finance PUT /alerts/rules 返回403
+[1A[2K[69/97] [chromium] › e2e\alerts.spec.ts:495:3 › 预警中心 -> 角色权限矩阵补充 › TC-PERM-ALERT-EXTRA-01. admin GET /alerts 返回200
+[1A[2K[70/97] [chromium] › e2e\alerts.spec.ts:500:3 › 预警中心 -> 角色权限矩阵补充 › TC-PERM-ALERT-EXTRA-02. 任意角色GET /alerts 返回200
+[1A[2K[71/97] [chromium] › e2e\alerts.spec.ts:507:3 › 预警中心 -> 角色权限矩阵补充 › TC-PERM-ALERT-EXTRA-03. admin POST /alerts/generate 返回200
+[1A[2K[72/97] [chromium] › e2e\alerts.spec.ts:518:3 › 预警中心 -> 业务流程树 › BF-ALERT-01. 主路径：登录→预警中心→查看pending→处理→状态变为handled
+[1A[2K[73/97] [chromium] › e2e\alerts.spec.ts:525:3 › 预警中心 -> 业务流程树 › BF-ALERT-02. 分支：关闭处理弹窗
+[1A[2K[74/97] [chromium] › e2e\alerts.spec.ts:530:3 › 预警中心 -> 业务流程树 › BF-ALERT-03. 分支：未填备注提交
+[1A[2K[75/97] [chromium] › e2e\alerts.spec.ts:537:3 › 预警中心 -> 业务流程树 › BF-ALERT-04. 分支：处理不存在预警
+[1A[2K[76/97] [chromium] › e2e\alerts.spec.ts:542:3 › 预警中心 -> 业务流程树 › BF-ALERT-05. 分支：重复处理同一预警
+[1A[2K[77/97] [chromium] › e2e\alerts.spec.ts:550:3 › 预警中心 -> 业务流程树 › BF-ALERT-06. 分支：批量处理3条预警
+[1A[2K[78/97] [chromium] › e2e\alerts.spec.ts:558:3 › 预警中心 -> 业务流程树 › BF-ALERT-07. 分支：刷新后预警状态保持
+[1A[2K[79/97] [chromium] › e2e\alerts.spec.ts:565:3 › 预警中心 -> 业务流程树 › BF-ALERT-08. 分支：禁用规则后不再生成
+[1A[2K[80/97] [chromium] › e2e\alerts.spec.ts:579:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-01. 预警级别颜色标签
+[1A[2K[81/97] [chromium] › e2e\alerts.spec.ts:584:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-02. 预警自动生成定时任务
+[1A[2K[82/97] [chromium] › e2e\alerts.spec.ts:589:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-03. 预警手动扫描
+[1A[2K[83/97] [chromium] › e2e\alerts.spec.ts:594:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-04. 预警历史记录
+[1A[2K[84/97] [chromium] › e2e\alerts.spec.ts:599:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-05. 预警导出功能
+[1A[2K[85/97] [chromium] › e2e\alerts.spec.ts:604:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-06. 预警打印功能
+[1A[2K[86/97] [chromium] › e2e\alerts.spec.ts:609:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-07. 预警页面响应式
+[1A[2K[87/97] [chromium] › e2e\alerts.spec.ts:615:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-08. 预警页面加载性能
+[1A[2K[88/97] [chromium] › e2e\alerts.spec.ts:622:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-09. 预警搜索防抖
+[1A[2K[89/97] [chromium] › e2e\alerts.spec.ts:633:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-10. 预警规则默认值
+[1A[2K[90/97] [chromium] › e2e\alerts.spec.ts:640:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-11. 预警处理人信息
+[1A[2K[91/97] [chromium] › e2e\alerts.spec.ts:645:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-12. 预警时间格式化
+[1A[2K[92/97] [chromium] › e2e\alerts.spec.ts:650:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-13. 预警数量统计卡片
+[1A[2K[93/97] [chromium] › e2e\alerts.spec.ts:655:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-14. 预警低库存与临期区分
+[1A[2K[94/97] [chromium] › e2e\alerts.spec.ts:662:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-15. 预警邮件通知入口
+[1A[2K[95/97] [chromium] › e2e\alerts.spec.ts:667:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-16. 预警字段XSS防护
+[1A[2K[96/97] [chromium] › e2e\alerts.spec.ts:674:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-17. 预警API响应格式
+[1A[2K[97/97] [chromium] › e2e\alerts.spec.ts:681:3 › 预警中心 -> 盲点分析补充 › BLIND-ALERT-18. 多角色同时处理互不影响
+[1A[2K  13 skipped
+  84 passed (3.2m)

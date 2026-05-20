@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
@@ -31,7 +31,7 @@ interface MenuItem {
   icon: React.ElementType
 }
 
-const mainMenuItems: MenuItem[] = [
+const ALL_MAIN_MENU: MenuItem[] = [
   { label: '仪表盘', path: '/', icon: LayoutDashboard },
   { label: '库存列表', path: '/inventory', icon: Package },
   { label: '入库记录', path: '/inbound', icon: ArrowDownToLine },
@@ -46,7 +46,7 @@ const mainMenuItems: MenuItem[] = [
   { label: '预警中心', path: '/alerts', icon: Bell },
 ]
 
-const systemMenuItems: MenuItem[] = [
+const ALL_SYSTEM_MENU: MenuItem[] = [
   { label: '供应商管理', path: '/suppliers', icon: Truck },
   { label: '库位管理', path: '/locations', icon: MapPin },
   { label: '用户管理', path: '/users', icon: Users },
@@ -54,10 +54,74 @@ const systemMenuItems: MenuItem[] = [
   { label: '操作日志', path: '/logs', icon: FileText },
 ]
 
+// 角色-菜单权限映射（与后端 E2E 权限矩阵保持一致）
+const ROLE_MENU_MAP: Record<string, string[]> = {
+  admin: [
+    '/', '/inventory', '/inbound', '/outbound', '/stocktaking',
+    '/projects', '/bom', '/reconciliation', '/cost-analysis',
+    '/categories', '/materials', '/alerts',
+    '/suppliers', '/locations', '/users', '/roles', '/logs',
+  ],
+  warehouse_manager: [
+    '/inventory', '/inbound', '/outbound', '/stocktaking',
+    '/suppliers', '/locations', '/materials', '/alerts',
+  ],
+  technician: [
+    '/inventory', '/projects', '/bom', '/reconciliation',
+    '/cost-analysis', '/materials',
+  ],
+  procurement: [
+    '/inventory', '/inbound', '/materials', '/suppliers',
+  ],
+  finance: [
+    '/inventory', '/reconciliation', '/cost-analysis',
+  ],
+  pathologist: [
+    '/inventory', '/projects', '/bom', '/reconciliation', '/cost-analysis',
+  ],
+}
+
+function getUserRole(): string | null {
+  try {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      const user = JSON.parse(userStr)
+      return user.role || null
+    }
+  } catch { /* ignore */ }
+  return null
+}
+
+function getRoleLabel(role: string | null): string {
+  const labels: Record<string, string> = {
+    admin: '系统管理员',
+    warehouse_manager: '仓库管理员',
+    technician: '技术员',
+    procurement: '采购员',
+    finance: '财务人员',
+    pathologist: '病理医生',
+  }
+  return labels[role || ''] || '用户'
+}
+
 export default function AppSidebar() {
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  const role = useMemo(() => getUserRole(), [location.pathname])
+  const allowedPaths = useMemo(() => {
+    if (!role) return ALL_MAIN_MENU.map(m => m.path).concat(ALL_SYSTEM_MENU.map(m => m.path))
+    return ROLE_MENU_MAP[role] || ROLE_MENU_MAP.technician
+  }, [role])
+
+  const mainMenuItems = useMemo(() =>
+    ALL_MAIN_MENU.filter(item => allowedPaths.includes(item.path)),
+  [allowedPaths])
+
+  const systemMenuItems = useMemo(() =>
+    ALL_SYSTEM_MENU.filter(item => allowedPaths.includes(item.path)),
+  [allowedPaths])
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -154,7 +218,7 @@ export default function AppSidebar() {
             <NavItem key={item.path} item={item} />
           ))}
 
-          <NavDivider />
+          {systemMenuItems.length > 0 && <NavDivider />}
 
           {systemMenuItems.map(item => (
             <NavItem key={item.path} item={item} />
@@ -174,8 +238,8 @@ export default function AppSidebar() {
             </div>
             {!collapsed && (
               <div className="flex flex-col min-w-0">
-                <span className="text-sm font-medium text-[#111827] truncate">管理员</span>
-                <span className="text-xs text-[#6b7280] truncate">系统管理员</span>
+                <span className="text-sm font-medium text-[#111827] truncate">{getRoleLabel(role)}</span>
+                <span className="text-xs text-[#6b7280] truncate">{role || '用户'}</span>
               </div>
             )}
           </div>

@@ -1,0 +1,6 @@
+
+Running 1 test using 1 worker
+
+  ok 1 [chromium] › e2e\materials.spec.ts:703:3 › 耗材管理 -> 批量启用停用 › MAT-BATCH-07. 异常恢复：批量操作时部分失败 (766ms)
+
+  1 passed (5.0s)

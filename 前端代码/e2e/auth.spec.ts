@@ -543,8 +543,12 @@ test.describe('认证与登录 -> 业务流程树', () => {
       test(`BF-PERM-${role}-${path.replace(/\//g, '')}. ${role}尝试访问${path}应被拦截`, async ({ page }) => {
         await loginAs(page, role)
         await page.goto(`${FE_BASE}${path}`)
-        const unauthorized = page.locator('text=/无权访问|403|Forbidden|未授权/i').first()
-        await expect(unauthorized.or(page.locator('body'))).toBeVisible()
+        await page.waitForTimeout(500)
+        const currentUrl = page.url()
+        const bodyText = await page.locator('body').innerText()
+        const isRedirected = currentUrl === `${FE_BASE}/`
+        const hasForbiddenText = /无权访问|403|Forbidden|未授权|insufficient/i.test(bodyText)
+        expect(isRedirected || hasForbiddenText).toBe(true)
       })
     }
   }

@@ -1,0 +1,15 @@
+
+Running 10 tests using 1 worker
+
+  ok  1 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-01. technician GET /reconciliation/summary 返回403 (914ms)
+  ok  2 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-02. warehouse_manager GET /reconciliation/summary 返回403 (710ms)
+  ok  3 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-03. pathologist GET /reconciliation/summary 返回200 (701ms)
+  ok  4 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-04. procurement GET /reconciliation/summary 返回403 (910ms)
+  ok  5 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-05. finance GET /reconciliation/summary 返回200 (747ms)
+  ok  6 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-06. admin GET /reconciliation/summary 返回200 (1.2s)
+  ok  7 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-07. technician POST /reconciliation/cases/import 返回403 (1.3s)
+  ok  8 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-08. technician POST /reconciliation/logs 返回403 (763ms)
+  ok  9 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-09. finance POST /reconciliation/cases/import 返回200 (1.4s)
+  ok 10 [chromium] › e2e\reconciliation.spec.ts:853:5 › 消耗对账 -> 角色权限矩阵补充 › TC-PERM-RECON-10. admin POST /reconciliation/cases/import 返回200 (1.2s)
+
+  10 passed (20.7s)

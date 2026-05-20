@@ -1,0 +1,142 @@
+
+Running 136 tests using 1 worker
+
+  ok   1 [chromium] › e2e\materials.spec.ts:81:5 › 耗材管理 -> 查看物料列表 › MAT-LIST-01-admin. 正常用例：admin可查看物料列表 (1.6s)
+  ok   2 [chromium] › e2e\materials.spec.ts:81:5 › 耗材管理 -> 查看物料列表 › MAT-LIST-01-warehouse_manager. 正常用例：warehouse_manager可查看物料列表 (1.5s)
+  ok   3 [chromium] › e2e\materials.spec.ts:81:5 › 耗材管理 -> 查看物料列表 › MAT-LIST-01-technician. 正常用例：technician可查看物料列表 (1.6s)
+  ok   4 [chromium] › e2e\materials.spec.ts:81:5 › 耗材管理 -> 查看物料列表 › MAT-LIST-01-pathologist. 正常用例：pathologist可查看物料列表 (1.8s)
+  ok   5 [chromium] › e2e\materials.spec.ts:81:5 › 耗材管理 -> 查看物料列表 › MAT-LIST-01-procurement. 正常用例：procurement可查看物料列表 (1.8s)
+  ok   6 [chromium] › e2e\materials.spec.ts:87:3 › 耗材管理 -> 查看物料列表 › MAT-LIST-02. 空数据边界：无物料数据显示空状态 (2.5s)
+  ok   7 [chromium] › e2e\materials.spec.ts:92:3 › 耗材管理 -> 查看物料列表 › MAT-LIST-03. 权限：finance访问返回403 (675ms)
+  ok   8 [chromium] › e2e\materials.spec.ts:96:3 › 耗材管理 -> 查看物料列表 › MAT-LIST-04. 异常恢复：API 500显示错误Toast (2.4s)
+  ok   9 [chromium] › e2e\materials.spec.ts:101:3 › 耗材管理 -> 查看物料列表 › MAT-LIST-05. UI差异：admin显示新增编辑删除按钮 (2.7s)
+  ok  10 [chromium] › e2e\materials.spec.ts:106:3 › 耗材管理 -> 查看物料列表 › MAT-LIST-06. UI差异：procurement仅显示新增编辑 (2.8s)
+  ok  11 [chromium] › e2e\materials.spec.ts:111:3 › 耗材管理 -> 查看物料列表 › MAT-LIST-07. 正常用例：列表分页每页20条 (905ms)
+  ok  12 [chromium] › e2e\materials.spec.ts:117:3 › 耗材管理 -> 查看物料列表 › MAT-LIST-08. 并发：快速刷新页面 (2.0s)
+  ok  13 [chromium] › e2e\materials.spec.ts:123:3 › 耗材管理 -> 查看物料列表 › MAT-LIST-09. UI差异：technician仅查看 (2.5s)
+  ok  14 [chromium] › e2e\materials.spec.ts:128:3 › 耗材管理 -> 查看物料列表 › MAT-LIST-10. 正常用例：列表显示133个物料 (927ms)
+  ok  15 [chromium] › e2e\materials.spec.ts:140:3 › 耗材管理 -> 按分类筛选 › MAT-CAT-01. 正常用例：选择分类仅显示该分类物料 (979ms)
+  ok  16 [chromium] › e2e\materials.spec.ts:147:3 › 耗材管理 -> 按分类筛选 › MAT-CAT-02. 空数据边界：分类下无物料 (879ms)
+  ok  17 [chromium] › e2e\materials.spec.ts:152:3 › 耗材管理 -> 按分类筛选 › MAT-CAT-03. 正常用例：重置分类筛选 (2.7s)
+  ok  18 [chromium] › e2e\materials.spec.ts:157:3 › 耗材管理 -> 按分类筛选 › MAT-CAT-04. UI差异：各角色分类筛选可见 (6.4s)
+  ok  19 [chromium] › e2e\materials.spec.ts:164:3 › 耗材管理 -> 按分类筛选 › MAT-CAT-05. 并发：快速切换分类 (2.4s)
+  ok  20 [chromium] › e2e\materials.spec.ts:173:3 › 耗材管理 -> 按分类筛选 › MAT-CAT-06. 异常恢复：分类筛选时API错误 (2.2s)
+  ok  21 [chromium] › e2e\materials.spec.ts:184:3 › 耗材管理 -> 按供应商筛选 › MAT-SUP-01. 正常用例：选择供应商仅显示该供应商物料 (772ms)
+  ok  22 [chromium] › e2e\materials.spec.ts:191:3 › 耗材管理 -> 按供应商筛选 › MAT-SUP-02. 空数据边界：供应商下无物料 (751ms)
+  ok  23 [chromium] › e2e\materials.spec.ts:196:3 › 耗材管理 -> 按供应商筛选 › MAT-SUP-03. 正常用例：重置供应商筛选 (2.3s)
+  ok  24 [chromium] › e2e\materials.spec.ts:201:3 › 耗材管理 -> 按供应商筛选 › MAT-SUP-04. UI差异：各角色供应商筛选可见 (6.3s)
+  ok  25 [chromium] › e2e\materials.spec.ts:208:3 › 耗材管理 -> 按供应商筛选 › MAT-SUP-05. 并发：快速切换供应商 (1.9s)
+  ok  26 [chromium] › e2e\materials.spec.ts:215:3 › 耗材管理 -> 按供应商筛选 › MAT-SUP-06. 异常恢复：供应商筛选时API错误 (2.2s)
+  ok  27 [chromium] › e2e\materials.spec.ts:226:3 › 耗材管理 -> 搜索物料 › MAT-SEARCH-01. 正常用例：搜索"Ki-67"返回匹配物料 (748ms)
+  ok  28 [chromium] › e2e\materials.spec.ts:231:3 › 耗材管理 -> 搜索物料 › MAT-SEARCH-02. 空数据边界：搜索无结果 (758ms)
+  ok  29 [chromium] › e2e\materials.spec.ts:237:3 › 耗材管理 -> 搜索物料 › MAT-SEARCH-03. 并发：快速连续输入 (2.6s)
+  ok  30 [chromium] › e2e\materials.spec.ts:249:3 › 耗材管理 -> 搜索物料 › MAT-SEARCH-04. 异常恢复：搜索时网络断 (2.1s)
+  ok  31 [chromium] › e2e\materials.spec.ts:254:3 › 耗材管理 -> 搜索物料 › MAT-SEARCH-05. 边界：搜索超长字符串 (736ms)
+  ok  32 [chromium] › e2e\materials.spec.ts:259:3 › 耗材管理 -> 搜索物料 › MAT-SEARCH-06. UI差异：各角色搜索可见 (5.9s)
+  ok  33 [chromium] › e2e\materials.spec.ts:272:3 › 耗材管理 -> 新增物料 › MAT-CREATE-01. 正常用例：admin新增物料成功 (538ms)
+  ok  34 [chromium] › e2e\materials.spec.ts:282:3 › 耗材管理 -> 新增物料 › MAT-CREATE-02. 正常用例：procurement新增物料成功 (739ms)
+  ok  35 [chromium] › e2e\materials.spec.ts:292:3 › 耗材管理 -> 新增物料 › MAT-CREATE-03. 空数据边界：price=0合法 (512ms)
+  ok  36 [chromium] › e2e\materials.spec.ts:301:3 › 耗材管理 -> 新增物料 › MAT-CREATE-04. 表单校验：未传name返回400 (497ms)
+  ok  37 [chromium] › e2e\materials.spec.ts:310:3 › 耗材管理 -> 新增物料 › MAT-CREATE-05. 表单校验：未传unit返回400 (487ms)
+  ok  38 [chromium] › e2e\materials.spec.ts:319:3 › 耗材管理 -> 新增物料 › MAT-CREATE-06. 表单校验：未传categoryId返回400 (500ms)
+  ok  39 [chromium] › e2e\materials.spec.ts:327:5 › 耗材管理 -> 新增物料 › MAT-CREATE-07-technician. 权限：technician新增物料返回403 (723ms)
+  ok  40 [chromium] › e2e\materials.spec.ts:327:5 › 耗材管理 -> 新增物料 › MAT-CREATE-07-pathologist. 权限：pathologist新增物料返回403 (723ms)
+  ok  41 [chromium] › e2e\materials.spec.ts:327:5 › 耗材管理 -> 新增物料 › MAT-CREATE-07-finance. 权限：finance新增物料返回403 (725ms)
+  ok  42 [chromium] › e2e\materials.spec.ts:338:3 › 耗材管理 -> 新增物料 › MAT-CREATE-08. 业务冲突：code已存在返回409 (519ms)
+  ok  43 [chromium] › e2e\materials.spec.ts:352:3 › 耗材管理 -> 新增物料 › MAT-CREATE-09. 并发：快速双击提交 (550ms)
+  ok  44 [chromium] › e2e\materials.spec.ts:360:3 › 耗材管理 -> 新增物料 › MAT-CREATE-10. 异常恢复：提交时网络中断后重试 (529ms)
+  ok  45 [chromium] › e2e\materials.spec.ts:369:3 › 耗材管理 -> 新增物料 › MAT-CREATE-11. 正常用例：新增物料后inventory自动创建stock=0 (531ms)
+  ok  46 [chromium] › e2e\materials.spec.ts:382:3 › 耗材管理 -> 新增物料 › MAT-CREATE-12. 边界：超长code (871ms)
+  ok  47 [chromium] › e2e\materials.spec.ts:391:3 › 耗材管理 -> 新增物料 › MAT-CREATE-13. 边界：特殊字符name (837ms)
+  ok  48 [chromium] › e2e\materials.spec.ts:400:3 › 耗材管理 -> 新增物料 › MAT-CREATE-14. 边界：负数price (929ms)
+  ok  49 [chromium] › e2e\materials.spec.ts:409:3 › 耗材管理 -> 新增物料 › MAT-CREATE-15. UI差异：admin显示新增物料按钮 (2.6s)
+  ok  50 [chromium] › e2e\materials.spec.ts:414:3 › 耗材管理 -> 新增物料 › MAT-CREATE-16. UI差异：procurement显示新增物料按钮 (2.5s)
+  ok  51 [chromium] › e2e\materials.spec.ts:419:3 › 耗材管理 -> 新增物料 › MAT-CREATE-17. UI差异：technician不显示新增按钮 (2.5s)
+  ok  52 [chromium] › e2e\materials.spec.ts:424:3 › 耗材管理 -> 新增物料 › MAT-CREATE-18. 表单校验：空字符串name (504ms)
+  -   53 [chromium] › e2e\materials.spec.ts:439:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-01. 正常用例：admin编辑物料价格成功
+  -   54 [chromium] › e2e\materials.spec.ts:446:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-02. 正常用例：procurement编辑物料成功
+  -   55 [chromium] › e2e\materials.spec.ts:454:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-03. 空数据边界：price=-1
+  -   56 [chromium] › e2e\materials.spec.ts:462:5 › 耗材管理 -> 编辑物料 › MAT-EDIT-04-technician. 权限：technician编辑物料返回403
+  -   57 [chromium] › e2e\materials.spec.ts:462:5 › 耗材管理 -> 编辑物料 › MAT-EDIT-04-pathologist. 权限：pathologist编辑物料返回403
+  -   58 [chromium] › e2e\materials.spec.ts:462:5 › 耗材管理 -> 编辑物料 › MAT-EDIT-04-finance. 权限：finance编辑物料返回403
+  -   59 [chromium] › e2e\materials.spec.ts:471:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-05. 业务冲突：编辑categoryId不更新code前缀
+  -   60 [chromium] › e2e\materials.spec.ts:478:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-06. 并发：并发编辑同一物料
+  -   61 [chromium] › e2e\materials.spec.ts:488:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-07. 异常恢复：编辑时API 500后重试
+  ok  62 [chromium] › e2e\materials.spec.ts:495:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-08. UI差异：admin显示编辑按钮 (2.5s)
+  ok  63 [chromium] › e2e\materials.spec.ts:500:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-09. UI差异：procurement显示编辑按钮 (2.5s)
+  ok  64 [chromium] › e2e\materials.spec.ts:505:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-10. UI差异：technician不显示编辑按钮 (2.3s)
+  -   65 [chromium] › e2e\materials.spec.ts:510:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-11. 正常用例：编辑后列表数据更新
+  ok  66 [chromium] › e2e\materials.spec.ts:518:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-12. 表单校验：编辑不存在的物料返回404 (485ms)
+  -   67 [chromium] › e2e\materials.spec.ts:523:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-13. 边界：编辑name为空字符串
+  -   68 [chromium] › e2e\materials.spec.ts:530:3 › 耗材管理 -> 编辑物料 › MAT-EDIT-14. 异常恢复：编辑时网络中断
+  ok  69 [chromium] › e2e\materials.spec.ts:543:3 › 耗材管理 -> 删除物料 › MAT-DEL-01. 正常用例：admin删除stock=0物料 (539ms)
+  -   70 [chromium] › e2e\materials.spec.ts:556:5 › 耗材管理 -> 删除物料 › MAT-DEL-02-technician. 权限：technician删除物料返回403
+  -   71 [chromium] › e2e\materials.spec.ts:556:5 › 耗材管理 -> 删除物料 › MAT-DEL-02-pathologist. 权限：pathologist删除物料返回403
+  -   72 [chromium] › e2e\materials.spec.ts:556:5 › 耗材管理 -> 删除物料 › MAT-DEL-02-procurement. 权限：procurement删除物料返回403
+  -   73 [chromium] › e2e\materials.spec.ts:556:5 › 耗材管理 -> 删除物料 › MAT-DEL-02-finance. 权限：finance删除物料返回403
+  -   74 [chromium] › e2e\materials.spec.ts:565:3 › 耗材管理 -> 删除物料 › MAT-DEL-03. 业务冲突：stock>0删除返回409
+  ok  75 [chromium] › e2e\materials.spec.ts:572:3 › 耗材管理 -> 删除物料 › MAT-DEL-04. 并发：并发删除同一物料 (528ms)
+  ok  76 [chromium] › e2e\materials.spec.ts:587:3 › 耗材管理 -> 删除物料 › MAT-DEL-05. 异常恢复：删除时API 500后重试 (537ms)
+  ok  77 [chromium] › e2e\materials.spec.ts:600:3 › 耗材管理 -> 删除物料 › MAT-DEL-06. UI差异：admin显示删除按钮 (2.5s)
+  ok  78 [chromium] › e2e\materials.spec.ts:605:3 › 耗材管理 -> 删除物料 › MAT-DEL-07. UI差异：procurement可能隐藏删除 (2.4s)
+  ok  79 [chromium] › e2e\materials.spec.ts:610:3 › 耗材管理 -> 删除物料 › MAT-DEL-08. 表单校验：删除不存在的物料返回404 (639ms)
+  ok  80 [chromium] › e2e\materials.spec.ts:615:3 › 耗材管理 -> 删除物料 › MAT-DEL-09. 业务冲突：删除后再次删除返回404 (589ms)
+  ok  81 [chromium] › e2e\materials.spec.ts:628:3 › 耗材管理 -> 删除物料 › MAT-DEL-10. 异常恢复：删除后inventory联动删除 (538ms)
+  ok  82 [chromium] › e2e\materials.spec.ts:640:3 › 耗材管理 -> 删除物料 › MAT-DEL-11. 正常用例：删除后物料列表刷新 (875ms)
+  ok  83 [chromium] › e2e\materials.spec.ts:652:3 › 耗材管理 -> 删除物料 › MAT-DEL-12. UI差异：warehouse_manager不显示删除按钮 (2.6s)
+  -   84 [chromium] › e2e\materials.spec.ts:663:3 › 耗材管理 -> 批量启用停用 › MAT-BATCH-01. 正常用例：admin批量停用物料
+  -   85 [chromium] › e2e\materials.spec.ts:670:3 › 耗材管理 -> 批量启用停用 › MAT-BATCH-02. 正常用例：admin批量启用物料
+  ok  86 [chromium] › e2e\materials.spec.ts:677:3 › 耗材管理 -> 批量启用停用 › MAT-BATCH-03. 空数据边界：空数组ids返回400 (490ms)
+  -   87 [chromium] › e2e\materials.spec.ts:682:3 › 耗材管理 -> 批量启用停用 › MAT-BATCH-04. 权限：technician批量操作返回403
+  -   88 [chromium] › e2e\materials.spec.ts:690:3 › 耗材管理 -> 批量启用停用 › MAT-BATCH-05. 并发：快速点击批量停用多次
+  ok  89 [chromium] › e2e\materials.spec.ts:698:3 › 耗材管理 -> 批量启用停用 › MAT-BATCH-06. UI差异：admin显示批量操作按钮 (2.5s)
+  ok  90 [chromium] › e2e\materials.spec.ts:703:3 › 耗材管理 -> 批量启用停用 › MAT-BATCH-07. 异常恢复：批量操作时部分失败 (482ms)
+  -   91 [chromium] › e2e\materials.spec.ts:708:3 › 耗材管理 -> 批量启用停用 › MAT-BATCH-08. 正常用例：批量操作后列表状态标签更新
+  -   92 [chromium] › e2e\materials.spec.ts:722:5 › 耗材管理 -> 查看物料详情 › MAT-DETAIL-01-admin. 正常用例：admin可查看物料详情
+  -   93 [chromium] › e2e\materials.spec.ts:722:5 › 耗材管理 -> 查看物料详情 › MAT-DETAIL-01-warehouse_manager. 正常用例：warehouse_manager可查看物料详情
+  -   94 [chromium] › e2e\materials.spec.ts:722:5 › 耗材管理 -> 查看物料详情 › MAT-DETAIL-01-technician. 正常用例：technician可查看物料详情
+  -   95 [chromium] › e2e\materials.spec.ts:722:5 › 耗材管理 -> 查看物料详情 › MAT-DETAIL-01-pathologist. 正常用例：pathologist可查看物料详情
+  -   96 [chromium] › e2e\materials.spec.ts:722:5 › 耗材管理 -> 查看物料详情 › MAT-DETAIL-01-procurement. 正常用例：procurement可查看物料详情
+  ok  97 [chromium] › e2e\materials.spec.ts:730:3 › 耗材管理 -> 查看物料详情 › MAT-DETAIL-02. 表单校验：查看不存在的物料返回404 (493ms)
+  ok  98 [chromium] › e2e\materials.spec.ts:735:3 › 耗材管理 -> 查看物料详情 › MAT-DETAIL-03. UI差异：admin可点击行查看详情 (2.3s)
+  ok  99 [chromium] › e2e\materials.spec.ts:748:3 › 耗材管理 -> 分页切换 › MAT-PAGE-01. 正常用例：切换到第2页 (2.2s)
+  ok 100 [chromium] › e2e\materials.spec.ts:753:3 › 耗材管理 -> 分页切换 › MAT-PAGE-02. 边界：仅1页分页器隐藏 (2.2s)
+  ok 101 [chromium] › e2e\materials.spec.ts:758:3 › 耗材管理 -> 分页切换 › MAT-PAGE-03. 表单校验：page=0后端修正为1 (495ms)
+  ok 102 [chromium] › e2e\materials.spec.ts:766:3 › 耗材管理 -> 分页切换 › MAT-PAGE-04. 边界：page=999返回空列表 (743ms)
+  ok 103 [chromium] › e2e\materials.spec.ts:771:3 › 耗材管理 -> 分页切换 › MAT-PAGE-05. 边界：pageSize=1 (762ms)
+  ok 104 [chromium] › e2e\materials.spec.ts:777:3 › 耗材管理 -> 分页切换 › MAT-PAGE-06. 边界：pageSize=100 (754ms)
+  ok 105 [chromium] › e2e\materials.spec.ts:782:3 › 耗材管理 -> 分页切换 › MAT-PAGE-07. 并发：快速切换分页 (2.5s)
+  ok 106 [chromium] › e2e\materials.spec.ts:789:3 › 耗材管理 -> 分页切换 › MAT-PAGE-08. UI差异：各角色分页一致 (6.1s)
+  ok 107 [chromium] › e2e\materials.spec.ts:811:5 › 耗材管理 -> 角色权限矩阵补充 › TC-PERM-MAT-01. finance GET /materials 返回403 (506ms)
+  ok 108 [chromium] › e2e\materials.spec.ts:811:5 › 耗材管理 -> 角色权限矩阵补充 › TC-PERM-MAT-02. admin GET /materials 返回200 (488ms)
+  ok 109 [chromium] › e2e\materials.spec.ts:811:5 › 耗材管理 -> 角色权限矩阵补充 › TC-PERM-MAT-03. procurement GET /materials 返回200 (492ms)
+  ok 110 [chromium] › e2e\materials.spec.ts:811:5 › 耗材管理 -> 角色权限矩阵补充 › TC-PERM-MAT-04. warehouse_manager POST /materials 返回403 (730ms)
+  ok 111 [chromium] › e2e\materials.spec.ts:811:5 › 耗材管理 -> 角色权限矩阵补充 › TC-PERM-MAT-05. technician POST /materials 返回403 (733ms)
+  ok 112 [chromium] › e2e\materials.spec.ts:811:5 › 耗材管理 -> 角色权限矩阵补充 › TC-PERM-MAT-06. pathologist POST /materials 返回403 (723ms)
+  ok 113 [chromium] › e2e\materials.spec.ts:823:3 › 耗材管理 -> 角色权限矩阵补充 › TC-PERM-MAT-07. admin POST /materials 返回201 (516ms)
+  ok 114 [chromium] › e2e\materials.spec.ts:832:3 › 耗材管理 -> 角色权限矩阵补充 › TC-PERM-MAT-08. finance直接访问/materials页面 (2.4s)
+  ok 115 [chromium] › e2e\materials.spec.ts:843:3 › 耗材管理 -> 业务流程树 › BF-MAT-01. 主路径：登录→进入耗材管理→新增物料→填写信息→提交→列表刷新 (516ms)
+  ok 116 [chromium] › e2e\materials.spec.ts:852:3 › 耗材管理 -> 业务流程树 › BF-MAT-02. 分支：关闭弹窗不保存 (2.4s)
+  ok 117 [chromium] › e2e\materials.spec.ts:857:3 › 耗材管理 -> 业务流程树 › BF-MAT-03. 分支：编码已存在 (523ms)
+  ok 118 [chromium] › e2e\materials.spec.ts:866:3 › 耗材管理 -> 业务流程树 › BF-MAT-04. 分支：必填字段漏填 (505ms)
+  ok 119 [chromium] › e2e\materials.spec.ts:871:3 › 耗材管理 -> 业务流程树 › BF-MAT-05. 分支：价格输入负数 (517ms)
+  ok 120 [chromium] › e2e\materials.spec.ts:880:3 › 耗材管理 -> 业务流程树 › BF-MAT-06. 分支：刷新页面后新物料仍在列表 (2.9s)
+  -  121 [chromium] › e2e\materials.spec.ts:887:3 › 耗材管理 -> 业务流程树 › BF-MAT-07. 分支：删除有库存的物料
+  ok 122 [chromium] › e2e\materials.spec.ts:894:3 › 耗材管理 -> 业务流程树 › BF-MAT-08. 分支：technician尝试新增物料被403拦截 (749ms)
+  ok 123 [chromium] › e2e\materials.spec.ts:910:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-01. 物料编码自动生成规则 (519ms)
+  ok 124 [chromium] › e2e\materials.spec.ts:919:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-02. 物料分类下拉联动 (2.3s)
+  ok 125 [chromium] › e2e\materials.spec.ts:924:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-03. 物料供应商下拉联动 (2.5s)
+  -  126 [chromium] › e2e\materials.spec.ts:929:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-04. 物料库存预警阈值设置
+  ok 127 [chromium] › e2e\materials.spec.ts:936:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-05. 物料列表导出功能 (2.5s)
+  ok 128 [chromium] › e2e\materials.spec.ts:941:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-06. 物料列表打印功能 (2.4s)
+  ok 129 [chromium] › e2e\materials.spec.ts:946:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-07. 物料详情Tab切换 (2.3s)
+  ok 130 [chromium] › e2e\materials.spec.ts:951:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-08. 物料图片上传功能 (2.3s)
+  ok 131 [chromium] › e2e\materials.spec.ts:956:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-09. 物料批次信息展示 (2.3s)
+  ok 132 [chromium] › e2e\materials.spec.ts:961:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-10. 物料页面响应式布局 (7.7s)
+  ok 133 [chromium] › e2e\materials.spec.ts:967:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-11. 物料页面加载性能 (5.6s)
+  ok 134 [chromium] › e2e\materials.spec.ts:974:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-12. 物料字段XSS防护 (524ms)
+  ok 135 [chromium] › e2e\materials.spec.ts:983:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-13. 物料字段SQL注入防护 (530ms)
+  ok 136 [chromium] › e2e\materials.spec.ts:992:3 › 耗材管理 -> 盲点分析补充 › BLIND-MAT-14. 物料API响应格式验证 (506ms)
+
+  29 skipped
+  107 passed (3.3m)

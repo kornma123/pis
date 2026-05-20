@@ -1,0 +1,229 @@
+
+Running 88 tests using 1 worker
+
+  ok  1 [chromium] › e2e\roles.spec.ts:64:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-01. 正常用例：admin可查看角色列表 (4.4s)
+  ok  2 [chromium] › e2e\roles.spec.ts:68:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-02. 正常用例：角色列表显示统计卡片 (3.4s)
+  x   3 [chromium] › e2e\roles.spec.ts:72:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-03. 正常用例：角色以卡片形式展示 (3.5s)
+  ok  4 [chromium] › e2e\roles.spec.ts:77:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-04. 空数据边界：无角色数据卡片显示空状态 (3.8s)
+  ok  5 [chromium] › e2e\roles.spec.ts:84:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-05. 异常恢复：API 500显示错误提示 (3.8s)
+  ok  6 [chromium] › e2e\roles.spec.ts:89:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-06. 权限：technician访问返回403 (3.0s)
+  ok  7 [chromium] › e2e\roles.spec.ts:94:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-07. 并发：快速刷新页面多次 (4.6s)
+  ok  8 [chromium] › e2e\roles.spec.ts:99:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-08. UI差异：admin显示新建角色按钮 (3.4s)
+  ok  9 [chromium] › e2e\roles.spec.ts:103:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-09. UI差异：非admin不显示新建按钮 (5.1s)
+  ok 10 [chromium] › e2e\roles.spec.ts:113:3 › 角色权限 -> Tab切换 › ROLE-TAB-01. 正常用例：默认显示全部角色Tab (4.3s)
+  ok 11 [chromium] › e2e\roles.spec.ts:117:3 › 角色权限 -> Tab切换 › ROLE-TAB-02. 正常用例：切换到系统角色Tab (6.3s)
+  ok 12 [chromium] › e2e\roles.spec.ts:122:3 › 角色权限 -> Tab切换 › ROLE-TAB-03. 正常用例：切换到自定义角色Tab (5.5s)
+  ok 13 [chromium] › e2e\roles.spec.ts:127:3 › 角色权限 -> Tab切换 › ROLE-TAB-04. 并发：快速切换Tab多次 (4.1s)
+  ok 14 [chromium] › e2e\roles.spec.ts:140:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-01. 正常用例：按角色名称搜索 (11.2s)
+  ok 15 [chromium] › e2e\roles.spec.ts:145:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-02. 空数据边界：搜索无结果 (6.2s)
+  ok 16 [chromium] › e2e\roles.spec.ts:150:3 › 角色权限 -> 搜索功能 › ROLE-SEARCH-03. 边界：搜索关键词为空恢复全部 (5.3s)
+  ok 17 [chromium] › e2e\roles.spec.ts:161:3 › 角色权限 -> 新建角色 › ROLE-CREATE-01. 正常用例：admin新建角色成功 (15.1s)
+  ok 18 [chromium] › e2e\roles.spec.ts:170:3 › 角色权限 -> 新建角色 › ROLE-CREATE-02. 正常用例：新建角色时配置权限 (7.6s)
+  ok 19 [chromium] › e2e\roles.spec.ts:181:3 › 角色权限 -> 新建角色 › ROLE-CREATE-03. 正常用例：新建角色时选择数据权限范围 (8.0s)
+  ok 20 [chromium] › e2e\roles.spec.ts:192:3 › 角色权限 -> 新建角色 › ROLE-CREATE-04. 空数据边界：名称为空提交被阻止 (9.0s)
+  ok 21 [chromium] › e2e\roles.spec.ts:198:3 › 角色权限 -> 新建角色 › ROLE-CREATE-05. 表单校验：未传必填字段返回400 (942ms)
+  ok 22 [chromium] › e2e\roles.spec.ts:204:5 › 角色权限 -> 新建角色 › ROLE-CREATE-06-technician. 权限：technician新建角色返回403 (640ms)
+  ok 23 [chromium] › e2e\roles.spec.ts:204:5 › 角色权限 -> 新建角色 › ROLE-CREATE-06-pathologist. 权限：pathologist新建角色返回403 (616ms)
+  ok 24 [chromium] › e2e\roles.spec.ts:204:5 › 角色权限 -> 新建角色 › ROLE-CREATE-06-procurement. 权限：procurement新建角色返回403 (619ms)
+  ok 25 [chromium] › e2e\roles.spec.ts:204:5 › 角色权限 -> 新建角色 › ROLE-CREATE-06-finance. 权限：finance新建角色返回403 (659ms)
+  ok 26 [chromium] › e2e\roles.spec.ts:204:5 › 角色权限 -> 新建角色 › ROLE-CREATE-06-warehouse_manager. 权限：warehouse_manager新建角色返回403 (630ms)
+  ok 27 [chromium] › e2e\roles.spec.ts:210:3 › 角色权限 -> 新建角色 › ROLE-CREATE-07. 并发：快速双击新建按钮 (10.4s)
+  ok 28 [chromium] › e2e\roles.spec.ts:215:3 › 角色权限 -> 新建角色 › ROLE-CREATE-08. 异常恢复：网络中断后重试新建 (9.7s)
+  ok 29 [chromium] › e2e\roles.spec.ts:223:3 › 角色权限 -> 新建角色 › ROLE-CREATE-09. UI差异：admin前端显示新建按钮 (7.7s)
+  ok 30 [chromium] › e2e\roles.spec.ts:233:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-01. 正常用例：admin编辑角色权限保存成功 (4.3s)
+  ok 31 [chromium] › e2e\roles.spec.ts:244:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-02. 正常用例：admin修改角色名称保存成功 (3.2s)
+  ok 32 [chromium] › e2e\roles.spec.ts:256:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-03. 空数据边界：编辑后名称为空被阻止 (8.8s)
+  ok 33 [chromium] › e2e\roles.spec.ts:265:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-04. 表单校验：编辑不存在的角色返回404 (867ms)
+  ok 34 [chromium] › e2e\roles.spec.ts:271:5 › 角色权限 -> 编辑角色 › ROLE-EDIT-05-technician. 权限：technician编辑角色返回403 (616ms)
+  ok 35 [chromium] › e2e\roles.spec.ts:271:5 › 角色权限 -> 编辑角色 › ROLE-EDIT-05-pathologist. 权限：pathologist编辑角色返回403 (593ms)
+  ok 36 [chromium] › e2e\roles.spec.ts:271:5 › 角色权限 -> 编辑角色 › ROLE-EDIT-05-procurement. 权限：procurement编辑角色返回403 (606ms)
+  ok 37 [chromium] › e2e\roles.spec.ts:271:5 › 角色权限 -> 编辑角色 › ROLE-EDIT-05-finance. 权限：finance编辑角色返回403 (584ms)
+  ok 38 [chromium] › e2e\roles.spec.ts:271:5 › 角色权限 -> 编辑角色 › ROLE-EDIT-05-warehouse_manager. 权限：warehouse_manager编辑角色返回403 (656ms)
+  ok 39 [chromium] › e2e\roles.spec.ts:277:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-06. 并发：并发编辑同一角色 (1.1s)
+  ok 40 [chromium] › e2e\roles.spec.ts:286:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-07. 异常恢复：编辑时API 500后重试 (11.8s)
+  x  41 [chromium] › e2e\roles.spec.ts:293:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-08. UI差异：admin显示编辑按钮 (8.2s)
+  ok 42 [chromium] › e2e\roles.spec.ts:298:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-09. 正常用例：编辑后列表数据更新 (4.1s)
+  ok 43 [chromium] › e2e\roles.spec.ts:303:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-10. 业务冲突：编辑系统角色admin被阻止 (989ms)
+  ok 44 [chromium] › e2e\roles.spec.ts:317:3 › 角色权限 -> 删除角色 › ROLE-DELETE-01. 正常用例：admin删除自定义角色成功 (3.7s)
+  ok 45 [chromium] › e2e\roles.spec.ts:330:3 › 角色权限 -> 删除角色 › ROLE-DELETE-02. 业务冲突：删除admin角色被阻止 (1.2s)
+  ok 46 [chromium] › e2e\roles.spec.ts:338:3 › 角色权限 -> 删除角色 › ROLE-DELETE-03. 并发：并发删除同一角色 (1.0s)
+  ok 47 [chromium] › e2e\roles.spec.ts:347:3 › 角色权限 -> 删除角色 › ROLE-DELETE-04. 异常恢复：删除时API 500后重试 (958ms)
+  ok 48 [chromium] › e2e\roles.spec.ts:357:5 › 角色权限 -> 删除角色 › ROLE-DELETE-05-technician. 权限：technician删除角色返回403 (644ms)
+  ok 49 [chromium] › e2e\roles.spec.ts:357:5 › 角色权限 -> 删除角色 › ROLE-DELETE-05-pathologist. 权限：pathologist删除角色返回403 (598ms)
+  ok 50 [chromium] › e2e\roles.spec.ts:357:5 › 角色权限 -> 删除角色 › ROLE-DELETE-05-procurement. 权限：procurement删除角色返回403 (638ms)
+  ok 51 [chromium] › e2e\roles.spec.ts:357:5 › 角色权限 -> 删除角色 › ROLE-DELETE-05-finance. 权限：finance删除角色返回403 (614ms)
+  ok 52 [chromium] › e2e\roles.spec.ts:357:5 › 角色权限 -> 删除角色 › ROLE-DELETE-05-warehouse_manager. 权限：warehouse_manager删除角色返回403 (649ms)
+  x  53 [chromium] › e2e\roles.spec.ts:363:3 › 角色权限 -> 删除角色 › ROLE-DELETE-06. UI差异：admin显示删除按钮 (3.8s)
+  ok 54 [chromium] › e2e\roles.spec.ts:368:3 › 角色权限 -> 删除角色 › ROLE-DELETE-07. 正常用例：删除后列表自动刷新 (3.9s)
+  x  55 [chromium] › e2e\roles.spec.ts:383:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-01. 正常用例：点击查看详情打开弹窗 (4.0s)
+  ok 56 [chromium] › e2e\roles.spec.ts:392:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-02. 正常用例：详情弹窗显示用户数量 (3.4s)
+  ok 57 [chromium] › e2e\roles.spec.ts:403:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-03. 正常用例：admin角色详情显示全部权限 (3.3s)
+  ok 58 [chromium] › e2e\roles.spec.ts:413:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-04. 正常用例：详情弹窗关闭后恢复列表 (3.2s)
+  ok 59 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-01. technician GET /roles 返回403 (666ms)
+  ok 60 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-02. pathologist GET /roles 返回403 (617ms)
+  ok 61 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-03. procurement GET /roles 返回403 (591ms)
+  ok 62 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-04. finance GET /roles 返回403 (593ms)
+  ok 63 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-05. warehouse_manager GET /roles 返回403 (592ms)
+  ok 64 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-06. admin GET /roles 返回200 (601ms)
+  ok 65 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-07. technician POST /roles 返回403 (623ms)
+  ok 66 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-08. technician PUT /roles/test-id 返回403 (643ms)
+  ok 67 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-09. technician DELETE /roles/test-id 返回403 (622ms)
+  ok 68 [chromium] › e2e\roles.spec.ts:442:5 › 角色权限 -> 角色权限矩阵补充 › TC-PERM-ROLE-10. admin PUT /roles/test-id 返回404 (607ms)
+  ok 69 [chromium] › e2e\roles.spec.ts:454:3 › 角色权限 -> 业务流程树 › BF-ROLE-01. 主路径：创建角色→配置权限→保存 (4.8s)
+  ok 70 [chromium] › e2e\roles.spec.ts:460:3 › 角色权限 -> 业务流程树 › BF-ROLE-02. 分支：创建角色时不填名称被阻止 (4.3s)
+  ok 71 [chromium] › e2e\roles.spec.ts:466:3 › 角色权限 -> 业务流程树 › BF-ROLE-03. 分支：编辑角色后取消不保存 (3.1s)
+  ok 72 [chromium] › e2e\roles.spec.ts:471:3 › 角色权限 -> 业务流程树 › BF-ROLE-04. 分支：删除角色弹窗点击取消 (3.1s)
+  ok 73 [chromium] › e2e\roles.spec.ts:476:3 › 角色权限 -> 业务流程树 › BF-ROLE-05. 分支：搜索角色后查看详情 (4.0s)
+  ok 74 [chromium] › e2e\roles.spec.ts:483:3 › 角色权限 -> 业务流程树 › BF-ROLE-06. 分支：切换Tab后编辑角色 (4.3s)
+  ok 75 [chromium] › e2e\roles.spec.ts:488:3 › 角色权限 -> 业务流程树 › BF-ROLE-07. 分支：无权限用户访问被拦截 (3.0s)
+  ok 76 [chromium] › e2e\roles.spec.ts:492:3 › 角色权限 -> 业务流程树 › BF-ROLE-08. 分支：查看角色详情后点击编辑 (3.4s)
+  ok 77 [chromium] › e2e\roles.spec.ts:507:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-01. 权限树形表格渲染正确 (3.6s)
+  ok 78 [chromium] › e2e\roles.spec.ts:515:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-02. 角色与用户关联数显示 (3.1s)
+  ok 79 [chromium] › e2e\roles.spec.ts:520:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-03. 系统角色和自定义角色标签区分 (3.2s)
+  ok 80 [chromium] › e2e\roles.spec.ts:525:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-04. 角色数据权限范围选项 (3.7s)
+  x  81 [chromium] › e2e\roles.spec.ts:533:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-05. 角色编码自动生成或只读 (3.8s)
+  ok 82 [chromium] › e2e\roles.spec.ts:543:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-06. 角色状态active/inactive (3.6s)
+  ok 83 [chromium] › e2e\roles.spec.ts:547:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-07. 分页功能正确 (3.2s)
+  ok 84 [chromium] › e2e\roles.spec.ts:552:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-08. 角色权限checkbox联动 (4.3s)
+  ok 85 [chromium] › e2e\roles.spec.ts:560:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-09. 响应式布局检查 (3.2s)
+  ok 86 [chromium] › e2e\roles.spec.ts:566:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-10. 角色API响应格式验证 (913ms)
+  ok 87 [chromium] › e2e\roles.spec.ts:572:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-11. 页面加载性能检查 (4.5s)
+  ok 88 [chromium] › e2e\roles.spec.ts:578:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-12. 角色卡片hover效果 (3.2s)
+
+
+  1) [chromium] › e2e\roles.spec.ts:72:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-03. 正常用例：角色以卡片形式展示 ───────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32mtrue[39m
+    Received: [31mfalse[39m
+
+      73 |     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/roles`); await page.waitForTimeout(1500)
+      74 |     const btn = page.locator('text=/查看详情/i').first()
+    > 75 |     expect(await btn.isVisible().catch(() => false)).toBe(true)
+         |                                                      ^
+      76 |   })
+      77 |   test('ROLE-LIST-04. 空数据边界：无角色数据卡片显示空状态', async ({ page }) => {
+      78 |     await page.route('**/api/v1/roles**', r => r.fulfill({ status: 200, body: JSON.stringify({ data: { list: [], pagination: { total: 0 } } }) }))
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:75:54
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-03-正常用例：角色以卡片形式展示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---查看角色列表-ROLE-LIST-03-正常用例：角色以卡片形式展示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---查看角色列表-ROLE-LIST-03-正常用例：角色以卡片形式展示-chromium\error-context.md
+
+  2) [chromium] › e2e\roles.spec.ts:293:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-08. UI差异：admin显示编辑按钮 ──────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32mtrue[39m
+    Received: [31mfalse[39m
+
+      294 |     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/roles`); await page.waitForTimeout(1500)
+      295 |     const btn = page.locator('text=/编辑/i').first()
+    > 296 |     expect(await btn.isVisible().catch(() => false)).toBe(true)
+          |                                                      ^
+      297 |   })
+      298 |   test('ROLE-EDIT-09. 正常用例：编辑后列表数据更新', async ({ page }) => {
+      299 |     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/roles`); await page.waitForTimeout(1500)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:296:54
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-08-UI差异：admin显示编辑按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---编辑角色-ROLE-EDIT-08-UI差异：admin显示编辑按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---编辑角色-ROLE-EDIT-08-UI差异：admin显示编辑按钮-chromium\error-context.md
+
+  3) [chromium] › e2e\roles.spec.ts:363:3 › 角色权限 -> 删除角色 › ROLE-DELETE-06. UI差异：admin显示删除按钮 ────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32mtrue[39m
+    Received: [31mfalse[39m
+
+      364 |     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/roles`); await page.waitForTimeout(1500)
+      365 |     const btn = page.locator('text=/删除/i').first()
+    > 366 |     expect(await btn.isVisible().catch(() => false)).toBe(true)
+          |                                                      ^
+      367 |   })
+      368 |   test('ROLE-DELETE-07. 正常用例：删除后列表自动刷新', async ({ page }) => {
+      369 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:366:54
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---删除角色-ROLE-DELETE-06-UI差异：admin显示删除按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---删除角色-ROLE-DELETE-06-UI差异：admin显示删除按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---删除角色-ROLE-DELETE-06-UI差异：admin显示删除按钮-chromium\error-context.md
+
+  4) [chromium] › e2e\roles.spec.ts:383:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-01. 正常用例：点击查看详情打开弹窗 ───────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32mtrue[39m
+    Received: [31mfalse[39m
+
+      386 |     if (await detail.isVisible().catch(() => false)) { await detail.click(); await page.waitForTimeout(1000) }
+      387 |     const title = page.locator('text=/角色详情/i').first()
+    > 388 |     expect(await title.isVisible().catch(() => false)).toBe(true)
+          |                                                        ^
+      389 |     const close = page.locator('text=/关闭/i').first()
+      390 |     if (await close.isVisible().catch(() => false)) await close.click()
+      391 |   })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:388:56
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-01-正常用例：点击查看详情打开弹窗-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-01-正常用例：点击查看详情打开弹窗-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---角色详情弹窗-ROLE-DETAIL-01-正常用例：点击查看详情打开弹窗-chromium\error-context.md
+
+  5) [chromium] › e2e\roles.spec.ts:533:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-05. 角色编码自动生成或只读 ────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mnull[39m
+
+      536 |     const codeInput = page.locator('input[placeholder*="自动生成"], input[readonly]').first()
+      537 |     if (await codeInput.isVisible().catch(() => false)) {
+    > 538 |       expect(await codeInput.isDisabled().catch(() => false) || await codeInput.getAttribute('readonly')).toBeTruthy()
+          |                                                                                                           ^
+      539 |     }
+      540 |     const cancel = page.locator('text=/取消|关闭/i').first()
+      541 |     if (await cancel.isVisible().catch(() => false)) await cancel.click()
+        at d:\Git\COREONE\最新代码\前端代码\e2e\roles.spec.ts:538:107
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-05-角色编码自动生成或只读-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-05-角色编码自动生成或只读-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\roles-角色权限---盲点分析补充-BLIND-ROLE-05-角色编码自动生成或只读-chromium\error-context.md
+
+  5 failed
+    [chromium] › e2e\roles.spec.ts:72:3 › 角色权限 -> 查看角色列表 › ROLE-LIST-03. 正常用例：角色以卡片形式展示 ────────────
+    [chromium] › e2e\roles.spec.ts:293:3 › 角色权限 -> 编辑角色 › ROLE-EDIT-08. UI差异：admin显示编辑按钮 ───────────
+    [chromium] › e2e\roles.spec.ts:363:3 › 角色权限 -> 删除角色 › ROLE-DELETE-06. UI差异：admin显示删除按钮 ─────────
+    [chromium] › e2e\roles.spec.ts:383:3 › 角色权限 -> 角色详情弹窗 › ROLE-DETAIL-01. 正常用例：点击查看详情打开弹窗 ────────
+    [chromium] › e2e\roles.spec.ts:533:3 › 角色权限 -> 盲点分析补充 › BLIND-ROLE-05. 角色编码自动生成或只读 ─────────────
+  83 passed (5.4m)

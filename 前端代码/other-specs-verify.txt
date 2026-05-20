@@ -1,0 +1,459 @@
+
+Running 354 tests using 1 worker
+
+  ok   1 [chromium] › e2e\locations.spec.ts:72:5 › 库位管理 -> 查看库位树 › LOC-LIST-01-admin. 正常用例：admin可查看库位列表 (2.4s)
+  ok   2 [chromium] › e2e\locations.spec.ts:72:5 › 库位管理 -> 查看库位树 › LOC-LIST-01-warehouse_manager. 正常用例：warehouse_manager可查看库位列表 (1.9s)
+  ok   3 [chromium] › e2e\locations.spec.ts:78:3 › 库位管理 -> 查看库位树 › LOC-LIST-02. 空数据边界：无库位数据显示空状态 (2.5s)
+  ok   4 [chromium] › e2e\locations.spec.ts:83:3 › 库位管理 -> 查看库位树 › LOC-LIST-03. 权限：technician访问返回403 (708ms)
+  ok   5 [chromium] › e2e\locations.spec.ts:87:3 › 库位管理 -> 查看库位树 › LOC-LIST-04. 权限：pathologist访问返回403 (605ms)
+  ok   6 [chromium] › e2e\locations.spec.ts:91:3 › 库位管理 -> 查看库位树 › LOC-LIST-05. 权限：procurement访问返回403 (607ms)
+  ok   7 [chromium] › e2e\locations.spec.ts:95:3 › 库位管理 -> 查看库位树 › LOC-LIST-06. 权限：finance访问返回403 (598ms)
+  ok   8 [chromium] › e2e\locations.spec.ts:99:3 › 库位管理 -> 查看库位树 › LOC-LIST-07. 异常恢复：API 500显示错误Toast (2.6s)
+  ok   9 [chromium] › e2e\locations.spec.ts:104:3 › 库位管理 -> 查看库位树 › LOC-LIST-08. UI差异：admin显示新增编辑删除按钮 (2.6s)
+  ok  10 [chromium] › e2e\locations.spec.ts:109:3 › 库位管理 -> 查看库位树 › LOC-LIST-09. UI差异：warehouse_manager仅显示查看 (3.0s)
+  ok  11 [chromium] › e2e\locations.spec.ts:114:3 › 库位管理 -> 查看库位树 › LOC-LIST-10. 正常用例：列表按区域显示树形结构 (3.0s)
+  ok  12 [chromium] › e2e\locations.spec.ts:125:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-01. 正常用例：选择refrigerator仅显示冷藏柜 (947ms)
+  ok  13 [chromium] › e2e\locations.spec.ts:130:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-02. 空数据边界：该类型无库位 (918ms)
+  ok  14 [chromium] › e2e\locations.spec.ts:135:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-03. 正常用例：重置类型筛选 (2.8s)
+  ok  15 [chromium] › e2e\locations.spec.ts:140:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-04. UI差异：各角色类型筛选可见 (3.7s)
+  ok  16 [chromium] › e2e\locations.spec.ts:147:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-05. 并发：快速切换类型 (2.8s)
+  ok  17 [chromium] › e2e\locations.spec.ts:154:3 › 库位管理 -> 按类型筛选 › LOC-TYPE-06. 异常恢复：类型筛选时API错误 (2.7s)
+  ok  18 [chromium] › e2e\locations.spec.ts:165:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-01. 正常用例：选择A区仅显示A区库位 (1.1s)
+  ok  19 [chromium] › e2e\locations.spec.ts:170:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-02. 空数据边界：该区域无库位 (961ms)
+  ok  20 [chromium] › e2e\locations.spec.ts:175:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-03. 正常用例：重置区域筛选 (2.4s)
+  ok  21 [chromium] › e2e\locations.spec.ts:180:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-04. UI差异：各角色区域筛选可见 (3.2s)
+  ok  22 [chromium] › e2e\locations.spec.ts:187:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-05. 并发：快速切换区域 (2.2s)
+  ok  23 [chromium] › e2e\locations.spec.ts:194:3 › 库位管理 -> 按区域筛选 › LOC-ZONE-06. 异常恢复：区域筛选时API错误 (2.4s)
+  ok  24 [chromium] › e2e\locations.spec.ts:205:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-01. 正常用例：选择active仅显示在用的库位 (909ms)
+  ok  25 [chromium] › e2e\locations.spec.ts:210:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-02. 空数据边界：无active库位 (1.0s)
+  ok  26 [chromium] › e2e\locations.spec.ts:215:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-03. 正常用例：重置状态筛选 (2.4s)
+  ok  27 [chromium] › e2e\locations.spec.ts:220:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-04. UI差异：各角色状态筛选可见 (3.5s)
+  ok  28 [chromium] › e2e\locations.spec.ts:227:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-05. 并发：快速切换状态 (2.3s)
+  ok  29 [chromium] › e2e\locations.spec.ts:234:3 › 库位管理 -> 按状态筛选 › LOC-STATUS-06. 异常恢复：状态筛选时API错误 (2.6s)
+  ok  30 [chromium] › e2e\locations.spec.ts:245:3 › 库位管理 -> 新增库位 › LOC-CREATE-01. 正常用例：admin新增库位成功 (621ms)
+  ok  31 [chromium] › e2e\locations.spec.ts:252:3 › 库位管理 -> 新增库位 › LOC-CREATE-02. 空数据边界：capacity=0合法 (632ms)
+  ok  32 [chromium] › e2e\locations.spec.ts:259:3 › 库位管理 -> 新增库位 › LOC-CREATE-03. 表单校验：未传name返回400 (637ms)
+  ok  33 [chromium] › e2e\locations.spec.ts:264:3 › 库位管理 -> 新增库位 › LOC-CREATE-04. 表单校验：未传zone返回400 (614ms)
+  ok  34 [chromium] › e2e\locations.spec.ts:270:5 › 库位管理 -> 新增库位 › LOC-CREATE-05-technician. 权限：technician新增库位返回403 (600ms)
+  ok  35 [chromium] › e2e\locations.spec.ts:270:5 › 库位管理 -> 新增库位 › LOC-CREATE-05-pathologist. 权限：pathologist新增库位返回403 (614ms)
+  ok  36 [chromium] › e2e\locations.spec.ts:270:5 › 库位管理 -> 新增库位 › LOC-CREATE-05-procurement. 权限：procurement新增库位返回403 (588ms)
+  ok  37 [chromium] › e2e\locations.spec.ts:270:5 › 库位管理 -> 新增库位 › LOC-CREATE-05-finance. 权限：finance新增库位返回403 (636ms)
+  ok  38 [chromium] › e2e\locations.spec.ts:278:3 › 库位管理 -> 新增库位 › LOC-CREATE-06. 并发：快速双击提交 (630ms)
+  ok  39 [chromium] › e2e\locations.spec.ts:284:3 › 库位管理 -> 新增库位 › LOC-CREATE-07. 异常恢复：提交时网络中断后重试 (696ms)
+  ok  40 [chromium] › e2e\locations.spec.ts:291:3 › 库位管理 -> 新增库位 › LOC-CREATE-08. UI差异：admin显示新增库位按钮 (2.7s)
+  ok  41 [chromium] › e2e\locations.spec.ts:296:3 › 库位管理 -> 新增库位 › LOC-CREATE-09. UI差异：warehouse_manager不显示新增按钮 (2.7s)
+  ok  42 [chromium] › e2e\locations.spec.ts:301:3 › 库位管理 -> 新增库位 › LOC-CREATE-10. 正常用例：新增库位后code自动生成 (642ms)
+  ok  43 [chromium] › e2e\locations.spec.ts:308:3 › 库位管理 -> 新增库位 › LOC-CREATE-11. 正常用例：新增库位后used=0 (714ms)
+  ok  44 [chromium] › e2e\locations.spec.ts:315:3 › 库位管理 -> 新增库位 › LOC-CREATE-12. 边界：超长name (779ms)
+  ok  45 [chromium] › e2e\locations.spec.ts:322:3 › 库位管理 -> 新增库位 › LOC-CREATE-13. 边界：负数capacity (760ms)
+  ok  46 [chromium] › e2e\locations.spec.ts:329:3 › 库位管理 -> 新增库位 › LOC-CREATE-14. 正常用例：入库单库位下拉同步 (815ms)
+  ok  47 [chromium] › e2e\locations.spec.ts:340:3 › 库位管理 -> 编辑库位 › LOC-EDIT-01. 正常用例：admin编辑库位capacity成功 (732ms)
+  ok  48 [chromium] › e2e\locations.spec.ts:347:3 › 库位管理 -> 编辑库位 › LOC-EDIT-02. 空数据边界：capacity=0 (708ms)
+  x   49 [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-warehouse_manager. 权限：warehouse_manager编辑库位返回403 (959ms)
+  ok  50 [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-technician. 权限：technician编辑库位返回403 (982ms)
+  ok  51 [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-pathologist. 权限：pathologist编辑库位返回403 (946ms)
+  ok  52 [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-procurement. 权限：procurement编辑库位返回403 (944ms)
+  ok  53 [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-finance. 权限：finance编辑库位返回403 (906ms)
+  ok  54 [chromium] › e2e\locations.spec.ts:364:3 › 库位管理 -> 编辑库位 › LOC-EDIT-04. 业务冲突：编辑used字段不被更新 (605ms)
+  ok  55 [chromium] › e2e\locations.spec.ts:371:3 › 库位管理 -> 编辑库位 › LOC-EDIT-05. 并发：并发编辑同一库位 (639ms)
+  ok  56 [chromium] › e2e\locations.spec.ts:381:3 › 库位管理 -> 编辑库位 › LOC-EDIT-06. 异常恢复：编辑时API 500后重试 (628ms)
+  ok  57 [chromium] › e2e\locations.spec.ts:388:3 › 库位管理 -> 编辑库位 › LOC-EDIT-07. UI差异：admin显示编辑按钮 (3.4s)
+  ok  58 [chromium] › e2e\locations.spec.ts:393:3 › 库位管理 -> 编辑库位 › LOC-EDIT-08. UI差异：warehouse_manager不显示编辑按钮 (2.7s)
+  ok  59 [chromium] › e2e\locations.spec.ts:398:3 › 库位管理 -> 编辑库位 › LOC-EDIT-09. 正常用例：编辑后列表数据更新 (655ms)
+  x   60 [chromium] › e2e\locations.spec.ts:404:3 › 库位管理 -> 编辑库位 › LOC-EDIT-10. 表单校验：编辑不存在的库位返回404 (598ms)
+  ok  61 [chromium] › e2e\locations.spec.ts:409:3 › 库位管理 -> 编辑库位 › LOC-EDIT-11. 边界：编辑name为空字符串 (690ms)
+  ok  62 [chromium] › e2e\locations.spec.ts:416:3 › 库位管理 -> 编辑库位 › LOC-EDIT-12. 异常恢复：编辑时网络中断 (665ms)
+  ok  63 [chromium] › e2e\locations.spec.ts:429:3 › 库位管理 -> 删除库位 › LOC-DEL-01. 正常用例：admin删除无库存关联库位 (643ms)
+  x   64 [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-warehouse_manager. 权限：warehouse_manager删除库位返回403 (925ms)
+  ok  65 [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-technician. 权限：technician删除库位返回403 (925ms)
+  ok  66 [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-pathologist. 权限：pathologist删除库位返回403 (947ms)
+  ok  67 [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-procurement. 权限：procurement删除库位返回403 (924ms)
+  ok  68 [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-finance. 权限：finance删除库位返回403 (875ms)
+  ok  69 [chromium] › e2e\locations.spec.ts:449:3 › 库位管理 -> 删除库位 › LOC-DEL-03. 业务冲突：有关联inventory删除后悬空引用 (622ms)
+  ok  70 [chromium] › e2e\locations.spec.ts:456:3 › 库位管理 -> 删除库位 › LOC-DEL-04. 并发：并发删除同一库位 (603ms)
+  ok  71 [chromium] › e2e\locations.spec.ts:469:3 › 库位管理 -> 删除库位 › LOC-DEL-05. 异常恢复：删除时API 500后重试 (670ms)
+  ok  72 [chromium] › e2e\locations.spec.ts:480:3 › 库位管理 -> 删除库位 › LOC-DEL-06. UI差异：admin显示删除按钮 (3.0s)
+  ok  73 [chromium] › e2e\locations.spec.ts:485:3 › 库位管理 -> 删除库位 › LOC-DEL-07. UI差异：warehouse_manager不显示删除按钮 (2.7s)
+  ok  74 [chromium] › e2e\locations.spec.ts:490:3 › 库位管理 -> 删除库位 › LOC-DEL-08. 表单校验：删除不存在的库位返回404 (667ms)
+  ok  75 [chromium] › e2e\locations.spec.ts:495:3 › 库位管理 -> 删除库位 › LOC-DEL-09. 业务冲突：删除后再次删除返回404 (702ms)
+  ok  76 [chromium] › e2e\locations.spec.ts:506:3 › 库位管理 -> 删除库位 › LOC-DEL-10. 正常用例：删除后列表刷新 (983ms)
+  ok  77 [chromium] › e2e\locations.spec.ts:514:3 › 库位管理 -> 删除库位 › LOC-DEL-11. 异常恢复：删除时网络中断 (712ms)
+  ok  78 [chromium] › e2e\locations.spec.ts:522:3 › 库位管理 -> 删除库位 › LOC-DEL-12. 边界：删除后其他角色查看 (3.3s)
+  ok  79 [chromium] › e2e\locations.spec.ts:539:3 › 库位管理 -> 分页切换 › LOC-PAGE-01. 正常用例：切换到第2页 (3.7s)
+  ok  80 [chromium] › e2e\locations.spec.ts:544:3 › 库位管理 -> 分页切换 › LOC-PAGE-02. 边界：仅1页分页器隐藏 (2.5s)
+  ok  81 [chromium] › e2e\locations.spec.ts:549:3 › 库位管理 -> 分页切换 › LOC-PAGE-03. 表单校验：page=0后端修正为1 (773ms)
+  ok  82 [chromium] › e2e\locations.spec.ts:557:3 › 库位管理 -> 分页切换 › LOC-PAGE-04. 边界：page=999返回空列表 (701ms)
+  ok  83 [chromium] › e2e\locations.spec.ts:562:3 › 库位管理 -> 分页切换 › LOC-PAGE-05. 边界：pageSize=1 (764ms)
+  ok  84 [chromium] › e2e\locations.spec.ts:568:3 › 库位管理 -> 分页切换 › LOC-PAGE-06. 边界：pageSize=100 (665ms)
+  ok  85 [chromium] › e2e\locations.spec.ts:573:3 › 库位管理 -> 分页切换 › LOC-PAGE-07. 并发：快速切换分页 (3.0s)
+  ok  86 [chromium] › e2e\locations.spec.ts:580:3 › 库位管理 -> 分页切换 › LOC-PAGE-08. UI差异：各角色分页一致 (3.4s)
+  ok  87 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-049. technician GET /locations 返回403 (733ms)
+  ok  88 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-050. pathologist GET /locations 返回403 (635ms)
+  ok  89 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-051. procurement GET /locations 返回403 (665ms)
+  ok  90 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-052. finance GET /locations 返回403 (682ms)
+  x   91 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-053. warehouse_manager POST /locations 返回403 (663ms)
+  ok  92 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-054. technician POST /locations 返回403 (669ms)
+  ok  93 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-055. pathologist POST /locations 返回403 (631ms)
+  ok  94 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-056. procurement POST /locations 返回403 (621ms)
+  ok  95 [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-057. finance POST /locations 返回403 (617ms)
+  ok  96 [chromium] › e2e\locations.spec.ts:613:3 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-LOC-EXTRA-01. admin GET /locations 返回200 (662ms)
+  ok  97 [chromium] › e2e\locations.spec.ts:618:3 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-LOC-EXTRA-02. warehouse_manager GET /locations 返回200 (653ms)
+  ok  98 [chromium] › e2e\locations.spec.ts:629:3 › 库位管理 -> 业务流程树 › BF-LOC-01. 主路径：登录→进入库位管理→新增库位→填写信息→提交→列表刷新 (669ms)
+  ok  99 [chromium] › e2e\locations.spec.ts:636:3 › 库位管理 -> 业务流程树 › BF-LOC-02. 分支：关闭弹窗不保存 (3.2s)
+  ok 100 [chromium] › e2e\locations.spec.ts:641:3 › 库位管理 -> 业务流程树 › BF-LOC-03. 分支：必填字段漏填 (733ms)
+  ok 101 [chromium] › e2e\locations.spec.ts:646:3 › 库位管理 -> 业务流程树 › BF-LOC-04. 分支：刷新页面后新库位仍在列表 (3.2s)
+  ok 102 [chromium] › e2e\locations.spec.ts:653:3 › 库位管理 -> 业务流程树 › BF-LOC-05. 分支：删除有库存关联的库位 (708ms)
+  -  103 [chromium] › e2e\locations.spec.ts:660:3 › 库位管理 -> 业务流程树 › BF-LOC-06. 分支：编辑库位后入库单下拉同步
+  x  104 [chromium] › e2e\locations.spec.ts:666:3 › 库位管理 -> 业务流程树 › BF-LOC-07. 分支：warehouse_manager尝试新增被403拦截 (693ms)
+  ok 105 [chromium] › e2e\locations.spec.ts:673:3 › 库位管理 -> 业务流程树 › BF-LOC-08. 分支：快速筛选后分页 (3.1s)
+  ok 106 [chromium] › e2e\locations.spec.ts:684:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-01. 库位编码自动生成规则 (685ms)
+  ok 107 [chromium] › e2e\locations.spec.ts:691:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-02. 库位容量使用率计算 (1.0s)
+  ok 108 [chromium] › e2e\locations.spec.ts:696:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-03. 库位树形结构展示 (2.8s)
+  ok 109 [chromium] › e2e\locations.spec.ts:701:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-04. 库位列表导出功能 (2.9s)
+  ok 110 [chromium] › e2e\locations.spec.ts:706:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-05. 库位打印功能 (2.8s)
+  ok 111 [chromium] › e2e\locations.spec.ts:711:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-06. 库位页面响应式布局 (3.0s)
+  ok 112 [chromium] › e2e\locations.spec.ts:717:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-07. 库位页面加载性能 (2.2s)
+  ok 113 [chromium] › e2e\locations.spec.ts:724:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-08. 库位搜索功能 (3.3s)
+  ok 114 [chromium] › e2e\locations.spec.ts:734:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-09. 库位详情弹窗 (2.8s)
+  ok 115 [chromium] › e2e\locations.spec.ts:741:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-10. 库位字段XSS防护 (784ms)
+  ok 116 [chromium] › e2e\locations.spec.ts:748:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-11. 库位字段SQL注入防护 (664ms)
+  ok 117 [chromium] › e2e\locations.spec.ts:755:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-12. 库位API响应格式验证 (664ms)
+  ok 118 [chromium] › e2e\locations.spec.ts:770:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-13. 库位容量预警 (1.1s)
+  ok 119 [chromium] › e2e\locations.spec.ts:783:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-14. 库位状态颜色标签 (2.8s)
+  ok 120 [chromium] › e2e\locations.spec.ts:788:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-15. 库位排序功能 (978ms)
+  ok 121 [chromium] › e2e\locations.spec.ts:793:3 › 库位管理 -> 盲点分析补充 › BLIND-LOC-16. 多角色同时操作互不影响 (3.3s)
+  ok 122 [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-admin. 正常用例：admin可查看项目列表 (1.8s)
+  ok 123 [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-technician. 正常用例：technician可查看项目列表 (2.2s)
+  ok 124 [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-pathologist. 正常用例：pathologist可查看项目列表 (1.9s)
+  ok 125 [chromium] › e2e\projects.spec.ts:82:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-02. 空数据边界：无项目数据 (2.7s)
+  ok 126 [chromium] › e2e\projects.spec.ts:87:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-03. 权限：warehouse_manager访问返回403 (704ms)
+  ok 127 [chromium] › e2e\projects.spec.ts:91:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-04. 权限：procurement访问返回403 (679ms)
+  ok 128 [chromium] › e2e\projects.spec.ts:95:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-05. 权限：finance访问返回403 (699ms)
+  ok 129 [chromium] › e2e\projects.spec.ts:99:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-06. 异常恢复：API 500 (2.6s)
+  ok 130 [chromium] › e2e\projects.spec.ts:104:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-07. UI差异：admin显示新增编辑删除 (2.8s)
+  ok 131 [chromium] › e2e\projects.spec.ts:109:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-08. UI差异：technician仅显示查看 (2.9s)
+  ok 132 [chromium] › e2e\projects.spec.ts:114:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-09. 正常用例：显示编码名称类型周期BOM样本数 (2.9s)
+  ok 133 [chromium] › e2e\projects.spec.ts:119:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-10. 并发：快速刷新 (2.2s)
+  ok 134 [chromium] › e2e\projects.spec.ts:131:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-01. 正常用例：选择ihc仅显示免疫组化 (1.0s)
+  ok 135 [chromium] › e2e\projects.spec.ts:136:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-02. 空数据边界：该类型无项目 (962ms)
+  ok 136 [chromium] › e2e\projects.spec.ts:141:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-03. 正常用例：重置筛选 (2.6s)
+  ok 137 [chromium] › e2e\projects.spec.ts:146:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-04. UI差异：各角色类型筛选可见 (4.8s)
+  ok 138 [chromium] › e2e\projects.spec.ts:153:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-05. 并发：快速切换类型 (2.4s)
+  ok 139 [chromium] › e2e\projects.spec.ts:160:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-06. 异常恢复：类型筛选API错误 (2.6s)
+  ok 140 [chromium] › e2e\projects.spec.ts:171:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-01. 正常用例：选择active仅显示启用 (1.0s)
+  ok 141 [chromium] › e2e\projects.spec.ts:176:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-02. 空数据边界：无active项目 (930ms)
+  ok 142 [chromium] › e2e\projects.spec.ts:181:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-03. 正常用例：重置筛选 (2.4s)
+  ok 143 [chromium] › e2e\projects.spec.ts:186:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-04. UI差异：各角色状态筛选可见 (4.6s)
+  ok 144 [chromium] › e2e\projects.spec.ts:193:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-05. 并发：快速切换状态 (2.3s)
+  ok 145 [chromium] › e2e\projects.spec.ts:200:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-06. 异常恢复：状态筛选API错误 (2.4s)
+  ok 146 [chromium] › e2e\projects.spec.ts:211:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-01. 正常用例：搜索HER2 (934ms)
+  ok 147 [chromium] › e2e\projects.spec.ts:216:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-02. 空数据边界：无结果 (991ms)
+  ok 148 [chromium] › e2e\projects.spec.ts:222:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-03. 并发：快速连续输入 (3.0s)
+  ok 149 [chromium] › e2e\projects.spec.ts:233:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-04. 异常恢复：搜索网络断 (2.4s)
+  ok 150 [chromium] › e2e\projects.spec.ts:238:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-05. 边界：超长字符串 (937ms)
+  ok 151 [chromium] › e2e\projects.spec.ts:243:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-06. UI差异：各角色搜索可见 (4.6s)
+  ok 152 [chromium] › e2e\projects.spec.ts:256:3 › 检测项目 -> 新建项目 › PROJ-CREATE-01. 正常用例：admin新建项目成功 (715ms)
+  ok 153 [chromium] › e2e\projects.spec.ts:265:3 › 检测项目 -> 新建项目 › PROJ-CREATE-02. 空数据边界：cycle留空 (797ms)
+  ok 154 [chromium] › e2e\projects.spec.ts:272:3 › 检测项目 -> 新建项目 › PROJ-CREATE-03. 表单校验：未传code返回400 (714ms)
+  ok 155 [chromium] › e2e\projects.spec.ts:277:3 › 检测项目 -> 新建项目 › PROJ-CREATE-04. 表单校验：未传name返回400 (676ms)
+  ok 156 [chromium] › e2e\projects.spec.ts:282:3 › 检测项目 -> 新建项目 › PROJ-CREATE-05. 表单校验：未传type返回400 (671ms)
+  ok 157 [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-technician. 权限：technician新建返回403 (645ms)
+  ok 158 [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-pathologist. 权限：pathologist新建返回403 (611ms)
+  ok 159 [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-warehouse_manager. 权限：warehouse_manager新建返回403 (595ms)
+  ok 160 [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-procurement. 权限：procurement新建返回403 (620ms)
+  ok 161 [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-finance. 权限：finance新建返回403 (637ms)
+  ok 162 [chromium] › e2e\projects.spec.ts:296:3 › 检测项目 -> 新建项目 › PROJ-CREATE-07. 业务冲突：code已存在返回409 (637ms)
+  ok 163 [chromium] › e2e\projects.spec.ts:303:3 › 检测项目 -> 新建项目 › PROJ-CREATE-08. 并发：快速双击 (635ms)
+  ok 164 [chromium] › e2e\projects.spec.ts:309:3 › 检测项目 -> 新建项目 › PROJ-CREATE-09. 异常恢复：网络中断后重试 (642ms)
+  ok 165 [chromium] › e2e\projects.spec.ts:316:3 › 检测项目 -> 新建项目 › PROJ-CREATE-10. UI差异：admin显示新增按钮 (2.6s)
+  ok 166 [chromium] › e2e\projects.spec.ts:321:3 › 检测项目 -> 新建项目 › PROJ-CREATE-11. UI差异：technician不显示新增按钮 (2.7s)
+  ok 167 [chromium] › e2e\projects.spec.ts:326:3 › 检测项目 -> 新建项目 › PROJ-CREATE-12. UI差异：pathologist不显示新增按钮 (2.6s)
+  ok 168 [chromium] › e2e\projects.spec.ts:331:3 › 检测项目 -> 新建项目 › PROJ-CREATE-13. 正常用例：新建后status=active (619ms)
+  ok 169 [chromium] › e2e\projects.spec.ts:338:3 › 检测项目 -> 新建项目 › PROJ-CREATE-14. 边界：超长code (687ms)
+  ok 170 [chromium] › e2e\projects.spec.ts:345:3 › 检测项目 -> 新建项目 › PROJ-CREATE-15. 边界：非法type值 (605ms)
+  ok 171 [chromium] › e2e\projects.spec.ts:352:3 › 检测项目 -> 新建项目 › PROJ-CREATE-16. 正常用例：关联BOM创建项目 (620ms)
+  -  172 [chromium] › e2e\projects.spec.ts:366:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-01. 正常用例：admin编辑项目名称成功
+  -  173 [chromium] › e2e\projects.spec.ts:373:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-02. 空数据边界：清空必填字段
+  -  174 [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-technician. 权限：technician编辑返回403
+  -  175 [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-pathologist. 权限：pathologist编辑返回403
+  -  176 [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-warehouse_manager. 权限：warehouse_manager编辑返回403
+  -  177 [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-procurement. 权限：procurement编辑返回403
+  -  178 [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-finance. 权限：finance编辑返回403
+  -  179 [chromium] › e2e\projects.spec.ts:390:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-04. 业务冲突：编辑status不影响历史记录
+  -  180 [chromium] › e2e\projects.spec.ts:397:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-05. 并发：并发编辑同一项目
+  -  181 [chromium] › e2e\projects.spec.ts:407:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-06. 异常恢复：API 500后重试
+  ok 182 [chromium] › e2e\projects.spec.ts:414:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-07. UI差异：admin显示编辑按钮 (2.7s)
+  ok 183 [chromium] › e2e\projects.spec.ts:419:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-08. UI差异：technician不显示编辑按钮 (2.7s)
+  -  184 [chromium] › e2e\projects.spec.ts:424:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-09. 正常用例：编辑后列表更新
+  ok 185 [chromium] › e2e\projects.spec.ts:430:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-10. 表单校验：编辑不存在返回404 (612ms)
+  -  186 [chromium] › e2e\projects.spec.ts:435:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-11. 业务冲突：编辑已停用项目
+  -  187 [chromium] › e2e\projects.spec.ts:442:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-12. 异常恢复：网络中断
+  ok 188 [chromium] › e2e\projects.spec.ts:455:3 › 检测项目 -> 删除项目 › PROJ-DEL-01. 正常用例：admin删除无出库记录项目 (627ms)
+  -  189 [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-technician. 权限：technician删除返回403
+  -  190 [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-pathologist. 权限：pathologist删除返回403
+  -  191 [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-warehouse_manager. 权限：warehouse_manager删除返回403
+  -  192 [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-procurement. 权限：procurement删除返回403
+  -  193 [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-finance. 权限：finance删除返回403
+  -  194 [chromium] › e2e\projects.spec.ts:475:3 › 检测项目 -> 删除项目 › PROJ-DEL-03. 业务冲突：有关联出库删除后悬空引用
+  ok 195 [chromium] › e2e\projects.spec.ts:482:3 › 检测项目 -> 删除项目 › PROJ-DEL-04. 并发：并发删除 (677ms)
+  ok 196 [chromium] › e2e\projects.spec.ts:495:3 › 检测项目 -> 删除项目 › PROJ-DEL-05. 异常恢复：API 500后重试 (665ms)
+  ok 197 [chromium] › e2e\projects.spec.ts:506:3 › 检测项目 -> 删除项目 › PROJ-DEL-06. UI差异：admin显示删除按钮 (3.0s)
+  ok 198 [chromium] › e2e\projects.spec.ts:511:3 › 检测项目 -> 删除项目 › PROJ-DEL-07. UI差异：pathologist不显示删除按钮 (2.8s)
+  ok 199 [chromium] › e2e\projects.spec.ts:516:3 › 检测项目 -> 删除项目 › PROJ-DEL-08. 表单校验：删除不存在返回404 (699ms)
+  ok 200 [chromium] › e2e\projects.spec.ts:521:3 › 检测项目 -> 删除项目 › PROJ-DEL-09. 业务冲突：再次删除返回404 (766ms)
+  ok 201 [chromium] › e2e\projects.spec.ts:532:3 › 检测项目 -> 删除项目 › PROJ-DEL-10. 正常用例：删除后列表刷新 (1.4s)
+  ok 202 [chromium] › e2e\projects.spec.ts:546:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-01. 正常用例：点击项目跳转详情 (3.4s)
+  -  203 [chromium] › e2e\projects.spec.ts:553:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-02. 正常用例：详情显示编码名称类型周期
+  ok 204 [chromium] › e2e\projects.spec.ts:560:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-03. UI差异：pathologist显示成本统计 (3.5s)
+  ok 205 [chromium] › e2e\projects.spec.ts:565:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-04. UI差异：technician隐藏成本统计 (2.7s)
+  ok 206 [chromium] › e2e\projects.spec.ts:576:3 › 检测项目 -> 分页切换 › PROJ-PAGE-01. 正常用例：切换到第2页 (3.0s)
+  ok 207 [chromium] › e2e\projects.spec.ts:581:3 › 检测项目 -> 分页切换 › PROJ-PAGE-02. 边界：仅1页分页器隐藏 (3.2s)
+  ok 208 [chromium] › e2e\projects.spec.ts:586:3 › 检测项目 -> 分页切换 › PROJ-PAGE-03. 表单校验：page=0修正为1 (674ms)
+  ok 209 [chromium] › e2e\projects.spec.ts:592:3 › 检测项目 -> 分页切换 › PROJ-PAGE-04. 边界：page=999 (732ms)
+  ok 210 [chromium] › e2e\projects.spec.ts:597:3 › 检测项目 -> 分页切换 › PROJ-PAGE-05. 边界：pageSize=1 (664ms)
+  ok 211 [chromium] › e2e\projects.spec.ts:602:3 › 检测项目 -> 分页切换 › PROJ-PAGE-06. 边界：pageSize=100 (630ms)
+  ok 212 [chromium] › e2e\projects.spec.ts:607:3 › 检测项目 -> 分页切换 › PROJ-PAGE-07. 并发：快速切换分页 (3.0s)
+  ok 213 [chromium] › e2e\projects.spec.ts:614:3 › 检测项目 -> 分页切换 › PROJ-PAGE-08. UI差异：各角色分页一致 (4.7s)
+  ok 214 [chromium] › e2e\projects.spec.ts:627:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-100. warehouse_manager GET /projects 返回403 (780ms)
+  ok 215 [chromium] › e2e\projects.spec.ts:631:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-101. procurement GET /projects 返回403 (852ms)
+  ok 216 [chromium] › e2e\projects.spec.ts:635:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-102. finance GET /projects 返回403 (748ms)
+  ok 217 [chromium] › e2e\projects.spec.ts:639:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-103. warehouse_manager POST /projects 返回403 (690ms)
+  ok 218 [chromium] › e2e\projects.spec.ts:643:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-104. technician POST /projects 返回403 (779ms)
+  ok 219 [chromium] › e2e\projects.spec.ts:647:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-105. pathologist POST /projects 返回403 (640ms)
+  ok 220 [chromium] › e2e\projects.spec.ts:651:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-106. procurement POST /projects 返回403 (634ms)
+  ok 221 [chromium] › e2e\projects.spec.ts:655:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-107. finance POST /projects 返回403 (663ms)
+  ok 222 [chromium] › e2e\projects.spec.ts:665:3 › 检测项目 -> 业务流程树 › BF-PROJ-01. 主路径：登录→进入项目→新建→填写→提交→列表刷新 (635ms)
+  ok 223 [chromium] › e2e\projects.spec.ts:672:3 › 检测项目 -> 业务流程树 › BF-PROJ-02. 分支：关闭弹窗不保存 (2.8s)
+  ok 224 [chromium] › e2e\projects.spec.ts:677:3 › 检测项目 -> 业务流程树 › BF-PROJ-03. 分支：code已存在 (729ms)
+  ok 225 [chromium] › e2e\projects.spec.ts:684:3 › 检测项目 -> 业务流程树 › BF-PROJ-04. 分支：必填漏填 (665ms)
+  ok 226 [chromium] › e2e\projects.spec.ts:689:3 › 检测项目 -> 业务流程树 › BF-PROJ-05. 分支：刷新后新项目仍在 (3.2s)
+  -  227 [chromium] › e2e\projects.spec.ts:696:3 › 检测项目 -> 业务流程树 › BF-PROJ-06. 分支：删除有关联出库
+  ok 228 [chromium] › e2e\projects.spec.ts:703:3 › 检测项目 -> 业务流程树 › BF-PROJ-07. 分支：technician尝试新建被403 (652ms)
+  ok 229 [chromium] › e2e\projects.spec.ts:707:3 › 检测项目 -> 业务流程树 › BF-PROJ-08. 分支：筛选后分页 (2.5s)
+  ok 230 [chromium] › e2e\projects.spec.ts:718:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-01. 项目编码唯一性 (666ms)
+  ok 231 [chromium] › e2e\projects.spec.ts:726:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-02. 项目类型下拉选项 (2.8s)
+  ok 232 [chromium] › e2e\projects.spec.ts:731:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-03. 项目BOM选择器 (2.7s)
+  -  233 [chromium] › e2e\projects.spec.ts:736:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-04. 项目成本统计
+  ok 234 [chromium] › e2e\projects.spec.ts:743:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-05. 项目导出功能 (2.7s)
+  ok 235 [chromium] › e2e\projects.spec.ts:748:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-06. 项目打印功能 (2.7s)
+  ok 236 [chromium] › e2e\projects.spec.ts:753:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-07. 项目页面响应式 (2.9s)
+  ok 237 [chromium] › e2e\projects.spec.ts:759:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-08. 项目页面加载性能 (2.3s)
+  ok 238 [chromium] › e2e\projects.spec.ts:766:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-09. 项目字段XSS防护 (666ms)
+  ok 239 [chromium] › e2e\projects.spec.ts:773:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-10. 项目字段SQL注入防护 (704ms)
+  ok 240 [chromium] › e2e\projects.spec.ts:780:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-11. 项目API响应格式 (706ms)
+  ok 241 [chromium] › e2e\projects.spec.ts:787:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-12. 多角色同时操作 (3.0s)
+  ok 242 [chromium] › e2e\suppliers.spec.ts:73:5 › 供应商管理 -> 查看供应商列表 › SUP-LIST-01-admin. 正常用例：admin可查看供应商列表 (2.0s)
+  ok 243 [chromium] › e2e\suppliers.spec.ts:73:5 › 供应商管理 -> 查看供应商列表 › SUP-LIST-01-warehouse_manager. 正常用例：warehouse_manager可查看供应商列表 (1.9s)
+  ok 244 [chromium] › e2e\suppliers.spec.ts:73:5 › 供应商管理 -> 查看供应商列表 › SUP-LIST-01-procurement. 正常用例：procurement可查看供应商列表 (2.0s)
+  ok 245 [chromium] › e2e\suppliers.spec.ts:79:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-02. 空数据边界：无供应商显示空状态 (4.4s)
+  ok 246 [chromium] › e2e\suppliers.spec.ts:84:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-03. 权限：technician访问返回403 (1.3s)
+  ok 247 [chromium] › e2e\suppliers.spec.ts:88:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-04. 权限：pathologist访问返回403 (1.0s)
+  ok 248 [chromium] › e2e\suppliers.spec.ts:92:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-05. 权限：finance访问返回403 (799ms)
+  ok 249 [chromium] › e2e\suppliers.spec.ts:96:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-06. 异常恢复：API 500显示错误Toast (12.9s)
+  ok 250 [chromium] › e2e\suppliers.spec.ts:101:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-07. UI差异：admin显示新增编辑删除按钮 (5.1s)
+  ok 251 [chromium] › e2e\suppliers.spec.ts:106:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-08. UI差异：procurement显示新增编辑 (24.1s)
+  ok 252 [chromium] › e2e\suppliers.spec.ts:111:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-09. 正常用例：列表显示编码名称联系人合作次数累计金额 (3.8s)
+  ok 253 [chromium] › e2e\suppliers.spec.ts:116:3 › 供应商管理 -> 查看供应商列表 › SUP-LIST-10. 并发：快速刷新页面 (7.5s)
+  ok 254 [chromium] › e2e\suppliers.spec.ts:128:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-01. 正常用例：选择active仅显示合作中供应商 (1.0s)
+  ok 255 [chromium] › e2e\suppliers.spec.ts:133:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-02. 空数据边界：无active供应商 (1.0s)
+  ok 256 [chromium] › e2e\suppliers.spec.ts:138:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-03. 正常用例：重置状态筛选 (2.8s)
+  ok 257 [chromium] › e2e\suppliers.spec.ts:143:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-04. UI差异：各角色状态筛选可见 (5.6s)
+  ok 258 [chromium] › e2e\suppliers.spec.ts:150:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-05. 并发：快速切换状态 (3.2s)
+  ok 259 [chromium] › e2e\suppliers.spec.ts:157:3 › 供应商管理 -> 按状态筛选 › SUP-STATUS-06. 异常恢复：状态筛选时API错误 (11.2s)
+  ok 260 [chromium] › e2e\suppliers.spec.ts:168:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-01. 正常用例：搜索"SUP-00001"返回匹配 (1.3s)
+  ok 261 [chromium] › e2e\suppliers.spec.ts:173:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-02. 空数据边界：搜索无结果 (1.1s)
+  ok 262 [chromium] › e2e\suppliers.spec.ts:179:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-03. 并发：快速连续输入 (3.2s)
+  ok 263 [chromium] › e2e\suppliers.spec.ts:190:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-04. 异常恢复：搜索时网络断 (4.4s)
+  ok 264 [chromium] › e2e\suppliers.spec.ts:195:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-05. 边界：搜索超长字符串 (1.3s)
+  ok 265 [chromium] › e2e\suppliers.spec.ts:200:3 › 供应商管理 -> 搜索供应商 › SUP-SEARCH-06. UI差异：各角色搜索可见 (11.8s)
+  ok 266 [chromium] › e2e\suppliers.spec.ts:213:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-01. 正常用例：admin新增供应商成功 (654ms)
+  ok 267 [chromium] › e2e\suppliers.spec.ts:220:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-02. 正常用例：procurement新增供应商成功 (668ms)
+  ok 268 [chromium] › e2e\suppliers.spec.ts:227:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-03. 空数据边界：name留空返回400 (870ms)
+  ok 269 [chromium] › e2e\suppliers.spec.ts:232:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-04. 表单校验：email格式不校验 (870ms)
+  ok 270 [chromium] › e2e\suppliers.spec.ts:240:5 › 供应商管理 -> 新增供应商 › SUP-CREATE-05-technician. 权限：technician新增供应商返回403 (836ms)
+  ok 271 [chromium] › e2e\suppliers.spec.ts:240:5 › 供应商管理 -> 新增供应商 › SUP-CREATE-05-pathologist. 权限：pathologist新增供应商返回403 (909ms)
+  ok 272 [chromium] › e2e\suppliers.spec.ts:240:5 › 供应商管理 -> 新增供应商 › SUP-CREATE-05-finance. 权限：finance新增供应商返回403 (709ms)
+  ok 273 [chromium] › e2e\suppliers.spec.ts:240:5 › 供应商管理 -> 新增供应商 › SUP-CREATE-05-warehouse_manager. 权限：warehouse_manager新增供应商返回403 (663ms)
+  ok 274 [chromium] › e2e\suppliers.spec.ts:246:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-06. 并发：快速双击提交 (707ms)
+  ok 275 [chromium] › e2e\suppliers.spec.ts:252:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-07. 异常恢复：提交时网络中断后重试 (711ms)
+  ok 276 [chromium] › e2e\suppliers.spec.ts:259:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-08. UI差异：admin显示新增供应商按钮 (2.8s)
+  ok 277 [chromium] › e2e\suppliers.spec.ts:264:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-09. UI差异：procurement显示新增供应商按钮 (4.1s)
+  ok 278 [chromium] › e2e\suppliers.spec.ts:269:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-10. UI差异：warehouse_manager不显示新增按钮 (5.2s)
+  ok 279 [chromium] › e2e\suppliers.spec.ts:274:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-11. 正常用例：新增后code自动生成 (647ms)
+  ok 280 [chromium] › e2e\suppliers.spec.ts:281:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-12. 边界：超长name (628ms)
+  ok 281 [chromium] › e2e\suppliers.spec.ts:288:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-13. 边界：特殊字符name (688ms)
+  ok 282 [chromium] › e2e\suppliers.spec.ts:295:3 › 供应商管理 -> 新增供应商 › SUP-CREATE-14. 正常用例：新增后入库单供应商下拉同步 (881ms)
+  ok 283 [chromium] › e2e\suppliers.spec.ts:306:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-01. 正常用例：admin编辑联系方式成功 (818ms)
+  ok 284 [chromium] › e2e\suppliers.spec.ts:313:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-02. 正常用例：procurement编辑供应商成功 (1.2s)
+  ok 285 [chromium] › e2e\suppliers.spec.ts:321:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-03. 空数据边界：清空所有字段 (866ms)
+  ok 286 [chromium] › e2e\suppliers.spec.ts:329:5 › 供应商管理 -> 编辑供应商 › SUP-EDIT-04-technician. 权限：technician编辑供应商返回403 (1.3s)
+  ok 287 [chromium] › e2e\suppliers.spec.ts:329:5 › 供应商管理 -> 编辑供应商 › SUP-EDIT-04-pathologist. 权限：pathologist编辑供应商返回403 (1.4s)
+  ok 288 [chromium] › e2e\suppliers.spec.ts:329:5 › 供应商管理 -> 编辑供应商 › SUP-EDIT-04-finance. 权限：finance编辑供应商返回403 (1.0s)
+  ok 289 [chromium] › e2e\suppliers.spec.ts:329:5 › 供应商管理 -> 编辑供应商 › SUP-EDIT-04-warehouse_manager. 权限：warehouse_manager编辑供应商返回403 (927ms)
+  ok 290 [chromium] › e2e\suppliers.spec.ts:338:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-05. 业务冲突：编辑code历史入库记录supplier_id不更新 (640ms)
+  ok 291 [chromium] › e2e\suppliers.spec.ts:345:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-06. 并发：并发编辑同一供应商 (626ms)
+  ok 292 [chromium] › e2e\suppliers.spec.ts:355:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-07. 异常恢复：编辑时API 500后重试 (631ms)
+  ok 293 [chromium] › e2e\suppliers.spec.ts:362:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-08. UI差异：admin显示编辑按钮 (7.1s)
+  ok 294 [chromium] › e2e\suppliers.spec.ts:367:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-09. UI差异：procurement显示编辑按钮 (9.2s)
+  ok 295 [chromium] › e2e\suppliers.spec.ts:372:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-10. UI差异：warehouse_manager不显示编辑按钮 (6.8s)
+  ok 296 [chromium] › e2e\suppliers.spec.ts:377:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-11. 正常用例：编辑后列表数据更新 (1.1s)
+  ok 297 [chromium] › e2e\suppliers.spec.ts:383:3 › 供应商管理 -> 编辑供应商 › SUP-EDIT-12. 表单校验：编辑不存在的供应商返回404 (1.1s)
+  ok 298 [chromium] › e2e\suppliers.spec.ts:394:3 › 供应商管理 -> 删除供应商 › SUP-DEL-01. 正常用例：admin删除无物料关联供应商 (1.3s)
+  ok 299 [chromium] › e2e\suppliers.spec.ts:405:5 › 供应商管理 -> 删除供应商 › SUP-DEL-02-technician. 权限：technician删除供应商返回403 (1.9s)
+  ok 300 [chromium] › e2e\suppliers.spec.ts:405:5 › 供应商管理 -> 删除供应商 › SUP-DEL-02-pathologist. 权限：pathologist删除供应商返回403 (1.7s)
+  ok 301 [chromium] › e2e\suppliers.spec.ts:405:5 › 供应商管理 -> 删除供应商 › SUP-DEL-02-finance. 权限：finance删除供应商返回403 (1.2s)
+  ok 302 [chromium] › e2e\suppliers.spec.ts:405:5 › 供应商管理 -> 删除供应商 › SUP-DEL-02-warehouse_manager. 权限：warehouse_manager删除供应商返回403 (987ms)
+  ok 303 [chromium] › e2e\suppliers.spec.ts:414:3 › 供应商管理 -> 删除供应商 › SUP-DEL-03. 业务冲突：有关联物料删除后悬空引用 (682ms)
+  ok 304 [chromium] › e2e\suppliers.spec.ts:421:3 › 供应商管理 -> 删除供应商 › SUP-DEL-04. 并发：并发删除同一供应商 (887ms)
+  ok 305 [chromium] › e2e\suppliers.spec.ts:434:3 › 供应商管理 -> 删除供应商 › SUP-DEL-05. 异常恢复：删除时API 500后重试 (1.0s)
+  ok 306 [chromium] › e2e\suppliers.spec.ts:445:3 › 供应商管理 -> 删除供应商 › SUP-DEL-06. UI差异：admin显示删除按钮 (26.2s)
+  ok 307 [chromium] › e2e\suppliers.spec.ts:450:3 › 供应商管理 -> 删除供应商 › SUP-DEL-07. UI差异：procurement隐藏删除按钮 (6.3s)
+  ok 308 [chromium] › e2e\suppliers.spec.ts:455:3 › 供应商管理 -> 删除供应商 › SUP-DEL-08. 表单校验：删除不存在的供应商返回404 (809ms)
+  ok 309 [chromium] › e2e\suppliers.spec.ts:460:3 › 供应商管理 -> 删除供应商 › SUP-DEL-09. 业务冲突：删除后再次删除返回404 (897ms)
+  ok 310 [chromium] › e2e\suppliers.spec.ts:471:3 › 供应商管理 -> 删除供应商 › SUP-DEL-10. 正常用例：删除后列表刷新 (1.3s)
+  ok 311 [chromium] › e2e\suppliers.spec.ts:479:3 › 供应商管理 -> 删除供应商 › SUP-DEL-11. 异常恢复：删除时网络中断 (969ms)
+  ok 312 [chromium] › e2e\suppliers.spec.ts:487:3 › 供应商管理 -> 删除供应商 › SUP-DEL-12. 边界：删除后其他角色查看 (3.6s)
+  ok 313 [chromium] › e2e\suppliers.spec.ts:504:3 › 供应商管理 -> 分页切换 › SUP-PAGE-01. 正常用例：切换到第2页 (4.6s)
+  ok 314 [chromium] › e2e\suppliers.spec.ts:509:3 › 供应商管理 -> 分页切换 › SUP-PAGE-02. 边界：仅1页分页器隐藏 (9.1s)
+  ok 315 [chromium] › e2e\suppliers.spec.ts:514:3 › 供应商管理 -> 分页切换 › SUP-PAGE-03. 表单校验：page=0后端修正为1 (872ms)
+  ok 316 [chromium] › e2e\suppliers.spec.ts:522:3 › 供应商管理 -> 分页切换 › SUP-PAGE-04. 边界：page=999返回空列表 (708ms)
+  ok 317 [chromium] › e2e\suppliers.spec.ts:527:3 › 供应商管理 -> 分页切换 › SUP-PAGE-05. 边界：pageSize=1 (732ms)
+  ok 318 [chromium] › e2e\suppliers.spec.ts:533:3 › 供应商管理 -> 分页切换 › SUP-PAGE-06. 边界：pageSize=100 (709ms)
+  ok 319 [chromium] › e2e\suppliers.spec.ts:538:3 › 供应商管理 -> 分页切换 › SUP-PAGE-07. 并发：快速切换分页 (3.3s)
+  ok 320 [chromium] › e2e\suppliers.spec.ts:545:3 › 供应商管理 -> 分页切换 › SUP-PAGE-08. UI差异：各角色分页一致 (9.2s)
+  ok 321 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-026. technician GET /suppliers 返回403 (689ms)
+  ok 322 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-027. pathologist GET /suppliers 返回403 (645ms)
+  ok 323 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-028. finance GET /suppliers 返回403 (627ms)
+  ok 324 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-029. warehouse_manager POST /suppliers 返回403 (632ms)
+  ok 325 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-030. technician POST /suppliers 返回403 (616ms)
+  ok 326 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-031. pathologist POST /suppliers 返回403 (633ms)
+  ok 327 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-032. procurement POST /suppliers 返回201 (660ms)
+  ok 328 [chromium] › e2e\suppliers.spec.ts:569:5 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-033. finance POST /suppliers 返回403 (700ms)
+  ok 329 [chromium] › e2e\suppliers.spec.ts:577:3 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-SUP-EXTRA-01. admin GET /suppliers 返回200 (946ms)
+  ok 330 [chromium] › e2e\suppliers.spec.ts:582:3 › 供应商管理 -> 角色权限矩阵补充 › TC-PERM-SUP-EXTRA-02. warehouse_manager GET /suppliers 返回200 (805ms)
+  ok 331 [chromium] › e2e\suppliers.spec.ts:593:3 › 供应商管理 -> 业务流程树 › BF-SUP-01. 主路径：登录→进入供应商→新增→填写信息→提交→列表刷新 (758ms)
+  ok 332 [chromium] › e2e\suppliers.spec.ts:600:3 › 供应商管理 -> 业务流程树 › BF-SUP-02. 分支：关闭弹窗不保存 (7.8s)
+  ok 333 [chromium] › e2e\suppliers.spec.ts:605:3 › 供应商管理 -> 业务流程树 › BF-SUP-03. 分支：必填字段漏填 (764ms)
+  ok 334 [chromium] › e2e\suppliers.spec.ts:610:3 › 供应商管理 -> 业务流程树 › BF-SUP-04. 分支：刷新页面后新供应商仍在列表 (4.5s)
+  ok 335 [chromium] › e2e\suppliers.spec.ts:617:3 › 供应商管理 -> 业务流程树 › BF-SUP-05. 分支：删除有关联物料的供应商 (821ms)
+  ok 336 [chromium] › e2e\suppliers.spec.ts:624:3 › 供应商管理 -> 业务流程树 › BF-SUP-06. 分支：编辑供应商后入库单下拉同步 (1.1s)
+  ok 337 [chromium] › e2e\suppliers.spec.ts:630:3 › 供应商管理 -> 业务流程树 › BF-SUP-07. 分支：warehouse_manager尝试新增被403拦截 (789ms)
+  ok 338 [chromium] › e2e\suppliers.spec.ts:635:3 › 供应商管理 -> 业务流程树 › BF-SUP-08. 分支：快速筛选后分页 (3.2s)
+  ok 339 [chromium] › e2e\suppliers.spec.ts:646:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-01. 供应商编码自动生成规则 (766ms)
+  ok 340 [chromium] › e2e\suppliers.spec.ts:653:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-02. 供应商合作次数统计 (1.6s)
+  ok 341 [chromium] › e2e\suppliers.spec.ts:658:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-03. 供应商累计金额统计 (1.3s)
+  ok 342 [chromium] › e2e\suppliers.spec.ts:663:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-04. 供应商列表导出功能 (6.7s)
+  ok 343 [chromium] › e2e\suppliers.spec.ts:668:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-05. 供应商打印功能 (7.5s)
+  ok 344 [chromium] › e2e\suppliers.spec.ts:673:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-06. 供应商页面响应式布局 (3.4s)
+  ok 345 [chromium] › e2e\suppliers.spec.ts:679:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-07. 供应商页面加载性能 (13.9s)
+  ok 346 [chromium] › e2e\suppliers.spec.ts:686:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-08. 供应商搜索防抖 (3.7s)
+  ok 347 [chromium] › e2e\suppliers.spec.ts:697:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-09. 供应商详情弹窗 (6.9s)
+  ok 348 [chromium] › e2e\suppliers.spec.ts:704:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-10. 供应商字段XSS防护 (1.0s)
+  ok 349 [chromium] › e2e\suppliers.spec.ts:711:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-11. 供应商字段SQL注入防护 (912ms)
+  ok 350 [chromium] › e2e\suppliers.spec.ts:718:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-12. 供应商API响应格式验证 (912ms)
+  ok 351 [chromium] › e2e\suppliers.spec.ts:733:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-13. 供应商状态颜色标签 (3.0s)
+  ok 352 [chromium] › e2e\suppliers.spec.ts:738:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-14. 供应商排序功能 (1.1s)
+  ok 353 [chromium] › e2e\suppliers.spec.ts:743:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-15. 供应商联系信息完整性 (1.1s)
+  ok 354 [chromium] › e2e\suppliers.spec.ts:750:3 › 供应商管理 -> 盲点分析补充 › BLIND-SUP-16. 多角色同时操作互不影响 (7.1s)
+
+
+  1) [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-warehouse_manager. 权限：warehouse_manager编辑库位返回403 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m200[39m
+
+      359 |       if (!id) { test.skip(); return }
+      360 |       const res = await apiFetch(token, 'PUT', `/locations/${id}`, { name: '越权编辑' })
+    > 361 |       expect(res.status).toBe(403)
+          |                          ^
+      362 |     })
+      363 |   }
+      364 |   test('LOC-EDIT-04. 业务冲突：编辑used字段不被更新', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:361:26
+
+    Error Context: test-results\locations-库位管理---编辑库位-LOC--16e44-：warehouse-manager编辑库位返回403-chromium\error-context.md
+
+  2) [chromium] › e2e\locations.spec.ts:404:3 › 库位管理 -> 编辑库位 › LOC-EDIT-10. 表单校验：编辑不存在的库位返回404 ─────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m200[39m
+
+      405 |     const token = await apiLogin('admin')
+      406 |     const res = await apiFetch(token, 'PUT', '/locations/non-existent-id', { name: '不存在' })
+    > 407 |     expect(res.status).toBe(404)
+          |                        ^
+      408 |   })
+      409 |   test('LOC-EDIT-11. 边界：编辑name为空字符串', async () => {
+      410 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:407:24
+
+    Error Context: test-results\locations-库位管理---编辑库位-LOC-EDIT-10-表单校验：编辑不存在的库位返回404-chromium\error-context.md
+
+  3) [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-warehouse_manager. 权限：warehouse_manager删除库位返回403 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m200[39m
+
+      444 |       if (!id) { test.skip(); return }
+      445 |       const res = await apiFetch(token, 'DELETE', `/locations/${id}`)
+    > 446 |       expect(res.status).toBe(403)
+          |                          ^
+      447 |     })
+      448 |   }
+      449 |   test('LOC-DEL-03. 业务冲突：有关联inventory删除后悬空引用', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:446:26
+
+    Error Context: test-results\locations-库位管理---删除库位-LOC--f8df5-：warehouse-manager删除库位返回403-chromium\error-context.md
+
+  4) [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-053. warehouse_manager POST /locations 返回403 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m201[39m
+
+      608 |       if (s.method === 'GET') res = await apiFetch(token, 'GET', '/locations')
+      609 |       else res = await apiFetch(token, 'POST', '/locations', { name: '权限', zone: 'A区', type: 'shelf' })
+    > 610 |       expect(res.status).toBe(s.expect)
+          |                          ^
+      611 |     })
+      612 |   }
+      613 |   test('TC-PERM-LOC-EXTRA-01. admin GET /locations 返回200', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:610:26
+
+    Error Context: test-results\locations-库位管理---角色权限矩阵补充--bd4b9-anager-POST-locations-返回403-chromium\error-context.md
+
+  5) [chromium] › e2e\locations.spec.ts:666:3 › 库位管理 -> 业务流程树 › BF-LOC-07. 分支：warehouse_manager尝试新增被403拦截 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m403[39m
+    Received: [31m201[39m
+
+      669 |       name: '越权', zone: 'A区', type: 'shelf',
+      670 |     })
+    > 671 |     expect(res.status).toBe(403)
+          |                        ^
+      672 |   })
+      673 |   test('BF-LOC-08. 分支：快速筛选后分页', async ({ page }) => {
+      674 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\locations.spec.ts:671:24
+
+    Error Context: test-results\locations-库位管理---业务流程树-BF--101f4-warehouse-manager尝试新增被403拦截-chromium\error-context.md
+
+  Slow test file: [chromium] › e2e\suppliers.spec.ts (5.7m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  5 failed
+    [chromium] › e2e\locations.spec.ts:355:5 › 库位管理 -> 编辑库位 › LOC-EDIT-03-warehouse_manager. 权限：warehouse_manager编辑库位返回403 
+    [chromium] › e2e\locations.spec.ts:404:3 › 库位管理 -> 编辑库位 › LOC-EDIT-10. 表单校验：编辑不存在的库位返回404 ──────
+    [chromium] › e2e\locations.spec.ts:440:5 › 库位管理 -> 删除库位 › LOC-DEL-02-warehouse_manager. 权限：warehouse_manager删除库位返回403 
+    [chromium] › e2e\locations.spec.ts:605:5 › 库位管理 -> 角色权限矩阵补充 › TC-PERM-053. warehouse_manager POST /locations 返回403 
+    [chromium] › e2e\locations.spec.ts:666:3 › 库位管理 -> 业务流程树 › BF-LOC-07. 分支：warehouse_manager尝试新增被403拦截 
+  23 skipped
+  326 passed (12.0m)

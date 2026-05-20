@@ -1,0 +1,192 @@
+
+Running 119 tests using 1 worker
+
+  ok   1 [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-admin. admin可查看BOM列表 (1.9s)
+  ok   2 [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-technician. technician可查看BOM列表 (2.0s)
+  ok   3 [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-pathologist. pathologist可查看BOM列表 (2.7s)
+  ok   4 [chromium] › e2e\bom.spec.ts:80:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-02. 空数据边界 (2.7s)
+  ok   5 [chromium] › e2e\bom.spec.ts:86:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-03-warehouse_manager. warehouse_manager访问返回403 (600ms)
+  ok   6 [chromium] › e2e\bom.spec.ts:86:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-03-procurement. procurement访问返回403 (752ms)
+  ok   7 [chromium] › e2e\bom.spec.ts:86:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-03-finance. finance访问返回403 (652ms)
+  ok   8 [chromium] › e2e\bom.spec.ts:91:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-04. API 500 (2.7s)
+  ok   9 [chromium] › e2e\bom.spec.ts:96:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-05. admin显示新增编辑删除 (2.8s)
+  ok  10 [chromium] › e2e\bom.spec.ts:101:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-06. technician仅查看 (3.4s)
+  ok  11 [chromium] › e2e\bom.spec.ts:106:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-07. 显示编码名称类型物料数单样本成本 (3.0s)
+  ok  12 [chromium] › e2e\bom.spec.ts:111:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-08. 快速刷新 (3.0s)
+  ok  13 [chromium] › e2e\bom.spec.ts:121:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-01. 选择ihc (681ms)
+  ok  14 [chromium] › e2e\bom.spec.ts:126:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-02. 无该类型 (589ms)
+  ok  15 [chromium] › e2e\bom.spec.ts:131:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-03. 重置 (4.0s)
+  ok  16 [chromium] › e2e\bom.spec.ts:136:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-04. 各角色可见 (7.1s)
+  ok  17 [chromium] › e2e\bom.spec.ts:143:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-05. 快速切换 (3.4s)
+  ok  18 [chromium] › e2e\bom.spec.ts:150:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-06. API错误 (3.4s)
+  ok  19 [chromium] › e2e\bom.spec.ts:159:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-01. 搜索HER2 (579ms)
+  ok  20 [chromium] › e2e\bom.spec.ts:164:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-02. 无结果 (706ms)
+  ok  21 [chromium] › e2e\bom.spec.ts:169:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-03. 快速连续输入 (4.1s)
+  ok  22 [chromium] › e2e\bom.spec.ts:178:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-04. 网络断 (2.8s)
+  ok  23 [chromium] › e2e\bom.spec.ts:183:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-05. 超长字符串 (1.0s)
+  ok  24 [chromium] › e2e\bom.spec.ts:188:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-06. 各角色可见 (6.7s)
+  ok  25 [chromium] › e2e\bom.spec.ts:199:3 › BOM清单 -> 新建BOM › BOM-CREATE-01. admin新建成功 (1.1s)
+  x   26 [chromium] › e2e\bom.spec.ts:208:3 › BOM清单 -> 新建BOM › BOM-CREATE-02. materials空返回400 (830ms)
+  ok  27 [chromium] › e2e\bom.spec.ts:215:3 › BOM清单 -> 新建BOM › BOM-CREATE-03. 未传code返回400 (701ms)
+  ok  28 [chromium] › e2e\bom.spec.ts:220:3 › BOM清单 -> 新建BOM › BOM-CREATE-04. 未传name返回400 (606ms)
+  ok  29 [chromium] › e2e\bom.spec.ts:225:3 › BOM清单 -> 新建BOM › BOM-CREATE-05. 未传type返回400 (616ms)
+  ok  30 [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-technician. technician新建返回403 (753ms)
+  ok  31 [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-pathologist. pathologist新建返回403 (1.0s)
+  ok  32 [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-warehouse_manager. warehouse_manager新建返回403 (1.5s)
+  ok  33 [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-procurement. procurement新建返回403 (1.5s)
+  ok  34 [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-finance. finance新建返回403 (908ms)
+  ok  35 [chromium] › e2e\bom.spec.ts:237:3 › BOM清单 -> 新建BOM › BOM-CREATE-07. code已存在返回409 (807ms)
+  ok  36 [chromium] › e2e\bom.spec.ts:244:3 › BOM清单 -> 新建BOM › BOM-CREATE-08. 快速双击 (688ms)
+  ok  37 [chromium] › e2e\bom.spec.ts:250:3 › BOM清单 -> 新建BOM › BOM-CREATE-09. 网络中断重试 (661ms)
+  ok  38 [chromium] › e2e\bom.spec.ts:257:3 › BOM清单 -> 新建BOM › BOM-CREATE-10. admin显示新增按钮 (3.2s)
+  ok  39 [chromium] › e2e\bom.spec.ts:262:3 › BOM清单 -> 新建BOM › BOM-CREATE-11. technician不显示新增 (3.1s)
+  x   40 [chromium] › e2e\bom.spec.ts:267:3 › BOM清单 -> 新建BOM › BOM-CREATE-12. 新建后version=v1.0 (1.0s)
+  ok  41 [chromium] › e2e\bom.spec.ts:274:3 › BOM清单 -> 新建BOM › BOM-CREATE-13. 超长code (755ms)
+  ok  42 [chromium] › e2e\bom.spec.ts:281:3 › BOM清单 -> 新建BOM › BOM-CREATE-14. 特殊字符name (1.2s)
+  ok  43 [chromium] › e2e\bom.spec.ts:288:3 › BOM清单 -> 新建BOM › BOM-CREATE-15. 多物料BOM (854ms)
+  ok  44 [chromium] › e2e\bom.spec.ts:298:3 › BOM清单 -> 新建BOM › BOM-CREATE-16. 负数量物料 (725ms)
+  -   45 [chromium] › e2e\bom.spec.ts:311:3 › BOM清单 -> 编辑BOM › BOM-EDIT-01. admin编辑物料用量
+  -   46 [chromium] › e2e\bom.spec.ts:318:3 › BOM清单 -> 编辑BOM › BOM-EDIT-02. 不传materials仅基础字段更新
+  -   47 [chromium] › e2e\bom.spec.ts:326:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-technician. technician编辑返回403
+  -   48 [chromium] › e2e\bom.spec.ts:326:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-pathologist. pathologist编辑返回403
+  -   49 [chromium] › e2e\bom.spec.ts:326:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-warehouse_manager. warehouse_manager编辑返回403
+  -   50 [chromium] › e2e\bom.spec.ts:326:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-procurement. procurement编辑返回403
+  -   51 [chromium] › e2e\bom.spec.ts:326:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-finance. finance编辑返回403
+  -   52 [chromium] › e2e\bom.spec.ts:335:3 › BOM清单 -> 编辑BOM › BOM-EDIT-04. 被项目关联编辑后版本升级
+  -   53 [chromium] › e2e\bom.spec.ts:342:3 › BOM清单 -> 编辑BOM › BOM-EDIT-05. 并发编辑
+  -   54 [chromium] › e2e\bom.spec.ts:352:3 › BOM清单 -> 编辑BOM › BOM-EDIT-06. API 500后重试
+  x   55 [chromium] › e2e\bom.spec.ts:359:3 › BOM清单 -> 编辑BOM › BOM-EDIT-07. admin显示编辑按钮 (3.7s)
+  ok  56 [chromium] › e2e\bom.spec.ts:364:3 › BOM清单 -> 编辑BOM › BOM-EDIT-08. technician不显示编辑 (5.7s)
+  -   57 [chromium] › e2e\bom.spec.ts:369:3 › BOM清单 -> 编辑BOM › BOM-EDIT-09. 编辑后列表更新
+  ok  58 [chromium] › e2e\bom.spec.ts:375:3 › BOM清单 -> 编辑BOM › BOM-EDIT-10. 编辑不存在返回404 (676ms)
+  -   59 [chromium] › e2e\bom.spec.ts:380:3 › BOM清单 -> 编辑BOM › BOM-EDIT-11. name为空
+  -   60 [chromium] › e2e\bom.spec.ts:387:3 › BOM清单 -> 编辑BOM › BOM-EDIT-12. 网络中断
+  ok  61 [chromium] › e2e\bom.spec.ts:398:3 › BOM清单 -> 删除BOM › BOM-DEL-01. admin删除无关联BOM (1.6s)
+  -   62 [chromium] › e2e\bom.spec.ts:411:5 › BOM清单 -> 删除BOM › BOM-DEL-02-technician. technician删除返回403
+  -   63 [chromium] › e2e\bom.spec.ts:411:5 › BOM清单 -> 删除BOM › BOM-DEL-02-pathologist. pathologist删除返回403
+  -   64 [chromium] › e2e\bom.spec.ts:411:5 › BOM清单 -> 删除BOM › BOM-DEL-02-warehouse_manager. warehouse_manager删除返回403
+  -   65 [chromium] › e2e\bom.spec.ts:411:5 › BOM清单 -> 删除BOM › BOM-DEL-02-procurement. procurement删除返回403
+  -   66 [chromium] › e2e\bom.spec.ts:411:5 › BOM清单 -> 删除BOM › BOM-DEL-02-finance. finance删除返回403
+  -   67 [chromium] › e2e\bom.spec.ts:420:3 › BOM清单 -> 删除BOM › BOM-DEL-03. 被项目关联删除后悬空引用
+  ok  68 [chromium] › e2e\bom.spec.ts:427:3 › BOM清单 -> 删除BOM › BOM-DEL-04. 并发删除 (767ms)
+  ok  69 [chromium] › e2e\bom.spec.ts:440:3 › BOM清单 -> 删除BOM › BOM-DEL-05. API 500后重试 (593ms)
+  ok  70 [chromium] › e2e\bom.spec.ts:451:3 › BOM清单 -> 删除BOM › BOM-DEL-06. admin显示删除按钮 (3.3s)
+  ok  71 [chromium] › e2e\bom.spec.ts:456:3 › BOM清单 -> 删除BOM › BOM-DEL-07. pathologist不显示删除 (3.4s)
+  ok  72 [chromium] › e2e\bom.spec.ts:461:3 › BOM清单 -> 删除BOM › BOM-DEL-08. 不存在返回404 (1.1s)
+  ok  73 [chromium] › e2e\bom.spec.ts:466:3 › BOM清单 -> 删除BOM › BOM-DEL-09. 再次删除返回404 (877ms)
+  ok  74 [chromium] › e2e\bom.spec.ts:477:3 › BOM清单 -> 删除BOM › BOM-DEL-10. 删除后列表刷新 (634ms)
+  -   75 [chromium] › e2e\bom.spec.ts:490:5 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-01-admin. admin可查看详情
+  -   76 [chromium] › e2e\bom.spec.ts:490:5 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-01-technician. technician可查看详情
+  -   77 [chromium] › e2e\bom.spec.ts:490:5 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-01-pathologist. pathologist可查看详情
+  ok  78 [chromium] › e2e\bom.spec.ts:498:3 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-02. 不存在返回404 (625ms)
+  ok  79 [chromium] › e2e\bom.spec.ts:503:3 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-03. admin可点击查看详情弹窗 (3.3s)
+  ok  80 [chromium] › e2e\bom.spec.ts:514:3 › BOM清单 -> 分页切换 › BOM-PAGE-01. 第2页 (2.7s)
+  ok  81 [chromium] › e2e\bom.spec.ts:519:3 › BOM清单 -> 分页切换 › BOM-PAGE-02. 仅1页 (2.6s)
+  ok  82 [chromium] › e2e\bom.spec.ts:524:3 › BOM清单 -> 分页切换 › BOM-PAGE-03. page=0 (1.4s)
+  ok  83 [chromium] › e2e\bom.spec.ts:529:3 › BOM清单 -> 分页切换 › BOM-PAGE-04. page=999 (669ms)
+  ok  84 [chromium] › e2e\bom.spec.ts:534:3 › BOM清单 -> 分页切换 › BOM-PAGE-05. pageSize=1 (823ms)
+  ok  85 [chromium] › e2e\bom.spec.ts:539:3 › BOM清单 -> 分页切换 › BOM-PAGE-06. pageSize=100 (1.2s)
+  ok  86 [chromium] › e2e\bom.spec.ts:544:3 › BOM清单 -> 分页切换 › BOM-PAGE-07. 快速切换 (3.9s)
+  ok  87 [chromium] › e2e\bom.spec.ts:551:3 › BOM清单 -> 分页切换 › BOM-PAGE-08. 各角色一致 (5.0s)
+  ok  88 [chromium] › e2e\bom.spec.ts:562:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-108. WHM GET /boms 返回403 (623ms)
+  ok  89 [chromium] › e2e\bom.spec.ts:566:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-109. PROC GET /boms 返回403 (775ms)
+  ok  90 [chromium] › e2e\bom.spec.ts:570:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-110. FIN GET /boms 返回403 (1.1s)
+  ok  91 [chromium] › e2e\bom.spec.ts:574:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-111. WHM POST /boms 返回403 (674ms)
+  ok  92 [chromium] › e2e\bom.spec.ts:578:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-112. TECH POST /boms 返回403 (707ms)
+  ok  93 [chromium] › e2e\bom.spec.ts:582:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-113. PATH POST /boms 返回403 (730ms)
+  ok  94 [chromium] › e2e\bom.spec.ts:586:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-114. PROC POST /boms 返回403 (1.2s)
+  ok  95 [chromium] › e2e\bom.spec.ts:590:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-115. FIN POST /boms 返回403 (1.3s)
+  ok  96 [chromium] › e2e\bom.spec.ts:598:3 › BOM清单 -> 业务流程树 › BF-BOM-01. 主路径：新建→填写→提交→version=v1.0 (954ms)
+  ok  97 [chromium] › e2e\bom.spec.ts:605:3 › BOM清单 -> 业务流程树 › BF-BOM-02. 关闭弹窗不保存 (3.1s)
+  ok  98 [chromium] › e2e\bom.spec.ts:610:3 › BOM清单 -> 业务流程树 › BF-BOM-03. code已存在 (618ms)
+  ok  99 [chromium] › e2e\bom.spec.ts:617:3 › BOM清单 -> 业务流程树 › BF-BOM-04. 必填漏填 (563ms)
+  ok 100 [chromium] › e2e\bom.spec.ts:622:3 › BOM清单 -> 业务流程树 › BF-BOM-05. 刷新后仍在 (3.4s)
+  -  101 [chromium] › e2e\bom.spec.ts:629:3 › BOM清单 -> 业务流程树 › BF-BOM-06. 被项目关联删除
+  ok 102 [chromium] › e2e\bom.spec.ts:636:3 › BOM清单 -> 业务流程树 › BF-BOM-07. technician尝试新建被403 (686ms)
+  -  103 [chromium] › e2e\bom.spec.ts:640:3 › BOM清单 -> 业务流程树 › BF-BOM-08. 编辑后版本升级
+  ok 104 [chromium] › e2e\bom.spec.ts:651:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-01. 编码唯一性 (1.2s)
+  -  105 [chromium] › e2e\bom.spec.ts:659:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-02. version自动升级
+  -  106 [chromium] › e2e\bom.spec.ts:665:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-03. costRatio计算
+  ok 107 [chromium] › e2e\bom.spec.ts:672:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-04. 导出功能 (3.1s)
+  ok 108 [chromium] › e2e\bom.spec.ts:677:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-05. 打印功能 (2.9s)
+  ok 109 [chromium] › e2e\bom.spec.ts:682:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-06. 响应式布局 (3.6s)
+  ok 110 [chromium] › e2e\bom.spec.ts:688:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-07. 加载性能 (3.1s)
+  ok 111 [chromium] › e2e\bom.spec.ts:695:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-08. 搜索防抖 (3.8s)
+  ok 112 [chromium] › e2e\bom.spec.ts:704:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-09. 物料明细展示 (2.8s)
+  ok 113 [chromium] › e2e\bom.spec.ts:711:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-10. XSS防护 (655ms)
+  ok 114 [chromium] › e2e\bom.spec.ts:718:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-11. SQL注入防护 (565ms)
+  ok 115 [chromium] › e2e\bom.spec.ts:725:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-12. API响应格式 (816ms)
+  -  116 [chromium] › e2e\bom.spec.ts:732:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-13. 版本历史
+  ok 117 [chromium] › e2e\bom.spec.ts:739:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-14. 排序功能 (1.1s)
+  ok 118 [chromium] › e2e\bom.spec.ts:744:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-15. 多角色同时操作 (3.8s)
+  ok 119 [chromium] › e2e\bom.spec.ts:756:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-16. 物料用量小数 (1.2s)
+
+
+  1) [chromium] › e2e\bom.spec.ts:208:3 › BOM清单 -> 新建BOM › BOM-CREATE-02. materials空返回400 ──────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m201[39m
+
+      211 |       code: `TEST-BOM-${Date.now()}`, name: '空物料', type: 'ihc', materials: [],
+      212 |     })
+    > 213 |     expect(res.status).toBe(400)
+          |                        ^
+      214 |   })
+      215 |   test('BOM-CREATE-03. 未传code返回400', async () => {
+      216 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:213:24
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-02-materials空返回400-chromium\error-context.md
+
+  2) [chromium] › e2e\bom.spec.ts:267:3 › BOM清单 -> 新建BOM › BOM-CREATE-12. 新建后version=v1.0 ──────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m"v1.0"[39m
+    Received: [31mundefined[39m
+
+      270 |       code: `TEST-VER-${Date.now()}`, name: '版本', type: 'ihc', materials: [],
+      271 |     })
+    > 272 |     if (res.status === 201) expect(res.data?.data?.version).toBe('v1.0')
+          |                                                             ^
+      273 |   })
+      274 |   test('BOM-CREATE-13. 超长code', async () => {
+      275 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:272:61
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-12-新建后version-v1-0-chromium\error-context.md
+
+  3) [chromium] › e2e\bom.spec.ts:359:3 › BOM清单 -> 编辑BOM › BOM-EDIT-07. admin显示编辑按钮 ────────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:8080/bom
+    Call log:
+    [2m  - navigating to "http://localhost:8080/bom", waiting until "load"[22m
+
+
+      359 |   test('BOM-EDIT-07. admin显示编辑按钮', async ({ page }) => {
+      360 |     await loginAs(page, 'admin')
+    > 361 |     await page.goto(`${FE_BASE}/bom`)
+          |                ^
+      362 |     await page.waitForTimeout(1000)
+      363 |   })
+      364 |   test('BOM-EDIT-08. technician不显示编辑', async ({ page }) => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:361:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---编辑BOM-BOM-EDIT-07-admin显示编辑按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---编辑BOM-BOM-EDIT-07-admin显示编辑按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---编辑BOM-BOM-EDIT-07-admin显示编辑按钮-chromium\error-context.md
+
+  3 failed
+    [chromium] › e2e\bom.spec.ts:208:3 › BOM清单 -> 新建BOM › BOM-CREATE-02. materials空返回400 ───────────
+    [chromium] › e2e\bom.spec.ts:267:3 › BOM清单 -> 新建BOM › BOM-CREATE-12. 新建后version=v1.0 ───────────
+    [chromium] › e2e\bom.spec.ts:359:3 › BOM清单 -> 编辑BOM › BOM-EDIT-07. admin显示编辑按钮 ─────────────────
+  27 skipped
+  89 passed (3.6m)

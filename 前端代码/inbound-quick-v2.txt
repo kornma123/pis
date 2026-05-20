@@ -1,0 +1,7 @@
+
+Running 2 tests using 1 worker
+
+  ok 1 [chromium] › e2e\inbound.spec.ts:1000:3 › 入库管理 -> 编辑入库单 › IN-EDIT-04. 表单校验：编辑不存在的入库单返回404 (1.2s)
+  ok 2 [chromium] › e2e\inbound.spec.ts:1903:3 › 入库管理 -> 盲点分析补充 › BLIND-IN-16. 入库打印功能入口 (3.1s)
+
+  2 passed (9.8s)

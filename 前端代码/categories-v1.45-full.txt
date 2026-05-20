@@ -1,0 +1,147 @@
+
+Running 141 tests using 1 worker
+
+[1A[2K[1/141] [chromium] › e2e\categories.spec.ts:70:5 › 物料分类 -> 查看分类树 › CAT-TREE-01-admin. 正常用例：admin可查看分类树
+[1A[2K[2/141] [chromium] › e2e\categories.spec.ts:70:5 › 物料分类 -> 查看分类树 › CAT-TREE-01-warehouse_manager. 正常用例：warehouse_manager可查看分类树
+[1A[2K[3/141] [chromium] › e2e\categories.spec.ts:70:5 › 物料分类 -> 查看分类树 › CAT-TREE-01-technician. 正常用例：technician可查看分类树
+[1A[2K[4/141] [chromium] › e2e\categories.spec.ts:70:5 › 物料分类 -> 查看分类树 › CAT-TREE-01-pathologist. 正常用例：pathologist可查看分类树
+[1A[2K[5/141] [chromium] › e2e\categories.spec.ts:70:5 › 物料分类 -> 查看分类树 › CAT-TREE-01-procurement. 正常用例：procurement可查看分类树
+[1A[2K[6/141] [chromium] › e2e\categories.spec.ts:70:5 › 物料分类 -> 查看分类树 › CAT-TREE-01-finance. 正常用例：finance可查看分类树
+[1A[2K[7/141] [chromium] › e2e\categories.spec.ts:75:3 › 物料分类 -> 查看分类树 › CAT-TREE-02. 空数据边界：无分类数据显示空状态
+[1A[2K[8/141] [chromium] › e2e\categories.spec.ts:81:3 › 物料分类 -> 查看分类树 › CAT-TREE-03. 正常用例：三级分类树正确渲染层级
+[1A[2K[9/141] [chromium] › e2e\categories.spec.ts:85:3 › 物料分类 -> 查看分类树 › CAT-TREE-04. 正常用例：统计卡片显示总数/启用/停用/物料数
+[1A[2K[10/141] [chromium] › e2e\categories.spec.ts:89:3 › 物料分类 -> 查看分类树 › CAT-TREE-05. UI差异：admin显示新建分类按钮
+[1A[2K[11/141] [chromium] › e2e\categories.spec.ts:93:3 › 物料分类 -> 查看分类树 › CAT-TREE-06. UI差异：technician查看分类树但无新建按钮
+[1A[2K[12/141] [chromium] › e2e\categories.spec.ts:97:3 › 物料分类 -> 查看分类树 › CAT-TREE-07. 异常恢复：API 500显示错误提示
+[1A[2K[13/141] [chromium] › e2e\categories.spec.ts:102:3 › 物料分类 -> 查看分类树 › CAT-TREE-08. 并发：快速刷新页面多次树结构正常
+[1A[2K[14/141] [chromium] › e2e\categories.spec.ts:107:3 › 物料分类 -> 查看分类树 › CAT-TREE-09. 正常用例：分类图标按层级显示不同图标
+[1A[2K[15/141] [chromium] › e2e\categories.spec.ts:115:3 › 物料分类 -> 查看分类树 › CAT-TREE-10. 正常用例：默认展开一级分类
+[1A[2K[16/141] [chromium] › e2e\categories.spec.ts:125:3 › 物料分类 -> 搜索分类 › CAT-SEARCH-01. 正常用例：按名称搜索返回匹配结果
+[1A[2K[17/141] [chromium] › e2e\categories.spec.ts:132:3 › 物料分类 -> 搜索分类 › CAT-SEARCH-02. 空数据边界：搜索无结果显示空状态
+[1A[2K[18/141] [chromium] › e2e\categories.spec.ts:144:3 › 物料分类 -> 搜索分类 › CAT-SEARCH-03. 边界：搜索关键词为空字符串恢复全部
+[1A[2K[19/141] [chromium] › e2e\categories.spec.ts:152:3 › 物料分类 -> 搜索分类 › CAT-SEARCH-04. 边界：搜索特殊字符不报错
+[1A[2K[20/141] [chromium] › e2e\categories.spec.ts:160:3 › 物料分类 -> 搜索分类 › CAT-SEARCH-05. 并发：快速输入搜索词防抖正常
+[1A[2K[21/141] [chromium] › e2e\categories.spec.ts:167:3 › 物料分类 -> 搜索分类 › CAT-SEARCH-06. 正常用例：搜索后点击清空按钮恢复
+[1A[2K[22/141] [chromium] › e2e\categories.spec.ts:177:3 › 物料分类 -> 搜索分类 › CAT-SEARCH-07. 正常用例：按编码搜索返回匹配结果
+[1A[2K[23/141] [chromium] › e2e\categories.spec.ts:184:3 › 物料分类 -> 搜索分类 › CAT-SEARCH-08. UI差异：各角色搜索功能均可见
+[1A[2K[24/141] [chromium] › e2e\categories.spec.ts:197:3 › 物料分类 -> 新建分类 › CAT-CREATE-01. 正常用例：admin新建一级分类成功
+[1A[2K[25/141] [chromium] › e2e\categories.spec.ts:206:3 › 物料分类 -> 新建分类 › CAT-CREATE-02. 正常用例：admin新建二级分类成功
+[1A[2K[26/141] [chromium] › e2e\categories.spec.ts:222:3 › 物料分类 -> 新建分类 › CAT-CREATE-03. 正常用例：admin新建三级分类成功
+[1A[2K[27/141] [chromium] › e2e\categories.spec.ts:233:3 › 物料分类 -> 新建分类 › CAT-CREATE-04. 空数据边界：名称为空提交被阻止
+[1A[2K[28/141] [chromium] › e2e\categories.spec.ts:241:3 › 物料分类 -> 新建分类 › CAT-CREATE-05. 表单校验：未传name/level API返回400
+[1A[2K[29/141] [chromium] › e2e\categories.spec.ts:246:3 › 物料分类 -> 新建分类 › CAT-CREATE-06. 表单校验：未传name API返回400
+[1A[2K[30/141] [chromium] › e2e\categories.spec.ts:251:3 › 物料分类 -> 新建分类 › CAT-CREATE-07. 表单校验：未传level API返回400
+[1A[2K[31/141] [chromium] › e2e\categories.spec.ts:257:5 › 物料分类 -> 新建分类 › CAT-CREATE-08-technician. 权限：technician新建分类返回403
+[1A[2K[32/141] [chromium] › e2e\categories.spec.ts:257:5 › 物料分类 -> 新建分类 › CAT-CREATE-08-pathologist. 权限：pathologist新建分类返回403
+[1A[2K[33/141] [chromium] › e2e\categories.spec.ts:257:5 › 物料分类 -> 新建分类 › CAT-CREATE-08-procurement. 权限：procurement新建分类返回403
+[1A[2K[34/141] [chromium] › e2e\categories.spec.ts:257:5 › 物料分类 -> 新建分类 › CAT-CREATE-08-finance. 权限：finance新建分类返回403
+[1A[2K[35/141] [chromium] › e2e\categories.spec.ts:257:5 › 物料分类 -> 新建分类 › CAT-CREATE-08-warehouse_manager. 权限：warehouse_manager新建分类返回403
+[1A[2K[36/141] [chromium] › e2e\categories.spec.ts:263:3 › 物料分类 -> 新建分类 › CAT-CREATE-09. 业务冲突：code已存在返回409
+[1A[2K[37/141] [chromium] › e2e\categories.spec.ts:271:3 › 物料分类 -> 新建分类 › CAT-CREATE-10. 并发：快速双击新建按钮
+[1A[2K[38/141] [chromium] › e2e\categories.spec.ts:278:3 › 物料分类 -> 新建分类 › CAT-CREATE-11. 异常恢复：网络中断后重试新建
+[1A[2K[39/141] [chromium] › e2e\categories.spec.ts:289:3 › 物料分类 -> 新建分类 › CAT-CREATE-12. 边界：超长分类名称(>100字符)
+[1A[2K[40/141] [chromium] › e2e\categories.spec.ts:294:3 › 物料分类 -> 新建分类 › CAT-CREATE-13. 边界：特殊字符分类名称
+[1A[2K[41/141] [chromium] › e2e\categories.spec.ts:299:3 › 物料分类 -> 新建分类 › CAT-CREATE-14. 边界：负数sortOrder
+[1A[2K[42/141] [chromium] › e2e\categories.spec.ts:304:3 › 物料分类 -> 新建分类 › CAT-CREATE-15. 正常用例：编码自动生成规则验证
+[1A[2K[43/141] [chromium] › e2e\categories.spec.ts:310:3 › 物料分类 -> 新建分类 › CAT-CREATE-16. UI差异：admin前端显示新建按钮
+[1A[2K[44/141] [chromium] › e2e\categories.spec.ts:314:3 › 物料分类 -> 新建分类 › CAT-CREATE-17. UI差异：finance前端无新建按钮
+[1A[2K[45/141] [chromium] › e2e\categories.spec.ts:318:3 › 物料分类 -> 新建分类 › CAT-CREATE-18. 正常用例：新建后分类树自动刷新
+[1A[2K[46/141] [chromium] › e2e\categories.spec.ts:330:3 › 物料分类 -> 编辑分类 › CAT-EDIT-01. 正常用例：admin修改分类名称保存成功
+[1A[2K[47/141] [chromium] › e2e\categories.spec.ts:342:3 › 物料分类 -> 编辑分类 › CAT-EDIT-02. 正常用例：admin修改分类状态为停用
+[1A[2K[48/141] [chromium] › e2e\categories.spec.ts:356:3 › 物料分类 -> 编辑分类 › CAT-EDIT-03. 空数据边界：编辑后名称为空被阻止
+[1A[2K[49/141] [chromium] › e2e\categories.spec.ts:368:3 › 物料分类 -> 编辑分类 › CAT-EDIT-04. 表单校验：编辑不存在的分类返回404
+[1A[2K[50/141] [chromium] › e2e\categories.spec.ts:374:5 › 物料分类 -> 编辑分类 › CAT-EDIT-05-technician. 权限：technician编辑分类返回403
+[1A[2K[51/141] [chromium] › e2e\categories.spec.ts:374:5 › 物料分类 -> 编辑分类 › CAT-EDIT-05-pathologist. 权限：pathologist编辑分类返回403
+[1A[2K[52/141] [chromium] › e2e\categories.spec.ts:374:5 › 物料分类 -> 编辑分类 › CAT-EDIT-05-procurement. 权限：procurement编辑分类返回403
+[1A[2K[53/141] [chromium] › e2e\categories.spec.ts:374:5 › 物料分类 -> 编辑分类 › CAT-EDIT-05-finance. 权限：finance编辑分类返回403
+[1A[2K[54/141] [chromium] › e2e\categories.spec.ts:374:5 › 物料分类 -> 编辑分类 › CAT-EDIT-05-warehouse_manager. 权限：warehouse_manager编辑分类返回403
+[1A[2K[55/141] [chromium] › e2e\categories.spec.ts:380:3 › 物料分类 -> 编辑分类 › CAT-EDIT-06. 业务冲突：编辑分类code不被更新
+[1A[2K[56/141] [chromium] › e2e\categories.spec.ts:388:3 › 物料分类 -> 编辑分类 › CAT-EDIT-07. 并发：并发编辑同一分类
+[1A[2K[57/141] [chromium] › e2e\categories.spec.ts:397:3 › 物料分类 -> 编辑分类 › CAT-EDIT-08. 异常恢复：编辑时API 500后重试
+[1A[2K[58/141] [chromium] › e2e\categories.spec.ts:406:3 › 物料分类 -> 编辑分类 › CAT-EDIT-09. UI差异：admin显示编辑按钮
+[1A[2K[59/141] [chromium] › e2e\categories.spec.ts:413:3 › 物料分类 -> 编辑分类 › CAT-EDIT-10. UI差异：technician不显示编辑按钮
+[1A[2K[60/141] [chromium] › e2e\categories.spec.ts:417:3 › 物料分类 -> 编辑分类 › CAT-EDIT-11. 边界：编辑sortOrder为超大值
+[1A[2K[61/141] [chromium] › e2e\categories.spec.ts:425:3 › 物料分类 -> 编辑分类 › CAT-EDIT-12. 正常用例：编辑后分类树自动刷新
+[1A[2K[62/141] [chromium] › e2e\categories.spec.ts:437:3 › 物料分类 -> 编辑分类 › CAT-EDIT-13. 表单校验：编辑parentId形成循环引用
+[1A[2K[63/141] [chromium] › e2e\categories.spec.ts:445:3 › 物料分类 -> 编辑分类 › CAT-EDIT-14. 边界：编辑remark为超长文本
+[1A[2K[64/141] [chromium] › e2e\categories.spec.ts:459:3 › 物料分类 -> 删除分类 › CAT-DELETE-01. 正常用例：admin删除无子分类无物料三级分类
+[1A[2K[65/141] [chromium] › e2e\categories.spec.ts:475:3 › 物料分类 -> 删除分类 › CAT-DELETE-02. 业务冲突：有子分类的一级分类删除返回409
+[1A[2K[66/141] [chromium] › e2e\categories.spec.ts:483:3 › 物料分类 -> 删除分类 › CAT-DELETE-03. 业务冲突：有关联物料的分类删除返回409
+[1A[2K[67/141] [chromium] › e2e\categories.spec.ts:492:3 › 物料分类 -> 删除分类 › CAT-DELETE-04. 并发：并发删除同一分类
+[1A[2K[68/141] [chromium] › e2e\categories.spec.ts:501:3 › 物料分类 -> 删除分类 › CAT-DELETE-05. 异常恢复：删除时API 500后重试
+[1A[2K[69/141] [chromium] › e2e\categories.spec.ts:511:5 › 物料分类 -> 删除分类 › CAT-DELETE-06-technician. 权限：technician删除分类返回403
+[1A[2K[70/141] [chromium] › e2e\categories.spec.ts:511:5 › 物料分类 -> 删除分类 › CAT-DELETE-06-pathologist. 权限：pathologist删除分类返回403
+[1A[2K[71/141] [chromium] › e2e\categories.spec.ts:511:5 › 物料分类 -> 删除分类 › CAT-DELETE-06-procurement. 权限：procurement删除分类返回403
+[1A[2K[72/141] [chromium] › e2e\categories.spec.ts:511:5 › 物料分类 -> 删除分类 › CAT-DELETE-06-finance. 权限：finance删除分类返回403
+[1A[2K[73/141] [chromium] › e2e\categories.spec.ts:511:5 › 物料分类 -> 删除分类 › CAT-DELETE-06-warehouse_manager. 权限：warehouse_manager删除分类返回403
+[1A[2K[74/141] [chromium] › e2e\categories.spec.ts:517:3 › 物料分类 -> 删除分类 › CAT-DELETE-07. UI差异：admin显示删除按钮
+[1A[2K[75/141] [chromium] › e2e\categories.spec.ts:521:3 › 物料分类 -> 删除分类 › CAT-DELETE-08. UI差异：technician不显示删除按钮
+[1A[2K[76/141] [chromium] › e2e\categories.spec.ts:525:3 › 物料分类 -> 删除分类 › CAT-DELETE-09. 正常用例：删除后分类树自动刷新
+[1A[2K[77/141] [chromium] › e2e\categories.spec.ts:534:3 › 物料分类 -> 删除分类 › CAT-DELETE-10. 表单校验：删除不存在的分类返回404
+[1A[2K[78/141] [chromium] › e2e\categories.spec.ts:539:3 › 物料分类 -> 删除分类 › CAT-DELETE-11. 边界：删除后再次删除返回404
+[1A[2K[79/141] [chromium] › e2e\categories.spec.ts:554:3 › 物料分类 -> 分类详情面板 › CAT-DETAIL-01. 正常用例：点击分类显示详情面板
+[1A[2K[80/141] [chromium] › e2e\categories.spec.ts:560:3 › 物料分类 -> 分类详情面板 › CAT-DETAIL-02. 正常用例：详情面板显示面包屑路径
+[1A[2K[81/141] [chromium] › e2e\categories.spec.ts:566:3 › 物料分类 -> 分类详情面板 › CAT-DETAIL-03. 正常用例：详情面板显示关联物料数量
+[1A[2K[82/141] [chromium] › e2e\categories.spec.ts:572:3 › 物料分类 -> 分类详情面板 › CAT-DETAIL-04. UI差异：admin详情面板显示编辑和添加子分类按钮
+[1A[2K[83/141] [chromium] › e2e\categories.spec.ts:578:3 › 物料分类 -> 分类详情面板 › CAT-DETAIL-05. UI差异：technician详情面板仅显示信息无操作
+[1A[2K[84/141] [chromium] › e2e\categories.spec.ts:584:3 › 物料分类 -> 分类详情面板 › CAT-DETAIL-06. 正常用例：未选择分类显示占位提示
+[1A[2K[85/141] [chromium] › e2e\categories.spec.ts:588:3 › 物料分类 -> 分类详情面板 › CAT-DETAIL-07. 正常用例：详情面板显示状态标签
+[1A[2K[86/141] [chromium] › e2e\categories.spec.ts:594:3 › 物料分类 -> 分类详情面板 › CAT-DETAIL-08. 正常用例：三级分类不显示添加子分类按钮
+[1A[2K[87/141] [chromium] › e2e\categories.spec.ts:615:3 › 物料分类 -> 展开收起功能 › CAT-EXPAND-01. 正常用例：点击展开按钮显示子分类
+[1A[2K[88/141] [chromium] › e2e\categories.spec.ts:620:3 › 物料分类 -> 展开收起功能 › CAT-EXPAND-02. 正常用例：点击收起按钮隐藏子分类
+[1A[2K[89/141] [chromium] › e2e\categories.spec.ts:628:3 › 物料分类 -> 展开收起功能 › CAT-EXPAND-03. 正常用例：展开全部按钮展开所有层级
+[1A[2K[90/141] [chromium] › e2e\categories.spec.ts:633:3 › 物料分类 -> 展开收起功能 › CAT-EXPAND-04. 正常用例：收起全部按钮收起所有层级
+[1A[2K[91/141] [chromium] › e2e\categories.spec.ts:638:3 › 物料分类 -> 展开收起功能 › CAT-EXPAND-05. 边界：无子分类的节点不显示展开按钮
+[1A[2K[92/141] [chromium] › e2e\categories.spec.ts:646:3 › 物料分类 -> 展开收起功能 › CAT-EXPAND-06. UI差异：各角色展开收起功能一致
+[1A[2K[93/141] [chromium] › e2e\categories.spec.ts:658:3 › 物料分类 -> 状态管理 › CAT-STATUS-01. 正常用例：停用分类后状态标签变更
+[1A[2K[94/141] [chromium] › e2e\categories.spec.ts:667:3 › 物料分类 -> 状态管理 › CAT-STATUS-02. 正常用例：启用已停用的分类
+[1A[2K[95/141] [chromium] › e2e\categories.spec.ts:677:3 › 物料分类 -> 状态管理 › CAT-STATUS-03. 边界：停用有子分类的分类
+[1A[2K[96/141] [chromium] › e2e\categories.spec.ts:685:3 › 物料分类 -> 状态管理 › CAT-STATUS-04. UI差异：停用分类显示灰色标签
+[1A[2K[97/141] [chromium] › e2e\categories.spec.ts:689:3 › 物料分类 -> 状态管理 › CAT-STATUS-05. 正常用例：停用分类后物料仍可查询
+[1A[2K[98/141] [chromium] › e2e\categories.spec.ts:698:3 › 物料分类 -> 状态管理 › CAT-STATUS-06. 并发：快速切换状态多次
+[1A[2K[99/141] [chromium] › e2e\categories.spec.ts:714:3 › 物料分类 -> 右键菜单 › CAT-CTX-01. 正常用例：右键点击分类显示上下文菜单
+[1A[2K[100/141] [chromium] › e2e\categories.spec.ts:721:3 › 物料分类 -> 右键菜单 › CAT-CTX-02. 正常用例：右键菜单点击编辑打开弹窗
+[1A[2K[101/141] [chromium] › e2e\categories.spec.ts:730:3 › 物料分类 -> 右键菜单 › CAT-CTX-03. 正常用例：右键菜单点击添加子分类
+[1A[2K[102/141] [chromium] › e2e\categories.spec.ts:739:3 › 物料分类 -> 右键菜单 › CAT-CTX-04. 边界：三级分类右键菜单不显示添加子分类
+[1A[2K[103/141] [chromium] › e2e\categories.spec.ts:743:3 › 物料分类 -> 右键菜单 › CAT-CTX-05. UI差异：非admin右键点击不显示操作菜单
+[1A[2K[104/141] [chromium] › e2e\categories.spec.ts:751:3 › 物料分类 -> 右键菜单 › CAT-CTX-06. 异常恢复：点击其他地方右键菜单消失
+[1A[2K[105/141] [chromium] › e2e\categories.spec.ts:776:5 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-01. technician POST /categories 返回403
+[1A[2K[106/141] [chromium] › e2e\categories.spec.ts:776:5 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-02. pathologist POST /categories 返回403
+[1A[2K[107/141] [chromium] › e2e\categories.spec.ts:776:5 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-03. procurement POST /categories 返回403
+[1A[2K[108/141] [chromium] › e2e\categories.spec.ts:776:5 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-04. finance POST /categories 返回403
+[1A[2K[109/141] [chromium] › e2e\categories.spec.ts:776:5 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-05. warehouse_manager POST /categories 返回403
+[1A[2K[110/141] [chromium] › e2e\categories.spec.ts:776:5 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-06. technician PUT /categories/test-id 返回403
+[1A[2K[111/141] [chromium] › e2e\categories.spec.ts:776:5 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-07. pathologist DELETE /categories/test-id 返回403
+[1A[2K[112/141] [chromium] › e2e\categories.spec.ts:776:5 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-08. procurement PUT /categories/test-id 返回403
+[1A[2K[113/141] [chromium] › e2e\categories.spec.ts:782:3 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-09. admin GET /categories/tree 返回200
+[1A[2K[114/141] [chromium] › e2e\categories.spec.ts:787:3 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-10. technician GET /categories/tree 返回200
+[1A[2K[115/141] [chromium] › e2e\categories.spec.ts:792:3 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-11. admin GET /categories 返回200
+[1A[2K[116/141] [chromium] › e2e\categories.spec.ts:797:3 › 物料分类 -> 角色权限矩阵补充 › TC-PERM-CAT-12. warehouse_manager GET /categories 返回200
+[1A[2K[117/141] [chromium] › e2e\categories.spec.ts:808:3 › 物料分类 -> 业务流程树 › BF-CAT-01. 主路径：创建一级→二级→三级分类
+[1A[2K[118/141] [chromium] › e2e\categories.spec.ts:818:3 › 物料分类 -> 业务流程树 › BF-CAT-02. 分支：创建分类时不填名称被阻止
+[1A[2K[119/141] [chromium] › e2e\categories.spec.ts:824:3 › 物料分类 -> 业务流程树 › BF-CAT-03. 分支：编辑分类后取消不保存
+[1A[2K[120/141] [chromium] › e2e\categories.spec.ts:833:3 › 物料分类 -> 业务流程树 › BF-CAT-04. 分支：删除有子分类的分类被拦截
+[1A[2K[121/141] [chromium] › e2e\categories.spec.ts:841:3 › 物料分类 -> 业务流程树 › BF-CAT-05. 分支：删除弹窗点击取消
+[1A[2K[122/141] [chromium] › e2e\categories.spec.ts:850:3 › 物料分类 -> 业务流程树 › BF-CAT-06. 分支：搜索分类后点击结果查看详情
+[1A[2K[123/141] [chromium] › e2e\categories.spec.ts:859:3 › 物料分类 -> 业务流程树 › BF-CAT-07. 分支：展开全部分类后收起
+[1A[2K[124/141] [chromium] › e2e\categories.spec.ts:868:3 › 物料分类 -> 业务流程树 › BF-CAT-08. 分支：右键菜单添加子分类完整流程
+[1A[2K[125/141] [chromium] › e2e\categories.spec.ts:881:3 › 物料分类 -> 业务流程树 › BF-CAT-09. 分支：停用分类后重新启用
+[1A[2K[126/141] [chromium] › e2e\categories.spec.ts:890:3 › 物料分类 -> 业务流程树 › BF-CAT-10. 分支：创建同名分类被拦截
+[1A[2K[127/141] [chromium] › e2e\categories.spec.ts:904:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-01. 分类编码自动生成规则（一级100递增）
+[1A[2K[128/141] [chromium] › e2e\categories.spec.ts:910:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-02. 二级分类编码为一级编码+序号
+[1A[2K[129/141] [chromium] › e2e\categories.spec.ts:920:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-03. 分类下物料数量统计准确性
+[1A[2K[130/141] [chromium] › e2e\categories.spec.ts:926:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-04. 树形结构展开收起状态持久化
+[1A[2K[131/141] [chromium] › e2e\categories.spec.ts:934:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-05. 分类名称XSS防护
+[1A[2K[132/141] [chromium] › e2e\categories.spec.ts:939:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-06. 分类列表默认排序规则
+[1A[2K[133/141] [chromium] › e2e\categories.spec.ts:945:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-07. 分类详情面包屑路径正确性
+[1A[2K[134/141] [chromium] › e2e\categories.spec.ts:951:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-08. 分类创建时间记录
+[1A[2K[135/141] [chromium] › e2e\categories.spec.ts:957:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-09. 分类sortOrder影响排序
+[1A[2K[136/141] [chromium] › e2e\categories.spec.ts:962:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-10. 删除分类后关联物料category_id处理
+[1A[2K[137/141] [chromium] › e2e\categories.spec.ts:971:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-11. 分类页面响应式布局检查
+[1A[2K[138/141] [chromium] › e2e\categories.spec.ts:977:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-12. 分类Modal关闭后表单重置
+[1A[2K[139/141] [chromium] › e2e\categories.spec.ts:986:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-13. 分类API响应格式验证
+[1A[2K[140/141] [chromium] › e2e\categories.spec.ts:992:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-14. 分类tree API响应格式验证
+[1A[2K[141/141] [chromium] › e2e\categories.spec.ts:998:3 › 物料分类 -> 盲点分析补充 › BLIND-CAT-15. 分类页面加载性能检查
+[1A[2K  Slow test file: [chromium] › e2e\categories.spec.ts (5.3m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  141 passed (5.4m)

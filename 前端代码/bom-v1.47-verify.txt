@@ -1,0 +1,124 @@
+
+Running 119 tests using 1 worker
+
+[1A[2K[1/119] [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-admin. admin可查看BOM列表
+[1A[2K[2/119] [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-technician. technician可查看BOM列表
+[1A[2K[3/119] [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-pathologist. pathologist可查看BOM列表
+[1A[2K[4/119] [chromium] › e2e\bom.spec.ts:80:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-02. 空数据边界
+[1A[2K[5/119] [chromium] › e2e\bom.spec.ts:86:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-03-warehouse_manager. warehouse_manager访问返回403
+[1A[2K[6/119] [chromium] › e2e\bom.spec.ts:86:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-03-procurement. procurement访问返回403
+[1A[2K[7/119] [chromium] › e2e\bom.spec.ts:86:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-03-finance. finance访问返回403
+[1A[2K[8/119] [chromium] › e2e\bom.spec.ts:91:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-04. API 500
+[1A[2K[9/119] [chromium] › e2e\bom.spec.ts:96:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-05. admin显示新增编辑删除
+[1A[2K[10/119] [chromium] › e2e\bom.spec.ts:101:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-06. technician仅查看
+[1A[2K[11/119] [chromium] › e2e\bom.spec.ts:106:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-07. 显示编码名称类型物料数单样本成本
+[1A[2K[12/119] [chromium] › e2e\bom.spec.ts:111:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-08. 快速刷新
+[1A[2K[13/119] [chromium] › e2e\bom.spec.ts:121:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-01. 选择ihc
+[1A[2K[14/119] [chromium] › e2e\bom.spec.ts:126:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-02. 无该类型
+[1A[2K[15/119] [chromium] › e2e\bom.spec.ts:131:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-03. 重置
+[1A[2K[16/119] [chromium] › e2e\bom.spec.ts:136:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-04. 各角色可见
+[1A[2K[17/119] [chromium] › e2e\bom.spec.ts:143:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-05. 快速切换
+[1A[2K[18/119] [chromium] › e2e\bom.spec.ts:150:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-06. API错误
+[1A[2K[19/119] [chromium] › e2e\bom.spec.ts:159:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-01. 搜索HER2
+[1A[2K[20/119] [chromium] › e2e\bom.spec.ts:164:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-02. 无结果
+[1A[2K[21/119] [chromium] › e2e\bom.spec.ts:169:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-03. 快速连续输入
+[1A[2K[22/119] [chromium] › e2e\bom.spec.ts:178:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-04. 网络断
+[1A[2K[23/119] [chromium] › e2e\bom.spec.ts:183:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-05. 超长字符串
+[1A[2K[24/119] [chromium] › e2e\bom.spec.ts:188:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-06. 各角色可见
+[1A[2K[25/119] [chromium] › e2e\bom.spec.ts:199:3 › BOM清单 -> 新建BOM › BOM-CREATE-01. admin新建成功
+[1A[2K[26/119] [chromium] › e2e\bom.spec.ts:208:3 › BOM清单 -> 新建BOM › BOM-CREATE-02. materials空返回201
+[1A[2K[27/119] [chromium] › e2e\bom.spec.ts:215:3 › BOM清单 -> 新建BOM › BOM-CREATE-03. 未传code返回400
+[1A[2K[28/119] [chromium] › e2e\bom.spec.ts:220:3 › BOM清单 -> 新建BOM › BOM-CREATE-04. 未传name返回400
+[1A[2K[29/119] [chromium] › e2e\bom.spec.ts:225:3 › BOM清单 -> 新建BOM › BOM-CREATE-05. 未传type返回400
+[1A[2K[30/119] [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-technician. technician新建返回403
+[1A[2K[31/119] [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-pathologist. pathologist新建返回403
+[1A[2K[32/119] [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-warehouse_manager. warehouse_manager新建返回403
+[1A[2K[33/119] [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-procurement. procurement新建返回403
+[1A[2K[34/119] [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-finance. finance新建返回403
+[1A[2K[35/119] [chromium] › e2e\bom.spec.ts:237:3 › BOM清单 -> 新建BOM › BOM-CREATE-07. code已存在返回409
+[1A[2K[36/119] [chromium] › e2e\bom.spec.ts:244:3 › BOM清单 -> 新建BOM › BOM-CREATE-08. 快速双击
+[1A[2K[37/119] [chromium] › e2e\bom.spec.ts:250:3 › BOM清单 -> 新建BOM › BOM-CREATE-09. 网络中断重试
+[1A[2K[38/119] [chromium] › e2e\bom.spec.ts:257:3 › BOM清单 -> 新建BOM › BOM-CREATE-10. admin显示新增按钮
+[1A[2K[39/119] [chromium] › e2e\bom.spec.ts:262:3 › BOM清单 -> 新建BOM › BOM-CREATE-11. technician不显示新增
+[1A[2K[40/119] [chromium] › e2e\bom.spec.ts:267:3 › BOM清单 -> 新建BOM › BOM-CREATE-12. 新建后version=v1.0
+[1A[2K[41/119] [chromium] › e2e\bom.spec.ts:278:3 › BOM清单 -> 新建BOM › BOM-CREATE-13. 超长code
+[1A[2K[42/119] [chromium] › e2e\bom.spec.ts:285:3 › BOM清单 -> 新建BOM › BOM-CREATE-14. 特殊字符name
+[1A[2K[43/119] [chromium] › e2e\bom.spec.ts:292:3 › BOM清单 -> 新建BOM › BOM-CREATE-15. 多物料BOM
+[1A[2K[44/119] [chromium] › e2e\bom.spec.ts:302:3 › BOM清单 -> 新建BOM › BOM-CREATE-16. 负数量物料
+[1A[2K[45/119] [chromium] › e2e\bom.spec.ts:315:3 › BOM清单 -> 编辑BOM › BOM-EDIT-01. admin编辑物料用量
+[1A[2K[46/119] [chromium] › e2e\bom.spec.ts:322:3 › BOM清单 -> 编辑BOM › BOM-EDIT-02. 不传materials仅基础字段更新
+[1A[2K[47/119] [chromium] › e2e\bom.spec.ts:330:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-technician. technician编辑返回403
+[1A[2K[48/119] [chromium] › e2e\bom.spec.ts:330:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-pathologist. pathologist编辑返回403
+[1A[2K[49/119] [chromium] › e2e\bom.spec.ts:330:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-warehouse_manager. warehouse_manager编辑返回403
+[1A[2K[50/119] [chromium] › e2e\bom.spec.ts:330:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-procurement. procurement编辑返回403
+[1A[2K[51/119] [chromium] › e2e\bom.spec.ts:330:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-finance. finance编辑返回403
+[1A[2K[52/119] [chromium] › e2e\bom.spec.ts:339:3 › BOM清单 -> 编辑BOM › BOM-EDIT-04. 被项目关联编辑后版本升级
+[1A[2K[53/119] [chromium] › e2e\bom.spec.ts:346:3 › BOM清单 -> 编辑BOM › BOM-EDIT-05. 并发编辑
+[1A[2K[54/119] [chromium] › e2e\bom.spec.ts:356:3 › BOM清单 -> 编辑BOM › BOM-EDIT-06. API 500后重试
+[1A[2K[55/119] [chromium] › e2e\bom.spec.ts:363:3 › BOM清单 -> 编辑BOM › BOM-EDIT-07. admin显示编辑按钮
+[1A[2K[56/119] [chromium] › e2e\bom.spec.ts:368:3 › BOM清单 -> 编辑BOM › BOM-EDIT-08. technician不显示编辑
+[1A[2K[57/119] [chromium] › e2e\bom.spec.ts:373:3 › BOM清单 -> 编辑BOM › BOM-EDIT-09. 编辑后列表更新
+[1A[2K[58/119] [chromium] › e2e\bom.spec.ts:379:3 › BOM清单 -> 编辑BOM › BOM-EDIT-10. 编辑不存在返回404
+[1A[2K[59/119] [chromium] › e2e\bom.spec.ts:384:3 › BOM清单 -> 编辑BOM › BOM-EDIT-11. name为空
+[1A[2K[60/119] [chromium] › e2e\bom.spec.ts:391:3 › BOM清单 -> 编辑BOM › BOM-EDIT-12. 网络中断
+[1A[2K[61/119] [chromium] › e2e\bom.spec.ts:402:3 › BOM清单 -> 删除BOM › BOM-DEL-01. admin删除无关联BOM
+[1A[2K[62/119] [chromium] › e2e\bom.spec.ts:415:5 › BOM清单 -> 删除BOM › BOM-DEL-02-technician. technician删除返回403
+[1A[2K[63/119] [chromium] › e2e\bom.spec.ts:415:5 › BOM清单 -> 删除BOM › BOM-DEL-02-pathologist. pathologist删除返回403
+[1A[2K[64/119] [chromium] › e2e\bom.spec.ts:415:5 › BOM清单 -> 删除BOM › BOM-DEL-02-warehouse_manager. warehouse_manager删除返回403
+[1A[2K[65/119] [chromium] › e2e\bom.spec.ts:415:5 › BOM清单 -> 删除BOM › BOM-DEL-02-procurement. procurement删除返回403
+[1A[2K[66/119] [chromium] › e2e\bom.spec.ts:415:5 › BOM清单 -> 删除BOM › BOM-DEL-02-finance. finance删除返回403
+[1A[2K[67/119] [chromium] › e2e\bom.spec.ts:424:3 › BOM清单 -> 删除BOM › BOM-DEL-03. 被项目关联删除后悬空引用
+[1A[2K[68/119] [chromium] › e2e\bom.spec.ts:431:3 › BOM清单 -> 删除BOM › BOM-DEL-04. 并发删除
+[1A[2K[69/119] [chromium] › e2e\bom.spec.ts:444:3 › BOM清单 -> 删除BOM › BOM-DEL-05. API 500后重试
+[1A[2K[70/119] [chromium] › e2e\bom.spec.ts:455:3 › BOM清单 -> 删除BOM › BOM-DEL-06. admin显示删除按钮
+[1A[2K[71/119] [chromium] › e2e\bom.spec.ts:460:3 › BOM清单 -> 删除BOM › BOM-DEL-07. pathologist不显示删除
+[1A[2K[72/119] [chromium] › e2e\bom.spec.ts:465:3 › BOM清单 -> 删除BOM › BOM-DEL-08. 不存在返回404
+[1A[2K[73/119] [chromium] › e2e\bom.spec.ts:470:3 › BOM清单 -> 删除BOM › BOM-DEL-09. 再次删除返回404
+[1A[2K[74/119] [chromium] › e2e\bom.spec.ts:481:3 › BOM清单 -> 删除BOM › BOM-DEL-10. 删除后列表刷新
+[1A[2K[75/119] [chromium] › e2e\bom.spec.ts:494:5 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-01-admin. admin可查看详情
+[1A[2K[76/119] [chromium] › e2e\bom.spec.ts:494:5 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-01-technician. technician可查看详情
+[1A[2K[77/119] [chromium] › e2e\bom.spec.ts:494:5 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-01-pathologist. pathologist可查看详情
+[1A[2K[78/119] [chromium] › e2e\bom.spec.ts:502:3 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-02. 不存在返回404
+[1A[2K[79/119] [chromium] › e2e\bom.spec.ts:507:3 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-03. admin可点击查看详情弹窗
+[1A[2K[80/119] [chromium] › e2e\bom.spec.ts:518:3 › BOM清单 -> 分页切换 › BOM-PAGE-01. 第2页
+[1A[2K[81/119] [chromium] › e2e\bom.spec.ts:523:3 › BOM清单 -> 分页切换 › BOM-PAGE-02. 仅1页
+[1A[2K[82/119] [chromium] › e2e\bom.spec.ts:528:3 › BOM清单 -> 分页切换 › BOM-PAGE-03. page=0
+[1A[2K[83/119] [chromium] › e2e\bom.spec.ts:533:3 › BOM清单 -> 分页切换 › BOM-PAGE-04. page=999
+[1A[2K[84/119] [chromium] › e2e\bom.spec.ts:538:3 › BOM清单 -> 分页切换 › BOM-PAGE-05. pageSize=1
+[1A[2K[85/119] [chromium] › e2e\bom.spec.ts:543:3 › BOM清单 -> 分页切换 › BOM-PAGE-06. pageSize=100
+[1A[2K[86/119] [chromium] › e2e\bom.spec.ts:548:3 › BOM清单 -> 分页切换 › BOM-PAGE-07. 快速切换
+[1A[2K[87/119] [chromium] › e2e\bom.spec.ts:555:3 › BOM清单 -> 分页切换 › BOM-PAGE-08. 各角色一致
+[1A[2K[88/119] [chromium] › e2e\bom.spec.ts:566:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-108. WHM GET /boms 返回403
+[1A[2K[89/119] [chromium] › e2e\bom.spec.ts:570:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-109. PROC GET /boms 返回403
+[1A[2K[90/119] [chromium] › e2e\bom.spec.ts:574:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-110. FIN GET /boms 返回403
+[1A[2K[91/119] [chromium] › e2e\bom.spec.ts:578:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-111. WHM POST /boms 返回403
+[1A[2K[92/119] [chromium] › e2e\bom.spec.ts:582:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-112. TECH POST /boms 返回403
+[1A[2K[93/119] [chromium] › e2e\bom.spec.ts:586:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-113. PATH POST /boms 返回403
+[1A[2K[94/119] [chromium] › e2e\bom.spec.ts:590:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-114. PROC POST /boms 返回403
+[1A[2K[95/119] [chromium] › e2e\bom.spec.ts:594:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-115. FIN POST /boms 返回403
+[1A[2K[96/119] [chromium] › e2e\bom.spec.ts:602:3 › BOM清单 -> 业务流程树 › BF-BOM-01. 主路径：新建→填写→提交→version=v1.0
+[1A[2K[97/119] [chromium] › e2e\bom.spec.ts:609:3 › BOM清单 -> 业务流程树 › BF-BOM-02. 关闭弹窗不保存
+[1A[2K[98/119] [chromium] › e2e\bom.spec.ts:614:3 › BOM清单 -> 业务流程树 › BF-BOM-03. code已存在
+[1A[2K[99/119] [chromium] › e2e\bom.spec.ts:621:3 › BOM清单 -> 业务流程树 › BF-BOM-04. 必填漏填
+[1A[2K[100/119] [chromium] › e2e\bom.spec.ts:626:3 › BOM清单 -> 业务流程树 › BF-BOM-05. 刷新后仍在
+[1A[2K[101/119] [chromium] › e2e\bom.spec.ts:633:3 › BOM清单 -> 业务流程树 › BF-BOM-06. 被项目关联删除
+[1A[2K[102/119] [chromium] › e2e\bom.spec.ts:640:3 › BOM清单 -> 业务流程树 › BF-BOM-07. technician尝试新建被403
+[1A[2K[103/119] [chromium] › e2e\bom.spec.ts:644:3 › BOM清单 -> 业务流程树 › BF-BOM-08. 编辑后版本升级
+[1A[2K[104/119] [chromium] › e2e\bom.spec.ts:655:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-01. 编码唯一性
+[1A[2K[105/119] [chromium] › e2e\bom.spec.ts:663:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-02. version自动升级
+[1A[2K[106/119] [chromium] › e2e\bom.spec.ts:669:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-03. costRatio计算
+[1A[2K[107/119] [chromium] › e2e\bom.spec.ts:676:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-04. 导出功能
+[1A[2K[108/119] [chromium] › e2e\bom.spec.ts:681:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-05. 打印功能
+[1A[2K[109/119] [chromium] › e2e\bom.spec.ts:686:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-06. 响应式布局
+[1A[2K[110/119] [chromium] › e2e\bom.spec.ts:692:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-07. 加载性能
+[1A[2K[111/119] [chromium] › e2e\bom.spec.ts:699:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-08. 搜索防抖
+[1A[2K[112/119] [chromium] › e2e\bom.spec.ts:708:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-09. 物料明细展示
+[1A[2K[113/119] [chromium] › e2e\bom.spec.ts:715:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-10. XSS防护
+[1A[2K[114/119] [chromium] › e2e\bom.spec.ts:722:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-11. SQL注入防护
+[1A[2K[115/119] [chromium] › e2e\bom.spec.ts:729:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-12. API响应格式
+[1A[2K[116/119] [chromium] › e2e\bom.spec.ts:736:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-13. 版本历史
+[1A[2K[117/119] [chromium] › e2e\bom.spec.ts:743:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-14. 排序功能
+[1A[2K[118/119] [chromium] › e2e\bom.spec.ts:748:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-15. 多角色同时操作
+[1A[2K[119/119] [chromium] › e2e\bom.spec.ts:760:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-16. 物料用量小数
+[1A[2K  27 skipped
+  92 passed (3.4m)

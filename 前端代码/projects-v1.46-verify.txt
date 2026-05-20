@@ -1,0 +1,125 @@
+
+Running 120 tests using 1 worker
+
+[1A[2K[1/120] [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-admin. 正常用例：admin可查看项目列表
+[1A[2K[2/120] [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-technician. 正常用例：technician可查看项目列表
+[1A[2K[3/120] [chromium] › e2e\projects.spec.ts:76:5 › 检测项目 -> 查看项目列表 › PROJ-LIST-01-pathologist. 正常用例：pathologist可查看项目列表
+[1A[2K[4/120] [chromium] › e2e\projects.spec.ts:82:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-02. 空数据边界：无项目数据
+[1A[2K[5/120] [chromium] › e2e\projects.spec.ts:87:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-03. 权限：warehouse_manager访问返回403
+[1A[2K[6/120] [chromium] › e2e\projects.spec.ts:91:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-04. 权限：procurement访问返回403
+[1A[2K[7/120] [chromium] › e2e\projects.spec.ts:95:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-05. 权限：finance访问返回403
+[1A[2K[8/120] [chromium] › e2e\projects.spec.ts:99:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-06. 异常恢复：API 500
+[1A[2K[9/120] [chromium] › e2e\projects.spec.ts:104:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-07. UI差异：admin显示新增编辑删除
+[1A[2K[10/120] [chromium] › e2e\projects.spec.ts:109:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-08. UI差异：technician仅显示查看
+[1A[2K[11/120] [chromium] › e2e\projects.spec.ts:114:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-09. 正常用例：显示编码名称类型周期BOM样本数
+[1A[2K[12/120] [chromium] › e2e\projects.spec.ts:119:3 › 检测项目 -> 查看项目列表 › PROJ-LIST-10. 并发：快速刷新
+[1A[2K[13/120] [chromium] › e2e\projects.spec.ts:131:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-01. 正常用例：选择ihc仅显示免疫组化
+[1A[2K[14/120] [chromium] › e2e\projects.spec.ts:136:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-02. 空数据边界：该类型无项目
+[1A[2K[15/120] [chromium] › e2e\projects.spec.ts:141:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-03. 正常用例：重置筛选
+[1A[2K[16/120] [chromium] › e2e\projects.spec.ts:146:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-04. UI差异：各角色类型筛选可见
+[1A[2K[17/120] [chromium] › e2e\projects.spec.ts:153:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-05. 并发：快速切换类型
+[1A[2K[18/120] [chromium] › e2e\projects.spec.ts:160:3 › 检测项目 -> 按类型筛选 › PROJ-TYPE-06. 异常恢复：类型筛选API错误
+[1A[2K[19/120] [chromium] › e2e\projects.spec.ts:171:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-01. 正常用例：选择active仅显示启用
+[1A[2K[20/120] [chromium] › e2e\projects.spec.ts:176:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-02. 空数据边界：无active项目
+[1A[2K[21/120] [chromium] › e2e\projects.spec.ts:181:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-03. 正常用例：重置筛选
+[1A[2K[22/120] [chromium] › e2e\projects.spec.ts:186:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-04. UI差异：各角色状态筛选可见
+[1A[2K[23/120] [chromium] › e2e\projects.spec.ts:193:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-05. 并发：快速切换状态
+[1A[2K[24/120] [chromium] › e2e\projects.spec.ts:200:3 › 检测项目 -> 按状态筛选 › PROJ-STATUS-06. 异常恢复：状态筛选API错误
+[1A[2K[25/120] [chromium] › e2e\projects.spec.ts:211:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-01. 正常用例：搜索HER2
+[1A[2K[26/120] [chromium] › e2e\projects.spec.ts:216:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-02. 空数据边界：无结果
+[1A[2K[27/120] [chromium] › e2e\projects.spec.ts:222:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-03. 并发：快速连续输入
+[1A[2K[28/120] [chromium] › e2e\projects.spec.ts:233:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-04. 异常恢复：搜索网络断
+[1A[2K[29/120] [chromium] › e2e\projects.spec.ts:238:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-05. 边界：超长字符串
+[1A[2K[30/120] [chromium] › e2e\projects.spec.ts:243:3 › 检测项目 -> 搜索项目 › PROJ-SEARCH-06. UI差异：各角色搜索可见
+[1A[2K[31/120] [chromium] › e2e\projects.spec.ts:256:3 › 检测项目 -> 新建项目 › PROJ-CREATE-01. 正常用例：admin新建项目成功
+[1A[2K[32/120] [chromium] › e2e\projects.spec.ts:265:3 › 检测项目 -> 新建项目 › PROJ-CREATE-02. 空数据边界：cycle留空
+[1A[2K[33/120] [chromium] › e2e\projects.spec.ts:272:3 › 检测项目 -> 新建项目 › PROJ-CREATE-03. 表单校验：未传code返回400
+[1A[2K[34/120] [chromium] › e2e\projects.spec.ts:277:3 › 检测项目 -> 新建项目 › PROJ-CREATE-04. 表单校验：未传name返回400
+[1A[2K[35/120] [chromium] › e2e\projects.spec.ts:282:3 › 检测项目 -> 新建项目 › PROJ-CREATE-05. 表单校验：未传type返回400
+[1A[2K[36/120] [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-technician. 权限：technician新建返回403
+[1A[2K[37/120] [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-pathologist. 权限：pathologist新建返回403
+[1A[2K[38/120] [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-warehouse_manager. 权限：warehouse_manager新建返回403
+[1A[2K[39/120] [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-procurement. 权限：procurement新建返回403
+[1A[2K[40/120] [chromium] › e2e\projects.spec.ts:288:5 › 检测项目 -> 新建项目 › PROJ-CREATE-06-finance. 权限：finance新建返回403
+[1A[2K[41/120] [chromium] › e2e\projects.spec.ts:296:3 › 检测项目 -> 新建项目 › PROJ-CREATE-07. 业务冲突：code已存在返回409
+[1A[2K[42/120] [chromium] › e2e\projects.spec.ts:303:3 › 检测项目 -> 新建项目 › PROJ-CREATE-08. 并发：快速双击
+[1A[2K[43/120] [chromium] › e2e\projects.spec.ts:309:3 › 检测项目 -> 新建项目 › PROJ-CREATE-09. 异常恢复：网络中断后重试
+[1A[2K[44/120] [chromium] › e2e\projects.spec.ts:316:3 › 检测项目 -> 新建项目 › PROJ-CREATE-10. UI差异：admin显示新增按钮
+[1A[2K[45/120] [chromium] › e2e\projects.spec.ts:321:3 › 检测项目 -> 新建项目 › PROJ-CREATE-11. UI差异：technician不显示新增按钮
+[1A[2K[46/120] [chromium] › e2e\projects.spec.ts:326:3 › 检测项目 -> 新建项目 › PROJ-CREATE-12. UI差异：pathologist不显示新增按钮
+[1A[2K[47/120] [chromium] › e2e\projects.spec.ts:331:3 › 检测项目 -> 新建项目 › PROJ-CREATE-13. 正常用例：新建后status=active
+[1A[2K[48/120] [chromium] › e2e\projects.spec.ts:338:3 › 检测项目 -> 新建项目 › PROJ-CREATE-14. 边界：超长code
+[1A[2K[49/120] [chromium] › e2e\projects.spec.ts:345:3 › 检测项目 -> 新建项目 › PROJ-CREATE-15. 边界：非法type值
+[1A[2K[50/120] [chromium] › e2e\projects.spec.ts:352:3 › 检测项目 -> 新建项目 › PROJ-CREATE-16. 正常用例：关联BOM创建项目
+[1A[2K[51/120] [chromium] › e2e\projects.spec.ts:366:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-01. 正常用例：admin编辑项目名称成功
+[1A[2K[52/120] [chromium] › e2e\projects.spec.ts:373:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-02. 空数据边界：清空必填字段
+[1A[2K[53/120] [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-technician. 权限：technician编辑返回403
+[1A[2K[54/120] [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-pathologist. 权限：pathologist编辑返回403
+[1A[2K[55/120] [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-warehouse_manager. 权限：warehouse_manager编辑返回403
+[1A[2K[56/120] [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-procurement. 权限：procurement编辑返回403
+[1A[2K[57/120] [chromium] › e2e\projects.spec.ts:381:5 › 检测项目 -> 编辑项目 › PROJ-EDIT-03-finance. 权限：finance编辑返回403
+[1A[2K[58/120] [chromium] › e2e\projects.spec.ts:390:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-04. 业务冲突：编辑status不影响历史记录
+[1A[2K[59/120] [chromium] › e2e\projects.spec.ts:397:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-05. 并发：并发编辑同一项目
+[1A[2K[60/120] [chromium] › e2e\projects.spec.ts:407:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-06. 异常恢复：API 500后重试
+[1A[2K[61/120] [chromium] › e2e\projects.spec.ts:414:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-07. UI差异：admin显示编辑按钮
+[1A[2K[62/120] [chromium] › e2e\projects.spec.ts:419:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-08. UI差异：technician不显示编辑按钮
+[1A[2K[63/120] [chromium] › e2e\projects.spec.ts:424:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-09. 正常用例：编辑后列表更新
+[1A[2K[64/120] [chromium] › e2e\projects.spec.ts:430:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-10. 表单校验：编辑不存在返回404
+[1A[2K[65/120] [chromium] › e2e\projects.spec.ts:435:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-11. 业务冲突：编辑已停用项目
+[1A[2K[66/120] [chromium] › e2e\projects.spec.ts:442:3 › 检测项目 -> 编辑项目 › PROJ-EDIT-12. 异常恢复：网络中断
+[1A[2K[67/120] [chromium] › e2e\projects.spec.ts:455:3 › 检测项目 -> 删除项目 › PROJ-DEL-01. 正常用例：admin删除无出库记录项目
+[1A[2K[68/120] [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-technician. 权限：technician删除返回403
+[1A[2K[69/120] [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-pathologist. 权限：pathologist删除返回403
+[1A[2K[70/120] [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-warehouse_manager. 权限：warehouse_manager删除返回403
+[1A[2K[71/120] [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-procurement. 权限：procurement删除返回403
+[1A[2K[72/120] [chromium] › e2e\projects.spec.ts:466:5 › 检测项目 -> 删除项目 › PROJ-DEL-02-finance. 权限：finance删除返回403
+[1A[2K[73/120] [chromium] › e2e\projects.spec.ts:475:3 › 检测项目 -> 删除项目 › PROJ-DEL-03. 业务冲突：有关联出库删除后悬空引用
+[1A[2K[74/120] [chromium] › e2e\projects.spec.ts:482:3 › 检测项目 -> 删除项目 › PROJ-DEL-04. 并发：并发删除
+[1A[2K[75/120] [chromium] › e2e\projects.spec.ts:495:3 › 检测项目 -> 删除项目 › PROJ-DEL-05. 异常恢复：API 500后重试
+[1A[2K[76/120] [chromium] › e2e\projects.spec.ts:506:3 › 检测项目 -> 删除项目 › PROJ-DEL-06. UI差异：admin显示删除按钮
+[1A[2K[77/120] [chromium] › e2e\projects.spec.ts:511:3 › 检测项目 -> 删除项目 › PROJ-DEL-07. UI差异：pathologist不显示删除按钮
+[1A[2K[78/120] [chromium] › e2e\projects.spec.ts:516:3 › 检测项目 -> 删除项目 › PROJ-DEL-08. 表单校验：删除不存在返回404
+[1A[2K[79/120] [chromium] › e2e\projects.spec.ts:521:3 › 检测项目 -> 删除项目 › PROJ-DEL-09. 业务冲突：再次删除返回404
+[1A[2K[80/120] [chromium] › e2e\projects.spec.ts:532:3 › 检测项目 -> 删除项目 › PROJ-DEL-10. 正常用例：删除后列表刷新
+[1A[2K[81/120] [chromium] › e2e\projects.spec.ts:546:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-01. 正常用例：点击项目跳转详情
+[1A[2K[82/120] [chromium] › e2e\projects.spec.ts:553:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-02. 正常用例：详情显示编码名称类型周期
+[1A[2K[83/120] [chromium] › e2e\projects.spec.ts:560:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-03. UI差异：pathologist显示成本统计
+[1A[2K[84/120] [chromium] › e2e\projects.spec.ts:565:3 › 检测项目 -> 跳转项目详情 › PROJ-DETAIL-04. UI差异：technician隐藏成本统计
+[1A[2K[85/120] [chromium] › e2e\projects.spec.ts:576:3 › 检测项目 -> 分页切换 › PROJ-PAGE-01. 正常用例：切换到第2页
+[1A[2K[86/120] [chromium] › e2e\projects.spec.ts:581:3 › 检测项目 -> 分页切换 › PROJ-PAGE-02. 边界：仅1页分页器隐藏
+[1A[2K[87/120] [chromium] › e2e\projects.spec.ts:586:3 › 检测项目 -> 分页切换 › PROJ-PAGE-03. 表单校验：page=0修正为1
+[1A[2K[88/120] [chromium] › e2e\projects.spec.ts:592:3 › 检测项目 -> 分页切换 › PROJ-PAGE-04. 边界：page=999
+[1A[2K[89/120] [chromium] › e2e\projects.spec.ts:597:3 › 检测项目 -> 分页切换 › PROJ-PAGE-05. 边界：pageSize=1
+[1A[2K[90/120] [chromium] › e2e\projects.spec.ts:602:3 › 检测项目 -> 分页切换 › PROJ-PAGE-06. 边界：pageSize=100
+[1A[2K[91/120] [chromium] › e2e\projects.spec.ts:607:3 › 检测项目 -> 分页切换 › PROJ-PAGE-07. 并发：快速切换分页
+[1A[2K[92/120] [chromium] › e2e\projects.spec.ts:614:3 › 检测项目 -> 分页切换 › PROJ-PAGE-08. UI差异：各角色分页一致
+[1A[2K[93/120] [chromium] › e2e\projects.spec.ts:627:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-100. warehouse_manager GET /projects 返回403
+[1A[2K[94/120] [chromium] › e2e\projects.spec.ts:631:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-101. procurement GET /projects 返回403
+[1A[2K[95/120] [chromium] › e2e\projects.spec.ts:635:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-102. finance GET /projects 返回403
+[1A[2K[96/120] [chromium] › e2e\projects.spec.ts:639:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-103. warehouse_manager POST /projects 返回403
+[1A[2K[97/120] [chromium] › e2e\projects.spec.ts:643:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-104. technician POST /projects 返回403
+[1A[2K[98/120] [chromium] › e2e\projects.spec.ts:647:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-105. pathologist POST /projects 返回403
+[1A[2K[99/120] [chromium] › e2e\projects.spec.ts:651:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-106. procurement POST /projects 返回403
+[1A[2K[100/120] [chromium] › e2e\projects.spec.ts:655:3 › 检测项目 -> 角色权限矩阵补充 › TC-PERM-107. finance POST /projects 返回403
+[1A[2K[101/120] [chromium] › e2e\projects.spec.ts:665:3 › 检测项目 -> 业务流程树 › BF-PROJ-01. 主路径：登录→进入项目→新建→填写→提交→列表刷新
+[1A[2K[102/120] [chromium] › e2e\projects.spec.ts:672:3 › 检测项目 -> 业务流程树 › BF-PROJ-02. 分支：关闭弹窗不保存
+[1A[2K[103/120] [chromium] › e2e\projects.spec.ts:677:3 › 检测项目 -> 业务流程树 › BF-PROJ-03. 分支：code已存在
+[1A[2K[104/120] [chromium] › e2e\projects.spec.ts:684:3 › 检测项目 -> 业务流程树 › BF-PROJ-04. 分支：必填漏填
+[1A[2K[105/120] [chromium] › e2e\projects.spec.ts:689:3 › 检测项目 -> 业务流程树 › BF-PROJ-05. 分支：刷新后新项目仍在
+[1A[2K[106/120] [chromium] › e2e\projects.spec.ts:696:3 › 检测项目 -> 业务流程树 › BF-PROJ-06. 分支：删除有关联出库
+[1A[2K[107/120] [chromium] › e2e\projects.spec.ts:703:3 › 检测项目 -> 业务流程树 › BF-PROJ-07. 分支：technician尝试新建被403
+[1A[2K[108/120] [chromium] › e2e\projects.spec.ts:707:3 › 检测项目 -> 业务流程树 › BF-PROJ-08. 分支：筛选后分页
+[1A[2K[109/120] [chromium] › e2e\projects.spec.ts:718:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-01. 项目编码唯一性
+[1A[2K[110/120] [chromium] › e2e\projects.spec.ts:726:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-02. 项目类型下拉选项
+[1A[2K[111/120] [chromium] › e2e\projects.spec.ts:731:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-03. 项目BOM选择器
+[1A[2K[112/120] [chromium] › e2e\projects.spec.ts:736:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-04. 项目成本统计
+[1A[2K[113/120] [chromium] › e2e\projects.spec.ts:743:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-05. 项目导出功能
+[1A[2K[114/120] [chromium] › e2e\projects.spec.ts:748:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-06. 项目打印功能
+[1A[2K[115/120] [chromium] › e2e\projects.spec.ts:753:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-07. 项目页面响应式
+[1A[2K[116/120] [chromium] › e2e\projects.spec.ts:759:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-08. 项目页面加载性能
+[1A[2K[117/120] [chromium] › e2e\projects.spec.ts:766:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-09. 项目字段XSS防护
+[1A[2K[118/120] [chromium] › e2e\projects.spec.ts:773:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-10. 项目字段SQL注入防护
+[1A[2K[119/120] [chromium] › e2e\projects.spec.ts:780:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-11. 项目API响应格式
+[1A[2K[120/120] [chromium] › e2e\projects.spec.ts:787:3 › 检测项目 -> 盲点分析补充 › BLIND-PROJ-12. 多角色同时操作
+[1A[2K  22 skipped
+  98 passed (4.5m)
