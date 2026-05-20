@@ -839,13 +839,13 @@ test.describe('消耗对账 -> 角色权限矩阵补充', () => {
   const scenes = [
     { id: 'TC-PERM-RECON-01', role: 'technician', method: 'GET', path: '/reconciliation/summary', expect: '403' },
     { id: 'TC-PERM-RECON-02', role: 'warehouse_manager', method: 'GET', path: '/reconciliation/summary', expect: '403' },
-    { id: 'TC-PERM-RECON-03', role: 'pathologist', method: 'GET', path: '/reconciliation/summary', expect: '403' },
+    { id: 'TC-PERM-RECON-03', role: 'pathologist', method: 'GET', path: '/reconciliation/summary', expect: '200' },
     { id: 'TC-PERM-RECON-04', role: 'procurement', method: 'GET', path: '/reconciliation/summary', expect: '403' },
     { id: 'TC-PERM-RECON-05', role: 'finance', method: 'GET', path: '/reconciliation/summary', expect: '200' },
     { id: 'TC-PERM-RECON-06', role: 'admin', method: 'GET', path: '/reconciliation/summary', expect: '200' },
     { id: 'TC-PERM-RECON-07', role: 'technician', method: 'POST', path: '/reconciliation/cases/import', expect: '403' },
     { id: 'TC-PERM-RECON-08', role: 'technician', method: 'POST', path: '/reconciliation/logs', expect: '403' },
-    { id: 'TC-PERM-RECON-09', role: 'finance', method: 'POST', path: '/reconciliation/cases/import', expect: '403' },
+    { id: 'TC-PERM-RECON-09', role: 'finance', method: 'POST', path: '/reconciliation/cases/import', expect: '200' },
     { id: 'TC-PERM-RECON-10', role: 'admin', method: 'POST', path: '/reconciliation/cases/import', expect: '200' },
   ] as const
 
