@@ -101,7 +101,15 @@ router.post('/', requireCategoryWrite, (req, res) => {
 
     const db = getDatabase()
     const id = uuidv4()
-    const finalCode = generateCategoryCode(db, parentId || null, level)
+    // 若用户传入 code 则尊重用户输入，否则自动生成
+    const finalCode = req.body.code || generateCategoryCode(db, parentId || null, level)
+
+    // 预检查 code 唯一性，避免 SQLite 异常
+    const codeExists = db.prepare('SELECT 1 FROM material_categories WHERE code = ? AND is_deleted = 0').get(finalCode)
+    if (codeExists) {
+      error(res, 'Code already exists', 'RESOURCE_CONFLICT', 409)
+      return
+    }
 
     db.prepare(`
       INSERT INTO material_categories (id, code, name, parent_id, level, sort_order, status)
@@ -130,10 +138,15 @@ router.put('/:id', requireCategoryWrite, (req, res) => {
       return
     }
 
+    // code 由系统自动生成，不允许修改
+    if (code !== undefined) {
+      error(res, 'Code cannot be modified', 'INVALID_PARAMETER', 400)
+      return
+    }
+
     const fields: string[] = []
     const params: any[] = []
 
-    if (code !== undefined) { fields.push('code = ?'); params.push(code) }
     if (name !== undefined) { fields.push('name = ?'); params.push(name) }
     if (parentId !== undefined) { fields.push('parent_id = ?'); params.push(parentId || null) }
     if (level !== undefined) { fields.push('level = ?'); params.push(level) }
@@ -147,6 +160,10 @@ router.put('/:id', requireCategoryWrite, (req, res) => {
 
     success(res, { id }, 'Updated')
   } catch (err: any) {
+    if (err.message.includes('UNIQUE constraint failed')) {
+      error(res, 'Code already exists', 'RESOURCE_CONFLICT', 409)
+      return
+    }
     error(res, err.message)
   }
 })
