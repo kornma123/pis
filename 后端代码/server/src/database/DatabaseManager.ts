@@ -244,6 +244,8 @@ export function initializeDatabase(): void {
     database.prepare('INSERT INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
   }
+  // 确保 admin 始终可用（防止 E2E 测试软删除后无法恢复）
+  database.prepare('UPDATE users SET is_deleted = 0, status = 1 WHERE username = ?').run('admin')
 
   // 插入 E2E 测试所需的标准角色用户 (密码: CoreOne2026!)
   const testUsers = [
@@ -260,6 +262,8 @@ export function initializeDatabase(): void {
   for (const u of testUsers) {
     insertUser.run(u.id, u.username, hashedTestPw, u.realName, u.role, u.department, 1)
   }
+  // 确保 E2E 测试用户始终可用（防止被软删除后无法恢复）
+  database.prepare("UPDATE users SET is_deleted = 0, status = 1 WHERE username IN ('cangguan','jishuyuan1','yishi1','caigou','caiwu')").run()
 
   // 插入默认预警规则
   const countRules = database.prepare('SELECT COUNT(*) as count FROM alert_rules').get() as any

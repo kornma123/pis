@@ -1,0 +1,6 @@
+
+Running 1 test using 1 worker
+
+  ok 1 [chromium] › e2e\outbound.spec.ts:808:3 › 出库管理 -> 分页切换 › OUT-PAGE-03. 表单校验：page=0后端修正为1 (711ms)
+
+  1 passed (5.2s)

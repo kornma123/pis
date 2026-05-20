@@ -22,6 +22,10 @@ export function successList<T>(
     success: true,
     data: {
       list,
+      page: normalizedPage,
+      pageSize,
+      total,
+      totalPages,
       pagination: {
         page: normalizedPage,
         pageSize,

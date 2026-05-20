@@ -2,38 +2,8 @@
 > coreone-backend@1.1.0 dev
 > tsx watch src/app.ts
 
-Migrated purchase_orders table: added is_deleted column
 Database initialized successfully
-(node:27596) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:30116) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
 COREONE Backend Server running on port 3001
 API Base URL: http://localhost:3001/api/v1
-[2026-05-20T01:34:00.978Z] GET /api/health
-09:34:21 [tsx] change in ./src\routes\stocktaking-v1.1.ts Restarting...
-cDatabase initialized successfully
-(node:9236) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-COREONE Backend Server running on port 3001
-API Base URL: http://localhost:3001/api/v1
-[2026-05-20T01:34:37.308Z] POST /api/v1/auth/login
-[2026-05-20T01:34:37.612Z] POST /api/v1/boms
-09:35:08 [tsx] change in ./src\routes\inbound-v1.1.ts Restarting...
-cDatabase initialized successfully
-(node:15416) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-COREONE Backend Server running on port 3001
-API Base URL: http://localhost:3001/api/v1
-09:35:23 [tsx] change in ./src\routes\inbound-v1.1.ts Restarting...
-cDatabase initialized successfully
-(node:16204) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-COREONE Backend Server running on port 3001
-API Base URL: http://localhost:3001/api/v1
-09:35:45 [tsx] change in ./src\routes\inbound-v1.1.ts Restarting...
-cDatabase initialized successfully
-(node:18196) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-COREONE Backend Server running on port 3001
-API Base URL: http://localhost:3001/api/v1
-[2026-05-20T01:36:14.805Z] GET /api/v1/outbound
-[2026-05-20T01:36:24.692Z] POST /api/v1/auth/login

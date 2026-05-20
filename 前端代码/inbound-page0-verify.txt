@@ -1,0 +1,6 @@
+
+Running 1 test using 1 worker
+
+  ok 1 [chromium] › e2e\inbound.spec.ts:1495:3 › 入库管理 -> 分页切换 › IN-PAGE-03. 表单校验：page=0后端修正为1 (1.2s)
+
+  1 passed (6.2s)

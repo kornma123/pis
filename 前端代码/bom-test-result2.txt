@@ -1,0 +1,1665 @@
+
+Running 119 tests using 1 worker
+
+  x    1 [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-admin. admin可查看BOM列表 (11.7s)
+  ok   2 [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-technician. technician可查看BOM列表 (1.4s)
+  ok   3 [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-pathologist. pathologist可查看BOM列表 (1.4s)
+  x    4 [chromium] › e2e\bom.spec.ts:80:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-02. 空数据边界 (11.3s)
+  ok   5 [chromium] › e2e\bom.spec.ts:86:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-03-warehouse_manager. warehouse_manager访问返回403 (305ms)
+  ok   6 [chromium] › e2e\bom.spec.ts:86:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-03-procurement. procurement访问返回403 (309ms)
+  ok   7 [chromium] › e2e\bom.spec.ts:86:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-03-finance. finance访问返回403 (250ms)
+  x    8 [chromium] › e2e\bom.spec.ts:91:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-04. API 500 (11.3s)
+  x    9 [chromium] › e2e\bom.spec.ts:96:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-05. admin显示新增编辑删除 (11.5s)
+  ok  10 [chromium] › e2e\bom.spec.ts:101:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-06. technician仅查看 (2.6s)
+  x   11 [chromium] › e2e\bom.spec.ts:106:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-07. 显示编码名称类型物料数单样本成本 (11.4s)
+  x   12 [chromium] › e2e\bom.spec.ts:111:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-08. 快速刷新 (11.8s)
+  x   13 [chromium] › e2e\bom.spec.ts:121:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-01. 选择ihc (36ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   14 [chromium] › e2e\bom.spec.ts:126:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-02. 无该类型 (34ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   15 [chromium] › e2e\bom.spec.ts:131:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-03. 重置 (11.7s)
+  x   16 [chromium] › e2e\bom.spec.ts:136:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-04. 各角色可见 (11.6s)
+  x   17 [chromium] › e2e\bom.spec.ts:143:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-05. 快速切换 (11.8s)
+  x   18 [chromium] › e2e\bom.spec.ts:150:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-06. API错误 (11.6s)
+  x   19 [chromium] › e2e\bom.spec.ts:159:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-01. 搜索HER2 (34ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   20 [chromium] › e2e\bom.spec.ts:164:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-02. 无结果 (32ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   21 [chromium] › e2e\bom.spec.ts:169:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-03. 快速连续输入 (11.7s)
+  x   22 [chromium] › e2e\bom.spec.ts:178:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-04. 网络断 (11.4s)
+  x   23 [chromium] › e2e\bom.spec.ts:183:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-05. 超长字符串 (33ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   24 [chromium] › e2e\bom.spec.ts:188:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-06. 各角色可见 (11.6s)
+  x   25 [chromium] › e2e\bom.spec.ts:199:3 › BOM清单 -> 新建BOM › BOM-CREATE-01. admin新建成功 (49ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   26 [chromium] › e2e\bom.spec.ts:208:3 › BOM清单 -> 新建BOM › BOM-CREATE-02. materials空返回400 (37ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   27 [chromium] › e2e\bom.spec.ts:215:3 › BOM清单 -> 新建BOM › BOM-CREATE-03. 未传code返回400 (34ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   28 [chromium] › e2e\bom.spec.ts:220:3 › BOM清单 -> 新建BOM › BOM-CREATE-04. 未传name返回400 (35ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   29 [chromium] › e2e\bom.spec.ts:225:3 › BOM清单 -> 新建BOM › BOM-CREATE-05. 未传type返回400 (34ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  ok  30 [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-technician. technician新建返回403 (281ms)
+  ok  31 [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-pathologist. pathologist新建返回403 (256ms)
+  ok  32 [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-warehouse_manager. warehouse_manager新建返回403 (258ms)
+  ok  33 [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-procurement. procurement新建返回403 (254ms)
+  ok  34 [chromium] › e2e\bom.spec.ts:231:5 › BOM清单 -> 新建BOM › BOM-CREATE-06-finance. finance新建返回403 (274ms)
+  x   35 [chromium] › e2e\bom.spec.ts:237:3 › BOM清单 -> 新建BOM › BOM-CREATE-07. code已存在返回409 (9ms)
+  x   36 [chromium] › e2e\bom.spec.ts:244:3 › BOM清单 -> 新建BOM › BOM-CREATE-08. 快速双击 (38ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   37 [chromium] › e2e\bom.spec.ts:250:3 › BOM清单 -> 新建BOM › BOM-CREATE-09. 网络中断重试 (36ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   38 [chromium] › e2e\bom.spec.ts:257:3 › BOM清单 -> 新建BOM › BOM-CREATE-10. admin显示新增按钮 (11.9s)
+  ok  39 [chromium] › e2e\bom.spec.ts:262:3 › BOM清单 -> 新建BOM › BOM-CREATE-11. technician不显示新增 (2.8s)
+  ok  40 [chromium] › e2e\bom.spec.ts:267:3 › BOM清单 -> 新建BOM › BOM-CREATE-12. 新建后version=v1.0 (12ms)
+  x   41 [chromium] › e2e\bom.spec.ts:274:3 › BOM清单 -> 新建BOM › BOM-CREATE-13. 超长code (19ms)
+  x   42 [chromium] › e2e\bom.spec.ts:281:3 › BOM清单 -> 新建BOM › BOM-CREATE-14. 特殊字符name (44ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   43 [chromium] › e2e\bom.spec.ts:288:3 › BOM清单 -> 新建BOM › BOM-CREATE-15. 多物料BOM (40ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   44 [chromium] › e2e\bom.spec.ts:298:3 › BOM清单 -> 新建BOM › BOM-CREATE-16. 负数量物料 (43ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  -   45 [chromium] › e2e\bom.spec.ts:311:3 › BOM清单 -> 编辑BOM › BOM-EDIT-01. admin编辑物料用量
+  -   46 [chromium] › e2e\bom.spec.ts:318:3 › BOM清单 -> 编辑BOM › BOM-EDIT-02. 不传materials仅基础字段更新
+  -   47 [chromium] › e2e\bom.spec.ts:326:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-technician. technician编辑返回403
+  -   48 [chromium] › e2e\bom.spec.ts:326:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-pathologist. pathologist编辑返回403
+  -   49 [chromium] › e2e\bom.spec.ts:326:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-warehouse_manager. warehouse_manager编辑返回403
+  -   50 [chromium] › e2e\bom.spec.ts:326:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-procurement. procurement编辑返回403
+  -   51 [chromium] › e2e\bom.spec.ts:326:5 › BOM清单 -> 编辑BOM › BOM-EDIT-03-finance. finance编辑返回403
+  -   52 [chromium] › e2e\bom.spec.ts:335:3 › BOM清单 -> 编辑BOM › BOM-EDIT-04. 被项目关联编辑后版本升级
+  -   53 [chromium] › e2e\bom.spec.ts:342:3 › BOM清单 -> 编辑BOM › BOM-EDIT-05. 并发编辑
+  -   54 [chromium] › e2e\bom.spec.ts:352:3 › BOM清单 -> 编辑BOM › BOM-EDIT-06. API 500后重试
+  x   55 [chromium] › e2e\bom.spec.ts:359:3 › BOM清单 -> 编辑BOM › BOM-EDIT-07. admin显示编辑按钮 (11.5s)
+  ok  56 [chromium] › e2e\bom.spec.ts:364:3 › BOM清单 -> 编辑BOM › BOM-EDIT-08. technician不显示编辑 (2.3s)
+  -   57 [chromium] › e2e\bom.spec.ts:369:3 › BOM清单 -> 编辑BOM › BOM-EDIT-09. 编辑后列表更新
+  x   58 [chromium] › e2e\bom.spec.ts:375:3 › BOM清单 -> 编辑BOM › BOM-EDIT-10. 编辑不存在返回404 (13ms)
+  -   59 [chromium] › e2e\bom.spec.ts:380:3 › BOM清单 -> 编辑BOM › BOM-EDIT-11. name为空
+  -   60 [chromium] › e2e\bom.spec.ts:387:3 › BOM清单 -> 编辑BOM › BOM-EDIT-12. 网络中断
+  x   61 [chromium] › e2e\bom.spec.ts:398:3 › BOM清单 -> 删除BOM › BOM-DEL-01. admin删除无关联BOM (20ms)
+  -   62 [chromium] › e2e\bom.spec.ts:411:5 › BOM清单 -> 删除BOM › BOM-DEL-02-technician. technician删除返回403
+  -   63 [chromium] › e2e\bom.spec.ts:411:5 › BOM清单 -> 删除BOM › BOM-DEL-02-pathologist. pathologist删除返回403
+  -   64 [chromium] › e2e\bom.spec.ts:411:5 › BOM清单 -> 删除BOM › BOM-DEL-02-warehouse_manager. warehouse_manager删除返回403
+  -   65 [chromium] › e2e\bom.spec.ts:411:5 › BOM清单 -> 删除BOM › BOM-DEL-02-procurement. procurement删除返回403
+  -   66 [chromium] › e2e\bom.spec.ts:411:5 › BOM清单 -> 删除BOM › BOM-DEL-02-finance. finance删除返回403
+  -   67 [chromium] › e2e\bom.spec.ts:420:3 › BOM清单 -> 删除BOM › BOM-DEL-03. 被项目关联删除后悬空引用
+  -   68 [chromium] › e2e\bom.spec.ts:427:3 › BOM清单 -> 删除BOM › BOM-DEL-04. 并发删除
+  ok  69 [chromium] › e2e\bom.spec.ts:440:3 › BOM清单 -> 删除BOM › BOM-DEL-05. API 500后重试 (6ms)
+  x   70 [chromium] › e2e\bom.spec.ts:451:3 › BOM清单 -> 删除BOM › BOM-DEL-06. admin显示删除按钮 (11.7s)
+  ok  71 [chromium] › e2e\bom.spec.ts:456:3 › BOM清单 -> 删除BOM › BOM-DEL-07. pathologist不显示删除 (2.3s)
+  x   72 [chromium] › e2e\bom.spec.ts:461:3 › BOM清单 -> 删除BOM › BOM-DEL-08. 不存在返回404 (15ms)
+  -   73 [chromium] › e2e\bom.spec.ts:466:3 › BOM清单 -> 删除BOM › BOM-DEL-09. 再次删除返回404
+  ok  74 [chromium] › e2e\bom.spec.ts:477:3 › BOM清单 -> 删除BOM › BOM-DEL-10. 删除后列表刷新 (10ms)
+  -   75 [chromium] › e2e\bom.spec.ts:490:5 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-01-admin. admin可查看详情
+  ok  76 [chromium] › e2e\bom.spec.ts:490:5 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-01-technician. technician可查看详情 (264ms)
+  ok  77 [chromium] › e2e\bom.spec.ts:490:5 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-01-pathologist. pathologist可查看详情 (251ms)
+  x   78 [chromium] › e2e\bom.spec.ts:498:3 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-02. 不存在返回404 (9ms)
+  x   79 [chromium] › e2e\bom.spec.ts:503:3 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-03. admin可点击查看详情弹窗 (11.5s)
+  x   80 [chromium] › e2e\bom.spec.ts:514:3 › BOM清单 -> 分页切换 › BOM-PAGE-01. 第2页 (11.3s)
+  x   81 [chromium] › e2e\bom.spec.ts:519:3 › BOM清单 -> 分页切换 › BOM-PAGE-02. 仅1页 (11.4s)
+  x   82 [chromium] › e2e\bom.spec.ts:524:3 › BOM清单 -> 分页切换 › BOM-PAGE-03. page=0 (37ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   83 [chromium] › e2e\bom.spec.ts:529:3 › BOM清单 -> 分页切换 › BOM-PAGE-04. page=999 (35ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   84 [chromium] › e2e\bom.spec.ts:534:3 › BOM清单 -> 分页切换 › BOM-PAGE-05. pageSize=1 (36ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   85 [chromium] › e2e\bom.spec.ts:539:3 › BOM清单 -> 分页切换 › BOM-PAGE-06. pageSize=100 (47ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   86 [chromium] › e2e\bom.spec.ts:544:3 › BOM清单 -> 分页切换 › BOM-PAGE-07. 快速切换 (11.9s)
+  x   87 [chromium] › e2e\bom.spec.ts:551:3 › BOM清单 -> 分页切换 › BOM-PAGE-08. 各角色一致 (12.0s)
+  ok  88 [chromium] › e2e\bom.spec.ts:562:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-108. WHM GET /boms 返回403 (508ms)
+  ok  89 [chromium] › e2e\bom.spec.ts:566:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-109. PROC GET /boms 返回403 (335ms)
+  ok  90 [chromium] › e2e\bom.spec.ts:570:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-110. FIN GET /boms 返回403 (468ms)
+  ok  91 [chromium] › e2e\bom.spec.ts:574:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-111. WHM POST /boms 返回403 (355ms)
+  ok  92 [chromium] › e2e\bom.spec.ts:578:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-112. TECH POST /boms 返回403 (720ms)
+  ok  93 [chromium] › e2e\bom.spec.ts:582:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-113. PATH POST /boms 返回403 (433ms)
+  ok  94 [chromium] › e2e\bom.spec.ts:586:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-114. PROC POST /boms 返回403 (424ms)
+  ok  95 [chromium] › e2e\bom.spec.ts:590:3 › BOM清单 -> 角色权限矩阵补充 › TC-PERM-115. FIN POST /boms 返回403 (423ms)
+  x   96 [chromium] › e2e\bom.spec.ts:598:3 › BOM清单 -> 业务流程树 › BF-BOM-01. 主路径：新建→填写→提交→version=v1.0 (14ms)
+  x   97 [chromium] › e2e\bom.spec.ts:605:3 › BOM清单 -> 业务流程树 › BF-BOM-02. 关闭弹窗不保存 (12.3s)
+  x   98 [chromium] › e2e\bom.spec.ts:610:3 › BOM清单 -> 业务流程树 › BF-BOM-03. code已存在 (111ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x   99 [chromium] › e2e\bom.spec.ts:617:3 › BOM清单 -> 业务流程树 › BF-BOM-04. 必填漏填 (50ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  100 [chromium] › e2e\bom.spec.ts:622:3 › BOM清单 -> 业务流程树 › BF-BOM-05. 刷新后仍在 (12.0s)
+  -  101 [chromium] › e2e\bom.spec.ts:629:3 › BOM清单 -> 业务流程树 › BF-BOM-06. 被项目关联删除
+  ok 102 [chromium] › e2e\bom.spec.ts:636:3 › BOM清单 -> 业务流程树 › BF-BOM-07. technician尝试新建被403 (263ms)
+  -  103 [chromium] › e2e\bom.spec.ts:640:3 › BOM清单 -> 业务流程树 › BF-BOM-08. 编辑后版本升级
+  x  104 [chromium] › e2e\bom.spec.ts:651:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-01. 编码唯一性 (12ms)
+  -  105 [chromium] › e2e\bom.spec.ts:659:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-02. version自动升级
+  -  106 [chromium] › e2e\bom.spec.ts:665:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-03. costRatio计算
+  x  107 [chromium] › e2e\bom.spec.ts:672:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-04. 导出功能 (12.1s)
+  x  108 [chromium] › e2e\bom.spec.ts:677:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-05. 打印功能 (11.9s)
+  x  109 [chromium] › e2e\bom.spec.ts:682:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-06. 响应式布局 (11.9s)
+  x  110 [chromium] › e2e\bom.spec.ts:688:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-07. 加载性能 (11.9s)
+  x  111 [chromium] › e2e\bom.spec.ts:695:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-08. 搜索防抖 (11.7s)
+  x  112 [chromium] › e2e\bom.spec.ts:704:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-09. 物料明细展示 (11.5s)
+  x  113 [chromium] › e2e\bom.spec.ts:711:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-10. XSS防护 (33ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  114 [chromium] › e2e\bom.spec.ts:718:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-11. SQL注入防护 (37ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  x  115 [chromium] › e2e\bom.spec.ts:725:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-12. API响应格式 (37ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+  -  116 [chromium] › e2e\bom.spec.ts:732:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-13. 版本历史
+  x  117 [chromium] › e2e\bom.spec.ts:739:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-14. 排序功能 (11ms)
+  x  118 [chromium] › e2e\bom.spec.ts:744:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-15. 多角色同时操作 (11.1s)
+  x  119 [chromium] › e2e\bom.spec.ts:756:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-16. 物料用量小数 (36ms)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76
+
+
+  1) [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-admin. admin可查看BOM列表 ───────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:75:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-01-admin-admin可查看BOM列表-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-01-admin-admin可查看BOM列表-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---查看BOM列表-BOM-LIST-01-admin-admin可查看BOM列表-chromium\error-context.md
+
+  2) [chromium] › e2e\bom.spec.ts:80:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-02. 空数据边界 ─────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:81:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-02-空数据边界-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-02-空数据边界-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---查看BOM列表-BOM-LIST-02-空数据边界-chromium\error-context.md
+
+  3) [chromium] › e2e\bom.spec.ts:91:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-04. API 500 ───────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:92:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-04-API-500-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-04-API-500-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---查看BOM列表-BOM-LIST-04-API-500-chromium\error-context.md
+
+  4) [chromium] › e2e\bom.spec.ts:96:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-05. admin显示新增编辑删除 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:97:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-05-admin显示新增编辑删除-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-05-admin显示新增编辑删除-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---查看BOM列表-BOM-LIST-05-admin显示新增编辑删除-chromium\error-context.md
+
+  5) [chromium] › e2e\bom.spec.ts:106:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-07. 显示编码名称类型物料数单样本成本 ─────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:107:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-07-显示编码名称类型物料数单样本成本-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-07-显示编码名称类型物料数单样本成本-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---查看BOM列表-BOM-LIST-07-显示编码名称类型物料数单样本成本-chromium\error-context.md
+
+  6) [chromium] › e2e\bom.spec.ts:111:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-08. 快速刷新 ─────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:112:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-08-快速刷新-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM列表-BOM-LIST-08-快速刷新-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---查看BOM列表-BOM-LIST-08-快速刷新-chromium\error-context.md
+
+  7) [chromium] › e2e\bom.spec.ts:121:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-01. 选择ihc ──────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      122 |     const token = await apiLogin('admin')
+      123 |     const res = await apiFetch(token, 'GET', '/boms?type=ihc')
+    > 124 |     expect(res.status).toBe(200)
+          |                        ^
+      125 |   })
+      126 |   test('BOM-TYPE-02. 无该类型', async () => {
+      127 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:124:24
+
+    Error Context: test-results\bom-BOM清单---按类型筛选-BOM-TYPE-01-选择ihc-chromium\error-context.md
+
+  8) [chromium] › e2e\bom.spec.ts:126:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-02. 无该类型 ───────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      127 |     const token = await apiLogin('admin')
+      128 |     const res = await apiFetch(token, 'GET', '/boms?type=nonexistent')
+    > 129 |     expect(res.status).toBe(200)
+          |                        ^
+      130 |   })
+      131 |   test('BOM-TYPE-03. 重置', async ({ page }) => {
+      132 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:129:24
+
+    Error Context: test-results\bom-BOM清单---按类型筛选-BOM-TYPE-02-无该类型-chromium\error-context.md
+
+  9) [chromium] › e2e\bom.spec.ts:131:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-03. 重置 ─────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:132:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---按类型筛选-BOM-TYPE-03-重置-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---按类型筛选-BOM-TYPE-03-重置-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---按类型筛选-BOM-TYPE-03-重置-chromium\error-context.md
+
+  10) [chromium] › e2e\bom.spec.ts:136:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-04. 各角色可见 ─────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:138:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---按类型筛选-BOM-TYPE-04-各角色可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---按类型筛选-BOM-TYPE-04-各角色可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---按类型筛选-BOM-TYPE-04-各角色可见-chromium\error-context.md
+
+  11) [chromium] › e2e\bom.spec.ts:143:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-05. 快速切换 ──────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:144:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---按类型筛选-BOM-TYPE-05-快速切换-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---按类型筛选-BOM-TYPE-05-快速切换-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---按类型筛选-BOM-TYPE-05-快速切换-chromium\error-context.md
+
+  12) [chromium] › e2e\bom.spec.ts:150:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-06. API错误 ─────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:151:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---按类型筛选-BOM-TYPE-06-API错误-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---按类型筛选-BOM-TYPE-06-API错误-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---按类型筛选-BOM-TYPE-06-API错误-chromium\error-context.md
+
+  13) [chromium] › e2e\bom.spec.ts:159:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-01. 搜索HER2 ──────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      160 |     const token = await apiLogin('admin')
+      161 |     const res = await apiFetch(token, 'GET', '/boms?keyword=HER2')
+    > 162 |     expect(res.status).toBe(200)
+          |                        ^
+      163 |   })
+      164 |   test('BOM-SEARCH-02. 无结果', async () => {
+      165 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:162:24
+
+    Error Context: test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-01-搜索HER2-chromium\error-context.md
+
+  14) [chromium] › e2e\bom.spec.ts:164:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-02. 无结果 ─────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      165 |     const token = await apiLogin('admin')
+      166 |     const res = await apiFetch(token, 'GET', '/boms?keyword=XYZ999')
+    > 167 |     expect(res.status).toBe(200)
+          |                        ^
+      168 |   })
+      169 |   test('BOM-SEARCH-03. 快速连续输入', async ({ page }) => {
+      170 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:167:24
+
+    Error Context: test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-02-无结果-chromium\error-context.md
+
+  15) [chromium] › e2e\bom.spec.ts:169:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-03. 快速连续输入 ──────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:170:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-03-快速连续输入-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-03-快速连续输入-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-03-快速连续输入-chromium\error-context.md
+
+  16) [chromium] › e2e\bom.spec.ts:178:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-04. 网络断 ─────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:179:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-04-网络断-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-04-网络断-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-04-网络断-chromium\error-context.md
+
+  17) [chromium] › e2e\bom.spec.ts:183:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-05. 超长字符串 ───────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      184 |     const token = await apiLogin('admin')
+      185 |     const res = await apiFetch(token, 'GET', '/boms?keyword=' + 'X'.repeat(300))
+    > 186 |     expect(res.status).toBe(200)
+          |                        ^
+      187 |   })
+      188 |   test('BOM-SEARCH-06. 各角色可见', async ({ page }) => {
+      189 |     for (const role of BOM_READ_ROLES) {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:186:24
+
+    Error Context: test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-05-超长字符串-chromium\error-context.md
+
+  18) [chromium] › e2e\bom.spec.ts:188:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-06. 各角色可见 ───────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:190:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-06-各角色可见-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-06-各角色可见-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---搜索BOM-BOM-SEARCH-06-各角色可见-chromium\error-context.md
+
+  19) [chromium] › e2e\bom.spec.ts:199:3 › BOM清单 -> 新建BOM › BOM-CREATE-01. admin新建成功 ───────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      204 |       materials: mid ? [{ materialId: mid, quantity: 1 }] : [], remark: 'E2E',
+      205 |     })
+    > 206 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      207 |   })
+      208 |   test('BOM-CREATE-02. materials空返回400', async () => {
+      209 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:206:29
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-01-admin新建成功-chromium\error-context.md
+
+  20) [chromium] › e2e\bom.spec.ts:208:3 › BOM清单 -> 新建BOM › BOM-CREATE-02. materials空返回400 ─────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      211 |       code: `TEST-BOM-${Date.now()}`, name: '空物料', type: 'ihc', materials: [],
+      212 |     })
+    > 213 |     expect(res.status).toBe(400)
+          |                        ^
+      214 |   })
+      215 |   test('BOM-CREATE-03. 未传code返回400', async () => {
+      216 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:213:24
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-02-materials空返回400-chromium\error-context.md
+
+  21) [chromium] › e2e\bom.spec.ts:215:3 › BOM清单 -> 新建BOM › BOM-CREATE-03. 未传code返回400 ─────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      216 |     const token = await apiLogin('admin')
+      217 |     const res = await apiFetch(token, 'POST', '/boms', { name: '无编码', type: 'ihc' })
+    > 218 |     expect(res.status).toBe(400)
+          |                        ^
+      219 |   })
+      220 |   test('BOM-CREATE-04. 未传name返回400', async () => {
+      221 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:218:24
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-03-未传code返回400-chromium\error-context.md
+
+  22) [chromium] › e2e\bom.spec.ts:220:3 › BOM清单 -> 新建BOM › BOM-CREATE-04. 未传name返回400 ─────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      221 |     const token = await apiLogin('admin')
+      222 |     const res = await apiFetch(token, 'POST', '/boms', { code: 'NONAME', type: 'ihc' })
+    > 223 |     expect(res.status).toBe(400)
+          |                        ^
+      224 |   })
+      225 |   test('BOM-CREATE-05. 未传type返回400', async () => {
+      226 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:223:24
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-04-未传name返回400-chromium\error-context.md
+
+  23) [chromium] › e2e\bom.spec.ts:225:3 › BOM清单 -> 新建BOM › BOM-CREATE-05. 未传type返回400 ─────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      226 |     const token = await apiLogin('admin')
+      227 |     const res = await apiFetch(token, 'POST', '/boms', { code: 'NOTYPE', name: '无类型' })
+    > 228 |     expect(res.status).toBe(400)
+          |                        ^
+      229 |   })
+      230 |   for (const role of ['technician', 'pathologist', 'warehouse_manager', 'procurement', 'finance'] as RoleKey[]) {
+      231 |     test(`BOM-CREATE-06-${role}. ${role}新建返回403`, async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:228:24
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-05-未传type返回400-chromium\error-context.md
+
+  24) [chromium] › e2e\bom.spec.ts:237:3 › BOM清单 -> 新建BOM › BOM-CREATE-07. code已存在返回409 ────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[400, 409][39m
+
+      240 |     await apiFetch(token, 'POST', '/boms', { code, name: '重复1', type: 'ihc', materials: [] })
+      241 |     const res = await apiFetch(token, 'POST', '/boms', { code, name: '重复2', type: 'ihc', materials: [] })
+    > 242 |     expect([400, 409]).toContain(res.status)
+          |                        ^
+      243 |   })
+      244 |   test('BOM-CREATE-08. 快速双击', async () => {
+      245 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:242:24
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-07-code已存在返回409-chromium\error-context.md
+
+  25) [chromium] › e2e\bom.spec.ts:244:3 › BOM清单 -> 新建BOM › BOM-CREATE-08. 快速双击 ────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      246 |     const body = { code: `TEST-CON-${Date.now()}`, name: '并发', type: 'ihc', materials: [] }
+      247 |     const [r1, r2] = await Promise.all([apiFetch(token, 'POST', '/boms', body), apiFetch(token, 'POST', '/boms', body)])
+    > 248 |     expect([201, 400, 409]).toContain(r1.status)
+          |                             ^
+      249 |   })
+      250 |   test('BOM-CREATE-09. 网络中断重试', async () => {
+      251 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:248:29
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-08-快速双击-chromium\error-context.md
+
+  26) [chromium] › e2e\bom.spec.ts:250:3 › BOM清单 -> 新建BOM › BOM-CREATE-09. 网络中断重试 ──────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      253 |       code: `TEST-RET-${Date.now()}`, name: '恢复', type: 'ihc', materials: [], remark: 'E2E',
+      254 |     })
+    > 255 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      256 |   })
+      257 |   test('BOM-CREATE-10. admin显示新增按钮', async ({ page }) => {
+      258 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:255:29
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-09-网络中断重试-chromium\error-context.md
+
+  27) [chromium] › e2e\bom.spec.ts:257:3 › BOM清单 -> 新建BOM › BOM-CREATE-10. admin显示新增按钮 ─────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:258:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---新建BOM-BOM-CREATE-10-admin显示新增按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---新建BOM-BOM-CREATE-10-admin显示新增按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-10-admin显示新增按钮-chromium\error-context.md
+
+  28) [chromium] › e2e\bom.spec.ts:274:3 › BOM清单 -> 新建BOM › BOM-CREATE-13. 超长code ──────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      277 |       code: 'TEST-' + 'X'.repeat(200), name: '超长', type: 'ihc', materials: [],
+      278 |     })
+    > 279 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      280 |   })
+      281 |   test('BOM-CREATE-14. 特殊字符name', async () => {
+      282 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:279:29
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-13-超长code-chromium\error-context.md
+
+  29) [chromium] › e2e\bom.spec.ts:281:3 › BOM清单 -> 新建BOM › BOM-CREATE-14. 特殊字符name ────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      284 |       code: `TEST-SPEC-${Date.now()}`, name: '!@#$$%^&*()', type: 'ihc', materials: [],
+      285 |     })
+    > 286 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      287 |   })
+      288 |   test('BOM-CREATE-15. 多物料BOM', async () => {
+      289 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:286:24
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-14-特殊字符name-chromium\error-context.md
+
+  30) [chromium] › e2e\bom.spec.ts:288:3 › BOM清单 -> 新建BOM › BOM-CREATE-15. 多物料BOM ──────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      294 |       materials: list.map((m: any) => ({ materialId: m.id, quantity: 1 })),
+      295 |     })
+    > 296 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      297 |   })
+      298 |   test('BOM-CREATE-16. 负数量物料', async () => {
+      299 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:296:29
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-15-多物料BOM-chromium\error-context.md
+
+  31) [chromium] › e2e\bom.spec.ts:298:3 › BOM清单 -> 新建BOM › BOM-CREATE-16. 负数量物料 ───────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      303 |       materials: mid ? [{ materialId: mid, quantity: -1 }] : [],
+      304 |     })
+    > 305 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      306 |   })
+      307 | })
+      308 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:305:29
+
+    Error Context: test-results\bom-BOM清单---新建BOM-BOM-CREATE-16-负数量物料-chromium\error-context.md
+
+  32) [chromium] › e2e\bom.spec.ts:359:3 › BOM清单 -> 编辑BOM › BOM-EDIT-07. admin显示编辑按钮 ───────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:360:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---编辑BOM-BOM-EDIT-07-admin显示编辑按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---编辑BOM-BOM-EDIT-07-admin显示编辑按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---编辑BOM-BOM-EDIT-07-admin显示编辑按钮-chromium\error-context.md
+
+  33) [chromium] › e2e\bom.spec.ts:375:3 › BOM清单 -> 编辑BOM › BOM-EDIT-10. 编辑不存在返回404 ────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      376 |     const token = await apiLogin('admin')
+      377 |     const res = await apiFetch(token, 'PUT', '/boms/non-existent', { name: '不存在' })
+    > 378 |     expect(res.status).toBe(404)
+          |                        ^
+      379 |   })
+      380 |   test('BOM-EDIT-11. name为空', async () => {
+      381 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:378:24
+
+    Error Context: test-results\bom-BOM清单---编辑BOM-BOM-EDIT-10-编辑不存在返回404-chromium\error-context.md
+
+  34) [chromium] › e2e\bom.spec.ts:398:3 › BOM清单 -> 删除BOM › BOM-DEL-01. admin删除无关联BOM ──────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      401 |       code: `TEST-DEL-${Date.now()}`, name: '删除', type: 'ihc', materials: [],
+      402 |     })
+    > 403 |     expect([201, 409]).toContain(create.status)
+          |                        ^
+      404 |     const id = create.data?.data?.id
+      405 |     if (id) {
+      406 |       const res = await apiFetch(token, 'DELETE', `/boms/${id}`)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:403:24
+
+    Error Context: test-results\bom-BOM清单---删除BOM-BOM-DEL-01-admin删除无关联BOM-chromium\error-context.md
+
+  35) [chromium] › e2e\bom.spec.ts:451:3 › BOM清单 -> 删除BOM › BOM-DEL-06. admin显示删除按钮 ────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:452:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---删除BOM-BOM-DEL-06-admin显示删除按钮-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---删除BOM-BOM-DEL-06-admin显示删除按钮-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---删除BOM-BOM-DEL-06-admin显示删除按钮-chromium\error-context.md
+
+  36) [chromium] › e2e\bom.spec.ts:461:3 › BOM清单 -> 删除BOM › BOM-DEL-08. 不存在返回404 ───────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      462 |     const token = await apiLogin('admin')
+      463 |     const res = await apiFetch(token, 'DELETE', '/boms/non-existent')
+    > 464 |     expect(res.status).toBe(404)
+          |                        ^
+      465 |   })
+      466 |   test('BOM-DEL-09. 再次删除返回404', async () => {
+      467 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:464:24
+
+    Error Context: test-results\bom-BOM清单---删除BOM-BOM-DEL-08-不存在返回404-chromium\error-context.md
+
+  37) [chromium] › e2e\bom.spec.ts:498:3 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-02. 不存在返回404 ──────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m404[39m
+    Received: [31m401[39m
+
+      499 |     const token = await apiLogin('admin')
+      500 |     const res = await apiFetch(token, 'GET', '/boms/non-existent')
+    > 501 |     expect(res.status).toBe(404)
+          |                        ^
+      502 |   })
+      503 |   test('BOM-DETAIL-03. admin可点击查看详情弹窗', async ({ page }) => {
+      504 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:501:24
+
+    Error Context: test-results\bom-BOM清单---查看BOM详情-BOM-DETAIL-02-不存在返回404-chromium\error-context.md
+
+  38) [chromium] › e2e\bom.spec.ts:503:3 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-03. admin可点击查看详情弹窗 ────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:504:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM详情-BOM-DETAIL-03-admin可点击查看详情弹窗-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---查看BOM详情-BOM-DETAIL-03-admin可点击查看详情弹窗-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---查看BOM详情-BOM-DETAIL-03-admin可点击查看详情弹窗-chromium\error-context.md
+
+  39) [chromium] › e2e\bom.spec.ts:514:3 › BOM清单 -> 分页切换 › BOM-PAGE-01. 第2页 ────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:515:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---分页切换-BOM-PAGE-01-第2页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---分页切换-BOM-PAGE-01-第2页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---分页切换-BOM-PAGE-01-第2页-chromium\error-context.md
+
+  40) [chromium] › e2e\bom.spec.ts:519:3 › BOM清单 -> 分页切换 › BOM-PAGE-02. 仅1页 ────────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:520:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---分页切换-BOM-PAGE-02-仅1页-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---分页切换-BOM-PAGE-02-仅1页-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---分页切换-BOM-PAGE-02-仅1页-chromium\error-context.md
+
+  41) [chromium] › e2e\bom.spec.ts:524:3 › BOM清单 -> 分页切换 › BOM-PAGE-03. page=0 ─────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      525 |     const token = await apiLogin('admin')
+      526 |     const res = await apiFetch(token, 'GET', '/boms?page=0')
+    > 527 |     expect(res.status).toBe(200)
+          |                        ^
+      528 |   })
+      529 |   test('BOM-PAGE-04. page=999', async () => {
+      530 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:527:24
+
+    Error Context: test-results\bom-BOM清单---分页切换-BOM-PAGE-03-page-0-chromium\error-context.md
+
+  42) [chromium] › e2e\bom.spec.ts:529:3 › BOM清单 -> 分页切换 › BOM-PAGE-04. page=999 ───────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      530 |     const token = await apiLogin('admin')
+      531 |     const res = await apiFetch(token, 'GET', '/boms?page=999')
+    > 532 |     expect(res.status).toBe(200)
+          |                        ^
+      533 |   })
+      534 |   test('BOM-PAGE-05. pageSize=1', async () => {
+      535 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:532:24
+
+    Error Context: test-results\bom-BOM清单---分页切换-BOM-PAGE-04-page-999-chromium\error-context.md
+
+  43) [chromium] › e2e\bom.spec.ts:534:3 › BOM清单 -> 分页切换 › BOM-PAGE-05. pageSize=1 ─────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      535 |     const token = await apiLogin('admin')
+      536 |     const res = await apiFetch(token, 'GET', '/boms?page=1&pageSize=1')
+    > 537 |     expect(res.status).toBe(200)
+          |                        ^
+      538 |   })
+      539 |   test('BOM-PAGE-06. pageSize=100', async () => {
+      540 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:537:24
+
+    Error Context: test-results\bom-BOM清单---分页切换-BOM-PAGE-05-pageSize-1-chromium\error-context.md
+
+  44) [chromium] › e2e\bom.spec.ts:539:3 › BOM清单 -> 分页切换 › BOM-PAGE-06. pageSize=100 ───────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      540 |     const token = await apiLogin('admin')
+      541 |     const res = await apiFetch(token, 'GET', '/boms?page=1&pageSize=100')
+    > 542 |     expect(res.status).toBe(200)
+          |                        ^
+      543 |   })
+      544 |   test('BOM-PAGE-07. 快速切换', async ({ page }) => {
+      545 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:542:24
+
+    Error Context: test-results\bom-BOM清单---分页切换-BOM-PAGE-06-pageSize-100-chromium\error-context.md
+
+  45) [chromium] › e2e\bom.spec.ts:544:3 › BOM清单 -> 分页切换 › BOM-PAGE-07. 快速切换 ───────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:545:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---分页切换-BOM-PAGE-07-快速切换-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---分页切换-BOM-PAGE-07-快速切换-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---分页切换-BOM-PAGE-07-快速切换-chromium\error-context.md
+
+  46) [chromium] › e2e\bom.spec.ts:551:3 › BOM清单 -> 分页切换 › BOM-PAGE-08. 各角色一致 ──────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:553:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---分页切换-BOM-PAGE-08-各角色一致-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---分页切换-BOM-PAGE-08-各角色一致-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---分页切换-BOM-PAGE-08-各角色一致-chromium\error-context.md
+
+  47) [chromium] › e2e\bom.spec.ts:598:3 › BOM清单 -> 业务流程树 › BF-BOM-01. 主路径：新建→填写→提交→version=v1.0 ───
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      601 |       code: `TEST-BF-${Date.now()}`, name: '业务流程', type: 'ihc', materials: [], remark: 'E2E',
+      602 |     })
+    > 603 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      604 |   })
+      605 |   test('BF-BOM-02. 关闭弹窗不保存', async ({ page }) => {
+      606 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:603:24
+
+    Error Context: test-results\bom-BOM清单---业务流程树-BF-BOM-01-主路径：新建→填写→提交→version-v1-0-chromium\error-context.md
+
+  48) [chromium] › e2e\bom.spec.ts:605:3 › BOM清单 -> 业务流程树 › BF-BOM-02. 关闭弹窗不保存 ─────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:606:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---业务流程树-BF-BOM-02-关闭弹窗不保存-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---业务流程树-BF-BOM-02-关闭弹窗不保存-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---业务流程树-BF-BOM-02-关闭弹窗不保存-chromium\error-context.md
+
+  49) [chromium] › e2e\bom.spec.ts:610:3 › BOM清单 -> 业务流程树 › BF-BOM-03. code已存在 ─────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[400, 409][39m
+
+      613 |     await apiFetch(token, 'POST', '/boms', { code, name: '重复1', type: 'ihc', materials: [] })
+      614 |     const res = await apiFetch(token, 'POST', '/boms', { code, name: '重复2', type: 'ihc', materials: [] })
+    > 615 |     expect([400, 409]).toContain(res.status)
+          |                        ^
+      616 |   })
+      617 |   test('BF-BOM-04. 必填漏填', async () => {
+      618 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:615:24
+
+    Error Context: test-results\bom-BOM清单---业务流程树-BF-BOM-03-code已存在-chromium\error-context.md
+
+  50) [chromium] › e2e\bom.spec.ts:617:3 › BOM清单 -> 业务流程树 › BF-BOM-04. 必填漏填 ────────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m400[39m
+    Received: [31m401[39m
+
+      618 |     const token = await apiLogin('admin')
+      619 |     const res = await apiFetch(token, 'POST', '/boms', { name: '漏填' })
+    > 620 |     expect(res.status).toBe(400)
+          |                        ^
+      621 |   })
+      622 |   test('BF-BOM-05. 刷新后仍在', async ({ page }) => {
+      623 |     await loginAs(page, 'admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:620:24
+
+    Error Context: test-results\bom-BOM清单---业务流程树-BF-BOM-04-必填漏填-chromium\error-context.md
+
+  51) [chromium] › e2e\bom.spec.ts:622:3 › BOM清单 -> 业务流程树 › BF-BOM-05. 刷新后仍在 ───────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:623:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---业务流程树-BF-BOM-05-刷新后仍在-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---业务流程树-BF-BOM-05-刷新后仍在-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---业务流程树-BF-BOM-05-刷新后仍在-chromium\error-context.md
+
+  52) [chromium] › e2e\bom.spec.ts:651:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-01. 编码唯一性 ───────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      654 |     const r1 = await apiFetch(token, 'POST', '/boms', { code, name: '唯一1', type: 'ihc', materials: [] })
+      655 |     const r2 = await apiFetch(token, 'POST', '/boms', { code, name: '唯一2', type: 'ihc', materials: [] })
+    > 656 |     expect([201, 409]).toContain(r1.status)
+          |                        ^
+      657 |     expect([400, 409]).toContain(r2.status)
+      658 |   })
+      659 |   test('BLIND-BOM-02. version自动升级', async () => {
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:656:24
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-01-编码唯一性-chromium\error-context.md
+
+  53) [chromium] › e2e\bom.spec.ts:672:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-04. 导出功能 ────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:673:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-04-导出功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-04-导出功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-04-导出功能-chromium\error-context.md
+
+  54) [chromium] › e2e\bom.spec.ts:677:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-05. 打印功能 ────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:678:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-05-打印功能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-05-打印功能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-05-打印功能-chromium\error-context.md
+
+  55) [chromium] › e2e\bom.spec.ts:682:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-06. 响应式布局 ───────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:683:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-06-响应式布局-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-06-响应式布局-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-06-响应式布局-chromium\error-context.md
+
+  56) [chromium] › e2e\bom.spec.ts:688:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-07. 加载性能 ────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:689:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-07-加载性能-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-07-加载性能-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-07-加载性能-chromium\error-context.md
+
+  57) [chromium] › e2e\bom.spec.ts:695:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-08. 搜索防抖 ────────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:696:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-08-搜索防抖-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-08-搜索防抖-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-08-搜索防抖-chromium\error-context.md
+
+  58) [chromium] › e2e\bom.spec.ts:704:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-09. 物料明细展示 ──────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:705:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-09-物料明细展示-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-09-物料明细展示-chromium\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-09-物料明细展示-chromium\error-context.md
+
+  59) [chromium] › e2e\bom.spec.ts:711:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-10. XSS防护 ───────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      714 |       code: `TEST-XSS-${Date.now()}`, name: '<script>alert(1)</script>', type: 'ihc', materials: [],
+      715 |     })
+    > 716 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      717 |   })
+      718 |   test('BLIND-BOM-11. SQL注入防护', async () => {
+      719 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:716:24
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-10-XSS防护-chromium\error-context.md
+
+  60) [chromium] › e2e\bom.spec.ts:718:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-11. SQL注入防护 ─────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 409][39m
+
+      721 |       code: `TEST-SQL-${Date.now()}`, name: "' OR '1'='1", type: 'ihc', materials: [],
+      722 |     })
+    > 723 |     expect([201, 409]).toContain(res.status)
+          |                        ^
+      724 |   })
+      725 |   test('BLIND-BOM-12. API响应格式', async () => {
+      726 |     const token = await apiLogin('admin')
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:723:24
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-11-SQL注入防护-chromium\error-context.md
+
+  61) [chromium] › e2e\bom.spec.ts:725:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-12. API响应格式 ─────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      726 |     const token = await apiLogin('admin')
+      727 |     const res = await apiFetch(token, 'GET', '/boms?page=1&pageSize=1')
+    > 728 |     expect(res.status).toBe(200)
+          |                        ^
+      729 |     expect(res.data).toHaveProperty('data')
+      730 |     expect(res.data?.data).toHaveProperty('list')
+      731 |   })
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:728:24
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-12-API响应格式-chromium\error-context.md
+
+  62) [chromium] › e2e\bom.spec.ts:739:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-14. 排序功能 ────────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m200[39m
+    Received: [31m401[39m
+
+      740 |     const token = await apiLogin('admin')
+      741 |     const res = await apiFetch(token, 'GET', '/boms?sort=code&order=asc')
+    > 742 |     expect(res.status).toBe(200)
+          |                        ^
+      743 |   })
+      744 |   test('BLIND-BOM-15. 多角色同时操作', async ({ browser }) => {
+      745 |     const ctx1 = await browser.newContext()
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:742:24
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-14-排序功能-chromium\error-context.md
+
+  63) [chromium] › e2e\bom.spec.ts:744:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-15. 多角色同时操作 ─────────────────
+
+    TimeoutError: page.waitForURL: Timeout 10000ms exceeded.
+    =========================== logs ===========================
+    waiting for navigation to "http://localhost:8080/" until "load"
+      navigated to "http://localhost:8080/login"
+    ============================================================
+
+      23 |   await page.fill('input[type="password"]', cred.password)
+      24 |   await page.click('button[type="submit"]')
+    > 25 |   await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+         |              ^
+      26 | }
+      27 |
+      28 | async function apiLogin(role: RoleKey): Promise<string> {
+        at loginAs (d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:25:14)
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:749:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-15-多角色同时操作-chromium\test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-15-多角色同时操作-chromium\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-15-多角色同时操作-chromium\error-context.md
+
+  64) [chromium] › e2e\bom.spec.ts:756:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-16. 物料用量小数 ──────────────────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected value: [32m401[39m
+    Received array: [31m[201, 400, 409][39m
+
+      761 |       materials: mid ? [{ materialId: mid, quantity: 1.5 }] : [],
+      762 |     })
+    > 763 |     expect([201, 400, 409]).toContain(res.status)
+          |                             ^
+      764 |   })
+      765 | })
+      766 |
+        at d:\Git\COREONE\最新代码\前端代码\e2e\bom.spec.ts:763:29
+
+    Error Context: test-results\bom-BOM清单---盲点分析补充-BLIND-BOM-16-物料用量小数-chromium\error-context.md
+
+  64 failed
+    [chromium] › e2e\bom.spec.ts:74:5 › BOM清单 -> 查看BOM列表 › BOM-LIST-01-admin. admin可查看BOM列表 ────────
+    [chromium] › e2e\bom.spec.ts:80:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-02. 空数据边界 ──────────────────────
+    [chromium] › e2e\bom.spec.ts:91:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-04. API 500 ────────────────────
+    [chromium] › e2e\bom.spec.ts:96:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-05. admin显示新增编辑删除 ──────────────
+    [chromium] › e2e\bom.spec.ts:106:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-07. 显示编码名称类型物料数单样本成本 ──────────
+    [chromium] › e2e\bom.spec.ts:111:3 › BOM清单 -> 查看BOM列表 › BOM-LIST-08. 快速刷新 ──────────────────────
+    [chromium] › e2e\bom.spec.ts:121:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-01. 选择ihc ───────────────────────
+    [chromium] › e2e\bom.spec.ts:126:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-02. 无该类型 ────────────────────────
+    [chromium] › e2e\bom.spec.ts:131:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-03. 重置 ──────────────────────────
+    [chromium] › e2e\bom.spec.ts:136:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-04. 各角色可见 ───────────────────────
+    [chromium] › e2e\bom.spec.ts:143:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-05. 快速切换 ────────────────────────
+    [chromium] › e2e\bom.spec.ts:150:3 › BOM清单 -> 按类型筛选 › BOM-TYPE-06. API错误 ───────────────────────
+    [chromium] › e2e\bom.spec.ts:159:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-01. 搜索HER2 ────────────────────
+    [chromium] › e2e\bom.spec.ts:164:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-02. 无结果 ───────────────────────
+    [chromium] › e2e\bom.spec.ts:169:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-03. 快速连续输入 ────────────────────
+    [chromium] › e2e\bom.spec.ts:178:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-04. 网络断 ───────────────────────
+    [chromium] › e2e\bom.spec.ts:183:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-05. 超长字符串 ─────────────────────
+    [chromium] › e2e\bom.spec.ts:188:3 › BOM清单 -> 搜索BOM › BOM-SEARCH-06. 各角色可见 ─────────────────────
+    [chromium] › e2e\bom.spec.ts:199:3 › BOM清单 -> 新建BOM › BOM-CREATE-01. admin新建成功 ─────────────────
+    [chromium] › e2e\bom.spec.ts:208:3 › BOM清单 -> 新建BOM › BOM-CREATE-02. materials空返回400 ───────────
+    [chromium] › e2e\bom.spec.ts:215:3 › BOM清单 -> 新建BOM › BOM-CREATE-03. 未传code返回400 ───────────────
+    [chromium] › e2e\bom.spec.ts:220:3 › BOM清单 -> 新建BOM › BOM-CREATE-04. 未传name返回400 ───────────────
+    [chromium] › e2e\bom.spec.ts:225:3 › BOM清单 -> 新建BOM › BOM-CREATE-05. 未传type返回400 ───────────────
+    [chromium] › e2e\bom.spec.ts:237:3 › BOM清单 -> 新建BOM › BOM-CREATE-07. code已存在返回409 ──────────────
+    [chromium] › e2e\bom.spec.ts:244:3 › BOM清单 -> 新建BOM › BOM-CREATE-08. 快速双击 ──────────────────────
+    [chromium] › e2e\bom.spec.ts:250:3 › BOM清单 -> 新建BOM › BOM-CREATE-09. 网络中断重试 ────────────────────
+    [chromium] › e2e\bom.spec.ts:257:3 › BOM清单 -> 新建BOM › BOM-CREATE-10. admin显示新增按钮 ───────────────
+    [chromium] › e2e\bom.spec.ts:274:3 › BOM清单 -> 新建BOM › BOM-CREATE-13. 超长code ────────────────────
+    [chromium] › e2e\bom.spec.ts:281:3 › BOM清单 -> 新建BOM › BOM-CREATE-14. 特殊字符name ──────────────────
+    [chromium] › e2e\bom.spec.ts:288:3 › BOM清单 -> 新建BOM › BOM-CREATE-15. 多物料BOM ────────────────────
+    [chromium] › e2e\bom.spec.ts:298:3 › BOM清单 -> 新建BOM › BOM-CREATE-16. 负数量物料 ─────────────────────
+    [chromium] › e2e\bom.spec.ts:359:3 › BOM清单 -> 编辑BOM › BOM-EDIT-07. admin显示编辑按钮 ─────────────────
+    [chromium] › e2e\bom.spec.ts:375:3 › BOM清单 -> 编辑BOM › BOM-EDIT-10. 编辑不存在返回404 ──────────────────
+    [chromium] › e2e\bom.spec.ts:398:3 › BOM清单 -> 删除BOM › BOM-DEL-01. admin删除无关联BOM ────────────────
+    [chromium] › e2e\bom.spec.ts:451:3 › BOM清单 -> 删除BOM › BOM-DEL-06. admin显示删除按钮 ──────────────────
+    [chromium] › e2e\bom.spec.ts:461:3 › BOM清单 -> 删除BOM › BOM-DEL-08. 不存在返回404 ─────────────────────
+    [chromium] › e2e\bom.spec.ts:498:3 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-02. 不存在返回404 ────────────────
+    [chromium] › e2e\bom.spec.ts:503:3 › BOM清单 -> 查看BOM详情 › BOM-DETAIL-03. admin可点击查看详情弹窗 ──────────
+    [chromium] › e2e\bom.spec.ts:514:3 › BOM清单 -> 分页切换 › BOM-PAGE-01. 第2页 ──────────────────────────
+    [chromium] › e2e\bom.spec.ts:519:3 › BOM清单 -> 分页切换 › BOM-PAGE-02. 仅1页 ──────────────────────────
+    [chromium] › e2e\bom.spec.ts:524:3 › BOM清单 -> 分页切换 › BOM-PAGE-03. page=0 ───────────────────────
+    [chromium] › e2e\bom.spec.ts:529:3 › BOM清单 -> 分页切换 › BOM-PAGE-04. page=999 ─────────────────────
+    [chromium] › e2e\bom.spec.ts:534:3 › BOM清单 -> 分页切换 › BOM-PAGE-05. pageSize=1 ───────────────────
+    [chromium] › e2e\bom.spec.ts:539:3 › BOM清单 -> 分页切换 › BOM-PAGE-06. pageSize=100 ─────────────────
+    [chromium] › e2e\bom.spec.ts:544:3 › BOM清单 -> 分页切换 › BOM-PAGE-07. 快速切换 ─────────────────────────
+    [chromium] › e2e\bom.spec.ts:551:3 › BOM清单 -> 分页切换 › BOM-PAGE-08. 各角色一致 ────────────────────────
+    [chromium] › e2e\bom.spec.ts:598:3 › BOM清单 -> 业务流程树 › BF-BOM-01. 主路径：新建→填写→提交→version=v1.0 ─────
+    [chromium] › e2e\bom.spec.ts:605:3 › BOM清单 -> 业务流程树 › BF-BOM-02. 关闭弹窗不保存 ───────────────────────
+    [chromium] › e2e\bom.spec.ts:610:3 › BOM清单 -> 业务流程树 › BF-BOM-03. code已存在 ───────────────────────
+    [chromium] › e2e\bom.spec.ts:617:3 › BOM清单 -> 业务流程树 › BF-BOM-04. 必填漏填 ──────────────────────────
+    [chromium] › e2e\bom.spec.ts:622:3 › BOM清单 -> 业务流程树 › BF-BOM-05. 刷新后仍在 ─────────────────────────
+    [chromium] › e2e\bom.spec.ts:651:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-01. 编码唯一性 ─────────────────────
+    [chromium] › e2e\bom.spec.ts:672:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-04. 导出功能 ──────────────────────
+    [chromium] › e2e\bom.spec.ts:677:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-05. 打印功能 ──────────────────────
+    [chromium] › e2e\bom.spec.ts:682:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-06. 响应式布局 ─────────────────────
+    [chromium] › e2e\bom.spec.ts:688:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-07. 加载性能 ──────────────────────
+    [chromium] › e2e\bom.spec.ts:695:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-08. 搜索防抖 ──────────────────────
+    [chromium] › e2e\bom.spec.ts:704:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-09. 物料明细展示 ────────────────────
+    [chromium] › e2e\bom.spec.ts:711:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-10. XSS防护 ─────────────────────
+    [chromium] › e2e\bom.spec.ts:718:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-11. SQL注入防护 ───────────────────
+    [chromium] › e2e\bom.spec.ts:725:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-12. API响应格式 ───────────────────
+    [chromium] › e2e\bom.spec.ts:739:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-14. 排序功能 ──────────────────────
+    [chromium] › e2e\bom.spec.ts:744:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-15. 多角色同时操作 ───────────────────
+    [chromium] › e2e\bom.spec.ts:756:3 › BOM清单 -> 盲点分析补充 › BLIND-BOM-16. 物料用量小数 ────────────────────
+  27 skipped
+  28 passed (8.1m)

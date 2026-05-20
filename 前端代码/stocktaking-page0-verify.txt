@@ -1,0 +1,6 @@
+
+Running 1 test using 1 worker
+
+  ok 1 [chromium] › e2e\stocktaking.spec.ts:471:3 › 库存盘点 -> 分页切换 › ST-PAGE-03. 表单校验：page=0后端修正为1 (634ms)
+
+  1 passed (4.5s)
