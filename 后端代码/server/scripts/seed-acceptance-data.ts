@@ -3,13 +3,12 @@
  * 基于 TEST-PLAN-v1.1 的测试场景创建完整数据链
  */
 
-import { DatabaseManager } from "../src/database/DatabaseManager";
+import { initializeDatabase, getDatabase } from "../src/database/DatabaseManager";
 import { v4 as uuidv4 } from "uuid";
 
 async function seedAcceptanceData() {
-  const dbManager = DatabaseManager.getInstance();
-  await dbManager.initialize();
-  const db = dbManager.getDatabase();
+  initializeDatabase();
+  const db = getDatabase();
 
   const now = new Date().toISOString();
 
