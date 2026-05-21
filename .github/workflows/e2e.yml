@@ -24,14 +24,11 @@ jobs:
         with:
           node-version: 22
 
-      # 1. 安装后端依赖并初始化数据库
+      # 1. 安装后端依赖
+      # 后端 app.ts 启动时会自动调用 initializeDatabase() 创建表结构，无需额外 seed
       - name: Install backend dependencies
         working-directory: 后端代码/server
         run: npm ci
-
-      - name: Seed database
-        working-directory: 后端代码/server
-        run: npx tsx scripts/seed-acceptance-data.ts
 
       # 2. 安装前端依赖
       - name: Install frontend dependencies
