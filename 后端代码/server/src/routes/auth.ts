@@ -3,9 +3,9 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, error } from '../utils/response.js'
+import { JWT_SECRET } from '../middleware/auth.js'
 
 const router = Router()
-const JWT_SECRET = process.env.JWT_SECRET || 'coreone-secret-key-2024'
 const JWT_EXPIRES = '8h'
 
 router.post('/login', (req, res) => {
@@ -30,14 +30,9 @@ router.post('/login', (req, res) => {
       }
     }
 
-    if (!user) {
-      error(res, 'User not found or disabled', 'UNAUTHORIZED', 401)
-      return
-    }
-
-    const validPassword = bcrypt.compareSync(password, user.password)
+    const validPassword = user && bcrypt.compareSync(password, user.password)
     if (!validPassword) {
-      error(res, 'Invalid password', 'UNAUTHORIZED', 401)
+      error(res, '用户名或密码错误', 'UNAUTHORIZED', 401)
       return
     }
 

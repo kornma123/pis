@@ -1,7 +1,10 @@
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'coreone-secret-key-2024'
+export const JWT_SECRET = process.env.JWT_SECRET
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required')
+}
 
 // 角色权限映射
 const ROLE_PERMISSIONS: Record<string, string[]> = {

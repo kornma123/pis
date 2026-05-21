@@ -1,6 +1,6 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import { initializeDatabase } from './database/DatabaseManager.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { authenticateToken, requireRole } from './middleware/auth.js'
@@ -28,8 +28,6 @@ import depletionRoutes from './routes/depletion-v1.1.js'
 import purchaseOrderRoutes from './routes/purchase-orders-v1.1.js'
 import transferRoutes from './routes/transfers-v1.1.js'
 import reconciliationRoutes from './routes/reconciliation-v1.1.js'
-
-dotenv.config()
 
 const app = express()
 const PORT = process.env.PORT || 3001

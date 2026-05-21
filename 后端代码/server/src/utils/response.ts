@@ -44,12 +44,14 @@ export function error(
   statusCode = 500,
   details?: unknown
 ): void {
+  const isDev = process.env.NODE_ENV === 'development'
+  const safeMessage = statusCode >= 500 && !isDev ? '服务器内部错误，请稍后重试' : message
   res.status(statusCode).json({
     success: false,
     error: {
       code,
-      message,
-      ...(details ? { details } : {}),
+      message: safeMessage,
+      ...(details && isDev ? { details } : {}),
     },
   })
 }
