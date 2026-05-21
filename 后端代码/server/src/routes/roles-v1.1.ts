@@ -45,13 +45,30 @@ router.put('/:id', (req, res) => {
     const { id } = req.params
     const { code, name, description, permissions, status } = req.body
     database.exec('BEGIN IMMEDIATE')
-    const role = database.prepare('SELECT 1 FROM roles WHERE id = ? AND is_deleted = 0').get(id)
+    const role = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id)
     if (!role) {
       database.exec('ROLLBACK')
       error(res, 'Role not found', 'NOT_FOUND', 404); return
     }
-    database.prepare('UPDATE roles SET code = ?, name = ?, description = ?, permissions = ?, status = ? WHERE id = ?')
-      .run(code, name, description || '', JSON.stringify(permissions || []), status === 'active' ? 1 : 0, id)
+    const fields: string[] = []; const params: any[] = []
+    if (code !== undefined) {
+      if (code !== role.code) {
+        const codeExists = database.prepare('SELECT 1 FROM roles WHERE code = ? AND id != ? AND is_deleted = 0').get(code, id)
+        if (codeExists) {
+          database.exec('ROLLBACK')
+          error(res, 'Role code already exists', 'RESOURCE_CONFLICT', 409); return
+        }
+      }
+      fields.push('code = ?'); params.push(code)
+    }
+    if (name !== undefined) { fields.push('name = ?'); params.push(name) }
+    if (description !== undefined) { fields.push('description = ?'); params.push(description || '') }
+    if (permissions !== undefined) { fields.push('permissions = ?'); params.push(JSON.stringify(permissions || [])) }
+    if (status !== undefined) { fields.push('status = ?'); params.push(status === 'active' ? 1 : 0) }
+    if (fields.length > 0) {
+      params.push(id)
+      database.prepare(`UPDATE roles SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params)
+    }
     database.exec('COMMIT')
     success(res, { id }, 'Updated')
   } catch (err: any) {
