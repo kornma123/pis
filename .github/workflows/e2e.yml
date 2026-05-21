@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, master]
 
+env:
+  # 消除 Node.js 20 弃用警告，强制 action 使用 Node.js 24 运行时
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
@@ -39,10 +43,10 @@ jobs:
         working-directory: 前端代码
         run: npx playwright install --with-deps chromium
 
-      # 4. 运行 E2E 测试
+      # 4. 运行 E2E 测试（带详细输出，方便排查失败）
       - name: Run E2E tests
         working-directory: 前端代码
-        run: npm run test:e2e:ci
+        run: npx playwright test --reporter=list --workers=1
         env:
           CI: true
 
