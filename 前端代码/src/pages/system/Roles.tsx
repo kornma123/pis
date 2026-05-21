@@ -95,7 +95,7 @@ export default function Roles() {
 
   const openCreate = () => {
     setEditingId(null)
-    setForm({ code: '', name: '', description: '', permissions: [], status: 'active', dataScope: 'dept' })
+    setForm({ code: `ROLE-${Date.now()}`, name: '', description: '', permissions: [], status: 'active', dataScope: 'dept' })
     setModalType('create')
   }
 
@@ -342,8 +342,9 @@ export default function Roles() {
                     value={form.code}
                     onChange={e => setForm({ ...form, code: e.target.value })}
                     placeholder={modalType === 'create' ? '系统自动生成' : ''}
+                    disabled={modalType === 'create'}
                     readOnly={modalType === 'edit'}
-                    className={`w-full h-10 px-3 text-sm text-[#111827] border border-[#d1d5db] rounded-md outline-none transition-all focus:border-[#3b82f6] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] ${modalType === 'edit' ? 'bg-[#f9fafb] text-[#9ca3af]' : 'bg-white'}`}
+                    className={`w-full h-10 px-3 text-sm text-[#111827] border border-[#d1d5db] rounded-md outline-none transition-all focus:border-[#3b82f6] focus:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] ${modalType === 'edit' ? 'bg-[#f9fafb] text-[#9ca3af]' : modalType === 'create' ? 'bg-[#f9fafb] text-[#9ca3af]' : 'bg-white'}`}
                   />
                 </div>
               </div>
