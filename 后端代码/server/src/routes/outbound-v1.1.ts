@@ -95,50 +95,70 @@ router.post('/', (req, res) => {
     const materialUnits = db.prepare('SELECT id, unit FROM materials WHERE id IN (' + items.map(() => '?').join(',') + ')').all(...items.map((i: any) => i.materialId)) as any[]
     const unitMap = new Map(materialUnits.map((m: any) => [m.id, m.unit]))
 
-    db.prepare(`
-      INSERT INTO outbound_records (id, outbound_no, type, project_id, total_cost, operator, status, remark)
-      VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)
-    `).run(id, outboundNo, type, projectId || null, totalCost, operator, remark || null)
-
-    for (const oi of outboundItems) {
-      const itemId = uuidv4()
-      db.prepare(`
-        INSERT INTO outbound_items (id, outbound_id, material_id, batch_id, batch_no, quantity, unit, unit_cost, total_cost, usage, receiver)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(itemId, id, oi.materialId, oi.batchId, oi.batchNo, oi.quantity, unitMap.get(oi.materialId) || 'pcs', oi.unitCost, oi.itemCost, oi.usage || 'self', oi.receiver || null)
-
-      db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(oi.quantity, oi.materialId)
-
-      if (oi.batchId) {
-        db.prepare('UPDATE batches SET remaining = remaining - ? WHERE id = ?').run(oi.quantity, oi.batchId)
-        const batchRemaining = (db.prepare('SELECT remaining FROM batches WHERE id = ?').get(oi.batchId) as any)?.remaining
-        if (batchRemaining <= 0) {
-          db.prepare('UPDATE batches SET status = 0 WHERE id = ?').run(oi.batchId)
+    // 事务保护：出库涉及 records + items + inventory + batches + stock_logs 多表操作
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      // 事务内重新校验库存，防止并发窗口
+      for (const item of items) {
+        const { materialId, quantity } = item
+        const invCheck = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
+        if (!invCheck || invCheck.stock < quantity) {
+          db.exec('ROLLBACK')
+          error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422)
+          return
         }
       }
 
-      // 自用物料创建使用中跟踪记录
-      if ((oi.usage || 'self') === 'self' && oi.batchId) {
-        const mat = db.prepare('SELECT name, spec FROM materials WHERE id = ? AND is_deleted = 0').get(oi.materialId) as any
-        const trkId = `TRK-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-        const today = new Date().toISOString().split('T')[0]
+      db.prepare(`
+        INSERT INTO outbound_records (id, outbound_no, type, project_id, total_cost, operator, status, remark)
+        VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)
+      `).run(id, outboundNo, type, projectId || null, totalCost, operator, remark || null)
+
+      for (const oi of outboundItems) {
+        const itemId = uuidv4()
         db.prepare(`
-          INSERT INTO batch_usage_tracking
-          (id, material_id, material_name, batch, spec, total_qty, remaining, unit, start_date, days_used, expected_days, progress, usage, receiver, status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, 'in-use', datetime('now'), datetime('now'))
-        `).run(trkId, oi.materialId, mat?.name || '', oi.batchNo || '', mat?.spec || '', oi.quantity, oi.quantity, unitMap.get(oi.materialId) || 'pcs', today, 30, 'self', null)
+          INSERT INTO outbound_items (id, outbound_id, material_id, batch_id, batch_no, quantity, unit, unit_cost, total_cost, usage, receiver)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(itemId, id, oi.materialId, oi.batchId, oi.batchNo, oi.quantity, unitMap.get(oi.materialId) || 'pcs', oi.unitCost, oi.itemCost, oi.usage || 'self', oi.receiver || null)
+
+        db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(oi.quantity, oi.materialId)
+
+        if (oi.batchId) {
+          db.prepare('UPDATE batches SET remaining = remaining - ? WHERE id = ?').run(oi.quantity, oi.batchId)
+          const batchRemaining = (db.prepare('SELECT remaining FROM batches WHERE id = ?').get(oi.batchId) as any)?.remaining
+          if (batchRemaining <= 0) {
+            db.prepare('UPDATE batches SET status = 0 WHERE id = ?').run(oi.batchId)
+          }
+        }
+
+        // 自用物料创建使用中跟踪记录
+        if ((oi.usage || 'self') === 'self' && oi.batchId) {
+          const mat = db.prepare('SELECT name, spec FROM materials WHERE id = ? AND is_deleted = 0').get(oi.materialId) as any
+          const trkId = `TRK-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+          const today = new Date().toISOString().split('T')[0]
+          db.prepare(`
+            INSERT INTO batch_usage_tracking
+            (id, material_id, material_name, batch, spec, total_qty, remaining, unit, start_date, days_used, expected_days, progress, usage, receiver, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, 'in-use', datetime('now'), datetime('now'))
+          `).run(trkId, oi.materialId, mat?.name || '', oi.batchNo || '', mat?.spec || '', oi.quantity, oi.quantity, unitMap.get(oi.materialId) || 'pcs', today, 30, 'self', null)
+        }
+
+        const logId = uuidv4()
+        const beforeStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(oi.materialId) as any)?.stock || 0
+        const afterStock = beforeStock - oi.quantity
+        db.prepare(`
+          INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
+          VALUES (?, 'outbound', ?, ?, ?, ?, ?, 'outbound', ?)
+        `).run(logId, oi.materialId, -oi.quantity, beforeStock, afterStock, id, operator)
       }
 
-      const logId = uuidv4()
-      const beforeStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(oi.materialId) as any)?.stock || 0
-      const afterStock = beforeStock - oi.quantity
-      db.prepare(`
-        INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
-        VALUES (?, 'outbound', ?, ?, ?, ?, ?, 'outbound', ?)
-      `).run(logId, oi.materialId, -oi.quantity, beforeStock, afterStock, id, operator)
+      db.exec('COMMIT')
+    } catch (err) {
+      db.exec('ROLLBACK')
+      throw err
     }
 
-    success(res, { id, outboundNo, type, projectId, totalCost, status: 'completed' }, 'Outbound created')
+    success(res, { id, outboundNo, type, projectId, totalCost, status: 'completed' }, 'Outbound created', 201)
   } catch (err: any) { error(res, err.message) }
 })
 
