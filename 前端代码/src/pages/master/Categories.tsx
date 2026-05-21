@@ -367,6 +367,8 @@ export default function Categories() {
               <div className="p-8 text-center text-gray-400 text-sm">加载中...</div>
             ) : tree.length === 0 ? (
               <div className="p-8 text-center text-gray-400 text-sm">暂无分类数据</div>
+            ) : searchKeyword.trim() && !tree.some(filterMatch) ? (
+              <div className="p-8 text-center text-gray-400 text-sm">未找到匹配的分类</div>
             ) : (
               renderTree(tree)
             )}
