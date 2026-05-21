@@ -16,16 +16,16 @@ const ROLE_MENU_MAP: Record<string, string[]> = {
   ],
   technician: [
     '/', '/inventory', '/projects', '/bom', '/reconciliation',
-    '/cost-analysis', '/materials',
+    '/cost-analysis', '/materials', '/alerts',
   ],
   procurement: [
-    '/', '/inventory', '/inbound', '/materials', '/suppliers',
+    '/', '/inventory', '/inbound', '/materials', '/suppliers', '/alerts',
   ],
   finance: [
-    '/', '/inventory', '/reconciliation', '/cost-analysis',
+    '/', '/inventory', '/reconciliation', '/cost-analysis', '/alerts',
   ],
   pathologist: [
-    '/', '/inventory', '/projects', '/bom', '/reconciliation', '/cost-analysis',
+    '/', '/inventory', '/projects', '/bom', '/reconciliation', '/cost-analysis', '/alerts',
   ],
 }
 

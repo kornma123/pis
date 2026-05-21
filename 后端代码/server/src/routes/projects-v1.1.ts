@@ -69,7 +69,13 @@ router.post('/', requireProjectWrite, (req, res) => {
     const id = uuidv4()
     db.prepare('INSERT INTO projects (id, code, name, type, cycle, manager, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, 1)')
       .run(id, code, name, type, cycle || null, manager || null, description || null)
-    success(res, { id, status: 'active' }, 'Created', 201)
+    const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as any
+    success(res, {
+      id: row.id, code: row.code, name: row.name, type: row.type, cycle: row.cycle,
+      bomId: row.bom_id, supportableSamples: row.supportable_samples,
+      status: row.status === 1 ? 'active' : 'inactive', manager: row.manager,
+      description: row.description, createdAt: row.created_at,
+    }, 'Created', 201)
   } catch (err: any) {
     if (err.message.includes('UNIQUE')) { error(res, 'Code exists', 'RESOURCE_CONFLICT', 409); return }
     error(res, err.message)
@@ -83,7 +89,9 @@ router.put('/:id', requireProjectWrite, (req, res) => {
     const db = getDatabase()
     const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND is_deleted = 0').get(id)
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
-    if (data.code === '' || data.name === '' || data.type === '') {
+    if (data.code === '' || data.code === null || data.code === undefined ||
+        data.name === '' || data.name === null || data.name === undefined ||
+        data.type === '' || data.type === null || data.type === undefined) {
       error(res, 'Code, name and type cannot be empty', 'INVALID_PARAMETER', 400); return
     }
     const fields: string[] = []; const params: any[] = []
