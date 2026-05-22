@@ -44,7 +44,7 @@ export function Pagination({
   }
 
   return (
-    <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+    <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-between flex-wrap gap-3">
       <span className="text-sm text-gray-500">
         共 {total} 条记录，第 {page} / {totalPages} 页
       </span>
@@ -52,7 +52,7 @@ export function Pagination({
         <button
           onClick={() => onChange(Math.max(1, page - 1))}
           disabled={page === 1}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-200 text-gray-600 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-3 h-9 text-sm bg-white border border-gray-200 text-gray-600 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           上一页
         </button>
@@ -66,7 +66,7 @@ export function Pagination({
               key={p}
               onClick={() => onChange(p as number)}
               className={cn(
-                'px-3 py-1.5 text-sm rounded-[6px] transition-colors',
+                'px-3 h-9 text-sm rounded-[6px] transition-colors',
                 page === p
                   ? 'bg-[#3b82f6] text-white'
                   : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -79,7 +79,7 @@ export function Pagination({
         <button
           onClick={() => onChange(Math.min(totalPages, page + 1))}
           disabled={page === totalPages}
-          className="px-3 py-1.5 text-sm bg-white border border-gray-200 text-gray-600 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-3 h-9 text-sm bg-white border border-gray-200 text-gray-600 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           下一页
         </button>
@@ -90,7 +90,7 @@ export function Pagination({
               onPageSizeChange(Number(e.target.value))
               onChange(1)
             }}
-            className="ml-2 px-2 py-1.5 text-sm border border-gray-200 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="ml-2 px-2 h-9 text-sm border border-gray-200 rounded-[6px] bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500"
           >
             <option value={10}>10条/页</option>
             <option value={20}>20条/页</option>
