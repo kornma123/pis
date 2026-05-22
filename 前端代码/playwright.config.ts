@@ -24,7 +24,9 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         launchOptions: process.env.PLAYWRIGHT_CHROMIUM_PATH
           ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
-          : { executablePath: 'C:\\Users\\86185\\AppData\\Local\\ms-playwright\\chromium-1217\\chrome-win64\\chrome.exe' },
+          : process.env.CI
+            ? undefined
+            : { executablePath: 'C:\\Users\\86185\\AppData\\Local\\ms-playwright\\chromium-1217\\chrome-win64\\chrome.exe' },
       },
     },
   ],
