@@ -24,13 +24,16 @@ function generateInboundNo(): string {
 
 router.get('/', (req, res) => {
   try {
-    let { page = 1, pageSize = 20, status, startDate, endDate } = req.query
+    let { page = 1, pageSize = 20, status, type, materialId, keyword, startDate, endDate } = req.query
     page = Math.max(1, Number(page) || 1)
     pageSize = Math.max(1, Math.min(100, Number(pageSize) || 20))
     const db = getDatabase()
     let where = 'r.is_deleted = 0'
     const params: any[] = []
     if (status) { where += ' AND r.status = ?'; params.push(status) }
+    if (type) { where += ' AND r.type = ?'; params.push(type) }
+    if (materialId) { where += ' AND r.material_id = ?'; params.push(materialId) }
+    if (keyword) { where += ' AND (r.inbound_no LIKE ? OR m.name LIKE ? OR r.batch_no LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`) }
     if (startDate) { where += ' AND r.created_at >= ?'; params.push(startDate) }
     if (endDate) { where += ' AND r.created_at <= ?'; params.push(`${endDate}T23:59:59`) }
 

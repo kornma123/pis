@@ -14,13 +14,16 @@ function generateNo(): string {
 
 router.get('/', (req, res) => {
   try {
-    let { page = 1, pageSize = 20 } = req.query
+    let { page = 1, pageSize = 20, keyword } = req.query
     page = Math.max(1, Number(page) || 1)
     pageSize = Math.max(1, Math.min(100, Number(pageSize) || 20))
     const db = getDatabase()
-    const count = (db.prepare('SELECT COUNT(*) as total FROM stocktaking_records').get() as any)?.total || 0
+    let where = '1=1'
+    const params: any[] = []
+    if (keyword) { where += ' AND (stocktaking_no LIKE ? OR material_name LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`) }
+    const count = (db.prepare(`SELECT COUNT(*) as total FROM stocktaking_records WHERE ${where}`).get(...params) as any)?.total || 0
     const offset = (page - 1) * pageSize
-    const list = db.prepare('SELECT * FROM stocktaking_records ORDER BY created_at DESC LIMIT ? OFFSET ?').all(pageSize, offset) as any[]
+    const list = db.prepare(`SELECT * FROM stocktaking_records WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, pageSize, offset) as any[]
     successList(res, list.map((r: any) => ({
       id: r.id, stocktakingNo: r.stocktaking_no, materialId: r.material_id,
       systemStock: r.system_stock, actualStock: r.actual_stock,

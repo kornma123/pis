@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Search, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight,
+  Search, Plus, Edit2, Trash2, X,
   Eye, Power, CheckCircle2, XCircle, RotateCcw
 } from 'lucide-react'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { materialApi, categoryApi, supplierApi } from '@/api/master'
 import type { Material, Category, Supplier } from '@/types'
 import { toast } from 'sonner'
@@ -25,18 +29,62 @@ interface FormData {
 type QuickFilter = 'all' | 'active' | 'inactive' | 'low-stock'
 
 export default function Materials() {
-  // Data states
-  const [data, setData] = useState<Material[]>([])
-  const [loading, setLoading] = useState(false)
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const pageSize = 20
+  // URL params
+  const { get, getNumber, setMultiple } = useUrlParams()
 
   // Filters
   const [keyword, setKeyword] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [supplierId, setSupplierId] = useState('')
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
+
+  // Pagination
+  const urlPage = Math.max(1, getNumber('page', 1))
+  const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 20))
+    ? getNumber('pageSize', 20)
+    : 20
+
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<Material>({
+    fetchFn: async ({ page, pageSize }) => {
+      const params: any = { page, pageSize }
+      if (keyword) params.keyword = keyword
+      if (categoryId) params.categoryId = categoryId
+      if (supplierId) params.supplierId = supplierId
+      if (quickFilter === 'active' || quickFilter === 'inactive') {
+        params.status = quickFilter
+      }
+      const res: any = await materialApi.getList(params)
+      let list: Material[] = res.list || []
+      if (quickFilter === 'low-stock') {
+        list = list.filter((m: Material) => m.stock <= m.minStock)
+      }
+      return { list, pagination: res.pagination }
+    },
+    initialPage: urlPage,
+    initialPageSize: urlPageSize,
+    deps: [keyword, categoryId, supplierId, quickFilter],
+  })
+
+  // Sync to URL
+  useEffect(() => {
+    setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 20 ? pageSize : null,
+      keyword: keyword || null,
+      categoryId: categoryId || null,
+      supplierId: supplierId || null,
+      status: quickFilter !== 'all' ? quickFilter : null,
+    })
+  }, [page, pageSize, keyword, categoryId, supplierId, quickFilter, setMultiple])
 
   // Ref data
   const [categories, setCategories] = useState<Category[]>([])
@@ -48,6 +96,27 @@ export default function Materials() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [detailMaterial, setDetailMaterial] = useState<Material | null>(null)
 
+  // ConfirmDialog
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmProps, setConfirmProps] = useState<{
+    title: string
+    description: string
+    confirmText: string
+    confirmVariant: 'danger' | 'primary'
+    onConfirm: () => void
+  } | null>(null)
+
+  const openConfirm = (props: {
+    title: string
+    description: string
+    confirmText: string
+    confirmVariant: 'danger' | 'primary'
+    onConfirm: () => void
+  }) => {
+    setConfirmProps(props)
+    setConfirmOpen(true)
+  }
+
   // Form
   const [form, setForm] = useState<FormData>({
     code: '', name: '', spec: '', unit: '个', categoryId: '', supplierId: '',
@@ -56,31 +125,6 @@ export default function Materials() {
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-
-  // Fetch materials
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const params: any = { page, pageSize }
-      if (keyword) params.keyword = keyword
-      if (categoryId) params.categoryId = categoryId
-      if (supplierId) params.supplierId = supplierId
-      if (quickFilter === 'active' || quickFilter === 'inactive') {
-        params.status = quickFilter
-      }
-
-      const res: any = await materialApi.getList(params)
-      let list: Material[] = res.list || []
-
-      // Client-side low stock filter
-      if (quickFilter === 'low-stock') {
-        list = list.filter((m: Material) => m.stock <= m.minStock)
-      }
-
-      setData(list)
-      setTotal(res.pagination?.total || 0)
-    } catch (e) { console.error(e) } finally { setLoading(false) }
-  }
 
   const fetchRefs = async () => {
     try {
@@ -93,7 +137,7 @@ export default function Materials() {
     } catch (e) { console.error(e) }
   }
 
-  useEffect(() => { fetchData(); fetchRefs() }, [page, quickFilter])
+  useEffect(() => { fetchRefs() }, [])
 
   // categories 加载完成后，如果新建弹窗已打开且编码为空，自动填充
   useEffect(() => {
@@ -171,19 +215,26 @@ export default function Materials() {
         toast.success('物料创建成功')
       }
       setModalOpen(false)
-      fetchData()
+      refresh()
     } catch (e) {
       toast.error('操作失败')
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确认删除该物料？')) return
-    try {
-      await materialApi.delete(id)
-      toast.success('删除成功')
-      fetchData()
-    } catch (e) { toast.error('删除失败') }
+    openConfirm({
+      title: '确认删除',
+      description: '删除后不可恢复，是否继续？',
+      confirmText: '删除',
+      confirmVariant: 'danger',
+      onConfirm: async () => {
+        try {
+          await materialApi.delete(id)
+          toast.success('删除成功')
+          refresh()
+        } catch (e) { toast.error('删除失败') }
+      },
+    })
   }
 
   const handleToggleStatus = async (row: Material) => {
@@ -191,7 +242,7 @@ export default function Materials() {
     try {
       await materialApi.update(row.id, { status: newStatus })
       toast.success(newStatus === 'active' ? '物料已启用' : '物料已停用')
-      fetchData()
+      refresh()
     } catch (e) { toast.error('操作失败') }
   }
 
@@ -216,15 +267,22 @@ export default function Materials() {
   const clearSelection = () => setSelectedIds(new Set())
 
   const batchDelete = async () => {
-    if (!confirm(`确认删除选中的 ${selectedIds.size} 个物料？`)) return
-    try {
-      for (const id of selectedIds) {
-        await materialApi.delete(id)
-      }
-      toast.success('批量删除成功')
-      clearSelection()
-      fetchData()
-    } catch (e) { toast.error('批量删除失败') }
+    openConfirm({
+      title: '确认批量删除',
+      description: `确认删除选中的 ${selectedIds.size} 个物料？删除后不可恢复。`,
+      confirmText: '删除',
+      confirmVariant: 'danger',
+      onConfirm: async () => {
+        try {
+          for (const id of selectedIds) {
+            await materialApi.delete(id)
+          }
+          toast.success('批量删除成功')
+          clearSelection()
+          refresh()
+        } catch (e) { toast.error('批量删除失败') }
+      },
+    })
   }
 
   const batchToggleStatus = async (status: 'active' | 'inactive') => {
@@ -234,11 +292,9 @@ export default function Materials() {
       }
       toast.success(status === 'active' ? '批量启用成功' : '批量停用成功')
       clearSelection()
-      fetchData()
+      refresh()
     } catch (e) { toast.error('操作失败') }
   }
-
-  const totalPages = Math.ceil(total / pageSize)
 
   const getCategoryName = (id?: string) => {
     if (!id) return '-'
@@ -267,7 +323,6 @@ export default function Materials() {
 
   const handleSearch = () => {
     setPage(1)
-    fetchData()
   }
 
   const handleReset = () => {
@@ -276,8 +331,6 @@ export default function Materials() {
     setSupplierId('')
     setQuickFilter('all')
     setPage(1)
-    // fetch after state updates via useEffect or timeout
-    setTimeout(() => fetchData(), 0)
   }
 
   return (
@@ -476,37 +529,31 @@ export default function Materials() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200">
-          <span className="text-sm text-gray-500">共 {total} 条记录</span>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="inline-flex items-center px-3 py-1.5 border border-gray-200 rounded-[6px] text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors">
-              <ChevronLeft className="w-4 h-4" />
-              上一页
-            </button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let p = i + 1
-              if (totalPages > 5 && page > 3) {
-                p = page - 2 + i
-                if (p > totalPages) p = totalPages - 4 + i
-              }
-              if (p < 1 || p > totalPages) return null
-              return (
-                <button
-                  key={p}
-                  onClick={() => setPage(p)}
-                  className={`px-3 py-1.5 text-sm rounded-[6px] transition-colors ${page === p ? 'bg-blue-500 text-white' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
-                >
-                  {p}
-                </button>
-              )
-            })}
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="inline-flex items-center px-3 py-1.5 border border-gray-200 rounded-[6px] text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors">
-              下一页
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+      <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200">
+        <span className="text-sm text-gray-500">共 {total} 条记录</span>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChangePage={setPage}
+          onChangePageSize={setPageSize}
+        />
+      </div>
+
+      {/* ConfirmDialog */}
+      {confirmOpen && confirmProps && (
+        <ConfirmDialog
+          open={confirmOpen}
+          title={confirmProps.title}
+          description={confirmProps.description}
+          confirmText={confirmProps.confirmText}
+          confirmVariant={confirmProps.confirmVariant}
+          onConfirm={() => {
+            setConfirmOpen(false)
+            confirmProps.onConfirm()
+          }}
+          onCancel={() => setConfirmOpen(false)}
+        />
       )}
 
       {/* Create/Edit Modal */}

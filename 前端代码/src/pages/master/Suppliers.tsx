@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Search, Plus, X } from 'lucide-react'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { supplierApi } from '@/api/master'
 import type { Supplier } from '@/types'
 import { toast } from 'sonner'
@@ -20,19 +24,75 @@ interface FormData {
 type ModalType = 'create' | 'edit' | 'detail' | null
 
 export default function Suppliers() {
-  const [data, setData] = useState<Supplier[]>([])
-  const [loading, setLoading] = useState(false)
+  const { get, getNumber, setMultiple } = useUrlParams()
+
   const [searchKeyword, setSearchKeyword] = useState('')
   const [searchStatus, setSearchStatus] = useState<string>('all')
   const [keyword, setKeyword] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const pageSize = 100
+
+  const urlPage = Math.max(1, getNumber('page', 1))
+  const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 100))
+    ? getNumber('pageSize', 100)
+    : 100
+
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<Supplier>({
+    fetchFn: async ({ page, pageSize }) => {
+      const params: any = { page, pageSize, keyword: keyword || undefined }
+      if (statusFilter && statusFilter !== 'all') {
+        params.status = statusFilter
+      }
+      const res: any = await supplierApi.getList(params)
+      return { list: res.list || [], pagination: res.pagination }
+    },
+    initialPage: urlPage,
+    initialPageSize: urlPageSize,
+    deps: [keyword, statusFilter],
+  })
+
+  useEffect(() => {
+    setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 100 ? pageSize : null,
+      keyword: keyword || null,
+      status: statusFilter !== 'all' ? statusFilter : null,
+    })
+  }, [page, pageSize, keyword, statusFilter, setMultiple])
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [modalType, setModalType] = useState<ModalType>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [detailRow, setDetailRow] = useState<Supplier | null>(null)
+
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmProps, setConfirmProps] = useState<{
+    title: string
+    description: string
+    confirmText: string
+    confirmVariant: 'danger' | 'primary'
+    onConfirm: () => void
+  } | null>(null)
+
+  const openConfirm = (props: {
+    title: string
+    description: string
+    confirmText: string
+    confirmVariant: 'danger' | 'primary'
+    onConfirm: () => void
+  }) => {
+    setConfirmProps(props)
+    setConfirmOpen(true)
+  }
+
   const [form, setForm] = useState<FormData>({
     code: '',
     name: '',
@@ -45,27 +105,6 @@ export default function Suppliers() {
     bankAccount: '',
     status: 'active',
   })
-
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const params: any = { page, pageSize, keyword: keyword || undefined }
-      if (statusFilter && statusFilter !== 'all') {
-        params.status = statusFilter
-      }
-      const res: any = await supplierApi.getList(params)
-      setData(res.list || [])
-      setTotal(res.pagination?.total || 0)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchData()
-  }, [page, keyword, statusFilter])
 
   const stats = {
     total,
@@ -148,21 +187,28 @@ export default function Suppliers() {
       }
       toast.success('保存成功')
       setModalType(null)
-      fetchData()
+      refresh()
     } catch (e) {
       toast.error('保存失败')
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确定删除该供应商？')) return
-    try {
-      await supplierApi.delete(id)
-      toast.success('删除成功')
-      fetchData()
-    } catch (e) {
-      toast.error('删除失败')
-    }
+    openConfirm({
+      title: '确认删除',
+      description: '确定删除该供应商？删除后不可恢复。',
+      confirmText: '删除',
+      confirmVariant: 'danger',
+      onConfirm: async () => {
+        try {
+          await supplierApi.delete(id)
+          toast.success('删除成功')
+          refresh()
+        } catch (e) {
+          toast.error('删除失败')
+        }
+      },
+    })
   }
 
   const handleToggleStatus = async (row: Supplier) => {
@@ -170,7 +216,7 @@ export default function Suppliers() {
     try {
       await supplierApi.update(row.id, { status: newStatus })
       toast.success(newStatus === 'active' ? '已启用' : '已停用')
-      fetchData()
+      refresh()
     } catch (e) {
       toast.error('操作失败')
     }
@@ -193,8 +239,6 @@ export default function Suppliers() {
     }
     setSelectedIds(next)
   }
-
-  const totalPages = Math.ceil(total / pageSize)
 
   const getAvatarColor = (name: string) => {
     const colors = [
@@ -430,31 +474,33 @@ export default function Suppliers() {
         </div>
 
         {/* 分页 */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-            <span className="text-sm text-gray-500">共 {total} 条记录</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1.5 text-sm border border-gray-200 rounded-[6px] hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                上一页
-              </button>
-              <span className="text-sm text-gray-600">
-                {page} / {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-3 py-1.5 text-sm border border-gray-200 rounded-[6px] hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                下一页
-              </button>
-            </div>
-          </div>
-        )}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+          <span className="text-sm text-gray-500">共 {total} 条记录</span>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onChangePage={setPage}
+            onChangePageSize={setPageSize}
+          />
+        </div>
       </div>
+
+      {/* ConfirmDialog */}
+      {confirmOpen && confirmProps && (
+        <ConfirmDialog
+          open={confirmOpen}
+          title={confirmProps.title}
+          description={confirmProps.description}
+          confirmText={confirmProps.confirmText}
+          confirmVariant={confirmProps.confirmVariant}
+          onConfirm={() => {
+            setConfirmOpen(false)
+            confirmProps.onConfirm()
+          }}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
 
       {/* 新建/编辑弹窗 */}
       {(modalType === 'create' || modalType === 'edit') && (

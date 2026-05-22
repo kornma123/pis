@@ -37,7 +37,7 @@ async function apiLogin(role: RoleKey): Promise<string> {
 
 async function apiFetch(token: string, method: string, path: string, body?: any) {
   const opts: any = { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } }
-  if (body) opts.body = JSON.stringify(body)
+  if (body && method !== 'GET' && method !== 'HEAD') opts.body = JSON.stringify(body)
   const res = await fetch(`${API_BASE}${path}`, opts)
   return { status: res.status, data: (await res.json().catch(() => null)) as any }
 }

@@ -8,6 +8,8 @@ import { toast } from 'sonner'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Pagination } from '@/components/ui/Pagination'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
 
 // ============================================
 // 类型扩展
@@ -199,12 +201,12 @@ function IconQr({ className }: { className?: string }) {
 // 主组件
 // ============================================
 export default function Inbound() {
-  // 数据状态
-  const [data, setData] = useState<InboundRecord[]>([])
-  const [loading, setLoading] = useState(false)
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const pageSize = 20
+  const url = useUrlParams()
+
+  const initialPage = Math.max(1, url.getNumber('page', 1))
+  const initialPageSize = [10, 20, 50, 100].includes(url.getNumber('pageSize', 20))
+    ? url.getNumber('pageSize', 20)
+    : 20
 
   // 引用数据
   const [materials, setMaterials] = useState<Material[]>([])
@@ -212,13 +214,13 @@ export default function Inbound() {
   const [locations, setLocations] = useState<Location[]>([])
 
   // 筛选状态
-  const [searchKeyword, setSearchKeyword] = useState('')
-  const [filterMaterial, setFilterMaterial] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [filterType, setFilterType] = useState('')
-  const [filterStartDate, setFilterStartDate] = useState('')
-  const [filterEndDate, setFilterEndDate] = useState('')
-  const [activeQuickFilter, setActiveQuickFilter] = useState('all')
+  const [searchKeyword, setSearchKeyword] = useState(url.get('keyword', ''))
+  const [filterMaterial, setFilterMaterial] = useState(url.get('materialId', ''))
+  const [filterStatus, setFilterStatus] = useState(url.get('status', ''))
+  const [filterType, setFilterType] = useState(url.get('type', ''))
+  const [filterStartDate, setFilterStartDate] = useState(url.get('startDate', ''))
+  const [filterEndDate, setFilterEndDate] = useState(url.get('endDate', ''))
+  const [activeQuickFilter, setActiveQuickFilter] = useState(url.get('quickFilter', 'all'))
 
   // 选择状态
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -257,7 +259,81 @@ export default function Inbound() {
     supplierId: '', locationId: '', fromLocationId: '', fromLocationName: '', productionDate: '', expiryDate: '', remark: '', purchaseOrderId: ''
   })
 
-  // 统计数据（模拟）
+  // 快速筛选映射为日期范围
+  const quickFilterDates = useMemo(() => {
+    const now = new Date()
+    const today = now.toISOString().split('T')[0]
+    const weekStart = new Date(now.getTime() - now.getDay() * 86400000).toISOString().split('T')[0]
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
+    switch (activeQuickFilter) {
+      case 'today': return { startDate: today, endDate: today }
+      case 'week': return { startDate: weekStart, endDate: today }
+      case 'month': return { startDate: monthStart, endDate: today }
+      default: return { startDate: filterStartDate, endDate: filterEndDate }
+    }
+  }, [activeQuickFilter, filterStartDate, filterEndDate])
+
+  const effectiveStatus = filterStatus || undefined
+  const effectiveType = filterType || undefined
+  const effectiveMaterialId = filterMaterial || undefined
+  const effectiveKeyword = searchKeyword || undefined
+  const effectiveStartDate = quickFilterDates.startDate || undefined
+  const effectiveEndDate = quickFilterDates.endDate || undefined
+
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<InboundRecord>({
+    fetchFn: async (params) => {
+      const res: any = await inboundApi.getList({
+        ...params,
+        status: effectiveStatus,
+        type: effectiveType,
+        materialId: effectiveMaterialId,
+        keyword: effectiveKeyword,
+        startDate: effectiveStartDate,
+        endDate: effectiveEndDate,
+      })
+      return {
+        list: res?.list || [],
+        pagination: res?.pagination,
+      }
+    },
+    initialPage,
+    initialPageSize,
+    deps: [
+      effectiveStatus,
+      effectiveType,
+      effectiveMaterialId,
+      effectiveKeyword,
+      effectiveStartDate,
+      effectiveEndDate,
+    ],
+  })
+
+  // URL 同步
+  useEffect(() => {
+    url.setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 20 ? pageSize : null,
+      keyword: searchKeyword || null,
+      materialId: filterMaterial || null,
+      status: filterStatus || null,
+      type: filterType || null,
+      startDate: filterStartDate || null,
+      endDate: filterEndDate || null,
+      quickFilter: activeQuickFilter !== 'all' ? activeQuickFilter : null,
+    })
+  }, [page, pageSize, searchKeyword, filterMaterial, filterStatus, filterType, filterStartDate, filterEndDate, activeQuickFilter])
+
+  // 统计数据
   const stats = useMemo(() => {
     const completedCount = data.filter(d => d.status === 'completed').length
     const pendingCount = data.filter(d => (d as any).status === 'pending').length
@@ -265,16 +341,16 @@ export default function Inbound() {
     const totalAmount = data.reduce((sum, d) => sum + (d.amount || 0), 0)
     const uniqueSuppliers = new Set(data.map(d => d.supplierId).filter(Boolean)).size
     return {
-      total: data.length,
+      total,
       completed: completedCount,
       pending: pendingCount,
       cancelled: cancelledCount,
       amount: totalAmount,
       supplierCount: uniqueSuppliers,
     }
-  }, [data])
+  }, [data, total])
 
-  // 快速筛选计数
+  // 快速筛选计数（基于当前页）
   const quickFilterCounts = useMemo(() => {
     const today = new Date().toISOString().split('T')[0]
     const now = new Date()
@@ -288,89 +364,6 @@ export default function Inbound() {
       month: data.filter(d => d.createdAt && d.createdAt >= monthStart).length,
     }
   }, [data])
-
-  // 筛选后的数据
-  const filteredData = useMemo(() => {
-    let result = [...data]
-
-    // 快速筛选
-    if (activeQuickFilter !== 'all') {
-      const now = new Date()
-      const today = now.toISOString().split('T')[0]
-      const weekStart = new Date(now.getTime() - now.getDay() * 86400000).toISOString().split('T')[0]
-      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-
-      switch (activeQuickFilter) {
-        case 'today':
-          result = result.filter(d => d.createdAt?.startsWith(today))
-          break
-        case 'week':
-          result = result.filter(d => d.createdAt && d.createdAt >= weekStart)
-          break
-        case 'month':
-          result = result.filter(d => d.createdAt && d.createdAt >= monthStart)
-          break
-      }
-    }
-
-    // 搜索关键词
-    if (searchKeyword) {
-      const kw = searchKeyword.toLowerCase()
-      result = result.filter(d =>
-        d.inboundNo?.toLowerCase().includes(kw) ||
-        d.materialName?.toLowerCase().includes(kw) ||
-        d.batchNo?.toLowerCase().includes(kw)
-      )
-    }
-
-    // 耗材筛选
-    if (filterMaterial) {
-      result = result.filter(d => d.materialId === filterMaterial)
-    }
-
-    // 状态筛选
-    if (filterStatus) {
-      result = result.filter(d => d.status === filterStatus)
-    }
-
-    // 入库来源筛选
-    if (filterType) {
-      result = result.filter(d => d.type === filterType)
-    }
-
-    // 日期范围
-    if (filterStartDate) {
-      result = result.filter(d => d.createdAt && d.createdAt >= filterStartDate)
-    }
-    if (filterEndDate) {
-      result = result.filter(d => d.createdAt && d.createdAt <= filterEndDate + 'T23:59:59')
-    }
-
-    return result
-  }, [data, activeQuickFilter, searchKeyword, filterMaterial, filterStatus, filterType, filterStartDate, filterEndDate])
-
-  // 分页数据
-  const paginatedData = useMemo(() => {
-    const start = (page - 1) * pageSize
-    return filteredData.slice(start, start + pageSize)
-  }, [filteredData, page])
-
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize))
-
-  // 获取数据
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const res: any = await inboundApi.getList({ page, pageSize })
-      setData(res.list || [])
-      setTotal(res.pagination?.total || 0)
-    } catch (e) {
-      console.error(e)
-      toast.error('获取数据失败')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const fetchRefs = async () => {
     try {
@@ -397,20 +390,15 @@ export default function Inbound() {
   }
 
   useEffect(() => {
-    fetchData()
     fetchPurchaseOrders()
   }, [])
 
-  useEffect(() => {
-    setPage(1)
-  }, [activeQuickFilter, searchKeyword, filterMaterial, filterStatus, filterType, filterStartDate, filterEndDate])
-
   // 选择操作
   const toggleSelectAll = () => {
-    if (selectedIds.size === paginatedData.length && paginatedData.length > 0) {
+    if (selectedIds.size === data.length && data.length > 0) {
       setSelectedIds(new Set())
     } else {
-      setSelectedIds(new Set(paginatedData.map(d => d.id)))
+      setSelectedIds(new Set(data.map(d => d.id)))
     }
   }
 
@@ -426,8 +414,8 @@ export default function Inbound() {
 
   const clearSelection = () => setSelectedIds(new Set())
 
-  const isAllSelected = paginatedData.length > 0 && selectedIds.size === paginatedData.length
-  const isIndeterminate = selectedIds.size > 0 && selectedIds.size < paginatedData.length
+  const isAllSelected = data.length > 0 && selectedIds.size === data.length
+  const isIndeterminate = selectedIds.size > 0 && selectedIds.size < data.length
 
   // 弹窗操作
   const openCreate = () => {
@@ -469,7 +457,7 @@ export default function Inbound() {
       try {
         await inboundApi.delete(record.id)
         toast.success('删除成功')
-        fetchData()
+        refresh()
       } catch (e) {
         toast.error('删除失败')
       }
@@ -543,7 +531,7 @@ export default function Inbound() {
         }
       }
       closeModal()
-      fetchData()
+      refresh()
     } catch (e) {
       toast.error(modalType === 'edit' ? '更新失败' : '创建失败')
     } finally {
@@ -557,7 +545,7 @@ export default function Inbound() {
       await inboundApi.update(selectedRecord.id, { status: 'completed' } as any)
       toast.success('恢复成功', { description: '入库记录已恢复' })
       closeModal()
-      fetchData()
+      refresh()
     } catch (e: any) {
       toast.error('恢复失败', { description: e?.message || '请检查后端接口是否支持状态恢复' })
     }
@@ -865,14 +853,14 @@ export default function Inbound() {
                     </div>
                   </td>
                 </tr>
-              ) : paginatedData.length === 0 ? (
+              ) : data.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
                     暂无数据
                   </td>
                 </tr>
               ) : (
-                paginatedData.map(row => {
+                data.map(row => {
                   const status = getRecordStatus(row)
                   return (
                     <tr
@@ -962,8 +950,9 @@ export default function Inbound() {
         <Pagination
           page={page}
           pageSize={pageSize}
-          total={filteredData.length}
+          total={total}
           onChange={setPage}
+          onPageSizeChange={setPageSize}
         />
       </div>
 
@@ -1426,7 +1415,7 @@ export default function Inbound() {
         <Modal onClose={closeModal} title="批量导入入库" size="lg">
           <ImportInboundModal
             onClose={closeModal}
-            onSuccess={() => { closeModal(); fetchData() }}
+            onSuccess={() => { closeModal(); refresh() }}
             materials={materials}
             locations={locations}
           />
@@ -1459,7 +1448,7 @@ export default function Inbound() {
                 </tr>
               </thead>
               <tbody>
-                {(selectedRecord ? [selectedRecord] : paginatedData.slice(0, 5)).map(row => (
+                {(selectedRecord ? [selectedRecord] : data.slice(0, 5)).map(row => (
                   <tr key={row.id}>
                     <td className="border border-gray-200 px-2 py-2 font-mono">{row.inboundNo}</td>
                     <td className="border border-gray-200 px-2 py-2">{row.materialName}</td>

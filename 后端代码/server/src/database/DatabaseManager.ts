@@ -7,7 +7,7 @@ import fs from 'fs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-const DB_PATH = join(__dirname, '../../data/coreone.db')
+const DB_PATH = process.env.DATABASE_PATH || join(__dirname, '../../data/coreone.db')
 
 fs.mkdirSync(dirname(DB_PATH), { recursive: true })
 
@@ -264,6 +264,22 @@ export function initializeDatabase(): void {
   }
   // 确保 E2E 测试用户始终可用（防止被软删除后无法恢复）
   database.prepare("UPDATE users SET is_deleted = 0, status = 1 WHERE username IN ('cangguan','jishuyuan1','yishi1','caigou','caiwu')").run()
+
+  // 插入默认角色（E2E 测试依赖）
+  const defaultRoles = [
+    { id: 'ROLE-ADMIN', code: 'admin', name: '管理员', description: '系统管理员，拥有全部权限' },
+    { id: 'ROLE-WHM', code: 'warehouse_manager', name: '仓库管理员', description: '负责库存、入库、出库、盘点管理' },
+    { id: 'ROLE-TECH', code: 'technician', name: '技术员', description: '负责检测项目、BOM、成本分析' },
+    { id: 'ROLE-DOC', code: 'pathologist', name: '病理医师', description: '负责项目审核、成本查看' },
+    { id: 'ROLE-PRO', code: 'procurement', name: '采购员', description: '负责采购、供应商管理' },
+    { id: 'ROLE-FIN', code: 'finance', name: '财务', description: '负责对账、成本分析' },
+  ]
+  const insertRole = database.prepare(
+    'INSERT OR IGNORE INTO roles (id, code, name, description, permissions, status) VALUES (?, ?, ?, ?, ?, ?)'
+  )
+  for (const r of defaultRoles) {
+    insertRole.run(r.id, r.code, r.name, r.description, '[]', 1)
+  }
 
   // 插入默认预警规则
   const countRules = database.prepare('SELECT COUNT(*) as count FROM alert_rules').get() as any

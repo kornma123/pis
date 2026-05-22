@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, X, Users, Shield, Database } from 'lucide-react'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
 import request from '@/api/request'
 import type { Role } from '@/types'
 import { toast } from 'sonner'
@@ -46,13 +49,43 @@ const DATA_SCOPE_OPTIONS = [
 ]
 
 export default function Roles() {
-  const [data, setData] = useState<Role[]>([])
-  const [loading, setLoading] = useState(false)
+  const { get, getNumber, setMultiple } = useUrlParams()
+
   const [keyword, setKeyword] = useState('')
   const [tabType, setTabType] = useState<'all' | 'system' | 'custom'>('all')
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const pageSize = 20
+
+  const urlPage = Math.max(1, getNumber('page', 1))
+  const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 20))
+    ? getNumber('pageSize', 20)
+    : 20
+
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<Role>({
+    fetchFn: async ({ page, pageSize }) => {
+      const res: any = await request.get('/roles', { params: { page, pageSize } })
+      return { list: res?.list || [], pagination: res?.pagination }
+    },
+    initialPage: urlPage,
+    initialPageSize: urlPageSize,
+    deps: [],
+  })
+
+  useEffect(() => {
+    setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 20 ? pageSize : null,
+      keyword: keyword || null,
+      tab: tabType !== 'all' ? tabType : null,
+    })
+  }, [page, pageSize, keyword, tabType, setMultiple])
 
   const [modalType, setModalType] = useState<'create' | 'edit' | 'detail' | 'delete' | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -62,17 +95,6 @@ export default function Roles() {
   const [form, setForm] = useState<FormData>({
     code: '', name: '', description: '', permissions: [], status: 'active', dataScope: 'dept'
   })
-
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const res: any = await request.get('/roles', { params: { page, pageSize } })
-      setData(res?.list || [])
-      setTotal(res?.pagination?.total || 0)
-    } catch (e) { console.error(e) } finally { setLoading(false) }
-  }
-
-  useEffect(() => { fetchData() }, [page])
 
   const stats = useMemo(() => {
     const totalRoles = data.length
@@ -145,7 +167,7 @@ export default function Roles() {
       }
       toast.success(editingId ? '保存成功' : '创建成功')
       setModalType(null)
-      fetchData()
+      refresh()
     } catch (e) {
       toast.error('操作失败')
     }
@@ -157,7 +179,7 @@ export default function Roles() {
       await request.delete(`/roles/${deleteRole.id}`)
       toast.success('删除成功')
       setModalType(null)
-      fetchData()
+      refresh()
     } catch (e) {
       toast.error('删除失败')
     }
@@ -192,8 +214,6 @@ export default function Roles() {
       <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-[#f3f4f6] text-[#374151] font-medium">{c}</span>
     ))
   }
-
-  const totalPages = Math.ceil(total / pageSize)
 
   return (
     <div className="space-y-6">
@@ -303,16 +323,16 @@ export default function Roles() {
             </div>
           )}
         </div>
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-5 py-4 border-t border-[#e5e7eb] bg-[#f9fafb]">
-            <span className="text-sm text-[#6b7280]">共 {total} 条记录</span>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-8 px-3 text-sm text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] disabled:opacity-30 transition-all">上一页</button>
-              <span className="text-sm text-[#374151] px-3">{page} / {totalPages}</span>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="h-8 px-3 text-sm text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] disabled:opacity-30 transition-all">下一页</button>
-            </div>
-          </div>
-        )}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-[#e5e7eb] bg-[#f9fafb]">
+          <span className="text-sm text-[#6b7280]">共 {total} 条记录</span>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onChangePage={setPage}
+            onChangePageSize={setPageSize}
+          />
+        </div>
       </div>
 
       {/* Create / Edit Modal */}

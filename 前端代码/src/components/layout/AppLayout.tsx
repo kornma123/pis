@@ -12,20 +12,20 @@ const ROLE_MENU_MAP: Record<string, string[]> = {
   ],
   warehouse_manager: [
     '/', '/inventory', '/inbound', '/outbound', '/stocktaking',
-    '/suppliers', '/locations', '/materials', '/alerts',
+    '/suppliers', '/locations', '/materials', '/categories', '/alerts',
   ],
   technician: [
     '/', '/inventory', '/projects', '/bom', '/reconciliation',
-    '/cost-analysis', '/materials', '/alerts',
+    '/cost-analysis', '/materials', '/categories', '/alerts',
   ],
   procurement: [
-    '/', '/inventory', '/inbound', '/materials', '/suppliers', '/alerts',
+    '/', '/inventory', '/inbound', '/materials', '/suppliers', '/categories', '/alerts',
   ],
   finance: [
-    '/', '/inventory', '/reconciliation', '/cost-analysis', '/alerts',
+    '/', '/inventory', '/reconciliation', '/cost-analysis', '/categories', '/alerts',
   ],
   pathologist: [
-    '/', '/inventory', '/projects', '/bom', '/reconciliation', '/cost-analysis', '/alerts',
+    '/', '/inventory', '/projects', '/bom', '/reconciliation', '/cost-analysis', '/categories', '/alerts',
   ],
 }
 

@@ -4,6 +4,9 @@ import {
   AlertTriangle, CheckCircle, XCircle, Clock,
   Layers, FileSpreadsheet
 } from 'lucide-react'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
 import { bomApi } from '@/api/master'
 import type { BOM, BOMMaterial, BOMVersion } from '@/types'
 import { toast } from 'sonner'
@@ -114,18 +117,22 @@ function StatCard({
 /* ===================== 主页面 ===================== */
 
 export default function BOMPage() {
-  /* ---------- 状态 ---------- */
-  const [data, setData] = useState<BOM[]>([])
-  const [loading, setLoading] = useState(false)
-  const [keyword, setKeyword] = useState('')
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const pageSize = 20
+  const url = useUrlParams()
 
-  const [quickFilter, setQuickFilter] = useState<'all' | 'active' | 'inactive'>('all')
-  const [filterType, setFilterType] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [searchInput, setSearchInput] = useState('')
+  const initialPage = Math.max(1, url.getNumber('page', 1))
+  const initialPageSize = [10, 20, 50, 100].includes(url.getNumber('pageSize', 20))
+    ? url.getNumber('pageSize', 20)
+    : 20
+
+  /* ---------- 状态 ---------- */
+  const [keyword, setKeyword] = useState(url.get('keyword', ''))
+  const [searchInput, setSearchInput] = useState(url.get('keyword', ''))
+
+  const [quickFilter, setQuickFilter] = useState<'all' | 'active' | 'inactive'>(
+    (url.get('quickFilter', 'all') as 'all' | 'active' | 'inactive') || 'all'
+  )
+  const [filterType, setFilterType] = useState(url.get('type', ''))
+  const [filterStatus, setFilterStatus] = useState(url.get('status', ''))
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -151,31 +158,46 @@ export default function BOMPage() {
 
   const [copyForm, setCopyForm] = useState({ name: '', copyInfo: true, copyMaterials: true })
 
-  /* ---------- 数据获取 ---------- */
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const params: any = { page, pageSize }
-      if (keyword) params.keyword = keyword
-      if (filterType) params.type = filterType
-      if (filterStatus) params.status = filterStatus
-      else if (quickFilter !== 'all') params.status = quickFilter
+  const effectiveStatus = filterStatus || (quickFilter !== 'all' ? quickFilter : undefined)
 
-      const res: any = await bomApi.getList(params)
-      setData(res.list || [])
-      setTotal(res.pagination?.total || 0)
-    } catch (e) {
-      console.error(e)
-      toast.error('获取BOM列表失败')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<BOM>({
+    fetchFn: async (params) => {
+      const res: any = await bomApi.getList({
+        ...params,
+        keyword: keyword || undefined,
+        type: filterType || undefined,
+        status: effectiveStatus,
+      })
+      return {
+        list: res?.list || [],
+        pagination: res?.pagination,
+      }
+    },
+    initialPage,
+    initialPageSize,
+    deps: [keyword, filterType, effectiveStatus],
+  })
 
+  // URL 同步
   useEffect(() => {
-    fetchData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, keyword, filterType, filterStatus, quickFilter])
+    url.setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 20 ? pageSize : null,
+      keyword: keyword || null,
+      type: filterType || null,
+      status: filterStatus || null,
+      quickFilter: quickFilter !== 'all' ? quickFilter : null,
+    })
+  }, [page, pageSize, keyword, filterType, filterStatus, quickFilter])
 
   /* ---------- 计算值 ---------- */
   const stats = useMemo(() => {
@@ -188,8 +210,6 @@ export default function BOMPage() {
     }).length
     return { total: all.length, sufficient, low, insufficient }
   }, [data])
-
-  const totalPages = Math.ceil(total / pageSize)
 
   const isAllSelected = data.length > 0 && selectedIds.size === data.length
   const isIndeterminate = selectedIds.size > 0 && selectedIds.size < data.length
@@ -302,7 +322,7 @@ export default function BOMPage() {
         toast.success('BOM创建成功')
       }
       setModalType(null)
-      fetchData()
+      refresh()
     } catch {
       toast.error('操作失败')
     }
@@ -315,7 +335,7 @@ export default function BOMPage() {
       toast.success('BOM已删除')
       setModalType(null)
       setEditingId(null)
-      fetchData()
+      refresh()
     } catch {
       toast.error('删除失败')
     }
@@ -328,7 +348,7 @@ export default function BOMPage() {
       toast.success(`已删除 ${ids.length} 个BOM`)
       setModalType(null)
       setSelectedIds(new Set())
-      fetchData()
+      refresh()
     } catch {
       toast.error('批量删除失败')
     }
@@ -356,7 +376,7 @@ export default function BOMPage() {
       await bomApi.create(payload)
       toast.success('BOM复制成功')
       setModalType(null)
-      fetchData()
+      refresh()
     } catch {
       toast.error('复制失败')
     }
@@ -655,42 +675,13 @@ export default function BOMPage() {
         </div>
 
         {/* 分页 */}
-        {totalPages > 1 && (
-          <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between">
-            <span className="text-sm text-gray-500">
-              共 {total} 条记录，第 {page} / {totalPages} 页
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                上一页
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPage(p)}
-                  className={`min-w-[32px] px-2 py-1.5 text-sm rounded-md transition-colors ${
-                    p === page
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 border border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                下一页
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
       {/* ===================== 弹窗 ===================== */}

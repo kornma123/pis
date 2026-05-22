@@ -4,14 +4,15 @@ import {
   Package,
   Search,
   X,
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Download,
   Trash2,
   Eye,
   Calendar,
 } from 'lucide-react'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
 import { outboundApi } from '@/api/inventory'
 import { materialApi, projectApi } from '@/api/master'
 import type { OutboundRecord, OutboundItem, Material, Project } from '@/types'
@@ -46,12 +47,46 @@ const typeConfig: Record<string, string> = {
 }
 
 export default function Outbound() {
+  // URL params
+  const { get, getNumber, setMultiple } = useUrlParams()
+
   // Data & loading
-  const [data, setData] = useState<OutboundRecord[]>([])
-  const [loading, setLoading] = useState(false)
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const pageSize = 10
+  const urlPage = Math.max(1, getNumber('page', 1))
+  const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 10))
+    ? getNumber('pageSize', 10)
+    : 10
+
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<OutboundRecord>({
+    fetchFn: async ({ page, pageSize }) => {
+      const res: any = await outboundApi.getList({
+        page,
+        pageSize,
+        status: statusFilter || undefined,
+      })
+      return { list: res.list || [], pagination: res.pagination }
+    },
+    initialPage: urlPage,
+    initialPageSize: urlPageSize,
+    deps: [statusFilter],
+  })
+
+  // Sync to URL
+  useEffect(() => {
+    setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 10 ? pageSize : null,
+      status: statusFilter || null,
+    })
+  }, [page, pageSize, statusFilter, setMultiple])
 
   // References
   const [materials, setMaterials] = useState<Material[]>([])
@@ -87,19 +122,6 @@ export default function Outbound() {
     remark: '',
   })
 
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const res: any = await outboundApi.getList({ page, pageSize, status: statusFilter || undefined })
-      setData(res.list || [])
-      setTotal(res.pagination?.total || 0)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const fetchRefs = async () => {
     try {
       const [mRes, pRes]: any = await Promise.all([
@@ -114,8 +136,8 @@ export default function Outbound() {
   }
 
   useEffect(() => {
-    fetchData()
-  }, [page, statusFilter])
+    fetchRefs()
+  }, [])
 
   // Selection handlers
   const toggleSelectAll = () => {
@@ -192,9 +214,6 @@ export default function Outbound() {
     }
   }, [data])
 
-  // Pagination
-  const totalPages = Math.ceil(total / pageSize)
-
   // Modal handlers
   const openCreate = () => {
     setForm({
@@ -245,7 +264,7 @@ export default function Outbound() {
       await outboundApi.create({ ...form, items: validItems })
       toast.success('出库登记成功')
       setCreateModalOpen(false)
-      fetchData()
+      refresh()
     } catch (e) {
       toast.error('出库登记失败')
     }
@@ -260,7 +279,7 @@ export default function Outbound() {
     // Mock cancel action
     toast.success('出库已取消')
     setCancelModalOpen(false)
-    fetchData()
+    refresh()
   }
 
   const batchExport = () => {
@@ -446,7 +465,6 @@ export default function Outbound() {
             <button
               onClick={() => {
                 setPage(1)
-                fetchData()
               }}
               className="h-10 px-4 bg-white border border-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-50 transition-all duration-150"
             >
@@ -461,7 +479,6 @@ export default function Outbound() {
                 setStartDate('')
                 setEndDate('')
                 setPage(1)
-                fetchData()
               }}
               className="h-10 px-4 text-gray-500 rounded-md text-sm hover:text-gray-700 hover:bg-gray-50 transition-all duration-150"
             >
@@ -640,63 +657,16 @@ export default function Outbound() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
-            <span className="text-sm text-gray-500">
-              共 {total} 条记录，第 {page}/{totalPages} 页
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const num =
-                  totalPages <= 5
-                    ? i + 1
-                    : page <= 3
-                      ? i + 1
-                      : page >= totalPages - 2
-                        ? totalPages - 4 + i
-                        : page - 2 + i
-                return (
-                  <button
-                    key={num}
-                    onClick={() => setPage(num)}
-                    className={`min-w-[32px] px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${
-                      page === num
-                        ? 'bg-blue-500 text-white'
-                        : 'border border-gray-300 hover:bg-gray-50 text-gray-700'
-                    }`}
-                  >
-                    {num}
-                  </button>
-                )
-              })}
-              {totalPages > 5 && page < totalPages - 2 && (
-                <span className="px-2 text-gray-400">...</span>
-              )}
-              {totalPages > 5 && page < totalPages - 2 && (
-                <button
-                  onClick={() => setPage(totalPages)}
-                  className="min-w-[32px] px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700 transition-all duration-150"
-                >
-                  {totalPages}
-                </button>
-              )}
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-150"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
+          <span className="text-sm text-gray-500">共 {total} 条记录</span>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onChangePage={setPage}
+            onChangePageSize={setPageSize}
+          />
+        </div>
       </div>
 
       {/* ==================== Create Modal ==================== */}

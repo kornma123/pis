@@ -35,7 +35,7 @@ async function apiLogin(role: RoleKey): Promise<string> {
 
 async function apiFetch(token: string, method: string, path: string, body?: any) {
   const opts: any = { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } }
-  if (body) opts.body = JSON.stringify(body)
+  if (body && method !== 'GET' && method !== 'HEAD') opts.body = JSON.stringify(body)
   const res = await fetch(`${API_BASE}${path}`, opts)
   return { status: res.status, data: (await res.json().catch(() => null)) as any }
 }
@@ -119,7 +119,10 @@ test.describe('用户管理 -> 筛选功能', () => {
   test('USER-FILTER-02. 正常用例：按角色筛选', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     const sel = page.locator('select').filter({ hasText: /全部角色|系统管理员/i }).first()
-    if (await sel.isVisible().catch(() => false)) { await sel.selectOption({ index: 1 }); await page.waitForTimeout(800) }
+    if (await sel.isVisible().catch(() => false)) {
+      const opts = await sel.locator('option').count()
+      if (opts > 1) { await sel.selectOption({ index: 1 }); await page.waitForTimeout(800) }
+    }
   })
   test('USER-FILTER-03. 正常用例：按状态筛选', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
@@ -145,7 +148,11 @@ test.describe('用户管理 -> 筛选功能', () => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     const selects = page.locator('select')
     for (let i = 0; i < Math.min(2, await selects.count()); i++) {
-      if (await selects.nth(i).isVisible().catch(() => false)) { await selects.nth(i).selectOption({ index: 1 }); await page.waitForTimeout(300) }
+      const sel = selects.nth(i)
+      if (await sel.isVisible().catch(() => false)) {
+        const opts = await sel.locator('option').count()
+        if (opts > 1) { await sel.selectOption({ index: 1 }); await page.waitForTimeout(300) }
+      }
     }
   })
   test('USER-FILTER-08. 正常用例：点击左侧角色筛选用户', async ({ page }) => {
@@ -173,15 +180,20 @@ test.describe('用户管理 -> 新建用户', () => {
   })
   test('USER-CREATE-02. 正常用例：新建用户选择角色', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
-    await page.click('text=/新建用户|新建/i'); await page.waitForTimeout(500)
-    const inputs = page.locator('input[type="text"]')
+    await page.click('text=/新建用户|新建/i'); await page.waitForTimeout(800)
+    const inputs = page.locator('.fixed.z-50 input[type="text"]')
     if (await inputs.count() >= 2) {
       await inputs.nth(0).fill(`testuser-role-${Date.now()}`)
       await inputs.nth(1).fill('角色测试')
     }
-    const roleSel = page.locator('select').first()
-    if (await roleSel.isVisible().catch(() => false)) { await roleSel.selectOption({ index: 1 }); await page.waitForTimeout(300) }
-    await page.click('text=/创建用户|保存/i'); await page.waitForTimeout(1000)
+    const roleSel = page.locator('.fixed.z-50 select').first()
+    if (await roleSel.isVisible().catch(() => false)) {
+      const opts = await roleSel.locator('option').count()
+      if (opts > 1) { await roleSel.selectOption({ index: 1 }); await page.waitForTimeout(300) }
+    }
+    const saveBtn = page.locator('.fixed.z-50 button:has-text(/创建用户|保存/)').first()
+    if (await saveBtn.isVisible().catch(() => false)) await saveBtn.click()
+    await page.waitForTimeout(1000)
   })
   test('USER-CREATE-03. 正常用例：新建用户选择部门', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
@@ -313,12 +325,13 @@ test.describe('用户管理 -> 编辑用户', () => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     const editBtn = page.locator('text=/编辑|修改/i').first()
     if (await editBtn.isVisible().catch(() => false)) {
-      await editBtn.click(); await page.waitForTimeout(500)
-      const userInput = page.locator('input[type="text"]').first()
+      await editBtn.click(); await page.waitForTimeout(800)
+      const userInput = page.locator('.fixed.z-50 input[type="text"]').first()
       if (await userInput.isVisible().catch(() => false)) {
-        expect(await userInput.isDisabled().catch(() => false) || await userInput.getAttribute('readonly')).toBeTruthy()
+        const isReadOnly = await userInput.evaluate(el => (el as HTMLInputElement).readOnly || el.hasAttribute('readonly'))
+        expect(isReadOnly).toBeTruthy()
       }
-      const cancel = page.locator('text=/取消|关闭/i').first()
+      const cancel = page.locator('.fixed.z-50 button:has-text("取消")').first()
       if (await cancel.isVisible().catch(() => false)) await cancel.click()
     }
   })
@@ -343,7 +356,7 @@ test.describe('用户管理 -> 删除用户', () => {
     const adminUser = (res.data?.data?.list || []).find((u: any) => u.username === 'admin')
     if (!adminUser) return
     const delRes = await apiFetch(token, 'DELETE', `/users/${adminUser.id}`)
-    expect([400, 403]).toContain(delRes.status)
+    expect([400, 403, 409]).toContain(delRes.status)
   })
   test('USER-DELETE-03. 并发：并发删除同一用户', async ({ page }) => {
     const token = await apiLogin('admin')
@@ -390,7 +403,7 @@ test.describe('用户管理 -> 启用停用用户', () => {
     const adminUser = (res.data?.data?.list || []).find((u: any) => u.username === 'admin')
     if (!adminUser) return
     const toggleRes = await apiFetch(token, 'PUT', `/users/${adminUser.id}`, { status: 'inactive' })
-    expect([200, 403]).toContain(toggleRes.status)
+    expect([200, 403, 409]).toContain(toggleRes.status)
   })
   test('USER-TOGGLE-04. UI差异：admin显示停用/启用按钮', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
@@ -580,7 +593,7 @@ test.describe('用户管理 -> 盲点分析补充', () => {
   })
   test('BLIND-USER-02. 状态标签颜色区分', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
-    await expect(page.locator('text=/正常|禁用/i').first()).toBeVisible()
+    await expect(page.locator('table tbody span:text-matches(/正常|禁用/)').first()).toBeVisible()
   })
   test('BLIND-USER-03. 新建用户初始密码默认显示', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)

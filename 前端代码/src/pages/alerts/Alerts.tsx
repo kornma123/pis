@@ -4,8 +4,6 @@ import {
   Clock,
   Search,
   X,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   CheckSquare,
   RotateCcw,
@@ -13,6 +11,9 @@ import {
 import request from '@/api/request'
 import type { Alert } from '@/types'
 import { toast } from 'sonner'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
 
 // 扩展类型以支持设计稿中的可选字段
 interface AlertItem extends Alert {
@@ -50,40 +51,87 @@ const STATUS_MAP: Record<string, { label: string; bg: string; text: string }> = 
 }
 
 export default function Alerts() {
-  const [data, setData] = useState<AlertItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const url = useUrlParams()
+
+  const initialPage = Math.max(1, url.getNumber('page', 1))
+  const initialPageSize = [10, 20, 50, 100].includes(url.getNumber('pageSize', 10))
+    ? url.getNumber('pageSize', 10)
+    : 10
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize] = useState(10)
   const [modal, setModal] = useState<ModalState>({ type: null, alert: null })
   const [filter, setFilter] = useState<FilterState>({
-    keyword: '',
-    type: 'all',
-    status: 'all',
-    dateRange: ['', ''],
+    keyword: url.get('keyword', ''),
+    type: (url.get('type', 'all') as AlertTypeFilter) || 'all',
+    status: (url.get('status', 'all') as AlertStatusFilter) || 'all',
+    dateRange: [url.get('startDate', ''), url.get('endDate', '')] as [string, string],
   })
-  const [quickFilter, setQuickFilter] = useState<AlertStatusFilter>('all')
+  const [quickFilter, setQuickFilter] = useState<AlertStatusFilter>(
+    (url.get('quickFilter', 'all') as AlertStatusFilter) || 'all'
+  )
   const [handleForm, setHandleForm] = useState({
     opinion: '',
     result: 'purchased',
   })
 
-  // 保持现有数据获取逻辑不变
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const res: any = await request.get('/alerts')
-      setData(res?.list || [])
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const effectiveStatus = quickFilter !== 'all'
+    ? quickFilter
+    : filter.status !== 'all'
+      ? filter.status
+      : undefined
+  const effectiveType = filter.type !== 'all' ? filter.type : undefined
 
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<AlertItem>({
+    fetchFn: async (params) => {
+      const res: any = await request.get('/alerts', {
+        params: {
+          ...params,
+          keyword: filter.keyword || undefined,
+          type: effectiveType,
+          status: effectiveStatus,
+          startDate: filter.dateRange[0] || undefined,
+          endDate: filter.dateRange[1] || undefined,
+        },
+      })
+      return {
+        list: res?.list || [],
+        pagination: res?.pagination,
+      }
+    },
+    initialPage,
+    initialPageSize,
+    deps: [
+      filter.keyword,
+      filter.type,
+      filter.status,
+      filter.dateRange[0],
+      filter.dateRange[1],
+      quickFilter,
+    ],
+  })
+
+  // URL 同步
   useEffect(() => {
-    fetchData()
-  }, [])
+    url.setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 10 ? pageSize : null,
+      keyword: filter.keyword || null,
+      type: filter.type !== 'all' ? filter.type : null,
+      status: filter.status !== 'all' ? filter.status : null,
+      quickFilter: quickFilter !== 'all' ? quickFilter : null,
+      startDate: filter.dateRange[0] || null,
+      endDate: filter.dateRange[1] || null,
+    })
+  }, [page, pageSize, filter.keyword, filter.type, filter.status, filter.dateRange, quickFilter])
 
   // 统计数据
   const stats = useMemo(() => {
@@ -95,60 +143,13 @@ export default function Alerts() {
       const now = new Date()
       return d.toDateString() === now.toDateString()
     }).length
-    const month = data.length
-    return { pending, processed, ignored, today, month }
-  }, [data])
+    return { pending, processed, ignored, today, total }
+  }, [data, total])
 
-  // 筛选数据
-  const filteredData = useMemo(() => {
-    let result = [...data]
-
-    // 快速筛选
-    if (quickFilter !== 'all') {
-      result = result.filter((a) => a.status === quickFilter)
-    }
-
-    // 关键词搜索
-    if (filter.keyword) {
-      const kw = filter.keyword.toLowerCase()
-      result = result.filter(
-        (a) =>
-          a.id.toLowerCase().includes(kw) ||
-          a.materialName?.toLowerCase().includes(kw) ||
-          a.message?.toLowerCase().includes(kw)
-      )
-    }
-
-    // 类型筛选
-    if (filter.type !== 'all') {
-      result = result.filter((a) => a.type === filter.type)
-    }
-
-    // 状态筛选
-    if (filter.status !== 'all') {
-      result = result.filter((a) => a.status === filter.status)
-    }
-
-    // 日期范围
-    if (filter.dateRange[0]) {
-      const start = new Date(filter.dateRange[0])
-      result = result.filter((a) => new Date(a.createdAt) >= start)
-    }
-    if (filter.dateRange[1]) {
-      const end = new Date(filter.dateRange[1])
-      end.setHours(23, 59, 59)
-      result = result.filter((a) => new Date(a.createdAt) <= end)
-    }
-
-    return result
-  }, [data, filter, quickFilter])
-
-  // 分页
-  const totalPages = Math.ceil(filteredData.length / pageSize) || 1
-  const pagedData = filteredData.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  )
+  // 清空选择当筛选/分页变化时
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [page, pageSize, filter.keyword, filter.type, filter.status, filter.dateRange, quickFilter])
 
   const handleSelect = (id: string) => {
     const next = new Set(selectedIds)
@@ -158,10 +159,10 @@ export default function Alerts() {
   }
 
   const handleSelectAll = () => {
-    if (pagedData.length > 0 && selectedIds.size === pagedData.length) {
+    if (data.length > 0 && selectedIds.size === data.length) {
       setSelectedIds(new Set())
     } else {
-      setSelectedIds(new Set(pagedData.map((a) => a.id)))
+      setSelectedIds(new Set(data.map((a) => a.id)))
     }
   }
 
@@ -172,7 +173,7 @@ export default function Alerts() {
     try {
       await request.post(`/alerts/${id}/process`, {})
       toast.success('处理成功')
-      fetchData()
+      refresh()
       setModal({ type: null, alert: null })
     } catch (e) {
       toast.error('处理失败')
@@ -183,7 +184,7 @@ export default function Alerts() {
     try {
       await request.post(`/alerts/${id}/ignore`, {})
       toast.success('已忽略')
-      fetchData()
+      refresh()
     } catch (e) {
       toast.error('操作失败')
     }
@@ -267,7 +268,7 @@ export default function Alerts() {
           <div className="mt-1 text-sm text-gray-500">今日预警</div>
         </div>
         <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-5 border-l-4 border-blue-500">
-          <div className="text-2xl font-bold text-blue-600">{stats.month}</div>
+          <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
           <div className="mt-1 text-sm text-gray-500">本月预警</div>
         </div>
       </div>
@@ -286,7 +287,7 @@ export default function Alerts() {
             key={item.key}
             onClick={() => {
               setQuickFilter(item.key)
-              setCurrentPage(1)
+              setPage(1)
             }}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-150 h-10 ${
               quickFilter === item.key
@@ -371,7 +372,7 @@ export default function Alerts() {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => setCurrentPage(1)}
+              onClick={() => setPage(1)}
               className="inline-flex items-center gap-1.5 h-10 px-4 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors duration-150 shadow-sm"
             >
               <Search className="w-4 h-4" />
@@ -386,7 +387,7 @@ export default function Alerts() {
                   dateRange: ['', ''],
                 })
                 setQuickFilter('all')
-                setCurrentPage(1)
+                setPage(1)
               }}
               className="inline-flex items-center gap-1.5 h-10 px-4 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors duration-150"
             >
@@ -429,7 +430,7 @@ export default function Alerts() {
       <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.1)] overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">预警列表</h2>
-          <span className="text-xs text-gray-400">共 {filteredData.length} 条记录</span>
+          <span className="text-xs text-gray-400">共 {total} 条记录</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -439,7 +440,7 @@ export default function Alerts() {
                   <input
                     type="checkbox"
                     checked={
-                      pagedData.length > 0 && selectedIds.size === pagedData.length
+                      data.length > 0 && selectedIds.size === data.length
                     }
                     onChange={handleSelectAll}
                     className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -481,14 +482,14 @@ export default function Alerts() {
                     </div>
                   </td>
                 </tr>
-              ) : pagedData.length === 0 ? (
+              ) : data.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
                     暂无预警数据
                   </td>
                 </tr>
               ) : (
-                pagedData.map((alert) => {
+                data.map((alert) => {
                   const typeInfo = getAlertTypeInfo(alert.type)
                   const statusInfo = getStatusInfo(alert.status)
                   return (
@@ -604,58 +605,13 @@ export default function Alerts() {
         </div>
 
         {/* 分页 */}
-        {filteredData.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between px-5 py-4 border-t border-gray-100 gap-3">
-            <span className="text-sm text-gray-500">
-              共 {filteredData.length} 条记录，第 {currentPage}/{totalPages} 页
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 text-gray-600 text-sm rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                上一页
-              </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let page: number
-                if (totalPages <= 5) {
-                  page = i + 1
-                } else if (currentPage <= 3) {
-                  page = i + 1
-                } else if (currentPage >= totalPages - 2) {
-                  page = totalPages - 4 + i
-                } else {
-                  page = currentPage - 2 + i
-                }
-                return (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                      currentPage === page
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                )
-              })}
-              <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages}
-                className="inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 text-gray-600 text-sm rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                下一页
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
       {/* ===== 弹窗：处理预警（库存不足/即将过期） ===== */}

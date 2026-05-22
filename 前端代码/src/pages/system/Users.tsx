@@ -1,5 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Search, Plus, X } from 'lucide-react'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import request from '@/api/request'
 import type { User } from '@/types'
 import { toast } from 'sonner'
@@ -25,14 +29,52 @@ interface RoleItem {
 }
 
 export default function Users() {
-  const [data, setData] = useState<User[]>([])
-  const [loading, setLoading] = useState(false)
+  const { get, getNumber, setMultiple } = useUrlParams()
+
   const [keyword, setKeyword] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const pageSize = 20
+  const [selectedRoleId, setSelectedRoleId] = useState('')
+
+  const urlPage = Math.max(1, getNumber('page', 1))
+  const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 20))
+    ? getNumber('pageSize', 20)
+    : 20
+
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<User>({
+    fetchFn: async ({ page, pageSize }) => {
+      const params: any = { page, pageSize }
+      if (keyword) params.keyword = keyword
+      if (roleFilter) params.role = roleFilter
+      if (statusFilter) params.status = statusFilter
+      if (selectedRoleId) params.roleId = selectedRoleId
+      const res: any = await request.get('/users', { params })
+      return { list: res?.list || [], pagination: res?.pagination }
+    },
+    initialPage: urlPage,
+    initialPageSize: urlPageSize,
+    deps: [keyword, roleFilter, statusFilter, selectedRoleId],
+  })
+
+  useEffect(() => {
+    setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 20 ? pageSize : null,
+      keyword: keyword || null,
+      role: roleFilter || null,
+      status: statusFilter || null,
+      roleId: selectedRoleId || null,
+    })
+  }, [page, pageSize, keyword, roleFilter, statusFilter, selectedRoleId, setMultiple])
 
   const [modalType, setModalType] = useState<'create' | 'edit' | 'detail' | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -42,20 +84,25 @@ export default function Users() {
   })
 
   const [roles, setRoles] = useState<RoleItem[]>([])
-  const [selectedRoleId, setSelectedRoleId] = useState<string>('')
 
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const params: any = { page, pageSize }
-      if (keyword) params.keyword = keyword
-      if (roleFilter) params.role = roleFilter
-      if (statusFilter) params.status = statusFilter
-      if (selectedRoleId) params.roleId = selectedRoleId
-      const res: any = await request.get('/users', { params })
-      setData(res?.list || [])
-      setTotal(res?.pagination?.total || 0)
-    } catch (e) { console.error(e) } finally { setLoading(false) }
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmProps, setConfirmProps] = useState<{
+    title: string
+    description: string
+    confirmText: string
+    confirmVariant: 'danger' | 'primary'
+    onConfirm: () => void
+  } | null>(null)
+
+  const openConfirm = (props: {
+    title: string
+    description: string
+    confirmText: string
+    confirmVariant: 'danger' | 'primary'
+    onConfirm: () => void
+  }) => {
+    setConfirmProps(props)
+    setConfirmOpen(true)
   }
 
   const fetchRoles = async () => {
@@ -74,7 +121,6 @@ export default function Users() {
     } catch (e) { console.error(e) }
   }
 
-  useEffect(() => { fetchData() }, [page, keyword, roleFilter, statusFilter, selectedRoleId])
   useEffect(() => { fetchRoles() }, [])
 
   const stats = useMemo(() => {
@@ -123,21 +169,28 @@ export default function Users() {
       }
       toast.success(editingId ? '保存成功' : '创建成功')
       setModalType(null)
-      fetchData()
+      refresh()
     } catch (e) {
       toast.error('操作失败')
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确认删除该用户？')) return
-    try {
-      await request.delete(`/users/${id}`)
-      toast.success('删除成功')
-      fetchData()
-    } catch (e) {
-      toast.error('删除失败')
-    }
+    openConfirm({
+      title: '确认删除',
+      description: '确认删除该用户？删除后不可恢复。',
+      confirmText: '删除',
+      confirmVariant: 'danger',
+      onConfirm: async () => {
+        try {
+          await request.delete(`/users/${id}`)
+          toast.success('删除成功')
+          refresh()
+        } catch (e) {
+          toast.error('删除失败')
+        }
+      },
+    })
   }
 
   const handleToggleStatus = async (row: User) => {
@@ -145,23 +198,30 @@ export default function Users() {
     try {
       await request.put(`/users/${row.id}`, { status: newStatus })
       toast.success(newStatus === 'active' ? '已启用' : '已停用')
-      fetchData()
+      refresh()
     } catch (e) {
       toast.error('操作失败')
     }
   }
 
   const handleResetPassword = async (id: string) => {
-    if (!confirm('确认重置该用户密码？')) return
-    try {
-      await request.post(`/users/${id}/reset-password`, {})
-      toast.success('密码重置成功')
-    } catch (e) {
-      toast.error('密码重置失败')
-    }
+    openConfirm({
+      title: '确认重置密码',
+      description: '确认重置该用户密码？重置后用户需使用新密码登录。',
+      confirmText: '重置',
+      confirmVariant: 'primary',
+      onConfirm: async () => {
+        try {
+          await request.post(`/users/${id}/reset-password`, {})
+          toast.success('密码重置成功')
+        } catch (e) {
+          toast.error('密码重置失败')
+        }
+      },
+    })
   }
 
-  const handleSearch = () => { setPage(1); fetchData() }
+  const handleSearch = () => { setPage(1) }
   const handleReset = () => {
     setKeyword('')
     setRoleFilter('')
@@ -170,7 +230,6 @@ export default function Users() {
     setPage(1)
   }
 
-  const totalPages = Math.ceil(total / pageSize)
   const getAvatarChar = (name: string) => name ? name.charAt(0) : '?'
 
   return (
@@ -335,24 +394,34 @@ export default function Users() {
             </table>
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-4 border-t border-[#e5e7eb] bg-[#f9fafb]">
-              <span className="text-sm text-[#6b7280]">共 {total} 条记录，第 {page}/{totalPages} 页</span>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-8 px-3 text-sm text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] disabled:opacity-30 transition-all">上一页</button>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const p = i + 1
-                  return (
-                    <button key={p} onClick={() => setPage(p)} className={`h-8 w-8 text-sm rounded-md transition-all ${page === p ? 'bg-[#3b82f6] text-white' : 'text-[#374151] hover:bg-[#f3f4f6]'}`}>{p}</button>
-                  )
-                })}
-                {totalPages > 5 && <span className="px-2 text-[#6b7280]">...</span>}
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="h-8 px-3 text-sm text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] disabled:opacity-30 transition-all">下一页</button>
-              </div>
-            </div>
-          )}
+          <div className="flex items-center justify-between px-5 py-4 border-t border-[#e5e7eb] bg-[#f9fafb]">
+            <span className="text-sm text-[#6b7280]">共 {total} 条记录</span>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onChangePage={setPage}
+              onChangePageSize={setPageSize}
+            />
+          </div>
         </div>
       </div>
+
+      {/* ConfirmDialog */}
+      {confirmOpen && confirmProps && (
+        <ConfirmDialog
+          open={confirmOpen}
+          title={confirmProps.title}
+          description={confirmProps.description}
+          confirmText={confirmProps.confirmText}
+          confirmVariant={confirmProps.confirmVariant}
+          onConfirm={() => {
+            setConfirmOpen(false)
+            confirmProps.onConfirm()
+          }}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
 
       {/* Create / Edit Modal */}
       {(modalType === 'create' || modalType === 'edit') && (

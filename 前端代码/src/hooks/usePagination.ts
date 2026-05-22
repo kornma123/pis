@@ -5,18 +5,20 @@ interface UsePaginationOptions<T> {
     list: T[]
     pagination?: { total: number; page: number; pageSize: number }
   }>
+  initialPage?: number
   initialPageSize?: number
   deps?: React.DependencyList
 }
 
 export function usePagination<T>({
   fetchFn,
+  initialPage = 1,
   initialPageSize = 20,
   deps = [],
 }: UsePaginationOptions<T>) {
   const [data, setData] = useState<T[]>([])
   const [loading, setLoading] = useState(false)
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(initialPage)
   const [pageSize, setPageSize] = useState(initialPageSize)
   const [total, setTotal] = useState(0)
 

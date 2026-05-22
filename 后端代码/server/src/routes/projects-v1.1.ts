@@ -11,7 +11,7 @@ const requireProjectWrite = requireRole('admin')
 
 router.get('/', (req, res) => {
   try {
-    let { page = 1, pageSize = 20, type, status, keyword } = req.query
+    let { page = 1, pageSize = 20, type, status, keyword, bomFilter } = req.query
     page = Math.max(1, Number(page) || 1)
     pageSize = Math.max(1, Math.min(100, Number(pageSize) || 20))
     const db = getDatabase()
@@ -20,6 +20,8 @@ router.get('/', (req, res) => {
     if (type) { where += ' AND type = ?'; params.push(type) }
     if (status) { where += ' AND status = ?'; params.push(status === 'active' ? 1 : 0) }
     if (keyword) { where += ' AND (name LIKE ? OR code LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`) }
+    if (bomFilter === 'configured') { where += ' AND bom_id IS NOT NULL' }
+    if (bomFilter === 'unconfigured') { where += ' AND bom_id IS NULL' }
 
     const count = (db.prepare(`SELECT COUNT(*) as total FROM projects WHERE ${where}`).get(...params) as any)?.total || 0
     const offset = (Number(page) - 1) * Number(pageSize)

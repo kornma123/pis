@@ -2,12 +2,15 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Search, Plus, X, CheckCircle, ArrowRight, ArrowLeft,
   FolderOpen, AlertTriangle, Loader2, BarChart3,
-  FileText, ChevronLeft, ChevronRight
+  FileText
 } from 'lucide-react'
 import request from '@/api/request'
 import { materialApi } from '@/api/master'
 import type { Material } from '@/types'
 import { toast } from 'sonner'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
 
 interface StocktakingRecord {
   id: string
@@ -49,12 +52,14 @@ const statusOptions = [
 ]
 
 export default function Stocktaking() {
-  const [data, setData] = useState<StocktakingRecord[]>([])
-  const [loading, setLoading] = useState(false)
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const pageSize = 20
-  const [keyword, setKeyword] = useState('')
+  const url = useUrlParams()
+
+  const initialPage = Math.max(1, url.getNumber('page', 1))
+  const initialPageSize = [10, 20, 50, 100].includes(url.getNumber('pageSize', 20))
+    ? url.getNumber('pageSize', 20)
+    : 20
+
+  const [keyword, setKeyword] = useState(url.get('keyword', ''))
   const [statusFilter, setStatusFilter] = useState('')
   const [scopeFilter, setScopeFilter] = useState('')
 
@@ -69,16 +74,38 @@ export default function Stocktaking() {
     name: '', type: 'full', scope: 'all', manager: ''
   })
 
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const res: any = await request.get('/stocktaking', { params: { page, pageSize, keyword: keyword || undefined } })
-      setData(res?.list || [])
-      setTotal(res?.pagination?.total || 0)
-    } catch (e) { console.error(e) } finally { setLoading(false) }
-  }
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<StocktakingRecord>({
+    fetchFn: async (params) => {
+      const res: any = await request.get('/stocktaking', {
+        params: { ...params, keyword: keyword || undefined },
+      })
+      return {
+        list: res?.list || [],
+        pagination: res?.pagination,
+      }
+    },
+    initialPage,
+    initialPageSize,
+    deps: [keyword],
+  })
 
-  useEffect(() => { fetchData() }, [page, keyword])
+  // URL 同步
+  useEffect(() => {
+    url.setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 20 ? pageSize : null,
+      keyword: keyword || null,
+    })
+  }, [page, pageSize, keyword])
 
   const stats = useMemo(() => {
     const inProgress = data.filter(d => d.status === 'in_progress').length
@@ -117,7 +144,7 @@ export default function Stocktaking() {
       })
       toast.success('盘点记录已创建')
       setModalType(null)
-      fetchData()
+      refresh()
     } catch (e) { toast.error('操作失败') } finally { setIsSubmitting(false) }
   }
 
@@ -131,10 +158,9 @@ export default function Stocktaking() {
     setModalType('adjust')
   }
 
-  const handleQuery = () => { setPage(1); fetchData() }
-  const handleReset = () => { setKeyword(''); setStatusFilter(''); setScopeFilter(''); setPage(1); fetchData() }
+  const handleQuery = () => { setPage(1) }
+  const handleReset = () => { setKeyword(''); setStatusFilter(''); setScopeFilter(''); setPage(1) }
 
-  const totalPages = Math.ceil(total / pageSize)
   const selectedMaterial = materials.find(m => m.id === form.materialId)
 
   return (
@@ -250,18 +276,13 @@ export default function Stocktaking() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-sm text-gray-500">共 {total} 条记录</span>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors">上一页</button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                <button key={p} onClick={() => setPage(p)} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${page === p ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}>{p}</button>
-              ))}
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors">下一页</button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
       {/* Create Modal */}

@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Download, X, Search } from 'lucide-react'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
 import request from '@/api/request'
 import type { OperationLog } from '@/types'
 import { toast } from 'sonner'
@@ -41,17 +44,57 @@ const USERS = [
 ]
 
 export default function Logs() {
-  const [data, setData] = useState<OperationLog[]>([])
-  const [loading, setLoading] = useState(false)
+  const { get, getNumber, setMultiple } = useUrlParams()
+
   const [keyword, setKeyword] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [moduleFilter, setModuleFilter] = useState('')
   const [userFilter, setUserFilter] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const pageSize = 20
+
+  const urlPage = Math.max(1, getNumber('page', 1))
+  const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 20))
+    ? getNumber('pageSize', 20)
+    : 20
+
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+  } = usePagination<OperationLog>({
+    fetchFn: async ({ page, pageSize }) => {
+      const params: any = { page, pageSize }
+      if (keyword) params.keyword = keyword
+      if (typeFilter) params.type = typeFilter
+      if (moduleFilter) params.module = moduleFilter
+      if (userFilter) params.username = userFilter
+      if (startDate) params.startDate = startDate
+      if (endDate) params.endDate = endDate
+      const res: any = await request.get('/logs', { params })
+      return { list: res?.list || [], pagination: res?.pagination }
+    },
+    initialPage: urlPage,
+    initialPageSize: urlPageSize,
+    deps: [keyword, typeFilter, moduleFilter, userFilter, startDate, endDate],
+  })
+
+  useEffect(() => {
+    setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 20 ? pageSize : null,
+      keyword: keyword || null,
+      type: typeFilter || null,
+      module: moduleFilter || null,
+      user: userFilter || null,
+      startDate: startDate || null,
+      endDate: endDate || null,
+    })
+  }, [page, pageSize, keyword, typeFilter, moduleFilter, userFilter, startDate, endDate, setMultiple])
 
   const [detailLog, setDetailLog] = useState<OperationLog | null>(null)
   const [showDetail, setShowDetail] = useState(false)
@@ -67,24 +110,6 @@ export default function Logs() {
     includeDiff: false,
   })
 
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const params: any = { page, pageSize }
-      if (keyword) params.keyword = keyword
-      if (typeFilter) params.type = typeFilter
-      if (moduleFilter) params.module = moduleFilter
-      if (userFilter) params.username = userFilter
-      if (startDate) params.startDate = startDate
-      if (endDate) params.endDate = endDate
-      const res: any = await request.get('/logs', { params })
-      setData(res?.list || [])
-      setTotal(res?.pagination?.total || 0)
-    } catch (e) { console.error(e) } finally { setLoading(false) }
-  }
-
-  useEffect(() => { fetchData() }, [page])
-
   const stats = useMemo(() => {
     const todayOps = data.length
     const loginCount = data.filter(d => d.operation.toLowerCase().includes('login')).length
@@ -97,7 +122,7 @@ export default function Logs() {
     return { todayOps, loginCount, dataChanges, activeUsers }
   }, [data])
 
-  const handleSearch = () => { setPage(1); fetchData() }
+  const handleSearch = () => { setPage(1) }
   const handleReset = () => {
     setKeyword('')
     setTypeFilter('')
@@ -149,8 +174,6 @@ export default function Logs() {
       toast.error('导出失败')
     }
   }
-
-  const totalPages = Math.ceil(total / pageSize)
 
   return (
     <div className="space-y-6">
@@ -287,22 +310,16 @@ export default function Logs() {
           </table>
         </div>
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-5 py-4 border-t border-[#e5e7eb] bg-[#f9fafb]">
-            <span className="text-sm text-[#6b7280]">共 {total} 条记录，第 {page}/{totalPages} 页</span>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-8 px-3 text-sm text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] disabled:opacity-30 transition-all">上一页</button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const p = i + 1
-                return (
-                  <button key={p} onClick={() => setPage(p)} className={`h-8 w-8 text-sm rounded-md transition-all ${page === p ? 'bg-[#3b82f6] text-white' : 'text-[#374151] hover:bg-[#f3f4f6]'}`}>{p}</button>
-                )
-              })}
-              {totalPages > 5 && <span className="px-2 text-[#6b7280]">...</span>}
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="h-8 px-3 text-sm text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] disabled:opacity-30 transition-all">下一页</button>
-            </div>
-          </div>
-        )}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-[#e5e7eb] bg-[#f9fafb]">
+          <span className="text-sm text-[#6b7280]">共 {total} 条记录</span>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onChangePage={setPage}
+            onChangePageSize={setPageSize}
+          />
+        </div>
       </div>
 
       {/* Detail Modal */}

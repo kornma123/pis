@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  Search, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight,
+  Search, Plus, Edit2, Trash2, X,
   Eye, Copy, Upload, CheckCircle, ArrowRight, ArrowLeft,
   FolderOpen, AlertTriangle, FileText, Loader2, Download
 } from 'lucide-react'
 import { projectApi, bomApi } from '@/api/master'
 import type { Project, BOM } from '@/types'
 import { toast } from 'sonner'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
 
 type ModalType = 'create' | 'edit' | 'copy' | 'delete' | 'import' | null
 
@@ -59,16 +62,11 @@ const typeBadgeClass: Record<string, string> = {
 }
 
 export default function Projects() {
-  const [data, setData] = useState<Project[]>([])
   const [boms, setBoms] = useState<BOM[]>([])
-  const [loading, setLoading] = useState(false)
   const [keyword, setKeyword] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [bomFilter, setBomFilter] = useState('')
-  const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
-  const pageSize = 20
   const [modalType, setModalType] = useState<ModalType>(null)
   const [editingRow, setEditingRow] = useState<Project | null>(null)
   const [form, setForm] = useState<FormData>({
@@ -82,16 +80,55 @@ export default function Projects() {
   const [selectedBomId, setSelectedBomId] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const fetchData = async () => {
-    setLoading(true)
-    try {
-      const res: any = await projectApi.getList({
-        page, pageSize, keyword: keyword || undefined
-      })
-      setData(res.list || [])
-      setTotal(res.pagination?.total || 0)
-    } catch (e) { console.error(e) } finally { setLoading(false) }
-  }
+  const { get, getNumber, setMultiple } = useUrlParams()
+
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<Project>({
+    fetchFn: (p, ps) =>
+      projectApi.getList({
+        page: p,
+        pageSize: ps,
+        keyword: keyword || undefined,
+        type: typeFilter || undefined,
+        status: statusFilter || undefined,
+        bomFilter: bomFilter || undefined,
+      }),
+    deps: [keyword, typeFilter, statusFilter, bomFilter],
+  })
+
+  useEffect(() => {
+    const k = get('keyword') || ''
+    const t = get('type') || ''
+    const s = get('status') || ''
+    const b = get('bom') || ''
+    setKeyword(k)
+    setTypeFilter(t)
+    setStatusFilter(s)
+    setBomFilter(b)
+    const p = getNumber('page', 1)
+    const ps = getNumber('pageSize', 20)
+    setPage(Math.max(1, p || 1))
+    setPageSize(Math.max(1, Math.min(100, ps || 20)))
+  }, [])
+
+  useEffect(() => {
+    const params: Record<string, string> = {}
+    if (keyword) params.keyword = keyword
+    if (typeFilter) params.type = typeFilter
+    if (statusFilter) params.status = statusFilter
+    if (bomFilter) params.bom = bomFilter
+    if (page !== 1) params.page = String(page)
+    if (pageSize !== 20) params.pageSize = String(pageSize)
+    setMultiple(params)
+  }, [page, pageSize, keyword, typeFilter, statusFilter, bomFilter])
 
   const fetchBoms = async () => {
     try {
@@ -100,26 +137,12 @@ export default function Projects() {
     } catch (e) { console.error(e) }
   }
 
-  useEffect(() => { fetchData() }, [page, keyword])
-
-  const filteredData = useMemo(() => {
-    let list = [...data]
-    if (typeFilter) list = list.filter(r => r.type === typeFilter)
-    if (statusFilter) list = list.filter(r => r.status === statusFilter)
-    if (bomFilter) {
-      if (bomFilter === 'configured') list = list.filter(r => r.bomId)
-      if (bomFilter === 'unconfigured') list = list.filter(r => !r.bomId)
-    }
-    return list
-  }, [data, typeFilter, statusFilter, bomFilter])
-
   const stats = useMemo(() => {
-    const total = data.length
     const active = data.filter(s => s.status === 'active').length
     const inactive = data.filter(s => s.status === 'inactive').length
     const noBom = data.filter(s => !s.bomId).length
     return { total, active, inactive, noBom }
-  }, [data])
+  }, [data, total])
 
   const openCreate = () => {
     setEditingRow(null)
@@ -189,7 +212,7 @@ export default function Projects() {
         toast.success('检测服务已复制')
       }
       setModalType(null)
-      fetchData()
+      refresh()
     } catch (e) { toast.error('操作失败') } finally { setIsSubmitting(false) }
   }
 
@@ -199,18 +222,18 @@ export default function Projects() {
       await projectApi.delete(editingRow.id)
       toast.success('已删除')
       setModalType(null)
-      fetchData()
+      refresh()
     } catch (e) { toast.error('删除失败') }
   }
 
-  const handleQuery = () => { setPage(1); fetchData() }
+  const handleQuery = () => { setPage(1) }
   const handleReset = () => {
     setKeyword(''); setTypeFilter(''); setStatusFilter(''); setBomFilter('')
-    setPage(1); fetchData()
+    setPage(1)
   }
 
   const toggleSelectAll = (checked: boolean) => {
-    if (checked) setSelectedIds(new Set(filteredData.map(r => r.id)))
+    if (checked) setSelectedIds(new Set(data.map(r => r.id)))
     else setSelectedIds(new Set())
   }
 
@@ -231,7 +254,6 @@ export default function Projects() {
     setSelectedIds(new Set())
   }
 
-  const totalPages = Math.ceil(total / pageSize)
   const selectedBom = boms.find(b => b.id === selectedBomId)
 
   return (
@@ -367,7 +389,7 @@ export default function Projects() {
                 <th className="px-4 py-3 w-10">
                   <input
                     type="checkbox"
-                    checked={filteredData.length > 0 && selectedIds.size === filteredData.length}
+                    checked={data.length > 0 && selectedIds.size === data.length}
                     onChange={e => toggleSelectAll(e.target.checked)}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
@@ -407,7 +429,7 @@ export default function Projects() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredData.length === 0 ? (
+              ) : data.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
                     <FolderOpen className="w-10 h-10 mx-auto mb-2 text-gray-300" />
@@ -415,7 +437,7 @@ export default function Projects() {
                     <div className="text-xs mt-1">点击"新建服务"添加检测服务</div>
                   </td>
                 </tr>
-              ) : filteredData.map(row => (
+              ) : data.map(row => (
                 <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
                     <input

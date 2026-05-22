@@ -4,8 +4,10 @@ interface PaginationProps {
   page: number
   pageSize: number
   total: number
-  onChange: (page: number) => void
+  onChange?: (page: number) => void
   onPageSizeChange?: (pageSize: number) => void
+  onChangePage?: (page: number) => void
+  onChangePageSize?: (pageSize: number) => void
 }
 
 export function Pagination({
@@ -14,9 +16,13 @@ export function Pagination({
   total,
   onChange,
   onPageSizeChange,
+  onChangePage,
+  onChangePageSize,
 }: PaginationProps) {
+  const handleChangePage = onChangePage || onChange || (() => {})
+  const handleChangePageSize = onChangePageSize || onPageSizeChange
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  if (totalPages <= 1 && !onPageSizeChange) return null
+  if (totalPages <= 1 && !handleChangePageSize) return null
 
   const getPageNumbers = () => {
     const pages: (number | string)[] = []
@@ -50,7 +56,7 @@ export function Pagination({
       </span>
       <div className="flex items-center gap-1.5">
         <button
-          onClick={() => onChange(Math.max(1, page - 1))}
+          onClick={() => handleChangePage(Math.max(1, page - 1))}
           disabled={page === 1}
           className="px-3 h-9 text-sm bg-white border border-gray-200 text-gray-600 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
@@ -64,7 +70,7 @@ export function Pagination({
           ) : (
             <button
               key={p}
-              onClick={() => onChange(p as number)}
+              onClick={() => handleChangePage(p as number)}
               className={cn(
                 'px-3 h-9 text-sm rounded-[6px] transition-colors',
                 page === p
@@ -77,18 +83,18 @@ export function Pagination({
           )
         )}
         <button
-          onClick={() => onChange(Math.min(totalPages, page + 1))}
+          onClick={() => handleChangePage(Math.min(totalPages, page + 1))}
           disabled={page === totalPages}
           className="px-3 h-9 text-sm bg-white border border-gray-200 text-gray-600 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           下一页
         </button>
-        {onPageSizeChange && (
+        {handleChangePageSize && (
           <select
             value={pageSize}
             onChange={(e) => {
-              onPageSizeChange(Number(e.target.value))
-              onChange(1)
+              handleChangePageSize(Number(e.target.value))
+              handleChangePage(1)
             }}
             className="ml-2 px-2 h-9 text-sm border border-gray-200 rounded-[6px] bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500"
           >

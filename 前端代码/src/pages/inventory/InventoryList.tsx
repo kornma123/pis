@@ -7,9 +7,10 @@ import {
   X,
   Trash2,
   Upload,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
 import { inventoryApi, outboundApi, depletionApi, scrapApi } from '@/api/inventory'
 import { bomApi } from '@/api/master'
 import { materialApi, projectApi, userApi } from '@/api/master'
@@ -26,18 +27,14 @@ type SortDirection = 'asc' | 'desc'
 type QuickFilterType = 'all' | 'low-stock' | 'expiring-soon' | 'expiring-month' | 'expired' | 'out-of-stock'
 
 export default function InventoryList() {
+  // ===== URL 参数同步 =====
+  const { get, getNumber, setMultiple } = useUrlParams()
+
   // ===== 数据状态 =====
-  const [data, setData] = useState<InventoryRow[]>([])
-  const [loading, setLoading] = useState(false)
   const [stats, setStats] = useState<InventoryStats | null>(null)
 
-  // ===== 分页状态 =====
-  const [page, setPage] = useState(1)
-  const [pageSize] = useState(20)
-  const [total, setTotal] = useState(0)
-
   // ===== 筛选状态 =====
-  const [keyword, setKeyword] = useState('')
+  const [keyword, setKeyword] = useState(get('keyword', ''))
   const [category, setCategory] = useState('全部分类')
   const [location, setLocation] = useState('全部库位')
   const [quickFilter, setQuickFilter] = useState<QuickFilterType>('all')
@@ -140,10 +137,23 @@ export default function InventoryList() {
     receiver: string
   }>>([])
 
-  // ===== 获取数据 =====
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    try {
+  // ===== 分页数据 =====
+  const urlPage = Math.max(1, getNumber('page', 1))
+  const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 20))
+    ? getNumber('pageSize', 20)
+    : 20
+
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<InventoryRow>({
+    fetchFn: async ({ page, pageSize }) => {
       const res: any = await inventoryApi.getList({
         page,
         pageSize,
@@ -154,14 +164,21 @@ export default function InventoryList() {
         batch: item.batch || item.batchNo || '-',
         expiry: item.expiry || item.expiryDate || '-',
       })) as InventoryRow[]
-      setData(list)
-      setTotal(res?.pagination?.total || 0)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }, [page, pageSize, keyword])
+      return { list, pagination: res?.pagination }
+    },
+    initialPage: urlPage,
+    initialPageSize: urlPageSize,
+    deps: [keyword],
+  })
+
+  // 同步分页/筛选状态到 URL
+  useEffect(() => {
+    setMultiple({
+      page: page > 1 ? page : null,
+      pageSize: pageSize !== 20 ? pageSize : null,
+      keyword: keyword || null,
+    })
+  }, [page, pageSize, keyword, setMultiple])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -255,13 +272,12 @@ export default function InventoryList() {
   }, [])
 
   useEffect(() => {
-    fetchData()
     fetchStats()
     fetchProjects()
     fetchUsers()
     fetchDepletionTracking()
     fetchDepletedRecords()
-  }, [fetchData, fetchStats, fetchProjects, fetchUsers, fetchDepletionTracking, fetchDepletedRecords])
+  }, [fetchStats, fetchProjects, fetchUsers, fetchDepletionTracking, fetchDepletedRecords])
 
   // ===== 计算统计 =====
   const computedStats = useMemo(() => {
@@ -381,7 +397,6 @@ export default function InventoryList() {
   // ===== 筛选处理 =====
   const handleSearch = () => {
     setPage(1)
-    fetchData()
   }
 
   const handleReset = () => {
@@ -390,7 +405,6 @@ export default function InventoryList() {
     setLocation('全部库位')
     setQuickFilter('all')
     setPage(1)
-    fetchData()
   }
 
   const handleQuickFilter = (filter: QuickFilterType) => {
@@ -652,7 +666,7 @@ export default function InventoryList() {
       setOutboundMaterials([])
       setOutboundRemark('')
       setOutboundModalOpen(false)
-      fetchData()
+      refresh()
       fetchStats()
     } catch (e) {
       console.error(e)
@@ -698,14 +712,14 @@ export default function InventoryList() {
     setBatchScrapModalOpen(false)
     setScrapRemark('')
     clearSelection()
-    fetchData()
+    refresh()
     fetchStats()
   }
 
   const confirmBatchOutboundOnly = async () => {
     setBatchOutboundModalOpen(false)
     clearSelection()
-    fetchData()
+    refresh()
     fetchStats()
   }
 
@@ -714,23 +728,6 @@ export default function InventoryList() {
     setDetailModalOpen(true)
   }
 
-  // ===== 分页计算 =====
-  const totalPages = Math.ceil(total / pageSize) || 1
-  const pageNumbers = useMemo(() => {
-    const pages: (number | string)[] = []
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i)
-    } else {
-      if (page <= 3) {
-        pages.push(1, 2, 3, 4, '...', totalPages)
-      } else if (page >= totalPages - 2) {
-        pages.push(1, '...', totalPages - 3, totalPages - 2, totalPages - 1, totalPages)
-      } else {
-        pages.push(1, '...', page - 1, page, page + 1, '...', totalPages)
-      }
-    }
-    return pages
-  }, [page, totalPages])
 
   // ===== 渲染 =====
   return (
@@ -1091,39 +1088,13 @@ export default function InventoryList() {
         {/* 分页 */}
         <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between">
           <span className="text-sm text-gray-500">共 {total} 条记录</span>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="inline-flex items-center px-2.5 py-1.5 border border-gray-200 rounded-md text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 ease"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            {pageNumbers.map((p, idx) => (
-              p === '...' ? (
-                <span key={`ellipsis-${idx}`} className="px-2 py-1.5 text-sm text-gray-400">...</span>
-              ) : (
-                <button
-                  key={p}
-                  onClick={() => setPage(p as number)}
-                  className={`min-w-[32px] px-2.5 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ease ${
-                    page === p
-                      ? 'bg-[#3b82f6] text-white shadow-[0_1px_2px_rgba(59,130,246,0.2)]'
-                      : 'text-gray-600 hover:bg-gray-50 border border-gray-200'
-                  }`}
-                >
-                  {p}
-                </button>
-              )
-            ))}
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="inline-flex items-center px-2.5 py-1.5 border border-gray-200 rounded-md text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 ease"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onChangePage={setPage}
+            onChangePageSize={setPageSize}
+          />
         </div>
       </div>
       )}

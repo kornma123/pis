@@ -50,6 +50,10 @@ router.put('/:id', (req, res) => {
       database.exec('ROLLBACK')
       error(res, 'Role not found', 'NOT_FOUND', 404); return
     }
+    if (role.code === 'admin') {
+      database.exec('ROLLBACK')
+      error(res, 'Cannot modify system admin role', 'FORBIDDEN', 403); return
+    }
     const fields: string[] = []; const params: any[] = []
     if (code !== undefined) {
       if (code !== role.code) {
@@ -83,6 +87,7 @@ router.delete('/:id', (req, res) => {
     const { id } = req.params
     const existing = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id)
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (existing.code === 'admin') { error(res, 'Cannot delete system admin role', 'FORBIDDEN', 403); return }
     database.prepare('UPDATE roles SET is_deleted = 1 WHERE id = ?').run(id)
     success(res, { id }, 'Deleted')
   } catch (err: any) { error(res, err.message) }

@@ -51,12 +51,15 @@ router.put('/rules/:id', (req, res) => {
 
 router.get('/', (req, res) => {
   try {
-    const { status, type, page = 1, pageSize = 20 } = req.query
+    const { status, type, keyword, startDate, endDate, page = 1, pageSize = 20 } = req.query
     const db = getDatabase()
     let where = '1=1'
     const params: any[] = []
     if (status) { where += ' AND status = ?'; params.push(status) }
     if (type) { where += ' AND type = ?'; params.push(type) }
+    if (keyword) { where += ' AND (material_name LIKE ? OR message LIKE ? OR id LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`) }
+    if (startDate) { where += ' AND created_at >= ?'; params.push(startDate) }
+    if (endDate) { where += ' AND created_at <= ?'; params.push(endDate + ' 23:59:59') }
 
     const count = (db.prepare(`SELECT COUNT(*) as total FROM alerts WHERE ${where}`).get(...params) as any)?.total || 0
     const offset = (Number(page) - 1) * Number(pageSize)
