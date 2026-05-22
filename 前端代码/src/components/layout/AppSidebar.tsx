@@ -63,29 +63,35 @@ const ROLE_MENU_MAP: Record<string, string[]> = {
     '/suppliers', '/locations', '/users', '/roles', '/logs',
   ],
   warehouse_manager: [
-    '/inventory', '/inbound', '/outbound', '/stocktaking',
+    '/', '/inventory', '/inbound', '/outbound', '/stocktaking',
     '/suppliers', '/locations', '/materials', '/alerts',
   ],
   technician: [
-    '/inventory', '/projects', '/bom', '/reconciliation',
+    '/', '/inventory', '/projects', '/bom', '/reconciliation',
     '/cost-analysis', '/materials',
   ],
   procurement: [
-    '/inventory', '/inbound', '/materials', '/suppliers',
+    '/', '/inventory', '/inbound', '/materials', '/suppliers',
   ],
   finance: [
-    '/inventory', '/reconciliation', '/cost-analysis',
+    '/', '/inventory', '/reconciliation', '/cost-analysis',
   ],
   pathologist: [
-    '/inventory', '/projects', '/bom', '/reconciliation', '/cost-analysis',
+    '/', '/inventory', '/projects', '/bom', '/reconciliation', '/cost-analysis',
   ],
+}
+
+function decodeBase64Url(str: string): string {
+  const padding = '='.repeat((4 - (str.length % 4)) % 4)
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/') + padding
+  return atob(base64)
 }
 
 function getUserRole(): string | null {
   try {
     const token = localStorage.getItem('token')
     if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]))
+      const payload = JSON.parse(decodeBase64Url(token.split('.')[1]))
       if (payload.role) return payload.role
     }
     const userStr = localStorage.getItem('user')

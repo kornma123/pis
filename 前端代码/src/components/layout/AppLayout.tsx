@@ -29,11 +29,17 @@ const ROLE_MENU_MAP: Record<string, string[]> = {
   ],
 }
 
+function decodeBase64Url(str: string): string {
+  const padding = '='.repeat((4 - (str.length % 4)) % 4)
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/') + padding
+  return atob(base64)
+}
+
 function getUserRole(): string | null {
   try {
     const token = localStorage.getItem('token')
     if (token) {
-      const payload = JSON.parse(atob(token.split('.')[1]))
+      const payload = JSON.parse(decodeBase64Url(token.split('.')[1]))
       if (payload.role) return payload.role
     }
     const userStr = localStorage.getItem('user')

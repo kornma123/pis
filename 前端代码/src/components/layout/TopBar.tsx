@@ -30,6 +30,49 @@ export default function TopBar() {
   const notificationRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
 
+  function decodeBase64Url(str: string): string {
+    const padding = '='.repeat((4 - (str.length % 4)) % 4)
+    const base64 = str.replace(/-/g, '+').replace(/_/g, '/') + padding
+    return atob(base64)
+  }
+
+  function getUserInfo() {
+    try {
+      const token = localStorage.getItem('token')
+      if (token) {
+        const payload = JSON.parse(decodeBase64Url(token.split('.')[1]))
+        return {
+          realName: payload.realName || payload.username || '用户',
+          role: payload.role || '',
+          username: payload.username || '',
+        }
+      }
+      const userStr = localStorage.getItem('user')
+      if (userStr) {
+        const user = JSON.parse(userStr)
+        return {
+          realName: user.realName || user.username || '用户',
+          role: user.role || '',
+          username: user.username || '',
+        }
+      }
+    } catch { /* ignore */ }
+    return { realName: '用户', role: '', username: '' }
+  }
+
+  const roleLabels: Record<string, string> = {
+    admin: '系统管理员',
+    warehouse_manager: '仓库管理员',
+    technician: '技术员',
+    procurement: '采购员',
+    finance: '财务人员',
+    pathologist: '病理医生',
+  }
+
+  const userInfo = getUserInfo()
+  const displayName = userInfo.realName
+  const displayRole = roleLabels[userInfo.role] || userInfo.role || '用户'
+
   // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -193,16 +236,16 @@ export default function TopBar() {
               <User className="w-4 h-4" />
             </div>
             <div className="hidden sm:flex flex-col items-start">
-              <span className="text-sm font-medium leading-tight">管理员</span>
-              <span className="text-xs text-[#6b7280] leading-tight">系统管理员</span>
+              <span className="text-sm font-medium leading-tight">{displayName}</span>
+              <span className="text-xs text-[#6b7280] leading-tight">{displayRole}</span>
             </div>
           </button>
 
           {userMenuOpen && (
             <div className="absolute right-0 mt-2 w-52 bg-white rounded-lg shadow-lg border border-[#e5e7eb] py-1 z-50">
               <div className="px-4 py-3 border-b border-[#e5e7eb]">
-                <p className="text-sm font-medium text-[#111827]">管理员</p>
-                <p className="text-xs text-[#6b7280]">admin@coreone.com</p>
+                <p className="text-sm font-medium text-[#111827]">{displayName}</p>
+                <p className="text-xs text-[#6b7280]">{userInfo.username || displayRole}</p>
               </div>
               <a
                 href="/users"
