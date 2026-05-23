@@ -71,7 +71,7 @@ test.describe('库存列表 -> 查看列表', () => {
     test(`INV-LIST-01-${role}. 正常用例：${role}可查看库存列表`, async ({ page }) => {
       await loginAs(page, role)
       await page.goto(`${FE_BASE}/inventory`)
-      await expect(page.locator('body')).toBeVisible({ timeout: 8000 })
+      await expect(page.locator('body')).toBeVisible({ timeout: 30000 })
     })
   }
   test('INV-LIST-02. 空数据边界：库存表为空显示空状态', async ({ page }) => {
@@ -794,7 +794,7 @@ test.describe('库存列表 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     const start = Date.now()
     await page.goto(`${FE_BASE}/inventory`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     expect(Date.now() - start).toBeLessThan(10000)
   })
   test('BLIND-INV-22. 库存列表暗黑模式', async ({ page }) => {

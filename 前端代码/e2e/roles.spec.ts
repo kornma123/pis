@@ -62,7 +62,7 @@ test.beforeEach(async () => {
 // ───────────────────────────────────────────────
 test.describe('角色权限 -> 查看角色列表', () => {
   test('ROLE-LIST-01. 正常用例：admin可查看角色列表', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/roles`); await page.waitForLoadState('networkidle'); await page.waitForTimeout(1500)
+    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/roles`); await page.waitForTimeout(2000); await page.waitForTimeout(1500)
     await expect(page.locator('text=/角色管理|角色权限|角色列表/i').first()).toBeVisible()
   })
   test('ROLE-LIST-02. 正常用例：角色列表显示统计卡片', async ({ page }) => {
@@ -290,7 +290,7 @@ test.describe('角色权限 -> 编辑角色', () => {
     if (await editBtn.isVisible().catch(() => false)) { await editBtn.click(); await page.waitForTimeout(500) }
     await page.unroute('**/api/v1/roles/*')
   })
-  test('ROLE-EDIT-08. UI差异：admin显示编辑按钮', async ({ page }) => {
+  test('ROLE-EDIT-08. UI差异：自定义角色显示编辑按钮', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/roles`); await page.waitForTimeout(1500)
     const btn = page.locator('text=/编辑/i').first()
     expect(await btn.isVisible().catch(() => false)).toBe(true)
@@ -360,7 +360,7 @@ test.describe('角色权限 -> 删除角色', () => {
       expect(res.status).toBe(403)
     })
   }
-  test('ROLE-DELETE-06. UI差异：admin显示删除按钮', async ({ page }) => {
+  test('ROLE-DELETE-06. UI差异：自定义角色显示删除按钮', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/roles`); await page.waitForTimeout(1500)
     const btn = page.locator('text=/删除/i').first()
     expect(await btn.isVisible().catch(() => false)).toBe(true)

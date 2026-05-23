@@ -424,7 +424,7 @@ test.describe('物料成本分析 -> 分页功能', () => {
   test('COST-PAGE-05. 并发：快速切换分页', async ({ page }) => {
     await loginAs(page, 'finance'); await page.goto(`${FE_BASE}/cost-analysis`); await page.waitForTimeout(2500)
     const next = page.locator('text=/下一页/i').first()
-    for (let i = 0; i < 3; i++) { if (await next.isVisible().catch(() => false)) await next.click() }
+    for (let i = 0; i < 3; i++) { if (await next.isVisible().catch(() => false) && await next.isEnabled().catch(() => false)) await next.click() }
     await page.waitForTimeout(800)
   })
   test('COST-PAGE-06. UI差异：各角色分页功能一致', async ({ page }) => {

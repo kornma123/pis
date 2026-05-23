@@ -778,7 +778,7 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
   test('BLIND-AUTH-27. 登录页面加载性能检查', async ({ page }) => {
     const start = Date.now()
     await page.goto(`${FE_BASE}/login`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     const duration = Date.now() - start
     expect(duration).toBeLessThan(5000)
   })

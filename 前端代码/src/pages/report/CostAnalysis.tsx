@@ -7,8 +7,6 @@ import {
   Search,
   Download,
   X,
-  ChevronLeft,
-  ChevronRight,
   Settings,
   LineChart,
   Activity,
@@ -22,6 +20,8 @@ import request from '@/api/request'
 import type { ProjectCostReport, MaterialCostReport, SupplierCostReport } from '@/types'
 import { formatCurrency } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
 import {
   LineChart as ReLineChart,
   Line,
@@ -143,11 +143,13 @@ export default function CostAnalysis() {
   const [supplierReport, setSupplierReport] = useState<SupplierCostReport | null>(null)
   const [loading, setLoading] = useState(false)
 
+  const { get, getNumber, setMultiple } = useUrlParams()
+
   // Tabs
-  const [activeTab, setActiveTab] = useState<TabKey>('project-cost')
+  const [activeTab, setActiveTab] = useState<TabKey>((get('tab') as TabKey) || 'project-cost')
 
   // Filters
-  const [searchText, setSearchText] = useState('')
+  const [searchText, setSearchText] = useState(get('search') || '')
   const [projectFilter, setProjectFilter] = useState('')
   const [startDate, setStartDate] = useState('2024-01-01')
   const [endDate, setEndDate] = useState('2024-12-31')
@@ -157,8 +159,8 @@ export default function CostAnalysis() {
   const [dataSource, setDataSource] = useState<'lis' | 'manual'>('lis')
 
   // Pagination
-  const [page, setPage] = useState(1)
-  const pageSize = 10
+  const [page, setPage] = useState(Math.max(1, getNumber('page', 1)))
+  const [pageSize, setPageSize] = useState(Math.max(1, Math.min(100, getNumber('pageSize', 10))))
 
   // Modals
   const [exportModalOpen, setExportModalOpen] = useState(false)
@@ -190,6 +192,15 @@ export default function CostAnalysis() {
   useEffect(() => {
     setPage(1)
   }, [activeTab, searchText, projectFilter])
+
+  useEffect(() => {
+    const params: Record<string, string | null> = {}
+    params.tab = activeTab === 'project-cost' ? null : activeTab
+    params.search = searchText || null
+    params.page = page === 1 ? null : String(page)
+    params.pageSize = pageSize === 10 ? null : String(pageSize)
+    setMultiple(params)
+  }, [activeTab, searchText, page, pageSize])
 
   const dateRanges: Record<string, [string, string]> = {
     '2024': ['2024-01-01', '2024-12-31'],
@@ -260,8 +271,6 @@ export default function CostAnalysis() {
     return filteredMaterials.slice(start, start + pageSize)
   }, [filteredMaterials, page])
 
-  const totalProjectPages = Math.max(1, Math.ceil(filteredProjects.length / pageSize))
-  const totalMaterialPages = Math.max(1, Math.ceil(filteredMaterials.length / pageSize))
 
   const totalSupplierAmount = mockSuppliers.reduce((s, i) => s + i.amount, 0)
 
@@ -569,31 +578,14 @@ export default function CostAnalysis() {
 
           {/* Pagination */}
           {filteredProjects.length > 0 && (
-            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-              <span className="text-xs text-gray-500">
-                共 <strong className="text-gray-700">{filteredProjects.length}</strong> 条记录
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5 mr-0.5" />
-                  上一页
-                </button>
-                <span className="text-xs text-gray-500">
-                  第 <strong className="text-gray-700">{page}</strong> / {totalProjectPages} 页
-                </span>
-                <button
-                  onClick={() => setPage(p => Math.min(totalProjectPages, p + 1))}
-                  disabled={page >= totalProjectPages}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
-                >
-                  下一页
-                  <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
-                </button>
-              </div>
+            <div className="px-5 py-3 border-t border-gray-100">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={filteredProjects.length}
+                onChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
             </div>
           )}
         </div>
@@ -666,31 +658,14 @@ export default function CostAnalysis() {
 
             {/* Pagination */}
             {filteredMaterials.length > 0 && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-                <span className="text-xs text-gray-500">
-                  共 <strong className="text-gray-700">{filteredMaterials.length}</strong> 条记录
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page <= 1}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5 mr-0.5" />
-                    上一页
-                  </button>
-                  <span className="text-xs text-gray-500">
-                    第 <strong className="text-gray-700">{page}</strong> / {totalMaterialPages} 页
-                  </span>
-                  <button
-                    onClick={() => setPage(p => Math.min(totalMaterialPages, p + 1))}
-                    disabled={page >= totalMaterialPages}
-                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
-                  >
-                    下一页
-                    <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
-                  </button>
-                </div>
+              <div className="px-5 py-3 border-t border-gray-100">
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={filteredMaterials.length}
+                  onChange={setPage}
+                  onPageSizeChange={setPageSize}
+                />
               </div>
             )}
           </div>

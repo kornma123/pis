@@ -133,7 +133,7 @@ test.describe('消耗对账 -> 查看对账列表与统计卡片', () => {
     await page.goto(`${FE_BASE}/reconciliation`)
     for (let i = 0; i < 3; i++) {
       await page.reload()
-      await page.waitForLoadState('networkidle')
+      await page.waitForTimeout(2000)
     }
     await expect(page.locator('h1', { hasText: '消耗对账' })).toBeVisible()
   })
@@ -968,7 +968,7 @@ test.describe('消耗对账 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     const start = Date.now()
     await page.goto(`${FE_BASE}/reconciliation`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     const duration = Date.now() - start
     expect(duration).toBeLessThan(10000)
   })

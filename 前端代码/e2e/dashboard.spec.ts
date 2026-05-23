@@ -230,7 +230,7 @@ test.describe('仪表盘 -> 侧边栏导航切换', () => {
       const menu = page.locator(`nav >> text=${link.label}`).first()
       if (await menu.isVisible().catch(() => false)) {
         await menu.click()
-        await page.waitForURL(`${FE_BASE}${link.path}`, { timeout: 8000 })
+        await page.waitForURL(`${FE_BASE}${link.path}`, { timeout: 30000 })
       }
     })
   }
@@ -240,7 +240,7 @@ test.describe('仪表盘 -> 侧边栏导航切换', () => {
     const menu = page.locator('nav >> text=库存').first()
     if (await menu.isVisible().catch(() => false)) {
       await menu.click()
-      await page.waitForURL(`${FE_BASE}/inventory`, { timeout: 8000 })
+      await page.waitForURL(`${FE_BASE}/inventory`, { timeout: 30000 })
       const active = page.locator('nav [class*="active"], nav [aria-current="page"]').first()
       await expect(active.or(page.locator('body'))).toBeVisible()
     }

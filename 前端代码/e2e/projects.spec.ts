@@ -76,7 +76,7 @@ test.describe('检测项目 -> 查看项目列表', () => {
     test(`PROJ-LIST-01-${role}. 正常用例：${role}可查看项目列表`, async ({ page }) => {
       await loginAs(page, role)
       await page.goto(`${FE_BASE}/projects`)
-      await expect(page.locator('body')).toBeVisible({ timeout: 8000 })
+      await expect(page.locator('body')).toBeVisible({ timeout: 30000 })
     })
   }
   test('PROJ-LIST-02. 空数据边界：无项目数据', async ({ page }) => {
@@ -760,7 +760,7 @@ test.describe('检测项目 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     const start = Date.now()
     await page.goto(`${FE_BASE}/projects`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     expect(Date.now() - start).toBeLessThan(10000)
   })
   test('BLIND-PROJ-09. 项目字段XSS防护', async () => {

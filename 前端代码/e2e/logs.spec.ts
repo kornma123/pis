@@ -232,7 +232,7 @@ test.describe('操作日志 -> 分页功能', () => {
   test('LOG-PAGE-06. 并发：快速切换分页', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
     const next = page.locator('text=/下一页/i').first()
-    for (let i = 0; i < 3; i++) { if (await next.isVisible().catch(() => false)) await next.click() }
+    for (let i = 0; i < 3; i++) { if (await next.isVisible().catch(() => false) && await next.isEnabled().catch(() => false)) await next.click() }
     await page.waitForTimeout(800)
   })
   test('LOG-PAGE-07. 正常用例：分页信息显示正确', async ({ page }) => {

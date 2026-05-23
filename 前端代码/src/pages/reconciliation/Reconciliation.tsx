@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Search, Upload, Download, ChevronDown, ChevronUp, FileSpreadsheet, X } from 'lucide-react'
 import { toast } from 'sonner'
 import request from '@/api/request'
+import { usePagination } from '@/hooks/usePagination'
+import { useUrlParams } from '@/hooks/useUrlParams'
+import { Pagination } from '@/components/ui/Pagination'
 
 interface SummaryData {
   totalCases: number
@@ -99,17 +102,12 @@ export default function Reconciliation() {
   const [materials, setMaterials] = useState<MaterialSummary[]>([])
 
   // Cases
-  const [cases, setCases] = useState<LisCase[]>([])
   const [caseSearch, setCaseSearch] = useState('')
   const [caseFilterProject, setCaseFilterProject] = useState('')
   const [caseFilterStatus, setCaseFilterStatus] = useState('')
-  const [casePage, setCasePage] = useState(1)
-  const [caseTotal, setCaseTotal] = useState(0)
 
   // Logs
-  const [logs, setLogs] = useState<ReconcileLog[]>([])
-  const [logPage, setLogPage] = useState(1)
-  const [logTotal, setLogTotal] = useState(0)
+  // (no extra state)
 
   // Modals
   const [importModalOpen, setImportModalOpen] = useState(false)
@@ -146,33 +144,55 @@ export default function Reconciliation() {
     } catch (e) { console.error(e) } finally { setLoading(false) }
   }, [dateParams])
 
-  const fetchCases = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res: any = await request.get('/reconciliation/cases', {
-        params: { page: casePage, pageSize: 20, search: caseSearch || undefined, projectId: caseFilterProject || undefined, status: caseFilterStatus || undefined },
-      })
-      setCases(res?.list || [])
-      setCaseTotal(res?.pagination?.total || 0)
-    } catch (e) { console.error(e) } finally { setLoading(false) }
-  }, [casePage, caseSearch, caseFilterProject, caseFilterStatus])
+  const { get, getNumber, setMultiple } = useUrlParams()
 
-  const fetchLogs = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res: any = await request.get('/reconciliation/logs', { params: { page: logPage, pageSize: 20 } })
-      setLogs(res?.list || [])
-      setLogTotal(res?.pagination?.total || 0)
-    } catch (e) { console.error(e) } finally { setLoading(false) }
-  }, [logPage])
+  const casePagination = usePagination<LisCase>({
+    fetchFn: async ({ page, pageSize }) => {
+      if (activeTab !== 'case') return { list: [], pagination: { total: 0, page, pageSize } }
+      const res: any = await request.get('/reconciliation/cases', {
+        params: {
+          page,
+          pageSize,
+          search: caseSearch || undefined,
+          projectId: caseFilterProject || undefined,
+          status: caseFilterStatus || undefined,
+        },
+      })
+      return { list: res?.list || [], pagination: res?.pagination }
+    },
+    initialPage: Math.max(1, getNumber('cpage', 1)),
+    initialPageSize: Math.max(1, Math.min(100, getNumber('cpageSize', 20))),
+    deps: [activeTab, caseSearch, caseFilterProject, caseFilterStatus],
+  })
+
+  const logPagination = usePagination<ReconcileLog>({
+    fetchFn: async ({ page, pageSize }) => {
+      if (activeTab !== 'log') return { list: [], pagination: { total: 0, page, pageSize } }
+      const res: any = await request.get('/reconciliation/logs', { params: { page, pageSize } })
+      return { list: res?.list || [], pagination: res?.pagination }
+    },
+    initialPage: Math.max(1, getNumber('lpage', 1)),
+    initialPageSize: Math.max(1, Math.min(100, getNumber('lpageSize', 20))),
+    deps: [activeTab],
+  })
 
   useEffect(() => {
     fetchSummary()
     if (activeTab === 'reconcile') fetchProjects()
     if (activeTab === 'material') fetchMaterials()
-    if (activeTab === 'case') fetchCases()
-    if (activeTab === 'log') fetchLogs()
-  }, [activeTab, fetchSummary, fetchProjects, fetchMaterials, fetchCases, fetchLogs])
+  }, [activeTab, fetchSummary, fetchProjects, fetchMaterials])
+
+  useEffect(() => {
+    setMultiple({
+      cpage: casePagination.page === 1 ? null : String(casePagination.page),
+      cpageSize: casePagination.pageSize === 20 ? null : String(casePagination.pageSize),
+      csearch: caseSearch || null,
+      cproject: caseFilterProject || null,
+      cstatus: caseFilterStatus || null,
+      lpage: logPagination.page === 1 ? null : String(logPagination.page),
+      lpageSize: logPagination.pageSize === 20 ? null : String(logPagination.pageSize),
+    })
+  }, [casePagination.page, casePagination.pageSize, caseSearch, caseFilterProject, caseFilterStatus, logPagination.page, logPagination.pageSize])
 
   const loadProjectMaterials = async (projectId: string) => {
     if (projectMaterials[projectId]) {
@@ -199,7 +219,7 @@ export default function Reconciliation() {
       setImportModalOpen(false)
       setImportData('')
       fetchSummary()
-      if (activeTab === 'case') fetchCases()
+      if (activeTab === 'case') casePagination.refresh()
     } catch (e: any) {
       toast.error(e?.message || '导入失败')
     }
@@ -530,7 +550,7 @@ export default function Reconciliation() {
                     placeholder="搜索病理号..."
                     value={caseSearch}
                     onChange={e => setCaseSearch(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && fetchCases()}
+                    onKeyDown={e => e.key === 'Enter' && casePagination.setPage(1)}
                     className="pl-9 pr-4 h-9 text-sm border border-gray-300 rounded-md focus:outline-none focus:border-blue-500 w-48"
                   />
                 </div>
@@ -554,8 +574,8 @@ export default function Reconciliation() {
                   <option value="modified">已修改</option>
                   <option value="unmatched">未关联BOM</option>
                 </select>
-                <button onClick={fetchCases} className="h-9 px-4 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">查询</button>
-                <button onClick={() => { setCaseSearch(''); setCaseFilterProject(''); setCaseFilterStatus(''); }} className="h-9 px-4 text-sm text-gray-500 hover:text-gray-700">重置</button>
+                <button onClick={() => casePagination.setPage(1)} className="h-9 px-4 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">查询</button>
+                <button onClick={() => { setCaseSearch(''); setCaseFilterProject(''); setCaseFilterStatus(''); casePagination.setPage(1) }} className="h-9 px-4 text-sm text-gray-500 hover:text-gray-700">重置</button>
               </div>
               <button className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
                 <Download className="w-4 h-4" />
@@ -578,7 +598,7 @@ export default function Reconciliation() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {cases.map(c => (
+                  {casePagination.data.map(c => (
                     <tr key={c.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-mono font-semibold text-gray-900">{c.case_no}</td>
                       <td className="px-4 py-3">
@@ -609,19 +629,18 @@ export default function Reconciliation() {
                 </tbody>
               </table>
             </div>
-            {cases.length === 0 && !loading && (
+            {casePagination.data.length === 0 && !casePagination.loading && (
               <div className="text-center py-12 text-gray-400">暂无病例数据，请先导入LIS数据</div>
             )}
-            {caseTotal > 20 && (
-              <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-                <span className="text-sm text-gray-500">共 {caseTotal} 条记录</span>
-                <div className="flex gap-1">
-                  <button onClick={() => setCasePage(p => Math.max(1, p - 1))} disabled={casePage === 1} className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50">上一页</button>
-                  <span className="px-3 py-1 text-sm">{casePage}</span>
-                  <button onClick={() => setCasePage(p => p + 1)} disabled={casePage * 20 >= caseTotal} className="px-3 py-1 text-sm border rounded hover:bg-gray-50 disabled:opacity-50">下一页</button>
-                </div>
-              </div>
-            )}
+            <div className="px-4 py-3 border-t border-gray-200">
+              <Pagination
+                page={casePagination.page}
+                pageSize={casePagination.pageSize}
+                total={casePagination.total}
+                onChange={casePagination.setPage}
+                onPageSizeChange={casePagination.setPageSize}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -633,11 +652,11 @@ export default function Reconciliation() {
             <h3 className="font-semibold text-gray-900">BOM修正记录</h3>
           </div>
           <div className="p-5">
-            {logs.length === 0 ? (
+            {logPagination.data.length === 0 && !logPagination.loading ? (
               <div className="text-center py-8 text-gray-400">暂无修正记录</div>
             ) : (
               <div className="space-y-4">
-                {logs.map(log => (
+                {logPagination.data.map(log => (
                   <div key={log.id} className="flex gap-3 pb-4 border-b border-gray-100 last:border-0">
                     <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${log.type === 'bom_fix' ? 'bg-blue-500' : 'bg-green-500'}`} />
                     <div className="flex-1">
@@ -657,6 +676,15 @@ export default function Reconciliation() {
                 ))}
               </div>
             )}
+            <div className="mt-4">
+              <Pagination
+                page={logPagination.page}
+                pageSize={logPagination.pageSize}
+                total={logPagination.total}
+                onChange={logPagination.setPage}
+                onPageSizeChange={logPagination.setPageSize}
+              />
+            </div>
           </div>
         </div>
       )}

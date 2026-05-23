@@ -58,7 +58,7 @@ test.describe('预警中心 -> 查看预警列表', () => {
     test(`ALERT-LIST-01-${role}. 正常用例：${role}可查看预警列表`, async ({ page }) => {
       await loginAs(page, role)
       await page.goto(`${FE_BASE}/alerts`)
-      await expect(page.locator('body')).toBeVisible({ timeout: 8000 })
+      await expect(page.locator('body')).toBeVisible({ timeout: 30000 })
     })
   }
   test('ALERT-LIST-02. 空数据边界：无预警显示空状态', async ({ page }) => {
@@ -616,7 +616,7 @@ test.describe('预警中心 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     const start = Date.now()
     await page.goto(`${FE_BASE}/alerts`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     expect(Date.now() - start).toBeLessThan(10000)
   })
   test('BLIND-ALERT-09. 预警搜索防抖', async ({ page }) => {

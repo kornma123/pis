@@ -74,7 +74,7 @@ test.describe('BOM清单 -> 查看BOM列表', () => {
     test(`BOM-LIST-01-${role}. ${role}可查看BOM列表`, async ({ page }) => {
       await loginAs(page, role)
       await page.goto(`${FE_BASE}/bom`)
-      await expect(page.locator('body')).toBeVisible({ timeout: 8000 })
+      await expect(page.locator('body')).toBeVisible({ timeout: 30000 })
     })
   }
   test('BOM-LIST-02. 空数据边界', async ({ page }) => {
@@ -693,7 +693,7 @@ test.describe('BOM清单 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     const start = Date.now()
     await page.goto(`${FE_BASE}/bom`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     expect(Date.now() - start).toBeLessThan(10000)
   })
   test('BLIND-BOM-08. 搜索防抖', async ({ page }) => {

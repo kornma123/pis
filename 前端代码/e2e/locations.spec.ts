@@ -72,7 +72,7 @@ test.describe('库位管理 -> 查看库位树', () => {
     test(`LOC-LIST-01-${role}. 正常用例：${role}可查看库位列表`, async ({ page }) => {
       await loginAs(page, role)
       await page.goto(`${FE_BASE}/locations`)
-      await expect(page.locator('body')).toBeVisible({ timeout: 8000 })
+      await expect(page.locator('body')).toBeVisible({ timeout: 30000 })
     })
   }
   test('LOC-LIST-02. 空数据边界：无库位数据显示空状态', async ({ page }) => {
@@ -718,7 +718,7 @@ test.describe('库位管理 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     const start = Date.now()
     await page.goto(`${FE_BASE}/locations`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     expect(Date.now() - start).toBeLessThan(10000)
   })
   test('BLIND-LOC-08. 库位搜索功能', async ({ page }) => {

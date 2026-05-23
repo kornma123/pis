@@ -60,8 +60,11 @@ export default function AppLayout() {
     return ROLE_MENU_MAP[role] || ROLE_MENU_MAP.technician
   }, [role])
 
-  // 路由守卫：无权限访问时重定向
-  const hasAccess = !role || allowedPaths.includes(location.pathname)
+  // 路由守卫：未登录重定向到登录页，无权限重定向到首页
+  if (!role) {
+    return <Navigate to="/login" replace />
+  }
+  const hasAccess = allowedPaths.includes(location.pathname)
   if (!hasAccess) {
     return <Navigate to="/" replace />
   }

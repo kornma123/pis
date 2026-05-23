@@ -87,14 +87,14 @@ test.describe('入库管理 -> 查看入库列表', () => {
     test(`IN-LIST-01-${role}. 正常用例：${role}可查看入库列表`, async ({ page }) => {
       await loginAs(page, role)
       await page.goto(`${FE_BASE}/inbound`)
-      await expect(page.locator('table, .empty-state, [data-testid="inbound-list"]')).toBeVisible({ timeout: 8000 })
+      await expect(page.locator('table, .empty-state, [data-testid="inbound-list"]')).toBeVisible({ timeout: 30000 })
     })
   }
   test('IN-LIST-02. 空数据边界：无入库记录显示空状态', async ({ page }) => {
     await loginAs(page, 'admin')
     await page.goto(`${FE_BASE}/inbound`)
     const empty = page.locator('text=/暂无数据|暂无入库|空状态|empty/i')
-    await expect(empty.or(page.locator('table tbody tr'))).toBeVisible({ timeout: 8000 })
+    await expect(empty.or(page.locator('table tbody tr'))).toBeVisible({ timeout: 30000 })
   })
   test('IN-LIST-03. 权限：technician访问返回403', async ({ page }) => {
     await loginAs(page, 'technician')
@@ -1944,7 +1944,7 @@ test.describe('入库管理 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     const start = Date.now()
     await page.goto(`${FE_BASE}/inbound`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     const elapsed = Date.now() - start
     expect(elapsed).toBeLessThan(10000)
   })

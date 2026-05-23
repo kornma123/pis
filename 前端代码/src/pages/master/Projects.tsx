@@ -92,10 +92,10 @@ export default function Projects() {
     setPageSize,
     refresh,
   } = usePagination<Project>({
-    fetchFn: (p, ps) =>
+    fetchFn: ({ page, pageSize }) =>
       projectApi.getList({
-        page: p,
-        pageSize: ps,
+        page,
+        pageSize,
         keyword: keyword || undefined,
         type: typeFilter || undefined,
         status: statusFilter || undefined,
@@ -509,40 +509,15 @@ export default function Projects() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-sm text-gray-500">共 {total} 条记录</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors"
-              >
-                上一页
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                <button
-                  key={p}
-                  onClick={() => setPage(p)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    page === p
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded-md text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors"
-              >
-                下一页
-              </button>
-            </div>
-          </div>
-        )}
+        <div className="px-5 py-3 border-t border-gray-100">
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
       </div>
 
       {/* ===== Modals ===== */}

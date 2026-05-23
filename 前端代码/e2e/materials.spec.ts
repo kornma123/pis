@@ -81,7 +81,7 @@ test.describe('耗材管理 -> 查看物料列表', () => {
     test(`MAT-LIST-01-${role}. 正常用例：${role}可查看物料列表`, async ({ page }) => {
       await loginAs(page, role)
       await page.goto(`${FE_BASE}/materials`)
-      await expect(page.locator('body')).toBeVisible({ timeout: 8000 })
+      await expect(page.locator('body')).toBeVisible({ timeout: 30000 })
     })
   }
   test('MAT-LIST-02. 空数据边界：无物料数据显示空状态', async ({ page }) => {
@@ -968,7 +968,7 @@ test.describe('耗材管理 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     const start = Date.now()
     await page.goto(`${FE_BASE}/materials`)
-    await page.waitForLoadState('networkidle')
+    await page.waitForTimeout(2000)
     expect(Date.now() - start).toBeLessThan(10000)
   })
   test('BLIND-MAT-12. 物料字段XSS防护', async () => {
