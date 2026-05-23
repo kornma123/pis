@@ -107,12 +107,15 @@ export default function Outbound() {
 
   // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [editRecordId, setEditRecordId] = useState<string | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [detailRecord, setDetailRecord] = useState<OutboundRecord | null>(null)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [cancelRecord, setCancelRecord] = useState<OutboundRecord | null>(null)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelRemark, setCancelRemark] = useState('')
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteRecord, setDeleteRecord] = useState<OutboundRecord | null>(null)
 
   // Form
   const [form, setForm] = useState<FormData>({
@@ -216,6 +219,7 @@ export default function Outbound() {
 
   // Modal handlers
   const openCreate = () => {
+    setEditRecordId(null)
     setForm({
       type: 'project',
       projectId: '',
@@ -224,6 +228,23 @@ export default function Outbound() {
     })
     fetchRefs()
     setCreateModalOpen(true)
+  }
+
+  const openEdit = (record: OutboundRecord) => {
+    setEditRecordId(record.id)
+    setForm({
+      type: record.type as any,
+      projectId: record.projectId || '',
+      items: record.items?.map(i => ({ materialId: i.materialId, quantity: i.quantity })) || [{ materialId: materials[0]?.id || '', quantity: 1 }],
+      remark: record.remark || '',
+    })
+    fetchRefs()
+    setCreateModalOpen(true)
+  }
+
+  const openDelete = (record: OutboundRecord) => {
+    setDeleteRecord(record)
+    setDeleteConfirmOpen(true)
   }
 
   const openDetail = (record: OutboundRecord) => {
@@ -261,12 +282,31 @@ export default function Outbound() {
       return
     }
     try {
-      await outboundApi.create({ ...form, items: validItems })
-      toast.success('出库登记成功')
+      if (editRecordId) {
+        await outboundApi.update(editRecordId, { ...form, items: validItems })
+        toast.success('出库更新成功')
+      } else {
+        await outboundApi.create({ ...form, items: validItems })
+        toast.success('出库登记成功')
+      }
       setCreateModalOpen(false)
+      setEditRecordId(null)
       refresh()
     } catch (e) {
-      toast.error('出库登记失败')
+      toast.error(editRecordId ? '出库更新失败' : '出库登记失败')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteRecord) return
+    try {
+      await outboundApi.delete(deleteRecord.id)
+      toast.success('删除成功')
+      setDeleteConfirmOpen(false)
+      setDeleteRecord(null)
+      refresh()
+    } catch (e) {
+      toast.error('删除失败')
     }
   }
 
@@ -276,10 +316,14 @@ export default function Outbound() {
       toast.error('请选择取消原因')
       return
     }
-    // Mock cancel action
-    toast.success('出库已取消')
-    setCancelModalOpen(false)
-    refresh()
+    try {
+      await outboundApi.delete(cancelRecord.id)
+      toast.success('出库已取消')
+      setCancelModalOpen(false)
+      refresh()
+    } catch (e) {
+      toast.error('取消失败')
+    }
   }
 
   const batchExport = () => {
@@ -638,6 +682,22 @@ export default function Outbound() {
                           >
                             打印
                           </button>
+                          {row.status === 'completed' && (
+                            <>
+                              <button
+                                onClick={() => openEdit(row)}
+                                className="px-2 py-1 text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-150"
+                              >
+                                编辑
+                              </button>
+                              <button
+                                onClick={() => openDelete(row)}
+                                className="px-2 py-1 text-xs text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-150"
+                              >
+                                删除
+                              </button>
+                            </>
+                          )}
                           {row.status === 'pending' && (
                             <button
                               onClick={() => openCancel(row)}
@@ -674,7 +734,7 @@ export default function Outbound() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">出库登记</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{editRecordId ? '编辑出库' : '出库登记'}</h3>
               <button
                 onClick={() => setCreateModalOpen(false)}
                 className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors duration-150"
@@ -782,7 +842,7 @@ export default function Outbound() {
                 onClick={handleSubmit}
                 className="px-4 py-2 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors duration-150"
               >
-                确认出库
+                {editRecordId ? '确认更新' : '确认出库'}
               </button>
             </div>
           </div>
@@ -942,6 +1002,43 @@ export default function Outbound() {
                 className="px-4 py-2 text-sm text-white bg-red-500 rounded-md hover:bg-red-600 transition-colors duration-150"
               >
                 确认取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== Delete Confirm Modal ==================== */}
+      {deleteConfirmOpen && deleteRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">确认删除</h3>
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors duration-150"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600">
+                确定要删除出库单 <strong>{deleteRecord.outboundNo}</strong> 吗？
+              </p>
+              <p className="text-sm text-gray-500">删除后将恢复库存并清除出库记录。此操作不可撤销。</p>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors duration-150"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 text-sm text-white bg-red-500 rounded-md hover:bg-red-600 transition-colors duration-150"
+              >
+                确认删除
               </button>
             </div>
           </div>

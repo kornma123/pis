@@ -115,6 +115,13 @@ export default function Reconciliation() {
   const [editCaseModalOpen, setEditCaseModalOpen] = useState(false)
   const [importData, setImportData] = useState('')
   const [fixTarget, setFixTarget] = useState<MaterialDiff | null>(null)
+  const [fixTargetProjectId, setFixTargetProjectId] = useState<string | null>(null)
+  const [fixNewUsage, setFixNewUsage] = useState<number>(0)
+  const [fixNewUnit, setFixNewUnit] = useState<string>('')
+  const [fixReason, setFixReason] = useState<string>('')
+  const [editCaseTarget, setEditCaseTarget] = useState<LisCase | null>(null)
+  const [editCaseProjectId, setEditCaseProjectId] = useState<string>('')
+  const [editCaseStatus, setEditCaseStatus] = useState<string>('')
 
   const dateParams = useMemo(() => ({
     startDate,
@@ -249,6 +256,55 @@ export default function Reconciliation() {
       normal: '正常', modified: '已修改', unmatched: '未关联', partial: '部分异常',
     }
     return map[status] || status
+  }
+
+  const handleFixBom = async () => {
+    if (!fixTarget || !fixTargetProjectId) return
+    if (!fixReason.trim()) {
+      toast.error('请填写修正原因')
+      return
+    }
+    try {
+      await request.post('/reconciliation/logs', {
+        type: 'bom_fix',
+        targetId: fixTarget.materialId,
+        targetName: fixTarget.materialName,
+        field: 'usage_per_sample',
+        oldValue: String(fixTarget.bomUsagePerSample),
+        newValue: String(fixNewUsage),
+        reason: fixReason,
+        projectId: fixTargetProjectId,
+        materialId: fixTarget.materialId,
+        newUsage: fixNewUsage,
+      })
+      toast.success('BOM用量已修正')
+      setFixBomModalOpen(false)
+      setFixTarget(null)
+      setFixTargetProjectId(null)
+      if (activeTab === 'reconcile') {
+        const res: any = await request.get(`/reconciliation/projects/${fixTargetProjectId}/materials`, { params: dateParams })
+        setProjectMaterials(prev => ({ ...prev, [fixTargetProjectId]: res?.list || [] }))
+      }
+      if (activeTab === 'material') fetchMaterials()
+    } catch (e: any) {
+      toast.error(e?.message || '修正失败')
+    }
+  }
+
+  const handleEditCase = async () => {
+    if (!editCaseTarget) return
+    try {
+      await request.put(`/reconciliation/cases/${editCaseTarget.id}`, {
+        projectId: editCaseProjectId || undefined,
+        status: editCaseStatus || undefined,
+      })
+      toast.success('病例信息已更新')
+      setEditCaseModalOpen(false)
+      setEditCaseTarget(null)
+      casePagination.refresh()
+    } catch (e: any) {
+      toast.error(e?.message || '更新失败')
+    }
   }
 
   return (
@@ -453,7 +509,14 @@ export default function Reconciliation() {
                                 <td className="px-3 py-3 text-center">
                                   {mat.status !== 'match' && (
                                     <button
-                                      onClick={() => { setFixTarget(mat); setFixBomModalOpen(true) }}
+                                      onClick={() => {
+                                        setFixTarget(mat)
+                                        setFixTargetProjectId(proj.id)
+                                        setFixNewUsage(mat.bomUsagePerSample)
+                                        setFixNewUnit(mat.bomUnit)
+                                        setFixReason('')
+                                        setFixBomModalOpen(true)
+                                      }}
                                       className="px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
                                     >
                                       修正BOM
@@ -518,8 +581,8 @@ export default function Reconciliation() {
                         <td className="px-4 py-3 text-center">
                           {mat.status !== 'match' ? (
                             <button
-                              onClick={() => { setFixTarget(mat as any); setFixBomModalOpen(true) }}
-                              className="px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
+                              onClick={() => { toast.info('请到"按项目对账"页进行BOM修正') }}
+                              className="px-3 py-1 text-xs font-medium text-gray-400 bg-gray-50 border border-gray-200 rounded-md cursor-not-allowed"
                             >
                               调整BOM
                             </button>
@@ -618,7 +681,12 @@ export default function Reconciliation() {
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
-                          onClick={() => setEditCaseModalOpen(true)}
+                          onClick={() => {
+                            setEditCaseTarget(c)
+                            setEditCaseProjectId(c.project_id || '')
+                            setEditCaseStatus(c.status || '')
+                            setEditCaseModalOpen(true)
+                          }}
                           className="px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
                         >
                           修改
@@ -724,7 +792,7 @@ export default function Reconciliation() {
       )}
 
       {/* Fix BOM Modal */}
-      {fixBomModalOpen && fixTarget && (
+      {fixBomModalOpen && fixTarget && fixTargetProjectId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setFixBomModalOpen(false)} />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
@@ -745,21 +813,21 @@ export default function Reconciliation() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">建议用量/例</label>
-                  <input type="text" value={`${fixTarget.bomUsagePerSample * 1.2} ${fixTarget.bomUnit}`} disabled className="w-full px-3 py-2 text-sm border rounded-md bg-gray-100 text-amber-700" />
+                  <input type="text" value={`${(fixTarget.bomUsagePerSample * 1.2).toFixed(2)} ${fixTarget.bomUnit}`} disabled className="w-full px-3 py-2 text-sm border rounded-md bg-gray-100 text-amber-700" />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">修正为 <span className="text-red-500">*</span></label>
                 <div className="flex gap-2">
-                  <input type="number" defaultValue={fixTarget.bomUsagePerSample} className="flex-1 px-3 py-2 text-sm border rounded-md focus:outline-none focus:border-blue-500" />
-                  <select defaultValue={fixTarget.bomUnit} className="w-24 px-3 py-2 text-sm border rounded-md">
+                  <input type="number" step="0.01" value={fixNewUsage} onChange={e => setFixNewUsage(Number(e.target.value))} className="flex-1 px-3 py-2 text-sm border rounded-md focus:outline-none focus:border-blue-500" />
+                  <select value={fixNewUnit} onChange={e => setFixNewUnit(e.target.value)} className="w-24 px-3 py-2 text-sm border rounded-md">
                     <option>ml</option><option>μl</option><option>L</option><option>g</option><option>mg</option><option>片</option><option>支</option>
                   </select>
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">修正原因 <span className="text-red-500">*</span></label>
-                <textarea rows={2} placeholder="请说明修正原因" className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:border-blue-500" />
+                <textarea rows={2} placeholder="请说明修正原因" value={fixReason} onChange={e => setFixReason(e.target.value)} className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:border-blue-500" />
               </div>
               <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-800">
                 <strong>提示：</strong>修正后，该BOM的历史对账数据将同步更新，差异记录保留在日志中。
@@ -767,29 +835,54 @@ export default function Reconciliation() {
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
               <button onClick={() => setFixBomModalOpen(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
-              <button onClick={() => { toast.success('BOM用量已修正！'); setFixBomModalOpen(false) }} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">确认修正</button>
+              <button onClick={handleFixBom} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">确认修正</button>
             </div>
           </div>
         </div>
       )}
 
       {/* Edit Case Modal */}
-      {editCaseModalOpen && (
+      {editCaseModalOpen && editCaseTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setEditCaseModalOpen(false)} />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">修改病例消耗信息</h3>
+              <h3 className="text-lg font-semibold text-gray-900">修改病例信息 - {editCaseTarget.case_no}</h3>
               <button onClick={() => setEditCaseModalOpen(false)} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
             </div>
-            <div className="p-6">
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">检测项目</label>
+                <select
+                  value={editCaseProjectId}
+                  onChange={e => setEditCaseProjectId(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">请选择</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">状态</label>
+                <select
+                  value={editCaseStatus}
+                  onChange={e => setEditCaseStatus(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:border-blue-500"
+                >
+                  <option value="normal">正常</option>
+                  <option value="modified">已修改</option>
+                  <option value="unmatched">未关联BOM</option>
+                </select>
+              </div>
               <div className="bg-green-50 border border-green-200 rounded-md p-3 text-sm text-green-800">
                 <strong>说明：</strong>修改仅影响本病例的成本归集，不会修改BOM标准。如需修改标准用量，请使用"修正BOM"功能。
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
               <button onClick={() => setEditCaseModalOpen(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
-              <button onClick={() => { toast.success('病例信息已修改！'); setEditCaseModalOpen(false) }} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">保存修改</button>
+              <button onClick={handleEditCase} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">保存修改</button>
             </div>
           </div>
         </div>

@@ -435,3 +435,72 @@ export interface OperationLog {
   userAgent?: string
   createdAt: string
 }
+
+// ===== 退库 =====
+export interface ReturnRecord {
+  id: string
+  returnNo: string
+  materialId: string
+  materialName?: string
+  batchId?: string
+  quantity: number
+  reason: string
+  operator: string
+  status: string
+  remark?: string
+  createdAt: string
+}
+
+// ===== 报废 =====
+export interface ScrapRecord {
+  id: string
+  scrapNo: string
+  materialId: string
+  materialName?: string
+  batchId?: string
+  quantity: number
+  reason: string
+  operator: string
+  status: string
+  remark?: string
+  createdAt: string
+}
+
+// ===== 调拨 =====
+export interface TransferRecord {
+  id: string
+  inboundNo: string
+  materialId: string
+  materialName?: string
+  batchNo?: string
+  quantity: number
+  fromLocationId?: string
+  fromLocationName?: string
+  toLocationId: string
+  toLocationName?: string
+  operator: string
+  status: string
+  remark?: string
+  createdAt: string
+}
+
+// ===== 采购订单 =====
+export interface PurchaseOrder {
+  id: string
+  orderNo: string
+  materialId: string
+  materialName: string
+  supplierId?: string
+  supplierName?: string
+  orderedQty: number
+  receivedQty: number
+  remainingQty: number
+  unit: string
+  unitPrice: number
+  totalAmount: number
+  expectedDate?: string
+  status: 'pending' | 'partial' | 'completed' | 'cancelled'
+  remark?: string
+  createdAt: string
+  updatedAt: string
+}

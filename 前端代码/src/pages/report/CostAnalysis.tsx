@@ -11,8 +11,6 @@ import {
   LineChart,
   Activity,
   Users,
-  ArrowUpRight,
-  ArrowDownRight,
   Minus,
   FileText,
 } from 'lucide-react'
@@ -48,47 +46,7 @@ const categoryMap: Record<string, { label: string; bg: string; text: string }> =
 
 const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316']
 
-const trendData = [
-  { month: '1月', cost: 82000 },
-  { month: '2月', cost: 76000 },
-  { month: '3月', cost: 91000 },
-  { month: '4月', cost: 88000 },
-  { month: '5月', cost: 95000 },
-  { month: '6月', cost: 102000 },
-  { month: '7月', cost: 98000 },
-  { month: '8月', cost: 105000 },
-  { month: '9月', cost: 110000 },
-  { month: '10月', cost: 108000 },
-  { month: '11月', cost: 115000 },
-  { month: '12月', cost: 108500 },
-]
 
-const pieData = [
-  { name: '分子诊断', value: 34.2 },
-  { name: '病理技术', value: 27.7 },
-  { name: '免疫组化', value: 18.1 },
-  { name: '特殊染色', value: 12.2 },
-  { name: '细胞学', value: 7.8 },
-]
-
-const mockPublicCosts = [
-  { id: 'PUB-001', name: '一次性手套', category: '防护用品', consumption: 1200, amount: 12000, ratio: 26.3 },
-  { id: 'PUB-002', name: '医用口罩', category: '防护用品', consumption: 800, amount: 8000, ratio: 17.5 },
-  { id: 'PUB-003', name: '防护服', category: '防护用品', consumption: 200, amount: 10000, ratio: 21.9 },
-  { id: 'PUB-004', name: '消毒液', category: '消毒用品', consumption: 150, amount: 7500, ratio: 16.4 },
-  { id: 'PUB-005', name: '酒精棉球', category: '消毒用品', consumption: 230, amount: 8100, ratio: 17.8 },
-]
-
-const mockSuppliers = [
-  { id: 'SUP-001', name: '罗氏诊断', contact: '周经理', phone: '400-888-7890', address: '上海市静安区', status: 'active', amount: 452000, orderCount: 12, isLongTerm: true },
-  { id: 'SUP-002', name: '赛默飞世尔', contact: '张经理', phone: '400-888-1234', address: '上海市浦东新区', status: 'active', amount: 328000, orderCount: 8, isLongTerm: true },
-  { id: 'SUP-003', name: '达安基因', contact: '吴经理', phone: '400-888-8901', address: '广州市黄埔区', status: 'active', amount: 185000, orderCount: 15, isLongTerm: true },
-  { id: 'SUP-004', name: '华大基因', contact: '郑经理', phone: '400-888-9012', address: '深圳市南山区', status: 'active', amount: 120000, orderCount: 6, isLongTerm: true },
-  { id: 'SUP-005', name: 'DAKO', contact: '陈经理', phone: '400-888-6789', address: '上海市徐汇区', status: 'active', amount: 98000, orderCount: 4, isLongTerm: true },
-  { id: 'SUP-006', name: '艾本德', contact: '李经理', phone: '400-888-2345', address: '北京市朝阳区', status: 'active', amount: 75000, orderCount: 3, isLongTerm: false },
-  { id: 'SUP-007', name: '赛多利斯', contact: '王经理', phone: '400-888-3456', address: '广州市天河区', status: 'active', amount: 62000, orderCount: 2, isLongTerm: false },
-  { id: 'SUP-008', name: '北京病理科技', contact: '孙经理', phone: '010-12345678', address: '北京市昌平区', status: 'active', amount: 45000, orderCount: 5, isLongTerm: false },
-]
 
 function RankBadge({ rank }: { rank: number }) {
   const className =
@@ -141,6 +99,7 @@ export default function CostAnalysis() {
   const [projectReport, setProjectReport] = useState<ProjectCostReport | null>(null)
   const [materialReport, setMaterialReport] = useState<MaterialCostReport | null>(null)
   const [supplierReport, setSupplierReport] = useState<SupplierCostReport | null>(null)
+  const [trendReport, setTrendReport] = useState<{ trend: { month: string; cost: number }[] } | null>(null)
   const [loading, setLoading] = useState(false)
 
   const { get, getNumber, setMultiple } = useUrlParams()
@@ -170,14 +129,16 @@ export default function CostAnalysis() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [pRes, mRes, sRes]: any = await Promise.all([
-        request.get('/reports/project-cost'),
-        request.get('/reports/material-cost'),
-        request.get('/reports/supplier-cost'),
+      const [pRes, mRes, sRes, tRes]: any = await Promise.all([
+        request.get('/reports/cost-by-project'),
+        request.get('/reports/cost-by-material'),
+        request.get('/reports/cost-by-supplier'),
+        request.get('/reports/cost-trend'),
       ])
       setProjectReport(pRes)
       setMaterialReport(mRes)
       setSupplierReport(sRes)
+      setTrendReport(tRes)
     } catch (e) {
       console.error(e)
     } finally {
@@ -272,7 +233,19 @@ export default function CostAnalysis() {
   }, [filteredMaterials, page])
 
 
-  const totalSupplierAmount = mockSuppliers.reduce((s, i) => s + i.amount, 0)
+  const realSuppliers = supplierReport?.suppliers || []
+  const totalSupplierAmount = realSuppliers.reduce((s: number, i: any) => s + (i.amount || 0), 0)
+
+  const pieData = useMemo(() => {
+    const projects = projectReport?.projects || []
+    if (projects.length === 0) return []
+    const total = projects.reduce((sum, p) => sum + (p.totalCost || 0), 0)
+    if (total === 0) return []
+    return projects.slice(0, 7).map(p => ({
+      name: p.name,
+      value: Number(((p.totalCost / total) * 100).toFixed(1)),
+    }))
+  }, [projectReport])
 
   return (
     <div className="space-y-6">
@@ -338,10 +311,7 @@ export default function CostAnalysis() {
             ¥{(stats.totalCost / 10000).toFixed(1)}万
           </div>
           <div className="flex items-center gap-2 mt-2 text-xs">
-            <span className="inline-flex items-center gap-0.5 text-red-600 font-medium">
-              <ArrowUpRight className="w-3 h-3" />+8.2% 同比
-            </span>
-            <span className="text-gray-400">vs 2023年</span>
+            <span className="text-gray-400">统计周期内总成本</span>
           </div>
         </div>
 
@@ -356,9 +326,6 @@ export default function CostAnalysis() {
             ¥{(stats.projectCost / 10000).toFixed(1)}万
           </div>
           <div className="flex items-center gap-2 mt-2 text-xs">
-            <span className="inline-flex items-center gap-0.5 text-red-600 font-medium">
-              <ArrowUpRight className="w-3 h-3" />+12.5% 同比
-            </span>
             <span className="text-gray-400">占比 {stats.totalCost > 0 ? ((stats.projectCost / stats.totalCost) * 100).toFixed(1) : '0.0'}%</span>
           </div>
         </div>
@@ -374,9 +341,6 @@ export default function CostAnalysis() {
             ¥{(stats.publicCost / 10000).toFixed(1)}万
           </div>
           <div className="flex items-center gap-2 mt-2 text-xs">
-            <span className="inline-flex items-center gap-0.5 text-green-600 font-medium">
-              <ArrowDownRight className="w-3 h-3" />-3.1% 同比
-            </span>
             <span className="text-gray-400">占比 {stats.totalCost > 0 ? ((stats.publicCost / stats.totalCost) * 100).toFixed(1) : '0.0'}%</span>
           </div>
         </div>
@@ -388,9 +352,9 @@ export default function CostAnalysis() {
             </div>
             <span className="text-xs text-gray-500 font-medium">供应商数量</span>
           </div>
-          <div className="text-2xl font-bold text-gray-900">{supplierReport?.suppliers?.length || mockSuppliers.length}</div>
+          <div className="text-2xl font-bold text-gray-900">{realSuppliers.length}</div>
           <div className="flex items-center gap-2 mt-2 text-xs">
-            <span className="text-green-600 font-medium">长期合作 {mockSuppliers.filter(s => s.isLongTerm).length}家</span>
+            <span className="text-gray-400">有采购记录的供应商</span>
           </div>
         </div>
       </div>
@@ -401,7 +365,7 @@ export default function CostAnalysis() {
           <h3 className="text-base font-semibold text-gray-900 mb-4">成本趋势</h3>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <ReLineChart data={trendData}>
+              <ReLineChart data={trendReport?.trend || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={{ stroke: '#e5e7eb' }} />
                 <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={{ stroke: '#e5e7eb' }} tickFormatter={(v: number) => `¥${(v / 10000).toFixed(0)}万`} />
@@ -702,19 +666,19 @@ export default function CostAnalysis() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="text-xs text-gray-500 mb-1">年度消耗</div>
-                <div className="text-lg font-semibold text-gray-900">2,580 件</div>
+                <div className="text-lg font-semibold text-gray-900">-</div>
               </div>
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="text-xs text-gray-500 mb-1">年度成本</div>
-                <div className="text-lg font-semibold text-gray-900">¥45,600</div>
+                <div className="text-lg font-semibold text-gray-900">-</div>
               </div>
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="text-xs text-gray-500 mb-1">占总成本</div>
-                <div className="text-lg font-semibold text-gray-900">4.2%</div>
+                <div className="text-lg font-semibold text-gray-900">-</div>
               </div>
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="text-xs text-gray-500 mb-1">物料种类</div>
-                <div className="text-lg font-semibold text-gray-900">15 种</div>
+                <div className="text-lg font-semibold text-gray-900">-</div>
               </div>
             </div>
 
@@ -733,15 +697,11 @@ export default function CostAnalysis() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {mockPublicCosts.map(item => (
-                      <tr key={item.id} className="hover:bg-gray-50/50 transition-colors duration-150">
-                        <td className="px-4 py-3 font-semibold text-gray-900">{item.name}</td>
-                        <td className="px-4 py-3 text-gray-600">{item.category}</td>
-                        <td className="px-4 py-3 text-right text-gray-600">{item.consumption.toLocaleString()} 件</td>
-                        <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(item.amount)}</td>
-                        <td className="px-4 py-3 text-right text-gray-600">{item.ratio}%</td>
-                      </tr>
-                    ))}
+                    <tr>
+                      <td colSpan={5} className="px-4 py-12 text-center text-gray-400">
+                        公共成本统计功能开发中，请先完善BOM清单配置
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -765,22 +725,28 @@ export default function CostAnalysis() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {mockSuppliers.map(item => {
-                  const ratio = totalSupplierAmount > 0 ? ((item.amount / totalSupplierAmount) * 100).toFixed(1) : '0.0'
-                  return (
-                    <tr key={item.id} className="hover:bg-gray-50/50 transition-colors duration-150">
-                      <td className="px-4 py-3 font-semibold text-gray-900">{item.name}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(item.amount)}</td>
-                      <td className="px-4 py-3 text-right text-gray-600">{item.orderCount} 次</td>
-                      <td className="px-4 py-3 text-right text-gray-600">{ratio}%</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`text-xs font-medium ${item.isLongTerm ? 'text-green-600' : 'text-gray-500'}`}>
-                          {item.isLongTerm ? '长期合作' : '普通合作'}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
+                {realSuppliers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-12 text-center text-gray-400">暂无供应商数据</td>
+                  </tr>
+                ) : (
+                  realSuppliers.map((item: any) => {
+                    const ratio = totalSupplierAmount > 0 ? ((item.amount / totalSupplierAmount) * 100).toFixed(1) : '0.0'
+                    return (
+                      <tr key={item.id} className="hover:bg-gray-50/50 transition-colors duration-150">
+                        <td className="px-4 py-3 font-semibold text-gray-900">{item.name}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(item.amount)}</td>
+                        <td className="px-4 py-3 text-right text-gray-600">{item.orderCount} 次</td>
+                        <td className="px-4 py-3 text-right text-gray-600">{ratio}%</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-xs font-medium ${item.status === 'long-term' ? 'text-green-600' : 'text-gray-500'}`}>
+                            {item.status === 'long-term' ? '长期合作' : '普通合作'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -876,12 +842,12 @@ export default function CostAnalysis() {
                   <div className="text-xs text-gray-500 mt-0.5">单病例均成本</div>
                 </div>
                 <div>
-                  <div className="text-xl font-semibold text-gray-900">5-7天</div>
+                  <div className="text-xl font-semibold text-gray-900">-</div>
                   <div className="text-xs text-gray-500 mt-0.5">平均检测周期</div>
                 </div>
                 <div>
-                  <div className="text-xl font-semibold text-green-600">98.5%</div>
-                  <div className="text-xs text-gray-500 mt-0.5">LIS数据完整度</div>
+                  <div className="text-xl font-semibold text-green-600">-</div>
+                  <div className="text-xs text-gray-500 mt-0.5">数据完整度</div>
                 </div>
               </div>
             </div>
@@ -923,45 +889,17 @@ export default function CostAnalysis() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {[1, 2, 3].map(i => (
-                      <tr key={i} className="hover:bg-gray-50/50 transition-colors duration-150">
-                        <td className="px-4 py-3 font-mono text-blue-600 text-xs">B2024-0145{6 - i}</td>
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900 text-sm">张*</div>
-                          <div className="text-xs text-gray-500">男 45岁</div>
-                        </td>
-                        <td className="px-4 py-3"><CategoryTag category={selectedProject.category} /></td>
-                        <td className="px-4 py-3 text-right text-xs text-gray-600">
-                          <div>NGS建库试剂盒 ×1</div>
-                          <div className="text-gray-400">测序芯片 ×0.025</div>
-                        </td>
-                        <td className="px-4 py-3 text-right font-semibold text-gray-900 text-sm">¥3,412.50</td>
-                        <td className="px-4 py-3 text-xs text-gray-600">2024-01-15</td>
-                        <td className="px-4 py-3 text-center">
-                          <span className="text-xs font-medium text-green-600">已完成</span>
-                        </td>
-                      </tr>
-                    ))}
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
+                        病例明细功能开发中，当前仅展示项目汇总数据
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between px-6 py-3 border-t border-gray-100 bg-gray-50">
-              <span className="text-xs text-gray-500">
-                共 <strong className="text-gray-700">450</strong> 条记录，显示 1-3 条
-              </span>
-              <div className="flex items-center gap-2">
-                <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 disabled:opacity-40 transition-all duration-150" disabled>
-                  上一页
-                </button>
-                <button className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-[6px] hover:bg-blue-700 transition-all duration-150">
-                  下一页
-                </button>
-              </div>
-            </div>
-
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
               <button
                 onClick={() => setDetailModalOpen(false)}

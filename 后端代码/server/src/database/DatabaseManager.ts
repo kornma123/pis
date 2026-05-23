@@ -101,6 +101,33 @@ export function initializeDatabase(): void {
       console.log('Migrated purchase_orders table: added is_deleted column')
     }
   } catch (_e) { /* ignore */ }
+
+  // 兼容旧数据库：添加 return_records.is_deleted 字段
+  try {
+    const rrCols = database.prepare("PRAGMA table_info(return_records)").all() as any[]
+    if (!rrCols.find(c => c.name === 'is_deleted')) {
+      database.exec("ALTER TABLE return_records ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
+      console.log('Migrated return_records table: added is_deleted column')
+    }
+  } catch (_e) { /* ignore */ }
+
+  // 兼容旧数据库：添加 scrap_records.is_deleted 字段
+  try {
+    const srCols = database.prepare("PRAGMA table_info(scrap_records)").all() as any[]
+    if (!srCols.find(c => c.name === 'is_deleted')) {
+      database.exec("ALTER TABLE scrap_records ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
+      console.log('Migrated scrap_records table: added is_deleted column')
+    }
+  } catch (_e) { /* ignore */ }
+
+  // 兼容旧数据库：添加 stocktaking_records.is_deleted 字段
+  try {
+    const stCols = database.prepare("PRAGMA table_info(stocktaking_records)").all() as any[]
+    if (!stCols.find(c => c.name === 'is_deleted')) {
+      database.exec("ALTER TABLE stocktaking_records ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
+      console.log('Migrated stocktaking_records table: added is_deleted column')
+    }
+  } catch (_e) { /* ignore */ }
   database.exec(`
     CREATE TABLE IF NOT EXISTS outbound_records (id TEXT PRIMARY KEY, outbound_no TEXT NOT NULL UNIQUE, type TEXT NOT NULL, project_id TEXT, total_cost DECIMAL(18, 4) NOT NULL DEFAULT 0, operator TEXT NOT NULL, approver TEXT, approved_at TEXT, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)

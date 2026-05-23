@@ -16,9 +16,9 @@ router.get('/', (req, res) => {
   try {
     const { page = 1, pageSize = 20 } = req.query
     const db = getDatabase()
-    const count = (db.prepare('SELECT COUNT(*) as total FROM scrap_records').get() as any)?.total || 0
+    const count = (db.prepare('SELECT COUNT(*) as total FROM scrap_records WHERE is_deleted = 0').get() as any)?.total || 0
     const offset = (Number(page) - 1) * Number(pageSize)
-    const list = db.prepare('SELECT * FROM scrap_records ORDER BY created_at DESC LIMIT ? OFFSET ?').all(Number(pageSize), offset) as any[]
+    const list = db.prepare('SELECT * FROM scrap_records WHERE is_deleted = 0 ORDER BY created_at DESC LIMIT ? OFFSET ?').all(Number(pageSize), offset) as any[]
     successList(res, list.map((r: any) => ({
       id: r.id, scrapNo: r.scrap_no, materialId: r.material_id,
       quantity: r.quantity, reason: r.reason, operator: r.operator,
@@ -38,11 +38,66 @@ router.post('/', (req, res) => {
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
     const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
     if (!inv || inv.stock < quantity) { error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return }
-    const id = uuidv4()
-    db.prepare('INSERT INTO scrap_records (id, scrap_no, material_id, quantity, reason, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, generateNo(), materialId, quantity, reason, operator || 'system', remark || null)
-    db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(quantity, materialId)
-    success(res, { id }, 'Scrap created')
+
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const id = uuidv4()
+      db.prepare('INSERT INTO scrap_records (id, scrap_no, material_id, quantity, reason, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(id, generateNo(), materialId, quantity, reason, operator || 'system', remark || null)
+      db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(quantity, materialId)
+
+      // 负库存兜底
+      const afterCheck = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock
+      if (afterCheck < 0) {
+        db.exec('ROLLBACK')
+        error(res, '库存不能为负数', 'STOCK_NEGATIVE', 422)
+        return
+      }
+
+      const afterStock = (inv?.stock || 0) - quantity
+      const logId = uuidv4()
+      db.prepare(`
+        INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
+        VALUES (?, 'scrap', ?, ?, ?, ?, ?, 'scrap', ?)
+      `).run(logId, materialId, -quantity, inv?.stock || 0, afterStock, id, operator || 'system')
+
+      db.exec('COMMIT')
+      success(res, { id }, 'Scrap created')
+    } catch (e: any) {
+      db.exec('ROLLBACK')
+      throw e
+    }
+  } catch (err: any) { error(res, err.message) }
+})
+
+router.delete('/:id', (req, res) => {
+  try {
+    const { id } = req.params
+    const db = getDatabase()
+    const record = db.prepare('SELECT * FROM scrap_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    if (!record) { error(res, '记录不存在或已删除', 'NOT_FOUND', 404); return }
+
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('UPDATE scrap_records SET is_deleted = 1 WHERE id = ?').run(id)
+
+      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any
+      const beforeStock = inv?.stock || 0
+      const afterStock = beforeStock + record.quantity
+      db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(afterStock, record.material_id)
+
+      const logId = uuidv4()
+      db.prepare(`
+        INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
+        VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'scrap_cancel', ?, '撤销报废记录')
+      `).run(logId, record.material_id, record.quantity, beforeStock, afterStock, id, req.body.operator || 'system')
+
+      db.exec('COMMIT')
+      success(res, null, '报废记录已撤销')
+    } catch (e: any) {
+      db.exec('ROLLBACK')
+      throw e
+    }
   } catch (err: any) { error(res, err.message) }
 })
 

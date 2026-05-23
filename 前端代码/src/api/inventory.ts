@@ -51,6 +51,12 @@ export const outboundApi = {
 
   create: (data: OutboundFormData) =>
     request.post<OutboundRecord>('/outbound', data),
+
+  update: (id: string, data: Partial<OutboundFormData>) =>
+    request.put<OutboundRecord>(`/outbound/${id}`, data),
+
+  delete: (id: string) =>
+    request.delete(`/outbound/${id}`),
 }
 
 export const scrapApi = {
@@ -58,6 +64,26 @@ export const scrapApi = {
     request.get<PaginationData<any>>('/scraps', { params }),
   create: (data: { materialId: string; quantity: number; reason: string; operator?: string; remark?: string }) =>
     request.post<any>('/scraps', data),
+  delete: (id: string) =>
+    request.delete(`/scraps/${id}`),
+}
+
+export const returnApi = {
+  getList: (params?: PageParams) =>
+    request.get<PaginationData<any>>('/returns', { params }),
+  create: (data: { materialId: string; quantity: number; reason: string; operator?: string; remark?: string }) =>
+    request.post<any>('/returns', data),
+  delete: (id: string) =>
+    request.delete(`/returns/${id}`),
+}
+
+export const transferApi = {
+  getList: (params?: PageParams) =>
+    request.get<PaginationData<any>>('/transfers', { params }),
+  createInbound: (data: { materialId: string; batchNo?: string; quantity: number; fromLocationId?: string; fromLocationName?: string; toLocationId: string; operator?: string; remark?: string }) =>
+    request.post<any>('/transfers/inbound', data),
+  delete: (id: string) =>
+    request.delete(`/transfers/${id}`),
 }
 
 export const depletionApi = {

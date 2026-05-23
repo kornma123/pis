@@ -5,13 +5,13 @@ import TopBar from './TopBar'
 
 const ROLE_MENU_MAP: Record<string, string[]> = {
   admin: [
-    '/', '/inventory', '/inbound', '/outbound', '/stocktaking',
+    '/', '/inventory', '/inbound', '/outbound', '/returns', '/scraps', '/transfers', '/stocktaking',
     '/projects', '/bom', '/reconciliation', '/cost-analysis',
     '/categories', '/materials', '/alerts',
-    '/suppliers', '/locations', '/users', '/roles', '/logs',
+    '/purchase-orders', '/suppliers', '/locations', '/users', '/roles', '/logs',
   ],
   warehouse_manager: [
-    '/', '/inventory', '/inbound', '/outbound', '/stocktaking',
+    '/', '/inventory', '/inbound', '/outbound', '/returns', '/scraps', '/transfers', '/stocktaking',
     '/suppliers', '/locations', '/materials', '/categories', '/alerts',
   ],
   technician: [
@@ -19,7 +19,7 @@ const ROLE_MENU_MAP: Record<string, string[]> = {
     '/cost-analysis', '/materials', '/categories', '/alerts',
   ],
   procurement: [
-    '/', '/inventory', '/inbound', '/materials', '/suppliers', '/categories', '/alerts',
+    '/', '/inventory', '/inbound', '/materials', '/suppliers', '/purchase-orders', '/categories', '/alerts',
   ],
   finance: [
     '/', '/inventory', '/reconciliation', '/cost-analysis', '/categories', '/alerts',

@@ -104,4 +104,25 @@ router.get('/cost-by-supplier', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
+router.get('/cost-trend', (req, res) => {
+  try {
+    const { startDate, endDate } = req.query
+    const db = getDatabase()
+    let where = "status = 'completed' AND is_deleted = 0"
+    const params: any[] = []
+    if (startDate) { where += ' AND created_at >= ?'; params.push(startDate) }
+    if (endDate) { where += ' AND created_at <= ?'; params.push(`${endDate}T23:59:59`) }
+
+    const rows = db.prepare(`
+      SELECT strftime('%Y-%m', created_at) as month, SUM(total_cost) as cost
+      FROM outbound_records
+      WHERE ${where}
+      GROUP BY month
+      ORDER BY month
+    `).all(...params) as any[]
+
+    success(res, { trend: rows.map((r: any) => ({ month: r.month, cost: r.cost || 0 })) })
+  } catch (err: any) { error(res, err.message) }
+})
+
 export default router

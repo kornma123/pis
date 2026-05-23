@@ -23,6 +23,10 @@ import {
   ChevronRight,
   PanelLeft,
   PanelRight,
+  ShoppingCart,
+  Undo2,
+  Trash2,
+  ArrowRightLeft,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -36,6 +40,9 @@ const ALL_MAIN_MENU: MenuItem[] = [
   { label: '库存列表', path: '/inventory', icon: Package },
   { label: '入库记录', path: '/inbound', icon: ArrowDownToLine },
   { label: '出库记录', path: '/outbound', icon: ArrowUpFromLine },
+  { label: '退库管理', path: '/returns', icon: Undo2 },
+  { label: '报废管理', path: '/scraps', icon: Trash2 },
+  { label: '调拨管理', path: '/transfers', icon: ArrowRightLeft },
   { label: '库存盘点', path: '/stocktaking', icon: ClipboardCheck },
   { label: '检测项目', path: '/projects', icon: FlaskConical },
   { label: 'BOM清单', path: '/bom', icon: ClipboardList },
@@ -47,6 +54,7 @@ const ALL_MAIN_MENU: MenuItem[] = [
 ]
 
 const ALL_SYSTEM_MENU: MenuItem[] = [
+  { label: '采购订单', path: '/purchase-orders', icon: ShoppingCart },
   { label: '供应商管理', path: '/suppliers', icon: Truck },
   { label: '库位管理', path: '/locations', icon: MapPin },
   { label: '用户管理', path: '/users', icon: Users },
@@ -57,13 +65,13 @@ const ALL_SYSTEM_MENU: MenuItem[] = [
 // 角色-菜单权限映射（与后端 E2E 权限矩阵保持一致）
 const ROLE_MENU_MAP: Record<string, string[]> = {
   admin: [
-    '/', '/inventory', '/inbound', '/outbound', '/stocktaking',
+    '/', '/inventory', '/inbound', '/outbound', '/returns', '/scraps', '/transfers', '/stocktaking',
     '/projects', '/bom', '/reconciliation', '/cost-analysis',
     '/categories', '/materials', '/alerts',
-    '/suppliers', '/locations', '/users', '/roles', '/logs',
+    '/purchase-orders', '/suppliers', '/locations', '/users', '/roles', '/logs',
   ],
   warehouse_manager: [
-    '/', '/inventory', '/inbound', '/outbound', '/stocktaking',
+    '/', '/inventory', '/inbound', '/outbound', '/returns', '/scraps', '/transfers', '/stocktaking',
     '/suppliers', '/locations', '/materials', '/alerts',
   ],
   technician: [
@@ -71,7 +79,7 @@ const ROLE_MENU_MAP: Record<string, string[]> = {
     '/cost-analysis', '/materials',
   ],
   procurement: [
-    '/', '/inventory', '/inbound', '/materials', '/suppliers',
+    '/', '/inventory', '/inbound', '/materials', '/suppliers', '/purchase-orders',
   ],
   finance: [
     '/', '/inventory', '/reconciliation', '/cost-analysis',

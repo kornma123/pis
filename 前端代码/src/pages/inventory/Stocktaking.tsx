@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Search, Plus, X, CheckCircle, ArrowRight, ArrowLeft,
   FolderOpen, AlertTriangle, Loader2, BarChart3,
-  FileText
+  FileText, Trash2
 } from 'lucide-react'
 import request from '@/api/request'
 import { materialApi } from '@/api/master'
@@ -67,6 +67,8 @@ export default function Stocktaking() {
   const [detailRow, setDetailRow] = useState<StocktakingRecord | null>(null)
   const [createStep, setCreateStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [recordToDelete, setRecordToDelete] = useState<StocktakingRecord | null>(null)
 
   const [materials, setMaterials] = useState<Material[]>([])
   const [form, setForm] = useState<FormData>({
@@ -156,6 +158,24 @@ export default function Stocktaking() {
   const openAdjust = (row: StocktakingRecord) => {
     setDetailRow(row)
     setModalType('adjust')
+  }
+
+  const openDelete = (row: StocktakingRecord) => {
+    setRecordToDelete(row)
+    setDeleteConfirmOpen(true)
+  }
+
+  const handleDelete = async () => {
+    if (!recordToDelete) return
+    try {
+      await request.delete(`/stocktaking/${recordToDelete.id}`)
+      toast.success('盘点记录已撤销')
+      setDeleteConfirmOpen(false)
+      setRecordToDelete(null)
+      refresh()
+    } catch (e) {
+      toast.error('撤销失败')
+    }
   }
 
   const handleQuery = () => { setPage(1) }
@@ -267,6 +287,13 @@ export default function Stocktaking() {
                       {row.difference !== 0 && (
                         <button onClick={() => openAdjust(row)} className="px-2 py-1 text-gray-500 hover:text-blue-600 text-xs font-medium transition-colors">查看差异</button>
                       )}
+                      <button
+                        onClick={() => openDelete(row)}
+                        className="px-2 py-1 text-gray-400 hover:text-red-600 text-xs font-medium transition-colors"
+                        title="撤销"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -501,6 +528,30 @@ export default function Stocktaking() {
               {detailRow.difference !== 0 && (
                 <button onClick={() => openAdjust(detailRow)} className="px-4 py-2 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600">处理差异</button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirmOpen && recordToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={e => { if (e.target === e.currentTarget) setDeleteConfirmOpen(false) }}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">确认撤销</h3>
+              <button onClick={() => setDeleteConfirmOpen(false)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors duration-150">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600">
+                确定要撤销盘点记录 <span className="font-mono font-medium">{recordToDelete.stocktakingNo}</span> 吗？
+              </p>
+              <p className="text-sm text-gray-500 mt-2">撤销后库存将自动回滚到盘点前状态。</p>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
+              <button onClick={() => setDeleteConfirmOpen(false)} className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors duration-150">取消</button>
+              <button onClick={handleDelete} className="px-4 py-2 text-sm text-white bg-red-500 rounded-md hover:bg-red-600 transition-colors duration-150">确认撤销</button>
             </div>
           </div>
         </div>

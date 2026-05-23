@@ -18,6 +18,10 @@ import Alerts from './pages/alerts/Alerts'
 import Users from './pages/system/Users'
 import Roles from './pages/system/Roles'
 import Logs from './pages/system/Logs'
+import PurchaseOrders from './pages/purchase/PurchaseOrders'
+import Returns from './pages/returns/Returns'
+import Scraps from './pages/scraps/Scraps'
+import Transfers from './pages/transfers/Transfers'
 import Login from './pages/auth/Login'
 import NotFound from './pages/NotFound'
 
@@ -44,6 +48,10 @@ function App() {
           <Route path="/users" element={<Users />} />
           <Route path="/roles" element={<Roles />} />
           <Route path="/logs" element={<Logs />} />
+          <Route path="/purchase-orders" element={<PurchaseOrders />} />
+          <Route path="/returns" element={<Returns />} />
+          <Route path="/scraps" element={<Scraps />} />
+          <Route path="/transfers" element={<Transfers />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
