@@ -56,6 +56,15 @@ export default function Outbound() {
     ? getNumber('pageSize', 10)
     : 10
 
+  // Filters (must declare before usePagination which depends on statusFilter)
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
+  const [searchText, setSearchText] = useState('')
+  const [materialFilter, setMaterialFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState<'' | 'project' | 'transfer' | 'scrap'>('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+
   const {
     data,
     loading,
@@ -91,15 +100,6 @@ export default function Outbound() {
   // References
   const [materials, setMaterials] = useState<Material[]>([])
   const [projects, setProjects] = useState<Project[]>([])
-
-  // Filters
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
-  const [searchText, setSearchText] = useState('')
-  const [materialFilter, setMaterialFilter] = useState('')
-  const [typeFilter, setTypeFilter] = useState<'' | 'project' | 'transfer' | 'scrap'>('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
