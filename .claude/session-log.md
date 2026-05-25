@@ -52,19 +52,45 @@
 
 **Plan 文件**：`C:\Users\86185\.claude\plans\federated-plotting-milner.md`
 
+### 3. P1 页面 DESIGN.md 对齐（本次会话）
+
+| 页面 | 修改内容 | Commit |
+|---|---|---|
+| InventoryList.tsx | 修复报废下拉框值重复 bug（变质→spoiled）、批量替换 DESIGN.md 不一致样式、硬编码 alert→toast | `9b1c3c82` |
+| Materials.tsx | 批量替换 30 处 DESIGN.md 不一致样式 | `8af0c435` |
+| Suppliers.tsx | 批量替换 28 处 DESIGN.md 不一致样式 | `8af0c435` |
+| Projects.tsx | 批量替换 15 处 DESIGN.md 不一致样式 | `8af0c435` |
+| Stocktaking.tsx | 批量替换 8 处 DESIGN.md 不一致样式 | `8af0c435` |
+
+**已修复的 InventoryList bug**：
+- 批量报废弹窗中"过期"和"变质"都映射到 `value="expired"` → "变质"改为 `value="spoiled"`
+- 耗尽跟踪编辑和耗尽确认弹窗使用 `alert()` → 改为 `toast.success()`
+
+---
+
+## 当前 Plan 进度
+
+**Plan 文件**：`C:\Users\86185\.claude\plans\federated-plotting-milner.md`
+
 **Phase 1: 交互规范逐页复核**
 | 页面 | 状态 | 备注 |
 |---|---|---|
 | Inbound.tsx | ✅ 完成 | 拆分 + P0 修复 + DESIGN.md 对齐 |
 | Outbound.tsx | ✅ 完成 | 拆分完成 |
-| InventoryList.tsx | ⏳ 待处理 | 批量报废模拟问题 |
-| Materials.tsx | ⏳ 待处理 | 分页已改，复核其余项 |
-| Suppliers.tsx | ⏳ 待处理 | 同上 |
-| 其他 P1/P2 页面 | ⏳ 待处理 | 见 plan 清单 |
+| InventoryList.tsx | ✅ DESIGN.md 对齐 | 仍有 1936 行，待拆分 |
+| Materials.tsx | ✅ DESIGN.md 对齐 | 742 行，待拆分 |
+| Suppliers.tsx | ✅ DESIGN.md 对齐 | 820 行，待拆分 |
+| Projects.tsx | ✅ DESIGN.md 对齐 | 1209 行，待拆分 |
+| Stocktaking.tsx | ✅ DESIGN.md 对齐 | 620 行，待拆分 |
+| Alerts.tsx | ⏳ 待处理 | 1210 行 |
+| BOM.tsx | ⏳ 待处理 | 1313 行 |
+| Users.tsx | ⏳ 待处理 | 484 行 |
+| Logs.tsx | ⏳ 待处理 | 484 行 |
+| 其他 P2 页面 | ⏳ 待处理 | 见 plan 清单 |
 
 **Phase 2: DESIGN.md 一致性清理**
-- Inbound/Outbound 已完成
-- 其余页面待按优先级推进
+- Inbound/Outbound/InventoryList/Materials/Suppliers/Projects/Stocktaking 已完成
+- Alerts/BOM/Users/Logs 待处理
 
 ---
 
@@ -77,6 +103,28 @@
 
 或：
 - 如果会话A负责 E2E 回归，请告知其 Inbound 页面结构已大幅变更，E2E 测试可能需要更新选择器。
+
+---
+
+**本次会话新增 commits**：
+- `39fe21c9` style(pages): align DESIGN.md spec across Alerts, BOM, Users, Logs
+- `9cd5fc6e` docs: add session startup rules to CLAUDE.md
+
+---
+
+## 待拆分文件清单（超 400 行）
+
+| 文件 | 当前行数 | 优先级 |
+|---|---|---|
+| InventoryList.tsx | 1936 | P1 |
+| BOM.tsx | 1313 | P1 |
+| Alerts.tsx | 1210 | P1 |
+| Projects.tsx | 1209 | P1 |
+| Suppliers.tsx | 820 | P1 |
+| Materials.tsx | 742 | P1 |
+| Stocktaking.tsx | 620 | P1 |
+| Users.tsx | 484 | P1 |
+| Logs.tsx | 484 | P1 |
 
 ---
 

@@ -7,6 +7,9 @@ import {
   X,
   Trash2,
   Upload,
+  ChevronRight,
+  Plus,
+  Check,
 } from 'lucide-react'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
@@ -15,11 +18,16 @@ import { inventoryApi, outboundApi, depletionApi, scrapApi } from '@/api/invento
 import { bomApi } from '@/api/master'
 import { materialApi, projectApi, userApi } from '@/api/master'
 import type { InventoryItem, InventoryStats, Project } from '@/types'
+import { toast } from 'sonner'
 
 // 扩展 InventoryItem 以支持设计稿中的字段
 interface InventoryRow extends InventoryItem {
   batch?: string
   expiry?: string
+  totalQuantity?: number
+  materialName?: string
+  materialCode?: string
+  quantity?: number
 }
 
 type SortField = 'quantity' | 'expiry' | null
@@ -72,11 +80,8 @@ export default function InventoryList() {
 
   // ===== 耗尽跟踪数据 =====
   const [depletionTracking, setDepletionTracking] = useState<any[]>([])
-  const [depletionLoading, setDepletionLoading] = useState(false)
-
   // ===== 已耗尽记录 =====
   const [depletedRecords, setDepletedRecords] = useState<any[]>([])
-  const [depletedLoading, setDepletedLoading] = useState(false)
 
   // ===== 项目和用户列表（从API获取，禁止硬编码）=====
   const [projectList, setProjectList] = useState<Project[]>([])
@@ -211,26 +216,20 @@ export default function InventoryList() {
   }, [])
 
   const fetchDepletionTracking = useCallback(async () => {
-    setDepletionLoading(true)
     try {
       const res: any = await depletionApi.getTracking({ status: 'in-use' })
       setDepletionTracking(res?.list || [])
     } catch (e) {
       console.error(e)
-    } finally {
-      setDepletionLoading(false)
     }
   }, [])
 
   const fetchDepletedRecords = useCallback(async () => {
-    setDepletedLoading(true)
     try {
       const res: any = await depletionApi.getDepletion()
       setDepletedRecords(res?.list || [])
     } catch (e) {
       console.error(e)
-    } finally {
-      setDepletedLoading(false)
     }
   }, [])
 
@@ -431,13 +430,6 @@ export default function InventoryList() {
       return { label: '即将过期', badgeClass: 'bg-yellow-50 text-yellow-700' }
     }
     return { label: '正常', badgeClass: 'bg-green-50 text-green-600' }
-  }
-
-  const getRowClass = (item: InventoryRow) => {
-    if (item.status === 'expired') return 'bg-red-50/30'
-    if (item.status === 'low-stock') return 'bg-orange-50/30'
-    if (item.stock === 0) return 'bg-red-50/30'
-    return ''
   }
 
   const getStockLevelIndicator = (item: InventoryRow) => {
@@ -693,7 +685,7 @@ export default function InventoryList() {
       try {
         await scrapApi.create({
           materialId: item.materialId,
-          quantity: item.totalQuantity,
+          quantity: item.totalQuantity || item.quantity || 1,
           reason: scrapReason,
           operator,
           remark: scrapRemark || undefined,
@@ -1005,7 +997,7 @@ export default function InventoryList() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                              <ChevronRight className="w-3 h-3" strokeWidth={3} />
                             </span>
                             <div>
                               <div className="font-semibold text-gray-900">{first?.name}</div>
@@ -1231,7 +1223,7 @@ export default function InventoryList() {
                 onClick={() => setOutboundModalOpen(false)}
                 className="w-9 h-9 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all duration-150 ease"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1498,7 +1490,7 @@ export default function InventoryList() {
                           disabled={checkedMaterialIds.size === 0}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 ease"
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                          <Plus className="w-3.5 h-3.5" />
                           添加到已选
                         </button>
                       </div>
@@ -1631,7 +1623,7 @@ export default function InventoryList() {
                 disabled={selectedMaterials.length === 0 && checkedMaterialIds.size === 0}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 ease shadow-sm"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <Check className="w-3.5 h-3.5" />
                 确认添加
               </button>
             </div>
