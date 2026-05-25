@@ -15,8 +15,9 @@ type RoleKey = keyof typeof ROLES
 const ROLE_KEYS: RoleKey[] = ['admin', 'warehouse_manager', 'technician', 'pathologist', 'procurement', 'finance']
 
 async function loginAs(page: Page, role: RoleKey) {
-  await page.goto(`${FE_BASE}/login`)
+  await page.goto('about:blank')
   await page.evaluate(() => localStorage.clear())
+  await page.goto(`${FE_BASE}/login`)
   const cred = ROLES[role]
   await page.fill('input[type="text"]', cred.username)
   await page.fill('input[type="password"]', cred.password)
@@ -41,8 +42,9 @@ async function apiFetch(token: string, method: string, path: string, body?: any)
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto(`${FE_BASE}/login`)
+  await page.goto('about:blank')
   await page.evaluate(() => localStorage.clear())
+  await page.goto(`${FE_BASE}/login`)
 })
 
 // ═══════════════════════════════════════════════════════════════

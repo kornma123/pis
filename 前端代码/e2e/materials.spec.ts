@@ -17,8 +17,9 @@ const MAT_WRITE_ROLES: RoleKey[] = ['admin', 'procurement']
 const MAT_FORBIDDEN: RoleKey[] = ['finance']
 
 async function loginAs(page: Page, role: RoleKey) {
-  await page.goto(`${FE_BASE}/login`)
+  await page.goto('about:blank')
   await page.evaluate(() => localStorage.clear())
+  await page.goto(`${FE_BASE}/login`)
   const cred = ROLES[role]
   await page.fill('input[type="text"]', cred.username)
   await page.fill('input[type="password"]', cred.password)
