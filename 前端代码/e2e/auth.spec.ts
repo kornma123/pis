@@ -15,8 +15,11 @@ type RoleKey = keyof typeof ROLES
 const ROLE_KEYS: RoleKey[] = ['admin', 'warehouse_manager', 'technician', 'pathologist', 'procurement', 'finance']
 
 async function loginAs(page: Page, role: RoleKey) {
-  await page.goto(`${FE_BASE}/login`)
+  // Ensure clean state: clear localStorage before navigating to login
+  // to prevent login page auto-redirect from seeing stale tokens
+  await page.goto('about:blank')
   await page.evaluate(() => localStorage.clear())
+  await page.goto(`${FE_BASE}/login`)
   const cred = ROLES[role]
   await page.fill('input[type="text"]', cred.username)
   await page.fill('input[type="password"]', cred.password)
@@ -38,7 +41,9 @@ async function loginAs(page: Page, role: RoleKey) {
     return null
   })
   if (actualRole !== role) {
-    console.warn(`[E2E Auth Warning] Expected role: ${role}, actual: ${actualRole} for user: ${cred.username}`)
+    const currentUrl = page.url()
+    const lsKeys = await page.evaluate(() => Object.keys(localStorage))
+    console.warn(`[E2E Auth Warning] Expected role: ${role}, actual: ${actualRole} for user: ${cred.username}, url: ${currentUrl}, localStorage keys: ${lsKeys.join(',')}`)
   }
 }
 
@@ -60,8 +65,11 @@ async function apiFetch(token: string, method: string, path: string, body?: any)
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto(`${FE_BASE}/login`)
+  // Clear localStorage on a blank page before navigating to login
+  // to prevent login page useEffect from seeing stale tokens
+  await page.goto('about:blank')
   await page.evaluate(() => localStorage.clear())
+  await page.goto(`${FE_BASE}/login`)
 })
 
 // ═══════════════════════════════════════════════════════════════
@@ -587,7 +595,7 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
   test('BLIND-AUTH-02. 已登录用户回退到登录页应自动重定向到首页', async ({ page }) => {
     await loginAs(page, 'admin')
     await page.goto(`${FE_BASE}/login`)
-    await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+    await expect(page).toHaveURL(`${FE_BASE}/`, { timeout: 10000 })
   })
 
   test('BLIND-AUTH-03. Token过期且refreshToken无效后应重定向登录', async ({ page }) => {
