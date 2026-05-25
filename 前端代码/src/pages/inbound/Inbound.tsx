@@ -1,5 +1,8 @@
 ﻿import { useState, useEffect, useMemo, useRef } from 'react'
-import { QrCode } from 'lucide-react'
+import {
+  QrCode, Plus, Search, Upload, Download, Printer,
+  CircleCheck, RotateCcw, AlertTriangle,
+} from 'lucide-react'
 import { inboundApi, purchaseOrderApi } from '@/api/inventory'
 import { materialApi, supplierApi, locationApi } from '@/api/master'
 import type { InboundRecord, Material, Supplier, Location } from '@/types'
@@ -111,91 +114,6 @@ function getSourceBadgeColor(type: string): string {
 // ============================================
 // 图标组件（内联 SVG，与设计稿一致）
 // ============================================
-function IconPlus({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  )
-}
-
-function IconSearch({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-  )
-}
-
-function IconUpload({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
-  )
-}
-
-function IconDownload({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  )
-}
-
-function IconPrinter({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="6 9 6 2 18 2 18 9" />
-      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-      <rect x="6" y="14" width="12" height="8" />
-    </svg>
-  )
-}
-
-function IconCheck({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </svg>
-  )
-}
-
-function IconRestore({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-    </svg>
-  )
-}
-
-function IconWarning({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  )
-}
-
-function IconQr({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-      <line x1="8" y1="12" x2="16" y2="12" />
-      <line x1="12" y1="8" x2="12" y2="16" />
-    </svg>
-  )
-}
 
 // ============================================
 // 主组件
@@ -214,13 +132,21 @@ export default function Inbound() {
   const [locations, setLocations] = useState<Location[]>([])
 
   // 筛选状态
-  const [searchKeyword, setSearchKeyword] = useState(url.get('keyword', ''))
-  const [filterMaterial, setFilterMaterial] = useState(url.get('materialId', ''))
-  const [filterStatus, setFilterStatus] = useState(url.get('status', ''))
-  const [filterType, setFilterType] = useState(url.get('type', ''))
-  const [filterStartDate, setFilterStartDate] = useState(url.get('startDate', ''))
-  const [filterEndDate, setFilterEndDate] = useState(url.get('endDate', ''))
-  const [activeQuickFilter, setActiveQuickFilter] = useState(url.get('quickFilter', 'all'))
+  const [searchKeyword, setSearchKeywordRaw] = useState(url.get('keyword', ''))
+  const [filterMaterial, setFilterMaterialRaw] = useState(url.get('materialId', ''))
+  const [filterStatus, setFilterStatusRaw] = useState(url.get('status', ''))
+  const [filterType, setFilterTypeRaw] = useState(url.get('type', ''))
+  const [filterStartDate, setFilterStartDateRaw] = useState(url.get('startDate', ''))
+  const [filterEndDate, setFilterEndDateRaw] = useState(url.get('endDate', ''))
+  const [activeQuickFilter, setActiveQuickFilterRaw] = useState(url.get('quickFilter', 'all'))
+
+  const setSearchKeyword = (v: string) => { setSearchKeywordRaw(v); setPage(1) }
+  const setFilterMaterial = (v: string) => { setFilterMaterialRaw(v); setPage(1) }
+  const setFilterStatus = (v: string) => { setFilterStatusRaw(v); setPage(1) }
+  const setFilterType = (v: string) => { setFilterTypeRaw(v); setPage(1) }
+  const setFilterStartDate = (v: string) => { setFilterStartDateRaw(v); setPage(1) }
+  const setFilterEndDate = (v: string) => { setFilterEndDateRaw(v); setPage(1) }
+  const setActiveQuickFilter = (v: string) => { setActiveQuickFilterRaw(v); setPage(1) }
 
   // 选择状态
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -596,12 +522,14 @@ export default function Inbound() {
   }
 
   const handleResetFilters = () => {
-    setSearchKeyword('')
-    setFilterMaterial('')
-    setFilterStatus('')
-    setFilterStartDate('')
-    setFilterEndDate('')
-    setActiveQuickFilter('all')
+    setSearchKeywordRaw('')
+    setFilterMaterialRaw('')
+    setFilterStatusRaw('')
+    setFilterStartDateRaw('')
+    setFilterEndDateRaw('')
+    setActiveQuickFilterRaw('all')
+    setFilterTypeRaw('')
+    setPage(1)
   }
 
   const getRecordStatus = (row: InboundRecord): InboundStatus => row.status
@@ -623,27 +551,27 @@ export default function Inbound() {
       <div className="flex flex-wrap gap-3">
         <button
           onClick={openCreate}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#3b82f6] text-white rounded-[6px] text-sm font-medium hover:bg-blue-600 transition-colors shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 transition-colors shadow-sm"
         >
-          <IconPlus /> 新增入库
+          <Plus className="w-[18px] h-[18px]" /> 新增入库
         </button>
         <button
           onClick={() => setModalType('scan')}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-[6px] text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
         >
-          <IconQr /> 扫码入库
+          <QrCode /> 扫码入库
         </button>
         <button
           onClick={() => setModalType('import')}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-[6px] text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
         >
-          <IconUpload /> 批量导入
+          <Upload /> 批量导入
         </button>
         <button
           onClick={() => setModalType('print')}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-[6px] text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
         >
-          <IconPrinter /> 打印记录
+          <Printer /> 打印记录
         </button>
       </div>
 
@@ -651,32 +579,28 @@ export default function Inbound() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div
           onClick={() => setFilterStatus('')}
-          className="bg-white rounded-lg p-5 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-          style={{ borderLeft: '3px solid #3b82f6' }}
+          className="bg-white rounded-lg p-5 shadow-sm border border-gray-200 border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow"
         >
           <div className="text-2xl font-semibold text-gray-900">{stats.total}</div>
           <div className="text-sm text-gray-500 mt-1">本月入库</div>
         </div>
         <div
           onClick={() => setFilterStatus('completed')}
-          className="bg-white rounded-lg p-5 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-          style={{ borderLeft: '3px solid #10b981' }}
+          className="bg-white rounded-lg p-5 shadow-sm border border-gray-200 border-l-4 border-l-green-500 cursor-pointer hover:shadow-md transition-shadow"
         >
           <div className="text-2xl font-semibold text-gray-900">{formatCurrency(stats.amount)}</div>
           <div className="text-sm text-gray-500 mt-1">入库金额</div>
         </div>
         <div
           onClick={() => setFilterStatus('pending')}
-          className="bg-white rounded-lg p-5 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-          style={{ borderLeft: '3px solid #f59e0b' }}
+          className="bg-white rounded-lg p-5 shadow-sm border border-gray-200 border-l-4 border-l-amber-500 cursor-pointer hover:shadow-md transition-shadow"
         >
           <div className="text-2xl font-semibold text-gray-900">{stats.pending}</div>
           <div className="text-sm text-gray-500 mt-1">待入库</div>
         </div>
         <div
           onClick={() => { }}
-          className="bg-white rounded-lg p-5 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow"
-          style={{ borderLeft: '3px solid #6b7280' }}
+          className="bg-white rounded-lg p-5 shadow-sm border border-gray-200 border-l-4 border-l-gray-500 cursor-pointer hover:shadow-md transition-shadow"
         >
           <div className="text-2xl font-semibold text-gray-900">{stats.supplierCount}</div>
           <div className="text-sm text-gray-500 mt-1">供应商数</div>
@@ -713,26 +637,26 @@ export default function Inbound() {
       </div>
 
       {/* 主卡片 */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         {/* 筛选栏 */}
-        <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
+        <div className="px-5 py-4 border-b border-gray-200 flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-gray-900">入库记录</span>
           <div className="flex-1" />
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
-              <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 placeholder="搜索入库单号/耗材名称/批号..."
                 value={searchKeyword}
                 onChange={e => setSearchKeyword(e.target.value)}
-                className="pl-9 pr-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] w-64 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="pl-9 pr-3 py-2 h-10 text-sm border border-gray-300 rounded-md w-64 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
             <select
               value={filterMaterial}
               onChange={e => setFilterMaterial(e.target.value)}
-              className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">全部耗材</option>
               {materials.map(m => (
@@ -742,7 +666,7 @@ export default function Inbound() {
             <select
               value={filterStatus}
               onChange={e => setFilterStatus(e.target.value)}
-              className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">全部状态</option>
               <option value="completed">已完成</option>
@@ -752,7 +676,7 @@ export default function Inbound() {
             <select
               value={filterType}
               onChange={e => setFilterType(e.target.value)}
-              className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">全部来源</option>
               <option value="purchase">采购入库</option>
@@ -764,18 +688,18 @@ export default function Inbound() {
               type="date"
               value={filterStartDate}
               onChange={e => setFilterStartDate(e.target.value)}
-              className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <span className="text-gray-400 text-sm">至</span>
             <input
               type="date"
               value={filterEndDate}
               onChange={e => setFilterEndDate(e.target.value)}
-              className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
-              onClick={() => { }}
-              className="px-4 py-2 h-10 text-sm bg-white border border-gray-300 text-gray-700 rounded-[6px] hover:bg-gray-50 transition-colors"
+              onClick={() => setPage(1)}
+              className="px-4 py-2 h-10 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
             >
               查询
             </button>
@@ -797,15 +721,15 @@ export default function Inbound() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleBatchExport}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-white rounded-[6px] border border-transparent hover:border-gray-200 transition-all"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-white rounded-md border border-transparent hover:border-gray-200 transition-all"
               >
-                <IconDownload className="w-3.5 h-3.5" /> 导出
+                <Download className="w-3.5 h-3.5" /> 导出
               </button>
               <button
                 onClick={handleBatchPrint}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-white rounded-[6px] border border-transparent hover:border-gray-200 transition-all"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 hover:bg-white rounded-md border border-transparent hover:border-gray-200 transition-all"
               >
-                <IconPrinter className="w-3.5 h-3.5" /> 打印
+                <Printer className="w-3.5 h-3.5" /> 打印
               </button>
               <button
                 onClick={clearSelection}
@@ -972,7 +896,7 @@ export default function Inbound() {
                 <select
                   value={form.type}
                   onChange={e => setForm({ ...form, type: e.target.value as any })}
-                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">请选择来源</option>
                   <option value="purchase">采购入库</option>
@@ -1007,7 +931,7 @@ export default function Inbound() {
                         setForm(prev => ({ ...prev, purchaseOrderId: '' }));
                       }
                     }}
-                    className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">不关联采购订单</option>
                     {purchaseOrders.map(o => (
@@ -1031,7 +955,7 @@ export default function Inbound() {
                         setForm({ ...form, fromLocationId: matched ? matched.id : '', fromLocationName: matched ? '' : val });
                       }}
                       placeholder="请选择或输入来源库位"
-                      className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                      className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
                     />
                     <datalist id="source-location-list">
                       {locations.map(l => (
@@ -1068,7 +992,7 @@ export default function Inbound() {
               <select
                 value={form.materialId}
                 onChange={e => setForm({ ...form, materialId: e.target.value })}
-                className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">请选择耗材</option>
                 {materials.map(m => (
@@ -1083,7 +1007,7 @@ export default function Inbound() {
                 <input
                   value={form.batchNo}
                   onChange={e => setForm({ ...form, batchNo: e.target.value })}
-                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="请输入批号"
                 />
               </div>
@@ -1108,7 +1032,7 @@ export default function Inbound() {
                   max={selectedOrderId && selectedOrder ? selectedOrder.remainingQty : undefined}
                   value={form.quantity}
                   onChange={e => setForm({ ...form, quantity: Number(e.target.value) })}
-                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -1121,7 +1045,7 @@ export default function Inbound() {
                   step="0.01"
                   value={form.price}
                   onChange={e => setForm({ ...form, price: Number(e.target.value) })}
-                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="0.00"
                 />
               </div>
@@ -1132,7 +1056,7 @@ export default function Inbound() {
                 <select
                   value={form.locationId}
                   onChange={e => setForm({ ...form, locationId: e.target.value })}
-                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">{form.type === 'transfer' ? '请选择目标库位' : '请选择库位'}</option>
                   {locations.map(l => (
@@ -1149,7 +1073,7 @@ export default function Inbound() {
                   type="date"
                   value={form.productionDate}
                   onChange={e => setForm({ ...form, productionDate: e.target.value })}
-                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
@@ -1158,7 +1082,7 @@ export default function Inbound() {
                   type="date"
                   value={form.expiryDate}
                   onChange={e => setForm({ ...form, expiryDate: e.target.value })}
-                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -1168,7 +1092,7 @@ export default function Inbound() {
               <select
                 value={form.supplierId}
                 onChange={e => setForm({ ...form, supplierId: e.target.value })}
-                className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-[6px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">请选择供应商</option>
                 {suppliers.map(s => (
@@ -1183,22 +1107,22 @@ export default function Inbound() {
                 value={form.remark}
                 onChange={e => setForm({ ...form, remark: e.target.value })}
                 rows={2}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="请输入备注信息（可选）"
               />
             </div>
           </div>
-          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
             <button
               onClick={closeModal}
-              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
             >
               取消
             </button>
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="px-4 py-2 text-sm text-white bg-[#3b82f6] rounded-[6px] hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? '提交中...' : '确认入库'}
             </button>
@@ -1279,16 +1203,16 @@ export default function Inbound() {
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
             <button
               onClick={closeModal}
-              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
             >
               关闭
             </button>
             <button
               onClick={() => setModalType('print')}
-              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
             >
               打印入库单
             </button>
@@ -1300,7 +1224,7 @@ export default function Inbound() {
       {modalType === 'restore' && selectedRecord && (
         <Modal onClose={closeModal} title="恢复入库">
           <div className="text-center py-5">
-            <IconRestore className="mx-auto text-blue-500 mb-4" />
+            <RotateCcw className="mx-auto text-blue-500 mb-4" />
             <h4 className="text-base font-semibold text-gray-900 mb-2">恢复此入库记录？</h4>
             <p className="text-sm text-gray-500 mb-5">
               入库单号: <span className="font-mono">{selectedRecord.inboundNo}</span>
@@ -1315,21 +1239,21 @@ export default function Inbound() {
                 <span className="font-medium">{selectedRecord.quantity}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">恢复后库存</span>
-                <span className="font-medium text-green-600">{selectedRecord.quantity + 400}</span>
+                <span className="text-gray-500">当前库存</span>
+                <span className="font-medium text-green-600">恢复后将重新计入</span>
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
             <button
               onClick={closeModal}
-              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
             >
               取消
             </button>
             <button
               onClick={handleRestoreInbound}
-              className="px-4 py-2 text-sm text-white bg-[#3b82f6] rounded-[6px] hover:bg-blue-600 transition-colors"
+              className="px-4 py-2 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors"
             >
               确认恢复
             </button>
@@ -1349,7 +1273,7 @@ export default function Inbound() {
                 type="text"
                 autoFocus
                 placeholder="请扫描或输入条码..."
-                className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-[6px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 onKeyDown={async (e) => {
                   if (e.key === 'Enter') {
                     const code = (e.target as HTMLInputElement).value.trim()
@@ -1386,23 +1310,23 @@ export default function Inbound() {
               <div className="text-xs text-gray-500 mb-2">支持以下条码类型：</div>
               <div className="flex flex-wrap justify-center gap-2">
                 {['Code 128', 'Code 39', 'EAN-13', 'QR Code'].map(code => (
-                  <span key={code} className="px-2 py-1 bg-white rounded text-xs text-gray-500 border border-gray-100">
+                  <span key={code} className="px-2 py-1 bg-white rounded text-xs text-gray-500 border border-gray-200">
                     {code}
                   </span>
                 ))}
               </div>
             </div>
           </div>
-          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
             <button
               onClick={closeModal}
-              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
             >
               取消
             </button>
             <button
               onClick={() => { closeModal(); openCreate() }}
-              className="px-4 py-2 text-sm text-white bg-[#3b82f6] rounded-[6px] hover:bg-blue-600 transition-colors"
+              className="px-4 py-2 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors"
             >
               手动输入
             </button>
@@ -1468,18 +1392,18 @@ export default function Inbound() {
               <div>第 1 页 / 共 1 页</div>
             </div>
           </div>
-          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+          <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
             <button
               onClick={closeModal}
-              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
             >
               取消
             </button>
             <button
               onClick={() => { window.print(); closeModal() }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-[#3b82f6] rounded-[6px] hover:bg-blue-600 transition-colors"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors"
             >
-              <IconPrinter className="w-3.5 h-3.5" /> 打印
+              <Printer className="w-3.5 h-3.5" /> 打印
             </button>
           </div>
         </Modal>
@@ -1659,7 +1583,7 @@ function ImportInboundModal({
         className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
         onClick={() => fileInputRef.current?.click()}
       >
-        <IconUpload className="w-12 h-12 mx-auto text-gray-400 mb-3" />
+        <Upload className="w-12 h-12 mx-auto text-gray-400 mb-3" />
         <div className="text-base font-medium text-gray-900 mb-2">{file ? file.name : '点击或拖拽文件到此处'}</div>
         <div className="text-sm text-gray-500">支持 Excel (.xlsx, .xls) 和 CSV 格式</div>
       </div>
@@ -1694,9 +1618,9 @@ function ImportInboundModal({
         <div className="text-sm text-gray-600 mb-2">模板下载：</div>
         <button
           onClick={downloadTemplate}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white border border-gray-200 rounded-[6px] hover:bg-gray-50 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
         >
-          <IconDownload className="w-3.5 h-3.5" /> 入库导入模板.xlsx
+          <Download className="w-3.5 h-3.5" /> 入库导入模板.xlsx
         </button>
       </div>
 
@@ -1710,17 +1634,17 @@ function ImportInboundModal({
         </ul>
       </div>
 
-      <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+      <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
         <button
           onClick={onClose}
-          className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-50 transition-colors"
+          className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
         >
           取消
         </button>
         <button
           onClick={handleImport}
           disabled={importing || preview.length === 0}
-          className="px-4 py-2 text-sm text-white bg-[#3b82f6] rounded-[6px] hover:bg-blue-600 transition-colors disabled:opacity-50"
+          className="px-4 py-2 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
         >
           {importing ? '导入中...' : '开始导入'}
         </button>
