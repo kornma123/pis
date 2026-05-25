@@ -22,6 +22,9 @@ export const inboundApi = {
   delete: (id: string) =>
     request.delete(`/inbound/${id}`),
 
+  getStats: () =>
+    request.get<{ total: number; completed: number; cancelled: number; amount: number; supplierCount: number; pendingOrders: number }>('/inbound/stats'),
+
   checkDeletable: (id: string) =>
     request.get<{ canDelete: boolean; reasons: string[]; record: any }>(`/inbound/${id}/check-deletable`),
 

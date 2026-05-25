@@ -152,20 +152,21 @@ export function useInboundPage() {
     })
   }, [page, pageSize, searchKeyword, filterMaterial, filterStatus, filterType, filterStartDate, filterEndDate, activeQuickFilter])
 
-  // 统计数据
-  const stats = useMemo(() => {
-    const completedCount = data.filter(d => d.status === 'completed').length
-    const pendingCount = data.filter(d => (d as any).status === 'pending').length
-    const totalAmount = data.reduce((sum, d) => sum + (d.amount || 0), 0)
-    const uniqueSuppliers = new Set(data.map(d => d.supplierId).filter(Boolean)).size
-    return {
-      total,
-      completed: completedCount,
-      pending: pendingCount,
-      amount: totalAmount,
-      supplierCount: uniqueSuppliers,
-    }
-  }, [data, total])
+  // 统计数据（从后端获取，非当前页计算）
+  const [stats, setStats] = useState({
+    total: 0, completed: 0, cancelled: 0, amount: 0, supplierCount: 0, pendingOrders: 0,
+  })
+
+  const fetchStats = async () => {
+    try {
+      const res: any = await inboundApi.getStats()
+      setStats(res.data || res)
+    } catch (e) { console.error(e) }
+  }
+
+  useEffect(() => {
+    fetchStats()
+  }, [])
 
   // 快速筛选计数（基于当前页）
   const quickFilterCounts = useMemo(() => {
@@ -278,16 +279,30 @@ export function useInboundPage() {
     setModalType('edit')
   }
 
-  const handleDelete = (record: InboundRecord) => {
-    openConfirmModal('删除确认', `确定删除入库记录 ${record.inboundNo} 吗？删除后不可恢复。`, async () => {
-      try {
-        await inboundApi.delete(record.id)
-        toast.success('删除成功')
-        refresh()
-      } catch (e) {
-        toast.error('删除失败')
+  const handleDelete = async (record: InboundRecord) => {
+    try {
+      const check = await inboundApi.checkDeletable(record.id)
+      if (!check.data?.canDelete) {
+        const reasons = check.data?.reasons || ['该记录不可删除']
+        openConfirmModal('不可删除', reasons.join('；'), () => {})
+        return
       }
-    })
+      openConfirmModal(
+        '删除确认',
+        `确定删除入库记录 ${record.inboundNo} 吗？删除后不可恢复。`,
+        async () => {
+          try {
+            await inboundApi.delete(record.id)
+            toast.success('删除成功')
+            refresh()
+          } catch (e: any) {
+            toast.error(e?.message || '删除失败')
+          }
+        }
+      )
+    } catch (e: any) {
+      toast.error(e?.message || '预检查失败')
+    }
   }
 
   const openRestore = (record: InboundRecord) => {
@@ -457,7 +472,8 @@ export function useInboundPage() {
     purchaseOrders, selectedOrderId, setSelectedOrderId,
     form, setForm, submitting, handleSubmit,
     // 数据
-    data, loading, page, pageSize, total, setPage, setPageSize, refresh,
+    data, loading, page, pageSize, total, setPage, setPageSize,
+    refresh: () => { refresh(); fetchStats() },
     // 统计
     stats, quickFilterCounts,
     // 操作

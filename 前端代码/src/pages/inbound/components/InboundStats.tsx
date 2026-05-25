@@ -3,12 +3,12 @@ import { formatCurrency } from '@/lib/utils'
 interface InboundStatsProps {
   total: number
   amount: number
-  pending: number
+  pendingOrders: number
   supplierCount: number
   onFilterStatus: (status: string) => void
 }
 
-export default function InboundStats({ total, amount, pending, supplierCount, onFilterStatus }: InboundStatsProps) {
+export default function InboundStats({ total, amount, pendingOrders, supplierCount, onFilterStatus }: InboundStatsProps) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <div
@@ -29,7 +29,7 @@ export default function InboundStats({ total, amount, pending, supplierCount, on
         onClick={() => onFilterStatus('pending')}
         className="bg-white rounded-lg p-5 shadow-sm border border-gray-200 border-l-4 border-l-amber-500 cursor-pointer hover:shadow-md transition-shadow"
       >
-        <div className="text-2xl font-semibold text-gray-900">{pending}</div>
+        <div className="text-2xl font-semibold text-gray-900">{pendingOrders}</div>
         <div className="text-sm text-gray-500 mt-1">待入库</div>
       </div>
       <div

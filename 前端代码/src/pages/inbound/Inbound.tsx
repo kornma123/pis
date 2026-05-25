@@ -58,7 +58,7 @@ export default function Inbound() {
       <InboundStats
         total={page.stats.total}
         amount={page.stats.amount}
-        pending={page.stats.pending}
+        pendingOrders={page.stats.pendingOrders}
         supplierCount={page.stats.supplierCount}
         onFilterStatus={page.setFilterStatus}
       />

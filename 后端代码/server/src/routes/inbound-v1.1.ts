@@ -65,6 +65,20 @@ router.get('/', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
+// 入库统计
+router.get('/stats', (req, res) => {
+  try {
+    const db = getDatabase()
+    const total = (db.prepare("SELECT COUNT(*) as c FROM inbound_records WHERE is_deleted = 0").get() as any)?.c || 0
+    const completed = (db.prepare("SELECT COUNT(*) as c FROM inbound_records WHERE is_deleted = 0 AND status = 'completed'").get() as any)?.c || 0
+    const cancelled = (db.prepare("SELECT COUNT(*) as c FROM inbound_records WHERE is_deleted = 0 AND status = 'cancelled'").get() as any)?.c || 0
+    const amount = (db.prepare("SELECT COALESCE(SUM(amount),0) as c FROM inbound_records WHERE is_deleted = 0 AND status = 'completed'").get() as any)?.c || 0
+    const supplierCount = (db.prepare("SELECT COUNT(DISTINCT supplier_id) as c FROM inbound_records WHERE is_deleted = 0 AND status = 'completed' AND supplier_id IS NOT NULL").get() as any)?.c || 0
+    const pendingOrders = (db.prepare("SELECT COUNT(*) as c FROM purchase_orders WHERE is_deleted = 0 AND status IN ('pending','partial')").get() as any)?.c || 0
+    success(res, { total, completed, cancelled, amount, supplierCount, pendingOrders })
+  } catch (err: any) { error(res, err.message) }
+})
+
 // 检查入库记录是否可删除
 router.get('/:id/check-deletable', (req, res) => {
   try {
