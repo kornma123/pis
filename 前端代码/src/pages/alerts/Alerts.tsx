@@ -255,19 +255,19 @@ export default function Alerts() {
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-5 border-l-4 border-red-500">
+        <div className="bg-white rounded-lg shadow-sm p-5 border-l-4 border-red-500">
           <div className="text-2xl font-bold text-red-600">{stats.pending}</div>
           <div className="mt-1 text-sm text-gray-500">待处理</div>
         </div>
-        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-5 border-l-4 border-green-500">
+        <div className="bg-white rounded-lg shadow-sm p-5 border-l-4 border-green-500">
           <div className="text-2xl font-bold text-green-600">{stats.processed}</div>
           <div className="mt-1 text-sm text-gray-500">已处理</div>
         </div>
-        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-5 border-l-4 border-yellow-500">
+        <div className="bg-white rounded-lg shadow-sm p-5 border-l-4 border-yellow-500">
           <div className="text-2xl font-bold text-yellow-600">{stats.today}</div>
           <div className="mt-1 text-sm text-gray-500">今日预警</div>
         </div>
-        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-5 border-l-4 border-blue-500">
+        <div className="bg-white rounded-lg shadow-sm p-5 border-l-4 border-blue-500">
           <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
           <div className="mt-1 text-sm text-gray-500">本月预警</div>
         </div>
@@ -301,7 +301,7 @@ export default function Alerts() {
       </div>
 
       {/* 筛选栏 */}
-      <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-4">
+      <div className="bg-white rounded-lg shadow-sm p-4">
         <div className="flex flex-col xl:flex-row gap-3">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -427,8 +427,8 @@ export default function Alerts() {
       )}
 
       {/* 表格卡片 */}
-      <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.1)] overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">预警列表</h2>
           <span className="text-xs text-gray-400">共 {total} 条记录</span>
         </div>
@@ -619,7 +619,7 @@ export default function Alerts() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={closeModal} />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">处理预警</h3>
               <button
                 onClick={closeModal}
@@ -705,7 +705,7 @@ export default function Alerts() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
                 onClick={closeModal}
                 className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors"
@@ -728,7 +728,7 @@ export default function Alerts() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={closeModal} />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
                 处理消耗异常预警
               </h3>
@@ -907,7 +907,7 @@ export default function Alerts() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
                 onClick={closeModal}
                 className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors"
@@ -930,7 +930,7 @@ export default function Alerts() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={closeModal} />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
                 预警详情 - {modal.alert.id}
               </h3>
@@ -991,7 +991,7 @@ export default function Alerts() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
                 onClick={closeModal}
                 className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors"
@@ -1018,7 +1018,7 @@ export default function Alerts() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={closeModal} />
           <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">
                 消耗异常详情 - {modal.alert.id}
               </h3>
@@ -1181,7 +1181,7 @@ export default function Alerts() {
                 </tbody>
               </table>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
                 onClick={closeModal}
                 className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors"

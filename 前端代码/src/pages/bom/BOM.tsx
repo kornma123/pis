@@ -100,7 +100,7 @@ function StatCard({
   colorClass: string
 }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-[0_1px_3px_rgba(0,0,0,0.1)] transition-shadow hover:shadow-md">
+    <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-start justify-between">
         <div>
           <div className="text-2xl font-semibold text-gray-900">{value}</div>
@@ -419,7 +419,7 @@ export default function BOMPage() {
           </button>
           <button
             onClick={openCreate}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors h-10 shadow-[0_1px_2px_rgba(59,130,246,0.1)]"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors h-10 shadow-sm"
           >
             <Plus className="w-4 h-4" />
             新建BOM
@@ -459,7 +459,7 @@ export default function BOMPage() {
       </div>
 
       {/* ---------- 主卡片：筛选 + 表格 ---------- */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-[0_1px_3px_rgba(0,0,0,0.1)] overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
         {/* 筛选栏 */}
         <div className="px-5 py-4 border-b border-gray-200 flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="relative flex-1 max-w-sm">
@@ -690,7 +690,7 @@ export default function BOMPage() {
       {(modalType === 'create' || modalType === 'edit') && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
               <h3 className="text-lg font-semibold text-gray-900">
                 {modalType === 'create' ? '新建BOM' : '编辑BOM'}
               </h3>
@@ -840,7 +840,7 @@ export default function BOMPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 flex-shrink-0">
               <button
                 onClick={() => setModalType(null)}
                 className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors border border-gray-200"
@@ -849,7 +849,7 @@ export default function BOMPage() {
               </button>
               <button
                 onClick={handleSubmit}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-[0_1px_2px_rgba(59,130,246,0.1)]"
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-sm"
               >
                 {modalType === 'create' ? '创建BOM' : '保存修改'}
               </button>
@@ -862,7 +862,7 @@ export default function BOMPage() {
       {modalType === 'detail' && detailBom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
               <h3 className="text-lg font-semibold text-gray-900">BOM详情</h3>
               <button
                 onClick={() => setModalType(null)}
@@ -871,7 +871,7 @@ export default function BOMPage() {
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
-            <div className="px-6 py-4 border-b border-gray-100 flex-shrink-0">
+            <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
               <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
                 {([
                   { key: 'info', label: '基本信息' },
@@ -1045,7 +1045,7 @@ export default function BOMPage() {
                 </div>
               )}
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 flex-shrink-0">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 flex-shrink-0">
               <button
                 onClick={() => setModalType(null)}
                 className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors border border-gray-200"
@@ -1057,7 +1057,7 @@ export default function BOMPage() {
                   setModalType(null)
                   openEdit(detailBom)
                 }}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-[0_1px_2px_rgba(59,130,246,0.1)]"
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-sm"
               >
                 编辑
               </button>
@@ -1070,7 +1070,7 @@ export default function BOMPage() {
       {modalType === 'copy' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">复制BOM</h3>
               <button onClick={() => setModalType(null)} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors">
                 <X className="w-4 h-4 text-gray-500" />
@@ -1118,11 +1118,11 @@ export default function BOMPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
               <button onClick={() => setModalType(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors border border-gray-200">
                 取消
               </button>
-              <button onClick={handleCopy} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-[0_1px_2px_rgba(59,130,246,0.1)]">
+              <button onClick={handleCopy} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-sm">
                 确认复制
               </button>
             </div>
@@ -1134,7 +1134,7 @@ export default function BOMPage() {
       {modalType === 'delete' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">确认删除</h3>
               <button onClick={() => setModalType(null)} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors">
                 <X className="w-4 h-4 text-gray-500" />
@@ -1155,7 +1155,7 @@ export default function BOMPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
               <button onClick={() => setModalType(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors border border-gray-200">
                 取消
               </button>
@@ -1171,7 +1171,7 @@ export default function BOMPage() {
       {modalType === 'batchDelete' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">批量删除确认</h3>
               <button onClick={() => setModalType(null)} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors">
                 <X className="w-4 h-4 text-gray-500" />
@@ -1188,7 +1188,7 @@ export default function BOMPage() {
                 <p className="text-sm text-gray-500">删除后将无法恢复</p>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
               <button onClick={() => setModalType(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors border border-gray-200">
                 取消
               </button>
@@ -1204,7 +1204,7 @@ export default function BOMPage() {
       {modalType === 'import' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">导入BOM</h3>
               <button onClick={() => setModalType(null)} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors">
                 <X className="w-4 h-4 text-gray-500" />
@@ -1226,11 +1226,11 @@ export default function BOMPage() {
                 <button className="text-xs text-blue-600 hover:text-blue-700 font-medium">下载导入模板</button>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
               <button onClick={() => setModalType(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors border border-gray-200">
                 取消
               </button>
-              <button onClick={handleImport} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-[0_1px_2px_rgba(59,130,246,0.1)]">
+              <button onClick={handleImport} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-sm">
                 开始导入
               </button>
             </div>
@@ -1242,7 +1242,7 @@ export default function BOMPage() {
       {modalType === 'export' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">导出BOM</h3>
               <button onClick={() => setModalType(null)} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors">
                 <X className="w-4 h-4 text-gray-500" />
@@ -1297,11 +1297,11 @@ export default function BOMPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
               <button onClick={() => setModalType(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors border border-gray-200">
                 取消
               </button>
-              <button onClick={handleExport} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-[0_1px_2px_rgba(59,130,246,0.1)]">
+              <button onClick={handleExport} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-sm">
                 确认导出
               </button>
             </div>
