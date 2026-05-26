@@ -71,7 +71,7 @@ router.delete('/:id', (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
-    const existing = db.prepare('SELECT * FROM users WHERE id = ? AND is_deleted = 0').get(id)
+    const existing = db.prepare('SELECT * FROM users WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     // 禁止删除 admin 账户
     if (existing.username === 'admin' || existing.id === 'USER-001') {

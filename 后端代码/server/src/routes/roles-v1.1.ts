@@ -45,7 +45,7 @@ router.put('/:id', (req, res) => {
     const { id } = req.params
     const { code, name, description, permissions, status } = req.body
     database.exec('BEGIN IMMEDIATE')
-    const role = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id)
+    const role = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!role) {
       database.exec('ROLLBACK')
       error(res, 'Role not found', 'NOT_FOUND', 404); return
@@ -85,7 +85,7 @@ router.delete('/:id', (req, res) => {
   try {
     const database = getDatabase()
     const { id } = req.params
-    const existing = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id)
+    const existing = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     if (existing.code === 'admin') { error(res, 'Cannot delete system admin role', 'FORBIDDEN', 403); return }
     database.prepare('UPDATE roles SET is_deleted = 1 WHERE id = ?').run(id)

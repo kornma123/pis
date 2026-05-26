@@ -28,7 +28,52 @@ Thumbs.db
 .vscode/settings.json
 .idea/
 
+# Claude Code / AI tools
+.claude/skills/
+.claude/rules/skills-auto-trigger.md
+
+# Other IDE/AI plugins
+.adal/
+.agents/
+.augment/
+.bob/
+.codebuddy/
+.commandcode/
+.continue/
+.cortex/
+.crush/
+.factory/
+.goose/
+.iflow/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.vibe/
+.windsurf/
+.zencoder/
+
 # Temporary files
 *.tmp
 *.temp
 *.bak
+
+# Test artifacts
+前端代码/coverage/
+前端代码/test-results/
+e2e-report-tmp/
+test-results/
+
+# Misc
+backend.pid
+skills-lock.json

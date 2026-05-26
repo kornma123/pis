@@ -1,10 +1,11 @@
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 
-export const JWT_SECRET = process.env.JWT_SECRET
-if (!JWT_SECRET) {
+const jwtSecret = process.env.JWT_SECRET
+if (!jwtSecret) {
   throw new Error('JWT_SECRET environment variable is required')
 }
+export const JWT_SECRET = jwtSecret
 
 // 角色权限映射
 const ROLE_PERMISSIONS: Record<string, string[]> = {

@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./后端代码/server
+      dockerfile: Dockerfile
+    container_name: coreone-backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - JWT_SECRET=${JWT_SECRET:-coreone-jwt-secret-key-2024}
+      - JWT_EXPIRES_IN=8h
+      - REFRESH_TOKEN_EXPIRES_IN=7d
+      - DATABASE_PATH=/app/data/coreone.db
+    volumes:
+      - coreone-data:/app/data
+    networks:
+      - coreone-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./前端代码
+      dockerfile: Dockerfile
+    container_name: coreone-frontend
+    restart: unless-stopped
+    ports:
+      - "${COREONE_PORT:-8080}:80"
+    depends_on:
+      - backend
+    networks:
+      - coreone-network
+
+networks:
+  coreone-network:
+    driver: bridge
+
+volumes:
+  coreone-data:
+    driver: local

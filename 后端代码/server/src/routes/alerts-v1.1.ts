@@ -79,7 +79,7 @@ router.post('/:id/handle', (req, res) => {
     const { id } = req.params
     const { action, remark } = req.body
     const db = getDatabase()
-    const existing = db.prepare('SELECT * FROM alerts WHERE id = ?').get(id)
+    const existing = db.prepare('SELECT * FROM alerts WHERE id = ?').get(id) as any
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     if (existing.status !== 'pending') { error(res, '预警已处理，不可重复操作', 'ALREADY_HANDLED', 400); return }
     db.prepare('UPDATE alerts SET status = ?, remark = ?, handled_at = CURRENT_TIMESTAMP WHERE id = ?')
