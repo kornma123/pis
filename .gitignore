@@ -77,3 +77,6 @@ test-results/
 # Misc
 backend.pid
 skills-lock.json
+
+# Docker Desktop Installer (large binary, don't commit)
+DockerDesktopInstaller.exe
