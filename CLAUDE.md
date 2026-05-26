@@ -185,6 +185,35 @@ cd 前端代码 && npx playwright test e2e/xxx.spec.ts --debug
 | 数据库变更 | `/db-migration` |
 | 代码审查 | `/code-review` |
 
+## 技能自动触发规则
+
+本项目已安装 **260+ 个技能**，覆盖开发流程、代码质量、架构设计、项目管理、安全合规、营销产品等多个领域。
+
+**自动触发规则见 `.claude/rules/skills-auto-trigger.md`**。核心原则：
+
+- **P0 强制自动**：开发流程类技能（TDD、Debug、Code Review、Planning）在匹配场景下**必须主动调用**，无需用户显式指定
+- **P1 智能推荐**：技术领域类技能（React、Backend、Security、Performance）在相关上下文中**建议调用**
+- **P2 按需触发**：角色扮演类技能（`senior-*`、`ciso-advisor`、`cto-review`）仅在用户明确要求或上下文暗示时调用
+
+**常用自动触发示例**：
+
+| 用户说 | 我自动调用 |
+|--------|-----------|
+| "怎么实现 X" / "规划一下" | `/brainstorming` → `/writing-plans` |
+| "写个测试" / "TDD" | `/test-driven-development` |
+| "有 bug" / "报错" | `/systematic-debugging` |
+| "看看代码" / "有问题吗" | `/requesting-code-review` |
+| "简化" / "重构" | `/simplify` + `/refactor` |
+| "完成" / "done" | `/verification-before-completion` |
+| "部署" / "上线" | `/deploy-to-vercel` |
+
+**组合调用流程**：
+- 新功能开发：`/brainstorming` → `/writing-plans` → `/test-driven-development` → `/requesting-code-review` → `/create-pr`
+- Bug 修复：`/systematic-debugging` → `/test-driven-development` → `/focused-fix`
+- 安全审查：`/security-review` → `/skill-security-auditor`
+
+**注意**：同一场景下不堆叠超过 3 个技能，同一会话中不重复调用同一技能。
+
 ---
 
 *本文档基于 everything-claude-code 模式构建。随项目演进更新。*
