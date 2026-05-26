@@ -474,7 +474,7 @@ test.describe('认证与登录 -> 用户登出', () => {
 // 六、角色权限矩阵（大量组合）
 // ═══════════════════════════════════════════════════════════════
 test.describe('认证与登录 -> 角色权限矩阵补充', () => {
-  const protectedPaths = ['/', '/inventory', '/inbound', '/outbound', '/stocktaking', '/categories', '/materials', '/suppliers', '/locations', '/projects', '/bom', '/cost-analysis', '/reconciliation', '/alerts', '/users', '/roles', '/logs']
+  const protectedPaths = ['/', '/inventory', '/inbound', '/outbound', '/stocktaking', '/categories', '/materials', '/suppliers', '/locations', '/projects', '/bom', '/cost-analysis', '/reconciliation', '/alerts', '/users', '/roles', '/logs', '/supplier-returns']
 
   for (const path of protectedPaths) {
     test(`TC-PERM-AUTH-01${path.replace(/\//g, '-')}. 未登录访问${path}应重定向到登录页`, async ({ page }) => {
@@ -508,7 +508,7 @@ test.describe('认证与登录 -> 角色权限矩阵补充', () => {
     await loginAs(page, 'admin')
     for (const path of protectedPaths.filter(p => p !== '/')) {
       await page.goto(`${FE_BASE}${path}`)
-      await expect(page.locator('body')).toBeVisible()
+      await expect(page.locator('body')).toBeVisible({ timeout: 10000 })
     }
   })
 

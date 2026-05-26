@@ -122,12 +122,12 @@ export default function OutboundTable({
               <tr>
                 <td colSpan={11} className="px-4 py-8 text-center text-gray-400">加载中...</td>
               </tr>
-            ) : filteredData.length === 0 ? (
+            ) : data.length === 0 ? (
               <tr>
                 <td colSpan={11} className="px-4 py-8 text-center text-gray-400">暂无数据</td>
               </tr>
             ) : (
-              filteredData.map(row => {
+              data.map(row => {
                 const firstItem = row.items?.[0]
                 const cfg = statusConfig[row.status] || statusConfig.completed
                 return (

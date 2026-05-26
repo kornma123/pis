@@ -246,13 +246,13 @@ test.describe('退货给供应商 -> 创建退货记录', () => {
     const token = await apiLogin('admin')
     const mid = await getMaterialWithStock(token)
     if (!mid) { test.skip(); return }
-    const before = await apiFetch(token, 'GET', `/inventory?page=1&pageSize=1&materialId=${mid}`)
-    const bStock = before.data?.data?.list?.[0]?.stock || 0
+    const before = await apiFetch(token, 'GET', `/materials/${mid}`)
+    const bStock = before.data?.data?.stock || 0
     await apiFetch(token, 'POST', '/supplier-returns', {
       materialId: mid, quantity: 1, reason: 'quality_issue', remark: 'E2E库存测试',
     })
-    const after = await apiFetch(token, 'GET', `/inventory?page=1&pageSize=1&materialId=${mid}`)
-    const aStock = after.data?.data?.list?.[0]?.stock || 0
+    const after = await apiFetch(token, 'GET', `/materials/${mid}`)
+    const aStock = after.data?.data?.stock || 0
     expect(aStock).toBe(bStock - 1)
   })
   test('SR-CREATE-14. 正常用例：退货单号格式SR-YYYYMMDD-XXX', async ({ page }) => {
@@ -507,15 +507,15 @@ test.describe('退货给供应商 -> 删除退货记录', () => {
     const token = await apiLogin('admin')
     const mid = await getMaterialWithStock(token)
     if (!mid) { test.skip(); return }
-    const before = await apiFetch(token, 'GET', `/inventory?page=1&pageSize=1&materialId=${mid}`)
-    const bStock = before.data?.data?.list?.[0]?.stock || 0
+    const before = await apiFetch(token, 'GET', `/materials/${mid}`)
+    const bStock = before.data?.data?.stock || 0
     const create = await apiFetch(token, 'POST', '/supplier-returns', {
       materialId: mid, quantity: 2, reason: 'quality_issue', remark: 'E2E库存恢复',
     })
     const id = create.data?.data?.id
     await apiFetch(token, 'DELETE', `/supplier-returns/${id}`)
-    const after = await apiFetch(token, 'GET', `/inventory?page=1&pageSize=1&materialId=${mid}`)
-    const aStock = after.data?.data?.list?.[0]?.stock || 0
+    const after = await apiFetch(token, 'GET', `/materials/${mid}`)
+    const aStock = after.data?.data?.stock || 0
     expect(aStock).toBe(bStock)
   })
   test('SR-DELETE-08. 表单校验：删除不存在的记录返回404', async ({ page }) => {
@@ -713,13 +713,13 @@ test.describe('退货给供应商 -> 业务流程树', () => {
     const token = await apiLogin('admin')
     const mid = await getMaterialWithStock(token)
     if (!mid) { test.skip(); return }
-    const before = await apiFetch(token, 'GET', `/inventory?page=1&pageSize=1&materialId=${mid}`)
-    const bStock = before.data?.data?.list?.[0]?.stock || 0
+    const before = await apiFetch(token, 'GET', `/materials/${mid}`)
+    const bStock = before.data?.data?.stock || 0
     await apiFetch(token, 'POST', '/supplier-returns', {
       materialId: mid, quantity: 1, reason: 'quality_issue', remark: 'E2E流水检查',
     })
-    const after = await apiFetch(token, 'GET', `/inventory?page=1&pageSize=1&materialId=${mid}`)
-    const aStock = after.data?.data?.list?.[0]?.stock || 0
+    const after = await apiFetch(token, 'GET', `/materials/${mid}`)
+    const aStock = after.data?.data?.stock || 0
     expect(aStock).toBe(Math.max(0, bStock - 1))
   })
 })
