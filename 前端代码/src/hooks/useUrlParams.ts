@@ -23,7 +23,8 @@ export function useUrlParams() {
   const getNumber = useCallback(
     (key: string, defaultValue = 0) => {
       const val = params.get(key)
-      return val ? Number(val) : defaultValue
+      const num = val ? Number(val) : defaultValue
+      return Number.isNaN(num) ? defaultValue : num
     },
     [params]
   )

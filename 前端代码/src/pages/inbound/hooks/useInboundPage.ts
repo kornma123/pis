@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { inboundApi, purchaseOrderApi } from '@/api/inventory'
 import { materialApi, supplierApi, locationApi } from '@/api/master'
 import type { InboundRecord, Material, Supplier, Location } from '@/types'
@@ -92,17 +92,8 @@ export function useInboundPage() {
   const effectiveStartDate = quickFilterDates.startDate || undefined
   const effectiveEndDate = quickFilterDates.endDate || undefined
 
-  const {
-    data,
-    loading,
-    page,
-    pageSize,
-    total,
-    setPage,
-    setPageSize,
-    refresh,
-  } = usePagination<InboundRecord>({
-    fetchFn: async (params) => {
+  const fetchFn = useCallback(
+    async (params: { page: number; pageSize: number }) => {
       const res: any = await inboundApi.getList({
         ...params,
         status: effectiveStatus,
@@ -117,6 +108,27 @@ export function useInboundPage() {
         pagination: res?.pagination,
       }
     },
+    [
+      effectiveStatus,
+      effectiveType,
+      effectiveMaterialId,
+      effectiveKeyword,
+      effectiveStartDate,
+      effectiveEndDate,
+    ]
+  )
+
+  const {
+    data,
+    loading,
+    page,
+    pageSize,
+    total,
+    setPage,
+    setPageSize,
+    refresh,
+  } = usePagination<InboundRecord>({
+    fetchFn,
     initialPage,
     initialPageSize,
     deps: [

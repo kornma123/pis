@@ -1,3 +1,51 @@
+# Session Log — 技能包安装与自动触发规则配置
+
+## 2026-05-26 本次会话完成的工作
+
+### 1. 安装 260+ 个 Claude Code Skills
+
+**已安装的技能包**：
+| 来源 | 数量 | 状态 |
+|------|------|------|
+| Superpowers (`obra/superpowers`) | 14 | ✅ |
+| Vercel Agent Skills (`vercel-labs/agent-skills`) | 8 | ✅ |
+| Caveman (`JuliusBrussee/caveman`) | 7 | ✅ |
+| FradSer/dotclaude | ~38 | ✅ |
+| alirezarezvani/claude-skills | ~298 | ✅ |
+| 原有技能 | 10+ | ✅ |
+
+**核心技能**：
+- **流程类**: `test-driven-development`, `systematic-debugging`, `writing-plans`, `using-git-worktrees`, `requesting-code-review`
+- **技术类**: `vercel-react-best-practices`, `shadcn`, `backend-development`, `security-review`
+- **专家类**: `senior-backend`, `senior-frontend`, `senior-fullstack`, `senior-devops`, `senior-security`
+- **工具类**: `create-pr`, `commit`, `simplify`, `deploy-to-vercel`
+- **合规类**: `gdpr-dsgvo-expert`, `soc2-compliance`, `iso42001-specialist`
+
+### 2. MCP 服务器配置
+
+| MCP | 状态 |
+|-----|------|
+| Context7 (`@upstash/context7-mcp`) | ✅ 已连接 |
+| Playwright (`@executeautomation/playwright-mcp-server`) | ❌ 已移除（zod 依赖冲突） |
+
+### 3. 创建技能自动触发规则
+
+**新建文件**：
+- `.claude/rules/skills-auto-trigger.md` — 定义所有技能的自动触发条件和组合调用流程
+- 更新 `CLAUDE.md` — 添加"技能自动触发规则"章节
+
+**触发优先级**：
+- **P0 强制自动**: TDD、Debug、Code Review、Planning 等开发流程技能
+- **P1 智能推荐**: React、Backend、Security、Performance 等技术领域技能
+- **P2 按需触发**: `senior-*`、C-level 顾问等角色扮演技能
+
+**组合流程**：
+- 新功能开发: `/brainstorming` → `/writing-plans` → `/test-driven-development` → `/requesting-code-review` → `/create-pr`
+- Bug 修复: `/systematic-debugging` → `/test-driven-development` → `/focused-fix`
+- 安全审查: `/security-review` → `/skill-security-auditor`
+
+---
+
 # Session Log — 交互规范逐页复核 / Inbound 拆分
 
 ## 本次会话完成的工作
@@ -499,5 +547,49 @@ CI E2E 测试持续失败，auth.spec.ts 中 15 个权限相关测试失败（pr
 **修改的文件**：
 - `后端代码/server/src/routes/supplier-returns-v1.1.ts` — 返回增加 returnNo
 - `后端代码/server/tests/supplier-returns.test.ts` — 新建（NEW）
+
+*更新时间：2026-05-26*
+
+---
+
+## 本次会话完成的工作（前端单元测试补充）
+
+**目标**：建立前端单元测试基线，覆盖工具函数、核心 Hooks 和页面级业务 Hooks。
+
+### 测试结果
+- **84 个测试通过** / 0 失败 ✅
+- **7 个测试文件**：
+  - `src/lib/utils.test.ts`（12 用例）
+  - `src/lib/permissions.test.ts`（15 用例）
+  - `src/hooks/usePagination.test.ts`（9 用例）
+  - `src/hooks/useUrlParams.test.ts`（13 用例）
+  - `src/pages/inbound/hooks/useInboundPage.test.ts`（10 用例）
+  - `src/pages/inventory/hooks/useInventoryPage.test.ts`（8 用例）
+  - `src/api/request.test.ts`（7 用例）
+
+### 基础设施增强
+- `vitest.config.ts`：启用 v8 覆盖率、排除 e2e 目录
+- `src/test/setup.ts`：增加 matchMedia / localStorage / IntersectionObserver mock、console.error 过滤
+- `src/test/mocks.ts`：集中 mock 数据工厂（createMockInboundRecord 等）
+
+### Bug 修复（测试中发现）
+1. **`useUrlParams.ts`**：`getNumber` 对非数字字符串（如 `page=abc`）返回 `NaN` → 改为返回 `defaultValue`
+2. **`useInboundPage.ts`**：`fetchFn` 未用 `useCallback` 包裹 → 每次 render 触发无限 fetch 循环
+3. **`useInventoryPage.ts`**：同上，`fetchFn` 未 memoized → 无限 fetch 循环
+
+### 修改文件清单
+- `前端代码/vitest.config.ts` — 覆盖率配置 + e2e 排除
+- `前端代码/src/test/setup.ts` — 测试环境 mock
+- `前端代码/src/test/mocks.ts` — 新建（NEW）
+- `前端代码/src/lib/utils.test.ts` — 扩充边界用例
+- `前端代码/src/lib/permissions.test.ts` — 新建（NEW）
+- `前端代码/src/hooks/usePagination.test.ts` — 新建（NEW）
+- `前端代码/src/hooks/useUrlParams.test.ts` — 新建（NEW）
+- `前端代码/src/hooks/useUrlParams.ts` — 修复 getNumber NaN bug
+- `前端代码/src/api/request.test.ts` — 新建（NEW）
+- `前端代码/src/pages/inbound/hooks/useInboundPage.ts` — fetchFn useCallback
+- `前端代码/src/pages/inbound/hooks/useInboundPage.test.ts` — 新建（NEW）
+- `前端代码/src/pages/inventory/hooks/useInventoryPage.ts` — fetchFn useCallback
+- `前端代码/src/pages/inventory/hooks/useInventoryPage.test.ts` — 新建（NEW）
 
 *更新时间：2026-05-26*

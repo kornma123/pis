@@ -111,6 +111,23 @@ export function useInventoryPage() {
     ? getNumber('pageSize', 20)
     : 20
 
+  const fetchFn = useCallback(
+    async (params: { page: number; pageSize: number }) => {
+      const res: any = await inventoryApi.getList({
+        page: params.page,
+        pageSize: params.pageSize,
+        keyword: keyword || undefined,
+      })
+      const list = (res?.list || []).map((item: any) => ({
+        ...item,
+        batch: item.batch || item.batchNo || '-',
+        expiry: item.expiry || item.expiryDate || '-',
+      })) as InventoryRow[]
+      return { list, pagination: res?.pagination }
+    },
+    [keyword]
+  )
+
   const {
     data,
     loading,
@@ -121,19 +138,7 @@ export function useInventoryPage() {
     setPageSize,
     refresh,
   } = usePagination<InventoryRow>({
-    fetchFn: async ({ page, pageSize }) => {
-      const res: any = await inventoryApi.getList({
-        page,
-        pageSize,
-        keyword: keyword || undefined,
-      })
-      const list = (res?.list || []).map((item: any) => ({
-        ...item,
-        batch: item.batch || item.batchNo || '-',
-        expiry: item.expiry || item.expiryDate || '-',
-      })) as InventoryRow[]
-      return { list, pagination: res?.pagination }
-    },
+    fetchFn,
     initialPage: urlPage,
     initialPageSize: urlPageSize,
     deps: [keyword],
