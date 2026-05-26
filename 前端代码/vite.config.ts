@@ -35,6 +35,14 @@ export default defineConfig(({ mode }) => ({
         entryFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
         chunkFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
         assetFileNames: `assets/[name]-[hash]-${Date.now()}.[ext]`,
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('xlsx') || id.includes('jspdf')) return 'vendor-export'
+            if (id.includes('recharts')) return 'vendor-charts'
+            if (id.includes('lucide-react')) return 'vendor-icons'
+            if (id.includes('framer-motion')) return 'vendor-animation'
+          }
+        },
       },
     },
   },

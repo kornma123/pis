@@ -6,6 +6,7 @@ import { outboundApi } from '@/api/inventory'
 import { materialApi, projectApi } from '@/api/master'
 import type { OutboundRecord, Material, Project } from '@/types'
 import { toast } from 'sonner'
+import { formatDateTime } from '@/lib/utils'
 import OutboundFormModal, { type FormData } from './components/OutboundFormModal'
 import OutboundDetailModal from './components/OutboundDetailModal'
 import OutboundCancelModal from './components/OutboundCancelModal'
@@ -274,7 +275,6 @@ export default function Outbound() {
     }
     try {
       const XLSX = await import('xlsx')
-      const { formatDateTime } = await import('@/lib/utils')
       const rows = exportData.map(row => ({
         出库单号: row.outboundNo,
         类型: row.type === 'project' ? '项目出库' : row.type === 'transfer' ? '调拨出库' : '报废出库',

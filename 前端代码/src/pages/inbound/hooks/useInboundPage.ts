@@ -5,6 +5,7 @@ import type { InboundRecord, Material, Supplier, Location } from '@/types'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
 import { toast } from 'sonner'
+import { formatDateTime } from '@/lib/utils'
 import type { FormData } from '../components/InboundFormModal'
 
 type ModalType = 'create' | 'edit' | 'detail' | 'restore' | 'scan' | 'import' | 'print' | null
@@ -405,7 +406,6 @@ export function useInboundPage() {
     }
     try {
       const XLSX = await import('xlsx')
-      const { formatDateTime } = await import('@/lib/utils')
       const rows = exportData.map(row => ({
         入库单号: row.inboundNo,
         耗材名称: row.materialName,
