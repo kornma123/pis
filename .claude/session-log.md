@@ -636,3 +636,77 @@ CI E2E 测试持续失败，auth.spec.ts 中 15 个权限相关测试失败（pr
 3. 监控 nightly CI 全量回归结果
 
 *更新时间：2026-05-26*
+
+---
+
+## 本次会话完成的工作（Docker 部署配置）
+
+### 目标
+用户需要部署开发版本到公司 Linux 公网服务器，用于后续验收。
+
+### 1. 修复后端 TypeScript 构建错误
+
+后端 `npm run build`（tsc）此前因以下原因失败，已逐一修复：
+
+| 问题 | 修复方式 |
+|------|----------|
+| `node:sqlite` 类型声明缺失（Node.js 22 新特性，@types/node v20 未覆盖） | 新建 `src/types/node-sqlite.d.ts` |
+| `JWT_SECRET` 导出为 `string \| undefined`，导致 `jwt.sign/verify` 类型报错 | `auth.ts` 中先运行时检查，再导出已断言的常量 |
+| `db.prepare(...).get()` 返回 `unknown`，访问 `.status/.code/.username` 报错 | 在 `alerts/roles/users` 路由中加 `as any` 断言 |
+| `tsconfig.json` 包含 `tests/` 和 `scripts/` | 排除，只编译 `src/**/*` |
+
+修复后：`cd 后端代码/server && npm run build` ✅ 通过
+
+### 2. 创建 Docker + docker-compose 部署配置
+
+**新增文件**：
+
+| 文件 | 用途 |
+|------|------|
+| `docker-compose.yml` | 编排 frontend (Nginx) + backend (Node.js 22) + SQLite volume |
+| `后端代码/server/Dockerfile` | 后端容器：node:22-alpine + `npx tsx src/app.ts` |
+| `前端代码/Dockerfile` | 前端多阶段构建：node build → nginx:alpine 托管 |
+| `前端代码/nginx.conf` | 静态文件托管 + `/api/v1/*` 反向代理到 backend 容器 |
+| `部署说明.md` | 完整部署文档（3 步快速部署 + 运维命令 + 故障排查） |
+
+**部署架构**：
+```
+公司服务器
+├── coreone-frontend (Nginx)
+│   └── 端口 8080 → 80
+│   └── /api/v1/* 反向代理到 backend
+├── coreone-backend (Node.js 22)
+│   └── 端口 3001（仅内部网络）
+│   └── SQLite (/app/data/coreone.db)
+└── Docker Volume: coreone-data
+```
+
+### 3. 部署步骤（服务器上执行）
+
+```bash
+# 1. 上传代码到服务器
+scp coreone-deploy.tar.gz root@your-server-ip:/opt/
+
+# 2. 服务器端启动
+ssh root@your-server-ip
+cd /opt && mkdir -p coreone && tar -xzvf coreone-deploy.tar.gz -C coreone
+cd coreone && docker compose up -d --build
+
+# 3. 访问
+http://your-server-ip:8080
+```
+
+### 交付物
+
+- Commit: `3e33e81b` chore(deploy): add Docker deployment configuration
+- 部署文档：`部署说明.md`
+
+### 阻塞问题汇总（部署前已解决）
+
+| 阻塞点 | 状态 |
+|--------|------|
+| 后端 tsc 构建失败（node:sqlite 类型缺失） | ✅ 已修复 |
+| 前端构建产物 API baseURL 硬编码为 localhost | ✅ Dockerfile 中覆盖为 `/api/v1` |
+| 无部署文档 | ✅ 已编写 |
+
+*更新时间：2026-05-26*
