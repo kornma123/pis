@@ -148,14 +148,14 @@
 | 文件 | 当前行数 | 优先级 | 状态 |
 |---|---|---|---|
 | InventoryList.tsx | 217 | P1 | ✅ 已完成 |
-| BOM.tsx | 1313 | P1 | ⏳ 待拆分 |
-| Alerts.tsx | 1210 | P1 | ⏳ 待拆分 |
-| Projects.tsx | 1209 | P1 | ⏳ 待拆分 |
-| Suppliers.tsx | 820 | P1 | ⏳ 待拆分 |
-| Materials.tsx | 742 | P1 | ⏳ 待拆分 |
-| Stocktaking.tsx | 620 | P1 | ⏳ 待拆分 |
-| Users.tsx | 484 | P1 | ⏳ 待拆分 |
-| Logs.tsx | 484 | P1 | ⏳ 待拆分 |
+| BOM.tsx | 153 | P1 | ✅ 已拆分 |
+| Alerts.tsx | 121 | P1 | ✅ 已拆分 |
+| Projects.tsx | 147 | P1 | ✅ 已拆分 |
+| Suppliers.tsx | 113 | P1 | ✅ 已拆分 |
+| Materials.tsx | 126 | P1 | ✅ 已拆分 |
+| Stocktaking.tsx | 105 | P1 | ✅ 已拆分 |
+| Users.tsx | 107 | P1 | ✅ 已拆分 |
+| Logs.tsx | 92 | P1 | ✅ 已拆分 |
 
 ## 下一步建议
 

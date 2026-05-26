@@ -52,7 +52,7 @@ export function BOMCopyModal({
               value={copyForm.name}
               onChange={(e) => onChange({ ...copyForm, name: e.target.value })}
               placeholder="请输入新BOM名称"
-              className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+              className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
             />
           </div>
           <div>

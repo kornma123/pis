@@ -85,14 +85,14 @@ export function BOMTable({
             value={searchInput}
             onChange={(e) => onSearchInputChange(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && onSearch()}
-            className="w-full h-10 pl-10 pr-4 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+            className="w-full h-10 pl-10 pr-4 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <select
             value={filterType}
             onChange={(e) => onFilterTypeChange(e.target.value)}
-            className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500"
           >
             {TYPE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -103,7 +103,7 @@ export function BOMTable({
           <select
             value={filterStatus}
             onChange={(e) => onFilterStatusChange(e.target.value)}
-            className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500"
           >
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>

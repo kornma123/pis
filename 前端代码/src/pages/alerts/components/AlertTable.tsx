@@ -90,13 +90,13 @@ export function AlertTable({
               placeholder="搜索预警编号/物料..."
               value={filter.keyword}
               onChange={(e) => onFilterChange({ ...filter, keyword: e.target.value })}
-              className="w-full h-10 pl-9 pr-4 border border-gray-300 rounded-md text-sm placeholder:text-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all duration-150"
+              className="w-full h-10 pl-9 pr-4 border border-gray-300 rounded-md text-sm placeholder:text-gray-400 focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150"
             />
           </div>
           <select
             value={filter.type}
             onChange={(e) => onFilterChange({ ...filter, type: e.target.value as AlertTypeFilter })}
-            className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all duration-150"
+            className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150"
           >
             <option value="all">全部类型</option>
             <option value="low-stock">库存不足</option>
@@ -106,7 +106,7 @@ export function AlertTable({
           <select
             value={filter.status}
             onChange={(e) => onFilterChange({ ...filter, status: e.target.value as AlertStatusFilter })}
-            className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all duration-150"
+            className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150"
           >
             <option value="all">全部状态</option>
             <option value="pending">待处理</option>
@@ -118,14 +118,14 @@ export function AlertTable({
               type="date"
               value={filter.dateRange[0]}
               onChange={(e) => onFilterChange({ ...filter, dateRange: [e.target.value, filter.dateRange[1]] })}
-              className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all duration-150"
+              className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150"
             />
             <span className="text-gray-400">-</span>
             <input
               type="date"
               value={filter.dateRange[1]}
               onChange={(e) => onFilterChange({ ...filter, dateRange: [filter.dateRange[0], e.target.value] })}
-              className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all duration-150"
+              className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150"
             />
           </div>
           <div className="flex gap-2">

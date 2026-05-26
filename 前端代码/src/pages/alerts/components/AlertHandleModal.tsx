@@ -48,7 +48,7 @@ export function AlertHandleModal({ open, alert, form, onClose, onChange, onConfi
                 onChange={(e) => onChange({ ...form, opinion: e.target.value })}
                 placeholder="请输入处理意见..."
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm placeholder:text-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 resize-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm placeholder:text-gray-400 focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 resize-none"
               />
             </div>
             <div>

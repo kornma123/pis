@@ -48,7 +48,7 @@ export function BOMFormModal({
                 value={form.name}
                 onChange={(e) => onChange({ ...form, name: e.target.value })}
                 placeholder="请输入BOM名称"
-                className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
               />
             </div>
             <div>
@@ -59,7 +59,7 @@ export function BOMFormModal({
                 value={form.code}
                 onChange={(e) => onChange({ ...form, code: e.target.value })}
                 placeholder="请输入BOM编号"
-                className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
               />
             </div>
           </div>
@@ -72,7 +72,7 @@ export function BOMFormModal({
                 value={form.serviceId}
                 onChange={(e) => onChange({ ...form, serviceId: e.target.value })}
                 placeholder="请选择检测服务"
-                className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
               />
             </div>
             <div>
@@ -82,7 +82,7 @@ export function BOMFormModal({
               <select
                 value={form.type}
                 onChange={(e) => onChange({ ...form, type: e.target.value })}
-                className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
               >
                 {TYPE_OPTIONS.filter((o) => o.value).map((o) => (
                   <option key={o.value} value={o.value}>
@@ -125,7 +125,7 @@ export function BOMFormModal({
                     status: e.target.value as 'active' | 'inactive',
                   })
                 }
-                className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
               >
                 <option value="active">已启用</option>
                 <option value="inactive">已停用</option>
@@ -142,7 +142,7 @@ export function BOMFormModal({
               onChange={(e) =>
                 onChange({ ...form, supportableSamples: Number(e.target.value) })
               }
-              className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+              className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
             />
           </div>
           <div>
@@ -154,7 +154,7 @@ export function BOMFormModal({
               onChange={(e) => onChange({ ...form, description: e.target.value })}
               rows={2}
               placeholder="请输入BOM描述"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-none"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors resize-none"
             />
           </div>
           {/* 物料清单区域（展示性） */}
