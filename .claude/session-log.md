@@ -696,6 +696,37 @@ cd coreone && docker compose up -d --build
 http://your-server-ip:8080
 ```
 
+---
+
+## 本次会话完成的工作（E2E CI 修复 - 第二轮）
+
+### 问题
+用户反馈 CI 再次失败。分析后发现上一轮 CI 实际结果是 `1 failed + 1 flaky`，不是超时。
+
+### 根因分析
+1. **OutboundTable.tsx 运行时崩溃**：组件拆分后遗留 `filteredData` 变量未定义
+   - 访问 `/outbound` 时 React 崩溃 → 页面空白 → `body` bounding box 为 0
+   - Playwright `toBeVisible` 判定为 hidden
+2. **supplier-returns 测试误用 inventory API**：`inventory-v1.1.ts` 不支持 `materialId` 查询参数
+   - `/inventory?page=1&pageSize=1&materialId=${mid}` 实际返回排序第一条记录
+   - 导致库存断言随机失败（flaky）
+
+### 修复内容
+- `OutboundTable.tsx:125,130`：`filteredData` → `data`
+- `auth.spec.ts`：`protectedPaths` 补上 `/supplier-returns`
+- `supplier-returns.spec.ts`：3 处库存查询改用 `/materials/${mid}` API
+  - BF-SR-06、SR-CREATE-13、SR-DELETE-07
+
+### CI 结果
+- Run: https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/actions/runs/26437312491
+- 结论：**success** ✅ (255 tests passed)
+- 耗时：约 8 分钟
+
+### 提交
+- `359f6583` fix(e2e): resolve CI failures - OutboundTable runtime error + inventory API misuse
+
+---
+
 ### 交付物
 
 - Commit: `3e33e81b` chore(deploy): add Docker deployment configuration
