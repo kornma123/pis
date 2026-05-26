@@ -28,6 +28,7 @@ import {
   Undo2,
   Trash2,
   ArrowRightLeft,
+  CornerUpLeft,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -42,6 +43,7 @@ const ALL_MAIN_MENU: MenuItem[] = [
   { label: '入库记录', path: '/inbound', icon: ArrowDownToLine },
   { label: '出库记录', path: '/outbound', icon: ArrowUpFromLine },
   { label: '退库管理', path: '/returns', icon: Undo2 },
+  { label: '退货给供应商', path: '/supplier-returns', icon: CornerUpLeft },
   { label: '报废管理', path: '/scraps', icon: Trash2 },
   { label: '调拨管理', path: '/transfers', icon: ArrowRightLeft },
   { label: '库存盘点', path: '/stocktaking', icon: ClipboardCheck },

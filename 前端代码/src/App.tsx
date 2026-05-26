@@ -20,6 +20,7 @@ import Roles from './pages/system/Roles'
 import Logs from './pages/system/Logs'
 import PurchaseOrders from './pages/purchase/PurchaseOrders'
 import Returns from './pages/returns/Returns'
+import SupplierReturns from './pages/supplier-returns/SupplierReturns'
 import Scraps from './pages/scraps/Scraps'
 import Transfers from './pages/transfers/Transfers'
 import Login from './pages/auth/Login'
@@ -50,6 +51,7 @@ function App() {
           <Route path="/logs" element={<Logs />} />
           <Route path="/purchase-orders" element={<PurchaseOrders />} />
           <Route path="/returns" element={<Returns />} />
+          <Route path="/supplier-returns" element={<SupplierReturns />} />
           <Route path="/scraps" element={<Scraps />} />
           <Route path="/transfers" element={<Transfers />} />
         </Route>

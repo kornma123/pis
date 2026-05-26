@@ -436,6 +436,44 @@ export interface OperationLog {
   createdAt: string
 }
 
+// ===== 退货给供应商 =====
+export interface SupplierReturnRecord {
+  id: string
+  returnNo: string
+  materialId: string
+  materialName?: string
+  batchId?: string
+  batchNo?: string
+  quantity: number
+  supplierId?: string
+  supplierName?: string
+  purchaseOrderId?: string
+  purchaseOrderNo?: string
+  inboundRecordId?: string
+  inboundNo?: string
+  reason: string
+  refundAmount?: number
+  trackingNo?: string
+  status: 'pending' | 'shipped' | 'received' | 'refunded' | 'cancelled'
+  operator: string
+  remark?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SupplierReturnFormData {
+  materialId: string
+  quantity: number
+  supplierId?: string
+  purchaseOrderId?: string
+  inboundRecordId?: string
+  reason: string
+  refundAmount?: number
+  trackingNo?: string
+  remark?: string
+  operator?: string
+}
+
 // ===== 退库 =====
 export interface ReturnRecord {
   id: string

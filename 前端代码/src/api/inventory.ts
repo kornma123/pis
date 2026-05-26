@@ -1,5 +1,5 @@
 import request from './request'
-import type { ApiResponse, PaginationData, InventoryItem, InventoryStats, InboundRecord, InboundFormData, OutboundRecord, OutboundFormData, PageParams } from '@/types'
+import type { ApiResponse, PaginationData, InventoryItem, InventoryStats, InboundRecord, InboundFormData, OutboundRecord, OutboundFormData, PageParams, SupplierReturnRecord, SupplierReturnFormData } from '@/types'
 
 export const inventoryApi = {
   getList: (params?: PageParams & { status?: string; categoryId?: string; locationId?: string }) =>
@@ -81,6 +81,19 @@ export const returnApi = {
     request.post<any>('/returns', data),
   delete: (id: string) =>
     request.delete(`/returns/${id}`),
+}
+
+export const supplierReturnApi = {
+  getList: (params?: PageParams & { supplierId?: string; status?: string; keyword?: string; startDate?: string; endDate?: string }) =>
+    request.get<PaginationData<SupplierReturnRecord>>('/supplier-returns', { params }),
+  getById: (id: string) =>
+    request.get<any>(`/supplier-returns/${id}`),
+  create: (data: SupplierReturnFormData) =>
+    request.post<any>('/supplier-returns', data),
+  updateStatus: (id: string, status: string) =>
+    request.put<any>(`/supplier-returns/${id}/status`, { status }),
+  delete: (id: string) =>
+    request.delete(`/supplier-returns/${id}`),
 }
 
 export const transferApi = {

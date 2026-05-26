@@ -31,6 +31,9 @@ function generateReturnNo(seq: number): string {
 function generateScrapNo(seq: number): string {
   return `SC-20260511-${String(seq).padStart(3, '0')}`
 }
+function generateSupplierReturnNo(seq: number): string {
+  return `SR-20260511-${String(seq).padStart(3, '0')}`
+}
 function generatePurchaseOrderNo(seq: number): string {
   return `PO-20260511-${String(seq).padStart(3, '0')}`
 }
@@ -483,7 +486,42 @@ function seedScraps(db: any) {
 }
 
 // ============================================
-// 9. 创建库存流水
+// 9. 创建退货给供应商记录
+// ============================================
+function seedSupplierReturns(db: any) {
+  log('开始创建退货给供应商记录...')
+  const check = db.prepare('SELECT COUNT(*) as count FROM supplier_returns WHERE is_deleted = 0').get() as any
+  if (check.count > 0) {
+    log('退货给供应商记录已存在，跳过')
+    return
+  }
+
+  const records = [
+    // pending: 待发货
+    { id: 'SR-001', material_id: 'MAT-HE-001', quantity: 1, supplier_id: 'SUP-003', reason: 'quality_issue', refund_amount: 180, tracking_no: '', status: 'pending', operator: '王仓库', remark: '包装渗漏' },
+    // shipped: 已发货
+    { id: 'SR-002', material_id: 'MAT-GLASS-001', quantity: 2, supplier_id: 'SUP-003', reason: 'damaged', refund_amount: 360, tracking_no: 'SF1234567890', status: 'shipped', operator: '王仓库', remark: '运输破损' },
+    // received: 已收货
+    { id: 'SR-003', material_id: 'MAT-IHC-001', quantity: 1, supplier_id: 'SUP-001', reason: 'quality_issue', refund_amount: 1200, tracking_no: 'JD9876543210', status: 'received', operator: '王仓库', remark: '效期不足6个月' },
+    // refunded: 已退款
+    { id: 'SR-004', material_id: 'MAT-HE-005', quantity: 3, supplier_id: 'SUP-009', reason: 'quantity_mismatch', refund_amount: 75, tracking_no: 'YT5555666677', status: 'refunded', operator: '赵采购', remark: '实际到货少3瓶' },
+    // cancelled: 已取消
+    { id: 'SR-005', material_id: 'MAT-LAB-010', quantity: 1, supplier_id: 'SUP-010', reason: 'other', refund_amount: 0, tracking_no: '', status: 'cancelled', operator: '王仓库', remark: '与供应商协商换货' },
+  ]
+
+  const insert = db.prepare(
+    `INSERT INTO supplier_returns (id, return_no, material_id, batch_id, batch_no, quantity, supplier_id, purchase_order_id, inbound_record_id, reason, refund_amount, tracking_no, status, operator, remark, created_at, updated_at, is_deleted)
+     VALUES (?, ?, ?, null, null, ?, ?, null, null, ?, ?, ?, ?, ?, ?, ?, ?, 0)`
+  )
+  for (let i = 0; i < records.length; i++) {
+    const r = records[i]
+    insert.run(r.id, generateSupplierReturnNo(i + 1), r.material_id, r.quantity, r.supplier_id, r.reason, r.refund_amount, r.tracking_no, r.status, r.operator, r.remark, now, now)
+  }
+  log(`退货给供应商记录创建完成: ${records.length} 笔`)
+}
+
+// ============================================
+// 10. 创建库存流水
 // ============================================
 function seedStockLogs(db: any) {
   log('开始创建库存流水...')
@@ -561,6 +599,7 @@ function main() {
     seedStocktaking(db)
     seedReturns(db)
     seedScraps(db)
+    seedSupplierReturns(db)
     seedStockLogs(db)
     seedOperationLogs(db)
 

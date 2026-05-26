@@ -168,6 +168,28 @@ export function initializeDatabase(): void {
     CREATE TABLE IF NOT EXISTS return_records (id TEXT PRIMARY KEY, return_no TEXT NOT NULL UNIQUE, material_id TEXT NOT NULL, batch_id TEXT, quantity DECIMAL(18, 4) NOT NULL, reason TEXT NOT NULL, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)
   database.exec(`
+    CREATE TABLE IF NOT EXISTS supplier_returns (
+      id TEXT PRIMARY KEY,
+      return_no TEXT NOT NULL UNIQUE,
+      material_id TEXT NOT NULL,
+      batch_id TEXT,
+      batch_no TEXT,
+      quantity DECIMAL(18, 4) NOT NULL,
+      supplier_id TEXT,
+      purchase_order_id TEXT,
+      inbound_record_id TEXT,
+      reason TEXT NOT NULL,
+      refund_amount DECIMAL(18, 4) DEFAULT 0,
+      tracking_no TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      operator TEXT NOT NULL,
+      remark TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      is_deleted INTEGER NOT NULL DEFAULT 0
+    )
+  `)
+  database.exec(`
     CREATE TABLE IF NOT EXISTS scrap_records (id TEXT PRIMARY KEY, scrap_no TEXT NOT NULL UNIQUE, material_id TEXT NOT NULL, batch_id TEXT, quantity DECIMAL(18, 4) NOT NULL, reason TEXT NOT NULL, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)
   database.exec(`
