@@ -21,9 +21,15 @@ beforeAll(async () => {
   db = await getDb()
   const supplierReturnRoutes = (await import('../src/routes/supplier-returns-v1.1.js')).default
 
-  // supplier-returns 路由本身无认证中间件（与 app.ts 一致挂在已认证后），直接挂载
+  // supplier-returns 路由本身无认证中间件（与 app.ts 一致挂在已认证后）。
+  // P1-14 给写端点加了 requireWriteAccess（依赖 req.user.role），故此处注入一个写角色用户，
+  // 模拟 authenticateToken 已设置 req.user（生产链路一致）。
+  const injectWriteUser = (req: any, _res: any, next: any) => {
+    req.user = { userId: 'TEST-ADMIN', username: 'admin', role: 'admin' }
+    next()
+  }
   app = await buildTestApp([
-    { path: '/api/v1/supplier-returns', router: supplierReturnRoutes },
+    { path: '/api/v1/supplier-returns', router: supplierReturnRoutes, middleware: [injectWriteUser] },
   ])
 
   // 物料：进价（批次 inbound_price）= 10/瓶

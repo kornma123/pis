@@ -47,7 +47,7 @@ export const ROLE_MENU_MAP: Record<string, string[]> = {
     '/', '/inventory', '/inbound', '/materials', '/suppliers', '/purchase-orders', '/supplier-returns', '/categories', '/alerts',
   ],
   finance: [
-    '/', '/inventory', '/reconciliation', '/cost-analysis', '/categories', '/alerts',
+    '/', '/inventory', '/supplier-returns', '/reconciliation', '/cost-analysis', '/categories', '/alerts',
   ],
   pathologist: [
     '/', '/inventory', '/projects', '/bom', '/reconciliation', '/cost-analysis',

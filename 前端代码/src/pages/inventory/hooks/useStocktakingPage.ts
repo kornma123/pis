@@ -31,6 +31,12 @@ export interface FormData {
   manager: string
 }
 
+export interface BatchRow {
+  materialId: string
+  actualStock: number | ''
+  remark: string
+}
+
 export const scopeOptions = [
   { value: '', label: '全部范围' },
   { value: 'all', label: '全部物料' },
@@ -57,7 +63,9 @@ export function useStocktakingPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [scopeFilter, setScopeFilter] = useState('')
 
-  const [modalType, setModalType] = useState<'create' | 'detail' | 'adjust' | null>(null)
+  const [modalType, setModalType] = useState<'create' | 'detail' | 'adjust' | 'batch' | null>(null)
+  const [batchRows, setBatchRows] = useState<BatchRow[]>([])
+  const [batchOperator, setBatchOperator] = useState('')
   const [detailRow, setDetailRow] = useState<StocktakingRecord | null>(null)
   const [createStep, setCreateStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -137,6 +145,45 @@ export function useStocktakingPage() {
     } catch (e) { toast.error('操作失败') } finally { setIsSubmitting(false) }
   }
 
+  const openBatch = async () => {
+    const res: any = await materialApi.getList({ page: 1, pageSize: 999, status: 'active' })
+    setMaterials(res?.list || [])
+    setBatchRows([{ materialId: '', actualStock: '', remark: '' }])
+    setBatchOperator('')
+    setModalType('batch')
+  }
+
+  const handleBatchSubmit = async () => {
+    // 仅提交已选物料的行
+    const filled = batchRows.filter(r => r.materialId)
+    if (filled.length === 0) { toast.error('请至少添加一行物料'); return }
+    // 前端预校验：实盘数量必填、非负、不重复（与后端 all-or-nothing 同口径，避免无谓整单 422）
+    const seen = new Set<string>()
+    for (let i = 0; i < filled.length; i++) {
+      const r = filled[i]
+      if (r.actualStock === '' || r.actualStock === null || isNaN(Number(r.actualStock))) {
+        toast.error(`第 ${i + 1} 行：请输入实盘数量`); return
+      }
+      if (Number(r.actualStock) < 0) { toast.error(`第 ${i + 1} 行：实盘数量不能为负数`); return }
+      if (seen.has(r.materialId)) { toast.error(`第 ${i + 1} 行：物料重复`); return }
+      seen.add(r.materialId)
+    }
+    setIsSubmitting(true)
+    try {
+      await request.post('/stocktaking/batch', {
+        operator: batchOperator || undefined,
+        items: filled.map(r => ({
+          materialId: r.materialId,
+          actualStock: Number(r.actualStock),
+          remark: r.remark || undefined,
+        })),
+      })
+      toast.success(`批量盘点完成，共 ${filled.length} 项`)
+      setModalType(null)
+      refresh()
+    } catch (e) { /* 拦截器统一提示 */ } finally { setIsSubmitting(false) }
+  }
+
   const openDetail = (row: StocktakingRecord) => {
     setDetailRow(row)
     setModalType('detail')
@@ -186,5 +233,7 @@ export function useStocktakingPage() {
     openCreate, openDetail, openAdjust, openDelete,
     handleSubmit, handleDelete,
     selectedMaterial,
+    batchRows, setBatchRows, batchOperator, setBatchOperator,
+    openBatch, handleBatchSubmit,
   }
 }

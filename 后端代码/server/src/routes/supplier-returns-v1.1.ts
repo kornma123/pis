@@ -12,6 +12,37 @@ function generateNo(): string {
   return `SR-${date}-${timestamp}-${random}`
 }
 
+// P1-14: 供应商退货为写操作（创建/流转/修正退款额/删除），finance 仅【只读】访问。
+// app.ts 已把 finance 纳入 allowedRoles 以获得读权限；此端点级守卫保证 finance 不能写。
+function requireWriteAccess(req: any, res: any, next: any) {
+  const role = req.user?.role
+  if (role === 'admin' || role === 'warehouse_manager' || role === 'procurement') {
+    next()
+    return
+  }
+  error(res, 'Forbidden: insufficient permissions', 'FORBIDDEN', 403)
+}
+
+// P1-13/P1-14: 退款额来源成本上界 = 来源单价 × 数量。
+// 来源单价优先取关联入库单 price，其次该物料批次最近 inbound_price，最后 material.price。
+// 返回 0 表示无可勾稽来源（不设上界，放行）。
+function resolveRefundCap(db: any, materialId: string, quantity: number, inboundRecordId?: string | null): number {
+  let sourceUnitCost = 0
+  if (inboundRecordId) {
+    const ir = db.prepare('SELECT price FROM inbound_records WHERE id = ? AND is_deleted = 0').get(inboundRecordId) as any
+    sourceUnitCost = Number(ir?.price) || 0
+  }
+  if (sourceUnitCost <= 0) {
+    const b = db.prepare('SELECT inbound_price FROM batches WHERE material_id = ? ORDER BY created_at DESC').get(materialId) as any
+    sourceUnitCost = Number(b?.inbound_price) || 0
+  }
+  if (sourceUnitCost <= 0) {
+    const m = db.prepare('SELECT price FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
+    sourceUnitCost = Number(m?.price) || 0
+  }
+  return sourceUnitCost * Number(quantity)
+}
+
 // 列表查询
 router.get('/', (req, res) => {
   try {
@@ -128,7 +159,7 @@ router.get('/:id', (req, res) => {
 })
 
 // 创建退货记录
-router.post('/', (req, res) => {
+router.post('/', requireWriteAccess, (req, res) => {
   try {
     const { materialId, quantity, supplierId, purchaseOrderId, inboundRecordId, reason, refundAmount, trackingNo, operator, remark } = req.body
     if (!materialId || quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0 || !reason) {
@@ -141,22 +172,9 @@ router.post('/', (req, res) => {
     if (!inv || inv.stock < quantity) { error(res, '库存不足', 'STOCK_INSUFFICIENT', 422); return }
 
     // P1-13: 退款金额与来源成本勾稽，refundAmount 不得超过 来源单价 × 数量。
-    // 来源单价优先取关联入库单 price，其次该物料批次最近 inbound_price，最后 material.price。
     const refund = Number(refundAmount) || 0
     if (refund > 0) {
-      let sourceUnitCost = 0
-      if (inboundRecordId) {
-        const ir = db.prepare('SELECT price FROM inbound_records WHERE id = ? AND is_deleted = 0').get(inboundRecordId) as any
-        sourceUnitCost = Number(ir?.price) || 0
-      }
-      if (sourceUnitCost <= 0) {
-        const b = db.prepare('SELECT inbound_price FROM batches WHERE material_id = ? ORDER BY created_at DESC').get(materialId) as any
-        sourceUnitCost = Number(b?.inbound_price) || 0
-      }
-      if (sourceUnitCost <= 0) {
-        sourceUnitCost = Number(material.price) || 0
-      }
-      const refundCap = sourceUnitCost * Number(quantity)
+      const refundCap = resolveRefundCap(db, materialId, Number(quantity), inboundRecordId)
       // 浮点容差，避免边界等值误判
       if (refundCap > 0 && refund > refundCap + 1e-6) {
         error(res, `退款金额(${refund})超过来源成本上界(${refundCap})`, 'REFUND_EXCEEDS_SOURCE_COST', 422); return
@@ -202,7 +220,7 @@ router.post('/', (req, res) => {
 })
 
 // 更新状态
-router.put('/:id/status', (req, res) => {
+router.put('/:id/status', requireWriteAccess, (req, res) => {
   try {
     const { status } = req.body
     const validStatuses = ['pending', 'shipped', 'received', 'refunded', 'cancelled']
@@ -230,8 +248,64 @@ router.put('/:id/status', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
+// P1-14: 修正退款额。
+// - 受 P1-13 来源成本上界约束（与创建时同口径勾稽）；
+// - 已 refunded 状态锁定不可改（409），避免改动已过账金额；
+// - 修正写一条 operation_logs 审计留痕（旧值→新值）。
+// 注：refunded 应付贷项过账因 master 无应付/财务台账表而 deferred（见交付 modelNote）。
+router.put('/:id/refund-amount', requireWriteAccess, (req: any, res) => {
+  try {
+    const { refundAmount } = req.body
+    const refund = Number(refundAmount)
+    if (refundAmount === undefined || refundAmount === null || isNaN(refund) || refund < 0) {
+      error(res, '退款金额必须为非负数', 'INVALID_PARAMETER', 400); return
+    }
+    const db = getDatabase()
+    const record = db.prepare('SELECT * FROM supplier_returns WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
+    if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
+
+    // 已退款锁定：退款已完成的金额不允许再修正
+    if (record.status === 'refunded') {
+      error(res, '已退款记录的退款金额不可修正', 'REFUND_LOCKED', 409); return
+    }
+
+    // 来源成本上界勾稽（复用 P1-13）
+    if (refund > 0) {
+      const refundCap = resolveRefundCap(db, record.material_id, Number(record.quantity), record.inbound_record_id)
+      if (refundCap > 0 && refund > refundCap + 1e-6) {
+        error(res, `退款金额(${refund})超过来源成本上界(${refundCap})`, 'REFUND_EXCEEDS_SOURCE_COST', 422); return
+      }
+    }
+
+    const oldRefund = Number(record.refund_amount) || 0
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('UPDATE supplier_returns SET refund_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(refund, req.params.id)
+
+      // 审计留痕：退款额修正
+      db.prepare(`
+        INSERT INTO operation_logs (id, user_id, username, operation, description, request_data)
+        VALUES (?, ?, ?, 'supplier_return_refund_amount', ?, ?)
+      `).run(
+        uuidv4(),
+        req.user?.userId || null,
+        req.user?.username || 'system',
+        `修正退货单 ${record.return_no} 退款额：${oldRefund} → ${refund}`,
+        JSON.stringify({ returnId: req.params.id, oldRefund, newRefund: refund })
+      )
+
+      db.exec('COMMIT')
+      success(res, { id: req.params.id, refundAmount: refund }, '退款金额已修正')
+    } catch (e: any) {
+      db.exec('ROLLBACK')
+      throw e
+    }
+  } catch (err: any) { error(res, err.message) }
+})
+
 // 删除（仅 pending 状态可删除，恢复库存）
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireWriteAccess, (req, res) => {
   try {
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM supplier_returns WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
