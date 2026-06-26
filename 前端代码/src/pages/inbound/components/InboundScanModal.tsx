@@ -46,7 +46,7 @@ export default function InboundScanModal({ open, onClose, onManualInput, onScanS
                     toast.error('未找到匹配物料', { description: `条码 "${code}" 未匹配到任何物料` })
                   }
                 } catch {
-                  toast.error('查询失败')
+                  /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
                 }
               }
             }}

@@ -149,7 +149,7 @@ export function useLogsPage() {
       window.URL.revokeObjectURL(url)
       toast.success('导出成功')
       setShowExport(false)
-    } catch (e) { toast.error('导出失败') }
+    } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
   }
 
   return {

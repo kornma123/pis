@@ -195,7 +195,7 @@ export function useReconciliationPage() {
       const res: any = await request.get(`/reconciliation/projects/${projectId}/materials`, { params: dateParams })
       setProjectMaterials(prev => ({ ...prev, [projectId]: res?.list || [] }))
       setExpandedProject(projectId)
-    } catch (e) { toast.error('加载物料明细失败') }
+    } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
   }
 
   const handleImport = async () => {

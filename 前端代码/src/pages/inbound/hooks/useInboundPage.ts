@@ -308,13 +308,13 @@ export function useInboundPage() {
             await inboundApi.delete(record.id)
             toast.success('删除成功')
             refresh()
-          } catch (e: any) {
-            toast.error(e?.message || '删除失败')
+          } catch {
+            /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
           }
         }
       )
-    } catch (e: any) {
-      toast.error(e?.message || '预检查失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -389,8 +389,8 @@ export function useInboundPage() {
       }
       closeModal()
       refresh()
-    } catch (e) {
-      toast.error(modalType === 'edit' ? '更新失败' : '创建失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     } finally {
       setSubmitting(false)
     }
@@ -403,8 +403,8 @@ export function useInboundPage() {
       toast.success('恢复成功', { description: '入库记录已恢复' })
       closeModal()
       refresh()
-    } catch (e: any) {
-      toast.error('恢复失败', { description: e?.message || '请检查后端接口是否支持状态恢复' })
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 

@@ -67,8 +67,8 @@ export default function Scraps() {
       setModalOpen(false)
       setForm({ materialId: '', quantity: 1, reason: '', remark: '' })
       refresh()
-    } catch (e) {
-      toast.error('报废登记失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     } finally {
       setIsSubmitting(false)
     }
@@ -87,8 +87,8 @@ export default function Scraps() {
       setDeleteConfirmOpen(false)
       setRecordToDelete(null)
       refresh()
-    } catch (e) {
-      toast.error('撤销失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
