@@ -25,6 +25,30 @@ import Scraps from './pages/scraps/Scraps'
 import Transfers from './pages/transfers/Transfers'
 import Login from './pages/auth/Login'
 import NotFound from './pages/NotFound'
+// ===== ABC 成本核算页面（移植自 abc-productization 分支）=====
+import EquipmentList from '@/pages/equipment/EquipmentList'
+import EquipmentTypeList from '@/pages/equipment/EquipmentTypeList'
+import EquipmentDepreciationStats from '@/pages/equipment/EquipmentDepreciationStats'
+import LaborTimeList from '@/pages/labor/LaborTimeList'
+import IndirectCostCenterList from '@/pages/cost-center/IndirectCostCenterList'
+import CostDashboard from '@/pages/cost/CostDashboard'
+import SlideCostAnalysis from '@/pages/cost/SlideCostAnalysis'
+import { ProfitabilityAnalysis } from '@/pages/cost/ProfitabilityAnalysis'
+import FeeComparison from '@/pages/cost/FeeComparison'
+import SupplierCostAnalysis from '@/pages/cost/SupplierCostAnalysis'
+import FeeMappingConfig from '@/pages/cost/FeeMappingConfig'
+import CostTrend from '@/pages/cost/CostTrend'
+import { ActivityCenterList } from '@/pages/cost/ActivityCenterList'
+import { CostDriverList } from '@/pages/cost/CostDriverList'
+import CostPoolList from '@/pages/cost/CostPoolList'
+import BudgetManagement from '@/pages/cost/BudgetManagement'
+import QualityCostAnalysis from '@/pages/cost/QualityCostAnalysis'
+import CostVarianceAnalysis from '@/pages/cost/CostVarianceAnalysis'
+import CostAlerts from '@/pages/cost/CostAlerts'
+import AuditTrail from '@/pages/cost/AuditTrail'
+import QuarterlyAdjustment from '@/pages/cost/QuarterlyAdjustment'
+import PersonnelEfficiency from '@/pages/cost/PersonnelEfficiency'
+import CostModelValidation from '@/pages/cost/CostModelValidation'
 
 function App() {
   return (
@@ -54,6 +78,30 @@ function App() {
           <Route path="/supplier-returns" element={<SupplierReturns />} />
           <Route path="/scraps" element={<Scraps />} />
           <Route path="/transfers" element={<Transfers />} />
+          {/* ===== ABC 成本核算路由（移植自 abc-productization 分支）===== */}
+          <Route path="/equipment" element={<EquipmentList />} />
+          <Route path="/equipment/types" element={<EquipmentTypeList />} />
+          <Route path="/equipment/depreciation" element={<EquipmentDepreciationStats />} />
+          <Route path="/labor-times" element={<LaborTimeList />} />
+          <Route path="/indirect-costs" element={<IndirectCostCenterList />} />
+          <Route path="/abc/dashboard" element={<CostDashboard />} />
+          <Route path="/abc/slide-cost" element={<SlideCostAnalysis />} />
+          <Route path="/abc/profitability" element={<ProfitabilityAnalysis />} />
+          <Route path="/abc/fee-comparison" element={<FeeComparison />} />
+          <Route path="/abc/supplier-costs" element={<SupplierCostAnalysis />} />
+          <Route path="/abc/fee-mappings" element={<FeeMappingConfig />} />
+          <Route path="/abc/trend" element={<CostTrend />} />
+          <Route path="/abc/activity-centers" element={<ActivityCenterList />} />
+          <Route path="/abc/cost-drivers" element={<CostDriverList />} />
+          <Route path="/abc/cost-pools" element={<CostPoolList />} />
+          <Route path="/abc/budgets" element={<BudgetManagement />} />
+          <Route path="/abc/quality-costs" element={<QualityCostAnalysis />} />
+          <Route path="/abc/variance" element={<CostVarianceAnalysis />} />
+          <Route path="/abc/alerts" element={<CostAlerts />} />
+          <Route path="/abc/audit" element={<AuditTrail />} />
+          <Route path="/abc/quarterly-adjustment" element={<QuarterlyAdjustment />} />
+          <Route path="/abc/personnel-efficiency" element={<PersonnelEfficiency />} />
+          <Route path="/abc/model-validation" element={<CostModelValidation />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

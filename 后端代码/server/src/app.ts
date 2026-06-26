@@ -3,7 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import { initializeDatabase } from './database/DatabaseManager.js'
 import { errorHandler } from './middleware/errorHandler.js'
-import { authenticateToken, requireRole } from './middleware/auth.js'
+import { authenticateToken, requireRole, requireCostWorkbenchAccess } from './middleware/auth.js'
 
 // 路由导入
 import authRoutes from './routes/auth.js'
@@ -29,6 +29,13 @@ import purchaseOrderRoutes from './routes/purchase-orders-v1.1.js'
 import transferRoutes from './routes/transfers-v1.1.js'
 import supplierReturnRoutes from './routes/supplier-returns-v1.1.js'
 import reconciliationRoutes from './routes/reconciliation-v1.1.js'
+// ABC 成本核算路由（纯增量移植）
+import equipmentRoutes from './routes/equipment-v1.1.js'
+import equipmentTypeRoutes from './routes/equipment-types-v1.1.js'
+import laborTimeRoutes from './routes/labor-time-v1.1.js'
+import indirectCostRoutes from './routes/indirect-cost-v1.1.js'
+import abcRoutes from './routes/abc-v1.1.js'
+import costAdjustmentRoutes from './routes/cost-adjustment-v1.1.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -88,6 +95,16 @@ app.use('/api/v1/reconciliation', authenticateToken, requireRole('admin', 'patho
 app.use('/api/v1/categories', authenticateToken, categoryRoutes)
 app.use('/api/v1/materials', authenticateToken, requireRole('admin', 'warehouse_manager', 'technician', 'pathologist', 'procurement'), materialRoutes)
 
+// 路由注册 - ABC 成本核算（纯增量）
+// 设备/工时主数据维护
+app.use('/api/v1/equipment', authenticateToken, requireRole('admin', 'finance'), equipmentRoutes)
+app.use('/api/v1/equipment-types', authenticateToken, requireRole('admin', 'finance'), equipmentTypeRoutes)
+app.use('/api/v1/labor-times', authenticateToken, requireRole('admin', 'finance'), laborTimeRoutes)
+app.use('/api/v1/indirect-costs', authenticateToken, requireCostWorkbenchAccess, indirectCostRoutes)
+// 成本工作台（核算/池/披露）
+app.use('/api/v1/abc', authenticateToken, requireRole('admin', 'pathologist', 'finance'), abcRoutes)
+app.use('/api/v1/cost-adjustments', authenticateToken, requireCostWorkbenchAccess, costAdjustmentRoutes)
+
 // 健康检查
 app.get('/api/health', (_req, res) => {
   res.json({ success: true, data: { status: 'ok', version: '1.1.0' } })
@@ -101,7 +118,12 @@ app.use((_req, res) => {
   res.status(404).json({ success: false, error: { message: 'Not found', code: 'NOT_FOUND' } })
 })
 
-app.listen(PORT, () => {
-  console.log(`COREONE Backend Server running on port ${PORT}`)
-  console.log(`API Base URL: http://localhost:${PORT}/api/v1`)
-})
+// 测试环境下不自动启动服务器（测试用 supertest 的 request(app)，无需常驻端口）
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`COREONE Backend Server running on port ${PORT}`)
+    console.log(`API Base URL: http://localhost:${PORT}/api/v1`)
+  })
+}
+
+export default app
