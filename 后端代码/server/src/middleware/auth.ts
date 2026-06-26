@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import { getDatabase } from '../database/DatabaseManager.js'
 
 const jwtSecret = process.env.JWT_SECRET
 if (!jwtSecret) {
@@ -69,13 +70,36 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
     return
   }
 
+  let decoded: { userId: string; username: string; role: string }
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; username: string; role: string }
-    req.user = decoded
-    next()
+    decoded = jwt.verify(token, JWT_SECRET) as { userId: string; username: string; role: string }
   } catch {
     res.status(401).json({ success: false, error: { message: 'Invalid token', code: 'UNAUTHORIZED' } })
+    return
   }
+
+  // 即时失效校验：回查 users，确保停用/软删除/改角色后 token 立即失效（不必等 8h 过期）。
+  // DB 异常时退回仅签名校验（不因 DB 抖动锁死全部请求）。
+  try {
+    const db = getDatabase()
+    const u = db.prepare('SELECT status, is_deleted, role FROM users WHERE id = ?').get(decoded.userId) as
+      | { status: number; is_deleted: number; role: string }
+      | undefined
+
+    if (!u || u.is_deleted === 1 || u.status !== 1) {
+      res.status(401).json({ success: false, error: { message: '账号已停用或不存在，请重新登录', code: 'ACCOUNT_DISABLED' } })
+      return
+    }
+    if (u.role !== decoded.role) {
+      res.status(401).json({ success: false, error: { message: '账号角色已变更，请重新登录', code: 'ROLE_CHANGED' } })
+      return
+    }
+  } catch {
+    // DB 不可用：降级为仅签名校验，避免数据库抖动导致全站 401
+  }
+
+  req.user = decoded
+  next()
 }
 
 export function requireRole(...allowedRoles: string[]) {

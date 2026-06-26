@@ -148,8 +148,8 @@ export function useCategoriesPage() {
       }
       setModalOpen(false)
       fetchData()
-    } catch (e) {
-      toast.error('操作失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -167,8 +167,8 @@ export function useCategoriesPage() {
       setDeleteModalOpen(false)
       setDeleteTarget(null)
       fetchData()
-    } catch (e) {
-      toast.error('删除失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 

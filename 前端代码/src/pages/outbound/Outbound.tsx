@@ -231,8 +231,8 @@ export default function Outbound() {
       setCreateModalOpen(false)
       setEditRecordId(null)
       refreshWithStats()
-    } catch (e) {
-      toast.error(editRecordId ? '出库更新失败' : '出库登记失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -244,8 +244,8 @@ export default function Outbound() {
       setDeleteConfirmOpen(false)
       setDeleteRecord(null)
       refreshWithStats()
-    } catch (e) {
-      toast.error('删除失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -260,8 +260,8 @@ export default function Outbound() {
       toast.success('出库已取消')
       setCancelModalOpen(false)
       refreshWithStats()
-    } catch (e) {
-      toast.error('取消失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 

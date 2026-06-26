@@ -94,30 +94,31 @@ router.post('/tracking/:id/deplete', (req, res) => {
     const endDate = new Date(today)
     const daysUsed = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
 
-    // 创建耗尽记录
+    // 确认耗尽是“已领出在用瓶子”的领用台账闭环，仓库库存在出库时已结算，
+    // 此处不得回写已结算的仓库 batches/inventory（否则用在用瓶子剩余量绝对覆盖仓库批次
+    // → 破坏守恒不变量 inventory.stock == SUM(batches.remaining)，产生幽灵库存）。
+    // 全程包事务，保证 batch_depletion 落账与 tracking 置位原子一致。
     const depletionId = `DPL-${Date.now()}`
-    db.prepare(`
-      INSERT INTO batch_depletion 
-      (id, tracking_id, material_id, material_name, batch, spec, total_qty, remain_qty, unit, start_date, end_date, days_used, actual_days, deplete_type, deplete_reason, operator, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(depletionId, id, tracking.material_id, tracking.material_name, tracking.batch, tracking.spec,
-      tracking.total_qty, remain_qty, tracking.unit, tracking.start_date, today, daysUsed, tracking.expected_days,
-      deplete_type, deplete_reason, operator)
-
-    // 更新跟踪记录状态为耗尽
-    db.prepare(`
-      UPDATE batch_usage_tracking 
-      SET status = 'depleted', updated_at = datetime('now')
-      WHERE id = ?
-    `).run(id)
-
-    // 更新批次库存
-    if (tracking.batch && tracking.material_id) {
+    db.exec('BEGIN IMMEDIATE')
+    try {
       db.prepare(`
-        UPDATE batches
-        SET remaining = ?, status = 2, updated_at = datetime('now')
-        WHERE batch_no = ? AND material_id = ?
-      `).run(remain_qty, tracking.batch, tracking.material_id)
+        INSERT INTO batch_depletion
+        (id, tracking_id, material_id, material_name, batch, spec, total_qty, remain_qty, unit, start_date, end_date, days_used, actual_days, deplete_type, deplete_reason, operator, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(depletionId, id, tracking.material_id, tracking.material_name, tracking.batch, tracking.spec,
+        tracking.total_qty, remain_qty, tracking.unit, tracking.start_date, today, daysUsed, tracking.expected_days,
+        deplete_type, deplete_reason, operator)
+
+      db.prepare(`
+        UPDATE batch_usage_tracking
+        SET status = 'depleted', remaining = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(remain_qty, id)
+
+      db.exec('COMMIT')
+    } catch (txErr) {
+      db.exec('ROLLBACK')
+      throw txErr
     }
 
     success(res, { id: depletionId })

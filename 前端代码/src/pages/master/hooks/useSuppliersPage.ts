@@ -163,8 +163,8 @@ export function useSuppliersPage() {
       toast.success('保存成功')
       setModalType(null)
       refresh()
-    } catch (e) {
-      toast.error('保存失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -179,8 +179,8 @@ export function useSuppliersPage() {
           await supplierApi.delete(id)
           toast.success('删除成功')
           refresh()
-        } catch (e) {
-          toast.error('删除失败')
+        } catch {
+          /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
         }
       },
     })
@@ -192,8 +192,8 @@ export function useSuppliersPage() {
       await supplierApi.update(row.id, { status: newStatus })
       toast.success(newStatus === 'active' ? '已启用' : '已停用')
       refresh()
-    } catch (e) {
-      toast.error('操作失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 

@@ -56,8 +56,8 @@ export function LogDetailModal({ open, log, getLogType, getModuleLabel, onClose 
                   <tbody className="divide-y divide-gray-200">
                     {Object.entries(log.requestData).map(([key, value]) => (
                       <tr key={key}>
-                        <td className="px-4 py-2.5 w-[140px] bg-gray-50 font-medium text-gray-700">{key}</td>
-                        <td className="px-4 py-2.5 text-gray-900">{String(value)}</td>
+                        <td className="px-4 py-2.5 w-[140px] bg-gray-50 font-medium text-gray-700 align-top">{key}</td>
+                        <td className="px-4 py-2.5 text-gray-900">{renderLogValue(value)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -72,6 +72,18 @@ export function LogDetailModal({ open, log, getLogType, getModuleLabel, onClose 
       </div>
     </div>
   )
+}
+
+function renderLogValue(value: unknown): React.ReactNode {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'object') {
+    return (
+      <pre className="whitespace-pre-wrap break-all font-mono text-[13px] text-gray-700 m-0">
+        {JSON.stringify(value, null, 2)}
+      </pre>
+    )
+  }
+  return String(value)
 }
 
 function Info({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {

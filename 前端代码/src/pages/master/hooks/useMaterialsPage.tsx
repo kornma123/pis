@@ -190,8 +190,8 @@ export function useMaterialsPage() {
       }
       setModalOpen(false)
       refresh()
-    } catch (e) {
-      toast.error('操作失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -206,7 +206,7 @@ export function useMaterialsPage() {
           await materialApi.delete(id)
           toast.success('删除成功')
           refresh()
-        } catch (e) { toast.error('删除失败') }
+        } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
       },
     })
   }
@@ -217,7 +217,7 @@ export function useMaterialsPage() {
       await materialApi.update(row.id, { status: newStatus })
       toast.success(newStatus === 'active' ? '物料已启用' : '物料已停用')
       refresh()
-    } catch (e) { toast.error('操作失败') }
+    } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
   }
 
   const toggleSelectAll = () => {
@@ -253,7 +253,7 @@ export function useMaterialsPage() {
           toast.success('批量删除成功')
           clearSelection()
           refresh()
-        } catch (e) { toast.error('批量删除失败') }
+        } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
       },
     })
   }
@@ -266,7 +266,7 @@ export function useMaterialsPage() {
       toast.success(status === 'active' ? '批量启用成功' : '批量停用成功')
       clearSelection()
       refresh()
-    } catch (e) { toast.error('操作失败') }
+    } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
   }
 
   const getCategoryName = (id?: string) => {

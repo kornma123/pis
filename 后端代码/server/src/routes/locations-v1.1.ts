@@ -7,7 +7,8 @@ import { authenticateToken, requireRole } from '../middleware/auth.js'
 const router = Router()
 
 const requireLocationRead = requireRole('admin', 'warehouse_manager')
-const requireLocationWrite = requireRole('admin')
+// P1-12: 写权限与读权限/角色矩阵(app.ts:81)对齐——仓管进库位模块即可建/改/删库位
+const requireLocationWrite = requireRole('admin', 'warehouse_manager')
 
 router.get('/', authenticateToken, requireLocationRead, (req, res) => {
   try {
@@ -25,10 +26,15 @@ router.get('/', authenticateToken, requireLocationRead, (req, res) => {
     const offset = (Number(page) - 1) * Number(pageSize)
     const list = db.prepare(`SELECT * FROM locations WHERE ${where} ORDER BY zone, name LIMIT ? OFFSET ?`).all(...params, Number(pageSize), offset) as any[]
 
-    successList(res, list.map((r: any) => ({
-      id: r.id, code: r.code, name: r.name, type: r.type, parentId: r.parent_id, zone: r.zone, shelf: r.shelf, position: r.position,
-      capacity: r.capacity, used: r.used, status: r.status === 1 ? 'active' : 'inactive',
-    })), Number(page), Number(pageSize), count)
+    // P1-06: used 派生自该库位下库存合计（inventory.location_id 关联），不再读从不被写的 locations.used 装饰列
+    const usedStmt = db.prepare('SELECT COALESCE(SUM(stock), 0) as used FROM inventory WHERE location_id = ?')
+    successList(res, list.map((r: any) => {
+      const used = Number((usedStmt.get(r.id) as any)?.used || 0)
+      return {
+        id: r.id, code: r.code, name: r.name, type: r.type, parentId: r.parent_id, zone: r.zone, shelf: r.shelf, position: r.position,
+        capacity: r.capacity, used, status: r.status === 1 ? 'active' : 'inactive',
+      }
+    }), Number(page), Number(pageSize), count)
   } catch (err: any) { error(res, err.message) }
 })
 

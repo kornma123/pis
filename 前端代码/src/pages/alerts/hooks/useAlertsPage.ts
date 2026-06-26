@@ -164,7 +164,7 @@ export function useAlertsPage() {
       refresh()
       setModal({ type: null, alert: null })
     } catch {
-      toast.error('处理失败')
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -174,7 +174,7 @@ export function useAlertsPage() {
       toast.success('已忽略')
       refresh()
     } catch {
-      toast.error('操作失败')
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 

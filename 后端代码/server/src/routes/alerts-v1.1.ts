@@ -95,19 +95,23 @@ router.post('/generate', (_req, res) => {
 
     const lowStockRule = db.prepare("SELECT * FROM alert_rules WHERE type = 'low-stock' AND enabled = 1").get() as any
     if (lowStockRule) {
+      // 有效阈值：优先 min_stock（表单/列表同源），为空时回退 safety_stock（兼容旧数据）。
+      // 统一口径，避免“仓管在阈值栏填值进 min_stock、引擎只读 safety_stock(0)”导致静默漏报。
       const lowItems = db.prepare(`
-        SELECT m.id, m.name, i.stock, m.safety_stock
+        SELECT m.id, m.name, i.stock,
+          COALESCE(NULLIF(m.min_stock, 0), m.safety_stock) AS effective_threshold
         FROM materials m
         JOIN inventory i ON m.id = i.material_id
         WHERE m.status = 1 AND m.is_deleted = 0
-        AND i.stock <= m.safety_stock AND m.safety_stock > 0
+        AND i.stock <= COALESCE(NULLIF(m.min_stock, 0), m.safety_stock)
+        AND COALESCE(NULLIF(m.min_stock, 0), m.safety_stock) > 0
       `).all() as any[]
 
       for (const item of lowItems) {
-        const exists = db.prepare('SELECT COUNT(*) as c FROM alerts WHERE material_id = ? AND type = ? AND status = "pending"').get(item.id, 'low-stock') as any
+        const exists = db.prepare("SELECT COUNT(*) as c FROM alerts WHERE material_id = ? AND type = ? AND status = 'pending'").get(item.id, 'low-stock') as any
         if (exists.c === 0) {
-          db.prepare('INSERT INTO alerts (id, type, level, material_id, material_name, current_stock, threshold, message, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, "pending")')
-            .run(uuidv4(), 'low-stock', 'warning', item.id, item.name, item.stock, item.safety_stock, `Low stock: current ${item.stock}, safety ${item.safety_stock}`)
+          db.prepare("INSERT INTO alerts (id, type, level, material_id, material_name, current_stock, threshold, message, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')")
+            .run(uuidv4(), 'low-stock', 'warning', item.id, item.name, item.stock, item.effective_threshold, `Low stock: current ${item.stock}, threshold ${item.effective_threshold}`)
           count++
         }
       }
@@ -128,9 +132,9 @@ router.post('/generate', (_req, res) => {
       `).all(thresholdStr) as any[]
 
       for (const item of expItems) {
-        const exists = db.prepare('SELECT COUNT(*) as c FROM alerts WHERE material_id = ? AND type = ? AND status = "pending"').get(item.id, 'expiry') as any
+        const exists = db.prepare("SELECT COUNT(*) as c FROM alerts WHERE material_id = ? AND type = ? AND status = 'pending'").get(item.id, 'expiry') as any
         if (exists.c === 0) {
-          db.prepare('INSERT INTO alerts (id, type, level, material_id, material_name, threshold, message, status) VALUES (?, ?, ?, ?, ?, ?, ?, "pending")')
+          db.prepare("INSERT INTO alerts (id, type, level, material_id, material_name, threshold, message, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')")
             .run(uuidv4(), 'expiry', 'danger', item.id, item.name, expiryRule.threshold_days, `Batch ${item.batch_no} expires at ${item.expiry_date}`)
           count++
         }

@@ -1,7 +1,8 @@
-import { Plus } from 'lucide-react'
+import { Plus, Layers } from 'lucide-react'
 import { useStocktakingPage, statusOptions, scopeOptions } from './hooks/useStocktakingPage'
 import { StocktakingTable } from './components/StocktakingTable'
 import { StocktakingCreateModal } from './components/StocktakingCreateModal'
+import { StocktakingBatchModal } from './components/StocktakingBatchModal'
 import { StocktakingDetailModal } from './components/StocktakingDetailModal'
 import { StocktakingDeleteModal } from './components/StocktakingDeleteModal'
 import { StocktakingAdjustModal } from './components/StocktakingAdjustModal'
@@ -17,9 +18,14 @@ export default function Stocktaking() {
           <h1 className="text-[28px] font-semibold text-gray-900 leading-tight tracking-tight">库存盘点</h1>
           <p className="mt-1 text-sm text-gray-500">管理库存盘点任务，确保账实相符</p>
         </div>
-        <button onClick={page.openCreate} className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm font-medium shadow-sm transition-colors">
-          <Plus className="w-4 h-4" />新建盘点
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={page.openBatch} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm font-medium shadow-sm transition-colors">
+            <Layers className="w-4 h-4" />批量盘点
+          </button>
+          <button onClick={page.openCreate} className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm font-medium shadow-sm transition-colors">
+            <Plus className="w-4 h-4" />新建盘点
+          </button>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -76,6 +82,19 @@ export default function Stocktaking() {
         onClose={() => page.setModalType(null)}
         onChange={page.setForm}
         onSetCreateStep={page.setCreateStep}
+      />
+
+      {/* Batch Modal */}
+      <StocktakingBatchModal
+        open={page.modalType === 'batch'}
+        rows={page.batchRows}
+        operator={page.batchOperator}
+        materials={page.materials}
+        isSubmitting={page.isSubmitting}
+        onClose={() => page.setModalType(null)}
+        onRowsChange={page.setBatchRows}
+        onOperatorChange={page.setBatchOperator}
+        onSubmit={page.handleBatchSubmit}
       />
 
       {/* Detail Modal */}

@@ -110,7 +110,7 @@ export function MaterialFormModal({
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                安全库存 <span className="text-xs text-gray-400 font-normal ml-1">({form.unit || '个'})</span>
+                库存预警阈值 <span className="text-xs text-gray-400 font-normal ml-1">({form.unit || '个'})</span>
               </label>
               <input type="number" value={form.minStock} onChange={e => onChange({ ...form, minStock: Number(e.target.value) })} placeholder={`输入数量，单位：${form.unit || '个'}`} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500" />
             </div>

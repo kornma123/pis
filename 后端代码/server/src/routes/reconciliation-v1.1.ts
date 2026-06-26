@@ -240,12 +240,15 @@ router.get('/materials', (req, res) => {
         theoryTotal += (cc?.count || 0) * (bu.usage_per_sample || 0)
       }
 
-      // 实际出库
+      // 实际出库（仅计入挂项目的出库，与 theory 口径一致；
+      // 无项目的直接出库不参与物料级对账，否则永远不平）
       const actual = db.prepare(`
         SELECT SUM(oi.quantity) as total_qty
         FROM outbound_items oi
         JOIN outbound_records o ON oi.outbound_id = o.id
-        WHERE oi.material_id = ? AND o.status = 'completed' AND o.is_deleted = 0 ${hasDate ? 'AND o.created_at >= ? AND o.created_at <= ?' : ''}
+        WHERE oi.material_id = ? AND o.status = 'completed' AND o.is_deleted = 0
+          AND o.project_id IS NOT NULL AND o.project_id != ''
+          ${hasDate ? 'AND o.created_at >= ? AND o.created_at <= ?' : ''}
       `).get(m.id, ...dateParams) as any
 
       const actualTotal = actual?.total_qty || 0

@@ -1,4 +1,5 @@
-import { X, AlertTriangle } from 'lucide-react'
+import { X, AlertTriangle, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import type { AlertItem } from '../hooks/useAlertsPage'
 import { ALERT_TYPE_MAP } from '../hooks/useAlertsPage'
 
@@ -12,9 +13,20 @@ interface Props {
 }
 
 export function AlertHandleModal({ open, alert, form, onClose, onChange, onConfirm }: Props) {
+  const navigate = useNavigate()
   if (!open || !alert) return null
 
   const typeInfo = ALERT_TYPE_MAP[alert.type] || { label: alert.type, bg: 'bg-gray-50', text: 'text-gray-600' }
+  const isExpiry = alert.type === 'expiry'
+
+  const goToScrap = () => {
+    const params = new URLSearchParams()
+    if (alert.materialId) params.set('materialId', alert.materialId)
+    if (alert.batchNo) params.set('batchId', alert.batchNo)
+    params.set('reason', 'expired')
+    onClose()
+    navigate(`/scraps?${params.toString()}`)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -75,13 +87,26 @@ export function AlertHandleModal({ open, alert, form, onClose, onChange, onConfi
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <button onClick={onClose} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors">
-            取消
-          </button>
-          <button onClick={onConfirm} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors shadow-sm">
-            确认处理
-          </button>
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <div>
+            {isExpiry && (
+              <button
+                onClick={goToScrap}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-600 text-sm font-medium rounded-md hover:bg-red-50 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                去报废
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 transition-colors">
+              取消
+            </button>
+            <button onClick={onConfirm} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors shadow-sm">
+              确认处理
+            </button>
+          </div>
         </div>
       </div>
     </div>

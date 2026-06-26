@@ -87,8 +87,8 @@ export default function PurchaseOrders() {
       setModalOpen(false)
       setForm({ materialId: '', supplierId: '', orderedQty: 1, unitPrice: 0, unit: '个', expectedDate: '', remark: '' })
       refresh()
-    } catch (e) {
-      toast.error('创建失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -104,8 +104,8 @@ export default function PurchaseOrders() {
       setReceiveModalOpen(false)
       setSelectedOrder(null)
       refresh()
-    } catch (e) {
-      toast.error('收货失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -114,8 +114,8 @@ export default function PurchaseOrders() {
       await purchaseOrderApi.cancel(order.id)
       toast.success('订单已取消')
       refresh()
-    } catch (e) {
-      toast.error('取消失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 

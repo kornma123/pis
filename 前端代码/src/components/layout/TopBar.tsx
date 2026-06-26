@@ -3,6 +3,7 @@ import { Bell, User, LogOut, Search, ChevronRight, Settings, FileText } from 'lu
 import { toast } from 'sonner'
 import { useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { clearAuth } from '@/api/request'
 
 const breadcrumbMap: Record<string, string> = {
   '/': '仪表盘',
@@ -93,7 +94,7 @@ export default function TopBar() {
   }, [])
 
   const handleLogout = () => {
-    localStorage.removeItem('token')
+    clearAuth()
     toast.success('已退出登录')
     window.location.href = '/login'
   }

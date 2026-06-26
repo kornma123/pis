@@ -228,6 +228,9 @@ router.post('/bom', (req, res) => {
       if (quantity <= 0) continue
       const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(item.material_id) as any
       if (!inv || inv.stock < quantity) {
+        // P1-01: 辅料(is_alternative=1，如通用试剂/耗材/质控)缺货跳过该项，不计出库、不阻断整单；
+        //        主料(is_alternative=0)缺货才阻断整单。
+        if (item.is_alternative === 1) continue
         error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
       }
       const batch = db.prepare(`
@@ -249,8 +252,11 @@ router.post('/bom', (req, res) => {
     try {
       for (const item of bomItems) {
         const quantity = item.usage_per_sample * sc
+        if (quantity <= 0) continue
         const invCheck = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(item.material_id) as any
         if (!invCheck || invCheck.stock < quantity) {
+          // P1-01: 与预检一致——辅料缺货跳过（不在 outboundItems 中，不会被扣减），主料缺货才回滚整单
+          if (item.is_alternative === 1) continue
           db.exec('ROLLBACK')
           error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
         }

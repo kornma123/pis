@@ -63,7 +63,7 @@ export const ROLE_MENU_MAP: Record<string, string[]> = {
     '/', '/inventory', '/inbound', '/materials', '/suppliers', '/purchase-orders', '/supplier-returns', '/categories', '/alerts',
   ],
   finance: [
-    '/', '/inventory', '/reconciliation', '/cost-analysis', '/categories', '/alerts',
+    '/', '/inventory', '/supplier-returns', '/reconciliation', '/cost-analysis', '/categories', '/alerts',
     // ABC 成本核算（移植）
     '/abc/dashboard', '/abc/slide-cost', '/abc/profitability', '/abc/activity-centers', '/equipment', '/labor-times', '/indirect-costs',
   ],

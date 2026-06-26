@@ -120,12 +120,17 @@ export function initializeDatabase(): void {
     }
   } catch (_e) { /* ignore */ }
 
-  // 兼容旧数据库：添加 stocktaking_records.is_deleted 字段
+  // 兼容旧数据库：添加 stocktaking_records.is_deleted / sheet_no 字段
   try {
     const stCols = database.prepare("PRAGMA table_info(stocktaking_records)").all() as any[]
     if (!stCols.find(c => c.name === 'is_deleted')) {
       database.exec("ALTER TABLE stocktaking_records ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
       console.log('Migrated stocktaking_records table: added is_deleted column')
+    }
+    // P1-04 批量盘点：同一次盘点的多条记录用 sheet_no 归组（单条盘点为 NULL）
+    if (!stCols.find(c => c.name === 'sheet_no')) {
+      database.exec("ALTER TABLE stocktaking_records ADD COLUMN sheet_no TEXT")
+      console.log('Migrated stocktaking_records table: added sheet_no column')
     }
   } catch (_e) { /* ignore */ }
   database.exec(`
@@ -162,7 +167,7 @@ export function initializeDatabase(): void {
     CREATE TABLE IF NOT EXISTS operation_logs (id TEXT PRIMARY KEY, user_id TEXT, username TEXT, operation TEXT NOT NULL, description TEXT NOT NULL, request_data TEXT, response_data TEXT, ip TEXT, user_agent TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)
   database.exec(`
-    CREATE TABLE IF NOT EXISTS stocktaking_records (id TEXT PRIMARY KEY, stocktaking_no TEXT NOT NULL UNIQUE, material_id TEXT NOT NULL, system_stock DECIMAL(18, 4) NOT NULL, actual_stock DECIMAL(18, 4) NOT NULL, difference DECIMAL(18, 4) NOT NULL, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
+    CREATE TABLE IF NOT EXISTS stocktaking_records (id TEXT PRIMARY KEY, stocktaking_no TEXT NOT NULL UNIQUE, sheet_no TEXT, material_id TEXT NOT NULL, system_stock DECIMAL(18, 4) NOT NULL, actual_stock DECIMAL(18, 4) NOT NULL, difference DECIMAL(18, 4) NOT NULL, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS return_records (id TEXT PRIMARY KEY, return_no TEXT NOT NULL UNIQUE, material_id TEXT NOT NULL, batch_id TEXT, quantity DECIMAL(18, 4) NOT NULL, reason TEXT NOT NULL, operator TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'completed', remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)

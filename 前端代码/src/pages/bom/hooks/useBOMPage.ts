@@ -249,7 +249,7 @@ export function useBOMPage() {
       setModalType(null)
       refresh()
     } catch {
-      toast.error('操作失败')
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -262,7 +262,7 @@ export function useBOMPage() {
       setEditingId(null)
       refresh()
     } catch {
-      toast.error('删除失败')
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -275,7 +275,7 @@ export function useBOMPage() {
       setSelectedIds(new Set())
       refresh()
     } catch {
-      toast.error('批量删除失败')
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -303,7 +303,7 @@ export function useBOMPage() {
       setModalType(null)
       refresh()
     } catch {
-      toast.error('复制失败')
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 

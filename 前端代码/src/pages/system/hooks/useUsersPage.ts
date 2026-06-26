@@ -153,8 +153,8 @@ export function useUsersPage() {
       toast.success(editingId ? '保存成功' : '创建成功')
       setModalType(null)
       refresh()
-    } catch (e) {
-      toast.error('操作失败')
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     }
   }
 
@@ -169,7 +169,7 @@ export function useUsersPage() {
           await request.delete(`/users/${id}`)
           toast.success('删除成功')
           refresh()
-        } catch (e) { toast.error('删除失败') }
+        } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
       },
     })
   }
@@ -180,7 +180,7 @@ export function useUsersPage() {
       await request.put(`/users/${row.id}`, { status: newStatus })
       toast.success(newStatus === 'active' ? '已启用' : '已停用')
       refresh()
-    } catch (e) { toast.error('操作失败') }
+    } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
   }
 
   const handleResetPassword = async (id: string) => {
@@ -193,7 +193,7 @@ export function useUsersPage() {
         try {
           await request.post(`/users/${id}/reset-password`, {})
           toast.success('密码重置成功')
-        } catch (e) { toast.error('密码重置失败') }
+        } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
       },
     })
   }

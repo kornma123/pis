@@ -21,7 +21,12 @@ import { supplierReturnApi, purchaseOrderApi, inboundApi } from '@/api/inventory
 import { materialApi, supplierApi } from '@/api/master'
 import type { SupplierReturnRecord, Material, Supplier, PurchaseOrder, InboundRecord } from '@/types'
 import { formatDate } from '@/lib/utils'
+import { getUserRole } from '@/lib/permissions'
 import { toast } from 'sonner'
+
+// P1-14: finance 对供应商退货【只读】（后端端点级写守卫一致）。读取列表/详情可见，
+// 写操作（新建/状态流转/删除）对 finance 隐藏。
+const WRITE_ROLES = ['admin', 'warehouse_manager', 'procurement']
 
 const statusMap: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   pending: { label: '待发货', color: 'text-amber-700', bg: 'bg-amber-50', icon: Clock },
@@ -40,6 +45,7 @@ const reasonOptions = [
 ]
 
 export default function SupplierReturns() {
+  const canWrite = WRITE_ROLES.includes(getUserRole() || '')
   const [searchParams, setSearchParams] = useSearchParams()
   const [materials, setMaterials] = useState<Material[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -206,15 +212,19 @@ export default function SupplierReturns() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-[28px] font-semibold text-gray-900">退货给供应商</h1>
-          <p className="text-sm text-gray-500 mt-1">管理物料退回供应商的完整流程</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {canWrite ? '管理物料退回供应商的完整流程' : '查看物料退回供应商的记录（只读）'}
+          </p>
         </div>
-        <button
-          onClick={() => { fetchRefs(); setModalOpen(true) }}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors shadow-sm"
-        >
-          <CornerUpLeft className="w-4 h-4" />
-          新建退货
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => { fetchRefs(); setModalOpen(true) }}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors shadow-sm"
+          >
+            <CornerUpLeft className="w-4 h-4" />
+            新建退货
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -340,7 +350,7 @@ export default function SupplierReturns() {
                             <Eye className="w-3.5 h-3.5 inline mr-0.5" />
                             详情
                           </button>
-                          {row.status === 'pending' && (
+                          {canWrite && row.status === 'pending' && (
                             <button
                               onClick={() => openDelete(row)}
                               className="px-2 py-1 text-gray-500 hover:text-red-600 text-xs font-medium transition-colors"
@@ -614,8 +624,8 @@ export default function SupplierReturns() {
                 </span>
               </div>
 
-              {/* Status Flow */}
-              {detailRecord.status !== 'refunded' && detailRecord.status !== 'cancelled' && (
+              {/* Status Flow（finance 只读，隐藏流转按钮） */}
+              {canWrite && detailRecord.status !== 'refunded' && detailRecord.status !== 'cancelled' && (
                 <div className="border-t border-gray-200 pt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">状态流转</label>
                   <div className="flex items-center gap-2 flex-wrap">
