@@ -4,6 +4,7 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { buildBomSourceSnapshot, calculateSlideCostWithFee, getBomPerSampleDriverQty } from '../utils/cost-calculator.js'
 import { recordCostException } from '../utils/cost-exceptions.js'
+import { getActiveBomVersionId } from '../utils/bom-version.js'
 
 const router = Router()
 
@@ -312,8 +313,8 @@ router.post('/bom', (req, res) => {
           (id, outbound_id, bom_id, project_id, sample_count, slide_count, block_count, case_count,
            material_cost, activity_cost, total_cost, cost_per_slide,
            fee_category, fee_standard_id, fee_amount, profit, profit_rate,
-           activity_details, cost_month, cost_status, case_no, charge_group_id, calculation_version, source_snapshot)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           activity_details, cost_month, cost_status, case_no, charge_group_id, calculation_version, source_snapshot, bom_version_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           abcDetailId, id, bomId, projectId || null,
           sc, storedSlideCount, storedBlockCount, 0,
@@ -333,7 +334,8 @@ router.post('/bom', (req, res) => {
             bomSnapshot: buildBomSourceSnapshot(db, bomId),
             feeBreakdown: slideCostResult.feeBreakdown,
             calculatedAt: new Date().toISOString(),
-          })
+          }),
+          getActiveBomVersionId(db, bomId), // 钉到当时活跃版本（历史可复现）
         )
         db.prepare(`
           UPDATE outbound_records SET

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { writeBomVersionSnapshot, getLatestBomVersionSnapshot, buildBomVersionSnapshot } from '../utils/bom-version.js'
 
 const router = Router()
 const requireBomWrite = requireRole('admin')
@@ -75,18 +76,32 @@ router.post('/', authenticateToken, requireBomWrite, (req, res) => {
     const db = getDatabase()
     const id = uuidv4()
     const version = 'v1.0'
+    const operator = (req as any).user?.username
+    const list = Array.isArray(materials) ? materials : []
 
-    db.prepare('INSERT INTO boms (id, code, name, version, type, service_id, description, supportable_samples, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)')
-      .run(id, code, name, version, type, serviceId || null, description || null, supportableSamples || null)
-
-    for (const m of materials) {
-      const itemId = uuidv4()
+    // 先校验全部用量，避免事务中途因非法值回滚
+    for (const m of list) {
       const usage = Number(m.usagePerSample)
       if (isNaN(usage) || usage < 0) {
         error(res, 'Invalid usage_per_sample', 'INVALID_PARAMETER', 400); return
       }
-      db.prepare('INSERT INTO bom_items (id, bom_id, material_id, usage_per_sample, unit) VALUES (?, ?, ?, ?, ?)')
-        .run(itemId, id, m.materialId, usage, m.unit)
+    }
+
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('INSERT INTO boms (id, code, name, version, type, service_id, description, supportable_samples, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)')
+        .run(id, code, name, version, type, serviceId || null, description || null, supportableSamples || null)
+
+      for (const m of list) {
+        db.prepare('INSERT INTO bom_items (id, bom_id, material_id, usage_per_sample, unit) VALUES (?, ?, ?, ?, ?)')
+          .run(uuidv4(), id, m.materialId, Number(m.usagePerSample), m.unit)
+      }
+
+      // 落初始版本快照
+      writeBomVersionSnapshot(db, id, null, operator)
+      db.exec('COMMIT')
+    } catch (e) {
+      db.exec('ROLLBACK'); throw e
     }
 
     success(res, { id }, 'Created', 201)
@@ -105,24 +120,42 @@ router.put('/:id', authenticateToken, requireBomWrite, (req, res) => {
     const existing = db.prepare('SELECT * FROM boms WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
 
-    const versionParts = existing.version.replace('v', '').split('.').map(Number)
-    versionParts[1] = (versionParts[1] || 0) + 1
-    const newVersion = `v${versionParts[0]}.${versionParts[1]}`
-
-    db.prepare('UPDATE boms SET name = ?, version = ?, description = ?, supportable_samples = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(name || existing.name, newVersion, description || existing.description, supportableSamples || existing.supportable_samples, id)
-
-    if (Array.isArray(materials)) {
-      db.prepare('DELETE FROM bom_items WHERE bom_id = ?').run(id)
+    const hasMaterials = Array.isArray(materials)
+    // 先校验全部用量
+    if (hasMaterials) {
       for (const m of materials) {
-        const itemId = uuidv4()
         const usage = Number(m.usagePerSample)
         if (isNaN(usage) || usage < 0) {
           error(res, 'Invalid usage_per_sample', 'INVALID_PARAMETER', 400); return
         }
-        db.prepare('INSERT INTO bom_items (id, bom_id, material_id, usage_per_sample, unit) VALUES (?, ?, ?, ?, ?)')
-          .run(itemId, id, m.materialId, usage, m.unit)
       }
+    }
+
+    const versionParts = existing.version.replace('v', '').split('.').map(Number)
+    versionParts[1] = (versionParts[1] || 0) + 1
+    const newVersion = `v${versionParts[0]}.${versionParts[1]}`
+    const operator = (req as any).user?.username
+    // 变更前快照（无历史版本则即时构建当前状态作为 before）
+    const previousSnapshot = getLatestBomVersionSnapshot(db, id) || buildBomVersionSnapshot(db, id)
+
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare('UPDATE boms SET name = ?, version = ?, description = ?, supportable_samples = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(name || existing.name, newVersion, description || existing.description, supportableSamples || existing.supportable_samples, id)
+
+      if (hasMaterials) {
+        db.prepare('DELETE FROM bom_items WHERE bom_id = ?').run(id)
+        for (const m of materials) {
+          db.prepare('INSERT INTO bom_items (id, bom_id, material_id, usage_per_sample, unit) VALUES (?, ?, ?, ?, ?)')
+            .run(uuidv4(), id, m.materialId, Number(m.usagePerSample), m.unit)
+        }
+      }
+
+      // 落新版本快照（BOM 直接编辑固定 future_only，不触发历史重算）
+      writeBomVersionSnapshot(db, id, previousSnapshot, operator, { effectiveScope: 'future_only' })
+      db.exec('COMMIT')
+    } catch (e) {
+      db.exec('ROLLBACK'); throw e
     }
 
     success(res, { id, version: newVersion }, 'Updated')

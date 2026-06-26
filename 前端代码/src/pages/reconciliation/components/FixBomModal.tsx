@@ -66,12 +66,12 @@ export function FixBomModal({
             <textarea rows={2} placeholder="请说明修正原因" value={fixReason} onChange={e => setFixReason(e.target.value)} className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:border-blue-500" />
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-amber-800">
-            <strong>提示：</strong>修正后，该BOM的历史对账数据将同步更新，差异记录保留在日志中。
+            <strong>提示：</strong>提交后不会立即修改 BOM，须由独立的成本负责人（财务/管理员）审核通过后才生效；是否追溯重算历史月份由审核环节决定。
           </div>
         </div>
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
-          <button onClick={onConfirm} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">确认修正</button>
+          <button onClick={onConfirm} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">提交修正（待审核）</button>
         </div>
       </div>
     </div>

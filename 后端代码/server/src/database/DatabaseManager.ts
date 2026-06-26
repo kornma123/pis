@@ -148,6 +148,22 @@ export function initializeDatabase(): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS bom_items (id TEXT PRIMARY KEY, bom_id TEXT NOT NULL, material_id TEXT NOT NULL, usage_per_sample DECIMAL(18, 4) NOT NULL, unit TEXT NOT NULL, is_alternative INTEGER NOT NULL DEFAULT 0, main_item_id TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(bom_id, material_id))
   `)
+  // BOM 标准用量版本快照：每次合法变更（BOM 编辑 / 对账核准）落一行，保留可追溯历史 + 影响范围
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS bom_versions (
+      id TEXT PRIMARY KEY,
+      bom_id TEXT NOT NULL,
+      version TEXT NOT NULL,
+      snapshot TEXT NOT NULL,
+      diff_summary TEXT,
+      change_log TEXT,
+      effective_scope TEXT NOT NULL DEFAULT 'future_only',
+      impact_summary TEXT,
+      changed_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(bom_id, version)
+    )
+  `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS stock_logs (id TEXT PRIMARY KEY, type TEXT NOT NULL, material_id TEXT NOT NULL, quantity DECIMAL(18, 4) NOT NULL, before_stock DECIMAL(18, 4) NOT NULL, after_stock DECIMAL(18, 4) NOT NULL, related_id TEXT, related_type TEXT, operator TEXT NOT NULL, remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)
@@ -356,6 +372,16 @@ export function initializeDatabase(): void {
       database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
     }
   }
+
+  // —— 对账 propose→approve 工作流列（reconciliation_logs 既有为事后审计，补待审/审核留痕）——
+  // 提案信息（material_id/project_id/proposed_usage）须持久化，审批时才能重放写回 BOM
+  ensureColumn('reconciliation_logs', 'status', "TEXT NOT NULL DEFAULT 'pending'") // pending|approved|rejected|applied
+  ensureColumn('reconciliation_logs', 'reviewed_by', 'TEXT')
+  ensureColumn('reconciliation_logs', 'reviewed_at', 'DATETIME')
+  ensureColumn('reconciliation_logs', 'applied_bom_id', 'TEXT')
+  ensureColumn('reconciliation_logs', 'proposed_usage', 'DECIMAL(18, 4)')
+  ensureColumn('reconciliation_logs', 'material_id', 'TEXT')
+  ensureColumn('reconciliation_logs', 'project_id', 'TEXT')
 
   // —— 设备 / 设备模板 / 设备用量 / 标准工时 ——
   database.exec(`

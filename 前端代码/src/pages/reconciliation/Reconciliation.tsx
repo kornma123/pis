@@ -172,7 +172,13 @@ export default function Reconciliation() {
       )}
 
       {page.activeTab === 'log' && (
-        <LogListTab logPagination={page.logPagination} />
+        <LogListTab
+          logPagination={page.logPagination}
+          currentUsername={page.currentUsername}
+          canApprove={page.canApprove}
+          onApprove={page.handleApproveProposal}
+          onReject={page.handleRejectProposal}
+        />
       )}
 
       {/* Modals */}

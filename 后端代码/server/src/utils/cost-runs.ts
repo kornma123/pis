@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { buildBomSourceSnapshot, calculateSlideCostWithFee, getBomPerSampleDriverQty } from './cost-calculator.js'
 import { errorMessage, recordCostException } from './cost-exceptions.js'
+import { getActiveBomVersionId } from './bom-version.js'
 
 const currentMonth = () => new Date().toISOString().slice(0, 7)
 
@@ -80,9 +81,9 @@ export const writeOutboundAbcSnapshot = (db: any, outbound: any, costRunId: stri
       material_cost, activity_cost, total_cost, cost_per_slide,
       fee_category, fee_standard_id, fee_amount, profit, profit_rate,
       activity_details, cost_month, cost_status, cost_run_id, case_no, charge_group_id,
-      calculation_version, source_snapshot
+      calculation_version, source_snapshot, bom_version_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     uuidv4(),
     outbound.id,
@@ -109,6 +110,7 @@ export const writeOutboundAbcSnapshot = (db: any, outbound: any, costRunId: stri
     result.chargeGroupId || (outbound.case_no ? `${outbound.case_no}-${yearMonth}` : outbound.id),
     'v1',
     JSON.stringify(sourceSnapshot),
+    getActiveBomVersionId(db, bomId), // 钉到当时活跃版本（历史可复现）
   )
   db.prepare(`
     UPDATE outbound_records
