@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { buildBomSourceSnapshot, calculateSlideCostWithFee, getBomPerSampleDriverQty } from '../utils/cost-calculator.js'
+import { recordCostException } from '../utils/cost-exceptions.js'
 
 const router = Router()
 
@@ -285,6 +287,76 @@ router.post('/bom', (req, res) => {
           VALUES (?, 'outbound', ?, ?, ?, ?, ?, 'outbound', ?)
         `).run(logId, oi.materialId, -oi.quantity, beforeStock, afterStock, id, operator)
       }
+
+      // ===== ABC 成本核算：写入 outbound_abc_details（失败不阻断出库）=====
+      try {
+        const costMonth = new Date().toISOString().slice(0, 7)
+        const perSampleDriver = getBomPerSampleDriverQty(db, bomId)
+        const storedBlockCount = Math.round(perSampleDriver.block * sc)
+        const storedSlideCount = Math.round((perSampleDriver.slide > 0 ? perSampleDriver.slide : 1) * sc)
+        const slideCostResult = calculateSlideCostWithFee(db, {
+          bomId,
+          slideCount: sc,
+          blockCount: 1,
+          month: costMonth,
+          materialCost: totalCost,
+          caseNo: null,
+          applyCaseAggregation: true,
+          sampleCount: sc,
+          caseCount: 0,
+        })
+        const missingFeeMapping = slideCostResult.feeBreakdown.length === 0
+        const abcDetailId = uuidv4()
+        db.prepare(`
+          INSERT INTO outbound_abc_details
+          (id, outbound_id, bom_id, project_id, sample_count, slide_count, block_count, case_count,
+           material_cost, activity_cost, total_cost, cost_per_slide,
+           fee_category, fee_standard_id, fee_amount, profit, profit_rate,
+           activity_details, cost_month, cost_status, case_no, charge_group_id, calculation_version, source_snapshot)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          abcDetailId, id, bomId, projectId || null,
+          sc, storedSlideCount, storedBlockCount, 0,
+          slideCostResult.materialCost, slideCostResult.totalActivityCost, slideCostResult.totalCost,
+          sc > 0 ? slideCostResult.totalCost / sc : 0,
+          slideCostResult.feeCategory, slideCostResult.feeStandardId,
+          slideCostResult.feeAmount, slideCostResult.profit, slideCostResult.profitRate,
+          JSON.stringify(slideCostResult.activityCosts),
+          costMonth,
+          missingFeeMapping ? 'cost_exception' : 'costed',
+          null,
+          id,
+          'v1',
+          JSON.stringify({
+            outboundId: id, outboundNo, bomId, projectId: projectId || null, caseNo: null,
+            sampleCount: sc, materialCost: totalCost,
+            bomSnapshot: buildBomSourceSnapshot(db, bomId),
+            feeBreakdown: slideCostResult.feeBreakdown,
+            calculatedAt: new Date().toISOString(),
+          })
+        )
+        db.prepare(`
+          UPDATE outbound_records SET
+            abc_total_cost = ?, abc_activity_cost = ?, fee_amount = ?, profit = ?, cost_status = ?
+          WHERE id = ?
+        `).run(
+          slideCostResult.totalCost, slideCostResult.totalActivityCost,
+          slideCostResult.feeAmount, slideCostResult.profit,
+          missingFeeMapping ? 'cost_exception' : 'costed', id,
+        )
+        if (missingFeeMapping) {
+          recordCostException(db, {
+            sourceModule: 'abc', sourceType: 'bom_outbound', sourceId: id,
+            projectId: projectId || null, bomId, outboundId: id, yearMonth: costMonth,
+            exceptionType: 'missing_fee_mapping', severity: 'warning',
+            message: 'BOM未配置收费映射，出库收费与利润核算不可确认',
+            details: { outboundNo, bomId, projectId: projectId || null, caseNo: null, sampleCount: sc, action: 'configure_bom_fee_mapping' },
+          })
+        }
+      } catch (abcErr) {
+        console.error('ABC cost calculation failed (non-blocking):', abcErr)
+      }
+
       db.exec('COMMIT')
     } catch (err) {
       db.exec('ROLLBACK')

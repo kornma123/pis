@@ -3,16 +3,18 @@
  *
  * 背景（P1-08 / triage 2026-06-26）：
  *   triage 声称 master 存在设备子系统（`equipment-v1.1.ts`）且 BOM 出库可自动写
- *   `equipment_usage`。**经核验，真实 master 完全没有设备子系统**——无 equipment 表、
+ *   `equipment_usage`。**当时核验：真实 master（未含 ABC）没有设备子系统**——无 equipment 表、
  *   无 equipment_usage 表、无 equipment 路由、前端无设备 UI、bom_items 仅含
- *   material_id（消耗品），不存在 BOM↔设备关联（bom_equipment）。triage 的引用源自
- *   并行 codex fork，不适用于本分支。
+ *   material_id（消耗品），不存在 BOM↔设备关联（bom_equipment）。
  *
- *   因此「BOM 出库消耗设备时自动 INSERT equipment_usage」无落点（无设备主数据、无
- *   关联模型可挂钩）。完整自动入口属于更大的新功能（需先建设备注册表 + 折旧方法配置
- *   + BOM↔设备映射），本轮**降级为最小安全增量**：仅交付一个经测试的、可在设备模型
- *   落地后被 outbound/equipment 路由直接调用的折旧计算 util，不引入任何 schema、不
- *   伪造任何设备/折旧数据、不改动现有出库事务。
+ *   因此「BOM 出库消耗设备时自动 INSERT equipment_usage」无落点，本轮**降级为最小安全增量**：
+ *   仅交付一个经测试的、可在设备模型落地后被 outbound/equipment 路由直接调用的折旧计算
+ *   util，不引入任何 schema、不伪造任何设备/折旧数据、不改动现有出库事务。
+ *
+ *   ⚠️ 合并说明（2026-06-26，#2 ABC × #3 审计集成）：ABC 子系统（PR #2）已引入真实
+ *   设备子系统（equipment-v1.1.ts 等），其配套的 `computeEquipmentDepreciation`
+ *   （按 equipment 表字段口径）一并保留于本文件末尾。两套 API 当前均未接入生产出库事务，
+ *   待设备↔BOM 映射落地后再统一收口（见 session-log 待办）。
  *
  * 提供两种标准会计折旧法：
  *   1. 直线法（straight-line）：按时间均摊到每个会计期/每天。
@@ -144,4 +146,31 @@ export function computeDepreciation(
     default:
       throw new Error(`Unknown depreciation method: ${method as string}`)
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ABC 子系统（PR #2）配套：与 equipment 路由 POST /:id/usage 的口径一致，
+// 抽出供 BOM 出库自动登记设备使用复用（P1-08）。字段直接对应 equipment 表。
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DepreciableEquipment {
+  purchase_price?: number | null
+  residual_value?: number | null
+  depreciation_method?: string | null
+  total_capacity?: number | null
+  depreciable_life_years?: number | null
+}
+
+export function computeEquipmentDepreciation(equipment: DepreciableEquipment, usageMinutes: number): number {
+  const depreciableAmount = (Number(equipment.purchase_price) || 0) - (Number(equipment.residual_value) || 0)
+  if (depreciableAmount <= 0 || usageMinutes <= 0) return 0
+  // 工作量法：按使用分钟占总工作量比例
+  if (equipment.depreciation_method === 'units_of_production' && Number(equipment.total_capacity) > 0) {
+    return (depreciableAmount / Number(equipment.total_capacity)) * usageMinutes
+  }
+  // 直线法：按日历分钟折旧（365天×24时×60分=525600分/年）
+  const minutesPerYear = 365 * 24 * 60
+  const totalMinutes = (Number(equipment.depreciable_life_years) || 5) * minutesPerYear
+  if (totalMinutes <= 0) return 0
+  return (depreciableAmount / totalMinutes) * usageMinutes
 }

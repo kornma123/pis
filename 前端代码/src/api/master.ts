@@ -1,5 +1,5 @@
 import request from './request'
-import type { ApiResponse, PaginationData, Category, Material, Supplier, Location, Project, BOM, PageParams } from '@/types'
+import type { ApiResponse, PaginationData, Category, Material, Supplier, Location, Project, BOM, PageParams, Equipment, EquipmentType, EquipmentUsage, DepreciationStat, StandardLaborTime, IndirectCostCenter, IndirectCostAllocation, CostAdjustment } from '@/types'
 
 export const categoryApi = {
   getTree: () => request.get<Category[]>('/categories/tree'),
@@ -58,4 +58,75 @@ export const bomApi = {
 export const userApi = {
   getList: (params?: PageParams & { keyword?: string }) =>
     request.get<PaginationData<any>>('/users', { params }),
+}
+
+// ===== ABC 成本核算 API（移植自 abc-productization 分支）=====
+export const equipmentApi = {
+  getList: (params?: PageParams & { keyword?: string; status?: string; typeId?: string; includeDeleted?: boolean }) =>
+    request.get<PaginationData<Equipment>>('/equipment', { params }),
+  getStats: (params?: { keyword?: string; status?: string; typeId?: string; includeDeleted?: boolean }) =>
+    request.get('/equipment/stats', { params }),
+  getDetail: (id: string) => request.get<Equipment>(`/equipment/${id}`),
+  create: (data: Partial<Equipment>) => request.post('/equipment', data),
+  update: (id: string, data: Partial<Equipment>) => request.put(`/equipment/${id}`, data),
+  delete: (id: string) => request.delete(`/equipment/${id}`),
+  getUsage: (id: string, params?: PageParams) =>
+    request.get<PaginationData<EquipmentUsage>>(`/equipment/${id}/usage`, { params }),
+  recordUsage: (id: string, data: Partial<EquipmentUsage>) =>
+    request.post(`/equipment/${id}/usage`, data),
+  getTypes: (params?: PageParams & { keyword?: string; status?: string; includeDeleted?: boolean }) =>
+    request.get<PaginationData<EquipmentType>>('/equipment-types', { params }),
+  getTypeStats: (params?: { keyword?: string; status?: string; includeDeleted?: boolean }) =>
+    request.get<{ total: number; active: number; equipmentCount: number }>('/equipment-types/stats', { params }),
+  getTypeDetail: (id: string) => request.get<EquipmentType>(`/equipment-types/${id}`),
+  createType: (data: Partial<EquipmentType>) => request.post('/equipment-types', data),
+  updateType: (id: string, data: Partial<EquipmentType>) => request.put(`/equipment-types/${id}`, data),
+  deleteType: (id: string) => request.delete(`/equipment-types/${id}`),
+  getDepreciationStats: () => request.get<{ summary: any; stats: DepreciationStat[] }>('/equipment/depreciation-stats'),
+}
+
+export const laborTimeApi = {
+  getList: (params?: PageParams & { projectType?: string; stepCode?: string; keyword?: string; referenceSource?: string }) =>
+    request.get<PaginationData<StandardLaborTime>>('/labor-times', { params }),
+  getStats: (params?: { projectType?: string; stepCode?: string; keyword?: string; referenceSource?: string }) =>
+    request.get('/labor-times/stats', { params }),
+  getByProjectType: (type: string) =>
+    request.get<StandardLaborTime[]>(`/labor-times/project-type/${type}`),
+  getDetail: (id: string) =>
+    request.get<StandardLaborTime>(`/labor-times/${id}`),
+  create: (data: Partial<StandardLaborTime>) =>
+    request.post('/labor-times', data),
+  update: (id: string, data: Partial<StandardLaborTime>) =>
+    request.put(`/labor-times/${id}`, data),
+  delete: (id: string) =>
+    request.delete(`/labor-times/${id}`),
+}
+
+export const indirectCostApi = {
+  getList: (params?: PageParams & { keyword?: string; status?: string }) =>
+    request.get<PaginationData<IndirectCostCenter>>('/indirect-costs', { params }),
+  getStats: (params?: { keyword?: string; status?: string }) =>
+    request.get('/indirect-costs/stats', { params }),
+  getDetail: (id: string) =>
+    request.get<IndirectCostCenter>(`/indirect-costs/${id}`),
+  create: (data: Partial<IndirectCostCenter>) =>
+    request.post('/indirect-costs', data),
+  update: (id: string, data: Partial<IndirectCostCenter>) =>
+    request.put(`/indirect-costs/${id}`, data),
+  delete: (id: string) =>
+    request.delete(`/indirect-costs/${id}`),
+  getAllocations: (id: string, params?: PageParams) =>
+    request.get<PaginationData<IndirectCostAllocation>>(`/indirect-costs/${id}/allocations`, { params }),
+  recordAllocation: (id: string, data: Partial<IndirectCostAllocation>) =>
+    request.post(`/indirect-costs/${id}/allocations`, data),
+}
+
+export const costAdjustmentApi = {
+  getSuggestions: (params?: { yearQuarter?: string; costCenterId?: string }) =>
+    request.get('/cost-adjustments/suggestions', { params }),
+  create: (data: Partial<CostAdjustment>) => request.post('/cost-adjustments', data),
+  review: (id: string, data: { status: 'approved' | 'rejected'; reason?: string }) =>
+    request.post(`/cost-adjustments/${id}/review`, data),
+  getList: (params?: PageParams & { yearQuarter?: string; costCenterId?: string; reviewStatus?: string }) =>
+    request.get<PaginationData<CostAdjustment>>('/cost-adjustments', { params }),
 }

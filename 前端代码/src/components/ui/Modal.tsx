@@ -1,3 +1,4 @@
+import React from 'react'
 import { useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -32,13 +33,16 @@ export function Modal({ children, onClose, title, size = 'md' }: ModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
         className={cn(
           'relative bg-white rounded-xl shadow-lg w-full mx-4 flex flex-col max-h-[90vh]',
           sizeClass[size]
         )}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+          <h3 id="modal-title" className="text-base font-semibold text-gray-900">{title}</h3>
           <button
             onClick={onClose}
             className="p-1 hover:bg-gray-50 rounded-md transition-colors"

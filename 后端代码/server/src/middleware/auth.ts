@@ -133,3 +133,27 @@ export function requireRole(...allowedRoles: string[]) {
     next()
   }
 }
+
+// 成本工作台访问控制（ABC 成本核算）
+// admin/finance 直接放行；自定义角色（非系统内置角色）需具备 '*' 或 'cost_analysis' 权限
+export function requireCostWorkbenchAccess(req: AuthRequest, res: Response, next: NextFunction): void {
+  const user = req.user
+  if (!user) {
+    res.status(401).json({ success: false, error: { message: 'Unauthorized', code: 'UNAUTHORIZED' } })
+    return
+  }
+
+  if (user.role === 'admin' || user.role === 'finance') {
+    next()
+    return
+  }
+
+  const userPerms = ROLE_PERMISSIONS[user.role] || []
+  const isCustomRole = !Object.keys(ROLE_PERMISSIONS).includes(user.role)
+  if (isCustomRole && (userPerms.includes('*') || userPerms.includes('cost_analysis'))) {
+    next()
+    return
+  }
+
+  res.status(403).json({ success: false, error: { message: 'Forbidden: insufficient permissions', code: 'FORBIDDEN' } })
+}

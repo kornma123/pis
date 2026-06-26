@@ -406,6 +406,11 @@ export interface SupplierCostReport {
     id: string
     name: string
     amount: number
+    // ABC 移植：供应商退货口径扩展字段（毛额/退款额/退货笔数/退货链接），SupplierCostAnalysis 使用
+    grossAmount?: number
+    refundedAmount?: number
+    refundedReturnCount?: number
+    supplierReturnUrl?: string
     ratio: number
     orderCount: number
     status: string
@@ -541,4 +546,147 @@ export interface PurchaseOrder {
   remark?: string
   createdAt: string
   updatedAt: string
+}
+
+// ===== ABC 成本核算（移植自 abc-productization 分支） =====
+
+// ===== 标准工时 =====
+export interface StandardLaborTime {
+  id: string
+  stepCode: string
+  stepName: string
+  projectType: string
+  standardMinutes: number
+  laborRatePerMinute: number
+  isEquipmentStep: boolean
+  description?: string
+  sortOrder: number
+  referenceSource?: 'supplier' | 'industry' | 'system'
+  referenceSourceLabel?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// ===== 间接成本中心 =====
+export interface IndirectCostCenter {
+  id: string
+  code: string
+  name: string
+  costType: string
+  monthlyAmount: number
+  allocationBase: string
+  description?: string
+  status: 'active' | 'inactive'
+  createdAt: string
+  updatedAt: string
+}
+
+export interface IndirectCostAllocation {
+  id: string
+  costCenterId: string
+  yearMonth: string
+  totalAmount: number
+  allocationBaseValue: number
+  allocationRate: number
+  createdAt: string
+}
+
+// ===== 设备类型 =====
+export interface EquipmentType {
+  id: string
+  code: string
+  name: string
+  description?: string
+  defaultPurchasePrice?: number
+  defaultDepreciableLifeYears?: number
+  defaultValue?: number
+  defaultDepreciationMethod?: string
+  defaultTotalCapacity?: number
+  defaultCapacityUnit?: string
+  status: 'active' | 'inactive'
+  equipmentCount?: number
+  isDeleted?: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// ===== 设备 =====
+export interface Equipment {
+  id: string
+  code: string
+  name: string
+  model?: string
+  manufacturer?: string
+  purchasePrice: number
+  purchaseDate?: string
+  depreciableLifeYears: number
+  residualValue: number
+  depreciationMethod: 'straight_line' | 'units_of_production'
+  totalCapacity?: number
+  capacityUnit?: string
+  status: 'active' | 'inactive' | 'scrapped'
+  locationId?: string
+  typeId?: string | null
+  typeName?: string | null
+  annualDepreciation?: number
+  accumulatedDepreciation?: number
+  netBookValue?: number
+  isDeleted?: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// ===== 设备折旧统计 =====
+export interface DepreciationStat {
+  typeId: string
+  typeCode: string
+  typeName: string
+  equipmentCount: number
+  totalPurchasePrice: number
+  totalAnnualDepreciation: number
+  totalMonthlyDepreciation: number
+}
+
+// ===== 季度成本调整 =====
+export interface CostAdjustment {
+  id: string
+  costCenterId: string
+  costCenterName?: string
+  yearQuarter: string
+  preProvisionAmount: number
+  actualAmount: number
+  adjustmentAmount: number
+  adjustmentReason?: string
+  adjustedBy?: string
+  adjustedAt?: string
+  reviewStatus: 'pending' | 'approved' | 'rejected'
+  reviewedBy?: string
+  reviewedAt?: string
+  reviewReason?: string
+}
+
+// ===== BOM 成本预览 =====
+export interface CostPreview {
+  bomId: string
+  bomName: string
+  totalCost: number
+  breakdown: {
+    materialCost: { amount: number; percentage: number }
+    laborCost: { amount: number; percentage: number }
+    equipmentCost: { amount: number; percentage: number }
+    indirectCost: { amount: number; percentage: number }
+  }
+}
+
+export interface EquipmentUsage {
+  id: string
+  equipmentId: string
+  projectId?: string
+  outboundId?: string
+  usageMinutes: number
+  usageCount: number
+  depreciationCost: number
+  operator?: string
+  usageDate?: string
+  createdAt: string
 }

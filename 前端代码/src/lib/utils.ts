@@ -42,3 +42,20 @@ export function formatCurrency(num: number | undefined): string {
     maximumFractionDigits: 2,
   })
 }
+
+// ABC 移植：客户端文本/CSV 导出辅助（成本页面"导出"按钮使用）
+export function downloadTextFile(filename: string, content: string, mimeType = 'text/plain;charset=utf-8') {
+  const blob = new Blob(['﻿', content], { type: mimeType })
+  downloadBlobFile(blob, filename)
+}
+
+export function downloadBlobFile(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}

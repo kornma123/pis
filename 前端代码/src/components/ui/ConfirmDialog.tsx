@@ -1,9 +1,12 @@
+import React from 'react'
 import { Modal } from './Modal'
 
 interface ConfirmDialogProps {
   open: boolean
   title: string
-  message: string
+  // message 与 description 二选一；description 为 ABC 移植页面使用的别名（additive）
+  message?: string
+  description?: string
   confirmText?: string
   cancelText?: string
   confirmVariant?: 'danger' | 'primary'
@@ -15,6 +18,7 @@ export function ConfirmDialog({
   open,
   title,
   message,
+  description,
   confirmText = '确认',
   cancelText = '取消',
   confirmVariant = 'danger',
@@ -26,7 +30,7 @@ export function ConfirmDialog({
   return (
     <Modal onClose={onCancel} title={title} size="sm">
       <div className="py-2">
-        <p className="text-sm text-gray-600">{message}</p>
+        <p className="text-sm text-gray-600">{description ?? message}</p>
       </div>
       <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
         <button

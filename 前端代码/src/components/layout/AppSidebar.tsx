@@ -29,6 +29,11 @@ import {
   Trash2,
   ArrowRightLeft,
   CornerUpLeft,
+  Wrench,
+  Clock,
+  TrendingUp,
+  Layers,
+  Settings,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -54,6 +59,14 @@ const ALL_MAIN_MENU: MenuItem[] = [
   { label: '物料分类', path: '/categories', icon: FolderTree },
   { label: '耗材管理', path: '/materials', icon: Boxes },
   { label: '预警中心', path: '/alerts', icon: Bell },
+  // ===== ABC 成本核算导航（移植自 abc-productization 分支）=====
+  { label: 'ABC成本看板', path: '/abc/dashboard', icon: BarChart3 },
+  { label: '单片成本分析', path: '/abc/slide-cost', icon: Layers },
+  { label: '盈利分析', path: '/abc/profitability', icon: TrendingUp },
+  { label: 'ABC配置', path: '/abc/activity-centers', icon: Settings },
+  { label: '设备管理', path: '/equipment', icon: Wrench },
+  { label: '标准工时库', path: '/labor-times', icon: Clock },
+  { label: '间接成本中心', path: '/indirect-costs', icon: Settings },
 ]
 
 const ALL_SYSTEM_MENU: MenuItem[] = [
