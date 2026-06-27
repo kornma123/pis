@@ -1,6 +1,12 @@
 # COREONE 角色越权测试场景矩阵
 
-> **依据**: `后端代码/server/src/middleware/auth.ts` 中 `ROLE_PERMISSIONS` 与 `pathToPermission` 映射、`角色功能测试报告-2026-05-11.md` 实测结果、TS-01~TS-16 测试场景文档  
+> ⚠️ **已过时（2026-06-26）—— 权限模型已改为数据驱动多角色 RBAC。**
+> 本文档基于旧 `auth.ts` 硬编码 `ROLE_PERMISSIONS`（已删除/替换）。现行权威权限矩阵 = **DB `roles.permissions`（对象矩阵，可在「角色权限」页编辑）**，初始种子见
+> [`docs/COREONE-RBAC角色权限矩阵-调研驱动设计-2026-06-26.md`](docs/COREONE-RBAC角色权限矩阵-调研驱动设计-2026-06-26.md) §8.2。
+> 主要变更：① 新增 `lab_director` 角色；② 病理/技术员去成本（abc/profit/单片成本 一律无权）；③ 财务获库存只读；④ 鉴权改 `requirePermission(module,R/W)` 读 DB 矩阵；⑤ 多角色=能力并集；⑥ 成本可见性可配置开关。
+> 下方旧场景仅供历史参考，**断言已不准确**，重写时请以新矩阵 + `tests/rbac-p3-route-matrix.test.ts` 为准。
+
+> **（历史）依据**: `后端代码/server/src/middleware/auth.ts` 中 `ROLE_PERMISSIONS` 与 `pathToPermission` 映射、`角色功能测试报告-2026-05-11.md` 实测结果、TS-01~TS-16 测试场景文档  
 > **6 角色**: admin(全部允许)、warehouse_manager(WHM)、technician(TECH)、pathologist(PATH)、procurement(PROC)、finance(FIN)  
 > **目标**: 为每个敏感功能点列举所有被禁止的角色，生成独立越权测试场景，总数 ≥120
 

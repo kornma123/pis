@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, error } from '../utils/response.js'
 import { JWT_SECRET, authenticateToken } from '../middleware/auth.js'
-import { getEffectivePermissions, getUserRoleCodes, canSeeCost } from '../middleware/permissions.js'
+import { getEffectivePermissions, getUserRoleCodes, canSeeCost, getCostVisibilityRoles, requireAnyRole } from '../middleware/permissions.js'
 
 const router = Router()
 const JWT_EXPIRES = '8h'
@@ -122,6 +122,31 @@ router.get('/me/capabilities', authenticateToken, (req, res) => {
     const u = db.prepare('SELECT role, primary_role FROM users WHERE id = ?').get(userId) as any
     const cap = buildCapabilityPayload(db, userId, u?.role)
     success(res, { primaryRole: u?.primary_role || u?.role || null, ...cap })
+  } catch (err: any) {
+    error(res, err.message, 'INTERNAL_ERROR', 500)
+  }
+})
+
+// 成本可见性开关（可配置默认）：读取当前允许看成本/利润的角色集合
+router.get('/cost-visibility', authenticateToken, (_req, res) => {
+  try {
+    success(res, { roles: getCostVisibilityRoles(getDatabase()) })
+  } catch (err: any) {
+    error(res, err.message, 'INTERNAL_ERROR', 500)
+  }
+})
+
+// 更新成本可见性角色集合（限运营管理者：admin/lab_director）
+router.put('/cost-visibility', authenticateToken, requireAnyRole('admin', 'lab_director'), (req, res) => {
+  try {
+    const { roles } = req.body
+    if (!Array.isArray(roles)) { error(res, 'roles must be an array', 'INVALID_PARAMETER', 400); return }
+    const clean = [...new Set(roles.filter((r) => typeof r === 'string'))]
+    if (!clean.includes('admin')) clean.push('admin') // admin 始终可见，防误锁
+    const db = getDatabase()
+    db.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES ('cost_visibility_roles', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
+      .run(JSON.stringify(clean))
+    success(res, { roles: clean }, 'Updated')
   } catch (err: any) {
     error(res, err.message, 'INTERNAL_ERROR', 500)
   }
