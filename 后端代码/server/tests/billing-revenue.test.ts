@@ -15,6 +15,7 @@ function L(seq: number, caseNo: string, code: string, item: string, price: numbe
 }
 
 // 取自真实数据的 5 个 case（含 80%/100% 扣率混合）
+const H = '上海和睦家医院'
 const ROWS: BillingRawRow[] = [
   // S26-02647: 3× 内镜活检 ¥165 80%→132
   L(1, 'S26-02647', '270300002b', '内镜组织活检检查与诊断-胃肠镜-和睦家', 165, 1, 165, '80%', 132),
@@ -96,6 +97,27 @@ describe('billing-revenue：code-agnostic + 扣率解析鲁棒性', () => {
     expect(codes).toContain('270900099-2')
     expect(codes).toContain('270500001-1')
   })
+  it('同一病理号跨月 → 拆成两条 case revenue（不被首月吞掉，深审②修复）', () => {
+    const rows = [
+      { 序号: 1, 病理号: 'S26-XM', 送检医院: H, 收费代码: 'C1', 计费金额: 165, 扣率: '80%', 开单金额: 132, 计费时间: '2026-06-02 14:00:00' },
+      { 序号: 1, 病理号: 'S26-XM', 送检医院: H, 收费代码: 'C2', 计费金额: 100, 扣率: '80%', 开单金额: 80, 计费时间: '2026-05-10 09:00:00' },
+    ]
+    const a = aggregateBilling(rows)
+    expect(a.cases.length).toBe(2)
+    expect(a.cases.map((c) => c.serviceMonth).sort()).toEqual(['2026-05', '2026-06'])
+  })
+
+  it('monthOf 容忍 2026/6/1 与单数字月（深审⑥修复）', () => {
+    const a = aggregateBilling([{ 序号: 1, 病理号: 'Y', 送检医院: H, 收费代码: 'C', 计费金额: 100, 扣率: '80%', 开单金额: 80, 计费时间: '2026/6/1 8:00' }])
+    expect(a.cases[0].serviceMonth).toBe('2026-06')
+  })
+
+  it('无收费代码但有金额的人工调整行 → 计入（code-agnostic，深审⑦修复）', () => {
+    const a = aggregateBilling([{ 序号: 1, 病理号: 'Z', 送检医院: H, 收费代码: '', 计费金额: 0, 扣率: '', 开单金额: 50, 计费时间: '2026-06-01' }])
+    expect(a.cases.length).toBe(1)
+    expect(a.cases[0].netAmount).toBe(50)
+  })
+
   it('扣率解析：80%→0.8 / 100%→1 / 0.8→0.8 / 缺失→net/gross 回退', () => {
     expect(normalizeLine(L(1, 'X', 'C', 'i', 100, 1, 100, '80%', 80)).discountRate).toBe(0.8)
     expect(normalizeLine(L(1, 'X', 'C', 'i', 100, 1, 100, '100%', 100)).discountRate).toBe(1)

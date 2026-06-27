@@ -14,6 +14,7 @@ import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { findOrCreatePartner } from '../utils/partner-upsert.js'
 import { normalizeLisRow, isValidLisRow } from '../utils/lis-import.js'
+import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
 
 const router = Router()
 const requireWrite = requirePermission('reconciliation', 'W')
@@ -74,6 +75,7 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
         )
         imported++
       }
+      backfillAbcPartnerIds(db) // LIS 落库后顺带把成本维度回填到位，减少手动 /backfill 遗漏
       db.exec('COMMIT')
     } catch (e) {
       db.exec('ROLLBACK')
@@ -162,11 +164,18 @@ router.put('/:caseNo/specimen-type', authenticateToken, requireWrite, (req, res)
     const db = getDatabase()
     const existing = db.prepare('SELECT specimen_type FROM lis_cases WHERE case_no = ?').get(caseNo) as { specimen_type: string } | undefined
     if (!existing) { error(res, '病例不存在', 'NOT_FOUND', 404); return }
-    db.prepare(`UPDATE lis_cases SET specimen_type = ?, specimen_type_source = 'manual' WHERE case_no = ?`).run(specimenType, caseNo)
-    // 留痕
-    db.prepare(`INSERT INTO reconciliation_logs (id, type, target_id, target_name, field, old_value, new_value, reason, operator)
-                VALUES (?, 'specimen_type_override', ?, ?, 'specimen_type', ?, ?, ?, ?)`)
-      .run(uuidv4(), caseNo, caseNo, existing.specimen_type || null, specimenType, '人工覆盖样本类型', (req as any).user?.id || null)
+    // 覆盖 + 留痕同一事务：日志写失败则覆盖回滚，不留无审计的变更
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare(`UPDATE lis_cases SET specimen_type = ?, specimen_type_source = 'manual' WHERE case_no = ?`).run(specimenType, caseNo)
+      db.prepare(`INSERT INTO reconciliation_logs (id, type, target_id, target_name, field, old_value, new_value, reason, operator)
+                  VALUES (?, 'specimen_type_override', ?, ?, 'specimen_type', ?, ?, ?, ?)`)
+        .run(uuidv4(), caseNo, caseNo, existing.specimen_type || null, specimenType, '人工覆盖样本类型', (req as any).user?.id || null)
+      db.exec('COMMIT')
+    } catch (e) {
+      db.exec('ROLLBACK')
+      throw e
+    }
     success(res, { caseNo, specimenType, source: 'manual' }, '已覆盖样本类型')
   } catch (e: any) { error(res, e.message) }
 })

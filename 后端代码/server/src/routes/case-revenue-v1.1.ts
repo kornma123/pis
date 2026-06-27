@@ -13,6 +13,7 @@ import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { findOrCreatePartner } from '../utils/partner-upsert.js'
 import { aggregateBilling } from '../utils/billing-revenue.js'
+import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
 
 const router = Router()
 const requireWrite = requirePermission('reconciliation', 'W')
@@ -44,37 +45,52 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
       INSERT INTO case_revenue_lines (id, case_no, partner_name, seq, specimen_name, charge_item, charge_code, unit_price, qty, unit, gross_amount, discount_rate, net_amount, charge_time, service_month, import_batch)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    const lisMatch = db.prepare('SELECT 1 FROM lis_cases WHERE case_no = ?')
+    const lisExists = db.prepare('SELECT 1 FROM lis_cases WHERE case_no = ?')
+    // 命中 LIS 且 LIS 有 partner 时以 LIS 的 partner 为权威，避免账单医院名别名/错字把收入落到与成本不同的 partner
+    const lisCanonical = db.prepare('SELECT partner_id FROM lis_cases WHERE case_no = ? AND partner_id IS NOT NULL')
+    const partnerByName = db.prepare('SELECT id FROM partners WHERE name = ? AND is_deleted = 0')
 
-    // 明细按 case 分组，使「删旧+插新」在同一 case 内成对，避免两段循环间的空窗
+    // 明细按 (病理号,服务月) 分组，与聚合键一致，使「删旧+插新」在同一 case+月内成对
     const linesByCase = new Map<string, typeof agg.lines>()
     for (const ln of agg.lines) {
-      const arr = linesByCase.get(ln.caseNo) || []
+      const k = `${ln.caseNo}|${ln.serviceMonth}`
+      const arr = linesByCase.get(k) || []
       arr.push(ln)
-      linesByCase.set(ln.caseNo, arr)
+      linesByCase.set(k, arr)
     }
 
     const unmatched: string[] = []
+    const nameMismatch: string[] = []
     let matchedToLis = 0
     // 整批事务：任一 case 失败则整体回滚（防「删了明细未补插」+ 并发交错）
     db.exec('BEGIN IMMEDIATE')
     try {
       for (const c of agg.cases) {
-        let partnerId = partnerCache.get(c.partnerName)
-        if (!partnerId) {
-          const ref = findOrCreatePartner(db, c.partnerName, uuidv4, { createdBy: operator })
-          partnerId = ref.id
-          partnerCache.set(c.partnerName, partnerId)
-          if (ref.created) partnersCreated++
+        const lisRow = lisCanonical.get(c.caseNo) as { partner_id: string } | undefined
+        let partnerId: string
+        if (lisRow) {
+          partnerId = lisRow.partner_id // LIS canonical（收入与成本归同一 partner）
+          const byName = partnerByName.get(c.partnerName) as { id: string } | undefined
+          if (byName && byName.id !== partnerId) nameMismatch.push(c.caseNo)
+        } else {
+          partnerId = partnerCache.get(c.partnerName) || ''
+          if (!partnerId) {
+            const ref = findOrCreatePartner(db, c.partnerName, uuidv4, { createdBy: operator })
+            partnerId = ref.id
+            partnerCache.set(c.partnerName, partnerId)
+            if (ref.created) partnersCreated++
+          }
         }
+        // 命中/未命中按 LIS 中是否存在该病理号判定（与 partner 是否已知解耦）
+        if (lisExists.get(c.caseNo)) matchedToLis++
+        else unmatched.push(c.caseNo)
         upsertRev.run(`CR-${uuidv4()}`, c.caseNo, partnerId, c.partnerName, docNo || null, c.grossAmount, c.netAmount, c.discountRate, c.serviceMonth, c.lineCount, importBatch)
         delLines.run(c.caseNo, c.serviceMonth)
-        const lns = linesByCase.get(c.caseNo) || []
+        const lns = linesByCase.get(`${c.caseNo}|${c.serviceMonth}`) || []
         lns.forEach((ln, i) => insLine.run(`CRL-${uuidv4()}`, ln.caseNo, ln.partnerName, i + 1, ln.specimenName, ln.chargeItem, ln.chargeCode,
           ln.unitPrice, ln.qty, ln.unit, ln.grossAmount, ln.discountRate, ln.netAmount, ln.chargeTime, ln.serviceMonth, importBatch))
-        if (lisMatch.get(c.caseNo)) matchedToLis++
-        else unmatched.push(c.caseNo)
       }
+      backfillAbcPartnerIds(db) // 顺带把成本维度刷新到位，减少手动回填遗漏
       db.exec('COMMIT')
     } catch (e) {
       db.exec('ROLLBACK')
@@ -89,11 +105,12 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
       netTotal: agg.summary.netTotal,
       discountRate: agg.summary.discountRate,
       serviceMonths: agg.summary.serviceMonths,
-      partnersMatched: partnerCache.size,
       partnersCreated,
       matchedToLis,
       unmatchedCount: unmatched.length,
       unmatchedCases: unmatched.slice(0, 100),
+      nameMismatchCount: nameMismatch.length,
+      nameMismatchCases: nameMismatch.slice(0, 100),
     }, `导入 ${agg.cases.length} case 实收 ¥${agg.summary.netTotal}（命中 LIS ${matchedToLis}，未命中 ${unmatched.length}）`)
   } catch (e: any) {
     error(res, e.message || '导入失败')

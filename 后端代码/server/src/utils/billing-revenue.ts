@@ -110,16 +110,30 @@ function round4(n: number): number {
   return Math.round((n + Number.EPSILON) * 10000) / 10000
 }
 
-/** 明细行判定：序号为数字 + 病理号非空非"小计" + 有收费代码 */
+/**
+ * 明细行判定：序号为数字 + 病理号非空非"小计" + (有收费代码 或 有金额)。
+ * code-agnostic：允许无收费代码但有金额的人工调整/折扣/补退费行（否则会漏计 case 实收）。
+ */
 function isDetailRow(row: BillingRawRow): boolean {
   const seq = raw(row, 'seq')
   const caseNo = str(row, 'caseNo')
-  return seq != null && Number.isFinite(Number(seq)) && caseNo !== '' && caseNo !== '小计' && str(row, 'chargeCode') !== ''
+  if (!(seq != null && Number.isFinite(Number(seq))) || caseNo === '' || caseNo === '小计') return false
+  return str(row, 'chargeCode') !== '' || num(row, 'grossAmount') > 0 || num(row, 'netAmount') > 0
 }
 
-function monthOf(chargeTime: string): string {
-  const m = chargeTime.match(/(\d{4})[-/](\d{2})/)
-  return m ? `${m[1]}-${m[2]}` : ''
+/** 服务月解析：容忍 'YYYY-M(-D)'/'YYYY/M/D'/Date 对象/Excel 序列号；无法识别返回 ''。 */
+function monthOf(v: unknown): string {
+  if (v == null || v === '') return ''
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}`
+  const s = String(v).trim()
+  const m = s.match(/(\d{4})[-/](\d{1,2})/) // 含单数字月
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}`
+  const serial = Number(s) // Excel 序列号（1899-12-30 起的天数）
+  if (Number.isFinite(serial) && serial > 30000 && serial < 90000) {
+    const d = new Date(Date.UTC(1899, 11, 30) + serial * 86400000)
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  }
+  return ''
 }
 
 export function normalizeLine(row: BillingRawRow): BillingLine {
@@ -142,7 +156,7 @@ export function normalizeLine(row: BillingRawRow): BillingLine {
     discountRate: round4(discount),
     netAmount: net,
     chargeTime,
-    serviceMonth: monthOf(chargeTime),
+    serviceMonth: monthOf(raw(row, 'chargeTime') ?? chargeTime), // 用原值，支持 Date/Excel 序列号
   }
 }
 
@@ -155,12 +169,15 @@ export function aggregateBilling(rows: BillingRawRow[]): BillingAggregate {
     else skipped++
   }
 
+  // 聚合键 = (病理号, 服务月)，与 case_revenue UNIQUE(case_no, service_month) 一致；
+  // 同一 case 跨月补收费/冲销不会被合并成一行、月份不会被首行吞掉。
   const byCase = new Map<string, CaseRevenue>()
   for (const ln of lines) {
-    let c = byCase.get(ln.caseNo)
+    const key = `${ln.caseNo}|${ln.serviceMonth}`
+    let c = byCase.get(key)
     if (!c) {
       c = { caseNo: ln.caseNo, partnerName: ln.partnerName, grossAmount: 0, netAmount: 0, discountRate: 0, serviceMonth: ln.serviceMonth, lineCount: 0 }
-      byCase.set(ln.caseNo, c)
+      byCase.set(key, c)
     }
     c.grossAmount = round2(c.grossAmount + ln.grossAmount)
     c.netAmount = round2(c.netAmount + ln.netAmount)

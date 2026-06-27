@@ -7,7 +7,7 @@
  */
 
 import { computeCasePnl, rollupPartnerRevenue, type CasePnl, type CasePnlInput, type RevenueQuality } from './partner-pnl.js'
-import { getPartnerCostRollup, getCaseCostRollup } from './abc-partner-link.js'
+import { getPartnerCostRollup, getCaseCostRollup, getPartnerCostByMonth } from './abc-partner-link.js'
 import { loadChargeCatalog } from './charge-catalog.js'
 import type { ChargeCodeDef } from './charge-engine.js'
 import type { ServiceScope } from './partner-upsert.js'
@@ -154,22 +154,29 @@ export interface PnlTrendPoint {
   caseCount: number
 }
 
-/** 某医院的月度趋势（按 service_month 时序）。单次装载目录+收入+成本，按月分桶，避免逐月 N+1。 */
+/**
+ * 某医院的月度趋势（按 service_month 时序）。单次装载目录+收入+成本。
+ * 成本按【cost_month】归集（getPartnerCostByMonth），避免按 case lifetime 把同一份成本串到每个收入月重复计。
+ */
 export function buildPartnerTrend(db: DbLike, partnerId: string): PnlTrendPoint[] {
   const catalog = loadChargeCatalog(db) // 一次
   const cases = loadCasePnls(db, catalog, { partnerId }) // 一次（全月份）
-  const costMap = getCaseCostRollup(db, {}) // 一次（case→成本）
+  const costByMonth = getPartnerCostByMonth(db, partnerId) // 一次（按成本月）
   const byMonth = new Map<string, PnlTrendPoint>()
-  for (const c of cases) {
-    const m = c.serviceMonth
-    if (!m) continue
+  const ensure = (m: string) => {
     let p = byMonth.get(m)
     if (!p) { p = { serviceMonth: m, netRevenueTotal: 0, labRevenueTotal: 0, costTotal: 0, grossMargin: 0, caseCount: 0 }; byMonth.set(m, p) }
+    return p
+  }
+  for (const c of cases) {
+    if (!c.serviceMonth) continue
+    const p = ensure(c.serviceMonth)
     p.netRevenueTotal = r2(p.netRevenueTotal + c.netRevenue)
     p.labRevenueTotal = r2(p.labRevenueTotal + c.labRevenue)
-    p.costTotal = r2(p.costTotal + (costMap.get(c.caseNo) || 0))
     p.caseCount++
   }
+  // 成本归到自己的成本月（即使该月暂无收入也呈现，便于发现成本/收入错期）
+  for (const [m, cost] of costByMonth) ensure(m).costTotal = cost
   const points = [...byMonth.values()].sort((a, b) => a.serviceMonth.localeCompare(b.serviceMonth))
   points.forEach((p) => { p.grossMargin = r2(p.labRevenueTotal - p.costTotal) })
   return points

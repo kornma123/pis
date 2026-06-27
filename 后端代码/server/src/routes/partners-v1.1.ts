@@ -76,12 +76,16 @@ router.put('/:id', authenticateToken, requireWrite, (req, res) => {
   try {
     const { id } = req.params
     const d = req.body
-    if (d.serviceScope && !SCOPES.includes(d.serviceScope)) { error(res, 'serviceScope 非法', 'INVALID_PARAMETER', 400); return }
+    // 与 POST 同级校验：name 非空白、serviceScope/status 合法、code 非空白（避免脏数据进库）
+    if (d.serviceScope !== undefined && !SCOPES.includes(d.serviceScope)) { error(res, 'serviceScope 非法', 'INVALID_PARAMETER', 400); return }
+    if (d.name !== undefined && !String(d.name).trim()) { error(res, '医院名称不能为空', 'INVALID_PARAMETER', 400); return }
+    if (d.code !== undefined && !String(d.code).trim()) { error(res, 'code 不能为空', 'INVALID_PARAMETER', 400); return }
+    if (d.status !== undefined && !['active', 'inactive'].includes(d.status)) { error(res, 'status 只接受 active/inactive', 'INVALID_PARAMETER', 400); return }
     const db = getDatabase()
     if (!db.prepare('SELECT 1 FROM partners WHERE id = ? AND is_deleted = 0').get(id)) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     const fields: string[] = []; const params: any[] = []
     const set = (col: string, val: any) => { fields.push(`${col} = ?`); params.push(val) }
-    if (d.code !== undefined) set('code', d.code)
+    if (d.code !== undefined) set('code', String(d.code).trim())
     if (d.name !== undefined) set('name', String(d.name).trim())
     if (d.shortName !== undefined) set('short_name', d.shortName)
     if (d.contact !== undefined) set('contact', d.contact)

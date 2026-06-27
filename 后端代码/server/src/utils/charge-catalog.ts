@@ -80,7 +80,16 @@ export function loadChargeCatalog(db: { prepare: (sql: string) => { all: (...arg
   const rows = db
     .prepare(`SELECT code, name, unit, category, rule_type, rule_json FROM charge_codes WHERE status = 'active'`)
     .all() as ChargeCodeRow[]
-  return buildCatalog(rows.map(rowToChargeDef))
+  // rule_json 坏行（人工误改/脏迁移）逐条跳过，不让一行坏数据使整个 P&L 接口 500
+  const defs: ChargeCodeDef[] = []
+  for (const r of rows) {
+    try {
+      defs.push(rowToChargeDef(r))
+    } catch {
+      console.warn(`charge_codes: 跳过无法解析的 rule_json，code=${r.code}`)
+    }
+  }
+  return buildCatalog(defs)
 }
 
 /** 引擎用内存目录（不连 DB 时的回退/单测用）：直接从种子构建。 */

@@ -88,6 +88,16 @@ describe('partners CRUD（admin）', () => {
   })
 })
 
+describe('partners PUT 校验（深审⑧修复：与 POST 同级）', () => {
+  it('空白 name / 非法 status / 非法 serviceScope → 400（校验先于存在性检查）', async () => {
+    const request = (await import('supertest')).default
+    const auth = `Bearer ${adminToken}`
+    expect((await request(app).put('/api/v1/partners/any-id').set('Authorization', auth).send({ name: '   ' })).status).toBe(400)
+    expect((await request(app).put('/api/v1/partners/any-id').set('Authorization', auth).send({ status: 'bogus' })).status).toBe(400)
+    expect((await request(app).put('/api/v1/partners/any-id').set('Authorization', auth).send({ serviceScope: '' })).status).toBe(400)
+  })
+})
+
 describe('partners RBAC', () => {
   it('finance：可读(R)，但写被拒(403)', async () => {
     const request = (await import('supertest')).default
