@@ -2,12 +2,13 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
-import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
+import { requirePermission } from '../middleware/permissions.js'
 import { normalizeDisplayText, requireValidText, type TextGuardResult } from '../utils/text-guard.js'
 import { logOperation } from '../utils/operation-logger.js'
 
 const router = Router()
-const requireEquipmentTypeWrite = requireRole()
+const requireEquipmentTypeWrite = requirePermission('equipment', 'W')
 
 type DepreciationMethodParse =
   | { ok: true; value: string }

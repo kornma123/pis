@@ -2,8 +2,12 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
+
+// 写权限：读 DB 矩阵（purchase_orders W = admin/procurement；lab_director/warehouse/finance 仅 R）
+const requirePOWrite = requirePermission('purchase_orders', 'W')
 
 function generateOrderNo(): string {
   const date = new Date()
@@ -66,7 +70,7 @@ router.get('/:id', (req, res) => {
 })
 
 // 创建采购订单
-router.post('/', (req, res) => {
+router.post('/', requirePOWrite, (req, res) => {
   try {
     const { materialId, materialName, supplierId, orderedQty, unit, unitPrice, expectedDate, remark } = req.body
     if (!materialId || orderedQty === undefined || orderedQty === null || isNaN(Number(orderedQty)) || Number(orderedQty) <= 0) {
@@ -85,7 +89,7 @@ router.post('/', (req, res) => {
 })
 
 // 更新采购订单收货数量（部分入库时调用）
-router.put('/:id/receive', (req, res) => {
+router.put('/:id/receive', requirePOWrite, (req, res) => {
   try {
     const { quantity } = req.body
     if (quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0) {
@@ -108,7 +112,7 @@ router.put('/:id/receive', (req, res) => {
 })
 
 // 取消采购订单
-router.put('/:id/cancel', (req, res) => {
+router.put('/:id/cancel', requirePOWrite, (req, res) => {
   try {
     const db = getDatabase()
     const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(req.params.id) as any

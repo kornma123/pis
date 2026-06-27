@@ -2,12 +2,12 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
-import { requireRole } from '../middleware/auth.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
 // 物料分类写入权限：仅 admin 可操作（与 E2E 权限矩阵一致）
-const requireCategoryWrite = requireRole('admin')
+const requireCategoryWrite = requirePermission('categories', 'W')
 
 router.get('/tree', (_req, res) => {
   try {

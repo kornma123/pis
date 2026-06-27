@@ -5,6 +5,7 @@ import { success, successList, error } from '../utils/response.js'
 import { buildBomSourceSnapshot, calculateSlideCostWithFee, getBomPerSampleDriverQty } from '../utils/cost-calculator.js'
 import { recordCostException } from '../utils/cost-exceptions.js'
 import { getActiveBomVersionId } from '../utils/bom-version.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
@@ -369,14 +370,7 @@ router.post('/bom', (req, res) => {
 })
 
 // 写入权限检查
-function requireWriteAccess(req: any, res: any, next: any) {
-  const role = req.user?.role
-  if (role === 'admin' || role === 'warehouse_manager') {
-    next()
-    return
-  }
-  error(res, 'Forbidden: insufficient permissions', 'FORBIDDEN', 403)
-}
+const requireWriteAccess = requirePermission('outbound', 'W')
 
 router.put('/:id', requireWriteAccess, (req, res) => {
   try {

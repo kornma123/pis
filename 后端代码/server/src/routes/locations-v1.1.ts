@@ -2,13 +2,14 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
-import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
-const requireLocationRead = requireRole('admin', 'warehouse_manager')
-// P1-12: 写权限与读权限/角色矩阵(app.ts:81)对齐——仓管进库位模块即可建/改/删库位
-const requireLocationWrite = requireRole('admin', 'warehouse_manager')
+const requireLocationRead = requirePermission('locations', 'R')
+// 写权限读 DB 矩阵（locations W = admin/warehouse_manager，可在角色权限页改）
+const requireLocationWrite = requirePermission('locations', 'W')
 
 router.get('/', authenticateToken, requireLocationRead, (req, res) => {
   try {

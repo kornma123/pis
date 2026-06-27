@@ -2,7 +2,8 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
-import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
+import { requirePermission } from '../middleware/permissions.js'
 import { logOperation } from '../utils/operation-logger.js'
 
 const router = Router()
@@ -65,7 +66,7 @@ function getAdjustmentWithCenter(db: any, id: string) {
 }
 
 // 获取季度调整建议（自动计算）
-router.get('/suggestions', authenticateToken, requireRole('admin', 'finance'), (req, res) => {
+router.get('/suggestions', authenticateToken, requirePermission('cost_analysis', 'R'), (req, res) => {
   try {
     const { yearQuarter } = req.query
     const db = getDatabase()
@@ -127,7 +128,7 @@ router.get('/suggestions', authenticateToken, requireRole('admin', 'finance'), (
 })
 
 // 创建调整记录
-router.post('/', authenticateToken, requireRole('admin', 'finance'), (req, res) => {
+router.post('/', authenticateToken, requirePermission('cost_analysis', 'W'), (req, res) => {
   try {
     const { costCenterId, yearQuarter, actualAmount, adjustmentReason } = req.body
     const normalizedCostCenterId = String(costCenterId || '').trim()
@@ -191,7 +192,7 @@ router.post('/', authenticateToken, requireRole('admin', 'finance'), (req, res) 
 })
 
 // 审核调整
-router.post('/:id/review', authenticateToken, requireRole('admin', 'finance'), (req, res) => {
+router.post('/:id/review', authenticateToken, requirePermission('cost_analysis', 'W'), (req, res) => {
   try {
     const { id } = req.params
     const { status, reason } = req.body
@@ -237,7 +238,7 @@ router.post('/:id/review', authenticateToken, requireRole('admin', 'finance'), (
 })
 
 // 获取调整记录列表
-router.get('/', authenticateToken, requireRole('admin', 'finance'), (req, res) => {
+router.get('/', authenticateToken, requirePermission('cost_analysis', 'R'), (req, res) => {
   try {
     const { page = 1, pageSize = 20, yearQuarter, costCenterId, reviewStatus } = req.query
     const db = getDatabase()

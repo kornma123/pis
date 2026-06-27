@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
@@ -19,7 +20,7 @@ router.get('/rules', (_req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.put('/rules/:id', (req, res) => {
+router.put('/rules/:id', requirePermission('alerts', 'W'), (req, res) => {
   try {
     const user = (req as any).user
     if (!user || user.role !== 'admin') {

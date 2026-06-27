@@ -6,12 +6,12 @@ import { calculateSlideCostWithFee } from '../utils/cost-calculator.js'
 import { recordCostException } from '../utils/cost-exceptions.js'
 import { ensurePeriodOpen, getOrCreatePeriod, normalizeMonth, runCostRecalculation, writeAuditLog } from '../utils/cost-runs.js'
 import { buildClosingReadiness } from '../utils/closing-readiness.js'
-import { requireCostWorkbenchAccess } from '../middleware/auth.js'
+import { requirePermission } from '../middleware/permissions.js'
 import { logOperation } from '../utils/operation-logger.js'
 
 const router = Router()
-const requireCostWrite = requireCostWorkbenchAccess
-const requireCostWorkbenchRead = requireCostWorkbenchAccess
+const requireCostWrite = requirePermission('abc_config', 'W')
+const requireCostWorkbenchRead = requirePermission('abc_dashboard', 'R')
 
 const pageParams = (query: any) => {
   const page = Math.max(1, Number(query.page) || 1)

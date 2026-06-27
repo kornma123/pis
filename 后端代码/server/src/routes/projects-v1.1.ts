@@ -2,12 +2,12 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
-import { requireRole } from '../middleware/auth.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
 // 项目写入权限：仅 admin 可操作
-const requireProjectWrite = requireRole('admin')
+const requireProjectWrite = requirePermission('projects', 'W')
 
 router.get('/', (req, res) => {
   try {

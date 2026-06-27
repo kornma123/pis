@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
@@ -13,15 +14,8 @@ function generateNo(): string {
 }
 
 // P1-14: 供应商退货为写操作（创建/流转/修正退款额/删除），finance 仅【只读】访问。
-// app.ts 已把 finance 纳入 allowedRoles 以获得读权限；此端点级守卫保证 finance 不能写。
-function requireWriteAccess(req: any, res: any, next: any) {
-  const role = req.user?.role
-  if (role === 'admin' || role === 'warehouse_manager' || role === 'procurement') {
-    next()
-    return
-  }
-  error(res, 'Forbidden: insufficient permissions', 'FORBIDDEN', 403)
-}
+// 挂载层 supplier_returns R 给读权限；此端点级守卫要求 supplier_returns W（矩阵：admin/仓管/采购 W，finance R）。
+const requireWriteAccess = requirePermission('supplier_returns', 'W')
 
 // P1-13/P1-14: 退款额来源成本上界 = 来源单价 × 数量。
 // 来源单价优先取关联入库单 price，其次该物料批次最近 inbound_price，最后 material.price。

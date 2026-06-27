@@ -76,16 +76,19 @@ describe('P0-03 JWT 即时失效', () => {
     expect(res.body.error.code).toBe('ACCOUNT_DISABLED')
   })
 
-  it('改角色后，旧 token(role不符) 访问应 401 ROLE_CHANGED', async () => {
+  it('改角色后，旧 token 即时按新角色鉴权（数据驱动 RBAC：不再 ROLE_CHANGED 401，改为即时生效）', async () => {
     const request = (await import('supertest')).default
     const token = await loginAs('p03role', 'pw123456')
     const ok = await request(app).get('/api/v1/materials?page=1').set('Authorization', `Bearer ${token}`)
     expect(ok.status).toBe(200)
-    // 改成 finance（DB 内 role 与 token 内 role 不一致）
+    // 改成 finance：finance 不在 materials 允许角色内 → 同 token 立即被拒（403 而非 401 ROLE_CHANGED）
     db.prepare('UPDATE users SET role = ? WHERE id = ?').run('finance', 'U-ROLE')
+    db.prepare('DELETE FROM user_roles WHERE user_id = ?').run('U-ROLE')
+    db.prepare('INSERT OR IGNORE INTO user_roles (id, user_id, role_code) VALUES (?, ?, ?)').run('UR-U-ROLE-fin', 'U-ROLE', 'finance')
     const res = await request(app).get('/api/v1/materials?page=1').set('Authorization', `Bearer ${token}`)
-    expect(res.status).toBe(401)
-    expect(res.body.error.code).toBe('ROLE_CHANGED')
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('FORBIDDEN')
+    expect(res.body.error.code).not.toBe('ROLE_CHANGED')
   })
 
   it('正常 admin 用户不受影响', async () => {

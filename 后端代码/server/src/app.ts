@@ -3,7 +3,8 @@ import express from 'express'
 import cors from 'cors'
 import { initializeDatabase } from './database/DatabaseManager.js'
 import { errorHandler } from './middleware/errorHandler.js'
-import { authenticateToken, requireRole, requireCostWorkbenchAccess } from './middleware/auth.js'
+import { authenticateToken } from './middleware/auth.js'
+import { requirePermission } from './middleware/permissions.js'
 
 // 路由导入
 import authRoutes from './routes/auth.js'
@@ -57,53 +58,46 @@ initializeDatabase()
 // 路由注册 - 公开路由
 app.use('/api/v1/auth', authRoutes)
 
-// 路由注册 - admin专属
-app.use('/api/v1/users', authenticateToken, requireRole('admin'), userRoutes)
-app.use('/api/v1/roles', authenticateToken, requireRole('admin'), roleRoutes)
+// 路由注册 — 数据驱动 RBAC：挂载层按模块「读权限」放行（写权限由各路由内 requirePermission(module,'W') 守卫）。
+// 单一事实源 = DB roles.permissions（matrix，可在「角色权限」页改，即时生效）。
+app.use('/api/v1/users', authenticateToken, requirePermission('users', 'R'), userRoutes)
+app.use('/api/v1/roles', authenticateToken, requirePermission('roles', 'R'), roleRoutes)
 
-// 路由注册 - finance可访问
-app.use('/api/v1/logs', authenticateToken, requireRole('admin'), logRoutes)
-app.use('/api/v1/reports', authenticateToken, requireRole('admin', 'pathologist', 'finance'), reportRoutes)
-app.use('/api/v1/depletion', authenticateToken, requireRole('admin', 'pathologist', 'finance'), depletionRoutes)
+app.use('/api/v1/logs', authenticateToken, requirePermission('logs', 'R'), logRoutes)
+app.use('/api/v1/reports', authenticateToken, requirePermission('cost_analysis', 'R'), reportRoutes)
+app.use('/api/v1/depletion', authenticateToken, requirePermission('cost_analysis', 'R'), depletionRoutes)
 
-// 路由注册 - warehouse/technician/pathologist/procurement共享 (库存/预警)
-app.use('/api/v1/inventory', authenticateToken, requireRole('admin', 'warehouse_manager', 'technician', 'pathologist', 'procurement'), inventoryRoutes)
-app.use('/api/v1/alerts', authenticateToken, requireRole('admin', 'warehouse_manager', 'technician', 'pathologist', 'procurement', 'finance'), alertRoutes)
+app.use('/api/v1/inventory', authenticateToken, requirePermission('inventory', 'R'), inventoryRoutes)
+app.use('/api/v1/alerts', authenticateToken, requirePermission('alerts', 'R'), alertRoutes)
 
-// 路由注册 - warehouse/procurement共享 (入库相关)
-app.use('/api/v1/inbound', authenticateToken, requireRole('admin', 'warehouse_manager', 'procurement'), inboundRoutes)
-app.use('/api/v1/purchase-orders', authenticateToken, requireRole('admin', 'procurement'), purchaseOrderRoutes)
-app.use('/api/v1/suppliers', authenticateToken, requireRole('admin', 'warehouse_manager', 'procurement'), supplierRoutes)
+app.use('/api/v1/inbound', authenticateToken, requirePermission('inbound', 'R'), inboundRoutes)
+app.use('/api/v1/purchase-orders', authenticateToken, requirePermission('purchase_orders', 'R'), purchaseOrderRoutes)
+app.use('/api/v1/suppliers', authenticateToken, requirePermission('suppliers', 'R'), supplierRoutes)
 
-// 路由注册 - warehouse专属 (库存操作)
-app.use('/api/v1/outbound', authenticateToken, requireRole('admin', 'warehouse_manager', 'technician', 'pathologist'), outboundRoutes)
-app.use('/api/v1/stocktaking', authenticateToken, requireRole('admin', 'warehouse_manager'), stocktakingRoutes)
-app.use('/api/v1/locations', authenticateToken, requireRole('admin', 'warehouse_manager'), locationRoutes)
-app.use('/api/v1/returns', authenticateToken, requireRole('admin', 'warehouse_manager'), returnRoutes)
-app.use('/api/v1/scraps', authenticateToken, requireRole('admin', 'warehouse_manager'), scrapRoutes)
-app.use('/api/v1/transfers', authenticateToken, requireRole('admin', 'warehouse_manager'), transferRoutes)
-app.use('/api/v1/supplier-returns', authenticateToken, requireRole('admin', 'warehouse_manager', 'procurement', 'finance'), supplierReturnRoutes)
+app.use('/api/v1/outbound', authenticateToken, requirePermission('outbound', 'R'), outboundRoutes)
+app.use('/api/v1/stocktaking', authenticateToken, requirePermission('stocktaking', 'R'), stocktakingRoutes)
+app.use('/api/v1/locations', authenticateToken, requirePermission('locations', 'R'), locationRoutes)
+app.use('/api/v1/returns', authenticateToken, requirePermission('returns', 'R'), returnRoutes)
+app.use('/api/v1/scraps', authenticateToken, requirePermission('scraps', 'R'), scrapRoutes)
+app.use('/api/v1/transfers', authenticateToken, requirePermission('transfers', 'R'), transferRoutes)
+app.use('/api/v1/supplier-returns', authenticateToken, requirePermission('supplier_returns', 'R'), supplierReturnRoutes)
 
-// 路由注册 - technician/pathologist共享
-app.use('/api/v1/projects', authenticateToken, requireRole('admin', 'technician', 'pathologist'), projectRoutes)
-app.use('/api/v1/boms', authenticateToken, requireRole('admin', 'technician', 'pathologist'), bomRoutes)
+app.use('/api/v1/projects', authenticateToken, requirePermission('projects', 'R'), projectRoutes)
+app.use('/api/v1/boms', authenticateToken, requirePermission('bom', 'R'), bomRoutes)
 
-// 路由注册 - 成本对账：移除 pathologist（诊断线无成本权）；technician 可提案，审批限 admin/finance（路由内守卫）
-app.use('/api/v1/reconciliation', authenticateToken, requireRole('admin', 'finance', 'technician'), reconciliationRoutes)
+// 成本对账：技术员 W（录入/提案），审批限 admin/finance/lab_director（路由内 requireAnyRole 守卫）
+app.use('/api/v1/reconciliation', authenticateToken, requirePermission('reconciliation', 'R'), reconciliationRoutes)
 
-// 路由注册 - 通用主数据 (所有已认证角色可查看)
-app.use('/api/v1/categories', authenticateToken, categoryRoutes)
-app.use('/api/v1/materials', authenticateToken, requireRole('admin', 'warehouse_manager', 'technician', 'pathologist', 'procurement'), materialRoutes)
+app.use('/api/v1/categories', authenticateToken, requirePermission('categories', 'R'), categoryRoutes)
+app.use('/api/v1/materials', authenticateToken, requirePermission('materials', 'R'), materialRoutes)
 
-// 路由注册 - ABC 成本核算（纯增量）
-// 设备/工时主数据维护
-app.use('/api/v1/equipment', authenticateToken, requireRole('admin', 'finance'), equipmentRoutes)
-app.use('/api/v1/equipment-types', authenticateToken, requireRole('admin', 'finance'), equipmentTypeRoutes)
-app.use('/api/v1/labor-times', authenticateToken, requireRole('admin', 'finance'), laborTimeRoutes)
-app.use('/api/v1/indirect-costs', authenticateToken, requireCostWorkbenchAccess, indirectCostRoutes)
-// 成本工作台（核算/池/披露）
-app.use('/api/v1/abc', authenticateToken, requireRole('admin', 'pathologist', 'finance'), abcRoutes)
-app.use('/api/v1/cost-adjustments', authenticateToken, requireCostWorkbenchAccess, costAdjustmentRoutes)
+// ABC 成本核算（设备/工时主数据 + 成本工作台）
+app.use('/api/v1/equipment', authenticateToken, requirePermission('equipment', 'R'), equipmentRoutes)
+app.use('/api/v1/equipment-types', authenticateToken, requirePermission('equipment', 'R'), equipmentTypeRoutes)
+app.use('/api/v1/labor-times', authenticateToken, requirePermission('labor_times', 'R'), laborTimeRoutes)
+app.use('/api/v1/indirect-costs', authenticateToken, requirePermission('abc_config', 'R'), indirectCostRoutes)
+app.use('/api/v1/abc', authenticateToken, requirePermission('abc_dashboard', 'R'), abcRoutes)
+app.use('/api/v1/cost-adjustments', authenticateToken, requirePermission('cost_analysis', 'R'), costAdjustmentRoutes)
 
 // 健康检查
 app.get('/api/health', (_req, res) => {

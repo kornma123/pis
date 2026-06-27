@@ -2,12 +2,13 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
-import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
-const requireSupplierRead = requireRole('admin', 'warehouse_manager', 'procurement')
-const requireSupplierWrite = requireRole('admin', 'procurement')
+const requireSupplierRead = requirePermission('suppliers', 'R')
+const requireSupplierWrite = requirePermission('suppliers', 'W')
 
 router.get('/', authenticateToken, requireSupplierRead, (req, res) => {
   try {

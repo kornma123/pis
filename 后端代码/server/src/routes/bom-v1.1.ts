@@ -2,11 +2,12 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
-import { authenticateToken, requireRole } from '../middleware/auth.js'
+import { authenticateToken } from '../middleware/auth.js'
+import { requirePermission } from '../middleware/permissions.js'
 import { writeBomVersionSnapshot, getLatestBomVersionSnapshot, buildBomVersionSnapshot } from '../utils/bom-version.js'
 
 const router = Router()
-const requireBomWrite = requireRole('admin')
+const requireBomWrite = requirePermission('bom', 'W')
 
 router.get('/', (req, res) => {
   try {

@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 import bcrypt from 'bcryptjs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
 import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -179,6 +180,24 @@ export function initializeDatabase(): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, description TEXT, permissions TEXT NOT NULL DEFAULT '[]', status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)
+  // 数据驱动多角色 RBAC：一个用户可持多角色（鉴权按所有角色权限并集）
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS user_roles (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      role_code TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, role_code)
+    )
+  `)
+  // 通用配置项（如成本可见性开关 cost_visibility_roles）
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS operation_logs (id TEXT PRIMARY KEY, user_id TEXT, username TEXT, operation TEXT NOT NULL, description TEXT NOT NULL, request_data TEXT, response_data TEXT, ip TEXT, user_agent TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)
@@ -335,21 +354,35 @@ export function initializeDatabase(): void {
   // 确保 E2E 测试用户始终可用（防止被软删除后无法恢复）
   database.prepare("UPDATE users SET is_deleted = 0, status = 1 WHERE username IN ('cangguan','jishuyuan1','yishi1','caigou','caiwu')").run()
 
-  // 插入默认角色（E2E 测试依赖）
+  // 插入默认角色（E2E 测试依赖）+ 数据驱动 RBAC 初始种子矩阵（RBAC §8.2）
   const defaultRoles = [
     { id: 'ROLE-ADMIN', code: 'admin', name: '管理员', description: '系统管理员，拥有全部权限' },
+    { id: 'ROLE-DIR', code: 'lab_director', name: '实验室主任', description: '运营总览（含成本），跨线审批' },
     { id: 'ROLE-WHM', code: 'warehouse_manager', name: '仓库管理员', description: '负责库存、入库、出库、盘点管理' },
-    { id: 'ROLE-TECH', code: 'technician', name: '技术员', description: '负责检测项目、BOM、成本分析' },
-    { id: 'ROLE-DOC', code: 'pathologist', name: '病理医师', description: '负责项目审核、成本查看' },
+    { id: 'ROLE-TECH', code: 'technician', name: '技术员', description: '负责出库消耗、盘点、消耗对账录入、QC' },
+    { id: 'ROLE-DOC', code: 'pathologist', name: '病理医师', description: '诊断线：检测项目、BOM 只读，无成本权限' },
     { id: 'ROLE-PRO', code: 'procurement', name: '采购员', description: '负责采购、供应商管理' },
-    { id: 'ROLE-FIN', code: 'finance', name: '财务', description: '负责对账、成本分析' },
+    { id: 'ROLE-FIN', code: 'finance', name: '财务', description: '成本/盈利唯一 owner，对账核准' },
   ]
+  // 种子权限：admin→'["*"]'；其余→SEED_MATRIX 对象（数据驱动单一事实源）
+  const seedPermsFor = (code: string): string =>
+    code === 'admin' ? '["*"]' : JSON.stringify(SEED_MATRIX[code] || {})
   const insertRole = database.prepare(
     'INSERT OR IGNORE INTO roles (id, code, name, description, permissions, status) VALUES (?, ?, ?, ?, ?, ?)'
   )
+  // 旧库遗留 '[]' 空权限的种子角色一次性回填为矩阵（不覆盖管理员已编辑的非空值）
+  const backfillRolePerms = database.prepare(
+    "UPDATE roles SET permissions = ? WHERE code = ? AND (permissions = '[]' OR permissions = '' OR permissions IS NULL)"
+  )
   for (const r of defaultRoles) {
-    insertRole.run(r.id, r.code, r.name, r.description, '[]', 1)
+    insertRole.run(r.id, r.code, r.name, r.description, seedPermsFor(r.code), 1)
+    backfillRolePerms.run(seedPermsFor(r.code), r.code)
   }
+
+  // 成本可见性开关默认（可在「角色权限/设置」改）
+  database.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('cost_visibility_roles', ?)")
+    .run(JSON.stringify(['finance', 'lab_director', 'admin']))
+  // 注：user_roles + primary_role 回填见 ensureColumn('users','primary_role') 之后（列须先存在）
 
   // 插入默认预警规则
   const countRules = database.prepare('SELECT COUNT(*) as count FROM alert_rules').get() as any
@@ -370,6 +403,21 @@ export function initializeDatabase(): void {
     const cols = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
     if (!cols.some((c) => c.name === column)) {
       database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+    }
+  }
+
+  // 多角色 RBAC：用户主身份角色（展示用；权限走 user_roles 并集）
+  ensureColumn('users', 'primary_role', 'TEXT')
+
+  // 回填 user_roles：存量单角色用户 → user_roles(单角色) + primary_role（幂等；须在 primary_role 列建好后）
+  {
+    const allUsers = database.prepare('SELECT id, role FROM users WHERE is_deleted = 0').all() as Array<{ id: string; role: string }>
+    const insertUserRole = database.prepare('INSERT OR IGNORE INTO user_roles (id, user_id, role_code) VALUES (?, ?, ?)')
+    const setPrimary = database.prepare("UPDATE users SET primary_role = ? WHERE id = ? AND (primary_role IS NULL OR primary_role = '')")
+    for (const u of allUsers) {
+      if (!u.role) continue
+      insertUserRole.run(`UR-${u.id}-${u.role}`, u.id, u.role)
+      setPrimary.run(u.role, u.id)
     }
   }
 

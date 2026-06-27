@@ -2,18 +2,12 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
-// 写入权限检查：仅 admin 和 warehouse_manager 可操作写入
-function requireWriteAccess(req: any, res: any, next: any) {
-  const role = req.user?.role
-  if (role === 'admin' || role === 'warehouse_manager') {
-    next()
-    return
-  }
-  error(res, 'Forbidden: insufficient permissions', 'FORBIDDEN', 403)
-}
+// 写入权限：读 DB 矩阵（inbound W = admin/warehouse_manager/procurement，可在角色权限页改）
+const requireWriteAccess = requirePermission('inbound', 'W')
 
 function generateInboundNo(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')

@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { getDatabase } from '../database/DatabaseManager.js'
+import { getUserRoleCodes } from './permissions.js'
 
 const jwtSecret = process.env.JWT_SECRET
 if (!jwtSecret) {
@@ -58,7 +59,7 @@ function pathToPermission(req: AuthRequest): string {
 }
 
 interface AuthRequest extends Request {
-  user?: { userId: string; username: string; role: string }
+  user?: { userId: string; username: string; role: string; roles?: string[] }
 }
 
 export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction): void {
@@ -78,8 +79,12 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
     return
   }
 
-  // 即时失效校验：回查 users，确保停用/软删除/改角色后 token 立即失效（不必等 8h 过期）。
+  // 即时失效校验：回查 users，确保停用/软删除后 token 立即失效（不必等 8h 过期）。
+  // 数据驱动多角色 RBAC：不再因 role 变更强制 401（ROLE_CHANGED 已移除）——
+  //   改为每请求解析用户全部角色（user_roles ∪ users.role）并挂 req.user.roles，
+  //   鉴权按角色权限并集即时生效（改角色/改矩阵无需重登）。
   // DB 异常时退回仅签名校验（不因 DB 抖动锁死全部请求）。
+  const enriched: { userId: string; username: string; role: string; roles?: string[] } = { ...decoded }
   try {
     const db = getDatabase()
     const u = db.prepare('SELECT status, is_deleted, role FROM users WHERE id = ?').get(decoded.userId) as
@@ -90,15 +95,13 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
       res.status(401).json({ success: false, error: { message: '账号已停用或不存在，请重新登录', code: 'ACCOUNT_DISABLED' } })
       return
     }
-    if (u.role !== decoded.role) {
-      res.status(401).json({ success: false, error: { message: '账号角色已变更，请重新登录', code: 'ROLE_CHANGED' } })
-      return
-    }
+    enriched.role = u.role || decoded.role // DB 主角色为准（用于 requireRole 兼容 shim）
+    enriched.roles = getUserRoleCodes(db, decoded.userId)
   } catch {
     // DB 不可用：降级为仅签名校验，避免数据库抖动导致全站 401
   }
 
-  req.user = decoded
+  req.user = enriched
   next()
 }
 

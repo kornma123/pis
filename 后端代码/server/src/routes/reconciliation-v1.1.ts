@@ -8,11 +8,11 @@ import {
   buildBomChangeImpact,
 } from '../utils/bom-version.js'
 import { runCostRecalculation } from '../utils/cost-runs.js'
-import { requireRole } from '../middleware/auth.js'
+import { requireAnyRole } from '../middleware/permissions.js'
 
 const router = Router()
-// 审批/驳回 BOM 修正提案限成本负责人（admin/finance）；propose 由挂载层角色（含 technician）放行
-const requireReconcileApprove = requireRole('admin', 'finance')
+// 审批/驳回 BOM 修正提案限成本核准角色（admin/finance/lab_director）；propose 由挂载层 reconciliation R + 技术员 W 放行
+const requireReconcileApprove = requireAnyRole('admin', 'finance', 'lab_director')
 
 /**
  * GET /api/v1/reconciliation/summary
