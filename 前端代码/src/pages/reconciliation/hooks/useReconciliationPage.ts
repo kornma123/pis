@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import request from '@/api/request'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
+import { getUserRole } from '@/lib/permissions'
 
 export interface SummaryData {
   totalCases: number
@@ -76,6 +77,9 @@ export interface ReconcileLog {
   reason: string
   operator: string
   created_at: string
+  status?: string
+  reviewed_by?: string
+  proposed_usage?: number
 }
 
 export type TabType = 'reconcile' | 'material' | 'case' | 'log'
@@ -262,17 +266,46 @@ export function useReconciliationPage() {
         materialId: fixTarget.materialId,
         newUsage: fixNewUsage,
       })
-      toast.success('BOM用量已修正')
+      // 现为「提议→审核」：提交不立即改 BOM，须独立审核人通过后生效（SoD）
+      toast.success('修正已提交，待审核')
       setFixBomModalOpen(false)
       setFixTarget(null)
       setFixTargetProjectId(null)
-      if (activeTab === 'reconcile') {
-        const res: any = await request.get(`/reconciliation/projects/${fixTargetProjectId}/materials`, { params: dateParams })
-        setProjectMaterials(prev => ({ ...prev, [fixTargetProjectId]: res?.list || [] }))
-      }
-      if (activeTab === 'material') fetchMaterials()
     } catch (e: any) {
-      toast.error(e?.message || '修正失败')
+      toast.error(e?.message || '提交失败')
+    }
+  }
+
+  // 当前登录用户（用于 SoD 前端提示：不能审核自己提交的提案）
+  const currentUsername = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}')?.username || ''
+    } catch { return '' }
+  })()
+  const canApprove = ['admin', 'finance'].includes(getUserRole() || '')
+
+  const handleApproveProposal = async (id: string, effectiveScope: 'future_only' | 'retroactive') => {
+    try {
+      const res: any = await request.post(`/reconciliation/logs/${id}/approve`, { effectiveScope })
+      const retro = res?.retroactive
+      toast.success(
+        retro && retro.recalculatedMonths > 0
+          ? `已审核通过并追溯重算 ${retro.recalculatedMonths} 个月${retro.closedMonths > 0 ? `（${retro.closedMonths} 个已关账月需走调整单）` : ''}`
+          : '已审核通过，自下次生效',
+      )
+      logPagination.refresh()
+    } catch (e: any) {
+      toast.error(e?.message || '审核失败')
+    }
+  }
+
+  const handleRejectProposal = async (id: string) => {
+    try {
+      await request.post(`/reconciliation/logs/${id}/reject`, {})
+      toast.success('提案已驳回')
+      logPagination.refresh()
+    } catch (e: any) {
+      toast.error(e?.message || '驳回失败')
     }
   }
 
@@ -362,6 +395,10 @@ export function useReconciliationPage() {
     loadProjectMaterials,
     handleImport,
     handleFixBom,
+    handleApproveProposal,
+    handleRejectProposal,
+    currentUsername,
+    canApprove,
     handleEditCase,
     getDiffClass,
     getStatusBadge,

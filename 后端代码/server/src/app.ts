@@ -88,8 +88,8 @@ app.use('/api/v1/supplier-returns', authenticateToken, requireRole('admin', 'war
 app.use('/api/v1/projects', authenticateToken, requireRole('admin', 'technician', 'pathologist'), projectRoutes)
 app.use('/api/v1/boms', authenticateToken, requireRole('admin', 'technician', 'pathologist'), bomRoutes)
 
-// 路由注册 - 成本对账 (admin/finance/pathologist可访问)
-app.use('/api/v1/reconciliation', authenticateToken, requireRole('admin', 'pathologist', 'finance'), reconciliationRoutes)
+// 路由注册 - 成本对账：移除 pathologist（诊断线无成本权）；technician 可提案，审批限 admin/finance（路由内守卫）
+app.use('/api/v1/reconciliation', authenticateToken, requireRole('admin', 'finance', 'technician'), reconciliationRoutes)
 
 // 路由注册 - 通用主数据 (所有已认证角色可查看)
 app.use('/api/v1/categories', authenticateToken, categoryRoutes)
