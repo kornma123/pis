@@ -76,6 +76,24 @@ export const SEED_MATRIX: Record<string, PermMap> = {
   },
 }
 
+/**
+ * 职责分离(SoD)不相容角色组合（同一人同时持有时告警，非硬阻断——小实验室可豁免确认）。
+ * 依据：采购需求 vs 选择定价分离、保管 vs 对账核准分离、技术员 vs 医师不兼职(CNAS 信号)。
+ */
+export const SOD_INCOMPATIBLE: Array<[string, string]> = [
+  ['procurement', 'finance'],
+  ['warehouse_manager', 'finance'],
+  ['pathologist', 'technician'],
+]
+
+/** 检测角色集合中的 SoD 冲突，返回冲突描述（如 'procurement+finance'）；admin 不参与 */
+export function detectSoDConflicts(roles: string[]): string[] {
+  const set = new Set(roles)
+  const out: string[] = []
+  for (const [a, b] of SOD_INCOMPATIBLE) if (set.has(a) && set.has(b)) out.push(`${a}+${b}`)
+  return out
+}
+
 /** admin 全模块 W */
 export function adminAllPermissions(): PermMap {
   return Object.fromEntries(MODULES.map((m) => [m, 'W'])) as PermMap

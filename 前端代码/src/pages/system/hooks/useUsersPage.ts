@@ -8,11 +8,24 @@ import { useUrlParams } from '@/hooks/useUrlParams'
 export interface FormData {
   username: string
   realName: string
-  role: string
+  role: string // 主角色（兼容旧字段；= primaryRole）
+  roles: string[] // 数据驱动 RBAC：多角色（鉴权按并集）
+  primaryRole: string // 身份展示主角色
   department: string
   phone: string
   email: string
   status: 'active' | 'inactive'
+}
+
+// SoD 不相容组合（前端实时提示；后端权威校验）
+export const SOD_PAIRS: Array<[string, string]> = [
+  ['procurement', 'finance'],
+  ['warehouse_manager', 'finance'],
+  ['pathologist', 'technician'],
+]
+export function frontendSoDConflicts(roles: string[]): string[] {
+  const set = new Set(roles)
+  return SOD_PAIRS.filter(([a, b]) => set.has(a) && set.has(b)).map(([a, b]) => `${a}+${b}`)
 }
 
 export interface RoleItem {
@@ -120,14 +133,16 @@ export function useUsersPage() {
 
   const openCreate = () => {
     setEditingId(null)
-    setForm({ username: '', realName: '', role: 'operator', department: '', phone: '', email: '', status: 'active' })
+    setForm({ username: '', realName: '', role: 'operator', roles: [], primaryRole: '', department: '', phone: '', email: '', status: 'active' })
     setModalType('create')
   }
 
   const openEdit = (row: User) => {
     setEditingId(row.id)
+    const rowRoles = Array.isArray((row as any).roles) && (row as any).roles.length ? (row as any).roles : [row.role]
     setForm({
       username: row.username, realName: row.realName, role: row.role,
+      roles: rowRoles, primaryRole: (row as any).primaryRole || row.role,
       department: row.department || '', phone: row.phone || '', email: row.email || '',
       status: row.status
     })
@@ -144,13 +159,22 @@ export function useUsersPage() {
       toast.error('请填写必填字段')
       return
     }
+    if (!form.roles || form.roles.length === 0) {
+      toast.error('请至少分配一个角色')
+      return
+    }
+    const primary = form.primaryRole && form.roles.includes(form.primaryRole) ? form.primaryRole : form.roles[0]
+    const payload = { ...form, role: primary, primaryRole: primary }
     try {
-      if (editingId) {
-        await request.put(`/users/${editingId}`, form)
+      const res: any = editingId
+        ? await request.put(`/users/${editingId}`, payload)
+        : await request.post('/users', payload)
+      const sod: string[] = res?.sodWarning || []
+      if (sod.length > 0) {
+        toast.warning(`已保存，但存在职责分离(SoD)提醒：${sod.join('、')}（建议复核或走豁免审批）`)
       } else {
-        await request.post('/users', form)
+        toast.success(editingId ? '保存成功' : '创建成功')
       }
-      toast.success(editingId ? '保存成功' : '创建成功')
       setModalType(null)
       refresh()
     } catch {

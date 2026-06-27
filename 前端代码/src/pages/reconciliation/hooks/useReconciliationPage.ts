@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import request from '@/api/request'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
-import { getUserRole } from '@/lib/permissions'
+import { getRoles } from '@/lib/permissions'
 
 export interface SummaryData {
   totalCases: number
@@ -282,7 +282,8 @@ export function useReconciliationPage() {
       return JSON.parse(localStorage.getItem('user') || '{}')?.username || ''
     } catch { return '' }
   })()
-  const canApprove = ['admin', 'finance'].includes(getUserRole() || '')
+  // 对账核准 = 成本核准角色（admin/finance/lab_director），多角色按并集（与后端 requireAnyRole 一致）
+  const canApprove = getRoles().some((r) => ['admin', 'finance', 'lab_director'].includes(r))
 
   const handleApproveProposal = async (id: string, effectiveScope: 'future_only' | 'retroactive') => {
     try {

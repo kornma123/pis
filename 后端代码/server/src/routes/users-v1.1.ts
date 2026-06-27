@@ -3,8 +3,25 @@ import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { detectSoDConflicts } from '../middleware/permissions.js'
 
 const router = Router()
+
+// 同步用户多角色 → user_roles + primary_role + users.role(主角色,兼容旧链路)
+function syncUserRoles(db: any, userId: string, roles: string[], primaryRole?: string): void {
+  const clean = [...new Set(roles.filter(Boolean))]
+  if (clean.length === 0) return
+  db.prepare('DELETE FROM user_roles WHERE user_id = ?').run(userId)
+  const ins = db.prepare('INSERT OR IGNORE INTO user_roles (id, user_id, role_code) VALUES (?, ?, ?)')
+  for (const rc of clean) ins.run(`UR-${userId}-${rc}`, userId, rc)
+  const primary = primaryRole && clean.includes(primaryRole) ? primaryRole : clean[0]
+  db.prepare('UPDATE users SET role = ?, primary_role = ? WHERE id = ?').run(primary, primary, userId)
+}
+
+function getUserRoles(db: any, userId: string): string[] {
+  const rows = db.prepare('SELECT role_code FROM user_roles WHERE user_id = ?').all(userId) as Array<{ role_code: string }>
+  return rows.map((r) => r.role_code)
+}
 
 router.get('/', (req, res) => {
   try {
@@ -16,27 +33,37 @@ router.get('/', (req, res) => {
 
     const count = (db.prepare(`SELECT COUNT(*) as total FROM users WHERE ${where}`).get(...params) as any)?.total || 0
     const offset = (Number(page) - 1) * Number(pageSize)
-    const list = db.prepare(`SELECT id, username, real_name, role, department, phone, email, status, created_at FROM users WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, Number(pageSize), offset) as any[]
+    const list = db.prepare(`SELECT id, username, real_name, role, primary_role, department, phone, email, status, created_at FROM users WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params, Number(pageSize), offset) as any[]
 
-    successList(res, list.map((r: any) => ({
-      id: r.id, username: r.username, realName: r.real_name,
-      role: r.role, department: r.department, phone: r.phone,
-      email: r.email, status: r.status === 1 ? 'active' : 'inactive',
-      createdAt: r.created_at,
-    })), Number(page), Number(pageSize), count)
+    successList(res, list.map((r: any) => {
+      const roles = getUserRoles(db, r.id)
+      return {
+        id: r.id, username: r.username, realName: r.real_name,
+        role: r.role, primaryRole: r.primary_role || r.role,
+        roles: roles.length ? roles : (r.role ? [r.role] : []),
+        department: r.department, phone: r.phone,
+        email: r.email, status: r.status === 1 ? 'active' : 'inactive',
+        createdAt: r.created_at,
+      }
+    }), Number(page), Number(pageSize), count)
   } catch (err: any) { error(res, err.message) }
 })
 
 router.post('/', (req, res) => {
   try {
-    const { username, password, realName, role, department, phone } = req.body
+    const { username, password, realName, role, roles, primaryRole, department, phone } = req.body
     if (!username || !password || !realName) { error(res, 'Username, password and realName required', 'INVALID_PARAMETER', 400); return }
     const db = getDatabase()
     const id = uuidv4()
     const hashedPassword = bcrypt.hashSync(password, 12)
-    db.prepare('INSERT INTO users (id, username, password, real_name, role, department, phone, status) VALUES (?, ?, ?, ?, ?, ?, ?, 1)')
-      .run(id, username, hashedPassword, realName, role || 'operator', department || null, phone || null)
-    success(res, { id }, 'Created', 201)
+    // 多角色：roles[] 优先，回退单 role；primary 决定 users.role
+    const roleList: string[] = Array.isArray(roles) && roles.length ? roles : [role || 'operator']
+    const primary = primaryRole && roleList.includes(primaryRole) ? primaryRole : roleList[0]
+    db.prepare('INSERT INTO users (id, username, password, real_name, role, primary_role, department, phone, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)')
+      .run(id, username, hashedPassword, realName, primary, primary, department || null, phone || null)
+    syncUserRoles(db, id, roleList, primary)
+    const sodWarning = detectSoDConflicts(roleList)
+    success(res, { id, roles: roleList, primaryRole: primary, sodWarning }, 'Created', 201)
   } catch (err: any) {
     if (err.message.includes('UNIQUE')) { error(res, 'Username exists', 'RESOURCE_CONFLICT', 409); return }
     error(res, err.message)
@@ -63,7 +90,15 @@ router.put('/:id', (req, res) => {
     if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status === 'active' ? 1 : 0) }
     if (data.password) { fields.push('password = ?'); params.push(bcrypt.hashSync(data.password, 12)) }
     if (fields.length > 0) { params.push(id); db.prepare(`UPDATE users SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params) }
-    success(res, { id }, 'Updated')
+    // 多角色同步（roles[] 提供时覆盖 user_roles + primary_role + users.role）
+    let sodWarning: string[] = []
+    if (Array.isArray(data.roles) && data.roles.length) {
+      syncUserRoles(db, id, data.roles, data.primaryRole)
+      sodWarning = detectSoDConflicts(data.roles)
+    } else if (data.role !== undefined) {
+      syncUserRoles(db, id, [data.role], data.role) // 单角色编辑也同步到 user_roles
+    }
+    success(res, { id, roles: getUserRoles(db, id), sodWarning }, 'Updated')
   } catch (err: any) { error(res, err.message) }
 })
 

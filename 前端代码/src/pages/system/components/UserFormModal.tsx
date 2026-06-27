@@ -1,6 +1,18 @@
 import { X } from 'lucide-react'
 import type { User } from '@/types'
 import type { FormData } from '../hooks/useUsersPage'
+import { frontendSoDConflicts } from '../hooks/useUsersPage'
+
+const ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'admin', label: '系统管理员' },
+  { value: 'lab_director', label: '实验室主任' },
+  { value: 'warehouse_manager', label: '仓库管理员' },
+  { value: 'technician', label: '技术员' },
+  { value: 'pathologist', label: '病理医师' },
+  { value: 'procurement', label: '采购员' },
+  { value: 'finance', label: '财务' },
+]
+const roleLabel = (v: string) => ROLE_OPTIONS.find(r => r.value === v)?.label || v
 
 interface Props {
   open: boolean
@@ -14,6 +26,13 @@ interface Props {
 
 export function UserFormModal({ open, type, form, onClose, onChange, onSubmit, onResetPassword }: Props) {
   if (!open) return null
+
+  const sodConflicts = frontendSoDConflicts(form.roles)
+  const toggleRole = (value: string) => {
+    const next = form.roles.includes(value) ? form.roles.filter(r => r !== value) : [...form.roles, value]
+    const primary = next.includes(form.primaryRole) ? form.primaryRole : (next[0] || '')
+    onChange({ ...form, roles: next, primaryRole: primary })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -46,34 +65,58 @@ export function UserFormModal({ open, type, form, onClose, onChange, onSubmit, o
               />
             </div>
           </div>
-          <div className="flex gap-5 mb-5">
-            <div className="flex-1">
-              <label className="block text-[13px] font-medium text-gray-700 mb-1.5">角色 <span className="text-red-500">*</span></label>
-              <select
-                value={form.role}
-                onChange={e => onChange({ ...form, role: e.target.value })}
-                className="w-full h-10 px-3 pr-8 text-sm text-gray-900 bg-white border border-gray-300 rounded-md outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 appearance-none cursor-pointer"
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-              >
-                <option value="admin">系统管理员</option>
-                <option value="operator">操作员</option>
-                <option value="viewer">查看者</option>
-              </select>
+          <div className="mb-5">
+            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">角色（可多选，鉴权按能力并集）<span className="text-red-500">*</span></label>
+            <div className="flex flex-wrap gap-2">
+              {ROLE_OPTIONS.map(r => {
+                const checked = form.roles.includes(r.value)
+                return (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() => toggleRole(r.value)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-all ${
+                      checked ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                )
+              })}
             </div>
-            <div className="flex-1">
-              <label className="block text-[13px] font-medium text-gray-700 mb-1.5">部门 <span className="text-red-500">*</span></label>
-              <select
-                value={form.department}
-                onChange={e => onChange({ ...form, department: e.target.value })}
-                className="w-full h-10 px-3 pr-8 text-sm text-gray-900 bg-white border border-gray-300 rounded-md outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 appearance-none cursor-pointer"
-                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-              >
-                <option value="">请选择部门</option>
-                <option value="病理科">病理科</option>
-                <option value="检验科">检验科</option>
-                <option value="信息科">信息科</option>
-              </select>
-            </div>
+            {form.roles.length > 1 && (
+              <div className="mt-2 flex items-center gap-2 text-sm">
+                <span className="text-gray-600">主角色（身份展示）</span>
+                <select
+                  value={form.primaryRole}
+                  onChange={e => onChange({ ...form, primaryRole: e.target.value })}
+                  className="h-9 px-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-md outline-none focus:border-blue-500"
+                >
+                  {form.roles.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                </select>
+              </div>
+            )}
+            {sodConflicts.length > 0 && (
+              <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                ⚠ 职责分离(SoD)提醒：{sodConflicts.map(c => c.split('+').map(roleLabel).join(' + ')).join('；')}。可保存，但建议复核或走豁免审批。
+              </div>
+            )}
+          </div>
+          <div className="mb-5">
+            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">部门</label>
+            <select
+              value={form.department}
+              onChange={e => onChange({ ...form, department: e.target.value })}
+              className="w-full h-10 px-3 pr-8 text-sm text-gray-900 bg-white border border-gray-300 rounded-md outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 appearance-none cursor-pointer"
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+            >
+              <option value="">请选择部门</option>
+              <option value="病理科">病理科</option>
+              <option value="检验科">检验科</option>
+              <option value="信息科">信息科</option>
+              <option value="财务科">财务科</option>
+              <option value="设备科">设备科</option>
+            </select>
           </div>
           <div className="flex gap-5 mb-5">
             <div className="flex-1">

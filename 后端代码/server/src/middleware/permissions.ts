@@ -18,6 +18,7 @@ import {
 export {
   type Level, type PermMap,
   MODULES, COST_MODULES, NON_ADMIN_ROLES, SEED_MATRIX,
+  SOD_INCOMPATIBLE, detectSoDConflicts,
   adminAllPermissions, parsePermissions, mergePermissions, hasLevel,
 } from './rbac-matrix.js'
 
