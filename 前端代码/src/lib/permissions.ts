@@ -39,7 +39,89 @@ export function getUserPermissions(): string[] {
   }
 }
 
-// 角色-菜单权限映射（与 PRD-v1.0-FINAL 权限矩阵保持一致）
+// ============================================================================
+// 数据驱动多角色 RBAC（能力并集）—— 登录响应 user.capabilities/roles/canSeeCost
+// 为单一来源；nav/守卫/仪表盘统一读它。capabilities 缺失时退回旧 ROLE_MENU_MAP。
+// ============================================================================
+export type CapLevel = 'R' | 'W'
+
+export function getCapabilities(): Record<string, CapLevel> | null {
+  try {
+    const userStr = localStorage.getItem('user')
+    if (!userStr) return null
+    const user = JSON.parse(userStr)
+    if (user.capabilities && typeof user.capabilities === 'object') return user.capabilities
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function getRoles(): string[] {
+  try {
+    const userStr = localStorage.getItem('user')
+    if (!userStr) return []
+    const user = JSON.parse(userStr)
+    if (Array.isArray(user.roles)) return user.roles
+    return user.role ? [user.role] : []
+  } catch {
+    return []
+  }
+}
+
+/** 当前用户对 module 是否具备 level 权限（W 蕴含 R）。capabilities 缺失→放行（退回旧逻辑，由 getAccessiblePaths 兜底 nav）。 */
+export function canAccess(module: string, level: CapLevel = 'R'): boolean {
+  const caps = getCapabilities()
+  if (!caps) return true
+  const got = caps[module]
+  if (!got) return false
+  return level === 'R' ? true : got === 'W'
+}
+
+/** 成本/利润可见性（后端 app_settings.cost_visibility_roles 计算后随登录下发）。 */
+export function canSeeCost(): boolean {
+  try {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      const user = JSON.parse(userStr)
+      if (typeof user.canSeeCost === 'boolean') return user.canSeeCost
+    }
+  } catch {
+    /* ignore */
+  }
+  const caps = getCapabilities()
+  if (caps) return ['cost_analysis', 'abc_dashboard', 'slide_cost', 'profitability'].some((m) => caps[m])
+  return false
+}
+
+/** nav 路径 → 模块码（能力驱动菜单/守卫的映射） */
+export const NAV_PATH_MODULE: Record<string, string> = {
+  '/inventory': 'inventory', '/inbound': 'inbound', '/outbound': 'outbound', '/returns': 'returns',
+  '/supplier-returns': 'supplier_returns', '/scraps': 'scraps', '/transfers': 'transfers', '/stocktaking': 'stocktaking',
+  '/projects': 'projects', '/bom': 'bom', '/reconciliation': 'reconciliation', '/cost-analysis': 'cost_analysis',
+  '/categories': 'categories', '/materials': 'materials', '/alerts': 'alerts',
+  '/purchase-orders': 'purchase_orders', '/suppliers': 'suppliers', '/locations': 'locations',
+  '/users': 'users', '/roles': 'roles', '/logs': 'logs',
+  '/abc/dashboard': 'abc_dashboard', '/abc/slide-cost': 'slide_cost', '/abc/profitability': 'profitability',
+  '/abc/activity-centers': 'abc_config', '/equipment': 'equipment', '/labor-times': 'labor_times', '/indirect-costs': 'abc_config',
+}
+
+/** 当前用户可访问的 nav 路径集合（能力驱动；capabilities 缺失→退回旧 ROLE_MENU_MAP）。 */
+export function getAccessiblePaths(): string[] {
+  const caps = getCapabilities()
+  if (caps) {
+    const paths = ['/']
+    for (const [p, mod] of Object.entries(NAV_PATH_MODULE)) {
+      if (canAccess(mod, 'R')) paths.push(p)
+    }
+    return paths
+  }
+  const role = getUserRole()
+  if (role && ROLE_MENU_MAP[role]) return ROLE_MENU_MAP[role]
+  return ROLE_MENU_MAP.technician
+}
+
+// 角色-菜单权限映射（legacy 兜底；capabilities 缺失时回退使用）
 export const ROLE_MENU_MAP: Record<string, string[]> = {
   admin: [
     '/', '/inventory', '/inbound', '/outbound', '/returns', '/supplier-returns', '/scraps', '/transfers', '/stocktaking',

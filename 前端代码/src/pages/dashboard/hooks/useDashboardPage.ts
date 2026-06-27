@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { inventoryApi, inboundApi, outboundApi } from '@/api/inventory'
+import { canAccess } from '@/lib/permissions'
 import type { InventoryStats, InboundRecord, OutboundRecord } from '@/types'
 
 export interface DashboardStats extends InventoryStats {
@@ -32,22 +33,25 @@ export function useDashboardPage() {
     const fetchData = async () => {
       setLoading(true)
       try {
+        // 数据驱动 RBAC：仅拉取当前用户有读权限的接口（根治财务/病理等首屏 403 toast）
         const [statsData, inboundRes, outboundRes] = await Promise.all([
-          inventoryApi.getStats(),
-          inboundApi.getList({ page: 1, pageSize: 5 }),
-          outboundApi.getList({ page: 1, pageSize: 5 }),
+          canAccess('inventory', 'R') ? inventoryApi.getStats() : Promise.resolve(null),
+          canAccess('inbound', 'R') ? inboundApi.getList({ page: 1, pageSize: 5 }) : Promise.resolve(null),
+          canAccess('outbound', 'R') ? outboundApi.getList({ page: 1, pageSize: 5 }) : Promise.resolve(null),
         ])
 
-        const baseStats = statsData as unknown as InventoryStats
-        setStats({
-          ...baseStats,
-          monthlyInbound: 0,
-          monthlyOutbound: 0,
-          alertCount: (baseStats.lowStockCount || 0) + (baseStats.expiringCount || 0) + (baseStats.expiredCount || 0),
-        })
+        if (statsData) {
+          const baseStats = statsData as unknown as InventoryStats
+          setStats({
+            ...baseStats,
+            monthlyInbound: 0,
+            monthlyOutbound: 0,
+            alertCount: (baseStats.lowStockCount || 0) + (baseStats.expiringCount || 0) + (baseStats.expiredCount || 0),
+          })
+        }
 
-        setRecentInbound((inboundRes as unknown as { list: InboundRecord[] }).list || [])
-        setRecentOutbound((outboundRes as unknown as { list: OutboundRecord[] }).list || [])
+        setRecentInbound((inboundRes as unknown as { list: InboundRecord[] } | null)?.list || [])
+        setRecentOutbound((outboundRes as unknown as { list: OutboundRecord[] } | null)?.list || [])
       } catch {
         // silent fail
       } finally {

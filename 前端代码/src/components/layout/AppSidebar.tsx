@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { ROLE_MENU_MAP, getUserRole } from '@/lib/permissions'
+import { getUserRole, getAccessiblePaths } from '@/lib/permissions'
 import {
   LayoutDashboard,
   Package,
@@ -98,8 +98,8 @@ export default function AppSidebar() {
   const role = useMemo(() => getUserRole(), [location.pathname])
   const allowedPaths = useMemo(() => {
     if (!role) return ALL_MAIN_MENU.map(m => m.path).concat(ALL_SYSTEM_MENU.map(m => m.path))
-    return ROLE_MENU_MAP[role] || ROLE_MENU_MAP.technician
-  }, [role])
+    return getAccessiblePaths()
+  }, [role, location.pathname])
 
   const mainMenuItems = useMemo(() =>
     ALL_MAIN_MENU.filter(item => allowedPaths.includes(item.path)),

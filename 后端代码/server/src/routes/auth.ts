@@ -3,10 +3,21 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, error } from '../utils/response.js'
-import { JWT_SECRET } from '../middleware/auth.js'
+import { JWT_SECRET, authenticateToken } from '../middleware/auth.js'
+import { getEffectivePermissions, getUserRoleCodes, canSeeCost } from '../middleware/permissions.js'
 
 const router = Router()
 const JWT_EXPIRES = '8h'
+
+/** 当前用户能力载荷（数据驱动 RBAC：角色并集权限 + 成本可见性，前端 nav/守卫/仪表盘单一来源） */
+function buildCapabilityPayload(db: any, userId: string, fallbackRole?: string) {
+  const roles = getUserRoleCodes(db, userId)
+  return {
+    roles: roles.length ? roles : (fallbackRole ? [fallbackRole] : []),
+    capabilities: getEffectivePermissions(db, userId),
+    canSeeCost: canSeeCost(db, userId),
+  }
+}
 
 router.post('/login', (req, res) => {
   try {
@@ -48,6 +59,7 @@ router.post('/login', (req, res) => {
       { expiresIn: '7d' }
     )
 
+    const cap = buildCapabilityPayload(db, user.id, user.role)
     success(res, {
       token,
       refreshToken,
@@ -57,7 +69,10 @@ router.post('/login', (req, res) => {
         username: user.username,
         realName: user.real_name,
         role: user.role,
-        permissions: ['inventory:view', 'inventory:edit', 'report:view', 'system:view'],
+        primaryRole: user.primary_role || user.role,
+        roles: cap.roles,
+        capabilities: cap.capabilities,
+        canSeeCost: cap.canSeeCost,
       },
     }, 'Login success')
   } catch (err: any) {
@@ -96,6 +111,19 @@ router.post('/refresh', (req, res) => {
     success(res, { token, expiresIn: 28800 }, 'Refresh success')
   } catch (err: any) {
     error(res, err.message, 'UNAUTHORIZED', 401)
+  }
+})
+
+// 当前用户能力（数据驱动 RBAC 单一来源；改矩阵/角色后前端刷新即生效）
+router.get('/me/capabilities', authenticateToken, (req, res) => {
+  try {
+    const db = getDatabase()
+    const userId = (req as any).user.userId as string
+    const u = db.prepare('SELECT role, primary_role FROM users WHERE id = ?').get(userId) as any
+    const cap = buildCapabilityPayload(db, userId, u?.role)
+    success(res, { primaryRole: u?.primary_role || u?.role || null, ...cap })
+  } catch (err: any) {
+    error(res, err.message, 'INTERNAL_ERROR', 500)
   }
 })
 

@@ -2,16 +2,17 @@ import { Outlet, useLocation, Navigate } from 'react-router-dom'
 import { useMemo } from 'react'
 import AppSidebar from './AppSidebar'
 import TopBar from './TopBar'
-import { ROLE_MENU_MAP, getUserRole } from '@/lib/permissions'
+import { getUserRole, getAccessiblePaths } from '@/lib/permissions'
 
 export default function AppLayout() {
   const location = useLocation()
   const role = getUserRole()
 
+  // 能力驱动：可访问路径由 capabilities 推出（capabilities 缺失时退回旧角色映射）
   const allowedPaths = useMemo(() => {
     if (!role) return []
-    return ROLE_MENU_MAP[role] || ROLE_MENU_MAP.technician
-  }, [role])
+    return getAccessiblePaths()
+  }, [role, location.pathname])
 
   // 路由守卫：未登录重定向到登录页，无权限重定向到首页
   if (!role) {
