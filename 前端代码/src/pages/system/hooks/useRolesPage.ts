@@ -5,11 +5,13 @@ import request from '@/api/request'
 import type { Role } from '@/types'
 import { toast } from 'sonner'
 
+export type PermLevel = 'R' | 'W'
+
 export interface FormData {
   code: string
   name: string
   description: string
-  permissions: string[]
+  permissions: Record<string, PermLevel> // 数据驱动 RBAC：模块 → R/W（缺省=无权限）
   status: 'active' | 'inactive'
   dataScope?: 'all' | 'dept' | 'self'
 }
@@ -17,28 +19,53 @@ export interface FormData {
 export interface PermissionModule {
   key: string
   label: string
-  actions: ('view' | 'add' | 'edit' | 'delete')[]
 }
 
+// 27 模块矩阵（与后端 SEED_MATRIX / MODULES 对齐）。分组仅用于 UI 呈现。
 export const PERMISSION_MODULES: PermissionModule[] = [
-  { key: 'inventory', label: '库存管理', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'inbound', label: '入库管理', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'outbound', label: '出库管理', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'stocktaking', label: '盘点管理', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'scrap', label: '报废管理', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'project', label: '检测服务', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'bom', label: 'BOM管理', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'cost', label: '成本分析', actions: ['view'] },
-  { key: 'alert', label: '预警管理', actions: ['view'] },
-  { key: 'category', label: '物料分类', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'consumable', label: '耗材配置', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'rule', label: '规则配置', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'supplier', label: '供应商管理', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'location', label: '库位管理', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'user', label: '用户管理', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'role', label: '角色管理', actions: ['view', 'add', 'edit', 'delete'] },
-  { key: 'log', label: '操作日志', actions: ['view'] },
+  { key: 'inventory', label: '库存' },
+  { key: 'inbound', label: '入库' },
+  { key: 'outbound', label: '出库（领用消耗）' },
+  { key: 'transfers', label: '调拨' },
+  { key: 'stocktaking', label: '盘点' },
+  { key: 'returns', label: '退库' },
+  { key: 'scraps', label: '报废' },
+  { key: 'materials', label: '耗材物料' },
+  { key: 'categories', label: '物料分类' },
+  { key: 'locations', label: '库位' },
+  { key: 'bom', label: 'BOM' },
+  { key: 'projects', label: '检测项目' },
+  { key: 'suppliers', label: '供应商' },
+  { key: 'purchase_orders', label: '采购订单' },
+  { key: 'supplier_returns', label: '退货给供应商' },
+  { key: 'reconciliation', label: '消耗对账' },
+  { key: 'cost_analysis', label: '物料成本分析' },
+  { key: 'abc_dashboard', label: 'ABC 成本看板' },
+  { key: 'slide_cost', label: '单片成本' },
+  { key: 'profitability', label: '盈利分析' },
+  { key: 'abc_config', label: 'ABC 配置' },
+  { key: 'equipment', label: '设备管理' },
+  { key: 'labor_times', label: '标准工时' },
+  { key: 'alerts', label: '预警' },
+  { key: 'users', label: '用户管理' },
+  { key: 'roles', label: '角色权限' },
+  { key: 'logs', label: '操作日志' },
 ]
+
+// 规范化角色权限为对象矩阵（兼容后端对象形态 / 旧扁平数组）
+export function normalizeRolePerms(raw: any): Record<string, PermLevel> {
+  if (raw && !Array.isArray(raw) && typeof raw === 'object') {
+    const out: Record<string, PermLevel> = {}
+    for (const [k, v] of Object.entries(raw)) if (v === 'R' || v === 'W') out[k] = v
+    return out
+  }
+  if (Array.isArray(raw)) {
+    const out: Record<string, PermLevel> = {}
+    for (const code of raw) if (typeof code === 'string' && PERMISSION_MODULES.some(m => m.key === code)) out[code] = 'W'
+    return out
+  }
+  return {}
+}
 
 export const DATA_SCOPE_OPTIONS = [
   { value: 'all' as const, label: '全部数据', desc: '可查看所有部门数据' },
@@ -91,7 +118,7 @@ export function useRolesPage() {
   const [deleteRole, setDeleteRole] = useState<Role | null>(null)
 
   const [form, setForm] = useState<FormData>({
-    code: '', name: '', description: '', permissions: [], status: 'active', dataScope: 'dept'
+    code: '', name: '', description: '', permissions: {}, status: 'active', dataScope: 'dept'
   })
 
   const stats = useMemo(() => {
@@ -115,7 +142,7 @@ export function useRolesPage() {
 
   const openCreate = () => {
     setEditingId(null)
-    setForm({ code: `ROLE-${Date.now()}`, name: '', description: '', permissions: [], status: 'active', dataScope: 'dept' })
+    setForm({ code: `ROLE-${Date.now()}`, name: '', description: '', permissions: {}, status: 'active', dataScope: 'dept' })
     setModalType('create')
   }
 
@@ -125,7 +152,7 @@ export function useRolesPage() {
       code: row.code,
       name: row.name,
       description: row.description || '',
-      permissions: row.permissions || [],
+      permissions: normalizeRolePerms((row as any).permissions),
       status: row.status,
       dataScope: 'dept'
     })
@@ -142,14 +169,14 @@ export function useRolesPage() {
     setModalType('delete')
   }
 
-  const togglePermission = (moduleKey: string, action: string) => {
-    const permKey = `${moduleKey}:${action}`
-    setForm(prev => ({
-      ...prev,
-      permissions: prev.permissions.includes(permKey)
-        ? prev.permissions.filter(p => p !== permKey)
-        : [...prev.permissions, permKey]
-    }))
+  // 设置某模块权限级别：'R' | 'W' | null（无权限）
+  const setPermLevel = (moduleKey: string, level: PermLevel | null) => {
+    setForm(prev => {
+      const next = { ...prev.permissions }
+      if (level === null) delete next[moduleKey]
+      else next[moduleKey] = level
+      return { ...prev, permissions: next }
+    })
   }
 
   const handleSubmit = async () => {
@@ -217,7 +244,7 @@ export function useRolesPage() {
     openEdit,
     openDetail,
     openDelete,
-    togglePermission,
+    setPermLevel,
     handleSubmit,
     handleDelete,
     getDataScopeLabel,

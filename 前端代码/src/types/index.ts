@@ -423,7 +423,8 @@ export interface Role {
   code: string
   name: string
   description?: string
-  permissions: string[]
+  // 数据驱动 RBAC：对象矩阵 {module:'R'|'W'}（兼容旧扁平数组）
+  permissions: string[] | Record<string, 'R' | 'W'>
   status: 'active' | 'inactive'
   createdAt: string
 }

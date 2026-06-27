@@ -62,12 +62,17 @@ export function UsersTable({
               </div>
               <div className="text-xs text-gray-500 mb-2 line-clamp-1">{role.description || '-'}</div>
               <div className="flex flex-wrap gap-1">
-                {role.permissions.slice(0, 3).map(p => (
-                  <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{p}</span>
-                ))}
-                {role.permissions.length > 3 && (
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">+{role.permissions.length - 3}</span>
-                )}
+                {(() => {
+                  const keys = Array.isArray(role.permissions) ? role.permissions : Object.keys(role.permissions ?? {})
+                  return (<>
+                    {keys.slice(0, 3).map(p => (
+                      <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{p}</span>
+                    ))}
+                    {keys.length > 3 && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">+{keys.length - 3}</span>
+                    )}
+                  </>)
+                })()}
               </div>
             </div>
           ))}

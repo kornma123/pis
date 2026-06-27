@@ -17,7 +17,7 @@ function getRoleBadge(role: Role) {
 
 function getPermissionChips(role: Role) {
   if (role.code === 'admin') return [<span key="all" className="text-xs px-2.5 py-1 rounded-full bg-green-50 text-green-500 font-medium">全部权限</span>]
-  const perms = Array.isArray(role.permissions) ? role.permissions : []
+  const perms = Array.isArray(role.permissions) ? role.permissions : Object.keys(role.permissions ?? {})
   const chips: string[] = []
   const uniqueModules = new Set<string>()
   perms.forEach(p => {

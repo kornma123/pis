@@ -107,7 +107,7 @@ export default function Roles() {
         onClose={() => page.setModalType(null)}
         onChange={page.setForm}
         onSubmit={page.handleSubmit}
-        onTogglePermission={page.togglePermission}
+        onSetPermLevel={page.setPermLevel}
       />
 
       {/* Detail Modal */}

@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import type { FormData } from '../hooks/useRolesPage'
+import type { FormData, PermLevel } from '../hooks/useRolesPage'
 import { PERMISSION_MODULES, DATA_SCOPE_OPTIONS } from '../hooks/useRolesPage'
 
 interface Props {
@@ -9,11 +9,17 @@ interface Props {
   onClose: () => void
   onChange: (form: FormData) => void
   onSubmit: () => void
-  onTogglePermission: (moduleKey: string, action: string) => void
+  onSetPermLevel: (moduleKey: string, level: PermLevel | null) => void
 }
 
-export function RoleFormModal({ open, type, form, onClose, onChange, onSubmit, onTogglePermission }: Props) {
+export function RoleFormModal({ open, type, form, onClose, onChange, onSubmit, onSetPermLevel }: Props) {
   if (!open) return null
+
+  const LEVELS: { value: PermLevel | null; label: string }[] = [
+    { value: null, label: '无' },
+    { value: 'R', label: '只读' },
+    { value: 'W', label: '读写' },
+  ]
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -79,38 +85,42 @@ export function RoleFormModal({ open, type, form, onClose, onChange, onSubmit, o
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">功能权限配置</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">功能权限矩阵（每模块：无 / 只读 / 读写）</label>
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700">功能模块</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-700">查看</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-700">新增</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-700">编辑</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-700">删除</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-700">模块</th>
+                    <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-700 w-[220px]">权限</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {PERMISSION_MODULES.map(mod => (
-                    <tr key={mod.key} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-900">{mod.label}</td>
-                      {(['view', 'add', 'edit', 'delete'] as const).map(action => (
-                        <td key={action} className="px-4 py-3 text-center">
-                          {mod.actions.includes(action) ? (
-                            <input
-                              type="checkbox"
-                              checked={form.permissions.includes(`${mod.key}:${action}`)}
-                              onChange={() => onTogglePermission(mod.key, action)}
-                              className="rounded border-gray-300 text-blue-500 focus:ring-blue-500 w-4 h-4 cursor-pointer"
-                            />
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
+                  {PERMISSION_MODULES.map(mod => {
+                    const cur = form.permissions[mod.key] ?? null
+                    return (
+                      <tr key={mod.key} className="hover:bg-gray-50">
+                        <td className="px-4 py-2 text-gray-900">{mod.label}</td>
+                        <td className="px-4 py-2">
+                          <div className="flex items-center justify-center gap-1">
+                            {LEVELS.map(lv => (
+                              <button
+                                key={lv.label}
+                                type="button"
+                                onClick={() => onSetPermLevel(mod.key, lv.value)}
+                                className={`px-3 py-1 rounded-md text-xs font-medium border transition-all ${
+                                  cur === lv.value
+                                    ? 'bg-blue-500 text-white border-blue-500'
+                                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                                }`}
+                              >
+                                {lv.label}
+                              </button>
+                            ))}
+                          </div>
                         </td>
-                      ))}
-                    </tr>
-                  ))}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

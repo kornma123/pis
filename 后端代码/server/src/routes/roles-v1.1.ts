@@ -2,8 +2,14 @@ import { Router } from 'express'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { v4 as uuidv4 } from 'uuid'
+import { parsePermissions } from '../middleware/rbac-matrix.js'
 
 const router = Router()
+
+// 规范化权限为对象矩阵 {module:'R'|'W'}（兼容旧数组/含 '*'），落库 + 返回统一形态
+function normalizePerms(raw: any): string {
+  return JSON.stringify(parsePermissions(raw))
+}
 
 router.get('/', (req, res) => {
   const database = getDatabase()
@@ -34,7 +40,7 @@ router.post('/', (req, res) => {
     if (exists) { error(res, 'Role code already exists', 'RESOURCE_CONFLICT', 409); return }
     const id = uuidv4()
     database.prepare('INSERT INTO roles (id, code, name, description, permissions, status) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, code, name, description || '', JSON.stringify(permissions || []), status === 'active' ? 1 : 0)
+      .run(id, code, name, description || '', normalizePerms(permissions), status === 'active' ? 1 : 0)
     success(res, { id }, 'Created')
   } catch (err: any) { error(res, err.message) }
 })
@@ -67,7 +73,7 @@ router.put('/:id', (req, res) => {
     }
     if (name !== undefined) { fields.push('name = ?'); params.push(name) }
     if (description !== undefined) { fields.push('description = ?'); params.push(description || '') }
-    if (permissions !== undefined) { fields.push('permissions = ?'); params.push(JSON.stringify(permissions || [])) }
+    if (permissions !== undefined) { fields.push('permissions = ?'); params.push(normalizePerms(permissions)) }
     if (status !== undefined) { fields.push('status = ?'); params.push(status === 'active' ? 1 : 0) }
     if (fields.length > 0) {
       params.push(id)
