@@ -37,6 +37,11 @@ import laborTimeRoutes from './routes/labor-time-v1.1.js'
 import indirectCostRoutes from './routes/indirect-cost-v1.1.js'
 import abcRoutes from './routes/abc-v1.1.js'
 import costAdjustmentRoutes from './routes/cost-adjustment-v1.1.js'
+// 按医院成本/盈利
+import partnerRoutes from './routes/partners-v1.1.js'
+import lisCaseRoutes from './routes/lis-cases-v1.1.js'
+import caseRevenueRoutes from './routes/case-revenue-v1.1.js'
+import partnerPnlRoutes from './routes/partner-pnl-v1.1.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -98,6 +103,15 @@ app.use('/api/v1/labor-times', authenticateToken, requirePermission('labor_times
 app.use('/api/v1/indirect-costs', authenticateToken, requirePermission('abc_config', 'R'), indirectCostRoutes)
 app.use('/api/v1/abc', authenticateToken, requirePermission('abc_dashboard', 'R'), abcRoutes)
 app.use('/api/v1/cost-adjustments', authenticateToken, requirePermission('cost_analysis', 'R'), costAdjustmentRoutes)
+
+// 按医院成本/盈利：合作医院（客户）维度 CRUD（W2）。读 partners R，写由路由内 requirePermission('partners','W') 守卫。
+app.use('/api/v1/partners', authenticateToken, requirePermission('partners', 'R'), partnerRoutes)
+// LIS 病例导入/列表/样本覆盖（W3）。读 reconciliation R，写由路由内 requirePermission('reconciliation','W') 守卫。
+app.use('/api/v1/lis-cases', authenticateToken, requirePermission('reconciliation', 'R'), lisCaseRoutes)
+// 财务收费单据→逐 case 实收导入（W4）。读 reconciliation R，写由路由内 requirePermission('reconciliation','W') 守卫。
+app.use('/api/v1/case-revenue', authenticateToken, requirePermission('reconciliation', 'R'), caseRevenueRoutes)
+// 院级 P&L 视图 + ABC 成本维度回填（W6/W5）。读权限由路由内 cost_analysis R 守卫（成本敏感）。
+app.use('/api/v1/partner-pnl', authenticateToken, partnerPnlRoutes)
 
 // 健康检查
 app.get('/api/health', (_req, res) => {

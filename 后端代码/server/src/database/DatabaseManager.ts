@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
+import { CHARGE_CODE_SEED, chargeDefToRow } from '../utils/charge-catalog.js'
 import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -326,6 +327,66 @@ export function initializeDatabase(): void {
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+
+  // 收入侧（按医院成本/盈利）：收费目录 charge_codes —— 收费引擎的计价规则源。
+  // ⛔ 红线：与成本侧 fee_standards / cost-calculator 完全独立，互不读写。rule_json 持久化 ChargeRule。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS charge_codes (
+      code TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      unit TEXT,
+      category TEXT NOT NULL,
+      rule_type TEXT NOT NULL,
+      rule_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // 收入侧：财务收费单据 → 逐 case 实收（W4，code-agnostic）。net_amount=开单金额(折后实收)；gross=计费金额(折前)。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS case_revenue (
+      id TEXT PRIMARY KEY,
+      case_no TEXT NOT NULL,
+      partner_id TEXT,
+      partner_name TEXT,
+      doc_no TEXT,
+      gross_amount DECIMAL(18, 4) NOT NULL DEFAULT 0,
+      net_amount DECIMAL(18, 4) NOT NULL DEFAULT 0,
+      discount_rate DECIMAL(10, 6) NOT NULL DEFAULT 0,
+      service_month TEXT,
+      line_count INTEGER NOT NULL DEFAULT 0,
+      import_batch TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(case_no, service_month)
+    )
+  `)
+  // 原始收费明细行（code-agnostic 原样存，备 v2 编码标准化后逐码交叉核对，不依赖其语义）
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS case_revenue_lines (
+      id TEXT PRIMARY KEY,
+      case_no TEXT NOT NULL,
+      partner_name TEXT,
+      seq INTEGER,
+      specimen_name TEXT,
+      charge_item TEXT,
+      charge_code TEXT,
+      unit_price DECIMAL(18, 4) DEFAULT 0,
+      qty DECIMAL(18, 4) DEFAULT 0,
+      unit TEXT,
+      gross_amount DECIMAL(18, 4) DEFAULT 0,
+      discount_rate DECIMAL(10, 6) DEFAULT 0,
+      net_amount DECIMAL(18, 4) DEFAULT 0,
+      charge_time TEXT,
+      service_month TEXT,
+      import_batch TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_partner_month ON case_revenue(partner_id, service_month)`)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_lines_case ON case_revenue_lines(case_no)`)
 
   // 成本对账：修正日志
   database.exec(`
@@ -962,6 +1023,14 @@ export function initializeDatabase(): void {
   ensureColumn('outbound_abc_details', 'partner_id', 'TEXT')
   ensureColumn('lis_cases', 'partner_id', 'TEXT')
   ensureColumn('outbound_abc_details', 'source_snapshot', 'TEXT')
+  // 收入侧推断层：样本类型(tissue/tissue_complex/cytology)推断结果 + 来源(auto 关键词判 / manual 人工覆盖永远赢)。
+  // 增量纠错架构：派生推断落字段、可逐 case 覆盖、留痕；改判断逻辑只需重跑（原始数量不动）。
+  ensureColumn('lis_cases', 'specimen_type', 'TEXT')
+  ensureColumn('lis_cases', 'specimen_type_source', "TEXT NOT NULL DEFAULT 'auto'")
+  // LIS 基础数量列（W3 导入写入；charge mapping 的输入；与原始事实层一致，可重传覆盖）
+  ;['he_slide_count', 'block_count', 'ihc_count', 'special_stain_count', 'eber_count', 'pdl1_count'].forEach((c) =>
+    ensureColumn('lis_cases', c, 'INTEGER NOT NULL DEFAULT 0'),
+  )
 
   // —— ABC 索引（L2 成本来源→中心映射热路径 + 期间动因聚合）——
   database.exec(`CREATE INDEX IF NOT EXISTS idx_labor_center ON standard_labor_times(activity_center_id)`)
@@ -1060,6 +1129,16 @@ export function initializeDatabase(): void {
     VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
   `)
   feeDefaults.forEach((row) => insertFee.run(...row, row[5]))
+
+  // 收入侧收费目录种子（v1 常见档；INSERT OR IGNORE 幂等，已存在不覆盖以保留运营修改）
+  const insertChargeCode = database.prepare(`
+    INSERT OR IGNORE INTO charge_codes (code, name, unit, category, rule_type, rule_json, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'active')
+  `)
+  CHARGE_CODE_SEED.forEach((def) => {
+    const row = chargeDefToRow(def)
+    insertChargeCode.run(row.code, row.name, row.unit, row.category, row.rule_type, row.rule_json)
+  })
 
   console.log('Database initialized successfully')
 }
