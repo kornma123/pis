@@ -426,6 +426,42 @@ export function initializeDatabase(): void {
   `)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_ngs_orders_partner_month ON ngs_orders(partner_id, order_month)`)
 
+  // 逐院配置（单一事实源，配置驱动导入器 P0）：每院一份【版本化】配置 JSON blob（仿 bom_versions）。
+  // config_json = mockup 配置对象（basic/amount/parse/lines/discount/special）。is_current=当前版；
+  // is_baseline=月度导入基线。版本不可变、可回滚、可按版本追溯重算。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS partner_configs (
+      id TEXT PRIMARY KEY,
+      partner_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      config_json TEXT NOT NULL,
+      is_current INTEGER NOT NULL DEFAULT 0,
+      is_baseline INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT,
+      UNIQUE(partner_id, version)
+    )
+  `)
+  // 逐院配置变更记录：每次保存/回滚记一条「调整前→调整后」(diffs_json) + 快照(snapshot_json，回滚源)。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS partner_config_changes (
+      id TEXT PRIMARY KEY,
+      partner_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'edit',
+      tab TEXT,
+      diffs_json TEXT,
+      snapshot_json TEXT,
+      changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      changed_by TEXT,
+      UNIQUE(partner_id, version)
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_partner_configs_current ON partner_configs(partner_id, is_current)`)
+  // codex F3：同院最多一行 current / 一行 baseline（部分唯一索引，DB 级兜底非原子写/并发种子导致的多 current）
+  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_configs_one_current ON partner_configs(partner_id) WHERE is_current = 1`)
+  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_configs_one_baseline ON partner_configs(partner_id) WHERE is_baseline = 1`)
+
   // 成本对账：修正日志
   database.exec(`
     CREATE TABLE IF NOT EXISTS reconciliation_logs (
@@ -1057,6 +1093,14 @@ export function initializeDatabase(): void {
   ensureColumn('outbound_abc_details', 'case_no', 'TEXT')
   ensureColumn('outbound_abc_details', 'charge_group_id', 'TEXT')
   ensureColumn('outbound_abc_details', 'calculation_version', "TEXT NOT NULL DEFAULT 'v1'")
+  // 配置驱动导入器 P0：每期导入记下所用逐院配置版本 → 改规则后判影响面 + 追溯重算锚。
+  ensureColumn('case_revenue', 'config_version', 'INTEGER')
+  // P5 收入侧：配置驱动导入(/commit)落库时写【实验室收入=Σ(IN结算)】+移出额+来源。
+  //   lab_revenue NULL = 非配置驱动(走估算 实收×占比)；非 NULL = 已对账(statement 权威)。revenue_source: statement/estimated/corrected。
+  ensureColumn('case_revenue', 'lab_revenue', 'DECIMAL(18, 4)')
+  ensureColumn('case_revenue', 'out_revenue', 'DECIMAL(18, 4) NOT NULL DEFAULT 0')
+  ensureColumn('case_revenue', 'revenue_source', 'TEXT')
+  ensureColumn('case_revenue_lines', 'scope', 'TEXT') // in/out/unmatched/ambiguous（逐行分类留痕）
   // 按医院(客户)成本/盈利：partner 维度（LIS 给"哪家医院送检" → lis_cases；冗余到 abc 明细供按客户上卷）
   ensureColumn('outbound_abc_details', 'partner_id', 'TEXT')
   ensureColumn('lis_cases', 'partner_id', 'TEXT')

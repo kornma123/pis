@@ -43,6 +43,9 @@ import lisCaseRoutes from './routes/lis-cases-v1.1.js'
 import caseRevenueRoutes from './routes/case-revenue-v1.1.js'
 import partnerPnlRoutes from './routes/partner-pnl-v1.1.js'
 import ngsRoutes from './routes/ngs-v1.1.js'
+// 配置驱动导入器（P4）：逐院配置单一事实源 + 对账单导入预览/归类
+import partnerConfigRoutes from './routes/partner-config-v1.1.js'
+import statementImportRoutes from './routes/statement-import-v1.1.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -115,6 +118,10 @@ app.use('/api/v1/case-revenue', authenticateToken, requirePermission('reconcilia
 app.use('/api/v1/partner-pnl', authenticateToken, partnerPnlRoutes)
 // NGS 基因检测外购转销（独立渠道）：订单导入/产品目录/院级 NGS P&L。读写权限由路由内守卫（reconciliation W / cost_analysis R）。
 app.use('/api/v1/ngs', authenticateToken, ngsRoutes)
+// 配置驱动导入器（P4）：逐院配置单一事实源（CRUD/版本/回滚/基线）。权限由路由内守卫（财务/管理员）。
+app.use('/api/v1/partner-config', authenticateToken, partnerConfigRoutes)
+// 对账单导入（P4）：预览(干跑) + 归类写回该院配置。权限由路由内守卫（财务/管理员）。
+app.use('/api/v1/statement-import', authenticateToken, statementImportRoutes)
 
 // 健康检查
 app.get('/api/health', (_req, res) => {
