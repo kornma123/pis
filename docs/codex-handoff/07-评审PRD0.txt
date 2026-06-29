@@ -1,0 +1,29 @@
+# 角色与任务
+你是资深后端 + 数据库 + 测试架构师。评审开发前的 **PRD-0（可信度止血 / Phase 0）**——目标是开发前把任务拆全、把会出错的地方挑出来、把 §4 待定决策定下来。这是从"路线图互评"切到"PRD/任务/测试互评"的第一份。
+
+# 必读
+- PRD-0：docs/prd/PRD-0-可信度止血.md
+- 路线图定稿（背景/口径）：docs/COREONE-配置驱动导入器-产品路线图-2026-06-29.md（§11 Phase 0、§8 阻断矩阵、决策①②）
+- 相关现有代码（评审任务拆分是否对得上真实代码）：
+  - database/DatabaseManager.ts（case_revenue 已迁移；lis_cases 待迁移；建表/索引/迁移段）
+  - routes/lis-cases-v1.1.ts、utils/lis-import.ts（LIS 导入/覆盖）
+  - utils/abc-partner-link.ts（backfillAbcPartnerIds / getCaseCostRollup / getPartnerCostRollup）
+  - utils/partner-pnl-service.ts（P&L join lis_cases）
+  - utils/partner-config.ts（row2config / loadConfig / rollbackConfig / normalizeConfig）
+  - routes/ngs-v1.1.ts、utils/ngs-pnl.ts、partner-pnl-service（NGS 并入）
+  - tests/*（既有 448 基线 + statement-commit 的跨院同号测试）
+位置：克隆本仓库 → git checkout codex-rereview-p0-p6 → 仓库根目录。
+
+# 重点评审
+1. **任务拆分是否漏文件/漏改动点**：T1 全链路复合键，除 §2 列的文件，还有哪些地方按 `case_no` 单键读写 lis_cases / case 成本 / 收入（grep 全仓）？有没有别的 reader（导出/报表/对账）会串院？
+2. **lis_cases 重建迁移风险**：表级 UNIQUE 改复合键的迁移，对既有数据、外键、索引、并发、其它依赖 lis_cases.case_no 的查询安全吗？迁移前审计 SQL 够不够？
+3. **§4 三个待定决策给结论**：
+   - ABC 回填归属（选项 A 精确 (partner_id,case_no) vs 选项 B ABC case_no 实际全局唯一）：从代码看 outbound_abc_details 的 case_no/partner_id 来源，到底会不会跨院撞号？给你的判断 + 依据。
+   - NGS 缺成本/缺价口径（硬 400 vs 落库+质量标记+P&L 排除）。
+   - 历史跨院同号审计与迁移策略。
+4. **测试用例是否真覆盖 bug**：TC1–TC6 删掉对应修复会变红吗？还缺哪些用例（如 LIS 晚到、人工覆盖跨院、回滚坏版本、ABC 跨院成本）？
+5. **零回归风险**：哪些既有测试/功能会被 lis_cases 迁移或 join 改动波及？
+
+# 输出
+先一句话：PRD-0 是否可直接进开发、还差哪些必补项。再分 **必须补（不补会漏改/串数据/迁移出事）/ 建议补 / §4 决策建议** 三档，每条：缺什么/改哪 + 为什么 + 具体做法。中文。
+（findings 写到 docs/codex-handoff/findings/07-prd0.md，commit 回 codex-rereview-p0-p6 并 push。）
