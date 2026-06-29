@@ -39,6 +39,11 @@ export function startsWithPrefix(no: string, prefix: string): boolean {
   return p.length > 0 && n.length > 0 && n.startsWith(p)
 }
 
+/** 病理号规范化（NFKC 全角→半角 + trim）。用于病例匹配 / 落库分组，避免全角号 'Ｓ２６-００１' 与 LIS 半角号 'S26-001' 对不上（codex MEDIUM-3）。 */
+export function canonicalCaseNo(s: unknown): string {
+  return nfkc(s)
+}
+
 /** 文本含关键词（均归一+大小写折叠；空关键词不匹配）。 */
 export function containsKeyword(text: string, kw: string): boolean {
   const t = fold(text)
@@ -55,18 +60,27 @@ export function classify(lines: PartnerConfigLine[], input: ClassifyInput): Clas
   const item = input.item ?? ''
   const remark = input.remark ?? ''
 
-  // 1) 前缀优先：命中多个前缀时取【最长】前缀（更具体），并列取 line 顺序靠前。
-  //    codex F7：原「按 line 顺序首条命中即返回」会让短前缀 'H' 吃掉长前缀 'HE' → 误分类。
-  let bestPrefix: { line: PartnerConfigLine; prefix: string; len: number } | null = null
+  // 1) 前缀优先：取【最长】前缀（更具体）。codex F7：短前缀 'H' 不得吃掉长前缀 'HE'。
+  //    codex HIGH-5：若多条 enabled 业务线在【同一最长长度】命中 → 歧义(需人工归类)，不得静默取首条。
+  let bestLen = 0
+  const prefixHits: { line: PartnerConfigLine; prefix: string }[] = []
   for (const l of enabled) {
     for (const p of l.prefixes) {
       if (startsWithPrefix(no, p)) {
         const len = fold(p).length
-        if (!bestPrefix || len > bestPrefix.len) bestPrefix = { line: l, prefix: p, len }
+        if (len > bestLen) { bestLen = len; prefixHits.length = 0; prefixHits.push({ line: l, prefix: p }) }
+        else if (len === bestLen) prefixHits.push({ line: l, prefix: p })
       }
     }
   }
-  if (bestPrefix) return { kind: 'matched', line: bestPrefix.line, scope: bestPrefix.line.scope, by: `前缀 ${nfkc(bestPrefix.prefix)}` }
+  if (prefixHits.length > 0) {
+    const distinctLines = prefixHits.filter((h, i) => prefixHits.findIndex((x) => x.line === h.line) === i).map((h) => h.line)
+    if (distinctLines.length === 1) {
+      const h = prefixHits[0]
+      return { kind: 'matched', line: h.line, scope: h.line.scope, by: `前缀 ${nfkc(h.prefix)}` }
+    }
+    return { kind: 'ambiguous', lines: distinctLines }
+  }
 
   // 2) 关键词（项目名）/备注，收集命中（按 line 去重）
   const hits: PartnerConfigLine[] = []

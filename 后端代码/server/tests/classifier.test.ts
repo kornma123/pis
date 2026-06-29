@@ -101,4 +101,13 @@ describe('codex 修复回归', () => {
     const r2 = classify(lines, { no: 'H26-001', item: '' })
     if (r2.kind === 'matched') expect(r2.line.key).toBe('h')
   })
+  it('HIGH-5 同长前缀并列：两条 enabled 线都配 H，H26-1 → 歧义(不静默取首条)', () => {
+    const lines: PartnerConfigLine[] = [
+      { key: 'a', name: 'A线', on: true, scope: 'in', prefixes: ['H'], keywords: [], remarks: [] },
+      { key: 'b', name: 'B线', on: true, scope: 'out', prefixes: ['H'], keywords: [], remarks: [] },
+    ]
+    const r = classify(lines, { no: 'H26-1', item: '' })
+    expect(r.kind).toBe('ambiguous')
+    if (r.kind === 'ambiguous') expect(r.lines.map((l) => l.key).sort()).toEqual(['a', 'b'])
+  })
 })

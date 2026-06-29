@@ -80,6 +80,50 @@ function tx<T>(db: DbLike, fn: () => T): T {
   }
 }
 
+/** 归一扣率：接受 "90%" / 90 / 0.9 → 0–1 小数；非有限 / 负 / >1 → 抛错。
+ *  codex HIGH-4：解析层已修 90%→0.9，但同样的百倍虚高仍可从配置 JSON 的 discount 进入回退路径，故保存前必须归一。 */
+function normRate(v: unknown, where: string): number {
+  let n: number
+  if (typeof v === 'string') {
+    const s = v.trim()
+    n = s.endsWith('%') ? Number(s.slice(0, -1)) / 100 : Number(s)
+  } else n = Number(v)
+  if (!Number.isFinite(n)) throw new Error(`扣率无效（${where}）：${String(v)}`)
+  if (n > 1) n = n / 100 // 90 → 0.9（百分数写法）
+  if (n < 0 || n > 1) throw new Error(`扣率应在 0–1 之间（${where}）：${String(v)}`)
+  return Math.round(n * 1e6) / 1e6
+}
+
+/** 保存前归一 + 校验配置形状（codex HIGH-4 扣率归一 + MEDIUM-1 形状校验）。
+ *  下游分类/计算假设 lines/prefixes/discount 形状合法；坏配置会致 500 / NaN / 非法 scope 落库 / 列映射解析为空。
+ *  非法形状抛 Error（路由映射 400，不写版本）；保留其余字段（amount/parse/special）原样。 */
+export function normalizeConfig(input: any): PartnerConfig {
+  if (!input || typeof input !== 'object') throw new Error('配置格式无效')
+  if (!Array.isArray(input.lines)) throw new Error('配置格式无效（缺 lines 数组）')
+  const seenKeys = new Set<string>()
+  const lines: PartnerConfigLine[] = input.lines.map((l: any, i: number) => {
+    if (!l || typeof l !== 'object') throw new Error(`业务线[${i}] 格式无效`)
+    const key = String(l.key ?? '').trim()
+    if (!key) throw new Error(`业务线[${i}] 缺 key`)
+    if (seenKeys.has(key)) throw new Error(`业务线 key 重复：${key}`)
+    seenKeys.add(key)
+    if (l.scope !== 'in' && l.scope !== 'out') throw new Error(`业务线「${key}」scope 必须为 in 或 out`)
+    const arr = (x: any, name: string): string[] => {
+      if (x == null) return []
+      if (!Array.isArray(x)) throw new Error(`业务线「${key}」${name} 必须是数组`)
+      return x.map((s: any) => String(s))
+    }
+    return { key, name: String(l.name ?? key), on: !!l.on, scope: l.scope, prefixes: arr(l.prefixes, 'prefixes'), keywords: arr(l.keywords, 'keywords'), remarks: arr(l.remarks, 'remarks') }
+  })
+  const d = input.discount || {}
+  const discount = {
+    def: normRate(d.def ?? 1, 'discount.def'),
+    byLine: Array.isArray(d.byLine) ? d.byLine.map((x: any) => ({ key: String(x?.key ?? ''), rate: normRate(x?.rate, `discount.byLine[${x?.key}]`) })) : [],
+    byItem: Array.isArray(d.byItem) ? d.byItem.map((x: any) => ({ item: String(x?.item ?? ''), rate: normRate(x?.rate, `discount.byItem[${x?.item}]`) })) : [],
+  }
+  return { ...input, lines, discount } as PartnerConfig
+}
+
 // —— 默认 8 线模板（plan §P0：4 计入 + 4 移出）——
 // 识别词取自定稿 mockup config_v11 默认模板；第 8 线「共建分成净额」按 plan 补齐（mockup 默认 7 线，
 // 共建按院 special.joint 开关，此处作为默认目录线占位，识别走专用解析器）。

@@ -361,7 +361,7 @@ export function initializeDatabase(): void {
       import_batch TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(case_no, service_month)
+      UNIQUE(partner_id, case_no, service_month)
     )
   `)
   // 原始收费明细行（code-agnostic 原样存，备 v2 编码标准化后逐码交叉核对，不依赖其语义）
@@ -460,11 +460,16 @@ export function initializeDatabase(): void {
   database.exec(`CREATE INDEX IF NOT EXISTS idx_partner_configs_current ON partner_configs(partner_id, is_current)`)
   // codex F3 + verify-H3：建唯一索引前先归一历史脏数据（旧库若已有同院多 current/baseline 会让建索引失败）。
   // current = 该院最高版本那行；baseline 仅保留最高版本的一条。幂等（干净库为 no-op）。
-  database.exec(`UPDATE partner_configs SET is_current = 0 WHERE is_current = 1 AND version <> (SELECT MAX(version) FROM partner_configs p2 WHERE p2.partner_id = partner_configs.partner_id)`)
-  database.exec(`UPDATE partner_configs SET is_baseline = 0 WHERE is_baseline = 1 AND version <> (SELECT MAX(version) FROM partner_configs p2 WHERE p2.partner_id = partner_configs.partner_id AND p2.is_baseline = 1)`)
-  // codex F3：同院最多一行 current / 一行 baseline（部分唯一索引，DB 级兜底非原子写/并发种子导致的多 current）
-  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_configs_one_current ON partner_configs(partner_id) WHERE is_current = 1`)
-  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_configs_one_baseline ON partner_configs(partner_id) WHERE is_baseline = 1`)
+  // codex LOW-1：归一 + 两个唯一索引放进一个事务，失败整体回滚——否则可能留下「已改 is_current/is_baseline 但唯一索引未建」的半状态。
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    database.exec(`UPDATE partner_configs SET is_current = 0 WHERE is_current = 1 AND version <> (SELECT MAX(version) FROM partner_configs p2 WHERE p2.partner_id = partner_configs.partner_id)`)
+    database.exec(`UPDATE partner_configs SET is_baseline = 0 WHERE is_baseline = 1 AND version <> (SELECT MAX(version) FROM partner_configs p2 WHERE p2.partner_id = partner_configs.partner_id AND p2.is_baseline = 1)`)
+    // codex F3：同院最多一行 current / 一行 baseline（部分唯一索引，DB 级兜底非原子写/并发种子导致的多 current）
+    database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_configs_one_current ON partner_configs(partner_id) WHERE is_current = 1`)
+    database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_configs_one_baseline ON partner_configs(partner_id) WHERE is_baseline = 1`)
+    database.exec('COMMIT')
+  } catch (e) { database.exec('ROLLBACK'); throw e }
 
   // 成本对账：修正日志
   database.exec(`
@@ -1105,6 +1110,49 @@ export function initializeDatabase(): void {
   ensureColumn('case_revenue', 'out_revenue', 'DECIMAL(18, 4) NOT NULL DEFAULT 0')
   ensureColumn('case_revenue', 'revenue_source', 'TEXT')
   ensureColumn('case_revenue_lines', 'scope', 'TEXT') // in/out/unmatched/ambiguous（逐行分类留痕）
+  // codex CRITICAL：收入归属于医院，明细行也需 partner_id（删插与查询都按院隔离，防跨院同号串账）。
+  ensureColumn('case_revenue_lines', 'partner_id', 'TEXT')
+  // codex CRITICAL：case_revenue 旧唯一键 (case_no, service_month) 缺 partner_id → 不同医院同月同本地病理号会串账覆盖。
+  //   迁移唯一键为 (partner_id, case_no, service_month)；SQLite 表级 UNIQUE 不能 ALTER，须整表重建（事务内，幂等）。
+  {
+    const cr = database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='case_revenue'").get() as { sql?: string } | undefined
+    if (cr?.sql && /UNIQUE\s*\(\s*case_no\s*,\s*service_month\s*\)/i.test(cr.sql)) {
+      database.exec('BEGIN IMMEDIATE')
+      try {
+        database.exec(`
+          CREATE TABLE case_revenue__new (
+            id TEXT PRIMARY KEY,
+            case_no TEXT NOT NULL,
+            partner_id TEXT,
+            partner_name TEXT,
+            doc_no TEXT,
+            gross_amount DECIMAL(18, 4) NOT NULL DEFAULT 0,
+            net_amount DECIMAL(18, 4) NOT NULL DEFAULT 0,
+            discount_rate DECIMAL(10, 6) NOT NULL DEFAULT 0,
+            service_month TEXT,
+            line_count INTEGER NOT NULL DEFAULT 0,
+            import_batch TEXT,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            config_version INTEGER,
+            lab_revenue DECIMAL(18, 4),
+            out_revenue DECIMAL(18, 4) NOT NULL DEFAULT 0,
+            revenue_source TEXT,
+            UNIQUE(partner_id, case_no, service_month)
+          )
+        `)
+        database.exec(`
+          INSERT INTO case_revenue__new (id, case_no, partner_id, partner_name, doc_no, gross_amount, net_amount, discount_rate, service_month, line_count, import_batch, created_at, updated_at, config_version, lab_revenue, out_revenue, revenue_source)
+          SELECT id, case_no, partner_id, partner_name, doc_no, gross_amount, net_amount, discount_rate, service_month, line_count, import_batch, created_at, updated_at, config_version, lab_revenue, out_revenue, revenue_source FROM case_revenue
+        `)
+        database.exec('DROP TABLE case_revenue')
+        database.exec('ALTER TABLE case_revenue__new RENAME TO case_revenue')
+        database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_partner_month ON case_revenue(partner_id, service_month)`)
+        database.exec('COMMIT')
+      } catch (e) { database.exec('ROLLBACK'); throw e }
+    }
+  }
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_lines_partner_case_month ON case_revenue_lines(partner_id, case_no, service_month)`)
   // 按医院(客户)成本/盈利：partner 维度（LIS 给"哪家医院送检" → lis_cases；冗余到 abc 明细供按客户上卷）
   ensureColumn('outbound_abc_details', 'partner_id', 'TEXT')
   ensureColumn('lis_cases', 'partner_id', 'TEXT')

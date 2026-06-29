@@ -121,6 +121,28 @@ describe('GOLDEN 端到端：配置 → 导入 → 看板 = ¥13,152', () => {
   })
 })
 
+describe('codex CRITICAL: 跨院同号同月不串账', () => {
+  const gridFor = (bill: number, rate: number, net: number) => [
+    ['病理号', '项目名称', '收费金额', '结算扣率', '结算金额'],
+    ['S26-DUP', '手术标本检查与诊断', String(bill), String(rate), String(net)],
+    ['合计', '', String(bill), '', String(net)],
+  ]
+  it('医院A与医院B同月同病理号 commit → 两院各自保留，不互相覆盖', async () => {
+    const a = await commit(financeToken, PID, gridFor(100, 0.8, 80), '2026-11', true)
+    expect(a.status).toBe(200)
+    const b = await commit(financeToken, GID, gridFor(200, 0.9, 180), '2026-11', true)
+    expect(b.status).toBe(200)
+    const rowA = db.prepare(`SELECT lab_revenue FROM case_revenue WHERE partner_id=? AND case_no='S26-DUP' AND service_month='2026-11'`).get(PID) as any
+    const rowB = db.prepare(`SELECT lab_revenue FROM case_revenue WHERE partner_id=? AND case_no='S26-DUP' AND service_month='2026-11'`).get(GID) as any
+    expect(rowA?.lab_revenue).toBe(80) // A 未被 B 覆盖
+    expect(rowB?.lab_revenue).toBe(180)
+    const linesA = db.prepare(`SELECT COUNT(*) t FROM case_revenue_lines WHERE partner_id=? AND case_no='S26-DUP' AND service_month='2026-11'`).get(PID) as any
+    const linesB = db.prepare(`SELECT COUNT(*) t FROM case_revenue_lines WHERE partner_id=? AND case_no='S26-DUP' AND service_month='2026-11'`).get(GID) as any
+    expect(linesA.t).toBe(1) // B 的删插未波及 A 的明细
+    expect(linesB.t).toBe(1)
+  })
+})
+
 describe('codex verify 门禁加固（H1 严格布尔 / H2 无合计行需确认）', () => {
   const NOTOTAL = [
     ['病理号', '项目名称', '收费金额', '结算扣率', '结算金额'],

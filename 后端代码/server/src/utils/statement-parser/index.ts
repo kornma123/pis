@@ -260,6 +260,13 @@ export function parseLineItems(grid: Grid, opts: ParseOpts = {}): ParseResult {
   const rowSettleSum = round2(rows.reduce((s, r) => s + (Number.isFinite(r.settle) ? r.settle : 0), 0))
   if (colMap.settle < 0) warnings.push('未识别结算金额列，逐行实收按 开单×扣率 估算')
   if (declaredTotal == null) warnings.push('未找到独立合计行，无法做对账闭合校验')
+  // codex HIGH-1：宽表模板（远程会诊/诊断服务费）的业务语义在【列表头】（远程会诊结算/免组结算金额…），逐行项目名为空。
+  //   这些行金额(结算合计)仍正确入账并参与对账闭合，但分类阶段会落「待人工归类」——这是诚实的保守处理：
+  //   不按列自动展开归类，是为避免把「远程会诊(移出)」误按 会诊关键词判成「线下会诊(计入)」而虚增实验室收入。
+  //   逐列语义→业务线 的自动映射属配置+解析协同的后续功能项，届时再做；当前在测试台按列含义人工归类。
+  if ((template === 'consult_remote' || template === 'diagnostic_fee') && rows.some((r) => !r.item)) {
+    warnings.push('宽表模板：项目语义在列表头、逐行项目名为空，相关行将进入「待人工归类」（金额已正确入账与对账，分类需在测试台按列含义确认，避免移出项被误计入）。')
+  }
   return { template, rows, declaredTotal, declaredGross, rowSettleSum, headerRow, colMap, warnings }
 }
 

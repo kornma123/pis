@@ -11,6 +11,7 @@
  * 纯函数（无 DB）；P4 路由层负责从 DB 取本期该院 LIS 病理号后调用。
  */
 import type { StatementRevenue } from './statement-revenue.js'
+import { canonicalCaseNo } from './classifier.js' // codex MEDIUM-3：病例匹配用 NFKC 规范化，全角号与 LIS 半角号才能对上
 
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100
 
@@ -60,9 +61,9 @@ export function scoreStatement(rev: StatementRevenue, ctx: ScoreCtx): ImportScor
   }
 
   // 3. 病例匹配（双向）
-  const lisSet = new Set((ctx.lisCaseNos ?? []).map((s) => s.trim()).filter(Boolean))
-  const caseRows = rev.rows.filter((r) => r.no && r.no.trim())
-  const stmtCaseSet = new Set(caseRows.map((r) => r.no.trim()))
+  const lisSet = new Set((ctx.lisCaseNos ?? []).map((s) => canonicalCaseNo(s)).filter(Boolean))
+  const caseRows = rev.rows.filter((r) => canonicalCaseNo(r.no))
+  const stmtCaseSet = new Set(caseRows.map((r) => canonicalCaseNo(r.no)))
   let fwdMatched = 0
   for (const c of stmtCaseSet) if (lisSet.has(c)) fwdMatched++
   const fwdRate = stmtCaseSet.size > 0 ? round2((fwdMatched / stmtCaseSet.size) * 100) / 100 : 1

@@ -32,18 +32,19 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
     const partnerCache = new Map<string, string>()
     let partnersCreated = 0
 
+    // codex CRITICAL（同步修 W4 账单导入器）：唯一键含 partner_id，删插/冲突都按院隔离，防跨院同号同月串账。
     const upsertRev = db.prepare(`
       INSERT INTO case_revenue (id, case_no, partner_id, partner_name, doc_no, gross_amount, net_amount, discount_rate, service_month, line_count, import_batch)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(case_no, service_month) DO UPDATE SET
-        partner_id = excluded.partner_id, partner_name = excluded.partner_name, doc_no = excluded.doc_no,
+      ON CONFLICT(partner_id, case_no, service_month) DO UPDATE SET
+        partner_name = excluded.partner_name, doc_no = excluded.doc_no,
         gross_amount = excluded.gross_amount, net_amount = excluded.net_amount, discount_rate = excluded.discount_rate,
         line_count = excluded.line_count, import_batch = excluded.import_batch, updated_at = CURRENT_TIMESTAMP
     `)
-    const delLines = db.prepare('DELETE FROM case_revenue_lines WHERE case_no = ? AND service_month = ?')
+    const delLines = db.prepare('DELETE FROM case_revenue_lines WHERE partner_id = ? AND case_no = ? AND service_month = ?')
     const insLine = db.prepare(`
-      INSERT INTO case_revenue_lines (id, case_no, partner_name, seq, specimen_name, charge_item, charge_code, unit_price, qty, unit, gross_amount, discount_rate, net_amount, charge_time, service_month, import_batch)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO case_revenue_lines (id, case_no, partner_id, partner_name, seq, specimen_name, charge_item, charge_code, unit_price, qty, unit, gross_amount, discount_rate, net_amount, charge_time, service_month, import_batch)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const lisExists = db.prepare('SELECT 1 FROM lis_cases WHERE case_no = ?')
     // 命中 LIS 且 LIS 有 partner 时以 LIS 的 partner 为权威，避免账单医院名别名/错字把收入落到与成本不同的 partner
@@ -85,9 +86,9 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
         if (lisExists.get(c.caseNo)) matchedToLis++
         else unmatched.push(c.caseNo)
         upsertRev.run(`CR-${uuidv4()}`, c.caseNo, partnerId, c.partnerName, docNo || null, c.grossAmount, c.netAmount, c.discountRate, c.serviceMonth, c.lineCount, importBatch)
-        delLines.run(c.caseNo, c.serviceMonth)
+        delLines.run(partnerId, c.caseNo, c.serviceMonth)
         const lns = linesByCase.get(`${c.caseNo}|${c.serviceMonth}`) || []
-        lns.forEach((ln, i) => insLine.run(`CRL-${uuidv4()}`, ln.caseNo, ln.partnerName, i + 1, ln.specimenName, ln.chargeItem, ln.chargeCode,
+        lns.forEach((ln, i) => insLine.run(`CRL-${uuidv4()}`, ln.caseNo, partnerId, ln.partnerName, i + 1, ln.specimenName, ln.chargeItem, ln.chargeCode,
           ln.unitPrice, ln.qty, ln.unit, ln.grossAmount, ln.discountRate, ln.netAmount, ln.chargeTime, ln.serviceMonth, importBatch))
       }
       backfillAbcPartnerIds(db) // 顺带把成本维度刷新到位，减少手动回填遗漏

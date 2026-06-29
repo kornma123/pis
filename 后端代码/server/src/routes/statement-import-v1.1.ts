@@ -16,6 +16,7 @@ import { requireAnyRole } from '../middleware/permissions.js'
 import { loadConfig, peekConfig, saveConfig, type PartnerConfigLine } from '../utils/partner-config.js'
 import { parseStatement, type Grid, type ColMap } from '../utils/statement-parser/index.js'
 import { computeStatementRevenue, type ClassifiedRow } from '../utils/statement-revenue.js'
+import { canonicalCaseNo } from '../utils/classifier.js' // codex MEDIUM-3：落库分组用 NFKC 规范化病理号
 import { scoreStatement } from '../utils/import-score.js'
 import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
 
@@ -116,7 +117,7 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
     const linesByCase = new Map<string, ClassifiedRow[]>()
     let skippedNoCase = 0
     for (const r of rev.rows) {
-      const no = (r.no || '').trim()
+      const no = canonicalCaseNo(r.no)
       if (!no) { skippedNoCase++; continue }
       const arr = linesByCase.get(no) || []
       arr.push(r)
@@ -125,17 +126,18 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
     if (linesByCase.size === 0) { error(res, '无可逐 case 落库的明细行（缺病理号）', 'BAD_REQUEST', 400); return }
 
     const importBatch = `STMT-${Date.now()}`
+    // codex CRITICAL：唯一键含 partner_id，删插/冲突都按院隔离，防跨院同号同月串账。
     const upsert = db.prepare(`
       INSERT INTO case_revenue (id, case_no, partner_id, partner_name, doc_no, gross_amount, net_amount, lab_revenue, out_revenue, discount_rate, revenue_source, service_month, config_version, line_count, import_batch)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'statement', ?, ?, ?, ?)
-      ON CONFLICT(case_no, service_month) DO UPDATE SET
-        partner_id = excluded.partner_id, partner_name = excluded.partner_name, doc_no = excluded.doc_no,
+      ON CONFLICT(partner_id, case_no, service_month) DO UPDATE SET
+        partner_name = excluded.partner_name, doc_no = excluded.doc_no,
         gross_amount = excluded.gross_amount, net_amount = excluded.net_amount, lab_revenue = excluded.lab_revenue,
         out_revenue = excluded.out_revenue, discount_rate = excluded.discount_rate, revenue_source = 'statement',
         config_version = excluded.config_version, line_count = excluded.line_count, import_batch = excluded.import_batch, updated_at = CURRENT_TIMESTAMP
     `)
-    const delLines = db.prepare('DELETE FROM case_revenue_lines WHERE case_no = ? AND service_month = ?')
-    const insLine = db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_name, seq, charge_item, gross_amount, discount_rate, net_amount, scope, service_month, import_batch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    const delLines = db.prepare('DELETE FROM case_revenue_lines WHERE partner_id = ? AND case_no = ? AND service_month = ?')
+    const insLine = db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, partner_name, seq, charge_item, gross_amount, discount_rate, net_amount, scope, service_month, import_batch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
     let labTotal = 0, outTotal = 0, caseCount = 0
     db.exec('BEGIN IMMEDIATE')
@@ -149,8 +151,8 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
         }
         const dr = gross > 0 ? round4(net / gross) : 0
         upsert.run(`CR-${uuidv4()}`, no, partnerId, partner.name, docNo || null, gross, net, lab, out, dr, serviceMonth, cfg.version, lines.length, importBatch)
-        delLines.run(no, serviceMonth)
-        lines.forEach((r, i) => insLine.run(`CRL-${uuidv4()}`, no, partner.name, i + 1, r.item, fin(r.bill), fin(r.rate), fin(r.settle), r.status, serviceMonth, importBatch))
+        delLines.run(partnerId, no, serviceMonth)
+        lines.forEach((r, i) => insLine.run(`CRL-${uuidv4()}`, no, partnerId, partner.name, i + 1, r.item, fin(r.bill), fin(r.rate), fin(r.settle), r.status, serviceMonth, importBatch))
         labTotal = round2(labTotal + lab); outTotal = round2(outTotal + out); caseCount++
       }
       backfillAbcPartnerIds(db)
@@ -168,7 +170,7 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
 router.post('/classify-rule', authenticateToken, requireImport, (req, res) => {
   try {
     const db = getDatabase()
-    const { partnerId, lineKey, newLine, ruleType, value } = req.body as any
+    const { partnerId, lineKey, newLine, ruleType, value, expectedVersion } = req.body as any
     if (!partnerId || !value || !['prefix', 'keyword', 'remark'].includes(ruleType)) { error(res, '参数无效（需 partnerId / ruleType[prefix|keyword|remark] / value）', 'BAD_REQUEST', 400); return }
     if (!partnerExists(db, partnerId)) { error(res, '医院不存在', 'NOT_FOUND', 404); return }
 
@@ -192,9 +194,13 @@ router.post('/classify-rule', authenticateToken, requireImport, (req, res) => {
     const words = String(value).split(/[，,、\s]+/).map((s) => s.trim()).filter(Boolean)
     for (const w of words) if (!target[field].includes(w)) target[field].push(w)
 
-    const r = saveConfig(db, partnerId, config, { changedBy: userId(req), tab: '业务分类', genId })
+    // codex MEDIUM-2：测试台基于某版预览归类时传 expectedVersion → 乐观锁防并发覆盖（配置页已改到更新版时 409，要求重新预览）。
+    const r = saveConfig(db, partnerId, config, { changedBy: userId(req), tab: '业务分类', genId, expectedVersion })
     success(res, { partnerId, version: r.version, lineKey: target.key, scope: target.scope }, `已写入 ${partnerId} 配置（v${r.version}·业务分类），立即生效`)
-  } catch (e: any) { error(res, e.message) }
+  } catch (e: any) {
+    if (/版本冲突/.test(e.message)) { error(res, e.message, 'CONFLICT', 409); return }
+    error(res, e.message)
+  }
 })
 
 export default router

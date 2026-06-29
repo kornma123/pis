@@ -11,23 +11,35 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
-import { requirePermission } from '../middleware/permissions.js'
+import { requirePermission, requireAnyRole } from '../middleware/permissions.js'
 import { findOrCreatePartner } from '../utils/partner-upsert.js'
 import { aggregateNgsOrders } from '../utils/ngs-pnl.js'
 
 const router = Router()
-const requireWrite = requirePermission('reconciliation', 'W')
+// codex HIGH-2：NGS 导入/预览写入售价/外包成本/毛利→进院级利润，须财务+管理员（与对账单导入一致）；
+//   reconciliation W 含 technician/lab_director，会让非财务角色改利润数据，故收窄为 requireAnyRole('finance')。
+const requireWrite = requireAnyRole('finance')
 const requireCostRead = requirePermission('cost_analysis', 'R')
 
 /** POST /import —— 导入 NGS 订单（落库，按医院归集；幂等 upsert） */
 router.post('/import', authenticateToken, requireWrite, (req, res) => {
   try {
     const db = getDatabase()
-    const { orders, docNo } = req.body as { orders: Record<string, unknown>[]; docNo?: string }
+    const { orders, docNo, confirm } = req.body as { orders: Record<string, unknown>[]; docNo?: string; confirm?: boolean }
     if (!Array.isArray(orders) || orders.length === 0) { error(res, '导入数据为空', 'BAD_REQUEST', 400); return }
 
     const agg = aggregateNgsOrders(orders)
     if (agg.orders.length === 0) { error(res, '无有效 NGS 订单行', 'BAD_REQUEST', 400); return }
+
+    // codex HIGH-3：缺外包成本→毛利被高估为售价、缺售价→毛利失真，会持久污染院级利润。
+    //   非展示警告能兜住，须财务显式 confirm===true 才落库（严格布尔，与对账单门禁一致）。
+    const confirmed = confirm === true
+    if (!confirmed && (agg.summary.missingCostCount > 0 || agg.summary.missingPriceCount > 0)) {
+      error(res,
+        `NGS 订单缺外包成本 ${agg.summary.missingCostCount} 单 / 缺售价 ${agg.summary.missingPriceCount} 单，毛利会失真污染院级利润。请补全后重导，或重发带 confirm:true 显式确认入库。`,
+        'NEEDS_CONFIRM', 409)
+      return
+    }
 
     const importBatch = `NGS-${docNo || uuidv4()}`
     const operator = (req as any).user?.id || null
