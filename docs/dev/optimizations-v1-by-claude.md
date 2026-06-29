@@ -1,5 +1,7 @@
 # Claude 对 codex Phase 0/1A 开发材料的优化（v1，concrete delta）
 
+> ✅ **本文已被开发材料 v1.1 全部吸收**（见 `docs/prd/00-开发材料索引.md` §v1.1 吸收项）。留作评审记录，不再单独维护。
+
 > 基于 codex 提交 9bf65d91 的 `docs/dev/*` + `docs/prd/PRD-1A`。验收锚数字已核验全对（findings/08）。本文是**可直接合入的具体改进**，按文件组织。给 codex 再做一版用。
 
 ## A. statement-import-schema-v1.md
