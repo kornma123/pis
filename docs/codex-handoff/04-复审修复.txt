@@ -1,0 +1,35 @@
+# 角色与任务
+你是资深后端 + 前端 + 安全审查员，做**对抗性复审**。上一轮你（codex）审出 36 条发现，另一个 AI（Claude）据此修了 25 项。
+你的任务：**怀疑并验证 Claude 的每一项修复**——是否真修对、有无回归、有无引入新 bug、有无不完整或可绕过的路径。默认怀疑，不轻信。
+
+# 你所在的位置
+克隆本仓库 → git checkout codex-rereview-p0-p6 → 在仓库根目录工作。
+- 修复 diff（只看 Claude 的修复，不含 P6 原始前端）：git diff 6f9dbdad..fix/codex-p0-p6
+  （6f9dbdad = 修复前的 P6 tip；fix/codex-p0-p6 = 修复后。两个 SHA/分支都在 origin。）
+- 原始发现（修复要对照这些）：docs/codex-handoff/findings/{01-engine,02-frontend,03-live}.md
+
+# 口径（不变，复核据此）
+实验室收入 = Σ(计入实验室服务项结算金额)；结算 = 医院收费(开单) × 扣率；黄金 = 和睦家 W4 25 case 全组织学 = ¥13152。
+
+# 逐项复核（重点怀疑这些）
+1. **跨院串账 CRITICAL**：case_revenue 唯一键改 (partner_id,case_no,service_month) + 整表重建迁移。
+   - 迁移对已有数据安全吗？会丢数据/丢列吗？迁移幂等吗？并发/中断安全吗？
+   - statement-import 与 case-revenue(W4) **两个**导入器都改了吗？ON CONFLICT / DELETE / INSERT 三处都按 partner 隔离了吗？
+   - 有无**其它 reader** 仍按 case_no 单键查 case_revenue/case_revenue_lines → 跨院泄漏？
+   - case_revenue_lines.partner_id 新行写入了、查询/删除都带上了吗？
+2. **409 门禁失效 CRITICAL（前端）**：向导改读 e.response.data.error。
+   - 真能拿到 NEEDS_CONFIRM 吗？confirm:true 复提交路径对吗？
+   - import-console 的 classify-rule 409（乐观锁冲突）也正确处理了吗？拦截器 reject 形状是否前后一致、有无破坏别的页面错误处理？
+3. **NGS RBAC + 缺成本门禁**：requireAnyRole('finance') 收窄对吗？缺成本/售价 409 严格布尔 confirm===true 有无绕过？读路由(products/partner-pnl)该不该也收窄？
+4. **normalizeConfig 扣率归一 + 形状校验**：边界够吗——'90%' / 90 / 0.9 / 1 / 0 / 负 / NaN / >100 / 缺 discount / byLine 缺 rate / key 重复 / scope 非法 / prefixes 非数组。有无能让坏值落库的路径？归一会不会误伤合法值（如把 1.0=100% 当成要 /100）？
+5. **分类同长前缀歧义、病例号 NFKC、partner_configs 迁移单事务、宽表保守告警**：逐个验证是否完整、有无新边界漏掉、有无回归。
+6. **前端 a11y**（Field→label、Tabs WAI-ARIA+方向键、上传按钮触发 ref、window.confirm→应用内弹层、看板 reqRef/selectedRef 竞态、行/开关键盘）：实现正确吗？焦点管理/键盘真能用吗？弹层 Esc/遮罩/焦点回收对吗？有无破坏既有交互或引入新竞态？
+7. **新增红测试**（跨院串账 / 前缀歧义 / normalizeConfig）：真覆盖了 bug 吗（删掉对应修复会变红吗）？有无 self-fulfilling / 造假？黄金 ¥13152 仍被守住吗？
+
+# 方法
+读 diff + 读改后完整文件 + 必要时跑/查测试与 fixtures。read-only 沙箱足够。
+
+# 输出
+先一句话总结：**修复整体是否可信、有无仍需返工的项**。再按 CRITICAL / HIGH / MEDIUM / LOW 列：
+哪一项修复有问题 + 文件:行 + 为什么（对照口径/发现）+ 复现/触发 + 具体改法。对确认修对的关键项也简述确认依据。中文。
+（把发现写到 docs/codex-handoff/findings/04-rereview.md，commit 回 codex-rereview-p0-p6 并 push。）
