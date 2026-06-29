@@ -1,0 +1,156 @@
+# Phase 1A 验收测试
+
+范围：东安、赣州、平泉三样本 + 和睦家黄金锚点。
+
+建议测试文件：
+
+- `后端代码/server/tests/statement-normalized-lines.test.ts`
+- `后端代码/server/tests/statement-ledger-phase1a.test.ts`
+- `后端代码/server/tests/month-close-quality-flags.test.ts`
+
+## 1. Fixture
+
+| 样本 | 文件 | 目标 |
+| --- | --- | --- |
+| 东安 | `out_category_summary__dongan_2601.json` | 科目汇总 -> 聚合收入账本 |
+| 赣州 | `out_outsourced_detail__ganzhou.json` | 跨月纯 OUT -> OUT 台账 |
+| 平泉 | `out_consult_remote__pingquan_2603.json` | 宽表来源列 -> OUT 规则 + 期间冲突 |
+| 和睦家 | `out_line_item__hemujia_2602.json` / 现有黄金测试 | 病例级收入黄金 `13152` 不回退 |
+
+## 2. 东安科目汇总
+
+### TC-DA-01 normalized lines
+
+Given 东安科目汇总 fixture。
+
+When 构建 `statement_normalized_lines`。
+
+Then 应生成类别 detail 行和声明合计行。
+
+Expected：
+
+- `template_family='category_summary'`
+- `declared_total=121016.9`
+- `row_kind=declared_total` 的合计行存在。
+- 常规病理诊断、免疫组化、EBER、特殊染色、冰冻、P16 至少映射为 `business_line=IN`。
+- 病理诊断HPV、基因检测、FISH 至少映射为 `business_line=OUT`。
+
+### TC-DA-02 ledger split
+
+When 派生聚合收入账本。
+
+Then：
+
+- IN settlement amount = `93264.9`
+- OUT settlement amount = `27752.0`
+- total = `121016.9`
+- 小计/合计不重复入账。
+
+## 3. 赣州纯外送
+
+### TC-GZ-01 pure OUT normalized lines
+
+Given 赣州纯外送 fixture。
+
+When 构建规范行。
+
+Then：
+
+- 每个明细行 `case_no=''` 或 `NULL`，但有 `external_subject_key`。
+- 每个明细行 `business_line=OUT`。
+- 每个明细行 `line_grain=out`。
+- 批次 `multi_month_batch=1`。
+- 声明合计 `40219.2` 保留为 `declared_total`。
+
+### TC-GZ-02 month split
+
+When 按 `report_date` 或已确认行级归属月派生 OUT 台账。
+
+Then：
+
+- 2026-01 OUT settlement = `2570.4`
+- 2026-02 OUT settlement = `7534.8`
+- 2026-03 OUT settlement = `30114.0`
+- total = `40219.2`
+- `lab_revenue_amount=0`。
+- 不生成缺病例号阻断项，只生成 `pure_out_without_case` info。
+
+## 4. 平泉宽表远程会诊
+
+### TC-PQ-01 source column preserved
+
+Given 平泉宽表 fixture。
+
+When 构建规范行。
+
+Then 每条远程会诊金额行保留：
+
+- `source_column` 对应远程会诊结算列。
+- `source_label` 包含远程会诊结算语义。
+- `business_line=OUT` 或 `classification_status=pending` 且带候选 OUT。
+- 明细金额两行各 `308.7`。
+- 声明合计 `617.4`。
+
+### TC-PQ-02 period conflict
+
+Given 文件标题/文件名指向 2026-03，但 sheet 名指向 202510。
+
+When 创建批次。
+
+Then：
+
+- `period_conflict_flag=1`。
+- 生成 `period_conflict` quality flag。
+- 默认 `blocks_posting=1`，`blocks_closing=1`。
+- 未确认结算月前不得进入 `posted`。
+
+## 5. 和睦家黄金锚
+
+### TC-HMJ-01 golden regression
+
+Given 现有和睦家黄金测试数据。
+
+When 执行 statement commit 或现有黄金回归。
+
+Then：
+
+- labRevenueTotal = `13152`
+- sourceCounts.statement = `25`
+- 新增 normalized line 逻辑不得改变现有病例级收入计算。
+
+## 6. 最小差异包
+
+### TC-PACK-01 export summary
+
+Given 东安、赣州、平泉三批次已生成规范行。
+
+When 生成最小差异包 JSON。
+
+Then 每个批次至少包含：
+
+- `settlement_month`
+- `partner_name`
+- `batch_id`
+- `source_file`
+- `template_family`
+- `declared_total`
+- `parsed_total`
+- `in_amount`
+- `out_amount`
+- `adjustment_amount`
+- `unknown_amount`
+- `cost_pending_amount`
+- `lis_pending_count`
+- `quality_flags`
+- `rule_version`
+- `confirmed_by`
+- `confirmed_at`
+- `confirmation_note`
+
+## 7. 删除修复应变红的断言
+
+- 如果 parser 不保留 `source_column/source_label`，TC-PQ-01 应失败。
+- 如果小计/合计被当明细派生，TC-DA-02 或 TC-GZ-02 应失败。
+- 如果无病例号 OUT 被阻断，TC-GZ-01 应失败。
+- 如果期间冲突未标记，TC-PQ-02 应失败。
+- 如果新增逻辑污染病例级链路，TC-HMJ-01 应失败。
