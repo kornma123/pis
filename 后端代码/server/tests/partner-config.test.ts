@@ -20,6 +20,7 @@ import {
   rollbackConfig,
   setBaseline,
   getConfigVersion,
+  normalizeConfig,
   type PartnerConfig,
 } from '../src/utils/partner-config.js'
 
@@ -232,5 +233,42 @@ describe('case_revenue.config_version 列（追溯重算锚）', () => {
   it('case_revenue 含 config_version 列', () => {
     const cols = db.prepare(`PRAGMA table_info(case_revenue)`).all() as any[]
     expect(cols.map((c) => c.name)).toContain('config_version')
+  })
+})
+
+describe('normalizeConfig（codex HIGH-4 扣率归一 + MEDIUM-1 形状校验）', () => {
+  const base = () => seedDefaultConfig({ name: 'X', code: 'x' })
+  it('扣率归一：90→0.9、"85%"→0.85、0.8 保持；按线/按项同样归一', () => {
+    const c = base(); c.discount.def = 90 as any
+    c.discount.byLine = [{ key: 'histo', rate: '85%' as any }]
+    c.discount.byItem = [{ item: 'PD-L1', rate: 0.8 }]
+    const n = normalizeConfig(c)
+    expect(n.discount.def).toBe(0.9)
+    expect(n.discount.byLine[0].rate).toBe(0.85)
+    expect(n.discount.byItem[0].rate).toBe(0.8)
+  })
+  it('非法扣率（>100→归一后>1 / 非数 / 负）抛错，不静默落库', () => {
+    const c1 = base(); c1.discount.def = 150 as any
+    expect(() => normalizeConfig(c1)).toThrow()
+    const c2 = base(); c2.discount.def = 'abc' as any
+    expect(() => normalizeConfig(c2)).toThrow()
+    const c3 = base(); c3.discount.def = -0.5 as any
+    expect(() => normalizeConfig(c3)).toThrow()
+  })
+  it('形状校验：非法 scope / prefixes 非数组 / 缺 key / key 重复 抛错', () => {
+    const c1 = base(); (c1.lines[0] as any).scope = 'maybe'
+    expect(() => normalizeConfig(c1)).toThrow()
+    const c2 = base(); (c2.lines[0] as any).prefixes = 'H'
+    expect(() => normalizeConfig(c2)).toThrow()
+    const c3 = base(); (c3.lines[0] as any).key = ''
+    expect(() => normalizeConfig(c3)).toThrow()
+    const c4 = base(); c4.lines[1].key = c4.lines[0].key
+    expect(() => normalizeConfig(c4)).toThrow()
+  })
+  it('合法默认配置归一后形状不变（幂等）', () => {
+    const n = normalizeConfig(base())
+    expect(n.lines.length).toBeGreaterThan(0)
+    expect(n.discount.def).toBeGreaterThan(0)
+    expect(n.discount.def).toBeLessThanOrEqual(1)
   })
 })
