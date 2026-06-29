@@ -1,5 +1,7 @@
 # 质量标记矩阵
 
+版本：v1.1（吸收云端 08 评审意见，2026-06-29）
+
 范围：Phase 1A 最小对账闭环。
 
 ## 1. quality_flags 字段
@@ -39,11 +41,14 @@
 | `closed_month_change` | blocking | finance | create_adjustment | 1 | 1 | 已关账月份不得覆盖 |
 | `duplicate_file` | warning | finance | ignore_or_replace | 1 | 1 | 同 hash 重复上传 |
 | `section_total_mismatch` | warning | finance | reconcile_section | 0 | 1 | 小计段不平 |
+| `settlement_month_basis_missing` | blocking | implementation | confirm_settlement_month_basis | 1 | 1 | 多月行级入账需要的默认日期列缺失 |
+| `rule_seed_unconfirmed` | warning | implementation | confirm_rule_seed | 0 | 1 | 固定 seed 中依赖领域判断的分类尚未业务确认 |
 
 ## 3. 放行规则
 
 Phase 1A 默认不做完整 UI，但后端数据结构要支持放行：
 
+- `owner_role` 入库存英文枚举，UI 层再映射成中文角色名，避免文案和数据口径不一致。
 - `declared_total_mismatch` 可由财务带原因放行，但必须保留 `resolution_note`。
 - `missing_lis` 可暂入收入，但最终关账前必须补 LIS 或带原因放行。
 - `missing_cost` 不阻断收入派生，但阻断正常毛利关账；P&L 必须单列。
@@ -58,3 +63,6 @@ Phase 1A 默认不做完整 UI，但后端数据结构要支持放行：
 - `numeric_parse_status != 'ok'`：行级 `numeric_format_anomaly`。
 - `declared_total` 与明细合计差异大于 0.01：批次级 `declared_total_mismatch`。
 - `case_no IS NULL` 且 `business_line=OUT`：行级或批次级 `pure_out_without_case`。
+- `source_hash` 命中唯一索引：批次级 `duplicate_file`，返回忽略/替换选择，不返回 500。
+- 多月 OUT 需要行级归属月但 `report_date` 缺失：行级或批次级 `settlement_month_basis_missing`。
+- EBER、特殊染色等领域判断未完成业务确认：批次级或规则级 `rule_seed_unconfirmed`，不阻断入账但阻断最终关账。

@@ -1,5 +1,7 @@
 # PRD-1A：最小对账闭环
 
+版本：v1.1（吸收云端 08 评审意见，2026-06-29）
+
 > 对应最终路线图 §12。目标不是完整院级盈亏关账，而是用东安、赣州、平泉三个真实样本跑通“上传 -> 规范行 -> 分类/质量标记 -> 派生账本 -> 最小差异包”的最小对账闭环，并用和睦家黄金值守住病例级收入链路。
 
 ## 1. Executive Summary
@@ -12,7 +14,7 @@
 
 - 东安、赣州、平泉均能生成可追溯的 `statement_normalized_lines`。
 - 东安声明合计 `121016.9` 与解析合计闭合，IN/OUT 金额可解释。
-- 赣州声明结算 `40219.2` 全额进入 OUT 台账，按行级月份汇总。
+- 赣州声明结算 `40219.2` 全额进入 OUT 台账，按 `report_date` 派生行级月份，并记录 `settlement_month_basis='report_date'`。
 - 平泉远程会诊结算保留来源列，并生成期间冲突质量标记。
 - 和睦家黄金 `13152` 不回退。
 
@@ -65,7 +67,8 @@ uploaded file/grid
 ### Integration Points
 
 - Parser：复用现有 `statement-parser`，新增 normalized line builder。
-- Config：读取逐院配置和规则版本；Phase 1A 可先用固定规则 seed 支持三样本。
+- Config：读取逐院配置和规则版本；Phase 1A 可先用固定规则 seed 支持三样本，三样本 seed 规则见 §6。
+- Classifier：除既有项目名/前缀/备注匹配外，必须支持 `category_summary` 对“项目名称”列里的类别名做 keyword 匹配。
 - Ledger：新增聚合收入账本和 OUT 台账；不改写现有 `case_revenue` 作为 Phase 1A 主目标。
 - Tests：基于 `后端代码/server/tests/fixtures/statements/*.json`。
 
@@ -109,8 +112,51 @@ uploaded file/grid
 - v1.1：加入最小 API 和导出数据结构。
 - v1.2：接入基础前端月结视图。
 
-## 6. Open Decisions
+## 6. v1.1 开发默认规则
 
-- Phase 1A 是否需要实际落 SQLite 表，还是先以内部 normalized DTO + 测试固定输出验证字段。建议直接落表，避免后续返工。
+### 6.1 行级归属月
+
+`row_settlement_month` 的优先级为：用户选择 > header > 文件名 > sheet > 行日期。需要使用行日期时，默认取 `report_date`，因为报告出具通常代表可结算时间点。
+
+- 赣州纯 OUT 样本必须按 `report_date` 派生行级月份。
+- `statement_normalized_lines` 必须记录 `settlement_month_basis`，赣州验收期望值为 `report_date`。
+- 若 `report_date` 缺失但存在送检/接收日期，Phase 1A 不自动换列入账，应生成质量标记并进入复核。
+
+### 6.2 三样本固定 seed 分类规则
+
+Phase 1A 先用固定 seed 规则覆盖三样本，productize 时再由逐院配置表达 `category/source_label -> business_line`。
+
+东安 `category_summary` 的匹配对象是“项目名称”列里的类别名。
+
+| 类别/关键词 | 默认业务线 | 说明 |
+| --- | --- | --- |
+| 常规病理诊断 | IN | 院内病理收入 |
+| 免疫组化 / IHC | IN | 院内工序 |
+| EBER | IN | 默认按院内原位杂交/化学探针处理，开发前需业务确认 |
+| 特殊染色 | IN | 默认按院内实物工序处理，开发前需业务确认 |
+| 冰冻 | IN | 院内工序 |
+| P16 | IN | 院内工序 |
+| HPV / HPV-E6E7 | OUT | 依赖默认目录或 seed，不得因目录缺失落 UNKNOWN |
+| 基因检测 | OUT | 外送/外包检测 |
+| FISH | OUT | 外送/外包检测 |
+
+赣州纯外送整单固定为 `line_grain=out`、`business_line=OUT`，不要求逐 case 匹配。
+
+平泉宽表固定 seed：
+
+- `source_label='远程会诊结算'`：`business_line=OUT`。
+- `source_label='免组结算金额'`：`business_line=IN` 候选，`classification_status=pending`，等待人工确认。
+
+### 6.3 P&L 并表边界
+
+`partner_month_revenue_ledger` 与 `out_settlement_ledger` 是 Phase 1A 新派生层；现有院级盈亏看板仍主要读取 `case_revenue` / `partner-pnl` 链路。
+
+- Phase 1A 最小差异包必须标注 `ledger_scope='statement_internal'` 或等价字段，避免误以为现有 P&L 看板已经关账。
+- Phase 1A 之后单独做并表任务：定义聚合账本、OUT 台账、病例级收入在院级 P&L 中的消费优先级和对账关系。
+- 并表完成前，测试只证明后端规范行和派生账本正确，不承诺完整院级 P&L 闭合。
+
+## 7. Open Decisions
+
+- Phase 1A 是否需要实际落 SQLite 表，还是先以内部 normalized DTO + 测试固定输出验证字段。本版默认直接落表，避免后续返工。
 - 最小差异包是后端 JSON 还是 Excel。建议先 JSON，Excel 放 Phase 1B。
 - 平泉期间冲突是否允许用户手工选择 2026-03 放行。建议 Phase 1A 先生成阻断标记，不做放行 UI。

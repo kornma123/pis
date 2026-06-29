@@ -1,4 +1,6 @@
-# Statement Import Schema v1
+# Statement Import Schema v1.1
+
+版本：v1.1（吸收云端 08 评审意见，2026-06-29）
 
 范围：Phase 1A 最小对账闭环。
 
@@ -70,6 +72,8 @@ CREATE TABLE IF NOT EXISTS statement_normalized_lines (
   partner_id TEXT NOT NULL,
   settlement_month TEXT NOT NULL,
   row_settlement_month TEXT,
+  row_settlement_date TEXT,
+  settlement_month_basis TEXT,
 
   case_no TEXT,
   external_subject_key TEXT,
@@ -91,6 +95,7 @@ CREATE TABLE IF NOT EXISTS statement_normalized_lines (
   entity_scope TEXT NOT NULL DEFAULT 'case',
   financial_metric TEXT NOT NULL DEFAULT 'revenue',
   amount_role TEXT NOT NULL DEFAULT 'settlement',
+  declared_total_scope TEXT,
   amount DECIMAL(18, 4) NOT NULL DEFAULT 0,
 
   quantity DECIMAL(18, 4),
@@ -129,7 +134,12 @@ CREATE INDEX IF NOT EXISTS idx_statement_lines_case
 
 CREATE INDEX IF NOT EXISTS idx_statement_lines_business
   ON statement_normalized_lines(business_line, row_kind, line_grain);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_lines_identity
+  ON statement_normalized_lines(batch_id, source_row, source_column);
 ```
+
+说明：`source_column` 需要由 builder 提供稳定身份；没有物理列的行式模板可使用 parser 生成的占位列身份，避免重解析产生重复规范行。
 
 ## 4. quality_flags
 
@@ -144,6 +154,8 @@ CREATE TABLE IF NOT EXISTS quality_flags (
   resolution_action TEXT NOT NULL,
   blocks_posting INTEGER NOT NULL DEFAULT 0,
   blocks_closing INTEGER NOT NULL DEFAULT 0,
+  partner_id TEXT,
+  settlement_month TEXT,
   related_batch_id TEXT,
   related_line_id TEXT,
   message TEXT,
@@ -160,6 +172,9 @@ CREATE INDEX IF NOT EXISTS idx_quality_flags_batch
 
 CREATE INDEX IF NOT EXISTS idx_quality_flags_line
   ON quality_flags(related_line_id);
+
+CREATE INDEX IF NOT EXISTS idx_quality_flags_partner_month
+  ON quality_flags(partner_id, settlement_month, blocks_closing);
 ```
 
 ## 5. partner_month_revenue_ledger
@@ -187,6 +202,9 @@ CREATE TABLE IF NOT EXISTS partner_month_revenue_ledger (
 
 CREATE INDEX IF NOT EXISTS idx_partner_month_ledger
   ON partner_month_revenue_ledger(partner_id, settlement_month, business_line);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_month_ledger_source_line
+  ON partner_month_revenue_ledger(source_line_id);
 ```
 
 ## 6. out_settlement_ledger
@@ -215,6 +233,9 @@ CREATE TABLE IF NOT EXISTS out_settlement_ledger (
 
 CREATE INDEX IF NOT EXISTS idx_out_settlement_partner_month
   ON out_settlement_ledger(partner_id, settlement_month, out_type);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_out_settlement_source_line
+  ON out_settlement_ledger(source_line_id);
 ```
 
 ## 7. Enumerations
@@ -259,6 +280,24 @@ CREATE INDEX IF NOT EXISTS idx_out_settlement_partner_month
 
 See `docs/dev/month-close-state-machine.md`.
 
+### settlement_month_basis
+
+- `user_selected`
+- `header`
+- `file_name`
+- `sheet`
+- `report_date`
+- `send_date`
+- `receive_date`
+- `service_date`
+- `manual_override`
+
+### declared_total_scope
+
+- `batch`
+- `section`
+- `business_line`
+
 ## 8. Phase 1A 派生规则
 
 - `row_kind IN ('subtotal', 'declared_total', 'header', 'note')` 不派生收入账本。
@@ -266,3 +305,7 @@ See `docs/dev/month-close-state-machine.md`.
 - `business_line='OUT'` 派生到 `out_settlement_ledger`，`lab_revenue_amount=0`。
 - `business_line='UNKNOWN'` 不派生正常账本，生成 `missing_rule` 或 `ambiguous_rule`。
 - 存在 `period_conflict`、`numeric_format_anomaly`、`declared_total_mismatch` 时，批次状态不得进入 `ready_to_close`。
+- `row_settlement_month` 的来源优先级为用户选择 > header > 文件名 > sheet > 行日期；需要使用行日期时，默认取 `report_date`，并记录 `settlement_month_basis='report_date'`。
+- 赣州纯 OUT 样本必须按 `report_date` 拆分 `row_settlement_month`；若 `report_date` 缺失，不得静默改用送检/接收日期入账。
+- 同一 batch 重派生账本必须先按 `batch_id` 删除旧派生行，再从当前 normalized lines 重建，避免金额翻倍。
+- `source_hash` 命中唯一索引时，应用层必须捕获冲突并返回 `duplicate_file` 质量标记和“忽略/替换”选择，不得返回 500。

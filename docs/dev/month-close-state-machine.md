@@ -1,5 +1,7 @@
 # 月结状态机
 
+版本：v1.1（吸收云端 08 评审意见，2026-06-29）
+
 范围：Phase 1A 最小对账闭环。
 
 ## 1. 批次状态
@@ -43,6 +45,7 @@
 
 - 无批次：`not_started`。
 - 存在 `template_unrecognized` / `parse_failed` / `classification_required`：`blocked`。
+- 存在未解决 `duplicate_file` 且 `blocks_posting=1`：`blocked`，不得进入 `posted`。
 - 存在 `blocks_closing=1` 且未解决：`blocked`。
 - 所有批次已 `posted`，但存在 warning/info：`posted_with_flags`。
 - 所有批次已 `posted` 或 `posted_with_flags`，且无未解决 `blocks_closing=1`：`ready_to_close`。
@@ -57,6 +60,8 @@
 - `period_conflict` 未解决时，批次不得进入 `posted`。
 - `numeric_format_anomaly` 未解决时，批次不得进入 `posted`。
 - `missing_cost` 可允许收入入账，但不得进入正常毛利关账。
+- 多月 OUT 批次必须记录 `settlement_month_basis`；赣州默认值为 `report_date`，来源缺失时不得静默进入 `posted`。
+- Phase 1A 派生账本不得被现有院级 P&L 看板直接视为已并表口径；并表完成前只能作为最小对账闭环的内部账本。
 
 ## 5. Phase 1A 最小 API 建议
 
@@ -76,3 +81,4 @@ GET  /api/v1/month-close/:settlementMonth/partners/:partnerId/summary
 - `blockingFlags`
 - `warningFlags`
 - `amountSummary`
+- `ledgerScope` 或等价字段，标明是否仍为 `statement_internal`

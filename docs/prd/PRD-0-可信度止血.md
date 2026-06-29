@@ -1,5 +1,7 @@
 # PRD-0：可信度止血（Phase 0）
 
+版本：v1.1（吸收云端 08 评审意见，2026-06-29）
+
 > 对应路线图【最终定稿】§11。目标 = 让**当前已有链路不再污染数据**，不引入新产品功能。全部已决策、可 TDD、不依赖产品 Epic。
 > 周期：1–2 周。守护红线：黄金 ¥13,152 不回退、后端全量零回归（基线 448 通过 + 本 PRD 新增红测试）。
 
@@ -14,6 +16,7 @@
 
 | 子任务 | 文件 | 改动 |
 |---|---|---|
+| T1.0 ABC/LIS 跨院审计 | 迁移脚本或测试 helper | Phase 0 第一步先审计 `lis_cases` 与 `outbound_abc_details` 的 `case_no` 是否跨多个 `partner_id`，至少执行 `SELECT case_no, COUNT(DISTINCT partner_id) c FROM lis_cases GROUP BY case_no HAVING c>1` 及 ABC 同口径审计，并输出 `partner_id IS NULL`、同号多院、ABC 可精确回填/只能单键回填的数量 |
 | T1.1 lis_cases 唯一键 | `database/DatabaseManager.ts:321` | `case_no TEXT NOT NULL UNIQUE` → 整表重建迁移为 `UNIQUE(partner_id, case_no)`（仿 case_revenue 重建迁移，事务内幂等；迁移前审计重复键） |
 | T1.2 LIS 导入幂等 | `routes/lis-cases-v1.1.ts:41`、`utils/lis-import.ts` | `ON CONFLICT(case_no)` → `ON CONFLICT(partner_id, case_no)`；导入前先 upsert partner、确保 partner_id 非空 |
 | T1.3 人工覆盖 | `routes/lis-cases-v1.1.ts`（specimen 覆盖等） | 覆盖/查询的 WHERE 带 partner_id |
@@ -35,6 +38,7 @@
 
 ## 3. 测试用例（红测试先行，每个先红后绿）
 - **TC1 跨院同号（已有 statement-commit 测试，补 P&L/ABC 链路）**：A、B 两院各导入 LIS `S26-DUP` + 各自 case_revenue + 各自 ABC 成本 → `buildPartnerPnl({partnerId:B})` 只读 B 的 LIS 数量/成本，不串 A；`getCaseCostRollup` 不把 A/B 同号成本混算。
+- **TC1.0 ABC/LIS 审计报告**：迁移前审计输出 `lisDuplicateCaseNoAcrossPartnerCount`、`lisNullPartnerCount`、`abcCaseNoMatchedSinglePartnerCount`、`abcCaseNoAmbiguousCount`；若 `abcCaseNoAmbiguousCount>0`，T1.6 不得走单键回填。
 - **TC2 LIS 导入跨院不覆盖**：先导 A 的 `S26-DUP`，再导 B 的 `S26-DUP` → 两条 lis_cases 都在，A 的 partner_id/数量不被 B 覆盖。
 - **TC3 配置历史坏扣率**：直接写一条 `config_json` 含 `discount.def=90` 的历史版本 → `loadConfig`/`peekConfig` 读出后 `discount.def===0.9`；缺结算列的行 settle 不再 ×90。
 - **TC4 回滚坏版本**：rollback 到含坏扣率的历史版本 → 新 current 已归一（或 400 拒绝），不带坏值。
@@ -63,6 +67,7 @@
 > 目的：让开发可以先写红测试和迁移设计，不再因为 §4 三个问题停摆。若评审发现代码证据相反，再在实现前调整。
 
 1. **ABC 回填归属默认采用“精确优先、拒绝歧义”**：
+   - 实施顺序：Phase 0 第一项先跑 T1.0 审计，审计结果决定 T1.6 采用复合键精确回填还是保留经证实安全的单键兼容路径。
    - 若 `outbound_abc_details.partner_id` 已存在或可从成本源可靠取得，则按 `(partner_id, case_no)` 精确回填。
    - 若 ABC 明细只有 `case_no`，且该 `case_no` 在 `lis_cases` 中对应多个 `partner_id`，不得随机选一个；保持未回填并产生待处理质量信号或回填报告。
    - 只有在迁移审计证明 ABC 侧 `case_no` 实际全局唯一时，才允许单键回填作为兼容路径。

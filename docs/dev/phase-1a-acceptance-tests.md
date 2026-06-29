@@ -1,5 +1,7 @@
 # Phase 1A 验收测试
 
+版本：v1.1（吸收云端 08 评审意见，2026-06-29）
+
 范围：东安、赣州、平泉三样本 + 和睦家黄金锚点。
 
 建议测试文件：
@@ -34,6 +36,9 @@ Expected：
 - `row_kind=declared_total` 的合计行存在。
 - 常规病理诊断、免疫组化、EBER、特殊染色、冰冻、P16 至少映射为 `business_line=IN`。
 - 病理诊断HPV、基因检测、FISH 至少映射为 `business_line=OUT`。
+- 上述映射来自 Phase 1A 固定 seed 规则，即使默认产品目录未包含 HPV-E6E7，也不得把 HPV 行落为 UNKNOWN。
+- EBER、特殊染色本版默认归 IN；开发前业务确认若否定该口径，应同步更新 seed 规则和本测试的金额锚点。
+- FISH amount=0 行必须保留为规范行，`line_grain=out`，但本版不派生 `out_settlement_ledger` 零金额行；不得因为无病例号生成阻断项。
 
 ### TC-DA-02 ledger split
 
@@ -44,6 +49,8 @@ Then：
 - IN settlement amount = `93264.9`
 - OUT settlement amount = `27752.0`
 - total = `121016.9`
+- detail 行 IN+OUT 合计等于 `declared_total=121016.9`，允许误差 `<=0.01`。
+- 不生成 `declared_total_mismatch`。
 - 小计/合计不重复入账。
 
 ## 3. 赣州纯外送
@@ -64,7 +71,7 @@ Then：
 
 ### TC-GZ-02 month split
 
-When 按 `report_date` 或已确认行级归属月派生 OUT 台账。
+When 按 `report_date` 派生 OUT 台账。
 
 Then：
 
@@ -72,6 +79,7 @@ Then：
 - 2026-02 OUT settlement = `7534.8`
 - 2026-03 OUT settlement = `30114.0`
 - total = `40219.2`
+- 每个明细行记录 `settlement_month_basis='report_date'`。
 - `lab_revenue_amount=0`。
 - 不生成缺病例号阻断项，只生成 `pure_out_without_case` info。
 
@@ -102,6 +110,7 @@ Then：
 - `period_conflict_flag=1`。
 - 生成 `period_conflict` quality flag。
 - 默认 `blocks_posting=1`，`blocks_closing=1`。
+- `settlement_month` 在确认前不得静默按 sheet 或文件名覆盖。
 - 未确认结算月前不得进入 `posted`。
 
 ## 5. 和睦家黄金锚
@@ -143,11 +152,52 @@ Then 每个批次至少包含：
 - `lis_pending_count`
 - `quality_flags`
 - `rule_version`
+- `ledger_scope`，Phase 1A 期望为 `statement_internal`
+- `pnl_bridge_status`，Phase 1A 期望为 `not_integrated`
 - `confirmed_by`
 - `confirmed_at`
 - `confirmation_note`
 
-## 7. 删除修复应变红的断言
+### TC-PACK-02 no silent P&L merge
+
+Given 东安聚合收入账本、赣州 OUT 台账、平泉 OUT 台账已生成。
+
+When 生成最小差异包或院月摘要。
+
+Then：
+
+- 新账本金额必须单独展示为 statement/internal ledger。
+- 不得把 `partner_month_revenue_ledger` / `out_settlement_ledger` 静默并入现有 `case_revenue` / `partner-pnl` 口径。
+- 摘要必须暴露 `pnl_bridge_status='not_integrated'` 或等价状态，作为 Phase 1A 后续并表任务的入口。
+
+## 7. 幂等和去重
+
+### TC-DUP-01 duplicate file
+
+Given 任一 Phase 1A 样本文件已上传并写入 `statement_import_batches.source_hash`。
+
+When 使用同一 `source_hash` 再次上传。
+
+Then：
+
+- 返回或写入 `duplicate_file` quality flag。
+- 不产生第二个有效 batch。
+- 不重复生成 `statement_normalized_lines`。
+- 不返回 500。
+
+### TC-RE-01 repost idempotency
+
+Given 同一 batch 已生成 normalized lines 并完成一次 post。
+
+When 对同一 batch 连续执行两次 post 或重算派生。
+
+Then：
+
+- `partner_month_revenue_ledger` 行数不翻倍。
+- `out_settlement_ledger` 行数不翻倍。
+- 同一 `source_line_id` 在对应派生账本中最多一行。
+
+## 8. 删除修复应变红的断言
 
 - 如果 parser 不保留 `source_column/source_label`，TC-PQ-01 应失败。
 - 如果小计/合计被当明细派生，TC-DA-02 或 TC-GZ-02 应失败。
