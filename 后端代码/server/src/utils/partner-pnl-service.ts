@@ -7,7 +7,7 @@
  */
 
 import { computeCasePnl, statementCasePnl, rollupPartnerRevenue, type CasePnl, type CasePnlInput, type RevenueQuality, type RevenueSource } from './partner-pnl.js'
-import { getPartnerCostRollup, getCaseCostRollup, getPartnerCostByMonth } from './abc-partner-link.js'
+import { getPartnerCostRollup, getCaseCostRollup, getPartnerCostByMonth, caseCostKey } from './abc-partner-link.js'
 import { loadChargeCatalog } from './charge-catalog.js'
 import type { ChargeCodeDef } from './charge-engine.js'
 import type { ServiceScope } from './partner-upsert.js'
@@ -54,7 +54,7 @@ export function loadCasePnls(db: DbLike, catalog: Map<string, ChargeCodeDef>, op
            lc.he_slide_count, lc.block_count, lc.ihc_count, lc.special_stain_count, lc.eber_count, lc.pdl1_count, lc.specimen_type
     FROM case_revenue cr
     LEFT JOIN partners p ON p.id = cr.partner_id
-    LEFT JOIN lis_cases lc ON lc.case_no = cr.case_no
+    LEFT JOIN lis_cases lc ON lc.partner_id = cr.partner_id AND lc.case_no = cr.case_no
     WHERE ${where}
   `).all(...params) as RevenueRow[]
 
@@ -101,7 +101,7 @@ export function loadCasePnlsWithCost(db: DbLike, opts: { serviceMonth?: string; 
   const cases = loadCasePnls(db, catalog, opts)
   const costMap = getCaseCostRollup(db, { serviceMonth: opts.serviceMonth })
   return cases.map((c) => {
-    const costTotal = costMap.get(c.caseNo) || 0
+    const costTotal = costMap.get(caseCostKey(c.partnerId, c.caseNo)) || 0 // T1.5 复合键：不取他院同号成本
     const grossMargin = r2(c.labRevenue - costTotal)
     return { ...c, costTotal, grossMargin, marginRate: c.labRevenue > 0 ? r4(grossMargin / c.labRevenue) : 0, flagged: grossMargin < 0 }
   })
@@ -124,16 +124,22 @@ export interface PartnerPnl {
   costMatched: boolean // 该院是否有已归集的 ABC 成本（否=成本未接通，毛利仅供参考）
   benchmarkCorrected: false // 恒 false：v1 benchmark 未做病种校正（UI 必标注）
   // —— NGS 外购转销（独立渠道，非 LIS/对账单；外包成本独立于 ABC）——
-  ngsRevenue: number // NGS 售价合计
-  ngsCost: number // NGS 外包成本合计（协议价）
-  ngsMargin: number // NGS 毛利 = 售价 − 外包成本
-  ngsOrderCount: number
-  totalMargin: number // 院级总毛利 = 院内技术毛利(grossMargin) + NGS 毛利(ngsMargin)
+  ngsRevenue: number // NGS 售价合计（已核成本单）
+  ngsCost: number // NGS 外包成本合计（协议价，已核单）
+  ngsMargin: number // NGS 毛利 = 售价 − 外包成本（仅已核成本单）
+  ngsOrderCount: number // 已核成本的 NGS 单数
+  ngsUnconfirmedRevenue: number // T3 未核外包成本单的售价合计（单列，不进毛利）
+  ngsUnconfirmedCount: number // T3 未核外包成本的 NGS 单数（需补成本）
+  totalMargin: number // 院级总毛利 = 院内技术毛利(grossMargin) + NGS 已核毛利(ngsMargin)；未核单不计入
 }
 
-interface NgsPartnerAgg { partnerName: string; revenue: number; cost: number; margin: number; orderCount: number }
+interface NgsPartnerAgg {
+  partnerName: string; revenue: number; cost: number; margin: number; orderCount: number
+  // T3：未核外包成本（cost_confirmed=0）单独计，不进 revenue/cost/margin，避免按 0 成本把毛利高估为售价污染院级利润。
+  unconfirmedRevenue: number; unconfirmedCount: number
+}
 
-/** 按 partner_id 上卷 NGS 外购转销（SQL SUM 聚合，避免装载全部订单）。 */
+/** 按 partner_id 上卷 NGS 外购转销（SQL SUM 聚合，避免装载全部订单）。已核成本(cost_confirmed=1)进正常毛利；未核单单列。 */
 export function loadNgsByPartner(db: DbLike, opts: { serviceMonth?: string; partnerId?: string } = {}): Map<string, NgsPartnerAgg> {
   let where = '1=1'
   const params: unknown[] = []
@@ -141,14 +147,22 @@ export function loadNgsByPartner(db: DbLike, opts: { serviceMonth?: string; part
   if (opts.partnerId) { where += ' AND no.partner_id = ?'; params.push(opts.partnerId) }
   const rows = db.prepare(`
     SELECT no.partner_id AS pid, COALESCE(p.name, no.partner_name) AS pname,
-           COUNT(*) AS n, SUM(no.sell_price) AS rev, SUM(no.outsource_cost) AS cost, SUM(no.margin) AS margin
+           SUM(CASE WHEN no.cost_confirmed = 1 THEN 1 ELSE 0 END) AS n,
+           SUM(CASE WHEN no.cost_confirmed = 1 THEN no.sell_price ELSE 0 END) AS rev,
+           SUM(CASE WHEN no.cost_confirmed = 1 THEN no.outsource_cost ELSE 0 END) AS cost,
+           SUM(CASE WHEN no.cost_confirmed = 1 THEN no.margin ELSE 0 END) AS margin,
+           SUM(CASE WHEN no.cost_confirmed = 0 THEN 1 ELSE 0 END) AS uN,
+           SUM(CASE WHEN no.cost_confirmed = 0 THEN no.sell_price ELSE 0 END) AS uRev
     FROM ngs_orders no LEFT JOIN partners p ON p.id = no.partner_id
     WHERE ${where} GROUP BY no.partner_id
-  `).all(...params) as Array<{ pid: string; pname: string; n: number; rev: number; cost: number; margin: number }>
+  `).all(...params) as Array<{ pid: string; pname: string; n: number; rev: number; cost: number; margin: number; uN: number; uRev: number }>
   const map = new Map<string, NgsPartnerAgg>()
   for (const r of rows) {
     if (!r.pid) continue
-    map.set(r.pid, { partnerName: r.pname, revenue: r2(Number(r.rev) || 0), cost: r2(Number(r.cost) || 0), margin: r2(Number(r.margin) || 0), orderCount: Number(r.n) || 0 })
+    map.set(r.pid, {
+      partnerName: r.pname, revenue: r2(Number(r.rev) || 0), cost: r2(Number(r.cost) || 0), margin: r2(Number(r.margin) || 0), orderCount: Number(r.n) || 0,
+      unconfirmedRevenue: r2(Number(r.uRev) || 0), unconfirmedCount: Number(r.uN) || 0,
+    })
   }
   return map
 }
@@ -191,6 +205,8 @@ export function buildPartnerPnl(db: DbLike, opts: { serviceMonth?: string; partn
       ngsCost: ngs?.cost || 0,
       ngsMargin,
       ngsOrderCount: ngs?.orderCount || 0,
+      ngsUnconfirmedRevenue: ngs?.unconfirmedRevenue || 0,
+      ngsUnconfirmedCount: ngs?.unconfirmedCount || 0,
       totalMargin: r2(grossMargin + ngsMargin),
     }
   })
@@ -207,6 +223,7 @@ export function buildPartnerPnl(db: DbLike, opts: { serviceMonth?: string; partn
       sourceCounts: { statement: 0, estimated: 0, corrected: 0 },
       costMatched: false, benchmarkCorrected: false,
       ngsRevenue: ngs.revenue, ngsCost: ngs.cost, ngsMargin: ngs.margin, ngsOrderCount: ngs.orderCount,
+      ngsUnconfirmedRevenue: ngs.unconfirmedRevenue, ngsUnconfirmedCount: ngs.unconfirmedCount,
       totalMargin: ngs.margin,
     })
   }

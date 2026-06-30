@@ -210,8 +210,14 @@ export function makeDiffs(prev: PartnerConfig, cur: PartnerConfig): FriendlyDiff
 
 // —— DB 帮手 ——
 
+/**
+ * T2.1 读路径归一（best-effort）：历史版本可能含 discount.def=90（百倍虚高），原仅保存路径归一 →
+ * 读/回滚路径漏进回退计算。这里读时也归一（90→0.9）；若配置坏到无法归一（如 def 非数）则退回原始解析，
+ * 不让 loadConfig 崩（坏配置的严格拒绝交由保存/回滚路径处理）。
+ */
 function row2config(json: string): PartnerConfig {
-  return JSON.parse(json) as PartnerConfig
+  const raw = JSON.parse(json)
+  try { return normalizeConfig(raw) } catch { return raw as PartnerConfig }
 }
 
 function currentRow(db: DbLike, partnerId: string): { version: number; config_json: string } | undefined {
@@ -303,14 +309,18 @@ export function getConfigVersion(db: DbLike, partnerId: string, version: number)
 export function rollbackConfig(db: DbLike, partnerId: string, toVersion: number, opts: { changedBy?: string; genId: () => string }): { version: number } {
   const target = getConfigVersion(db, partnerId, toVersion)
   if (!target) throw new Error(`回滚失败：找不到版本 v${toVersion}`)
+  // T2.2 回滚前严格归一：保证新 current 不带坏扣率（90→0.9）。无法归一的坏历史版本 → 明确报错，不生成 current。
+  let clean: PartnerConfig
+  try { clean = normalizeConfig(target) }
+  catch (e: any) { throw new Error(`回滚失败：版本 v${toVersion} 配置无法归一（${e?.message || e}），请先修复该历史版本再回滚`) }
   const base = currentRow(db, partnerId)
   const baseConfig = base ? row2config(base.config_json) : seedDefaultConfig()
   const baseVersion = base ? base.version : 0
   const nextVersion = baseVersion + 1
-  const diffs = makeDiffs(baseConfig, target)
+  const diffs = makeDiffs(baseConfig, clean)
   tx(db, () => {
-    writeVersion(db, partnerId, nextVersion, target, opts.changedBy ?? null, opts.genId)
-    insertChange(db, partnerId, nextVersion, 'rollback', `回滚到 v${toVersion}`, diffs, target, opts.changedBy ?? null, opts.genId)
+    writeVersion(db, partnerId, nextVersion, clean, opts.changedBy ?? null, opts.genId)
+    insertChange(db, partnerId, nextVersion, 'rollback', `回滚到 v${toVersion}`, diffs, clean, opts.changedBy ?? null, opts.genId)
   })
   return { version: nextVersion }
 }

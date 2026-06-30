@@ -38,8 +38,7 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
          he_slide_count, block_count, ihc_count, special_stain_count, eber_count, pdl1_count,
          specimen_type, specimen_type_source)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'auto')
-      ON CONFLICT(case_no) DO UPDATE SET
-        partner_id = excluded.partner_id,
+      ON CONFLICT(partner_id, case_no) DO UPDATE SET
         status = excluded.status,
         operate_time = excluded.operate_time,
         he_slide_count = excluded.he_slide_count,
@@ -159,24 +158,31 @@ router.get('/', authenticateToken, (req, res) => {
 router.put('/:caseNo/specimen-type', authenticateToken, requireWrite, (req, res) => {
   try {
     const { caseNo } = req.params
-    const { specimenType } = req.body
-    if (!SPECIMEN_TYPES.includes(specimenType)) { error(res, 'specimenType 非法', 'INVALID_PARAMETER', 400); return }
+    const { specimenType, partnerId } = req.body as { specimenType?: string; partnerId?: string }
+    const pid = partnerId || (req.query.partnerId as string | undefined)
+    if (!SPECIMEN_TYPES.includes(specimenType as string)) { error(res, 'specimenType 非法', 'INVALID_PARAMETER', 400); return }
     const db = getDatabase()
-    const existing = db.prepare('SELECT specimen_type FROM lis_cases WHERE case_no = ?').get(caseNo) as { specimen_type: string } | undefined
-    if (!existing) { error(res, '病例不存在', 'NOT_FOUND', 404); return }
-    // 覆盖 + 留痕同一事务：日志写失败则覆盖回滚，不留无审计的变更
+    // 跨院同号（T1.3）：精确定位行。带 partnerId 优先；不带且 case_no 跨多院 → 歧义 400，不得随机选院串改。
+    const rows = (pid
+      ? db.prepare('SELECT id, partner_id, specimen_type FROM lis_cases WHERE case_no = ? AND partner_id = ?').all(caseNo, pid)
+      : db.prepare('SELECT id, partner_id, specimen_type FROM lis_cases WHERE case_no = ?').all(caseNo)
+    ) as Array<{ id: string; partner_id: string | null; specimen_type: string | null }>
+    if (rows.length === 0) { error(res, '病例不存在', 'NOT_FOUND', 404); return }
+    if (rows.length > 1) { error(res, '该病理号在多家医院存在，请指定 partnerId 以避免跨院串改', 'AMBIGUOUS_PARTNER', 400); return }
+    const target = rows[0]
+    // 覆盖 + 留痕同一事务：日志写失败则覆盖回滚，不留无审计的变更。按 id 精确更新，绝不波及他院同号行。
     db.exec('BEGIN IMMEDIATE')
     try {
-      db.prepare(`UPDATE lis_cases SET specimen_type = ?, specimen_type_source = 'manual' WHERE case_no = ?`).run(specimenType, caseNo)
+      db.prepare(`UPDATE lis_cases SET specimen_type = ?, specimen_type_source = 'manual' WHERE id = ?`).run(specimenType, target.id)
       db.prepare(`INSERT INTO reconciliation_logs (id, type, target_id, target_name, field, old_value, new_value, reason, operator)
                   VALUES (?, 'specimen_type_override', ?, ?, 'specimen_type', ?, ?, ?, ?)`)
-        .run(uuidv4(), caseNo, caseNo, existing.specimen_type || null, specimenType, '人工覆盖样本类型', (req as any).user?.id || null)
+        .run(uuidv4(), caseNo, caseNo, target.specimen_type || null, specimenType, '人工覆盖样本类型', (req as any).user?.id || null)
       db.exec('COMMIT')
     } catch (e) {
       db.exec('ROLLBACK')
       throw e
     }
-    success(res, { caseNo, specimenType, source: 'manual' }, '已覆盖样本类型')
+    success(res, { caseNo, partnerId: target.partner_id, specimenType, source: 'manual' }, '已覆盖样本类型')
   } catch (e: any) { error(res, e.message) }
 })
 

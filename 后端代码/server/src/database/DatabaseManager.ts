@@ -318,7 +318,8 @@ export function initializeDatabase(): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS lis_cases (
       id TEXT PRIMARY KEY,
-      case_no TEXT NOT NULL UNIQUE,
+      -- case_no 不再全局 UNIQUE：不同医院各自编号体系会撞号；唯一性下移到复合索引 uq_lis_cases_partner_case(partner_id, case_no)。
+      case_no TEXT NOT NULL,
       project_id TEXT,
       project_name TEXT,
       operator TEXT,
@@ -1109,6 +1110,8 @@ export function initializeDatabase(): void {
   ensureColumn('case_revenue', 'lab_revenue', 'DECIMAL(18, 4)')
   ensureColumn('case_revenue', 'out_revenue', 'DECIMAL(18, 4) NOT NULL DEFAULT 0')
   ensureColumn('case_revenue', 'revenue_source', 'TEXT')
+  // PRD-0 T3：NGS 缺外包成本时落库但标记未核（cost_confirmed=0）→ 院级 P&L 不计入正常毛利、单列「未核 NGS 毛利」，不按 0 成本污染。默认 1（既有数据视为已核，向后兼容）。
+  ensureColumn('ngs_orders', 'cost_confirmed', 'INTEGER NOT NULL DEFAULT 1')
   ensureColumn('case_revenue_lines', 'scope', 'TEXT') // in/out/unmatched/ambiguous（逐行分类留痕）
   // codex CRITICAL：收入归属于医院，明细行也需 partner_id（删插与查询都按院隔离，防跨院同号串账）。
   ensureColumn('case_revenue_lines', 'partner_id', 'TEXT')
@@ -1174,6 +1177,36 @@ export function initializeDatabase(): void {
   ensureColumn('lis_cases', 'business_line_source', "TEXT NOT NULL DEFAULT 'auto'")
   ensureColumn('lis_cases', 'service_step_scope', 'TEXT')
   ensureColumn('lis_cases', 'service_step_scope_source', "TEXT NOT NULL DEFAULT 'auto'")
+
+  // ── PRD-0 T1.1 跨院串账止血：lis_cases 唯一键 (case_no) → (partner_id, case_no) ──
+  // 不同医院各自编号体系会撞号；旧 UNIQUE(case_no) 让第二家医院同号被拒/覆盖（codex 04 CRITICAL：跨院串账半闭环）。
+  // SQLite 列级 UNIQUE 不能 ALTER 删除 → 整表重建（仿 case_revenue 重建；动态读 PRAGMA 列保留全部 ensureColumn 增列，事务内幂等）。
+  // 迁移前不并入 partner_id IS NULL 的历史行（§7.3：保持待修复，不自动归入任意医院）。
+  {
+    const lc = database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='lis_cases'").get() as { sql?: string } | undefined
+    if (lc?.sql && /case_no\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(lc.sql)) {
+      const cols = database.prepare(`PRAGMA table_info(lis_cases)`).all() as Array<{ name: string; type: string; notnull: number; dflt_value: unknown; pk: number }>
+      const colDefs = cols.map((c) => {
+        let def = `"${c.name}" ${c.type || 'TEXT'}`
+        if (c.pk) def += ' PRIMARY KEY'
+        else if (c.notnull) def += ' NOT NULL'
+        if (c.dflt_value != null) def += ` DEFAULT ${c.dflt_value}`
+        return def
+      }).join(', ')
+      const colList = cols.map((c) => `"${c.name}"`).join(', ')
+      database.exec('BEGIN IMMEDIATE')
+      try {
+        database.exec(`CREATE TABLE lis_cases__new (${colDefs})`)
+        database.exec(`INSERT INTO lis_cases__new (${colList}) SELECT ${colList} FROM lis_cases`)
+        database.exec('DROP TABLE lis_cases')
+        database.exec('ALTER TABLE lis_cases__new RENAME TO lis_cases')
+        database.exec('COMMIT')
+      } catch (e) { database.exec('ROLLBACK'); throw e }
+    }
+  }
+  // 复合唯一：同院同号唯一；跨院同号并存。partner_id IS NULL 的历史行在 SQLite UNIQUE 中视为相异 → 不互相冲突、不自动并入任意医院（待人工补院）。
+  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_lis_cases_partner_case ON lis_cases(partner_id, case_no)`)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_lis_cases_case_no ON lis_cases(case_no)`)
 
   // —— ABC 索引（L2 成本来源→中心映射热路径 + 期间动因聚合）——
   database.exec(`CREATE INDEX IF NOT EXISTS idx_labor_center ON standard_labor_times(activity_center_id)`)

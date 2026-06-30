@@ -14,6 +14,7 @@ import { requirePermission } from '../middleware/permissions.js'
 import { findOrCreatePartner } from '../utils/partner-upsert.js'
 import { aggregateBilling } from '../utils/billing-revenue.js'
 import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
+import { resolveLisCanonicalPartner } from '../utils/lis-partner-resolve.js'
 
 const router = Router()
 const requireWrite = requirePermission('reconciliation', 'W')
@@ -47,8 +48,8 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const lisExists = db.prepare('SELECT 1 FROM lis_cases WHERE case_no = ?')
-    // 命中 LIS 且 LIS 有 partner 时以 LIS 的 partner 为权威，避免账单医院名别名/错字把收入落到与成本不同的 partner
-    const lisCanonical = db.prepare('SELECT partner_id FROM lis_cases WHERE case_no = ? AND partner_id IS NOT NULL')
+    // 命中 LIS 且【精确对应单一 partner】时以 LIS 的 partner 为权威，避免账单医院名别名/错字把收入落到与成本不同的 partner。
+    // 跨院同号歧义（resolveLisCanonicalPartner 返回 undefined）→ 不随机选院，退回账单自带医院名（§7.1）。
     const partnerByName = db.prepare('SELECT id FROM partners WHERE name = ? AND is_deleted = 0')
 
     // 明细按 (病理号,服务月) 分组，与聚合键一致，使「删旧+插新」在同一 case+月内成对
@@ -67,10 +68,10 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
     db.exec('BEGIN IMMEDIATE')
     try {
       for (const c of agg.cases) {
-        const lisRow = lisCanonical.get(c.caseNo) as { partner_id: string } | undefined
+        const lisPid = resolveLisCanonicalPartner(db, c.caseNo) // 仅单一 partner 才规范化；跨院同号歧义→退回账单医院名
         let partnerId: string
-        if (lisRow) {
-          partnerId = lisRow.partner_id // LIS canonical（收入与成本归同一 partner）
+        if (lisPid) {
+          partnerId = lisPid // LIS canonical（收入与成本归同一 partner）
           const byName = partnerByName.get(c.partnerName) as { id: string } | undefined
           if (byName && byName.id !== partnerId) nameMismatch.push(c.caseNo)
         } else {

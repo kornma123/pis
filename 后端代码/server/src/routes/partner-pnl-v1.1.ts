@@ -9,16 +9,27 @@ import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
+import { auditCrossPartnerCaseNos } from '../utils/cross-partner-audit.js'
 import { buildPartnerPnl, loadCasePnlsWithCost, buildPartnerTrend } from '../utils/partner-pnl-service.js'
 
 const router = Router()
 const requireCostRead = requirePermission('cost_analysis', 'R')
 
-/** POST /backfill-abc-partner —— 按 case_no 把医院维度回填到 ABC 成本明细（幂等可重跑） */
+/** POST /backfill-abc-partner —— 按 (partner_id, case_no) 精确把医院维度回填到 ABC 成本明细（歧义不回填，幂等可重跑）。
+ *  附跨院同号审计报告（PRD-0 T1.0/§7.3）：歧义 case_no 不回填，供 ops 识别待人工补院的成本。 */
 router.post('/backfill-abc-partner', authenticateToken, requirePermission('reconciliation', 'W'), (req, res) => {
   try {
-    const r = backfillAbcPartnerIds(getDatabase())
-    success(res, r, `回填 ${r.updated} 条 ABC 明细的医院维度`)
+    const db = getDatabase()
+    const r = backfillAbcPartnerIds(db)
+    const audit = auditCrossPartnerCaseNos(db)
+    success(res, { ...r, audit }, `回填 ${r.updated} 条 ABC 明细的医院维度` + (r.skippedAmbiguous ? `（${r.skippedAmbiguous} 条跨院同号歧义未回填，待人工补院）` : ''))
+  } catch (e: any) { error(res, e.message) }
+})
+
+/** GET /cross-partner-audit —— 跨院同号审计报告（迁移/运维诊断：跨院撞号、NULL partner、ABC 回填歧义计数）。 */
+router.get('/cross-partner-audit', authenticateToken, requireCostRead, (_req, res) => {
+  try {
+    success(res, auditCrossPartnerCaseNos(getDatabase()), '跨院同号审计')
   } catch (e: any) { error(res, e.message) }
 })
 

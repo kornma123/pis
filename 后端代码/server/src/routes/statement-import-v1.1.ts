@@ -13,7 +13,7 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requireAnyRole } from '../middleware/permissions.js'
-import { loadConfig, peekConfig, saveConfig, type PartnerConfigLine } from '../utils/partner-config.js'
+import { loadConfig, peekConfig, saveConfig, normalizeConfig, type PartnerConfigLine } from '../utils/partner-config.js'
 import { parseStatement, type Grid, type ColMap } from '../utils/statement-parser/index.js'
 import { computeStatementRevenue, type ClassifiedRow } from '../utils/statement-revenue.js'
 import { canonicalCaseNo } from '../utils/classifier.js' // codex MEDIUM-3：落库分组用 NFKC 规范化病理号
@@ -194,8 +194,13 @@ router.post('/classify-rule', authenticateToken, requireImport, (req, res) => {
     const words = String(value).split(/[，,、\s]+/).map((s) => s.trim()).filter(Boolean)
     for (const w of words) if (!target[field].includes(w)) target[field].push(w)
 
+    // PRD-0 T2 补漏：写回前严格归一（与 PUT 路由一致）。坏历史配置（含无法归一字段）经 row2config best-effort
+    //   会整体回退原值（坏扣率/坏 line 未治理）→ 这里拒绝在坏配置上叠加新版本，不把坏值再次持久化。
+    let normalized
+    try { normalized = normalizeConfig(config) } catch (ve: any) { error(res, ve?.message || '配置格式无效', 'BAD_REQUEST', 400); return }
+
     // codex MEDIUM-2：测试台基于某版预览归类时传 expectedVersion → 乐观锁防并发覆盖（配置页已改到更新版时 409，要求重新预览）。
-    const r = saveConfig(db, partnerId, config, { changedBy: userId(req), tab: '业务分类', genId, expectedVersion })
+    const r = saveConfig(db, partnerId, normalized, { changedBy: userId(req), tab: '业务分类', genId, expectedVersion })
     success(res, { partnerId, version: r.version, lineKey: target.key, scope: target.scope }, `已写入 ${partnerId} 配置（v${r.version}·业务分类），立即生效`)
   } catch (e: any) {
     if (/版本冲突/.test(e.message)) { error(res, e.message, 'CONFLICT', 409); return }
