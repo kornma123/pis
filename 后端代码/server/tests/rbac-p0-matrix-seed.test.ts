@@ -8,9 +8,9 @@ import {
 } from '../src/middleware/permissions.js'
 
 describe('RBAC-P0：SEED_MATRIX 完整性', () => {
-  it('27 个模块', () => {
-    expect(MODULES.length).toBe(27)
-    expect(new Set(MODULES).size).toBe(27) // 无重复
+  it('29 个模块', () => {
+    expect(MODULES.length).toBe(29)
+    expect(new Set(MODULES).size).toBe(29) // 无重复
   })
 
   it('6 个非 admin 角色均有矩阵', () => {
@@ -55,7 +55,7 @@ describe('RBAC-P0：SEED_MATRIX 完整性', () => {
 
   it('adminAllPermissions = 全模块 W', () => {
     const all = adminAllPermissions()
-    expect(Object.keys(all).length).toBe(27)
+    expect(Object.keys(all).length).toBe(29)
     expect(Object.values(all).every((v) => v === 'W')).toBe(true)
   })
 })
@@ -71,7 +71,7 @@ describe('RBAC-P0：parsePermissions 双形态', () => {
     expect(parsePermissions(['inventory', 'bom'])).toEqual({ inventory: 'W', bom: 'W' })
   })
   it("数组含 '*' → 全 W", () => {
-    expect(Object.keys(parsePermissions(['*'])).length).toBe(27)
+    expect(Object.keys(parsePermissions(['*'])).length).toBe(29)
   })
   it('空/非法 → {}', () => {
     expect(parsePermissions('')).toEqual({})

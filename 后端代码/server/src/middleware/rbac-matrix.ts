@@ -4,7 +4,7 @@
 export type Level = 'R' | 'W'
 export type PermMap = Record<string, Level>
 
-/** 27 个业务模块（权限码） */
+/** 29 个业务模块（权限码）。partners/partner_pricing = 按医院成本盈利特性新增。 */
 export const MODULES = [
   'inventory', 'inbound', 'outbound', 'transfers', 'stocktaking', 'returns', 'scraps',
   'materials', 'categories', 'locations',
@@ -13,6 +13,7 @@ export const MODULES = [
   'reconciliation',
   'cost_analysis', 'abc_dashboard', 'slide_cost', 'profitability', 'abc_config',
   'equipment', 'labor_times',
+  'partners', 'partner_pricing',
   'alerts', 'users', 'roles', 'logs',
 ] as const
 
@@ -33,6 +34,7 @@ export const SEED_MATRIX: Record<string, PermMap> = {
     reconciliation: 'W',
     cost_analysis: 'R', abc_dashboard: 'R', slide_cost: 'R', profitability: 'R', abc_config: 'W',
     equipment: 'W', labor_times: 'R',
+    partners: 'W', partner_pricing: 'W',
     alerts: 'R', users: 'W', roles: 'W', logs: 'R',
   },
   warehouse_manager: {
@@ -72,6 +74,7 @@ export const SEED_MATRIX: Record<string, PermMap> = {
     reconciliation: 'W',
     cost_analysis: 'W', abc_dashboard: 'W', slide_cost: 'W', profitability: 'W', abc_config: 'W',
     equipment: 'W', labor_times: 'W',
+    partners: 'R', partner_pricing: 'W',
     alerts: 'R', logs: 'R',
   },
 }

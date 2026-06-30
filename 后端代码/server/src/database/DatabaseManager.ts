@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
+import { CHARGE_CODE_SEED, chargeDefToRow } from '../utils/charge-catalog.js'
+import { NGS_PRODUCT_SEED, ngsProductToRow } from '../utils/ngs-catalog.js'
 import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -43,6 +45,24 @@ export function initializeDatabase(): void {
   `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS suppliers (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, contact TEXT, phone TEXT, email TEXT, address TEXT, tax_no TEXT, bank_name TEXT, bank_account TEXT, status INTEGER NOT NULL DEFAULT 1, cooperation_count INTEGER DEFAULT 0, total_amount DECIMAL(18, 4) DEFAULT 0, rating INTEGER DEFAULT 5, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
+  `)
+  // 合作医院(客户)主数据 —— 第三方诊断中心按医院核成本/盈利的核心维度（可经 LIS 按 code 导入/匹配）。
+  // service_scope: 本中心对该医院承担的范围（technical_only=仅技术 / with_diagnosis=含诊断），决定收入取哪些组分。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS partners (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      short_name TEXT,
+      contact TEXT, phone TEXT, address TEXT,
+      contract_no TEXT,
+      service_scope TEXT NOT NULL DEFAULT 'technical_only',
+      status INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT, updated_by TEXT,
+      is_deleted INTEGER NOT NULL DEFAULT 0
+    )
   `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS locations (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'shelf', parent_id TEXT, zone TEXT NOT NULL, shelf TEXT, position TEXT, capacity INTEGER DEFAULT 999999, used INTEGER DEFAULT 0, status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
@@ -308,6 +328,143 @@ export function initializeDatabase(): void {
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+
+  // 收入侧（按医院成本/盈利）：收费目录 charge_codes —— 收费引擎的计价规则源。
+  // ⛔ 红线：与成本侧 fee_standards / cost-calculator 完全独立，互不读写。rule_json 持久化 ChargeRule。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS charge_codes (
+      code TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      unit TEXT,
+      category TEXT NOT NULL,
+      rule_type TEXT NOT NULL,
+      rule_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // 收入侧：财务收费单据 → 逐 case 实收（W4，code-agnostic）。net_amount=开单金额(折后实收)；gross=计费金额(折前)。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS case_revenue (
+      id TEXT PRIMARY KEY,
+      case_no TEXT NOT NULL,
+      partner_id TEXT,
+      partner_name TEXT,
+      doc_no TEXT,
+      gross_amount DECIMAL(18, 4) NOT NULL DEFAULT 0,
+      net_amount DECIMAL(18, 4) NOT NULL DEFAULT 0,
+      discount_rate DECIMAL(10, 6) NOT NULL DEFAULT 0,
+      service_month TEXT,
+      line_count INTEGER NOT NULL DEFAULT 0,
+      import_batch TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(case_no, service_month)
+    )
+  `)
+  // 原始收费明细行（code-agnostic 原样存，备 v2 编码标准化后逐码交叉核对，不依赖其语义）
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS case_revenue_lines (
+      id TEXT PRIMARY KEY,
+      case_no TEXT NOT NULL,
+      partner_name TEXT,
+      seq INTEGER,
+      specimen_name TEXT,
+      charge_item TEXT,
+      charge_code TEXT,
+      unit_price DECIMAL(18, 4) DEFAULT 0,
+      qty DECIMAL(18, 4) DEFAULT 0,
+      unit TEXT,
+      gross_amount DECIMAL(18, 4) DEFAULT 0,
+      discount_rate DECIMAL(10, 6) DEFAULT 0,
+      net_amount DECIMAL(18, 4) DEFAULT 0,
+      charge_time TEXT,
+      service_month TEXT,
+      import_batch TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_partner_month ON case_revenue(partner_id, service_month)`)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_lines_case ON case_revenue_lines(case_no)`)
+
+  // 收入侧：NGS 基因检测【外购转销】产品目录（参考价）+ 逐单（独立渠道，非 LIS/非对账单）。
+  // ⛔ 红线：外包成本(协议价)=外购直接成本，独立于 ABC 内部成本引擎；与院内 charge_codes 占比估算互不读写。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ngs_products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_name TEXT NOT NULL UNIQUE,
+      category TEXT,
+      gene_count TEXT,
+      sample_type TEXT,
+      clinical_meaning TEXT,
+      turnaround_days INTEGER,
+      guide_price DECIMAL(18, 4),
+      agreement_price DECIMAL(18, 4),
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ngs_orders (
+      id TEXT PRIMARY KEY,
+      order_no TEXT,
+      partner_id TEXT,
+      partner_name TEXT,
+      product_name TEXT,
+      sell_price DECIMAL(18, 4) NOT NULL DEFAULT 0,
+      outsource_cost DECIMAL(18, 4) NOT NULL DEFAULT 0,
+      margin DECIMAL(18, 4) NOT NULL DEFAULT 0,
+      order_month TEXT,
+      import_batch TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(order_no, product_name, order_month)
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_ngs_orders_partner_month ON ngs_orders(partner_id, order_month)`)
+
+  // 逐院配置（单一事实源，配置驱动导入器 P0）：每院一份【版本化】配置 JSON blob（仿 bom_versions）。
+  // config_json = mockup 配置对象（basic/amount/parse/lines/discount/special）。is_current=当前版；
+  // is_baseline=月度导入基线。版本不可变、可回滚、可按版本追溯重算。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS partner_configs (
+      id TEXT PRIMARY KEY,
+      partner_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      config_json TEXT NOT NULL,
+      is_current INTEGER NOT NULL DEFAULT 0,
+      is_baseline INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT,
+      UNIQUE(partner_id, version)
+    )
+  `)
+  // 逐院配置变更记录：每次保存/回滚记一条「调整前→调整后」(diffs_json) + 快照(snapshot_json，回滚源)。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS partner_config_changes (
+      id TEXT PRIMARY KEY,
+      partner_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'edit',
+      tab TEXT,
+      diffs_json TEXT,
+      snapshot_json TEXT,
+      changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      changed_by TEXT,
+      UNIQUE(partner_id, version)
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_partner_configs_current ON partner_configs(partner_id, is_current)`)
+  // codex F3 + verify-H3：建唯一索引前先归一历史脏数据（旧库若已有同院多 current/baseline 会让建索引失败）。
+  // current = 该院最高版本那行；baseline 仅保留最高版本的一条。幂等（干净库为 no-op）。
+  database.exec(`UPDATE partner_configs SET is_current = 0 WHERE is_current = 1 AND version <> (SELECT MAX(version) FROM partner_configs p2 WHERE p2.partner_id = partner_configs.partner_id)`)
+  database.exec(`UPDATE partner_configs SET is_baseline = 0 WHERE is_baseline = 1 AND version <> (SELECT MAX(version) FROM partner_configs p2 WHERE p2.partner_id = partner_configs.partner_id AND p2.is_baseline = 1)`)
+  // codex F3：同院最多一行 current / 一行 baseline（部分唯一索引，DB 级兜底非原子写/并发种子导致的多 current）
+  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_configs_one_current ON partner_configs(partner_id) WHERE is_current = 1`)
+  database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_configs_one_baseline ON partner_configs(partner_id) WHERE is_baseline = 1`)
 
   // 成本对账：修正日志
   database.exec(`
@@ -940,7 +1097,35 @@ export function initializeDatabase(): void {
   ensureColumn('outbound_abc_details', 'case_no', 'TEXT')
   ensureColumn('outbound_abc_details', 'charge_group_id', 'TEXT')
   ensureColumn('outbound_abc_details', 'calculation_version', "TEXT NOT NULL DEFAULT 'v1'")
+  // 配置驱动导入器 P0：每期导入记下所用逐院配置版本 → 改规则后判影响面 + 追溯重算锚。
+  ensureColumn('case_revenue', 'config_version', 'INTEGER')
+  // P5 收入侧：配置驱动导入(/commit)落库时写【实验室收入=Σ(IN结算)】+移出额+来源。
+  //   lab_revenue NULL = 非配置驱动(走估算 实收×占比)；非 NULL = 已对账(statement 权威)。revenue_source: statement/estimated/corrected。
+  ensureColumn('case_revenue', 'lab_revenue', 'DECIMAL(18, 4)')
+  ensureColumn('case_revenue', 'out_revenue', 'DECIMAL(18, 4) NOT NULL DEFAULT 0')
+  ensureColumn('case_revenue', 'revenue_source', 'TEXT')
+  ensureColumn('case_revenue_lines', 'scope', 'TEXT') // in/out/unmatched/ambiguous（逐行分类留痕）
+  // 按医院(客户)成本/盈利：partner 维度（LIS 给"哪家医院送检" → lis_cases；冗余到 abc 明细供按客户上卷）
+  ensureColumn('outbound_abc_details', 'partner_id', 'TEXT')
+  ensureColumn('lis_cases', 'partner_id', 'TEXT')
   ensureColumn('outbound_abc_details', 'source_snapshot', 'TEXT')
+  // 收入侧推断层：样本类型(tissue/tissue_complex/cytology)推断结果 + 来源(auto 关键词判 / manual 人工覆盖永远赢)。
+  // 增量纠错架构：派生推断落字段、可逐 case 覆盖、留痕；改判断逻辑只需重跑（原始数量不动）。
+  ensureColumn('lis_cases', 'specimen_type', 'TEXT')
+  ensureColumn('lis_cases', 'specimen_type_source', "TEXT NOT NULL DEFAULT 'auto'")
+  // LIS 基础数量列（W3 导入写入；charge mapping 的输入；与原始事实层一致，可重传覆盖）
+  ;['he_slide_count', 'block_count', 'ihc_count', 'special_stain_count', 'eber_count', 'pdl1_count'].forEach((c) =>
+    ensureColumn('lis_cases', c, 'INTEGER NOT NULL DEFAULT 0'),
+  )
+  // —— 收入归属「两层模型」预埋（2026-06-27，待对账单学习后完善逻辑；当前全可空、无任何计算读取它们，零回归）——
+  //   business_line：检测业务线（组织学/细胞/宫颈液基/冰冻/外院会诊/分子院内/FISH/外送… 见 revenue-attribution.ts）。
+  //     决定该 case 走哪种「归属方法」(A 账单占比 / B 单项整笔 / C 外送转销)。
+  //   service_step_scope：方法 A 的 case 上「我们实际做了哪几步」的 JSON（病例级覆盖；默认取医院协议，可人工改、留痕）。
+  //   _source：取值来源（auto 推断 / contract 协议默认 / manual 人工 / bill 账单码反推）——增量纠错留痕，对齐 specimen_type_source。
+  ensureColumn('lis_cases', 'business_line', 'TEXT')
+  ensureColumn('lis_cases', 'business_line_source', "TEXT NOT NULL DEFAULT 'auto'")
+  ensureColumn('lis_cases', 'service_step_scope', 'TEXT')
+  ensureColumn('lis_cases', 'service_step_scope_source', "TEXT NOT NULL DEFAULT 'auto'")
 
   // —— ABC 索引（L2 成本来源→中心映射热路径 + 期间动因聚合）——
   database.exec(`CREATE INDEX IF NOT EXISTS idx_labor_center ON standard_labor_times(activity_center_id)`)
@@ -1039,6 +1224,26 @@ export function initializeDatabase(): void {
     VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
   `)
   feeDefaults.forEach((row) => insertFee.run(...row, row[5]))
+
+  // 收入侧收费目录种子（v1 常见档；INSERT OR IGNORE 幂等，已存在不覆盖以保留运营修改）
+  const insertChargeCode = database.prepare(`
+    INSERT OR IGNORE INTO charge_codes (code, name, unit, category, rule_type, rule_json, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'active')
+  `)
+  CHARGE_CODE_SEED.forEach((def) => {
+    const row = chargeDefToRow(def)
+    insertChargeCode.run(row.code, row.name, row.unit, row.category, row.rule_type, row.rule_json)
+  })
+
+  // NGS 外购转销产品参考目录种子（截图可见子集；INSERT OR IGNORE 幂等，已存在不覆盖以保留运营修改）
+  const insertNgsProduct = database.prepare(`
+    INSERT OR IGNORE INTO ngs_products (product_name, category, gene_count, sample_type, clinical_meaning, turnaround_days, guide_price, agreement_price, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+  `)
+  NGS_PRODUCT_SEED.forEach((def) => {
+    const r = ngsProductToRow(def)
+    insertNgsProduct.run(r.product_name, r.category, r.gene_count, r.sample_type, r.clinical_meaning, r.turnaround_days, r.guide_price, r.agreement_price)
+  })
 
   console.log('Database initialized successfully')
 }

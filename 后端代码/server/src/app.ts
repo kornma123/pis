@@ -37,6 +37,15 @@ import laborTimeRoutes from './routes/labor-time-v1.1.js'
 import indirectCostRoutes from './routes/indirect-cost-v1.1.js'
 import abcRoutes from './routes/abc-v1.1.js'
 import costAdjustmentRoutes from './routes/cost-adjustment-v1.1.js'
+// 按医院成本/盈利
+import partnerRoutes from './routes/partners-v1.1.js'
+import lisCaseRoutes from './routes/lis-cases-v1.1.js'
+import caseRevenueRoutes from './routes/case-revenue-v1.1.js'
+import partnerPnlRoutes from './routes/partner-pnl-v1.1.js'
+import ngsRoutes from './routes/ngs-v1.1.js'
+// 配置驱动导入器（P4）：逐院配置单一事实源 + 对账单导入预览/归类
+import partnerConfigRoutes from './routes/partner-config-v1.1.js'
+import statementImportRoutes from './routes/statement-import-v1.1.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -98,6 +107,21 @@ app.use('/api/v1/labor-times', authenticateToken, requirePermission('labor_times
 app.use('/api/v1/indirect-costs', authenticateToken, requirePermission('abc_config', 'R'), indirectCostRoutes)
 app.use('/api/v1/abc', authenticateToken, requirePermission('abc_dashboard', 'R'), abcRoutes)
 app.use('/api/v1/cost-adjustments', authenticateToken, requirePermission('cost_analysis', 'R'), costAdjustmentRoutes)
+
+// 按医院成本/盈利：合作医院（客户）维度 CRUD（W2）。读 partners R，写由路由内 requirePermission('partners','W') 守卫。
+app.use('/api/v1/partners', authenticateToken, requirePermission('partners', 'R'), partnerRoutes)
+// LIS 病例导入/列表/样本覆盖（W3）。读 reconciliation R，写由路由内 requirePermission('reconciliation','W') 守卫。
+app.use('/api/v1/lis-cases', authenticateToken, requirePermission('reconciliation', 'R'), lisCaseRoutes)
+// 财务收费单据→逐 case 实收导入（W4）。读 reconciliation R，写由路由内 requirePermission('reconciliation','W') 守卫。
+app.use('/api/v1/case-revenue', authenticateToken, requirePermission('reconciliation', 'R'), caseRevenueRoutes)
+// 院级 P&L 视图 + ABC 成本维度回填（W6/W5）。读权限由路由内 cost_analysis R 守卫（成本敏感）。
+app.use('/api/v1/partner-pnl', authenticateToken, partnerPnlRoutes)
+// NGS 基因检测外购转销（独立渠道）：订单导入/产品目录/院级 NGS P&L。读写权限由路由内守卫（reconciliation W / cost_analysis R）。
+app.use('/api/v1/ngs', authenticateToken, ngsRoutes)
+// 配置驱动导入器（P4）：逐院配置单一事实源（CRUD/版本/回滚/基线）。权限由路由内守卫（财务/管理员）。
+app.use('/api/v1/partner-config', authenticateToken, partnerConfigRoutes)
+// 对账单导入（P4）：预览(干跑) + 归类写回该院配置。权限由路由内守卫（财务/管理员）。
+app.use('/api/v1/statement-import', authenticateToken, statementImportRoutes)
 
 // 健康检查
 app.get('/api/health', (_req, res) => {
