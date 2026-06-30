@@ -34,6 +34,54 @@ export function resetDatabase(): void {
   }
 }
 
+/**
+ * 聚焦迁移：仓库管理员 / 采购 的「退货给供应商」(supplier_returns) 权限补齐。
+ *
+ * 背景：本系统采用数据驱动 RBAC —— `roles.permissions` 是权限的单一事实源。
+ * `SEED_MATRIX` 后来新增了 supplier_returns 模块，并授予 warehouse_manager / procurement 'W'，
+ * 但任何「该模块加入之前」就已存在的库（含提交进仓库、CI 直接 checkout 使用的测试
+ * `data/coreone.db`，以及任何已部署的生产库）的角色权限里没有这个模块；而
+ * initializeDatabase 的回填只补「完全为空」的权限、不会补「新增模块」。结果这两个角色
+ * 实际拿不到 supplier_returns → 虽然矩阵给了权限却在建/删退货时 403、前端退货看板被隐藏。
+ * 这是一处真实的「升级迁移缺口」（新增权限模块无法触达既有库的既有角色）。
+ *
+ * 修复：每次初始化时确保这两个角色的权限含 supplier_returns（与 SEED_MATRIX 的 'W' 对齐）。
+ * 兼容两种存储形态：旧扁平数组 ['inventory',...]（列出的码即 'W'）与对象 {mod:'R'|'W'}。
+ * 幂等：已含则不重复写。含 '*'(admin) 不处理。
+ *
+ * ⚠️ 范围注记（有意为之，勿擅自扩大）：本迁移刻意只动 warehouse_manager / procurement
+ * 两个角色的 supplier_returns 一项，不做「全角色 × 全矩阵」对齐。原因：SEED_MATRIX 同时
+ * 还给 finance supplier_returns 'R'、technician outbound/stocktaking 等，而既有 e2e
+ *（如 finance 访问退货期望 403、BF-PERM technician 访问出库被拦 等）是按「旧权限模型」断言、
+ * 且当前全部为绿；全量对齐会改动这些「现为绿」的用例 —— 那属于另一个独立的 RBAC 对齐决策。
+ * 因此这里只修复触发了 e2e 失败的两角色一项，保证零回归。库与矩阵在 finance 等处仍存在
+ * 有意的不一致，详见 PR 说明 / session-log / 记忆 coreone-pr8-e2e-rbac-migration-gap。
+ */
+export function reconcileSupplierReturnsPerms(database: DatabaseSync): void {
+  for (const code of ['warehouse_manager', 'procurement']) {
+    const row = database.prepare('SELECT permissions FROM roles WHERE code = ?').get(code) as
+      | { permissions: string }
+      | undefined
+    if (!row) continue
+    let val: unknown
+    try {
+      val = typeof row.permissions === 'string' ? JSON.parse(row.permissions) : row.permissions
+    } catch {
+      continue // 解析不了的脏值不动，避免覆盖
+    }
+    if (Array.isArray(val)) {
+      if (val.includes('*') || val.includes('supplier_returns')) continue
+      val.push('supplier_returns')
+      database.prepare('UPDATE roles SET permissions = ? WHERE code = ?').run(JSON.stringify(val), code)
+    } else if (val && typeof val === 'object') {
+      const obj = val as Record<string, unknown>
+      if (obj.supplier_returns === 'W') continue
+      obj.supplier_returns = 'W'
+      database.prepare('UPDATE roles SET permissions = ? WHERE code = ?').run(JSON.stringify(obj), code)
+    }
+  }
+}
+
 export function initializeDatabase(): void {
   const database = getDatabase()
 
@@ -541,6 +589,8 @@ export function initializeDatabase(): void {
     insertRole.run(r.id, r.code, r.name, r.description, seedPermsFor(r.code), 1)
     backfillRolePerms.run(seedPermsFor(r.code), r.code)
   }
+  // 聚焦迁移：补齐 仓管/采购 的 supplier_returns（既有库新增模块缺口，详见函数注释）
+  reconcileSupplierReturnsPerms(database)
 
   // 成本可见性开关默认（可在「角色权限/设置」改）
   database.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('cost_visibility_roles', ?)")
