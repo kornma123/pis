@@ -11,7 +11,7 @@ import { buildTestApp, getDb } from './p0-harness.js'
 import { seedDefaultConfig, saveConfig, normalizeConfig, loadConfig, type PartnerConfigLine } from '../src/utils/partner-config.js'
 import { buildPartnerPnl } from '../src/utils/partner-pnl-service.js'
 
-let app: any, db: any, financeToken = ''
+let app: any, db: any, financeToken = '', adminToken = ''
 const P_LIS = 'PT-SPLIT-LIS' // 有 LIS 蜡块
 const P_NOLIS = 'PT-SPLIT-NOLIS' // 无 LIS → 降级数量
 const genId = () => `PC-${Math.round(Math.random() * 1e9)}` // 测试内非并发，够用
@@ -55,13 +55,14 @@ beforeAll(async () => {
     { path: '/api/v1/statement-import', router: impRoutes },
   ])
   const request = (await import('supertest')).default
-  const r = await request(app).post('/api/v1/auth/login').send({ username: 'caiwu', password: 'CoreOne2026!' })
-  financeToken = r.body?.data?.token || ''
+  const login = async (u: string, p: string) => (await request(app).post('/api/v1/auth/login').send({ username: u, password: p })).body?.data?.token || ''
+  financeToken = await login('caiwu', 'CoreOne2026!')
+  adminToken = await login('admin', 'admin123')
 })
 
-async function post(path: string, body: any) {
+async function post(path: string, body: any, token: string = financeToken) {
   const request = (await import('supertest')).default
-  return request(app).post(`/api/v1/statement-import/${path}`).set('Authorization', `Bearer ${financeToken}`).send(body)
+  return request(app).post(`/api/v1/statement-import/${path}`).set('Authorization', `Bearer ${token}`).send(body)
 }
 
 describe('/preview 接 LIS 蜡块：制片按真蜡块拆 + 诊断桶', () => {
@@ -107,12 +108,12 @@ describe('/commit 落库诊断桶 + 逐病例守恒', () => {
   })
 })
 
-describe('classify-rule 可建 split/diagnosis 线（配置新口径的可用性缺口修复）', () => {
+describe('classify-rule 建 split/diagnosis 线（可用性缺口修复 + 口径门禁：仅 admin 可改）', () => {
   const P_CFG = 'PT-SPLIT-CFG'
   beforeAll(() => { db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, ?, ?, 1)`).run(P_CFG, P_CFG, P_CFG) })
 
-  it('建 split 线（带 splitProcRate/splitWorkload）→ 200，配置里如实存住', async () => {
-    const res = await post('classify-rule', { partnerId: P_CFG, newLine: { name: '组织制片', scope: 'split', splitProcRate: 36, splitWorkload: 'lis_blk' }, ruleType: 'keyword', value: '检查与诊断' })
+  it('admin 建 split 线（带 splitProcRate/splitWorkload）→ 200，配置里如实存住', async () => {
+    const res = await post('classify-rule', { partnerId: P_CFG, newLine: { name: '组织制片', scope: 'split', splitProcRate: 36, splitWorkload: 'lis_blk' }, ruleType: 'keyword', value: '检查与诊断' }, adminToken)
     expect(res.status).toBe(200)
     expect(res.body.data.scope).toBe('split')
     const line = loadConfig(db, P_CFG, genId).config.lines.find((l: any) => l.key === res.body.data.lineKey)!
@@ -122,14 +123,25 @@ describe('classify-rule 可建 split/diagnosis 线（配置新口径的可用性
     expect(line.keywords).toContain('检查与诊断')
   })
 
-  it('建 split 线但缺 splitProcRate → 400（不静默存坏配置）', async () => {
-    const res = await post('classify-rule', { partnerId: P_CFG, newLine: { name: '坏制片', scope: 'split' }, ruleType: 'keyword', value: '啥' })
+  it('admin 建 split 线但缺 splitProcRate → 400（不静默存坏配置）', async () => {
+    const res = await post('classify-rule', { partnerId: P_CFG, newLine: { name: '坏制片', scope: 'split' }, ruleType: 'keyword', value: '啥' }, adminToken)
     expect(res.status).toBe(400)
   })
 
-  it('建 diagnosis 线（诊断桶）→ 200', async () => {
-    const res = await post('classify-rule', { partnerId: P_CFG, newLine: { name: '报告', scope: 'diagnosis' }, ruleType: 'keyword', value: '报告' })
+  it('admin 建 diagnosis 线（诊断桶）→ 200', async () => {
+    const res = await post('classify-rule', { partnerId: P_CFG, newLine: { name: '报告', scope: 'diagnosis' }, ruleType: 'keyword', value: '报告' }, adminToken)
     expect(res.status).toBe(200)
     expect(res.body.data.scope).toBe('diagnosis')
+  })
+
+  it('⛔ 财务 建 split 线 → 403（拆分口径仅 admin 可改）', async () => {
+    const res = await post('classify-rule', { partnerId: P_CFG, newLine: { name: '财务想建的制片', scope: 'split', splitProcRate: 36, splitWorkload: 'qty' }, ruleType: 'keyword', value: '别的词' }, financeToken)
+    expect(res.status).toBe(403)
+  })
+
+  it('✅ 财务 建 in/out 线 → 200（财务仍拥有 in/out 归类，不受拆分门禁影响）', async () => {
+    const res = await post('classify-rule', { partnerId: P_CFG, newLine: { name: '财务建的移出线', scope: 'out' }, ruleType: 'keyword', value: '外送某项' }, financeToken)
+    expect(res.status).toBe(200)
+    expect(res.body.data.scope).toBe('out')
   })
 })

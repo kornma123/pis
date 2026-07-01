@@ -147,6 +147,23 @@ export function normalizeConfig(input: any): PartnerConfig {
   return { ...input, lines, discount } as PartnerConfig
 }
 
+/**
+ * 拆分口径签名：只序列化 split/diagnosis 线的（key/name/on/scope/费率/工作量来源/识别词）。
+ * 用于判断某次配置写入"是否改动了拆分口径"——改了则要求 admin（国标费率与工艺拆分是领域决策，
+ * 财务只配 in/out + 扣率 + 识别词，拆分线在其界面只读）。签名相等 = 财务这次没碰拆分线 → 放行。
+ */
+export function caliberSignature(config: PartnerConfig): string {
+  const lines = (config.lines ?? [])
+    .filter((l) => l.scope === 'split' || l.scope === 'diagnosis')
+    .map((l) => ({
+      key: l.key, name: l.name, on: !!l.on, scope: l.scope,
+      splitProcRate: l.splitProcRate ?? null, splitWorkload: l.splitWorkload ?? null,
+      prefixes: [...(l.prefixes ?? [])].sort(), keywords: [...(l.keywords ?? [])].sort(), remarks: [...(l.remarks ?? [])].sort(),
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key))
+  return JSON.stringify(lines)
+}
+
 // —— 默认 8 线模板（plan §P0：4 计入 + 4 移出）——
 // 识别词取自定稿 mockup config_v11 默认模板；第 8 线「共建分成净额」按 plan 补齐（mockup 默认 7 线，
 // 共建按院 special.joint 开关，此处作为默认目录线占位，识别走专用解析器）。
