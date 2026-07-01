@@ -1,7 +1,15 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
-import { success, successList, error } from '../utils/response.js'
+import { success, successList, error, buildSuccessEnvelope } from '../utils/response.js'
+import {
+  readIdempotencyKey,
+  fingerprintRequest,
+  tryReplayIdempotency,
+  claimIdempotency,
+  finalizeIdempotency,
+  isIdempotencyConflict,
+} from '../utils/idempotency.js'
 import { buildBomSourceSnapshot, calculateSlideCostWithFee, getBomPerSampleDriverQty } from '../utils/cost-calculator.js'
 import { recordCostException } from '../utils/cost-exceptions.js'
 import { getActiveBomVersionId } from '../utils/bom-version.js'
@@ -94,9 +102,15 @@ router.post('/', (req, res) => {
     }
 
     const db = getDatabase()
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = 'outbound:create'
+    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+
     const outboundNo = generateOutboundNo()
     const id = uuidv4()
     const operator = req.body.operator || 'system'
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
 
     let totalCost = 0
     const outboundItems: any[] = []
@@ -130,6 +144,7 @@ router.post('/', (req, res) => {
     // 事务保护：出库涉及 records + items + inventory + batches + stock_logs 多表操作
     db.exec('BEGIN IMMEDIATE')
     try {
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
       // 事务内重新校验库存，防止并发窗口
       for (const item of items) {
         const { materialId, quantity } = item
@@ -184,13 +199,16 @@ router.post('/', (req, res) => {
         `).run(logId, oi.materialId, -oi.quantity, beforeStock, afterStock, id, operator)
       }
 
+      responseEnvelope = buildSuccessEnvelope({ id, outboundNo, type, projectId, totalCost, status: 'completed', createdAt: new Date().toISOString() }, 'Outbound created')
+      if (idemKey) finalizeIdempotency(db, idemKey, 201, responseEnvelope)
       db.exec('COMMIT')
     } catch (err) {
       db.exec('ROLLBACK')
+      if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
       throw err
     }
 
-    success(res, { id, outboundNo, type, projectId, totalCost, status: 'completed', createdAt: new Date().toISOString() }, 'Outbound created', 201)
+    res.status(201).json(responseEnvelope)
   } catch (err: any) { error(res, err.message) }
 })
 
@@ -206,9 +224,15 @@ router.post('/bom', (req, res) => {
     }
 
     const db = getDatabase()
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = 'outbound:bom'
+    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+
     const outboundNo = generateOutboundNo()
     const id = uuidv4()
     const operator = req.body.operator || 'system'
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ? AND is_deleted = 0').get(projectId) as any
     if (!project) { error(res, 'Project not found', 'NOT_FOUND', 404); return }
@@ -252,6 +276,7 @@ router.post('/bom', (req, res) => {
 
     db.exec('BEGIN IMMEDIATE')
     try {
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
       for (const item of bomItems) {
         const quantity = item.usage_per_sample * sc
         if (quantity <= 0) continue
@@ -360,12 +385,15 @@ router.post('/bom', (req, res) => {
         console.error('ABC cost calculation failed (non-blocking):', abcErr)
       }
 
+      responseEnvelope = buildSuccessEnvelope({ id, outboundNo, type: 'bom', projectId, totalCost, status: 'completed', createdAt: new Date().toISOString() }, 'BOM outbound created')
+      if (idemKey) finalizeIdempotency(db, idemKey, 201, responseEnvelope)
       db.exec('COMMIT')
     } catch (err) {
       db.exec('ROLLBACK')
+      if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
       throw err
     }
-    success(res, { id, outboundNo, type: 'bom', projectId, totalCost, status: 'completed', createdAt: new Date().toISOString() }, 'BOM outbound created', 201)
+    res.status(201).json(responseEnvelope)
   } catch (err: any) { error(res, err.message) }
 })
 

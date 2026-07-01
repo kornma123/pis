@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Printer, Package } from 'lucide-react'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
@@ -214,12 +214,16 @@ export default function Outbound() {
     setCancelModalOpen(true)
   }
 
+  // 防双击/重复提交：同一次提交进行中时，后续点击直接忽略（配合后端幂等键，重复请求不会二次出库）
+  const submittingRef = useRef(false)
   const handleSubmit = async () => {
+    if (submittingRef.current) return
     const validItems = form.items.filter(i => i.materialId && i.quantity > 0)
     if (validItems.length === 0) {
       toast.error('请添加至少一个有效物料')
       return
     }
+    submittingRef.current = true
     try {
       if (editRecordId) {
         await outboundApi.update(editRecordId, { ...form, items: validItems })
@@ -233,6 +237,8 @@ export default function Outbound() {
       refreshWithStats()
     } catch {
       /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
+    } finally {
+      submittingRef.current = false
     }
   }
 

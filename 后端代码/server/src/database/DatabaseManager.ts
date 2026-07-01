@@ -236,6 +236,12 @@ export function initializeDatabase(): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS stock_logs (id TEXT PRIMARY KEY, type TEXT NOT NULL, material_id TEXT NOT NULL, quantity DECIMAL(18, 4) NOT NULL, before_stock DECIMAL(18, 4) NOT NULL, after_stock DECIMAL(18, 4) NOT NULL, related_id TEXT, related_type TEXT, operator TEXT NOT NULL, remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)
+  // 幂等键：入库/出库等写入提交防止网络重试/双击/代理重发造成重复入账。
+  // 客户端为同一次提交动作生成稳定 key，后端对同一 key 仅入账一次，重复请求回放首次结果。
+  // status_code / response_body 在写入事务内随首次成功结果一并落库（claim+finalize 同事务，保证已提交行必为完整结果）。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS idempotency_keys (idempotency_key TEXT PRIMARY KEY, scope TEXT NOT NULL, request_fingerprint TEXT NOT NULL, status_code INTEGER, response_body TEXT, operator TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
+  `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS alert_rules (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, threshold INTEGER, threshold_days INTEGER, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)

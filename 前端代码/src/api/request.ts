@@ -12,6 +12,17 @@ const request = axios.create({
   },
 })
 
+/**
+ * 生成幂等键：用于入库/出库等写入提交，防止网络重试、代理重发、双击造成重复入账。
+ * 同一次提交动作复用同一个 key（后端对同一 key 仅入账一次，重复请求回放首次结果）。
+ */
+export function genIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `idem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 /** 统一清理本地登录态（token / refreshToken / user / rememberUsername） */
 export function clearAuth() {
   localStorage.removeItem('token')

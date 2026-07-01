@@ -1,8 +1,16 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
-import { success, successList, error } from '../utils/response.js'
+import { success, successList, error, buildSuccessEnvelope } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import {
+  readIdempotencyKey,
+  fingerprintRequest,
+  tryReplayIdempotency,
+  claimIdempotency,
+  finalizeIdempotency,
+  isIdempotencyConflict,
+} from '../utils/idempotency.js'
 
 const router = Router()
 
@@ -139,6 +147,11 @@ router.post('/', requireWriteAccess, (req, res) => {
     }
 
     const db = getDatabase()
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = 'inbound:create'
+    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+
     const inboundNo = generateInboundNo()
     const id = uuidv4()
     const operator = req.body.operator || 'system'
@@ -148,6 +161,7 @@ router.post('/', requireWriteAccess, (req, res) => {
 
     const unit = material.unit
     const amount = (price || 0) * quantity
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
 
     // 查询采购订单信息
     let purchaseOrderNo: string | null = null
@@ -159,6 +173,7 @@ router.post('/', requireWriteAccess, (req, res) => {
     // 事务保护：入库涉及 records + batches + inventory + stock_logs 多表操作
     db.exec('BEGIN IMMEDIATE')
     try {
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
       db.prepare(`
         INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_no, quantity, unit, price, amount, supplier_id, location_id, production_date, expiry_date, operator, status, remark, purchase_order_id, purchase_order_no)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)
@@ -207,13 +222,16 @@ router.post('/', requireWriteAccess, (req, res) => {
         VALUES (?, 'inbound', ?, ?, COALESCE((SELECT stock FROM inventory WHERE material_id = ?), 0) - ?, COALESCE((SELECT stock FROM inventory WHERE material_id = ?), 0), ?, 'inbound', ?)
       `).run(logId, materialId, quantity, materialId, quantity, materialId, id, operator)
 
+      responseEnvelope = buildSuccessEnvelope({ id, inboundNo, type, materialId, quantity, status: 'completed', purchaseOrderId, purchaseOrderNo }, 'Inbound created')
+      if (idemKey) finalizeIdempotency(db, idemKey, 201, responseEnvelope)
       db.exec('COMMIT')
     } catch (err) {
       db.exec('ROLLBACK')
+      if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
       throw err
     }
 
-    success(res, { id, inboundNo, type, materialId, quantity, status: 'completed', purchaseOrderId, purchaseOrderNo }, 'Inbound created', 201)
+    res.status(201).json(responseEnvelope)
   } catch (err: any) { error(res, err.message) }
 })
 

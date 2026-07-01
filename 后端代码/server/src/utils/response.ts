@@ -1,11 +1,15 @@
 import type { Response } from 'express'
 
-export function success<T>(res: Response, data: T, message = '操作成功', statusCode = 200): void {
-  res.status(statusCode).json({
-    success: true,
+export function buildSuccessEnvelope<T>(data: T, message = '操作成功') {
+  return {
+    success: true as const,
     data,
     message,
-  })
+  }
+}
+
+export function success<T>(res: Response, data: T, message = '操作成功', statusCode = 200): void {
+  res.status(statusCode).json(buildSuccessEnvelope(data, message))
 }
 
 export function successList<T>(

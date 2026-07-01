@@ -1,4 +1,4 @@
-import request from './request'
+import request, { genIdempotencyKey } from './request'
 import type { ApiResponse, PaginationData, InventoryItem, InventoryStats, InboundRecord, InboundFormData, OutboundRecord, OutboundFormData, PageParams, SupplierReturnRecord, SupplierReturnFormData } from '@/types'
 
 export const inventoryApi = {
@@ -13,8 +13,9 @@ export const inboundApi = {
   getList: (params?: PageParams & { status?: string; startDate?: string; endDate?: string }) =>
     request.get<PaginationData<InboundRecord>>('/inbound', { params }),
 
-  create: (data: InboundFormData) =>
-    request.post<InboundRecord>('/inbound', data),
+  // idempotencyKey：同一次提交动作传同一个 key，可防网络重试/代理重发/双击重复入账；不传则按本次调用自动生成。
+  create: (data: InboundFormData, idempotencyKey: string = genIdempotencyKey()) =>
+    request.post<InboundRecord>('/inbound', data, { headers: { 'Idempotency-Key': idempotencyKey } }),
 
   update: (id: string, data: Partial<InboundFormData>) =>
     request.put<InboundRecord>(`/inbound/${id}`, data),
@@ -55,8 +56,9 @@ export const outboundApi = {
   getStats: () =>
     request.get<{ total: number; completed: number; pending: number; cancelled: number; totalCost: number }>('/outbound/stats'),
 
-  create: (data: OutboundFormData) =>
-    request.post<OutboundRecord>('/outbound', data),
+  // idempotencyKey：同一次提交动作传同一个 key，可防网络重试/代理重发/双击重复出库；不传则按本次调用自动生成。
+  create: (data: OutboundFormData, idempotencyKey: string = genIdempotencyKey()) =>
+    request.post<OutboundRecord>('/outbound', data, { headers: { 'Idempotency-Key': idempotencyKey } }),
 
   update: (id: string, data: Partial<OutboundFormData>) =>
     request.put<OutboundRecord>(`/outbound/${id}`, data),
