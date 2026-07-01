@@ -1165,6 +1165,9 @@ export function initializeDatabase(): void {
   //   lab_revenue NULL = 非配置驱动(走估算 实收×占比)；非 NULL = 已对账(statement 权威)。revenue_source: statement/estimated/corrected。
   ensureColumn('case_revenue', 'lab_revenue', 'DECIMAL(18, 4)')
   ensureColumn('case_revenue', 'out_revenue', 'DECIMAL(18, 4) NOT NULL DEFAULT 0')
+  // Phase 2 纯实验室拆分：诊断桶（报告/现场/split 诊断份额）——我们的钱但非实验室工序，既不进 lab 也不进 out。
+  //   逐病例守恒：net_amount = lab_revenue + diagnosis_revenue + out_revenue。默认 0（旧配置全 in/out → 恒 0，零回归）。
+  ensureColumn('case_revenue', 'diagnosis_revenue', 'DECIMAL(18, 4) NOT NULL DEFAULT 0')
   ensureColumn('case_revenue', 'revenue_source', 'TEXT')
   // PRD-0 T3：NGS 缺外包成本时落库但标记未核（cost_confirmed=0）→ 院级 P&L 不计入正常毛利、单列「未核 NGS 毛利」，不按 0 成本污染。默认 1（既有数据视为已核，向后兼容）。
   ensureColumn('ngs_orders', 'cost_confirmed', 'INTEGER NOT NULL DEFAULT 1')

@@ -26,10 +26,22 @@ const genId = (): string => `PC-${uuidv4()}`
 const userId = (req: any): string | undefined => req.user?.id
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100
 const round4 = (n: number): number => Math.round((n + Number.EPSILON) * 10000) / 10000
-const fin = (n: number): number => (Number.isFinite(n) ? n : 0)
+const fin = (n: number | undefined): number => (Number.isFinite(n) ? (n as number) : 0)
 
 function partnerExists(db: any, id: string): boolean {
   return !!db.prepare('SELECT 1 FROM partners WHERE id = ? AND is_deleted = 0').get(id)
+}
+
+/**
+ * LIS 蜡块工作量（按病理号）：scope=split 且 splitWorkload='lis_blk' 的组织制片线，用 LIS 真蜡块拆分（对账单 × LIS join）。
+ * 唯一键 (partner_id, case_no) → 每院每号一行。缺 LIS 的病理号 → computeStatementRevenue 内部降级账单数量。
+ * 默认模板无 split 线 → 传了也不被读取（零回归）。
+ */
+function loadLisWorkload(db: any, partnerId: string): Map<string, { blk: number }> {
+  const rows = db.prepare('SELECT case_no, block_count FROM lis_cases WHERE partner_id = ?').all(partnerId) as any[]
+  const m = new Map<string, { blk: number }>()
+  for (const r of rows) m.set(String(r.case_no), { blk: Number(r.block_count) || 0 })
+  return m
 }
 
 router.post('/preview', authenticateToken, requireImport, (req, res) => {
@@ -49,7 +61,7 @@ router.post('/preview', authenticateToken, requireImport, (req, res) => {
       return
     }
 
-    const rev = computeStatementRevenue(parsed.rows, cfg.config)
+    const rev = computeStatementRevenue(parsed.rows, cfg.config, { lisWorkload: loadLisWorkload(db, partnerId) })
     // codex verify-M1：传了 serviceMonth 就按 LIS 登记月过滤本期病例，否则全院（无日期 LIS 不计入本期 backward 缺口）
     const lisRows = (serviceMonth
       ? db.prepare(`SELECT case_no FROM lis_cases WHERE partner_id = ? AND replace(substr(COALESCE(operate_time, ''), 1, 7), '/', '-') = ?`).all(partnerId, serviceMonth)
@@ -65,7 +77,7 @@ router.post('/preview', authenticateToken, requireImport, (req, res) => {
       partnerId, configVersion: cfg.version, template: parsed.template, serviceMonth: serviceMonth ?? null,
       declaredTotal: parsed.declaredTotal,
       revenue: {
-        labRevenue: rev.labRevenue, outSettle: rev.outSettle, unmatchedSettle: rev.unmatchedSettle,
+        labRevenue: rev.labRevenue, diagnosisSettle: rev.diagnosisSettle, outSettle: rev.outSettle, unmatchedSettle: rev.unmatchedSettle,
         ambiguousSettle: rev.ambiguousSettle, totalSettle: rev.totalSettle, byLine: rev.byLine, counts: rev.counts,
       },
       score,
@@ -96,7 +108,7 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
     if (parsed.template === 'category_summary' || parsed.template === 'joint_venture') {
       error(res, '类别汇总/共建利润表模板暂不支持逐 case 落库（用专用流程）', 'UNSUPPORTED', 400); return
     }
-    const rev = computeStatementRevenue(parsed.rows, cfg.config)
+    const rev = computeStatementRevenue(parsed.rows, cfg.config, { lisWorkload: loadLisWorkload(db, partnerId) })
 
     // codex F5（+verify H1/H2）：未匹配/歧义 或 对账不平 或【无独立合计行无法核对闭合】→ 需财务显式 confirm===true 才落库。
     const confirmed = confirm === true // 严格布尔：'false'/'0'/1 等一律不算确认（H1）
@@ -128,32 +140,34 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
     const importBatch = `STMT-${Date.now()}`
     // codex CRITICAL：唯一键含 partner_id，删插/冲突都按院隔离，防跨院同号同月串账。
     const upsert = db.prepare(`
-      INSERT INTO case_revenue (id, case_no, partner_id, partner_name, doc_no, gross_amount, net_amount, lab_revenue, out_revenue, discount_rate, revenue_source, service_month, config_version, line_count, import_batch)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'statement', ?, ?, ?, ?)
+      INSERT INTO case_revenue (id, case_no, partner_id, partner_name, doc_no, gross_amount, net_amount, lab_revenue, diagnosis_revenue, out_revenue, discount_rate, revenue_source, service_month, config_version, line_count, import_batch)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'statement', ?, ?, ?, ?)
       ON CONFLICT(partner_id, case_no, service_month) DO UPDATE SET
         partner_name = excluded.partner_name, doc_no = excluded.doc_no,
         gross_amount = excluded.gross_amount, net_amount = excluded.net_amount, lab_revenue = excluded.lab_revenue,
+        diagnosis_revenue = excluded.diagnosis_revenue,
         out_revenue = excluded.out_revenue, discount_rate = excluded.discount_rate, revenue_source = 'statement',
         config_version = excluded.config_version, line_count = excluded.line_count, import_batch = excluded.import_batch, updated_at = CURRENT_TIMESTAMP
     `)
     const delLines = db.prepare('DELETE FROM case_revenue_lines WHERE partner_id = ? AND case_no = ? AND service_month = ?')
     const insLine = db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, partner_name, seq, charge_item, gross_amount, discount_rate, net_amount, scope, service_month, import_batch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
-    let labTotal = 0, outTotal = 0, caseCount = 0
+    let labTotal = 0, diagTotal = 0, outTotal = 0, caseCount = 0
     db.exec('BEGIN IMMEDIATE')
     try {
       for (const [no, lines] of linesByCase) {
-        let gross = 0, net = 0, lab = 0, out = 0
+        let gross = 0, net = 0, lab = 0, diag = 0, out = 0
         for (const r of lines) {
           gross = round2(gross + fin(r.bill)); net = round2(net + fin(r.settle))
-          if (r.status === 'in') lab = round2(lab + fin(r.settle))
-          else if (r.status === 'out') out = round2(out + fin(r.settle))
+          // in=labPortion(=settle) / split=分摊后的制片份额；diagnosis=diagPortion(=settle) / split=诊断份额；out=整条
+          lab = round2(lab + fin(r.labPortion)); diag = round2(diag + fin(r.diagPortion))
+          if (r.status === 'out') out = round2(out + fin(r.settle))
         }
         const dr = gross > 0 ? round4(net / gross) : 0
-        upsert.run(`CR-${uuidv4()}`, no, partnerId, partner.name, docNo || null, gross, net, lab, out, dr, serviceMonth, cfg.version, lines.length, importBatch)
+        upsert.run(`CR-${uuidv4()}`, no, partnerId, partner.name, docNo || null, gross, net, lab, diag, out, dr, serviceMonth, cfg.version, lines.length, importBatch)
         delLines.run(partnerId, no, serviceMonth)
         lines.forEach((r, i) => insLine.run(`CRL-${uuidv4()}`, no, partnerId, partner.name, i + 1, r.item, fin(r.bill), fin(r.rate), fin(r.settle), r.status, serviceMonth, importBatch))
-        labTotal = round2(labTotal + lab); outTotal = round2(outTotal + out); caseCount++
+        labTotal = round2(labTotal + lab); diagTotal = round2(diagTotal + diag); outTotal = round2(outTotal + out); caseCount++
       }
       backfillAbcPartnerIds(db)
       db.exec('COMMIT')
@@ -161,9 +175,9 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
 
     success(res, {
       partnerId, serviceMonth, configVersion: cfg.version, importBatch,
-      caseCount, labRevenue: labTotal, outSettle: outTotal,
+      caseCount, labRevenue: labTotal, diagnosisSettle: diagTotal, outSettle: outTotal,
       unmatchedSettle: rev.unmatchedSettle, ambiguousSettle: rev.ambiguousSettle, skippedNoCase,
-    }, `已入库 ${caseCount} case·实验室收入 ¥${labTotal}（移出 ¥${outTotal}，未匹配 ¥${rev.unmatchedSettle}）`)
+    }, `已入库 ${caseCount} case·实验室收入 ¥${labTotal}（诊断桶 ¥${diagTotal}，移出 ¥${outTotal}，未匹配 ¥${rev.unmatchedSettle}）`)
   } catch (e: any) { error(res, e.message) }
 })
 
