@@ -17,15 +17,29 @@
 
 // —— 类型（与 mockup 配置对象 1:1）——
 
+/**
+ * 业务线归类范围（scope）：
+ *  - in        整条计入实验室（染色：免疫组化/特殊染色——判读已含在诊断费里，不重复计）。
+ *  - out       整条移出（外送 NGS/FISH、远程、共建分成、科研——非实验室实物工序）。
+ *  - split      老捆绑码「制片(IN) + 诊断(诊断桶)」逐病例按国标比例拆（G1 §2）：
+ *               制片份额 = splitProcRate × 工作量 / (splitProcRate × 工作量 + 105)。
+ *               工作量来源见 splitWorkload；诊断份额落「诊断桶」(diagnosisSettle)。
+ *  - diagnosis 整条落诊断桶（报告/现场服务——是我们的钱但非实验室技术工序，不进实验室收入也不进 out）。
+ * 注：split/diagnosis 为**新增可选口径**，默认模板仍全用 in/out（零回归）；仅新口径配置显式启用。
+ */
+export type LineScope = 'in' | 'out' | 'split' | 'diagnosis'
+
 /** 一条业务线（检测类别）。key = 稳定标识（非位置索引，防 reorder 错位）。 */
 export interface PartnerConfigLine {
   key: string
   name: string
   on: boolean
-  scope: 'in' | 'out' // 计入实验室 / 移出
+  scope: LineScope // 计入实验室 / 移出 / 制片拆分 / 诊断桶
   prefixes: string[] // 病理号前缀识别词（如 冰 / H / M）
   keywords: string[] // 项目名含
   remarks: string[] // 备注含（仅列映射了备注列时生效）
+  splitProcRate?: number // scope=split 专用：国标处理费率（组织 36/标本、细胞 75/玻片…），拆分公式分子系数
+  splitWorkload?: 'lis_blk' | 'qty' // scope=split 专用：工作量来源。lis_blk=LIS 真蜡块（组织检诊，最准）；qty=账单数量（无 LIS 降级/TCT/冰冻）。缺省 qty
 }
 
 export interface PartnerConfig {
@@ -107,13 +121,22 @@ export function normalizeConfig(input: any): PartnerConfig {
     if (!key) throw new Error(`业务线[${i}] 缺 key`)
     if (seenKeys.has(key)) throw new Error(`业务线 key 重复：${key}`)
     seenKeys.add(key)
-    if (l.scope !== 'in' && l.scope !== 'out') throw new Error(`业务线「${key}」scope 必须为 in 或 out`)
+    if (l.scope !== 'in' && l.scope !== 'out' && l.scope !== 'split' && l.scope !== 'diagnosis')
+      throw new Error(`业务线「${key}」scope 必须为 in / out / split / diagnosis`)
     const arr = (x: any, name: string): string[] => {
       if (x == null) return []
       if (!Array.isArray(x)) throw new Error(`业务线「${key}」${name} 必须是数组`)
       return x.map((s: any) => String(s))
     }
-    return { key, name: String(l.name ?? key), on: !!l.on, scope: l.scope, prefixes: arr(l.prefixes, 'prefixes'), keywords: arr(l.keywords, 'keywords'), remarks: arr(l.remarks, 'remarks') }
+    const line: PartnerConfigLine = { key, name: String(l.name ?? key), on: !!l.on, scope: l.scope, prefixes: arr(l.prefixes, 'prefixes'), keywords: arr(l.keywords, 'keywords'), remarks: arr(l.remarks, 'remarks') }
+    // split 专用字段：保存/回滚往返必须保留，否则重载后拆分口径丢失（份额退化成 0 或 NaN）。
+    if (l.scope === 'split') {
+      const rate = Number(l.splitProcRate)
+      if (!Number.isFinite(rate) || rate <= 0) throw new Error(`业务线「${key}」scope=split 须给正的 splitProcRate（国标处理费率）`)
+      line.splitProcRate = rate
+      line.splitWorkload = l.splitWorkload === 'lis_blk' ? 'lis_blk' : 'qty'
+    }
+    return line
   })
   const d = input.discount || {}
   const discount = {

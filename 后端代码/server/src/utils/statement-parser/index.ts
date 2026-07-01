@@ -41,6 +41,7 @@ export interface ColMap {
   settle: number
   remark: number
   campus: number
+  qty: number // 数量（split 制片拆分工作量降级用）
 }
 
 export interface ParsedRow {
@@ -51,6 +52,7 @@ export interface ParsedRow {
   rate: number // 扣率；缺=NaN
   settle: number // 结算金额（折后实收）= bill×rate（缺则现算）
   campus: string
+  qty?: number // 数量（scope=split 工作量降级来源；缺省按 1，与 golden 脚本 `parseFloat||1` 一致）
 }
 
 export interface ParseResult {
@@ -181,7 +183,8 @@ export function detectColMap(headerRowCells: Grid[number]): ColMap {
   const rate = pickCol(header, used, [/^结算扣率$|^结算↵?扣率$/, /^分配率$/, /^基础费分配率$/, /^远程比率$|^远程↵?比率$/, /扣率|分配率|比率/])
   const remark = pickCol(header, used, [/^备注$/, /住院号|检验编号/])
   const campus = pickCol(header, used, [/院区/])
-  return { caseNo, item, bill, rate, settle, remark, campus }
+  const qty = pickCol(header, used, [/^数量$/, /数量/])
+  return { caseNo, item, bill, rate, settle, remark, campus, qty }
 }
 
 // —— 通用解析（line_item / service_fee_mixed / consult_remote / diagnostic_fee / outsourced_detail）——
@@ -253,6 +256,10 @@ export function parseLineItems(grid: Grid, opts: ParseOpts = {}): ParseResult {
       rate: Number.isFinite(rate) ? round4(rate) : NaN,
       settle: Number.isFinite(settle) ? round2(settle) : NaN,
       campus: colMap.campus >= 0 ? cellStr(row[colMap.campus]) : '',
+      qty: (() => {
+        const q = colMap.qty >= 0 ? toNum(row[colMap.qty]) : NaN
+        return Number.isFinite(q) && q > 0 ? q : 1
+      })(),
     })
   }
 

@@ -34,7 +34,7 @@ describe('GOLDEN 和睦家 W4：实验室收入 = Σ(IN 结算) = ¥13,152', () 
   const rows: ParsedRow[] = HEMUJIA_W4.map((c) => ({ no: c.caseNo, item: '手术标本检查与诊断', remark: '', bill: c.gross, rate: NaN, settle: c.net, campus: '' }))
   const rev = computeStatementRevenue(rows, cfg())
   it('25 行全部计入实验室（组织学 IN），labRevenue=13152，outSettle=0', () => {
-    expect(rev.counts).toEqual({ total: 25, in: 25, out: 0, unmatched: 0, ambiguous: 0 })
+    expect(rev.counts).toEqual({ total: 25, in: 25, out: 0, split: 0, diagnosis: 0, unmatched: 0, ambiguous: 0 })
     expect(rev.labRevenue).toBe(13152)
     expect(rev.outSettle).toBe(0)
   })

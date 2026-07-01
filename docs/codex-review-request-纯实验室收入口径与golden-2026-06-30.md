@@ -58,7 +58,9 @@
 
 ## 数据源（golden 复现已自足，无需本机原始数据）
 
-- **⭐ golden 复现自足**：`node docs/analysis/hemujia-golden-lis-join.cjs` → 直接算出 **IN 27,870 / 诊断桶 27,671 / 守恒 55,541 / 165病例100%匹配**。所需数据已**脱敏**入库（无 PII，仅病理号+送检医院+金额/工作量数）：
+- **⭐ golden 复现自足**：`node docs/analysis/hemujia-golden-lis-join.cjs` → 直接算出 **IN 27,870 / 诊断桶 27,671 / 守恒 55,541 / 165病例100%匹配**。所需数据已**脱敏最小化**入库。**可审计字段清单（codex 09 · HIGH-2 修正，替代原"无 PII"过强表述）**：
+  - 结算表 fixture **保留列** = 病理号 + 项目名称 + 数量 + 项目收费单价 + 收费金额 + 结算扣率 + 结算金额（送检单位在表头）；**已置空列** = 登记日期 / 病人名称(伪名) / 性别 / 年龄 / 住院号(MRN)（复现 golden 不需要，表头标「(已置空)」自证）。
+  - LIS fixture = 仅 病理号 + 蜡块数（`lis_workload__hemujia_2602.json`）。
   - `后端代码/server/tests/fixtures/statements/out_line_item__hemujia_2602.json`（结算表26.2）
   - `docs/analysis/data/lis-hemujia-workload.json`（LIS 蜡块/免疫组化/特染）
   - `docs/analysis/data/billing-w4-hemujia.json`（W4 收费码/金额）

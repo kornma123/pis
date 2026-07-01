@@ -10,7 +10,7 @@
  * 归一（v3 修的地基坑）：NFKC 全角→半角；空前缀/空关键词【不匹配一切】（防 '' 静默吞全部）；空值跳过。
  * 只有 line.on=true 的业务线参与。
  */
-import type { PartnerConfigLine } from './partner-config.js'
+import type { PartnerConfigLine, LineScope } from './partner-config.js'
 
 export interface ClassifyInput {
   no: string // 病理号 / 编号（可空，如外送明细）
@@ -19,7 +19,7 @@ export interface ClassifyInput {
 }
 
 export type ClassifyResult =
-  | { kind: 'matched'; line: PartnerConfigLine; scope: 'in' | 'out'; by: string }
+  | { kind: 'matched'; line: PartnerConfigLine; scope: LineScope; by: string }
   | { kind: 'ambiguous'; lines: PartnerConfigLine[] }
   | { kind: 'none' }
 
