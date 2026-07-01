@@ -56,13 +56,13 @@
 
 ---
 
-## 数据源（复现用，都在 ~/Downloads）
+## 数据源（golden 复现已自足，无需本机原始数据）
 
-- 原始收费单据（W4，含收费代码）：`单据2026062607544902号收费单据.xls`
-- 月度结算表（26.1-26.4，无代码）：`2026年对账单.7z` 内（py7zr 解压）
-- LIS 病例导出（1-4月，含蜡块/免疫组化/特染数）：`病例导出文档20260701 (1).xls`
-- 国标81码：`病理类项目收费代码-YZ.xlsx`；成本台账：`康湾病理结转成本（26.5）/免疫组化相关耗材2025/常规耗材年终盘点2025.xlsx`
-- 复现脚本：`docs/analysis/hemujia-golden-lis-join.cjs`（node+xlsx，算 27,870）
+- **⭐ golden 复现自足**：`node docs/analysis/hemujia-golden-lis-join.cjs` → 直接算出 **IN 27,870 / 诊断桶 27,671 / 守恒 55,541 / 165病例100%匹配**。所需数据已**脱敏**入库（无 PII，仅病理号+送检医院+金额/工作量数）：
+  - `后端代码/server/tests/fixtures/statements/out_line_item__hemujia_2602.json`（结算表26.2）
+  - `docs/analysis/data/lis-hemujia-workload.json`（LIS 蜡块/免疫组化/特染）
+  - `docs/analysis/data/billing-w4-hemujia.json`（W4 收费码/金额）
+- **原始 PII 文件不入库**（姓名/性别/临床诊断/病史/大体描述——防患者隐私泄露，与项目脱敏 fixture 同标准）。如需 G2 成本台账（`康湾结转成本/免疫组化耗材/常规耗材.xlsx`，供应商/单价，非患者 PII）或国标81码原件，向用户索取。
 
 ---
 
