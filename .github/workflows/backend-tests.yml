@@ -1,0 +1,33 @@
+name: Backend Tests (golden)
+
+# 后端 vitest 门禁：守黄金锚 ¥27,870（纯实验室收入拆分）/ ¥13,152（partner 收入）。
+# 背景：此前全项目 CI 只有 e2e（Playwright），无任何 vitest 门禁；破坏黄金的 PR 在 GitHub 上不会变红。
+# 见 docs/COREONE-工作模型调研-…-2026-07-01.md §〇.B。
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main, feat/phase2-lab-revenue-split]
+
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vitest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: 后端代码/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: npm ci
+      - name: Run backend vitest (含 golden ¥27,870 / ¥13,152)
+        # test:node = node --experimental-sqlite ... vitest run（node:sqlite 需该 flag）
+        run: npm run test:node

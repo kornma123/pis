@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, configDefaults } from 'vitest/config'
 import { fileURLToPath } from 'node:url'
 
 // node:sqlite 是 Node 22+ 的实验性内置模块，但 vite 5 的 isBuiltin 剥离 `node:` 前缀后在
@@ -16,6 +16,16 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
+    // 以下 12 个是 tsx 集成冒烟脚本（自定义 test()+process.exit，需 live server，用
+    // `npx tsx tests/X.test.ts` 单跑），不是 vitest 套件。文件名撞了 *.test.ts 会被 include 抓进来
+    // 报 "No test suite found" → 使 `npm test` / CI 天生红。从 vitest 排除（默认排除项照带）。
+    exclude: [
+      ...configDefaults.exclude,
+      'tests/auth.test.ts', 'tests/inbound.test.ts', 'tests/inventory.test.ts',
+      'tests/outbound.test.ts', 'tests/materials.test.ts', 'tests/categories.test.ts',
+      'tests/suppliers.test.ts', 'tests/supplier-returns.test.ts', 'tests/purchase-orders.test.ts',
+      'tests/locations.test.ts', 'tests/roles.test.ts', 'tests/users.test.ts',
+    ],
     testTimeout: 30000,
     globals: true,
     environment: 'node',
