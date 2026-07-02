@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { buildTestApp, getDb } from './p0-harness.js'
 import { seedDefaultConfig, saveConfig, normalizeConfig, type PartnerConfigLine } from '../src/utils/partner-config.js'
+import { buildPartnerPnl } from '../src/utils/partner-pnl-service.js'
 
 let app: any, db: any, financeToken = ''
 const P_LIS = 'PT-SPLIT-LIS' // 有 LIS 蜡块
@@ -96,5 +97,12 @@ describe('/commit 落库诊断桶 + 逐病例守恒', () => {
     expect(row.gross_amount).toBe(600)
     // 逐病例守恒红线：net = lab + diagnosis + out
     expect(row.lab_revenue + row.diagnosis_revenue + row.out_revenue).toBe(row.net_amount)
+  })
+
+  it('看板不藏钱：buildPartnerPnl 把诊断桶单列（labRevenueTotal + diagnosisRevenueTotal = net）', () => {
+    const pnl = buildPartnerPnl(db, { partnerId: P_LIS, serviceMonth: '2026-02' }).find((p: any) => p.partnerId === P_LIS)!
+    expect(pnl.labRevenueTotal).toBe(LAB_LIS) // 162.71，不含诊断桶（毛利分子只用它）
+    expect(pnl.diagnosisRevenueTotal).toBe(DIAG_LIS) // 337.29，单列而非藏在 net−lab 缺口
+    expect(pnl.labRevenueTotal + pnl.diagnosisRevenueTotal).toBe(pnl.netRevenueTotal) // 本例 out=0 → 三桶守恒
   })
 })

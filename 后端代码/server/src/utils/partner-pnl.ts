@@ -42,6 +42,7 @@ export interface CasePnl {
   quality: RevenueQuality
   revenueSource: RevenueSource // 已对账(statement)/估算(estimated)/已修正(corrected)
   outRevenue?: number // 移出额（statement 路径才有）
+  diagnosisRevenue?: number // 诊断桶（报告/现场/split 诊断份额）——我们的钱但非实验室工序（statement 路径才有）
   note?: string
 }
 
@@ -91,7 +92,7 @@ export function computeCasePnl(input: CasePnlInput, catalog: Map<string, ChargeC
  * netRevenue=该 case 全部结算(实收)；labRevenue=IN 部分；outRevenue=移出部分；inScopeRatio=lab/net（仅展示）。
  */
 export function statementCasePnl(
-  input: Omit<CasePnlInput, 'qty'> & { labRevenue: number; outRevenue?: number },
+  input: Omit<CasePnlInput, 'qty'> & { labRevenue: number; outRevenue?: number; diagnosisRevenue?: number },
   source: Extract<RevenueSource, 'statement' | 'corrected'> = 'statement',
 ): CasePnl {
   const net = r2(input.netRevenue)
@@ -100,7 +101,7 @@ export function statementCasePnl(
     caseNo: input.caseNo, partnerId: input.partnerId, partnerName: input.partnerName,
     serviceScope: input.serviceScope, serviceMonth: input.serviceMonth, netRevenue: net,
     techRatio: 0, diagnosisRatio: 0, inScopeRatio: net > 0 ? r4(lab / net) : 0,
-    labRevenue: lab, outRevenue: r2(input.outRevenue ?? 0),
+    labRevenue: lab, outRevenue: r2(input.outRevenue ?? 0), diagnosisRevenue: r2(input.diagnosisRevenue ?? 0),
     quality: 'ok', revenueSource: source,
   }
 }
@@ -111,6 +112,7 @@ export interface PartnerRevenueRollup {
   caseCount: number
   netTotal: number // 财务实收合计
   labRevenueTotal: number // 实验室收入合计
+  diagnosisRevenueTotal: number // 诊断桶合计（我们的钱但非实验室工序；net−lab 的其中一块，别静默藏在缺口里）
   qualityCounts: Record<RevenueQuality, number>
   sourceCounts: Record<RevenueSource, number> // 已对账/估算/已修正 case 数（看板诚实标注）
 }
@@ -121,12 +123,13 @@ export function rollupPartnerRevenue(cases: CasePnl[]): PartnerRevenueRollup[] {
   for (const c of cases) {
     let p = byPartner.get(c.partnerId)
     if (!p) {
-      p = { partnerId: c.partnerId, partnerName: c.partnerName, caseCount: 0, netTotal: 0, labRevenueTotal: 0, qualityCounts: { ok: 0, partial_quantities: 0, no_quantities: 0 }, sourceCounts: { statement: 0, estimated: 0, corrected: 0 } }
+      p = { partnerId: c.partnerId, partnerName: c.partnerName, caseCount: 0, netTotal: 0, labRevenueTotal: 0, diagnosisRevenueTotal: 0, qualityCounts: { ok: 0, partial_quantities: 0, no_quantities: 0 }, sourceCounts: { statement: 0, estimated: 0, corrected: 0 } }
       byPartner.set(c.partnerId, p)
     }
     p.caseCount++
     p.netTotal = r2(p.netTotal + c.netRevenue)
     p.labRevenueTotal = r2(p.labRevenueTotal + c.labRevenue)
+    p.diagnosisRevenueTotal = r2(p.diagnosisRevenueTotal + (c.diagnosisRevenue ?? 0))
     p.qualityCounts[c.quality]++
     p.sourceCounts[c.revenueSource]++
   }

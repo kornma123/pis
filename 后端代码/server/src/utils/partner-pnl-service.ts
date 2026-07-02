@@ -31,6 +31,7 @@ interface RevenueRow {
   net_amount: number
   lab_revenue: number | null // 非 NULL = 配置驱动已对账（Σ(IN结算)，权威）
   out_revenue: number | null
+  diagnosis_revenue: number | null // 诊断桶（报告/现场/split 诊断份额）
   revenue_source: string | null
   service_month: string | null
   he_slide_count: number | null
@@ -49,7 +50,7 @@ export function loadCasePnls(db: DbLike, catalog: Map<string, ChargeCodeDef>, op
   if (opts.serviceMonth) { where += ' AND cr.service_month = ?'; params.push(opts.serviceMonth) }
   if (opts.partnerId) { where += ' AND cr.partner_id = ?'; params.push(opts.partnerId) }
   const rows = db.prepare(`
-    SELECT cr.case_no, cr.partner_id, cr.net_amount, cr.lab_revenue, cr.out_revenue, cr.revenue_source, cr.service_month,
+    SELECT cr.case_no, cr.partner_id, cr.net_amount, cr.lab_revenue, cr.out_revenue, cr.diagnosis_revenue, cr.revenue_source, cr.service_month,
            p.name AS partner_name, p.service_scope,
            lc.he_slide_count, lc.block_count, lc.ihc_count, lc.special_stain_count, lc.eber_count, lc.pdl1_count, lc.specimen_type
     FROM case_revenue cr
@@ -67,6 +68,7 @@ export function loadCasePnls(db: DbLike, catalog: Map<string, ChargeCodeDef>, op
         serviceScope: (r.service_scope as ServiceScope) || 'technical_only',
         netRevenue: Number(r.net_amount) || 0, serviceMonth: r.service_month || undefined,
         labRevenue: Number(r.lab_revenue) || 0, outRevenue: Number(r.out_revenue) || 0,
+        diagnosisRevenue: Number(r.diagnosis_revenue) || 0,
       }, src)
     }
     const hasLis = r.he_slide_count != null || r.block_count != null
@@ -113,6 +115,7 @@ export interface PartnerPnl {
   caseCount: number
   netRevenueTotal: number // 财务实收合计
   labRevenueTotal: number // 实验室收入合计
+  diagnosisRevenueTotal: number // 诊断桶合计（我们的钱但非实验室工序，不进毛利分子）
   costTotal: number // ABC 成本合计（按医院上卷）
   grossMargin: number // 毛利 = 实验室收入 − 成本
   marginRate: number // 毛利率 = grossMargin / labRevenue
@@ -194,6 +197,7 @@ export function buildPartnerPnl(db: DbLike, opts: { serviceMonth?: string; partn
       caseCount: rev.caseCount,
       netRevenueTotal: rev.netTotal,
       labRevenueTotal: rev.labRevenueTotal,
+      diagnosisRevenueTotal: rev.diagnosisRevenueTotal,
       costTotal,
       grossMargin,
       marginRate: rev.labRevenueTotal > 0 ? r4(grossMargin / rev.labRevenueTotal) : 0,
@@ -221,7 +225,7 @@ export function buildPartnerPnl(db: DbLike, opts: { serviceMonth?: string; partn
     if (seen.has(pid)) continue
     rows.push({
       partnerId: pid, partnerName: ngs.partnerName, caseCount: 0,
-      netRevenueTotal: 0, labRevenueTotal: 0, costTotal: 0, grossMargin: 0, marginRate: 0,
+      netRevenueTotal: 0, labRevenueTotal: 0, diagnosisRevenueTotal: 0, costTotal: 0, grossMargin: 0, marginRate: 0,
       avgLabRevenuePerCase: 0, avgCostPerCase: 0, avgMarginPerCase: 0,
       qualityCounts: { ok: 0, partial_quantities: 0, no_quantities: 0 },
       sourceCounts: { statement: 0, estimated: 0, corrected: 0 },
