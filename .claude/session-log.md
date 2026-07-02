@@ -838,4 +838,6 @@ http://your-server-ip:8080
 
 **旁注**：印证 #24 旁注——`.claude/skills-runtime/` 仍是未跟踪目录（未进 .gitignore），本会话已避开、只暂存目标文件。建议后续把它加进 .gitignore。
 
+**收尾（同会话续）**：#25 vitest required check 绿(1m3s)后**已合并**（merge commit `46e2027d`，e2e 非 required、pending 不阻断）→ 前后端模块矩阵均 30，**漂移清零**。顺带落实上条旁注：另开独立 PR [#26](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/26)（`chore/gitignore-skills-runtime` → master）把 `.claude/skills-runtime/` 补进 `.gitignore`（`git check-ignore` 已验证命中）。看板 `pr-governance.md` 同步：#25→MERGED、新增 #26 OPEN 行。#26 待合。
+
 *更新时间：2026-07-02*
