@@ -66,9 +66,9 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#30](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/30) | `feat/reconcile-phase2` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off 已合 #27 的 master；已 merge origin/master 消 #28/#29 带来的前端+doc 冲突：AppSidebar/permissions 保留双方 nav 项[账实核对+LIS 病例]、看板保留双方条目）。账实核对 **Phase 2 三页前端**（复核总览/工作台/补收追踪 + 关账状态机 UI）。走 **mockup 先行红线**：mockup 经真人拍板后落 React。纯前端新增页 + 小改（含 `PERMISSION_MODULES` 30→**31** 补 `account_reconcile`，消 #27 遗留漂移）；后端零改动。tsc + vite build 绿；**真跑端到端**（seed 演示院·登录·认定→补收 gate 口径正确·零报错）。golden 不受影响。**单独可合**。 | merge-order/1 |
+| — | [#30](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/30) | `feat/reconcile-phase2` → `master` | ✅ **MERGED**(2026-07-02, merge commit `393979a3`) | **独立**（非栈式，off 已合 #27 的 master；merge origin/master 消 #28/#29 带来的前端+doc 冲突：AppSidebar/permissions 保留双方 nav 项[账实核对+LIS 病例]、看板保留双方条目）。账实核对 **Phase 2 三页前端**（复核总览/工作台/补收追踪 + 关账状态机 UI）。走 **mockup 先行红线**：mockup 经真人拍板后落 React。含 `PERMISSION_MODULES` 30→**31** 补 `account_reconcile`（消 #27 遗留漂移，前后端 MODULES 31=31 对齐）；后端零改动。vitest required 绿(59s)；tsc+vite build 绿；真跑端到端过。golden 零回归。 | merge-order/1 |
 
-> 🟡 **#30 OPEN（2026-07-02）**：Phase 2 三页前端，off 已合 #27 的 master，等 vitest required check（后端零改动，风险为零）。合并后账实复核+逐抗体成本三阶段（#24 成本地基 → #27 核对引擎 → #30 三页前端）全落 master。
+> ✅ **#30 已合并（2026-07-02, merge commit `393979a3`）**：**账实复核+逐抗体成本三阶段全落 master**（#24 成本地基 → #27 核对引擎 → #30 三页前端）。前后端 `MODULES` 均 31、`PERMISSION_MODULES` 漂移清零。**当前无 open PR。**
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
@@ -90,7 +90,7 @@
 > ✅ **#28 已合并（2026-07-02, merge commit `4f7177a7`）**：LIS 病例导入权威实现 + phase2 配置口径迁移。
 > 🔴 **#21 CLOSED（2026-07-02, 14:43）**：被 #28+#27 取代，关闭时附逐提交核验说明（见 PR 评论），无内容丢失。
 
-**已合/关闭**：#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
+**已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
 > ✅ **合并完成（2026-06-30，账单已修，"按序合栈+拆 e2e 债"）**：#8→#10→#11 依次 merge commit 落 master。**每步 e2e 复校**=三次跑均 **6 failed/251 passed、失败集完全一致**（supplier-returns 5 + auth-logout 1），全栈**零新增 e2e 失败**。这 6 个=master 既有 supplier-returns/auth bug（与本栈无关，已拆 task `c93e8188` 单独修；非 RBAC 403，权限本就授予）。黄金 ¥13,152 守住、后端联合 482 绿。
 >
