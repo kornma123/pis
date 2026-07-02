@@ -34,6 +34,7 @@ import {
   TrendingUp,
   Layers,
   Settings,
+  Scale,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -61,6 +62,7 @@ const ALL_MAIN_MENU: MenuItem[] = [
   { label: '预警中心', path: '/alerts', icon: Bell },
   // ===== 按医院成本/盈利 =====
   { label: '医院盈利看板', path: '/hospital-pnl', icon: TrendingUp },
+  { label: '账实核对', path: '/account-reconcile', icon: Scale },
   { label: '合作医院配置', path: '/partner-config', icon: Settings },
   { label: '导入测试台', path: '/import-console', icon: FlaskConical },
   { label: '财务月度导入', path: '/import-wizard', icon: FileText },

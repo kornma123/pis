@@ -34,6 +34,7 @@ import IndirectCostCenterList from '@/pages/cost-center/IndirectCostCenterList'
 import CostDashboard from '@/pages/cost/CostDashboard'
 import HospitalPnLDashboard from '@/pages/hospital-pnl/HospitalPnLDashboard'
 import PartnerConfigPage from '@/pages/partner-config/PartnerConfigPage'
+import AccountReconcilePage from '@/pages/account-reconcile/AccountReconcilePage'
 import ImportConsolePage from '@/pages/import-console/ImportConsolePage'
 import ImportWizardPage from '@/pages/import-wizard/ImportWizardPage'
 import SlideCostAnalysis from '@/pages/cost/SlideCostAnalysis'
@@ -89,6 +90,7 @@ function App() {
           <Route path="/labor-times" element={<LaborTimeList />} />
           <Route path="/indirect-costs" element={<IndirectCostCenterList />} />
           <Route path="/hospital-pnl" element={<HospitalPnLDashboard />} />
+          <Route path="/account-reconcile" element={<AccountReconcilePage />} />
           <Route path="/partner-config" element={<PartnerConfigPage />} />
           <Route path="/import-console" element={<ImportConsolePage />} />
           <Route path="/import-wizard" element={<ImportWizardPage />} />

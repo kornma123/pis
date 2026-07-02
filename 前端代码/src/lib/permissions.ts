@@ -99,6 +99,7 @@ export const NAV_PATH_MODULE: Record<string, string> = {
   '/inventory': 'inventory', '/inbound': 'inbound', '/outbound': 'outbound', '/returns': 'returns',
   '/supplier-returns': 'supplier_returns', '/scraps': 'scraps', '/transfers': 'transfers', '/stocktaking': 'stocktaking',
   '/projects': 'projects', '/bom': 'bom', '/reconciliation': 'reconciliation', '/cost-analysis': 'cost_analysis',
+  '/account-reconcile': 'account_reconcile',
   '/categories': 'categories', '/materials': 'materials', '/alerts': 'alerts',
   '/purchase-orders': 'purchase_orders', '/suppliers': 'suppliers', '/locations': 'locations',
   '/users': 'users', '/roles': 'roles', '/logs': 'logs',
@@ -134,7 +135,7 @@ export function getAccessiblePaths(): string[] {
 export const ROLE_MENU_MAP: Record<string, string[]> = {
   admin: [
     '/', '/inventory', '/inbound', '/outbound', '/returns', '/supplier-returns', '/scraps', '/transfers', '/stocktaking',
-    '/projects', '/bom', '/reconciliation', '/cost-analysis',
+    '/projects', '/bom', '/reconciliation', '/account-reconcile', '/cost-analysis',
     '/categories', '/materials', '/alerts',
     '/purchase-orders', '/suppliers', '/locations', '/users', '/roles', '/logs', '/partner-config', '/import-console', '/import-wizard',
     // ABC 成本核算（移植）
@@ -154,7 +155,7 @@ export const ROLE_MENU_MAP: Record<string, string[]> = {
     '/', '/inventory', '/inbound', '/materials', '/suppliers', '/purchase-orders', '/supplier-returns', '/categories', '/alerts',
   ],
   finance: [
-    '/', '/inventory', '/supplier-returns', '/reconciliation', '/cost-analysis', '/categories', '/alerts', '/partner-config', '/import-console', '/import-wizard',
+    '/', '/inventory', '/supplier-returns', '/reconciliation', '/account-reconcile', '/cost-analysis', '/categories', '/alerts', '/partner-config', '/import-console', '/import-wizard',
     // ABC 成本核算（移植）
     '/abc/dashboard', '/abc/slide-cost', '/abc/profitability', '/abc/activity-centers', '/equipment', '/labor-times', '/indirect-costs',
   ],
