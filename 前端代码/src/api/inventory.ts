@@ -1,5 +1,5 @@
 import request, { genIdempotencyKey } from './request'
-import type { ApiResponse, PaginationData, InventoryItem, InventoryStats, InboundRecord, InboundFormData, OutboundRecord, OutboundFormData, PageParams, SupplierReturnRecord, SupplierReturnFormData } from '@/types'
+import type { PaginationData, InventoryItem, InventoryStats, InboundRecord, InboundFormData, OutboundRecord, OutboundFormData, PageParams, SupplierReturnRecord, SupplierReturnFormData } from '@/types'
 
 export const inventoryApi = {
   getList: (params?: PageParams & { status?: string; categoryId?: string; locationId?: string }) =>
@@ -10,7 +10,7 @@ export const inventoryApi = {
 }
 
 export const inboundApi = {
-  getList: (params?: PageParams & { status?: string; startDate?: string; endDate?: string }) =>
+  getList: (params?: PageParams & { status?: string; type?: string; materialId?: string; startDate?: string; endDate?: string }) =>
     request.get<PaginationData<InboundRecord>>('/inbound', { params }),
 
   // idempotencyKey：同一次提交动作传同一个 key，可防网络重试/代理重发/双击重复入账；不传则按本次调用自动生成。

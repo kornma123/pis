@@ -30,7 +30,7 @@ export function useUrlParams() {
   )
 
   const set = useCallback(
-    (key: string, value: string | number | null) => {
+    (key: string, value: string | number | null | undefined) => {
       const newParams = new URLSearchParams(window.location.search)
       if (value === null || value === '' || value === undefined) {
         newParams.delete(key)

@@ -1,5 +1,4 @@
 import { X } from 'lucide-react'
-import type { User } from '@/types'
 import type { FormData } from '../hooks/useUsersPage'
 import { frontendSoDConflicts } from '../hooks/useUsersPage'
 

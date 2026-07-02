@@ -1,5 +1,5 @@
 import React from 'react'
-import { Plus, Search, Edit2, Trash2, Wrench } from 'lucide-react'
+import { Plus, Search, Wrench } from 'lucide-react'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useEquipmentTypePage } from './hooks/useEquipmentTypePage'

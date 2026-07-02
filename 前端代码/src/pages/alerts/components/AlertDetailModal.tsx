@@ -1,6 +1,5 @@
 import { X } from 'lucide-react'
 import type { AlertItem } from '../hooks/useAlertsPage'
-import { ALERT_TYPE_MAP } from '../hooks/useAlertsPage'
 
 interface Props {
   open: boolean
@@ -12,8 +11,6 @@ interface Props {
 
 export function AlertDetailModal({ open, alert, onClose, onHandle, formatDate }: Props) {
   if (!open || !alert) return null
-
-  const typeInfo = ALERT_TYPE_MAP[alert.type] || { label: alert.type, bg: 'bg-gray-50', text: 'text-gray-600' }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

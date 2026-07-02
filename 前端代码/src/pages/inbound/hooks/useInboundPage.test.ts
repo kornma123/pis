@@ -3,7 +3,6 @@ import { renderHook, waitFor, act } from '@testing-library/react'
 import { useInboundPage } from './useInboundPage'
 import { inboundApi, purchaseOrderApi } from '@/api/inventory'
 import { materialApi, supplierApi, locationApi } from '@/api/master'
-import { toast } from 'sonner'
 import type { InboundRecord, Material, Supplier, Location } from '@/types'
 
 vi.mock('@/api/inventory')
@@ -49,7 +48,7 @@ describe('useInboundPage', () => {
       pagination: { total: 1, page: 1, pageSize: 20 },
     } as any)
     vi.mocked(inboundApi.getStats).mockResolvedValue({ total: 1, completed: 1, cancelled: 0, amount: 5000, supplierCount: 1, pendingOrders: 0 } as any)
-    vi.mocked(inboundApi.checkDeletable).mockResolvedValue({ data: { canDelete: true } } as any)
+    vi.mocked(inboundApi.checkDeletable).mockResolvedValue({ canDelete: true } as any)
     vi.mocked(inboundApi.delete).mockResolvedValue({} as any)
     vi.mocked(inboundApi.create).mockResolvedValue({} as any)
     vi.mocked(inboundApi.update).mockResolvedValue({} as any)
@@ -58,7 +57,7 @@ describe('useInboundPage', () => {
     vi.mocked(materialApi.getList).mockResolvedValue({ list: mockMaterials, pagination: { total: 1 } } as any)
     vi.mocked(supplierApi.getList).mockResolvedValue({ list: mockSuppliers, pagination: { total: 1 } } as any)
     vi.mocked(locationApi.getList).mockResolvedValue({ list: mockLocations, pagination: { total: 1 } } as any)
-    vi.mocked(purchaseOrderApi.getList).mockResolvedValue({ data: { list: [] } } as any)
+    vi.mocked(purchaseOrderApi.getList).mockResolvedValue({ list: [] } as any)
     vi.mocked(purchaseOrderApi.receive).mockResolvedValue({} as any)
   })
 
@@ -95,7 +94,7 @@ describe('useInboundPage', () => {
   })
 
   it('should block delete when pre-check fails', async () => {
-    vi.mocked(inboundApi.checkDeletable).mockResolvedValue({ data: { canDelete: false, reasons: ['已有出库记录'] } } as any)
+    vi.mocked(inboundApi.checkDeletable).mockResolvedValue({ canDelete: false, reasons: ['已有出库记录'] } as any)
 
     const { result } = renderHook(() => useInboundPage())
     await waitFor(() => expect(result.current.loading).toBe(false))

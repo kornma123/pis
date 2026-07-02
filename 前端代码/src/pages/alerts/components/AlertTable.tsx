@@ -1,7 +1,6 @@
 import { Search, RotateCcw, CheckSquare, Clock, Eye } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import type { AlertItem, AlertTypeFilter, AlertStatusFilter } from '../hooks/useAlertsPage'
-import { ALERT_TYPE_MAP, STATUS_MAP } from '../hooks/useAlertsPage'
 
 interface Props {
   data: AlertItem[]

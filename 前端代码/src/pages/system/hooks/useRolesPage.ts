@@ -74,7 +74,7 @@ export const DATA_SCOPE_OPTIONS = [
 ]
 
 export function useRolesPage() {
-  const { get, getNumber, setMultiple } = useUrlParams()
+  const { getNumber, setMultiple } = useUrlParams()
 
   const [keyword, setKeyword] = useState('')
   const [tabType, setTabType] = useState<'all' | 'system' | 'custom'>('all')

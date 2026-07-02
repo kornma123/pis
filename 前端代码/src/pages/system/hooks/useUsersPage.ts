@@ -39,7 +39,7 @@ export interface RoleItem {
 }
 
 export function useUsersPage() {
-  const { get, getNumber, setMultiple } = useUrlParams()
+  const { getNumber, setMultiple } = useUrlParams()
 
   const [keyword, setKeyword] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
@@ -84,7 +84,7 @@ export function useUsersPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
   const [form, setForm] = useState<FormData>({
-    username: '', realName: '', role: 'operator', department: '', phone: '', email: '', status: 'active'
+    username: '', realName: '', role: 'operator', roles: [], primaryRole: '', department: '', phone: '', email: '', status: 'active'
   })
 
   const [roles, setRoles] = useState<RoleItem[]>([])

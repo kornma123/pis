@@ -574,6 +574,7 @@ export interface IndirectCostCenter {
   code: string
   name: string
   costType: string
+  costTypeLabel?: string
   monthlyAmount: number
   allocationBase: string
   description?: string
@@ -660,6 +661,7 @@ export interface CostAdjustment {
   adjustmentReason?: string
   adjustedBy?: string
   adjustedAt?: string
+  submittedByName?: string
   reviewStatus: 'pending' | 'approved' | 'rejected'
   reviewedBy?: string
   reviewedAt?: string

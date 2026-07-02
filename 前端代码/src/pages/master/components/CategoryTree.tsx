@@ -1,4 +1,3 @@
-import { useCallback } from 'react'
 import { ChevronRight, ChevronDown, Folder, Circle, Plus, Edit2, Trash2, Search, X } from 'lucide-react'
 import type { Category } from '@/types'
 

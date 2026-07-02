@@ -3,7 +3,7 @@ import { Search, TrendingUp, TrendingDown, Minus, AlertTriangle, ChevronDown, Ch
 import { toast } from 'sonner'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, Cell, LineChart, Line,
+  ResponsiveContainer, Legend, LineChart, Line,
 } from 'recharts'
 import { abcApi } from '@/api/abc'
 import { downloadTextFile, formatCurrency } from '@/lib/utils'

@@ -6,7 +6,19 @@ import { reportsApi } from '@/api/reports'
 import { formatCurrency } from '@/lib/utils'
 import type { SupplierCostReport } from '@/types'
 
-type SupplierCostRow = SupplierCostReport['suppliers'][number]
+// normalizeSupplierCostRow 会补齐所有字段，故规范化后的行这些字段均为必填（API 原始类型里是可选）
+type SupplierCostRow = {
+  id: string
+  name: string
+  amount: number
+  grossAmount: number
+  refundedAmount: number
+  refundedReturnCount: number
+  supplierReturnUrl: string
+  ratio: number
+  orderCount: number
+  status: string
+}
 
 function normalizeSupplierCostRow(row: Partial<SupplierCostRow>): SupplierCostRow {
   const refundedAmount = Number(row.refundedAmount) || 0

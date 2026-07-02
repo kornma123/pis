@@ -10,7 +10,7 @@ interface Props {
   onToggleStatus: (loc: Location) => void
 }
 
-export function LocationCards({ loading, data, selectedNodeName, onEdit, onDelete, onToggleStatus }: Props) {
+export function LocationCards({ loading, data, onEdit, onDelete, onToggleStatus }: Props) {
   return (
     <div className="p-5">
       {loading ? (

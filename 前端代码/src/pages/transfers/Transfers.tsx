@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, X, ArrowRightLeft, Trash2 } from 'lucide-react'
+import { X, ArrowRightLeft, Trash2 } from 'lucide-react'
 import { usePagination } from '@/hooks/usePagination'
 import { Pagination } from '@/components/ui/Pagination'
 import { transferApi } from '@/api/inventory'
@@ -136,7 +136,7 @@ export default function Transfers() {
                       <td className="px-4 py-3 font-medium text-gray-900">{mat?.name || row.materialName || row.materialId}</td>
                       <td className="px-4 py-3 text-right">{row.quantity} {mat?.unit}</td>
                       <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700">{row.locationName || row.toLocationId}</span>
+                        <span className="px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700">{row.toLocationName || row.toLocationId}</span>
                       </td>
                       <td className="px-4 py-3 text-gray-600">{row.operator}</td>
                       <td className="px-4 py-3 text-gray-500">{formatDate(row.createdAt)}</td>

@@ -140,7 +140,7 @@ export function useReconciliationPage() {
     } catch (e) { console.error(e) } finally { setLoading(false) }
   }, [dateParams])
 
-  const { get, getNumber, setMultiple } = useUrlParams()
+  const { getNumber, setMultiple } = useUrlParams()
 
   const casePagination = usePagination<LisCase>({
     fetchFn: async ({ page, pageSize }) => {

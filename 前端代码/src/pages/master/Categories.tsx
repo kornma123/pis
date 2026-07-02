@@ -1,4 +1,4 @@
-import { Plus, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, ChevronDown, ChevronUp, Edit2, Trash2 } from 'lucide-react'
 import { useCategoriesPage } from './hooks/useCategoriesPage'
 import { CategoryTree } from './components/CategoryTree'
 import { CategoryDetail } from './components/CategoryDetail'

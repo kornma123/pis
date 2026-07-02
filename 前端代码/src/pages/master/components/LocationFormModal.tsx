@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import type { Location } from '@/types'
 import type { FormData, ModalType } from '../hooks/useLocationsPage'
-import { typeOptions, getTypeIcon, getTypeLabel } from '../hooks/useLocationsPage'
+import { typeOptions, getTypeIcon } from '../hooks/useLocationsPage'
 
 interface Props {
   open: boolean
@@ -20,7 +20,6 @@ export function LocationFormModal({
   open,
   type,
   form,
-  editingId,
   data,
   flatLocations,
   levelConfigs,

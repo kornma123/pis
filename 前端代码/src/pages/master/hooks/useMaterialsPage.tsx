@@ -23,7 +23,7 @@ export interface FormData {
 export type QuickFilter = 'all' | 'active' | 'inactive' | 'low-stock'
 
 export function useMaterialsPage() {
-  const { get, getNumber, setMultiple } = useUrlParams()
+  const { getNumber, setMultiple } = useUrlParams()
 
   const [keyword, setKeyword] = useState('')
   const [categoryId, setCategoryId] = useState('')

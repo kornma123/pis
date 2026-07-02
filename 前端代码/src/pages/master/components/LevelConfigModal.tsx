@@ -1,5 +1,5 @@
 import { X, Plus } from 'lucide-react'
-import type { typeOptions } from '../hooks/useLocationsPage'
+import { typeOptions } from '../hooks/useLocationsPage'
 
 interface Props {
   open: boolean

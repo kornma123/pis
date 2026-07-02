@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import type { InboundRecord, Material, Supplier, Location } from '@/types'
 
@@ -22,7 +23,7 @@ interface InboundFormModalProps {
   open: boolean
   modalType: 'create' | 'edit'
   form: FormData
-  setForm: (form: FormData) => void
+  setForm: Dispatch<SetStateAction<FormData>>
   materials: Material[]
   locations: Location[]
   suppliers: Supplier[]
@@ -65,7 +66,6 @@ export default function InboundFormModal({
   purchaseOrders,
   selectedOrderId,
   setSelectedOrderId,
-  selectedRecord,
   submitting,
   onClose,
   onSubmit,

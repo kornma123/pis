@@ -300,12 +300,12 @@ export default function BudgetManagement() {
                     <div className="flex items-center gap-3">
                       <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all ${getProgressColor(budget.executionRate)}`}
-                          style={{ width: `${Math.min(budget.executionRate * 100, 100)}%` }}
+                          className={`h-full rounded-full transition-all ${getProgressColor(budget.executionRate ?? 0)}`}
+                          style={{ width: `${Math.min((budget.executionRate ?? 0) * 100, 100)}%` }}
                         />
                       </div>
-                      <span className={`text-sm font-medium w-14 text-right ${getProgressTextColor(budget.executionRate)}`}>
-                        {(budget.executionRate * 100).toFixed(1)}%
+                      <span className={`text-sm font-medium w-14 text-right ${getProgressTextColor(budget.executionRate ?? 0)}`}>
+                        {((budget.executionRate ?? 0) * 100).toFixed(1)}%
                       </span>
                     </div>
                   </td>

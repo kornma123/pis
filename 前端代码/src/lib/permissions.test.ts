@@ -91,7 +91,7 @@ describe('permissions', () => {
     })
 
     it('should have no duplicate routes within a role', () => {
-      Object.entries(ROLE_MENU_MAP).forEach(([role, routes]) => {
+      Object.entries(ROLE_MENU_MAP).forEach(([, routes]) => {
         const unique = new Set(routes)
         expect(unique.size).toBe(routes.length)
       })

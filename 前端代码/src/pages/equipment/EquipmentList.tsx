@@ -1,5 +1,5 @@
 import React from 'react'
-import { Plus, Search, Eye, Edit2, Trash2, Settings, BarChart3 } from 'lucide-react'
+import { Plus, Search, Settings } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { useEquipmentPage } from './hooks/useEquipmentPage'

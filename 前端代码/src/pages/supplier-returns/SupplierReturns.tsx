@@ -7,7 +7,6 @@ import {
   Package,
   Truck,
   RotateCcw,
-  FileText,
   Eye,
   Trash2,
   ChevronRight,
@@ -653,14 +652,13 @@ export default function SupplierReturns() {
                         标记退款完成
                       </button>
                     )}
-                    {detailRecord.status !== 'cancelled' && (
-                      <button
-                        onClick={() => handleStatusChange(detailRecord.id, 'cancelled')}
-                        className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs rounded-md hover:bg-gray-200 transition-colors"
-                      >
-                        取消退货
-                      </button>
-                    )}
+                    {/* 外层已排除 refunded/cancelled，此处 status 必为 pending|shipped|received，可直接展示取消按钮 */}
+                    <button
+                      onClick={() => handleStatusChange(detailRecord.id, 'cancelled')}
+                      className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs rounded-md hover:bg-gray-200 transition-colors"
+                    >
+                      取消退货
+                    </button>
                   </div>
                 </div>
               )}

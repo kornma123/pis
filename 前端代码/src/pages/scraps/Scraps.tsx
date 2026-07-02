@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, X, Trash2 } from 'lucide-react'
+import { X, Trash2 } from 'lucide-react'
 import { usePagination } from '@/hooks/usePagination'
 import { Pagination } from '@/components/ui/Pagination'
 import { scrapApi } from '@/api/inventory'

@@ -214,7 +214,7 @@ export function useInboundPage() {
   const fetchPurchaseOrders = async () => {
     try {
       const res = await purchaseOrderApi.getList({ status: 'pending,partial', pageSize: 100 })
-      setPurchaseOrders(res.data?.list || [])
+      setPurchaseOrders(res?.list || [])
     } catch (e) {
       setPurchaseOrders([])
     }
@@ -287,6 +287,7 @@ export function useInboundPage() {
       productionDate: record.productionDate || '',
       expiryDate: record.expiryDate || '',
       remark: record.remark || '',
+      purchaseOrderId: '',
     })
     fetchRefs()
     setModalType('edit')
@@ -295,8 +296,8 @@ export function useInboundPage() {
   const handleDelete = async (record: InboundRecord) => {
     try {
       const check = await inboundApi.checkDeletable(record.id)
-      if (!check.data?.canDelete) {
-        const reasons = check.data?.reasons || ['该记录不可删除']
+      if (!check?.canDelete) {
+        const reasons = check?.reasons || ['该记录不可删除']
         openConfirmModal('不可删除', reasons.join('；'), () => {})
         return
       }

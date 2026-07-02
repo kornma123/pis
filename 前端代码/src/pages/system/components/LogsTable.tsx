@@ -1,4 +1,3 @@
-import { Search } from 'lucide-react'
 import type { OperationLog } from '@/types'
 import { Pagination } from '@/components/ui/Pagination'
 

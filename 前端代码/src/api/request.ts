@@ -4,6 +4,21 @@ import { toast } from 'sonner'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 
+/**
+ * 响应拦截器（见下方）会在成功时返回 `response.data.data`，即**已解包**的业务负载。
+ * 因此每个请求方法的运行时返回值是 `T` 本身，而不是 axios 默认的 `AxiosResponse<T>`。
+ * 这里用 ApiClient 覆盖 axios 的方法签名，让静态类型与运行时行为对齐——调用方直接拿到 `T`。
+ */
+export interface ApiClient {
+  get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
+  delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
+  head<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
+  options<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
+  post<T = any>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T>
+  put<T = any>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T>
+  patch<T = any>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T>
+}
+
 const request = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
@@ -148,4 +163,5 @@ request.interceptors.response.use(
   }
 )
 
-export default request
+// 运行时是原生 axios 实例；对外类型收敛为「已解包」的 ApiClient（见接口注释）。
+export default request as unknown as ApiClient

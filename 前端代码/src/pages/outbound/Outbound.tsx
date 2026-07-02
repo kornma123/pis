@@ -20,7 +20,7 @@ type QuickFilter = 'all' | 'today' | 'week' | 'month'
 type StatusFilter = '' | 'completed' | 'pending' | 'cancelled'
 
 export default function Outbound() {
-  const { get, getNumber, setMultiple } = useUrlParams()
+  const { getNumber, setMultiple } = useUrlParams()
 
   const urlPage = Math.max(1, getNumber('page', 1))
   const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 10))

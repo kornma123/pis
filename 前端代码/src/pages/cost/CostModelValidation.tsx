@@ -61,7 +61,7 @@ export default function CostModelValidation() {
   const loadBomList = async () => {
     try {
       setLoading(true)
-      const res = await bomApi.getList({ pageSize: 200 })
+      const res: any = await bomApi.getList({ pageSize: 200 })
       const items = res?.items || res?.list || []
       setBomList(items.map((b: any) => ({
         id: b.id,
@@ -96,7 +96,7 @@ export default function CostModelValidation() {
       setResult(null)
 
       // Fetch BOM detail and activity links in parallel
-      const [bomDetail, bomLinksRes] = await Promise.all([
+      const [bomDetail, bomLinksRes]: [any, any] = await Promise.all([
         bomApi.getDetail(selectedBomId),
         abcApi.getBomLinks(selectedBomId).catch(() => null),
       ])

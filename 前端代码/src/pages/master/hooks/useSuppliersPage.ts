@@ -21,7 +21,7 @@ export interface FormData {
 export type ModalType = 'create' | 'edit' | 'detail' | null
 
 export function useSuppliersPage() {
-  const { get, getNumber, setMultiple } = useUrlParams()
+  const { getNumber, setMultiple } = useUrlParams()
 
   const [searchKeyword, setSearchKeyword] = useState('')
   const [searchStatus, setSearchStatus] = useState<string>('all')

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, X, Package } from 'lucide-react'
+import { Search, Plus, X } from 'lucide-react'
 import { usePagination } from '@/hooks/usePagination'
 import { Pagination } from '@/components/ui/Pagination'
 import { purchaseOrderApi } from '@/api/inventory'

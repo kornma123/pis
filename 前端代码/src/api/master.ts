@@ -1,5 +1,5 @@
 import request from './request'
-import type { ApiResponse, PaginationData, Category, Material, Supplier, Location, Project, BOM, PageParams, Equipment, EquipmentType, EquipmentUsage, DepreciationStat, StandardLaborTime, IndirectCostCenter, IndirectCostAllocation, CostAdjustment } from '@/types'
+import type { PaginationData, Category, Material, Supplier, Location, Project, BOM, PageParams, Equipment, EquipmentType, EquipmentUsage, DepreciationStat, StandardLaborTime, IndirectCostCenter, IndirectCostAllocation, CostAdjustment } from '@/types'
 
 export const categoryApi = {
   getTree: () => request.get<Category[]>('/categories/tree'),
@@ -38,7 +38,7 @@ export const locationApi = {
 }
 
 export const projectApi = {
-  getList: (params?: PageParams & { type?: string; status?: string }) =>
+  getList: (params?: PageParams & { type?: string; status?: string; bomFilter?: string }) =>
     request.get<PaginationData<Project>>('/projects', { params }),
   getDetail: (id: string) => request.get<Project>(`/projects/${id}`),
   create: (data: Partial<Project>) => request.post('/projects', data),
@@ -47,12 +47,14 @@ export const projectApi = {
 }
 
 export const bomApi = {
-  getList: (params?: PageParams & { type?: string }) =>
+  getList: (params?: PageParams & { type?: string; status?: string }) =>
     request.get<PaginationData<BOM>>('/boms', { params }),
   getDetail: (id: string) => request.get<BOM>(`/boms/${id}`),
   create: (data: Partial<BOM>) => request.post('/boms', data),
   update: (id: string, data: Partial<BOM>) => request.put(`/boms/${id}`, data),
   delete: (id: string) => request.delete(`/boms/${id}`),
+  // 单张切片成本预览（移植自 abc-productization 分支的 CostPreviewModal 消费）
+  getCostPreview: (id: string) => request.get(`/boms/${id}/cost-preview`),
 }
 
 export const userApi = {

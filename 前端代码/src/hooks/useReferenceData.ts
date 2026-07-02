@@ -3,16 +3,8 @@ import { materialApi, supplierApi, locationApi, projectApi, userApi } from '@/ap
 
 type EntityType = 'materials' | 'suppliers' | 'locations' | 'projects' | 'users'
 
-interface ReferenceDataState {
-  materials: Record<string, unknown>[]
-  suppliers: Record<string, unknown>[]
-  locations: Record<string, unknown>[]
-  projects: Record<string, unknown>[]
-  users: Record<string, unknown>[]
-  loading: boolean
-}
-
-const apiMap: Record<EntityType, (params: Record<string, unknown>) => Promise<Record<string, unknown> | null>> = {
+// 各实体 API 返回分页负载（request 拦截器已解包），此处仅取 list 作为下拉选项。
+const apiMap: Record<EntityType, (params: Record<string, unknown>) => Promise<{ list?: any[] } | null>> = {
   materials: (params) => materialApi.getList(params),
   suppliers: (params) => supplierApi.getList(params),
   locations: (params) => locationApi.getList(params),
@@ -51,9 +43,9 @@ export function useReferenceData(
       const results = await Promise.all(
         entities.map(async (entity) => {
           const api = apiMap[entity]
-          if (!api) return [entity, []] as const
+          if (!api) return [entity, [] as any[]] as const
           const res = await api({ page: 1, pageSize, status })
-          return [entity, res?.list || []] as const
+          return [entity, (res?.list || []) as any[]] as const
         })
       )
       setData(prev => {

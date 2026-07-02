@@ -116,7 +116,7 @@ export default function Materials() {
           confirmVariant={page.confirmProps.confirmVariant}
           onConfirm={() => {
             page.setConfirmOpen(false)
-            page.confirmProps.onConfirm()
+            page.confirmProps?.onConfirm()
           }}
           onCancel={() => page.setConfirmOpen(false)}
         />

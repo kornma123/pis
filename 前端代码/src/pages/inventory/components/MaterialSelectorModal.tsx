@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Search, X, Plus, Check, List, FolderOpen, Package } from 'lucide-react'
 
 interface Material {
@@ -48,7 +47,6 @@ interface Props {
 export function MaterialSelectorModal({
   open,
   tab,
-  materialList,
   materialLoading,
   materialKeyword,
   checkedMaterialIds,

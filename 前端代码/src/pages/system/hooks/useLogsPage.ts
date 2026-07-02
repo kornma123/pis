@@ -42,7 +42,7 @@ export const USERS = [
 ]
 
 export function useLogsPage() {
-  const { get, getNumber, setMultiple } = useUrlParams()
+  const { getNumber, setMultiple } = useUrlParams()
 
   const [keyword, setKeyword] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
