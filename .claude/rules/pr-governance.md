@@ -62,8 +62,13 @@
 | — | [#24](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/24) | `feat/reconcile-cost` → `master` | ✅ **MERGED**(2026-07-02, merge commit `36b8dda4`) | **独立**（非栈式，无上下游）。账实复核+逐抗体成本 **Phase 0 成本地基**：抗体库主数据+每片成本派生+192 种真台账 seed+`antibody_cost` 权限模块；与收入侧物理隔离。vitest required 绿(58s)；golden ¥13,152+¥27,870 零回归。合入后后端 `MODULES`→30；前端 `PERMISSION_MODULES` 漂移由 #25 修。 | merge-order/1 |
 | — | [#27](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/27) | `feat/reconcile-phase1` → `master` | ✅ **MERGED**(2026-07-02, merge commit `5343b572`) | **独立**（非栈式，off 已合 #24 的 master；merge origin/master 消 #25 带来的 doc 冲突）。账实复核+逐抗体成本 **Phase 1 核对引擎**：差异=账单片数vsLIS物理片数+匹配率门+6认定原因+补收gate+关账状态机+`account_reconcile` 权限模块（3 表，只读收入侧）。独立对抗复核修 3 项（HIGH 账单片数 floor / MED 孤儿补收单 / LOW 幂等）。vitest required 绿(1m0s)；golden ¥13,152+¥27,870 零回归。 | merge-order/1 |
 
-> ✅ **#24 → #27 均已合并（2026-07-02）**：Phase 0 成本地基 + Phase 1 核对引擎落 master。**遗留跟进**：本 PR 新增 `account_reconcile`（后端 `MODULES`→31）→ 前端 `PERMISSION_MODULES`（现 30）需再同步到 31（运行时权限已 seed 不阻断）。
-> ▶️ **下一步 Phase 2（三页前端：①复核总览/②复核工作台/③补收追踪）走 mockup 先行红线**（`feat/reconcile-phase2`）——**未定稿不写真代码**：先出 mockup 给真人拍板 + 过术语/文案黑名单，再落 React。
+> ✅ **#24 → #27 均已合并（2026-07-02）**：Phase 0 成本地基 + Phase 1 核对引擎落 master。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#30](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/30) | `feat/reconcile-phase2` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off 已合 #27 的 master）。账实核对 **Phase 2 三页前端**（复核总览/工作台/补收追踪 + 关账状态机 UI）。走 **mockup 先行红线**：mockup 经真人拍板后落 React。纯前端新增页 + 3 处小改（含 `PERMISSION_MODULES` 30→**31** 补 `account_reconcile`，消 Phase 1 遗留漂移）；后端零改动。tsc + vite build 绿；**真跑端到端**（seed 演示院·登录·认定→补收 gate 口径正确·零报错）。golden 不受影响。**单独可合**。 | merge-order/1 |
+
+> 🟡 **#30 OPEN（2026-07-02）**：Phase 2 三页前端，off 已合 #27 的 master，等 vitest required check（本 PR 后端零改动，风险为零；vitest 仍会跑）。合并后账实复核+逐抗体成本三阶段（成本地基→核对引擎→三页前端）全落地。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|

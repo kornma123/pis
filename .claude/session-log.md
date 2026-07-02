@@ -858,7 +858,18 @@ http://your-server-ip:8080
 **范围**：账实核对三页（①复核总览 / ②复核工作台 / ③补收追踪）+ 逐抗体成本页。**走 mockup 先行红线**（`docs/COREONE-前端标准-…-2026-06-27.md`：**未定稿不写真代码**）——先出 mockup 给真人拍板 + 过术语表/文案黑名单（基线 §3），批了再落 React。
 **已读实现依据**：设计基线全文（§2 三页元素 / §3 术语表+文案规范[万元·中文日期·说人话] / §4 状态机+权限[财务/管理员·单人·留痕兜底]）；后端 6 认定原因 + 状态串已与唯一术语串逐字对齐。
 **跟进**：前端 `PERMISSION_MODULES` 需补 `account_reconcile`（30→31，与后端对齐；运行时权限已 seed 不阻断）——可并入本 Phase 2 前端 PR。
-**下一步**：出三页 mockup（设计系统=Inter/blue-500/rounded 分级/gray-900·500/border-gray-200/shadow-sm·md/h-10）→ 真人拍板。
+**mockup → 真人拍板 → 落 React（本会话全做完）**：
+- **mockup**：三页交互草样（Artifact/预览面板），按基线 §2 结构 + §3 术语/文案（万元·中文日期·说人话·6 认定原因唯一串）+ COREONE 现有设计系统。用户拍板「方向对，落 React」。
+- **实现**（对齐前端约定：无 TanStack Query，用 `usePagination`/`useState`/`request`；`canAccess` 守卫；`request` 已 unwrap）：
+  - `src/types/account-reconcile.ts`(NEW)、`src/api/account-reconcile.ts`(NEW，对齐后端 11 端点)。
+  - `src/pages/account-reconcile/`：`AccountReconcilePage.tsx`(壳·三页签+守卫) + `hooks/useAccountReconcile.ts`(月/页签/总览/计算/关账) + `ui.tsx`(万元·中文日期·状态药丸·设计令牌) + `components/{ReconcileOverview,ReconcileWorkbench,SupplementTracking}.tsx`。
+  - 路由 `App.tsx` + 侧栏 `AppSidebar.tsx`(账实核对·Scale 图标) + 权限：`PERMISSION_MODULES` 30→**31**（补 `account_reconcile`，消 Phase 1 遗留漂移）+ `permissions.ts` `NAV_PATH_MODULE`/`ROLE_MENU_MAP`(admin/finance) 映射。
+- **验证**：前端 `tsc --noEmit` 绿 + `vite build` 绿。**真跑端到端**（起前后端·admin 登录·seed 演示院 4 例）：nav 显示账实核对、总览待复核 1 家、工作台 3 差异（漏收 −2/计费用错 +2/特染 +1，5=5 不出）口径正确、**认定「漏收，需补收」→ 已认定留痕 + 自动生成补收单 ¥200 待补收**、控制台零报错。演示数据用后即清、dev DB `git checkout` 复原。
+**跟进**：补收「计入本月实收」的回填 case_revenue（×扣率）留后续；反向操作现用 `window.prompt` 收理由（可后续换 Modal）。
+
+**PR**：[#30](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/30) OPEN（base=master，独立·单独可合，等 vitest required check）。看板 `pr-governance.md` 已记。合并后账实复核+逐抗体成本三阶段（#24 成本地基 → #27 核对引擎 → #30 三页前端）全落 master。
+
+*更新时间：2026-07-02*
 
 ---
 
