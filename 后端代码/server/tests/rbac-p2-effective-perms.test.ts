@@ -38,9 +38,9 @@ beforeAll(async () => {
 })
 
 describe('RBAC-P2：getEffectivePermissions 并集（DB 真值）', () => {
-  it('admin → 全 27 模块 W', () => {
+  it('admin → 全 30 模块 W', () => {
     const eff = getEffectivePermissions(db, userId('admin'))
-    expect(Object.keys(eff).length).toBe(29)
+    expect(Object.keys(eff).length).toBe(30)
     expect(eff.outbound).toBe('W')
     expect(eff.abc_dashboard).toBe('W')
   })

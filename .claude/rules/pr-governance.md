@@ -57,6 +57,12 @@
 
 > ✅ **#19 已合并（2026-07-02）**：独立 PR，vitest required check 绿后 merge commit 落 master。合并后**当前无 open PR**。
 
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#24](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/24) | `feat/reconcile-cost` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。账实复核+逐抗体成本 **Phase 0 成本地基**：抗体库主数据+每片成本派生+192 种真台账 seed+`antibody_cost` 权限模块；与收入侧物理隔离。tsc 绿 + vitest 74 files/532 tests 绿 + 独立对抗复核过；golden ¥13,152+¥27,870 零回归。**单独可合**。Phase 1 账实核对引擎另起。 | merge-order/1 |
+
+> 🟡 **#24 OPEN（2026-07-02）**：独立 PR，等 vitest required check。合并后 Phase 1（账实核对引擎：reconcile 表+口径+状态机）在 master 新分支另起。
+
 **已合/关闭**：#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#5/#1 CLOSED。
 
 > ✅ **合并完成（2026-06-30，账单已修，"按序合栈+拆 e2e 债"）**：#8→#10→#11 依次 merge commit 落 master。**每步 e2e 复校**=三次跑均 **6 failed/251 passed、失败集完全一致**（supplier-returns 5 + auth-logout 1），全栈**零新增 e2e 失败**。这 6 个=master 既有 supplier-returns/auth bug（与本栈无关，已拆 task `c93e8188` 单独修；非 RBAC 403，权限本就授予）。黄金 ¥13,152 守住、后端联合 482 绿。

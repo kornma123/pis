@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url'
 import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
 import { CHARGE_CODE_SEED, chargeDefToRow } from '../utils/charge-catalog.js'
 import { NGS_PRODUCT_SEED, ngsProductToRow } from '../utils/ngs-catalog.js'
+import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } from '../utils/antibody-catalog.js'
+import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
 import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -1127,6 +1129,85 @@ export function initializeDatabase(): void {
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  // ── Phase 0 逐抗体成本地基（账实复核+逐抗体成本，设计基线 §1.3）──
+  //   antibodies: 抗体库主数据 + 每片一抗成本（per_test_price = 台账已换算每人份价，勿再除换算率）；UNIQUE(name,form) 区分原液/即用。
+  //   detection_systems: 二抗/显色/辅料 单独共享项（上机二抗测试条 ~¥15/片）。
+  //   ihc_cost_params: 「算全」的二抗/工时/设备参数（工时/设备=G2 估·弱锚·待校准 B4，可配）。
+  //   special_stain_kits: 特染盒（盒价÷标称次数）。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS antibodies (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      clone_no TEXT,
+      supplier TEXT,
+      category TEXT NOT NULL DEFAULT '一抗',
+      form TEXT,
+      spec TEXT,
+      bottle_price DECIMAL(18, 4) DEFAULT 0,
+      bottle_price_taxed DECIMAL(18, 4),
+      conv_rate DECIMAL(18, 4),
+      per_test_price DECIMAL(18, 6),
+      dilution TEXT,
+      usage_per_slide DECIMAL(18, 4),
+      price_status TEXT NOT NULL DEFAULT 'has_price',
+      source_ledger TEXT,
+      status INTEGER NOT NULL DEFAULT 1,
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT,
+      updated_by TEXT,
+      UNIQUE(name, form)
+    )
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS detection_systems (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'secondary',
+      form TEXT,
+      spec TEXT,
+      bottle_price DECIMAL(18, 4),
+      conv_rate DECIMAL(18, 4),
+      per_slide_cost DECIMAL(18, 6),
+      is_default INTEGER NOT NULL DEFAULT 0,
+      source_ledger TEXT,
+      status INTEGER NOT NULL DEFAULT 1,
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS ihc_cost_params (
+      id TEXT PRIMARY KEY,
+      param_key TEXT NOT NULL UNIQUE,
+      value DECIMAL(18, 4) NOT NULL DEFAULT 0,
+      source TEXT,
+      confidence TEXT,
+      remark TEXT,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_by TEXT
+    )
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS special_stain_kits (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      kit_price DECIMAL(18, 4) NOT NULL DEFAULT 0,
+      nominal_tests INTEGER NOT NULL DEFAULT 0,
+      actual_yield INTEGER,
+      labor_per_test DECIMAL(18, 4) DEFAULT 0,
+      remark TEXT,
+      source_ledger TEXT,
+      status INTEGER NOT NULL DEFAULT 1,
+      is_deleted INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_antibodies_name ON antibodies(name)`)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_antibodies_category ON antibodies(category)`)
   // 幂等补列（旧库迁移 + :memory: 新库统一）
   ensureColumn('fee_standards', 'project_type', 'TEXT')
   ensureColumn('fee_standards', 'fee_per_slide', 'DECIMAL(18, 4) DEFAULT 0')
@@ -1384,6 +1465,53 @@ export function initializeDatabase(): void {
     const r = ngsProductToRow(def)
     insertNgsProduct.run(r.product_name, r.category, r.gene_count, r.sample_type, r.clinical_meaning, r.turnaround_days, r.guide_price, r.agreement_price)
   })
+
+  // —— Phase 0 逐抗体成本地基 seed（真台账 192 种 + 二抗/显色 + G2 估参数 + 特染盒；INSERT OR IGNORE 幂等，不覆盖运营修改）——
+  const insertAntibody = database.prepare(`
+    INSERT OR IGNORE INTO antibodies
+      (id, name, clone_no, supplier, category, form, spec, bottle_price, bottle_price_taxed, conv_rate, per_test_price, price_status, source_ledger, status)
+    VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `)
+  ANTIBODY_LEDGER_SEED.forEach((a, i) => {
+    const hasPrice = typeof a.perTestPrice === 'number' && (a.perTestPrice as number) > 0
+    insertAntibody.run(
+      `AB-S${String(i).padStart(3, '0')}`, a.name, a.supplier, a.category, a.form, a.spec,
+      a.bottlePrice ?? 0, a.bottlePriceTaxed, a.convRate, a.perTestPrice,
+      hasPrice ? 'has_price' : 'missing', ANTIBODY_LEDGER_SOURCE,
+    )
+  })
+  const insertDetection = database.prepare(`
+    INSERT OR IGNORE INTO detection_systems
+      (id, name, type, form, spec, bottle_price, conv_rate, per_slide_cost, is_default, source_ledger, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `)
+  DETECTION_LEDGER_SEED.forEach((d, i) => {
+    const isDefault = d.type === 'secondary' && d.name.includes('上机') ? 1 : 0
+    insertDetection.run(
+      `DET-S${String(i).padStart(3, '0')}`, d.name, d.type, d.form, d.spec,
+      d.bottlePrice, d.convRate, d.perSlideCost, isDefault, ANTIBODY_LEDGER_SOURCE,
+    )
+  })
+  const insertIhcParam = database.prepare(`
+    INSERT OR IGNORE INTO ihc_cost_params (id, param_key, value, source, confidence, remark)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `)
+  const ihcParamSeed: Array<[string, string, number, string, string, string]> = [
+    ['IHC-PARAM-SEC', 'secondary_per_slide', DEFAULT_IHC_COST_PARAMS.secondaryPerSlide, '台账/G2估', '粗估', '上机二抗测试条~¥15/片（台账真价 14~16）'],
+    ['IHC-PARAM-LAB', 'labor_per_slide', DEFAULT_IHC_COST_PARAMS.laborPerSlide, 'G2估', '粗估', '工时占位·弱锚·待康湾真实工资校准(B4)'],
+    ['IHC-PARAM-EQP', 'equipment_per_slide', DEFAULT_IHC_COST_PARAMS.equipmentPerSlide, 'G2估', '粗估', '设备折旧占位·弱锚·待校准(B4)'],
+  ]
+  ihcParamSeed.forEach((r) => insertIhcParam.run(r[0], r[1], r[2], r[3], r[4], r[5]))
+  const insertStain = database.prepare(`
+    INSERT OR IGNORE INTO special_stain_kits (id, name, kit_price, nominal_tests, labor_per_test, remark, source_ledger, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+  `)
+  const stainSeed: Array<[string, string, number, number, number, string, string]> = [
+    ['SS-MASSON', 'Masson三色', 318, 50, 14, '标称次数=50 占位·待补真实盒装次数', 'G2真实盒价'],
+    ['SS-RETIC', '网状纤维', 549, 50, 14, '标称次数=50 占位·待补真实盒装次数', 'G2真实盒价'],
+    ['SS-AFB', '抗酸(AFB)', 195, 50, 14, '标称次数=50 占位·待补真实盒装次数', 'G2真实盒价'],
+  ]
+  stainSeed.forEach((r) => insertStain.run(r[0], r[1], r[2], r[3], r[4], r[5], r[6]))
 
   console.log('Database initialized successfully')
 }

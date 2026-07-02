@@ -31,10 +31,10 @@ describe('partner-P0：schema', () => {
 })
 
 describe('partner-P0：RBAC 模块注册', () => {
-  it('MODULES 含 partners/partner_pricing（共 29）', () => {
+  it('MODULES 含 partners/partner_pricing（共 30）', () => {
     expect(MODULES).toContain('partners')
     expect(MODULES).toContain('partner_pricing')
-    expect(MODULES.length).toBe(29)
+    expect(MODULES.length).toBe(30)
   })
   it('种子：lab_director 定价 W；finance 定价 W、客户 R', () => {
     expect(SEED_MATRIX.lab_director.partner_pricing).toBe('W')

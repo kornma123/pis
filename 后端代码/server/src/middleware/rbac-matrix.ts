@@ -4,7 +4,7 @@
 export type Level = 'R' | 'W'
 export type PermMap = Record<string, Level>
 
-/** 29 个业务模块（权限码）。partners/partner_pricing = 按医院成本盈利特性新增。 */
+/** 30 个业务模块（权限码）。partners/partner_pricing = 按医院成本盈利特性新增；antibody_cost = 逐抗体成本地基。 */
 export const MODULES = [
   'inventory', 'inbound', 'outbound', 'transfers', 'stocktaking', 'returns', 'scraps',
   'materials', 'categories', 'locations',
@@ -12,6 +12,7 @@ export const MODULES = [
   'suppliers', 'purchase_orders', 'supplier_returns',
   'reconciliation',
   'cost_analysis', 'abc_dashboard', 'slide_cost', 'profitability', 'abc_config',
+  'antibody_cost',
   'equipment', 'labor_times',
   'partners', 'partner_pricing',
   'alerts', 'users', 'roles', 'logs',
@@ -33,6 +34,7 @@ export const SEED_MATRIX: Record<string, PermMap> = {
     suppliers: 'R', purchase_orders: 'R', supplier_returns: 'R',
     reconciliation: 'W',
     cost_analysis: 'R', abc_dashboard: 'R', slide_cost: 'R', profitability: 'R', abc_config: 'W',
+    antibody_cost: 'R',
     equipment: 'W', labor_times: 'R',
     partners: 'W', partner_pricing: 'W',
     alerts: 'R', users: 'W', roles: 'W', logs: 'R',
@@ -73,6 +75,7 @@ export const SEED_MATRIX: Record<string, PermMap> = {
     suppliers: 'R', purchase_orders: 'R', supplier_returns: 'R',
     reconciliation: 'W',
     cost_analysis: 'W', abc_dashboard: 'W', slide_cost: 'W', profitability: 'W', abc_config: 'W',
+    antibody_cost: 'W',
     equipment: 'W', labor_times: 'W',
     partners: 'R', partner_pricing: 'W',
     alerts: 'R', logs: 'R',

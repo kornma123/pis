@@ -788,3 +788,34 @@ http://your-server-ip:8080
 **改动文件**：`src/middleware/audit-log.ts`(NEW)、`src/app.ts`(import+app.use)、`tests/bv-write-audit-middleware.test.ts`(NEW)、`.claude/rules/coreone-guardrails.md`、`docs/FRS/FRS-16-操作日志.md`。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（Phase 0 逐抗体成本地基，feat/reconcile-cost，2026-07-02）
+
+**线/工作树**：master 主干新分支 `feat/reconcile-cost`（当前 worktree `trusting-bartik-ba3dca`，从 origin/master tip `2063f8e2` 切出，含 #22 设计基线）。收入侧全链路在 master（statement-revenue/partner-config/case_revenue/statement-import），本 PR 只加**新表+新 util+新路由**，与收入侧物理隔离。
+
+**范围**：实现 `docs/COREONE-账实复核与逐抗体成本-设计基线-2026-07-02.md` 的**成本侧地基**（用户确认：只做 Phase 0；账实核对三页=后续 Phase 1/2）。用户三决策：①当前树 switch -c ②只做 Phase 0 ③本 PR 导入 192 种真台账 seed。
+
+**真台账（PII 安全）**：`~/Downloads/免疫组化相关耗材2025年.xlsx` sheet「2025 (2)」= 耗材盘点表（**无任何患者信息**）。抽取 192 种标记（191 一抗 + 1 EBER，全部有每人份价）+ 9 二抗/显色/辅料共享项。核心成本列 = **第 14 列「每人份价（已换算）」**（= 瓶价÷换算率，台账已算好）。抗体真价 ¥0.287~99.82（差 ~348 倍，证明必须逐抗体）。生成为**不可变种子** `src/utils/antibody-catalog.ts`（xlsx 不进仓，避免运行期依赖）。
+
+**实现（TDD 先行 red→green）**：
+- `tests/antibody-cost.test.ts`(NEW, 14 用例)：先写会失败的断言，锁三红线——① **每片一抗成本直接取 perTestPrice·勿再除换算率**（坑守卫：2SC=¥99.82 ≠ 99.82/15）；② 算全=一抗+二抗/显色+工时(G2)+设备(G2)、完整度分档精算↔粗估（缺价降级全院均价+行级标「成本缺价·毛利待定」）；③ 特染=盒价÷标称次数。+ 真台账手核（2SC ¥99.82 / AFP ¥0.287 / 344 倍跨度）+ 建表/seed 192/CRUD。
+- `src/utils/antibody-cost.ts`(NEW)：纯口径函数 `perSlidePrimaryCost`（直接取台账已换算价）/`computeFullSlideCost`（算全+分档）/`fallbackAveragePrimary`（**诚实命名：算术均值降级，非用量加权——LIS 用量接入后升级**，且已 EXCLUDE EBER 只算一抗）/`specialStainPerTestCost`。
+- `src/database/DatabaseManager.ts`：4 新表（`antibodies` UNIQUE(name,form) 区分原液/即用；`detection_systems` 二抗/显色/辅料；`ihc_cost_params` 二抗/工时/设备参数；`special_stain_kits`）+ INSERT OR IGNORE 幂等 seed（192 抗体 + 9 detection + G2 参数 + 3 特染盒）。
+- `src/routes/antibody-cost-v1.1.ts`(NEW)：抗体库 CRUD + `/cost-preview`（每片算全派生）+ detection/cost-params/special-stains 查询；挂载层 requirePermission('antibody_cost','R')，写端点再要 'W'。全站写审计走 app.ts auditWrite 中间件（operation_logs 自动覆盖）。
+- `src/middleware/rbac-matrix.ts`：新增权限模块 `antibody_cost`（MODULES 29→30；finance=W、lab_director=R、admin 自动 W）。
+- `src/app.ts`：mount `/api/v1/antibody-cost`。
+- RBAC 计数快照 29→30 同步修（`rbac-p0-matrix-seed`/`rbac-p2-effective-perms`/`rbac-p4-capabilities-api`/`partner-p0-schema`）——加真模块的必然维护，非回归。
+
+**验证**：`npm run build`(tsc) 绿；`vitest run` 全绿 **74 files / 532 tests**（+1 文件 +14 用例，6 个 RBAC 计数快照已更新）；**golden ¥13,152（partner-revenue）+ ¥27,870（hemujia-purelab）零回归**（新表/seed 与收入侧物理隔离，已单独复跑确认）。
+
+**诚实边界/未决（交接 Phase 1+）**：① 工时/设备 = G2 估占位（labor=8/equip=3），`ihc_cost_params` 明标 source='G2估' confidence='粗估'、待康湾真实工资/折旧校准（未决 B4）——UI 应显示「G2 估·待校准」，不冒充精确。② 特染标称次数=50 占位（remark 已标待补真实盒装次数）。③ 缺台账价的抗体（未决 A1 的 10 种，LIS 引用但台账无）→ 走粗估降级路径。④ 独立复核（工作模型机制5）：已启异构第二视角对抗审 diff（进行中）。⑤ 账实核对三页 + 逐院差异引擎 = Phase 1/2，未动。⑥ 前端未动（Phase 2 走 mockup 先行红线）。
+
+**改动文件**：`src/utils/antibody-catalog.ts`(NEW)、`src/utils/antibody-cost.ts`(NEW)、`src/routes/antibody-cost-v1.1.ts`(NEW)、`tests/antibody-cost.test.ts`(NEW)、`src/database/DatabaseManager.ts`、`src/middleware/rbac-matrix.ts`、`src/app.ts`、`tests/{rbac-p0-matrix-seed,rbac-p2-effective-perms,rbac-p4-capabilities-api,partner-p0-schema}.test.ts`。
+
+**旁注**：worktree 里 `.claude/skills-runtime/venv/`（技能运行时 Python venv，非本 PR 产物）未被 .gitignore 覆盖 → `git add -A` 会误纳；已改用显式 `git add 后端代码/server/{src,tests}` 只暂存本 PR 文件。建议后续把 `.claude/skills-runtime/` 加进 .gitignore。
+
+**PR**：[#24](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/24) OPEN（base=master，独立·单独可合，等 vitest required check）。看板 `pr-governance.md` 已记。合并后 Phase 1（账实核对引擎）在 master 新分支另起。
+
+*更新时间：2026-07-02*
