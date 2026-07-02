@@ -21,7 +21,7 @@ export interface PermissionModule {
   label: string
 }
 
-// 27 模块矩阵（与后端 SEED_MATRIX / MODULES 对齐）。分组仅用于 UI 呈现。
+// 30 模块矩阵（与后端 SEED_MATRIX / MODULES 对齐）。分组仅用于 UI 呈现。
 export const PERMISSION_MODULES: PermissionModule[] = [
   { key: 'inventory', label: '库存' },
   { key: 'inbound', label: '入库' },
@@ -44,8 +44,11 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { key: 'slide_cost', label: '单片成本' },
   { key: 'profitability', label: '盈利分析' },
   { key: 'abc_config', label: 'ABC 配置' },
+  { key: 'antibody_cost', label: '逐抗体成本' },
   { key: 'equipment', label: '设备管理' },
   { key: 'labor_times', label: '标准工时' },
+  { key: 'partners', label: '合作医院' },
+  { key: 'partner_pricing', label: '医院定价与扣率' },
   { key: 'alerts', label: '预警' },
   { key: 'users', label: '用户管理' },
   { key: 'roles', label: '角色权限' },

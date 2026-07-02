@@ -850,4 +850,22 @@ http://your-server-ip:8080
 
 **PR**：[#27](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/27) OPEN（base=master，独立·单独可合，等 vitest required check）。看板 `pr-governance.md` 已记（#25/#26 号被他 PR 占用，合并前核对 `gh pr list`）。合并后 Phase 2 三页前端（mockup 先行红线）另起。
 
+---
+
+## 本次会话完成的工作（修 #24 遗留前端漂移：角色权限模块 27→30，2026-07-02）
+
+**线/工作树**：worktree `practical-mclaren-1a4747`，分支 `claude/practical-mclaren-1a4747`。
+
+**背景/发现**：任务称"后端 MODULES=30、前端 PERMISSION_MODULES=27 漂移"。核实时踩到 worktree 路径坑——本地 master 滞后（`2063f8e2` 只有 29 模块），一度误判 `antibody_cost` 未合。`git fetch` 后确认：**#24 已合进 origin/master**（merge commit `36b8dda4`），后端已 30；前端 `PERMISSION_MODULES` 仍 27——**漂移此刻真实存在于 master**（#24 只改后端 MODULES + 快照测试，未同步前端 UI 常量）。
+
+**治理决策（按 master `pr-governance.md`）**：初次误在滞后本地 master 上 merge 了 `feat/reconcile-cost`（多余，内容 master 已有）。改按"master=唯一权威线·新工作从 master 出发·别把上游改动混进自己 diff"——`git reset --hard origin/master` 丢弃多余 merge，站到当前 master（后端本就 30），只做纯前端一处 → 独立·非栈·base=master·单文件 diff。
+
+**改动**：`前端代码/src/pages/system/hooks/useRolesPage.ts` 的 `PERMISSION_MODULES` 按后端 `MODULES` 顺序补 `antibody_cost`（逐抗体成本）/`partners`（合作医院）/`partner_pricing`（医院定价与扣率），注释 27→30。scope 仅此一处 UI 常量，后端零改动。
+
+**验证**：① 逐 key 比对后端 `MODULES` **30=30**，无漏/无多/无重、顺序一致（脚本核对）；② `cd 前端代码 && npx tsc --noEmit` **exit 0**；③ 无 `PERMISSION_MODULES.length` 断言、无测试引用 → 无需同步。后端 vitest 未在本 worktree 跑（backend `node_modules` 未装；本改动不碰后端逻辑，风险为零）。
+
+**PR/看板**：[#25](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/25) OPEN（base=master，独立·单独可合，等 vitest required check）。看板 `pr-governance.md` 同步：#24 转 MERGED(`36b8dda4`) + 新增 #25 行。
+
+**旁注**：印证 #24 旁注——`.claude/skills-runtime/` 仍是未跟踪目录（未进 .gitignore），本会话已避开、只暂存目标文件。建议后续把它加进 .gitignore。
+
 *更新时间：2026-07-02*

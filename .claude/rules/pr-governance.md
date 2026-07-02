@@ -59,13 +59,19 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#24](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/24) | `feat/reconcile-cost` → `master` | ✅ **MERGED**(2026-07-02, merge commit `36b8dda4`) | **独立**（非栈式，无上下游）。账实复核+逐抗体成本 **Phase 0 成本地基**：抗体库主数据+每片成本派生+192 种真台账 seed+`antibody_cost` 权限模块；与收入侧物理隔离。vitest required 绿(58s)；golden ¥13,152+¥27,870 零回归。 | merge-order/1 |
-| — | [#27](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/27) | `feat/reconcile-phase1` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off 已合 #24 的 master）。账实复核+逐抗体成本 **Phase 1 核对引擎**：差异=账单片数vsLIS物理片数+匹配率门+6认定原因+补收gate+关账状态机+`account_reconcile` 权限模块（3 表，只读收入侧）。独立对抗复核修 3 项（HIGH 账单片数 floor / MED 孤儿补收单 / LOW 幂等）。tsc 绿 + vitest 76 files/557 tests 绿；golden ¥13,152+¥27,870 零回归。**单独可合**。 | merge-order/1 |
+| — | [#24](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/24) | `feat/reconcile-cost` → `master` | ✅ **MERGED**(2026-07-02, merge commit `36b8dda4`) | **独立**（非栈式，无上下游）。账实复核+逐抗体成本 **Phase 0 成本地基**：抗体库主数据+每片成本派生+192 种真台账 seed+`antibody_cost` 权限模块；与收入侧物理隔离。vitest required 绿(58s)；golden ¥13,152+¥27,870 零回归。合入后后端 `MODULES`→30；前端 `PERMISSION_MODULES` 漂移由 #25 修。 | merge-order/1 |
+| — | [#27](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/27) | `feat/reconcile-phase1` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off 已合 #24 的 master；已 merge origin/master 消 doc 冲突）。账实复核+逐抗体成本 **Phase 1 核对引擎**：差异=账单片数vsLIS物理片数+匹配率门+6认定原因+补收gate+关账状态机+`account_reconcile` 权限模块（3 表，只读收入侧）。独立对抗复核修 3 项（HIGH 账单片数 floor / MED 孤儿补收单 / LOW 幂等）。tsc 绿 + vitest 76 files/557 tests 绿；golden ¥13,152+¥27,870 零回归。**单独可合**。 | merge-order/1 |
 
 > ✅ **#24 已合并（2026-07-02, merge commit `36b8dda4`）**；🟡 **#27 OPEN（2026-07-02）**：Phase 1 账实核对引擎，off 已合 #24 的 master，等 vitest required check。合并后 Phase 2（三页前端·走 mockup 先行红线）另起。
-> ⚠️ 注意：#25/#26 号已被其它 PR 占用（含前端角色模块同步任务 `task_4f73db44` 可能开的 PR）——合并本 #27 前按看板核对 `gh pr list`，勿误合他人 PR。
+> ⚠️ 本 PR 新增 `account_reconcile`（后端 `MODULES`→31）→ 前端 `PERMISSION_MODULES`（#25 刚补到 30）需再同步到 31（跟进项，运行时权限已 seed 不阻断）。
 
-**已合/关闭**：#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#5/#1 CLOSED。
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#25](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/25) | `claude/practical-mclaren-1a4747` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。修 #24 合入后遗留的前端漂移：角色权限编辑器 `PERMISSION_MODULES` 27→30，补 `antibody_cost`/`partners`/`partner_pricing`（此前 UI 无法按角色授予/撤销这 3 个模块）。scope 仅一处前端 UI 常量，后端零改动。逐 key 比对后端 `MODULES` 30=30、顺序一致；前端 tsc 绿。**单独可合**。 | merge-order/1 |
+
+> 🟡 **#25 OPEN（2026-07-02）**：独立 PR，等 vitest required check（本改动不碰后端逻辑，风险为零）。
+
+**已合/关闭**：#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#5/#1 CLOSED。
 
 > ✅ **合并完成（2026-06-30，账单已修，"按序合栈+拆 e2e 债"）**：#8→#10→#11 依次 merge commit 落 master。**每步 e2e 复校**=三次跑均 **6 failed/251 passed、失败集完全一致**（supplier-returns 5 + auth-logout 1），全栈**零新增 e2e 失败**。这 6 个=master 既有 supplier-returns/auth bug（与本栈无关，已拆 task `c93e8188` 单独修；非 RBAC 403，权限本就授予）。黄金 ¥13,152 守住、后端联合 482 绿。
 >
