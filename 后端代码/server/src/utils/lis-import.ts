@@ -103,6 +103,46 @@ export function isValidLisRow(c: NormalizedLisCase): boolean {
   return c.caseNo !== '' && c.partnerName !== ''
 }
 
+// —— 抗体清单表（0702免组类：每例每抗体一行；无送检医院列）——
+export interface NormalizedMarker {
+  caseNo: string
+  markerName: string
+  adviceType: string // Y000001/Y000003=真抗体 · Y000006=HE深切重切 · Y000007=白片
+  waxNo: string
+  sectionNo: string
+}
+
+const MARKER_FIELD: Record<string, string[]> = {
+  caseNo: ['病理号', 'caseNo', 'case_no'],
+  markerName: ['markerName', '抗体名', '抗体', '标志物名称'],
+  adviceType: ['adviceType', '申请类型'],
+  waxNo: ['waxNo', '蜡块号'],
+  sectionNo: ['sectionNo', '切片号'],
+}
+
+/** 规范化一行抗体清单 → NormalizedMarker（按列识别，只取分析列；医生名/备注/时间戳等 PII 不取）。 */
+export function normalizeMarkerRow(row: Record<string, unknown>): NormalizedMarker {
+  const pickM = (key: string): string => {
+    for (const k of MARKER_FIELD[key] || [key]) {
+      const v = row[k]
+      if (v != null && v !== '') return String(v).normalize('NFKC').trim()
+    }
+    return ''
+  }
+  return { caseNo: pickM('caseNo'), markerName: pickM('markerName'), adviceType: pickM('adviceType'), waxNo: pickM('waxNo'), sectionNo: pickM('sectionNo') }
+}
+
+/** 有效抗体行：需病理号 + 抗体名。 */
+export function isValidMarkerRow(m: NormalizedMarker): boolean {
+  return m.caseNo !== '' && m.markerName !== ''
+}
+
+/** 按列识别是不是「抗体清单表」（不写死表名/表数量）：出现抗体名列 = 是。 */
+export function looksLikeMarkerSheet(headerNames: string[]): boolean {
+  const set = new Set(headerNames.map((h) => String(h ?? '').trim()))
+  return MARKER_FIELD.markerName.some((k) => set.has(k))
+}
+
 /** NormalizedLisCase → mapCaseToCharges 的输入（含已解析 specimen_type） */
 export function toLisCaseQty(c: NormalizedLisCase, specimenType: SpecimenType): LisCaseQty {
   return {

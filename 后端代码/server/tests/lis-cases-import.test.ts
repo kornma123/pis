@@ -123,3 +123,66 @@ describe('W3 RBAC：导入/预览收窄到管理员+财务；样本覆盖仍 rec
     expect((await request(app).post('/api/v1/lis-cases/import').set('Authorization', `Bearer ${whmToken}`).send({ cases: CASES })).status).toBe(403)
   })
 })
+
+describe('导入结果拆新增/更新（补传可见）', () => {
+  it('已存在→更新、新病理号→新增', async () => {
+    const request = await req()
+    const res = await request(app).post('/api/v1/lis-cases/import').set('Authorization', `Bearer ${adminToken}`)
+      .send({ cases: [
+        { 病理号: 'S26-02725', 送检医院: '上海和睦家医院', 蜡块数: 6 }, // 前面已导→更新
+        { 病理号: 'NEW-9001', 送检医院: '上海和睦家医院', 蜡块数: 1 }, // 新→新增
+      ] })
+    expect(res.status).toBe(200)
+    expect(res.body.data.updated).toBe(1)
+    expect(res.body.data.inserted).toBe(1)
+    expect(res.body.data.imported).toBe(2)
+  })
+})
+
+describe('抗体清单导入（按病理号 join 定医院 + 认不出单列 + 幂等整例刷新）', () => {
+  const MARKERS = [
+    { caseNo: 'S26-02725', markerName: 'ER', adviceType: 'Y000001', waxNo: 'A1', sectionNo: '1' },
+    { caseNo: 'S26-02725', markerName: 'PR', adviceType: 'Y000001', waxNo: 'A1', sectionNo: '2' },
+    { caseNo: 'S26-02725', markerName: '白片X', adviceType: 'Y000007', waxNo: 'A1', sectionNo: '3' },
+    { caseNo: 'NO-EXIST-1', markerName: 'HER2', adviceType: 'Y000001' }, // 病理号在工作量表查无 → 认不出
+    { caseNo: '', markerName: 'CK' }, // 无病理号 → skip
+  ]
+  it('命中的落库、认不出的单列、无效跳过', async () => {
+    const request = await req()
+    const res = await request(app).post('/api/v1/lis-cases/import-markers').set('Authorization', `Bearer ${adminToken}`).send({ markers: MARKERS })
+    expect(res.status).toBe(200)
+    expect(res.body.data.imported).toBe(3) // S26-02725 的 3 行
+    expect(res.body.data.casesAffected).toBe(1)
+    expect(res.body.data.skipped).toBe(1) // 空病理号
+    expect(res.body.data.unmatched).toBe(1) // NO-EXIST-1
+    expect(res.body.data.unmatchedCases).toContain('NO-EXIST-1')
+    const rows = db.prepare(`SELECT marker_name, advice_type, partner_id FROM lis_case_markers WHERE case_no='S26-02725' ORDER BY section_no`).all() as any[]
+    expect(rows.map((r: any) => r.marker_name)).toEqual(['ER', 'PR', '白片X'])
+    expect(rows.every((r: any) => r.partner_id)).toBe(true) // 都挂上了医院
+  })
+  it('幂等：补传该例抗体（少一个）→ 整例刷新，不残留旧行', async () => {
+    const request = await req()
+    await request(app).post('/api/v1/lis-cases/import-markers').set('Authorization', `Bearer ${adminToken}`)
+      .send({ markers: [{ caseNo: 'S26-02725', markerName: 'ER', adviceType: 'Y000001', sectionNo: '1' }] })
+    const rows = db.prepare(`SELECT marker_name FROM lis_case_markers WHERE case_no='S26-02725'`).all() as any[]
+    expect(rows).toHaveLength(1) // 从 3 刷新成 1，旧 PR/白片 已删
+    expect(rows[0].marker_name).toBe('ER')
+  })
+  it('RBAC：technician 导抗体 → 403（同工作量导入收窄）', async () => {
+    const request = await req()
+    expect((await request(app).post('/api/v1/lis-cases/import-markers').set('Authorization', `Bearer ${techToken}`).send({ markers: MARKERS })).status).toBe(403)
+  })
+})
+
+describe('最近导入批次接口', () => {
+  it('GET /batches 返回最近批次（含例数/医院数）', async () => {
+    const request = await req()
+    const res = await request(app).get('/api/v1/lis-cases/batches?limit=3').set('Authorization', `Bearer ${adminToken}`)
+    expect(res.status).toBe(200)
+    expect(Array.isArray(res.body.data)).toBe(true)
+    expect(res.body.data.length).toBeGreaterThan(0)
+    expect(res.body.data.length).toBeLessThanOrEqual(3)
+    expect(res.body.data[0].caseCount).toBeGreaterThan(0)
+    expect(res.body.data[0]).toHaveProperty('importBatch')
+  })
+})

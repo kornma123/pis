@@ -384,6 +384,24 @@ export function initializeDatabase(): void {
     )
   `)
 
+  // LIS 抗体清单（每例每抗体一行）——来自「抗体清单」导出表（0702免组类），只存分析所需列，患者/医生 PII 不入。
+  //   无送检医院列 → partner_id 靠病理号 join lis_cases 定位（认不出的行不落）。advice_type: 真抗体/白片/HE深切重切。
+  //   幂等：按 (partner_id, case_no) 整例删插（补传=该例抗体全量刷新）。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS lis_case_markers (
+      id TEXT PRIMARY KEY,
+      case_no TEXT NOT NULL,
+      partner_id TEXT,
+      marker_name TEXT NOT NULL,
+      advice_type TEXT,
+      wax_no TEXT,
+      section_no TEXT,
+      import_batch TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_lis_case_markers_case ON lis_case_markers(partner_id, case_no)`)
+
   // 收入侧（按医院成本/盈利）：收费目录 charge_codes —— 收费引擎的计价规则源。
   // ⛔ 红线：与成本侧 fee_standards / cost-calculator 完全独立，互不读写。rule_json 持久化 ChargeRule。
   database.exec(`

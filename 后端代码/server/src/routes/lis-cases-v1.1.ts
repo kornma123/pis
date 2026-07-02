@@ -16,7 +16,7 @@ import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission, requireAnyRole } from '../middleware/permissions.js'
 import { findOrCreatePartner } from '../utils/partner-upsert.js'
-import { normalizeLisRow, isValidLisRow } from '../utils/lis-import.js'
+import { normalizeLisRow, isValidLisRow, normalizeMarkerRow, isValidMarkerRow, type NormalizedMarker } from '../utils/lis-import.js'
 import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
 
 const router = Router()
@@ -44,11 +44,12 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
 
     const upsert = db.prepare(`
       INSERT INTO lis_cases
-        (id, case_no, partner_id, status, operate_time, import_batch,
+        (id, case_no, partner_id, operator, status, operate_time, import_batch,
          he_slide_count, block_count, ihc_count, special_stain_count, eber_count, pdl1_count,
          specimen_type, specimen_type_source)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'auto')
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'auto')
       ON CONFLICT(partner_id, case_no) DO UPDATE SET
+        operator = excluded.operator,
         status = excluded.status,
         operate_time = excluded.operate_time,
         he_slide_count = excluded.he_slide_count,
@@ -61,7 +62,8 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
         specimen_type_source = CASE WHEN specimen_type_source = 'manual' THEN 'manual' ELSE 'auto' END
     `)
 
-    let imported = 0
+    const existsStmt = db.prepare('SELECT 1 FROM lis_cases WHERE partner_id = ? AND case_no = ?')
+    let imported = 0, inserted = 0, updated = 0 // imported=inserted+updated；补传时拆开报，让人知道更新了多少、新增了多少
     let skipped = 0
     // 整批事务：任一行 SQL 失败则整体回滚，避免半批落库
     db.exec('BEGIN IMMEDIATE')
@@ -77,12 +79,14 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
           partnerCache.set(c.partnerName, partnerId)
           if (ref.created) partnersCreated++
         }
+        const existed = !!existsStmt.get(partnerId, c.caseNo) // upsert 前查存在性 → 拆新增/更新
         upsert.run(
-          `LC-${uuidv4()}`, c.caseNo, partnerId, c.status || 'normal', c.operateTime || null, importBatch,
+          `LC-${uuidv4()}`, c.caseNo, partnerId, operator, c.status || 'normal', c.operateTime || null, importBatch,
           c.heSlideCount, c.blockCount, c.ihcCount, c.specialStainCount, c.eberCount, c.pdl1Count,
           c.autoSpecimenType,
         )
         imported++
+        if (existed) updated++; else inserted++
       }
       backfillAbcPartnerIds(db) // LIS 落库后顺带把成本维度回填到位，减少手动 /backfill 遗漏
       db.exec('COMMIT')
@@ -94,10 +98,12 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
     success(res, {
       importBatch,
       imported,
+      inserted,
+      updated,
       skipped,
       partnersCreated,
       partnersMatched: partnerCache.size,
-    }, `导入 ${imported} 例（${partnerCache.size} 家医院，新建 ${partnersCreated} 家）`)
+    }, `导入 ${imported} 例（新增 ${inserted}·更新 ${updated}，${partnerCache.size} 家医院，新建 ${partnersCreated} 家）`)
   } catch (e: any) {
     error(res, e.message || '导入失败')
   }
@@ -194,6 +200,83 @@ router.put('/:caseNo/specimen-type', authenticateToken, requireWrite, (req, res)
       throw e
     }
     success(res, { caseNo, partnerId: target.partner_id, specimenType, source: 'manual' }, '已覆盖样本类型')
+  } catch (e: any) { error(res, e.message) }
+})
+
+/**
+ * POST /import-markers —— 导入抗体清单（0702免组类：每例每抗体一行）。
+ * 该表无送检医院列 → 病理号 join lis_cases 定医院；查无 / 跨院撞号 → 认不出，单列不落。
+ * 幂等：按 (partner_id, case_no) 整例删插（补传 = 该例抗体全量刷新，不残留旧行）。
+ */
+router.post('/import-markers', authenticateToken, requireImport, (req, res) => {
+  try {
+    const db = getDatabase()
+    const { markers } = req.body as { markers: Record<string, unknown>[] }
+    if (!Array.isArray(markers) || markers.length === 0) { error(res, '导入数据为空', 'BAD_REQUEST', 400); return }
+    if (markers.length > MAX_LIS_IMPORT_ROWS) { error(res, `单次导入最多支持 ${MAX_LIS_IMPORT_ROWS} 条，请分批导入`, 'INVALID_PARAMETER', 400); return }
+
+    const importBatch = `MK-${Date.now()}`
+    // 病理号 → partner_id：唯一命中才用；0 命中=查无、>1=跨院撞号 → 都归"认不出"，不落。
+    const partnerStmt = db.prepare('SELECT DISTINCT partner_id FROM lis_cases WHERE case_no = ?')
+    const partnerCache = new Map<string, string | null>() // caseNo -> pid（null=认不出）
+    const groups = new Map<string, { pid: string; caseNo: string; rows: NormalizedMarker[] }>()
+    let skipped = 0
+    const unmatchedCases = new Set<string>()
+    for (const raw of markers) {
+      const m = normalizeMarkerRow(raw)
+      if (!isValidMarkerRow(m)) { skipped++; continue }
+      let pid = partnerCache.get(m.caseNo)
+      if (pid === undefined) {
+        const rows = partnerStmt.all(m.caseNo) as Array<{ partner_id: string | null }>
+        pid = rows.length === 1 && rows[0].partner_id ? rows[0].partner_id : null
+        partnerCache.set(m.caseNo, pid)
+      }
+      if (!pid) { unmatchedCases.add(m.caseNo); continue }
+      const gk = `${pid}::${m.caseNo}`
+      const g = groups.get(gk) ?? { pid, caseNo: m.caseNo, rows: [] }
+      g.rows.push(m)
+      groups.set(gk, g)
+    }
+
+    const del = db.prepare('DELETE FROM lis_case_markers WHERE partner_id = ? AND case_no = ?')
+    const ins = db.prepare(`INSERT INTO lis_case_markers (id, case_no, partner_id, marker_name, advice_type, wax_no, section_no, import_batch)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    let imported = 0
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      for (const g of groups.values()) {
+        del.run(g.pid, g.caseNo) // 整例刷新
+        for (const m of g.rows) { ins.run(`MK-${uuidv4()}`, m.caseNo, g.pid, m.markerName, m.adviceType || null, m.waxNo || null, m.sectionNo || null, importBatch); imported++ }
+      }
+      db.exec('COMMIT')
+    } catch (e) { db.exec('ROLLBACK'); throw e }
+
+    success(res, {
+      importBatch, imported, skipped,
+      casesAffected: groups.size,
+      unmatched: unmatchedCases.size,
+      unmatchedCases: [...unmatchedCases].slice(0, 50),
+    }, `导入 ${imported} 条抗体（${groups.size} 例）${unmatchedCases.size ? `；${unmatchedCases.size} 例病理号在工作量表里查无、未落（先导工作量表）` : ''}`)
+  } catch (e: any) { error(res, e.message || '导入失败') }
+})
+
+/** GET /batches?limit=3 —— 最近 N 次工作量导入批次（导入弹窗底部展示补传历史）。 */
+router.get('/batches', authenticateToken, requireImport, (req, res) => {
+  try {
+    const db = getDatabase()
+    const limit = Math.max(1, Math.min(20, Number(req.query.limit) || 3))
+    const rows = db.prepare(`
+      SELECT lc.import_batch AS importBatch, COUNT(*) AS caseCount,
+             COUNT(DISTINCT lc.partner_id) AS hospitalCount, MIN(lc.created_at) AS importedAt,
+             MAX(u.real_name) AS operatorName
+      FROM lis_cases lc LEFT JOIN users u ON u.id = lc.operator
+      WHERE lc.import_batch IS NOT NULL
+      GROUP BY lc.import_batch ORDER BY importedAt DESC LIMIT ?
+    `).all(limit) as any[]
+    success(res, rows.map((r) => ({
+      importBatch: r.importBatch, caseCount: r.caseCount, hospitalCount: r.hospitalCount,
+      importedAt: r.importedAt, operatorName: r.operatorName || null,
+    })))
   } catch (e: any) { error(res, e.message) }
 })
 
