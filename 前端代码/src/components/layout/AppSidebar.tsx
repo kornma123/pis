@@ -35,6 +35,7 @@ import {
   Layers,
   Settings,
   Scale,
+  Database,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -64,6 +65,7 @@ const ALL_MAIN_MENU: MenuItem[] = [
   { label: '医院盈利看板', path: '/hospital-pnl', icon: TrendingUp },
   { label: '账实核对', path: '/account-reconcile', icon: Scale },
   { label: '合作医院配置', path: '/partner-config', icon: Settings },
+  { label: 'LIS 病例', path: '/lis-cases', icon: Database },
   { label: '导入测试台', path: '/import-console', icon: FlaskConical },
   { label: '财务月度导入', path: '/import-wizard', icon: FileText },
   // ===== ABC 成本核算导航（移植自 abc-productization 分支）=====

@@ -75,13 +75,20 @@ describe('POST /commit 落库 + 看板', () => {
     expect(res.status).toBe(200)
     expect(res.body.data.caseCount).toBe(2)
     expect(res.body.data.labRevenue).toBe(152)
+    expect(res.body.data.unallocatedSettle).toBe(150) // S26-002 未匹配 settle → 孤儿桶（E 修复）
     // case_revenue 落库且来源 statement
-    const rows = db.prepare(`SELECT case_no, lab_revenue, revenue_source, config_version FROM case_revenue WHERE partner_id=? ORDER BY case_no`).all(PID) as any[]
+    const rows = db.prepare(`SELECT case_no, net_amount, lab_revenue, diagnosis_revenue, out_revenue, unallocated_amount, revenue_source, config_version FROM case_revenue WHERE partner_id=? ORDER BY case_no`).all(PID) as any[]
     expect(rows).toHaveLength(2)
     expect(rows.find((r) => r.case_no === 'S26-001').lab_revenue).toBe(152)
     expect(rows.find((r) => r.case_no === 'S26-002').lab_revenue).toBe(0)
     expect(rows.every((r) => r.revenue_source === 'statement')).toBe(true)
     expect(rows.every((r) => r.config_version >= 1)).toBe(true)
+    // E 守恒：未匹配行 settle 落 unallocated_amount，逐案 net = lab + diagnosis + out + unallocated
+    expect(rows.find((r) => r.case_no === 'S26-002').unallocated_amount).toBe(150)
+    expect(rows.find((r) => r.case_no === 'S26-001').unallocated_amount).toBe(0)
+    for (const r of rows) {
+      expect(r4(r.lab_revenue + r.diagnosis_revenue + r.out_revenue + r.unallocated_amount)).toBe(r.net_amount)
+    }
   })
 
   it('看板读权威值：buildPartnerPnl labRevenueTotal=152，sourceCounts.statement=2', () => {

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle, RotateCw } from 'lucide-react'
+import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, XCircle, RotateCw, MinusCircle } from 'lucide-react'
 import { partnerConfigApi, type PartnerListItem } from '@/api/partner-config'
 import type { Grid } from '@/api/statement-import'
-import type { ImportScore, ImportStatus } from '@/types/statement-import'
+import type { ImportScore, ImportStatus, PreviewRevenue } from '@/types/statement-import'
 
 // —— 共用设计令牌（主蓝 #3b82f6；按钮 h-10=项目标准）——
 export const inputCls = 'h-10 rounded-md border border-gray-200 bg-white px-3 text-[13px] text-gray-900 outline-none transition-colors focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10'
@@ -85,8 +85,9 @@ const STATUS_META: Record<ImportStatus, { label: string; cls: string; icon: type
 }
 
 function Check({ ok, label, detail }: { ok: boolean | null; label: string; detail: string }) {
-  const Icon = ok === true ? CheckCircle2 : ok === false ? XCircle : AlertTriangle
-  const color = ok === true ? 'text-emerald-600' : ok === false ? 'text-rose-600' : 'text-gray-400'
+  // null = 未启用/无数据的中性态（灰圆点，不是警告）——可选项每月都黄会训练用户忽略状态（告警疲劳）
+  const Icon = ok === true ? CheckCircle2 : ok === false ? XCircle : MinusCircle
+  const color = ok === true ? 'text-emerald-600' : ok === false ? 'text-rose-600' : 'text-gray-300'
   return (
     <div className="flex items-start gap-2 rounded-md border border-gray-200 bg-white p-3">
       <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${color}`} />
@@ -98,21 +99,48 @@ function Check({ ok, label, detail }: { ok: boolean | null; label: string; detai
   )
 }
 
-/** 体检卡：识别率 / 对账闭合 / 病例匹配 / 黄金 + status + 未过项。 */
-export function ScoreCard({ score, labRevenue }: { score: ImportScore; labRevenue: number }) {
+/** 收入分桶小卡：实验室收入（主）/ 诊断与报告 / 外送转出 / 未识别。 */
+function Bucket({ label, value, tone = 'plain', hint }: { label: string; value: number; tone?: 'primary' | 'plain' | 'warn'; hint?: string }) {
+  const cls = tone === 'primary' ? 'border-blue-200 bg-blue-50' : tone === 'warn' ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-white'
+  const val = tone === 'primary' ? 'text-blue-700' : tone === 'warn' ? 'text-amber-700' : 'text-gray-900'
+  return (
+    <div className={`rounded-md border px-3 py-2 ${cls}`} title={hint}>
+      <div className="text-[12px] text-gray-500">{label}</div>
+      <div className={`text-[15px] font-semibold tabular-nums ${val}`}>{yuan(value)}</div>
+    </div>
+  )
+}
+
+/** 体检卡：收入三分（实验室/诊断报告/外送）+ 完整度提示 + 识别率/对账闭合/病例匹配/黄金 + status + 未过项。 */
+export function ScoreCard({ score, revenue }: { score: ImportScore; revenue: PreviewRevenue }) {
   const m = STATUS_META[score.status]
   const r = score.recognition, cl = score.closure, fwd = score.caseMatch.forward, bwd = score.caseMatch.backward, g = score.golden
+  const unrecognized = (revenue.unmatchedSettle || 0) + (revenue.ambiguousSettle || 0)
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12.5px] font-medium ${m.cls}`}><m.icon className="h-3.5 w-3.5" />{m.label}</span>
-        <span className="text-[13px] text-gray-500">实验室收入 <b className="text-gray-900 tabular-nums">{yuan(labRevenue)}</b></span>
+        <span className="text-[12px] text-gray-400">对账单实收合计 <b className="tabular-nums text-gray-600">{yuan(revenue.totalSettle)}</b>（= 下列各项之和，不漏不重）</span>
       </div>
+      {/* 收入三分：实验室收入是我们做的技术工序；诊断报告是我们收但非实验室工序；外送转出是转出去的 */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Bucket label="实验室收入" value={revenue.labRevenue} tone="primary" hint="整条计入的染色 + 拆分出的制片份额" />
+        <Bucket label="诊断与报告" value={revenue.diagnosisSettle} hint="医生诊断 / 报告 / 现场服务——我们收但非实验室工序" />
+        <Bucket label="外送转出" value={revenue.outSettle} hint="外送 NGS/FISH、远程、共建分成——非我们的实验室" />
+        {unrecognized > 0 && <Bucket label="未识别待归类" value={unrecognized} tone="warn" hint="未匹配 + 歧义，需在测试台补识别规则" />}
+      </div>
+      {/* 完整度：拆分依赖 LIS 蜡块，缺则降级账单数量估算，如实标注 */}
+      {revenue.splitLisMissing > 0 && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-[12px] text-amber-800">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>本期 {revenue.splitLisMissing}/{revenue.splitLisExpected} 例组织制片缺 LIS 蜡块数，已按账单数量估算（口径偏下限）。补导该院 LIS 后<b>重新导入本对账单</b>即可更新。</span>
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <Check ok={r.pass} label={`识别率 ${(r.rate * 100).toFixed(0)}%`} detail={`${r.matched}/${r.total} 行；未匹配 ${r.unmatched}、歧义 ${r.ambiguous}`} />
         <Check ok={cl.pass} label="对账闭合" detail={cl.declaredTotal == null ? '对账单无独立合计行' : `逐行 ${yuan(cl.computed)} vs 声明 ${yuan(cl.declaredTotal)}${cl.diff ? `，差 ${yuan(cl.diff)}` : '·对平'}`} />
-        <Check ok={fwd.pass} label="病例匹配" detail={fwd.pass == null ? '无本期 LIS 数据' : `命中 ${fwd.matched}/${fwd.withCaseNo}${bwd.missingFromStatement ? `；LIS 另有 ${bwd.missingFromStatement} 例未覆盖` : ''}`} />
-        <Check ok={g.pass} label="黄金值" detail={g.expected == null ? '未录入期望实收' : `算出 ${yuan(g.computed)} vs 期望 ${yuan(g.expected)}${g.diff ? `，差 ${yuan(g.diff)}` : '·符'}`} />
+        <Check ok={fwd.pass} label="病例匹配" detail={fwd.pass == null ? '该院未导 LIS，无法核对（不阻断）' : `命中 ${fwd.matched}/${fwd.withCaseNo}（对该院全部 LIS）${bwd.missingFromStatement ? `；本期 LIS 另有 ${bwd.missingFromStatement} 例未覆盖` : ''}`} />
+        <Check ok={g.pass} label="黄金值（可选）" detail={g.expected == null ? '未启用——可录入期望实收作外部核对' : `算出 ${yuan(g.computed)} vs 期望 ${yuan(g.expected)}${g.diff ? `，差 ${yuan(g.diff)}` : '·符'}`} />
       </div>
       {score.failures.length > 0 && (
         <ul className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-3 text-[12.5px] text-amber-800">

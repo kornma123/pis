@@ -13,7 +13,7 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requireAnyRole } from '../middleware/permissions.js'
-import { loadConfig, peekConfig, saveConfig, normalizeConfig, type PartnerConfigLine } from '../utils/partner-config.js'
+import { loadConfig, peekConfig, saveConfig, normalizeConfig, caliberSignature, type PartnerConfigLine } from '../utils/partner-config.js'
 import { parseStatement, type Grid, type ColMap } from '../utils/statement-parser/index.js'
 import { computeStatementRevenue, type ClassifiedRow } from '../utils/statement-revenue.js'
 import { canonicalCaseNo } from '../utils/classifier.js' // codex MEDIUM-3：落库分组用 NFKC 规范化病理号
@@ -23,7 +23,9 @@ import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
 const router = Router()
 const requireImport = requireAnyRole('finance')
 const genId = (): string => `PC-${uuidv4()}`
-const userId = (req: any): string | undefined => req.user?.id
+const userId = (req: any): string | undefined => req.user?.userId // auth 挂载 userId 非 id（配置 changedBy 防恒 NULL）
+/** 拆分/诊断口径 = 领域决策，仅 admin 可改（财务只配 in/out + 扣率 + 识别词）。 */
+const isAdmin = (req: any): boolean => req.user?.role === 'admin' || (req.user?.roles ?? []).includes('admin')
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100
 const round4 = (n: number): number => Math.round((n + Number.EPSILON) * 10000) / 10000
 const fin = (n: number | undefined): number => (Number.isFinite(n) ? (n as number) : 0)
@@ -44,6 +46,24 @@ function loadLisWorkload(db: any, partnerId: string): Map<string, { blk: number 
   return m
 }
 
+/**
+ * GET /lis-coverage?partnerId&month —— 向导预检：导对账单之前先看该院 LIS 覆盖。
+ * total=0 → 前端提示"先让管理员导 LIS，不导也能算（拆分按账单数量估，偏下限）"。正确顺序引导：先 LIS 后对账单。
+ */
+router.get('/lis-coverage', authenticateToken, requireImport, (req, res) => {
+  try {
+    const db = getDatabase()
+    const partnerId = String(req.query.partnerId || '')
+    const month = String(req.query.month || '')
+    if (!partnerId || !partnerExists(db, partnerId)) { error(res, '医院不存在', 'NOT_FOUND', 404); return }
+    const agg = db.prepare('SELECT COUNT(*) AS total, SUM(CASE WHEN block_count > 0 THEN 1 ELSE 0 END) AS withBlocks FROM lis_cases WHERE partner_id = ?').get(partnerId) as any
+    const inPeriod = month
+      ? (db.prepare(`SELECT COUNT(*) AS n FROM lis_cases WHERE partner_id = ? AND replace(substr(COALESCE(operate_time, ''), 1, 7), '/', '-') = ?`).get(partnerId, month) as any).n
+      : null
+    success(res, { total: Number(agg?.total) || 0, withBlocks: Number(agg?.withBlocks) || 0, inPeriod: inPeriod == null ? null : Number(inPeriod) })
+  } catch (e: any) { error(res, e.message) }
+})
+
 router.post('/preview', authenticateToken, requireImport, (req, res) => {
   try {
     const db = getDatabase()
@@ -62,14 +82,16 @@ router.post('/preview', authenticateToken, requireImport, (req, res) => {
     }
 
     const rev = computeStatementRevenue(parsed.rows, cfg.config, { lisWorkload: loadLisWorkload(db, partnerId) })
-    // codex verify-M1：传了 serviceMonth 就按 LIS 登记月过滤本期病例，否则全院（无日期 LIS 不计入本期 backward 缺口）
-    const lisRows = (serviceMonth
+    // 两把尺分开（口径修正）：正向存在性 = 该院【全量】LIS（与拆分 join 同尺——结算月≠登记月，按月过滤会漏配跨月登记病例）；
+    // 反向缺口 = 【本期】LIS（按登记月过滤，缺口检查天然按期；未选账期则跳过）。
+    const lisAllRows = db.prepare('SELECT case_no FROM lis_cases WHERE partner_id = ?').all(partnerId) as any[]
+    const lisPeriodRows = (serviceMonth
       ? db.prepare(`SELECT case_no FROM lis_cases WHERE partner_id = ? AND replace(substr(COALESCE(operate_time, ''), 1, 7), '/', '-') = ?`).all(partnerId, serviceMonth)
-      : db.prepare('SELECT case_no FROM lis_cases WHERE partner_id = ?').all(partnerId)) as any[]
-    const lisCaseNos = lisRows.map((r) => r.case_no)
+      : []) as any[]
     const score = scoreStatement(rev, {
       declaredTotal: parsed.declaredTotal,
-      lisCaseNos,
+      lisAllCaseNos: lisAllRows.map((r) => r.case_no),
+      lisInPeriodCaseNos: lisPeriodRows.map((r) => r.case_no),
       goldenExpected: Number.isFinite(Number(goldenExpected)) ? Number(goldenExpected) : undefined,
     })
 
@@ -79,6 +101,7 @@ router.post('/preview', authenticateToken, requireImport, (req, res) => {
       revenue: {
         labRevenue: rev.labRevenue, diagnosisSettle: rev.diagnosisSettle, outSettle: rev.outSettle, unmatchedSettle: rev.unmatchedSettle,
         ambiguousSettle: rev.ambiguousSettle, totalSettle: rev.totalSettle, byLine: rev.byLine, counts: rev.counts,
+        splitLisExpected: rev.splitLisExpected, splitLisMissing: rev.splitLisMissing,
       },
       score,
       // 待人工归类的行（未匹配/歧义）供测试台内联建规则
@@ -140,34 +163,36 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
     const importBatch = `STMT-${Date.now()}`
     // codex CRITICAL：唯一键含 partner_id，删插/冲突都按院隔离，防跨院同号同月串账。
     const upsert = db.prepare(`
-      INSERT INTO case_revenue (id, case_no, partner_id, partner_name, doc_no, gross_amount, net_amount, lab_revenue, diagnosis_revenue, out_revenue, discount_rate, revenue_source, service_month, config_version, line_count, import_batch)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'statement', ?, ?, ?, ?)
+      INSERT INTO case_revenue (id, case_no, partner_id, partner_name, doc_no, gross_amount, net_amount, lab_revenue, diagnosis_revenue, out_revenue, unallocated_amount, discount_rate, revenue_source, service_month, config_version, line_count, import_batch)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'statement', ?, ?, ?, ?)
       ON CONFLICT(partner_id, case_no, service_month) DO UPDATE SET
         partner_name = excluded.partner_name, doc_no = excluded.doc_no,
         gross_amount = excluded.gross_amount, net_amount = excluded.net_amount, lab_revenue = excluded.lab_revenue,
         diagnosis_revenue = excluded.diagnosis_revenue,
-        out_revenue = excluded.out_revenue, discount_rate = excluded.discount_rate, revenue_source = 'statement',
+        out_revenue = excluded.out_revenue, unallocated_amount = excluded.unallocated_amount, discount_rate = excluded.discount_rate, revenue_source = 'statement',
         config_version = excluded.config_version, line_count = excluded.line_count, import_batch = excluded.import_batch, updated_at = CURRENT_TIMESTAMP
     `)
     const delLines = db.prepare('DELETE FROM case_revenue_lines WHERE partner_id = ? AND case_no = ? AND service_month = ?')
     const insLine = db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, partner_name, seq, charge_item, gross_amount, discount_rate, net_amount, scope, service_month, import_batch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
-    let labTotal = 0, diagTotal = 0, outTotal = 0, caseCount = 0
+    let labTotal = 0, diagTotal = 0, outTotal = 0, unallocTotal = 0, caseCount = 0
     db.exec('BEGIN IMMEDIATE')
     try {
       for (const [no, lines] of linesByCase) {
-        let gross = 0, net = 0, lab = 0, diag = 0, out = 0
+        let gross = 0, net = 0, lab = 0, diag = 0, out = 0, unalloc = 0
         for (const r of lines) {
           gross = round2(gross + fin(r.bill)); net = round2(net + fin(r.settle))
           // in=labPortion(=settle) / split=分摊后的制片份额；diagnosis=diagPortion(=settle) / split=诊断份额；out=整条
           lab = round2(lab + fin(r.labPortion)); diag = round2(diag + fin(r.diagPortion))
           if (r.status === 'out') out = round2(out + fin(r.settle))
+          // confirm 强制落库的 未匹配/歧义 行：settle 进 net 却无桶承接 → 显式落 unallocated，维持守恒 net=lab+diag+out+unalloc
+          else if (r.status === 'unmatched' || r.status === 'ambiguous') unalloc = round2(unalloc + fin(r.settle))
         }
         const dr = gross > 0 ? round4(net / gross) : 0
-        upsert.run(`CR-${uuidv4()}`, no, partnerId, partner.name, docNo || null, gross, net, lab, diag, out, dr, serviceMonth, cfg.version, lines.length, importBatch)
+        upsert.run(`CR-${uuidv4()}`, no, partnerId, partner.name, docNo || null, gross, net, lab, diag, out, unalloc, dr, serviceMonth, cfg.version, lines.length, importBatch)
         delLines.run(partnerId, no, serviceMonth)
         lines.forEach((r, i) => insLine.run(`CRL-${uuidv4()}`, no, partnerId, partner.name, i + 1, r.item, fin(r.bill), fin(r.rate), fin(r.settle), r.status, serviceMonth, importBatch))
-        labTotal = round2(labTotal + lab); diagTotal = round2(diagTotal + diag); outTotal = round2(outTotal + out); caseCount++
+        labTotal = round2(labTotal + lab); diagTotal = round2(diagTotal + diag); outTotal = round2(outTotal + out); unallocTotal = round2(unallocTotal + unalloc); caseCount++
       }
       backfillAbcPartnerIds(db)
       db.exec('COMMIT')
@@ -175,8 +200,9 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
 
     success(res, {
       partnerId, serviceMonth, configVersion: cfg.version, importBatch,
-      caseCount, labRevenue: labTotal, diagnosisSettle: diagTotal, outSettle: outTotal,
+      caseCount, labRevenue: labTotal, diagnosisSettle: diagTotal, outSettle: outTotal, unallocatedSettle: unallocTotal,
       unmatchedSettle: rev.unmatchedSettle, ambiguousSettle: rev.ambiguousSettle, skippedNoCase,
+      splitLisExpected: rev.splitLisExpected, splitLisMissing: rev.splitLisMissing,
     }, `已入库 ${caseCount} case·实验室收入 ¥${labTotal}（诊断桶 ¥${diagTotal}，移出 ¥${outTotal}，未匹配 ¥${rev.unmatchedSettle}）`)
   } catch (e: any) { error(res, e.message) }
 })
@@ -198,7 +224,13 @@ router.post('/classify-rule', authenticateToken, requireImport, (req, res) => {
       target = config.lines.find((l: PartnerConfigLine) => l.key === lineKey)
       if (!target) { error(res, '业务线不存在', 'NOT_FOUND', 404); return }
     } else if (newLine && newLine.name) {
-      target = { key: `l-${uuidv4().slice(0, 8)}`, name: String(newLine.name), on: true, scope: newLine.scope === 'out' ? 'out' : 'in', prefixes: [], keywords: [], remarks: [] }
+      // scope 支持四态：in(计入实验室) / out(移出) / split(制片拆) / diagnosis(诊断桶)。split 需 splitProcRate（normalizeConfig 校验>0）。
+      const scope: PartnerConfigLine['scope'] = ['in', 'out', 'split', 'diagnosis'].includes(newLine.scope) ? newLine.scope : 'in'
+      target = { key: `l-${uuidv4().slice(0, 8)}`, name: String(newLine.name), on: true, scope, prefixes: [], keywords: [], remarks: [] }
+      if (scope === 'split') {
+        target.splitProcRate = Number(newLine.splitProcRate)
+        target.splitWorkload = newLine.splitWorkload === 'lis_blk' ? 'lis_blk' : 'qty'
+      }
       config.lines.push(target)
     } else {
       error(res, '需指定 lineKey 或 newLine.name', 'BAD_REQUEST', 400); return
@@ -212,6 +244,11 @@ router.post('/classify-rule', authenticateToken, requireImport, (req, res) => {
     //   会整体回退原值（坏扣率/坏 line 未治理）→ 这里拒绝在坏配置上叠加新版本，不把坏值再次持久化。
     let normalized
     try { normalized = normalizeConfig(config) } catch (ve: any) { error(res, ve?.message || '配置格式无效', 'BAD_REQUEST', 400); return }
+
+    // 拆分/诊断口径门禁：本次改动了 split/diagnosis 线（新建/改率/改识别词）→ 仅 admin 可写（财务只读拆分线）。
+    if (caliberSignature(normalized) !== caliberSignature(cur.config) && !isAdmin(req)) {
+      error(res, '拆分/诊断口径仅管理员可改（国标费率与工艺拆分是口径决策，财务侧只读）', 'FORBIDDEN', 403); return
+    }
 
     // codex MEDIUM-2：测试台基于某版预览归类时传 expectedVersion → 乐观锁防并发覆盖（配置页已改到更新版时 409，要求重新预览）。
     const r = saveConfig(db, partnerId, normalized, { changedBy: userId(req), tab: '业务分类', genId, expectedVersion })

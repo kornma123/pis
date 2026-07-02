@@ -57,7 +57,7 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
     }
 
     const importBatch = `NGS-${docNo || uuidv4()}`
-    const operator = (req as any).user?.id || null
+    const operator = (req as any).user?.userId || null // auth 挂载 userId 非 id（审计防恒 NULL）
     const partnerCache = new Map<string, string>()
     let partnersCreated = 0
 

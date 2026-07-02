@@ -124,6 +124,8 @@ export function getAccessiblePaths(): string[] {
     if (roles.includes('admin') || roles.includes('finance')) {
       paths.push('/partner-config', '/import-console', '/import-wizard')
     }
+    // LIS 病例（列表+导入）：口径/工作量数据源，管理员+财务（后端 requireAnyRole('admin','finance') 守卫，见 lis-cases 路由）
+    if (roles.includes('admin') || roles.includes('finance')) paths.push('/lis-cases')
     return paths
   }
   const role = getUserRole()
@@ -137,7 +139,7 @@ export const ROLE_MENU_MAP: Record<string, string[]> = {
     '/', '/inventory', '/inbound', '/outbound', '/returns', '/supplier-returns', '/scraps', '/transfers', '/stocktaking',
     '/projects', '/bom', '/reconciliation', '/account-reconcile', '/cost-analysis',
     '/categories', '/materials', '/alerts',
-    '/purchase-orders', '/suppliers', '/locations', '/users', '/roles', '/logs', '/partner-config', '/import-console', '/import-wizard',
+    '/purchase-orders', '/suppliers', '/locations', '/users', '/roles', '/logs', '/partner-config', '/lis-cases', '/import-console', '/import-wizard',
     // ABC 成本核算（移植）
     '/abc/dashboard', '/abc/slide-cost', '/abc/profitability', '/abc/activity-centers', '/equipment', '/labor-times', '/indirect-costs',
   ],
@@ -155,7 +157,7 @@ export const ROLE_MENU_MAP: Record<string, string[]> = {
     '/', '/inventory', '/inbound', '/materials', '/suppliers', '/purchase-orders', '/supplier-returns', '/categories', '/alerts',
   ],
   finance: [
-    '/', '/inventory', '/supplier-returns', '/reconciliation', '/account-reconcile', '/cost-analysis', '/categories', '/alerts', '/partner-config', '/import-console', '/import-wizard',
+    '/', '/inventory', '/supplier-returns', '/reconciliation', '/account-reconcile', '/cost-analysis', '/categories', '/alerts', '/partner-config', '/lis-cases', '/import-console', '/import-wizard',
     // ABC 成本核算（移植）
     '/abc/dashboard', '/abc/slide-cost', '/abc/profitability', '/abc/activity-centers', '/equipment', '/labor-times', '/indirect-costs',
   ],

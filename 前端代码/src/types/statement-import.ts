@@ -14,16 +14,24 @@ export interface ImportScore {
   failures: string[]
 }
 
-export interface LineRevenue { key: string; name: string; scope: 'in' | 'out'; count: number; settle: number }
+export type LineScope = 'in' | 'out' | 'split' | 'diagnosis'
+export interface LineRevenue {
+  key: string; name: string; scope: LineScope; count: number; settle: number
+  labShare?: number // scope=split：其中计入实验室的制片份额
+  diagShare?: number // scope=split：其中落诊断桶的诊断份额
+}
 
 export interface PreviewRevenue {
-  labRevenue: number
-  outSettle: number
+  labRevenue: number // 实验室收入（整条 in + 拆分制片份额）
+  diagnosisSettle: number // 诊断与报告（诊断桶：我们的钱但非实验室工序）
+  outSettle: number // 外送转出（NGS/FISH/远程/共建）
   unmatchedSettle: number
   ambiguousSettle: number
   totalSettle: number
+  splitLisExpected: number // 应按 LIS 蜡块拆的病例组数
+  splitLisMissing: number // 其中缺蜡块、已按账单数量降级估算的组数（完整度提示）
   byLine: LineRevenue[]
-  counts: { total: number; in: number; out: number; unmatched: number; ambiguous: number }
+  counts: { total: number; in: number; out: number; split: number; diagnosis: number; unmatched: number; ambiguous: number }
 }
 
 export interface AttentionRow { no: string; item: string; settle: number; status: 'unmatched' | 'ambiguous' }
@@ -49,8 +57,11 @@ export interface CommitResult {
   importBatch: string
   caseCount: number
   labRevenue: number
+  diagnosisSettle: number
   outSettle: number
   unmatchedSettle: number
   ambiguousSettle: number
   skippedNoCase: number
+  splitLisExpected: number
+  splitLisMissing: number
 }

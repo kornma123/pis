@@ -54,9 +54,28 @@ function s(row: Record<string, unknown>, key: string): string {
 function n(row: Record<string, unknown>, key: string): number {
   const v = pick(row, key)
   if (v == null) return 0
+  // NFKC 先把全角数字(如 '３')归半角，否则被 [^\d.-] 剥光→静默归 0 丢计数。
   // 保留小数点再 parseFloat → 四舍五入为整数计数；避免 parseInt 把 '10.5' 误剥成 '105'(×10 放大)
-  const x = parseFloat(String(v).replace(/[^\d.-]/g, ''))
+  const x = parseFloat(String(v).normalize('NFKC').replace(/[^\d.-]/g, ''))
   return Number.isFinite(x) && x > 0 ? Math.round(x) : 0
+}
+
+/**
+ * 日期归一：readGrid 用 raw:true → 日期列(登记时间)以 Excel 序列号返回(如 46198.7)。
+ * 若原样 String() 存 operate_time，下游按月过滤 substr(operate_time,1,7) 永不等 'YYYY-MM'
+ * → lis-coverage 本期覆盖 / 反向缺口 / 向导预检 对真实数据恒失效。此处把序列号转 YYYY-MM-DD。
+ * 已是日期字符串('2026-06-25...'/'2026/06/25')则原样返回（下游 replace('/','-') 兼容斜杠）。
+ */
+function toDateish(v: unknown): string {
+  if (v == null || v === '') return ''
+  const raw = String(v).trim()
+  const num = typeof v === 'number' ? v : (/^\d+(\.\d+)?$/.test(raw) ? Number(raw) : NaN)
+  if (Number.isFinite(num) && num >= 20000 && num <= 90000) { // 合理日期区间(约 1954–2146)，避开计数值/小整数
+    const d = new Date(Math.round((num - 25569) * 86400000)) // 25569 = 1970-01-01 的 Excel 序列号
+    const p = (x: number): string => String(x).padStart(2, '0')
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`
+  }
+  return raw
 }
 
 /** 规范化一行 LIS 导出 → NormalizedLisCase（含自动样本类型判定） */
@@ -67,7 +86,7 @@ export function normalizeLisRow(row: Record<string, unknown>): NormalizedLisCase
     partnerName: s(row, 'partnerName'),
     registrationType: s(row, 'registrationType'),
     status: s(row, 'status'),
-    operateTime: s(row, 'operateTime'),
+    operateTime: toDateish(pick(row, 'operateTime')), // 账期锚=登记时间(FIELD.operateTime 首选)；Excel 序列号→YYYY-MM-DD
     heSlideCount: n(row, 'heSlide'),
     blockCount: n(row, 'block'),
     ihcCount: n(row, 'ihc'),
@@ -82,6 +101,46 @@ export function normalizeLisRow(row: Record<string, unknown>): NormalizedLisCase
 /** 有效 case_no 行判定（导出可能夹杂空行/汇总行） */
 export function isValidLisRow(c: NormalizedLisCase): boolean {
   return c.caseNo !== '' && c.partnerName !== ''
+}
+
+// —— 抗体清单表（0702免组类：每例每抗体一行；无送检医院列）——
+export interface NormalizedMarker {
+  caseNo: string
+  markerName: string
+  adviceType: string // Y000001/Y000003=真抗体 · Y000006=HE深切重切 · Y000007=白片
+  waxNo: string
+  sectionNo: string
+}
+
+const MARKER_FIELD: Record<string, string[]> = {
+  caseNo: ['病理号', 'caseNo', 'case_no'],
+  markerName: ['markerName', '抗体名', '抗体', '标志物名称'],
+  adviceType: ['adviceType', '申请类型'],
+  waxNo: ['waxNo', '蜡块号'],
+  sectionNo: ['sectionNo', '切片号'],
+}
+
+/** 规范化一行抗体清单 → NormalizedMarker（按列识别，只取分析列；医生名/备注/时间戳等 PII 不取）。 */
+export function normalizeMarkerRow(row: Record<string, unknown>): NormalizedMarker {
+  const pickM = (key: string): string => {
+    for (const k of MARKER_FIELD[key] || [key]) {
+      const v = row[k]
+      if (v != null && v !== '') return String(v).normalize('NFKC').trim()
+    }
+    return ''
+  }
+  return { caseNo: pickM('caseNo'), markerName: pickM('markerName'), adviceType: pickM('adviceType'), waxNo: pickM('waxNo'), sectionNo: pickM('sectionNo') }
+}
+
+/** 有效抗体行：需病理号 + 抗体名。 */
+export function isValidMarkerRow(m: NormalizedMarker): boolean {
+  return m.caseNo !== '' && m.markerName !== ''
+}
+
+/** 按列识别是不是「抗体清单表」（不写死表名/表数量）：出现抗体名列 = 是。 */
+export function looksLikeMarkerSheet(headerNames: string[]): boolean {
+  const set = new Set(headerNames.map((h) => String(h ?? '').trim()))
+  return MARKER_FIELD.markerName.some((k) => set.has(k))
 }
 
 /** NormalizedLisCase → mapCaseToCharges 的输入（含已解析 specimen_type） */

@@ -46,6 +46,23 @@ describe('normalizeLisRow：真实 LIS 行 → 规范化', () => {
     expect(normalizeLisRow({ 病理号: 'A', 送检医院: 'H', 蜡块数: '7' }).blockCount).toBe(7)
   })
 
+  it('登记时间为 Excel 序列号(readGrid raw:true)→ operateTime 转 YYYY-MM-DD（否则按月过滤/本期覆盖恒失效）', () => {
+    // Excel 序列号 44927 = 2023-01-01（已知锚点）
+    expect(normalizeLisRow({ 病理号: 'A', 送检医院: 'H', 登记时间: 44927 }).operateTime).toBe('2023-01-01')
+    expect(normalizeLisRow({ 病理号: 'A', 送检医院: 'H', 登记时间: 44927.5 }).operateTime).toBe('2023-01-01') // 带时间小数→取日期
+    // 已是日期字符串 → 原样（下游 substr(,1,7)/replace('/','-') 兼容），账期锚=登记时间优先
+    expect(normalizeLisRow({ 病理号: 'A', 送检医院: 'H', 登记时间: '2026-06-25 15:38:39' }).operateTime).toMatch(/^2026-06-25/)
+    expect(normalizeLisRow({ 病理号: 'A', 送检医院: 'H', 登记时间: '2026/06/25' }).operateTime).toBe('2026/06/25')
+    // 小整数计数值不会被误当日期序列号
+    expect(normalizeLisRow({ 病理号: 'A', 送检医院: 'H', 登记时间: '5' }).operateTime).toBe('5')
+  })
+
+  it('全角数字数量 → NFKC 归一后正确计数（否则被 [^\\d.-] 剥光静默归 0）', () => {
+    const c = normalizeLisRow({ 病理号: 'A', 送检医院: 'H', 蜡块数: '３', 免疫组化数: '１２' })
+    expect(c.blockCount).toBe(3)
+    expect(c.ihcCount).toBe(12)
+  })
+
   it('toLisCaseQty：带入指定 specimenType，喂给 mapCaseToCharges', () => {
     const c = normalizeLisRow({ 病理号: 'A', 送检医院: 'H', 蜡块数: 2, 免疫组化数: 4 })
     const q = toLisCaseQty(c, 'tissue')

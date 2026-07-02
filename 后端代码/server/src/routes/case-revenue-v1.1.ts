@@ -29,7 +29,7 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
     if (agg.cases.length === 0) { error(res, '无有效收费明细行', 'BAD_REQUEST', 400); return }
 
     const importBatch = `REV-${Date.now()}`
-    const operator = (req as any).user?.id || null
+    const operator = (req as any).user?.userId || null // auth 挂载 userId 非 id（审计防恒 NULL）
     const partnerCache = new Map<string, string>()
     let partnersCreated = 0
 

@@ -386,6 +386,24 @@ export function initializeDatabase(): void {
     )
   `)
 
+  // LIS 抗体清单（每例每抗体一行）——来自「抗体清单」导出表（0702免组类），只存分析所需列，患者/医生 PII 不入。
+  //   无送检医院列 → partner_id 靠病理号 join lis_cases 定位（认不出的行不落）。advice_type: 真抗体/白片/HE深切重切。
+  //   幂等：按 (partner_id, case_no) 整例删插（补传=该例抗体全量刷新）。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS lis_case_markers (
+      id TEXT PRIMARY KEY,
+      case_no TEXT NOT NULL,
+      partner_id TEXT,
+      marker_name TEXT NOT NULL,
+      advice_type TEXT,
+      wax_no TEXT,
+      section_no TEXT,
+      import_batch TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_lis_case_markers_case ON lis_case_markers(partner_id, case_no)`)
+
   // 收入侧（按医院成本/盈利）：收费目录 charge_codes —— 收费引擎的计价规则源。
   // ⛔ 红线：与成本侧 fee_standards / cost-calculator 完全独立，互不读写。rule_json 持久化 ChargeRule。
   database.exec(`
@@ -1328,6 +1346,9 @@ export function initializeDatabase(): void {
   //   逐病例守恒：net_amount = lab_revenue + diagnosis_revenue + out_revenue。默认 0（旧配置全 in/out → 恒 0，零回归）。
   ensureColumn('case_revenue', 'diagnosis_revenue', 'DECIMAL(18, 4) NOT NULL DEFAULT 0')
   ensureColumn('case_revenue', 'revenue_source', 'TEXT')
+  // confirm 强制落库时，带病理号的 未匹配/歧义 行 settle 计入 net 却不进任何桶 → 无桶孤儿额。
+  //   显式承接，维持逐病例守恒：net_amount = lab_revenue + diagnosis_revenue + out_revenue + unallocated_amount。默认 0（识别率 100% 时恒 0，零回归）。
+  ensureColumn('case_revenue', 'unallocated_amount', 'DECIMAL(18, 4) NOT NULL DEFAULT 0')
   // PRD-0 T3：NGS 缺外包成本时落库但标记未核（cost_confirmed=0）→ 院级 P&L 不计入正常毛利、单列「未核 NGS 毛利」，不按 0 成本污染。默认 1（既有数据视为已核，向后兼容）。
   ensureColumn('ngs_orders', 'cost_confirmed', 'INTEGER NOT NULL DEFAULT 1')
   ensureColumn('case_revenue_lines', 'scope', 'TEXT') // in/out/unmatched/ambiguous（逐行分类留痕）

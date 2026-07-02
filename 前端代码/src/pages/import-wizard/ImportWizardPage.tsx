@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Lock, Loader2, AlertCircle, CheckCircle2, Database, ArrowRight, ArrowLeft } from 'lucide-react'
+import { Lock, Loader2, AlertCircle, CheckCircle2, Database, ArrowRight, ArrowLeft, Info } from 'lucide-react'
 import { statementImportApi, type Grid } from '@/api/statement-import'
 import type { PreviewResult, CommitResult } from '@/types/statement-import'
 import { UploadBar, ScoreCard, useHospitals, readGrid, btnCls, btnPri, yuan } from '@/pages/import-shared/ImportShared'
@@ -19,6 +19,18 @@ export default function ImportWizardPage() {
   const [needConfirm, setNeedConfirm] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // 预检：先 LIS 后对账单的顺序引导（该院无 LIS → 拆分只能按账单数量估，偏下限）
+  const [lisCoverage, setLisCoverage] = useState<{ total: number; withBlocks: number; inPeriod: number | null } | null>(null)
+
+  useEffect(() => {
+    setLisCoverage(null)
+    if (!partnerId) return
+    let stale = false
+    statementImportApi.lisCoverage(partnerId, month || undefined)
+      .then((r) => { if (!stale) setLisCoverage(r) })
+      .catch(() => { /* 预检失败不阻断导入，静默跳过 */ })
+    return () => { stale = true }
+  }, [partnerId, month])
 
   const step = committed ? 2 : preview ? 1 : 0
 
@@ -80,6 +92,13 @@ export default function ImportWizardPage() {
         <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
           <UploadBar hospitals={hospitals} partnerId={partnerId} onPartner={setPartnerId} month={month} onMonth={setMonth} onFile={onFile} busy={busy} fileName={fileName} hospitalsLoading={hospLoading} hospitalsError={hospError} onReloadHospitals={reloadHospitals} />
           <p className="mt-3 text-[12px] text-gray-400">先选医院和账期，再上传该院该月的对账单（.xlsx）。</p>
+          {/* 预检提示：顺序引导（先 LIS 后对账单），不阻断 */}
+          {partnerId && lisCoverage && lisCoverage.total === 0 && (
+            <div className="mt-3 flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-[12.5px] text-blue-800">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>该院还没有 LIS 病例数据：拆分类收费只能按账单数量估算（口径偏下限）。建议先让管理员导入该院 LIS 再导对账单——不导也能算，之后补导 LIS 并重新导入本对账单即可更新。</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -91,7 +110,7 @@ export default function ImportWizardPage() {
           ) : (
             <>
               <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-                <ScoreCard score={preview.score} labRevenue={preview.revenue.labRevenue} />
+                <ScoreCard score={preview.score} revenue={preview.revenue} />
               </div>
               {preview.needsAttention.length > 0 && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] text-amber-800">
@@ -120,9 +139,17 @@ export default function ImportWizardPage() {
         <div className="rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
           <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-500" />
           <div className="text-[15px] font-semibold text-gray-900">已入库 {committed.caseCount} 例</div>
-          <div className="mt-1 text-[13px] text-gray-500">实验室收入 <b className="tabular-nums text-gray-900">{yuan(committed.labRevenue)}</b>
+          <div className="mt-1 text-[13px] text-gray-500">
+            实验室收入 <b className="tabular-nums text-gray-900">{yuan(committed.labRevenue)}</b>
+            <> · 诊断与报告 <span className="tabular-nums text-gray-700">{yuan(committed.diagnosisSettle)}</span></>
+            <> · 外送转出 <span className="tabular-nums text-gray-700">{yuan(committed.outSettle)}</span></>
             {committed.unmatchedSettle > 0 && <> · 未识别 {yuan(committed.unmatchedSettle)}（未计入）</>}
             {committed.skippedNoCase > 0 && <> · 跳过无病理号 {committed.skippedNoCase} 行</>}</div>
+          {committed.splitLisMissing > 0 && (
+            <div className="mx-auto mt-3 max-w-md rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+              本期 {committed.splitLisMissing}/{committed.splitLisExpected} 例组织制片缺 LIS 蜡块数，制片份额按账单数量估算（偏下限）；补导该院 LIS 后重新导入本对账单即可更新。
+            </div>
+          )}
           <div className="mt-4 flex items-center justify-center gap-2">
             <Link to="/hospital-pnl" className={btnPri}>去看院级盈亏看板<ArrowRight className="h-4 w-4" /></Link>
             <button className={btnCls} onClick={reset}>再导一张</button>

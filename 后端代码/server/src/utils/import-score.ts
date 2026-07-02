@@ -4,11 +4,15 @@
  * 四项（都基于【独立】证据，避免 self-fulfilling）：
  *  1. 识别率 = (行数 − 未匹配 − 歧义) / 行数。
  *  2. 对账闭合 = |Σ逐行结算 − declaredTotal| ≤ 阈值（declaredTotal 来自对账单【独立声明的合计行】，抓漏读行）。
- *  3. 病例匹配（双向）：正向 = 有病理号的行命中本期该院 LIS 的比率；反向 = LIS 计入病例中对账单【未覆盖】的数。
+ *  3. 病例匹配（双向，两把尺分开——口径修正，见下）：
+ *     正向 = 对账单病理号是否存在于【该院全量 LIS】（与拆分 join 同一把尺；月份归属按结算表月≠登记月，
+ *     若按月过滤会把跨月登记的病例误报"查无"——和睦家 2 月表实含 3 月登记行）；
+ *     反向 = 【本期】LIS 计入病例中对账单未覆盖的数（缺口检查天然按期）。
  *  4. 黄金值 = 算出实验室收入 vs 财务录入的期望实收（外部值；不符=纠错信号，不是 self-fulfilling）。
+ *     可选项：未录入 = 跳过（null），不触发待处理（防"每月都黄"的告警疲劳→没人信=弃用）。
  *
- * status：ready（已人工核对设基线）> review（四项硬闸全过、待人工核对）> todo（任一未过）。
- * 纯函数（无 DB）；P4 路由层负责从 DB 取本期该院 LIS 病理号后调用。
+ * status：ready（已人工核对设基线）> review（硬闸全过、待人工核对）> todo（任一未过）。
+ * 纯函数（无 DB）；P4 路由层负责从 DB 取该院 LIS 病理号（全量+本期两份）后调用。
  */
 import type { StatementRevenue } from './statement-revenue.js'
 import { canonicalCaseNo } from './classifier.js' // codex MEDIUM-3：病例匹配用 NFKC 规范化，全角号与 LIS 半角号才能对上
@@ -17,8 +21,9 @@ const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 1
 
 export interface ScoreCtx {
   declaredTotal: number | null // 对账单独立声明结算合计
-  lisCaseNos?: string[] // 本期该院 LIS 计入病例的病理号（双向匹配用）
-  goldenExpected?: number // 财务录入的期望实收（黄金值）
+  lisAllCaseNos?: string[] // 该院【全量】LIS 病理号 —— 正向存在性检查（与拆分 join 同一把尺）
+  lisInPeriodCaseNos?: string[] // 该院【本期】LIS 计入病例 —— 反向缺口检查（按期）
+  goldenExpected?: number // 财务录入的期望实收（黄金值，可选）
   closureTolerance?: number // 对账闭合阈值，默认 0.01
   goldenTolerance?: number // 黄金阈值，默认 0.01
   humanReviewed?: boolean // 人工核对过 → ready
@@ -60,21 +65,24 @@ export function scoreStatement(rev: StatementRevenue, ctx: ScoreCtx): ImportScor
     failures.push('对账单无独立合计行，无法做对账闭合校验')
   }
 
-  // 3. 病例匹配（双向）
-  const lisSet = new Set((ctx.lisCaseNos ?? []).map((s) => canonicalCaseNo(s)).filter(Boolean))
+  // 3. 病例匹配（双向，两把尺）
+  // 正向：对账单病理号 ∈ 该院全量 LIS（与拆分 join 同尺；该院完全没 LIS → 提示态 null 不红叉，防告警疲劳）
+  const lisAllSet = new Set((ctx.lisAllCaseNos ?? []).map((s) => canonicalCaseNo(s)).filter(Boolean))
+  const hasLis = lisAllSet.size > 0
   const caseRows = rev.rows.filter((r) => canonicalCaseNo(r.no))
   const stmtCaseSet = new Set(caseRows.map((r) => canonicalCaseNo(r.no)))
   let fwdMatched = 0
-  for (const c of stmtCaseSet) if (lisSet.has(c)) fwdMatched++
+  for (const c of stmtCaseSet) if (lisAllSet.has(c)) fwdMatched++
   const fwdRate = stmtCaseSet.size > 0 ? round2((fwdMatched / stmtCaseSet.size) * 100) / 100 : 1
-  // 有 LIS 数据才判正向（无 lisCaseNos → null 跳过）
-  const fwdPass: boolean | null = ctx.lisCaseNos == null ? null : stmtCaseSet.size === 0 ? null : fwdMatched === stmtCaseSet.size
-  if (fwdPass === false) failures.push(`${stmtCaseSet.size - fwdMatched} 个对账单病理号在 LIS 查无（医院名/病理号对不上）`)
+  const fwdPass: boolean | null = !hasLis ? null : stmtCaseSet.size === 0 ? null : fwdMatched === stmtCaseSet.size
+  if (fwdPass === false) failures.push(`${stmtCaseSet.size - fwdMatched} 个对账单病理号在该院 LIS 全量中查无（可能病理号笔误，或该院 LIS 未导全）`)
 
+  // 反向：本期 LIS 计入病例是否被对账单覆盖（缺口检查按期；无本期数据 → null 跳过）
+  const lisPeriodSet = new Set((ctx.lisInPeriodCaseNos ?? []).map((s) => canonicalCaseNo(s)).filter(Boolean))
   const missingCaseNos: string[] = []
-  if (ctx.lisCaseNos != null) for (const c of lisSet) if (!stmtCaseSet.has(c)) missingCaseNos.push(c)
-  const bwdPass: boolean | null = ctx.lisCaseNos == null ? null : missingCaseNos.length === 0
-  if (bwdPass === false) failures.push(`${missingCaseNos.length} 例 LIS 计入病例对账单未覆盖（待对账/估算）`)
+  for (const c of lisPeriodSet) if (!stmtCaseSet.has(c)) missingCaseNos.push(c)
+  const bwdPass: boolean | null = lisPeriodSet.size === 0 ? null : missingCaseNos.length === 0
+  if (bwdPass === false) failures.push(`${missingCaseNos.length} 例本期 LIS 计入病例对账单未覆盖（待对账/估算）`)
 
   // 4. 黄金值
   let goldenPass: boolean | null = null
@@ -95,7 +103,7 @@ export function scoreStatement(rev: StatementRevenue, ctx: ScoreCtx): ImportScor
     closure: { declaredTotal: ctx.declaredTotal, computed: rev.totalSettle, diff: closureDiff, pass: closurePass },
     caseMatch: {
       forward: { withCaseNo: stmtCaseSet.size, matched: fwdMatched, rate: fwdRate, pass: fwdPass },
-      backward: { lisInPeriod: lisSet.size, missingFromStatement: missingCaseNos.length, missingCaseNos, pass: bwdPass },
+      backward: { lisInPeriod: lisPeriodSet.size, missingFromStatement: missingCaseNos.length, missingCaseNos, pass: bwdPass },
     },
     golden: { expected: ctx.goldenExpected ?? null, computed: rev.labRevenue, diff: goldenDiff, pass: goldenPass },
     status,

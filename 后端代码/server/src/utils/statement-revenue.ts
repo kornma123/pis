@@ -56,6 +56,8 @@ export interface StatementRevenue {
   unmatchedSettle: number
   ambiguousSettle: number
   totalSettle: number // Σ全行 settle（守恒：= lab + diagnosis + out + unmatched + ambiguous）
+  splitLisExpected: number // scope=split & splitWorkload=lis_blk 的病例组数（应按 LIS 蜡块拆）
+  splitLisMissing: number // 其中缺 LIS 蜡块、已降级账单数量估算的组数（完整度信号：>0 说明拆分口径为下限估算）
   byLine: LineRevenue[]
   rows: ClassifiedRow[]
   counts: { total: number; in: number; out: number; split: number; diagnosis: number; unmatched: number; ambiguous: number }
@@ -115,6 +117,8 @@ export function computeStatementRevenue(
     unmatchedSettle: 0,
     ambiguousSettle: 0,
     totalSettle: 0,
+    splitLisExpected: 0,
+    splitLisMissing: 0,
     byLine: [],
     rows: [],
     counts: { total: 0, in: 0, out: 0, split: 0, diagnosis: 0, unmatched: 0, ambiguous: 0 },
@@ -188,7 +192,9 @@ export function computeStatementRevenue(
   // —— 第二趟：逐病例 split 拆分（制片份额 = rate×工作量 / (rate×工作量 + 105)）——
   for (const g of splitGroups.values()) {
     const rate = Number.isFinite(g.line.splitProcRate as number) ? (g.line.splitProcRate as number) : 0
-    const useLis = g.line.splitWorkload === 'lis_blk' && lisNorm.has(nfkcUpper(g.no))
+    const wantsLis = g.line.splitWorkload === 'lis_blk'
+    const useLis = wantsLis && lisNorm.has(nfkcUpper(g.no))
+    if (wantsLis) { out.splitLisExpected++; if (!useLis) out.splitLisMissing++ } // 完整度：缺蜡块→降级估算
     const workload = useLis ? lisNorm.get(nfkcUpper(g.no))!.blk : g.qty
     const denom = rate * workload + SPLIT_DIAG_FEE
     const f = denom > 0 ? (rate * workload) / denom : 0

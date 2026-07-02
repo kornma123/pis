@@ -37,6 +37,7 @@ import PartnerConfigPage from '@/pages/partner-config/PartnerConfigPage'
 import AccountReconcilePage from '@/pages/account-reconcile/AccountReconcilePage'
 import ImportConsolePage from '@/pages/import-console/ImportConsolePage'
 import ImportWizardPage from '@/pages/import-wizard/ImportWizardPage'
+import LisCasesPage from '@/pages/lis-cases/LisCasesPage'
 import SlideCostAnalysis from '@/pages/cost/SlideCostAnalysis'
 import { ProfitabilityAnalysis } from '@/pages/cost/ProfitabilityAnalysis'
 import FeeComparison from '@/pages/cost/FeeComparison'
@@ -94,6 +95,7 @@ function App() {
           <Route path="/partner-config" element={<PartnerConfigPage />} />
           <Route path="/import-console" element={<ImportConsolePage />} />
           <Route path="/import-wizard" element={<ImportWizardPage />} />
+          <Route path="/lis-cases" element={<LisCasesPage />} />
           <Route path="/abc/dashboard" element={<CostDashboard />} />
           <Route path="/abc/slide-cost" element={<SlideCostAnalysis />} />
           <Route path="/abc/profitability" element={<ProfitabilityAnalysis />} />

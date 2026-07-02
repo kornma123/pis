@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { Lock, ArrowLeft, Save, Plus, X, History, ChevronRight, Loader2, AlertCircle, Search } from 'lucide-react'
+import { Lock, ArrowLeft, Save, Plus, X, History, ChevronRight, Loader2, AlertCircle, Search, Scissors } from 'lucide-react'
 import { partnerConfigApi, type PartnerListItem } from '@/api/partner-config'
-import type { PartnerConfig, ConfigChange } from '@/types/partner-config'
+import type { PartnerConfig, ConfigChange, LineScope } from '@/types/partner-config'
+import { getRoles, getUserRole } from '@/lib/permissions'
 
 // —— 设计令牌（Stripe 风，主蓝 #3b82f6；按钮 h-10=项目标准）——
 const inputCls = 'h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[13px] text-gray-900 placeholder:text-gray-400 outline-none transition-colors focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10'
+// 归类中文文案 + 拆分国标费率（固定，不开放自定义）+ 制片份额预览（以 2 蜡块为例）
+const SCOPE_LABEL: Record<LineScope, string> = { in: '计入实验室', out: '外送转出（不计）', split: '拆分（只计制片）', diagnosis: '诊断与报告（不计）' }
+const PROC_RATE_OPTS: Array<{ rate: number; label: string }> = [{ rate: 36, label: '¥36 · 组织/冰冻' }, { rate: 75, label: '¥75 · 细胞' }]
+const splitInPct = (rate: number): number => Math.round(((rate * 2) / (rate * 2 + 105)) * 100)
 const btnCls = 'inline-flex h-10 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 text-[13px] font-medium text-gray-700 transition-colors hover:bg-gray-50 focus-visible:ring-[3px] focus-visible:ring-blue-500/10 focus-visible:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50'
 const btnPri = 'inline-flex h-10 items-center gap-1.5 rounded-md bg-blue-500 px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-blue-600 focus-visible:ring-[3px] focus-visible:ring-blue-500/30 disabled:cursor-not-allowed disabled:opacity-50'
 const label = 'mb-1 block text-[12px] font-medium text-gray-500'
@@ -113,7 +118,10 @@ export default function PartnerConfigPage() {
     if (!(c.discount.def > 0 && c.discount.def <= 1)) bad.push('默认扣率须在 0–1 之间')
     c.discount.byLine.forEach((d) => { if (!(d.rate > 0 && d.rate <= 1)) bad.push('按业务线扣率须在 0–1 之间') })
     c.discount.byItem.forEach((d) => { if (!d.item.trim()) bad.push('按项目扣率的项目名不能为空'); if (!(d.rate > 0 && d.rate <= 1)) bad.push('按项目扣率须在 0–1 之间') })
-    c.lines.forEach((l) => { if (!l.name.trim()) bad.push('业务线名称不能为空') })
+    c.lines.forEach((l) => {
+      if (!l.name.trim()) bad.push('业务线名称不能为空')
+      if (l.scope === 'split' && !(Number(l.splitProcRate) > 0)) bad.push('拆分线需选择处理费（国标）')
+    })
     return [...new Set(bad)]
   }
 
@@ -333,9 +341,10 @@ function Chips({ words, onAdd, onDel, placeholder }: { words: string[]; onAdd: (
 
 function LinesTab({ cfg, patch, askConfirm }: { cfg: PartnerConfig; patch: PatchFn; askConfirm: (r: ConfirmReq) => void }) {
   const hasRemark = !!(cfg.parse.colMap && (cfg.parse.colMap as any).remark != null)
+  const isAdmin = getRoles().includes('admin') || getUserRole() === 'admin'
   return (
     <div className="space-y-3">
-      <p className="text-[12.5px] text-gray-500">每条业务线：是否计入实验室、以及怎么从对账单认出它（病理号前缀 / 项目名含词 / 备注含词，每条只检索对应那列）。</p>
+      <p className="text-[12.5px] text-gray-500">每条业务线：这项收费怎么归、以及怎么从对账单认出它（病理号前缀 / 项目名含词 / 备注含词，每条只检索对应那列）。{!isAdmin && <span className="text-gray-400">「拆分」「诊断与报告」是口径设置，由管理员维护，这里只读。</span>}</p>
       {cfg.lines.map((l, i) => (
         <div key={l.key} className="rounded-md border border-gray-200 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -347,14 +356,52 @@ function LinesTab({ cfg, patch, askConfirm }: { cfg: PartnerConfig; patch: Patch
               <span className={`h-4 w-4 rounded-full bg-white transition-transform ${l.on ? 'translate-x-4' : ''}`} />
             </button>
             <span className="text-[12px] text-gray-500">{l.on ? '启用' : '停用'}</span>
-            <div role="group" aria-label="算不算实验室" className="inline-flex overflow-hidden rounded-md border border-gray-200 text-[12px]">
-              {(['in', 'out'] as const).map((s) => (
-                <button key={s} aria-pressed={l.scope === s} onClick={() => patch((c) => { c.lines[i].scope = s })}
-                  className={`px-2.5 py-1 transition-colors ${l.scope === s ? 'bg-blue-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>{s === 'in' ? '计入实验室' : '不计入'}</button>
-              ))}
-            </div>
+            <span className="text-[12px] text-gray-500">这项怎么归</span>
+            {(l.scope === 'split' || l.scope === 'diagnosis') && !isAdmin ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-[12px] text-gray-500" title="拆分/诊断口径由管理员设定">
+                <Lock className="h-3 w-3" />{SCOPE_LABEL[l.scope]} · 管理员设定
+              </span>
+            ) : (
+              <select aria-label="这项收费怎么归" value={l.scope}
+                onChange={(e) => patch((c) => {
+                  const s = e.target.value as LineScope
+                  c.lines[i].scope = s
+                  if (s === 'split') { if (!(Number(c.lines[i].splitProcRate) > 0)) c.lines[i].splitProcRate = 36; if (!c.lines[i].splitWorkload) c.lines[i].splitWorkload = 'lis_blk' }
+                })}
+                className="h-8 rounded-md border border-gray-200 bg-white px-2 text-[12px] text-gray-900 outline-none transition-colors focus:border-blue-500">
+                <option value="in">计入实验室</option>
+                {isAdmin && <option value="split">拆分（只计制片）</option>}
+                {isAdmin && <option value="diagnosis">诊断与报告（不计）</option>}
+                <option value="out">外送转出（不计）</option>
+              </select>
+            )}
             <button className="ml-auto text-gray-300 hover:text-red-500" aria-label={`删除业务线 ${l.name}`} onClick={() => askConfirm({ title: `删除业务线「${l.name}」？`, desc: '该业务线的识别词与归属设置将一并移除。', danger: true, onConfirm: () => patch((c) => { c.lines.splice(i, 1) }) })}><X className="h-4 w-4" /></button>
           </div>
+          {l.scope === 'split' && (
+            <div className="mb-2 rounded-md bg-blue-50 p-2.5 text-[12px]">
+              <div className="mb-2 flex items-center gap-1.5 text-blue-700"><Scissors className="h-3.5 w-3.5" />拆开算：制片按工作量计入实验室，诊断部分不计</div>
+              <div className="flex flex-wrap items-end gap-4">
+                <label className="block">
+                  <span className="mb-1 block text-[11.5px] text-gray-500">处理费（国标）</span>
+                  <select value={l.splitProcRate ?? 36} disabled={!isAdmin}
+                    onChange={(e) => patch((c) => { c.lines[i].splitProcRate = Number(e.target.value) })}
+                    className="h-8 rounded-md border border-gray-200 bg-white px-2 text-[12px] text-gray-900 outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400">
+                    {PROC_RATE_OPTS.map((o) => <option key={o.rate} value={o.rate}>{o.label}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[11.5px] text-gray-500">工作量按</span>
+                  <select value={l.splitWorkload ?? 'lis_blk'} disabled={!isAdmin}
+                    onChange={(e) => patch((c) => { c.lines[i].splitWorkload = e.target.value as 'lis_blk' | 'qty' })}
+                    className="h-8 rounded-md border border-gray-200 bg-white px-2 text-[12px] text-gray-900 outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400">
+                    <option value="lis_blk">LIS 蜡块数（最准）</option>
+                    <option value="qty">账单数量</option>
+                  </select>
+                </label>
+              </div>
+              <div className="mt-2 text-[11.5px] text-blue-700">按此设置，这类每单约拆：制片 {splitInPct(l.splitProcRate ?? 36)}% 计入 · 诊断 {100 - splitInPct(l.splitProcRate ?? 36)}% 不计（以 2 蜡块为例）</div>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div><span className="mb-1 block text-[11.5px] text-gray-400">病理号前缀 · 开头</span><Chips words={l.prefixes} placeholder="如 H" onAdd={(w) => patch((c) => { if (!c.lines[i].prefixes.includes(w)) c.lines[i].prefixes.push(w) })} onDel={(k) => patch((c) => { c.lines[i].prefixes.splice(k, 1) })} /></div>
             <div><span className="mb-1 block text-[11.5px] text-gray-400">项目名 · 含</span><Chips words={l.keywords} placeholder="如 手术标本" onAdd={(w) => patch((c) => { if (!c.lines[i].keywords.includes(w)) c.lines[i].keywords.push(w) })} onDel={(k) => patch((c) => { c.lines[i].keywords.splice(k, 1) })} /></div>

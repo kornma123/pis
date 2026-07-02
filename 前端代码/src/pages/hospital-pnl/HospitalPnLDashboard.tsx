@@ -141,6 +141,7 @@ export default function HospitalPnLDashboard() {
                     <th className="text-left font-medium px-4 py-2.5">医院</th>
                     <th className="text-right font-medium px-4 py-2.5">财务实收</th>
                     <th className="text-right font-medium px-4 py-2.5">实验室收入</th>
+                    <th className="text-right font-medium px-4 py-2.5" title="医生诊断/报告/现场服务——我们收但非实验室工序，不进毛利">诊断与报告</th>
                     <th className="text-right font-medium px-4 py-2.5">核算成本</th>
                     <th className="text-right font-medium px-4 py-2.5">毛利</th>
                     <th className="text-right font-medium px-4 py-2.5">毛利率</th>
@@ -161,6 +162,7 @@ export default function HospitalPnLDashboard() {
                         <td className={cn('px-4 py-3 font-medium', INK)}>{r.partnerName || r.partnerId}</td>
                         <td className="px-4 py-3 text-right text-slate-600">{yuan(r.netRevenueTotal)}</td>
                         <td className="px-4 py-3 text-right text-slate-600">{yuan(r.labRevenueTotal)}</td>
+                        <td className="px-4 py-3 text-right text-slate-400">{r.diagnosisRevenueTotal > 0 ? yuan(r.diagnosisRevenueTotal) : '—'}</td>
                         <td className="px-4 py-3 text-right text-slate-600">{r.costMatched ? yuan(r.costTotal) : <span className="text-amber-600">未接通</span>}</td>
                         <td className={cn('px-4 py-3 text-right font-medium', marginColor(r.grossMargin))}>{r.grossMargin < 0 ? '−' : '+'}{yuan(Math.abs(r.grossMargin)).slice(1)}</td>
                         <td className={cn('px-4 py-3 text-right font-medium', marginColor(r.grossMargin))}>{pct(r.marginRate)}</td>

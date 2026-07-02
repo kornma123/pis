@@ -6,6 +6,7 @@ export interface PartnerPnl {
   caseCount: number
   netRevenueTotal: number // 财务实收合计
   labRevenueTotal: number // 实验室收入合计
+  diagnosisRevenueTotal: number // 诊断与报告合计（我们的钱但非实验室工序；只展示，不进毛利）
   costTotal: number // ABC 成本合计（按医院上卷）
   grossMargin: number // 毛利 = 实验室收入 − 成本
   marginRate: number // 毛利率

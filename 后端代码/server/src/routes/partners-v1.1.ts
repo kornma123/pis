@@ -61,7 +61,7 @@ router.post('/', authenticateToken, requireWrite, (req, res) => {
     if (db.prepare('SELECT 1 FROM partners WHERE name = ? AND is_deleted = 0').get(String(name).trim())) {
       error(res, '同名医院已存在', 'RESOURCE_CONFLICT', 409); return
     }
-    const ref = findOrCreatePartner(db, name, uuidv4, { serviceScope: serviceScope || 'technical_only', createdBy: (req as any).user?.id })
+    const ref = findOrCreatePartner(db, name, uuidv4, { serviceScope: serviceScope || 'technical_only', createdBy: (req as any).user?.userId }) // userId 非 id（created_by 防恒 NULL）
     // 建后补充可选字段
     db.prepare('UPDATE partners SET short_name = ?, contact = ?, phone = ?, address = ?, contract_no = ? WHERE id = ?')
       .run(shortName || null, contact || null, phone || null, address || null, contractNo || null, ref.id)
