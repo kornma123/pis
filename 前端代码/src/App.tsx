@@ -36,6 +36,7 @@ import HospitalPnLDashboard from '@/pages/hospital-pnl/HospitalPnLDashboard'
 import PartnerConfigPage from '@/pages/partner-config/PartnerConfigPage'
 import ImportConsolePage from '@/pages/import-console/ImportConsolePage'
 import ImportWizardPage from '@/pages/import-wizard/ImportWizardPage'
+import LisImportPage from '@/pages/lis-import/LisImportPage'
 import SlideCostAnalysis from '@/pages/cost/SlideCostAnalysis'
 import { ProfitabilityAnalysis } from '@/pages/cost/ProfitabilityAnalysis'
 import FeeComparison from '@/pages/cost/FeeComparison'
@@ -92,6 +93,7 @@ function App() {
           <Route path="/partner-config" element={<PartnerConfigPage />} />
           <Route path="/import-console" element={<ImportConsolePage />} />
           <Route path="/import-wizard" element={<ImportWizardPage />} />
+          <Route path="/lis-import" element={<LisImportPage />} />
           <Route path="/abc/dashboard" element={<CostDashboard />} />
           <Route path="/abc/slide-cost" element={<SlideCostAnalysis />} />
           <Route path="/abc/profitability" element={<ProfitabilityAnalysis />} />

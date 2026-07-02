@@ -34,6 +34,7 @@ import {
   TrendingUp,
   Layers,
   Settings,
+  Database,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -62,6 +63,7 @@ const ALL_MAIN_MENU: MenuItem[] = [
   // ===== 按医院成本/盈利 =====
   { label: '医院盈利看板', path: '/hospital-pnl', icon: TrendingUp },
   { label: '合作医院配置', path: '/partner-config', icon: Settings },
+  { label: 'LIS 病例导入', path: '/lis-import', icon: Database },
   { label: '导入测试台', path: '/import-console', icon: FlaskConical },
   { label: '财务月度导入', path: '/import-wizard', icon: FileText },
   // ===== ABC 成本核算导航（移植自 abc-productization 分支）=====

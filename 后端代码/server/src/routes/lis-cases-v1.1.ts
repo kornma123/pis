@@ -1,6 +1,9 @@
 /**
  * LIS 病例（lis_cases）批量导入 + 列表 + 样本类型人工覆盖（W3）。
- * RBAC：读 reconciliation R（挂载层）；写 reconciliation W（技术员可录入，与对账同域）。
+ * RBAC：读 reconciliation R（挂载层）。写分两档：
+ *  - 导入/预览（/import、/preview）= 口径与工作量数据源输入 → requireAnyRole('admin','finance')
+ *    （与前端「LIS 病例导入」页管理员+财务一致；口径同 ngs-v1.1 收窄，不放开给技术员/主任）。
+ *  - 样本类型人工覆盖（PUT /:caseNo/specimen-type）= 单例技术更正、留痕 → reconciliation W（技术员可录入）。
  *
  * 增量纠错架构：
  *  - 原始事实层：6 数量列 + partner，幂等 upsert（重传覆盖）。
@@ -11,13 +14,14 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
-import { requirePermission } from '../middleware/permissions.js'
+import { requirePermission, requireAnyRole } from '../middleware/permissions.js'
 import { findOrCreatePartner } from '../utils/partner-upsert.js'
 import { normalizeLisRow, isValidLisRow } from '../utils/lis-import.js'
 import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
 
 const router = Router()
-const requireWrite = requirePermission('reconciliation', 'W')
+const requireWrite = requirePermission('reconciliation', 'W') // 样本类型覆盖（技术员可录入）
+const requireImport = requireAnyRole('admin', 'finance') // 导入/预览=口径数据源输入，收窄到管理员+财务
 const SPECIMEN_TYPES = ['tissue', 'tissue_complex', 'cytology']
 
 // 单次导入行数上限。node:sqlite 是同步接口：/import 在单个 BEGIN IMMEDIATE 事务里逐行
@@ -26,7 +30,7 @@ const SPECIMEN_TYPES = ['tissue', 'tissue_complex', 'cytology']
 const MAX_LIS_IMPORT_ROWS = 1000
 
 /** POST /import —— 批量导入 LIS 病例（含医院 upsert + 数量 + 自动样本判定） */
-router.post('/import', authenticateToken, requireWrite, (req, res) => {
+router.post('/import', authenticateToken, requireImport, (req, res) => {
   try {
     const db = getDatabase()
     const { cases } = req.body as { cases: Record<string, unknown>[] }
@@ -100,7 +104,7 @@ router.post('/import', authenticateToken, requireWrite, (req, res) => {
 })
 
 /** POST /preview —— 干跑：解析 LIS 行，不落库，返回汇总 + 医院新建预判 + 样本分布（导入向导第1步） */
-router.post('/preview', authenticateToken, requireWrite, (req, res) => {
+router.post('/preview', authenticateToken, requireImport, (req, res) => {
   try {
     const db = getDatabase()
     const { cases } = req.body as { cases: Record<string, unknown>[] }

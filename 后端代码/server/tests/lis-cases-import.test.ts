@@ -8,6 +8,8 @@ let app: any
 let db: any
 let adminToken = ''
 let whmToken = '' // warehouse_manager：reconciliation R 但无 W
+let financeToken = '' // finance：LIS 导入新口径 owner（管理员+财务）
+let techToken = '' // technician：持 reconciliation W，但导入被收窄 → 应 403
 
 async function login(u: string, p: string): Promise<string> {
   const request = (await import('supertest')).default
@@ -34,6 +36,8 @@ beforeAll(async () => {
   ])
   adminToken = await login('admin', 'admin123')
   whmToken = await login('cangguan', 'CoreOne2026!')
+  financeToken = await login('caiwu', 'CoreOne2026!')
+  techToken = await login('jishuyuan1', 'CoreOne2026!')
 })
 
 describe('W3 LIS 导入：医院 upsert + 数量 + 自动样本', () => {
@@ -94,7 +98,25 @@ describe('W3 样本类型人工覆盖（manual 永远赢）', () => {
   })
 })
 
-describe('W3 RBAC', () => {
+describe('W3 RBAC：导入/预览收窄到管理员+财务；样本覆盖仍 reconciliation W', () => {
+  it('finance（LIS 导入新口径 owner）：导入 200、预览 200', async () => {
+    const request = await req()
+    expect((await request(app).post('/api/v1/lis-cases/import').set('Authorization', `Bearer ${financeToken}`).send({ cases: CASES })).status).toBe(200)
+    expect((await request(app).post('/api/v1/lis-cases/preview').set('Authorization', `Bearer ${financeToken}`).send({ cases: CASES })).status).toBe(200)
+  })
+
+  it('technician（持 reconciliation W 但非管理员/财务）：导入 403、预览 403（口径数据源已收窄）', async () => {
+    const request = await req()
+    expect((await request(app).post('/api/v1/lis-cases/import').set('Authorization', `Bearer ${techToken}`).send({ cases: CASES })).status).toBe(403)
+    expect((await request(app).post('/api/v1/lis-cases/preview').set('Authorization', `Bearer ${techToken}`).send({ cases: CASES })).status).toBe(403)
+  })
+
+  it('technician 仍可做样本类型人工覆盖（reconciliation W，单例技术更正不随导入收窄）', async () => {
+    const request = await req()
+    const ov = await request(app).put('/api/v1/lis-cases/S26-02725/specimen-type').set('Authorization', `Bearer ${techToken}`).send({ specimenType: 'tissue' })
+    expect(ov.status).toBe(200)
+  })
+
   it('warehouse_manager（reconciliation R 无 W）：列表可读，导入被拒 403', async () => {
     const request = await req()
     expect((await request(app).get('/api/v1/lis-cases').set('Authorization', `Bearer ${whmToken}`)).status).toBe(200)
