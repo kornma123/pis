@@ -5,6 +5,7 @@ import { initializeDatabase } from './database/DatabaseManager.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { authenticateToken } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
+import { auditWrite } from './middleware/audit-log.js'
 
 // 路由导入
 import authRoutes from './routes/auth.js'
@@ -62,6 +63,11 @@ app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`)
   next()
 })
+
+// 全站写操作统一审计：给所有登录后的成功写操作留痕到 operation_logs（见 middleware/audit-log.ts）。
+// 置于路由挂载之前——其 res.on('finish') 钩子在 authenticateToken 填充 req.user、业务处理完成之后触发，
+// 故只记已鉴权且成功(2xx)的写；对读(GET)/公开接口(/auth 登录)/失败请求天然不记。
+app.use(auditWrite)
 
 // 初始化数据库
 initializeDatabase()

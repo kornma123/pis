@@ -77,7 +77,13 @@ export function resolveRequestRoles(user: { userId?: string; role?: string; role
   return user.role ? [user.role] : []
 }
 
-/** 路由守卫：要求当前用户对 module 具备 level 权限（读 DB 真值，即时生效） */
+/**
+ * 路由守卫：要求当前用户对 module 具备 level 权限（读 DB 真值，即时生效）。
+ *
+ * 审计口径：这是**鉴权**守卫，不是审计落点——它对 GET 读也会触发、且在业务操作成功前就跑。admin（→ 全 W）
+ * 直接放行且不写审计是有意为之。敏感写的留痕在**操作层**完成（writeAuditLog → abc_audit_logs，含 operator，
+ * 对 admin 一视同仁）；勿在此层补 writeAuditLog（否则会记录读操作、并在操作成功前误记）。
+ */
 export function requirePermission(module: string, level: Level = 'R') {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     const user = req.user

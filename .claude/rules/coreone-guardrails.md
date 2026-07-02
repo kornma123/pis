@@ -119,6 +119,14 @@ test(e2e): 补充入库流程 E2E 用例
 - SQL 查询必须使用参数化，禁止 `${}` 字符串拼接
 - 前端不存储敏感数据到 localStorage（token 除外，需加密或限制）
 
+## 审计留痕口径（权威表述，与实现对齐 2026-07-02）
+
+> 背景：一次多镜头自审曾把"`auth.ts` admin 分支只 `next()`、无审计写入"报为审计缺口。核实后为**误报**——审计不落在守卫层。此处固化真实口径，防复发。
+
+- **鉴权守卫 ≠ 审计落点**：`requireRole` / `requirePermission`（`middleware/`）是访问控制，对 GET 读也触发、且在业务操作成功前就跑。**不要在守卫的 admin 放行分支补 `writeAuditLog`**（会记录读操作、并在操作成功前误记）。`requireRole` 已是遗留兼容 shim（生产路由全走 `requirePermission`，仅测试脚手架仍引用）。
+- **敏感写在操作层留痕**：碰钱/口径的写（关账、成本核算、成本调整/补收、对账修正与审批、预算、质量成本）经 `writeAuditLog` 落 `abc_audit_logs`，字段含 `operator`（=用户名），**对 admin 一视同仁**；对账另有 SoD 自审拦截（`reconciliation-v1.1.ts`：不能审核自己提交的提案）。回归门禁见 `tests/bv-admin-audit-trail.test.ts`。
+- **全站写操作统一审计（已落地 2026-07-02）**：`middleware/audit-log.ts` 的 `auditWrite`（`app.ts` 全局挂载，路由之前）对**所有登录后的成功(2xx)写操作**（POST/PUT/PATCH/DELETE）统一落 `operation_logs`，记 `operator`/模块/路径/**脱敏后**的请求体/ip/ua。口径：**全站双轨**（成本/对账域与其专属审计并存，`operation_logs` = 「谁在何时改了什么」统一账本）；**只记成功**（失败尝试不入库，防日志投毒）；**强制脱敏**（password/token/secret 不落库）。对读(GET)/公开接口(/auth 登录)/未登录**天然不记**。回归门禁见 `tests/bv-write-audit-middleware.test.ts`。**勿再在守卫层补审计**（口径见上一条），新增写路由无需手动写通用日志——中间件已自动覆盖；仅当需要 before/after 明细时才在路由内额外手写（如成本域 `writeAuditLog`）。
+
 ---
 
 *与项目根目录 CLAUDE.md 配套使用。如有冲突，以 CLAUDE.md 为准。*

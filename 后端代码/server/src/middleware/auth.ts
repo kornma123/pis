@@ -105,6 +105,13 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   next()
 }
 
+// ⚠️ 遗留兼容 shim：生产路由已全部迁移到 requirePermission(module, level)（见 app.ts + permissions.ts，
+// 数据驱动 RBAC P3）。requireRole 现仅被测试脚手架引用，不在任何生产请求路径上。
+//
+// 审计口径（勿在此层补审计）：requireRole/requirePermission 都是**鉴权守卫**，对 GET 读同样触发、且在
+// 业务操作成功之前就跑，天然不是审计落点。敏感写的留痕在**操作层**完成——碰钱的写（关账/成本核算/
+// 成本调整/对账/预算/质量成本）经 writeAuditLog 落 abc_audit_logs（含 operator=用户名，对 admin 一视同仁），
+// 对账另有 SoD 自审拦截（reconciliation-v1.1.ts：不能审核自己提交的提案）。故 admin 放行处只放行、不写审计。
 export function requireRole(...allowedRoles: string[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     const user = req.user
@@ -113,7 +120,7 @@ export function requireRole(...allowedRoles: string[]) {
       return
     }
 
-    // admin 拥有所有权限
+    // admin 拥有所有权限（放行即可；审计在操作层，见函数头注释）
     if (user.role === 'admin') {
       next()
       return

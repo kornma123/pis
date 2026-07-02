@@ -741,3 +741,50 @@ http://your-server-ip:8080
 | 无部署文档 | ✅ 已编写 |
 
 *更新时间：2026-05-26*
+
+---
+
+## 本次会话完成的工作（审计缺口自审核实 + 文档对齐，2026-07-02）
+
+**线**：master（HEAD==origin/master `6e376050`，共同历史，改这条线正确）。worktree `nervous-kilby-6788c2`。
+
+**触发**：多镜头自审报"`auth.ts` admin 分支只 `next()`、无审计写入 → admin 无留痕"缺口。
+
+**核实结论 = 误报**（三步查清）：
+1. `requireRole` admin 分支确无审计，但它在生产路由 **0 引用**（`grep requireRole src/routes/`=空）——数据驱动 RBAC P3 已全换 `requirePermission`，`requireRole` 仅测试脚手架用。生产走 `requirePermission`，admin 路径同样只放行（守卫层本就不该审计：对读也触发、在操作成功前跑）。
+2. master **无顶层 operation_logs 中间件**（那是 codex 线）。碰钱的写（关账/成本核算/成本调整/补收/对账/预算/质量成本）**在操作层已审计** → `abc_audit_logs`（`writeAuditLog`，含 `operator`，对 admin 一视同仁）；对账另有 SoD 自审拦截（reconciliation-v1.1.ts:502 不能审核自己的提案）。
+3. **无任何治理文档声称"admin 放行时记录审计日志"**（全仓 grep 证实）；FRS-16 §3.1.3 已如实写明 operation_logs 逐路由手动写入、"部分操作可能未记录"。故不存在文档与实现矛盾。
+
+**落地（选项 B：文档/注释对齐实现 + 回归门禁；行为零变更、守 ABC 黄金）**：
+- `src/middleware/auth.ts`：`requireRole` 头 + admin 分支加注释（遗留 shim + 审计口径在操作层）。
+- `src/middleware/permissions.ts`：`requirePermission` JSDoc 补审计口径（勿在守卫补 writeAuditLog）。
+- `.claude/rules/coreone-guardrails.md`：新增「审计留痕口径（权威表述）」小节，固化真实口径防复发 + 标注通用 CRUD operation_logs 覆盖不全为独立立项。
+- `tests/bv-admin-audit-trail.test.ts`（NEW）：锁定不变量——admin 创建成本期间 → `abc_audit_logs` 留痕且 `operator=admin`。
+
+**验证**：`npm run test:node` 全绿 **72 files / 511 tests**（新增 +1）；golden ¥27,870 / ¥13,152 零回归。
+
+**遗留建议（未做，供用户决策）**：通用 CRUD（用户/角色/物料/库存）写操作无统一审计中间件——如需 SoD/合规级全站留痕，属独立立项，不要靠守卫层打补丁。 → **已启动并落地，见下一节。**
+
+*更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（全站写操作统一审计中间件，独立立项，2026-07-02）
+
+**触发**：上一节「遗留建议」——通用 CRUD 无统一审计。用户拍板"启动这个任务"。
+
+**真数据摸底**：全站 32 路由文件 / ~130 写端点。已自审计=成本域(abc/cost-adjustment/equipment*/indirect-cost/labor-time→abc_audit_logs)+对账(reconciliation→reconciliation_logs)+supplier-returns 修正(operation_logs)；**无审计的真缺口≈24 文件 ~70 写端点**（users/roles/materials/inventory/suppliers/categories/locations/projects/bom/alerts/入出库/盘点/采购/退货报废调拨/partners/lis/ngs/statement 等）。
+
+**用户决策（AskUserQuestion）**：① 覆盖范围=**补齐缺口+成本域双轨**（成本域也进 operation_logs，与专属审计并存；operation_logs=全站「谁在何时改了什么」统一账本）；② 失败口径=**只记成功(2xx)**。
+
+**实现（NEW `src/middleware/audit-log.ts` 的 `auditWrite`）**：全局挂载于 `app.ts` 路由之前；`res.on('finish')` 钩子在 authenticateToken 填 req.user、业务完成后触发。仅「写方法 + 已登录 + 2xx」时往**现有 operation_logs 表**追加一条（operator/模块/路径/**脱敏后**请求体/ip/ua）。铁律：读(GET)/公开接口(/auth)/未登录/失败**天然不记**；**强制脱敏**(password/token/secret→[REDACTED]，含嵌套)；`response_data` 恒 null（不落响应体防泄敏）；绝不阻断响应/绝不抛错；零 schema 变更。导出等 GET 不受影响；只包裹 res.json 故 res.send/download 不受影响。
+
+**BDD/TDD（NEW `tests/bv-write-audit-middleware.test.ts`，6 用例）**：脱敏单元 + 成功写留痕(operator=admin,脱敏) + 读不记 + 失败(404)不记 + 未登录(401)不记 + 成本域双轨(abc_audit_logs & operation_logs 并存)。
+
+**文档对齐（活文档）**：`coreone-guardrails.md` 审计口径新增「全站写操作统一审计（已落地）」条；`docs/FRS/FRS-16-操作日志.md` §3.1.3 更新为"中间件统一自动记录 + 脱敏 + 只记成功"（原"非自动中间件/未脱敏"已过时）。
+
+**验证**：`npm run build`(tsc) 绿；`npm run test:node` 全绿 **73 files / 517 tests**（+1 文件 +6 用例）；golden ¥27,870/¥13,152 零回归。
+
+**改动文件**：`src/middleware/audit-log.ts`(NEW)、`src/app.ts`(import+app.use)、`tests/bv-write-audit-middleware.test.ts`(NEW)、`.claude/rules/coreone-guardrails.md`、`docs/FRS/FRS-16-操作日志.md`。
+
+*更新时间：2026-07-02*
