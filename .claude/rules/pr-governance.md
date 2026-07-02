@@ -60,10 +60,10 @@
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
 | — | [#24](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/24) | `feat/reconcile-cost` → `master` | ✅ **MERGED**(2026-07-02, merge commit `36b8dda4`) | **独立**（非栈式，无上下游）。账实复核+逐抗体成本 **Phase 0 成本地基**：抗体库主数据+每片成本派生+192 种真台账 seed+`antibody_cost` 权限模块；与收入侧物理隔离。vitest required 绿(58s)；golden ¥13,152+¥27,870 零回归。合入后后端 `MODULES`→30；前端 `PERMISSION_MODULES` 漂移由 #25 修。 | merge-order/1 |
-| — | [#27](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/27) | `feat/reconcile-phase1` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off 已合 #24 的 master；已 merge origin/master 消 doc 冲突）。账实复核+逐抗体成本 **Phase 1 核对引擎**：差异=账单片数vsLIS物理片数+匹配率门+6认定原因+补收gate+关账状态机+`account_reconcile` 权限模块（3 表，只读收入侧）。独立对抗复核修 3 项（HIGH 账单片数 floor / MED 孤儿补收单 / LOW 幂等）。tsc 绿 + vitest 76 files/557 tests 绿；golden ¥13,152+¥27,870 零回归。**单独可合**。 | merge-order/1 |
+| — | [#27](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/27) | `feat/reconcile-phase1` → `master` | ✅ **MERGED**(2026-07-02, merge commit `5343b572`) | **独立**（非栈式，off 已合 #24 的 master；已 merge origin/master 消 doc 冲突）。账实复核+逐抗体成本 **Phase 1 核对引擎**：差异=账单片数vsLIS物理片数+匹配率门+6认定原因+补收gate+关账状态机+`account_reconcile` 权限模块（3 表，只读收入侧）。独立对抗复核修 3 项（HIGH 账单片数 floor / MED 孤儿补收单 / LOW 幂等）。tsc 绿 + vitest 76 files/557 tests 绿；golden ¥13,152+¥27,870 零回归。 | merge-order/1 |
 
-> ✅ **#24 已合并（2026-07-02, merge commit `36b8dda4`）**；🟡 **#27 OPEN（2026-07-02）**：Phase 1 账实核对引擎，off 已合 #24 的 master，等 vitest required check。合并后 Phase 2（三页前端·走 mockup 先行红线）另起。
-> ⚠️ 本 PR 新增 `account_reconcile`（后端 `MODULES`→31）→ 前端 `PERMISSION_MODULES`（#25 刚补到 30）需再同步到 31（跟进项，运行时权限已 seed 不阻断）。
+> ✅ **#24 已合并（2026-07-02, merge commit `36b8dda4`）**；✅ **#27 已合并（2026-07-02, merge commit `5343b572`）**：Phase 1 账实核对引擎落 master。Phase 2（三页前端·走 mockup 先行红线）另起。
+> ⚠️ **遗留漂移（跟进项）**：#27 新增 `account_reconcile`（后端 `MODULES`→**31**）→ 前端 `PERMISSION_MODULES`（#25 补到 30）现为 **30 vs 31**，需再同步补 `account_reconcile`（运行时权限已 seed 不阻断，仅角色编辑 UI 无法配该模块）。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
@@ -73,11 +73,19 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#26](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/26) | `chore/gitignore-skills-runtime` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。`.gitignore` 补 `.claude/skills-runtime/`（技能运行时 venv，非仓库产物；#24/#25 两会话均遇 `git add -A` 误纳）。零代码影响，仅忽略规则。**单独可合**。 | merge-order/1 |
+| — | [#26](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/26) | `chore/gitignore-skills-runtime` → `master` | ✅ **MERGED**(2026-07-02, merge commit `aeee4cb5`) | **独立**（非栈式，无上下游）。`.gitignore` 补 `.claude/skills-runtime/`（技能运行时 venv，非仓库产物；#24/#25 两会话均遇 `git add -A` 误纳）。零代码影响，仅忽略规则。e2e+vitest 均绿。 | merge-order/1 |
 
-> 🟡 **#26 OPEN（2026-07-02）**：独立 PR，纯 `.gitignore` 忽略规则，零代码影响。
+> ✅ **#26 已合并（2026-07-02, merge commit `aeee4cb5`）**：独立 PR，纯 `.gitignore` 忽略规则，零代码影响。
 
-**已合/关闭**：#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#5/#1 CLOSED。
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#28](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/28) | `feat/lis-import-to-master` → `master` | ✅ **MERGED**(2026-07-02, merge commit `4f7177a7`) | **独立**（非栈式，无上下游）。LIS 病例导入功能（列表/详情/整屏导入，`lis-cases/` 页 + `lis-cases-v1.1` 路由 + `lis-import` util）+ 迁移 phase2 显示层·配置口径到 master（含 split/diagnosis 四态建线、admin 写入门禁 `caliberSignature`、批一口径/告警疲劳/LIS预检）。**取代 #21**（见下）。 | merge-order/1 |
+| — | [#21](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/21) | `feat/phase2-config-split` → `master` | 🔴 **CLOSED-superseded**(2026-07-02) | **已被 #28 + #27 完全取代，零内容丢失**（逐提交 patch/内容核验：LIS页/配置四态随 #28、split/diagnosis 建线与 admin 门禁 master 逐字一致、import-score+三导入页完全一致、TS 债 patch-id 同 #23）。分支建于今晨早于 #24/#25/#27/#28，严重落后 master，**只能关不能合**（原样合并会删 #27/#24/#19/#25 的活）。 | — |
+
+> ✅ **#28 已合并（2026-07-02, merge commit `4f7177a7`）**：LIS 病例导入权威实现 + phase2 配置口径迁移。
+> 🔴 **#21 CLOSED（2026-07-02, 14:43）**：被 #28+#27 取代，关闭时附逐提交核验说明（见 PR 评论），无内容丢失。
+
+**已合/关闭**：#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
 > ✅ **合并完成（2026-06-30，账单已修，"按序合栈+拆 e2e 债"）**：#8→#10→#11 依次 merge commit 落 master。**每步 e2e 复校**=三次跑均 **6 failed/251 passed、失败集完全一致**（supplier-returns 5 + auth-logout 1），全栈**零新增 e2e 失败**。这 6 个=master 既有 supplier-returns/auth bug（与本栈无关，已拆 task `c93e8188` 单独修；非 RBAC 403，权限本就授予）。黄金 ¥13,152 守住、后端联合 482 绿。
 >

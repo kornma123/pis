@@ -870,4 +870,7 @@ http://your-server-ip:8080
 
 **收尾（同会话续）**：#25 vitest required check 绿(1m3s)后**已合并**（merge commit `46e2027d`，e2e 非 required、pending 不阻断）→ 前后端模块矩阵均 30，**漂移清零**。顺带落实上条旁注：另开独立 PR [#26](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/26)（`chore/gitignore-skills-runtime` → master）把 `.claude/skills-runtime/` 补进 `.gitignore`（`git check-ignore` 已验证命中）。看板 `pr-governance.md` 同步：#25→MERGED、新增 #26 OPEN 行。#26 待合。
 
+**收尾2（board-sweep）**：#26 e2e+vitest 绿后**已合并**（merge commit `aeee4cb5`）。核 open PR 时发现另一条线的 #21(`feat/phase2-config-split`) 仍 OPEN——逐提交 patch/内容核验后确认**已被 #28+#27 完全取代零丢失**（LIS页/配置四态随 #28、split/diagnosis 建线+admin 门禁 master 逐字一致、import-score+三导入页完全一致、TS债 patch-id 同 #23），且 #21 严重落后 master 只能关不能合 → **已 CLOSED 并附核验说明**。同时发现看板积压 4 条状态差（#26/#27/#28 未标 MERGED、#21/#28 未上板），另开纯文档 PR **一次性刷新看板**（#26/#27/#28→MERGED、#21→CLOSED-superseded、更新已合清单）。
+**新发现遗留漂移（跟进项）**：#27 新增 `account_reconcile` → 后端 `MODULES`=**31**，前端 `PERMISSION_MODULES`=**30**，又差一个（性质同 #24→#25 那次）。运行时权限已 seed 不阻断，仅角色编辑 UI 无法配 `account_reconcile`。待补前端一处 UI 常量（未在本 PR 做——本 PR 纯文档）。
+
 *更新时间：2026-07-02*
