@@ -86,7 +86,13 @@
 |---|---|---|---|---|---|
 | — | [#40](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/40) | `feat/reconcile-antibody-hints` → `master` | ✅ **MERGED**(2026-07-02, merge commit `47b11756`) | **独立**（非栈式，off master `2bdbbee7`）。账实核对边界③：**逐抗体细粒度初判**（同蜡块同抗体重复=返工·跨蜡块=多病灶）。**关键**：逐抗体明细表 `lis_case_markers` 早已随 LIS 导入落库，此前只详情页展示；本 PR 补对账消费端。只读 marker·**只写 reconcile_case_hints**·正交不改差异/认定/golden。独立对抗复核修 5 项（HIGH 线索独立区显 delta=0 也可见 / MED 白名单对齐+事务原子 / LOW distinct切片+蜡块号）。vitest required 绿(1m2s)·78 files/590 tests；golden 零回归；真跑端到端过。 | merge-order/1 |
 
-> ✅ **#40 已合并（2026-07-02, merge commit `47b11756`）**：逐抗体初判落地——**账实核对三条已披露边界全落 master**（①补收实收 #33 · ②反向弹窗 #35 · ③逐抗体初判 #40）；余「超期免费」待计费期口径。
+> ✅ **#40 已合并（2026-07-02, merge commit `47b11756`）**：逐抗体初判落地——账实核对三条边界（①补收实收 #33 · ②反向弹窗 #35 · ③逐抗体初判 #40）落 master。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#45](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/45) | `feat/reconcile-overdue-free` → `master` | ✅ **MERGED**(2026-07-02, merge commit `c0c91f54`) | **独立**（非栈式，off 已合 #43 的 master）。账实核对**边界④「超期免费」**——**用户拍板口径：超期免费=财务判断，非系统硬规则**（不按跨月/N天/关账自动判）；「免费」暂态，医院日后同意补→改认定「漏收，需补收」即生成补收单。做法=**前端差异卡支持「改认定」翻转**（后端 verdict 端点本就支持重认定，此前仅前端锁死）；**未建完成时间管道**（财务已有信息，不越权硬判）。后端逻辑零改动·TDD 4 用例锁翻转不变量·真跑端到端(改认定→补收单¥300)。vitest required 绿(1m4s)；golden 零回归。 | merge-order/1 |
+
+> ✅ **#45 已合并（2026-07-02, merge commit `c0c91f54`）**：账实核对边界④超期免费收官——**四条边界全部落地**（①补收实收 #33 · ②反向弹窗 #35 · ③逐抗体初判 #40 · ④超期免费翻转 #45）。**账实复核+逐抗体成本主线全部完成。**
 > ⚠️ **其它 open PR（并行会话·非本线）**：`gh pr list` 现见 #37（LIS抗体名→台账映射）/ #39（D2 检测项目目录）/ #41（逐抗体成本弱锚校准线 F）——合并各自前按 `gh pr list` 核对，勿误合。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
