@@ -895,3 +895,26 @@ http://your-server-ip:8080
 **新发现遗留漂移（跟进项）**：#27 新增 `account_reconcile` → 后端 `MODULES`=**31**，前端 `PERMISSION_MODULES`=**30**，又差一个（性质同 #24→#25 那次）。运行时权限已 seed 不阻断，仅角色编辑 UI 无法配 `account_reconcile`。待补前端一处 UI 常量（未在本 PR 做——本 PR 纯文档）。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（基础模块实现任务拆分 + 多会话并行分派，2026-07-02）
+
+**线/工作树**：worktree `eloquent-lichterman-af4db5`，分支 `claude/eloquent-lichterman-af4db5`（master tip `0b662efe`，零 open PR）。
+
+**触发**：用户基于 `docs/COREONE-账实复核与逐抗体成本-未决问题与关联文件-2026-07-02.md` 要"启动 plan+任务拆分，在多个新会话同步开工，按 master 约束文件规范执行"。
+
+**范围界定（用户拍板）**：另一会话已在做 **LIS 导入 + 财务对账 + 独立复核** → 本拆分**不碰** `reconcile-*`/`account-reconcile-v1.1`/前端三页/收入侧。本拆分只覆盖坐在对账引擎**下面那层**的**逐抗体成本基础数据 + 统一目录地基**（纯成本侧，物理隔离）。三阶段（#24/#27/#30）已全合 master、零 open PR，故 backlog=未决问题 A/B/C/D 里的基础模块子集。
+
+**产出**：
+- 新文档 `docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`：§1 通用约束（master worktree/工作模型四段/golden 零回归/PII 纪律/PR 治理/git 纪律/物理隔离）+ 三条互不碰文件的独立线卡 + PM 待解锁输入 + 排除清单 + 已关闭项（D1 拓扑已解决、C3 两误报无需修、A4 归对账会话）。
+- 三条线（每张自包含任务卡分派为 spawn_task chip，供多会话并行；用户要求**默认 ultracode**）：
+  - **线 A** 抗体名称映射与缺价补全（A1+A3，成本侧 `antibody-catalog/cost.ts`）——用户手动切 ultracode，**运行中**（`task_4675ee98`）。
+  - **线 D** 统一检测项目目录映射层（D2，新建 `project-catalog.ts`+新表；先摊口径给 PM 拍再落码）——ultracode chip `task_a65bcaab`（重发替代旧非-ultracode 版）。
+  - **线 F** G2 弱锚校准+承重墙口径（B4+B3，`ihc_cost_params` seed+敏感性文档；真值待康湾工资/折旧）——ultracode chip `task_b514b2ae`。
+
+**冲突边界**：A→antibody utils / D→新文件+新表 / F→`ihc_cost_params` seed+docs；共享 `DatabaseManager.ts` 由 D(新表块) 与 F(改 seed 值) 各占不同区，撞车后合方 `git merge origin/master` 消解。
+
+**PM 待解锁**：A1 缺价采购价、A2 三家扣率、B4 康湾工资/折旧、D2 目录口径拍板（各会话先产出清单/草案再等 PM）。
+
+*更新时间：2026-07-02*
