@@ -17,6 +17,14 @@ import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
 
+// 排序白名单：key = 前端/API 允许的排序字段名，value = 受控的 SQL 表达式（绝不拼接用户输入，防注入）。
+// 「数量」跨明细汇总（outbound_records 无数量列），用相关子查询求和 outbound_items.quantity。
+const OUTBOUND_SORT_COLUMNS: Record<string, string> = {
+  createdAt: 'r.created_at',
+  totalCost: 'r.total_cost',
+  quantity: '(SELECT COALESCE(SUM(oi.quantity), 0) FROM outbound_items oi WHERE oi.outbound_id = r.id)',
+}
+
 function generateOutboundNo(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   const timestamp = Date.now().toString().slice(-6)
@@ -26,9 +34,29 @@ function generateOutboundNo(): string {
 
 router.get('/', (req, res) => {
   try {
-    let { page = 1, pageSize = 20, projectId, status, keyword, materialId, type, startDate, endDate } = req.query
+    let { page = 1, pageSize = 20, projectId, status, keyword, materialId, type, startDate, endDate, sortField, sortOrder } = req.query
     page = Math.max(1, Number(page) || 1)
     pageSize = Math.max(1, Math.min(100, Number(pageSize) || 20))
+
+    // 排序：白名单列 + asc/desc 归一，非法一律 400（不落入 SQL，防注入）。缺省=出库时间倒序（向后兼容）。
+    let sortColumn = OUTBOUND_SORT_COLUMNS.createdAt
+    if (sortField !== undefined && sortField !== '') {
+      // 用自有属性判定，避免 __proto__/constructor/toString 等原型链键返回真值绕过白名单
+      const key = String(sortField)
+      if (!Object.prototype.hasOwnProperty.call(OUTBOUND_SORT_COLUMNS, key)) {
+        error(res, 'Invalid sortField', 'INVALID_PARAMETER', 400); return
+      }
+      sortColumn = OUTBOUND_SORT_COLUMNS[key]
+    }
+    let sortDir = 'DESC'
+    if (sortOrder !== undefined && sortOrder !== '') {
+      const dir = String(sortOrder).toLowerCase()
+      if (dir !== 'asc' && dir !== 'desc') { error(res, 'Invalid sortOrder', 'INVALID_PARAMETER', 400); return }
+      sortDir = dir === 'asc' ? 'ASC' : 'DESC'
+    }
+    // 二级排序 r.id 作稳定 tiebreaker，使同值行分页顺序确定。
+    const orderByClause = `${sortColumn} ${sortDir}, r.id DESC`
+
     const db = getDatabase()
     let where = 'r.is_deleted = 0'
     const params: any[] = []
@@ -59,7 +87,7 @@ router.get('/', (req, res) => {
       FROM outbound_records r
       LEFT JOIN projects p ON r.project_id = p.id AND p.is_deleted = 0
       WHERE ${where}
-      ORDER BY r.created_at DESC
+      ORDER BY ${orderByClause}
       LIMIT ? OFFSET ?
     `).all(...params, Number(pageSize), offset) as any[]
 

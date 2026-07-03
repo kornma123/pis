@@ -50,7 +50,7 @@ export const purchaseOrderApi = {
 }
 
 export const outboundApi = {
-  getList: (params?: PageParams & { projectId?: string; status?: string; keyword?: string; materialId?: string; type?: string; startDate?: string; endDate?: string }) =>
+  getList: (params?: PageParams & { projectId?: string; status?: string; keyword?: string; materialId?: string; type?: string; startDate?: string; endDate?: string; sortField?: 'createdAt' | 'totalCost' | 'quantity'; sortOrder?: 'asc' | 'desc' }) =>
     request.get<PaginationData<OutboundRecord>>('/outbound', { params }),
 
   getStats: () =>
