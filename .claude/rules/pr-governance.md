@@ -159,6 +159,23 @@
 
 > 🟢 **D2 PR #39 OPEN（2026-07-02）**：独立·非栈·单独可合，等 vitest required check。合并后系统首次有「四套叫法↔同一项目」的对照地基（只读并存，供后续对账会话决定是否消费）。
 
+### 收官批：进销存修流程 wave-1 + 逐抗体成本基础模块 —— 7 线全落 master（2026-07-03）
+
+> ⚠️ **本节为权威收官记录**：上方 #38/#39/#48/#49 的 🟢OPEN 行已随本批合并**作废，以本节为准**（那些行是各线会话开 PR 时写的，未回填 MERGED）。
+
+| PR | 线 | 状态 | merge commit | 备注 |
+|---|---|---|---|---|
+| [#37](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/37) | A·抗体名映射(A1+A3) | ✅ MERGED | `96a55b5d` | 成本侧。**手工消解** `antibody-cost-v1.1.ts`（与 #41 同文件）：保留双方 import + 响应对象 `resolution`+`meta` 双键。 |
+| [#39](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/39) | D·统一检测项目目录 | ✅ MERGED | `3be2f840` | 只读对照层，零 MODULES 漂移。 |
+| [#41](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/41) | F·G2校准+承重墙(B3+B4) | ✅ MERGED | `285db11f` | 成本侧。诚实透出「G2估·待校准」。 |
+| [#44](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/44) | E·预警做真 | ✅ MERGED | `eb5f484a` | **手工消解** `alerts-v1.1.ts`（与 #48 同文件）：保留口径注释 + `HANDLE_ACTIONS` 常量。 |
+| [#47](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/47) | B·出库真排序 | ✅ MERGED | `2c1e9026` | 后端白名单排序+表头点击。 |
+| [#48](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/48) | E衍生·预警RBAC口径 | ✅ MERGED | `2350d4eb` | 固化「写操作仅 alerts:R」+回归门禁。 |
+| [#49](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/49) | A·库存/盘点做真 | ✅ MERGED | `e7f89f3f` | 盘点两阶段+Tab 空态。 |
+| [#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) | **C·退库/报废/调拨三页**(第8条) | 🟢 **OPEN** | — | 最大·mockup 先行·**改正库存语义**。刚开、CI 未起。**待 CI + PM 过目**（改库存语义，见记忆 [[coreone-transfers-returns-stock-semantics]]）。 |
+
+> ✅ **7 线收官（2026-07-03）**：全部 vitest required 绿后 merge commit 落 master（tip `96a55b5d`）。合并纪律：**2 处代码冲突**（`antibody-cost-v1.1.ts` #37↔#41、`alerts-v1.1.ts` #44↔#48）**手工消解=保留双方意图**、vitest 复核；**治理文档冲突（session-log/本看板）统一取 master 版**避免 append 级联，各线 PR body/分支历史仍留详细记录，本节为 consolidated 账。golden ¥13,152+¥27,870 零回归。**第 8 条 Lane C #52 待合**。
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 对一遍本看板，差异即更新看板。

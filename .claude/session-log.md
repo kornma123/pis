@@ -1100,3 +1100,27 @@ http://your-server-ip:8080
 **PR**：[#50](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/50) OPEN（base=master·独立·纯前端·单独可合）。用户过目页面中。**待办**：队列未持久化（刷新丢）·parseMonth/matchHospital 为建议可改——本轮未做。
 
 *更新时间：2026-07-03*
+
+---
+
+## 本次会话完成的工作（并行 8 线中 7 线合并落 master + 收官批 board-sweep，2026-07-03）
+
+**触发**：用户"8 条线（一条自己又开了 task）已完成 7 条，启动合并到 master"。本会话（`eloquent-lichterman-af4db5`，编排/分派线）负责把 7 个已完成 PR 合并落 master。
+
+**合并前核实**：`gh pr list` + 逐 PR `mergeStateStatus`/`statusCheckRollup`/共享文件/behind-count。7 PR 全部 vitest+e2e 绿；3 CLEAN（#39/#41/#48）、4 DIRTY（#37/#44/#47/#49，均因分支落后 ~20 commits）。
+
+**合并（全 merge commit，vitest required 绿为门；e2e 非 required）**：
+- 成本侧：**#39** D 统一目录 `3be2f840` · **#41** F G2校准 `285db11f` · **#37** A 抗体映射 `96a55b5d`
+- 进销存：**#44** E 预警 `eb5f484a` · **#47** B 出库排序 `2c1e9026` · **#48** E衍生预警RBAC口径 `2350d4eb` · **#49** A 库存/盘点 `e7f89f3f`
+
+**冲突消解纪律（关键经验）**：
+1. **治理文档级联冲突**：session-log/pr-governance 每线都在末尾 append → 每合一个，下一个在同一 append 点再冲突。**解法=对这两个文件统一取 master 版（零 doc diff）**，各线 PR body/分支历史留详细记录，board-sweep 出 consolidated 账。（初期只取 session-log 未取 pr-governance→#47 合 #49 后再冲突，已纠正。）
+2. **2 处真代码冲突手工消解=保留双方意图**：① `antibody-cost-v1.1.ts`（#37 名映射 ↔ #41 G2校准同文件）：保留双方 import + `/cost-preview` 响应 `resolution`+`meta` 双键（核实 `loadIhcParamMeta` L94 定义、`resolution` L189 声明默认 null 安全）。② `alerts-v1.1.ts`（#44 预警 ↔ #48 RBAC口径同文件）：保留 #48 口径注释块 + #44 `HANDLE_ACTIONS` 常量（核实 master 无重复定义）。均 vitest 复核绿后合。
+3. **分支在各自 session worktree 已 checkout** → 用 `git worktree add --detach origin/<branch>` 消解 + `git push origin HEAD:<branch>` 回推，不碰各线活 worktree。
+4. golden ¥13,152+¥27,870 **零回归**（每 PR vitest 含 golden；#37 末尾后台 poll-merge on vitest SUCCESS）。
+
+**board-sweep**：`pr-governance.md` 加「收官批」consolidated 节（7 线 MERGED + commit + 手工消解备注），标注上方 #38/#39/#48/#49 旧 OPEN 行作废。
+
+**第 8 条 Lane C（#52 `claude/eloquent-fermat-da583d`）**：合并期间**刚开 PR**（退库/报废/调拨三页 + **改正库存语义** [[coreone-transfers-returns-stock-semantics]]）。CI 未起、UNKNOWN。**未合**——留 PM 过目（改库存语义 + mockup 先行 + 最大线）。另有 #50（import UX，他会话）OPEN 待 PM。
+
+*更新时间：2026-07-03*
