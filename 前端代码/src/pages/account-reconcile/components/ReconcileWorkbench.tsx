@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { accountReconcileApi } from '@/api/account-reconcile'
-import { VERDICT_REASONS, type ReconcileDiff, type UnmatchedCase, type HospitalMonth, type VerdictReason } from '@/types/account-reconcile'
+import { VERDICT_REASONS, type ReconcileDiff, type UnmatchedCase, type HospitalMonth, type VerdictReason, type CaseHint } from '@/types/account-reconcile'
 import { HmPill, matchStatusMeta, wan, yuan, cnMonth, btnCls, btnPri, btnGhost, cardCls, selectCls } from '../ui'
 import { ReasonModal } from './ReasonModal'
 
@@ -17,6 +17,7 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
   const [hm, setHm] = useState<HospitalMonth | null>(null)
   const [diffs, setDiffs] = useState<ReconcileDiff[]>([])
   const [unmatched, setUnmatched] = useState<UnmatchedCase[]>([])
+  const [caseHints, setCaseHints] = useState<Record<string, CaseHint[]>>({})
   const [loading, setLoading] = useState(true)
   const [showUnmatched, setShowUnmatched] = useState(false)
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -28,6 +29,7 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
       setHm(res.hospitalMonth)
       setDiffs(res.diffs || [])
       setUnmatched(res.unmatched || [])
+      setCaseHints(res.caseHints || {})
     } catch {
       /* toast handled */
     } finally {
@@ -119,6 +121,32 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
             </div>
           ) : (
             diffs.map((d) => <DiffCard key={d.id} d={d} readOnly={readOnly} saving={savingId === d.id} onVerdict={setVerdict} />)
+          )}
+
+          {/* ③ 逐抗体线索（返工/多病灶）—— 独立展示，不依赖差异卡（账实数量对得上、抗体明细仍可有线索） */}
+          {Object.keys(caseHints).length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-[13px] font-bold text-gray-900">逐抗体线索</h3>
+              <p className="mb-3 mt-1 text-xs text-gray-500">从 LIS 逐抗体明细看出的线索（同蜡块重复=返工、同抗体跨蜡块=多病灶），提示财务终判——不改差异计数与认定。</p>
+              <div className={`${cardCls} divide-y divide-gray-100`}>
+                {Object.entries(caseHints).map(([caseNo, hs]) => (
+                  <div key={caseNo} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5">
+                    <span className="text-sm font-semibold text-gray-900">病理号 {caseNo}</span>
+                    {hs.map((h, i) =>
+                      h.hintType === '疑似返工' ? (
+                        <span key={i} className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                          同蜡块 {h.markerName}{h.waxNo ? `（${h.waxNo}）` : ''} 做了 {h.occurrences} 次 · 疑似返工（可能不该多收）
+                        </span>
+                      ) : (
+                        <span key={i} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">
+                          {h.markerName} 跨 {h.occurrences} 个蜡块{h.waxNo ? `（${h.waxNo}）` : ''} · 多病灶各收各钱
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* footer */}
