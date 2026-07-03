@@ -114,6 +114,12 @@ router.get('/workbench', (req, res) => {
     // 未匹配列表按需重算（无认定态，安全）
     const { bills, lis } = buildReconcileInputs(db, partnerId, serviceMonth)
     const unmatched = computeReconcile(bills, lis).unmatched
+    // ③ 逐抗体细粒度初判线索（返工/多病灶）按 case 分组——附加提示，供逐差异下钻
+    const hintRows = db.prepare('SELECT case_no, hint_type, marker_name, wax_no, occurrences FROM reconcile_case_hints WHERE hospital_month_id = ? ORDER BY case_no, hint_type').all(hm.id) as any[]
+    const caseHints: Record<string, Array<{ hintType: string; markerName: string; waxNo: string | null; occurrences: number }>> = {}
+    for (const h of hintRows) {
+      ;(caseHints[h.case_no] ??= []).push({ hintType: h.hint_type, markerName: h.marker_name, waxNo: h.wax_no, occurrences: h.occurrences })
+    }
     success(res, {
       hospitalMonth: {
         id: hm.id, partnerId: hm.partner_id, partnerName: hm.partner_name, serviceMonth: hm.service_month,
@@ -124,6 +130,7 @@ router.get('/workbench', (req, res) => {
       },
       diffs,
       unmatched,
+      caseHints,
     })
   } catch (err: any) {
     error(res, err.message)

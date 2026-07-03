@@ -74,7 +74,19 @@
 |---|---|---|---|---|---|
 | — | [#33](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/33) | `feat/reconcile-supplement-revenue` → `master` | ✅ **MERGED**(2026-07-02, merge commit `6e03daa6`) | **独立**（非栈式，off #30 收官后的 master `0b662efe`）。补齐 Phase 2 已披露边界：**补收→计入本月实收**（已补收按实验室工序行扣率折实收、计入 collected_month；反向/放弃清零）。只读收入侧算扣率·**不写 case_revenue**（保护 golden）。独立对抗复核修 3 项（HIGH 扣率改工序行·纠误诊 / HIGH 无双计不变量文档化 / LOW 放弃清折实收）。vitest required 绿(1m0s)·77 files/580 tests；golden 零回归；真跑端到端过。 | merge-order/1 |
 
-> ✅ **#33 已合并（2026-07-02, merge commit `6e03daa6`）**：补收实收闭环落地——账实核对补收侧「已补收→计入本月实收（实验室工序行扣率）」贯通。**当前无 open PR。**
+> ✅ **#33 已合并（2026-07-02, merge commit `6e03daa6`）**：补收实收闭环落地——账实核对补收侧「已补收→计入本月实收（实验室工序行扣率）」贯通。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#35](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/35) | `feat/reconcile-reason-modal` → `master` | ✅ **MERGED**(2026-07-02, merge commit `07543ca7`) | **独立**（非栈式，off master `858f16fa`）。账实核对边界②：4 处反向操作（重新打开/反关账/放弃/恢复待补收）理由收集从浏览器 `prompt` → 系统内正式弹窗 `ReasonModal`。**纯前端 UX**·后端 API 零改动·留痕口径不变。vitest required 绿(1m1s)·tsc+vite build 绿；真跑端到端过。 | merge-order/1 |
+
+> ✅ **#35 已合并（2026-07-02, merge commit `07543ca7`）**：反向操作正式弹窗落地（边界②完）。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#40](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/40) | `feat/reconcile-antibody-hints` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off master `2bdbbee7`）。账实核对边界③：**逐抗体细粒度初判**（同蜡块同抗体重复=返工·跨蜡块=多病灶）。**关键**：逐抗体明细表 `lis_case_markers` 早已随 LIS 导入落库，此前只详情页展示；本 PR 补对账消费端。只读 marker·**只写 reconcile_case_hints**·正交不改差异/认定/golden。独立对抗复核修 5 项（HIGH 线索独立区显 delta=0 也可见 / MED 白名单对齐+事务原子 / LOW distinct切片+蜡块号）。vitest 78 files/590 tests 绿；golden 零回归；真跑端到端过。**单独可合**。 | merge-order/1 |
+
+> 🟡 **#40 OPEN（2026-07-02）**：逐抗体初判，等 vitest required check。合并后账实核对三条已披露边界（①补收实收 #33 · ②反向弹窗 #35 · ③逐抗体初判 #40）全落地。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
@@ -98,15 +110,21 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) | `claude/eloquent-lichterman-af4db5` → `master` | ✅ **MERGED**(2026-07-02, merge commit `6a8e69bd`) | **独立**（非栈式，无上下游）。纯文档：新增 `docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`——把账实复核+逐抗体成本未决清单里的**基础模块**项拆成三条互不碰文件的独立线（A 抗体名称映射 / D 统一检测项目目录 / F G2 弱锚校准+承重墙口径），供多会话并行；明确排除对账引擎/前端三页/收入侧/独立复核（另一会话在做）。**单独可合**·零代码·golden 天然零回归。 | merge-order/1 |
+| — | [#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) | `claude/eloquent-lichterman-af4db5` → `master` | ✅ **MERGED**(2026-07-02, merge commit `6a8e69bd`) | **独立**（非栈式，无上下游）。纯文档：新增 `docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`——把账实复核+逐抗体成本未决清单里的**基础模块（成本侧）**项拆成三条互不碰文件的独立线（A 抗体名称映射 / D 统一检测项目目录 / F G2 弱锚校准+承重墙口径），供多会话并行；明确排除对账引擎/前端三页/收入侧/独立复核。零代码·golden 零回归。 | merge-order/1 |
 
-> ✅ **#32 MERGED（2026-07-02, merge commit `6a8e69bd`）**：纯文档任务拆分落 master。三条线分派为 spawn_task chip（**A→本 PR #37 已实现**；D `task_a65bcaab`·ultracode；F `task_b514b2ae`·ultracode）。
+> ✅ **#32 已合并（2026-07-02, merge commit `6a8e69bd`）**：成本侧基础模块拆分边界表落 master。三线 chip：**A→本 PR #37 已实现**；D `task_a65bcaab`；F `task_b514b2ae`。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#37](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/37) | `feat/antibody-name-map` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游·off 最新 master `858f16fa`）。实现 #32 拆分的**线 A 逐抗体成本·抗体名映射(A1+A3)**：LIS 抗体名→台账(价+剂型) resolver（规范化规则+5 生物学同义词种子+碰撞防护 ambiguousNorm）+ `antibody_aliases` 表(ops 可扩展) + 5 种真缺入库占位 + `/antibodies/resolve`·别名 CRUD + 缺价清单交 PM。真数据手核：A1「缺10种」实为 5 别名(台账已有价)+5 真缺(PD-1≠PD-L1/cathepsinK/GPNMB/TROP-2/HP)；别名救回 Ki67 等 28 种/151 行。**独立对抗复核(Workflow 8-agent)修 MEDIUM TCR 跨抗体误价 1 项**。纯成本侧·物理隔离收入/对账。vitest 78 files/608 tests 绿；golden ¥13,152+¥27,870 零回归；tsc 绿。**单独可合**。 | merge-order/1 |
+| — | [#37](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/37) | `feat/antibody-name-map` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游·已 merge origin/master 消看板 doc 冲突）。实现 #32 拆分的**线 A 逐抗体成本·抗体名映射(A1+A3)**：LIS 抗体名→台账(价+剂型) resolver（规范化规则+5 生物学同义词种子+碰撞防护 ambiguousNorm）+ `antibody_aliases` 表(ops 可扩展) + 5 种真缺入库占位 + `/antibodies/resolve`·别名 CRUD + 缺价清单交 PM。真数据手核：A1「缺10种」实为 5 别名(台账已有价)+5 真缺(PD-1≠PD-L1/cathepsinK/GPNMB/TROP-2/HP)；别名救回 Ki67 等 28 种/151 行。**独立对抗复核(Workflow 8-agent)修 MEDIUM TCR 跨抗体误价 1 项**。纯成本侧·物理隔离收入/对账。vitest 78 files/608 tests 绿；golden ¥13,152+¥27,870 零回归；tsc 绿。**单独可合**。 | merge-order/1 |
 
 > 🟢 **#37 OPEN（2026-07-02）**：线 A 抗体名映射实现，独立单独可合，等 vitest required check。合并后前端/对账/LIS 侧可经 resolver util 或 `GET /antibodies/resolve` 端点对上台账价。PM 待解锁：5 种真缺采购价（清单 `docs/COREONE-缺价抗体清单-…`）。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#38](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/38) | `claude/eloquent-lichterman-af4db5` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。纯文档：新增 `docs/COREONE-进销存修流程-实现任务拆分-2026-07-02.md`——进销存基础流程 backlog **核实先行**（ultracode Workflow `w1yoz1dxl` 逐模块核当前 master 真实状态：入库/退货供应商/采购三模块已做→丢弃），真剩 **wave-1 四线**（C 调拨退库报废[唯一动 schema]/E 预警/A 库存盘点/B 出库排序）互不碰文件、已分派 ultracode chip；wave-2（D 主数据/F BOM）等 PM 口径。**单独可合**·零代码·golden 零回归。 | merge-order/1 |
+
+> 🟢 **#38 OPEN（2026-07-02）**：进销存修流程 wave-1 拆分边界表。四线 chip：C `task_9b1bf9c5`·E `task_f68fd867`·A `task_9b77fcb3`·B `task_0d75ee19`（均 ultracode）。核实丢弃：入库 IN-03/05/06 已修、退货供应商已完整、采购菜单/路由/页面都在。
 
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
