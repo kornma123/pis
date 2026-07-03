@@ -75,6 +75,19 @@ router.get('/', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
+// ── 预警写操作权限口径（有意为之，2026-07-02 复核固化）────────────────────────────
+// 处理预警(POST /:id/handle) 与生成预警(POST /generate) 只继承挂载层的 requirePermission('alerts','R')，
+// **不额外要求 'W'**。这是产品意图，非疏漏：预警是信息性运营操作（标记低库存/临期预警为已处理、
+// 或触发扫描生成），不碰金额/口径，「能看预警的都能处理/生成」= adoption-first 基线。真正敏感的写是
+// **阈值配置** PUT /rules/:id，已单独 W+admin 锁定（见上）。
+//
+// ⚠️ 勿擅自给这两个端点加 requirePermission('alerts','W')：SEED_MATRIX 中**全部非 admin 角色仅有
+//    alerts:'R'（无 'W'）**，加 W 会令除 admin 外所有角色 403（warehouse_manager 等无法处理库存预警）——
+//    与既有库回填缺口叠加，正是 supplier_returns 迁移缺口的复刻。若产品确要收紧，须同时：
+//    ① SEED_MATRIX 给相关角色补 alerts:'W'  ② 加既有库回填迁移（仿 reconcileSupplierReturnsPerms）
+//    ③ 更新回归门禁 tests/bv-alerts-write-rbac.test.ts（把 R 级角色的期望由 200 翻为 403）。
+// 回归门禁：tests/bv-alerts-write-rbac.test.ts（R 级角色 pathologist 可 handle/generate → 锁死此口径）。
+// ─────────────────────────────────────────────────────────────────────────────
 // 处理/忽略预警的唯一写入端点。前端「处理」「忽略」「批量处理」均走这里，
 // 用 action 区分终态：'processed'（已处理）| 'ignored'（已忽略）。缺省视为 'processed'。
 const HANDLE_ACTIONS = ['processed', 'ignored'] as const
@@ -99,6 +112,7 @@ router.post('/:id/handle', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
+// 权限口径同 /:id/handle：只需 alerts:'R'，勿加 'W'（详见上方 /:id/handle 前的口径说明与收紧步骤）。
 router.post('/generate', (_req, res) => {
   try {
     const db = getDatabase()

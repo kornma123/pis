@@ -80,8 +80,26 @@
 |---|---|---|---|---|---|
 | — | [#35](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/35) | `feat/reconcile-reason-modal` → `master` | ✅ **MERGED**(2026-07-02, merge commit `07543ca7`) | **独立**（非栈式，off master `858f16fa`）。账实核对边界②：4 处反向操作（重新打开/反关账/放弃/恢复待补收）理由收集从浏览器 `prompt` → 系统内正式弹窗 `ReasonModal`。**纯前端 UX**·后端 API 零改动·留痕口径不变。vitest required 绿(1m1s)·tsc+vite build 绿；真跑端到端过。 | merge-order/1 |
 
-> ✅ **#35 已合并（2026-07-02, merge commit `07543ca7`）**：反向操作正式弹窗落地（边界②完）。**当前无 open PR。**
-> 📌 账实核对已披露边界剩 **③ 系统初判细粒度**（同蜡块返工/跨蜡块多病灶）——需**先做逐抗体 LIS 明细导入**（现只有按病例片数汇总·无蜡块+抗体逐片行），数据前置、待用户决策另立项。
+> ✅ **#35 已合并（2026-07-02, merge commit `07543ca7`）**：反向操作正式弹窗落地（边界②完）。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#40](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/40) | `feat/reconcile-antibody-hints` → `master` | ✅ **MERGED**(2026-07-02, merge commit `47b11756`) | **独立**（非栈式，off master `2bdbbee7`）。账实核对边界③：**逐抗体细粒度初判**（同蜡块同抗体重复=返工·跨蜡块=多病灶）。**关键**：逐抗体明细表 `lis_case_markers` 早已随 LIS 导入落库，此前只详情页展示；本 PR 补对账消费端。只读 marker·**只写 reconcile_case_hints**·正交不改差异/认定/golden。独立对抗复核修 5 项（HIGH 线索独立区显 delta=0 也可见 / MED 白名单对齐+事务原子 / LOW distinct切片+蜡块号）。vitest required 绿(1m2s)·78 files/590 tests；golden 零回归；真跑端到端过。 | merge-order/1 |
+
+> ✅ **#40 已合并（2026-07-02, merge commit `47b11756`）**：逐抗体初判落地——账实核对三条边界（①补收实收 #33 · ②反向弹窗 #35 · ③逐抗体初判 #40）落 master。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#45](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/45) | `feat/reconcile-overdue-free` → `master` | ✅ **MERGED**(2026-07-02, merge commit `c0c91f54`) | **独立**（非栈式，off 已合 #43 的 master）。账实核对**边界④「超期免费」**——**用户拍板口径：超期免费=财务判断，非系统硬规则**（不按跨月/N天/关账自动判）；「免费」暂态，医院日后同意补→改认定「漏收，需补收」即生成补收单。做法=**前端差异卡支持「改认定」翻转**（后端 verdict 端点本就支持重认定，此前仅前端锁死）；**未建完成时间管道**（财务已有信息，不越权硬判）。后端逻辑零改动·TDD 4 用例锁翻转不变量·真跑端到端(改认定→补收单¥300)。vitest required 绿(1m4s)；golden 零回归。 | merge-order/1 |
+
+> ✅ **#45 已合并（2026-07-02, merge commit `c0c91f54`）**：账实核对边界④超期免费收官——**四条边界全部落地**（①补收实收 #33 · ②反向弹窗 #35 · ③逐抗体初判 #40 · ④超期免费翻转 #45）。**账实复核+逐抗体成本主线全部完成。**
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#50](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/50) | `feat/import-ux` → `master` | ✅ **MERGED**(2026-07-03, merge commit `a82e5203`) | **独立**（非栈式，off master `3a662d46`）。对账单导入前端优化（用户拍板 4 方向全做·mockup 先行）：**接缝打通**（向导内当场归类·带改基线提示）+**拖拽上传**+**行级预览**+**批量队列**（拖多家→自动认院[客户头模糊匹配·仅唯一命中]+自动认账期→逐家核对入库）+测试台简化=去重。**纯前端·后端零改动**。codex 读码修 2 HIGH 异步竞态 + 多 agent 对抗自审修 10 项（needConfirm 串项·LIS 预检回归·并发预览·ref 同步 等）。真跑：真温州对账单 42%→100%·批量 2 家自动认院·零报错。vitest required 绿(1m4s)·golden 不受影响。 | merge-order/1 |
+
+> ✅ **#50 已合并（2026-07-03, merge commit `a82e5203`）**：对账单导入前端优化落 master（用户拍板并确认合并）。
+> ⚠️ **其它 open PR（并行会话·非本线）**：`gh pr list` 现见 #37（LIS抗体名→台账映射）/ #39（D2 检测项目目录）/ #41（逐抗体成本弱锚校准线 F）——合并各自前按 `gh pr list` 核对，勿误合。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
@@ -105,9 +123,21 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) | `claude/eloquent-lichterman-af4db5` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。纯文档：新增 `docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`——把账实复核+逐抗体成本未决清单里的**基础模块**项拆成三条互不碰文件的独立线（A 抗体名称映射 / D 统一检测项目目录 / F G2 弱锚校准+承重墙口径），供多会话并行；明确排除对账引擎/前端三页/收入侧/独立复核（另一会话在做）。**单独可合**·零代码·golden 天然零回归。 | merge-order/1 |
+| — | [#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) | `claude/eloquent-lichterman-af4db5` → `master` | ✅ **MERGED**(2026-07-02, merge commit `6a8e69bd`) | **独立**（非栈式，无上下游）。纯文档：新增 `docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`——把账实复核+逐抗体成本未决清单里的**基础模块（成本侧）**项拆成三条互不碰文件的独立线（A 抗体名称映射 / D 统一检测项目目录 / F G2 弱锚校准+承重墙口径），供多会话并行；明确排除对账引擎/前端三页/收入侧/独立复核。零代码·golden 零回归。 | merge-order/1 |
 
-> 🟢 **#32 OPEN（2026-07-02）**：纯文档任务拆分，供多会话并行分派的边界表进 master。三条线已分派为 spawn_task chip（A 运行中·ultracode；D `task_a65bcaab`·ultracode；F `task_b514b2ae`·ultracode）。
+> ✅ **#32 已合并（2026-07-02, merge commit `6a8e69bd`）**：成本侧基础模块拆分边界表落 master。三线 chip：A 运行中·ultracode；D `task_a65bcaab`；F `task_b514b2ae`。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#38](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/38) | `claude/eloquent-lichterman-af4db5` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。纯文档：新增 `docs/COREONE-进销存修流程-实现任务拆分-2026-07-02.md`——进销存基础流程 backlog **核实先行**（ultracode Workflow `w1yoz1dxl` 逐模块核当前 master 真实状态：入库/退货供应商/采购三模块已做→丢弃），真剩 **wave-1 四线**（C 调拨退库报废[唯一动 schema]/E 预警/A 库存盘点/B 出库排序）互不碰文件、已分派 ultracode chip；wave-2（D 主数据/F BOM）等 PM 口径。**单独可合**·零代码·golden 零回归。 | merge-order/1 |
+
+> 🟢 **#38 OPEN（2026-07-02）**：进销存修流程 wave-1 拆分边界表。四线 chip：C `task_9b1bf9c5`·E `task_f68fd867`·A `task_9b77fcb3`·B `task_0d75ee19`（均 ultracode）。核实丢弃：入库 IN-03/05/06 已修、退货供应商已完整、采购菜单/路由/页面都在。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#48](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/48) | `claude/brave-bassi-4bdd83` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。Lane E「预警做真」评审衍生：`alerts-v1.1.ts` 两写端点(handle/generate)权限口径复核。**评估=有意口径非缺口→维持 R**（全部非 admin 角色仅 alerts:R 无 W，裸加 W 会令除 admin 外全部 403；敏感阈值配置 PUT /rules/:id 已 W+admin 锁；全站 auditWrite 已留痕）。仅加口径注释 + 回归门禁 `bv-alerts-write-rbac.test.ts`（**变异测试证有效**：临时加 W→3 个 R 级用例翻 403）。scope 仅 alerts+测试。**单独可合**·无功能变更·vitest 79/594 绿·golden ¥13,152+¥27,870 零回归。 | merge-order/1 |
+
+> 🟢 **#48 OPEN（2026-07-02）**：预警写操作 RBAC 口径固化（维持 R）。源于 #38 的 wave-1 线 E「预警做真」评审。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
@@ -122,6 +152,14 @@
 > ✅ **合并完成（2026-06-30，账单已修，"按序合栈+拆 e2e 债"）**：#8→#10→#11 依次 merge commit 落 master。**每步 e2e 复校**=三次跑均 **6 failed/251 passed、失败集完全一致**（supplier-returns 5 + auth-logout 1），全栈**零新增 e2e 失败**。这 6 个=master 既有 supplier-returns/auth bug（与本栈无关，已拆 task `c93e8188` 单独修；非 RBAC 403，权限本就授予）。黄金 ¥13,152 守住、后端联合 482 绿。
 >
 > **经验沉淀**：①栈式 PR 用 **merge commit**（保留共享历史→下游重定向 base 后免 rebase、diff 干净）。②base 改 master 后 e2e（`pull_request: branches:[master]`）不会自动触发→**推空提交**（`git commit-tree`/`--allow-empty`）触发。③e2e 非 required check，合并门禁靠人/看板，不靠 GitHub 阻断。
+
+### 活跃 PR 看板 · D2 统一检测项目目录（地基线 D）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#39](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/39) | `feat/project-catalog-d2` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游；从 `origin/master` tip `0b662efe` 出发）。D2 只读对照层：`project_catalog`(26 标准项)+`code_mappings` 两新表 + 幂等种子（国标/LIS/对账单/项目码四套叫法→标准项 `PC-*`）+ 查询 util `project-catalog.ts` + **全只读**路由 `/api/v1/project-catalog`（复用 `projects` 权限，**不新增权限模块=零 MODULES 漂移**）。**不改任何现有分类**（classifier/case-charge-mapping/statement-revenue/收入侧/reconcile 均未碰，git diff 仅 6 文件）。tsc 绿 + vitest **78 files/620 tests 全绿**；黄金 ¥13,152+¥27,870 零回归；分类器真跑 514 真对账单名（未覆盖仅 22=临床非病理项）；异构 codex+3-lens workflow 双轨复核修 4 真 bug（见 session-log）。 | merge-order/1 |
+
+> 🟢 **D2 PR #39 OPEN（2026-07-02）**：独立·非栈·单独可合，等 vitest required check。合并后系统首次有「四套叫法↔同一项目」的对照地基（只读并存，供后续对账会话决定是否消费）。
 
 ## 5. 会话启动检查清单（30 秒）
 

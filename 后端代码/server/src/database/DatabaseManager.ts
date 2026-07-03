@@ -4,6 +4,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
 import { CHARGE_CODE_SEED, chargeDefToRow } from '../utils/charge-catalog.js'
+import { seedProjectCatalog } from '../utils/project-catalog.js'
 import { NGS_PRODUCT_SEED, ngsProductToRow } from '../utils/ngs-catalog.js'
 import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } from '../utils/antibody-catalog.js'
 import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
@@ -1305,6 +1306,23 @@ export function initializeDatabase(): void {
   database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_diffs_partner_month ON reconcile_diffs(partner_id, service_month)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_supplement_partner_month ON supplement_orders(partner_id, service_month)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_supplement_status ON supplement_orders(status)`)
+  // ③ 逐抗体细粒度初判线索（返工/多病灶）——与 reconcile_diffs 平行的附加线索表，读 lis_case_markers 派生；不改差异计数口径。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS reconcile_case_hints (
+      id TEXT PRIMARY KEY,
+      hospital_month_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL,
+      service_month TEXT NOT NULL,
+      case_no TEXT NOT NULL,
+      hint_type TEXT NOT NULL,
+      marker_name TEXT,
+      wax_no TEXT,
+      occurrences INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_hints_hm ON reconcile_case_hints(hospital_month_id)`)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_hints_case ON reconcile_case_hints(hospital_month_id, case_no)`)
   // 幂等补列（旧库迁移 + :memory: 新库统一）
   ensureColumn('supplement_orders', 'collected_revenue', 'DECIMAL(18, 4)')
   ensureColumn('fee_standards', 'project_type', 'TEXT')
@@ -1613,6 +1631,14 @@ export function initializeDatabase(): void {
     ['SS-AFB', '抗酸(AFB)', 195, 50, 14, '标称次数=50 占位·待补真实盒装次数', 'G2真实盒价'],
   ]
   stainSeed.forEach((r) => insertStain.run(r[0], r[1], r[2], r[3], r[4], r[5], r[6]))
+
+  // ===========================================================================
+  // D2 统一检测项目目录（project_catalog / code_mappings）—— 地基线 D
+  //   只读对照层：把四套/五套叫法（projects.code / 国标码 / 老物价码 / LIS 名 / 对账单名）
+  //   对到同一个标准项(PC-*)。建表+幂等种子全在 utils/project-catalog.ts。
+  //   ⛔ 不改任何现有分类逻辑（先并存）；守黄金 ¥13,152 / ¥27,870 零回归。
+  // ===========================================================================
+  seedProjectCatalog(database)
 
   console.log('Database initialized successfully')
 }
