@@ -5,31 +5,76 @@ import { success, successList, error } from '../utils/response.js'
 
 const router = Router()
 
-// 获取调拨记录列表
+// 排序白名单：键为前端可传的字段名，值为受控列名（只来自此表 → 杜绝 ORDER BY 注入）
+const SORT_COLUMNS: Record<string, string> = { createdAt: 'i.created_at', quantity: 'i.quantity' }
+function orderBy(sortField: unknown, sortOrder: unknown): string {
+  const col = SORT_COLUMNS[String(sortField)] || 'i.created_at'
+  const dir = String(sortOrder).toLowerCase() === 'asc' ? 'ASC' : 'DESC'
+  return `ORDER BY ${col} ${dir}`
+}
+
+// 获取调拨记录列表（筛选 + 排序 + 分页）
 router.get('/', (req, res) => {
   try {
-    const { page = 1, pageSize = 20 } = req.query
+    let { page = 1, pageSize = 20 } = req.query as any
+    const { keyword, locationId, materialId, startDate, endDate, sortField, sortOrder } = req.query as any
+    page = Math.max(1, Number(page) || 1)
+    pageSize = Math.max(1, Math.min(100, Number(pageSize) || 20))
     const db = getDatabase()
-    const count = (db.prepare("SELECT COUNT(*) as total FROM inbound_records WHERE type = 'transfer' AND is_deleted = 0").get() as any)?.total || 0
-    const offset = (Number(page) - 1) * Number(pageSize)
+
+    let where = "i.type = 'transfer' AND i.is_deleted = 0"
+    const params: any[] = []
+    if (materialId) { where += ' AND i.material_id = ?'; params.push(materialId) }
+    if (locationId) { where += ' AND i.location_id = ?'; params.push(locationId) }
+    if (keyword) { where += ' AND (i.inbound_no LIKE ? OR m.name LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`) }
+    if (startDate) { where += ' AND i.created_at >= ?'; params.push(startDate) }
+    if (endDate) { where += ' AND i.created_at <= ?'; params.push(`${endDate}T23:59:59`) }
+
+    const count = (db.prepare(`
+      SELECT COUNT(*) as total FROM inbound_records i
+      LEFT JOIN materials m ON i.material_id = m.id AND m.is_deleted = 0
+      WHERE ${where}
+    `).get(...params) as any)?.total || 0
+    const offset = (page - 1) * pageSize
+
     const list = db.prepare(`
-      SELECT i.*, m.name as material_name, l.name as location_name
+      SELECT i.*, m.name as material_name, m.unit as material_unit,
+             lt.name as to_location_name, lf.name as from_location_name
       FROM inbound_records i
       LEFT JOIN materials m ON i.material_id = m.id AND m.is_deleted = 0
-      LEFT JOIN locations l ON i.location_id = l.id AND l.is_deleted = 0
-      WHERE i.type = 'transfer' AND i.is_deleted = 0
-      ORDER BY i.created_at DESC
+      LEFT JOIN locations lt ON i.location_id = lt.id AND lt.is_deleted = 0
+      LEFT JOIN locations lf ON i.from_location_id = lf.id AND lf.is_deleted = 0
+      WHERE ${where}
+      ${orderBy(sortField, sortOrder)}
       LIMIT ? OFFSET ?
-    `).all(Number(pageSize), offset) as any[]
+    `).all(...params, pageSize, offset) as any[]
+
     successList(res, list.map((r: any) => ({
       id: r.id, inboundNo: r.inbound_no, materialId: r.material_id, materialName: r.material_name,
-      batchNo: r.batch_no, quantity: r.quantity, locationId: r.location_id, locationName: r.location_name,
+      batchNo: r.batch_no, quantity: r.quantity, unit: r.unit || r.material_unit,
+      fromLocationId: r.from_location_id, fromLocationName: r.from_location_name,
+      toLocationId: r.location_id, toLocationName: r.to_location_name,
       operator: r.operator, status: r.status, remark: r.remark, createdAt: r.created_at,
-    })), Number(page), Number(pageSize), count)
+    })), page, pageSize, count)
   } catch (err: any) { error(res, err.message) }
 })
 
-// 新增调拨入库
+// 调拨统计（本月/件数/涉及物料/今日）
+router.get('/stats', (_req, res) => {
+  try {
+    const db = getDatabase()
+    const base = "FROM inbound_records WHERE type = 'transfer' AND is_deleted = 0"
+    const month = "strftime('%Y-%m', created_at) = strftime('%Y-%m','now')"
+    const total = (db.prepare(`SELECT COUNT(*) c ${base}`).get() as any)?.c || 0
+    const monthCount = (db.prepare(`SELECT COUNT(*) c ${base} AND ${month}`).get() as any)?.c || 0
+    const monthQty = (db.prepare(`SELECT COALESCE(SUM(quantity),0) c ${base} AND ${month}`).get() as any)?.c || 0
+    const materialKinds = (db.prepare(`SELECT COUNT(DISTINCT material_id) c ${base} AND ${month}`).get() as any)?.c || 0
+    const todayCount = (db.prepare(`SELECT COUNT(*) c ${base} AND date(created_at) = date('now')`).get() as any)?.c || 0
+    success(res, { total, monthCount, monthQty, materialKinds, todayCount })
+  } catch (err: any) { error(res, err.message) }
+})
+
+// 新增调拨（库位间移动、总库存不变：仅记录 + 改 location_id，不动 stock）
 router.post('/inbound', (req, res) => {
   try {
     const { materialId, batchNo, quantity, fromLocationId, fromLocationName, toLocationId, operator, remark } = req.body
@@ -43,56 +88,42 @@ router.post('/inbound', (req, res) => {
     }
     const db = getDatabase()
 
-    // 校验物料和目标库位是否存在且未删除
     const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
     const location = db.prepare('SELECT * FROM locations WHERE id = ? AND is_deleted = 0').get(toLocationId) as any
     if (!location) { error(res, '目标库位不存在或已删除', 'NOT_FOUND', 404); return }
+    // 来源以 id 形式给出则校验存在 + 禁止同库位自调；保留 fromLocationName 兜底（外部/自由来源，其撤销无法还原库位）
+    if (fromLocationId) {
+      const fromLoc = db.prepare('SELECT id FROM locations WHERE id = ? AND is_deleted = 0').get(fromLocationId) as any
+      if (!fromLoc) { error(res, '来源库位不存在或已删除', 'NOT_FOUND', 404); return }
+      if (fromLocationId === toLocationId) { error(res, '来源库位和目标库位不能相同', 'INVALID_PARAMETER', 400); return }
+    }
+    // 调拨＝移动既有库存：物料必须已在库（无库存行不能凭空"移动"，首次入库请走入库）
+    const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
+    if (!inv) { error(res, '该物料暂无库存，无法调拨（如需入库请使用入库）', 'STOCK_INSUFFICIENT', 422); return }
 
+    const qty = Number(quantity)
+    const beforeStock = inv.stock
     db.exec('BEGIN IMMEDIATE')
     try {
-      // 创建入库记录
       const inboundNo = `TF-${Date.now()}`
       const id = uuidv4()
       db.prepare(`
-        INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_no, quantity, unit, location_id, operator, status, remark)
-        VALUES (?, ?, 'transfer', ?, ?, ?, '个', ?, ?, 'completed', ?)
-      `).run(id, inboundNo, materialId, batchNo || null, quantity, toLocationId, operator || 'system', remark || '')
+        INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_no, quantity, unit, location_id, from_location_id, operator, status, remark)
+        VALUES (?, ?, 'transfer', ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
+      `).run(id, inboundNo, materialId, batchNo || null, qty, material.unit || '个', toLocationId, fromLocationId || null, operator || 'system', remark || '')
 
-      // 增加目标库位库存
-      const existingInv = db.prepare('SELECT * FROM inventory WHERE material_id = ?').get(materialId) as any
-      let beforeStock = 0
-      let afterStock = 0
-      if (existingInv) {
-        beforeStock = existingInv.stock
-        afterStock = beforeStock + quantity
-        db.prepare("UPDATE inventory SET stock = stock + ?, location_id = ?, last_inbound_id = ?, last_inbound_date = date('now','localtime'), update_time = CURRENT_TIMESTAMP WHERE material_id = ?")
-          .run(quantity, toLocationId, id, materialId)
-      } else {
-        afterStock = quantity
-        db.prepare(`
-          INSERT INTO inventory (id, material_id, stock, locked_stock, location_id, last_inbound_id, last_inbound_date, update_time)
-          VALUES (?, ?, ?, 0, ?, ?, date('now','localtime'), CURRENT_TIMESTAMP)
-        `).run(uuidv4(), materialId, quantity, toLocationId, id)
-      }
+      // 库位间移动：总库存不变，只把物料当前库位指到目标（单库位模型：整物料 last-move-wins）
+      db.prepare("UPDATE inventory SET location_id = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?").run(toLocationId, materialId)
 
-      // 负库存兜底（调拨增加库存，不会负数，但保持统一检查）
-      const afterCheck = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock
-      if (afterCheck < 0) {
-        db.exec('ROLLBACK')
-        error(res, '库存不能为负数', 'STOCK_NEGATIVE', 422)
-        return
-      }
-
-      // 记录 stock_logs
-      const logId = uuidv4()
+      // stock_logs：调拨对库存 0 变动（before==after，quantity=0），仅留移库痕
       db.prepare(`
-        INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
-        VALUES (?, 'transfer', ?, ?, ?, ?, ?, 'transfer', ?)
-      `).run(logId, materialId, quantity, beforeStock, afterStock, id, operator || 'system')
+        INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
+        VALUES (?, 'transfer', ?, 0, ?, ?, ?, 'transfer', ?, ?)
+      `).run(uuidv4(), materialId, beforeStock, beforeStock, id, operator || 'system', `库位调拨 ${qty}（总量不变）`)
 
       db.exec('COMMIT')
-      success(res, { id, inboundNo, materialId, quantity, fromLocationId, fromLocationName, toLocationId }, 'Transfer inbound created')
+      success(res, { id, inboundNo, materialId, quantity: qty, fromLocationId, fromLocationName, toLocationId }, 'Transfer created')
     } catch (e: any) {
       db.exec('ROLLBACK')
       throw e
@@ -100,7 +131,7 @@ router.post('/inbound', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-// 撤销调拨记录
+// 撤销调拨（还原库位到来源；总库存仍不变。来源未知的历史记录保持现状、不乱写）
 router.delete('/:id', (req, res) => {
   try {
     const { id } = req.params
@@ -110,26 +141,18 @@ router.delete('/:id', (req, res) => {
 
     db.exec('BEGIN IMMEDIATE')
     try {
-      // 软删除调拨记录
       db.prepare('UPDATE inbound_records SET is_deleted = 1 WHERE id = ?').run(id)
 
-      // 回滚库存（调拨是增加库存，撤销是减少）
       const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any
-      const beforeStock = inv?.stock || 0
-      if (beforeStock < record.quantity) {
-        db.exec('ROLLBACK')
-        error(res, '库存不足，无法撤销调拨', 'STOCK_INSUFFICIENT', 422)
-        return
+      const beforeStock = inv?.stock ?? 0
+      if (record.from_location_id) {
+        db.prepare('UPDATE inventory SET location_id = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(record.from_location_id, record.material_id)
       }
-      const afterStock = beforeStock - record.quantity
-      db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(afterStock, record.material_id)
 
-      // 记录 stock_logs
-      const logId = uuidv4()
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
-        VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'transfer_cancel', ?, '撤销调拨记录')
-      `).run(logId, record.material_id, -record.quantity, beforeStock, afterStock, id, req.body.operator || 'system')
+        VALUES (?, 'cancel', ?, 0, ?, ?, ?, 'transfer_cancel', ?, '撤销调拨（还原库位·总量不变）')
+      `).run(uuidv4(), record.material_id, beforeStock, beforeStock, id, req.body?.operator || 'system')
 
       db.exec('COMMIT')
       success(res, null, '调拨记录已撤销')

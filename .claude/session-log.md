@@ -1014,6 +1014,33 @@ http://your-server-ip:8080
 
 ---
 
+## 本次会话：Lane C「修流程」退库/报废/调拨三页补全（2026-07-02，进行中）
+
+**线/工作树**：worktree `eloquent-fermat-da583d`，分支 `claude/eloquent-fermat-da583d`（起自 master tip `2bdbbee7`，零 open PR）。**ultracode 全程**（每个实质子任务走 Workflow 多代理编排）。
+
+**范围**：三页 `Transfers.tsx`/`Returns.tsx`/`Scraps.tsx`（现为壳）按 inbound/inventory 成熟范式补齐——筛选栏+统计卡+快速筛选+详情弹窗(页内 modal)+导出 Excel+批量+表头排序(后端白名单)+URL 同步。后端 `transfers/returns/scraps-v1.1.ts` 加 sortField/sortOrder+过滤+stats；`transfers` 持久化 `from_location_id`（DatabaseManager `ensureColumn`）；`returns/scraps` 加 `created_at` 索引。独占文件；共享 `api/inventory.ts` 只改 scrap/return/transfer 导出块、共享 `DatabaseManager.ts` 只追加 Lane C 专属段。**不碰**对账/收入侧/逐抗体成本/Lane A(inventory/inbound/outbound/depletion)。
+
+**基线**：本 worktree `npm ci` 后 `npx vitest run` = **77 files / 580 tests 全绿**（golden ¥13,152+¥27,870 基线）。
+
+**讨论循环（关键产出）**：向 PM 摊语义假设，逮到**两个既有库存 bug**（PM 拍板改正方向）：
+- **退库**现状**减库存**→ 应**加库存**（物料退回仓库）；撤销对称减。
+- **调拨**现状**加库存**→ 应**总量不变移库**（只更新 `location_id`，不动 stock）；撤销还原库位。单库位模型做不了分库位拆分（记忆 [[coreone-transfers-returns-stock-semantics]]）。
+- **报废**现状减库存＝**对的·不动**。
+- **blast-radius**（Workflow 三镜头+对抗复核 `wf_9b0c227d`）：黄金 ¥13,152/¥27,870 **零影响**、三路由**零测试覆盖→零变红**、改动只落我自己两个路由文件、不改 inventory 表结构。
+- **PM 决策**：**本波一起修**（语义改对 + 补 TDD 测试 + 三页 UI，一个 PR）。
+
+**执行完成（2026-07-03）**：
+- **mockup 便宜阶段定稿**：show_widget 三页可点原型（改正后语义徽章 + 说人话 note + 五态）→ 讨论循环收敛(2 条 PM 决策：退库不设上限 / 原因按"能用-不能用"清分)。
+- **后端 TDD**：新增 `tests/lane-c-transfers-returns-scraps.test.ts`(17 用例·红→绿)。三路由改语义 + sort/sortOrder 白名单 + 关键字/原因/目标库位/日期过滤 + `/stats`。DatabaseManager Lane C 段：`ensureColumn` from_location_id + return/scrap `is_deleted` 兜底(修全新库迁移空跑) + created_at 索引。
+- **前端重建**：共享 `pages/_laneC/`（`useLaneCPage` hook + Stats/QuickFilters/FilterBar/Table/DetailModal/CreateModal + LaneCPage）config 驱动，三页各 <70 行薄配置。URL 同步 / 批量勾选(改筛选清空) / 重置清 quickFilter / ConfirmDialog 二次确认 / 筛选无结果独立空态 / 无权限态 / capabilities 门控 / xlsx 导出。api `scrap/return/transfer` 块加 filter 参数 + getStats。
+- **自验**：backend tsc 绿 + **vitest 78 files/597 tests 全绿**（golden ¥13,152+¥27,870 零回归）；frontend tsc + vite build 绿；**真跑端到端**（preview 8091 + 后端 3001，真 DB 手测：退库 9→14→撤销→9 ✓ / 调拨 stock 不变·库位 L1→L2·from_location_id 落库 ✓·撤销还原 L1 ✓）；三页浏览器渲染 console 零错、详情弹窗/登记弹窗(改正后原因清单)均验。
+- **codex 异构复核**(gpt-5.5)：①②③⑤ clean；④调拨两处 CONFIRMED → 无库存行调拨改**拒绝 422**(补 TF-05)、给 fromLocationId 则校验存在+禁 from==to(补 TF-04)；**未照 codex 硬 require fromLocationId**（会回归 Lane A 入库页的自由文本来源，见记忆）。codex 频繁重连→按韧性套路 `resume --last` 低强度出结论。
+
+**独占/共享纪律**：只改 `{transfers,returns,scraps}` 前后端独占文件 + 共享 `api/inventory.ts` 仅动 scrap/return/transfer 块 + `DatabaseManager.ts` 仅追加 Lane C 段。未碰 Lane A(inventory/inbound/outbound/depletion)/对账/成本。git 只显式 add 目标文件（禁 -A：worktree 已 npm ci，node_modules 未 ignore）。
+
+**副作用披露**：调拨语义改 stock-neutral 后，Lane A 入库页"调拨入库"按钮(同一 `/transfers/inbound` 路由)也变"移库不加库存"——符合 PM 单一语义决策，但其"入库"文案名不符实，留给 Lane A 会话改。
+
+**PR/看板**：[#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) OPEN（base=master，独立·单独可合，等 vitest required check 绿）。看板 `pr-governance.md` 同步新增 #52 行。
 ## 本次会话完成的工作（进销存「修流程」并行任务拆分 + 核实分派，2026-07-02）
 
 **线/工作树**：worktree `eloquent-lichterman-af4db5`（已 ff 到 master tip `2bdbbee7`）。

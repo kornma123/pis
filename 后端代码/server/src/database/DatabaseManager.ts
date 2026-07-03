@@ -647,6 +647,19 @@ export function initializeDatabase(): void {
     }
   }
 
+  // ===========================================================================
+  // Lane C「修流程」— 退库/报废/调拨（本波唯一动 schema 的线；纯增量，不改既有列）
+  // ===========================================================================
+  // 调拨（inbound_records type='transfer'）持久化来源库位：撤销时还原库位 + 列表展示"来源→目标"
+  ensureColumn('inbound_records', 'from_location_id', 'TEXT')
+  // 兜底 is_deleted：return_records/scrap_records 的 CREATE 不含该列，其"补列迁移"却排在 CREATE 之前
+  // → 全新库（如 :memory: 测试）里迁移空跑、列缺失。ensureColumn 在建表之后跑，幂等补齐（生产已有则 no-op）。
+  ensureColumn('return_records', 'is_deleted', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('scrap_records', 'is_deleted', 'INTEGER NOT NULL DEFAULT 0')
+  // 退库/报废列表默认按时间倒序、并支持时间排序 → 建 created_at 索引（幂等）
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_return_records_created ON return_records(created_at)`)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_scrap_records_created ON scrap_records(created_at)`)
+
   // 多角色 RBAC：用户主身份角色（展示用；权限走 user_roles 并集）
   ensureColumn('users', 'primary_role', 'TEXT')
 
