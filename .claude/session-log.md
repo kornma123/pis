@@ -925,6 +925,6 @@ http://your-server-ip:8080
 
 **跟进**：`project_code` 映射靠读 `projects` 表动态生成，`initializeDatabase` 阶段 projects 常为空 → 首次为空、待 projects seed 后下次 init 或显式调 `syncProjectCodeMappings` 补齐（非阻断，静态国标/LIS/对账单映射不受影响）。前端只读清单页（供人过🔴待校对队列）留后续会话，本线只出后端只读 API。
 
-**PR/看板**：[待建] `feat/project-catalog-d2` → master（独立·非栈·单独可合，等 vitest required check）。看板 `pr-governance.md` 已记。
+**PR/看板**：[#39](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/39) OPEN（`feat/project-catalog-d2` → master，独立·非栈·单独可合，等 vitest required check）。看板 `pr-governance.md` 已记（#39 行）。
 
 *更新时间：2026-07-02*
