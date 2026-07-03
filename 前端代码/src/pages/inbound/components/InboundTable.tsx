@@ -8,7 +8,7 @@ function getTypeLabel(type: string): string {
     direct: '直接入库',
     purchase: '采购入库',
     return: '退库入库',
-    transfer: '调拨入库',
+    transfer: '库位调拨',
     surplus: '盘盈入库',
     other: '其他入库',
   }
