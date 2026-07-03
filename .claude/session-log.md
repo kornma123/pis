@@ -1174,3 +1174,26 @@ http://your-server-ip:8080
 **经验**：①task 描述已点名线 A 含 `ambiguousNorm` 碰撞防护——我第一版只复用了 `normalizeAntibodyName` 漏了防护，**对抗面板逮回**（教训=复用一个模块的规范化时，连它的消歧/兜底一起复用，别只搬前半）。②codex「别读别的文件」指令过严→它啥都没读直接拒答，改为**inline 贴码**才出结论（codex-cli-usage 已有「缩小请求」经验，本次是反向：太缩到没上下文）。③异构轴(codex)给方向、对抗轴(Workflow panel)给具体反例，两轴互补=机制5 落地。
 
 *更新时间：2026-07-03*
+
+---
+
+## 本次会话完成的工作（ABC 确认并行线 2 · ABC 前端审计 + 废弃候选清单 → PR，2026-07-03）
+
+**触发**：用户 task「ABC 确认并行线 2：ABC 前端审计 + 废弃候选清单」。**纯审计/文档，绝不删或改任何代码/路由**。worktree `hungry-austin-230c91`。PM 立场=「ABC 本就不该有前端页面，是方法论不是功能」，但 task 已预警**这话一半成立**（配置类需 UI 有漏洞），须如实呈现别机械照搬"全废"。
+
+**范围**：`App.tsx` 全部 **18 `/abc/*` + `/indirect-costs`**（19 页）。逐页给 现状/数据来源 · 重叠对象 · 处置建议 · 合并去向；分「配置类=保留」「报表类=废弃候选」；结论=无一可直接删。
+
+**方法（ultracode）**：Workflow **42-agent** 编排——phase0 测绘 4 个重叠对象真实表面（hospital-pnl/account-reconcile/逐抗体成本/cost-analysis+reconciliation）→ phase1 pipeline 逐页审计（sonnet 读码）→ phase2 对抗处置判断（opus，「删/合会不会丢独有能力」）。再自查 grep + codex(high·单文件) 异构抽查高风险项。
+
+**结论：19 页 = 保留 10 · 合并候选 3 · 待定 6 · 直接删 0。**
+- **配置类 10 页保留**（作业中心/成本动因/成本池/收费映射/间接成本/预算/质量成本/季度调整/成本异常台账/ABC看板工作台）=ABC 参数的唯一录入入口，删了方法论没处落参数。**修正 task 原名单**：原点名配置类 5 个，实测 10 个（budgets/quality-costs/quarterly-adjustment/alerts 都是真写操作 config；而 model-validation 是纯只读模拟器→应移出配置类）。
+- **报表类 9 页**（与 hospital-pnl/逐抗体成本/cost-analysis 重叠）：3 合并候选（supplier-costs→cost-analysis供应商Tab、trend→cost-analysis月度趋势、model-validation→slide-cost）+ 6 待定（slide-cost/profitability/fee-comparison/variance/audit/personnel-efficiency）。
+- **可发现性是眼下最尖锐问题**：18 个 `/abc/*` 里 **14 个孤儿路由**（App.tsx 注册但侧栏无入口、不在任何角色 `NAV_PATH_MODULE`/`ROLE_MENU_MAP`），含多个有独有录入能力的配置页 → 处置=补导航而非删。
+
+**顺带查出 2 缺陷（不修·纯审计范围·建议另立项）**：① `personnel-efficiency` 调**幽灵接口** `/reports/personnel-efficiency`（后端 grep `personnel` 零命中→必 404、从未显示真数据）；② `variance` 的"标准成本"**造假**（后端 `totalStandard += materialActual` 复制材料实际、labor/equipment 标准硬编码 0），真"理论vs实际"其实在 `消耗对账` 页。
+
+**独立复核**：4 个最高风险声明自查 grep 全部证实——model-validation 纯只读(无 mutation)✓ / supplier-costs 同端点已被 cost-analysis 消费+退款netting三列后端从不返回✓ / personnel-efficiency 幽灵接口✓ / trend 唯一消费者✓。codex(high·单文件·别读别的)第三轴抽查 model-validation 重分类。
+
+**产出**：新增 `docs/COREONE-ABC前端页面处置清单-审计与废弃候选-2026-07-03.md`（纯文档·零代码·golden 零回归）→ PR。PM 待拍 3 项：①「ABC 前端全废」能否成立（配置类漏洞）②是否新建统一报表平台承载 ABC 报表类页 ③各报表页去向（并入 hospital-pnl / 留下钻 / 先补导航观察）。**清单先摊 PM 拍**再谈实现，删/合动作一律等 PM 拍后另立实现项。
+
+*更新时间：2026-07-03*
