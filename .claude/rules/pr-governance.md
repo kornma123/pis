@@ -125,13 +125,7 @@
 |---|---|---|---|---|---|
 | — | [#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) | `claude/eloquent-lichterman-af4db5` → `master` | ✅ **MERGED**(2026-07-02, merge commit `6a8e69bd`) | **独立**（非栈式，无上下游）。纯文档：新增 `docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`——把账实复核+逐抗体成本未决清单里的**基础模块（成本侧）**项拆成三条互不碰文件的独立线（A 抗体名称映射 / D 统一检测项目目录 / F G2 弱锚校准+承重墙口径），供多会话并行；明确排除对账引擎/前端三页/收入侧/独立复核。零代码·golden 零回归。 | merge-order/1 |
 
-> ✅ **#32 已合并（2026-07-02, merge commit `6a8e69bd`）**：成本侧基础模块拆分边界表落 master。三线 chip：**A→本 PR #37 已实现**；D `task_a65bcaab`；F `task_b514b2ae`。
-
-| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
-|---|---|---|---|---|---|
-| — | [#37](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/37) | `feat/antibody-name-map` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游·已 merge origin/master 消看板 doc 冲突）。实现 #32 拆分的**线 A 逐抗体成本·抗体名映射(A1+A3)**：LIS 抗体名→台账(价+剂型) resolver（规范化规则+5 生物学同义词种子+碰撞防护 ambiguousNorm）+ `antibody_aliases` 表(ops 可扩展) + 5 种真缺入库占位 + `/antibodies/resolve`·别名 CRUD + 缺价清单交 PM。真数据手核：A1「缺10种」实为 5 别名(台账已有价)+5 真缺(PD-1≠PD-L1/cathepsinK/GPNMB/TROP-2/HP)；别名救回 Ki67 等 28 种/151 行。**独立对抗复核(Workflow 8-agent)修 MEDIUM TCR 跨抗体误价 1 项**。纯成本侧·物理隔离收入/对账。vitest 78 files/608 tests 绿；golden ¥13,152+¥27,870 零回归；tsc 绿。**单独可合**。 | merge-order/1 |
-
-> 🟢 **#37 OPEN（2026-07-02）**：线 A 抗体名映射实现，独立单独可合，等 vitest required check。合并后前端/对账/LIS 侧可经 resolver util 或 `GET /antibodies/resolve` 端点对上台账价。PM 待解锁：5 种真缺采购价（清单 `docs/COREONE-缺价抗体清单-…`）。
+> ✅ **#32 已合并（2026-07-02, merge commit `6a8e69bd`）**：成本侧基础模块拆分边界表落 master。三线 chip：A 运行中·ultracode；D `task_a65bcaab`；F `task_b514b2ae`。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
@@ -144,6 +138,12 @@
 | — | [#48](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/48) | `claude/brave-bassi-4bdd83` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。Lane E「预警做真」评审衍生：`alerts-v1.1.ts` 两写端点(handle/generate)权限口径复核。**评估=有意口径非缺口→维持 R**（全部非 admin 角色仅 alerts:R 无 W，裸加 W 会令除 admin 外全部 403；敏感阈值配置 PUT /rules/:id 已 W+admin 锁；全站 auditWrite 已留痕）。仅加口径注释 + 回归门禁 `bv-alerts-write-rbac.test.ts`（**变异测试证有效**：临时加 W→3 个 R 级用例翻 403）。scope 仅 alerts+测试。**单独可合**·无功能变更·vitest 79/594 绿·golden ¥13,152+¥27,870 零回归。 | merge-order/1 |
 
 > 🟢 **#48 OPEN（2026-07-02）**：预警写操作 RBAC 口径固化（维持 R）。源于 #38 的 wave-1 线 E「预警做真」评审。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#49](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/49) | `claude/goofy-wescoff-33d1e9` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。Lane A 修流程·库存/盘点做真：**盘点单条改真两阶段**（create 只登记不入账→新增 `POST /:id/adjust` 才入账·受控原因白名单+幂等+防过期409+operator取token→DELETE 仅对已入账回滚）+ `DepletionTab`/`DepletedTab` 空态。batch 故意保持一阶段（受控落地）。仅动 stocktaking 域 9 文件·**不碰对账/LIS/成本/收入侧**。新增 TDD `stocktaking-two-phase.test.ts` 11 用例；后端 vitest **591 全绿**（golden ¥13,152+¥27,870 零回归、batch p1-04 零改动仍绿）；tsc+vite build 绿。独立复核：Workflow 五镜头修 2 项 + codex 异构确认无双计/漏账。**单独可合**。 | merge-order/1 |
+
+> 🟢 **#49 OPEN（2026-07-02）**：Lane A 盘点两阶段+空态。等 vitest required check。**已披露边界**：批量盘点仍一阶段；无 inventory 行物料 adjust=UPDATE no-op（master 既有行为，未新增风险）。
 
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 

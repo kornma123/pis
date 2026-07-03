@@ -1650,9 +1650,11 @@ export function initializeDatabase(): void {
     VALUES (?, ?, ?, ?, ?, ?)
   `)
   const ihcParamSeed: Array<[string, string, number, string, string, string]> = [
-    ['IHC-PARAM-SEC', 'secondary_per_slide', DEFAULT_IHC_COST_PARAMS.secondaryPerSlide, '台账/G2估', '粗估', '上机二抗测试条~¥15/片（台账真价 14~16）'],
-    ['IHC-PARAM-LAB', 'labor_per_slide', DEFAULT_IHC_COST_PARAMS.laborPerSlide, 'G2估', '粗估', '工时占位·弱锚·待康湾真实工资校准(B4)'],
-    ['IHC-PARAM-EQP', 'equipment_per_slide', DEFAULT_IHC_COST_PARAMS.equipmentPerSlide, 'G2估', '粗估', '设备折旧占位·弱锚·待校准(B4)'],
+    // 二抗/显色是台账真价（上机二抗测试条 ¥15，台账 14~16）——非弱锚，如实标「台账真价」，别混进 G2 估。
+    ['IHC-PARAM-SEC', 'secondary_per_slide', DEFAULT_IHC_COST_PARAMS.secondaryPerSlide, '台账', '台账真价', '上机二抗测试条~¥15/片（台账真价 14~16）'],
+    // 工时/设备是弱锚（B4）——诚实标 G2 估·粗估·待校准；用真实工资/折旧走 POST /cost-params/calibrate 摊算写回后翻牌「已校准」。
+    ['IHC-PARAM-LAB', 'labor_per_slide', DEFAULT_IHC_COST_PARAMS.laborPerSlide, 'G2估', '粗估', '工时占位·弱锚·待康湾真实工资校准(B4)：POST /cost-params/calibrate'],
+    ['IHC-PARAM-EQP', 'equipment_per_slide', DEFAULT_IHC_COST_PARAMS.equipmentPerSlide, 'G2估', '粗估', '设备折旧占位·弱锚·待校准(B4)：POST /cost-params/calibrate'],
   ]
   ihcParamSeed.forEach((r) => insertIhcParam.run(r[0], r[1], r[2], r[3], r[4], r[5]))
   const insertStain = database.prepare(`

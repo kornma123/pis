@@ -117,6 +117,12 @@ export default function Stocktaking() {
       <StocktakingAdjustModal
         open={page.modalType === 'adjust'}
         row={page.detailRow}
+        reason={page.adjustReason}
+        note={page.adjustNote}
+        submitting={page.isSubmitting}
+        onChangeReason={page.setAdjustReason}
+        onChangeNote={page.setAdjustNote}
+        onSubmit={page.handleAdjust}
         onClose={() => page.setModalType(null)}
       />
     </div>

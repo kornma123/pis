@@ -1,3 +1,6 @@
+import { Archive } from 'lucide-react'
+import { EmptyState } from '@/components/ui/EmptyState'
+
 interface DepletedRecord {
   id: string
   materialName: string
@@ -22,6 +25,13 @@ export function DepletedTab({ records }: Props) {
       <div className="px-5 py-4 border-b border-gray-200">
         <span className="text-base font-semibold text-gray-900">已耗尽记录</span>
       </div>
+      {records.length === 0 ? (
+        <EmptyState
+          icon={Archive}
+          title="暂无已耗尽记录"
+          description="批次确认耗尽后会归档到这里，留存实际使用周期备查"
+        />
+      ) : (
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
@@ -59,6 +69,7 @@ export function DepletedTab({ records }: Props) {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   )
 }
