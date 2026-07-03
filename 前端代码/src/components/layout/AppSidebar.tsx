@@ -36,6 +36,14 @@ import {
   Settings,
   Scale,
   Database,
+  AlertTriangle,
+  History,
+  GitBranch,
+  Container,
+  Receipt,
+  Wallet,
+  ShieldCheck,
+  CalendarClock,
 } from 'lucide-react'
 
 interface MenuItem {
@@ -72,7 +80,16 @@ const ALL_MAIN_MENU: MenuItem[] = [
   { label: 'ABC成本看板', path: '/abc/dashboard', icon: BarChart3 },
   { label: '单片成本分析', path: '/abc/slide-cost', icon: Layers },
   { label: '盈利分析', path: '/abc/profitability', icon: TrendingUp },
+  { label: '成本异常台账', path: '/abc/alerts', icon: AlertTriangle },
+  { label: '成本审计追溯', path: '/abc/audit', icon: History },
+  // ----- ABC 配置类（参数唯一录入入口，I-1 补导航）-----
   { label: 'ABC配置', path: '/abc/activity-centers', icon: Settings },
+  { label: '成本动因', path: '/abc/cost-drivers', icon: GitBranch },
+  { label: '成本池', path: '/abc/cost-pools', icon: Container },
+  { label: '收费映射配置', path: '/abc/fee-mappings', icon: Receipt },
+  { label: '成本预算', path: '/abc/budgets', icon: Wallet },
+  { label: '质量成本', path: '/abc/quality-costs', icon: ShieldCheck },
+  { label: '季度成本调整', path: '/abc/quarterly-adjustment', icon: CalendarClock },
   { label: '设备管理', path: '/equipment', icon: Wrench },
   { label: '标准工时库', path: '/labor-times', icon: Clock },
   { label: '间接成本中心', path: '/indirect-costs', icon: Settings },

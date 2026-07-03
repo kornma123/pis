@@ -216,6 +216,14 @@
 
 > ✅ **#62 已合并（2026-07-03, merge commit `aed65fd9`）**：文档剩余线 1（task `task_b403412d`）。vitest required check 绿(1m19s)后 `--merge --admin`（e2e 非 required·pending 不阻断）落 master。⚠️ 其它 open PR：#61（`hungry-austin-230c91` ABC 前端处置清单·文档剩余线 2·并行会话，非本线，仍 OPEN）——合并各自前按 `gh pr list` 核对，勿误合。
 
+### 活跃 PR 看板 · I-1 ABC 孤儿配置页补导航（实现项，源自 #61 §五）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#65](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/65) | `claude/magical-sutherland-e69f26` → `master` | 🟢 **OPEN**(2026-07-03) | **独立**（非栈式，无上下游；off master `877b3932`）。实现项 **I-1**（PM 已拍「配置类保留」）。**纯前端·零后端·golden 天然零回归**。8 个 ABC 孤儿页接回侧栏（6 配置页+成本异常台账+成本审计追溯）+ `NAV_PATH_MODULE`/`ROLE_MENU_MAP` 权限映射。仅改 2 前端文件（`permissions.ts`/`AppSidebar.tsx`）。可达性⟺后端授权对齐：配置类映 `abc_config`（同既有 activity-centers）、alerts/audit 映 `abc_dashboard`；**共旅不变量**（持 abc_config 者必同持 abc_dashboard:R）经 SEED_MATRIX+运行库+逐 6 种子用户×8 路径 live HTTP 验证=**0 破链**。前端 tsc/build 绿·permissions vitest(15+7)绿·整仓零新增失败；后端 vitest 89/757 绿·golden ¥13,152+¥27,870 零回归；真跑端到端 8 页可点开+落库+审计留痕。独立复核=codex 异构(high·拆多请求)+Workflow 3-lens 对抗面板+inline live harness 三引擎一致；采纳 2 项 LOW 命名消歧。**单独可合**·等 vitest required check。 | merge-order/1 |
+
+> 🟢 **#65 OPEN（2026-07-03）**：I-1 补导航（纯前端）。**已披露边界**：①共旅假设与既有 `/abc/activity-centers` 同款耦合（非新引入·注释固化），仅不连贯自造角色(abc_config 无 abc_dashboard)可破链；②运行库 finance 欠配 ABC 模块→当前实际可见者=admin（同 activity-centers 行为）；③personnel-efficiency/variance 缺陷另立 I-3/I-4。合并前按 `gh pr list` 核对；其它并行会话 PR 勿误合。
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 对一遍本看板，差异即更新看板。

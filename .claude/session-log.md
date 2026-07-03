@@ -1268,3 +1268,23 @@ http://your-server-ip:8080
 **产出**：commit `5cea35cb`（2 文档）→ **PR [#62](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/62)**（独立·非栈·单独可合·doc-only）→ 治理 commit（看板+session-log 记 #62）→ merge origin/master 消 #61 带来的治理文档 append 冲突（保留双方段）→ **✅ MERGED（2026-07-03, merge commit `aed65fd9`）**：用户拍板合并，vitest required 绿(1m19s)后 `--merge --admin` 落 master。看板 #62 行 OPEN→MERGED。⚠️ 其它 open PR：#61（ABC 前端处置清单·文档剩余线 2·并行会话，仍 OPEN）。
 
 *更新时间：2026-07-03*
+
+## 本次会话完成的工作（I-1 · ABC 孤儿配置页补导航，2026-07-03）
+
+**线/工作树**：worktree `magical-sutherland-e69f26`（off master tip `877b3932`，PR #61 已合）。task=实现项 **I-1**（ABC 前端处置清单 §五，PM 已拍「配置类保留」）。**纯前端·零后端·golden 天然零回归**。
+
+**做的事**：把 8 个够不着的 ABC 页接回侧栏——6 配置页（成本动因/成本池/收费映射/成本预算/质量成本/季度调整）+ 2 成本管理页（成本异常台账/成本审计追溯）。仅改 2 前端文件：`permissions.ts`(`NAV_PATH_MODULE` 加 8 条映射 + `ROLE_MENU_MAP` admin/finance 各加 8 条)、`AppSidebar.tsx`(`ALL_MAIN_MENU` 加 8 项 + 8 个 lucide import)。
+
+**关键=可达性⟺后端授权对齐（先摊后端真相）**：`/abc/*` 挂载守卫=`abc_dashboard:R`、写=`requireCostWrite`=`abc_config:W`；`/cost-adjustments`(季度调整)=`cost_analysis:R/W`。配置类映 `abc_config`（与既有 `/abc/activity-centers` 一致）、alerts/audit 映 `abc_dashboard`。**共旅不变量**：真实角色矩阵（SEED_MATRIX + 运行库 roles 表）里持 `abc_config` 者必同时持 `abc_dashboard:R`（且季度调整批亦持 `cost_analysis:R`）→ 侧栏可见 ⟹ 读端点不 403。已在代码注释固化。
+
+**真跑端到端（起前后端·admin 登录·真数据）**：8 入口全现侧栏+文案正确；逐个点开=8 页全渲染 H1、无 403/无 error boundary/**零 console 报错**；admin 对 8 主 GET 全 200；`成本动因`+`成本预算`创建**落库**（`成本审计追溯`页显两条创建留痕 operator=admin）。**可达性⟺授权不变量**逐 6 种子用户×8 路径实测 HTTP=**0 破链**（admin 见 8/8 全授权；其余角色因无 abc 能力见 0/8=与后端 403 一致）。
+
+**验证**：前端 tsc 绿 + vite build 绿（附记：共享 node_modules 原缺 `@tanstack/react-query`[package.json 已声明]，`--no-save --no-package-lock` 补装后过，与本改动无关）；前端 vitest permissions 两套(15+7)绿·整仓 5 失败与 clean-master 基线完全一致=**零新增**；后端 vitest **89 files/757 绿·golden ¥13,152+¥27,870 零回归**。
+
+**独立复核（机制5·三引擎一致）**：① codex 异构(`-s read-only -c high`·拆 2 请求)=破链专审确认「abc_config-without-abc_dashboard」仅**理论**风险（真实矩阵无此角色）+ 完整性专审两轮 PASS（8 路径三处齐全·路径匹配 App.tsx·8 图标全 import）；② Workflow 3-lens 对抗面板（RBAC-403/完整性/文案回归）=RBAC 独立复算「invariant holds·仅不连贯自造角色可破」、完整性 PASS、回归 PASS·纯新增；③ 我 inline 逐用户 live 不变量 harness=0 违反。**采纳 2 项 LOW 命名消歧**：成本异常中心→**成本异常台账**（避与「预警中心」撞"中心"）、成本操作审计→**成本审计追溯**（避与系统「操作日志」撞"操作"）。
+
+**已披露边界**：共旅假设（与既有 activity-centers 同款耦合·非新引入·注释固化）；运行库 finance 角色欠配 ABC 模块→当前只 admin 实际可见（同既有 activity-centers 行为）；缺陷 personnel-efficiency/variance 不在本项（另立 I-3/I-4）。
+
+**治理**：worktree 无 node_modules→symlink 主仓（**全程禁 `git add -A`**·只显式 add 2 源文件+doc+session-log+看板）；跑服务改了 tracked `coreone.db`→`git checkout` 复原至基线 hash `150f1094`。⚠️**worktree 路径坑**：初次误编辑主仓副本（`/进销存/前端代码/...` 命中主仓非 worktree）→ 用 `git diff | git apply` 迁到 worktree + 主仓 `git checkout` 复原。产出 → PR（待开）。
+
+*更新时间：2026-07-03*
