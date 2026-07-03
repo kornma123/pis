@@ -917,4 +917,6 @@ http://your-server-ip:8080
 
 **PM 待解锁**：A1 缺价采购价、A2 三家扣率、B4 康湾工资/折旧、D2 目录口径拍板（各会话先产出清单/草案再等 PM）。
 
+**PR/看板**：[#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) OPEN（base=master，独立·纯文档·单独可合，把拆分边界表落 master 供并行会话共读）。看板 `pr-governance.md` 同步新增 #32 行 + 三线 chip 状态。
+
 *更新时间：2026-07-02*
