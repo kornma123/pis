@@ -1,3 +1,6 @@
+import { PackageOpen } from 'lucide-react'
+import { EmptyState } from '@/components/ui/EmptyState'
+
 interface DepletionItem {
   id: string
   materialName: string
@@ -19,6 +22,18 @@ interface Props {
 }
 
 export function DepletionTab({ items, onEditRemain, onConfirmDeplete }: Props) {
+  if (items.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm">
+        <EmptyState
+          icon={PackageOpen}
+          title="暂无使用中的批次"
+          description="领用出库后，正在使用的批次会显示在这里，方便跟踪剩余量和用尽进度"
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {items.map(dep => (
