@@ -1305,6 +1305,23 @@ export function initializeDatabase(): void {
   database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_diffs_partner_month ON reconcile_diffs(partner_id, service_month)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_supplement_partner_month ON supplement_orders(partner_id, service_month)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_supplement_status ON supplement_orders(status)`)
+  // ③ 逐抗体细粒度初判线索（返工/多病灶）——与 reconcile_diffs 平行的附加线索表，读 lis_case_markers 派生；不改差异计数口径。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS reconcile_case_hints (
+      id TEXT PRIMARY KEY,
+      hospital_month_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL,
+      service_month TEXT NOT NULL,
+      case_no TEXT NOT NULL,
+      hint_type TEXT NOT NULL,
+      marker_name TEXT,
+      wax_no TEXT,
+      occurrences INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_hints_hm ON reconcile_case_hints(hospital_month_id)`)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_hints_case ON reconcile_case_hints(hospital_month_id, case_no)`)
   // 幂等补列（旧库迁移 + :memory: 新库统一）
   ensureColumn('supplement_orders', 'collected_revenue', 'DECIMAL(18, 4)')
   ensureColumn('fee_standards', 'project_type', 'TEXT')
