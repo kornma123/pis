@@ -93,6 +93,12 @@
 | — | [#45](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/45) | `feat/reconcile-overdue-free` → `master` | ✅ **MERGED**(2026-07-02, merge commit `c0c91f54`) | **独立**（非栈式，off 已合 #43 的 master）。账实核对**边界④「超期免费」**——**用户拍板口径：超期免费=财务判断，非系统硬规则**（不按跨月/N天/关账自动判）；「免费」暂态，医院日后同意补→改认定「漏收，需补收」即生成补收单。做法=**前端差异卡支持「改认定」翻转**（后端 verdict 端点本就支持重认定，此前仅前端锁死）；**未建完成时间管道**（财务已有信息，不越权硬判）。后端逻辑零改动·TDD 4 用例锁翻转不变量·真跑端到端(改认定→补收单¥300)。vitest required 绿(1m4s)；golden 零回归。 | merge-order/1 |
 
 > ✅ **#45 已合并（2026-07-02, merge commit `c0c91f54`）**：账实核对边界④超期免费收官——**四条边界全部落地**（①补收实收 #33 · ②反向弹窗 #35 · ③逐抗体初判 #40 · ④超期免费翻转 #45）。**账实复核+逐抗体成本主线全部完成。**
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#50](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/50) | `feat/import-ux` → `master` | 🟡 **OPEN**(2026-07-03) | **独立**（非栈式，off master `3a662d46`）。对账单导入前端优化（用户拍板 4 方向全做·mockup 先行）：**接缝打通**（向导内当场归类·带改基线提示）+**拖拽上传**+**行级预览**+**批量队列**（拖多家→自动认院[客户头模糊匹配·仅唯一命中]+自动认账期→逐家核对入库）+测试台简化=去重。**纯前端·后端零改动**。codex 读码修 2 HIGH 异步竞态 + 多 agent 对抗自审修 10 项（needConfirm 串项·LIS 预检回归·并发预览·ref 同步 等）。真跑：真温州对账单 42%→100%·批量 2 家自动认院·零报错。tsc+build 绿·golden 不受影响。**单独可合**。 | merge-order/1 |
+
+> 🟡 **#50 OPEN（2026-07-03）**：对账单导入前端优化。用户「我看页面」中，等其过目 + vitest required check。
 > ⚠️ **其它 open PR（并行会话·非本线）**：`gh pr list` 现见 #37（LIS抗体名→台账映射）/ #39（D2 检测项目目录）/ #41（逐抗体成本弱锚校准线 F）——合并各自前按 `gh pr list` 核对，勿误合。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
