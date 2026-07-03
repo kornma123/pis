@@ -7,6 +7,7 @@ import { CHARGE_CODE_SEED, chargeDefToRow } from '../utils/charge-catalog.js'
 import { NGS_PRODUCT_SEED, ngsProductToRow } from '../utils/ngs-catalog.js'
 import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } from '../utils/antibody-catalog.js'
 import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
+import { ANTIBODY_SYNONYM_SEED, ANTIBODY_MISSING_PRICE_SEED } from '../utils/antibody-name-map.js'
 import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -1224,8 +1225,25 @@ export function initializeDatabase(): void {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  // antibody_aliases: LIS 抗体名 → 台账规范名 别名表（A1+A3 名称映射）。
+  //   代码规范化(去连字符/空格/大小写)自动对上大多数写法差异；此表存**规范化也撞不到的生物学同义词**（Ecad→E-cadherin 等），
+  //   ops 可继续加新别名（无需改代码发版）。lis_name UNIQUE，幂等 INSERT OR IGNORE。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS antibody_aliases (
+      id TEXT PRIMARY KEY,
+      lis_name TEXT NOT NULL UNIQUE,
+      canonical_name TEXT NOT NULL,
+      note TEXT,
+      source TEXT,
+      status INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT
+    )
+  `)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_antibodies_name ON antibodies(name)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_antibodies_category ON antibodies(category)`)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_antibody_aliases_lis ON antibody_aliases(lis_name)`)
   // ── Phase 1 账实核对引擎（设计基线 §1.4/§1.5）──
   //   reconcile_hospital_months: 院·月复核状态机（待复核→复核完成→已关账；匹配率/院名对齐/关账留痕）。
   //   reconcile_diffs: 逐差异（账单片数 vs LIS 物理片数·¥影响·系统初判·6 认定原因·经手人）。
@@ -1580,6 +1598,22 @@ export function initializeDatabase(): void {
       a.bottlePrice ?? 0, a.bottlePriceTaxed, a.convRate, a.perTestPrice,
       hasPrice ? 'has_price' : 'missing', ANTIBODY_LEDGER_SOURCE,
     )
+  })
+  // 台账真缺 5 种（LIS 用到、台账无价，A1）：入库标 price_status='missing'，成本走降级 + 行级「毛利待定」。
+  //   待 PM 补采购价后经 PUT /antibodies/:id 回填（form=NULL 未知剂型，与台账无 UNIQUE 冲突）。
+  ANTIBODY_MISSING_PRICE_SEED.forEach((m, i) => {
+    insertAntibody.run(
+      `AB-MISS${String(i).padStart(2, '0')}`, m.name, null, m.category, null, null,
+      0, null, null, null, 'missing', `LIS用到·台账缺价·待PM补采购价(A1)｜${m.note}`,
+    )
+  })
+  // 抗体别名种子（生物学同义词，规范化撞不到的）→ antibody_aliases。
+  const insertAlias = database.prepare(`
+    INSERT OR IGNORE INTO antibody_aliases (id, lis_name, canonical_name, note, source, status)
+    VALUES (?, ?, ?, ?, ?, 1)
+  `)
+  ANTIBODY_SYNONYM_SEED.forEach((s, i) => {
+    insertAlias.run(`AB-ALIAS${String(i).padStart(2, '0')}`, s.lisName, s.canonicalName, s.note, '种子(A1同义词)')
   })
   const insertDetection = database.prepare(`
     INSERT OR IGNORE INTO detection_systems

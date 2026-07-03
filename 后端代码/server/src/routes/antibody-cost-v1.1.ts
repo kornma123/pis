@@ -18,8 +18,36 @@ import {
   DEFAULT_IHC_COST_PARAMS,
   type IhcCostParams,
 } from '../utils/antibody-cost.js'
+import {
+  buildLedgerIndex,
+  resolveAntibodyName,
+  normalizeAntibodyName,
+  type LedgerIndex,
+  type LedgerRow,
+} from '../utils/antibody-name-map.js'
 
 const router = Router()
+
+/** 从 antibodies 表构建台账索引（抗体名↔价+剂型 解析用）。 */
+function buildDbLedgerIndex(db: any): LedgerIndex {
+  const rows = db
+    .prepare('SELECT name, form, per_test_price, category FROM antibodies WHERE is_deleted = 0')
+    .all() as Array<{ name: string; form: string | null; per_test_price: number | null; category: string | null }>
+  const ledger: LedgerRow[] = rows.map((r) => ({ name: r.name, form: r.form, perTestPrice: r.per_test_price, category: r.category }))
+  return buildLedgerIndex(ledger)
+}
+
+/** 从 antibody_aliases 表构建 规范化(LIS名)→台账名 映射（DB=权威源，含 ops 新增）。 */
+function buildSynonymMapFromDb(db: any): Map<string, string> {
+  const m = new Map<string, string>()
+  try {
+    const rows = db.prepare('SELECT lis_name, canonical_name FROM antibody_aliases WHERE status = 1').all() as Array<{ lis_name: string; canonical_name: string }>
+    for (const r of rows) m.set(normalizeAntibodyName(r.lis_name), r.canonical_name)
+  } catch {
+    /* 表未建 → 空映射（仅靠规范化） */
+  }
+  return m
+}
 
 interface AntibodyRow {
   id: string
@@ -101,6 +129,22 @@ router.get('/antibodies', (req, res) => {
   }
 })
 
+// GET /antibodies/resolve —— 把 LIS 抗体名解析成台账（价 + 剂型）。供 LIS/对账侧对上台账价用。
+//   ?name=（必填）&form=（可选，LIS 有剂型时传）。返回 matchKind(exact/alias/missing/non_antibody) + canonicalName + form + formAssumed + perTestPrice + priceStatus。
+//   注册在 /antibodies 之后、:id 路由之前，避免 'resolve' 被当成 id。
+router.get('/antibodies/resolve', (req, res) => {
+  try {
+    const db = getDatabase()
+    const nameQ = String(req.query.name ?? '').trim()
+    if (!nameQ) return error(res, '需提供 name', 'BAD_REQUEST', 400)
+    const formQ = String(req.query.form ?? '').trim()
+    const rr = resolveAntibodyName(nameQ, buildDbLedgerIndex(db), buildSynonymMapFromDb(db), formQ ? { form: formQ } : {})
+    success(res, rr)
+  } catch (err: any) {
+    error(res, err.message)
+  }
+})
+
 // GET /cost-preview —— 每片「算全」成本派生（一抗 + 二抗/显色 + 工时G2 + 设备G2 + 完整度分档）
 //   入参：?id= 或 ?name=（可加 &form=）从库取；或 ?perTestPrice= 直接试算。
 router.get('/cost-preview', (req, res) => {
@@ -114,18 +158,19 @@ router.get('/cost-preview', (req, res) => {
     const priceQ = req.query.perTestPrice
 
     let costInput: { name?: string; form?: string | null; perTestPrice?: number | null; category?: string | null }
+    let resolution: ReturnType<typeof resolveAntibodyName> | null = null
     if (idQ) {
       const row = db.prepare('SELECT * FROM antibodies WHERE id = ? AND is_deleted = 0').get(idQ) as AntibodyRow | undefined
       if (!row) return error(res, '抗体不存在', 'NOT_FOUND', 404)
       costInput = toCostInput(row)
     } else if (nameQ) {
-      // 同名多剂型（如 CK19/CK20 有 原液+即用，价差 ~6 倍）：只给 name 时取**每人份价更高者**（保守=不高估毛利）；
-      // 需精确按剂型请带 &form=。
-      const row = (formQ
-        ? db.prepare('SELECT * FROM antibodies WHERE name = ? AND form = ? AND is_deleted = 0').get(nameQ, formQ)
-        : db.prepare('SELECT * FROM antibodies WHERE name = ? AND is_deleted = 0 ORDER BY per_test_price DESC').get(nameQ)) as AntibodyRow | undefined
-      if (!row) return error(res, '抗体不存在', 'NOT_FOUND', 404)
-      costInput = toCostInput(row)
+      // A1+A3 名称映射：先经 resolver 把 LIS 写法（Ecad/Ki67/…）对上台账（价+剂型）。
+      //   同名多剂型 + 无剂型 → 保守取高价 + 剂型待确认；台账真缺 → 走降级(粗估) + 行级标注（不再直接 404）。
+      resolution = resolveAntibodyName(nameQ, buildDbLedgerIndex(db), buildSynonymMapFromDb(db), formQ ? { form: formQ } : {})
+      if (resolution.matchKind === 'non_antibody') {
+        return error(res, `「${nameQ}」是${resolution.category ?? '非抗体'}，不是抗体，无法算每片抗体成本`, 'BAD_REQUEST', 400)
+      }
+      costInput = { name: resolution.canonicalName ?? nameQ, form: resolution.form, perTestPrice: resolution.perTestPrice, category: '一抗' }
     } else if (priceQ !== undefined) {
       costInput = { perTestPrice: Number(priceQ), category: '一抗' }
     } else {
@@ -133,7 +178,7 @@ router.get('/cost-preview', (req, res) => {
     }
 
     const breakdown = computeFullSlideCost(costInput, params, { fallbackAvg: avg })
-    success(res, { ...breakdown, params, fallbackAvg: avg })
+    success(res, { ...breakdown, params, fallbackAvg: avg, resolution })
   } catch (err: any) {
     error(res, err.message)
   }
@@ -270,6 +315,56 @@ router.get('/special-stains', (_req, res) => {
       remark: r.remark, sourceLedger: r.source_ledger,
     }))
     success(res, list)
+  } catch (err: any) {
+    error(res, err.message)
+  }
+})
+
+// GET /antibody-aliases —— 别名表（LIS 名 → 台账名），ops 可读/加/删。
+router.get('/antibody-aliases', (_req, res) => {
+  try {
+    const db = getDatabase()
+    const rows = db.prepare('SELECT id, lis_name, canonical_name, note, source, status FROM antibody_aliases ORDER BY lis_name').all() as Array<any>
+    const list = rows.map((r) => ({ id: r.id, lisName: r.lis_name, canonicalName: r.canonical_name, note: r.note, source: r.source, status: r.status }))
+    success(res, list)
+  } catch (err: any) {
+    error(res, err.message)
+  }
+})
+
+// POST /antibody-aliases —— 新增别名（写）。canonical_name 必须是已存在的台账抗体名，否则拒绝（防映射到不存在的名）。
+router.post('/antibody-aliases', requirePermission('antibody_cost', 'W'), (req, res) => {
+  try {
+    const db = getDatabase()
+    const b = req.body ?? {}
+    const lisName = String(b.lisName ?? '').trim()
+    const canonicalName = String(b.canonicalName ?? '').trim()
+    if (!lisName || !canonicalName) return error(res, 'lisName / canonicalName 必填', 'BAD_REQUEST', 400)
+    const target = db.prepare('SELECT 1 FROM antibodies WHERE name = ? AND is_deleted = 0 LIMIT 1').get(canonicalName)
+    if (!target) return error(res, `台账无抗体「${canonicalName}」，不能作为别名目标`, 'BAD_REQUEST', 400)
+    try {
+      db.prepare(`
+        INSERT INTO antibody_aliases (id, lis_name, canonical_name, note, source, status, created_by)
+        VALUES (?, ?, ?, ?, ?, 1, ?)
+      `).run(uuidv4(), lisName, canonicalName, b.note ?? null, '手工录入', (req as any).user?.username ?? null)
+    } catch (e: any) {
+      if (String(e.message).includes('UNIQUE')) return error(res, `别名已存在（${lisName}）`, 'CONFLICT', 409)
+      throw e
+    }
+    success(res, { lisName, canonicalName }, '别名已新增', 201)
+  } catch (err: any) {
+    error(res, err.message)
+  }
+})
+
+// DELETE /antibody-aliases/:id —— 删除别名（写）。
+router.delete('/antibody-aliases/:id', requirePermission('antibody_cost', 'W'), (req, res) => {
+  try {
+    const db = getDatabase()
+    const existing = db.prepare('SELECT id FROM antibody_aliases WHERE id = ?').get(req.params.id)
+    if (!existing) return error(res, '别名不存在', 'NOT_FOUND', 404)
+    db.prepare('DELETE FROM antibody_aliases WHERE id = ?').run(req.params.id)
+    success(res, { id: req.params.id }, '别名已删除')
   } catch (err: any) {
     error(res, err.message)
   }
