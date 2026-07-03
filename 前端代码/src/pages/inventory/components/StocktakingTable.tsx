@@ -1,6 +1,6 @@
 import { Search, FolderOpen, Loader2, Trash2 } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
-import type { StocktakingRecord } from '../hooks/useStocktakingPage'
+import { getStocktakingStatusDisplay, type StocktakingRecord } from '../hooks/useStocktakingPage'
 
 interface Props {
   data: StocktakingRecord[]
@@ -97,13 +97,15 @@ export function StocktakingTable({
                 <td className="px-4 py-3 text-gray-700">{row.operator || '-'}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{row.createdAt ? new Date(row.createdAt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-') : '-'}</td>
                 <td className="px-4 py-3">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-600">已完成</span>
+                  {(() => { const s = getStocktakingStatusDisplay(row.status); return (
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>{s.label}</span>
+                  ) })()}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1">
                     <button onClick={() => onOpenDetail(row)} className="px-2 py-1 text-gray-500 hover:text-blue-600 text-xs font-medium transition-colors">详情</button>
-                    {row.difference !== 0 && (
-                      <button onClick={() => onOpenAdjust(row)} className="px-2 py-1 text-gray-500 hover:text-blue-600 text-xs font-medium transition-colors">查看差异</button>
+                    {row.status === 'pending' && row.difference !== 0 && (
+                      <button onClick={() => onOpenAdjust(row)} className="px-2 py-1 text-blue-500 hover:text-blue-600 text-xs font-medium transition-colors">处理差异</button>
                     )}
                     <button onClick={() => onOpenDelete(row)} className="px-2 py-1 text-gray-400 hover:text-red-600 text-xs font-medium transition-colors" title="撤销">
                       <Trash2 className="w-3.5 h-3.5" />

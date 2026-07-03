@@ -141,11 +141,9 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#44](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/44) | `claude/blissful-vaughan-12ce52` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，off master `2bdbbee7`）。**Lane E 预警做真**：修库存预警页处理/忽略/生成链路契约断裂（前端调 /process、/ignore，后端只有 /handle→全 404）+ 表单 opinion/result 透传落库 + handled_by 留痕 + 空态兜底/生成入口。独占 4 文件（alerts 页 3+`alerts-v1.1.ts`）+2 测试，不碰 DatabaseManager/对账/成本/LIS。契约 PM 拍板（统一 /handle 带 action、意见必填、忽略→已忽略、生成=按钮+空态自动）。后端 vitest 78f/586 绿(+lane-e 6 例)；前端 alerts 11 绿+tsc 绿；真跑端到端过（隔离 DB：generate→handle→落库核对 status/remark/handled_by=admin）；golden ¥13,152+¥27,870 零回归。独立复核：4 镜头对抗 workflow(1 真 LOW 已修)+codex 异构 CLEAN。**范围外遗留**：写端点仅继承 alerts:R（既有现状）→已拆 follow-up `task_4bb21aba`。 | merge-order/1 |
+| — | [#49](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/49) | `claude/goofy-wescoff-33d1e9` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。Lane A 修流程·库存/盘点做真：**盘点单条改真两阶段**（create 只登记不入账→新增 `POST /:id/adjust` 才入账·受控原因白名单+幂等+防过期409+operator取token→DELETE 仅对已入账回滚）+ `DepletionTab`/`DepletedTab` 空态。batch 故意保持一阶段（受控落地）。仅动 stocktaking 域 9 文件·**不碰对账/LIS/成本/收入侧**。新增 TDD `stocktaking-two-phase.test.ts` 11 用例；后端 vitest **591 全绿**（golden ¥13,152+¥27,870 零回归、batch p1-04 零改动仍绿）；tsc+vite build 绿。独立复核：Workflow 五镜头修 2 项 + codex 异构确认无双计/漏账。**单独可合**。 | merge-order/1 |
 
-> 🟢 **#44 OPEN（2026-07-02）**：Lane E 预警链路修复，与并行 #37/#39/#41（逐抗体成本/目录线）互不碰文件、各自独立可合。
-
-**并行开着（2026-07-02，各自独立·非栈·base=master）**：#37(A1+A3 抗体名映射)、#39(D2 目录只读层)、#41(线 F 弱锚校准)、#44(Lane E 预警做真)——四条并行线，文件独占、无上下游、各自 merge-order/1。
+> 🟢 **#49 OPEN（2026-07-02）**：Lane A 盘点两阶段+空态。等 vitest required check。**已披露边界**：批量盘点仍一阶段；无 inventory 行物料 adjust=UPDATE no-op（master 既有行为，未新增风险）。
 
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
