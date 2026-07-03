@@ -133,6 +133,12 @@
 
 > 🟢 **#38 OPEN（2026-07-02）**：进销存修流程 wave-1 拆分边界表。四线 chip：C `task_9b1bf9c5`·E `task_f68fd867`·A `task_9b77fcb3`·B `task_0d75ee19`（均 ultracode）。核实丢弃：入库 IN-03/05/06 已修、退货供应商已完整、采购菜单/路由/页面都在。
 
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#48](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/48) | `claude/brave-bassi-4bdd83` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。Lane E「预警做真」评审衍生：`alerts-v1.1.ts` 两写端点(handle/generate)权限口径复核。**评估=有意口径非缺口→维持 R**（全部非 admin 角色仅 alerts:R 无 W，裸加 W 会令除 admin 外全部 403；敏感阈值配置 PUT /rules/:id 已 W+admin 锁；全站 auditWrite 已留痕）。仅加口径注释 + 回归门禁 `bv-alerts-write-rbac.test.ts`（**变异测试证有效**：临时加 W→3 个 R 级用例翻 403）。scope 仅 alerts+测试。**单独可合**·无功能变更·vitest 79/594 绿·golden ¥13,152+¥27,870 零回归。 | merge-order/1 |
+
+> 🟢 **#48 OPEN（2026-07-02）**：预警写操作 RBAC 口径固化（维持 R）。源于 #38 的 wave-1 线 E「预警做真」评审。
+
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
 > ✅ **合并完成（2026-06-30，账单已修，"按序合栈+拆 e2e 债"）**：#8→#10→#11 依次 merge commit 落 master。**每步 e2e 复校**=三次跑均 **6 failed/251 passed、失败集完全一致**（supplier-returns 5 + auth-logout 1），全栈**零新增 e2e 失败**。这 6 个=master 既有 supplier-returns/auth bug（与本栈无关，已拆 task `c93e8188` 单独修；非 RBAC 403，权限本就授予）。黄金 ¥13,152 守住、后端联合 482 绿。
