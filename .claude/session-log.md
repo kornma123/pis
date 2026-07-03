@@ -956,6 +956,39 @@ http://your-server-ip:8080
 
 ---
 
+## 本次会话完成的工作（D2 统一检测项目目录·地基线 D，2026-07-02）
+
+**线/工作树**：worktree `hungry-fermat-218505`，分支 `claude/hungry-fermat-218505`，从 `origin/master` tip `0b662efe` 出发。ultracode 多代理编排（勘察 5-agent 并行 → 真数据核 → codex 异构复核）。
+
+**任务**：建 D2「统一检测项目目录」——同一检测项目在系统里有四套/五套叫法（`projects.code` / 国标收费码 / 老本地物价码 / LIS 名 / 对账单名）且**无硬映射**，加一层**只读对照表**把它们对到同一个标准项。**加目录层不合表 · 先并存不改现有分类**。
+
+**discussion-first（PM 拍板，非一问一答）**：先出最小 schema 草案 + 概念图讲清 D2，PM 拍定 4 项 + 追问「校对指什么」→ 二轮澄清后定：①全收真实项目词汇（变体靠 NFKC 归一，不逐条列全角/半角）②复合行拆包（一名→多标准项+数量）③标准项用新命名空间 `PC-*`（与 projects.code/国标码解耦）④校对 = 自动分高/中/低三层 + 噪音自动剔除不映射 + 复合自动拆待确认 + 只读清单。
+
+**落码（独占文件；不碰 classifier.ts / case-charge-mapping.ts / statement-revenue.ts / 收入侧 / reconcile-* / 前端）**：
+- `后端代码/server/src/utils/project-catalog.ts`(NEW)：两表 schema（`project_catalog` 26 标准项 / `code_mappings`）+ 幂等种子（国标码 exact·high / LIS 数量列+抗体+adviceType / projects.type 动态读表 / 对账单词汇全收+拆包+分层）+ 查询 API（`lookupProject` 未命中不抛错只 `matched:false` · `listReviewQueue` 待校对清单 · `catalogSummary` · 反查）+ 关键词分类器（含分子基因检测/噪音/复合拆包/数量解析）。
+- `后端代码/server/src/database/DatabaseManager.ts`：+import + `initializeDatabase` 末尾 D2 标注块调用 `seedProjectCatalog`（+9 行；建表+种子全在 util）。
+- `后端代码/server/src/routes/project-catalog-v1.1.ts`(NEW) + `app.ts` 注册 `/api/v1/project-catalog`（**全只读**：/lookup /review-queue /catalog /summary /反查；复用 `requirePermission('projects','R')`，**不新增权限模块 → 零 MODULES 漂移**）。
+- `后端代码/server/tests/project-catalog.test.ts`(30) + `tests/project-catalog-routes.test.ts`(8)。
+
+**真数据验证（真跑不是查渲染）**：把分类器跑**全部 514 个真对账单项目名**（19 院 `2026年对账单.7z`，PII 纪律=只取项目名列、xlsx 不进仓）——高置信 179 / 中 121 / 噪音自动剔 267 / **未覆盖仅 22**（残留为手术/麻醉/无痛胃镜/微波消融等**临床非病理项** + 少量行政费，正确落待校对队列）。据真数据补 4 处：①分子基因检测（突变/融合/重排 K-RAS/EGFR/BRCA…）规则（原只识「基因检测」漏「基因突变检测」）②`/` 不当分隔符（BRCA1/2 不拆碎）③财务噪音扩表（费用/耗材/税/福利/设备…）④免疫细胞化学→IHC。加守卫测试锁「癌基因蛋白仍是 IHC 非分子」。
+
+**验证**：`npx tsc --noEmit` 绿；`npx vitest run` **78 files / 620 tests 全绿**；黄金 **¥13,152 + ¥27,870 零回归**。dev DB 未动（测试走 `:memory:`）。
+
+**独立对抗复核（异构 codex + 同构 3-lens workflow 双轨）——逮到 4 个真 bug 并修（单元测试原本全绿也没照出，靠真跑入库/查询回环才逮）**：
+- 🔴 **F1（medium·复合行同标准项丢数量）**：复合行拆出两段同标准项（癌基因蛋白×10 + 单克隆抗体×6 都=IHC）时 `UNIQUE(system,alias_norm,catalog_code)`+`INSERT OR IGNORE` 把第二段顶掉→IHC 数被 16 读成 10。**修**：新增 `aggregateComponents` 入库/查询前按标准项聚合、数量相加。
+- 🔴 **F2（low-med·id 哈希碰撞丢映射）**：`id` 用 32-bit djb2 哈希，codex 实测构造碰撞对→两个不同别名映到同标准项时第二条被 PRIMARY KEY 顶掉。**修**：`id` 改 `uuid`（幂等本就由 UNIQUE 约束保证）。
+- 🔴 **F3（medium·白片误判+口径打架）**：`免组白片/特染白片`=空白复制片(PC-SLIDE-COPY) 却被「免组/特染」规则先命中成 IHC/特染、high/auto 不进复核、且与 `LIS_TECH_ROW_SEED` 打架。**修**：白片规则前移到 IHC/特染/PD-L1 之前。
+- 🟡 **F4（low·"服务费"误剔噪音）**：`NOISE_RE` 含「服务费」会把「远程会诊服务费」这类真项目整段剔成噪音。**修**：移除「服务费」。
+- ✅ 确认无误：先并存零改动（git diff 仅 6 文件）、lookup 任意输入不抛错、SQL 全参数化、权限复用无 MODULES 漂移、黄金零回归。4 项均补回归测试锁定。
+
+**跟进**：`project_code` 映射靠读 `projects` 表动态生成，`initializeDatabase` 阶段 projects 常为空 → 首次为空、待 projects seed 后下次 init 或显式调 `syncProjectCodeMappings` 补齐（非阻断，静态国标/LIS/对账单映射不受影响）。前端只读清单页（供人过🔴待校对队列）留后续会话，本线只出后端只读 API。
+
+**PR/看板**：[#39](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/39) OPEN（`feat/project-catalog-d2` → master，独立·非栈·单独可合，等 vitest required check）。看板 `pr-governance.md` 已记（#39 行）。
+
+*更新时间：2026-07-02*
+
+---
+
 ## 本次会话完成的工作（基础模块实现任务拆分 + 多会话并行分派，2026-07-02）
 
 **线/工作树**：worktree `eloquent-lichterman-af4db5`，分支 `claude/eloquent-lichterman-af4db5`（master tip `0b662efe`，零 open PR）。
@@ -1006,35 +1039,64 @@ http://your-server-ip:8080
 
 ---
 
-## 本次会话完成的工作（线 A 逐抗体成本·抗体名映射 A1+A3，feat/antibody-name-map，2026-07-02）
+## 本次会话完成的工作（预警写操作 RBAC 口径固化，2026-07-02）
 
-**线/工作树**：worktree `elastic-fermi-0c520a`，从最新 `origin/master`（rebase 到 `858f16fa`）切 `feat/antibody-name-map`。基础模块任务拆分（`docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`）**线 A**：让 LIS 只给「抗体名」时也对上台账的**价+剂型**，并把台账真缺的抗体清出来。
+**线/工作树**：worktree `brave-bassi-4bdd83`（分支 `claude/brave-bassi-4bdd83`，off master）。
 
-**工作模型第一段（先讨论/摊假设·真数据手核）**：读台账 `免疫组化相关耗材2025年.xlsx·sheet「2025(2)」` + LIS `0702免组.xlsx`（PII 安全·只取抗体名/剂型/价分析列），交叉比对本月 105 种 markerName/806 行 →
-- **A1「缺 10 种」实为 5 种是别名**（台账早有价）：Ecad→E-cadherin/Melan A→MART-1·melan-A/Vimentin→VIM/cyclinD1→CYCD-1/SMARCA4→SMARC4；**真缺仅 5 种**：PD-1(≠PD-L1)/cathepsinK/GPNMB/TROP-2/HP（全工作簿含旧表查无）。
-- 别名映射顺带救回 Ki67(52次)/S100/TTF1/HER2/galectin3 等 **28 种/151 行**"写法对不上"的抗体 → 能算准成本从 277 行涨到 428 行。
-- **A3 剂型歧义**仅 CK19/CK20（原液/即用差~6倍、LIS 无剂型）。
-- 摊给 PM 3 问拍板：①CK19/CK20 剂型=**保守取高价+标「剂型待确认」**；②HP=**当免疫组化抗体·补采购价**；③别名落地=**代码规范化规则+可在库里加别名表**。安全校验：规范化对台账（修笔误后）**仅 TCR 一处真撞键**。
+**触发**：Lane E「预警做真」评审中两独立引擎（Workflow 安全镜头 + codex 深审）都注意到的**既有**现状——`alerts-v1.1.ts` 的 `POST /:id/handle`、`POST /generate` 只继承挂载层 `requirePermission('alerts','R')`，无额外 W 守卫；对比其他写域普遍要求 'W'，是权限口径不一致。非 Lane E 引入，故当时未在 Lane E 修。本会话专项评估。
 
-**实现（TDD 先行 red→green）**：
-- `src/utils/antibody-name-map.ts`(NEW)：`normalizeAntibodyName`(去括号克隆号/连字符/空格/点/大写) + `ANTIBODY_SYNONYM_SEED`(5 生物学同义词) + `ANTIBODY_MISSING_PRICE_SEED`(5 真缺) + `classifyMarker`(隔离白片/HE/深切重切/分子/特染疑) + `buildLedgerIndex`(**碰撞防护 ambiguousNorm**) + `resolveForm`(保守取高价) + `resolveAntibodyName`(非抗体→精确→别名→歧义拦→规范化→真缺)。
-- `src/database/DatabaseManager.ts`：`antibody_aliases` 表(ops 可扩展·幂等 INSERT OR IGNORE) + 别名种子 + 5 种真缺入 antibodies 表(price_status=missing 占位)。
-- `src/routes/antibody-cost-v1.1.ts`：`/cost-preview` 认别名(Ecad 不再 404) + `GET /antibodies/resolve`(供 LIS/对账侧对价) + 别名 CRUD(`/antibody-aliases` GET/POST/DELETE，POST 校验 canonical 存在)。
-- `tests/antibody-name-map.test.ts`(NEW，28 用例)：规范化/classifyMarker/别名命中/剂型歧义/真缺/PD-1≠PD-L1/碰撞防护/TCR 守卫 + DB seed + resolve/别名端点。
-- 交付 PM：`docs/COREONE-缺价抗体清单-交PM补采购价-2026-07-02.md`（5 种真缺待补价）。
+**评估结论 = 有意口径，非缺口（判定「维持 R + 固化」）**：
+- 关键事实：`SEED_MATRIX` 中**全部 6 个非 admin 角色仅 alerts:'R'（无 'W'）**，仅 admin 有 W。→ 裸加 `requirePermission('alerts','W')` 会令**除 admin 外全部角色 403**（warehouse_manager 等无法处理库存预警），是 supplier_returns 迁移缺口的复刻（既有库不回填）。
+- 预警是信息性运营操作、无金额/口径影响；真正敏感的写=**阈值配置** `PUT /rules/:id` 已单独 W+admin 锁定；全站 `auditWrite` 中间件已把这两个 2xx 写落 `operation_logs`（含 operator）→ 问责链已在。符合本项目 base 功能 adoption-first 基线。
+- 收紧成本高收益低：需 SEED_MATRIX 改 + 既有库回填迁移 + 改 pathologist/finance 权威，仅换来边际安全值。
 
-**独立复核（机制5·异构轴）已过 + 修 1 项**：Workflow 5 维对抗复核面板（8 agent·含对抗 verify）逮到 **MEDIUM 真 bug**：TCR(a/b)=αβ¥6.63 与 TCR(G/D)=γδ¥10.10 去克隆号规范化都→'TCR' 撞键，byNorm 首个占位会把 γδ 静默误价成 αβ（跨抗体误价，PD-1≠PD-L1 同类红线）；原碰撞测试"过"只因台账 `TCR(G/D))` 多打个 `)` 的笔误掩盖。**已修**（笔误订正 + buildLedgerIndex 标 ambiguousNorm 不自动解析 + 软化不实注释 + TCR 回归测试）。另 2 条 finding（HE 大小写变体/source_ledger 塞 note）复核**反驳=非真问题**（真实数据无该输入/无消费者）。codex 异构深审因另一会话 D2 复核占用资源、本次未产出（诚实边界）。
+**产出（scope 仅 alerts + 测试，零碰对账/成本/LIS）**：
+- `src/routes/alerts-v1.1.ts`：两端点前加口径注释固化「只需 R、勿加 W」+ 若确要收紧的三步（SEED_MATRIX + 回填迁移 + 翻测试期望）。
+- 新回归门禁 `tests/bv-alerts-write-rbac.test.ts`：镜像 app.ts 真实挂载 `requirePermission('alerts','R')`，用 R 级角色 pathologist（alerts:R 无 W）验证可 handle/generate（200）+ 未登录 401。
+- **变异测试验证门禁有效**：临时给端点加 W 守卫 → 3 个 R 级用例如期翻 403（证明未来误收紧会被拦）；已还原。
 
-**验证**：`tsc --noEmit` 绿；`vitest run` **78 文件/608 测试全绿**（+1 文件 +28 用例含 3 TCR 守卫）；**golden ¥13,152+¥27,870 零回归**（映射只读 antibodies/别名表，不碰收入侧/对账引擎）；工作树干净（dev DB 未脏）。rebase 到 `858f16fa` 后重跑全绿。
+**验证**：tsc 绿(exit 0)；full vitest **79 files / 594 tests 全绿**（基线 78/590 + 本次 1 文件/4 测试，零回归）；golden ¥13,152 + ¥27,870 零回归；`data/coreone.db` 未动（测试走 :memory:）。
 
-**诚实边界/未决（交接）**：① 5 种真缺待 PM 补采购价（清单已交）；② CK19/CK20 真实剂型待确认（现保守取高价占位）；③ 别名 resolver 是纯口径 util + 只读端点，LIS 导入侧真正消费（导入时对价）留对账/LIS 会话按需接（契约已就绪）；④ 特染权威分类仍归对账域 A4，本线只做轻量识别防污染缺价清单。
+**PR/看板**：[#48](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/48)（base=master·独立·非栈式·单独可合）。看板 `pr-governance.md` 已加 #48 行。PM 已拍板「保持现状（维持 R）」；若将来要收紧到 W，注释与测试已写明三步落地路径。
 
-**改动文件**：`src/utils/antibody-name-map.ts`(NEW)、`src/utils/antibody-catalog.ts`(TCR 笔误订正)、`src/database/DatabaseManager.ts`、`src/routes/antibody-cost-v1.1.ts`、`tests/antibody-name-map.test.ts`(NEW)、`docs/COREONE-缺价抗体清单-交PM补采购价-2026-07-02.md`(NEW)。
+---
 
-**PR**：[#37](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/37) OPEN（base=master·独立非栈·单独可合，等 vitest required check）。看板 `pr-governance.md` 同步（#32→MERGED + 新增 #37 行）。合并后前端/对账/LIS 侧可经 resolver util 或 `GET /antibodies/resolve` 对上台账价。
+## 本次会话完成的工作（账实核对边界④ 超期免费·认定翻转，feat/reconcile-overdue-free，2026-07-02）
 
-**收尾补记（同会话续）**：
-- **codex 诊断 + 文档沉淀**：本线收尾 codex 异构复核首两次（xhigh/high 长复核）**流式断开**（`stream disconnected before completion: network error: error decoding response body`）——非 codex 坏/非限流/非登录（最小 low 探针秒级成功、`rate_limit_reached_type:null`），根因=长时流式连接保不住（高推理+大上下文，多 xhigh 会话并发加剧）。**低推理+单文件复跑成功**，codex 对核心逻辑 4 红线逐条判「无真 bug」（与 Workflow 面板互印）。规避法记进 `.claude/rules/codex-cli-usage.md` 新增「长请求断流规避」节 → **独立纯文档 PR [#42](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/42) 已 MERGED（merge commit `fdc134e5`，--admin 落 master）**。
-- **#37 消看板漂移**：master 经他会话 #35/#38/#40 前进后，#37 在 `pr-governance.md`/`session-log.md` 有 doc 冲突（代码文件不冲突）→ 按惯例 `git merge origin/master`、看板按并集解（保 #37+#38 双行、#32 chip 标 A→#37 已实现）。**合并组合态重验：tsc 绿 + vitest 79 files/618 tests 绿（含 #40 reconcile-antibody-hints 的 10 用例）+ golden ¥13,152+¥27,870 零回归**；#37 现 `mergeable=MERGEABLE`（等新提交 vitest 重跑）。
+**背景**：账实核对 ①补收实收(#33)/②反向弹窗(#35)/③逐抗体初判(#40) 已全落 master；余边界④「超期免费」。
+
+**用户口径拍板（重要纠正）**：超期免费**不做成系统硬规则**（不按跨月/N天/关账自动判）——它是**财务对账时的判断**，财务有准确信息；「免费」是**暂态**，日后合作医院同意补 → 改认定「漏收，需补收」即生成补收单；默认先让财务核实收不到。
+
+**做法**：核实发现后端 verdict 端点本就支持**重认定**（改判自动增删待补收单、仅拦已关账），此前只有**前端 DiffCard 把认定锁成一次性戳**、无法翻转。故边界④=**前端一处**：差异卡认定后支持「改认定」（预选当前原因、可取消）+ 翻转说明文案。**未建完成时间管道**（按用户「财务已有信息」，不越权硬判超期；完成时间在 0702免组 文件里、现未导 `lis_case_markers`，日后要辅助可再加）。
+
+**验证**：后端 TDD 4 用例锁翻转不变量（超期免费↔漏收 对待补收单增删）；**真跑端到端**（seed 漏收演示院·admin 登录·认定超期免费→无补收单→改认定漏收→**补收单¥300 生成**→复核完成可用·零报错）；tsc 前后端绿；vitest **79 files/594 tests** 绿；golden ¥13,152/¥27,870 零回归（后端逻辑零改动）。演示数据用后即清、dev DB `git checkout` 复原、僵尸进程清。
+
+**改动文件**：`前端代码/src/pages/account-reconcile/components/ReconcileWorkbench.tsx`（DiffCard 改认定 + 文案）、`后端代码/server/tests/account-reconcile-verdict-flip.test.ts`(NEW)。
+
+**PR**：[#45](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/45)（base=master，独立·单独可合，等 vitest required）。看板已记。**至此账实核对四条边界全部落地**。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（对账单导入前端优化，feat/import-ux，2026-07-03）
+
+**背景**：用户「对账单导入的前端页面优化你也接手一下」。现状是两页——`import-console`(导入测试台·校准归类+设基线) + `import-wizard`(财务月度导入·三步)，本已不烂（设计系统/说人话/codex F2-F7 硬化过）。讨论后用户拍板 **4 方向全做**（打通接缝/拖拽+行级/批量/打磨）+ 测试台保留简化 + 批量=队列逐家核 + 自动认院+人确认。走 **mockup 先行红线**（show_widget mockup 真人「以上全部」拍板后落码）。
+
+**切片实现（用户要求切片+逐个真跑）**：
+- **① 接缝**：向导预览里未识别行**当场归类**（`AttentionItem` 内联·写回该院配置·重预览）+ **「改基线」提示**。抽 `ScopeTag/ByLineTable/AttentionItem` 入 `import-shared`（测试台/向导共用=去重）。
+- **② 拖拽**：`UploadBar` + 向导多文件拖拽区（非法/多余/忙态 toast 反馈）。
+- **③ 行级**：`ByLineTable`(line-level 按业务线拆分) + 未匹配逐行内联。
+- **④ 批量队列**（新 `useImportQueue.ts` hook）：拖多家→自动认院（对账单头「客户：」`matchHospital` 模糊匹配·**仅唯一命中**）+ 自动认账期（`parseMonth` 文件名）→ 队列 chip 逐家核对/切换/移除/入库。
+
+**复核（用户「同步再启动一轮自审」）**：
+- codex 读码修 2 HIGH 异步竞态：`setPartner/setMonth` 请求守卫（丢弃陈旧预览响应）·`classify` 乐观锁绑 partnerId + 从最新态重预览。
+- 多 agent 对抗自审（Workflow·10 条全 CONFIRMED 全修）：**needConfirm 页级串项**（归类完确认横幅赖着不走）→ 预览刷新即清；**LIS 预检回归恢复**（旧向导有·重写丢了）；串行预览→并发；removeItem 回落剩余项；拖拽反馈；**addFiles ref 立即同步**（真跑逮到我自己[3]修复引入的 bug——守卫用陈旧 queueRef 误跳过刚建项致不预览）。
+
+**真跑（真温州对账单·姓名/住院号脱敏不入库·浏览器 DataTransfer 注入文件）**：① 42%→归类 HPV→100%·未识别归零·对账闭合对平；④ 批量 2 家（温州+石门变体）拖入→自动认院+账期→队列切换；needConfirm 归类后自动清；LIS 提示恢复；控制台零报错。tsc + vite build 绿。
+
+**改动文件**：`import-shared/ImportShared.tsx`、`import-console/ImportConsolePage.tsx`、`import-wizard/ImportWizardPage.tsx`、`import-wizard/useImportQueue.ts`(NEW)。
+
+**PR**：[#50](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/50) OPEN（base=master·独立·纯前端·单独可合）。用户过目页面中。**待办**：队列未持久化（刷新丢）·parseMonth/matchHospital 为建议可改——本轮未做。
+
+*更新时间：2026-07-03*
