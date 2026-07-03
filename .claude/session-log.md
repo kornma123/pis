@@ -956,25 +956,36 @@ http://your-server-ip:8080
 
 ---
 
-## 本次会话完成的工作（线 F 逐抗体成本弱锚校准 B3+B4，2026-07-03）
+## 本次会话完成的工作（D2 统一检测项目目录·地基线 D，2026-07-02）
 
-**线/工作树**：worktree `fervent-kare-16e84e`，分支 `claude/fervent-kare-16e84e`（off origin/master tip `0b662efe`）。ultracode 多代理编排。
+**线/工作树**：worktree `hungry-fermat-218505`，分支 `claude/hungry-fermat-218505`，从 `origin/master` tip `0b662efe` 出发。ultracode 多代理编排（勘察 5-agent 并行 → 真数据核 → codex 异构复核）。
 
-**任务**：设计基线未决 **B3**（承重墙 36/105 分摊口径）+ **B4**（工时/设备 G2 估弱锚校准）。真值待 PM，只交机制 + 诚实透出。
+**任务**：建 D2「统一检测项目目录」——同一检测项目在系统里有四套/五套叫法（`projects.code` / 国标收费码 / 老本地物价码 / LIS 名 / 对账单名）且**无硬映射**，加一层**只读对照表**把它们对到同一个标准项。**加目录层不合表 · 先并存不改现有分类**。
 
-**做了什么**：
-- **B3 承重墙口径**：`antibody-cost.ts` 加只读 `manufactureShare`/`manufactureShareBand`，忠实镜像收入侧 `statement-revenue.ts` 的 `f=(rate×wl)/(rate×wl+105)`（**不改收入侧**）；`DIAGNOSIS_ANCHOR_DEFAULT===SPLIT_DIAG_FEE(105)` drift-guard 锁死；±30% 占位区间（PM 拍板）。文档 `docs/COREONE-B3承重墙口径-36-105分摊敏感性-2026-07-02.md`：政策分摊≠价值证明 + 敏感性表。
-- **B4 弱锚校准**：`laborEquipmentSource` 由写死 `'G2估'` 改为随参数元数据派生 `G2估|部分校准|已校准`（缺省仍 G2估·向后兼容）；`/cost-preview`+`/cost-params` 透出 source/confidence/remark。新增 `POST /cost-params/calibrate`（喂真实月人力/折旧/房租/产片量→摊算写回+翻牌已校准+事务+`abc_audit_logs` before/after 留痕）；修 `PUT /cost-params/:key` 丢弃 confidence/remark 的 bug；**诚实不变式**：手工 PUT 不得冒用「实测/校准」来源或写成「读起来已校准」——校准态只能经 calibrate 一条来路，手工改值即诚实降级 `手工核定`。seed：`secondary_per_slide` 从「粗估」改标「台账真价」（非弱锚）。文档 `docs/COREONE-B4弱锚校准-需康湾数据清单-2026-07-02.md`。
+**discussion-first（PM 拍板，非一问一答）**：先出最小 schema 草案 + 概念图讲清 D2，PM 拍定 4 项 + 追问「校对指什么」→ 二轮澄清后定：①全收真实项目词汇（变体靠 NFKC 归一，不逐条列全角/半角）②复合行拆包（一名→多标准项+数量）③标准项用新命名空间 `PC-*`（与 projects.code/国标码解耦）④校对 = 自动分高/中/低三层 + 噪音自动剔除不映射 + 复合自动拆待确认 + 只读清单。
 
-**验证**：新增 `tests/antibody-cost-calibration.test.ts`（**23 用例**）；全套 **77 files / 597 tests 绿**；tsc exit 0；golden **¥13,152 + ¥27,870 零回归**。范围仅成本侧 4 文件，零收入侧/reconcile/前端/dev-DB 改动。
+**落码（独占文件；不碰 classifier.ts / case-charge-mapping.ts / statement-revenue.ts / 收入侧 / reconcile-* / 前端）**：
+- `后端代码/server/src/utils/project-catalog.ts`(NEW)：两表 schema（`project_catalog` 26 标准项 / `code_mappings`）+ 幂等种子（国标码 exact·high / LIS 数量列+抗体+adviceType / projects.type 动态读表 / 对账单词汇全收+拆包+分层）+ 查询 API（`lookupProject` 未命中不抛错只 `matched:false` · `listReviewQueue` 待校对清单 · `catalogSummary` · 反查）+ 关键词分类器（含分子基因检测/噪音/复合拆包/数量解析）。
+- `后端代码/server/src/database/DatabaseManager.ts`：+import + `initializeDatabase` 末尾 D2 标注块调用 `seedProjectCatalog`（+9 行；建表+种子全在 util）。
+- `后端代码/server/src/routes/project-catalog-v1.1.ts`(NEW) + `app.ts` 注册 `/api/v1/project-catalog`（**全只读**：/lookup /review-queue /catalog /summary /反查；复用 `requirePermission('projects','R')`，**不新增权限模块 → 零 MODULES 漂移**）。
+- `后端代码/server/tests/project-catalog.test.ts`(30) + `tests/project-catalog-routes.test.ts`(8)。
 
-**独立复核（异构 + 多代理）**：codex `exec -s read-only` 2 轮 + 4 镜头对抗验证 workflow（逐条独立验证）。共逮 **6 处真实问题全修**：①HIGH `node:sqlite` 接受 Infinity 写库→伪校准（拦 Infinity/NaN/负值+结果有限性兜底）②HIGH calibrate 无事务→半截口径（BEGIN IMMEDIATE 包裹）③MED band 非有限入参→NaN（回退默认）④MED 分数片量 0.0001→4亿/片（月产片量 ≥1 底线）⑤LOW 审计 targetId=null（复合 id）⑥P1 诚实透出可绕过：手工 PUT confidence=已校准 冒充精确（写门禁绑读判定 isParamCalibrated + 源标签守卫 + 降级留痕）。
+**真数据验证（真跑不是查渲染）**：把分类器跑**全部 514 个真对账单项目名**（19 院 `2026年对账单.7z`，PII 纪律=只取项目名列、xlsx 不进仓）——高置信 179 / 中 121 / 噪音自动剔 267 / **未覆盖仅 22**（残留为手术/麻醉/无痛胃镜/微波消融等**临床非病理项** + 少量行政费，正确落待校对队列）。据真数据补 4 处：①分子基因检测（突变/融合/重排 K-RAS/EGFR/BRCA…）规则（原只识「基因检测」漏「基因突变检测」）②`/` 不当分隔符（BRCA1/2 不拆碎）③财务噪音扩表（费用/耗材/税/福利/设备…）④免疫细胞化学→IHC。加守卫测试锁「癌基因蛋白仍是 IHC 非分子」。
 
-**PR/看板**：[#41](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/41) OPEN（base=master，独立·单独可合，等 vitest required check）。commit `6cc4da62`。看板 `pr-governance.md` 已加 #41 行 + 记并行 sibling #37（抗体名映射 A1/A3）/#39（D2 目录）——三者独立正交，撞车由后合方 merge master 消解。
+**验证**：`npx tsc --noEmit` 绿；`npx vitest run` **78 files / 620 tests 全绿**；黄金 **¥13,152 + ¥27,870 零回归**。dev DB 未动（测试走 `:memory:`）。
 
-**真值边界（交 PM）**：康湾真实工资/折旧/房租（B4 校准输入，见数据清单）、本地协商诊断值（B3 band 收窄），补齐后各调一次接口即完成。
+**独立对抗复核（异构 codex + 同构 3-lens workflow 双轨）——逮到 4 个真 bug 并修（单元测试原本全绿也没照出，靠真跑入库/查询回环才逮）**：
+- 🔴 **F1（medium·复合行同标准项丢数量）**：复合行拆出两段同标准项（癌基因蛋白×10 + 单克隆抗体×6 都=IHC）时 `UNIQUE(system,alias_norm,catalog_code)`+`INSERT OR IGNORE` 把第二段顶掉→IHC 数被 16 读成 10。**修**：新增 `aggregateComponents` 入库/查询前按标准项聚合、数量相加。
+- 🔴 **F2（low-med·id 哈希碰撞丢映射）**：`id` 用 32-bit djb2 哈希，codex 实测构造碰撞对→两个不同别名映到同标准项时第二条被 PRIMARY KEY 顶掉。**修**：`id` 改 `uuid`（幂等本就由 UNIQUE 约束保证）。
+- 🔴 **F3（medium·白片误判+口径打架）**：`免组白片/特染白片`=空白复制片(PC-SLIDE-COPY) 却被「免组/特染」规则先命中成 IHC/特染、high/auto 不进复核、且与 `LIS_TECH_ROW_SEED` 打架。**修**：白片规则前移到 IHC/特染/PD-L1 之前。
+- 🟡 **F4（low·"服务费"误剔噪音）**：`NOISE_RE` 含「服务费」会把「远程会诊服务费」这类真项目整段剔成噪音。**修**：移除「服务费」。
+- ✅ 确认无误：先并存零改动（git diff 仅 6 文件）、lookup 任意输入不抛错、SQL 全参数化、权限复用无 MODULES 漂移、黄金零回归。4 项均补回归测试锁定。
 
-*更新时间：2026-07-03*
+**跟进**：`project_code` 映射靠读 `projects` 表动态生成，`initializeDatabase` 阶段 projects 常为空 → 首次为空、待 projects seed 后下次 init 或显式调 `syncProjectCodeMappings` 补齐（非阻断，静态国标/LIS/对账单映射不受影响）。前端只读清单页（供人过🔴待校对队列）留后续会话，本线只出后端只读 API。
+
+**PR/看板**：[#39](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/39) OPEN（`feat/project-catalog-d2` → master，独立·非栈·单独可合，等 vitest required check）。看板 `pr-governance.md` 已记（#39 行）。
+
+*更新时间：2026-07-02*
 
 ---
 
@@ -1025,3 +1036,67 @@ http://your-server-ip:8080
 **PR/看板**：[#38](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/38)（base=master，独立·纯文档，wave-1 边界表）。看板 `pr-governance.md` 同步：#32→MERGED、新增 #38 行 + 四线 chip。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（预警写操作 RBAC 口径固化，2026-07-02）
+
+**线/工作树**：worktree `brave-bassi-4bdd83`（分支 `claude/brave-bassi-4bdd83`，off master）。
+
+**触发**：Lane E「预警做真」评审中两独立引擎（Workflow 安全镜头 + codex 深审）都注意到的**既有**现状——`alerts-v1.1.ts` 的 `POST /:id/handle`、`POST /generate` 只继承挂载层 `requirePermission('alerts','R')`，无额外 W 守卫；对比其他写域普遍要求 'W'，是权限口径不一致。非 Lane E 引入，故当时未在 Lane E 修。本会话专项评估。
+
+**评估结论 = 有意口径，非缺口（判定「维持 R + 固化」）**：
+- 关键事实：`SEED_MATRIX` 中**全部 6 个非 admin 角色仅 alerts:'R'（无 'W'）**，仅 admin 有 W。→ 裸加 `requirePermission('alerts','W')` 会令**除 admin 外全部角色 403**（warehouse_manager 等无法处理库存预警），是 supplier_returns 迁移缺口的复刻（既有库不回填）。
+- 预警是信息性运营操作、无金额/口径影响；真正敏感的写=**阈值配置** `PUT /rules/:id` 已单独 W+admin 锁定；全站 `auditWrite` 中间件已把这两个 2xx 写落 `operation_logs`（含 operator）→ 问责链已在。符合本项目 base 功能 adoption-first 基线。
+- 收紧成本高收益低：需 SEED_MATRIX 改 + 既有库回填迁移 + 改 pathologist/finance 权威，仅换来边际安全值。
+
+**产出（scope 仅 alerts + 测试，零碰对账/成本/LIS）**：
+- `src/routes/alerts-v1.1.ts`：两端点前加口径注释固化「只需 R、勿加 W」+ 若确要收紧的三步（SEED_MATRIX + 回填迁移 + 翻测试期望）。
+- 新回归门禁 `tests/bv-alerts-write-rbac.test.ts`：镜像 app.ts 真实挂载 `requirePermission('alerts','R')`，用 R 级角色 pathologist（alerts:R 无 W）验证可 handle/generate（200）+ 未登录 401。
+- **变异测试验证门禁有效**：临时给端点加 W 守卫 → 3 个 R 级用例如期翻 403（证明未来误收紧会被拦）；已还原。
+
+**验证**：tsc 绿(exit 0)；full vitest **79 files / 594 tests 全绿**（基线 78/590 + 本次 1 文件/4 测试，零回归）；golden ¥13,152 + ¥27,870 零回归；`data/coreone.db` 未动（测试走 :memory:）。
+
+**PR/看板**：[#48](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/48)（base=master·独立·非栈式·单独可合）。看板 `pr-governance.md` 已加 #48 行。PM 已拍板「保持现状（维持 R）」；若将来要收紧到 W，注释与测试已写明三步落地路径。
+
+---
+
+## 本次会话完成的工作（账实核对边界④ 超期免费·认定翻转，feat/reconcile-overdue-free，2026-07-02）
+
+**背景**：账实核对 ①补收实收(#33)/②反向弹窗(#35)/③逐抗体初判(#40) 已全落 master；余边界④「超期免费」。
+
+**用户口径拍板（重要纠正）**：超期免费**不做成系统硬规则**（不按跨月/N天/关账自动判）——它是**财务对账时的判断**，财务有准确信息；「免费」是**暂态**，日后合作医院同意补 → 改认定「漏收，需补收」即生成补收单；默认先让财务核实收不到。
+
+**做法**：核实发现后端 verdict 端点本就支持**重认定**（改判自动增删待补收单、仅拦已关账），此前只有**前端 DiffCard 把认定锁成一次性戳**、无法翻转。故边界④=**前端一处**：差异卡认定后支持「改认定」（预选当前原因、可取消）+ 翻转说明文案。**未建完成时间管道**（按用户「财务已有信息」，不越权硬判超期；完成时间在 0702免组 文件里、现未导 `lis_case_markers`，日后要辅助可再加）。
+
+**验证**：后端 TDD 4 用例锁翻转不变量（超期免费↔漏收 对待补收单增删）；**真跑端到端**（seed 漏收演示院·admin 登录·认定超期免费→无补收单→改认定漏收→**补收单¥300 生成**→复核完成可用·零报错）；tsc 前后端绿；vitest **79 files/594 tests** 绿；golden ¥13,152/¥27,870 零回归（后端逻辑零改动）。演示数据用后即清、dev DB `git checkout` 复原、僵尸进程清。
+
+**改动文件**：`前端代码/src/pages/account-reconcile/components/ReconcileWorkbench.tsx`（DiffCard 改认定 + 文案）、`后端代码/server/tests/account-reconcile-verdict-flip.test.ts`(NEW)。
+
+**PR**：[#45](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/45)（base=master，独立·单独可合，等 vitest required）。看板已记。**至此账实核对四条边界全部落地**。
+
+*更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（对账单导入前端优化，feat/import-ux，2026-07-03）
+
+**背景**：用户「对账单导入的前端页面优化你也接手一下」。现状是两页——`import-console`(导入测试台·校准归类+设基线) + `import-wizard`(财务月度导入·三步)，本已不烂（设计系统/说人话/codex F2-F7 硬化过）。讨论后用户拍板 **4 方向全做**（打通接缝/拖拽+行级/批量/打磨）+ 测试台保留简化 + 批量=队列逐家核 + 自动认院+人确认。走 **mockup 先行红线**（show_widget mockup 真人「以上全部」拍板后落码）。
+
+**切片实现（用户要求切片+逐个真跑）**：
+- **① 接缝**：向导预览里未识别行**当场归类**（`AttentionItem` 内联·写回该院配置·重预览）+ **「改基线」提示**。抽 `ScopeTag/ByLineTable/AttentionItem` 入 `import-shared`（测试台/向导共用=去重）。
+- **② 拖拽**：`UploadBar` + 向导多文件拖拽区（非法/多余/忙态 toast 反馈）。
+- **③ 行级**：`ByLineTable`(line-level 按业务线拆分) + 未匹配逐行内联。
+- **④ 批量队列**（新 `useImportQueue.ts` hook）：拖多家→自动认院（对账单头「客户：」`matchHospital` 模糊匹配·**仅唯一命中**）+ 自动认账期（`parseMonth` 文件名）→ 队列 chip 逐家核对/切换/移除/入库。
+
+**复核（用户「同步再启动一轮自审」）**：
+- codex 读码修 2 HIGH 异步竞态：`setPartner/setMonth` 请求守卫（丢弃陈旧预览响应）·`classify` 乐观锁绑 partnerId + 从最新态重预览。
+- 多 agent 对抗自审（Workflow·10 条全 CONFIRMED 全修）：**needConfirm 页级串项**（归类完确认横幅赖着不走）→ 预览刷新即清；**LIS 预检回归恢复**（旧向导有·重写丢了）；串行预览→并发；removeItem 回落剩余项；拖拽反馈；**addFiles ref 立即同步**（真跑逮到我自己[3]修复引入的 bug——守卫用陈旧 queueRef 误跳过刚建项致不预览）。
+
+**真跑（真温州对账单·姓名/住院号脱敏不入库·浏览器 DataTransfer 注入文件）**：① 42%→归类 HPV→100%·未识别归零·对账闭合对平；④ 批量 2 家（温州+石门变体）拖入→自动认院+账期→队列切换；needConfirm 归类后自动清；LIS 提示恢复；控制台零报错。tsc + vite build 绿。
+
+**改动文件**：`import-shared/ImportShared.tsx`、`import-console/ImportConsolePage.tsx`、`import-wizard/ImportWizardPage.tsx`、`import-wizard/useImportQueue.ts`(NEW)。
+
+**PR**：[#50](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/50) OPEN（base=master·独立·纯前端·单独可合）。用户过目页面中。**待办**：队列未持久化（刷新丢）·parseMonth/matchHospital 为建议可改——本轮未做。
+
+*更新时间：2026-07-03*

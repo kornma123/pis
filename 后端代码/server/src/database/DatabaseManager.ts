@@ -4,6 +4,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
 import { CHARGE_CODE_SEED, chargeDefToRow } from '../utils/charge-catalog.js'
+import { seedProjectCatalog } from '../utils/project-catalog.js'
 import { NGS_PRODUCT_SEED, ngsProductToRow } from '../utils/ngs-catalog.js'
 import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } from '../utils/antibody-catalog.js'
 import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
@@ -1632,6 +1633,14 @@ export function initializeDatabase(): void {
     ['SS-AFB', '抗酸(AFB)', 195, 50, 14, '标称次数=50 占位·待补真实盒装次数', 'G2真实盒价'],
   ]
   stainSeed.forEach((r) => insertStain.run(r[0], r[1], r[2], r[3], r[4], r[5], r[6]))
+
+  // ===========================================================================
+  // D2 统一检测项目目录（project_catalog / code_mappings）—— 地基线 D
+  //   只读对照层：把四套/五套叫法（projects.code / 国标码 / 老物价码 / LIS 名 / 对账单名）
+  //   对到同一个标准项(PC-*)。建表+幂等种子全在 utils/project-catalog.ts。
+  //   ⛔ 不改任何现有分类逻辑（先并存）；守黄金 ¥13,152 / ¥27,870 零回归。
+  // ===========================================================================
+  seedProjectCatalog(database)
 
   console.log('Database initialized successfully')
 }
