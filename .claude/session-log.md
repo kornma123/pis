@@ -1213,6 +1213,6 @@ http://your-server-ip:8080
 
 **PM 待拍（对齐父拆分 #4/#5）**：#4 partner-pnl 能否退役=**不能**（先迁移 hospital-pnl 消费才谈退役）；#5 reconciliation vs account-reconcile 合并 UI/保留两条 API=**建议保留两条 API+两入口**（不同域·信息架构分两子项而非合并路由）；附待拍=antibody-cost 是否补前端页 / CostTrend·supplier-costs 孤儿页补入口（接线归线 2）。
 
-**治理**：零代码/零 seed·golden ¥13,152+¥27,870 天然零回归；git 只 add 目标文档+session-log+看板（**未 `-A`**）；产出走文档 PR→master。
+**治理**：零代码/零 seed·golden ¥13,152+¥27,870 天然零回归；git 只 add 目标文档+session-log+看板（**未 `-A`**）；产出 → **PR [#59](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/59)**（🟢 OPEN·单独可合·等 vitest required check）。看板新增线 3 行。
 
 *更新时间：2026-07-03*
