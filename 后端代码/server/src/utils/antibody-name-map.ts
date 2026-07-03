@@ -8,7 +8,9 @@
  *
  * 口径（PM 拍板 2026-07-02）：
  *  1) 别名落地 = **代码规范化规则**（去括号克隆号 / 空格 / 连字符 / 点 / 大小写）自动对上大多数写法差异
- *     ＋ **可扩展的别名种子**（生物学同义词，规范化也撞不到的，如 Ecad→E-cadherin）。规范化对台账 200 名**单射无碰撞**（已验证），安全。
+ *     ＋ **可扩展的别名种子**（生物学同义词，规范化也撞不到的，如 Ecad→E-cadherin）。
+ *     规范化对台账**几乎单射**：极少数真撞键（如去克隆号后 `TCR(a/b)` 与 `TCR(G/D)` 都→`TCR`，是两种不同抗体）
+ *     由 `buildLedgerIndex` 标 `ambiguousNorm`、**不自动解析**（返回缺价、要求精确名/剂型/别名消歧），防跨抗体误价。
  *  2) 剂型歧义（同名多剂型、LIS 无剂型）→ **保守取高价**（成本更高 = 不高估毛利，与 antibody-cost-v1.1 `/cost-preview` 一致）
  *     ＋ 标 `formAssumed=true`（行级「剂型待确认」），后续可逐个订正。
  *  3) 台账真缺（PD-1 / cathepsinK / GPNMB / TROP-2 / HP）→ 解析为 priceStatus='missing'，成本走降级（fallbackAveragePrimary）＋行级标注，
@@ -52,7 +54,8 @@ export const ANTIBODY_MISSING_PRICE_SEED: MissingAntibodyDef[] = [
 
 /**
  * 规范化抗体名：去括号克隆号（如 (22C3)/(BRG1)）→ 去空格/连字符/下划线/点 → 大写。
- * 用于把 LIS 写法与台账名对齐；已验证对台账 200 名**单射无碰撞**（不会把两个不同抗体并成一个）。
+ * 用于把 LIS 写法与台账名对齐。⚠️ 规范化会去掉括号内克隆号/链型，故**并非绝对单射**（TCR(a/b) 与 TCR(G/D) 都→TCR）——
+ * 真撞键的消歧由 `buildLedgerIndex` 的 `ambiguousNorm` 兜底（不自动解析），本函数只负责生成键。
  */
 export function normalizeAntibodyName(raw: string): string {
   return String(raw ?? '')
@@ -101,21 +104,35 @@ export interface LedgerRow {
 }
 export interface LedgerIndex {
   byName: Map<string, LedgerRow[]> // 台账名 → 该名下各剂型行
-  byNorm: Map<string, string> // 规范化键 → 台账名（单射）
+  byNorm: Map<string, string> // 规范化键 → 台账名（仅收单射键；碰撞键不收，见 ambiguousNorm）
+  ambiguousNorm: Set<string> // 规范化后**多个不同台账名相撞**的键（如 TCR：TCRαβ vs TCRγδ）→ 不自动解析，防跨抗体误价
 }
 
-/** 从台账行构建索引（供 resolver 用）。 */
+/**
+ * 从台账行构建索引（供 resolver 用）。
+ * ⚠️ 碰撞防护：若两个**不同**台账名规范化成同一键（去括号克隆号后 `TCR(a/b)` 与 `TCR(G/D)` 都→`TCR`），
+ *    则该键不进 byNorm、改入 ambiguousNorm——resolver 遇之返回缺价而非静默取第一个（否则会把 TCRγδ 误价成 TCRαβ）。
+ *    精确名 / 剂型限定 / 显式别名 仍可解析，只是 bare「TCR」这种歧义输入被强制消歧。
+ */
 export function buildLedgerIndex(rows: LedgerRow[]): LedgerIndex {
   const byName = new Map<string, LedgerRow[]>()
-  const byNorm = new Map<string, string>()
+  const normOwners = new Map<string, Set<string>>() // 规范化键 → 落到它的**不同台账名**集合
   for (const r of rows) {
     const list = byName.get(r.name) ?? []
     list.push(r)
     byName.set(r.name, list)
     const key = normalizeAntibodyName(r.name)
-    if (!byNorm.has(key)) byNorm.set(key, r.name)
+    const owners = normOwners.get(key) ?? new Set<string>()
+    owners.add(r.name)
+    normOwners.set(key, owners)
   }
-  return { byName, byNorm }
+  const byNorm = new Map<string, string>()
+  const ambiguousNorm = new Set<string>()
+  for (const [key, owners] of normOwners) {
+    if (owners.size === 1) byNorm.set(key, [...owners][0])
+    else ambiguousNorm.add(key) // 多个不同抗体撞键 → 歧义，不自动解析
+  }
+  return { byName, byNorm, ambiguousNorm }
 }
 
 /** 从种子构建默认台账索引（纯函数测试用；DB 路由用真实 antibodies 表构建）。 */
@@ -216,14 +233,19 @@ export function resolveAntibodyName(
 
   const norm = normalizeAntibodyName(input)
 
-  // 2) 别名种子（生物学同义词）
+  // 2) 别名种子（生物学同义词）——**显式别名优先于歧义防护**（登记了别名即视为已消歧）
   const syn = synonymMap.get(norm)
   if (syn) return pack(syn, 'synonym')
 
-  // 3) 规范化命中（去连字符/空格/大小写等写法差异；对台账单射，安全）
+  // 3) 规范化歧义防护：该键对应多个不同台账名（如 TCR）→ 不猜，返回缺价 + 要求消歧（防跨抗体误价）
+  if (index.ambiguousNorm.has(norm)) {
+    return { ...base(), note: `「${input}」规范化后在台账对应多个不同抗体（需精确名/剂型限定或登记别名消歧）·不自动解析防误价` }
+  }
+
+  // 4) 规范化命中（去连字符/空格/大小写等写法差异；仅单射键，安全）
   const canon = index.byNorm.get(norm)
   if (canon) return pack(canon, 'normalized')
 
-  // 4) 台账真缺
+  // 5) 台账真缺
   return { ...base(), note: '台账无此抗体·成本缺价·毛利待定（需 PM 补采购价）' }
 }

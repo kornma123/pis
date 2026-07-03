@@ -39,17 +39,46 @@ describe('规范化 normalizeAntibodyName', () => {
   })
 })
 
-describe('规范化对台账 200 名单射（无碰撞）——安全自动匹配的前提', () => {
-  it('每个台账名规范化后唯一映射回自己，无两名相撞', () => {
-    const byNorm = new Map<string, string[]>()
+describe('规范化碰撞防护——真撞键标 ambiguous、不自动解析（防跨抗体误价）', () => {
+  it('去克隆号后真相撞的键（TCR：TCRαβ vs TCRγδ）进 ambiguousNorm、不进 byNorm', () => {
+    // 枚举台账里规范化后落到多个不同名的键
+    const owners = new Map<string, Set<string>>()
     for (const a of ANTIBODY_LEDGER_SEED) {
       const k = normalizeAntibodyName(a.name)
-      const arr = byNorm.get(k) ?? []
-      if (!arr.includes(a.name)) arr.push(a.name)
-      byNorm.set(k, arr)
+      const s = owners.get(k) ?? new Set<string>()
+      s.add(a.name)
+      owners.set(k, s)
     }
-    const collisions = [...byNorm.entries()].filter(([, names]) => names.length > 1)
-    expect(collisions).toEqual([])
+    const realCollisions = [...owners.entries()].filter(([, s]) => s.size > 1).map(([k]) => k)
+    // 本台账唯一真撞键 = TCR（TCR(a/b) 与 TCR(G/D)）
+    expect(realCollisions).toEqual(['TCR'])
+    // buildLedgerIndex 必须把它标 ambiguous 且排除出 byNorm
+    for (const k of realCollisions) {
+      expect(INDEX.ambiguousNorm.has(k), `${k} 应为 ambiguous`).toBe(true)
+      expect(INDEX.byNorm.has(k), `${k} 不应进 byNorm`).toBe(false)
+    }
+  })
+  it('非撞键仍单射进 byNorm（如 KI67→Ki-67）', () => {
+    expect(INDEX.byNorm.get('KI67')).toBe('Ki-67')
+    expect(INDEX.ambiguousNorm.has('KI67')).toBe(false)
+  })
+})
+
+describe('TCR 跨抗体误价守卫（workflow 复核真捕获·MEDIUM）', () => {
+  it('精确名各归各价：TCR(a/b)=αβ¥6.63 / TCR(G/D)=γδ¥10.10（不串价）', () => {
+    const ab = resolve('TCR(a/b)')
+    expect(ab.matchKind).toBe('exact')
+    expect(ab.perTestPrice).toBeCloseTo(6.634444, 4)
+    const gd = resolve('TCR(G/D)')
+    expect(gd.matchKind).toBe('exact')
+    expect(gd.perTestPrice).toBeCloseTo(10.102778, 4)
+  })
+  it('bare「TCR」歧义 → 缺价，绝不静默取 TCR(a/b)（防把 γδ 误价成 αβ）', () => {
+    const r = resolve('TCR')
+    expect(r.priceStatus).toBe('missing')
+    expect(r.canonicalName).toBeNull()
+    expect(r.perTestPrice).not.toBe(6.634444)
+    expect(r.note).toContain('多个不同抗体')
   })
 })
 

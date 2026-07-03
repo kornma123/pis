@@ -211,7 +211,7 @@ export const ANTIBODY_LEDGER_SEED: AntibodyLedgerDef[] = [
   { name: "STAT-6", supplier: "基因", form: "原液", spec: "0.2ML", bottlePrice: 1003.5398, bottlePriceTaxed: 1134.0, convRate: 300.0, perTestPrice: 3.345133, category: "一抗" },
   { name: "SYN", supplier: "基因", form: "原液", spec: "0.2ML", bottlePrice: 716.8142, bottlePriceTaxed: 810.0, convRate: 300.0, perTestPrice: 2.389381, category: "一抗" },
   { name: "TCR(a/b)", supplier: "基因", form: "原液", spec: "0.2ML", bottlePrice: 0.0, bottlePriceTaxed: null, convRate: 300.0, perTestPrice: 6.634444, category: "一抗" },
-  { name: "TCR(G/D))", supplier: "基因", form: "原液", spec: "0.2ML", bottlePrice: 0.0, bottlePriceTaxed: null, convRate: 300.0, perTestPrice: 10.102778, category: "一抗" },
+  { name: "TCR(G/D)", supplier: "基因", form: "原液", spec: "0.2ML", bottlePrice: 0.0, bottlePriceTaxed: null, convRate: 300.0, perTestPrice: 10.102778, category: "一抗" },
   { name: "TDT", supplier: "基因", form: "原液", spec: "0.2ML", bottlePrice: 1338.0531, bottlePriceTaxed: 1512.0, convRate: 300.0, perTestPrice: 4.460177, category: "一抗" },
   { name: "TFE3", supplier: "基因", form: "原液", spec: "0.2ML", bottlePrice: 1425.6637, bottlePriceTaxed: 1611.0, convRate: 300.0, perTestPrice: 4.752212, category: "一抗" },
   { name: "TG", supplier: "基因", form: "即用", spec: "2ML", bottlePrice: 175.2212, bottlePriceTaxed: 198.0, convRate: 15.0, perTestPrice: 11.681416, category: "一抗" },
