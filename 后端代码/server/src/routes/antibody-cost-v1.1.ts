@@ -15,9 +15,13 @@ import {
   perSlidePrimaryCost,
   fallbackAveragePrimary,
   specialStainPerTestCost,
+  deriveCalibrationState,
+  deriveLaborEquipmentPerSlide,
+  isParamCalibrated,
   DEFAULT_IHC_COST_PARAMS,
   type IhcCostParams,
 } from '../utils/antibody-cost.js'
+import { writeAuditLog } from '../utils/cost-runs.js'
 
 const router = Router()
 
@@ -35,20 +39,44 @@ interface AntibodyRow {
   source_ledger: string | null
 }
 
-/** 从 ihc_cost_params 表读「算全」参数（缺失回退默认 G2 估）。 */
+/** 从 ihc_cost_params 表读「算全」参数（缺失回退默认 G2 估）；顺带把工时/设备的校准状态读进来（B4 诚实透出）。 */
 function loadIhcParams(db: any): IhcCostParams {
   const p = { ...DEFAULT_IHC_COST_PARAMS }
   try {
-    const rows = db.prepare('SELECT param_key, value FROM ihc_cost_params').all() as Array<{ param_key: string; value: number }>
+    const rows = db
+      .prepare('SELECT param_key, value, source, confidence FROM ihc_cost_params')
+      .all() as Array<{ param_key: string; value: number; source: string | null; confidence: string | null }>
     for (const r of rows) {
       if (r.param_key === 'secondary_per_slide') p.secondaryPerSlide = Number(r.value)
-      else if (r.param_key === 'labor_per_slide') p.laborPerSlide = Number(r.value)
-      else if (r.param_key === 'equipment_per_slide') p.equipmentPerSlide = Number(r.value)
+      else if (r.param_key === 'labor_per_slide') {
+        p.laborPerSlide = Number(r.value)
+        p.laborCalibrated = isParamCalibrated(r)
+      } else if (r.param_key === 'equipment_per_slide') {
+        p.equipmentPerSlide = Number(r.value)
+        p.equipmentCalibrated = isParamCalibrated(r)
+      }
     }
   } catch {
     /* 表未建 → 默认 */
   }
   return p
+}
+
+/** 每参数来源/置信/备注（B4 诚实透出：供前端如实标注「G2 估·待校准」而非冒充精确）。 */
+function loadIhcParamMeta(db: any): Record<string, { source: string | null; confidence: string | null; remark: string | null }> {
+  const out: Record<string, { source: string | null; confidence: string | null; remark: string | null }> = {}
+  try {
+    const rows = db.prepare('SELECT param_key, source, confidence, remark FROM ihc_cost_params').all() as Array<{
+      param_key: string
+      source: string | null
+      confidence: string | null
+      remark: string | null
+    }>
+    for (const r of rows) out[r.param_key] = { source: r.source ?? null, confidence: r.confidence ?? null, remark: r.remark ?? null }
+  } catch {
+    /* 表未建 */
+  }
+  return out
 }
 
 function toCostInput(row: AntibodyRow) {
@@ -133,7 +161,8 @@ router.get('/cost-preview', (req, res) => {
     }
 
     const breakdown = computeFullSlideCost(costInput, params, { fallbackAvg: avg })
-    success(res, { ...breakdown, params, fallbackAvg: avg })
+    // meta：透出工时/设备等每参数的 source/confidence/remark，供前端如实标注「G2 估·待校准」而非冒充精确（B4）
+    success(res, { ...breakdown, params, fallbackAvg: avg, meta: loadIhcParamMeta(db) })
   } catch (err: any) {
     error(res, err.message)
   }
@@ -224,18 +253,20 @@ router.get('/detection-systems', (_req, res) => {
   }
 })
 
-// GET /cost-params —— 算全参数（二抗/工时/设备，含 G2 估来源标注）
+// GET /cost-params —— 算全参数（二抗/工时/设备，含 G2 估来源标注 + 整体校准状态）
 router.get('/cost-params', (_req, res) => {
   try {
     const db = getDatabase()
     const rows = db.prepare('SELECT param_key, value, source, confidence, remark FROM ihc_cost_params ORDER BY param_key').all()
-    success(res, { params: loadIhcParams(db), rows })
+    const params = loadIhcParams(db)
+    // calibrationState：工时/设备两半的整体校准状态（G2估/部分校准/已校准），诚实透出弱锚（B4）
+    success(res, { params, rows, calibrationState: deriveCalibrationState(!!params.laborCalibrated, !!params.equipmentCalibrated) })
   } catch (err: any) {
     error(res, err.message)
   }
 })
 
-// PUT /cost-params/:key —— 调整算全参数（写；碰成本口径）
+// PUT /cost-params/:key —— 手工调整算全参数（写；碰成本口径）。持久化 confidence/remark，并落 before/after 留痕。
 router.put('/cost-params/:key', requirePermission('antibody_cost', 'W'), (req, res) => {
   try {
     const db = getDatabase()
@@ -244,15 +275,98 @@ router.put('/cost-params/:key', requirePermission('antibody_cost', 'W'), (req, r
     if (!allowed.includes(key)) return error(res, '未知参数', 'BAD_REQUEST', 400)
     const value = Number(req.body?.value)
     if (!Number.isFinite(value) || value < 0) return error(res, '参数值非法', 'BAD_REQUEST', 400)
-    const exists = db.prepare('SELECT id FROM ihc_cost_params WHERE param_key = ?').get(key) as { id: string } | undefined
-    if (exists) {
-      db.prepare('UPDATE ihc_cost_params SET value = ?, source = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE param_key = ?')
-        .run(value, String(req.body?.source ?? '手工'), (req as any).user?.username ?? null, key)
-    } else {
-      db.prepare('INSERT INTO ihc_cost_params (id, param_key, value, source, updated_by) VALUES (?, ?, ?, ?, ?)')
-        .run(uuidv4(), key, value, String(req.body?.source ?? '手工'), (req as any).user?.username ?? null)
+    const operator = (req as any).user?.username || 'system'
+    const before = db.prepare('SELECT value, source, confidence, remark FROM ihc_cost_params WHERE param_key = ?').get(key) as
+      | { value: number; source: string | null; confidence: string | null; remark: string | null }
+      | undefined
+    const source = req.body?.source != null ? String(req.body.source) : '手工'
+    // 持久化 confidence/remark（此前被丢弃 → 手工校准后置信永远卡在初始值的 bug）；未给则沿用旧值
+    let confidence = req.body?.confidence != null ? String(req.body.confidence) : before?.confidence ?? null
+    let remark = req.body?.remark != null ? String(req.body.remark) : before?.remark ?? null
+    // 诚实透出不变式（B4）之一：手工 PUT 不得冒用「实测/校准」来源标签——那是 calibrate 专属，
+    //   否则 /cost-params 会显示成像被真实数据校准过（哪怕置信仍是粗估，来源标签本身就误导）。
+    if (req.body?.source != null && (String(req.body.source).includes('实测') || String(req.body.source).includes('校准'))) {
+      return error(res, '「实测/校准」来源标签只能经 POST /cost-params/calibrate 写入；手工调整请用其他来源标注', 'BAD_REQUEST', 400)
     }
+    // 之二：手工 PUT 不得把参数写成「读起来像已校准」——「已校准」态只能经 calibrate 写回（附真实数据 + before/after 留痕）。
+    //   把写门禁直接绑到读判定 isParamCalibrated，确保「能读成已校准」的状态只有一条合法来路。
+    if (isParamCalibrated({ source, confidence })) {
+      if (req.body?.confidence != null || req.body?.source != null) {
+        return error(res, '「已校准」等校准态只能经 POST /cost-params/calibrate 写回（附真实数据+留痕）；手工调整请用非校准置信（如 粗估/手工核定）', 'BAD_REQUEST', 400)
+      }
+      // 未显式给 source/confidence、但继承到的旧值是校准态：手工改值即脱离校准 → 如实降级留痕，不再冒充精确
+      confidence = '手工核定'
+      if (req.body?.remark == null) remark = '手工改值·已脱离校准（原校准值被覆盖）'
+    }
+    if (before) {
+      db.prepare('UPDATE ihc_cost_params SET value = ?, source = ?, confidence = ?, remark = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE param_key = ?')
+        .run(value, source, confidence, remark, operator, key)
+    } else {
+      db.prepare('INSERT INTO ihc_cost_params (id, param_key, value, source, confidence, remark, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(uuidv4(), key, value, source, confidence, remark, operator)
+    }
+    // 碰口径的写：abc_audit_logs 落 before/after 明细（全站 operation_logs 另由 auditWrite 自动落，不重复）
+    writeAuditLog(db, 'antibody_cost', 'param_update', key, { key, before: before ?? null, after: { value, source, confidence, remark } }, operator)
     success(res, { key, value }, '参数已更新')
+  } catch (err: any) {
+    error(res, err.message)
+  }
+})
+
+// POST /cost-params/calibrate —— B4 弱锚校准写回入口（写；碰成本口径）。
+//   喂康湾真实（月人力/月折旧/月房租/月产片量）→ 摊算每片工时/设备 → 写回并翻牌「已校准」+ before/after 留痕。
+//   真值待 PM 补，见 docs/COREONE-B4弱锚校准-需康湾数据清单-2026-07-02.md。
+router.post('/cost-params/calibrate', requirePermission('antibody_cost', 'W'), (req, res) => {
+  try {
+    const db = getDatabase()
+    const b = req.body ?? {}
+    let derived
+    try {
+      derived = deriveLaborEquipmentPerSlide({
+        monthlyTechnicianCost: Number(b.monthlyTechnicianCost),
+        monthlyEquipmentDepreciation: Number(b.monthlyEquipmentDepreciation),
+        monthlyFacilityCost: b.monthlyFacilityCost != null ? Number(b.monthlyFacilityCost) : 0,
+        monthlySlideVolume: Number(b.monthlySlideVolume),
+        facilityToLaborRatio: b.facilityToLaborRatio != null ? Number(b.facilityToLaborRatio) : undefined,
+      })
+    } catch (e: any) {
+      return error(res, e.message || '校准输入非法', 'BAD_REQUEST', 400)
+    }
+    const operator = (req as any).user?.username || 'system'
+    const before = {
+      labor: db.prepare("SELECT value, source, confidence FROM ihc_cost_params WHERE param_key = 'labor_per_slide'").get() ?? null,
+      equipment: db.prepare("SELECT value, source, confidence FROM ihc_cost_params WHERE param_key = 'equipment_per_slide'").get() ?? null,
+    }
+    const remark = `康湾实测校准 ${JSON.stringify(derived.inputs)}`
+    const upsertCalibrated = (key: string, value: number) => {
+      const exists = db.prepare('SELECT id FROM ihc_cost_params WHERE param_key = ?').get(key) as { id: string } | undefined
+      if (exists) {
+        db.prepare("UPDATE ihc_cost_params SET value = ?, source = '康湾实测校准', confidence = '已校准', remark = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE param_key = ?")
+          .run(value, remark, operator, key)
+      } else {
+        db.prepare("INSERT INTO ihc_cost_params (id, param_key, value, source, confidence, remark, updated_by) VALUES (?, ?, ?, '康湾实测校准', '已校准', ?, ?)")
+          .run(uuidv4(), key, value, remark, operator)
+      }
+    }
+    // 事务包裹：两个参数 + 审计要么全落、要么全回滚——防止「工时已翻已校准、设备没翻」的半截口径状态。
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      upsertCalibrated('labor_per_slide', derived.laborPerSlide)
+      upsertCalibrated('equipment_per_slide', derived.equipmentPerSlide)
+      writeAuditLog(
+        db,
+        'antibody_cost',
+        'calibrate',
+        'labor_equipment', // 非 null 复合 targetId：校准事件可按 target 索引查
+        { inputs: derived.inputs, method: derived.method, before, after: { laborPerSlide: derived.laborPerSlide, equipmentPerSlide: derived.equipmentPerSlide } },
+        operator,
+      )
+      db.exec('COMMIT')
+    } catch (e) {
+      db.exec('ROLLBACK')
+      throw e
+    }
+    success(res, { laborPerSlide: derived.laborPerSlide, equipmentPerSlide: derived.equipmentPerSlide, inputs: derived.inputs, method: derived.method }, '工时/设备参数已按真实数据校准')
   } catch (err: any) {
     error(res, err.message)
   }
