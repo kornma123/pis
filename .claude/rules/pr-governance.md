@@ -176,6 +176,14 @@
 
 > ✅ **7 线收官（2026-07-03）**：全部 vitest required 绿后 merge commit 落 master（tip `96a55b5d`）。合并纪律：**2 处代码冲突**（`antibody-cost-v1.1.ts` #37↔#41、`alerts-v1.1.ts` #44↔#48）**手工消解=保留双方意图**、vitest 复核；**治理文档冲突（session-log/本看板）统一取 master 版**避免 append 级联，各线 PR body/分支历史仍留详细记录，本节为 consolidated 账。golden ¥13,152+¥27,870 零回归。**第 8 条 Lane C #52 待合**。
 
+### 活跃 PR 看板 · 对账逐抗体初判 DRY 收敛（复用线 A resolver）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#57](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/57) | `feat/reconcile-antibody-resolver-dry` → `master` | 🟢 **OPEN**(2026-07-03) | **独立**（非栈式，off master `8a0afa8f`）。**低优先 DRY/健壮性**，非修 bug。对账「逐抗体初判」(#40) 两段自写抗体名逻辑改**委托线 A** `antibody-name-map.ts`(#37)：①`isRealAntibodyMarker` 名字兜底委托 `classifyMarker`（advice_type 白名单仍为主信号不变；无码时 免组HE/分子/特染也剔）②`classifyCaseHints` 分组键改 `normalizeAntibodyName`（Ki67/Ki-67 归一判返工）③**复用 `ambiguousNorm` 碰撞防护**（独立复核逮到 TCR(a/b)/TCR(G/D) 去克隆号撞键=seed 唯一歧义键→回退原始名不误并，防伪造双计费指控）。只改 reconcile 域 1 源文件+1 测试·**零改动** delta/认定/补收/golden。新增 13 TDD；vitest **88 files/740 tests 绿**·tsc 绿·golden ¥13,152+¥27,870 零回归。独立复核=codex 异构(inline)+Workflow 3-lens 对抗面板。**单独可合**·等 vitest required check。 | merge-order/1 |
+
+> 🟢 **#57 OPEN（2026-07-03）**：源于本 task「对账逐抗体初判复用线 A 抗体名 resolver」。**已披露边界**：碰撞防护覆盖 seed 台账已识别歧义键（当前唯一=TCR），未进 seed 的新撞键抗体对不在防护内（属**漏判**保守 miss 非**伪造**，对已知数据零风险）；歧义抗体同例不同 raw 拼写不合并（benign miss）。
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 对一遍本看板，差异即更新看板。
