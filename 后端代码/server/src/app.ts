@@ -17,6 +17,7 @@ import inventoryRoutes from './routes/inventory-v1.1.js'
 import inboundRoutes from './routes/inbound-v1.1.js'
 import outboundRoutes from './routes/outbound-v1.1.js'
 import projectRoutes from './routes/projects-v1.1.js'
+import projectCatalogRoutes from './routes/project-catalog-v1.1.js'
 import bomRoutes from './routes/bom-v1.1.js'
 import reportRoutes from './routes/reports-v1.1.js'
 import alertRoutes from './routes/alerts-v1.1.js'
@@ -102,6 +103,8 @@ app.use('/api/v1/transfers', authenticateToken, requirePermission('transfers', '
 app.use('/api/v1/supplier-returns', authenticateToken, requirePermission('supplier_returns', 'R'), supplierReturnRoutes)
 
 app.use('/api/v1/projects', authenticateToken, requirePermission('projects', 'R'), projectRoutes)
+// D2 统一检测项目目录（只读对照层）：复用 projects 权限，不新增权限模块
+app.use('/api/v1/project-catalog', authenticateToken, requirePermission('projects', 'R'), projectCatalogRoutes)
 app.use('/api/v1/boms', authenticateToken, requirePermission('bom', 'R'), bomRoutes)
 
 // 成本对账：技术员 W（录入/提案），审批限 admin/finance/lab_director（路由内 requireAnyRole 守卫）

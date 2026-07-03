@@ -1,4 +1,4 @@
-import { Clock } from 'lucide-react'
+import { Clock, RefreshCw } from 'lucide-react'
 import { useAlertsPage } from './hooks/useAlertsPage'
 import { AlertTable } from './components/AlertTable'
 import { AlertHandleModal } from './components/AlertHandleModal'
@@ -25,6 +25,14 @@ export default function Alerts() {
           <button className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-150 h-10">
             <Clock className="w-4 h-4" />
             查看历史
+          </button>
+          <button
+            onClick={page.handleGenerate}
+            disabled={page.loading}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors duration-150 h-10 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+          >
+            <RefreshCw className={`w-4 h-4 ${page.loading ? 'animate-spin' : ''}`} />
+            刷新预警
           </button>
         </div>
       </div>
@@ -69,6 +77,8 @@ export default function Alerts() {
         onBatchProcess={page.handleBatchProcess}
         onOpenModal={page.openModal}
         onIgnore={page.handleIgnore}
+        onGenerate={page.handleGenerate}
+        hasActiveFilters={page.hasActiveFilters}
         getAlertTypeInfo={page.getAlertTypeInfo}
         getStatusInfo={page.getStatusInfo}
         isConsumption={page.isConsumption}
@@ -82,9 +92,7 @@ export default function Alerts() {
         form={page.handleForm}
         onClose={page.closeModal}
         onChange={page.setHandleForm}
-        onConfirm={() => {
-          if (page.modal.alert) page.handleProcess(page.modal.alert.id)
-        }}
+        onConfirm={page.submitHandle}
       />
 
       <AlertConsumptionHandleModal
@@ -93,9 +101,7 @@ export default function Alerts() {
         form={page.handleForm}
         onClose={page.closeModal}
         onChange={page.setHandleForm}
-        onConfirm={() => {
-          if (page.modal.alert) page.handleProcess(page.modal.alert.id)
-        }}
+        onConfirm={page.submitHandle}
       />
 
       <AlertDetailModal

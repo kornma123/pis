@@ -51,6 +51,18 @@ export const statusOptions = [
   { value: 'cancelled', label: '已取消' },
 ]
 
+// 盘点单状态 → 展示（两阶段口径）：pending 待处理差异未入账；confirmed 差异已处理入账；
+// completed 账实相符/批量即时入账；cancelled 已取消。未知状态兜底原样显示。
+export const stocktakingStatusDisplay: Record<string, { label: string; cls: string }> = {
+  pending: { label: '待处理', cls: 'bg-amber-50 text-amber-600' },
+  confirmed: { label: '已调整', cls: 'bg-green-50 text-green-600' },
+  completed: { label: '已完成', cls: 'bg-green-50 text-green-600' },
+  cancelled: { label: '已取消', cls: 'bg-gray-100 text-gray-500' },
+}
+export function getStocktakingStatusDisplay(status: string) {
+  return stocktakingStatusDisplay[status] || { label: status || '-', cls: 'bg-gray-100 text-gray-500' }
+}
+
 export function useStocktakingPage() {
   const url = useUrlParams()
 
@@ -67,6 +79,8 @@ export function useStocktakingPage() {
   const [batchRows, setBatchRows] = useState<BatchRow[]>([])
   const [batchOperator, setBatchOperator] = useState('')
   const [detailRow, setDetailRow] = useState<StocktakingRecord | null>(null)
+  const [adjustReason, setAdjustReason] = useState('')
+  const [adjustNote, setAdjustNote] = useState('')
   const [createStep, setCreateStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -106,8 +120,10 @@ export function useStocktakingPage() {
 
   const stats = useMemo(() => {
     const inProgress = data.filter(d => d.status === 'in_progress').length
-    const completed = data.filter(d => d.status === 'completed').length
-    const diffCount = data.filter(d => d.difference !== 0).length
+    // 已完成 = 已了结（账实相符 completed + 差异已处理入账 confirmed）；两阶段下 confirmed 不应从已完成里消失
+    const completed = data.filter(d => d.status === 'completed' || d.status === 'confirmed').length
+    // 待处理差异 = 待入账的 pending（两阶段口径），而非「所有差异≠0」——否则已处理(confirmed)会被一直计入、永不归零
+    const diffCount = data.filter(d => d.status === 'pending').length
     const accuracy = data.length > 0
       ? ((data.filter(d => d.difference === 0).length / data.length) * 100).toFixed(1)
       : '100.0'
@@ -191,7 +207,26 @@ export function useStocktakingPage() {
 
   const openAdjust = (row: StocktakingRecord) => {
     setDetailRow(row)
+    setAdjustReason('')
+    setAdjustNote('')
     setModalType('adjust')
+  }
+
+  const handleAdjust = async () => {
+    if (!detailRow) return
+    if (!adjustReason) { toast.error('请选择差异原因'); return }
+    setIsSubmitting(true)
+    try {
+      await request.post(`/stocktaking/${detailRow.id}/adjust`, {
+        reason: adjustReason,
+        remark: adjustNote || undefined,
+      })
+      toast.success('盘点差异已处理，库存已更新')
+      setModalType(null)
+      refresh()
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
+    } finally { setIsSubmitting(false) }
   }
 
   const openDelete = (row: StocktakingRecord) => {
@@ -231,7 +266,8 @@ export function useStocktakingPage() {
     stats,
     handleQuery, handleReset,
     openCreate, openDetail, openAdjust, openDelete,
-    handleSubmit, handleDelete,
+    handleSubmit, handleDelete, handleAdjust,
+    adjustReason, setAdjustReason, adjustNote, setAdjustNote,
     selectedMaterial,
     batchRows, setBatchRows, batchOperator, setBatchOperator,
     openBatch, handleBatchSubmit,

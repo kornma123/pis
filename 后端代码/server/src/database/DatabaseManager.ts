@@ -4,9 +4,11 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
 import { CHARGE_CODE_SEED, chargeDefToRow } from '../utils/charge-catalog.js'
+import { seedProjectCatalog } from '../utils/project-catalog.js'
 import { NGS_PRODUCT_SEED, ngsProductToRow } from '../utils/ngs-catalog.js'
 import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } from '../utils/antibody-catalog.js'
 import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
+import { ANTIBODY_SYNONYM_SEED, ANTIBODY_MISSING_PRICE_SEED } from '../utils/antibody-name-map.js'
 import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -1237,8 +1239,25 @@ export function initializeDatabase(): void {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  // antibody_aliases: LIS 抗体名 → 台账规范名 别名表（A1+A3 名称映射）。
+  //   代码规范化(去连字符/空格/大小写)自动对上大多数写法差异；此表存**规范化也撞不到的生物学同义词**（Ecad→E-cadherin 等），
+  //   ops 可继续加新别名（无需改代码发版）。lis_name UNIQUE，幂等 INSERT OR IGNORE。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS antibody_aliases (
+      id TEXT PRIMARY KEY,
+      lis_name TEXT NOT NULL UNIQUE,
+      canonical_name TEXT NOT NULL,
+      note TEXT,
+      source TEXT,
+      status INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_by TEXT
+    )
+  `)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_antibodies_name ON antibodies(name)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_antibodies_category ON antibodies(category)`)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_antibody_aliases_lis ON antibody_aliases(lis_name)`)
   // ── Phase 1 账实核对引擎（设计基线 §1.4/§1.5）──
   //   reconcile_hospital_months: 院·月复核状态机（待复核→复核完成→已关账；匹配率/院名对齐/关账留痕）。
   //   reconcile_diffs: 逐差异（账单片数 vs LIS 物理片数·¥影响·系统初判·6 认定原因·经手人）。
@@ -1318,6 +1337,23 @@ export function initializeDatabase(): void {
   database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_diffs_partner_month ON reconcile_diffs(partner_id, service_month)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_supplement_partner_month ON supplement_orders(partner_id, service_month)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_supplement_status ON supplement_orders(status)`)
+  // ③ 逐抗体细粒度初判线索（返工/多病灶）——与 reconcile_diffs 平行的附加线索表，读 lis_case_markers 派生；不改差异计数口径。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS reconcile_case_hints (
+      id TEXT PRIMARY KEY,
+      hospital_month_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL,
+      service_month TEXT NOT NULL,
+      case_no TEXT NOT NULL,
+      hint_type TEXT NOT NULL,
+      marker_name TEXT,
+      wax_no TEXT,
+      occurrences INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_hints_hm ON reconcile_case_hints(hospital_month_id)`)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_hints_case ON reconcile_case_hints(hospital_month_id, case_no)`)
   // 幂等补列（旧库迁移 + :memory: 新库统一）
   ensureColumn('supplement_orders', 'collected_revenue', 'DECIMAL(18, 4)')
   ensureColumn('fee_standards', 'project_type', 'TEXT')
@@ -1594,6 +1630,22 @@ export function initializeDatabase(): void {
       hasPrice ? 'has_price' : 'missing', ANTIBODY_LEDGER_SOURCE,
     )
   })
+  // 台账真缺 5 种（LIS 用到、台账无价，A1）：入库标 price_status='missing'，成本走降级 + 行级「毛利待定」。
+  //   待 PM 补采购价后经 PUT /antibodies/:id 回填（form=NULL 未知剂型，与台账无 UNIQUE 冲突）。
+  ANTIBODY_MISSING_PRICE_SEED.forEach((m, i) => {
+    insertAntibody.run(
+      `AB-MISS${String(i).padStart(2, '0')}`, m.name, null, m.category, null, null,
+      0, null, null, null, 'missing', `LIS用到·台账缺价·待PM补采购价(A1)｜${m.note}`,
+    )
+  })
+  // 抗体别名种子（生物学同义词，规范化撞不到的）→ antibody_aliases。
+  const insertAlias = database.prepare(`
+    INSERT OR IGNORE INTO antibody_aliases (id, lis_name, canonical_name, note, source, status)
+    VALUES (?, ?, ?, ?, ?, 1)
+  `)
+  ANTIBODY_SYNONYM_SEED.forEach((s, i) => {
+    insertAlias.run(`AB-ALIAS${String(i).padStart(2, '0')}`, s.lisName, s.canonicalName, s.note, '种子(A1同义词)')
+  })
   const insertDetection = database.prepare(`
     INSERT OR IGNORE INTO detection_systems
       (id, name, type, form, spec, bottle_price, conv_rate, per_slide_cost, is_default, source_ledger, status)
@@ -1611,9 +1663,11 @@ export function initializeDatabase(): void {
     VALUES (?, ?, ?, ?, ?, ?)
   `)
   const ihcParamSeed: Array<[string, string, number, string, string, string]> = [
-    ['IHC-PARAM-SEC', 'secondary_per_slide', DEFAULT_IHC_COST_PARAMS.secondaryPerSlide, '台账/G2估', '粗估', '上机二抗测试条~¥15/片（台账真价 14~16）'],
-    ['IHC-PARAM-LAB', 'labor_per_slide', DEFAULT_IHC_COST_PARAMS.laborPerSlide, 'G2估', '粗估', '工时占位·弱锚·待康湾真实工资校准(B4)'],
-    ['IHC-PARAM-EQP', 'equipment_per_slide', DEFAULT_IHC_COST_PARAMS.equipmentPerSlide, 'G2估', '粗估', '设备折旧占位·弱锚·待校准(B4)'],
+    // 二抗/显色是台账真价（上机二抗测试条 ¥15，台账 14~16）——非弱锚，如实标「台账真价」，别混进 G2 估。
+    ['IHC-PARAM-SEC', 'secondary_per_slide', DEFAULT_IHC_COST_PARAMS.secondaryPerSlide, '台账', '台账真价', '上机二抗测试条~¥15/片（台账真价 14~16）'],
+    // 工时/设备是弱锚（B4）——诚实标 G2 估·粗估·待校准；用真实工资/折旧走 POST /cost-params/calibrate 摊算写回后翻牌「已校准」。
+    ['IHC-PARAM-LAB', 'labor_per_slide', DEFAULT_IHC_COST_PARAMS.laborPerSlide, 'G2估', '粗估', '工时占位·弱锚·待康湾真实工资校准(B4)：POST /cost-params/calibrate'],
+    ['IHC-PARAM-EQP', 'equipment_per_slide', DEFAULT_IHC_COST_PARAMS.equipmentPerSlide, 'G2估', '粗估', '设备折旧占位·弱锚·待校准(B4)：POST /cost-params/calibrate'],
   ]
   ihcParamSeed.forEach((r) => insertIhcParam.run(r[0], r[1], r[2], r[3], r[4], r[5]))
   const insertStain = database.prepare(`
@@ -1626,6 +1680,14 @@ export function initializeDatabase(): void {
     ['SS-AFB', '抗酸(AFB)', 195, 50, 14, '标称次数=50 占位·待补真实盒装次数', 'G2真实盒价'],
   ]
   stainSeed.forEach((r) => insertStain.run(r[0], r[1], r[2], r[3], r[4], r[5], r[6]))
+
+  // ===========================================================================
+  // D2 统一检测项目目录（project_catalog / code_mappings）—— 地基线 D
+  //   只读对照层：把四套/五套叫法（projects.code / 国标码 / 老物价码 / LIS 名 / 对账单名）
+  //   对到同一个标准项(PC-*)。建表+幂等种子全在 utils/project-catalog.ts。
+  //   ⛔ 不改任何现有分类逻辑（先并存）；守黄金 ¥13,152 / ¥27,870 零回归。
+  // ===========================================================================
+  seedProjectCatalog(database)
 
   console.log('Database initialized successfully')
 }

@@ -1,7 +1,11 @@
-import { X, Download, Printer } from 'lucide-react'
+import { X, Download, Printer, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import type { OutboundRecord } from '@/types'
 import { formatDate } from '@/lib/utils'
+
+// 与后端排序白名单一致：金额/数量/时间（防注入的受控列名）
+export type OutboundSortField = 'createdAt' | 'totalCost' | 'quantity'
+export type OutboundSortOrder = 'asc' | 'desc'
 
 const statusConfig: Record<string, { label: string; bg: string; text: string }> = {
   completed: { label: '已完成', bg: 'bg-green-50', text: 'text-green-600' },
@@ -23,6 +27,9 @@ interface OutboundTableProps {
   total: number
   page: number
   pageSize: number
+  sortField: OutboundSortField
+  sortOrder: OutboundSortOrder
+  onSort: (field: OutboundSortField) => void
   onToggleSelectAll: () => void
   onToggleSelectRow: (id: string) => void
   onClearSelection: () => void
@@ -45,6 +52,9 @@ export default function OutboundTable({
   total,
   page,
   pageSize,
+  sortField,
+  sortOrder,
+  onSort,
   onToggleSelectAll,
   onToggleSelectRow,
   onClearSelection,
@@ -58,6 +68,21 @@ export default function OutboundTable({
   onBatchExport,
   onBatchPrint,
 }: OutboundTableProps) {
+  const SortHeader = ({ field, label }: { field: OutboundSortField; label: string }) => (
+    <button
+      type="button"
+      onClick={() => onSort(field)}
+      className="inline-flex items-center gap-1 hover:text-gray-700 transition-colors"
+    >
+      {label}
+      {sortField === field ? (
+        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+      ) : (
+        <ArrowUpDown className="w-3 h-3 opacity-50" />
+      )}
+    </button>
+  )
+
   return (
     <>
       {/* Batch Actions Bar */}
@@ -109,10 +134,17 @@ export default function OutboundTable({
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">耗材名称</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">批号</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">出库类型</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">数量</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <SortHeader field="quantity" label="数量" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <SortHeader field="totalCost" label="总金额" />
+              </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">领用项目</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">领用人</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">出库时间</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <SortHeader field="createdAt" label="出库时间" />
+              </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[140px]">操作</th>
             </tr>
@@ -120,11 +152,11 @@ export default function OutboundTable({
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-gray-400">加载中...</td>
+                <td colSpan={12} className="px-4 py-8 text-center text-gray-400">加载中...</td>
               </tr>
             ) : data.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-gray-400">暂无数据</td>
+                <td colSpan={12} className="px-4 py-8 text-center text-gray-400">暂无数据</td>
               </tr>
             ) : (
               data.map(row => {
@@ -161,6 +193,7 @@ export default function OutboundTable({
                     <td className="px-4 py-3">
                       {row.items?.reduce((sum, i) => sum + i.quantity, 0) || 0} {firstItem?.unit || '件'}
                     </td>
+                    <td className="px-4 py-3 text-gray-700">¥{(row.totalCost || 0).toFixed(2)}</td>
                     <td className="px-4 py-3 text-gray-700">{row.projectName || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{row.operator}</td>
                     <td className="px-4 py-3 text-gray-500">{formatDate(row.createdAt)}</td>

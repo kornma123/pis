@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
 import request from '@/api/request'
@@ -39,6 +39,18 @@ export const STATUS_MAP: Record<string, { label: string; bg: string; text: strin
   'ignored': { label: '已忽略', bg: 'bg-gray-50', text: 'text-gray-600' },
 }
 
+// 处理结果选项 → 备注前缀：后端只有单一 remark 字段，故把「处理结果」+「处理意见」
+// 组装成一条可读备注一起落库（覆盖低库存/过期弹窗与消耗异常弹窗两套选项）。
+export const RESULT_LABEL_MAP: Record<string, string> = {
+  purchased: '已采购补货',
+  adjusted: '调整阈值',
+  ignored: '忽略预警',
+  normal: '标记为正常波动',
+  observe: '关注观察',
+  optimize: '需优化流程',
+  adjust: '调整预警阈值',
+}
+
 export function useAlertsPage() {
   const url = useUrlParams()
 
@@ -73,6 +85,7 @@ export function useAlertsPage() {
   const {
     data,
     loading,
+    error,
     page,
     pageSize,
     total,
@@ -157,10 +170,16 @@ export function useAlertsPage() {
 
   const clearSelection = () => setSelectedIds(new Set())
 
-  const handleProcess = async (id: string) => {
+  // 唯一写入端点 = POST /alerts/:id/handle（action 区分终态）。
+  // 修复前前端调 /process、/ignore（后端无此路由）→ 处理/忽略全 404，本函数统一收口。
+  const handleProcess = async (
+    id: string,
+    payload?: { action?: 'processed' | 'ignored'; remark?: string }
+  ) => {
+    const action = payload?.action ?? 'processed'
     try {
-      await request.post(`/alerts/${id}/process`, {})
-      toast.success('处理成功')
+      await request.post(`/alerts/${id}/handle`, { action, remark: payload?.remark ?? '' })
+      toast.success(action === 'ignored' ? '已忽略' : '处理成功')
       refresh()
       setModal({ type: null, alert: null })
     } catch {
@@ -168,13 +187,39 @@ export function useAlertsPage() {
     }
   }
 
+  // 处理弹窗「确认处理」入口：校验处理意见必填，把「处理结果」+「处理意见」组装成 remark 后透传。
+  const submitHandle = async () => {
+    const alert = modal.alert
+    if (!alert) return
+    if (!handleForm.opinion.trim()) {
+      toast.error('请填写处理意见')
+      return
+    }
+    const action = handleForm.result === 'ignored' ? 'ignored' : 'processed'
+    const resultLabel = RESULT_LABEL_MAP[handleForm.result] || handleForm.result
+    const remark = `${resultLabel}：${handleForm.opinion.trim()}`
+    await handleProcess(alert.id, { action, remark })
+  }
+
   const handleIgnore = async (id: string) => {
     try {
-      await request.post(`/alerts/${id}/ignore`, {})
+      await request.post(`/alerts/${id}/handle`, { action: 'ignored', remark: '快速忽略' })
       toast.success('已忽略')
       refresh()
     } catch {
       /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
+    }
+  }
+
+  // 生成/刷新预警：调运行时 /generate（按库存与效期规则实时计算），回填生成条数并刷新列表。
+  const handleGenerate = async () => {
+    try {
+      const res = (await request.post('/alerts/generate', {})) as { generatedCount?: number } | null
+      const n = res?.generatedCount ?? 0
+      toast.success(n > 0 ? `本次生成 ${n} 条预警` : '暂无新预警')
+      refresh()
+    } catch {
+      /* 错误由全局响应拦截器统一提示后端真因 */
     }
   }
 
@@ -224,10 +269,34 @@ export function useAlertsPage() {
   const handleBatchProcess = async () => {
     const ids = Array.from(selectedIds)
     for (const id of ids) {
-      await handleProcess(id)
+      await handleProcess(id, { action: 'processed', remark: '批量处理' })
     }
     clearSelection()
   }
+
+  // 空态自动生成：首次拉取**成功**完成后，若无筛选且列表为空，自动跑一次 /generate（仅一次，防循环）。
+  // 有筛选返回空 = 正常「无匹配」，不触发生成。
+  // !error 守卫：拉取失败(500/断网)时 usePagination 也会把 total 置 0，不能误当空态去生成（否则在报错页多发一次请求 + 矛盾提示）。
+  const hasActiveFilters = !!(
+    filter.keyword ||
+    filter.type !== 'all' ||
+    filter.status !== 'all' ||
+    quickFilter !== 'all' ||
+    filter.dateRange[0] ||
+    filter.dateRange[1]
+  )
+  const autoGenTriedRef = useRef(false)
+  const prevLoadingRef = useRef(loading)
+  useEffect(() => {
+    const justFinished = prevLoadingRef.current && !loading
+    prevLoadingRef.current = loading
+    if (justFinished && !autoGenTriedRef.current && !hasActiveFilters && total === 0 && !error) {
+      autoGenTriedRef.current = true
+      handleGenerate()
+    }
+    // handleGenerate 每次渲染重建但由 ref 保证只触发一次，故不入依赖数组（与本文件其它 effect 一致风格）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, total, hasActiveFilters, error])
 
   return {
     filter,
@@ -253,7 +322,10 @@ export function useAlertsPage() {
     handleSelectAll,
     clearSelection,
     handleProcess,
+    submitHandle,
     handleIgnore,
+    handleGenerate,
+    hasActiveFilters,
     getAlertTypeInfo,
     getStatusInfo,
     openModal,
