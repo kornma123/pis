@@ -1033,4 +1033,8 @@ http://your-server-ip:8080
 
 **PR**：[#37](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/37) OPEN（base=master·独立非栈·单独可合，等 vitest required check）。看板 `pr-governance.md` 同步（#32→MERGED + 新增 #37 行）。合并后前端/对账/LIS 侧可经 resolver util 或 `GET /antibodies/resolve` 对上台账价。
 
+**收尾补记（同会话续）**：
+- **codex 诊断 + 文档沉淀**：本线收尾 codex 异构复核首两次（xhigh/high 长复核）**流式断开**（`stream disconnected before completion: network error: error decoding response body`）——非 codex 坏/非限流/非登录（最小 low 探针秒级成功、`rate_limit_reached_type:null`），根因=长时流式连接保不住（高推理+大上下文，多 xhigh 会话并发加剧）。**低推理+单文件复跑成功**，codex 对核心逻辑 4 红线逐条判「无真 bug」（与 Workflow 面板互印）。规避法记进 `.claude/rules/codex-cli-usage.md` 新增「长请求断流规避」节 → **独立纯文档 PR [#42](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/42) 已 MERGED（merge commit `fdc134e5`，--admin 落 master）**。
+- **#37 消看板漂移**：master 经他会话 #35/#38/#40 前进后，#37 在 `pr-governance.md`/`session-log.md` 有 doc 冲突（代码文件不冲突）→ 按惯例 `git merge origin/master`、看板按并集解（保 #37+#38 双行、#32 chip 标 A→#37 已实现）。**合并组合态重验：tsc 绿 + vitest 79 files/618 tests 绿（含 #40 reconcile-antibody-hints 的 10 用例）+ golden ¥13,152+¥27,870 零回归**；#37 现 `mergeable=MERGEABLE`（等新提交 vitest 重跑）。
+
 *更新时间：2026-07-02*
