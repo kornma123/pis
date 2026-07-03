@@ -954,6 +954,29 @@ http://your-server-ip:8080
 
 **PM 待解锁**：A1 缺价采购价、A2 三家扣率、B4 康湾工资/折旧、D2 目录口径拍板（各会话先产出清单/草案再等 PM）。
 
-**PR/看板**：[#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) OPEN（base=master，独立·纯文档·单独可合，把拆分边界表落 master 供并行会话共读）。看板 `pr-governance.md` 同步新增 #32 行 + 三线 chip 状态。
+**PR/看板**：[#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) ✅ MERGED（base=master，独立·纯文档，merge commit `6a8e69bd`）。把拆分边界表落 master 供并行会话共读。
+
+*更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（进销存「修流程」并行任务拆分 + 核实分派，2026-07-02）
+
+**线/工作树**：worktree `eloquent-lichterman-af4db5`（已 ff 到 master tip `2bdbbee7`）。
+
+**触发**：用户"同步前面进销存的流程，按上一轮同样方式并行开多任务，要求一致"。拍板范围=**先修流程做真（wave-1），再逐页前端重设计（wave-2）**。
+
+**方法（ultracode Workflow `w1yoz1dxl`）**：9 模块并行核实 backlog 对**当前 master 真实状态**→定线→起草卡。**核实先行避免重复劳动**：入库 IN-03/05/06 代码已修（仅清单失真）、退货给供应商已完整、采购订单菜单/路由/页面都在——**三模块丢弃**（清单说缺其实已做）。1 个 verify agent（采购）失败→已手工补核确认已做。
+
+**产出**：
+- 新文档 `docs/COREONE-进销存修流程-实现任务拆分-2026-07-02.md`（核实结论 + wave-1 四线卡 + wave-2 两线 + 冲突边界 + PM 待拍口径）。
+- **wave-1 四条互不碰文件线**（已分派 ultracode chip）：
+  - **C** 调拨/退库/报废三页补全（M·mockup 先行·**本波唯一动 DatabaseManager schema**）`task_9b1bf9c5`
+  - **E** 预警前后端契约对齐+生成触发（M）`task_f68fd867`
+  - **A** 库存/盘点空态+盘点调整落库（S）`task_9b77fcb3`
+  - **B** 出库排序做真+文档回填（S）`task_0d75ee19`
+- **wave-2 两条**（等 PM 口径）：D 主数据编码/库位层级（库位 code 规则待拍）、F BOM 做真（supportableSamples 待拍；注意 is_alternative=辅料非替代料）。
+
+**冲突边界**：`api/inventory.ts`（A↔C 各改各导出块，A 基准所有者）；`DatabaseManager.ts`（本波仅 C 动 schema）；`App.tsx`/`AppSidebar.tsx` 本波不动（详情用页内 modal）。
 
 *更新时间：2026-07-02*
