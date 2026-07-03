@@ -20,6 +20,44 @@ export interface ReconcileInputs {
   lisReady: boolean
 }
 
+/**
+ * 某院某月「收费→实收」全票扣率 = Σnet / Σgross（只读 case_revenue；无数据回退 1）。
+ * 仅作 partnerMonthLabRate 的回退——补收折实收不直接用它（见下）。
+ */
+export function partnerMonthDiscountRate(db: any, partnerId: string, serviceMonth: string): number {
+  const r = db
+    .prepare('SELECT COALESCE(SUM(gross_amount),0) g, COALESCE(SUM(net_amount),0) n FROM case_revenue WHERE partner_id = ? AND service_month = ?')
+    .get(partnerId, serviceMonth) as { g: number; n: number }
+  const g = Number(r?.g) || 0
+  const n = Number(r?.n) || 0
+  return g > 0 ? n / g : 1
+}
+
+/**
+ * 实验室工序（免疫组化/特染）行的扣率 = Σ(其 net) / Σ(其 gross)。
+ *
+ * 补收折实收专用。为什么不用全票 Σnet/Σgross：补收是漏收的**免疫组化/特染片**（§1.2 整条计入实验室=实验室工序），
+ * 折出的实收要和「确认实收 = Σlab_revenue（纯实验室，已剔诊断桶/移出）」同口径。全票扣率把**诊断/移出行**的扣率混了进来
+ * （合作方可按业务线设不同扣率），会污染免疫组化扣率；故只取免疫组化/特染行自己的 net/gross。
+ * 回退：无实验室工序行 → 全票扣率；再无数据 → 1。
+ */
+export function partnerMonthLabRate(db: any, partnerId: string, serviceMonth: string): number {
+  const rows = db
+    .prepare('SELECT charge_item, gross_amount, net_amount FROM case_revenue_lines WHERE partner_id = ? AND service_month = ?')
+    .all(partnerId, serviceMonth) as Array<{ charge_item: string; gross_amount: number; net_amount: number }>
+  let g = 0
+  let n = 0
+  for (const r of rows) {
+    const t = classifyChargeItem(r.charge_item)
+    if (t === '免疫组化' || t === '特染') {
+      g += Number(r.gross_amount) || 0
+      n += Number(r.net_amount) || 0
+    }
+  }
+  if (g > 0) return n / g
+  return partnerMonthDiscountRate(db, partnerId, serviceMonth)
+}
+
 /** 读某院某月的账单聚合（按 case，免疫组化/特染片数 + 单价）+ LIS 物理计数。 */
 export function buildReconcileInputs(db: any, partnerId: string, serviceMonth: string): ReconcileInputs {
   const billRows = db

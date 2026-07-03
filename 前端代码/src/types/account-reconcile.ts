@@ -44,6 +44,7 @@ export interface OverviewBoard {
   待复核: number
   复核完成: number
   已关账: number
+  补收实收: number
   确认实收: number
 }
 
@@ -102,6 +103,7 @@ export interface SupplementOrder {
   status: SupplementStatus
   collectedAt: string | null
   collectedMonth: string | null
+  collectedRevenue: number | null
   giveUpReason: string | null
   operator: string | null
 }
@@ -110,6 +112,7 @@ export interface SupplementBoard {
   待补收金额: number
   已补收金额: number
   已放弃金额: number
+  已补收实收: number
   待补收数: number
   补收率: number
 }

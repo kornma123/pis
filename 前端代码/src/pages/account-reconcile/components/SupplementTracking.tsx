@@ -66,8 +66,9 @@ export function SupplementTracking({ month, canWrite }: { month: string; canWrit
           <div className="mt-0.5 text-xs text-gray-400">{board?.待补收数 ?? 0} 单待催收</div>
         </div>
         <div className={`${cardCls} border-blue-100 bg-gradient-to-b from-blue-50/60 to-white p-4`}>
-          <div className="text-xs text-gray-500">已补收 · 计入本月</div>
-          <div className="mt-1.5 text-2xl font-bold tabular-nums text-blue-600">{wan(board?.已补收金额)}</div>
+          <div className="text-xs text-gray-500">已补收 · 计入本月实收</div>
+          <div className="mt-1.5 text-2xl font-bold tabular-nums text-blue-600">{wan(board?.已补收实收)}</div>
+          <div className="mt-0.5 text-xs text-gray-400">账单口径 {wan(board?.已补收金额)}（收费×扣率折实收）</div>
         </div>
         <div className={`${cardCls} p-4`}>
           <div className="text-xs text-gray-500">补收率</div>
@@ -109,7 +110,7 @@ export function SupplementTracking({ month, canWrite }: { month: string; canWrit
               {list.map((so) => (
                 <tr key={so.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{so.partnerId} · {cnMonth(so.serviceMonth)}</td>
-                  <td className="px-4 py-3 text-gray-600">{so.caseNo ? `病理号 ${so.caseNo} 漏收` : '漏收'}{so.collectedMonth && <span className="ml-2 text-xs text-blue-600">计入 {cnMonth(so.collectedMonth)}</span>}{so.giveUpReason && <span className="ml-2 text-xs text-gray-400">{so.giveUpReason}</span>}</td>
+                  <td className="px-4 py-3 text-gray-600">{so.caseNo ? `病理号 ${so.caseNo} 漏收` : '漏收'}{so.collectedMonth && <span className="ml-2 text-xs text-blue-600">计入 {cnMonth(so.collectedMonth)}</span>}{so.collectedRevenue != null && <span className="ml-2 text-xs text-gray-500">折实收 {yuan(so.collectedRevenue)}</span>}{so.giveUpReason && <span className="ml-2 text-xs text-gray-400">{so.giveUpReason}</span>}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{so.caseCount}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-gray-900">{yuan(so.amount)}</td>
                   <td className="px-4 py-3"><SupPill status={so.status} /></td>
