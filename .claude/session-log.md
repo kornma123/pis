@@ -1194,7 +1194,7 @@ http://your-server-ip:8080
 
 **独立复核**：4 个最高风险声明自查 grep 全部证实——model-validation 纯只读(无 mutation)✓ / supplier-costs 同端点已被 cost-analysis 消费+退款netting三列后端从不返回✓ / personnel-efficiency 幽灵接口✓ / trend 唯一消费者✓。codex(high·单文件·别读别的)第三轴抽查 model-validation 重分类。
 
-**产出**：新增 `docs/COREONE-ABC前端页面处置清单-审计与废弃候选-2026-07-03.md`（纯文档·零代码·golden 零回归）→ **PR [#61](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/61) OPEN**（commit d314bc16 doc+log、14df27c6 board）。
+**产出**：新增 `docs/COREONE-ABC前端页面处置清单-审计与废弃候选-2026-07-03.md`（纯文档·零代码·golden 零回归）→ **PR [#61](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/61) ✅ MERGED（2026-07-03, merge commit `877b3932`）**：vitest required 绿(1m12s)后 `--merge --admin`（e2e 非 required·pending 不阻断）；合并前 `git merge origin/master` 消 session-log/看板级联冲突=保留双方（#59 线 3 段并存）。实现另立项 I-1（补导航）已 spawn chip `task_fd5cfb70`。
 
 **discussion-first · PM 拍板（同会话续）**：清单摊给 PM 后拍定两项方向——**①配置类保留+报表类收敛**（「全废」不采纳，配置类是参数唯一录入口）**②报表类落点=新建统一报表平台**（收编成 Tab/维度，不逐个塞 hospital-pnl）。原待拍③（各报表页去向）被②吸收。据此把 §五 从「待拍」改为「PM 决策 + 由此产生的实现项」，登记 5 条另立实现线：**I-1 孤儿配置页补导航**（P0·fee-mappings/cost-drivers/cost-pools/budgets/quality-costs/quarterly-adjustment 接回侧栏+权限）·**I-2 统一报表平台设计+收编**（P1·mockup 先行·8 报表页）·**I-3 personnel-efficiency**（补幽灵后端 or 清理三件套）·**I-4 variance 口径修正**（假标准成本先修再收编）·**I-5 supplier-costs 并入 cost-analysis 供应商 Tab**。**实现均另立项、本清单仍不动码**；golden 零回归贯穿。
 
@@ -1223,6 +1223,8 @@ http://your-server-ip:8080
 
 *更新时间：2026-07-03*
 
+---
+
 ## 本次会话完成的工作（新旧功能重叠处置审计 · 线 3 → 废弃候选清单文档，2026-07-03）
 
 **线/工作树**：worktree `intelligent-margulis-bf75e8`（线 3，off `origin/master` tip `59a64dd9`）。task `task_1584b4f6`（「文档剩余+ABC确认」拆分之线 3）。**纯审计/文档、只读核实、不改任何码/路由**。
@@ -1241,6 +1243,29 @@ http://your-server-ip:8080
 **PM 待拍（对齐父拆分 #4/#5）**：#4 partner-pnl 能否退役=**不能**（先迁移 hospital-pnl 消费才谈退役）；#5 reconciliation vs account-reconcile 合并 UI/保留两条 API=**建议保留两条 API+两入口**（不同域·信息架构分两子项而非合并路由）；附待拍=antibody-cost 是否补前端页 / CostTrend·supplier-costs 孤儿页补入口（接线归线 2）。
 
 **治理**：零代码/零 seed·golden ¥13,152+¥27,870 天然零回归；git 只 add 目标文档+session-log+看板（**未 `-A`**）；产出 → **PR [#59](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/59)** → **✅ MERGED（2026-07-03, merge commit `a0003b9f`）**：vitest required check 绿(1m11s)后 `--merge --admin`（e2e 非 required·pending 不阻断）落 master。看板线 3 行 OPEN→MERGED。合并后当前无 open PR。
+
+---
+
+## 本次会话完成的工作（文档剩余线 1 · 数据质量项状态收口 → PR #62，2026-07-03）
+
+**线/工作树**：worktree `reverent-nash-4db6de`（文档剩余线 1，off master tip `59a64dd9`）。task `task_b403412d`。**纯文档·零代码/零 seed·golden 天然零回归**。
+
+**任务**：把「账实复核+逐抗体成本」未决清单的 **数据质量类**项（A1/A3/A4/A5 + G2 §7 三条待补）按 **master 真实实现状态**更新进两份现有文档（`docs/COREONE-账实复核与逐抗体成本-未决问题与关联文件-2026-07-02.md` §一A 表 + `docs/COREONE-G2成本基准-单位技术成本模型-2026-06-30.md` §7），**先核实再落笔**（避免把已实现的写成待做）。B1–B4 引擎/口径项归别的线，未动。
+
+**核实（ultracode Workflow `wq0mhjuy0`：5 verify + 5 对抗 refute；另首手 `grep`/`Read` 逐 `file:line` 复核）**：
+- **A1 缺价+别名**：✅ 已落地（PR #37/`96a55b5d`）。`antibody_aliases` 表（DBMgr 建表 1246/索引 1260/5 同义词种子 1642 + 5 真缺 AB-MISS 占位）+ `normalizeAntibodyName` 代码规范化 + GET/POST/DELETE CRUD（antibody-cost-v1.1 438/450/475）+ `buildSynonymMapFromDb` DB=权威源 + `/resolve`·`/cost-preview` 消费 + 回归门禁（端到端 POST→resolve）。**关键订正**：原"代码硬规则 vs 别名表二选一 PM 决策"**作废**——两者都做了。仅剩 5 种真缺（PD-1/cathepsinK/GPNMB/TROP-2/HP）补价（清单文档已备）。
+- **A3 剂型**：✅ 算法侧已落（`resolveForm` 保守取高价+`formAssumed`，被 /resolve+/cost-preview 消费）；🔵 数据侧 LIS 导出不带剂型（lis-import 只取名/申请类型/蜡块/切片）待补，双剂型本月仅 CK19/CK20。
+- **A4 特染**：🟡 计数/隔离层已落（`classifyMarker` 轻量识别 + 对账域 `classifyChargeItem` 分线计数/独立差异行 + LIS `special_stain_count` 独立列 + #57 DRY 委托）；账单文本分类仍启发式=诚实边界；成本口径归对账会话，本线不下结论。
+- **A5 PII**：🔵 无代码·政策待决（后端无导入/存储样本汇总表 PII 的路由/表，三管道只取分析列）。脱敏两选项（①只取分析列[推荐] vs ②字段级脱敏[复用 `scrubSensitive`]）+ 待 PM 拍，已列正文。
+- **G2 §7 三条**：**对抗 refute 逮到 verify 初判"data-gap-no-code"夸大** → 订正为"机制已编码、仅缺真实数据"：① 反推能力已具备（`statement-revenue` counts/`reconcile-compute`）；② 校准写回端点 `POST /cost-params/calibrate`+`deriveLaborEquipmentPerSlide`+`ihc_cost_params` 持久化+审计+测试已编码、缺康湾真实数字（B4 清单 doc）；③ 抗体 `form` 字段+`UNIQUE(name,form)`+192 种子已齐、降级"字段已落"。
+
+**codex 异构轴（收尾复核·high·单请求）**：`codex exec -c model_reasoning_effort=high` 首请求跑约 15 分钟出全量结论——**5 承重断言（A1/A3/A4 + G2 校准机制 + G2 form 字段）逐条判『忠实·无夸大·无漏标』**（A5 无代码项 codex 如实未越界，由 Workflow verify+refute 独立确认）。**经验补记**：期间起的 `high` 多文件请求 + `low` 单文件小探针**均一度断流**（0 字节/`Reading additional input from stdin...`+超时；ps 见 3 个并发 codex exec 抢连接=`codex-cli-usage.md` 所述**并发加剧断流**），但**首个长请求最终成功吐出结论**——教训：`tail -N` 管道会缓冲到进程退出才 flush，误判为断流；长请求给足时间（本次~15min）能出结果，**别叠并发探针**（越叠越断）。docs 措辞先误标"断流·兜底"、拿到 codex 结论后已订正为"codex 异构 high 复核『忠实』"。
+
+**⚠️ worktree 路径坑（自逮·已复原）**：初次写 session-log 误用绝对路径 `/Users/maxiaoyuan/Documents/进销存/.claude/session-log.md`（=**主仓 master 检出**，非本 worktree）→ `git add` 只暂存到 pr-governance、session-log 落空才发现（记忆 [[coreone-worktree-path-pitfall]] 复现）。已 `git checkout --` 复原主仓该文件（diff 确认仅我这一块、未伤其它会话），改用 worktree 全路径重写。**纪律**：worktree 会话写文件一律带 worktree 全路径。
+
+**改动**：仅 2 份现有文档正文/状态 + 各加变更记录段。git 只显式 add 这 2 文档 + 本 session-log + `pr-governance.md` 看板（**禁 `-A`**）。**验证**：零代码→黄金 ¥13,152+¥27,870 天然零回归；无测试需跑。
+
+**产出**：commit `5cea35cb`（2 文档）→ **PR [#62](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/62)**（独立·非栈·单独可合·doc-only）→ 治理 commit（看板+session-log 记 #62）→ merge origin/master 消 #61 带来的治理文档 append 冲突（保留双方段）→ **✅ MERGED（2026-07-03, merge commit `aed65fd9`）**：用户拍板合并，vitest required 绿(1m19s)后 `--merge --admin` 落 master。看板 #62 行 OPEN→MERGED。⚠️ 其它 open PR：#61（ABC 前端处置清单·文档剩余线 2·并行会话，仍 OPEN）。
 
 *更新时间：2026-07-03*
 
