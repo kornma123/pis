@@ -198,7 +198,7 @@
 |---|---|---|---|---|---|
 | — | [#61](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/61) | `claude/hungry-austin-230c91` → `master` | 🟢 **OPEN**(2026-07-03) | **独立**（非栈式，无上下游）。**纯审计/文档·零代码·零路由·golden 零回归**。新增 `docs/COREONE-ABC前端页面处置清单-审计与废弃候选-2026-07-03.md`：19 页（18 `/abc/*` + `/indirect-costs`）逐页 现状/数据来源·重叠对象·处置建议·合并去向。结论=**保留 10 / 合并候选 3 / 待定 6 / 直接删 0**。配置类 10 页=参数唯一录入口须保留（修正「ABC 前端全废」论点：原名单 5 个实测 10 个）；报表类 9 页与 hospital-pnl/逐抗体成本/cost-analysis 重叠为候选；14/18 孤儿路由=可发现性缺口非该删。另披露 2 缺陷（personnel-efficiency 幽灵接口·variance 假标准成本，不修·另立项）。方法=Workflow 42-agent 对抗审计 + grep 自查 + codex 异构抽查。**单独可合**·**但先摊 PM 拍**（待拍 3 项：①全废能否成立 ②是否建统一报表平台 ③各报表页去向）。 | merge-order/1 |
 
-> 🟢 **#61 OPEN（2026-07-03）**：ABC 前端处置清单（决策草案）。**discussion-first——清单是给 PM 拍的讨论件，删/合动作一律等 PM 拍后另立实现项**；本 PR 只落"审计事实 + 候选 + 待拍"，不决定任何处置。合并前按 `gh pr list` 核对；其它并行会话 PR 勿误合。
+> 🟢 **#61 OPEN（2026-07-03）**：ABC 前端处置清单（决策草案）。**discussion-first——清单是给 PM 拍的讨论件，删/合动作一律等 PM 拍后另立实现项**。**PM 已拍（同日）**：①配置类保留+报表类收敛 ②报表类落点=新建统一报表平台 → §五 已更新为「PM 决策+5 条另立实现项(I-1 补导航/I-2 报表平台/I-3 personnel-efficiency/I-4 variance 口径/I-5 supplier-costs 合并)」。**本 PR 仍纯文档零代码**，实现另立项。合并前按 `gh pr list` 核对；其它并行会话 PR 勿误合。
 
 ## 5. 会话启动检查清单（30 秒）
 
