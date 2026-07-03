@@ -1040,7 +1040,8 @@ http://your-server-ip:8080
 
 **副作用披露**：调拨语义改 stock-neutral 后，Lane A 入库页"调拨入库"按钮(同一 `/transfers/inbound` 路由)也变"移库不加库存"——符合 PM 单一语义决策，但其"入库"文案名不符实，留给 Lane A 会话改。
 
-**PR/看板**：[#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) OPEN（base=master，独立·单独可合，等 vitest required check 绿）。看板 `pr-governance.md` 同步新增 #52 行。
+**PR/看板**：[#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) ✅ **MERGED**（2026-07-03, merge commit `78d7296d`）。合并前遇 master 推进（#37/#39/#41/#44/#47/#48/#49 等）→ `git merge origin/master` 消冲突（session-log append 两段都留 + `api/inventory.ts`/`DatabaseManager.ts` 自动合双方改动都在）→ 重跑 **vitest 88 files/744 tests 全绿**（我的+收官批其他线一起，golden 零回归）+ 前端 tsc/build 绿 → PR vitest required check 绿(1m10s) → PM 授权后 `gh pr merge --merge` 落 master。看板 `pr-governance.md` 已同步 #52→MERGED（本 sweep）。**Lane C 收官，当前无 open PR。**
+
 ## 本次会话完成的工作（进销存「修流程」并行任务拆分 + 核实分派，2026-07-02）
 
 **线/工作树**：worktree `eloquent-lichterman-af4db5`（已 ff 到 master tip `2bdbbee7`）。

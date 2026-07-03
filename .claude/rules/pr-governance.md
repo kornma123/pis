@@ -147,9 +147,9 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) | `claude/eloquent-fermat-da583d` → `master` | 🟢 **OPEN**(2026-07-03) | **独立**（非栈式·Lane C 修流程）。退库/报废/调拨三页补全（筛选/统计卡/快速筛选/排序白名单/详情弹窗/批量/导出/URL 同步）+ **改正两处既有库存语义**（退库→加库存·调拨→总量不变移库·报废不变）。前后端独占文件；共享 `api/inventory.ts` 仅 3 块、`DatabaseManager.ts` 仅追加 Lane C 段；**未碰 Lane A/对账/成本**。vitest **78 files/597 tests 绿**·golden ¥13,152+¥27,870 零回归·真跑端到端过·codex 异构复核①②③⑤clean+④两处已处置。⚠️副作用：Lane A 入库页「调拨入库」同路由随之变移库(文案待 Lane A 改)。**单独可合**。 | merge-order/1 |
+| — | [#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) | `claude/eloquent-fermat-da583d` → `master` | ✅ **MERGED**(2026-07-03, merge commit `78d7296d`) | **独立**（非栈式·Lane C 修流程）。退库/报废/调拨三页补全（筛选/统计卡/快速筛选/排序白名单/详情弹窗/批量/导出/URL 同步）+ **改正两处既有库存语义**（退库→加库存·调拨→总量不变移库·报废不变）。前后端独占文件；共享 `api/inventory.ts` 仅 3 块、`DatabaseManager.ts` 仅追加 Lane C 段；**未碰 Lane A/对账/成本**。vitest **78 files/597 tests 绿**·golden ¥13,152+¥27,870 零回归·真跑端到端过·codex 异构复核①②③⑤clean+④两处已处置。⚠️副作用：Lane A 入库页「调拨入库」同路由随之变移库(文案待 Lane A 改)。**单独可合**。 | merge-order/1 |
 
-> 🟢 **#52 OPEN（2026-07-03）**：Lane C「修流程」三页补全 + 库存语义改正。等 vitest required check 绿即可合（e2e 非 required）。
+> ✅ **#52 MERGED（2026-07-03, merge commit `78d7296d`）**：Lane C「修流程」三页补全 + 库存语义改正落 master。合并前 `git merge origin/master` 消冲突（session-log append 两段都留；`api/inventory.ts`/`DatabaseManager.ts` 自动合双方改动都在），合后重跑 **vitest 88 files/744 tests 全绿**（我的 + 收官批其他线一起，golden 零回归）；PR vitest required check 绿(1m10s)后 merge commit 落 master。
 
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
@@ -178,9 +178,9 @@
 | [#47](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/47) | B·出库真排序 | ✅ MERGED | `2c1e9026` | 后端白名单排序+表头点击。 |
 | [#48](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/48) | E衍生·预警RBAC口径 | ✅ MERGED | `2350d4eb` | 固化「写操作仅 alerts:R」+回归门禁。 |
 | [#49](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/49) | A·库存/盘点做真 | ✅ MERGED | `e7f89f3f` | 盘点两阶段+Tab 空态。 |
-| [#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) | **C·退库/报废/调拨三页**(第8条) | 🟢 **OPEN** | — | 最大·mockup 先行·**改正库存语义**。刚开、CI 未起。**待 CI + PM 过目**（改库存语义，见记忆 [[coreone-transfers-returns-stock-semantics]]）。 |
+| [#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) | **C·退库/报废/调拨三页**(第8条) | ✅ **MERGED** | `78d7296d` | 最大·mockup 先行·**改正库存语义**（退库→加库存·调拨→总量不变移库）。PM 授权 vitest 绿后合。合并前 merge master 消冲突、合后 vitest 88 files/744 全绿。见记忆 [[coreone-transfers-returns-stock-semantics]]。 |
 
-> ✅ **7 线收官（2026-07-03）**：全部 vitest required 绿后 merge commit 落 master（tip `96a55b5d`）。合并纪律：**2 处代码冲突**（`antibody-cost-v1.1.ts` #37↔#41、`alerts-v1.1.ts` #44↔#48）**手工消解=保留双方意图**、vitest 复核；**治理文档冲突（session-log/本看板）统一取 master 版**避免 append 级联，各线 PR body/分支历史仍留详细记录，本节为 consolidated 账。golden ¥13,152+¥27,870 零回归。**第 8 条 Lane C #52 待合**。
+> ✅ **7 线收官（2026-07-03）**：全部 vitest required 绿后 merge commit 落 master（tip `96a55b5d`）。合并纪律：**2 处代码冲突**（`antibody-cost-v1.1.ts` #37↔#41、`alerts-v1.1.ts` #44↔#48）**手工消解=保留双方意图**、vitest 复核；**治理文档冲突（session-log/本看板）统一取 master 版**避免 append 级联，各线 PR body/分支历史仍留详细记录，本节为 consolidated 账。golden ¥13,152+¥27,870 零回归。**第 8 条 Lane C #52 已合（2026-07-03, merge commit `78d7296d`）→ 8 线全落 master、当前无 open PR**。
 
 ## 5. 会话启动检查清单（30 秒）
 
