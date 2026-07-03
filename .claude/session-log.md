@@ -1195,3 +1195,24 @@ http://your-server-ip:8080
 **分工防重叠**：线 1 改现有 2 文档；线 2 管 `/abc/*`+`/indirect-costs` 单页；线 3 管跨新旧重叠对+旧路由。7 条 PM 待拍口径已在拆分文档列清。
 
 *更新时间：2026-07-03*
+
+## 本次会话完成的工作（新旧功能重叠处置审计 · 线 3 → 废弃候选清单文档，2026-07-03）
+
+**线/工作树**：worktree `intelligent-margulis-bf75e8`（线 3，off `origin/master` tip `59a64dd9`）。task `task_1584b4f6`（「文档剩余+ABC确认」拆分之线 3）。**纯审计/文档、只读核实、不改任何码/路由**。
+
+**产出**：新建 `docs/COREONE-新旧功能重叠处置-废弃候选清单-2026-07-03.md`——逐对处置 5 对新旧重叠 + 旧路由退役候选，每对给三档建议（保留双方明确分工 / 加下钻导航 / 可删旧路由）+ 退役前置引用核实。
+
+**一句话结论**：**本轮无任何可安全退役的路由。**
+- ① 老 `Reconciliation`(消耗对账/物料消耗方差) vs 新 `account-reconcile`(账实核对/账单收入)：**不同域各司其职**（唯一交叠=共用 `lis_cases` 底表但消费列不同=正交复用）→ 保留双方明确分工·不合并（老 11 端点/新 12 端点均活跃）。
+- ② `SlideCostAnalysis`(/abc/slide-cost·消费 abcApi) vs `antibody-cost`(后端 14 端点)：**antibody-cost 一方无 UI**（前端 3 处 antibody 命中均非数据消费）=纯后端成本地基→保留分工·**无 UI 消费≠可删后端**（seed 192 种+被对账域复用+权限运营中）。
+- ③ `CostTrend`(/abc/trend) vs `CostDashboard`(/abc/dashboard)：同源不同视图（跨期趋势 vs 单月快照）互补不重复；**CostTrend 是孤儿路由**（仅 App.tsx:105 定义·无任何 Link/侧栏指向·只能手打 URL）→ 保留双方+加下钻导航（问题=缺入口非冗余）。
+- ④ 后端 `partner-pnl-v1.1.ts`旧路由（唯一较硬删除候选）vs `/abc/profitability?dimension=project`：**前置核实=`/hospital-pnl`(HospitalPnLDashboard.tsx:7/37/38/46/60)仍活跃消费 partner-pnl→不能退役**（院级盈利 vs 项目级盈利·聚合键+数据起点均不同·非重复；且 abc profitability 是多维共享端点 bom 还服务 slide-cost）。
+- ⑤ 幽灵路由核实（**核实先行·纠偏任务卡前提**）：`forecast`/`equipment-efficiency` **真幽灵**（全仓零命中·无码可删；equipment-efficiency 疑为 `/abc/personnel-efficiency` 误记）；`supplier-cost` **不是幽灵**=真实路由 `/abc/supplier-costs`→`SupplierCostAnalysis.tsx`（误当幽灵会误删真实页）；**`App.routes.test.ts` 全仓不存在**（"已加护栏"失真）。
+
+**三重独立复核（机制 5·异构双轴一致）**：① 主会话 inline 逐文件 grep/read；② Workflow 对抗复核面板 `overlap-audit-verify`（run `wf_1b89fa1f-8be`，5 对各 verify+refute agent）**5/5 refuted=false·high**，补出 3 处 inline 未及细节（CostTrend 孤儿路由 / abc profitability 多维共享 / personnel-efficiency 误记来源）；③ codex 异构第二引擎（`-s read-only -c model_reasoning_effort=high`·拆 2 聚焦请求）复核两条老路由前置引用——partner-pnl「不能退役·hospital-pnl 仍消费」、老 /reconciliation「不能退役·hook 仍消费 11 端点」。三轴一致。
+
+**PM 待拍（对齐父拆分 #4/#5）**：#4 partner-pnl 能否退役=**不能**（先迁移 hospital-pnl 消费才谈退役）；#5 reconciliation vs account-reconcile 合并 UI/保留两条 API=**建议保留两条 API+两入口**（不同域·信息架构分两子项而非合并路由）；附待拍=antibody-cost 是否补前端页 / CostTrend·supplier-costs 孤儿页补入口（接线归线 2）。
+
+**治理**：零代码/零 seed·golden ¥13,152+¥27,870 天然零回归；git 只 add 目标文档+session-log+看板（**未 `-A`**）；产出走文档 PR→master。
+
+*更新时间：2026-07-03*
