@@ -35,6 +35,19 @@ codex exec -i <截图.png> "<对着这张图审 UI/口径>"      # 视觉审查
 3. **结果验证**：Codex 输出需要人工验证，不要盲目采纳
 4. **结合使用**：可与 Claude Agent 子代理配合，获得更全面的分析
 
+## 长请求断流规避（实证 2026-07-02）
+
+> **症状**：`codex exec` 跑**长复核**（读多文件 + `xhigh`/`high` 长推理）时，结果在流式传输途中被掐断：
+> `ERROR: Reconnecting... 1/5 … 5/5` → `ERROR: stream disconnected before completion: Transport error: network error: error decoding response body`。进程 exit 0、`task_complete`，但**吐不出任何结论**（只 echo 了读过的文件）。
+
+- **不是 codex 坏 / 不是限流 / 不是登录**：最小探针（`-c model_reasoning_effort=low` 回一个词）秒级干净成功；`codex login status` 正常；会话日志 `rate_limit_reached_type: null`。根因是**长时流式连接保不住**——请求跑得久（高推理 + 大上下文），SSE 流被中途截断。**多个 codex `xhigh` 会话并发时显著加剧**（抢同一连接）。
+- **规避（按成功探针的姿势，实证有效）**：
+  1. **降推理强度**：多会话并发或长复核时用 `-c model_reasoning_effort=medium`（甚至 `low` 做定点核查）**起步，别默认 `xhigh`** → 推理短 → 流短 → 断流前完成。
+  2. **缩小请求**：**单文件聚焦**、明确"别读别的文件/别跑命令/直接给结论"，避免 codex 大范围探索把上下文撑大。
+  3. **错开并发**：等其它 codex `xhigh` 会话跑完再起高推理深审；或把一次大复核拆成几个小请求分轮跑。
+  4. **降级不降质**：长深审断流时，改用「low/medium + 逐文件 + 简短产出」仍能拿到对关键红线的逐条结论（实证：抗体名映射线 A 复核即以 `low` 单文件成功出「无真 bug」结论）。
+- **兜底**：codex 这一异构轴被网络挡住时，**Workflow 多 agent 对抗复核面板**（Claude 侧）可独立完成机制5 的第二视角复核，不必卡在 codex 上。
+
 ## 禁用场景
 
 以下情况**不建议**使用 Codex CLI：

@@ -75,10 +75,18 @@ export interface UnmatchedCase {
   note: string
 }
 
+export interface CaseHint {
+  hintType: '疑似返工' | '多病灶'
+  markerName: string
+  waxNo: string | null
+  occurrences: number
+}
+
 export interface WorkbenchResp {
   hospitalMonth: HospitalMonth
   diffs: ReconcileDiff[]
   unmatched: UnmatchedCase[]
+  caseHints: Record<string, CaseHint[]>
 }
 
 export interface ComputeResp {
