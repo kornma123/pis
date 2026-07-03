@@ -208,6 +208,14 @@
 
 > ✅ **线 3 PR #59 已合并（2026-07-03, merge commit `a0003b9f`）**：纯审计文档·vitest required check 绿(1m11s)后 `--merge --admin`（e2e 非 required·pending 不阻断）落 master。**分工**：`/abc/*`+`/indirect-costs` 单页处置归线 2（task `task_7b53b497`），本线只出跨新旧重叠对 + 旧路由退役候选。**PM 待拍**：#4 partner-pnl 能否退役=不能（先迁移 hospital-pnl 消费）；#5 reconciliation vs account-reconcile=建议保留两条 API+两入口。合并后**当前无 open PR**（注：本条为线 3 合并时快照；线 2 的 #61 现 OPEN，见上节）。
 
+### 活跃 PR 看板 · 文档剩余线 1（数据质量项状态收口）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#62](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/62) | `claude/reverent-nash-4db6de` → `master` | 🟢 **OPEN**(2026-07-03) | **独立**（非栈式，off master `59a64dd9`；已 merge origin/master 消 #61 带来的治理文档 append 冲突=保留双方看板段）。纯文档：按 master 真实实现状态收口「账实复核+逐抗体成本」未决清单的**数据质量项**（A1/A3/A4/A5 + G2 §7 三条），订正一批"已实现却写成待做"的失真——**A1** 缺价+别名 ✅ 已落地（`antibody_aliases` 表+代码规范化双轨·"二选一"PM 决策作废·仅剩 5 种真缺补价）；**A3** 剂型算法侧 ✅ 已落、数据侧 LIS 待补；**A4** 特染 🟡 计数/隔离层已落·成本口径归对账会话；**A5** PII 🔵 无代码·政策待决（脱敏两选项+推荐·待 PM 拍）；**G2 §7** 订正"无代码"→"校准机制已编码、仅缺康湾真实数字"+ form 字段已齐降级。只改 2 份现有文档正文/状态。核实=ultracode 10-agent Workflow(核实+对抗 refute)+首手 grep/Read+codex 异构 high 复核(5 承重断言逐条『忠实』)。**单独可合**·零代码/零 seed·golden ¥13,152+¥27,870 天然零回归。 | merge-order/1·docs |
+
+> 🟢 **#62 OPEN（2026-07-03）**：文档剩余线 1（task `task_b403412d`）。**独立·非栈·单独可合**，等 vitest required check（纯文档不影响，pending 不阻断合并判断）。⚠️ 其它 open PR：#61（`hungry-austin-230c91` ABC 前端处置清单·文档剩余线 2·并行会话，非本线）——合并各自前按 `gh pr list` 核对，勿误合。
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 对一遍本看板，差异即更新看板。
