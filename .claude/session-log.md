@@ -1003,3 +1003,21 @@ http://your-server-ip:8080
 **PR/看板**：[#38](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/38)（base=master，独立·纯文档，wave-1 边界表）。看板 `pr-governance.md` 同步：#32→MERGED、新增 #38 行 + 四线 chip。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（账实核对边界④ 超期免费·认定翻转，feat/reconcile-overdue-free，2026-07-02）
+
+**背景**：账实核对 ①补收实收(#33)/②反向弹窗(#35)/③逐抗体初判(#40) 已全落 master；余边界④「超期免费」。
+
+**用户口径拍板（重要纠正）**：超期免费**不做成系统硬规则**（不按跨月/N天/关账自动判）——它是**财务对账时的判断**，财务有准确信息；「免费」是**暂态**，日后合作医院同意补 → 改认定「漏收，需补收」即生成补收单；默认先让财务核实收不到。
+
+**做法**：核实发现后端 verdict 端点本就支持**重认定**（改判自动增删待补收单、仅拦已关账），此前只有**前端 DiffCard 把认定锁成一次性戳**、无法翻转。故边界④=**前端一处**：差异卡认定后支持「改认定」（预选当前原因、可取消）+ 翻转说明文案。**未建完成时间管道**（按用户「财务已有信息」，不越权硬判超期；完成时间在 0702免组 文件里、现未导 `lis_case_markers`，日后要辅助可再加）。
+
+**验证**：后端 TDD 4 用例锁翻转不变量（超期免费↔漏收 对待补收单增删）；**真跑端到端**（seed 漏收演示院·admin 登录·认定超期免费→无补收单→改认定漏收→**补收单¥300 生成**→复核完成可用·零报错）；tsc 前后端绿；vitest **79 files/594 tests** 绿；golden ¥13,152/¥27,870 零回归（后端逻辑零改动）。演示数据用后即清、dev DB `git checkout` 复原、僵尸进程清。
+
+**改动文件**：`前端代码/src/pages/account-reconcile/components/ReconcileWorkbench.tsx`（DiffCard 改认定 + 文案）、`后端代码/server/tests/account-reconcile-verdict-flip.test.ts`(NEW)。
+
+**PR**：[#45](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/45)（base=master，独立·单独可合，等 vitest required）。看板已记。**至此账实核对四条边界全部落地**。
+
+*更新时间：2026-07-02*
