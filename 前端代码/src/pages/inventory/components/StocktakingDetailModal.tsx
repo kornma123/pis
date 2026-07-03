@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import type { StocktakingRecord } from '../hooks/useStocktakingPage'
+import { getStocktakingStatusDisplay, type StocktakingRecord } from '../hooks/useStocktakingPage'
 
 interface Props {
   open: boolean
@@ -32,7 +32,7 @@ export function StocktakingDetailModal({ open, row, onClose, onAdjust }: Props) 
                 { label: '负责人', value: row.operator || '-' },
                 { label: '创建时间', value: row.createdAt ? new Date(row.createdAt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-') : '-' },
                 { label: '盘点进度', value: '100%' },
-                { label: '状态', value: <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-600">已完成</span> },
+                { label: '状态', value: (() => { const s = getStocktakingStatusDisplay(row.status); return <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>{s.label}</span> })() },
               ].map(item => (
                 <div key={item.label}>
                   <div className="text-xs text-gray-500 mb-1">{item.label}</div>
@@ -83,7 +83,7 @@ export function StocktakingDetailModal({ open, row, onClose, onAdjust }: Props) 
         </div>
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md border border-gray-300">关闭</button>
-          {row.difference !== 0 && (
+          {row.status === 'pending' && row.difference !== 0 && (
             <button onClick={() => onAdjust(row)} className="px-4 py-2 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600">处理差异</button>
           )}
         </div>

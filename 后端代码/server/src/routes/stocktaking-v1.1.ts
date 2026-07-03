@@ -50,30 +50,86 @@ router.post('/', (req, res) => {
     const material = db.prepare('SELECT 1 FROM materials WHERE id = ? AND is_deleted = 0').get(materialId)
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
 
+    // 两阶段·第一阶段「登记」：只记录盘点结果，不入账（不改 inventory、不写 stock_logs）。
+    // 差异=0 → completed（账实相符，无需入账）；差异≠0 → pending（待「处理差异」入账）。
+    // 真正的库存调整改由 POST /:id/adjust 完成，把「清点」与「审批入账」拆成两步（内控分离）。
+    const systemStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock || 0
+    const difference = Number(actualStock) - Number(systemStock)
+    const status = difference === 0 ? 'completed' : 'pending'
+    const id = uuidv4()
+    db.prepare('INSERT INTO stocktaking_records (id, stocktaking_no, material_id, system_stock, actual_stock, difference, operator, status, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, generateNo(), materialId, systemStock, Number(actualStock), difference, operator || 'system', status, remark || null)
+
+    success(res, { id, status }, '盘点记录已创建')
+  } catch (err: any) { error(res, err.message) }
+})
+
+// 差异原因白名单（受控口径，与前端弹窗 select 一致；非白名单一律拒绝，防手写脏原因）
+const ADJUST_REASONS: Record<string, string> = {
+  normal: '正常损耗',
+  record: '账务问题',
+  physical: '实物问题',
+  other: '其他',
+}
+
+/**
+ * 处理盘点差异（两阶段·第二阶段「入账」）——仅对 pending 记录生效。
+ * body: { reason: normal|record|physical|other, remark? }
+ * - 受控原因校验：非白名单 → 400，无任何库存副作用。
+ * - 幂等：非 pending（completed/confirmed/…）→ 400，防重复入账把库存双计。
+ * - 防过期：入账前若账面已不等于创建时快照(system_stock) → 409，不入账（防旧盘点覆盖期间发生的新库存变动）。
+ * - 入账 = inventory.stock 改到实盘 + 写 stock_logs 'adjust' + status='confirmed' + 差异原因/说明落 remark。
+ * - 操作人以登录用户(req.user)为准，忽略 body 伪造；成功写操作由全局 auditWrite 统一留痕 operation_logs。
+ */
+router.post('/:id/adjust', (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason, remark } = req.body
+    const operator = (req as any).user?.username || 'system'
+    // 用 own-property 校验做白名单，避免 constructor/toString 等原型链键绕过 `if (!label)`（原型污染式脏原因）。
+    // 用 Object.prototype.hasOwnProperty.call（而非 Object.hasOwn）以免依赖 ES2022 运行时/lib。
+    const hasReason = Object.prototype.hasOwnProperty.call(ADJUST_REASONS, reason)
+    const label = (typeof reason === 'string' && hasReason) ? ADJUST_REASONS[reason] : undefined
+    if (!label) { error(res, '差异原因无效', 'INVALID_PARAMETER', 400); return }
+
+    const db = getDatabase()
+    const record = db.prepare('SELECT * FROM stocktaking_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    if (!record) { error(res, '记录不存在或已删除', 'NOT_FOUND', 404); return }
+    if (record.status !== 'pending') { error(res, '该盘点差异已处理，不可重复调整', 'ALREADY_ADJUSTED', 400); return }
+
     db.exec('BEGIN IMMEDIATE')
     try {
-      const systemStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock || 0
-      const difference = actualStock - systemStock
-      const id = uuidv4()
-      db.prepare('INSERT INTO stocktaking_records (id, stocktaking_no, material_id, system_stock, actual_stock, difference, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(id, generateNo(), materialId, systemStock, actualStock, difference, operator || 'system', remark || null)
+      const systemStock = record.system_stock
+      const currentStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any)?.stock ?? 0
+      // 防过期：账面已变（期间发生了出入库）→ 拒绝用旧盘点结果覆盖当前库存
+      if (Number(currentStock) !== Number(systemStock)) {
+        db.exec('ROLLBACK')
+        error(res, '当前库存已变化，请重新盘点后再处理', 'STOCK_CHANGED', 409)
+        return
+      }
+      const actualStock = record.actual_stock
+      const difference = record.difference
 
-      if (difference !== 0) {
-        db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(actualStock, materialId)
-        // 负库存兜底
-        const afterStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock
-        if (afterStock < 0) {
-          db.exec('ROLLBACK')
-          error(res, '库存不能为负数', 'STOCK_NEGATIVE', 422)
-          return
-        }
-        const logId = uuidv4()
-        db.prepare('INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(logId, 'adjust', materialId, difference, systemStock, actualStock, id, 'stocktaking', operator || 'system')
+      db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(actualStock, record.material_id)
+      // 负库存兜底
+      const afterStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any)?.stock
+      if (Number(afterStock) < 0) {
+        db.exec('ROLLBACK')
+        error(res, '库存不能为负数', 'STOCK_NEGATIVE', 422)
+        return
       }
 
+      const noteText = String(remark || '').trim()
+      const reasonNote = noteText ? `差异原因：${label}；处理说明：${noteText}` : `差异原因：${label}`
+      const logId = uuidv4()
+      db.prepare('INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(logId, 'adjust', record.material_id, difference, systemStock, actualStock, id, 'stocktaking', operator, reasonNote)
+
+      const mergedRemark = record.remark ? `${record.remark} ｜ ${reasonNote}` : reasonNote
+      db.prepare("UPDATE stocktaking_records SET status = 'confirmed', remark = ? WHERE id = ?").run(mergedRemark, id)
+
       db.exec('COMMIT')
-      success(res, { id }, 'Stocktaking done')
+      success(res, { id, status: 'confirmed' }, '盘点差异已处理，库存已更新')
     } catch (e: any) {
       db.exec('ROLLBACK')
       throw e
@@ -162,7 +218,9 @@ router.delete('/:id', (req, res) => {
     try {
       db.prepare('UPDATE stocktaking_records SET is_deleted = 1 WHERE id = ?').run(id)
 
-      if (record.difference !== 0) {
+      // 仅回滚**已入账**的差异：pending 从未动过库存（两阶段第一步只登记）→ 只软删不回滚；
+      // confirmed（单条已处理）/ completed（批量或旧数据，创建即入账）+ 差异≠0 → 回滚到账面。
+      if (record.difference !== 0 && record.status !== 'pending') {
         const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any
         const beforeStock = inv?.stock || 0
         const afterStock = record.system_stock

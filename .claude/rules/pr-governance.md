@@ -141,9 +141,9 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#47](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/47) | `claude/hungry-mayer-e8386b` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。线B「修流程」：出库列表**后端真排序**（`OUTBOUND_SORT_COLUMNS` 白名单 金额/数量/时间·`hasOwnProperty` 挡原型链键·非白名单/非法方向 400·跨全部分页非仅当前页·`r.id` 稳定 tiebreaker）+ 表头点击排序 + `功能补全清单.md §1.2` 出库章节回填（含 2 项诚实 P2）。仅动出库页/出库路由/该文档（不碰对账/LIS/成本侧/`DatabaseManager`）。**单独可合**。 | merge-order/1 |
+| — | [#49](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/49) | `claude/goofy-wescoff-33d1e9` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。Lane A 修流程·库存/盘点做真：**盘点单条改真两阶段**（create 只登记不入账→新增 `POST /:id/adjust` 才入账·受控原因白名单+幂等+防过期409+operator取token→DELETE 仅对已入账回滚）+ `DepletionTab`/`DepletedTab` 空态。batch 故意保持一阶段（受控落地）。仅动 stocktaking 域 9 文件·**不碰对账/LIS/成本/收入侧**。新增 TDD `stocktaking-two-phase.test.ts` 11 用例；后端 vitest **591 全绿**（golden ¥13,152+¥27,870 零回归、batch p1-04 零改动仍绿）；tsc+vite build 绿。独立复核：Workflow 五镜头修 2 项 + codex 异构确认无双计/漏账。**单独可合**。 | merge-order/1 |
 
-> 🟢 **#47 OPEN（2026-07-02）**：出库真排序 + 文档回填。TDD 15 例（金额/数量/时间升降序·大小写归一·非白名单列/注入式列/非法方向/原型链键拒绝·跨分页真排序+tiebreaker 不重不漏）；本地 tsc+vite build 绿、后端 vitest 78 files/595 tests 全绿、golden ¥13,152+¥27,870 零回归；codex 独立复核后端 CLEAN/前端 SHIP。**CI 全绿**：vitest(required) 1m6s ✅ + e2e 9m41s ✅。待人工合并。
+> 🟢 **#49 OPEN（2026-07-02）**：Lane A 盘点两阶段+空态。等 vitest required check。**已披露边界**：批量盘点仍一阶段；无 inventory 行物料 adjust=UPDATE no-op（master 既有行为，未新增风险）。
 
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
