@@ -1265,6 +1265,6 @@ http://your-server-ip:8080
 
 **改动**：仅 2 份现有文档正文/状态 + 各加变更记录段。git 只显式 add 这 2 文档 + 本 session-log + `pr-governance.md` 看板（**禁 `-A`**）。**验证**：零代码→黄金 ¥13,152+¥27,870 天然零回归；无测试需跑。
 
-**产出**：commit `5cea35cb`（2 文档）→ **PR [#62](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/62)**（独立·非栈·单独可合·doc-only）→ 治理 commit（看板+session-log 记 #62）→ merge origin/master 消 #61 带来的治理文档 append 冲突（保留双方段）。⚠️ 其它 open PR：#61（ABC 前端处置清单·文档剩余线 2·并行会话）。
+**产出**：commit `5cea35cb`（2 文档）→ **PR [#62](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/62)**（独立·非栈·单独可合·doc-only）→ 治理 commit（看板+session-log 记 #62）→ merge origin/master 消 #61 带来的治理文档 append 冲突（保留双方段）→ **✅ MERGED（2026-07-03, merge commit `aed65fd9`）**：用户拍板合并，vitest required 绿(1m19s)后 `--merge --admin` 落 master。看板 #62 行 OPEN→MERGED。⚠️ 其它 open PR：#61（ABC 前端处置清单·文档剩余线 2·并行会话，仍 OPEN）。
 
 *更新时间：2026-07-03*
