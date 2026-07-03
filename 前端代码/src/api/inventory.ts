@@ -67,9 +67,31 @@ export const outboundApi = {
     request.delete(`/outbound/${id}`),
 }
 
+// Lane C 列表/统计参数（退库·报废共用；调拨见下）
+export type LaneCListParams = PageParams & {
+  keyword?: string
+  reason?: string
+  materialId?: string
+  startDate?: string
+  endDate?: string
+  sortField?: 'createdAt' | 'quantity'
+  sortOrder?: 'asc' | 'desc'
+}
+
+// 三页统一统计口径：本月笔数 / 本月件数 / 本月涉及物料 / 今日笔数
+export interface LaneCStats {
+  total: number
+  monthCount: number
+  monthQty: number
+  materialKinds: number
+  todayCount: number
+}
+
 export const scrapApi = {
-  getList: (params?: PageParams) =>
+  getList: (params?: LaneCListParams) =>
     request.get<PaginationData<any>>('/scraps', { params }),
+  getStats: () =>
+    request.get<LaneCStats>('/scraps/stats'),
   create: (data: { materialId: string; quantity: number; reason: string; operator?: string; remark?: string }) =>
     request.post<any>('/scraps', data),
   delete: (id: string) =>
@@ -77,8 +99,10 @@ export const scrapApi = {
 }
 
 export const returnApi = {
-  getList: (params?: PageParams) =>
+  getList: (params?: LaneCListParams) =>
     request.get<PaginationData<any>>('/returns', { params }),
+  getStats: () =>
+    request.get<LaneCStats>('/returns/stats'),
   create: (data: { materialId: string; quantity: number; reason: string; operator?: string; remark?: string }) =>
     request.post<any>('/returns', data),
   delete: (id: string) =>
@@ -98,9 +122,21 @@ export const supplierReturnApi = {
     request.delete(`/supplier-returns/${id}`),
 }
 
+export type TransferListParams = PageParams & {
+  keyword?: string
+  locationId?: string
+  materialId?: string
+  startDate?: string
+  endDate?: string
+  sortField?: 'createdAt' | 'quantity'
+  sortOrder?: 'asc' | 'desc'
+}
+
 export const transferApi = {
-  getList: (params?: PageParams) =>
+  getList: (params?: TransferListParams) =>
     request.get<PaginationData<any>>('/transfers', { params }),
+  getStats: () =>
+    request.get<LaneCStats>('/transfers/stats'),
   createInbound: (data: { materialId: string; batchNo?: string; quantity: number; fromLocationId?: string; fromLocationName?: string; toLocationId: string; operator?: string; remark?: string }) =>
     request.post<any>('/transfers/inbound', data),
   delete: (id: string) =>
