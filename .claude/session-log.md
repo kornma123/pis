@@ -1152,3 +1152,25 @@ http://your-server-ip:8080
 **第 8 条 Lane C（#52 `claude/eloquent-fermat-da583d`）**：合并期间**刚开 PR**（退库/报废/调拨三页 + **改正库存语义** [[coreone-transfers-returns-stock-semantics]]）。CI 未起、UNKNOWN。**未合**——留 PM 过目（改库存语义 + mockup 先行 + 最大线）。另有 #50（import UX，他会话）OPEN 待 PM。
 
 *更新时间：2026-07-03*
+
+---
+
+## 本次会话完成的工作（对账逐抗体初判复用线 A 抗体名 resolver · DRY 收敛 → PR #57，2026-07-03）
+
+**触发**：用户 task「对账『逐抗体细粒度初判』复用线 A 抗体名 resolver（DRY 收敛·健壮性）」，明确定位**低优先级、改动要小、别重构对账引擎**，评估收益太小可如实回报不做。worktree `modest-clarke-6f190f`。
+
+**verify-first**：`git fetch` → HEAD 已在最新 master tip `8a0afa8f`；`git show 96a55b5d`(线 A #37)/`c22e7b28`(#40) 核实描述与 master 一致。fresh worktree 无 node_modules → symlink 主仓 server/node_modules 才跑 vitest/tsc（**node_modules 非 gitignore 覆盖→全程禁 `git add -A`**，只显式 add 目标文件）。
+
+**改动（只改 `reconcile-account.ts` 两纯函数 + 新增 1 测试文件·零碰线 A/收入侧/差异引擎）**：
+1. `isRealAntibodyMarker` 名字兜底 → 委托线 A `classifyMarker(name)==='抗体'`（advice_type 白名单仍为**主信号**权威优先，不变）；无码时 `免组HE`/`分子`/特染(PAS/Masson/网状…) 也能剔除（#40 旧兜底 `/白片|重切|深切/`＋精确 `^he$` 会漏判成抗体）。
+2. `classifyCaseHints` 分组键 → `normalizeAntibodyName`（展示仍用首见原始名），`Ki67`/`Ki-67` 同蜡块归一判返工。
+
+**独立复核逮到真回归 → 修（关键）**：codex 异构(inline·medium) 逐条核红线，指出无码 false-exclusion **条件风险**（若真抗体名含 分子/白片/染色 或恰为 GMS/含 MASSON）→ 我用**真台账 203 项 grep 核为零命中**（不触发）；**Workflow 3-lens 对抗面板**两条 lens 独立收敛逮到**真 bug**：`normalizeAntibodyName` 去克隆号 → `TCR(a/b)`(TCRαβ) 与 `TCR(G/D)`(TCRγδ) 都→`TCR` 撞键（**用真 seed 实测=192 项里唯一歧义键**），会误并成同抗体 → 伪造 `多病灶`/`疑似返工`（后者=对双计费的错误指控）。**修法=复用线 A 自己的碰撞防护** `buildSeedLedgerIndex().ambiguousNorm`：歧义键不做规范化合并、回退原始名分组（=改动前对这些抗体的行为），非歧义键(Ki67/Ki-67)照常合并。TDD 先红后绿锁死。codex 复审确认防护正确、无残留真 bug（空名已被 `isRealAntibodyMarker` 上游过滤）。
+
+**验证**：新增 13 用例（`reconcile-antibody-resolver-dry.test.ts`）；后端 vitest **88 files/740 tests 全绿**·tsc 绿；黄金 **¥13,152+¥27,870 零回归**。
+
+**产出**：commit `f8f0107b` → **PR [#57](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/57)**（独立·off master `8a0afa8f`·单独可合·等 vitest required check）。看板已加行。**未自动合**——低优先 DRY，留用户/PM 拍板（vitest 绿后可代合）。
+
+**经验**：①task 描述已点名线 A 含 `ambiguousNorm` 碰撞防护——我第一版只复用了 `normalizeAntibodyName` 漏了防护，**对抗面板逮回**（教训=复用一个模块的规范化时，连它的消歧/兜底一起复用，别只搬前半）。②codex「别读别的文件」指令过严→它啥都没读直接拒答，改为**inline 贴码**才出结论（codex-cli-usage 已有「缩小请求」经验，本次是反向：太缩到没上下文）。③异构轴(codex)给方向、对抗轴(Workflow panel)给具体反例，两轴互补=机制5 落地。
+
+*更新时间：2026-07-03*
