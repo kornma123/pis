@@ -1177,6 +1177,33 @@ http://your-server-ip:8080
 
 ---
 
+## 本次会话完成的工作（ABC 确认并行线 2 · ABC 前端审计 + 废弃候选清单 → PR，2026-07-03）
+
+**触发**：用户 task「ABC 确认并行线 2：ABC 前端审计 + 废弃候选清单」。**纯审计/文档，绝不删或改任何代码/路由**。worktree `hungry-austin-230c91`。PM 立场=「ABC 本就不该有前端页面，是方法论不是功能」，但 task 已预警**这话一半成立**（配置类需 UI 有漏洞），须如实呈现别机械照搬"全废"。
+
+**范围**：`App.tsx` 全部 **18 `/abc/*` + `/indirect-costs`**（19 页）。逐页给 现状/数据来源 · 重叠对象 · 处置建议 · 合并去向；分「配置类=保留」「报表类=废弃候选」；结论=无一可直接删。
+
+**方法（ultracode）**：Workflow **42-agent** 编排——phase0 测绘 4 个重叠对象真实表面（hospital-pnl/account-reconcile/逐抗体成本/cost-analysis+reconciliation）→ phase1 pipeline 逐页审计（sonnet 读码）→ phase2 对抗处置判断（opus，「删/合会不会丢独有能力」）。再自查 grep + codex(high·单文件) 异构抽查高风险项。
+
+**结论：19 页 = 保留 10 · 合并候选 3 · 待定 6 · 直接删 0。**
+- **配置类 10 页保留**（作业中心/成本动因/成本池/收费映射/间接成本/预算/质量成本/季度调整/成本异常台账/ABC看板工作台）=ABC 参数的唯一录入入口，删了方法论没处落参数。**修正 task 原名单**：原点名配置类 5 个，实测 10 个（budgets/quality-costs/quarterly-adjustment/alerts 都是真写操作 config；而 model-validation 是纯只读模拟器→应移出配置类）。
+- **报表类 9 页**（与 hospital-pnl/逐抗体成本/cost-analysis 重叠）：3 合并候选（supplier-costs→cost-analysis供应商Tab、trend→cost-analysis月度趋势、model-validation→slide-cost）+ 6 待定（slide-cost/profitability/fee-comparison/variance/audit/personnel-efficiency）。
+- **可发现性是眼下最尖锐问题**：18 个 `/abc/*` 里 **14 个孤儿路由**（App.tsx 注册但侧栏无入口、不在任何角色 `NAV_PATH_MODULE`/`ROLE_MENU_MAP`），含多个有独有录入能力的配置页 → 处置=补导航而非删。
+
+**顺带查出 2 缺陷（不修·纯审计范围·建议另立项）**：① `personnel-efficiency` 调**幽灵接口** `/reports/personnel-efficiency`（后端 grep `personnel` 零命中→必 404、从未显示真数据）；② `variance` 的"标准成本"**造假**（后端 `totalStandard += materialActual` 复制材料实际、labor/equipment 标准硬编码 0），真"理论vs实际"其实在 `消耗对账` 页。
+
+**独立复核**：4 个最高风险声明自查 grep 全部证实——model-validation 纯只读(无 mutation)✓ / supplier-costs 同端点已被 cost-analysis 消费+退款netting三列后端从不返回✓ / personnel-efficiency 幽灵接口✓ / trend 唯一消费者✓。codex(high·单文件·别读别的)第三轴抽查 model-validation 重分类。
+
+**产出**：新增 `docs/COREONE-ABC前端页面处置清单-审计与废弃候选-2026-07-03.md`（纯文档·零代码·golden 零回归）→ **PR [#61](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/61) OPEN**（commit d314bc16 doc+log、14df27c6 board）。
+
+**discussion-first · PM 拍板（同会话续）**：清单摊给 PM 后拍定两项方向——**①配置类保留+报表类收敛**（「全废」不采纳，配置类是参数唯一录入口）**②报表类落点=新建统一报表平台**（收编成 Tab/维度，不逐个塞 hospital-pnl）。原待拍③（各报表页去向）被②吸收。据此把 §五 从「待拍」改为「PM 决策 + 由此产生的实现项」，登记 5 条另立实现线：**I-1 孤儿配置页补导航**（P0·fee-mappings/cost-drivers/cost-pools/budgets/quality-costs/quarterly-adjustment 接回侧栏+权限）·**I-2 统一报表平台设计+收编**（P1·mockup 先行·8 报表页）·**I-3 personnel-efficiency**（补幽灵后端 or 清理三件套）·**I-4 variance 口径修正**（假标准成本先修再收编）·**I-5 supplier-costs 并入 cost-analysis 供应商 Tab**。**实现均另立项、本清单仍不动码**；golden 零回归贯穿。
+
+**codex 第三轴**：抽查 model-validation 重分类，长推理挂起未回（已 kill 我这条·exit144，其它会话 4 条 codex 留活不动）→ 4 个最高风险声明改由 grep 自查 + Workflow 对抗面板覆盖（codex-cli-usage 明示的兜底路径）。
+
+**与线 3(#59) 交叉印证**：本审计（线 2）与已合并的线 3 重叠处置审计独立得出一致结论——CostTrend/供应商成本等孤儿路由=缺入口非冗余、personnel-efficiency 幽灵、antibody-cost 无 UI≠可删。两线互不冲突（线 2 管 `/abc/*`+`/indirect-costs` 单页处置、线 3 管跨新旧重叠对+旧路由退役）。
+
+*更新时间：2026-07-03*
+
 ## 本次会话完成的工作（文档剩余任务 + ABC 确认 —— 3 线拆分分派 + codex 用法变更，2026-07-03）
 
 **线/工作树**：worktree `eloquent-lichterman-af4db5`（编排/分派线，已 ff 到 master tip `19dd51a5`）。
