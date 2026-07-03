@@ -90,6 +90,12 @@
 > ✅ **#28 已合并（2026-07-02, merge commit `4f7177a7`）**：LIS 病例导入权威实现 + phase2 配置口径迁移。
 > 🔴 **#21 CLOSED（2026-07-02, 14:43）**：被 #28+#27 取代，关闭时附逐提交核验说明（见 PR 评论），无内容丢失。
 
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| 1 | [#41](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/41) | `claude/fervent-kare-16e84e` → `master` | 🟢 **OPEN**(2026-07-03, 独立·单独可合) | **独立**（非栈式，无上下游）。线 F 逐抗体成本弱锚校准：B3 承重墙 36/105 分摊只读敏感性 band（drift-guard 锁锚=SPLIT_DIAG_FEE）+ B4 工时/设备 G2 估**诚实透出**（派生 `G2估\|部分校准\|已校准`）+ `POST /cost-params/calibrate` 真实数据摊算写回（事务+审计+防伪校准）+ 修 PUT 丢 confidence bug。仅成本侧 4 文件，零收入侧/前端。**23 新测试；77 files/597 tests 绿；golden ¥13,152+¥27,870 零回归**；codex 异构×2 + 4 镜头对抗验证共 6 处真实问题全修。**与 sibling #37（抗体名映射 A1/A3）同域正交**——若都碰 `antibody-cost.ts`，后合方 `git merge origin/master` 消解。真值（康湾工资/折旧、本地协商诊断值）待 PM。 | merge-order/1 |
+
+> 🟢 **并行 sibling（他会话，本线不碰）**：#39（D2 统一检测项目目录·只读对照层）、#37（LIS 抗体名→台账映射 A1/A3）均 OPEN·base=master·独立。三者互不依赖；合并顺序各自独立，撞车（如 #37/#41 同碰 antibody-cost）由后合方 merge master 消解。
+
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
 > ✅ **合并完成（2026-06-30，账单已修，"按序合栈+拆 e2e 债"）**：#8→#10→#11 依次 merge commit 落 master。**每步 e2e 复校**=三次跑均 **6 failed/251 passed、失败集完全一致**（supplier-returns 5 + auth-logout 1），全栈**零新增 e2e 失败**。这 6 个=master 既有 supplier-returns/auth bug（与本栈无关，已拆 task `c93e8188` 单独修；非 RBAC 403，权限本就授予）。黄金 ¥13,152 守住、后端联合 482 绿。

@@ -895,3 +895,25 @@ http://your-server-ip:8080
 **新发现遗留漂移（跟进项）**：#27 新增 `account_reconcile` → 后端 `MODULES`=**31**，前端 `PERMISSION_MODULES`=**30**，又差一个（性质同 #24→#25 那次）。运行时权限已 seed 不阻断，仅角色编辑 UI 无法配 `account_reconcile`。待补前端一处 UI 常量（未在本 PR 做——本 PR 纯文档）。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（线 F 逐抗体成本弱锚校准 B3+B4，2026-07-03）
+
+**线/工作树**：worktree `fervent-kare-16e84e`，分支 `claude/fervent-kare-16e84e`（off origin/master tip `0b662efe`）。ultracode 多代理编排。
+
+**任务**：设计基线未决 **B3**（承重墙 36/105 分摊口径）+ **B4**（工时/设备 G2 估弱锚校准）。真值待 PM，只交机制 + 诚实透出。
+
+**做了什么**：
+- **B3 承重墙口径**：`antibody-cost.ts` 加只读 `manufactureShare`/`manufactureShareBand`，忠实镜像收入侧 `statement-revenue.ts` 的 `f=(rate×wl)/(rate×wl+105)`（**不改收入侧**）；`DIAGNOSIS_ANCHOR_DEFAULT===SPLIT_DIAG_FEE(105)` drift-guard 锁死；±30% 占位区间（PM 拍板）。文档 `docs/COREONE-B3承重墙口径-36-105分摊敏感性-2026-07-02.md`：政策分摊≠价值证明 + 敏感性表。
+- **B4 弱锚校准**：`laborEquipmentSource` 由写死 `'G2估'` 改为随参数元数据派生 `G2估|部分校准|已校准`（缺省仍 G2估·向后兼容）；`/cost-preview`+`/cost-params` 透出 source/confidence/remark。新增 `POST /cost-params/calibrate`（喂真实月人力/折旧/房租/产片量→摊算写回+翻牌已校准+事务+`abc_audit_logs` before/after 留痕）；修 `PUT /cost-params/:key` 丢弃 confidence/remark 的 bug；**诚实不变式**：手工 PUT 不得冒用「实测/校准」来源或写成「读起来已校准」——校准态只能经 calibrate 一条来路，手工改值即诚实降级 `手工核定`。seed：`secondary_per_slide` 从「粗估」改标「台账真价」（非弱锚）。文档 `docs/COREONE-B4弱锚校准-需康湾数据清单-2026-07-02.md`。
+
+**验证**：新增 `tests/antibody-cost-calibration.test.ts`（**23 用例**）；全套 **77 files / 597 tests 绿**；tsc exit 0；golden **¥13,152 + ¥27,870 零回归**。范围仅成本侧 4 文件，零收入侧/reconcile/前端/dev-DB 改动。
+
+**独立复核（异构 + 多代理）**：codex `exec -s read-only` 2 轮 + 4 镜头对抗验证 workflow（逐条独立验证）。共逮 **6 处真实问题全修**：①HIGH `node:sqlite` 接受 Infinity 写库→伪校准（拦 Infinity/NaN/负值+结果有限性兜底）②HIGH calibrate 无事务→半截口径（BEGIN IMMEDIATE 包裹）③MED band 非有限入参→NaN（回退默认）④MED 分数片量 0.0001→4亿/片（月产片量 ≥1 底线）⑤LOW 审计 targetId=null（复合 id）⑥P1 诚实透出可绕过：手工 PUT confidence=已校准 冒充精确（写门禁绑读判定 isParamCalibrated + 源标签守卫 + 降级留痕）。
+
+**PR/看板**：[#41](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/41) OPEN（base=master，独立·单独可合，等 vitest required check）。commit `6cc4da62`。看板 `pr-governance.md` 已加 #41 行 + 记并行 sibling #37（抗体名映射 A1/A3）/#39（D2 目录）——三者独立正交，撞车由后合方 merge master 消解。
+
+**真值边界（交 PM）**：康湾真实工资/折旧/房租（B4 校准输入，见数据清单）、本地协商诊断值（B3 band 收窄），补齐后各调一次接口即完成。
+
+*更新时间：2026-07-03*
