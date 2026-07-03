@@ -72,9 +72,9 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#33](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/33) | `feat/reconcile-supplement-revenue` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off #30 收官后的 master `0b662efe`）。补齐 Phase 2 已披露边界：**补收→计入本月实收**（已补收按实验室工序行扣率折实收、计入 collected_month；反向/放弃清零）。只读收入侧算扣率·**不写 case_revenue**（保护 golden）。独立对抗复核修 3 项（HIGH 扣率改工序行·纠误诊 / HIGH 无双计不变量文档化 / LOW 放弃清折实收）。vitest 77 files/580 tests 绿；golden 零回归；真跑端到端过。**单独可合**。 | merge-order/1 |
+| — | [#33](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/33) | `feat/reconcile-supplement-revenue` → `master` | ✅ **MERGED**(2026-07-02, merge commit `6e03daa6`) | **独立**（非栈式，off #30 收官后的 master `0b662efe`）。补齐 Phase 2 已披露边界：**补收→计入本月实收**（已补收按实验室工序行扣率折实收、计入 collected_month；反向/放弃清零）。只读收入侧算扣率·**不写 case_revenue**（保护 golden）。独立对抗复核修 3 项（HIGH 扣率改工序行·纠误诊 / HIGH 无双计不变量文档化 / LOW 放弃清折实收）。vitest required 绿(1m0s)·77 files/580 tests；golden 零回归；真跑端到端过。 | merge-order/1 |
 
-> 🟡 **#33 OPEN（2026-07-02）**：补收实收闭环，off #30 收官 master，等 vitest required check。合并后账实核对补收侧「计入本月实收」落地。
+> ✅ **#33 已合并（2026-07-02, merge commit `6e03daa6`）**：补收实收闭环落地——账实核对补收侧「已补收→计入本月实收（实验室工序行扣率）」贯通。**当前无 open PR。**
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
