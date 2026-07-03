@@ -1200,4 +1200,46 @@ http://your-server-ip:8080
 
 **codex 第三轴**：抽查 model-validation 重分类，长推理挂起未回（已 kill 我这条·exit144，其它会话 4 条 codex 留活不动）→ 4 个最高风险声明改由 grep 自查 + Workflow 对抗面板覆盖（codex-cli-usage 明示的兜底路径）。
 
+**与线 3(#59) 交叉印证**：本审计（线 2）与已合并的线 3 重叠处置审计独立得出一致结论——CostTrend/供应商成本等孤儿路由=缺入口非冗余、personnel-efficiency 幽灵、antibody-cost 无 UI≠可删。两线互不冲突（线 2 管 `/abc/*`+`/indirect-costs` 单页处置、线 3 管跨新旧重叠对+旧路由退役）。
+
+*更新时间：2026-07-03*
+
+## 本次会话完成的工作（文档剩余任务 + ABC 确认 —— 3 线拆分分派 + codex 用法变更，2026-07-03）
+
+**线/工作树**：worktree `eloquent-lichterman-af4db5`（编排/分派线，已 ff 到 master tip `19dd51a5`）。
+
+**触发**：用户"继续分配 task；3 点变化=① codex 新用法 ② 保持 ultracode ③ 范围=文档剩余任务+ABC 确认（重叠老功能可废、ABC 本不该有前端·是方法论）；先确认要求+master 现状后开 3 个 task"。
+
+**codex 用法变更（用户拍板，已入 `.claude/rules/codex-cli-usage.md`）**：独立复核默认 `model_reasoning_effort=high`（**不用 xhigh**——直接 xhigh 深审频繁重连/断流）+ **一次大提问拆多个请求**（`codex exec` + `resume --last` 续问）。旧 §2/表格 xhigh 已降级标注。
+
+**核实先行（ultracode Workflow `wk2zv61r7`，6 agent）**：逐份文档核待办 + 逐个 ABC 前端页核替代关系 + 对抗核实废弃建议。**对抗轴逮到首轮审计 2 硬伤**：① `hospital-pnl`/`account-reconcile` 在 master 真实存在（非幻影）；② `/indirect-costs` 无替代品（`IndirectCostCenterList` 即该路由本身）。**关键结论**：PM「ABC 全废」**半成立**——配置类页（活动中心/成本动因/成本池/费用映射/模型校验）确需 UI，报表类页（dashboard/slide-cost/profitability/trend/…）才是重叠废弃候选。
+
+**产出**：新文档 `docs/COREONE-文档剩余+ABC确认-任务拆分-2026-07-03.md` + 3 条互不碰文件的 ultracode chip（全为审计/文档、**零代码、不删任何 merged 码**、审计类 discussion-first）：
+- **线 1** 数据质量收口（A1/A3/A4/A5+G2 待补）`task_b403412d`——改 2 份现有文档正文/状态，可直接开。
+- **线 2** ABC 前端审计+废弃清单 `task_7b53b497`——新建 doc，先给 PM 拍（含 2 硬伤纠正 + 配置/报表分类）。
+- **线 3** 新旧功能重叠处置审计 `task_1584b4f6`——新建 doc，先给 PM 拍（partner-pnl 旧路由退役候选需先核 /hospital-pnl 引用）。
+
+**分工防重叠**：线 1 改现有 2 文档；线 2 管 `/abc/*`+`/indirect-costs` 单页；线 3 管跨新旧重叠对+旧路由。7 条 PM 待拍口径已在拆分文档列清。
+
+*更新时间：2026-07-03*
+
+## 本次会话完成的工作（新旧功能重叠处置审计 · 线 3 → 废弃候选清单文档，2026-07-03）
+
+**线/工作树**：worktree `intelligent-margulis-bf75e8`（线 3，off `origin/master` tip `59a64dd9`）。task `task_1584b4f6`（「文档剩余+ABC确认」拆分之线 3）。**纯审计/文档、只读核实、不改任何码/路由**。
+
+**产出**：新建 `docs/COREONE-新旧功能重叠处置-废弃候选清单-2026-07-03.md`——逐对处置 5 对新旧重叠 + 旧路由退役候选，每对给三档建议（保留双方明确分工 / 加下钻导航 / 可删旧路由）+ 退役前置引用核实。
+
+**一句话结论**：**本轮无任何可安全退役的路由。**
+- ① 老 `Reconciliation`(消耗对账/物料消耗方差) vs 新 `account-reconcile`(账实核对/账单收入)：**不同域各司其职**（唯一交叠=共用 `lis_cases` 底表但消费列不同=正交复用）→ 保留双方明确分工·不合并（老 11 端点/新 12 端点均活跃）。
+- ② `SlideCostAnalysis`(/abc/slide-cost·消费 abcApi) vs `antibody-cost`(后端 14 端点)：**antibody-cost 一方无 UI**（前端 3 处 antibody 命中均非数据消费）=纯后端成本地基→保留分工·**无 UI 消费≠可删后端**（seed 192 种+被对账域复用+权限运营中）。
+- ③ `CostTrend`(/abc/trend) vs `CostDashboard`(/abc/dashboard)：同源不同视图（跨期趋势 vs 单月快照）互补不重复；**CostTrend 是孤儿路由**（仅 App.tsx:105 定义·无任何 Link/侧栏指向·只能手打 URL）→ 保留双方+加下钻导航（问题=缺入口非冗余）。
+- ④ 后端 `partner-pnl-v1.1.ts`旧路由（唯一较硬删除候选）vs `/abc/profitability?dimension=project`：**前置核实=`/hospital-pnl`(HospitalPnLDashboard.tsx:7/37/38/46/60)仍活跃消费 partner-pnl→不能退役**（院级盈利 vs 项目级盈利·聚合键+数据起点均不同·非重复；且 abc profitability 是多维共享端点 bom 还服务 slide-cost）。
+- ⑤ 幽灵路由核实（**核实先行·纠偏任务卡前提**）：`forecast`/`equipment-efficiency` **真幽灵**（全仓零命中·无码可删；equipment-efficiency 疑为 `/abc/personnel-efficiency` 误记）；`supplier-cost` **不是幽灵**=真实路由 `/abc/supplier-costs`→`SupplierCostAnalysis.tsx`（误当幽灵会误删真实页）；**`App.routes.test.ts` 全仓不存在**（"已加护栏"失真）。
+
+**三重独立复核（机制 5·异构双轴一致）**：① 主会话 inline 逐文件 grep/read；② Workflow 对抗复核面板 `overlap-audit-verify`（run `wf_1b89fa1f-8be`，5 对各 verify+refute agent）**5/5 refuted=false·high**，补出 3 处 inline 未及细节（CostTrend 孤儿路由 / abc profitability 多维共享 / personnel-efficiency 误记来源）；③ codex 异构第二引擎（`-s read-only -c model_reasoning_effort=high`·拆 2 聚焦请求）复核两条老路由前置引用——partner-pnl「不能退役·hospital-pnl 仍消费」、老 /reconciliation「不能退役·hook 仍消费 11 端点」。三轴一致。
+
+**PM 待拍（对齐父拆分 #4/#5）**：#4 partner-pnl 能否退役=**不能**（先迁移 hospital-pnl 消费才谈退役）；#5 reconciliation vs account-reconcile 合并 UI/保留两条 API=**建议保留两条 API+两入口**（不同域·信息架构分两子项而非合并路由）；附待拍=antibody-cost 是否补前端页 / CostTrend·supplier-costs 孤儿页补入口（接线归线 2）。
+
+**治理**：零代码/零 seed·golden ¥13,152+¥27,870 天然零回归；git 只 add 目标文档+session-log+看板（**未 `-A`**）；产出 → **PR [#59](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/59)** → **✅ MERGED（2026-07-03, merge commit `a0003b9f`）**：vitest required check 绿(1m11s)后 `--merge --admin`（e2e 非 required·pending 不阻断）落 master。看板线 3 行 OPEN→MERGED。合并后当前无 open PR。
+
 *更新时间：2026-07-03*

@@ -200,6 +200,14 @@
 
 > 🟢 **#61 OPEN（2026-07-03）**：ABC 前端处置清单（决策草案）。**discussion-first——清单是给 PM 拍的讨论件，删/合动作一律等 PM 拍后另立实现项**。**PM 已拍（同日）**：①配置类保留+报表类收敛 ②报表类落点=新建统一报表平台 → §五 已更新为「PM 决策+5 条另立实现项(I-1 补导航/I-2 报表平台/I-3 personnel-efficiency/I-4 variance 口径/I-5 supplier-costs 合并)」。**本 PR 仍纯文档零代码**，实现另立项。合并前按 `gh pr list` 核对；其它并行会话 PR 勿误合。
 
+### 活跃 PR 看板 · 新旧功能重叠处置审计（线 3·纯文档）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#59](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/59) | `claude/intelligent-margulis-bf75e8` → `master` | ✅ **MERGED**(2026-07-03, merge commit `a0003b9f`) | **独立**（非栈式，off master `59a64dd9`）。「文档剩余+ABC确认」拆分之**线 3**（task `task_1584b4f6`）。**纯审计/文档·只读核实·零码/零 seed·golden 天然零回归**。新建 `docs/COREONE-新旧功能重叠处置-废弃候选清单-2026-07-03.md`：逐对处置 5 对新旧重叠 + 旧路由退役候选，每对三档建议 + 退役前置引用核实。**一句话结论=本轮无任何可安全退役的路由**：④ partner-pnl（唯一较硬删除候选）经三重核实**不可退役**（`/hospital-pnl` 仍消费）；① 老对账 vs 账实核对=不同域各司其职（保留两条 API）；② antibody-cost 一方无 UI=纯后端地基不可删；③ CostTrend 是孤儿路由缺入口（保留+加下钻·接线归线 2）；⑤ **核实先行纠偏**任务卡失真前提=forecast/equipment-efficiency 真幽灵（无码可删）、supplier-cost 是被误报的真实页、`App.routes.test.ts` 全仓不存在。三重复核=inline + Workflow 对抗面板(`wf_1b89fa1f-8be`·5/5 refuted=false) + codex 异构(high·拆 2 请求)。**单独可合**·纯文档。 | merge-order/1·docs |
+
+> ✅ **线 3 PR #59 已合并（2026-07-03, merge commit `a0003b9f`）**：纯审计文档·vitest required check 绿(1m11s)后 `--merge --admin`（e2e 非 required·pending 不阻断）落 master。**分工**：`/abc/*`+`/indirect-costs` 单页处置归线 2（task `task_7b53b497`），本线只出跨新旧重叠对 + 旧路由退役候选。**PM 待拍**：#4 partner-pnl 能否退役=不能（先迁移 hospital-pnl 消费）；#5 reconciliation vs account-reconcile=建议保留两条 API+两入口。合并后**当前无 open PR**（注：本条为线 3 合并时快照；线 2 的 #61 现 OPEN，见上节）。
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 对一遍本看板，差异即更新看板。
