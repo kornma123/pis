@@ -979,4 +979,6 @@ http://your-server-ip:8080
 
 **冲突边界**：`api/inventory.ts`（A↔C 各改各导出块，A 基准所有者）；`DatabaseManager.ts`（本波仅 C 动 schema）；`App.tsx`/`AppSidebar.tsx` 本波不动（详情用页内 modal）。
 
+**PR/看板**：[#38](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/38)（base=master，独立·纯文档，wave-1 边界表）。看板 `pr-governance.md` 同步：#32→MERGED、新增 #38 行 + 四线 chip。
+
 *更新时间：2026-07-02*
