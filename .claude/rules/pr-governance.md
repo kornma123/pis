@@ -68,7 +68,13 @@
 |---|---|---|---|---|---|
 | — | [#30](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/30) | `feat/reconcile-phase2` → `master` | ✅ **MERGED**(2026-07-02, merge commit `393979a3`) | **独立**（非栈式，off 已合 #27 的 master；merge origin/master 消 #28/#29 带来的前端+doc 冲突：AppSidebar/permissions 保留双方 nav 项[账实核对+LIS 病例]、看板保留双方条目）。账实核对 **Phase 2 三页前端**（复核总览/工作台/补收追踪 + 关账状态机 UI）。走 **mockup 先行红线**：mockup 经真人拍板后落 React。含 `PERMISSION_MODULES` 30→**31** 补 `account_reconcile`（消 #27 遗留漂移，前后端 MODULES 31=31 对齐）；后端零改动。vitest required 绿(59s)；tsc+vite build 绿；真跑端到端过。golden 零回归。 | merge-order/1 |
 
-> ✅ **#30 已合并（2026-07-02, merge commit `393979a3`）**：**账实复核+逐抗体成本三阶段全落 master**（#24 成本地基 → #27 核对引擎 → #30 三页前端）。前后端 `MODULES` 均 31、`PERMISSION_MODULES` 漂移清零。**当前无 open PR。**
+> ✅ **#30 已合并（2026-07-02, merge commit `393979a3`）**：**账实复核+逐抗体成本三阶段全落 master**（#24 成本地基 → #27 核对引擎 → #30 三页前端）。前后端 `MODULES` 均 31、`PERMISSION_MODULES` 漂移清零。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#33](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/33) | `feat/reconcile-supplement-revenue` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off #30 收官后的 master `0b662efe`）。补齐 Phase 2 已披露边界：**补收→计入本月实收**（已补收按实验室工序行扣率折实收、计入 collected_month；反向/放弃清零）。只读收入侧算扣率·**不写 case_revenue**（保护 golden）。独立对抗复核修 3 项（HIGH 扣率改工序行·纠误诊 / HIGH 无双计不变量文档化 / LOW 放弃清折实收）。vitest 77 files/580 tests 绿；golden 零回归；真跑端到端过。**单独可合**。 | merge-order/1 |
+
+> 🟡 **#33 OPEN（2026-07-02）**：补收实收闭环，off #30 收官 master，等 vitest required check。合并后账实核对补收侧「计入本月实收」落地。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
