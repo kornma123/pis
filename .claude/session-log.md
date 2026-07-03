@@ -957,3 +957,29 @@ http://your-server-ip:8080
 **PR/看板**：[#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) OPEN（base=master，独立·纯文档·单独可合，把拆分边界表落 master 供并行会话共读）。看板 `pr-governance.md` 同步新增 #32 行 + 三线 chip 状态。
 
 *更新时间：2026-07-02*
+
+---
+
+# Session Log — 线B（修流程）：出库列表真排序 + 功能补全清单回填
+
+**线/工作树**：worktree `hungry-mayer-e8386b`，分支 `claude/hungry-mayer-e8386b`（off master tip `2bdbbee7`，独立线）。默认 ultracode。
+
+**触发**：并行修流程线B（小活）。另有会话在做对账/LIS/成本侧——本线**物理隔离**、只碰出库页/出库路由/`功能补全清单.md`。
+
+**范围（已核实"还开着"）**：
+1. **排序做真**：`outbound-v1.1.ts` GET `/` 原硬编码 `ORDER BY r.created_at DESC` 不可排序 → 加白名单 `sortField`/`sortOrder`（金额/数量/时间）。
+2. **文档回填**：`V1.1设计稿/v1.1/功能补全清单.md` §1.2 出库章节「待补充」→ 核实后回填（改文档非代码）。
+
+**产出**：
+- 后端 `outbound-v1.1.ts`：`OUTBOUND_SORT_COLUMNS` 白名单（`quantity` 用相关子查询求和明细，与列表展示口径一致）+ `hasOwnProperty` 守卫（挡 `__proto__`/`constructor`/`toString` 原型链键绕过）+ `asc/desc` 归一 + 非白名单/非法方向 **400** + `r.id` 稳定 tiebreaker + 缺省向后兼容。
+- 前端 `OutboundTable.tsx`（表头点击排序 数量/总金额/时间 + 新增总金额列 + colSpan 11→12）/ `Outbound.tsx`（sort 状态 + handleSort + deps 重取 + URL 双向恢复）/ `api/inventory.ts`（类型）。
+- 文档 `功能补全清单.md` §1.2 回填（已核实功能真实、无空壳）+ 诚实标 2 项残留 P2（取消原因未落库 / `pending`·`cancelled` 状态形同虚设）；`UX-P1-03` 标已落地。
+- 测试 `tests/outbound-sort.test.ts`（TDD 红→绿，**15 例**：升降序/大小写归一/非白名单列·注入列·非法方向·原型链键拒绝/跨分页真排序+tiebreaker 不重不漏；协作者补强了原型链与分页边界用例）。
+
+**验证**：tsc + vite build 绿；后端 vitest **78 files / 595 tests 全绿**；golden **¥13,152 + ¥27,870 零回归**。独立复核：codex（多条消息·inline 低强度绕开网络抖动）后端判 **CLEAN**、前端+整体判 **SHIP**。
+
+**PR/看板**：[#47](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/47) OPEN（base=master，独立·单独可合）。看板 `pr-governance.md` 同步新增 #47 行。CI vitest(required)+e2e 运行中。
+
+**git 纪律**：只 `git add` 6 个目标文件（未 `-A`）；`后端代码/server/node_modules` 为本会话符号链接（非 gitignore 覆盖，留未暂存不提交）。
+
+*更新时间：2026-07-02*

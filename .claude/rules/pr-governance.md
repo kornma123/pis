@@ -109,6 +109,12 @@
 
 > 🟢 **#32 OPEN（2026-07-02）**：纯文档任务拆分，供多会话并行分派的边界表进 master。三条线已分派为 spawn_task chip（A 运行中·ultracode；D `task_a65bcaab`·ultracode；F `task_b514b2ae`·ultracode）。
 
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#47](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/47) | `claude/hungry-mayer-e8386b` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。线B「修流程」：出库列表**后端真排序**（`OUTBOUND_SORT_COLUMNS` 白名单 金额/数量/时间·`hasOwnProperty` 挡原型链键·非白名单/非法方向 400·跨全部分页非仅当前页·`r.id` 稳定 tiebreaker）+ 表头点击排序 + `功能补全清单.md §1.2` 出库章节回填（含 2 项诚实 P2）。仅动出库页/出库路由/该文档（不碰对账/LIS/成本侧/`DatabaseManager`）。**单独可合**。 | merge-order/1 |
+
+> 🟢 **#47 OPEN（2026-07-02）**：出库真排序 + 文档回填。TDD 15 例（金额/数量/时间升降序·大小写归一·非白名单列/注入式列/非法方向/原型链键拒绝·跨分页真排序+tiebreaker 不重不漏）；本地 tsc+vite build 绿、后端 vitest 78 files/595 tests 全绿、golden ¥13,152+¥27,870 零回归；codex 独立复核后端 CLEAN/前端 SHIP。CI vitest(required)+e2e 运行中（e2e 非必需）。
+
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
 > ✅ **合并完成（2026-06-30，账单已修，"按序合栈+拆 e2e 债"）**：#8→#10→#11 依次 merge commit 落 master。**每步 e2e 复校**=三次跑均 **6 failed/251 passed、失败集完全一致**（supplier-returns 5 + auth-logout 1），全栈**零新增 e2e 失败**。这 6 个=master 既有 supplier-returns/auth bug（与本栈无关，已拆 task `c93e8188` 单独修；非 RBAC 403，权限本就授予）。黄金 ¥13,152 守住、后端联合 482 绿。
