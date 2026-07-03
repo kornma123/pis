@@ -196,9 +196,9 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#61](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/61) | `claude/hungry-austin-230c91` → `master` | 🟢 **OPEN**(2026-07-03) | **独立**（非栈式，无上下游）。**纯审计/文档·零代码·零路由·golden 零回归**。新增 `docs/COREONE-ABC前端页面处置清单-审计与废弃候选-2026-07-03.md`：19 页（18 `/abc/*` + `/indirect-costs`）逐页 现状/数据来源·重叠对象·处置建议·合并去向。结论=**保留 10 / 合并候选 3 / 待定 6 / 直接删 0**。配置类 10 页=参数唯一录入口须保留（修正「ABC 前端全废」论点：原名单 5 个实测 10 个）；报表类 9 页与 hospital-pnl/逐抗体成本/cost-analysis 重叠为候选；14/18 孤儿路由=可发现性缺口非该删。另披露 2 缺陷（personnel-efficiency 幽灵接口·variance 假标准成本，不修·另立项）。方法=Workflow 42-agent 对抗审计 + grep 自查 + codex 异构抽查。**单独可合**·**但先摊 PM 拍**（待拍 3 项：①全废能否成立 ②是否建统一报表平台 ③各报表页去向）。 | merge-order/1 |
+| — | [#61](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/61) | `claude/hungry-austin-230c91` → `master` | ✅ **MERGED**(2026-07-03, merge commit `877b3932`) | **独立**（非栈式，无上下游）。**纯审计/文档·零代码·零路由·golden 零回归**。新增 `docs/COREONE-ABC前端页面处置清单-审计与废弃候选-2026-07-03.md`：19 页（18 `/abc/*` + `/indirect-costs`）逐页 现状/数据来源·重叠对象·处置建议·合并去向。结论=**保留 10 / 合并候选 3 / 待定 6 / 直接删 0**。配置类 10 页=参数唯一录入口须保留（修正「ABC 前端全废」论点：原名单 5 个实测 10 个）；报表类 9 页与 hospital-pnl/逐抗体成本/cost-analysis 重叠为候选；14/18 孤儿路由=可发现性缺口非该删。另披露 2 缺陷（personnel-efficiency 幽灵接口·variance 假标准成本，不修·另立项）。方法=Workflow 42-agent 对抗审计 + grep 自查 + codex 异构抽查。**单独可合**·**但先摊 PM 拍**（待拍 3 项：①全废能否成立 ②是否建统一报表平台 ③各报表页去向）。 | merge-order/1 |
 
-> 🟢 **#61 OPEN（2026-07-03）**：ABC 前端处置清单（决策草案）。**discussion-first——清单是给 PM 拍的讨论件，删/合动作一律等 PM 拍后另立实现项**。**PM 已拍（同日）**：①配置类保留+报表类收敛 ②报表类落点=新建统一报表平台 → §五 已更新为「PM 决策+5 条另立实现项(I-1 补导航/I-2 报表平台/I-3 personnel-efficiency/I-4 variance 口径/I-5 supplier-costs 合并)」。**本 PR 仍纯文档零代码**，实现另立项。合并前按 `gh pr list` 核对；其它并行会话 PR 勿误合。
+> ✅ **#61 已合并（2026-07-03, merge commit `877b3932`）**：ABC 前端处置清单落 master。vitest required check 绿(1m12s)后 `--merge --admin`（e2e 非 required·pending 不阻断）；合并前 `git merge origin/master` 消 session-log/看板级联冲突=**保留双方**（#59 线 3 段 + 本线段并存）。**PM 已拍**：①配置类保留+报表类收敛 ②报表类落点=新建统一报表平台 → 文档 §五=「PM 决策+5 条另立实现项(I-1 补导航/I-2 报表平台/I-3 personnel-efficiency/I-4 variance 口径/I-5 supplier-costs 合并)」，实现另立项（I-1 已 spawn chip `task_fd5cfb70`）。合并后**当前无 open PR**（本线）。
 
 ### 活跃 PR 看板 · 新旧功能重叠处置审计（线 3·纯文档）
 
