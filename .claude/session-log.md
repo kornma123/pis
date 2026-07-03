@@ -1177,6 +1177,33 @@ http://your-server-ip:8080
 
 ---
 
+## 本次会话完成的工作（ABC 确认并行线 2 · ABC 前端审计 + 废弃候选清单 → PR，2026-07-03）
+
+**触发**：用户 task「ABC 确认并行线 2：ABC 前端审计 + 废弃候选清单」。**纯审计/文档，绝不删或改任何代码/路由**。worktree `hungry-austin-230c91`。PM 立场=「ABC 本就不该有前端页面，是方法论不是功能」，但 task 已预警**这话一半成立**（配置类需 UI 有漏洞），须如实呈现别机械照搬"全废"。
+
+**范围**：`App.tsx` 全部 **18 `/abc/*` + `/indirect-costs`**（19 页）。逐页给 现状/数据来源 · 重叠对象 · 处置建议 · 合并去向；分「配置类=保留」「报表类=废弃候选」；结论=无一可直接删。
+
+**方法（ultracode）**：Workflow **42-agent** 编排——phase0 测绘 4 个重叠对象真实表面（hospital-pnl/account-reconcile/逐抗体成本/cost-analysis+reconciliation）→ phase1 pipeline 逐页审计（sonnet 读码）→ phase2 对抗处置判断（opus，「删/合会不会丢独有能力」）。再自查 grep + codex(high·单文件) 异构抽查高风险项。
+
+**结论：19 页 = 保留 10 · 合并候选 3 · 待定 6 · 直接删 0。**
+- **配置类 10 页保留**（作业中心/成本动因/成本池/收费映射/间接成本/预算/质量成本/季度调整/成本异常台账/ABC看板工作台）=ABC 参数的唯一录入入口，删了方法论没处落参数。**修正 task 原名单**：原点名配置类 5 个，实测 10 个（budgets/quality-costs/quarterly-adjustment/alerts 都是真写操作 config；而 model-validation 是纯只读模拟器→应移出配置类）。
+- **报表类 9 页**（与 hospital-pnl/逐抗体成本/cost-analysis 重叠）：3 合并候选（supplier-costs→cost-analysis供应商Tab、trend→cost-analysis月度趋势、model-validation→slide-cost）+ 6 待定（slide-cost/profitability/fee-comparison/variance/audit/personnel-efficiency）。
+- **可发现性是眼下最尖锐问题**：18 个 `/abc/*` 里 **14 个孤儿路由**（App.tsx 注册但侧栏无入口、不在任何角色 `NAV_PATH_MODULE`/`ROLE_MENU_MAP`），含多个有独有录入能力的配置页 → 处置=补导航而非删。
+
+**顺带查出 2 缺陷（不修·纯审计范围·建议另立项）**：① `personnel-efficiency` 调**幽灵接口** `/reports/personnel-efficiency`（后端 grep `personnel` 零命中→必 404、从未显示真数据）；② `variance` 的"标准成本"**造假**（后端 `totalStandard += materialActual` 复制材料实际、labor/equipment 标准硬编码 0），真"理论vs实际"其实在 `消耗对账` 页。
+
+**独立复核**：4 个最高风险声明自查 grep 全部证实——model-validation 纯只读(无 mutation)✓ / supplier-costs 同端点已被 cost-analysis 消费+退款netting三列后端从不返回✓ / personnel-efficiency 幽灵接口✓ / trend 唯一消费者✓。codex(high·单文件·别读别的)第三轴抽查 model-validation 重分类。
+
+**产出**：新增 `docs/COREONE-ABC前端页面处置清单-审计与废弃候选-2026-07-03.md`（纯文档·零代码·golden 零回归）→ **PR [#61](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/61) OPEN**（commit d314bc16 doc+log、14df27c6 board）。
+
+**discussion-first · PM 拍板（同会话续）**：清单摊给 PM 后拍定两项方向——**①配置类保留+报表类收敛**（「全废」不采纳，配置类是参数唯一录入口）**②报表类落点=新建统一报表平台**（收编成 Tab/维度，不逐个塞 hospital-pnl）。原待拍③（各报表页去向）被②吸收。据此把 §五 从「待拍」改为「PM 决策 + 由此产生的实现项」，登记 5 条另立实现线：**I-1 孤儿配置页补导航**（P0·fee-mappings/cost-drivers/cost-pools/budgets/quality-costs/quarterly-adjustment 接回侧栏+权限）·**I-2 统一报表平台设计+收编**（P1·mockup 先行·8 报表页）·**I-3 personnel-efficiency**（补幽灵后端 or 清理三件套）·**I-4 variance 口径修正**（假标准成本先修再收编）·**I-5 supplier-costs 并入 cost-analysis 供应商 Tab**。**实现均另立项、本清单仍不动码**；golden 零回归贯穿。
+
+**codex 第三轴**：抽查 model-validation 重分类，长推理挂起未回（已 kill 我这条·exit144，其它会话 4 条 codex 留活不动）→ 4 个最高风险声明改由 grep 自查 + Workflow 对抗面板覆盖（codex-cli-usage 明示的兜底路径）。
+
+**与线 3(#59) 交叉印证**：本审计（线 2）与已合并的线 3 重叠处置审计独立得出一致结论——CostTrend/供应商成本等孤儿路由=缺入口非冗余、personnel-efficiency 幽灵、antibody-cost 无 UI≠可删。两线互不冲突（线 2 管 `/abc/*`+`/indirect-costs` 单页处置、线 3 管跨新旧重叠对+旧路由退役）。
+
+*更新时间：2026-07-03*
+
 ## 本次会话完成的工作（文档剩余任务 + ABC 确认 —— 3 线拆分分派 + codex 用法变更，2026-07-03）
 
 **线/工作树**：worktree `eloquent-lichterman-af4db5`（编排/分派线，已 ff 到 master tip `19dd51a5`）。
@@ -1195,6 +1222,27 @@ http://your-server-ip:8080
 **分工防重叠**：线 1 改现有 2 文档；线 2 管 `/abc/*`+`/indirect-costs` 单页；线 3 管跨新旧重叠对+旧路由。7 条 PM 待拍口径已在拆分文档列清。
 
 *更新时间：2026-07-03*
+
+---
+
+## 本次会话完成的工作（新旧功能重叠处置审计 · 线 3 → 废弃候选清单文档，2026-07-03）
+
+**线/工作树**：worktree `intelligent-margulis-bf75e8`（线 3，off `origin/master` tip `59a64dd9`）。task `task_1584b4f6`（「文档剩余+ABC确认」拆分之线 3）。**纯审计/文档、只读核实、不改任何码/路由**。
+
+**产出**：新建 `docs/COREONE-新旧功能重叠处置-废弃候选清单-2026-07-03.md`——逐对处置 5 对新旧重叠 + 旧路由退役候选，每对给三档建议（保留双方明确分工 / 加下钻导航 / 可删旧路由）+ 退役前置引用核实。
+
+**一句话结论**：**本轮无任何可安全退役的路由。**
+- ① 老 `Reconciliation`(消耗对账/物料消耗方差) vs 新 `account-reconcile`(账实核对/账单收入)：**不同域各司其职**（唯一交叠=共用 `lis_cases` 底表但消费列不同=正交复用）→ 保留双方明确分工·不合并（老 11 端点/新 12 端点均活跃）。
+- ② `SlideCostAnalysis`(/abc/slide-cost·消费 abcApi) vs `antibody-cost`(后端 14 端点)：**antibody-cost 一方无 UI**（前端 3 处 antibody 命中均非数据消费）=纯后端成本地基→保留分工·**无 UI 消费≠可删后端**（seed 192 种+被对账域复用+权限运营中）。
+- ③ `CostTrend`(/abc/trend) vs `CostDashboard`(/abc/dashboard)：同源不同视图（跨期趋势 vs 单月快照）互补不重复；**CostTrend 是孤儿路由**（仅 App.tsx:105 定义·无任何 Link/侧栏指向·只能手打 URL）→ 保留双方+加下钻导航（问题=缺入口非冗余）。
+- ④ 后端 `partner-pnl-v1.1.ts`旧路由（唯一较硬删除候选）vs `/abc/profitability?dimension=project`：**前置核实=`/hospital-pnl`(HospitalPnLDashboard.tsx:7/37/38/46/60)仍活跃消费 partner-pnl→不能退役**（院级盈利 vs 项目级盈利·聚合键+数据起点均不同·非重复；且 abc profitability 是多维共享端点 bom 还服务 slide-cost）。
+- ⑤ 幽灵路由核实（**核实先行·纠偏任务卡前提**）：`forecast`/`equipment-efficiency` **真幽灵**（全仓零命中·无码可删；equipment-efficiency 疑为 `/abc/personnel-efficiency` 误记）；`supplier-cost` **不是幽灵**=真实路由 `/abc/supplier-costs`→`SupplierCostAnalysis.tsx`（误当幽灵会误删真实页）；**`App.routes.test.ts` 全仓不存在**（"已加护栏"失真）。
+
+**三重独立复核（机制 5·异构双轴一致）**：① 主会话 inline 逐文件 grep/read；② Workflow 对抗复核面板 `overlap-audit-verify`（run `wf_1b89fa1f-8be`，5 对各 verify+refute agent）**5/5 refuted=false·high**，补出 3 处 inline 未及细节（CostTrend 孤儿路由 / abc profitability 多维共享 / personnel-efficiency 误记来源）；③ codex 异构第二引擎（`-s read-only -c model_reasoning_effort=high`·拆 2 聚焦请求）复核两条老路由前置引用——partner-pnl「不能退役·hospital-pnl 仍消费」、老 /reconciliation「不能退役·hook 仍消费 11 端点」。三轴一致。
+
+**PM 待拍（对齐父拆分 #4/#5）**：#4 partner-pnl 能否退役=**不能**（先迁移 hospital-pnl 消费才谈退役）；#5 reconciliation vs account-reconcile 合并 UI/保留两条 API=**建议保留两条 API+两入口**（不同域·信息架构分两子项而非合并路由）；附待拍=antibody-cost 是否补前端页 / CostTrend·supplier-costs 孤儿页补入口（接线归线 2）。
+
+**治理**：零代码/零 seed·golden ¥13,152+¥27,870 天然零回归；git 只 add 目标文档+session-log+看板（**未 `-A`**）；产出 → **PR [#59](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/59)** → **✅ MERGED（2026-07-03, merge commit `a0003b9f`）**：vitest required check 绿(1m11s)后 `--merge --admin`（e2e 非 required·pending 不阻断）落 master。看板线 3 行 OPEN→MERGED。合并后当前无 open PR。
 
 ---
 
@@ -1217,6 +1265,6 @@ http://your-server-ip:8080
 
 **改动**：仅 2 份现有文档正文/状态 + 各加变更记录段。git 只显式 add 这 2 文档 + 本 session-log + `pr-governance.md` 看板（**禁 `-A`**）。**验证**：零代码→黄金 ¥13,152+¥27,870 天然零回归；无测试需跑。
 
-**产出**：commit `5cea35cb`（2 文档）→ **PR [#62](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/62)**（独立·非栈·单独可合·doc-only）→ 治理 commit（看板+session-log 记 #62）。⚠️ 其它 open PR：#61（ABC 前端处置清单·文档剩余线 2·并行会话）。
+**产出**：commit `5cea35cb`（2 文档）→ **PR [#62](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/62)**（独立·非栈·单独可合·doc-only）→ 治理 commit（看板+session-log 记 #62）→ merge origin/master 消 #61 带来的治理文档 append 冲突（保留双方段）。⚠️ 其它 open PR：#61（ABC 前端处置清单·文档剩余线 2·并行会话）。
 
 *更新时间：2026-07-03*
