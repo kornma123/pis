@@ -14,18 +14,25 @@ import OutboundDeleteModal from './components/OutboundDeleteModal'
 import OutboundStats from './components/OutboundStats'
 import OutboundQuickFilters from './components/OutboundQuickFilters'
 import OutboundFilterBar from './components/OutboundFilterBar'
-import OutboundTable from './components/OutboundTable'
+import OutboundTable, { type OutboundSortField, type OutboundSortOrder } from './components/OutboundTable'
 
 type QuickFilter = 'all' | 'today' | 'week' | 'month'
 type StatusFilter = '' | 'completed' | 'pending' | 'cancelled'
 
 export default function Outbound() {
-  const { getNumber, setMultiple } = useUrlParams()
+  const { get, getNumber, setMultiple } = useUrlParams()
 
   const urlPage = Math.max(1, getNumber('page', 1))
   const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 10))
     ? getNumber('pageSize', 10)
     : 10
+
+  // 排序参数与 page/pageSize 一样从 URL 双向恢复（刷新/收藏/后退保真），非白名单值回落缺省
+  const SORT_FIELDS: OutboundSortField[] = ['createdAt', 'totalCost', 'quantity']
+  const urlSortField = SORT_FIELDS.includes(get('sortField') as OutboundSortField)
+    ? (get('sortField') as OutboundSortField)
+    : 'createdAt'
+  const urlSortOrder: OutboundSortOrder = get('sortOrder') === 'asc' ? 'asc' : 'desc'
 
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
   const [searchText, setSearchText] = useState('')
@@ -34,6 +41,10 @@ export default function Outbound() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+
+  // 排序：缺省按出库时间倒序（与后端缺省一致）。表头点击切换字段/方向，走后端真排序（跨全部分页）。
+  const [sortField, setSortField] = useState<OutboundSortField>(urlSortField)
+  const [sortOrder, setSortOrder] = useState<OutboundSortOrder>(urlSortOrder)
 
   // 快速筛选映射为日期范围
   const quickFilterDates = useMemo(() => {
@@ -70,13 +81,26 @@ export default function Outbound() {
         type: typeFilter || undefined,
         startDate: quickFilterDates.startDate || undefined,
         endDate: quickFilterDates.endDate || undefined,
+        sortField,
+        sortOrder,
       })
       return { list: res.list || [], pagination: res.pagination }
     },
     initialPage: urlPage,
     initialPageSize: urlPageSize,
-    deps: [statusFilter, searchText, materialFilter, typeFilter, quickFilterDates.startDate, quickFilterDates.endDate],
+    deps: [statusFilter, searchText, materialFilter, typeFilter, quickFilterDates.startDate, quickFilterDates.endDate, sortField, sortOrder],
   })
+
+  // 表头点击：同字段切换升/降序；换字段则重置为升序；回到第 1 页看排序后的头部
+  const handleSort = (field: OutboundSortField) => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortField(field)
+      setSortOrder('asc')
+    }
+    setPage(1)
+  }
 
   useEffect(() => {
     setMultiple({
@@ -89,8 +113,10 @@ export default function Outbound() {
       startDate: startDate || null,
       endDate: endDate || null,
       quickFilter: quickFilter !== 'all' ? quickFilter : null,
+      sortField: sortField !== 'createdAt' ? sortField : null,
+      sortOrder: sortField !== 'createdAt' || sortOrder !== 'desc' ? sortOrder : null,
     })
-  }, [page, pageSize, statusFilter, searchText, materialFilter, typeFilter, startDate, endDate, quickFilter, setMultiple])
+  }, [page, pageSize, statusFilter, searchText, materialFilter, typeFilter, startDate, endDate, quickFilter, sortField, sortOrder, setMultiple])
 
   const [materials, setMaterials] = useState<Material[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -406,6 +432,9 @@ export default function Outbound() {
           total={total}
           page={page}
           pageSize={pageSize}
+          sortField={sortField}
+          sortOrder={sortOrder}
+          onSort={handleSort}
           onToggleSelectAll={toggleSelectAll}
           onToggleSelectRow={toggleSelectRow}
           onClearSelection={clearSelection}
