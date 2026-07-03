@@ -1038,7 +1038,7 @@ http://your-server-ip:8080
 
 **独占/共享纪律**：只改 `{transfers,returns,scraps}` 前后端独占文件 + 共享 `api/inventory.ts` 仅动 scrap/return/transfer 块 + `DatabaseManager.ts` 仅追加 Lane C 段。未碰 Lane A(inventory/inbound/outbound/depletion)/对账/成本。git 只显式 add 目标文件（禁 -A：worktree 已 npm ci，node_modules 未 ignore）。
 
-**副作用披露**：调拨语义改 stock-neutral 后，Lane A 入库页"调拨入库"按钮(同一 `/transfers/inbound` 路由)也变"移库不加库存"——符合 PM 单一语义决策，但其"入库"文案名不符实，留给 Lane A 会话改。
+**副作用披露**：调拨语义改 stock-neutral 后，Lane A 入库页"调拨入库"按钮(同一 `/transfers/inbound` 路由)也变"移库不加库存"——符合 PM 单一语义决策，但其"入库"文案名不符实。→ **已修（PR #55, merge commit `43644011`, 2026-07-03）**：入库页 5 处「调拨入库」→「库位调拨」，纯 UI 文案零逻辑。
 
 **PR/看板**：[#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) ✅ **MERGED**（2026-07-03, merge commit `78d7296d`）。合并前遇 master 推进（#37/#39/#41/#44/#47/#48/#49 等）→ `git merge origin/master` 消冲突（session-log append 两段都留 + `api/inventory.ts`/`DatabaseManager.ts` 自动合双方改动都在）→ 重跑 **vitest 88 files/744 tests 全绿**（我的+收官批其他线一起，golden 零回归）+ 前端 tsc/build 绿 → PR vitest required check 绿(1m10s) → PM 授权后 `gh pr merge --merge` 落 master。看板 `pr-governance.md` 已同步 #52→MERGED（本 sweep）。**Lane C 收官，当前无 open PR。**
 

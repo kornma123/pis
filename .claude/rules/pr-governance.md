@@ -181,6 +181,8 @@
 | [#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) | **C·退库/报废/调拨三页**(第8条) | ✅ **MERGED** | `78d7296d` | 最大·mockup 先行·**改正库存语义**（退库→加库存·调拨→总量不变移库）。PM 授权 vitest 绿后合。合并前 merge master 消冲突、合后 vitest 88 files/744 全绿。见记忆 [[coreone-transfers-returns-stock-semantics]]。 |
 
 > ✅ **7 线收官（2026-07-03）**：全部 vitest required 绿后 merge commit 落 master（tip `96a55b5d`）。合并纪律：**2 处代码冲突**（`antibody-cost-v1.1.ts` #37↔#41、`alerts-v1.1.ts` #44↔#48）**手工消解=保留双方意图**、vitest 复核；**治理文档冲突（session-log/本看板）统一取 master 版**避免 append 级联，各线 PR body/分支历史仍留详细记录，本节为 consolidated 账。golden ¥13,152+¥27,870 零回归。**第 8 条 Lane C #52 已合（2026-07-03, merge commit `78d7296d`）→ 8 线全落 master、当前无 open PR**。
+>
+> ✅ **#55 已合（2026-07-03, merge commit `43644011`）**：#52 文案尾巴——入库页 `type='transfer'` 标签「调拨入库」→「库位调拨」（对齐 #52 调拨=总量不变移库）。纯 UI 文案 5 处、零逻辑；frontend tsc+build 绿、vitest required 绿(1m13s)。**当前无 open PR。**
 
 ## 5. 会话启动检查清单（30 秒）
 
