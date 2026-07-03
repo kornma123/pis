@@ -88,16 +88,26 @@ router.get('/', (req, res) => {
 //    ③ 更新回归门禁 tests/bv-alerts-write-rbac.test.ts（把 R 级角色的期望由 200 翻为 403）。
 // 回归门禁：tests/bv-alerts-write-rbac.test.ts（R 级角色 pathologist 可 handle/generate → 锁死此口径）。
 // ─────────────────────────────────────────────────────────────────────────────
+// 处理/忽略预警的唯一写入端点。前端「处理」「忽略」「批量处理」均走这里，
+// 用 action 区分终态：'processed'（已处理）| 'ignored'（已忽略）。缺省视为 'processed'。
+const HANDLE_ACTIONS = ['processed', 'ignored'] as const
+
 router.post('/:id/handle', (req, res) => {
   try {
     const { id } = req.params
     const { action, remark } = req.body
+    const status = action == null || action === '' ? 'processed' : action
+    if (!HANDLE_ACTIONS.includes(status)) {
+      error(res, `无效的处理动作：${action}`, 'INVALID_PARAMETER', 400); return
+    }
     const db = getDatabase()
     const existing = db.prepare('SELECT * FROM alerts WHERE id = ?').get(id) as any
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     if (existing.status !== 'pending') { error(res, '预警已处理，不可重复操作', 'ALREADY_HANDLED', 400); return }
-    db.prepare('UPDATE alerts SET status = ?, remark = ?, handled_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(action || 'processed', remark || '', id)
+    // 记名留痕：谁处理的（handled_by = 当前登录用户名），配合全站 auditWrite 中间件双轨。
+    const operator = (req as any).user?.username || 'system'
+    db.prepare('UPDATE alerts SET status = ?, remark = ?, handled_by = ?, handled_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(status, remark || '', operator, id)
     success(res, null, 'Handled')
   } catch (err: any) { error(res, err.message) }
 })
