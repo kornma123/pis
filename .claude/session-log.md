@@ -1169,7 +1169,7 @@ http://your-server-ip:8080
 
 **验证**：新增 13 用例（`reconcile-antibody-resolver-dry.test.ts`）；后端 vitest **88 files/740 tests 全绿**·tsc 绿；黄金 **¥13,152+¥27,870 零回归**。
 
-**产出**：commit `f8f0107b` → **PR [#57](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/57)**（独立·off master `8a0afa8f`·单独可合·等 vitest required check）。看板已加行。**未自动合**——低优先 DRY，留用户/PM 拍板（vitest 绿后可代合）。
+**产出**：commit `f8f0107b` → **PR [#57](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/57)** → **✅ MERGED（2026-07-03, merge commit `e873e09b`）**：用户拍板「按要求合并到 master」→ vitest required check 绿(SUCCESS)后 `gh pr merge 57 --merge --admin`（e2e 非 required·IN_PROGRESS 不阻断）。合后 detached checkout merge commit **复跑 golden+statement+hints+DRY 42 用例全绿**、merge commit 双亲干净（`ea9daf7a`=master 8a0afa8f 树 + `ba1b7793`，无并发漂移）。**合并后当前无 open PR**。看板 #57 行已 OPEN→MERGED。
 
 **经验**：①task 描述已点名线 A 含 `ambiguousNorm` 碰撞防护——我第一版只复用了 `normalizeAntibodyName` 漏了防护，**对抗面板逮回**（教训=复用一个模块的规范化时，连它的消歧/兜底一起复用，别只搬前半）。②codex「别读别的文件」指令过严→它啥都没读直接拒答，改为**inline 贴码**才出结论（codex-cli-usage 已有「缩小请求」经验，本次是反向：太缩到没上下文）。③异构轴(codex)给方向、对抗轴(Workflow panel)给具体反例，两轴互补=机制5 落地。
 
