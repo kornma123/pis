@@ -1003,3 +1003,27 @@ http://your-server-ip:8080
 **PR/看板**：[#38](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/38)（base=master，独立·纯文档，wave-1 边界表）。看板 `pr-governance.md` 同步：#32→MERGED、新增 #38 行 + 四线 chip。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（预警写操作 RBAC 口径固化，2026-07-02）
+
+**线/工作树**：worktree `brave-bassi-4bdd83`（分支 `claude/brave-bassi-4bdd83`，off master）。
+
+**触发**：Lane E「预警做真」评审中两独立引擎（Workflow 安全镜头 + codex 深审）都注意到的**既有**现状——`alerts-v1.1.ts` 的 `POST /:id/handle`、`POST /generate` 只继承挂载层 `requirePermission('alerts','R')`，无额外 W 守卫；对比其他写域普遍要求 'W'，是权限口径不一致。非 Lane E 引入，故当时未在 Lane E 修。本会话专项评估。
+
+**评估结论 = 有意口径，非缺口（判定「维持 R + 固化」）**：
+- 关键事实：`SEED_MATRIX` 中**全部 6 个非 admin 角色仅 alerts:'R'（无 'W'）**，仅 admin 有 W。→ 裸加 `requirePermission('alerts','W')` 会令**除 admin 外全部角色 403**（warehouse_manager 等无法处理库存预警），是 supplier_returns 迁移缺口的复刻（既有库不回填）。
+- 预警是信息性运营操作、无金额/口径影响；真正敏感的写=**阈值配置** `PUT /rules/:id` 已单独 W+admin 锁定；全站 `auditWrite` 中间件已把这两个 2xx 写落 `operation_logs`（含 operator）→ 问责链已在。符合本项目 base 功能 adoption-first 基线。
+- 收紧成本高收益低：需 SEED_MATRIX 改 + 既有库回填迁移 + 改 pathologist/finance 权威，仅换来边际安全值。
+
+**产出（scope 仅 alerts + 测试，零碰对账/成本/LIS）**：
+- `src/routes/alerts-v1.1.ts`：两端点前加口径注释固化「只需 R、勿加 W」+ 若确要收紧的三步（SEED_MATRIX + 回填迁移 + 翻测试期望）。
+- 新回归门禁 `tests/bv-alerts-write-rbac.test.ts`：镜像 app.ts 真实挂载 `requirePermission('alerts','R')`，用 R 级角色 pathologist（alerts:R 无 W）验证可 handle/generate（200）+ 未登录 401。
+- **变异测试验证门禁有效**：临时给端点加 W 守卫 → 3 个 R 级用例如期翻 403（证明未来误收紧会被拦）；已还原。
+
+**验证**：tsc 绿(exit 0)；full vitest **79 files / 594 tests 全绿**（基线 78/590 + 本次 1 文件/4 测试，零回归）；golden ¥13,152 + ¥27,870 零回归；`data/coreone.db` 未动（测试走 :memory:）。
+
+**PR/看板**：待开 PR（独立·非栈式·off master）。因交互提问工具异常，「维持 R」为我按项目 adoption-first 基线代拍；若 PM 要收紧到 W，注释与测试已写明三步落地路径。
+
+*更新时间：2026-07-02*
