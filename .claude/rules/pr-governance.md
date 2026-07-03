@@ -90,9 +90,9 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#45](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/45) | `feat/reconcile-overdue-free` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off 已合 #43 的 master）。账实核对**边界④「超期免费」**——**用户拍板口径：超期免费=财务判断，非系统硬规则**（不按跨月/N天/关账自动判）；「免费」暂态，医院日后同意补→改认定「漏收，需补收」即生成补收单。做法=**前端差异卡支持「改认定」翻转**（后端 verdict 端点本就支持重认定，此前仅前端锁死）；**未建完成时间管道**（财务已有信息，不越权硬判）。后端逻辑零改动·TDD 4 用例锁翻转不变量·真跑端到端(改认定→补收单¥300)。vitest 79 files/594 tests 绿；golden 零回归。**单独可合**。 | merge-order/1 |
+| — | [#45](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/45) | `feat/reconcile-overdue-free` → `master` | ✅ **MERGED**(2026-07-02, merge commit `c0c91f54`) | **独立**（非栈式，off 已合 #43 的 master）。账实核对**边界④「超期免费」**——**用户拍板口径：超期免费=财务判断，非系统硬规则**（不按跨月/N天/关账自动判）；「免费」暂态，医院日后同意补→改认定「漏收，需补收」即生成补收单。做法=**前端差异卡支持「改认定」翻转**（后端 verdict 端点本就支持重认定，此前仅前端锁死）；**未建完成时间管道**（财务已有信息，不越权硬判）。后端逻辑零改动·TDD 4 用例锁翻转不变量·真跑端到端(改认定→补收单¥300)。vitest required 绿(1m4s)；golden 零回归。 | merge-order/1 |
 
-> 🟡 **#45 OPEN（2026-07-02）**：账实核对边界④超期免费收官——**四条边界全部落地**（①补收实收 · ②反向弹窗 · ③逐抗体初判 · ④超期免费翻转）。等 vitest required check。
+> ✅ **#45 已合并（2026-07-02, merge commit `c0c91f54`）**：账实核对边界④超期免费收官——**四条边界全部落地**（①补收实收 #33 · ②反向弹窗 #35 · ③逐抗体初判 #40 · ④超期免费翻转 #45）。**账实复核+逐抗体成本主线全部完成。**
 > ⚠️ **其它 open PR（并行会话·非本线）**：`gh pr list` 现见 #37（LIS抗体名→台账映射）/ #39（D2 检测项目目录）/ #41（逐抗体成本弱锚校准线 F）——合并各自前按 `gh pr list` 核对，勿误合。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
