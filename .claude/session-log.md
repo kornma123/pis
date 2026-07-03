@@ -1215,4 +1215,20 @@ http://your-server-ip:8080
 
 **治理**：零代码/零 seed·golden ¥13,152+¥27,870 天然零回归；git 只 add 目标文档+session-log+看板（**未 `-A`**）；产出 → **PR [#59](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/59)** → **✅ MERGED（2026-07-03, merge commit `a0003b9f`）**：vitest required check 绿(1m11s)后 `--merge --admin`（e2e 非 required·pending 不阻断）落 master。看板线 3 行 OPEN→MERGED。合并后当前无 open PR。
 
+---
+
+## 2026-07-03（续）成本口径方法论固化（讨论衍生·非原线 3 范畴）
+
+线 3 审计合并（#59）后，PM 转入一场**成本口径深度讨论**（"用 BOM 算单切片成本准不准 / 库存从没认真统计 / 不估算要准确计算 / BOM 到底有没有用"），多轮**讨论循环**收敛出一套方法论，落 `docs/COREONE-单切片成本口径-该花多少标准成本+贡献毛利-方法论固化-2026-07-03.md`：
+
+- **①②③ 判断框架**（可复用成本口径判据）：①有真值照算 / ②约定不下沉·绝不当精算砍院 / ③算不出绕开。**判口径看档位不看有没有数据**。
+- **贡献毛利判去留**（固定成本不下沉·数值推演证死亡螺旋）；诉求=**不估算·要准确算**，限"该花多少"标准成本（≠实际·别对财务账）。
+- **BOM 翻案**：配方慢(年度/事件)、价格快(随采购)双时钟；约定价=退化一行 BOM。两条地基：片三口径 + 配方按合作形态裁工序集（撞 `[[coreone-lab-revenue-scope-gap]]`）。
+- **§6 事实订正**（工程视角逮到）：抗体**已进**成本引擎（seed IHC BOM 的 `MAT-IHC-*` 用扁平价·`cost-calculator.ts:580` 已计价）→ 缺口=**换台账真价**非"没算"；改它波及 ABC 预览/出库快照生产报表。
+- **PM 拍板 §9 三项**：合作形态现纳入 / 分子线暂标未建模 / 抗体走**路径 a 换价源**。
+
+**四轮对抗审**：Claude 三视角红队（诚实/代码/逻辑）+ **codex 异构**(gpt-5.5·high·7 处采纳) + 一线实操/工程落地/决策误用三视角面板（逮到最深的漏，含 §6 事实错）；**codex xhigh 再次确认断流**（读完 echo 回来后 5 次重连 fail·`stream disconnected`·零结论）→ 第二视角改用 Workflow 面板。记忆 `[[coreone-cost-methodology-shouldcost]]`。
+
+**治理**：git 只 add 目标文档（**未 `-A`**·跳过会话前遗留的线 3 doc `M`）；commit `b3e8d3cc` → **PR [#67](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/67)**（🟢 OPEN·纯文档·golden 天然零回归·单独可合）；看板加成本讨论线行。**下一步**：功能梳理从文档 §8 起（抗体换价源路径 a + 合作形态接进配方）。
+
 *更新时间：2026-07-03*

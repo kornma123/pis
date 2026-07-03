@@ -200,6 +200,14 @@
 
 > ✅ **线 3 PR #59 已合并（2026-07-03, merge commit `a0003b9f`）**：纯审计文档·vitest required check 绿(1m11s)后 `--merge --admin`（e2e 非 required·pending 不阻断）落 master。**分工**：`/abc/*`+`/indirect-costs` 单页处置归线 2（task `task_7b53b497`），本线只出跨新旧重叠对 + 旧路由退役候选。**PM 待拍**：#4 partner-pnl 能否退役=不能（先迁移 hospital-pnl 消费）；#5 reconciliation vs account-reconcile=建议保留两条 API+两入口。合并后**当前无 open PR**。
 
+### 活跃 PR 看板 · 单切片成本口径方法论固化（成本讨论线·纯文档）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#67](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/67) | `claude/margulis-board-reconcile` → `master` | 🟢 **OPEN**(2026-07-03) | **独立**（非栈式，off master `59a64dd9`）。PM 与 AI 多轮讨论收敛的**成本口径方法论固化**（非原线 3 范畴·讨论衍生）：新建 `docs/COREONE-单切片成本口径-该花多少标准成本+贡献毛利-方法论固化-2026-07-03.md`——①②③判断框架 + 贡献毛利判去留（固定成本不下沉·死亡螺旋）+ BOM 配方/价格双时钟 + 两条地基（片三口径·配方按合作形态裁）+ 三条 PM 护栏。**§6 事实订正**：抗体已进成本引擎（用扁平 seed 价非台账真价·缺口=换价源）。**§9 PM 拍板**：合作形态现纳入 / 分子线暂标未建模 / 抗体走路径 a。**四轮对抗审**：Claude 三视角红队 + codex 异构(gpt-5.5·high·7 处采纳) + 一线/工程/决策三视角面板；codex xhigh 确认断流（视角由面板覆盖）。**纯文档·零码/零 seed·golden 天然零回归·单独可合**。见记忆 `[[coreone-cost-methodology-shouldcost]]`。 | merge-order/1·docs |
+
+> 🟢 **#67 OPEN（2026-07-03）**：成本口径方法论固化，等 vitest required check（纯文档不受影响）。功能梳理接续从文档 §8 起（抗体换价源路径 a + 合作形态接进配方）。
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 对一遍本看板，差异即更新看板。
