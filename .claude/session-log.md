@@ -941,3 +941,34 @@ http://your-server-ip:8080
 **PR/看板**：[#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) OPEN（base=master，独立·纯文档·单独可合，把拆分边界表落 master 供并行会话共读）。看板 `pr-governance.md` 同步新增 #32 行 + 三线 chip 状态。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（线 A 逐抗体成本·抗体名映射 A1+A3，feat/antibody-name-map，2026-07-02）
+
+**线/工作树**：worktree `elastic-fermi-0c520a`，从最新 `origin/master`（rebase 到 `858f16fa`）切 `feat/antibody-name-map`。基础模块任务拆分（`docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`）**线 A**：让 LIS 只给「抗体名」时也对上台账的**价+剂型**，并把台账真缺的抗体清出来。
+
+**工作模型第一段（先讨论/摊假设·真数据手核）**：读台账 `免疫组化相关耗材2025年.xlsx·sheet「2025(2)」` + LIS `0702免组.xlsx`（PII 安全·只取抗体名/剂型/价分析列），交叉比对本月 105 种 markerName/806 行 →
+- **A1「缺 10 种」实为 5 种是别名**（台账早有价）：Ecad→E-cadherin/Melan A→MART-1·melan-A/Vimentin→VIM/cyclinD1→CYCD-1/SMARCA4→SMARC4；**真缺仅 5 种**：PD-1(≠PD-L1)/cathepsinK/GPNMB/TROP-2/HP（全工作簿含旧表查无）。
+- 别名映射顺带救回 Ki67(52次)/S100/TTF1/HER2/galectin3 等 **28 种/151 行**"写法对不上"的抗体 → 能算准成本从 277 行涨到 428 行。
+- **A3 剂型歧义**仅 CK19/CK20（原液/即用差~6倍、LIS 无剂型）。
+- 摊给 PM 3 问拍板：①CK19/CK20 剂型=**保守取高价+标「剂型待确认」**；②HP=**当免疫组化抗体·补采购价**；③别名落地=**代码规范化规则+可在库里加别名表**。安全校验：规范化对台账（修笔误后）**仅 TCR 一处真撞键**。
+
+**实现（TDD 先行 red→green）**：
+- `src/utils/antibody-name-map.ts`(NEW)：`normalizeAntibodyName`(去括号克隆号/连字符/空格/点/大写) + `ANTIBODY_SYNONYM_SEED`(5 生物学同义词) + `ANTIBODY_MISSING_PRICE_SEED`(5 真缺) + `classifyMarker`(隔离白片/HE/深切重切/分子/特染疑) + `buildLedgerIndex`(**碰撞防护 ambiguousNorm**) + `resolveForm`(保守取高价) + `resolveAntibodyName`(非抗体→精确→别名→歧义拦→规范化→真缺)。
+- `src/database/DatabaseManager.ts`：`antibody_aliases` 表(ops 可扩展·幂等 INSERT OR IGNORE) + 别名种子 + 5 种真缺入 antibodies 表(price_status=missing 占位)。
+- `src/routes/antibody-cost-v1.1.ts`：`/cost-preview` 认别名(Ecad 不再 404) + `GET /antibodies/resolve`(供 LIS/对账侧对价) + 别名 CRUD(`/antibody-aliases` GET/POST/DELETE，POST 校验 canonical 存在)。
+- `tests/antibody-name-map.test.ts`(NEW，28 用例)：规范化/classifyMarker/别名命中/剂型歧义/真缺/PD-1≠PD-L1/碰撞防护/TCR 守卫 + DB seed + resolve/别名端点。
+- 交付 PM：`docs/COREONE-缺价抗体清单-交PM补采购价-2026-07-02.md`（5 种真缺待补价）。
+
+**独立复核（机制5·异构轴）已过 + 修 1 项**：Workflow 5 维对抗复核面板（8 agent·含对抗 verify）逮到 **MEDIUM 真 bug**：TCR(a/b)=αβ¥6.63 与 TCR(G/D)=γδ¥10.10 去克隆号规范化都→'TCR' 撞键，byNorm 首个占位会把 γδ 静默误价成 αβ（跨抗体误价，PD-1≠PD-L1 同类红线）；原碰撞测试"过"只因台账 `TCR(G/D))` 多打个 `)` 的笔误掩盖。**已修**（笔误订正 + buildLedgerIndex 标 ambiguousNorm 不自动解析 + 软化不实注释 + TCR 回归测试）。另 2 条 finding（HE 大小写变体/source_ledger 塞 note）复核**反驳=非真问题**（真实数据无该输入/无消费者）。codex 异构深审因另一会话 D2 复核占用资源、本次未产出（诚实边界）。
+
+**验证**：`tsc --noEmit` 绿；`vitest run` **78 文件/608 测试全绿**（+1 文件 +28 用例含 3 TCR 守卫）；**golden ¥13,152+¥27,870 零回归**（映射只读 antibodies/别名表，不碰收入侧/对账引擎）；工作树干净（dev DB 未脏）。rebase 到 `858f16fa` 后重跑全绿。
+
+**诚实边界/未决（交接）**：① 5 种真缺待 PM 补采购价（清单已交）；② CK19/CK20 真实剂型待确认（现保守取高价占位）；③ 别名 resolver 是纯口径 util + 只读端点，LIS 导入侧真正消费（导入时对价）留对账/LIS 会话按需接（契约已就绪）；④ 特染权威分类仍归对账域 A4，本线只做轻量识别防污染缺价清单。
+
+**改动文件**：`src/utils/antibody-name-map.ts`(NEW)、`src/utils/antibody-catalog.ts`(TCR 笔误订正)、`src/database/DatabaseManager.ts`、`src/routes/antibody-cost-v1.1.ts`、`tests/antibody-name-map.test.ts`(NEW)、`docs/COREONE-缺价抗体清单-交PM补采购价-2026-07-02.md`(NEW)。
+
+**PR**：[#37](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/37) OPEN（base=master·独立非栈·单独可合，等 vitest required check）。看板 `pr-governance.md` 同步（#32→MERGED + 新增 #37 行）。合并后前端/对账/LIS 侧可经 resolver util 或 `GET /antibodies/resolve` 对上台账价。
+
+*更新时间：2026-07-02*

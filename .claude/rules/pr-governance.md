@@ -98,9 +98,15 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) | `claude/eloquent-lichterman-af4db5` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。纯文档：新增 `docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`——把账实复核+逐抗体成本未决清单里的**基础模块**项拆成三条互不碰文件的独立线（A 抗体名称映射 / D 统一检测项目目录 / F G2 弱锚校准+承重墙口径），供多会话并行；明确排除对账引擎/前端三页/收入侧/独立复核（另一会话在做）。**单独可合**·零代码·golden 天然零回归。 | merge-order/1 |
+| — | [#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) | `claude/eloquent-lichterman-af4db5` → `master` | ✅ **MERGED**(2026-07-02, merge commit `6a8e69bd`) | **独立**（非栈式，无上下游）。纯文档：新增 `docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`——把账实复核+逐抗体成本未决清单里的**基础模块**项拆成三条互不碰文件的独立线（A 抗体名称映射 / D 统一检测项目目录 / F G2 弱锚校准+承重墙口径），供多会话并行；明确排除对账引擎/前端三页/收入侧/独立复核（另一会话在做）。**单独可合**·零代码·golden 天然零回归。 | merge-order/1 |
 
-> 🟢 **#32 OPEN（2026-07-02）**：纯文档任务拆分，供多会话并行分派的边界表进 master。三条线已分派为 spawn_task chip（A 运行中·ultracode；D `task_a65bcaab`·ultracode；F `task_b514b2ae`·ultracode）。
+> ✅ **#32 MERGED（2026-07-02, merge commit `6a8e69bd`）**：纯文档任务拆分落 master。三条线分派为 spawn_task chip（**A→本 PR #37 已实现**；D `task_a65bcaab`·ultracode；F `task_b514b2ae`·ultracode）。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#37](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/37) | `feat/antibody-name-map` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游·off 最新 master `858f16fa`）。实现 #32 拆分的**线 A 逐抗体成本·抗体名映射(A1+A3)**：LIS 抗体名→台账(价+剂型) resolver（规范化规则+5 生物学同义词种子+碰撞防护 ambiguousNorm）+ `antibody_aliases` 表(ops 可扩展) + 5 种真缺入库占位 + `/antibodies/resolve`·别名 CRUD + 缺价清单交 PM。真数据手核：A1「缺10种」实为 5 别名(台账已有价)+5 真缺(PD-1≠PD-L1/cathepsinK/GPNMB/TROP-2/HP)；别名救回 Ki67 等 28 种/151 行。**独立对抗复核(Workflow 8-agent)修 MEDIUM TCR 跨抗体误价 1 项**。纯成本侧·物理隔离收入/对账。vitest 78 files/608 tests 绿；golden ¥13,152+¥27,870 零回归；tsc 绿。**单独可合**。 | merge-order/1 |
+
+> 🟢 **#37 OPEN（2026-07-02）**：线 A 抗体名映射实现，独立单独可合，等 vitest required check。合并后前端/对账/LIS 侧可经 resolver util 或 `GET /antibodies/resolve` 端点对上台账价。PM 待解锁：5 种真缺采购价（清单 `docs/COREONE-缺价抗体清单-…`）。
 
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
