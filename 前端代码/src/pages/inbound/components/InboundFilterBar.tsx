@@ -79,7 +79,7 @@ export default function InboundFilterBar({
           <option value="purchase">采购入库</option>
           <option value="return">退库入库</option>
           <option value="direct">直接入库</option>
-          <option value="transfer">调拨入库</option>
+          <option value="transfer">库位调拨</option>
         </select>
         <input
           type="date"
