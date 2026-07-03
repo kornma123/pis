@@ -74,7 +74,13 @@
 |---|---|---|---|---|---|
 | — | [#33](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/33) | `feat/reconcile-supplement-revenue` → `master` | ✅ **MERGED**(2026-07-02, merge commit `6e03daa6`) | **独立**（非栈式，off #30 收官后的 master `0b662efe`）。补齐 Phase 2 已披露边界：**补收→计入本月实收**（已补收按实验室工序行扣率折实收、计入 collected_month；反向/放弃清零）。只读收入侧算扣率·**不写 case_revenue**（保护 golden）。独立对抗复核修 3 项（HIGH 扣率改工序行·纠误诊 / HIGH 无双计不变量文档化 / LOW 放弃清折实收）。vitest required 绿(1m0s)·77 files/580 tests；golden 零回归；真跑端到端过。 | merge-order/1 |
 
-> ✅ **#33 已合并（2026-07-02, merge commit `6e03daa6`）**：补收实收闭环落地——账实核对补收侧「已补收→计入本月实收（实验室工序行扣率）」贯通。**当前无 open PR。**
+> ✅ **#33 已合并（2026-07-02, merge commit `6e03daa6`）**：补收实收闭环落地——账实核对补收侧「已补收→计入本月实收（实验室工序行扣率）」贯通。
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#35](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/35) | `feat/reconcile-reason-modal` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off master `858f16fa`）。账实核对边界②：4 处反向操作（重新打开/反关账/放弃/恢复待补收）理由收集从浏览器 `prompt` → 系统内正式弹窗 `ReasonModal`。**纯前端 UX**·后端 API 零改动·留痕口径不变。tsc+vite build 绿；真跑端到端（放弃→弹窗→已放弃+理由留痕·零报错）。**单独可合**。 | merge-order/1 |
+
+> 🟡 **#35 OPEN（2026-07-02）**：反向操作正式弹窗，纯前端 UX，等 vitest required check（后端零改动·风险为零）。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|

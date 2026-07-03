@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { accountReconcileApi } from '@/api/account-reconcile'
 import type { SupplementOrder, SupplementBoard } from '@/types/account-reconcile'
 import { SupPill, wan, yuan, pct, cnMonth, btnGhost, cardCls, selectCls } from '../ui'
+import { ReasonModal } from './ReasonModal'
 
 const TH = 'px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-nowrap'
 
@@ -35,25 +36,16 @@ export function SupplementTracking({ month, canWrite }: { month: string; canWrit
     } catch { /* toast handled */ }
   }, [load])
 
-  const giveup = useCallback(async (so: SupplementOrder) => {
-    const reason = window.prompt('放弃补收——请填理由（记经手人）：')
-    if (!reason || !reason.trim()) return
+  const [pending, setPending] = useState<{ so: SupplementOrder; kind: 'giveup' | 'reopen' } | null>(null)
+  const doPending = useCallback(async (reason: string) => {
+    if (!pending) return
     try {
-      await accountReconcileApi.giveup(so.id, reason.trim())
-      toast.success('已放弃补收')
+      if (pending.kind === 'giveup') { await accountReconcileApi.giveup(pending.so.id, reason); toast.success('已放弃补收') }
+      else { await accountReconcileApi.reopenSupplement(pending.so.id, reason); toast.success('已恢复待补收') }
+      setPending(null)
       await load()
     } catch { /* toast handled */ }
-  }, [load])
-
-  const reopen = useCallback(async (so: SupplementOrder) => {
-    const reason = window.prompt('恢复待补收——请填理由（记经手人）：')
-    if (!reason || !reason.trim()) return
-    try {
-      await accountReconcileApi.reopenSupplement(so.id, reason.trim())
-      toast.success('已恢复待补收')
-      await load()
-    } catch { /* toast handled */ }
-  }, [load])
+  }, [pending, load])
 
   return (
     <div>
@@ -118,11 +110,11 @@ export function SupplementTracking({ month, canWrite }: { month: string; canWrit
                     {canWrite && so.status === '待补收' && (
                       <span className="inline-flex gap-1">
                         <button className={btnGhost} onClick={() => collect(so)}>标记已补收</button>
-                        <button className={`${btnGhost} text-gray-500 hover:bg-gray-100`} onClick={() => giveup(so)}>放弃</button>
+                        <button className={`${btnGhost} text-gray-500 hover:bg-gray-100`} onClick={() => setPending({ so, kind: 'giveup' })}>放弃</button>
                       </span>
                     )}
                     {canWrite && so.status !== '待补收' && (
-                      <button className={`${btnGhost} text-gray-500 hover:bg-gray-100`} onClick={() => reopen(so)}>恢复待补收</button>
+                      <button className={`${btnGhost} text-gray-500 hover:bg-gray-100`} onClick={() => setPending({ so, kind: 'reopen' })}>恢复待补收</button>
                     )}
                   </td>
                 </tr>
@@ -133,6 +125,17 @@ export function SupplementTracking({ month, canWrite }: { month: string; canWrit
       )}
 
       <p className="mt-3 text-xs text-gray-500">已关账月份的补收单只读回看；反向操作（恢复待补收 / 放弃）需填理由、记经手人。</p>
+
+      <ReasonModal
+        open={!!pending}
+        title={pending?.kind === 'giveup' ? '放弃补收' : '恢复待补收'}
+        description={pending?.kind === 'giveup'
+          ? '这笔漏收放弃追收（收不回/不再追）。放弃后退出实收统计，可日后再恢复。请填理由并记录经手人。'
+          : '把已补收 / 已放弃的补收单退回「待补收」，重新催收。请填理由并记录经手人。'}
+        confirmLabel={pending?.kind === 'giveup' ? '确认放弃' : '确认恢复'}
+        onConfirm={doPending}
+        onClose={() => setPending(null)}
+      />
     </div>
   )
 }

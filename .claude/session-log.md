@@ -894,6 +894,22 @@ http://your-server-ip:8080
 
 ---
 
+## 本次会话完成的工作（反向操作正式弹窗，feat/reconcile-reason-modal，2026-07-02）
+
+**背景**：三阶段+补收实收全落 master 后，用户点「边界②可推进」（③=逐抗体 LIS 数据前置、解释清楚待其决策）。
+
+**做了什么**（off master `858f16fa`，纯前端 UX）：账实核对 4 处反向操作（工作台 重新打开复核/反关账、补收追踪 放弃/恢复待补收）从浏览器 `window.prompt` 换成系统内正式弹窗 `ReasonModal`（新增·复用 `ui/Modal`：Esc/遮罩关闭·`rounded-xl`；理由文本框白底深字+placeholder 色·确认按钮空时禁用）。后端 `reopen`/`reopen-close`/`giveup`/`reopenSupplement` API 与留痕**零改动**。
+
+**验证**：tsc+vite build 绿；**真跑端到端**（seed 演示补收单→补收追踪点「放弃」→弹出正式弹窗非浏览器灰框·确认空禁用·填理由启用→提交→已放弃+理由内联留痕·控制台零报错；演示数据用后即清、dev DB 复原）。其余 3 处反向用同组件、同机制。
+
+**改动文件**：`前端代码/src/pages/account-reconcile/components/ReasonModal.tsx`(NEW)、`components/{ReconcileWorkbench,SupplementTracking}.tsx`。
+
+**PR**：[#35](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/35) OPEN（base=master，独立·纯前端·单独可合，等 vitest required check）。看板已记。**边界③（逐抗体初判）需先做逐抗体 LIS 明细导入=数据前置，待用户决策。**
+
+*更新时间：2026-07-02*
+
+---
+
 ## 本次会话完成的工作（修 #24 遗留前端漂移：角色权限模块 27→30，2026-07-02）
 
 **线/工作树**：worktree `practical-mclaren-1a4747`，分支 `claude/practical-mclaren-1a4747`。

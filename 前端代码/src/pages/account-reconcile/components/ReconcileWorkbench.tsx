@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { accountReconcileApi } from '@/api/account-reconcile'
 import { VERDICT_REASONS, type ReconcileDiff, type UnmatchedCase, type HospitalMonth, type VerdictReason } from '@/types/account-reconcile'
 import { HmPill, matchStatusMeta, wan, yuan, cnMonth, btnCls, btnPri, btnGhost, cardCls, selectCls } from '../ui'
+import { ReasonModal } from './ReasonModal'
 
 interface Props {
   partnerId: string
@@ -64,15 +65,16 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
     }
   }, [hm, onBack])
 
-  const reverse = useCallback(async () => {
+  const [reverseOpen, setReverseOpen] = useState(false)
+  const isClosed = hm?.status === '已关账'
+  const doReverse = useCallback(async (reason: string) => {
     if (!hm) return
-    const isClosed = hm.status === '已关账'
-    const reason = window.prompt(isClosed ? '反关账（慎用）——请填理由（记经手人）：' : '重新打开复核——请填理由（记经手人）：')
-    if (!reason || !reason.trim()) return
+    const closed = hm.status === '已关账'
     try {
-      if (isClosed) await accountReconcileApi.reopenClose(hm.id, reason.trim())
-      else await accountReconcileApi.reopen(hm.id, reason.trim())
-      toast.success(isClosed ? '已反关账' : '已重新打开')
+      if (closed) await accountReconcileApi.reopenClose(hm.id, reason)
+      else await accountReconcileApi.reopen(hm.id, reason)
+      toast.success(closed ? '已反关账' : '已重新打开')
+      setReverseOpen(false)
       await load()
     } catch {
       /* toast handled */
@@ -126,7 +128,7 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
             </button>
             <div className="flex items-center gap-2">
               {(hm.status === '复核完成' || hm.status === '已关账') && canWrite && (
-                <button className={btnCls} onClick={reverse}>{hm.status === '已关账' ? '反关账' : '重新打开'}</button>
+                <button className={btnCls} onClick={() => setReverseOpen(true)}>{hm.status === '已关账' ? '反关账' : '重新打开'}</button>
               )}
               {hm.status === '待复核' && (
                 <button className={btnPri} disabled={readOnly || pending > 0} onClick={complete}>
@@ -156,6 +158,18 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
             </div>
           )}
         </>
+      )}
+      {hm && (
+        <ReasonModal
+          open={reverseOpen}
+          title={isClosed ? '反关账（慎用）' : '重新打开复核'}
+          description={isClosed
+            ? '把已关账（定版）的院·月退回「复核完成」。此为敏感操作，请填理由并记录经手人。'
+            : '把「复核完成」退回「待复核」，可继续改认定。请填理由并记录经手人。'}
+          confirmLabel={isClosed ? '确认反关账' : '确认重新打开'}
+          onConfirm={doReverse}
+          onClose={() => setReverseOpen(false)}
+        />
       )}
     </div>
   )
