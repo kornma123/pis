@@ -192,6 +192,14 @@
 
 > ✅ **#57 已合并（2026-07-03, merge commit `e873e09b`）**：vitest required check 绿(SUCCESS)后 `--merge --admin`（e2e 非 required·pending 不阻断）落 master；合后 detached 复跑 golden+statement+hints+DRY 42 用例全绿复核、merge commit 双亲干净无并发漂移。源于本 task「对账逐抗体初判复用线 A 抗体名 resolver」。**已披露边界**：碰撞防护覆盖 seed 台账已识别歧义键（当前唯一=TCR），未进 seed 的新撞键抗体对不在防护内（属**漏判**保守 miss 非**伪造**，对已知数据零风险）；歧义抗体同例不同 raw 拼写不合并（benign miss）。合并后**当前无 open PR**。
 
+### 活跃 PR 看板 · ABC 确认并行线 2（ABC 前端审计 + 废弃候选清单）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#61](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/61) | `claude/hungry-austin-230c91` → `master` | 🟢 **OPEN**(2026-07-03) | **独立**（非栈式，无上下游）。**纯审计/文档·零代码·零路由·golden 零回归**。新增 `docs/COREONE-ABC前端页面处置清单-审计与废弃候选-2026-07-03.md`：19 页（18 `/abc/*` + `/indirect-costs`）逐页 现状/数据来源·重叠对象·处置建议·合并去向。结论=**保留 10 / 合并候选 3 / 待定 6 / 直接删 0**。配置类 10 页=参数唯一录入口须保留（修正「ABC 前端全废」论点：原名单 5 个实测 10 个）；报表类 9 页与 hospital-pnl/逐抗体成本/cost-analysis 重叠为候选；14/18 孤儿路由=可发现性缺口非该删。另披露 2 缺陷（personnel-efficiency 幽灵接口·variance 假标准成本，不修·另立项）。方法=Workflow 42-agent 对抗审计 + grep 自查 + codex 异构抽查。**单独可合**·**但先摊 PM 拍**（待拍 3 项：①全废能否成立 ②是否建统一报表平台 ③各报表页去向）。 | merge-order/1 |
+
+> 🟢 **#61 OPEN（2026-07-03）**：ABC 前端处置清单（决策草案）。**discussion-first——清单是给 PM 拍的讨论件，删/合动作一律等 PM 拍后另立实现项**；本 PR 只落"审计事实 + 候选 + 待拍"，不决定任何处置。合并前按 `gh pr list` 核对；其它并行会话 PR 勿误合。
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 对一遍本看板，差异即更新看板。
