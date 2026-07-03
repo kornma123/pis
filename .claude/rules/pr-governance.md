@@ -96,9 +96,9 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#50](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/50) | `feat/import-ux` → `master` | 🟡 **OPEN**(2026-07-03) | **独立**（非栈式，off master `3a662d46`）。对账单导入前端优化（用户拍板 4 方向全做·mockup 先行）：**接缝打通**（向导内当场归类·带改基线提示）+**拖拽上传**+**行级预览**+**批量队列**（拖多家→自动认院[客户头模糊匹配·仅唯一命中]+自动认账期→逐家核对入库）+测试台简化=去重。**纯前端·后端零改动**。codex 读码修 2 HIGH 异步竞态 + 多 agent 对抗自审修 10 项（needConfirm 串项·LIS 预检回归·并发预览·ref 同步 等）。真跑：真温州对账单 42%→100%·批量 2 家自动认院·零报错。tsc+build 绿·golden 不受影响。**单独可合**。 | merge-order/1 |
+| — | [#50](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/50) | `feat/import-ux` → `master` | ✅ **MERGED**(2026-07-03, merge commit `a82e5203`) | **独立**（非栈式，off master `3a662d46`）。对账单导入前端优化（用户拍板 4 方向全做·mockup 先行）：**接缝打通**（向导内当场归类·带改基线提示）+**拖拽上传**+**行级预览**+**批量队列**（拖多家→自动认院[客户头模糊匹配·仅唯一命中]+自动认账期→逐家核对入库）+测试台简化=去重。**纯前端·后端零改动**。codex 读码修 2 HIGH 异步竞态 + 多 agent 对抗自审修 10 项（needConfirm 串项·LIS 预检回归·并发预览·ref 同步 等）。真跑：真温州对账单 42%→100%·批量 2 家自动认院·零报错。vitest required 绿(1m4s)·golden 不受影响。 | merge-order/1 |
 
-> 🟡 **#50 OPEN（2026-07-03）**：对账单导入前端优化。用户「我看页面」中，等其过目 + vitest required check。
+> ✅ **#50 已合并（2026-07-03, merge commit `a82e5203`）**：对账单导入前端优化落 master（用户拍板并确认合并）。
 > ⚠️ **其它 open PR（并行会话·非本线）**：`gh pr list` 现见 #37（LIS抗体名→台账映射）/ #39（D2 检测项目目录）/ #41（逐抗体成本弱锚校准线 F）——合并各自前按 `gh pr list` 核对，勿误合。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
