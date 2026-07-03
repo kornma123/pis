@@ -910,6 +910,27 @@ http://your-server-ip:8080
 
 ---
 
+## 本次会话完成的工作（逐抗体细粒度初判 ③，feat/reconcile-antibody-hints，2026-07-02）
+
+**背景**：用户答"③逐抗体数据会跟 LIS 导出一起导入"。**wf 三线调查关键发现**：逐抗体明细表 `lis_case_markers`（每例每抗体逐切片行·含 marker_name/wax_no/section_no/advice_type）**早已存在、已随 LIS 导入落库**（`/import-markers`），此前**只被病例详情页展示、对账引擎没读**；`0702免组.xlsx` 实测=逐切片一行、能区分同蜡块重复vs跨蜡块（真抗体口径 13 例真重复）。→ ③ 数据地基现成，只缺消费端。用户拍板"返工+多病灶（现在做）·超期免费延后（缺计费期口径）"。
+
+**做了什么**（off master `2bdbbee7`，附加线索层·正交不改差异/认定/golden）：`classifyCaseHints`+`isRealAntibodyMarker`（白名单认 Y000001/Y000003·剔白片/重切/HE·未知码保守）；`buildCaseMarkers` 读 marker 表 join lis_cases 过滤月份；`runReconcile` 补 BEGIN IMMEDIATE 事务；新表 `reconcile_case_hints`；workbench 返回 caseHints；前端 ② 独立「逐抗体线索」区。
+
+**独立对抗复核（机制5）→ 修 5 项**：
+- 🔴 **HIGH**：线索原挂免疫组化差异卡 → **delta=0（正是被计费的返工）时不可见** → 改独立线索区（真跑验证 delta=0 返工可见）。
+- 🟠 **MED**：`isRealAntibodyMarker` 黑名单→**白名单**（与详情页 classifier 一致·未知码保守）；`runReconcile` **补事务原子**（原无·commit 文案"同事务"曾失真已纠正）。
+- 🟡 **LOW**：返工改 **distinct 切片号** 计次（防重复行）；多病灶**渲染蜡块号**。
+
+**验证**：tsc+build 绿；vitest **78 files/590 tests** 绿；golden 零回归；**真跑端到端**（seed 演示院·工作台差异带线索 + **delta=0 病例在独立区显"同蜡块 CD20（A2）做了 2 次·疑似返工"**·白片不误报·零报错；演示数据用后即清、DB 复原）。
+
+**改动文件**：`src/utils/reconcile-account.ts`(classifyCaseHints/isRealAntibodyMarker)、`reconcile-compute.ts`(buildCaseMarkers/事务)、`DatabaseManager.ts`(reconcile_case_hints)、`routes/account-reconcile-v1.1.ts`(caseHints)、`tests/reconcile-antibody-hints.test.ts`(NEW·10)、前端 `types`+`ReconcileWorkbench.tsx`。
+
+**PR**：[#40](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/40) OPEN。合并后账实核对三条已披露边界（①#33 ②#35 ③#40）全落地；余"超期免费"待计费期口径。
+
+*更新时间：2026-07-02*
+
+---
+
 ## 本次会话完成的工作（修 #24 遗留前端漂移：角色权限模块 27→30，2026-07-02）
 
 **线/工作树**：worktree `practical-mclaren-1a4747`，分支 `claude/practical-mclaren-1a4747`。
