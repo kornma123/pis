@@ -1,4 +1,4 @@
-import { Search, RotateCcw, CheckSquare, Clock, Eye } from 'lucide-react'
+import { Search, RotateCcw, CheckSquare, Clock, Eye, BellOff, RefreshCw } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import type { AlertItem, AlertTypeFilter, AlertStatusFilter } from '../hooks/useAlertsPage'
 
@@ -21,6 +21,8 @@ interface Props {
   onBatchProcess: () => void
   onOpenModal: (type: 'handle' | 'consumption-handle' | 'consumption-detail' | 'detail', alert: AlertItem) => void
   onIgnore: (id: string) => void
+  onGenerate: () => void
+  hasActiveFilters: boolean
   getAlertTypeInfo: (type: string) => { label: string; bg: string; text: string }
   getStatusInfo: (status: string) => { label: string; bg: string; text: string }
   isConsumption: (type: string) => boolean
@@ -46,6 +48,8 @@ export function AlertTable({
   onBatchProcess,
   onOpenModal,
   onIgnore,
+  onGenerate,
+  hasActiveFilters,
   getAlertTypeInfo,
   getStatusInfo,
   isConsumption,
@@ -212,8 +216,32 @@ export function AlertTable({
                 </tr>
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
-                    暂无预警数据
+                  <td colSpan={9} className="px-4 py-16">
+                    <div className="flex flex-col items-center justify-center gap-3 text-center">
+                      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gray-100">
+                        <BellOff className="w-6 h-6 text-gray-400" />
+                      </div>
+                      {hasActiveFilters ? (
+                        <>
+                          <p className="text-sm font-medium text-gray-700">没有符合筛选条件的预警</p>
+                          <p className="text-xs text-gray-500">试试调整或重置筛选条件</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium text-gray-700">暂无预警数据</p>
+                          <p className="text-xs text-gray-500 max-w-sm">
+                            点击下方按钮，系统会按库存与效期规则实时生成最新预警
+                          </p>
+                          <button
+                            onClick={onGenerate}
+                            className="mt-1 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors duration-150 shadow-sm h-10"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                            生成预警
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
