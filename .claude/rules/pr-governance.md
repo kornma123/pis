@@ -109,6 +109,12 @@
 
 > 🟢 **#32 OPEN（2026-07-02）**：纯文档任务拆分，供多会话并行分派的边界表进 master。三条线已分派为 spawn_task chip（A 运行中·ultracode；D `task_a65bcaab`·ultracode；F `task_b514b2ae`·ultracode）。
 
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) | `claude/eloquent-fermat-da583d` → `master` | 🟢 **OPEN**(2026-07-03) | **独立**（非栈式·Lane C 修流程）。退库/报废/调拨三页补全（筛选/统计卡/快速筛选/排序白名单/详情弹窗/批量/导出/URL 同步）+ **改正两处既有库存语义**（退库→加库存·调拨→总量不变移库·报废不变）。前后端独占文件；共享 `api/inventory.ts` 仅 3 块、`DatabaseManager.ts` 仅追加 Lane C 段；**未碰 Lane A/对账/成本**。vitest **78 files/597 tests 绿**·golden ¥13,152+¥27,870 零回归·真跑端到端过·codex 异构复核①②③⑤clean+④两处已处置。⚠️副作用：Lane A 入库页「调拨入库」同路由随之变移库(文案待 Lane A 改)。**单独可合**。 | merge-order/1 |
+
+> 🟢 **#52 OPEN（2026-07-03）**：Lane C「修流程」三页补全 + 库存语义改正。等 vitest required check 绿即可合（e2e 非 required）。
+
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
 > ✅ **合并完成（2026-06-30，账单已修，"按序合栈+拆 e2e 债"）**：#8→#10→#11 依次 merge commit 落 master。**每步 e2e 复校**=三次跑均 **6 failed/251 passed、失败集完全一致**（supplier-returns 5 + auth-logout 1），全栈**零新增 e2e 失败**。这 6 个=master 既有 supplier-returns/auth bug（与本栈无关，已拆 task `c93e8188` 单独修；非 RBAC 403，权限本就授予）。黄金 ¥13,152 守住、后端联合 482 绿。

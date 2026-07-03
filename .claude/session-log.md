@@ -986,6 +986,6 @@ http://your-server-ip:8080
 
 **副作用披露**：调拨语义改 stock-neutral 后，Lane A 入库页"调拨入库"按钮(同一 `/transfers/inbound` 路由)也变"移库不加库存"——符合 PM 单一语义决策，但其"入库"文案名不符实，留给 Lane A 会话改。
 
-**PR/看板**：待开（base=master，独立·单独可合）。
+**PR/看板**：[#52](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/52) OPEN（base=master，独立·单独可合，等 vitest required check 绿）。看板 `pr-governance.md` 同步新增 #52 行。
 
 *更新时间：2026-07-03*
