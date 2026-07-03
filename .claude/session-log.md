@@ -1021,3 +1021,27 @@ http://your-server-ip:8080
 **PR**：[#45](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/45)（base=master，独立·单独可合，等 vitest required）。看板已记。**至此账实核对四条边界全部落地**。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（对账单导入前端优化，feat/import-ux，2026-07-03）
+
+**背景**：用户「对账单导入的前端页面优化你也接手一下」。现状是两页——`import-console`(导入测试台·校准归类+设基线) + `import-wizard`(财务月度导入·三步)，本已不烂（设计系统/说人话/codex F2-F7 硬化过）。讨论后用户拍板 **4 方向全做**（打通接缝/拖拽+行级/批量/打磨）+ 测试台保留简化 + 批量=队列逐家核 + 自动认院+人确认。走 **mockup 先行红线**（show_widget mockup 真人「以上全部」拍板后落码）。
+
+**切片实现（用户要求切片+逐个真跑）**：
+- **① 接缝**：向导预览里未识别行**当场归类**（`AttentionItem` 内联·写回该院配置·重预览）+ **「改基线」提示**。抽 `ScopeTag/ByLineTable/AttentionItem` 入 `import-shared`（测试台/向导共用=去重）。
+- **② 拖拽**：`UploadBar` + 向导多文件拖拽区（非法/多余/忙态 toast 反馈）。
+- **③ 行级**：`ByLineTable`(line-level 按业务线拆分) + 未匹配逐行内联。
+- **④ 批量队列**（新 `useImportQueue.ts` hook）：拖多家→自动认院（对账单头「客户：」`matchHospital` 模糊匹配·**仅唯一命中**）+ 自动认账期（`parseMonth` 文件名）→ 队列 chip 逐家核对/切换/移除/入库。
+
+**复核（用户「同步再启动一轮自审」）**：
+- codex 读码修 2 HIGH 异步竞态：`setPartner/setMonth` 请求守卫（丢弃陈旧预览响应）·`classify` 乐观锁绑 partnerId + 从最新态重预览。
+- 多 agent 对抗自审（Workflow·10 条全 CONFIRMED 全修）：**needConfirm 页级串项**（归类完确认横幅赖着不走）→ 预览刷新即清；**LIS 预检回归恢复**（旧向导有·重写丢了）；串行预览→并发；removeItem 回落剩余项；拖拽反馈；**addFiles ref 立即同步**（真跑逮到我自己[3]修复引入的 bug——守卫用陈旧 queueRef 误跳过刚建项致不预览）。
+
+**真跑（真温州对账单·姓名/住院号脱敏不入库·浏览器 DataTransfer 注入文件）**：① 42%→归类 HPV→100%·未识别归零·对账闭合对平；④ 批量 2 家（温州+石门变体）拖入→自动认院+账期→队列切换；needConfirm 归类后自动清；LIS 提示恢复；控制台零报错。tsc + vite build 绿。
+
+**改动文件**：`import-shared/ImportShared.tsx`、`import-console/ImportConsolePage.tsx`、`import-wizard/ImportWizardPage.tsx`、`import-wizard/useImportQueue.ts`(NEW)。
+
+**PR**：[#50](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/50) OPEN（base=master·独立·纯前端·单独可合）。用户过目页面中。**待办**：队列未持久化（刷新丢）·parseMonth/matchHospital 为建议可改——本轮未做。
+
+*更新时间：2026-07-03*
