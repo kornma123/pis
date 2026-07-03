@@ -109,6 +109,12 @@
 
 > 🟢 **#32 OPEN（2026-07-02）**：纯文档任务拆分，供多会话并行分派的边界表进 master。三条线已分派为 spawn_task chip（A 运行中·ultracode；D `task_a65bcaab`·ultracode；F `task_b514b2ae`·ultracode）。
 
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#49](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/49) | `claude/goofy-wescoff-33d1e9` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游）。Lane A 修流程·库存/盘点做真：**盘点单条改真两阶段**（create 只登记不入账→新增 `POST /:id/adjust` 才入账·受控原因白名单+幂等+防过期409+operator取token→DELETE 仅对已入账回滚）+ `DepletionTab`/`DepletedTab` 空态。batch 故意保持一阶段（受控落地）。仅动 stocktaking 域 9 文件·**不碰对账/LIS/成本/收入侧**。新增 TDD `stocktaking-two-phase.test.ts` 11 用例；后端 vitest **591 全绿**（golden ¥13,152+¥27,870 零回归、batch p1-04 零改动仍绿）；tsc+vite build 绿。独立复核：Workflow 五镜头修 2 项 + codex 异构确认无双计/漏账。**单独可合**。 | merge-order/1 |
+
+> 🟢 **#49 OPEN（2026-07-02）**：Lane A 盘点两阶段+空态。等 vitest required check。**已披露边界**：批量盘点仍一阶段；无 inventory 行物料 adjust=UPDATE no-op（master 既有行为，未新增风险）。
+
 **已合/关闭**：#30(2026-07-02 独立·merge commit `393979a3`)；#28(2026-07-02 独立·merge commit `4f7177a7`·取代#21)；#27(2026-07-02 独立·merge commit `5343b572`)；#26(2026-07-02 独立·merge commit `aeee4cb5`)；#25(2026-07-02 独立·merge commit `46e2027d`)；#24(2026-07-02 独立·merge commit `36b8dda4`)；#19(2026-07-02 独立·merge commit `cd83153e`)；#17→#18(2026-07-02 栈·均 merge commit)；#8→#10→#11(2026-06-30 merge commit 落 master)；#9 引擎(MERGED→#8 线)、#7/#6/#4/#3/#2 已并 master；#21(2026-07-02 CLOSED·被#28+#27取代)、#5/#1 CLOSED。
 
 > ✅ **合并完成（2026-06-30，账单已修，"按序合栈+拆 e2e 债"）**：#8→#10→#11 依次 merge commit 落 master。**每步 e2e 复校**=三次跑均 **6 failed/251 passed、失败集完全一致**（supplier-returns 5 + auth-logout 1），全栈**零新增 e2e 失败**。这 6 个=master 既有 supplier-returns/auth bug（与本栈无关，已拆 task `c93e8188` 单独修；非 RBAC 403，权限本就授予）。黄金 ¥13,152 守住、后端联合 482 绿。

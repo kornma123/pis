@@ -957,3 +957,27 @@ http://your-server-ip:8080
 **PR/看板**：[#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) OPEN（base=master，独立·纯文档·单独可合，把拆分边界表落 master 供并行会话共读）。看板 `pr-governance.md` 同步新增 #32 行 + 三线 chip 状态。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（Lane A 修流程·库存/盘点做真：盘点单条改真两阶段 + 两 Tab 空态，2026-07-02）
+
+**线/工作树**：worktree `goofy-wescoff-33d1e9`，分支 `claude/goofy-wescoff-33d1e9`（off `origin/master` tip `2bdbbee7`）。ultracode 全程。
+
+**任务**：并行独立线 A「库存/盘点做真」，不碰对账/LIS/成本侧（另有会话在做）。两处开着的缺口：①`DepletionTab`/`DepletedTab` 空列表白页；②`StocktakingAdjustModal` 有表单但无 onSubmit、未接后端。
+
+**关键发现（踩 worktree 路径坑后订正）**：初次用绝对路径 `/进销存/后端代码/...` 读到的是**主仓（另一会话 live worktree·codex/abc 孤儿线 mid-flight）**，其 stocktaking 有 confirm/stats/四账两阶段版但路由/测试自相矛盾。改用 worktree 路径核实 **master 真实态**：`POST /stocktaking` **创建即入账**（改 inventory + 写 stock_logs），**无** confirm/adjust 路由、**无** stocktaking 单测。→ 盘点「处理差异」弹窗在 master 上无真实后端可接（库存已改过，再改双计）。孤儿线两阶段版**不合 master**（无共同历史）、当前无 open PR 触碰 stocktaking → **master 无活跃冲突**。
+
+**PM 决策（讨论循环）**：向 PM 摊「1 记录原因(安全补丁) / 2 真两阶段(更准但重设计)」→ PM 追问「哪个更准」→ 判定 **2 更准**（入账应在审批步而非清点步·内控分离；孤儿线已印证同结论）+ 采纳**受控落地**变体（只改单条路径，batch 保持一阶段）。
+
+**改动（9 文件）**：
+- 后端 `stocktaking-v1.1.ts`：create 只登记不入账（差异=0→completed / ≠0→pending）；**新增 `POST /:id/adjust`** 才入账（受控原因 own-property 白名单 + 非 pending→400 幂等 + 账面≠快照→409 防过期 + inventory=实盘 + 一条 stock_logs 'adjust' + status=confirmed + 原因落 remark + operator 取 req.user）；DELETE 仅对已入账回滚（差异≠0 且非 pending）；batch 零改动。
+- 前端：`StocktakingAdjustModal`（受控接线+说人话文案）、`useStocktakingPage`（handleAdjust + 统计两阶段口径 + 导出 `getStocktakingStatusDisplay`）、`Stocktaking.tsx`、`StocktakingTable`/`StocktakingDetailModal`（状态徽章读 row.status·处理入口仅 pending，盘点域小改）、`DepletionTab`/`DepletedTab`（空态 `EmptyState`）。
+
+**TDD/门禁**：新增 `stocktaking-two-phase.test.ts` 11 用例红→绿；后端 vitest **591 全绿**（golden ¥13,152+¥27,870 零回归、batch `p1-04` 零改动仍绿）；前端 tsc + vite build 绿；`coreone.db` 未污染；git 只 add 9 目标文件。
+
+**独立复核（机制5 异构轴）**：Workflow 五镜头对抗验证（8 agents）逮 **2 项**并修——统计「待处理差异」两阶段回归（改按 status=pending）+ 原因白名单原型链绕过（own-property 校验 + 回归测试 TP-04b）。codex `-s read-only` 异构复核：确认无双计/漏账，1 项 MED（`Object.hasOwn` 依赖 ES2022）已采纳更稳的 `hasOwnProperty.call`。**codex 操作踩坑**：首跑被 worktree `AGENTS.md` 带偏、次跑后台 stdin 挂死、三跑全仓 grep 网断——最终用「diff 内联进 prompt + `</dev/null` 闭 stdin + effort=high」一次过（沉淀到记忆）。
+
+**PR/看板**：[#49](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/49) OPEN（base=master，独立·单独可合，等 vitest required check）。看板 `pr-governance.md` 同步新增 #49 行。**已披露边界（受控落地留）**：批量盘点仍一阶段；无 inventory 行物料（master 既有边界·创建不 404）→ adjust 为 UPDATE no-op，属既有行为未新增风险。
+
+*更新时间：2026-07-02*
