@@ -1294,6 +1294,7 @@ export function initializeDatabase(): void {
       status TEXT NOT NULL DEFAULT '待补收',
       collected_at DATETIME,
       collected_month TEXT,
+      collected_revenue DECIMAL(18, 4),
       give_up_reason TEXT,
       operator TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1306,6 +1307,7 @@ export function initializeDatabase(): void {
   database.exec(`CREATE INDEX IF NOT EXISTS idx_supplement_partner_month ON supplement_orders(partner_id, service_month)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_supplement_status ON supplement_orders(status)`)
   // 幂等补列（旧库迁移 + :memory: 新库统一）
+  ensureColumn('supplement_orders', 'collected_revenue', 'DECIMAL(18, 4)')
   ensureColumn('fee_standards', 'project_type', 'TEXT')
   ensureColumn('fee_standards', 'fee_per_slide', 'DECIMAL(18, 4) DEFAULT 0')
   ensureColumn('fee_standards', 'base_price', 'DECIMAL(18, 4) DEFAULT 0')
