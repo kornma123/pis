@@ -11,6 +11,17 @@
  *    ⚠️ 数据质量：账单收费项文本分类（免疫组化/特染）依赖关键词；特染混进免疫组化的清洗见未决 A4。
  */
 
+// 复用线 A 抗体名工具（已在 master、契约稳定，只读消费）：
+//  · classifyMarker：按名字判物理片型/特染 → 让「是不是真抗体」的名字兜底与线 A 一致（认 免组HE/分子/特染）。
+//  · normalizeAntibodyName：抗体名规范化（Ki67↔Ki-67、S100↔S-100）→ 返工/多病灶分组不被拼写差异割裂。
+//  · buildSeedLedgerIndex().ambiguousNorm：台账里去克隆号后**撞键的不同抗体**（seed 唯一一例=TCR：
+//    TCR(a/b)/TCRαβ vs TCR(G/D)/TCRγδ 都→'TCR'）。复用线 A 这套碰撞防护，分组时对歧义键不合并、回退原始名，
+//    防把两种不同抗体误并成同抗体而伪造返工/多病灶（后者=对双计费的错误指控）。
+import { classifyMarker, normalizeAntibodyName, buildSeedLedgerIndex } from './antibody-name-map.js'
+
+// 台账种子的规范化歧义键集（模块加载时算一次·纯函数无 DB）——线 A 已识别的跨抗体撞键，分组不做规范化合并。
+const AMBIGUOUS_NORM = buildSeedLedgerIndex().ambiguousNorm
+
 export type LineType = '免疫组化' | '特染'
 export type MatchStatus = '正常' | '匹配偏低' | '先查' | '待对齐'
 export type SystemHint = '疑似漏收，需补收' | '疑似计费项目用错'
@@ -226,20 +237,20 @@ export interface CaseHint {
 // 真抗体申请类型（白名单，与病例详情页 lis-cases-v1.1 classifier 一致）：Y000001/Y000003。
 //   其它已知码 Y000006(HE深切重切)/Y000007(白片) + 未文档化码 → 保守判「非抗体」（避免误报返工）。
 const ANTIBODY_ADVICE = new Set(['Y000001', 'Y000003'])
-const PROCESS_LABEL_RE = /白片|重切|深切/
 
 /**
- * 是否真抗体染色行（剔除白片/重切/HE 等工序标签）。
- * 有申请类型 → 只认白名单（未知码保守=非抗体，与详情页口径一致）；无申请类型 → 退回名字判。
+ * 是否真抗体染色行（剔除白片/重切/HE/分子/特染 等非抗体行）。
+ *  · 有申请类型 → **主信号**：只认白名单（未知码保守=非抗体，与详情页口径一致）——权威、优先，不看名字。
+ *  · 无申请类型 → 名字兜底**委托线 A `classifyMarker`**（判为「抗体」才算真抗体）：比 #40 旧兜底
+ *    （仅 `/白片|重切|深切/` ＋精确 `^he$`）多认 `免组HE`/`分子`/特染(PAS/Masson/网状…)，防它们混进返工/多病灶线索。
+ *    classifyMarker 的非抗体判定均为锚定正则/精确匹配，不误伤含 "HE" 的真抗体（HER2/hepatocyte/HGAL…）。
  */
 export function isRealAntibodyMarker(m: MarkerRow): boolean {
   const name = (m.markerName || '').trim()
   if (!name) return false
   const advice = (m.adviceType || '').trim()
   if (advice) return ANTIBODY_ADVICE.has(advice)
-  if (PROCESS_LABEL_RE.test(name)) return false
-  if (/^he$/i.test(name)) return false
-  return true
+  return classifyMarker(name) === '抗体'
 }
 
 /**
@@ -250,20 +261,28 @@ export function isRealAntibodyMarker(m: MarkerRow): boolean {
  */
 export function classifyCaseHints(markers: MarkerRow[]): CaseHint[] {
   const real = markers.filter(isRealAntibodyMarker).filter((m) => (m.waxNo || '').trim())
-  const byMarker = new Map<string, Map<string, Set<string>>>() // markerName -> waxNo -> Set<sectionNo>
+  // 分组键 = normalizeAntibodyName（同抗体的拼写差异 Ki67/Ki-67 归一，防漏判返工）；展示仍用原始名。
+  const byMarker = new Map<string, Map<string, Set<string>>>() // normKey -> waxNo -> Set<sectionNo>
+  const displayName = new Map<string, string>() // normKey -> 首见原始名（展示用，不暴露规范化后的键）
   let anon = 0
   for (const m of real) {
-    const name = m.markerName.trim()
+    const rawName = m.markerName.trim()
+    const norm = normalizeAntibodyName(rawName)
+    // 规范化空（纯克隆号）或命中台账歧义键（TCR 去克隆号撞键）→ 回退原始名分组，防不同抗体误并；
+    // 非歧义键才用规范化键，让同抗体拼写差异（Ki67/Ki-67）归一。
+    const key = norm && !AMBIGUOUS_NORM.has(norm) ? norm : rawName
+    if (!displayName.has(key)) displayName.set(key, rawName)
     const wax = (m.waxNo as string).trim()
     const sec = (m.sectionNo || '').trim() || `__a${anon++}` // 缺切片号 → 视为独立一片（逐行计）
-    const blocks = byMarker.get(name) ?? new Map<string, Set<string>>()
+    const blocks = byMarker.get(key) ?? new Map<string, Set<string>>()
     const secs = blocks.get(wax) ?? new Set<string>()
     secs.add(sec)
     blocks.set(wax, secs)
-    byMarker.set(name, blocks)
+    byMarker.set(key, blocks)
   }
   const hints: CaseHint[] = []
-  for (const [markerName, blocks] of byMarker) {
+  for (const [key, blocks] of byMarker) {
+    const markerName = displayName.get(key) ?? key
     for (const [wax, secs] of blocks) {
       if (secs.size >= 2) hints.push({ hintType: '疑似返工', markerName, waxNo: wax, occurrences: secs.size })
     }
