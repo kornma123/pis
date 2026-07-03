@@ -873,6 +873,27 @@ http://your-server-ip:8080
 
 ---
 
+## 本次会话完成的工作（补收→计入本月实收，feat/reconcile-supplement-revenue，2026-07-02）
+
+**背景**：三阶段全合 master 后，用户点名补齐 Phase 2 已披露边界①「补收计入本月实收留后续」（②反向用 prompt=纯美化、③系统初判计数级=数据前置，均无需决策）。
+
+**做了什么**（off #30 收官 master `0b662efe`）：补收单标记已补收 → 按**实验室工序行扣率**折成实收 `collected_revenue`、计入 collected_month；总览 `确认实收`=复核完成/已关账院快照+本月`补收实收`；补收看板增 `已补收实收`；前端补收卡/行/总览注同步。**只读 case_revenue_lines 算扣率、不写收入侧**（保护 golden）。
+
+**独立对抗复核（机制5）→ 修 3 项**：
+- 🔴 **HIGH #1**：折实收扣率原用全票 Σnet/Σgross（被诊断/移出行不同扣率污染）。复核建议的「Σlab/Σgross 全票占比」经核**是误诊**（会被诊断 gross 稀释=低估免疫组化补收）；正解=**实验室工序行扣率**(Σ免疫组化+特染行 net/Σ其 gross)，与「确认实收=纯 lab_revenue」同口径。加单测锁 labRate 0.8 ≠ 全票 0.65。
+- 🔴 **HIGH #2**：re-import 双计（补收的钱若再导入 case_revenue、复核完成快照会与补收实收同时含它）。无 case_revenue↔补收单链接、无法自动 net → **不变量文档化**：漏收只经补收单进实收、绝不回填 case_revenue。
+- 🟡 **LOW**：`已补收→放弃` 未清 `collected_revenue` → 前端 已放弃行仍显「折实收」。已修（放弃亦清）+ 回归测试。
+
+**验证**：tsc+vite build 绿；后端 vitest **77 files/580 tests** 绿；golden ¥13,152/¥27,870 零回归；**真跑端到端**（seed 演示院·扣率0.83·补收 gross 240→折实收 ¥199.2·总览确认实收含补收·控制台零报错，演示数据用后即清、dev DB 复原）。
+
+**改动文件**：`src/utils/reconcile-compute.ts`(partnerMonthLabRate)、`src/routes/account-reconcile-v1.1.ts`(collect用工序行扣率+overview补收实收+supplements已补收实收+giveup清零)、`src/database/DatabaseManager.ts`(collected_revenue列+迁移)、`tests/account-reconcile-supplement-revenue.test.ts`(NEW·6用例)、前端 `types/account-reconcile.ts`+`components/{SupplementTracking,ReconcileOverview}.tsx`。
+
+**PR**：[#33](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/33) OPEN（base=master，独立·单独可合，等 vitest required check）。看板已记。
+
+*更新时间：2026-07-02*
+
+---
+
 ## 本次会话完成的工作（修 #24 遗留前端漂移：角色权限模块 27→30，2026-07-02）
 
 **线/工作树**：worktree `practical-mclaren-1a4747`，分支 `claude/practical-mclaren-1a4747`。

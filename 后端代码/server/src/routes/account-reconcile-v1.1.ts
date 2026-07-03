@@ -12,7 +12,7 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { writeAuditLog } from '../utils/cost-runs.js'
-import { buildReconcileInputs, runReconcile } from '../utils/reconcile-compute.js'
+import { buildReconcileInputs, runReconcile, partnerMonthLabRate } from '../utils/reconcile-compute.js'
 import { computeReconcile, verdictFollowUp, drivesSupplement, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
 
 const router = Router()
@@ -66,13 +66,20 @@ router.get('/overview', (req, res) => {
       unmatchedCount: r.unmatched_count,
       confirmedLabRevenue: r.confirmed_lab_revenue,
     }))
+    // 补收实收：本月收回的补收（已补收·计入本月）折实收，计入确认实收（往月漏收记本月，上月定版不动）。
+    const 补收实收 = Math.round(
+      (db.prepare(`SELECT COALESCE(SUM(collected_revenue),0) s FROM supplement_orders WHERE collected_month = ? AND status = '已补收'`)
+        .get(serviceMonth) as { s: number }).s * 100,
+    ) / 100
+    const base确认实收 = list.filter((x) => x.status === '复核完成' || x.status === '已关账')
+      .reduce((s, x) => s + (Number(x.confirmedLabRevenue) || 0), 0)
     const board = {
       total: list.length,
       待复核: list.filter((x) => x.status === '待复核').length,
       复核完成: list.filter((x) => x.status === '复核完成').length,
       已关账: list.filter((x) => x.status === '已关账').length,
-      确认实收: list.filter((x) => x.status === '复核完成' || x.status === '已关账')
-        .reduce((s, x) => s + (Number(x.confirmedLabRevenue) || 0), 0),
+      补收实收,
+      确认实收: Math.round((base确认实收 + 补收实收) * 100) / 100,
     }
     successList(res, list, 1, list.length || 1, list.length, { board })
   } catch (err: any) {
@@ -253,11 +260,14 @@ router.get('/supplements', (req, res) => {
     const list = rows.map((r) => ({
       id: r.id, partnerId: r.partner_id, serviceMonth: r.service_month, sourceDiffId: r.source_diff_id,
       caseNo: r.case_no, amount: r.amount, caseCount: r.case_count, status: r.status,
-      collectedAt: r.collected_at, collectedMonth: r.collected_month, giveUpReason: r.give_up_reason, operator: r.operator,
+      collectedAt: r.collected_at, collectedMonth: r.collected_month, collectedRevenue: r.collected_revenue,
+      giveUpReason: r.give_up_reason, operator: r.operator,
     }))
     const sum = (s: string) => list.filter((x) => x.status === s).reduce((a, x) => a + (Number(x.amount) || 0), 0)
+    const round2 = (n: number) => Math.round(n * 100) / 100
     const board = {
       待补收金额: sum('待补收'), 已补收金额: sum('已补收'), 已放弃金额: sum('已放弃'),
+      已补收实收: round2(list.filter((x) => x.status === '已补收').reduce((a, x) => a + (Number(x.collectedRevenue) || 0), 0)),
       待补收数: list.filter((x) => x.status === '待补收').length,
       补收率: (() => { const done = sum('已补收'); const tot = done + sum('待补收'); return tot > 0 ? done / tot : 0 })(),
     }
@@ -275,10 +285,16 @@ router.post('/supplements/:id/collect', requirePermission('account_reconcile', '
     if (!so) return error(res, '补收单不存在', 'NOT_FOUND', 404)
     if (so.status === '已补收') return error(res, '已是已补收', 'CONFLICT', 409)
     const collectedMonth = String(req.body?.collectedMonth ?? '').trim() || new Date().toISOString().slice(0, 7)
-    db.prepare(`UPDATE supplement_orders SET status = '已补收', collected_at = CURRENT_TIMESTAMP, collected_month = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-      .run(collectedMonth, so.id)
-    writeAuditLog(db, 'account_reconcile', 'supplement_collect', so.id, { amount: so.amount, collectedMonth }, operatorOf(req))
-    success(res, { id: so.id, status: '已补收', collectedMonth }, '已标记补收，计入本月实收')
+    // 折实收：账单口径 amount ×（原漏收月的**实验室工序行扣率**）；计入 collectedMonth 的实收。
+    //   只读 case_revenue_lines 算扣率、**不写收入侧**（保护 golden）。
+    //   不变量（防重复计）：漏收的补收只经补收单进实收，**绝不把这笔钱回填 case_revenue**——
+    //   否则复核完成快照(Σlab_revenue)会与补收实收同时含它、双计。计费用错类走「待外部更正」另路，不驱动补收。
+    const rate = partnerMonthLabRate(db, so.partner_id, so.service_month)
+    const collectedRevenue = Math.round(Number(so.amount) * rate * 100) / 100
+    db.prepare(`UPDATE supplement_orders SET status = '已补收', collected_at = CURRENT_TIMESTAMP, collected_month = ?, collected_revenue = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .run(collectedMonth, collectedRevenue, so.id)
+    writeAuditLog(db, 'account_reconcile', 'supplement_collect', so.id, { amount: so.amount, collectedMonth, collectedRevenue, rate }, operatorOf(req))
+    success(res, { id: so.id, status: '已补收', collectedMonth, collectedRevenue }, '已标记补收，计入本月实收')
   } catch (err: any) {
     error(res, err.message)
   }
@@ -292,7 +308,8 @@ router.post('/supplements/:id/giveup', requirePermission('account_reconcile', 'W
     if (!reason) return error(res, '放弃补收必填理由', 'BAD_REQUEST', 400)
     const so = db.prepare('SELECT * FROM supplement_orders WHERE id = ?').get(req.params.id) as any
     if (!so) return error(res, '补收单不存在', 'NOT_FOUND', 404)
-    db.prepare(`UPDATE supplement_orders SET status = '已放弃', give_up_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(reason, so.id)
+    // 放弃即退出实收：清 collected_revenue/collected_month（防已补收→放弃后残留折实收显示；金额聚合本就按 status 过滤，此为一致性）。
+    db.prepare(`UPDATE supplement_orders SET status = '已放弃', collected_revenue = NULL, collected_month = NULL, give_up_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(reason, so.id)
     writeAuditLog(db, 'account_reconcile', 'supplement_giveup', so.id, { amount: so.amount, reason }, operatorOf(req))
     success(res, { id: so.id, status: '已放弃' }, '已放弃补收')
   } catch (err: any) {
@@ -309,7 +326,7 @@ router.post('/supplements/:id/reopen', requirePermission('account_reconcile', 'W
     const so = db.prepare('SELECT * FROM supplement_orders WHERE id = ?').get(req.params.id) as any
     if (!so) return error(res, '补收单不存在', 'NOT_FOUND', 404)
     if (so.status === '待补收') return error(res, '已是待补收', 'CONFLICT', 409)
-    db.prepare(`UPDATE supplement_orders SET status = '待补收', collected_at = NULL, collected_month = NULL, give_up_reason = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(so.id)
+    db.prepare(`UPDATE supplement_orders SET status = '待补收', collected_at = NULL, collected_month = NULL, collected_revenue = NULL, give_up_reason = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(so.id)
     writeAuditLog(db, 'account_reconcile', 'supplement_reopen', so.id, { reason, from: so.status }, operatorOf(req))
     success(res, { id: so.id, status: '待补收' }, '已恢复待补收')
   } catch (err: any) {
