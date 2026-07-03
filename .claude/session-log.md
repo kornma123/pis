@@ -895,3 +895,36 @@ http://your-server-ip:8080
 **新发现遗留漂移（跟进项）**：#27 新增 `account_reconcile` → 后端 `MODULES`=**31**，前端 `PERMISSION_MODULES`=**30**，又差一个（性质同 #24→#25 那次）。运行时权限已 seed 不阻断，仅角色编辑 UI 无法配 `account_reconcile`。待补前端一处 UI 常量（未在本 PR 做——本 PR 纯文档）。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（D2 统一检测项目目录·地基线 D，2026-07-02）
+
+**线/工作树**：worktree `hungry-fermat-218505`，分支 `claude/hungry-fermat-218505`，从 `origin/master` tip `0b662efe` 出发。ultracode 多代理编排（勘察 5-agent 并行 → 真数据核 → codex 异构复核）。
+
+**任务**：建 D2「统一检测项目目录」——同一检测项目在系统里有四套/五套叫法（`projects.code` / 国标收费码 / 老本地物价码 / LIS 名 / 对账单名）且**无硬映射**，加一层**只读对照表**把它们对到同一个标准项。**加目录层不合表 · 先并存不改现有分类**。
+
+**discussion-first（PM 拍板，非一问一答）**：先出最小 schema 草案 + 概念图讲清 D2，PM 拍定 4 项 + 追问「校对指什么」→ 二轮澄清后定：①全收真实项目词汇（变体靠 NFKC 归一，不逐条列全角/半角）②复合行拆包（一名→多标准项+数量）③标准项用新命名空间 `PC-*`（与 projects.code/国标码解耦）④校对 = 自动分高/中/低三层 + 噪音自动剔除不映射 + 复合自动拆待确认 + 只读清单。
+
+**落码（独占文件；不碰 classifier.ts / case-charge-mapping.ts / statement-revenue.ts / 收入侧 / reconcile-* / 前端）**：
+- `后端代码/server/src/utils/project-catalog.ts`(NEW)：两表 schema（`project_catalog` 26 标准项 / `code_mappings`）+ 幂等种子（国标码 exact·high / LIS 数量列+抗体+adviceType / projects.type 动态读表 / 对账单词汇全收+拆包+分层）+ 查询 API（`lookupProject` 未命中不抛错只 `matched:false` · `listReviewQueue` 待校对清单 · `catalogSummary` · 反查）+ 关键词分类器（含分子基因检测/噪音/复合拆包/数量解析）。
+- `后端代码/server/src/database/DatabaseManager.ts`：+import + `initializeDatabase` 末尾 D2 标注块调用 `seedProjectCatalog`（+9 行；建表+种子全在 util）。
+- `后端代码/server/src/routes/project-catalog-v1.1.ts`(NEW) + `app.ts` 注册 `/api/v1/project-catalog`（**全只读**：/lookup /review-queue /catalog /summary /反查；复用 `requirePermission('projects','R')`，**不新增权限模块 → 零 MODULES 漂移**）。
+- `后端代码/server/tests/project-catalog.test.ts`(30) + `tests/project-catalog-routes.test.ts`(8)。
+
+**真数据验证（真跑不是查渲染）**：把分类器跑**全部 514 个真对账单项目名**（19 院 `2026年对账单.7z`，PII 纪律=只取项目名列、xlsx 不进仓）——高置信 179 / 中 121 / 噪音自动剔 267 / **未覆盖仅 22**（残留为手术/麻醉/无痛胃镜/微波消融等**临床非病理项** + 少量行政费，正确落待校对队列）。据真数据补 4 处：①分子基因检测（突变/融合/重排 K-RAS/EGFR/BRCA…）规则（原只识「基因检测」漏「基因突变检测」）②`/` 不当分隔符（BRCA1/2 不拆碎）③财务噪音扩表（费用/耗材/税/福利/设备…）④免疫细胞化学→IHC。加守卫测试锁「癌基因蛋白仍是 IHC 非分子」。
+
+**验证**：`npx tsc --noEmit` 绿；`npx vitest run` **78 files / 620 tests 全绿**；黄金 **¥13,152 + ¥27,870 零回归**。dev DB 未动（测试走 `:memory:`）。
+
+**独立对抗复核（异构 codex + 同构 3-lens workflow 双轨）——逮到 4 个真 bug 并修（单元测试原本全绿也没照出，靠真跑入库/查询回环才逮）**：
+- 🔴 **F1（medium·复合行同标准项丢数量）**：复合行拆出两段同标准项（癌基因蛋白×10 + 单克隆抗体×6 都=IHC）时 `UNIQUE(system,alias_norm,catalog_code)`+`INSERT OR IGNORE` 把第二段顶掉→IHC 数被 16 读成 10。**修**：新增 `aggregateComponents` 入库/查询前按标准项聚合、数量相加。
+- 🔴 **F2（low-med·id 哈希碰撞丢映射）**：`id` 用 32-bit djb2 哈希，codex 实测构造碰撞对→两个不同别名映到同标准项时第二条被 PRIMARY KEY 顶掉。**修**：`id` 改 `uuid`（幂等本就由 UNIQUE 约束保证）。
+- 🔴 **F3（medium·白片误判+口径打架）**：`免组白片/特染白片`=空白复制片(PC-SLIDE-COPY) 却被「免组/特染」规则先命中成 IHC/特染、high/auto 不进复核、且与 `LIS_TECH_ROW_SEED` 打架。**修**：白片规则前移到 IHC/特染/PD-L1 之前。
+- 🟡 **F4（low·"服务费"误剔噪音）**：`NOISE_RE` 含「服务费」会把「远程会诊服务费」这类真项目整段剔成噪音。**修**：移除「服务费」。
+- ✅ 确认无误：先并存零改动（git diff 仅 6 文件）、lookup 任意输入不抛错、SQL 全参数化、权限复用无 MODULES 漂移、黄金零回归。4 项均补回归测试锁定。
+
+**跟进**：`project_code` 映射靠读 `projects` 表动态生成，`initializeDatabase` 阶段 projects 常为空 → 首次为空、待 projects seed 后下次 init 或显式调 `syncProjectCodeMappings` 补齐（非阻断，静态国标/LIS/对账单映射不受影响）。前端只读清单页（供人过🔴待校对队列）留后续会话，本线只出后端只读 API。
+
+**PR/看板**：[待建] `feat/project-catalog-d2` → master（独立·非栈·单独可合，等 vitest required check）。看板 `pr-governance.md` 已记。
+
+*更新时间：2026-07-02*
