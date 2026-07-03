@@ -113,7 +113,7 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
             <h3 className="text-[13px] font-bold text-gray-900">差异明细</h3>
             <span className="text-xs text-gray-400">{diffs.length} 条 · 已认定 {diffs.length - pending} · 待认定 {pending}</span>
           </div>
-          <p className="mb-3 text-xs text-gray-500">系统初判是线索、不是定论；财务逐条终判。</p>
+          <p className="mb-3 text-xs text-gray-500">系统初判是线索、不是定论；财务逐条终判。认定后仍可「改认定」——如「超期，免费做的」日后医院同意补，改成「漏收，需补收」即自动生成补收单。</p>
 
           {!diffs.length ? (
             <div className="rounded-lg border border-dashed border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">
@@ -210,7 +210,9 @@ function Meta({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function DiffCard({ d, readOnly, saving, onVerdict }: { d: ReconcileDiff; readOnly: boolean; saving: boolean; onVerdict: (d: ReconcileDiff, r: VerdictReason) => void }) {
+  const [editing, setEditing] = useState(false)
   const reviewed = !!d.verdict
+  const showSelect = !reviewed || editing
   const deltaCls = d.delta < 0 ? 'text-red-600' : d.delta > 0 ? 'text-amber-600' : 'text-gray-500'
   return (
     <div className={`mb-2.5 grid grid-cols-1 items-center gap-x-5 gap-y-3 rounded-lg border px-4 py-3.5 md:grid-cols-[1fr_auto] ${reviewed ? 'border-green-200 bg-green-50/50' : 'border-gray-200 bg-white'}`}>
@@ -226,15 +228,21 @@ function DiffCard({ d, readOnly, saving, onVerdict }: { d: ReconcileDiff; readOn
           {d.systemHint && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">◔ 系统初判：{d.systemHint}</span>}
         </div>
       </div>
-      <div className="flex justify-start md:justify-end">
-        {reviewed ? (
-          <div className="text-xs font-semibold text-green-700">✓ 已认定：{d.verdict}{d.verdictBy && <span className="font-normal text-gray-500"> · {d.verdictBy}</span>}</div>
+      <div className="flex items-center justify-start gap-2 md:justify-end">
+        {showSelect ? (
+          <>
+            <select className={`${selectCls} min-w-[190px]`} disabled={readOnly || saving} defaultValue={d.verdict ?? ''}
+              onChange={(e) => { const v = e.target.value as VerdictReason; if (v) { onVerdict(d, v); setEditing(false) } }}>
+              <option value="">{saving ? '认定中…' : reviewed ? '改为…' : '选择认定原因…'}</option>
+              {VERDICT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            {editing && <button className={btnGhost} onClick={() => setEditing(false)}>取消</button>}
+          </>
         ) : (
-          <select className={`${selectCls} min-w-[190px]`} disabled={readOnly || saving} defaultValue=""
-            onChange={(e) => { const v = e.target.value as VerdictReason; if (v) onVerdict(d, v) }}>
-            <option value="">{saving ? '认定中…' : '选择认定原因…'}</option>
-            {VERDICT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <div className="text-right">
+            <div className="text-xs font-semibold text-green-700">✓ 已认定：{d.verdict}{d.verdictBy && <span className="font-normal text-gray-500"> · {d.verdictBy}</span>}</div>
+            {!readOnly && <button className={`${btnGhost} mt-0.5`} onClick={() => setEditing(true)}>改认定</button>}
+          </div>
         )}
       </div>
     </div>
