@@ -145,6 +145,14 @@
 >
 > **经验沉淀**：①栈式 PR 用 **merge commit**（保留共享历史→下游重定向 base 后免 rebase、diff 干净）。②base 改 master 后 e2e（`pull_request: branches:[master]`）不会自动触发→**推空提交**（`git commit-tree`/`--allow-empty`）触发。③e2e 非 required check，合并门禁靠人/看板，不靠 GitHub 阻断。
 
+### 活跃 PR 看板 · D2 统一检测项目目录（地基线 D）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#39](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/39) | `feat/project-catalog-d2` → `master` | 🟢 **OPEN**(2026-07-02) | **独立**（非栈式，无上下游；从 `origin/master` tip `0b662efe` 出发）。D2 只读对照层：`project_catalog`(26 标准项)+`code_mappings` 两新表 + 幂等种子（国标/LIS/对账单/项目码四套叫法→标准项 `PC-*`）+ 查询 util `project-catalog.ts` + **全只读**路由 `/api/v1/project-catalog`（复用 `projects` 权限，**不新增权限模块=零 MODULES 漂移**）。**不改任何现有分类**（classifier/case-charge-mapping/statement-revenue/收入侧/reconcile 均未碰，git diff 仅 6 文件）。tsc 绿 + vitest **78 files/620 tests 全绿**；黄金 ¥13,152+¥27,870 零回归；分类器真跑 514 真对账单名（未覆盖仅 22=临床非病理项）；异构 codex+3-lens workflow 双轨复核修 4 真 bug（见 session-log）。 | merge-order/1 |
+
+> 🟢 **D2 PR #39 OPEN（2026-07-02）**：独立·非栈·单独可合，等 vitest required check。合并后系统首次有「四套叫法↔同一项目」的对照地基（只读并存，供后续对账会话决定是否消费）。
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 对一遍本看板，差异即更新看板。
