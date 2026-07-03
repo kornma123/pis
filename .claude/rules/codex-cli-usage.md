@@ -14,10 +14,11 @@ codex review [文件或目录]
 
 ### 2. `codex exec` — 深审 / 任务执行（真实在用，本项目主力）
 ```bash
-codex exec -s read-only -c model_reasoning_effort=xhigh "<审查/分析任务描述>"
+codex exec -s read-only -c model_reasoning_effort=high "<聚焦的单点审查任务>"   # 默认 high
 codex exec -i <截图.png> "<对着这张图审 UI/口径>"      # 视觉审查
 ```
-- 常用参数：`-s read-only`（只读沙箱，防误改）、`-c model_reasoning_effort=xhigh`（拉高推理强度做深审）、`-i <图>`（喂截图做视觉/口径审）。
+- **⚠️ 默认推理强度 = `high`（2026-07-03 用户拍板）**：直接用 `xhigh` 调用会**频繁重连/断流**（长 SSE 流保不住）→ 改 `model_reasoning_effort=high`；并**把一次大提问拆成多个请求**（`codex exec` 起头 + `codex resume --last` 续问，分批喂，别一条塞满）。`xhigh` 仅在单文件+短上下文+无并发时偶用。详见下方「长请求断流规避」。
+- 常用参数：`-s read-only`（只读沙箱，防误改）、`-c model_reasoning_effort=high`（深审默认）、`-i <图>`（喂截图做视觉/口径审）。
 - 作为**第二引擎（异构轴）**做独立对抗复核——工作模型机制5 的落地方式。操作铁律（起服务/登录/清僵尸进程）见记忆 `coreone-codex-deep-review`。
 
 ## 使用场景
@@ -25,7 +26,7 @@ codex exec -i <截图.png> "<对着这张图审 UI/口径>"      # 视觉审查
 | 场景 | 命令 | 说明 |
 |------|------|------|
 | PR/提交前审查 | `codex review` | 快速质量/安全检查 |
-| 深度对抗复核（碰钱/口径） | `codex exec -s read-only -c model_reasoning_effort=xhigh` | 第二引擎独立审，守黄金锚 |
+| 深度对抗复核（碰钱/口径） | `codex exec -s read-only -c model_reasoning_effort=high`（拆多请求） | 第二引擎独立审，守黄金锚；勿默认 xhigh（断流） |
 | UI/口径视觉审 | `codex exec -i <图>` | 对着截图审 |
 
 ## 注意事项

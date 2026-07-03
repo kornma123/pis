@@ -1174,3 +1174,24 @@ http://your-server-ip:8080
 **经验**：①task 描述已点名线 A 含 `ambiguousNorm` 碰撞防护——我第一版只复用了 `normalizeAntibodyName` 漏了防护，**对抗面板逮回**（教训=复用一个模块的规范化时，连它的消歧/兜底一起复用，别只搬前半）。②codex「别读别的文件」指令过严→它啥都没读直接拒答，改为**inline 贴码**才出结论（codex-cli-usage 已有「缩小请求」经验，本次是反向：太缩到没上下文）。③异构轴(codex)给方向、对抗轴(Workflow panel)给具体反例，两轴互补=机制5 落地。
 
 *更新时间：2026-07-03*
+
+---
+
+## 本次会话完成的工作（文档剩余任务 + ABC 确认 —— 3 线拆分分派 + codex 用法变更，2026-07-03）
+
+**线/工作树**：worktree `eloquent-lichterman-af4db5`（编排/分派线，已 ff 到 master tip `19dd51a5`）。
+
+**触发**：用户"继续分配 task；3 点变化=① codex 新用法 ② 保持 ultracode ③ 范围=文档剩余任务+ABC 确认（重叠老功能可废、ABC 本不该有前端·是方法论）；先确认要求+master 现状后开 3 个 task"。
+
+**codex 用法变更（用户拍板，已入 `.claude/rules/codex-cli-usage.md`）**：独立复核默认 `model_reasoning_effort=high`（**不用 xhigh**——直接 xhigh 深审频繁重连/断流）+ **一次大提问拆多个请求**（`codex exec` + `resume --last` 续问）。旧 §2/表格 xhigh 已降级标注。
+
+**核实先行（ultracode Workflow `wk2zv61r7`，6 agent）**：逐份文档核待办 + 逐个 ABC 前端页核替代关系 + 对抗核实废弃建议。**对抗轴逮到首轮审计 2 硬伤**：① `hospital-pnl`/`account-reconcile` 在 master 真实存在（非幻影）；② `/indirect-costs` 无替代品（`IndirectCostCenterList` 即该路由本身）。**关键结论**：PM「ABC 全废」**半成立**——配置类页（活动中心/成本动因/成本池/费用映射/模型校验）确需 UI，报表类页（dashboard/slide-cost/profitability/trend/…）才是重叠废弃候选。
+
+**产出**：新文档 `docs/COREONE-文档剩余+ABC确认-任务拆分-2026-07-03.md` + 3 条互不碰文件的 ultracode chip（全为审计/文档、**零代码、不删任何 merged 码**、审计类 discussion-first）：
+- **线 1** 数据质量收口（A1/A3/A4/A5+G2 待补）`task_b403412d`——改 2 份现有文档正文/状态，可直接开。
+- **线 2** ABC 前端审计+废弃清单 `task_7b53b497`——新建 doc，先给 PM 拍（含 2 硬伤纠正 + 配置/报表分类）。
+- **线 3** 新旧功能重叠处置审计 `task_1584b4f6`——新建 doc，先给 PM 拍（partner-pnl 旧路由退役候选需先核 /hospital-pnl 引用）。
+
+**分工防重叠**：线 1 改现有 2 文档；线 2 管 `/abc/*`+`/indirect-costs` 单页；线 3 管跨新旧重叠对+旧路由。7 条 PM 待拍口径已在拆分文档列清。
+
+*更新时间：2026-07-03*
