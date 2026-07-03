@@ -44,6 +44,7 @@ export interface OverviewBoard {
   待复核: number
   复核完成: number
   已关账: number
+  补收实收: number
   确认实收: number
 }
 
@@ -74,10 +75,18 @@ export interface UnmatchedCase {
   note: string
 }
 
+export interface CaseHint {
+  hintType: '疑似返工' | '多病灶'
+  markerName: string
+  waxNo: string | null
+  occurrences: number
+}
+
 export interface WorkbenchResp {
   hospitalMonth: HospitalMonth
   diffs: ReconcileDiff[]
   unmatched: UnmatchedCase[]
+  caseHints: Record<string, CaseHint[]>
 }
 
 export interface ComputeResp {
@@ -102,6 +111,7 @@ export interface SupplementOrder {
   status: SupplementStatus
   collectedAt: string | null
   collectedMonth: string | null
+  collectedRevenue: number | null
   giveUpReason: string | null
   operator: string | null
 }
@@ -110,6 +120,7 @@ export interface SupplementBoard {
   待补收金额: number
   已补收金额: number
   已放弃金额: number
+  已补收实收: number
   待补收数: number
   补收率: number
 }

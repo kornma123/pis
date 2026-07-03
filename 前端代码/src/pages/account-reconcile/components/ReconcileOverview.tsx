@@ -106,7 +106,7 @@ export function ReconcileOverview({ ctx }: { ctx: Ctx }) {
         <div className={`${cardCls} border-blue-100 bg-gradient-to-b from-blue-50/60 to-white p-4`}>
           <div className="text-xs text-gray-500">实验室实收 · 已确认</div>
           <div className="mt-1.5 text-2xl font-bold tabular-nums text-blue-600">{wan(ctx.board?.确认实收)}</div>
-          <div className="mt-0.5 text-xs text-gray-400">仅算已复核完成 / 已关账的院</div>
+          <div className="mt-0.5 text-xs text-gray-400">复核完成 / 已关账的院{ctx.board?.补收实收 ? ` + 补收 ${wan(ctx.board.补收实收)}` : ''}</div>
         </div>
         {([['待复核', ctx.board?.待复核], ['复核完成', ctx.board?.复核完成], ['已关账', ctx.board?.已关账]] as const).map(([k, v]) => (
           <div key={k} className={`${cardCls} p-4`}>

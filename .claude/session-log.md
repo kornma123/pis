@@ -873,6 +873,64 @@ http://your-server-ip:8080
 
 ---
 
+## 本次会话完成的工作（补收→计入本月实收，feat/reconcile-supplement-revenue，2026-07-02）
+
+**背景**：三阶段全合 master 后，用户点名补齐 Phase 2 已披露边界①「补收计入本月实收留后续」（②反向用 prompt=纯美化、③系统初判计数级=数据前置，均无需决策）。
+
+**做了什么**（off #30 收官 master `0b662efe`）：补收单标记已补收 → 按**实验室工序行扣率**折成实收 `collected_revenue`、计入 collected_month；总览 `确认实收`=复核完成/已关账院快照+本月`补收实收`；补收看板增 `已补收实收`；前端补收卡/行/总览注同步。**只读 case_revenue_lines 算扣率、不写收入侧**（保护 golden）。
+
+**独立对抗复核（机制5）→ 修 3 项**：
+- 🔴 **HIGH #1**：折实收扣率原用全票 Σnet/Σgross（被诊断/移出行不同扣率污染）。复核建议的「Σlab/Σgross 全票占比」经核**是误诊**（会被诊断 gross 稀释=低估免疫组化补收）；正解=**实验室工序行扣率**(Σ免疫组化+特染行 net/Σ其 gross)，与「确认实收=纯 lab_revenue」同口径。加单测锁 labRate 0.8 ≠ 全票 0.65。
+- 🔴 **HIGH #2**：re-import 双计（补收的钱若再导入 case_revenue、复核完成快照会与补收实收同时含它）。无 case_revenue↔补收单链接、无法自动 net → **不变量文档化**：漏收只经补收单进实收、绝不回填 case_revenue。
+- 🟡 **LOW**：`已补收→放弃` 未清 `collected_revenue` → 前端 已放弃行仍显「折实收」。已修（放弃亦清）+ 回归测试。
+
+**验证**：tsc+vite build 绿；后端 vitest **77 files/580 tests** 绿；golden ¥13,152/¥27,870 零回归；**真跑端到端**（seed 演示院·扣率0.83·补收 gross 240→折实收 ¥199.2·总览确认实收含补收·控制台零报错，演示数据用后即清、dev DB 复原）。
+
+**改动文件**：`src/utils/reconcile-compute.ts`(partnerMonthLabRate)、`src/routes/account-reconcile-v1.1.ts`(collect用工序行扣率+overview补收实收+supplements已补收实收+giveup清零)、`src/database/DatabaseManager.ts`(collected_revenue列+迁移)、`tests/account-reconcile-supplement-revenue.test.ts`(NEW·6用例)、前端 `types/account-reconcile.ts`+`components/{SupplementTracking,ReconcileOverview}.tsx`。
+
+**PR**：[#33](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/33) OPEN（base=master，独立·单独可合，等 vitest required check）。看板已记。
+
+*更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（反向操作正式弹窗，feat/reconcile-reason-modal，2026-07-02）
+
+**背景**：三阶段+补收实收全落 master 后，用户点「边界②可推进」（③=逐抗体 LIS 数据前置、解释清楚待其决策）。
+
+**做了什么**（off master `858f16fa`，纯前端 UX）：账实核对 4 处反向操作（工作台 重新打开复核/反关账、补收追踪 放弃/恢复待补收）从浏览器 `window.prompt` 换成系统内正式弹窗 `ReasonModal`（新增·复用 `ui/Modal`：Esc/遮罩关闭·`rounded-xl`；理由文本框白底深字+placeholder 色·确认按钮空时禁用）。后端 `reopen`/`reopen-close`/`giveup`/`reopenSupplement` API 与留痕**零改动**。
+
+**验证**：tsc+vite build 绿；**真跑端到端**（seed 演示补收单→补收追踪点「放弃」→弹出正式弹窗非浏览器灰框·确认空禁用·填理由启用→提交→已放弃+理由内联留痕·控制台零报错；演示数据用后即清、dev DB 复原）。其余 3 处反向用同组件、同机制。
+
+**改动文件**：`前端代码/src/pages/account-reconcile/components/ReasonModal.tsx`(NEW)、`components/{ReconcileWorkbench,SupplementTracking}.tsx`。
+
+**PR**：[#35](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/35) OPEN（base=master，独立·纯前端·单独可合，等 vitest required check）。看板已记。**边界③（逐抗体初判）需先做逐抗体 LIS 明细导入=数据前置，待用户决策。**
+
+*更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（逐抗体细粒度初判 ③，feat/reconcile-antibody-hints，2026-07-02）
+
+**背景**：用户答"③逐抗体数据会跟 LIS 导出一起导入"。**wf 三线调查关键发现**：逐抗体明细表 `lis_case_markers`（每例每抗体逐切片行·含 marker_name/wax_no/section_no/advice_type）**早已存在、已随 LIS 导入落库**（`/import-markers`），此前**只被病例详情页展示、对账引擎没读**；`0702免组.xlsx` 实测=逐切片一行、能区分同蜡块重复vs跨蜡块（真抗体口径 13 例真重复）。→ ③ 数据地基现成，只缺消费端。用户拍板"返工+多病灶（现在做）·超期免费延后（缺计费期口径）"。
+
+**做了什么**（off master `2bdbbee7`，附加线索层·正交不改差异/认定/golden）：`classifyCaseHints`+`isRealAntibodyMarker`（白名单认 Y000001/Y000003·剔白片/重切/HE·未知码保守）；`buildCaseMarkers` 读 marker 表 join lis_cases 过滤月份；`runReconcile` 补 BEGIN IMMEDIATE 事务；新表 `reconcile_case_hints`；workbench 返回 caseHints；前端 ② 独立「逐抗体线索」区。
+
+**独立对抗复核（机制5）→ 修 5 项**：
+- 🔴 **HIGH**：线索原挂免疫组化差异卡 → **delta=0（正是被计费的返工）时不可见** → 改独立线索区（真跑验证 delta=0 返工可见）。
+- 🟠 **MED**：`isRealAntibodyMarker` 黑名单→**白名单**（与详情页 classifier 一致·未知码保守）；`runReconcile` **补事务原子**（原无·commit 文案"同事务"曾失真已纠正）。
+- 🟡 **LOW**：返工改 **distinct 切片号** 计次（防重复行）；多病灶**渲染蜡块号**。
+
+**验证**：tsc+build 绿；vitest **78 files/590 tests** 绿；golden 零回归；**真跑端到端**（seed 演示院·工作台差异带线索 + **delta=0 病例在独立区显"同蜡块 CD20（A2）做了 2 次·疑似返工"**·白片不误报·零报错；演示数据用后即清、DB 复原）。
+
+**改动文件**：`src/utils/reconcile-account.ts`(classifyCaseHints/isRealAntibodyMarker)、`reconcile-compute.ts`(buildCaseMarkers/事务)、`DatabaseManager.ts`(reconcile_case_hints)、`routes/account-reconcile-v1.1.ts`(caseHints)、`tests/reconcile-antibody-hints.test.ts`(NEW·10)、前端 `types`+`ReconcileWorkbench.tsx`。
+
+**PR**：[#40](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/40) OPEN。合并后账实核对三条已披露边界（①#33 ②#35 ③#40）全落地；余"超期免费"待计费期口径。
+
+*更新时间：2026-07-02*
+
+---
+
 ## 本次会话完成的工作（修 #24 遗留前端漂移：角色权限模块 27→30，2026-07-02）
 
 **线/工作树**：worktree `practical-mclaren-1a4747`，分支 `claude/practical-mclaren-1a4747`。
@@ -917,3 +975,53 @@ http://your-server-ip:8080
 **真值边界（交 PM）**：康湾真实工资/折旧/房租（B4 校准输入，见数据清单）、本地协商诊断值（B3 band 收窄），补齐后各调一次接口即完成。
 
 *更新时间：2026-07-03*
+
+---
+
+## 本次会话完成的工作（基础模块实现任务拆分 + 多会话并行分派，2026-07-02）
+
+**线/工作树**：worktree `eloquent-lichterman-af4db5`，分支 `claude/eloquent-lichterman-af4db5`（master tip `0b662efe`，零 open PR）。
+
+**触发**：用户基于 `docs/COREONE-账实复核与逐抗体成本-未决问题与关联文件-2026-07-02.md` 要"启动 plan+任务拆分，在多个新会话同步开工，按 master 约束文件规范执行"。
+
+**范围界定（用户拍板）**：另一会话已在做 **LIS 导入 + 财务对账 + 独立复核** → 本拆分**不碰** `reconcile-*`/`account-reconcile-v1.1`/前端三页/收入侧。本拆分只覆盖坐在对账引擎**下面那层**的**逐抗体成本基础数据 + 统一目录地基**（纯成本侧，物理隔离）。三阶段（#24/#27/#30）已全合 master、零 open PR，故 backlog=未决问题 A/B/C/D 里的基础模块子集。
+
+**产出**：
+- 新文档 `docs/COREONE-基础模块-实现任务拆分-2026-07-02.md`：§1 通用约束（master worktree/工作模型四段/golden 零回归/PII 纪律/PR 治理/git 纪律/物理隔离）+ 三条互不碰文件的独立线卡 + PM 待解锁输入 + 排除清单 + 已关闭项（D1 拓扑已解决、C3 两误报无需修、A4 归对账会话）。
+- 三条线（每张自包含任务卡分派为 spawn_task chip，供多会话并行；用户要求**默认 ultracode**）：
+  - **线 A** 抗体名称映射与缺价补全（A1+A3，成本侧 `antibody-catalog/cost.ts`）——用户手动切 ultracode，**运行中**（`task_4675ee98`）。
+  - **线 D** 统一检测项目目录映射层（D2，新建 `project-catalog.ts`+新表；先摊口径给 PM 拍再落码）——ultracode chip `task_a65bcaab`（重发替代旧非-ultracode 版）。
+  - **线 F** G2 弱锚校准+承重墙口径（B4+B3，`ihc_cost_params` seed+敏感性文档；真值待康湾工资/折旧）——ultracode chip `task_b514b2ae`。
+
+**冲突边界**：A→antibody utils / D→新文件+新表 / F→`ihc_cost_params` seed+docs；共享 `DatabaseManager.ts` 由 D(新表块) 与 F(改 seed 值) 各占不同区，撞车后合方 `git merge origin/master` 消解。
+
+**PM 待解锁**：A1 缺价采购价、A2 三家扣率、B4 康湾工资/折旧、D2 目录口径拍板（各会话先产出清单/草案再等 PM）。
+
+**PR/看板**：[#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) ✅ MERGED（base=master，独立·纯文档，merge commit `6a8e69bd`）。把拆分边界表落 master 供并行会话共读。
+
+*更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（进销存「修流程」并行任务拆分 + 核实分派，2026-07-02）
+
+**线/工作树**：worktree `eloquent-lichterman-af4db5`（已 ff 到 master tip `2bdbbee7`）。
+
+**触发**：用户"同步前面进销存的流程，按上一轮同样方式并行开多任务，要求一致"。拍板范围=**先修流程做真（wave-1），再逐页前端重设计（wave-2）**。
+
+**方法（ultracode Workflow `w1yoz1dxl`）**：9 模块并行核实 backlog 对**当前 master 真实状态**→定线→起草卡。**核实先行避免重复劳动**：入库 IN-03/05/06 代码已修（仅清单失真）、退货给供应商已完整、采购订单菜单/路由/页面都在——**三模块丢弃**（清单说缺其实已做）。1 个 verify agent（采购）失败→已手工补核确认已做。
+
+**产出**：
+- 新文档 `docs/COREONE-进销存修流程-实现任务拆分-2026-07-02.md`（核实结论 + wave-1 四线卡 + wave-2 两线 + 冲突边界 + PM 待拍口径）。
+- **wave-1 四条互不碰文件线**（已分派 ultracode chip）：
+  - **C** 调拨/退库/报废三页补全（M·mockup 先行·**本波唯一动 DatabaseManager schema**）`task_9b1bf9c5`
+  - **E** 预警前后端契约对齐+生成触发（M）`task_f68fd867`
+  - **A** 库存/盘点空态+盘点调整落库（S）`task_9b77fcb3`
+  - **B** 出库排序做真+文档回填（S）`task_0d75ee19`
+- **wave-2 两条**（等 PM 口径）：D 主数据编码/库位层级（库位 code 规则待拍）、F BOM 做真（supportableSamples 待拍；注意 is_alternative=辅料非替代料）。
+
+**冲突边界**：`api/inventory.ts`（A↔C 各改各导出块，A 基准所有者）；`DatabaseManager.ts`（本波仅 C 动 schema）；`App.tsx`/`AppSidebar.tsx` 本波不动（详情用页内 modal）。
+
+**PR/看板**：[#38](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/38)（base=master，独立·纯文档，wave-1 边界表）。看板 `pr-governance.md` 同步：#32→MERGED、新增 #38 行 + 四线 chip。
+
+*更新时间：2026-07-02*

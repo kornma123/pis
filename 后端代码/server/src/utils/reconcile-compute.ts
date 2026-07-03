@@ -9,8 +9,10 @@ import { v4 as uuidv4 } from 'uuid'
 import {
   classifyChargeItem,
   computeReconcile,
+  classifyCaseHints,
   type BillCase,
   type LisCase,
+  type MarkerRow,
 } from './reconcile-account.js'
 
 export interface ReconcileInputs {
@@ -18,6 +20,44 @@ export interface ReconcileInputs {
   lis: LisCase[]
   statementReady: boolean
   lisReady: boolean
+}
+
+/**
+ * 某院某月「收费→实收」全票扣率 = Σnet / Σgross（只读 case_revenue；无数据回退 1）。
+ * 仅作 partnerMonthLabRate 的回退——补收折实收不直接用它（见下）。
+ */
+export function partnerMonthDiscountRate(db: any, partnerId: string, serviceMonth: string): number {
+  const r = db
+    .prepare('SELECT COALESCE(SUM(gross_amount),0) g, COALESCE(SUM(net_amount),0) n FROM case_revenue WHERE partner_id = ? AND service_month = ?')
+    .get(partnerId, serviceMonth) as { g: number; n: number }
+  const g = Number(r?.g) || 0
+  const n = Number(r?.n) || 0
+  return g > 0 ? n / g : 1
+}
+
+/**
+ * 实验室工序（免疫组化/特染）行的扣率 = Σ(其 net) / Σ(其 gross)。
+ *
+ * 补收折实收专用。为什么不用全票 Σnet/Σgross：补收是漏收的**免疫组化/特染片**（§1.2 整条计入实验室=实验室工序），
+ * 折出的实收要和「确认实收 = Σlab_revenue（纯实验室，已剔诊断桶/移出）」同口径。全票扣率把**诊断/移出行**的扣率混了进来
+ * （合作方可按业务线设不同扣率），会污染免疫组化扣率；故只取免疫组化/特染行自己的 net/gross。
+ * 回退：无实验室工序行 → 全票扣率；再无数据 → 1。
+ */
+export function partnerMonthLabRate(db: any, partnerId: string, serviceMonth: string): number {
+  const rows = db
+    .prepare('SELECT charge_item, gross_amount, net_amount FROM case_revenue_lines WHERE partner_id = ? AND service_month = ?')
+    .all(partnerId, serviceMonth) as Array<{ charge_item: string; gross_amount: number; net_amount: number }>
+  let g = 0
+  let n = 0
+  for (const r of rows) {
+    const t = classifyChargeItem(r.charge_item)
+    if (t === '免疫组化' || t === '特染') {
+      g += Number(r.gross_amount) || 0
+      n += Number(r.net_amount) || 0
+    }
+  }
+  if (g > 0) return n / g
+  return partnerMonthDiscountRate(db, partnerId, serviceMonth)
 }
 
 /** 读某院某月的账单聚合（按 case，免疫组化/特染片数 + 单价）+ LIS 物理计数。 */
@@ -97,6 +137,30 @@ export interface RunReconcileResult {
 }
 
 /**
+ * ③ 读某院某月逐抗体明细（lis_case_markers），按 case 聚成 MarkerRow[]。
+ * marker 表本身无月份列 → join lis_cases 用 operate_time 过滤月份（与差异引擎同月份口径）。
+ */
+export function buildCaseMarkers(db: any, partnerId: string, serviceMonth: string): Map<string, MarkerRow[]> {
+  const rows = db
+    .prepare(
+      `SELECT m.case_no, m.marker_name, m.wax_no, m.section_no, m.advice_type
+       FROM lis_case_markers m
+       JOIN lis_cases c ON c.partner_id = m.partner_id AND c.case_no = m.case_no
+       WHERE m.partner_id = ? AND substr(replace(COALESCE(c.operate_time, ''), '/', '-'), 1, 7) = ?
+       ORDER BY m.case_no, m.wax_no, m.section_no, m.id`,
+    )
+    .all(partnerId, serviceMonth) as Array<{ case_no: string; marker_name: string; wax_no: string | null; section_no: string | null; advice_type: string | null }>
+  const byCase = new Map<string, MarkerRow[]>()
+  for (const r of rows) {
+    if (!r.case_no) continue
+    const arr = byCase.get(r.case_no) ?? []
+    arr.push({ markerName: r.marker_name, waxNo: r.wax_no, sectionNo: r.section_no, adviceType: r.advice_type })
+    byCase.set(r.case_no, arr)
+  }
+  return byCase
+}
+
+/**
  * 跑某院某月账实核对并落库（幂等重算：清旧 diffs 重建）。
  * 关账后（定版）拒绝重算——迟到数据记次月，不改定版（§1.5）。
  * ⚠️ 重算会清空未关账院·月的已填认定（设计取舍：待复核态重跑=重置认定；正式改判请走「重新打开」）。
@@ -115,6 +179,9 @@ export function runReconcile(db: any, partnerId: string, serviceMonth: string, o
 
   const hmId = existing?.id ?? uuidv4()
   const nowExpr = 'CURRENT_TIMESTAMP'
+  // 一个事务原子写入：院·月 + diffs + 清待补收 + 细粒度线索——任一步失败整体回滚，不留半截快照。
+  db.exec('BEGIN IMMEDIATE')
+  try {
   if (existing) {
     db.prepare(
       `UPDATE reconcile_hospital_months
@@ -145,6 +212,25 @@ export function runReconcile(db: any, partnerId: string, serviceMonth: string, o
   for (const d of result.diffs) {
     insertDiff.run(uuidv4(), hmId, partnerId, serviceMonth, d.caseNo, d.lineType, d.billCount, d.lisCount, d.delta,
       d.amountImpact, d.systemHint, d.lowConfidence ? 1 : 0)
+  }
+
+  // ③ 逐抗体细粒度初判（返工/多病灶）：读逐抗体明细 → 每 case 分组 → 落 reconcile_case_hints（与 diffs 同事务清建）。
+  //   附加线索、正交于计数级差异：某院月无 marker 明细 → 无线索、差异照常。
+  db.prepare('DELETE FROM reconcile_case_hints WHERE hospital_month_id = ?').run(hmId)
+  const insertHint = db.prepare(
+    `INSERT INTO reconcile_case_hints (id, hospital_month_id, partner_id, service_month, case_no, hint_type, marker_name, wax_no, occurrences)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  for (const [caseNo, markers] of buildCaseMarkers(db, partnerId, serviceMonth)) {
+    for (const h of classifyCaseHints(markers)) {
+      insertHint.run(uuidv4(), hmId, partnerId, serviceMonth, caseNo, h.hintType, h.markerName,
+        h.waxNo ?? (h.waxNos ? h.waxNos.join('、') : null), h.occurrences)
+    }
+  }
+    db.exec('COMMIT')
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
   }
 
   return {
