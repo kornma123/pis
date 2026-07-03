@@ -1024,6 +1024,6 @@ http://your-server-ip:8080
 
 **验证**：tsc 绿(exit 0)；full vitest **79 files / 594 tests 全绿**（基线 78/590 + 本次 1 文件/4 测试，零回归）；golden ¥13,152 + ¥27,870 零回归；`data/coreone.db` 未动（测试走 :memory:）。
 
-**PR/看板**：待开 PR（独立·非栈式·off master）。因交互提问工具异常，「维持 R」为我按项目 adoption-first 基线代拍；若 PM 要收紧到 W，注释与测试已写明三步落地路径。
+**PR/看板**：[#48](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/48)（base=master·独立·非栈式·单独可合）。看板 `pr-governance.md` 已加 #48 行。PM 已拍板「保持现状（维持 R）」；若将来要收紧到 W，注释与测试已写明三步落地路径。
 
 *更新时间：2026-07-02*
