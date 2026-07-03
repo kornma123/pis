@@ -78,9 +78,10 @@
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#35](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/35) | `feat/reconcile-reason-modal` → `master` | 🟡 **OPEN**(2026-07-02) | **独立**（非栈式，off master `858f16fa`）。账实核对边界②：4 处反向操作（重新打开/反关账/放弃/恢复待补收）理由收集从浏览器 `prompt` → 系统内正式弹窗 `ReasonModal`。**纯前端 UX**·后端 API 零改动·留痕口径不变。tsc+vite build 绿；真跑端到端（放弃→弹窗→已放弃+理由留痕·零报错）。**单独可合**。 | merge-order/1 |
+| — | [#35](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/35) | `feat/reconcile-reason-modal` → `master` | ✅ **MERGED**(2026-07-02, merge commit `07543ca7`) | **独立**（非栈式，off master `858f16fa`）。账实核对边界②：4 处反向操作（重新打开/反关账/放弃/恢复待补收）理由收集从浏览器 `prompt` → 系统内正式弹窗 `ReasonModal`。**纯前端 UX**·后端 API 零改动·留痕口径不变。vitest required 绿(1m1s)·tsc+vite build 绿；真跑端到端过。 | merge-order/1 |
 
-> 🟡 **#35 OPEN（2026-07-02）**：反向操作正式弹窗，纯前端 UX，等 vitest required check（后端零改动·风险为零）。
+> ✅ **#35 已合并（2026-07-02, merge commit `07543ca7`）**：反向操作正式弹窗落地（边界②完）。**当前无 open PR。**
+> 📌 账实核对已披露边界剩 **③ 系统初判细粒度**（同蜡块返工/跨蜡块多病灶）——需**先做逐抗体 LIS 明细导入**（现只有按病例片数汇总·无蜡块+抗体逐片行），数据前置、待用户决策另立项。
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
