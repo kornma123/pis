@@ -957,3 +957,40 @@ http://your-server-ip:8080
 **PR/看板**：[#32](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/32) OPEN（base=master，独立·纯文档·单独可合，把拆分边界表落 master 供并行会话共读）。看板 `pr-governance.md` 同步新增 #32 行 + 三线 chip 状态。
 
 *更新时间：2026-07-02*
+
+---
+
+## 本次会话完成的工作（Lane E 预警做真，2026-07-02）
+
+**线/工作树**：worktree `blissful-vaughan-12ce52`，分支 `claude/blissful-vaughan-12ce52`（off master tip `2bdbbee7`，零 open PR 起步）。工作模式=**ultracode**（多代理编排 + 对抗验证 + codex 异构复核）。
+
+**触发**：用户指派并行线 E「预警做真」，与对账/LIS/成本侧会话物理隔离。
+
+**范围（已核实"还开着"）**：库存预警页 5 处链路断裂——①契约断裂：前端调 `POST /alerts/:id/process`、`/ignore`，后端只有 `/:id/handle`→**处理/忽略/批量全 404**；②表单不透传：处理弹窗 opinion/result 从未送后端→remark 永空；③无 ignore 端点；④`/generate` 有算力但前端无触发入口；⑤空态只有一行"暂无数据"。
+
+**契约决策（discussion-first，PM 用 AskUserQuestion 拍板）**：
+- 统一到 `/handle` 带 `action∈{processed,ignored}`（前端改调，非后端加 /process /ignore）——单一事实源、匹配后端既有建模、顺带加 handled_by 留痕。
+- 生成入口=**按钮 + 空态自动**（空态首次拉取成功且无筛选→自动跑一次）。
+- 处理意见**必填**。
+- 处理弹窗「忽略预警」结果→状态**已忽略**（与列表 忽略 按钮语义统一）。
+
+**改动（独占 4 文件 + 2 测试，git 只 add 目标文件未 -A）**：
+- 后端 `alerts-v1.1.ts`：`/:id/handle` 收口为唯一写端点，action 白名单校验（非法 400/缺省 processed）、写 `handled_by`=用户名、沿用 404/ALREADY_HANDLED；SQL 全参数化。
+- 前端 `hooks/useAlertsPage.ts`：handleProcess/submitHandle/handleIgnore 统一 `/handle` 带 action；submitHandle 校验意见必填+ignored 派生+RESULT_LABEL_MAP 组装 remark 透传；新增 handleGenerate + 空态自动生成 effect（useRef 只一次 + `!error` 守卫防失败态误触发）。
+- 前端 `Alerts.tsx`：页头「刷新预警」按钮；弹窗 onConfirm→submitHandle。
+- 前端 `components/AlertTable.tsx`：空态引导 UI（无数据→生成 CTA / 有筛选→无匹配提示）。
+- 测试：后端 `tests/lane-e-alert-handle-contract.test.ts`（6 例 TDD 红→绿）；前端 `hooks/useAlertsPage.test.ts`（7 例，含 !error 守卫回归）。
+
+**验证（真跑，非壳检）**：
+- 后端 `vitest` 78 files/**586** 全绿；前端 alerts **11** 绿、`tsc` 绿。仓库既有 5 例失败（`lib/utils`+`cost/*`）**master 既有、正交**——已 stash 本改动复跑确认同样失败。
+- **真跑端到端**（隔离 scratchpad DB 起真服务、全 app.ts 中间件链）：登录→generate(生成 1)→handle(带 remark)→**查库核对 status=processed/remark 逐字/handled_by=admin/handled_at**；重复处理 400、非法 action 400、不存在 404 全符合。起服务用隔离 DB+PORT=3009、收尾杀进程清端口清 DB（零污染 tracked 库）。
+- golden ¥13,152+¥27,870 零回归。
+- **独立复核（机制5 异构轴）**：4 镜头对抗 workflow（契约/回归/UX/安全）→1 真 LOW（加载失败误触发生成）已修（加 `!error` 守卫+回归测试）；codex `exec -s read-only` 深审两轮，focused 轮 **CLEAN**。
+
+**范围外遗留（已开 follow-up）**：预警写端点（/handle、/generate）仅继承挂载层 `alerts:R`、未额外要求 W——两引擎均注意到的**既有**口径不一致（其他域写操作普遍要 W）。是否收紧已拆 spawn_task `task_4bb21aba`，不在本 PR 做（避免 scope 蔓延 + 403 回归）。
+
+**PR/看板**：[#44](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/44) OPEN（base=master，独立·单独可合）。看板 `pr-governance.md` 同步新增 #44 行 + 四并行线（#37/#39/#41/#44）汇总。
+
+**旁注**：worktree 无 node_modules（不共享），本会话用 symlink 指向主树 server/前端 已装依赖跑测试（lockfile 有差异但 vitest/supertest 核心依赖可解析）；收尾已删 symlink，未污染跟踪。
+
+*更新时间：2026-07-02*
