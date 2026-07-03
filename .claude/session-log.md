@@ -1285,6 +1285,6 @@ http://your-server-ip:8080
 
 **已披露边界**：共旅假设（与既有 activity-centers 同款耦合·非新引入·注释固化）；运行库 finance 角色欠配 ABC 模块→当前只 admin 实际可见（同既有 activity-centers 行为）；缺陷 personnel-efficiency/variance 不在本项（另立 I-3/I-4）。
 
-**治理**：worktree 无 node_modules→symlink 主仓（**全程禁 `git add -A`**·只显式 add 2 源文件+doc+session-log+看板）；跑服务改了 tracked `coreone.db`→`git checkout` 复原至基线 hash `150f1094`。⚠️**worktree 路径坑**：初次误编辑主仓副本（`/进销存/前端代码/...` 命中主仓非 worktree）→ 用 `git diff | git apply` 迁到 worktree + 主仓 `git checkout` 复原。产出 → PR（待开）。
+**治理**：worktree 无 node_modules→symlink 主仓（**全程禁 `git add -A`**·只显式 add 2 源文件+doc+session-log+看板）；跑服务改了 tracked `coreone.db`→`git checkout` 复原至基线 hash `150f1094`。⚠️**worktree 路径坑**：初次误编辑主仓副本（`/进销存/前端代码/...` 命中主仓非 worktree）→ 用 `git diff | git apply` 迁到 worktree + 主仓 `git checkout` 复原。产出 → **PR [#65](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/65) ✅ MERGED（2026-07-03, merge commit `f750b280`）**：合并前 merge origin/master 消治理文档 append 冲突（保留 #62+#65 双看板段·源文件未冲突未改），vitest required 绿(1m9s)后 `--merge --admin` 落 master；board 回填经 `chore/board-65-merged` 跟进 PR。合并后当前无 open PR。
 
 *更新时间：2026-07-03*
