@@ -13,6 +13,7 @@
 - 每次执行代码修改前，简要说明即将做什么
 - 每次执行代码修改后，更新 `.claude/session-log.md`；**并 `git add` 本次改动——仅限本会话自己的 worktree**。若改动落在其他会话的 live worktree，**只改码、留未暂存、不动其 session-log**，由该树会话自行提交。
 - session-log 的更新节奏与容量**以 `session-log.md` 头部规则为准**（单一事实源）
+- **纯治理回填不单独开 PR / 提交**（2026-07-06 减负）：看板 OPEN→MERGED、session-log 补状态等纯治理更新**攒着随下一个实质 PR 捎带**，绝不单独开 `chore/board-*` PR 或单独提交一坨只改看板/日志的治理 commit。实时 PR 状态真相以 `gh pr list` 为准。细则见 `.claude/rules/pr-governance.md` §1 第 8 条。
 - 另一会话可通过读取 `session-log.md` 了解当前状态
 - 如 `session-log.md` 不存在，创建它并记录本次工作
 
