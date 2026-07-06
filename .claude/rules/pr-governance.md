@@ -250,6 +250,14 @@
 
 > 🟢 **#73 OPEN（2026-07-06）**：「整理 master」四 task 收尾（A#68 Gen-2 权威集 → B#71/C#72 旧文档贴头 → #73 权威索引）。纯文档·vitest required 绿即可合。
 
+### 活跃 PR 看板 · 机制审查第 3 轮修复批
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#74](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/74) | `chore/mechanism-review-fixes` → `master` | 🟢 **OPEN**(2026-07-06·开 PR 时写定) | **独立**（非栈式，off origin/master `a100b33c`）。机制审查第 3 轮修复批：**规则镜像同步**（根 AGENTS.md 薄入口/PR 模板 §1.8 口径/CLAUDE.md 开发工作流+启动先同步/删 8 僵尸文件）+**新规入正文**（工作模型通用版 v1.3 机制10-11+去重、项目版 v1.3 默认 ultracode）+**护栏诚实化**（guardrails dev DB 护栏+E2E 现状/golden 507→757）+**CI paths-ignore**（e2e 两侧·backend-tests 仅 push 侧防 required 挂起）+**§1 第 9 条 --admin 默认不用**+**新建 `docs/PM待拍板.md` 决策队列**。纯文档/配置·零码·golden 天然零回归。质疑关=两波对抗面板（`wf_09f7cd47` 发现成立 + `wf_379815e4` 改动无引入错=7 stands+2 weakened 已修）。本地另清理（不进 PR）：skills-auto-trigger 精简 + 回收 15 棵已合并 worktree。**单独可合**。 | merge-order/1·docs |
+
+> 🟢 **#74 OPEN（2026-07-06）**：机制审查第 3 轮可修项一次落地。**留 PM 拍板**项收进 `docs/PM待拍板.md`（M-1 e2e 重建/M-2 质疑关分档等）。本 PR 亲身遵 §1.8：合并后不回改本行状态，真相以 `gh pr list` 为准。
+
 ## 5. 会话启动检查清单（30 秒）
 
 0. **先同步**：`git fetch origin`，确认当前工作区**不落后 `origin/master`**（`git log --oneline HEAD..origin/master` 空）。在**主仓或复用的旧 worktree** 里启动最易揣着过时规则/看板干活——落后就先同步、或直接读 `origin/master` 版规则（`git show origin/master:<路径>`）。新工作本就 off `origin/master` 开 worktree、天然新鲜。（2026-07-06 机制审查补：主仓曾落后 origin/master 32 提交。）
