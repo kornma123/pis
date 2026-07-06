@@ -224,6 +224,14 @@
 
 > ✅ **#65 已合并（2026-07-03, merge commit `f750b280`）**：I-1 补导航（纯前端）落 master。**已披露边界**：①共旅假设与既有 `/abc/activity-centers` 同款耦合（非新引入·注释固化），仅不连贯自造角色(abc_config 无 abc_dashboard)可破链；②运行库 finance 欠配 ABC 模块→当前实际可见者=admin（同 activity-centers 行为）；③personnel-efficiency/variance 缺陷另立 I-3/I-4。合并后**当前无 open PR**。
 
+### 活跃 PR 看板 · 成本域 Gen-2 权威文档集落 master（"整理 master" #1·前置阻塞项）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#68](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/68) | `docs/cost-methodology-gen2` → `master` | 🟢 **OPEN**(2026-07-06) | **独立**（非栈式，无上下游；off deepreview tip `b9d38784` + `git merge origin/master` merge commit `4654ba98`）。成本域 **Gen-2 权威文档集**落 master（"整理 master" 4-task 的 **#1·前置阻塞项**——B/C/D 旧文档标签头相对路径引用本 PR 落地文件）：`CONTEXT.md`（**仓库根**·成本域通用语言）+ P0 spec（院级贡献毛利·绝对最小业务逻辑）+ **7 份 ADR**（001-007）+ PM 待拍清单 Q1-Q11 + 方法论固化 + 讨论全过程实录 + 远程深审结论 + `docs/analysis/`（cm_sim 模拟·README）+ `docs/codex-handoff/findings/11-15`（远程 codex 深审+Claude 复核过程记录）。**完成/取代 [#67](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/67)**：本 PR 的方法论固化 doc（164 行）是 #67 版（160 行）**严格超集**（含 #67 全部 + 2026-07-04 codex 深审订正）→ **#67 关闭为 superseded·零内容丢失**。**纯文档·零码/零测试**（two-dot diff 里 AppSidebar/permissions/G2/账实复核 等=幻影反向修改·分支落后 master·merge 后与 master 逐字一致已消失）。vitest **89 files/757 tests 绿**·golden ¥13,152+¥27,870 零回归。独立复核=inline git 三向取证 + 对抗 Workflow 面板(4 skeptic·refute)。**单独可合**·PM 已拍「全上含过程记录」。 | merge-order/1·docs |
+
+> 🟢 **#68 OPEN（2026-07-06）**：成本域 Gen-2 文档集，等 vitest required check（纯文档不受影响）。**取代/去重 #67**（#67 合并时关闭）。合并后 B/C/D task 的标签头方可指向本 PR 落地的 `/CONTEXT.md`+P0 spec+7 ADR。
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 对一遍本看板，差异即更新看板。
