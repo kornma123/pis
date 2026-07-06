@@ -1333,3 +1333,22 @@ http://your-server-ip:8080
 **本 PR 亲身示范新规则**：合并后**不再开 board-backfill PR**；看板行随本 PR 一次写定。
 
 *更新时间：2026-07-06*
+
+---
+
+## 2026-07-06 本次会话完成的工作 —— 成本域文档权威索引（「整理 master」收尾 task #3）
+
+**背景**：成本域反复推翻旧方案后整理 master 的收尾。前置 task A(#68 Gen-2 权威文档集)/B(#71 4 份贴 SUPERSEDED/PARTIAL 头)/C(#72 6 份贴头) 均已合 master（开工前 `gh pr list` 空 + 看板确认）。本 task 建一页权威索引让实现者一眼找到唯一当前权威、并给两份正交文档加域边界注。
+
+**产出（本会话独占文件）**：
+- **新建 `docs/COREONE-成本域文档-权威索引-2026-07-06.md`**：四区导航——§1 当前权威（P0 spec + 仓库根 CONTEXT.md + 7 ADR + 方法论固化 + PM待拍清单 + 配套证据）；§2 过时·勿跟（§2A 按医院盈利 4 份/§2B G1·G2·codex-review·账实×2，逐份注头自述 SUPERSEDED/PARTIAL + 过时节 + 仍现行勿删节）；§3 邻域·正交（LIS 收入侧 / FRS-14·TS-14 出入库报表 / BOM 消耗对账域）；§4 现行成本侧配套（缺价清单·B3·B4 + handcheck README+脚本 + golden-registry）；§5 4 条关键矛盾速查 + PM 白话汇总。
+- **`docs/FRS/FRS-14-成本分析.md` + `docs/TestScenarios/TS-14-成本分析.md`**：顶部各加一句域边界注（PM 已拍）——本报表=进销存耗材出入库消耗成本，与院级贡献毛利是两个不同域，勿在出入库聚合模型上建医院盈利。
+- 指针：`CLAUDE.md` 会话启动必读段加「成本域权威索引」一条。
+
+**核实/质疑关**：逐份 Read A/B/C 已贴头的 13+ 份文件，索引每条分类/状态**镜像自各文件顶部自述头**。对抗 Workflow 面板 `wf_34fb0c2e-0e1`（4 区域验证 + 完整性批判 + 3 skeptic 推翻）：§1/§2/§3/§4 全 **CONSISTENT**、3 skeptic **0 refuted**；完整性批判逮到 5 处**遗漏**（缺价清单/B3/B4/handcheck README/BOM 对账线）→ 已逐份 Read 核实后补入索引 §3/§4。
+
+**验证**：后端 vitest **89 files/757 tests 全绿**、golden ¥13,152+¥27,870 零回归（纯文档改动·天然零回归）。
+
+**已知边界/留给日后**：FRS-14 存在一处 doc-vs-code RBAC 漂移（文档写 `requireRole('admin','pathologist','finance')`、代码实际 `requirePermission('cost_analysis','R')`）——本 task 不在范围、**未改**（避免扩散 scope），仅在 PR body 记一句留给日后 FRS 维护。
+
+*更新时间：2026-07-06*
