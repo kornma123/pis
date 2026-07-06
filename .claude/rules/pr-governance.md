@@ -235,6 +235,12 @@
 
 > ✅ **#68 已合并（2026-07-06, merge commit `4a806b82`）**：成本域 Gen-2 权威文档集落 master。vitest required check 绿(SUCCESS)后 `--merge --admin`（e2e 非 required·pending 不阻断）。**#67 已 CLOSED-superseded**（内容全并入 #68·对抗面板补回收入侧 golden 不变量后真·零丢失）。**交付验证**：master 上 `/CONTEXT.md`（根）+ P0 spec + 7 ADR(001-007) 路径齐、可被 B/C/D 相对路径引用。合并后**本线无 open PR**。**⚠️ B/C/D task 的标签头现可指向本 PR 落地文件。**
 
+### 活跃 PR 看板 · 治理减负（禁纯治理回填单开 PR）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#70](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/70) | `chore/lighten-pr-governance` → `master` | 🟢 **OPEN**(2026-07-06·开 PR 时写定) | **独立**（非栈式，off master `b7da3947`）。PM 拍板治理减负：新增 §1 第 8 条**禁纯治理状态回填单开 PR**（看板行开 PR 时一次写定·合并后不回改·实时真相以 `gh pr list` 为准·更新攒批随下一个实质 PR 捎带）+ 订正全文矛盾条款 + CLAUDE.md/session-log 跨文档对齐（补建缺失的头部规则块）。核实=Workflow 3-agent 扫矛盾条款+跨文档一致性；质疑关=4-skeptic 对抗面板全 refuted=false。**纯规则/文档·零码·golden 天然零回归·单独可合**。**本 PR 亲身示范新规则：合并后不回填本行状态**（此行按新规则不改·真相见 `gh pr list`）。 | merge-order/1·docs |
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 拿当前真实 open 集（=实时事实源）；与看板对照，差异**记在心里、随下一个实质 PR 捎带更正**，**不为纯看板对账单开 PR / 提交**（§1 第 8 条）。
