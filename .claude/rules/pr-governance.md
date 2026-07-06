@@ -224,13 +224,13 @@
 
 > ✅ **#65 已合并（2026-07-03, merge commit `f750b280`）**：I-1 补导航（纯前端）落 master。**已披露边界**：①共旅假设与既有 `/abc/activity-centers` 同款耦合（非新引入·注释固化），仅不连贯自造角色(abc_config 无 abc_dashboard)可破链；②运行库 finance 欠配 ABC 模块→当前实际可见者=admin（同 activity-centers 行为）；③personnel-efficiency/variance 缺陷另立 I-3/I-4。合并后**当前无 open PR**。
 
-### 活跃 PR 看板 · 单切片成本口径方法论固化（成本讨论线·纯文档）
+### 活跃 PR 看板 · 成本域 Gen-2 权威文档集落 master（"整理 master" #1·前置阻塞项）
 
 | 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
 |---|---|---|---|---|---|
-| — | [#67](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/67) | `claude/margulis-board-reconcile` → `master` | 🟢 **OPEN**(2026-07-03) | **独立**（非栈式，off master `59a64dd9`）。PM 与 AI 多轮讨论收敛的**成本口径方法论固化**（非原线 3 范畴·讨论衍生）：新建 `docs/COREONE-单切片成本口径-该花多少标准成本+贡献毛利-方法论固化-2026-07-03.md`——①②③判断框架 + 贡献毛利判去留（固定成本不下沉·死亡螺旋）+ BOM 配方/价格双时钟 + 两条地基（片三口径·配方按合作形态裁）+ 三条 PM 护栏。**§6 事实订正**：抗体已进成本引擎（用扁平 seed 价非台账真价·缺口=换价源）。**§9 PM 拍板**：合作形态现纳入 / 分子线暂标未建模 / 抗体走路径 a。**四轮对抗审**：Claude 三视角红队 + codex 异构(gpt-5.5·high·7 处采纳) + 一线/工程/决策三视角面板；codex xhigh 确认断流（视角由面板覆盖）。**纯文档·零码/零 seed·golden 天然零回归·单独可合**。见记忆 `[[coreone-cost-methodology-shouldcost]]`。 | merge-order/1·docs |
+| — | [#68](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/68) | `docs/cost-methodology-gen2` → `master` | 🟢 **OPEN**(2026-07-06) | **独立**（非栈式，无上下游；off deepreview tip `b9d38784` + `git merge origin/master` merge commit `4654ba98`）。成本域 **Gen-2 权威文档集**落 master（"整理 master" 4-task 的 **#1·前置阻塞项**——B/C/D 旧文档标签头相对路径引用本 PR 落地文件）：`CONTEXT.md`（**仓库根**·成本域通用语言）+ P0 spec（院级贡献毛利·绝对最小业务逻辑）+ **7 份 ADR**（001-007）+ PM 待拍清单 Q1-Q11 + 方法论固化 + 讨论全过程实录 + 远程深审结论 + `docs/analysis/`（cm_sim 模拟·README）+ `docs/codex-handoff/findings/11-15`（远程 codex 深审+Claude 复核过程记录）。**完成/取代 [#67](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/67)**：本 PR 的方法论固化 doc（164 行）是 #67 版（160 行）**严格超集**（含 #67 全部 + 2026-07-04 codex 深审订正）→ **#67 关闭为 superseded·零内容丢失**。**纯文档·零码/零测试**（two-dot diff 里 AppSidebar/permissions/G2/账实复核 等=幻影反向修改·分支落后 master·merge 后与 master 逐字一致已消失）。vitest **89 files/757 tests 绿**·golden ¥13,152+¥27,870 零回归。独立复核=inline git 三向取证 + 对抗 Workflow 面板(4 skeptic·refute)。**单独可合**·PM 已拍「全上含过程记录」。 | merge-order/1·docs |
 
-> 🟢 **#67 OPEN（2026-07-03）**：成本口径方法论固化，等 vitest required check（纯文档不受影响）。功能梳理接续从文档 §8 起（抗体换价源路径 a + 合作形态接进配方）。
+> 🟢 **#68 OPEN（2026-07-06）**：成本域 Gen-2 文档集，等 vitest required check（纯文档不受影响）。**取代/去重 #67**（#67 合并时关闭）。合并后 B/C/D task 的标签头方可指向本 PR 落地的 `/CONTEXT.md`+P0 spec+7 ADR。
 
 ## 5. 会话启动检查清单（30 秒）
 

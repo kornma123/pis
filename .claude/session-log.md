@@ -1288,3 +1288,20 @@ http://your-server-ip:8080
 **治理**：worktree 无 node_modules→symlink 主仓（**全程禁 `git add -A`**·只显式 add 2 源文件+doc+session-log+看板）；跑服务改了 tracked `coreone.db`→`git checkout` 复原至基线 hash `150f1094`。⚠️**worktree 路径坑**：初次误编辑主仓副本（`/进销存/前端代码/...` 命中主仓非 worktree）→ 用 `git diff | git apply` 迁到 worktree + 主仓 `git checkout` 复原。产出 → **PR [#65](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/65) ✅ MERGED（2026-07-03, merge commit `f750b280`）**：合并前 merge origin/master 消治理文档 append 冲突（保留 #62+#65 双看板段·源文件未冲突未改），vitest required 绿(1m9s)后 `--merge --admin` 落 master；board 回填经 `chore/board-65-merged` 跟进 PR。合并后当前无 open PR。
 
 *更新时间：2026-07-03*
+
+## 本次会话完成的工作（成本域 Gen-2 权威文档集落 master → PR #68，2026-07-06）
+
+**线/工作树**：worktree `upbeat-raman-f233d2`。新建分支 `docs/cost-methodology-gen2`（off deepreview tip `b9d38784` + `git merge origin/master` merge commit `4654ba98`）。**"整理 master" 4-task 的 #1·前置阻塞项**（B/C/D 旧文档标签头相对路径引用本 PR 落地文件）。**纯文档·零代码/零测试·golden 天然零回归**。
+
+**任务**：把成本域 **Gen-2 权威文档集**（P0 院级贡献毛利方案 + 域模型 + 7 ADR + 全过程记录）从 `claude/cost-methodology-deepreview` 走 PR 合进 master。PM 已拍「**全上（含过程记录）**」。落地：`CONTEXT.md`（**仓库根**·成本域通用语言）+ `docs/COREONE-成本口径-P0内圈-院级贡献毛利-…-2026-07-04.md`（P0 spec）+ ADR-001..007（7 份）+ PM 待拍清单 Q1-Q11 + 方法论固化 + 讨论全过程实录 + 远程深审结论 + `docs/analysis/`（cm_sim.py·README）+ `docs/codex-handoff/findings/11-15`。
+
+**核实先行（质疑关·对抗面板）**：
+- **diff 纯净**：分支 three-dot 真实贡献（`git diff origin/master...branch`）**零 `.ts/.tsx/.js`**。两点 diff 里的 `AppSidebar.tsx`/`permissions.ts`/G2/账实复核/ABC 两 doc = **幻影反向修改**（分支 off 较早 master tip `109cc03e`=#59 合并点，master 后经 #61/#62/#65 新增这些→分支落后才显示为"反向删/改"）；`git merge origin/master` 后与 master **逐字一致**、已从 PR diff 消失。合并后 `git diff origin/master HEAD` = **纯文档**。
+- **#67 去重**：#67（`claude/margulis-board-reconcile`·OPEN·仅 1 份方法论固化 doc）未合 → 本 PR 方法论固化 doc（**164 行**）是 #67 版（160 行）**严格超集**（含全部 + 2026-07-04 codex 深审订正）→ **#67 合并时关闭 superseded·零内容丢失**。
+- **CONTEXT.md 落仓库根**（非 docs/）✅ + 7 ADR + P0 spec 路径齐 → B/C/D 相对路径引用可达。
+
+**验证**：worktree symlink 主仓 node_modules → 后端 vitest **89 files/757 tests 全绿**·golden ¥13,152+¥27,870 零回归（`tests/golden/*.test.ts` 在绿套件内）。**独立复核（机制5）**：inline git 三向取证（merge-base/three-dot/master-side diff）+ 对抗 Workflow 面板 `wf_980a3ca8-c36`（4 skeptic 各证伪一条承重断言：diff 纯净/#67 无损/CONTEXT.md 根/merge 未回退 master 代码）。
+
+**治理**：git 只显式 add 目标文档+session-log+看板（**全程禁 `git add -A`**·仓库有大量并行 worktree/未追踪文件）；session-log/pr-governance append 冲突取 master 版；deepreview 分支正被另一 live worktree（`intelligent-margulis-bf75e8`）检出→**未 hijack 其分支**，改用自建分支 off 同 commit。产出 → **PR [#68](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/68)**（独立·单独可合·取代 #67）。
+
+*更新时间：2026-07-06*
