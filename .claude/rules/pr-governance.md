@@ -17,6 +17,7 @@
 6. **base 重定向**：当上游 PR 合进 master 后，其下游 PR 的 base 会悬空 → 立即把下游 PR 的 base 改到 master（或新的上游）并 rebase，再继续。
 7. **会话边界**：会话启动 `gh pr list` 对账（**不即改看板**）；**开新 PR 时**把关系/依赖/风险一次写定到看板行 + 打标签；合并/关闭后**不实时回改看板状态**，更新随下一个实质 PR 捎带（第 8 条）。会话结束在 `session-log` 留指针（同样攒批捎带、不为此单独提交/开 PR）。
 8. **禁止纯治理回填单独开 PR / 提交**（本次减负新增·2026-07-06 PM 拍板）：看板 OPEN→MERGED、session-log 补状态等**纯治理状态回填绝不单独开 PR**（也别单独 commit 一坨只改看板/日志的治理提交）。看板行在**开 PR 时一次写定**（关系/依赖/风险/预期 merge 方式），**合并后不回改状态列**；实时 open/merged 真相以 `gh pr list` 为准。需要的看板/session-log 更新**攒着随下一个实质 PR 捎带**（下一个实质 PR 本就要动看板加自己的行，顺手把上一批已合并行的状态划掉）；没有下一个实质 PR 就**挂着不回填**，靠会话启动 `gh pr list` 对账认知真实状态。〔背景：过去每合一个 PR 就再开一个 `chore/board-XX-merged` PR 刷状态，约半数 PR 是这种纯回填——重、没用，已废。〕
+9. **合并默认不用 `--admin`**（2026-07-06 机制审查补）：master 分支保护 = `required=[vitest]`、`enforce_admins=false`、无 required review。所以 **vitest required check 绿 → 普通 `gh pr merge --merge`（或 --squash）就能合**；e2e 非 required、pending 不阻断合并（#25/#52 实证：普通 merge 直接成功）。**为什么默认别加 `--admin`**（机理要说准）：`enforce_admins=false` 意味着 required check 对 **admin**（本仓 owner 即 admin）在**服务端本就不强制**——plain merge 与 `--admin` 在服务端没有差别。真正拦你的是 **`gh` 客户端**：不带 `--admin` 时，若 PR 被判 blocked（如 vitest 尚未绿/失败），`gh pr merge` 会**在本地拒绝**；`--admin`（其语义正是"merge a PR that does not meet requirements"）**跳过这道客户端拦截**——于是一个**红着的 vitest** 也会被顺手合进去。所以：默认**别加 `--admin`**（让 gh 客户端替你把住"vitest 没绿别合"这道关）；仅在**确有正当理由**（如 required check 因已知 CI 故障卡死、且 vitest 已在别处验证绿）时**显式说明理由**再用。〔背景：自 #57 起连续 6 个 PR 惯性写 `--merge --admin`——复制粘贴习惯，非制度需要。**注**：下方看板历史行里出现的 `--merge --admin` 是**当时实操留档、非推荐做法**，今后默认按本条走。〕
 
 ## 2. 新 PR 必填字段（PR body 模板，见 `.github/pull_request_template.md`）
 
@@ -249,11 +250,20 @@
 
 > 🟢 **#73 OPEN（2026-07-06）**：「整理 master」四 task 收尾（A#68 Gen-2 权威集 → B#71/C#72 旧文档贴头 → #73 权威索引）。纯文档·vitest required 绿即可合。
 
+### 活跃 PR 看板 · 机制审查第 3 轮修复批
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#74](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/74) | `chore/mechanism-review-fixes` → `master` | 🟢 **OPEN**(2026-07-06·开 PR 时写定) | **独立**（非栈式，off origin/master `a100b33c`）。机制审查第 3 轮修复批：**规则镜像同步**（根 AGENTS.md 薄入口/PR 模板 §1.8 口径/CLAUDE.md 开发工作流+启动先同步/删 8 僵尸文件）+**新规入正文**（工作模型通用版 v1.3 机制10-11+去重、项目版 v1.3 默认 ultracode）+**护栏诚实化**（guardrails dev DB 护栏+E2E 现状/golden 507→757）+**CI paths-ignore**（e2e 两侧·backend-tests 仅 push 侧防 required 挂起）+**§1 第 9 条 --admin 默认不用**+**新建 `docs/PM待拍板.md` 决策队列**。纯文档/配置·零码·golden 天然零回归。质疑关=两波对抗面板（`wf_09f7cd47` 发现成立 + `wf_379815e4` 改动无引入错=7 stands+2 weakened 已修）。本地另清理（不进 PR）：skills-auto-trigger 精简 + 回收 15 棵已合并 worktree。**单独可合**。 | merge-order/1·docs |
+
+> 🟢 **#74 OPEN（2026-07-06）**：机制审查第 3 轮可修项一次落地。**留 PM 拍板**项收进 `docs/PM待拍板.md`（M-1 e2e 重建/M-2 质疑关分档等）。本 PR 亲身遵 §1.8：合并后不回改本行状态，真相以 `gh pr list` 为准。
+
 ## 5. 会话启动检查清单（30 秒）
 
+0. **先同步**：`git fetch origin`，确认当前工作区**不落后 `origin/master`**（`git log --oneline HEAD..origin/master` 空）。在**主仓或复用的旧 worktree** 里启动最易揣着过时规则/看板干活——落后就先同步、或直接读 `origin/master` 版规则（`git show origin/master:<路径>`）。新工作本就 off `origin/master` 开 worktree、天然新鲜。（2026-07-06 机制审查补：主仓曾落后 origin/master 32 提交。）
 1. `gh pr list --state open` 拿当前真实 open 集（=实时事实源）；与看板对照，差异**记在心里、随下一个实质 PR 捎带更正**，**不为纯看板对账单开 PR / 提交**（§1 第 8 条）。
 2. 看有没有 `do-not-merge-alone` 的 PR 处在「即将被单独合」的风险位。
-3. 要合并？→ 确认是当前最上游可合项 → 合 →（如有下游）重定向下游 base。**看板状态不实时回改**。
+3. 要合并？→ 确认是当前最上游可合项 → vitest required 绿 → **普通 `gh pr merge`（默认不加 `--admin`，见 §1 第 9 条）** →（如有下游）重定向下游 base。**看板状态不实时回改**。
 
 ---
 

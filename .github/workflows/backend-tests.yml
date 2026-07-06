@@ -7,6 +7,12 @@ name: Backend Tests (golden)
 on:
   push:
     branches: [master, main]
+    # 纯文档/治理改动跳过**合并后**的重复 vitest（PR 时已跑过）。
+    paths-ignore: ['**.md', 'docs/**', '.claude/**']
+  # ⚠️ pull_request 故意**不加 paths-ignore**：`vitest` 是 master 的 required status check。
+  #    若 PR 因 paths-ignore 整体跳过本 job，required 检查永不上报 → PR 卡在 "Expected/Waiting"
+  #    无法合并。所以 PR 侧一律跑（纯文档 PR 也就多花约 1 分钟，可接受）。
+  #    要让 PR 侧也对文档跳过，需另加同名 no-op 占位 workflow（GitHub 官方方案）——见 docs/PM待拍板.md，暂不做。
   pull_request:
     branches: [master, main, feat/phase2-lab-revenue-split]
 

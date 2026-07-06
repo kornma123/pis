@@ -8,8 +8,11 @@
 - **状态是快照、非实时事实源**：session-log 与 `pr-governance.md` 看板里写的 PR OPEN/MERGED 状态是**记录当时的快照**；**实时真相以 `gh pr list` 为准**。合并/关闭后**不回改**这些状态行。
 - **纯治理回填攒批捎带、不单独开 PR / 提交**：看板 OPEN→MERGED、session-log 补状态等纯治理更新**随下一个实质 PR 捎带**，绝不为此单独开 `chore/board-*` PR 或单独 commit 一坨只改日志/看板的治理提交（细则见 `pr-governance.md` §1 第 8 条）。
 - **容量**：无硬上限；过时的逐条明细可精简（真相在 git log / PR body / 各文档），保留承重结论与指针即可。
+- **启动读法（别通读全文，已 1300+ 行）**：读 **① 本头部规则块** + **② 文件末尾最近若干段会话**（当前进度/待办在这里）+ **③ 承重指针**（`pr-governance.md` 看板、`docs/PM待拍板.md` 决策队列、`golden-registry.md`、成本域权威索引）。**开头几段是 2026-05/06 的历史失真内容（技能/代理/MCP 的旧账），启动时可跳过**——真相以各权威文档为准。（2026-07-06 机制审查补：此前无"读末尾 N 段"指引，每次启动从失真首块读起。）
 
 ---
+
+> ⚠️ **下面这几段（2026-05-26 起）是历史记录、含已订正的失真**（"安装 260+ 技能 / Context7·Playwright MCP 自动接入 / 一批 P0 强制技能"等——实测多数技能/MCP 在本项目不存在，见 `CLAUDE.md` 与 `skills-auto-trigger.md` 的订正）。**启动请直接跳到文件末尾看最近进度**；保留这些旧段仅因"追加式不回改历史"。
 
 ## 2026-05-26 本次会话完成的工作
 
@@ -1350,5 +1353,26 @@ http://your-server-ip:8080
 **验证**：后端 vitest **89 files/757 tests 全绿**、golden ¥13,152+¥27,870 零回归（纯文档改动·天然零回归）。
 
 **已知边界/留给日后**：FRS-14 存在一处 doc-vs-code RBAC 漂移（文档写 `requireRole('admin','pathologist','finance')`、代码实际 `requirePermission('cost_analysis','R')`）——本 task 不在范围、**未改**（避免扩散 scope），仅在 PR body 记一句留给日后 FRS 维护。
+
+*更新时间：2026-07-06*
+
+---
+
+## 2026-07-06 本次会话完成的工作 —— 机制审查第 3 轮 + 修复批（本 PR）
+
+**背景**：PM「再审查现有工作机制是否有不合理」→ 机制审查第 3 轮（复盘记忆 `coreone-mechanism-review-2026-07-03`）+ 两波对抗面板质疑关（`wf_09f7cd47`/`wf_379815e4`）后，把可修的逐条修掉。off origin/master `a100b33c` 开 `chore/mechanism-review-fixes`。
+
+**修的问题（对抗面板核实后）**：
+- **规则镜像同步**：根 `AGENTS.md`（codex 入口，178→薄入口，删 7 个不存在代理 + 会话A/B 废机制）；`.github/pull_request_template.md`「看板=唯一事实源/合并后更新看板」→ §1.8 快照制口径；`CLAUDE.md`「开发工作流」planner/code-reviewer → 工作模型四段落地 + 会话启动加「第 0 步先同步」；删 8 个 5-22 僵尸文件（`.claude/AGENTS.md`/SESSION-A/B-WORKLOG/HANDOFF*/plans/v1.0-fix-plan/handoffs/*，全仓零引用，git 可还原）。
+- **新规入正文**：工作模型通用版 v1.3——§3 加机制 10（结尾 PM 汇总）+ 11（产出过质疑关·按 §6 矩阵分档·收敛判据）、补 owner/last-reviewed、去重变更记录里重复的 v1.2；项目版 v1.3——加「并行分派铁律 + 默认 ultracode」+ 指向新决策队列。
+- **护栏/诚实化**：guardrails 加 dev DB git-tracked 护栏（禁 -A/提交前 checkout/不能 untrack 因 CI e2e 依赖）+「E2E 现状」诚实口径（PR 门只跑 2 spec、夜间全量每晚在跑但飘红无人消费、e2e 非 required）；e2e.yml 误导注释订正；golden-registry「507」→「757/89 files·别把定值当锚」。
+- **CI paths-ignore**：e2e.yml（非 required）两侧加；backend-tests.yml（vitest=required）**只加 push 侧、PR 侧不动**（否则 required check 挂起阻断合并）。ruby YAML 校验 + 结构核实（PR 侧无 paths-ignore=required 永上报）。
+- **`--admin` 惯例**：pr-governance §1 加第 9 条——默认不用 `--admin`（机理：enforce_admins=false 下 vitest 对 admin 服务端不强制，真正拦门在 gh **客户端**对 blocked PR 的本地拒绝，--admin 跳过它会把红 vitest 合进去）。
+- **PM 决策队列**：新建 `docs/PM待拍板.md` 单一收件箱（M-1 e2e 重建/M-2 质疑关分档/M-3 session-log 归档/M-4 vitest 文档跳过/M-5 worktree 回收 + P-1 PII + B-1/2/3 backlog + 成本域 Q1-Q11 指针）。
+- **本地清理（不进 PR）**：精简 gitignored `skills-auto-trigger.md`（167→stub）；回收 15 棵「已合并 origin/master + 干净」worktree（30→15，用 `git worktree remove` 保分支 ref；DIRTY/UNMERGED 12 棵故意保留，未提交工作原样保住）。
+
+**质疑关（两波对抗面板）**：第 1 波审「发现是否成立」（9 发现 5 修措辞 + 3 查漏，最重=e2e 每晚在跑但 149 败无人消费·非"没在跑"）；第 2 波审「改动是否引入错/矛盾」（`wf_379815e4`：7 stands + 2 weakened → 已修 §1.9 --admin 机理措辞 + 看板历史行回指 + §7 硬门槛引用精确化；完整性批判=未发现引入性破坏）。
+
+**验证**：纯文档/配置改动·零代码·golden ¥13,152+¥27,870 天然零回归；两个 workflow YAML ruby 校验合法。**已披露边界**：M-1（e2e 回归网重建）、M-2（质疑关是否硬分档）等留 PM 拍板；session-log 未真归档（M-3，只加读法机制）。
 
 *更新时间：2026-07-06*

@@ -3,8 +3,11 @@ name: E2E Tests
 on:
   push:
     branches: [main, master]
+    # 纯文档/治理改动不触发 e2e（e2e 非 required check，两侧都可安全跳过）
+    paths-ignore: ['**.md', 'docs/**', '.claude/**']
   pull_request:
     branches: [main, master]
+    paths-ignore: ['**.md', 'docs/**', '.claude/**']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -44,8 +47,12 @@ jobs:
         working-directory: 前端代码
         run: npx playwright install --with-deps chromium
 
-      # 4. 运行 E2E 测试（分阶段：先跑核心测试，缩短 CI 时间）
-      # 已稳定的测试（alerts/locations/bom/categories 等）在本地验证，CI 仅跑核心 + 新功能
+      # 4. 运行 E2E 测试（PR 门只跑这 2 个核心 spec，缩短 CI 时间）
+      # ⚠️ 诚实口径（2026-07-06 机制审查订正原注释）：这里只跑 auth+supplier-returns 两个 spec。
+      #    e2e/ 下其余 ~16 个 spec **不在 PR 门里跑**，也**未逐一在本地保绿**——全量回归靠夜间
+      #    e2e-full.yml（每晚 02:00 UTC），但该全量目前长期整体飘红、失败信号尚无人系统消费。
+      #    故本 job 绿 ≠ 全量回归绿；e2e 亦非 required check（不阻断合并）。真拦门的是 backend-tests(vitest)。
+      #    详见 .claude/rules/coreone-guardrails.md「E2E 现状」+ docs/PM待拍板.md（回归网重建=待拍项）。
       - name: Run E2E tests (core)
         working-directory: 前端代码
         run: npx playwright test e2e/auth.spec.ts e2e/supplier-returns.spec.ts --reporter=list --workers=1
