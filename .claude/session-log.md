@@ -1,5 +1,16 @@
 # Session Log — 技能包安装与自动触发规则配置
 
+## 头部规则（更新节奏 · 单一事实源）〔2026-07-06 补建〕
+
+> `CLAUDE.md`「跨会话沟通要求」段指向的「session-log.md 头部规则（单一事实源）」即本块（此前悬空、缺失，现补建）；与 `pr-governance.md` §1 第 8 条配套、同口径。
+
+- **追加式、不回改历史**：每个会话在**文件末尾**追加一段「本次会话完成的工作」；已写的历史块**不回改**（订正另起一行说明，别改旧行）。
+- **状态是快照、非实时事实源**：session-log 与 `pr-governance.md` 看板里写的 PR OPEN/MERGED 状态是**记录当时的快照**；**实时真相以 `gh pr list` 为准**。合并/关闭后**不回改**这些状态行。
+- **纯治理回填攒批捎带、不单独开 PR / 提交**：看板 OPEN→MERGED、session-log 补状态等纯治理更新**随下一个实质 PR 捎带**，绝不为此单独开 `chore/board-*` PR 或单独 commit 一坨只改日志/看板的治理提交（细则见 `pr-governance.md` §1 第 8 条）。
+- **容量**：无硬上限；过时的逐条明细可精简（真相在 git log / PR body / 各文档），保留承重结论与指针即可。
+
+---
+
 ## 2026-05-26 本次会话完成的工作
 
 ### 1. 安装 260+ 个 Claude Code Skills
@@ -1303,5 +1314,22 @@ http://your-server-ip:8080
 **验证**：worktree symlink 主仓 node_modules → 后端 vitest **89 files/757 tests 全绿**·golden ¥13,152+¥27,870 零回归（`tests/golden/*.test.ts` 在绿套件内）。**独立复核（机制5）**：inline git 三向取证（merge-base/three-dot/master-side diff）+ 对抗 Workflow 面板 `wf_980a3ca8-c36`（4 skeptic 各证伪一条承重断言：diff 纯净/#67 无损/CONTEXT.md 根/merge 未回退 master 代码）。
 
 **治理**：git 只显式 add 目标文档+session-log+看板（**全程禁 `git add -A`**·仓库有大量并行 worktree/未追踪文件）；session-log/pr-governance append 冲突取 master 版；deepreview 分支正被另一 live worktree（`intelligent-margulis-bf75e8`）检出→**未 hijack 其分支**，改用自建分支 off 同 commit。产出 → **PR [#68](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/68)**（独立·单独可合·取代 #67）。
+
+*更新时间：2026-07-06*
+
+## 本次会话完成的工作（治理减负：禁纯治理回填单开 PR → PR #70，2026-07-06）
+
+**线/工作树**：worktree `upbeat-raman-f233d2`，分支 `chore/lighten-pr-governance`（off master `b7da3947`）。**纯治理规则/文档·零代码·golden 天然零回归**。
+
+**背景**：PM 反馈——现在每合一个实质 PR，为把看板 OPEN→MERGED 要再开一个 `chore/board-XX-merged` PR（约半数 PR 是这种纯回填·记忆 `[[coreone-mechanism-review-2026-07-03]]` 早已识别"治理链超载"），太重、没用。PM 拍板改规范。本会话上一段刚亲历一次（#68 合并后开 #69 只为刷看板状态）。
+
+**改法（核心=让看板合并后无需回填→自然不用开那个 PR）**：
+- `pr-governance.md` 新增 **§1 铁律第 8 条**：禁止为纯治理状态回填单独开 PR / 提交；看板行**开 PR 时一次写定、合并后不回改状态**；实时 open/merged 真相以 `gh pr list` 为准；更新**攒着随下一个实质 PR 捎带**，无实质 PR 就挂着不回填。
+- 连带订正所有与之矛盾的旧条款（§1.5/§1.7「合完立即更新看板」、§4 标题「唯一事实源·实时更新」、§4 note、§3 P0 头、§5 清单「差异即更新」、页脚「唯一事实源」）→ 统一为「看板=关系/顺序/风险人读视图·非实时事实源」。看板对 **OPEN 栈序/依赖/风险**的护栏价值保留（防遗忘/防错序靠 `gh pr list` + 开 PR 时写定关系，不靠事后刷状态）。
+- 跨文档一致性（防"防漂移文件自己在漂"）：`CLAUDE.md` 跨会话沟通段补一条同口径禁令；`session-log.md` **补建缺失的「头部规则」块**（CLAUDE.md/pr-governance 早就指向它却悬空）——固化「追加不回改/状态=快照非实时/纯治理攒批捎带/容量无硬上限」。
+
+**核实（Workflow `wf_3cfe49a0-a83`·3 agent）**：条款搜集（pr-governance 8 条冲突条款逐一 file:line）+ 跨文档一致性（CLAUDE.md:15 悬空指针、session-log 缺头部规则块=真正落点）+ 独立风险评估（risk agent 网络断·其视角并入合并前对抗面板）。
+
+**本 PR 亲身示范新规则**：合并后**不再开 board-backfill PR**；看板行随本 PR 一次写定。
 
 *更新时间：2026-07-06*
