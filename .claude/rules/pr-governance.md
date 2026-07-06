@@ -241,6 +241,14 @@
 |---|---|---|---|---|---|
 | — | [#70](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/70) | `chore/lighten-pr-governance` → `master` | 🟢 **OPEN**(2026-07-06·开 PR 时写定) | **独立**（非栈式，off master `b7da3947`）。PM 拍板治理减负：新增 §1 第 8 条**禁纯治理状态回填单开 PR**（看板行开 PR 时一次写定·合并后不回改·实时真相以 `gh pr list` 为准·更新攒批随下一个实质 PR 捎带）+ 订正全文矛盾条款 + CLAUDE.md/session-log 跨文档对齐（补建缺失的头部规则块）。核实=Workflow 3-agent 扫矛盾条款+跨文档一致性；质疑关=4-skeptic 对抗面板全 refuted=false。**纯规则/文档·零码·golden 天然零回归·单独可合**。**本 PR 亲身示范新规则：合并后不回填本行状态**（此行按新规则不改·真相见 `gh pr list`）。 | merge-order/1·docs |
 
+### 活跃 PR 看板 · 成本域文档权威索引（"整理 master" #3·收尾 task）
+
+| 合并序 | PR | 分支 → base | 状态 | 关系 / 风险 | 标签 |
+|---|---|---|---|---|---|
+| — | [#73](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/73) | `claude/blissful-mirzakhani-da9de4` → `master` | 🟢 **OPEN**(2026-07-06·开 PR 时写定) | **独立**（非栈式，无上下游；off origin/master tip，含已合的 **A#68 / B#71 / C#72**——本 task 硬约束=A/B/C 全合后再做，否则索引状态不准）。「整理 master」**收尾 task #3**：新建成本域文档**权威索引** `docs/COREONE-成本域文档-权威索引-2026-07-06.md`（四区：当前权威 P0贡献毛利/过时勿跟/邻域正交/现行配套 + 4 矛盾速查 + PM 白话汇总）+ **FRS-14/TS-14 顶部各加一句域边界注**（PM 已拍·进销存出入库耗材成本≠院级贡献毛利）+ CLAUDE.md/session-log 指针。**纯文档·零码·golden 天然零回归**。质疑关=逐份 Read A/B/C 贴头文件·索引状态镜像各文件自述头 + 对抗 Workflow 面板 `wf_34fb0c2e-0e1`（4 区域验证+完整性批判+3 skeptic 推翻）§1-§4 全 **CONSISTENT·0 refuted**·完整性批判逮 5 遗漏（缺价/B3/B4/handcheck README/BOM）已核实补入 §3/§4。vitest **89/757 绿**·golden ¥13,152+¥27,870 零回归。**单独可合**·留给日后=FRS-14 doc-vs-code RBAC 漂移（未改·记 PR body）。 | merge-order/1·docs |
+
+> 🟢 **#73 OPEN（2026-07-06）**：「整理 master」四 task 收尾（A#68 Gen-2 权威集 → B#71/C#72 旧文档贴头 → #73 权威索引）。纯文档·vitest required 绿即可合。
+
 ## 5. 会话启动检查清单（30 秒）
 
 1. `gh pr list --state open` 拿当前真实 open 集（=实时事实源）；与看板对照，差异**记在心里、随下一个实质 PR 捎带更正**，**不为纯看板对账单开 PR / 提交**（§1 第 8 条）。
