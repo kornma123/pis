@@ -15,6 +15,9 @@
  *  - 纯函数（seed/diff/label）+ DB 帮手分离，无 express 依赖。
  */
 
+// 项C：全局拆分公式常量+版本纳入口径签名。statement-revenue 对 partner-config 仅 type-only import（编译期擦除）→ 运行时无环。
+import { SPLIT_DIAG_FEE, SPLIT_FORMULA_VERSION } from './statement-revenue.js'
+
 // —— 类型（与 mockup 配置对象 1:1）——
 
 /**
@@ -161,7 +164,10 @@ export function caliberSignature(config: PartnerConfig): string {
       prefixes: [...(l.prefixes ?? [])].sort(), keywords: [...(l.keywords ?? [])].sort(), remarks: [...(l.remarks ?? [])].sort(),
     }))
     .sort((a, b) => a.key.localeCompare(b.key))
-  return JSON.stringify(lines)
+  // 项C：把**全局**拆分公式常量+版本纳入口径签名——此前签名只覆盖 config JSON 里的拆分线字段，
+  // 拿不到算这些字段的公式常量 SPLIT_DIAG_FEE 与公式版本。纳入后，改 105/公式版本 → 签名变 → 写门禁/跨部署口径追溯都能感知。
+  // （同一请求内比对 old vs new 签名时两侧常量相同 → 不产生 spurious RBAC 触发；仅当源码常量真变时才整体变化。）
+  return JSON.stringify({ formula: { splitDiagFee: SPLIT_DIAG_FEE, formulaVersion: SPLIT_FORMULA_VERSION }, lines })
 }
 
 // —— 默认 8 线模板（plan §P0：4 计入 + 4 移出）——
