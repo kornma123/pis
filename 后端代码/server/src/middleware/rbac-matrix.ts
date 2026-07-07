@@ -27,8 +27,13 @@ export const NON_ADMIN_ROLES = [
 
 /** 初始种子矩阵（admin 单独处理为全 W；未列模块=无权限）。RBAC 文档 §8.2，用户逐行确认。 */
 export const SEED_MATRIX: Record<string, PermMap> = {
+  // lab_director（实验室主任）= 高权限管理角色（已持 users/roles/reconciliation 审批 + transfers/scraps 写）。
+  // 2026-07-06 PM 拍板：退库/盘点由 R→W，与已有的调拨/报废/管理用户/审批对账写权限一致——
+  //   消除「能报废/调拨却不能退库/盘点」的不对称。源：非-P0 审计项 E 的 W 守卫（#76）暴露此口径缺口。
+  //   ⚠️ 既有库的 lab_director 行(roles.permissions)会 shadow 本矩阵（getEffectivePermissionsForRoles 先读 roles 行）
+  //   → 单改此处对既有库静默无效；配套迁移 reconcileLabDirectorInventoryPerms（DatabaseManager）把既有行两键对齐 'W'、保证全库生效。
   lab_director: {
-    inventory: 'R', inbound: 'R', outbound: 'R', transfers: 'W', stocktaking: 'R', returns: 'R', scraps: 'W',
+    inventory: 'R', inbound: 'R', outbound: 'R', transfers: 'W', stocktaking: 'W', returns: 'W', scraps: 'W',
     materials: 'R', categories: 'R', locations: 'R',
     bom: 'W', projects: 'W',
     suppliers: 'R', purchase_orders: 'R', supplier_returns: 'R',

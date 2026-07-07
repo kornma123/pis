@@ -1411,29 +1411,59 @@ http://your-server-ip:8080
 
 *更新时间：2026-07-06*
 
-## 2026-07-06 本次会话完成的工作 —— case_no 归一不对称根治（非-P0 项 B 复核衍生）
+## 2026-07-06 本次会话完成的工作 —— 非-P0 域审计修复批（续：项 B 导入闸）
 
-**背景**：非-P0 审计项 B（PR 待合）的对抗复核逮到一个系统性 `case_no`（病理号）归一不对称：`lis_cases.case_no` 落库用 `String().trim()`（无 NFKC），而消费侧 `case_revenue(_lines).case_no` 经 `canonicalCaseNo`（NFKC+trim）。含全角/兼容字符的号 → LIS 侧留原样、canonical 侧归半角 → **永不命中**（reconcile-compute `buildReconcileInputs` 账单↔LIS 匹配漏、buildCaseMarkers 抗体 JOIN 孤儿丢线索、statement upsert 期间键）。方向=假阴性（漏非误）·多数病理号 ASCII 不受影响·非紧急，但根治点在**入库侧统一归一**。
+**④ B·对账单导入落库闸（PR 本分支 `feat/statement-import-gate-B`）**：/commit 闭合闸自指（totalSettle==declaredTotal 同源）→ 因守恒律把 IN 挪 OUT 逐行 settle 不变→平账，lab_revenue 静默缩水也落库；serviceMonth 只格式校验→传错月静默新建平行 case_revenue 行。修法=新增 `import-gates.ts` 两个不依赖当期口径的独立软锚（partnerRecentMedianLabShare 近 N 期在范围份额中位数 + dominantLedgerMonth 台账众数月）并入既有 NEEDS_CONFIRM（confirm 旁路）。新增 `import-gate-anchors.test.ts`(6·mutation 验证)+只读取证 `forensic-import-parallel-rows.cjs`。vitest 93/815 绿·golden 零回归。独立复核=4 镜头对抗面板（绕过自指 CLEAN·逮 5 项）：**已修** labShare 钳[0,1]（坏账 lab>net 不污染基线）+ 分母同口径（当期用可落库行 lab/settle 对齐历史 net_amount）+ MIN_PERIODS 2→3 + 阈值 0.15→0.20。**已披露边界**（软锚可 confirm·危害有上界）：阈值缺真数据标定（PM 待拍·用康湾台账标 P90-95）+ 锚基线双向性（早期坏口径当基线→正确月反被拦）+ case_no NFKC 失配假阴性（lis 入库未归一·chip `task_77245a02` 根治）。
+
+**⑤ C·拆分常量立法/披露（PR 本分支 `feat/split-const-freeze-C`·立法非改 bug）**：`SPLIT_DIAG_FEE=105`（拆分公式固定分母·决定范围内 vs 范围外份额·对外"高估约 2 倍"结论唯一来源）是模块级裸常量、改动不留痕不打标。档1=`105 as const`+新增 `SPLIT_FORMULA_VERSION`+结果透出 `caliber` 印记+纳入 caliberSignature（`{formula,lines}`）+drift-guard 测试（钉死 105/版本·收入侧=成本侧 DIAGNOSIS_ANCHOR_DEFAULT）。新增 `split-formula-caliber-freeze.test.ts`(4)。vitest 94/819 绿·golden 零回归·caliberSignature 格式变更安全（调用点同请求内比对·从不落库）。**分岔登记 PM 待拍板 P-2**：「高估 2 倍」出没出门（业务取证·未出门则完结档1·已出门触发披露/更正决策插队）。**后续**：档1 的落库+前端趋势打标（需列迁移+mockup）另 PR；档3 逐客户可配体检窗口内禁。独立复核=聚焦 review agent。
+
+*更新时间：2026-07-06*
+
+## 2026-07-06 本次会话完成的工作 —— lab_director 退库/盘点 RBAC 口径拍板落地（承接项 E #76 遗留待拍 chip `task_3abe1f3d`）
+
+**背景**：非-P0 审计项 E 的 W 守卫修复（PR #76·merge commit `e488f905`）surface 出一个 SEED_MATRIX 口径待定项：`rbac-matrix.ts` 里 `lab_director` 对 `returns`/`stocktaking` 只 `R`、对 `transfers`/`scraps` 却 `W`；E 给写端点补 `requirePermission(module,'W')` 后，主任写退库/盘点会 403。
+
+**核实先行（改前逐条验，全属实 + 2 处补充）**：① SEED_MATRIX:31 确为 transfers/scraps=W、stocktaking/returns=R；② E 修复四路由写端点均有 W 守卫；③ 运行库无 lab_director 种子用户（实测 6 角色）。**补①**：`UserFormModal.tsx:7`「实验室主任」是可选角色→管理员随时可建、非纯理论；**补②**：前端 nav 是 capabilities 驱动（login 下发 `getEffectivePermissions`）、非回退 technician——真建的 lab_director 会看到 R 级只读、与后端一致（故用户原担心的「回退 technician 拿 W」不会发生）。
+
+**关键判断=不对称疑似漏配非有意设计**：主任已持 users/roles/reconciliation 审批 + transfers/scraps 写，唯独退库/盘点只读，说不通。**PM 拍板：提到 W**（四类手工库存操作统一可写）。
+
+**实现（一处口径 + 配套迁移 + 回归门禁·零前端改动）**：
+- `rbac-matrix.ts` lab_director `stocktaking/returns` R→W + 口径注释。
+- `rbac-p0-matrix-seed.test.ts` 加回归 `it` 锁 returns/stocktaking/transfers/scraps 四格=W（防矩阵口径静默回退）。
+- **配套 DB 迁移**（⚠️ 首拍误判「无需迁移」，被对抗面板逮到并订正）：`DatabaseManager.ts` 新增聚焦迁移 `reconcileLabDirectorInventoryPerms` + init 里调用，把既有库 lab_director 行的 returns/stocktaking 对齐 'W'（R→W 幂等·只动这一角色这两键·不碰其余·不覆盖脏值/'*'，纪律同 `reconcileSupplierReturnsPerms`）。新增 DB 路径回归测试 `rbac-lab-director-inventory-perms.test.ts`(4)，走 `getEffectivePermissionsForRoles` 真解析、覆盖纯对象断言逮不到的 shadowing 盲区。
+- **无需前端改动**：nav 已在 R 可见、返回页写按钮 gate 于 `canAccess(mod,'W')`→capabilities 转 W 后自动出现；补 ROLE_MENU_MAP 反成第二事实源（其 fallback 已=technician W）。（盘点页写按钮本就未 gate=既有轻 UX 瑕疵、非本改引入，本改反而消除「显按钮却 403」的错配。）
+
+**⚠️ 对抗面板订正（ultracode·`wf_78d462a8-497` 四镜头 refute）**：开 PR 前跑对抗验证，**逮到 1 个 med 级真缺陷**——首拍「无需 DB 迁移」premise 错：我只查了提交进库的 `coreone.db`（恰无 lab_director 行→回退 SEED_MATRIX 掩盖了缺陷），漏了 `DatabaseManager.ts:599` defaultRoles **持久化** lab_director 行、`getEffectivePermissionsForRoles` 先读 roles 行才回退矩阵。凡在 [ROLE-DIR 落库, 本改) 窗口初始化过的既有库会固化旧 R、单改矩阵静默无效。**恰是记忆 `coreone-rbac-live-vs-seed-matrix`/`coreone-pr8-e2e-rbac-migration-gap` 那个迁移缺口，被我错误地判为「不适用」**。→ 已加迁移 + DB 路径测试修复。其余三镜头（前端一致性/SoD 无环/测试无反向断言）均 claimHolds=true（SoD：lab_director 仅 account_reconcile:R 不能批财务对账、其可批的 BOM 对账不消费 inventory→无「自己录数自己批」环）。
+
+**验证**：tsc 绿·后端 vitest **93 files/814 tests 全绿**（含 golden ¥13,152+¥27,870 零回归 + 项 E W 守卫测试 + 新迁移 4 测试）；rbac 四文件(p0-seed 16/p3-route 10/supplier-backfill 4/lab-director-inventory 4=34)聚焦复跑绿。dev DB 未脏（测试走 `:memory:`）；仅显式 `git add` 源码文件、node_modules symlink 未纳（禁 -A）。
+
+**治理**：分支 `claude/elastic-cohen-447e6c`，**PR #82 已开**（off master；PM 已拍板具体口径）。合并前 `git merge origin/master` 消 session-log append 冲突（保留 master 的 B/C 段 + 本段）。待拍 chip `task_3abe1f3d` 已解。参考记忆 `coreone-rbac-live-vs-seed-matrix`。
+
+*更新时间：2026-07-06*
+
+## 2026-07-06 本次会话完成的工作 —— case_no 归一不对称根治（**完成项 B #80 披露的 `task_77245a02` 根治项**）
+
+**背景**：非-P0 审计项 B 的对抗复核逮到一个系统性 `case_no`（病理号）归一不对称，并把根治单开为 chip `task_77245a02`（见项 B #80 已披露边界「case_no NFKC 失配假阴性·lis 入库未归一」）。本会话即完成该根治项。症结：`lis_cases.case_no` 落库用 `String().trim()`（无 NFKC），而消费侧 `case_revenue(_lines).case_no` 经 `canonicalCaseNo`（NFKC+trim）。含全角/兼容字符的号 → LIS 侧留原样、canonical 侧归半角 → **永不命中**（reconcile-compute `buildReconcileInputs` 账单↔LIS 匹配漏、buildCaseMarkers 抗体 JOIN 孤儿丢线索、项 B `import-gates.ts:60 dominantLedgerMonth` 期间键闸恒 null 静默失效）。方向=假阴性（漏非误）·多数病理号 ASCII 不受影响·非紧急，但根治点在**入库侧统一归一**。
 
 **修（3 处写入 seam·全走共享 `canonicalCaseNo`，与消费侧同一 canonical）**：
 - **①** `utils/lis-import.ts`：`normalizeLisRow.caseNo` + `normalizeMarkerRow.caseNo` → `canonicalCaseNo`（写 `lis_cases.case_no` 主导入 + `lis_case_markers.case_no`；一处修同时修好 reconcile 匹配 + 抗体 JOIN + `ON CONFLICT(partner_id,case_no)` 全角/半角去重）。
 - **②** `routes/reconciliation-v1.1.ts:~353`：遗留手工 `lis_cases` 导入路径也归一（不留第二条 raw 写路）。
 - **③** `utils/billing-revenue.ts`：`normalizeLine.caseNo` → `canonicalCaseNo`（**首轮复核衍生**：`case-revenue-v1.1.ts` 是**第二个**收入侧写者，此前 raw 落 `case_revenue(_lines)` 且用 raw 探 `lis_cases`/`resolveLisCanonicalPartner`；一处 seam 同时修写入+探针）。
 - 下游 `reconcile_diffs`/`reconcile_case_hints`/`supplement_orders` 的 case_no **继承 canonical**（只从已归一的 LIS/收入表读），无需各自再归一。
+- **修好项 B 期间键闸**：merge 后 `import-gates.ts:60 dominantLedgerMonth` 已在树。它 `SELECT ... FROM lis_cases WHERE case_no IN (<statement 传入的 canonical 列表>)`——修前 lis_cases 侧 raw → 全角号恒不命中 → 众数月恒 null → 期间键闸对全角静默失效；本 fix 归一 lis_cases 后该闸对全角真生效。
 
-**测试**：`lis-import.test.ts`（+全角 case_no 单测 + marker 归一）、`billing-revenue.test.ts`（+全角号 + 聚合键归一）、新 `reconcile-fullwidth-caseno.test.ts`（端到端证：全角 LIS 导入落半角 canonical + 账单半角 → `computeReconcile` matchRate=1，修前 union=2/matched=0=0）。
+**测试**：`lis-import.test.ts`（+全角 case_no 单测 + marker 归一）、`billing-revenue.test.ts`（+全角号 + 聚合键归一）、新 `reconcile-fullwidth-caseno.test.ts`（端到端证：全角 LIS 导入落半角 canonical + 账单半角 → `computeReconcile` matchRate=1，修前 union=2/matched=0）。
 
-**验证**：tsc 绿；后端 vitest **93 files/814 tests 全绿**（含 golden `partner-revenue-golden` ¥13,152 + `hemujia-purelab-golden` ¥27,870 零回归；canonicalCaseNo 对 ASCII 恒等，实数据不受影响）。dev DB 未污染（测试走 `:memory:`、探针只读）。
+**验证**：tsc 绿；后端 vitest 全绿（含 golden `partner-revenue-golden` ¥13,152 + `hemujia-purelab-golden` ¥27,870 零回归；canonicalCaseNo 对 ASCII 恒等，实数据不受影响）。dev DB 未污染（测试走 `:memory:`、探针只读）。**注**：merge origin/master（+项 B/C/rbac）后需以合并树复跑 vitest 确认联合绿（下方 PR 流程执行）。
 
 **独立复核（工作模型机制5·双轨）**：
 - 首轮 general-purpose 对抗读码 → 确认 3 处正确、无循环 import、NFKC 对 ASCII 恒等/幂等；**逮到 ③**（billing-revenue 第二收入写者 raw）已修。
-- ultracode 完整性 Workflow（`wf_5956f179-165`·8 agent：4 域枚举 → 综合矩阵 → 3-lens 对抗 refute）：**GAP_FOUND=成本侧**——`outbound_abc_details.case_no`（`cost-runs.ts:109` ← `outbound_records.case_no` raw 用户输入）在 `abc-partner-link.ts:24`（↔lis_cases 回填 partner）+ `:76`（↔case_revenue 院级 P&L 成本卷积）两条钱路 JOIN 仍 raw → 全角号成本掉出 partner P&L。**影响=全角-only·当前 ASCII 数据零影响·非 golden 回归**；属独立 ABC 成本/出库域（含 charge_group_id 派生键 + case_charge_groups + COUNT(DISTINCT) 幂等语义），另立**追踪 chip `task_4d5a4d3f`**（本会话不扩到该域，防在不熟域引双计风险；工作模型域隔离纪律）。
+- ultracode 完整性 Workflow（`wf_5956f179-165`·8 agent：4 域枚举 → 综合矩阵 → 3-lens 对抗 refute）：**GAP_FOUND=成本侧**——`outbound_abc_details.case_no`（`cost-runs.ts:109` ← `outbound_records.case_no` raw 用户输入）在 `abc-partner-link.ts:24`（↔lis_cases 回填 partner）+ `:76`（↔case_revenue 院级 P&L 成本卷积）两条钱路 JOIN 仍 raw → 全角号成本掉出 partner P&L。**影响=全角-only·当前 ASCII 数据零影响·非 golden 回归**；属独立 ABC 成本/出库域（含 charge_group_id 派生键 + case_charge_groups + COUNT(DISTINCT) 幂等语义），另立**追踪 chip `task_4d5a4d3f`**（用户已启动·独立会话跑；本会话不扩到该域，防在不熟域引双计风险；工作模型域隔离纪律）。
 
 **已披露边界**：
-- **成本侧 case_no 仍 raw**（见上·chip `task_4d5a4d3f`）——达「全库 case_no 皆 canonical」不变量的收尾项。
+- **成本侧 case_no 仍 raw**（见上·chip `task_4d5a4d3f`·用户已启动）——达「全库 case_no 皆 canonical」不变量的收尾项。
 - **NFKC 不折 dash 变体**（U+2212 减号 / U+2013 en-dash / U+2010 hyphen ≠ U+002D）：`canonicalCaseNo` 本身的局限（**预存**·statement 路径早已同此局限·非本次引入）；dash-错配号在任何 seam 都不命中。扩 `canonicalCaseNo` 折 dash 会影响**全部** reconcile 匹配、可能误并合法异号 → 属**共享语义决策·待 PM**（未改·未 spawn·记此）。
-- `dominantLedgerMonth` 期间键闸在当前工作树**无此命名符号**（grep 零命中，应在项 B 未合分支）；工作树内 case_no-bearing 期间键=statement upsert `ON CONFLICT(partner_id,case_no,service_month)`（两侧已 canonical=CLEAN），reconcile 月过滤/confirmed_lab_revenue 门键 `(partner_id,service_month)` 不含 case_no=免疫。
 
-**治理**：本条随本实质提交（3 修 + 3 测）；未合并/未开 PR（待用户拍）。改动仅 6 文件（src×3 + tests×3），未碰 dev DB / 未 `-A`（server/node_modules 非 gitignore 覆盖）。
+**治理**：分支 `claude/elastic-ellis-6551ce`（off master `55d2f83d`），已 `git merge origin/master`（7 提交·含项 B #80/C #81/rbac #82；仅 session-log append 冲突=保留双方）。改动仅 6 文件（src×3 + tests×3），未碰 dev DB / 未 `-A`（server/node_modules 非 gitignore 覆盖）。开 PR 到 master（独立·非栈·单独可合）。
 
 *更新时间：2026-07-06*

@@ -18,8 +18,20 @@ const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 1
 const nfkc = (s: unknown): string => (s == null ? '' : String(s)).normalize('NFKC').trim()
 const nfkcUpper = (s: unknown): string => nfkc(s).toUpperCase()
 
-/** 国标诊断费（元/病例）：一病例判读一次，split 拆分公式的固定分母项（G1 §2）。 */
-export const SPLIT_DIAG_FEE = 105
+/**
+ * 国标诊断费（元/病例）：一病例判读一次，split 拆分公式的固定分母项（G1 §2）。
+ *
+ * ⚠️ 项C 冻结（体检前置守卫）：此常量决定「范围内(实验室) vs 范围外(诊断桶)」份额分界，是对外「高估约 2 倍」结论的
+ * 唯一来源。在「只看趋势」语境下，恒定常量不破坏可比性，真正致命的是**中途被人悄改致趋势断层无标注**。故：
+ *   ① `as const` 冻结；② 改此值 = 碰口径 → **必须同步 bump `SPLIT_FORMULA_VERSION` + 更新 drift-guard 测试**
+ *   （强制「改口径=显式立法动作」，见 tests/split-formula-caliber-freeze.test.ts）；
+ *   ③ 须与成本侧 `antibody-cost.ts` `DIAGNOSIS_ANCHOR_DEFAULT` 一致（另有 drift-guard 守）。
+ * 逐客户可配（档3）在体检窗口内**禁止**新增（那是引入更多可中途改的变量）。
+ */
+export const SPLIT_DIAG_FEE = 105 as const
+
+/** 拆分公式口径版本：`SPLIT_DIAG_FEE` 或拆分公式结构变更时**必 bump**。纳入 caliberSignature + 随收入结果透出，供趋势对相邻两期做 caliber diff 打标（drift-guard 钉死此值）。 */
+export const SPLIT_FORMULA_VERSION = '2026-07-06.a' as const
 
 /** split 病例桶 key 的字段分隔符（可见双冒号 ::）：不会出现在病理号/业务线 key 里。
  *  用转义常量而非字面 NUL，否则源码含 NUL → Git 判为 binary、坏 diff/搜索/工具链（codex 10 LOW）。 */
@@ -61,6 +73,8 @@ export interface StatementRevenue {
   byLine: LineRevenue[]
   rows: ClassifiedRow[]
   counts: { total: number; in: number; out: number; split: number; diagnosis: number; unmatched: number; ambiguous: number }
+  /** 项C：口径印记——随每期收入结果透出拆分公式常量+版本，供落库/趋势对相邻两期做 caliber diff 打「口径变更」标注。 */
+  caliber: { splitDiagFee: number; formulaVersion: string }
 }
 
 /** 逐病例 split 累积桶：同一 (病理号, 业务线) 的结算与数量归并，pass 2 一次拆分（诊断费按病例计一次）。 */
@@ -122,6 +136,7 @@ export function computeStatementRevenue(
     byLine: [],
     rows: [],
     counts: { total: 0, in: 0, out: 0, split: 0, diagnosis: 0, unmatched: 0, ambiguous: 0 },
+    caliber: { splitDiagFee: SPLIT_DIAG_FEE, formulaVersion: SPLIT_FORMULA_VERSION },
   }
 
   const lineEntry = (line: PartnerConfigLine): LineRevenue => {
