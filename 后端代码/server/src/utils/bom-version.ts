@@ -35,13 +35,14 @@ export function normalizeEffectiveScope(value: unknown): 'future_only' | 'retroa
 
 /** 快照当前 BOM 标准（master 模型：boms 字段 + bom_items 物料用量列表） */
 export function buildBomVersionSnapshot(db: any, bomId: string): any {
+  // 绿档2（项F）：boms.standard_*_cost 六列全仓无非零写入（恒 0 噪声·bom-v1.1 的 INSERT/UPDATE 从不写它们），
+  // 是「未来某开发者发现假数据」的入口——从快照 SELECT/对象移除（列定义已在 DatabaseManager 标 deprecated）。
+  // unit_cost 保留（有真实写入路径，非恒 0）。
   const bom = db
     .prepare(
       `SELECT id, code, name, version, type, service_id, description,
               supportable_samples, fee_standard_id, fee_category, status,
-              unit_cost, standard_labor_cost, standard_equipment_cost,
-              standard_indirect_cost, standard_total_cost, standard_slide_cost,
-              standard_fee_per_slide, standard_margin_rate, updated_at
+              unit_cost, updated_at
        FROM boms WHERE id = ? AND is_deleted = 0`,
     )
     .get(bomId) as any
@@ -82,13 +83,7 @@ export function buildBomVersionSnapshot(db: any, bomId: string): any {
     feeCategory: bom.fee_category || null,
     status: bom.status,
     unitCost: Number(bom.unit_cost) || 0,
-    standardLaborCost: Number(bom.standard_labor_cost) || 0,
-    standardEquipmentCost: Number(bom.standard_equipment_cost) || 0,
-    standardIndirectCost: Number(bom.standard_indirect_cost) || 0,
-    standardTotalCost: Number(bom.standard_total_cost) || 0,
-    standardSlideCost: Number(bom.standard_slide_cost) || 0,
-    standardFeePerSlide: Number(bom.standard_fee_per_slide) || 0,
-    standardMarginRate: Number(bom.standard_margin_rate) || 0,
+    // 绿档2（项F）：standard_*_cost 六个恒 0 噪声字段已从快照移除（无消费者·防「发现假数据」）。
     updatedAt: bom.updated_at,
     materials,
   }
