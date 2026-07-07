@@ -9,6 +9,7 @@ import {
 } from '../utils/bom-version.js'
 import { runCostRecalculation } from '../utils/cost-runs.js'
 import { requireAnyRole } from '../middleware/permissions.js'
+import { canonicalCaseNo } from '../utils/classifier.js' // 病理号落库归一，与 lis-cases /import 及 case_revenue 同一 canonical（防全角号匹配漏）
 
 const router = Router()
 // 审批/驳回 BOM 修正提案限成本核准角色（admin/finance/lab_director）；propose 由挂载层 reconciliation R + 技术员 W 放行
@@ -364,7 +365,7 @@ router.post('/cases/import', (req, res) => {
       const id = `LC-${Date.now()}-${Math.floor(Math.random() * 10000)}`
       stmt.run(
         id,
-        item.caseNo || item.case_no || '',
+        canonicalCaseNo(item.caseNo || item.case_no || ''),
         item.projectId || item.project_id || '',
         item.projectName || item.project_name || '',
         item.operator || '',

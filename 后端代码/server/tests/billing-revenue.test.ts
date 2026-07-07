@@ -124,4 +124,17 @@ describe('billing-revenue：code-agnostic + 扣率解析鲁棒性', () => {
     expect(normalizeLine({ 序号: 1, 病理号: 'X', 收费代码: 'C', 计费金额: 100, 开单金额: 80, 扣率: 0.8, 计费时间: '2026-06-01' }).discountRate).toBe(0.8)
     expect(normalizeLine({ 序号: 1, 病理号: 'X', 收费代码: 'C', 计费金额: 200, 开单金额: 150, 计费时间: '2026-06-01' }).discountRate).toBe(0.75)
   })
+
+  it('全角病理号 → NFKC 归一（与 lis_cases/statement-import 同一 canonical，否则 case_revenue↔lis 匹配漏）', () => {
+    // 全角输入 'Ｓ２６-０２７２５' → 半角 'S26-02725'；ASCII 原样（幂等）
+    expect(normalizeLine({ 序号: 1, 病理号: 'Ｓ２６-０２７２５', 收费代码: 'C', 计费金额: 100, 开单金额: 80, 计费时间: '2026-06-01' }).caseNo).toBe('S26-02725')
+    expect(normalizeLine(L(1, 'S26-03046', 'C', 'i', 100, 1, 100, '80%', 80)).caseNo).toBe('S26-03046')
+    // 聚合键随之归一：同一物理 case 的全角/半角两行聚到同一 case（否则拆成两个）
+    const a = aggregateBilling([
+      { 序号: 1, 病理号: 'Ｓ２６-０２７２５', 送检医院: 'H', 收费代码: 'C1', 计费金额: 100, 开单金额: 80, 计费时间: '2026-06-01' },
+      { 序号: 2, 病理号: 'S26-02725', 送检医院: 'H', 收费代码: 'C2', 计费金额: 100, 开单金额: 80, 计费时间: '2026-06-01' },
+    ])
+    expect(a.cases).toHaveLength(1)
+    expect(a.cases[0].caseNo).toBe('S26-02725')
+  })
 })
