@@ -1422,3 +1422,24 @@ http://your-server-ip:8080
 **已披露边界/待办**：①**影子模式**——三门 A/B/C(库存守恒/期间键/常量冻结·`~/Desktop/非P0域-修复方案.md`)未在本仓落地前，输出不得进经营研判(`PORTFOLIO_HEALTH_GATES_VERIFIED=false`)；②CM_TARGET 待首月真院 golden 校准(现 G-1 经营线未定)；③tissue scope resolver 未建 → 只出「染色贡献毛利」；④真实三件套数据未导入 → 引擎对真库当前返回空(签入 db 快照表为空)；⑤旧 `HospitalPnLDashboard`(按率排序·盈利措辞)待 mockup 拍板后迁移替换。
 
 *更新时间：2026-07-06*
+
+---
+
+## 2026-07-07 本次会话续 —— P0 贡献毛利 mockup grill-with-docs（20 分支拷问 → 落 docs + 修 D20 代码 + 重构 mockup）
+
+**性质**：接上条 PR #77，PM `/grill-with-docs docs/mockups/hospital-cm-两层框架-mockup.html`。relentless 逐分支拷问设计（每问给推荐·一次一问·domain-modeling 边捕术语/ADR），20 个承重分支逐一拍板。
+
+**拍板要点（D1-D20）**：
+- **固定成本池**（覆盖倍数分母·非 P0 三件套数据）：D1 财务手工月度 config·D2 只放固定开销·系统约束排材料（双计护栏）·D5 **只整盘绝不摊单院**（死亡螺旋护栏）·D13 变更留痕+趋势线打标（照 §C）·D18 hero 改 ∑贡献毛利（真值）·覆盖倍数降次级。→ 落 **CONTEXT.md 新「组合体检层」术语段**（固定成本池/覆盖倍数/不排名精确化/顶梁柱=净贡献者非榜首/UNMEASURED）+ **新建 ADR-008**。
+- **对照表 UX**：D3 轻量人工抓手（标记/备注/导出·须持久化·不回喂排名）·D6 逐行显口径+混时分组警示（不变量④）·D7 逐行显率覆盖+低时弱化率（ADR-004）·D8 趋势不足标「积累中」不硬画·D10 状态词降页面级横幅·D11 顶梁柱徽章不自动贴·教学移说明·真标绑 §4b·D17 逐行下钻谈判弹药（§5 月度主菜）。
+- **UNMEASURED/复活**：D12 可点开清单+复核节奏（在册不可漏）·D9 阈值 30/30% 标「占位·待校准」观测优先。
+- **诚实边界（v1 披露·细分另立项）**：D14 关账后追溯补收·D15 lab_revenue≤0 不声称分作废/代阅片·D16 非IHC桶合桶+缺marker数据提醒·D19 三线混合率虚高。
+- **D20 代码互锁（真修·非文档）**：`checkTerminationPreFilter` 遇「候选点名集非空 + 产能费未测」不再静默返 ok，直接判违反（复活前置=产能费实测且 §4b 能跑）——堵「先重建自动点名再测产能→顶梁柱照样误伤」的洞。`InvariantViolation.capacityCharge` 改 `number|null`。补 TDD。
+
+**产出（本会话续·独占文件）**：CONTEXT.md（+组合体检层段）、`docs/COREONE-ADR-008-组合体检覆盖倍数-固定成本池口径-2026-07-07.md`（新）、`portfolio-health.ts`（D20 互锁）、`portfolio-health.test.ts`（D20 用例）、`docs/mockups/…mockup.html`（v2 重构落 D3-D19：空态屏/hero=∑CM/页级状态/逐行口径+率覆盖/谈判弹药下钻/UNMEASURED 可点开/人工抓手/复活占位/池变打标/疑含混线披露）。
+
+**验证**：tsc 净·P0 53 用例全绿·golden ¥13,152+¥27,870 零回归。
+
+**后端待办（记 PR #77·grill 衍生·未实现）**：固定成本池 config 表+留痕+趋势打标；标记持久化；逐行口径字段（tissue scope resolver）；率覆盖逐院字段（已有 lineCoverage 可用）；谈判弹药下钻端点（逐抗体/线 CM）；UNMEASURED 清单端点；D14/D15/D16/D19 的细分/并入另立项。
+
+*更新时间：2026-07-07*

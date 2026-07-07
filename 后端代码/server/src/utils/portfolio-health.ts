@@ -165,14 +165,18 @@ export function eligibleForTerminationPreFilter(account: AccountCmSummary, ctx: 
 export interface InvariantViolation {
   partnerId: string
   netContribution: number
-  capacityCharge: number
+  capacityCharge: number | null // null = 产能费未实测·无法验证 §4b（D20 互锁拦截·非静默放行）
   reason: string
 }
 
 /**
  * 性质断言检查器（**任何未来自动点名机制都必须先过这道**）：
- * 传入一个候选点名集（未来某机制产出的），返回其中**违反不变量的账户**（净贡献者却被点名）。
+ * 传入一个候选点名集（未来某机制产出的），返回其中**违反不变量的账户**。
  * 现行系统不产生任何自动点名 → 候选集恒空 → 无违反。本函数是**封存的复活条款**：重建自动化时先跑它。
+ *
+ * ⚠️ D20 互锁：产能费(occupancy)未实测 → 无法计算 capacityCharge → **无法验证 §4b**。
+ *   此时若候选集**非空**（有人在重建自动点名），**不静默放行**、直接判违反——
+ *   复活前置 = 产能费已实测且 §4b 能跑；未满足前禁止任何自动点名（否则先重建点名再测产能，顶梁柱照样误伤）。
  */
 export function checkTerminationPreFilter(
   accounts: AccountCmSummary[],
@@ -183,8 +187,12 @@ export function checkTerminationPreFilter(
   for (const a of accounts) {
     if (!candidateFlagged.has(a.partnerId)) continue
     const cc = capacityCharge(a, ctx)
-    if (cc == null) continue // 共享占用未测 → 不判定（第 3 层门控）
     const nc = netContribution(a)
+    if (cc == null) {
+      // D20 互锁：无法验证 → 拒绝（不静默 continue），把"未满足复活前置就自动点名"拦下
+      violations.push({ partnerId: a.partnerId, netContribution: nc, capacityCharge: null, reason: '产能费未实测·无法验证净贡献者性质断言 → 禁止自动点名（D20 互锁·复活前置未满足）' })
+      continue
+    }
     if (nc >= cc) {
       violations.push({ partnerId: a.partnerId, netContribution: nc, capacityCharge: cc, reason: '净贡献者被自动点名（违反不可谈判性质断言·§4b）' })
     }

@@ -59,12 +59,21 @@ describe('§4b 行为层性质断言：净贡献者不得被自动点名（ACC-D
     expect(r.ok).toBe(true) // 点名真恶化账户不违反断言
   })
 
-  it('共享占用未测（第 3 层门控）→ 不臆造产能费、不判定', () => {
+  it('共享占用未测（第 3 层门控）→ 不臆造产能费', () => {
     const noOcc: AccountCmSummary = { ...ACC_D, sharedOccupancy: undefined }
     expect(capacityCharge(noOcc, CTX)).toBeNull()
     expect(isNetContributor(noOcc, CTX)).toBeUndefined()
-    // 候选集里没有可判定的产能费 → 跳过、不误报
-    expect(checkTerminationPreFilter([noOcc], CTX, new Set(['ACC-D'])).ok).toBe(true)
+  })
+
+  it('D20 互锁：产能费未测 + 有候选点名集 → 拒绝（不静默放行），未点名则 ok', () => {
+    const noOcc: AccountCmSummary = { ...ACC_D, sharedOccupancy: undefined }
+    // 有人在产能费未测时喂候选点名集 → 拦下（复活前置未满足）
+    const flagged = checkTerminationPreFilter([noOcc], CTX, new Set(['ACC-D']))
+    expect(flagged.ok).toBe(false)
+    expect(flagged.violations[0].capacityCharge).toBeNull()
+    expect(flagged.violations[0].reason).toContain('D20')
+    // 没点名任何账户 → 不违反（现行系统候选恒空 = 天然 ok）
+    expect(checkTerminationPreFilter([noOcc], CTX, new Set()).ok).toBe(true)
   })
 })
 
