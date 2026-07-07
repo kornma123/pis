@@ -37,7 +37,7 @@
 |---|---|---|---|
 | B-1 | 进销存 wave-2 **主数据（D）** 口径 | wave-1 四线已落 master；wave-2 的主数据模块要 PM 定口径再开工 | ☐ |
 | B-2 | 进销存 wave-2 **BOM（F）** 口径 | 同上，BOM 缺 4 类维度待 PM 定 | ☐ |
-| B-3 | ABC **personnel-efficiency（I-3）** 页：修还是删？ | 该页有幽灵接口缺陷；ABC 处置清单已定"做or删待 PM"（I-2/I-4/I-5 方向 PM 已拍、属实现 backlog，不在此列） | ☐ |
+| B-3 | ABC **6 个幽灵报表接口**（reports.ts 恒 404）：修还是删？ | `前端代码/src/api/reports.ts` 包 10 个 api，但 `reports-v1.1.ts` 只定义 4 个真路由（cost-by-project/material/supplier/trend）→ **6 个恒 404**：`personnel-efficiency`/`cost-monthly-comparison`/`full-cost-by-project`/`cost-structure`/`cost-variance`/`cost-by-project-group`。**其中 2 个被 live 页真调用**（`personnel-efficiency`←PersonnelEfficiency.tsx、`cost-monthly-comparison`←CostDashboard.tsx，恒打 404），另 4 个是死 wrapper（无 live 页消费）。⚠️`/reports/cost-variance`(幽灵) ≠ `/abc/variance-analysis`(真·项F 已诚实降级)，勿混。取证=前端 network 恒 404、从未返回真数据 = 无真人被喂错数。二选一（PM 拍）：①删前端（页/路由/api）②补后端只读聚合路由。（I-2/I-4/I-5 方向 PM 已拍、属实现 backlog，不在此列） | ☐ |
 
 ---
 

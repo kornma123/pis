@@ -3356,6 +3356,11 @@ router.get('/variance-analysis', (req, res) => {
         totalVariance: Math.round(variance * 100) / 100,
         varianceRate: Math.round(varianceRate * 100) / 100,
         status: Math.abs(varianceRate) > 10 ? 'danger' : Math.abs(varianceRate) > 5 ? 'warn' : 'match',
+        // 项F 诚实降级：totalStandard 实为「物料实际」占位（非独立标准成本），labor/equip/indirect 标准硬编码 0。
+        //   故 varianceRate 是「总成本超出物料的部分/物料」，**不是**「实际 vs 标准」的真实差异率——禁作成本管控依据。
+        standardCalibrated: false,
+        standardSource: 'material_actual_placeholder',
+        disclaimer: '标准成本=物料实际(占位)·labor/equip/indirect 标准未接入·varianceRate 非真实标准差异·禁作成本管控依据',
       }
     })
 

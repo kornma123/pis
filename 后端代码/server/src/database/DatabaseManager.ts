@@ -834,6 +834,9 @@ export function initializeDatabase(): void {
   // —— BOM 扩展成本结构（标准成本快照 + 收费映射锚点）——
   ensureColumn('boms', 'fee_standard_id', 'TEXT')
   ensureColumn('boms', 'fee_category', 'TEXT')
+  // @deprecated（项F 绿档2）：以下 7 个 standard_*_cost 列全仓无非零写入（恒 0 噪声），
+  //   已从 bom_versions 快照 SELECT/对象移除，无任何消费者。保留列定义（不 drop，避免破坏性迁移），
+  //   但**勿再读写**——是假数据入口。真实成本走 outbound_items.unit_cost / ABC 成本池 / 逐抗体成本，非这些列。
   ensureColumn('boms', 'standard_labor_cost', 'DECIMAL(18, 4) DEFAULT 0')
   ensureColumn('boms', 'standard_equipment_cost', 'DECIMAL(18, 4) DEFAULT 0')
   ensureColumn('boms', 'standard_indirect_cost', 'DECIMAL(18, 4) DEFAULT 0')
