@@ -17,6 +17,7 @@ import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission, requireAnyRole } from '../middleware/permissions.js'
 import { findOrCreatePartner } from '../utils/partner-upsert.js'
 import { normalizeLisRow, isValidLisRow, normalizeMarkerRow, isValidMarkerRow, type NormalizedMarker } from '../utils/lis-import.js'
+import { canonicalCaseNo } from '../utils/classifier.js' // 读侧按 case_no 精确查库须与落库同一 canonical（否则全角/异体横线号 raw 输入查不到已归一的库行）
 import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
 
 const router = Router()
@@ -174,7 +175,8 @@ router.get('/', authenticateToken, (req, res) => {
 /** PUT /:caseNo/specimen-type —— 人工覆盖样本类型（manual 永远赢 + 留痕） */
 router.put('/:caseNo/specimen-type', authenticateToken, requireWrite, (req, res) => {
   try {
-    const { caseNo } = req.params
+    // 归一 URL 传入的病理号，与 lis_cases.case_no 落库侧同一 canonical（否则 raw 全角/异体横线号精确查不到已归一行 → 误 404）。
+    const caseNo = canonicalCaseNo(req.params.caseNo)
     const { specimenType, partnerId } = req.body as { specimenType?: string; partnerId?: string }
     const pid = partnerId || (req.query.partnerId as string | undefined)
     if (!SPECIMEN_TYPES.includes(specimenType as string)) { error(res, 'specimenType 非法', 'INVALID_PARAMETER', 400); return }
@@ -265,7 +267,7 @@ router.get('/markers', authenticateToken, (req, res) => {
   try {
     const db = getDatabase()
     const partnerId = String(req.query.partnerId || '')
-    const caseNo = String(req.query.caseNo || '')
+    const caseNo = canonicalCaseNo(req.query.caseNo) // 与 lis_case_markers.case_no 落库侧同一 canonical（raw 全角/异体横线号否则查不到）
     if (!caseNo) { error(res, '缺 caseNo', 'BAD_REQUEST', 400); return }
     const where = partnerId ? 'partner_id = ? AND case_no = ?' : 'case_no = ?'
     const params = partnerId ? [partnerId, caseNo] : [caseNo]
