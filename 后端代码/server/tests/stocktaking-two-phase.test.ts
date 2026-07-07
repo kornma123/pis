@@ -54,7 +54,14 @@ async function del(path: string) {
 beforeAll(async () => {
   db = await getDb()
   const stocktakingRoutes = (await import('../src/routes/stocktaking-v1.1.js')).default
-  app = await buildTestApp([{ path: '/api/v1/stocktaking', router: stocktakingRoutes }])
+  // 写端点现有 requirePermission('stocktaking','W') 守卫（依赖 req.user）。此处注入写角色用户，
+  // 模拟 authenticateToken 已设置 req.user（生产链路一致；本文件测两阶段业务逻辑，非 RBAC，RBAC 见 rbac-e-write-guard）。
+  // username 保持 'system' 以维持原 operator 取值不变。
+  const injectWriteUser = (req: any, _res: any, next: any) => {
+    req.user = { userId: 'TEST-ADMIN', username: 'system', role: 'admin' }
+    next()
+  }
+  app = await buildTestApp([{ path: '/api/v1/stocktaking', router: stocktakingRoutes, middleware: [injectWriteUser] }])
 })
 
 describe('盘点两阶段 · 创建只登记不入账', () => {

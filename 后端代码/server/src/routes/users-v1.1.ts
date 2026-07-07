@@ -3,9 +3,13 @@ import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
-import { detectSoDConflicts } from '../middleware/permissions.js'
+import { detectSoDConflicts, requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
+
+// 用户写入（改角色/改密码 = 提权入口）：挂载层只 requirePermission('users','R')，
+// 写端点必须自带 W 守卫，否则持 users:R 者即可增删改用户、改他人角色给自己提权。仿 projects/outbound 模式。
+const requireUsersWrite = requirePermission('users', 'W')
 
 // 同步用户多角色 → user_roles + primary_role + users.role(主角色,兼容旧链路)
 function syncUserRoles(db: any, userId: string, roles: string[], primaryRole?: string): void {
@@ -49,7 +53,7 @@ router.get('/', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.post('/', (req, res) => {
+router.post('/', requireUsersWrite, (req, res) => {
   try {
     const { username, password, realName, role, roles, primaryRole, department, phone } = req.body
     if (!username || !password || !realName) { error(res, 'Username, password and realName required', 'INVALID_PARAMETER', 400); return }
@@ -70,7 +74,7 @@ router.post('/', (req, res) => {
   }
 })
 
-router.put('/:id', (req, res) => {
+router.put('/:id', requireUsersWrite, (req, res) => {
   try {
     const { id } = req.params
     const data = req.body
@@ -102,7 +106,7 @@ router.put('/:id', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireUsersWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()

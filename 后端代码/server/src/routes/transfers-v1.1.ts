@@ -2,8 +2,13 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
+
+// 调拨写入（改库位/移库）：挂载层只 requirePermission('transfers','R')，
+// 写端点必须自带 W 守卫，否则持 transfers:R 者即可越权移库。仿 projects/outbound 模式。
+const requireTransfersWrite = requirePermission('transfers', 'W')
 
 // 排序白名单：键为前端可传的字段名，值为受控列名（只来自此表 → 杜绝 ORDER BY 注入）
 const SORT_COLUMNS: Record<string, string> = { createdAt: 'i.created_at', quantity: 'i.quantity' }
@@ -75,7 +80,7 @@ router.get('/stats', (_req, res) => {
 })
 
 // 新增调拨（库位间移动、总库存不变：仅记录 + 改 location_id，不动 stock）
-router.post('/inbound', (req, res) => {
+router.post('/inbound', requireTransfersWrite, (req, res) => {
   try {
     const { materialId, batchNo, quantity, fromLocationId, fromLocationName, toLocationId, operator, remark } = req.body
     if (!materialId || !toLocationId || quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0) {
@@ -132,7 +137,7 @@ router.post('/inbound', (req, res) => {
 })
 
 // 撤销调拨（还原库位到来源；总库存仍不变。来源未知的历史记录保持现状、不乱写）
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireTransfersWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
