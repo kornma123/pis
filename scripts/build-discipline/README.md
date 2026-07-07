@@ -74,9 +74,9 @@ node scripts/build-discipline/selftest.cjs
 
 1. **现在**：全 warn（本 task 定"先 warn 跑一轮看误报率"）。`.github/workflows/build-discipline.yml` 每 PR 跑，报告进 CI 日志；`selftest` 必过（工具坏了即红）。
 2. **切 C1（已落地·2026-07-07·PM 拍 M-6①）**：C1 已切 `--block=C1`——对**新增**幽灵404判红拦合并；`gate` 已加入 master required checks；workflow 的 PR 侧 paths-ignore 已移除（否则 required 永不上报卡 PR）。存量 9 幽灵在 baseline、不拦无关 PR。
-3. **切 C2**：同理 `--block=C1,C2`（棘轮只拦新增无消费者端点；存量按存量清单在「修非 P0 域」task 处置）。
-4. **C3**：高置信稳定后可选 `--block=C1,C2,C3`（只拦新增高置信）；低置信长期仅报告。
-5. **白名单死线兑现**：`consumer-whitelist.json` 的 deadline 过期→该端点从豁免翻违规。**但仅在 block 模式才真的红**——故死线兑现依赖第 2 步已切 block + 有人 review baseline diff。这条也在 M-6 一并拍。
+3. **切 C2（已落地·2026-07-07·PM 拍 M-6 续）**：`--block=C1,C2`——对**新增**无消费者端点判红。`gate` 已 required、无需再动分支保护。误报/孵化走 `consumer-whitelist.json`（owner+deadline）豁免。存量 33 在 baseline、不拦无关 PR。
+4. **C3 保持 warn（PM 拍 M-6·不切 block）**：C3 最模糊——硬拦会误伤「计算内联在路由、非独立 util」的合法配置字段（喊狼），且无干净豁免出口。日后若要拦，须先给 C3 加**逐字段豁免清单**（类比 C2 白名单）+ 收紧判定，把误报压下去再切。当前只报告 + 存量清单供人工处置。
+5. **白名单死线兑现**：`consumer-whitelist.json` 的 deadline 过期→该端点从豁免翻违规。C2 已 block（第 3 步），故 deadline 到期(2026-10-06)会真的红——须有人 review baseline diff / 处置。
 
 ## 存量清单
 
