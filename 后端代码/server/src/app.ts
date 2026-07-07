@@ -46,6 +46,7 @@ import partnerRoutes from './routes/partners-v1.1.js'
 import lisCaseRoutes from './routes/lis-cases-v1.1.js'
 import caseRevenueRoutes from './routes/case-revenue-v1.1.js'
 import partnerPnlRoutes from './routes/partner-pnl-v1.1.js'
+import hospitalPnlRoutes from './routes/hospital-pnl-v1.1.js'
 import ngsRoutes from './routes/ngs-v1.1.js'
 // 配置驱动导入器（P4）：逐院配置单一事实源 + 对账单导入预览/归类
 import partnerConfigRoutes from './routes/partner-config-v1.1.js'
@@ -131,6 +132,8 @@ app.use('/api/v1/lis-cases', authenticateToken, requirePermission('reconciliatio
 app.use('/api/v1/case-revenue', authenticateToken, requirePermission('reconciliation', 'R'), caseRevenueRoutes)
 // 院级 P&L 视图 + ABC 成本维度回填（W6/W5）。读权限由路由内 cost_analysis R 守卫（成本敏感）。
 app.use('/api/v1/partner-pnl', authenticateToken, partnerPnlRoutes)
+// 院级贡献毛利（P0 内圈·标准成本口径·四轮外审收敛两层框架）。与 partner-pnl 并存(ADR-003)·读权限路由内 cost_analysis R 守卫·零 MODULES 漂移。
+app.use('/api/v1/hospital-pnl', authenticateToken, hospitalPnlRoutes)
 // NGS 基因检测外购转销（独立渠道）：订单导入/产品目录/院级 NGS P&L。读写权限由路由内守卫（reconciliation W / cost_analysis R）。
 app.use('/api/v1/ngs', authenticateToken, ngsRoutes)
 // 配置驱动导入器（P4）：逐院配置单一事实源（CRUD/版本/回滚/基线）。权限由路由内守卫（财务/管理员）。

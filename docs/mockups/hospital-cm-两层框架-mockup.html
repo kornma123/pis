@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>院级贡献毛利 · 两层框架 mockup v2（grill 后·未定稿·待真人走查）</title>
+<style>
+  :root{
+    --ink:#0a2540; --gray900:#111827; --gray700:#374151; --gray600:#4b5563; --gray500:#6b7280; --gray400:#9ca3af;
+    --border:#e5e7eb; --blue:#3b82f6; --blue600:#2563eb; --bluebg:#eff6ff; --bluebd:#bfdbfe;
+    --bg:#f7f8fa; --card:#fff; --amber-bg:#fef3c7; --amber-bd:#fcd34d; --amber-tx:#92400e;
+  }
+  *{box-sizing:border-box}
+  body{font-family:Inter,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--gray900);background:var(--bg);margin:0;padding:24px;line-height:1.6;font-size:14px}
+  .wrap{max-width:1000px;margin:0 auto}
+  .mock-tag{display:inline-block;font-size:12px;color:var(--gray500);border:1px dashed var(--border);border-radius:9999px;padding:2px 12px;margin-bottom:12px}
+  h1{font-size:20px;font-weight:600;color:var(--ink);margin:0 0 4px}
+  .sub{color:var(--gray500);font-size:13px;margin:0 0 18px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 22px;margin-bottom:18px}
+  .banner{background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:8px;padding:12px 16px;margin-bottom:18px;color:var(--amber-tx);font-size:13px}
+  .banner b{font-weight:600}
+  .screen-label{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--gray400);text-transform:uppercase;margin:26px 0 8px}
+  h2{font-size:16px;font-weight:600;color:var(--ink);margin:0 0 2px}
+  .h2note{color:var(--gray500);font-size:12.5px;margin:0 0 16px}
+  .hero{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:4px 0 6px}
+  .hero .num{font-size:34px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1}
+  .hero .lab{font-size:13px;color:var(--gray500)}
+  .heroglos{font-size:12px;color:var(--gray500);margin-bottom:16px}
+  .secondrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:6px}
+  .metric{background:var(--bg);border-radius:8px;padding:13px 15px}
+  .metric .lab{font-size:12px;color:var(--gray500);margin-bottom:5px}
+  .metric .num{font-size:20px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1}
+  .metric .gloss{font-size:11px;color:var(--gray500);margin-top:5px;line-height:1.5}
+  .badge{display:inline-block;font-size:11px;font-weight:500;border-radius:9999px;padding:1px 8px;vertical-align:middle}
+  .b-trend{background:var(--bluebg);color:var(--blue600);border:1px solid var(--bluebd)}
+  .b-cal{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
+  .b-kou{background:#f3f4f6;color:var(--gray600);border:1px solid var(--border);font-size:10.5px}
+  .link{color:var(--blue600);cursor:pointer;text-decoration:none}
+  .bar{height:6px;background:var(--border);border-radius:9999px;overflow:hidden;margin-top:7px}
+  .bar>i{display:block;height:100%;background:var(--blue);border-radius:9999px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:right;font-weight:500;color:var(--gray500);font-size:11.5px;padding:8px 9px;border-bottom:1px solid var(--border)}
+  th.l,td.l{text-align:left}
+  td{text-align:right;padding:11px 9px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}
+  .hosp{font-weight:500;color:var(--gray900)}
+  .cm{font-weight:600;color:var(--ink)}
+  .rate-dim{color:var(--gray400)}
+  .cov{font-size:10.5px;color:var(--gray400)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px}
+  .btn{font-size:12px;color:var(--gray700);background:#fff;border:1px solid var(--border);border-radius:6px;padding:5px 11px;cursor:pointer}
+  .btn:hover{background:var(--bg)}
+  .note{background:var(--bluebg);border:1px solid var(--bluebd);border-radius:8px;padding:12px 16px;margin-top:16px;font-size:12.5px;color:#1e40af;line-height:1.6}
+  .warn{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;margin:12px 0;font-size:12px;color:#9a3412}
+  .drill{background:var(--bg);border:1px dashed var(--border);border-radius:8px;padding:12px 15px;margin-top:12px;font-size:12.5px}
+  .drill h4{margin:0 0 8px;font-size:13px;color:var(--ink);font-weight:600}
+  .ammo{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dotted var(--border);font-variant-numeric:tabular-nums}
+  .ammo:last-child{border-bottom:none}
+  .neg{color:#b91c1c;font-weight:500}
+  .foot{color:var(--gray400);font-size:11px;margin-top:10px;line-height:1.6}
+  .empty{text-align:center;padding:30px 20px;color:var(--gray500)}
+  .empty .big{font-size:15px;color:var(--gray700);font-weight:500;margin-bottom:6px}
+  ul.plain{margin:6px 0 0;padding-left:18px}
+  ul.plain li{margin:3px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="mock-tag">mockup v2 · grill 后 · 未定稿 · 待真人走查后才写真代码</div>
+  <h1>院级贡献毛利看板</h1>
+  <p class="sub">这个月挣的钱，扣掉「多做一片就多花、我们自己做才会花」的材料钱（试剂/显色/特染/组织处理）之后剩多少 —— 人工、设备、房租这类固定开销不摊进去。</p>
+
+  <div class="banner">
+    <b>影子模式 · 现在只用来校数据、看趋势方向，暂不作任何砍院/谈价决策。</b>
+    三道数据地基门（库存对得上账 / 月份不串 / 分钱常量冻结）和标准成本校准还没完成前，这里的绝对值先别信。影子期先给数据/校准的人看；对财务、管理层的经营用途，等三门 + 真实数据到位再开。
+  </div>
+
+  <!-- ============ day-1 空态屏（D4）============ -->
+  <div class="screen-label">day-1 第一眼（还没导入数据时真实长这样）</div>
+  <div class="card">
+    <div class="empty">
+      <div class="big">本月还没有可算的数据</div>
+      <div style="margin-bottom:14px">院级贡献毛利要三件套齐了才能算：<b>对账单</b>（实收）+ <b>工作量表</b>（片数）+ <b>抗体清单</b>（每片抗体）。现在这三样还没导入，所以先不显示假数字。</div>
+      <a class="btn" style="display:inline-block;text-decoration:none">去导入对账单 / 工作量表 / 抗体清单</a>
+    </div>
+  </div>
+
+  <!-- ============ 有数据后：第 1 层 组合体检 ============ -->
+  <div class="screen-label">数据齐了之后 · 第 1 层 · 整盘体检（2026 年 3 月）</div>
+  <div class="card">
+    <h2>整盘生意体检</h2>
+    <p class="h2note">只看整盘、不点名任何一家医院。结论只回答「在变好还是变坏」。</p>
+
+    <!-- hero = ∑贡献毛利（真值·D18）-->
+    <div class="hero">
+      <span class="num">¥69,621</span>
+      <span class="lab">本月贡献毛利合计
+        <svg width="80" height="22" viewBox="0 0 80 22" style="vertical-align:middle"><polyline points="2,16 26,13 52,9 78,5" fill="none" stroke="#3b82f6" stroke-width="2"/></svg>
+      </span>
+    </div>
+    <div class="heroglos">这是真算出来的数（各院实收 − 白名单材料）。连着三个月在涨。</div>
+
+    <!-- 次级：覆盖倍数（降级·D18）+ 产能 + 复活哨兵 -->
+    <div class="secondrow">
+      <div class="metric">
+        <div class="lab">够盖几倍固定开销 <span class="badge b-trend">只看趋势·校准前</span></div>
+        <div class="num">1.74×</div>
+        <div class="gloss">= 贡献毛利合计 ÷ 固定开销池（财务手填·只放固定开销）。绝对值还没校准、只看方向。<span class="link">7 月池上调过一次 →</span>（趋势线已打标）</div>
+      </div>
+      <div class="metric">
+        <div class="lab">产能忙不忙</div>
+        <div class="num" style="color:var(--gray400);font-size:17px">未测量</div>
+        <div class="gloss">瓶颈是哪类产能、忙到几成还没实测。测了才打开「每单位产能贡献」这层。</div>
+      </div>
+      <div class="metric">
+        <div class="lab">复活哨兵 <span class="badge b-cal">阈值占位·待校准</span></div>
+        <div class="num" style="font-size:16px">能算清 5 <span style="color:var(--gray400);font-weight:400;font-size:12px">/ ~30 家</span></div>
+        <div class="bar"><i style="width:17%"></i></div>
+        <div class="gloss">看不清的钱 <b>22%</b>（<a class="link">点开看是哪 4 家 →</a>）。两个数任一越线就重新考虑要不要自动排队。~30 家 / ~30% 是占位、贴近再拍。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 第 2 层 对照表 ============ -->
+  <div class="screen-label">第 2 层 · 各医院对照表（要看单家时）</div>
+  <div class="card">
+    <h2>各医院对照表</h2>
+    <p class="h2note">默认按「贡献毛利绝对额」从大到小排 —— 挣得最多的顶梁柱在最上。系统<b>不排名、不打分、不自动生成谈价清单</b>；排序≠评判，请你结合关系、议价力自己判断。</p>
+    <!-- 页面级状态横幅（D10）：CM_TARGET 未拍前不逐行重复 -->
+    <div class="warn" style="background:#f3f4f6;border-color:var(--border);color:var(--gray600)">
+      <b>全部医院：经营线未定 · 仅供观察。</b> 数字照出、可排序、可看弹药，但「可留 / 需谈价 / 停止候选」这类裁决词暂不出 —— 等经营线（CM_TARGET）由真实院月数据校准、PM 拍板后，才逐行显示裁决词。
+    </div>
+
+    <!-- 人工抓手（D3）-->
+    <div class="toolbar">
+      <button class="btn">标记本月要谈</button>
+      <button class="btn">加备注</button>
+      <button class="btn">导出选中院给 BD</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th class="l">医院</th>
+          <th>贡献毛利 ↓</th>
+          <th>率</th>
+          <th>占全组份额</th>
+          <th>口径</th>
+          <th>近几月趋势</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="l"><span class="hosp">东安县医院</span></td>
+          <td class="cm">¥36,994</td>
+          <td>68.7%<div class="cov">率覆盖技术收入 92%</div></td>
+          <td>53.1%</td>
+          <td><span class="badge b-kou">仅染色</span></td>
+          <td><svg width="56" height="16" viewBox="0 0 56 16"><polyline points="2,11 20,9 38,6 54,4" fill="none" stroke="#3b82f6" stroke-width="1.6"/></svg></td>
+        </tr>
+        <tr>
+          <td class="l"><span class="hosp">和睦家系</span></td>
+          <td class="cm">¥22,348</td>
+          <td>86.0%<div class="cov">率覆盖技术收入 88%</div></td>
+          <td>32.1%</td>
+          <td><span class="badge b-kou">仅染色</span></td>
+          <td><svg width="56" height="16" viewBox="0 0 56 16"><polyline points="2,8 20,9 38,8 54,8" fill="none" stroke="#9ca3af" stroke-width="1.6"/></svg></td>
+        </tr>
+        <tr>
+          <td class="l"><span class="hosp">新城医院</span></td>
+          <td class="cm">¥4,979</td>
+          <td class="rate-dim">83.7% ⚠<div class="cov" style="color:#b45309">率仅覆盖 41% 技术收入·不代表全院</div></td>
+          <td>7.2%</td>
+          <td><span class="badge b-kou">仅染色</span></td>
+          <td><svg width="56" height="16" viewBox="0 0 56 16"><polyline points="2,9 20,8 38,9 54,9" fill="none" stroke="#9ca3af" stroke-width="1.6"/></svg></td>
+        </tr>
+        <tr>
+          <td class="l"><span class="hosp">祁阳医院</span></td>
+          <td class="cm">¥3,200</td>
+          <td>79.0%<div class="cov">率覆盖技术收入 85%</div></td>
+          <td>4.6%</td>
+          <td><span class="badge b-kou">仅染色</span></td>
+          <td><span style="font-size:11px;color:var(--gray400)">趋势积累中<br>还需 2 个月</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- 谈判弹药下钻（D17）-->
+    <div class="drill">
+      <h4>东安县医院 · 谈判弹药（点开一行看到的）</h4>
+      <div class="ammo"><span>免疫组化线 — CK7（约定价 ¥5/片 × 320 片）</span><span>贡献毛利 <span class="neg">−¥1,280</span></span></div>
+      <div class="ammo"><span>免疫组化线 — Ki-67（约定价 ¥8/片 × 210 片）</span><span>贡献毛利 <span class="neg">−¥640</span></span></div>
+      <div class="ammo"><span>组织处理 — 常规蜡块（¥7/块 × 底扣率偏低）</span><span>当前扣率 62%</span></div>
+      <div class="foot" style="margin-top:8px">拿这些去谈扣率/涨价：哪些抗体/线按约定价是负贡献、各自缺口多少、当前扣率。CM_TARGET 拍板后这里再补「vs 目标率差 ¥X」。</div>
+    </div>
+
+    <div class="note">
+      <b>为什么东安县医院率最低（68.7%）却排最上？</b> 因为它贡献毛利绝对额最大（¥36,994）—— 是「大额薄利」的顶梁柱。按率排名把它当「最差」去压价，谈崩了它扛的那份固定开销没人分摊（死亡螺旋）。所以默认按绝对额排、系统不自动点名。<br>
+      <span style="color:var(--gray600)">（"顶梁柱"是个性质——净挣的绝对利润盖得住自己的完整成本；要真正盖章须等产能费实测。绝对贡献最大 ≠ 一定健康，所以系统不自动给谁贴"顶梁柱"标。）</span>
+    </div>
+
+    <p class="foot">
+      口径：本月各院都是「仅染色」（组织处理工序判定 scope 未建）→ 同口径可比。<b>一旦有院变「完整」口径，混口径的率不可直接比，届时会分组/警示（不变量④）。</b><br>
+      已知虚高源：4 家中有 1 家疑含「三线混合 case」（同例 IHC+特染+分子），分子那部分零成本收入会把率略微推高 —— 已标、case 内分线另立项。<br>
+      数据截止月 2026-03 · 后视镜口径（导入天然滞后 1–3 月，不反映当下）。缺价暴露、约定价估值占比随行显示供判断可信度。
+    </p>
+  </div>
+</div>
+</body>
+</html>

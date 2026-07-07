@@ -1493,3 +1493,29 @@ http://your-server-ip:8080
 **验证**：selftest 22/22 绿·warn gate exit 0·C1=9/C2=33/C3=3 baseline current·YAML/JSON 合法·app 源码零改动。**已披露边界**：覆盖诚实声明=五形态机器只查得 4 种（**孤儿路由**靠前端审计、**假能力**如 /abc/variance 假标准成本无机器检查·最高危仍靠人，已 hoist 到 README 顶防 PM 假门错觉）；C3 warn-only（启发式·计算内联在路由的口径分叉检不出）；keyOf param 折叠低危碰撞已文档化。**留 PM 拍**：M-6 何时切 block+设 required（推荐先切 0 误报的 C1）。
 
 *更新时间：2026-07-06*
+
+---
+
+## 2026-07-06 本次会话完成的工作 —— P0 院级贡献毛利「四轮外审收敛终稿」落地（后端引擎影子模式 + mockup）〔PR #77·分支 objective-mclaren-f477c2〕
+
+**性质**：应 PM「实现 P0 院级贡献毛利四轮外审收敛终稿设计」。碰钱/口径 → TDD + 独立对抗复核。**背景纠正**：`/hospital-pnl` 已有 `HospitalPnLDashboard.tsx`（`a7c379df`）但恰是四轮推翻的旧设计（按 grossMargin 升序=按率排名·盈利/亏损措辞）；任务「尚未建」指新贡献毛利引擎/后端路由（确无）→ 建**新并存 lane**（ADR-003）、旧看板暂不动。
+
+**后端（新独立 lane·影子模式·TDD·golden 零回归）**：`hospital-cm.ts`（per-case 引擎·桶A二抗+桶B一抗①*/特染/组织处理¥7·同源闸·准入闸·状态真值表 G-1·结构上无 labor/equipment）+ `portfolio-health.ts`（两层框架·覆盖倍数只看趋势·§4a 产能费单算·§4b 净贡献者不得自动点名封存·复活双触发常量）+ `hospital-cm-service.ts`（§10.A SQL 契约·lab_revenue 非 net_amount·marker 防扇出·§10.E 跨月复用禁输出）+ `hospital-pnl-v1.1.ts` 路由（复用 cost_analysis:R·零 MODULES 漂移·与 partner-pnl 并存）。
+
+**独立复核（机制5·`wf_9e39b91b`）逮 3 真 bug 并修 + TDD**：① HIGH §10.E 跨月复用双计闸未实现 → `loadCrossMonthReuseKeys`+`makeWithheldCase`；② coverage 恒真式 → `ihcCount` 透传+§10.D 真谓词；③ 特染占位价信号丢弃 → `stainPlaceholderShare` 披露。
+
+**前端 mockup 先行红线**（未写真 React）：`docs/mockups/hospital-cm-两层框架-mockup.html`。**验证**：后端 vitest 全绿·golden ¥13,152+¥27,870 零回归。
+
+*更新时间：2026-07-06*
+
+---
+
+## 2026-07-07 本次会话续 —— P0 贡献毛利 mockup grill-with-docs（20 分支拷问 → 落 docs + 修 D20 代码 + 重构 mockup）〔PR #77 续〕
+
+**性质**：PM `/grill-with-docs` relentless 逐分支拷问设计（一次一问·每问给推荐·domain-modeling 边捕术语/ADR），20 承重分支逐一拍板。
+
+**要点**：固定成本池（D1 财务手工月度 config·D2 只放固定开销排材料·D5 只整盘绝不摊单院[死亡螺旋护栏]·D13 变更留痕+趋势打标·D18 hero 改 ∑贡献毛利真值）→ 落 CONTEXT.md「组合体检层」术语段 + **新建 ADR-008**。对照表 UX（D3 人工抓手·D6 逐行口径+混时警示·D7 逐行率覆盖·D8 趋势积累中·D10 状态词降页面级·D11 顶梁柱教学移说明·D17 谈判弹药下钻）。UNMEASURED/复活（D12 可点开清单·D9 阈值占位待校准）。诚实边界 v1 披露（D14 关账后追溯补收·D15 作废/代阅片不声称分·D16 非IHC合桶·D19 三线混合率虚高）。**D20 代码真修**：`checkTerminationPreFilter` 遇「候选点名集非空+产能费未测」拒绝而非静默 ok（堵先重建点名再测产能→顶梁柱误伤的洞）+ TDD。
+
+**产出**：CONTEXT.md（+组合体检层段）、`docs/COREONE-ADR-008-…-2026-07-07.md`（新）、`portfolio-health.ts`（D20）、mockup v2（落 D3-D19）。**后端待办记 PR**：固定成本池 config 表/标记持久化/逐行口径字段/谈判弹药下钻端点/UNMEASURED 清单端点/D14-D19 细分。**验证**：tsc 净·后端 vitest 全绿·golden 零回归。
+
+*更新时间：2026-07-07*
