@@ -1410,3 +1410,9 @@ http://your-server-ip:8080
 **待续**：② floor-to-1 解析器根因 / B（导入闸）/ C（拆分常量冻结）/ F（ABC 抽查+弱锚闸）/ ⑦（统一旁路台账）。已披露的漏网成本点：`statement-revenue.ts:144`→C；`cost-calculator.ts:603`/`supplier-returns-v1.1.ts:27` 已有价格兜底、残余 0 与 A 设计一致（后续可统一走 resolver）。
 
 *更新时间：2026-07-06*
+
+## 2026-07-06 本次会话完成的工作 —— 非-P0 域审计修复批（续：项 B 导入闸）
+
+**④ B·对账单导入落库闸（PR 本分支 `feat/statement-import-gate-B`）**：/commit 闭合闸自指（totalSettle==declaredTotal 同源）→ 因守恒律把 IN 挪 OUT 逐行 settle 不变→平账，lab_revenue 静默缩水也落库；serviceMonth 只格式校验→传错月静默新建平行 case_revenue 行。修法=新增 `import-gates.ts` 两个不依赖当期口径的独立软锚（partnerRecentMedianLabShare 近 N 期在范围份额中位数 + dominantLedgerMonth 台账众数月）并入既有 NEEDS_CONFIRM（confirm 旁路）。新增 `import-gate-anchors.test.ts`(6·mutation 验证)+只读取证 `forensic-import-parallel-rows.cjs`。vitest 93/815 绿·golden 零回归。独立复核=4 镜头对抗面板（绕过自指 CLEAN·逮 5 项）：**已修** labShare 钳[0,1]（坏账 lab>net 不污染基线）+ 分母同口径（当期用可落库行 lab/settle 对齐历史 net_amount）+ MIN_PERIODS 2→3 + 阈值 0.15→0.20。**已披露边界**（软锚可 confirm·危害有上界）：阈值缺真数据标定（PM 待拍·用康湾台账标 P90-95）+ 锚基线双向性（早期坏口径当基线→正确月反被拦）+ case_no NFKC 失配假阴性（lis 入库未归一·chip `task_77245a02` 根治）。
+
+*更新时间：2026-07-06*
