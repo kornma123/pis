@@ -1,0 +1,37 @@
+{
+  "_doc": [
+    "检查② 后端→消费者 的白名单（有名有期的孵化）。",
+    "作用：一个后端端点暂时没有生产消费者（前端调用/内部引用）时，不是直接禁止，",
+    "     而是必须在此登记 {owner, deadline, reason}，把「先建后端等业务」从禁止变成有名有期的孵化。",
+    "     deadline（YYYY-MM-DD）过期仍无消费者 → CI 红（block 模式）、默认删（处置在另一 task）。",
+    "合法豁免类型（reason 里注明）：",
+    "  - incubating：规划中、消费者未落地的新能力（给死线）。",
+    "  - external：供外部系统/手动脚本调用的接口（前端天然无调用）。",
+    "  - internal：被后端内部逻辑消费、但静态扫不出（少见；优先改成可被扫出）。",
+    "match 规则：entry.path 可用归一形式（param 段写 ':' 或 ':id' 均可），method 精确匹配；",
+    "           path 末尾加 '/*' 可豁免该前缀下全部子路由（用于整文件孵化，如 ngs/*）。"
+  ],
+  "entries": [
+    {
+      "path": "/ngs/*",
+      "method": "*",
+      "owner": "PM待拍（成本域）",
+      "deadline": "2026-10-06",
+      "reason": "incubating — NGS 外购转销独立院级 P&L 后端（4 端点）前端零触达；去留绑定 P0 UNMEASURED 配套决策（是否为其配独立盈利口径），见记忆 coreone-feature-keep-cut-inventory。处置在「修非 P0 域」task，非本立闸 task。"
+    },
+    {
+      "path": "/project-catalog/*",
+      "method": "*",
+      "owner": "PM待拍（对账域）",
+      "deadline": "2026-10-06",
+      "reason": "incubating — D2 只读对照地基（PR#39），当初即定「并存供后续对账会话决定是否消费」；去留绑定 C 档「真标准成本」决策。见记忆 coreone-d2-project-catalog。"
+    },
+    {
+      "path": "/case-revenue/*",
+      "method": "*",
+      "owner": "PM待拍（对账域）",
+      "deadline": "2026-10-06",
+      "reason": "incubating — 财务收费单据→逐 case 实收导入后端；前端收入闭环当前走对账域(account-reconcile/statement-import)，此路由暂无前端消费者。处置在「修非 P0 域」task 决定接线或退役。"
+    }
+  ]
+}
