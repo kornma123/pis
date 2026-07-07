@@ -53,6 +53,13 @@ describe('RBAC-P0：SEED_MATRIX 完整性', () => {
     expect(SEED_MATRIX.pathologist.reconciliation).toBeUndefined()
   })
 
+  it('主任（lab_director）四类手工库存操作统一可写：退库/盘点/调拨/报废 = W（2026-07-06 PM 口径，消除不对称）', () => {
+    expect(SEED_MATRIX.lab_director.returns).toBe('W')
+    expect(SEED_MATRIX.lab_director.stocktaking).toBe('W')
+    expect(SEED_MATRIX.lab_director.transfers).toBe('W')
+    expect(SEED_MATRIX.lab_director.scraps).toBe('W')
+  })
+
   it('adminAllPermissions = 全模块 W', () => {
     const all = adminAllPermissions()
     expect(Object.keys(all).length).toBe(31)

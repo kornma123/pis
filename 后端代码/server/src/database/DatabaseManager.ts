@@ -86,6 +86,47 @@ export function reconcileSupplierReturnsPerms(database: DatabaseSync): void {
   }
 }
 
+/**
+ * 聚焦迁移：补齐 实验室主任(lab_director) 的 退库/盘点 写权限（returns/stocktaking → 'W'）。
+ *
+ * 背景（同 reconcileSupplierReturnsPerms 的 RBAC 迁移缺口，记忆 coreone-rbac-live-vs-seed-matrix）：
+ * roles.permissions 是单一事实源、会 shadow SEED_MATRIX——getEffectivePermissionsForRoles 先读
+ * roles 行、行缺失才回退矩阵（permissions.ts:46-48）。ROLE-DIR 自 defaultRoles 落库后，既有库的
+ * lab_director 行固化了当时的 returns:'R'/stocktaking:'R'；2026-07-06 PM 拍板把这两键改 'W' 只动了
+ * SEED_MATRIX，对既有库是静默无效（INSERT OR IGNORE 不覆盖既有行、backfillRolePerms 只补空值）。
+ * 此函数把既有 lab_director 行的这两键对齐到 'W'，保证口径在所有库生效、无需重建库。
+ * 纪律同 reconcileSupplierReturnsPerms：只动这一角色这两键、R→W 幂等、不碰其余键、
+ * 不覆盖脏值/'*'——保留库中其他有意的角色×矩阵不一致（如 finance 旧形态）。
+ */
+export function reconcileLabDirectorInventoryPerms(database: DatabaseSync): void {
+  const row = database.prepare('SELECT permissions FROM roles WHERE code = ?').get('lab_director') as
+    | { permissions: string }
+    | undefined
+  if (!row) return // 行缺失 → getEffectivePermissionsForRoles 回退 SEED_MATRIX（已含 'W'），无需迁移
+  let val: unknown
+  try {
+    val = typeof row.permissions === 'string' ? JSON.parse(row.permissions) : row.permissions
+  } catch {
+    return // 解析不了的脏值不动，避免覆盖
+  }
+  if (Array.isArray(val)) {
+    // 旧扁平数组形态（无 R/W 粒度，presence=可访问）：确保两键在列
+    if (val.includes('*')) return
+    let changed = false
+    for (const key of ['returns', 'stocktaking']) {
+      if (!val.includes(key)) { val.push(key); changed = true }
+    }
+    if (changed) database.prepare('UPDATE roles SET permissions = ? WHERE code = ?').run(JSON.stringify(val), 'lab_director')
+  } else if (val && typeof val === 'object') {
+    const obj = val as Record<string, unknown>
+    let changed = false
+    for (const key of ['returns', 'stocktaking']) {
+      if (obj[key] !== 'W') { obj[key] = 'W'; changed = true }
+    }
+    if (changed) database.prepare('UPDATE roles SET permissions = ? WHERE code = ?').run(JSON.stringify(obj), 'lab_director')
+  }
+}
+
 export function initializeDatabase(): void {
   const database = getDatabase()
 
@@ -619,6 +660,8 @@ export function initializeDatabase(): void {
   }
   // 聚焦迁移：补齐 仓管/采购 的 supplier_returns（既有库新增模块缺口，详见函数注释）
   reconcileSupplierReturnsPerms(database)
+  // 聚焦迁移：补齐 主任 的 退库/盘点 W（2026-07-06 PM 口径 R→W；既有库 lab_director 行 shadow 矩阵，详见函数注释）
+  reconcileLabDirectorInventoryPerms(database)
 
   // 成本可见性开关默认（可在「角色权限/设置」改）
   database.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('cost_visibility_roles', ?)")
