@@ -73,7 +73,7 @@ node scripts/build-discipline/selftest.cjs
 > 独立复核提醒：一个永远 `exit 0`、非 required 的"门"= 治理表演（项目已有 e2e 常年红没人消费的前车）。**delta 棘轮**让 block 可**立刻**切（只拦新增、不被存量挡）。flip 决策 + 死线已登记 **`docs/PM待拍板.md` M-6**（有 owner、有日期），不靠口头承诺。
 
 1. **现在**：全 warn（本 task 定"先 warn 跑一轮看误报率"）。`.github/workflows/build-discipline.yml` 每 PR 跑，报告进 CI 日志；`selftest` 必过（工具坏了即红）。
-2. **切 C1（棘轮·随时可切）**：C1 已实证 **0 误报**（9 幽灵全真）。因 delta 棘轮只拦**新增**，切 `--block=C1` **无需先清存量**、不会红墙无关 PR。切法=改 workflow Gate 命令为 `--block=C1` + 把本 workflow 加进 master 分支保护 required checks。→ PM 拍板见 M-6。
+2. **切 C1（已落地·2026-07-07·PM 拍 M-6①）**：C1 已切 `--block=C1`——对**新增**幽灵404判红拦合并；`gate` 已加入 master required checks；workflow 的 PR 侧 paths-ignore 已移除（否则 required 永不上报卡 PR）。存量 9 幽灵在 baseline、不拦无关 PR。
 3. **切 C2**：同理 `--block=C1,C2`（棘轮只拦新增无消费者端点；存量按存量清单在「修非 P0 域」task 处置）。
 4. **C3**：高置信稳定后可选 `--block=C1,C2,C3`（只拦新增高置信）；低置信长期仅报告。
 5. **白名单死线兑现**：`consumer-whitelist.json` 的 deadline 过期→该端点从豁免翻违规。**但仅在 block 模式才真的红**——故死线兑现依赖第 2 步已切 block + 有人 review baseline diff。这条也在 M-6 一并拍。

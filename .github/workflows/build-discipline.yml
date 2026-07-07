@@ -1,14 +1,17 @@
-name: Build Discipline Gate (warn)
+name: Build Discipline Gate
 
 # 构建纪律闸——把 P0 设计选择 #7「完成=真数据跑通+消费者被服务」推广成全系统机器可执行规则。
 # 三条检查：C1 前端→后端(幽灵404) / C2 后端→消费者(无人消费端点) / C3 配置→引擎(空转参数)。
 #
-# ⚠️ 当前为 **warn 模式**（不拦合并）：三条先跑一轮看误报率，稳定后逐条加 --block 切拦截。
-#    delta 棘轮：--block 只拦「新增」违规（不在 baseline.json 里的）、不被历史存量红墙挡无关 PR
-#    → 可随时切、无需先清存量。切法：把下方「Gate」命令改 `... --block=C1`（先切 0 误报的 C1），
-#    并把本 workflow 加进 master 分支保护 required checks。flip 决策有 owner+日期 = docs/PM待拍板.md M-6。
+# 拦截状态（PM 已拍 M-6·2026-07-07）：
+#   - **C1 已切 block**（`--block=C1`）：对**新增**幽灵 404 判红拦合并（delta 棘轮：只拦不在 baseline.json 里的）。
+#     C1 已实证 0 误报；存量 9 个历史幽灵在 baseline 里、不拦无关 PR。
+#   - **C2/C3 仍 warn**（只报告不拦），观察一轮后由 M-6 续拍是否切 block。
+#   - selftest 必过（工具本身坏了即红）。
 #
-# 本 workflow **非 required check**，故两侧都可 paths-ignore 纯文档（不会造成 required 挂起）。
+# ⚠️ 本 workflow 的 `gate` job 已是 master 分支保护的 **required status check**。
+#    故 **pull_request 侧不能 paths-ignore**（否则纯文档 PR 跳过本 job → required 永不上报 → PR 卡 "Expected"）。
+#    push 侧仍 paths-ignore（合并后纯文档跳过重复跑，无 required 顾虑）。同 backend-tests.yml 的 vitest 处理。
 
 on:
   push:
@@ -16,7 +19,6 @@ on:
     paths-ignore: ['**.md', 'docs/**', '.claude/**']
   pull_request:
     branches: [master, main]
-    paths-ignore: ['**.md', 'docs/**', '.claude/**']
 
 concurrency:
   group: build-discipline-${{ github.ref }}
@@ -31,9 +33,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # 自测：守护闸工具自身没被静默改坏（解析器漂了/口径变哑）。失败即红——非 required、不拦合并但可见。
+      # 自测：守护闸工具自身没被静默改坏（解析器漂了/口径变哑）。失败即红。
       - name: Selftest（工具不变量）
         run: node scripts/build-discipline/selftest.cjs
-      # 主闸：warn 模式，永远 exit 0，把三条检查的存量报告打进 CI 日志供人读。
-      - name: Gate（warn·打印存量报告）
-        run: node scripts/build-discipline/run-all.cjs
+      # 主闸：C1 对新增幽灵 404 判红（exit 1 拦合并）；C2/C3 仍 warn 只报告。存量报告一并打进 CI 日志。
+      - name: Gate（C1 block 新增·C2/C3 warn）
+        run: node scripts/build-discipline/run-all.cjs --block=C1
