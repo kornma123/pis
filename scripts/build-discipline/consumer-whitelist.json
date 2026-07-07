@@ -32,6 +32,13 @@
       "owner": "PM待拍（对账域）",
       "deadline": "2026-10-06",
       "reason": "incubating — 财务收费单据→逐 case 实收导入后端；前端收入闭环当前走对账域(account-reconcile/statement-import)，此路由暂无前端消费者。处置在「修非 P0 域」task 决定接线或退役。"
+    },
+    {
+      "path": "/hospital-pnl/*",
+      "method": "*",
+      "owner": "PM待拍（P0 贡献毛利）",
+      "deadline": "2026-10-07",
+      "reason": "incubating — P0 院级贡献毛利后端 lane（3 端点：/health 体检 / 对照表 / /trend）走 mockup 先行红线，前端 React 待 mockup(v2) 拍板后才写；且影子模式(PORTFOLIO_HEALTH_GATES_VERIFIED=false·三门 A/B/C 未验收前不进经营研判)。见 ADR-008 / PR #77。"
     }
   ]
 }
