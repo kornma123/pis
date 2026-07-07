@@ -1410,3 +1410,30 @@ http://your-server-ip:8080
 **待续**：② floor-to-1 解析器根因 / B（导入闸）/ C（拆分常量冻结）/ F（ABC 抽查+弱锚闸）/ ⑦（统一旁路台账）。已披露的漏网成本点：`statement-revenue.ts:144`→C；`cost-calculator.ts:603`/`supplier-returns-v1.1.ts:27` 已有价格兜底、残余 0 与 A 设计一致（后续可统一走 resolver）。
 
 *更新时间：2026-07-06*
+
+## 2026-07-06 本次会话完成的工作 —— case_no 归一不对称根治（非-P0 项 B 复核衍生）
+
+**背景**：非-P0 审计项 B（PR 待合）的对抗复核逮到一个系统性 `case_no`（病理号）归一不对称：`lis_cases.case_no` 落库用 `String().trim()`（无 NFKC），而消费侧 `case_revenue(_lines).case_no` 经 `canonicalCaseNo`（NFKC+trim）。含全角/兼容字符的号 → LIS 侧留原样、canonical 侧归半角 → **永不命中**（reconcile-compute `buildReconcileInputs` 账单↔LIS 匹配漏、buildCaseMarkers 抗体 JOIN 孤儿丢线索、statement upsert 期间键）。方向=假阴性（漏非误）·多数病理号 ASCII 不受影响·非紧急，但根治点在**入库侧统一归一**。
+
+**修（3 处写入 seam·全走共享 `canonicalCaseNo`，与消费侧同一 canonical）**：
+- **①** `utils/lis-import.ts`：`normalizeLisRow.caseNo` + `normalizeMarkerRow.caseNo` → `canonicalCaseNo`（写 `lis_cases.case_no` 主导入 + `lis_case_markers.case_no`；一处修同时修好 reconcile 匹配 + 抗体 JOIN + `ON CONFLICT(partner_id,case_no)` 全角/半角去重）。
+- **②** `routes/reconciliation-v1.1.ts:~353`：遗留手工 `lis_cases` 导入路径也归一（不留第二条 raw 写路）。
+- **③** `utils/billing-revenue.ts`：`normalizeLine.caseNo` → `canonicalCaseNo`（**首轮复核衍生**：`case-revenue-v1.1.ts` 是**第二个**收入侧写者，此前 raw 落 `case_revenue(_lines)` 且用 raw 探 `lis_cases`/`resolveLisCanonicalPartner`；一处 seam 同时修写入+探针）。
+- 下游 `reconcile_diffs`/`reconcile_case_hints`/`supplement_orders` 的 case_no **继承 canonical**（只从已归一的 LIS/收入表读），无需各自再归一。
+
+**测试**：`lis-import.test.ts`（+全角 case_no 单测 + marker 归一）、`billing-revenue.test.ts`（+全角号 + 聚合键归一）、新 `reconcile-fullwidth-caseno.test.ts`（端到端证：全角 LIS 导入落半角 canonical + 账单半角 → `computeReconcile` matchRate=1，修前 union=2/matched=0=0）。
+
+**验证**：tsc 绿；后端 vitest **93 files/814 tests 全绿**（含 golden `partner-revenue-golden` ¥13,152 + `hemujia-purelab-golden` ¥27,870 零回归；canonicalCaseNo 对 ASCII 恒等，实数据不受影响）。dev DB 未污染（测试走 `:memory:`、探针只读）。
+
+**独立复核（工作模型机制5·双轨）**：
+- 首轮 general-purpose 对抗读码 → 确认 3 处正确、无循环 import、NFKC 对 ASCII 恒等/幂等；**逮到 ③**（billing-revenue 第二收入写者 raw）已修。
+- ultracode 完整性 Workflow（`wf_5956f179-165`·8 agent：4 域枚举 → 综合矩阵 → 3-lens 对抗 refute）：**GAP_FOUND=成本侧**——`outbound_abc_details.case_no`（`cost-runs.ts:109` ← `outbound_records.case_no` raw 用户输入）在 `abc-partner-link.ts:24`（↔lis_cases 回填 partner）+ `:76`（↔case_revenue 院级 P&L 成本卷积）两条钱路 JOIN 仍 raw → 全角号成本掉出 partner P&L。**影响=全角-only·当前 ASCII 数据零影响·非 golden 回归**；属独立 ABC 成本/出库域（含 charge_group_id 派生键 + case_charge_groups + COUNT(DISTINCT) 幂等语义），另立**追踪 chip `task_4d5a4d3f`**（本会话不扩到该域，防在不熟域引双计风险；工作模型域隔离纪律）。
+
+**已披露边界**：
+- **成本侧 case_no 仍 raw**（见上·chip `task_4d5a4d3f`）——达「全库 case_no 皆 canonical」不变量的收尾项。
+- **NFKC 不折 dash 变体**（U+2212 减号 / U+2013 en-dash / U+2010 hyphen ≠ U+002D）：`canonicalCaseNo` 本身的局限（**预存**·statement 路径早已同此局限·非本次引入）；dash-错配号在任何 seam 都不命中。扩 `canonicalCaseNo` 折 dash 会影响**全部** reconcile 匹配、可能误并合法异号 → 属**共享语义决策·待 PM**（未改·未 spawn·记此）。
+- `dominantLedgerMonth` 期间键闸在当前工作树**无此命名符号**（grep 零命中，应在项 B 未合分支）；工作树内 case_no-bearing 期间键=statement upsert `ON CONFLICT(partner_id,case_no,service_month)`（两侧已 canonical=CLEAN），reconcile 月过滤/confirmed_lab_revenue 门键 `(partner_id,service_month)` 不含 case_no=免疫。
+
+**治理**：本条随本实质提交（3 修 + 3 测）；未合并/未开 PR（待用户拍）。改动仅 6 文件（src×3 + tests×3），未碰 dev DB / 未 `-A`（server/node_modules 非 gitignore 覆盖）。
+
+*更新时间：2026-07-06*
