@@ -19,6 +19,7 @@ import { computeStatementRevenue, type ClassifiedRow } from '../utils/statement-
 import { canonicalCaseNo } from '../utils/classifier.js' // codex MEDIUM-3：落库分组用 NFKC 规范化病理号
 import { scoreStatement } from '../utils/import-score.js'
 import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
+import { buildImportAnchorReasons } from '../utils/import-gates.js'
 
 const router = Router()
 const requireImport = requireAnyRole('finance')
@@ -139,11 +140,24 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
     const closureDiff = closureVerifiable ? round2(rev.totalSettle - (parsed.declaredTotal as number)) : null
     const closureOk = closureVerifiable && Math.abs(closureDiff as number) <= 0.01 // 无合计行 → 不可核对 → 非 OK（H2）
     const unclassified = rev.counts.unmatched + rev.counts.ambiguous
-    if (!confirmed && (unclassified > 0 || !closureOk)) {
-      const reason = !closureVerifiable ? '对账单无独立合计行，无法核对闭合'
-        : closureOk ? '' : `逐行结算 ${rev.totalSettle} 与对账单合计 ${parsed.declaredTotal} 差 ${closureDiff}`
+    // 项B：把两个不依赖当期口径的独立软锚（在范围份额中位数 + 台账期间键）并入同一 NEEDS_CONFIRM。
+    //   —— 闭合闸是自指的（totalSettle vs declaredTotal 同源），抓不住「拆分口径本身被改坏、平账落库」；
+    //      独立锚 + 期间键补这道盲区。无历史锚/无台账命中时自动跳过（向后兼容，不误拦首次/新院）。
+    // 与历史锚同口径：只用**可落库（有病理号）行**算当期 labShare——历史 net_amount 也只含有 case_no 的行
+    //   （commit 跳过无病理号外送行）；否则外送占比高的院当期分母含外送、与锚不对称（对抗复核 B-分母）。
+    const committable = rev.rows.filter((r: ClassifiedRow) => canonicalCaseNo(r.no))
+    const caseNos = [...new Set(committable.map((r: ClassifiedRow) => canonicalCaseNo(r.no)) as string[])]
+    const curLab = round2(committable.reduce((s, r) => s + fin(r.labPortion), 0))
+    const curSettle = round2(committable.reduce((s, r) => s + fin(r.settle), 0))
+    const anchorReasons = buildImportAnchorReasons(db, partnerId, String(serviceMonth), curLab, curSettle, caseNos)
+    if (!confirmed && (unclassified > 0 || !closureOk || anchorReasons.length > 0)) {
+      const reasonParts: string[] = []
+      if (unclassified > 0) reasonParts.push(`未匹配 ${rev.counts.unmatched} 行 / 歧义 ${rev.counts.ambiguous} 行`)
+      if (!closureOk) reasonParts.push(!closureVerifiable ? '对账单无独立合计行，无法核对闭合'
+        : `逐行结算 ${rev.totalSettle} 与对账单合计 ${parsed.declaredTotal} 差 ${closureDiff}`)
+      reasonParts.push(...anchorReasons)
       error(res,
-        `对账单未完全识别或未对平，未确认不落库：未匹配 ${rev.counts.unmatched} 行 / 歧义 ${rev.counts.ambiguous} 行${reason ? '，' + reason : ''}。请先归类/核对，或重发带 confirm:true 显式确认。`,
+        `对账单未通过落库前核对，未确认不落库：${reasonParts.join('；')}。请先归类/核对，或重发带 confirm:true 显式确认。`,
         'NEEDS_CONFIRM', 409)
       return
     }
