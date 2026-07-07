@@ -13,6 +13,13 @@
   ],
   "entries": [
     {
+      "path": "/logs/override-frequency",
+      "method": "GET",
+      "owner": "PM待拍（治理域）",
+      "deadline": "2026-10-06",
+      "reason": "incubating — 项⑦统一旁路台账「旁路使用频率」第 1 层体检指标后端；前端体检面板待接（治理/运维视图）。高频旁路=闸阈值错或有人在绕，须有人 review。见非-P0 域审计项⑦。"
+    },
+    {
       "path": "/ngs/*",
       "method": "*",
       "owner": "PM待拍（成本域）",

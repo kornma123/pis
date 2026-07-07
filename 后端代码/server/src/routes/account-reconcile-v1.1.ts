@@ -12,6 +12,7 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { writeAuditLog } from '../utils/cost-runs.js'
+import { recordOverride } from '../utils/override-log.js'
 import { buildReconcileInputs, runReconcile, partnerMonthLabRate } from '../utils/reconcile-compute.js'
 import { computeReconcile, verdictFollowUp, drivesSupplement, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
 
@@ -306,6 +307,13 @@ router.post('/supplements/:id/approve', requirePermission('account_reconcile', '
     db.prepare(`UPDATE supplement_orders SET review_status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(operator, so.id)
     writeAuditLog(db, 'account_reconcile', 'supplement_approve', so.id, { amount: so.amount, submittedBy: so.submitted_by ?? null }, operator)
+    // 项⑦ 统一旁路台账：签发是人工把补收单推过 pending→approved 的旁路点，汇入 override_log 供旁路频率体检。
+    recordOverride(db, {
+      gateType: 'supplement_approve', module: 'account_reconcile', targetId: so.id, operator,
+      reason: String(req.body?.reason ?? '').trim() || '独立复核签发·SoD 通过',
+      before: { reviewStatus: 'pending_review', submittedBy: so.submitted_by ?? null, amount: so.amount },
+      after: { reviewStatus: 'approved', reviewedBy: operator },
+    })
     success(res, { id: so.id, reviewStatus: 'approved', reviewedBy: operator }, '已签发补收单')
   } catch (err: any) {
     error(res, err.message)

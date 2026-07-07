@@ -61,7 +61,9 @@ beforeAll(async () => {
 
 async function commit(token: string, partnerId: string, grid: any[], serviceMonth: string, confirm?: boolean) {
   const request = await st()
-  return request(app).post('/api/v1/statement-import/commit').set('Authorization', `Bearer ${token}`).send({ partnerId, grid, serviceMonth, confirm })
+  // 项⑦：confirm 越过核对闸须带 overrideReason（无闸触发时该字段被忽略，无害）
+  return request(app).post('/api/v1/statement-import/commit').set('Authorization', `Bearer ${token}`)
+    .send({ partnerId, grid, serviceMonth, confirm, overrideReason: confirm ? '测试：确认越过核对闸' : undefined })
 }
 
 describe('POST /commit 落库 + 看板', () => {
@@ -166,8 +168,13 @@ describe('codex verify 门禁加固（H1 严格布尔 / H2 无合计行需确认
     const a = await request(app).post('/api/v1/statement-import/commit').set('Authorization', `Bearer ${financeToken}`)
       .send({ partnerId: PID, grid: NOTOTAL, serviceMonth: '2026-09' })
     expect(a.status).toBe(409)
-    const b = await request(app).post('/api/v1/statement-import/commit').set('Authorization', `Bearer ${financeToken}`)
+    // 项⑦：无合计行 confirm 越闸 → 缺 overrideReason 先 400
+    const noReason = await request(app).post('/api/v1/statement-import/commit').set('Authorization', `Bearer ${financeToken}`)
       .send({ partnerId: PID, grid: NOTOTAL, serviceMonth: '2026-09', confirm: true })
+    expect(noReason.status).toBe(400)
+    expect(noReason.body.error.code).toBe('OVERRIDE_REASON_REQUIRED')
+    const b = await request(app).post('/api/v1/statement-import/commit').set('Authorization', `Bearer ${financeToken}`)
+      .send({ partnerId: PID, grid: NOTOTAL, serviceMonth: '2026-09', confirm: true, overrideReason: '无合计行·财务核过' })
     expect(b.status).toBe(200)
     expect(b.body.data.labRevenue).toBe(152)
   })
