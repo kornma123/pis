@@ -178,6 +178,13 @@ function main() {
   } else {
     console.log(`  拦截：${[...args.block].join(',')} 对**新增**违规判红（存量不拦）${baselineNote}。`)
   }
+  if (blockedFail) {
+    console.log('\n  ✗ 有新增违规被拦。修法：')
+    console.log('    · C1 幽灵404 → 补上后端路由，或删掉前端那个死调用（前端调的路径必须真有后端路由）。')
+    console.log('    · C2 无消费者 → 补上前端消费者/入口，或登记 scripts/build-discipline/consumer-whitelist.json（带 owner+deadline 的孵化），或删掉这个没人用的端点。')
+    console.log('    · C3 空转参数 → 让引擎真读这个配置字段（否则它就是个骗人的旋钮），或去掉。')
+    console.log('    · 确需接受为存量债 → node scripts/build-discipline/run-all.cjs --update-baseline（baseline.json 的 diff 须在 PR 里说明理由）。')
+  }
 
   if (args.json) {
     console.log('\n===JSON===')

@@ -4,9 +4,11 @@ name: Build Discipline Gate
 # 三条检查：C1 前端→后端(幽灵404) / C2 后端→消费者(无人消费端点) / C3 配置→引擎(空转参数)。
 #
 # 拦截状态（PM 已拍 M-6·2026-07-07）：
-#   - **C1 已切 block**（`--block=C1`）：对**新增**幽灵 404 判红拦合并（delta 棘轮：只拦不在 baseline.json 里的）。
-#     C1 已实证 0 误报；存量 9 个历史幽灵在 baseline 里、不拦无关 PR。
-#   - **C2/C3 仍 warn**（只报告不拦），观察一轮后由 M-6 续拍是否切 block。
+#   - **C1 + C2 已切 block**（`--block=C1,C2`）：对**新增**幽灵404 / 无消费者端点判红拦合并
+#     （delta 棘轮：只拦不在 baseline.json 里的）。C1 0 误报；C2 已验证精确 + 有 consumer-whitelist.json
+#     兜底（孵化/误报都可登记 owner+deadline 豁免）。存量 9+33 在 baseline、不拦无关 PR。
+#   - **C3 仍 warn**（只报告不拦）：C3 最模糊、硬拦会误伤"计算内联在路由"的合法配置字段（喊狼），
+#     且无干净豁免出口 → PM 拍 M-6 保持 warn。日后要拦须先加 C3 逐字段豁免 + 精确化。
 #   - selftest 必过（工具本身坏了即红）。
 #
 # ⚠️ 本 workflow 的 `gate` job 已是 master 分支保护的 **required status check**。
@@ -36,6 +38,6 @@ jobs:
       # 自测：守护闸工具自身没被静默改坏（解析器漂了/口径变哑）。失败即红。
       - name: Selftest（工具不变量）
         run: node scripts/build-discipline/selftest.cjs
-      # 主闸：C1 对新增幽灵 404 判红（exit 1 拦合并）；C2/C3 仍 warn 只报告。存量报告一并打进 CI 日志。
-      - name: Gate（C1 block 新增·C2/C3 warn）
-        run: node scripts/build-discipline/run-all.cjs --block=C1
+      # 主闸：C1+C2 对新增违规判红（exit 1 拦合并）；C3 仍 warn 只报告。存量报告一并打进 CI 日志。
+      - name: Gate（C1+C2 block 新增·C3 warn）
+        run: node scripts/build-discipline/run-all.cjs --block=C1,C2
