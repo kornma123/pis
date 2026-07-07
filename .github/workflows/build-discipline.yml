@@ -1,0 +1,39 @@
+name: Build Discipline Gate (warn)
+
+# 构建纪律闸——把 P0 设计选择 #7「完成=真数据跑通+消费者被服务」推广成全系统机器可执行规则。
+# 三条检查：C1 前端→后端(幽灵404) / C2 后端→消费者(无人消费端点) / C3 配置→引擎(空转参数)。
+#
+# ⚠️ 当前为 **warn 模式**（不拦合并）：三条先跑一轮看误报率，稳定后逐条加 --block 切拦截。
+#    delta 棘轮：--block 只拦「新增」违规（不在 baseline.json 里的）、不被历史存量红墙挡无关 PR
+#    → 可随时切、无需先清存量。切法：把下方「Gate」命令改 `... --block=C1`（先切 0 误报的 C1），
+#    并把本 workflow 加进 master 分支保护 required checks。flip 决策有 owner+日期 = docs/PM待拍板.md M-6。
+#
+# 本 workflow **非 required check**，故两侧都可 paths-ignore 纯文档（不会造成 required 挂起）。
+
+on:
+  push:
+    branches: [master, main]
+    paths-ignore: ['**.md', 'docs/**', '.claude/**']
+  pull_request:
+    branches: [master, main]
+    paths-ignore: ['**.md', 'docs/**', '.claude/**']
+
+concurrency:
+  group: build-discipline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # 自测：守护闸工具自身没被静默改坏（解析器漂了/口径变哑）。失败即红——非 required、不拦合并但可见。
+      - name: Selftest（工具不变量）
+        run: node scripts/build-discipline/selftest.cjs
+      # 主闸：warn 模式，永远 exit 0，把三条检查的存量报告打进 CI 日志供人读。
+      - name: Gate（warn·打印存量报告）
+        run: node scripts/build-discipline/run-all.cjs
