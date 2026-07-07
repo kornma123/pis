@@ -5,14 +5,20 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import request from 'supertest'
-import { buildTestApp, getDb, loginAdmin } from './p0-harness.js'
+import { buildTestApp, getDb, loginAdmin, loginAs, seedReviewer } from './p0-harness.js'
 import { partnerMonthLabRate, partnerMonthDiscountRate } from '../src/utils/reconcile-compute.js'
 
 const P = 'PT-SR-1'
 const M = '2026-08'
 let app: any
 let token = ''
+let reviewerToken = '' // 第二审核人（项D maker-checker：认定人 admin 不能签发自己的补收单，须独立 approve）
 let supId = ''
+
+/** 项D：补收单收款前须独立签发（SoD）。认定人=admin，故由 reviewer2 签发。 */
+async function approve(id: string) {
+  return request(app).post(`/api/v1/account-reconcile/supplements/${id}/approve`).set('Authorization', `Bearer ${reviewerToken}`).send({})
+}
 
 async function mountApp() {
   const routes = (await import('../src/routes/account-reconcile-v1.1.js')).default
@@ -39,8 +45,10 @@ function seed(db: any) {
 beforeAll(async () => {
   const db = await getDb()
   seed(db)
+  await seedReviewer(db)
   app = await mountApp()
   token = await loginAdmin(app)
+  reviewerToken = await loginAs(app, 'reviewer2', 'CoreOne2026!')
 })
 const auth = (r: any) => r.set('Authorization', `Bearer ${token}`)
 
@@ -57,7 +65,14 @@ describe('补收 → 计入本月实收', () => {
     expect(sup.body.data.list[0].amount).toBe(200)
   })
 
+  it('未签发直接收款 → 409 NOT_APPROVED（项D 人闸）', async () => {
+    const res = await auth(request(app).post(`/api/v1/account-reconcile/supplements/${supId}/collect`).send({ collectedMonth: M }))
+    expect(res.status).toBe(409)
+    expect(res.body.error.code).toBe('NOT_APPROVED')
+  })
+
   it('标记已补收（计入 2026-08）→ collected_revenue = 200×0.8 = 160', async () => {
+    await approve(supId) // 项D：独立签发人先 approve，才可收款
     const res = await auth(request(app).post(`/api/v1/account-reconcile/supplements/${supId}/collect`).send({ collectedMonth: M }))
     expect(res.status).toBe(200)
     const sup = await auth(request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${M}`))
@@ -82,6 +97,7 @@ describe('补收 → 计入本月实收', () => {
   })
 
   it('已补收→放弃 → 清折实收、退出实收（LOW 修复）', async () => {
+    await approve(supId) // reopen 已把复核态回退 pending_review，收款前须重新签发
     await auth(request(app).post(`/api/v1/account-reconcile/supplements/${supId}/collect`).send({ collectedMonth: M }))
     await auth(request(app).post(`/api/v1/account-reconcile/supplements/${supId}/giveup`).send({ reason: '收不回' }))
     const sup = await auth(request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${M}`))

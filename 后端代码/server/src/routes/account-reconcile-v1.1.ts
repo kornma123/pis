@@ -156,9 +156,10 @@ router.post('/diffs/:id/verdict', requirePermission('account_reconcile', 'W'), (
     // 补收 gate：只有「漏收，需补收」驱动补收。改判则先清此差异下的「待补收」单（已补收/已放弃保留）。
     db.prepare("DELETE FROM supplement_orders WHERE source_diff_id = ? AND status = '待补收'").run(diff.id)
     if (drivesSupplement(reason)) {
-      db.prepare(`INSERT INTO supplement_orders (id, partner_id, service_month, source_diff_id, case_no, amount, case_count, status, operator)
-                  VALUES (?, ?, ?, ?, ?, ?, 1, '待补收', ?)`)
-        .run(uuidv4(), diff.partner_id, diff.service_month, diff.id, diff.case_no, diff.amount_impact, operator)
+      // maker-checker（项D 止血）：认定即提交「待复核」补收单（submitted_by=认定人），须独立 approve 后才可收款。
+      db.prepare(`INSERT INTO supplement_orders (id, partner_id, service_month, source_diff_id, case_no, amount, case_count, status, operator, review_status, submitted_by)
+                  VALUES (?, ?, ?, ?, ?, ?, 1, '待补收', ?, 'pending_review', ?)`)
+        .run(uuidv4(), diff.partner_id, diff.service_month, diff.id, diff.case_no, diff.amount_impact, operator, operator)
     }
     // 刷新待认定计数
     const pending = (db.prepare('SELECT COUNT(*) AS n FROM reconcile_diffs WHERE hospital_month_id = ? AND verdict IS NULL').get(hm.id) as { n: number }).n
@@ -269,6 +270,7 @@ router.get('/supplements', (req, res) => {
       caseNo: r.case_no, amount: r.amount, caseCount: r.case_count, status: r.status,
       collectedAt: r.collected_at, collectedMonth: r.collected_month, collectedRevenue: r.collected_revenue,
       giveUpReason: r.give_up_reason, operator: r.operator,
+      reviewStatus: r.review_status ?? 'pending_review', submittedBy: r.submitted_by, reviewedBy: r.reviewed_by, reviewedAt: r.reviewed_at,
     }))
     const sum = (s: string) => list.filter((x) => x.status === s).reduce((a, x) => a + (Number(x.amount) || 0), 0)
     const round2 = (n: number) => Math.round(n * 100) / 100
@@ -276,9 +278,35 @@ router.get('/supplements', (req, res) => {
       待补收金额: sum('待补收'), 已补收金额: sum('已补收'), 已放弃金额: sum('已放弃'),
       已补收实收: round2(list.filter((x) => x.status === '已补收').reduce((a, x) => a + (Number(x.collectedRevenue) || 0), 0)),
       待补收数: list.filter((x) => x.status === '待补收').length,
+      待签发数: list.filter((x) => x.status === '待补收' && x.reviewStatus !== 'approved').length,
       补收率: (() => { const done = sum('已补收'); const tot = done + sum('待补收'); return tot > 0 ? done / tot : 0 })(),
     }
     successList(res, list, 1, list.length || 1, list.length, { board })
+  } catch (err: any) {
+    error(res, err.message)
+  }
+})
+
+// POST /supplements/:id/approve —— 独立签发（写·SoD）：唯一把补收单 pending_review → approved 的入口。
+// 项D 止血核心：认定人（submitted_by）不能签发自己提交的补收单——检测与处方分离、人闸居中，
+// 仿老对账 reconciliation-v1.1.ts:502 的 SELF_REVIEW_FORBIDDEN 自审拦截。签发后方可 collect。
+router.post('/supplements/:id/approve', requirePermission('account_reconcile', 'W'), (req, res) => {
+  try {
+    const db = getDatabase()
+    const operator = operatorOf(req)
+    const so = db.prepare('SELECT * FROM supplement_orders WHERE id = ?').get(req.params.id) as any
+    if (!so) return error(res, '补收单不存在', 'NOT_FOUND', 404)
+    if (so.status !== '待补收') return error(res, '仅「待补收」补收单可签发', 'CONFLICT', 409)
+    if (so.review_status === 'approved') return error(res, '已签发', 'CONFLICT', 409)
+    // SoD：不能签发自己提交/发起的补收单（认定人≠签发人）。
+    // fail-closed：submitted_by 缺失（空串/NULL）视为数据缺陷 → 拒签发，绝不因短路跳过 SoD（对抗复核 D-①）。
+    if (!so.submitted_by || so.submitted_by === operator) {
+      return error(res, '不能签发自己提交的补收单（或提交人缺失）', 'SELF_REVIEW_FORBIDDEN', 403)
+    }
+    db.prepare(`UPDATE supplement_orders SET review_status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .run(operator, so.id)
+    writeAuditLog(db, 'account_reconcile', 'supplement_approve', so.id, { amount: so.amount, submittedBy: so.submitted_by ?? null }, operator)
+    success(res, { id: so.id, reviewStatus: 'approved', reviewedBy: operator }, '已签发补收单')
   } catch (err: any) {
     error(res, err.message)
   }
@@ -291,6 +319,8 @@ router.post('/supplements/:id/collect', requirePermission('account_reconcile', '
     const so = db.prepare('SELECT * FROM supplement_orders WHERE id = ?').get(req.params.id) as any
     if (!so) return error(res, '补收单不存在', 'NOT_FOUND', 404)
     if (so.status === '已补收') return error(res, '已是已补收', 'CONFLICT', 409)
+    // 人闸（项D 止血）：未经独立签发（approve）的补收单不可收款——防「认定人一步直发真金追加收费单」。
+    if (so.review_status !== 'approved') return error(res, '补收单未经独立复核签发，不可收款', 'NOT_APPROVED', 409)
     const collectedMonth = String(req.body?.collectedMonth ?? '').trim() || new Date().toISOString().slice(0, 7)
     // 折实收：账单口径 amount ×（原漏收月的**实验室工序行扣率**）；计入 collectedMonth 的实收。
     //   只读 case_revenue_lines 算扣率、**不写收入侧**（保护 golden）。
@@ -333,7 +363,8 @@ router.post('/supplements/:id/reopen', requirePermission('account_reconcile', 'W
     const so = db.prepare('SELECT * FROM supplement_orders WHERE id = ?').get(req.params.id) as any
     if (!so) return error(res, '补收单不存在', 'NOT_FOUND', 404)
     if (so.status === '待补收') return error(res, '已是待补收', 'CONFLICT', 409)
-    db.prepare(`UPDATE supplement_orders SET status = '待补收', collected_at = NULL, collected_month = NULL, collected_revenue = NULL, give_up_reason = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(so.id)
+    // 反向回待补收 → 复核态一并回退 pending_review（恢复后须重新独立签发才可再收款，防绕过人闸）。
+    db.prepare(`UPDATE supplement_orders SET status = '待补收', review_status = 'pending_review', reviewed_by = NULL, reviewed_at = NULL, collected_at = NULL, collected_month = NULL, collected_revenue = NULL, give_up_reason = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(so.id)
     writeAuditLog(db, 'account_reconcile', 'supplement_reopen', so.id, { reason, from: so.status }, operatorOf(req))
     success(res, { id: so.id, status: '待补收' }, '已恢复待补收')
   } catch (err: any) {
