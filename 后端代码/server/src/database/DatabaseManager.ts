@@ -1356,6 +1356,12 @@ export function initializeDatabase(): void {
   database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_hints_case ON reconcile_case_hints(hospital_month_id, case_no)`)
   // 幂等补列（旧库迁移 + :memory: 新库统一）
   ensureColumn('supplement_orders', 'collected_revenue', 'DECIMAL(18, 4)')
+  // 账实核对补收单 maker-checker（非-P0 审计项 D 止血）：认定人只能提交「待复核」补收单，须独立签发人 approve 后才可收款。
+  // 旧库既有补收单 ALTER 后默认 pending_review（连历史单也须过人闸再收，符合止血意图）。
+  ensureColumn('supplement_orders', 'review_status', "TEXT NOT NULL DEFAULT 'pending_review'") // pending_review|approved
+  ensureColumn('supplement_orders', 'submitted_by', 'TEXT')
+  ensureColumn('supplement_orders', 'reviewed_by', 'TEXT')
+  ensureColumn('supplement_orders', 'reviewed_at', 'DATETIME')
   ensureColumn('fee_standards', 'project_type', 'TEXT')
   ensureColumn('fee_standards', 'fee_per_slide', 'DECIMAL(18, 4) DEFAULT 0')
   ensureColumn('fee_standards', 'base_price', 'DECIMAL(18, 4) DEFAULT 0')

@@ -55,3 +55,23 @@ export async function loginAdmin(app: express.Express): Promise<string> {
   }
   return res.body.data.token
 }
+
+/** 用任意用户名/密码登录，返回 access token */
+export async function loginAs(app: express.Express, username: string, password: string): Promise<string> {
+  const request = (await import('supertest')).default
+  const res = await request(app).post('/api/v1/auth/login').send({ username, password })
+  if (!res.body?.data?.token) throw new Error(`loginAs(${username}) failed: ` + JSON.stringify(res.body))
+  return res.body.data.token
+}
+
+/**
+ * 造一个第二审核人（admin 角色→全 W·含 account_reconcile:W，用户名非 'admin'），密码 CoreOne2026!。
+ * 用于 SoD 场景：提交人=admin 时由该用户 approve（认定人≠签发人）。
+ */
+export async function seedReviewer(db: any, username = 'reviewer2'): Promise<void> {
+  const bcrypt = (await import('bcryptjs')).default
+  const pw = bcrypt.hashSync('CoreOne2026!', 10)
+  db.prepare(`INSERT OR REPLACE INTO users (id, username, password, real_name, role, primary_role, status, is_deleted)
+              VALUES (?, ?, ?, ?, 'admin', 'admin', 1, 0)`).run(`USER-${username}`, username, pw, username)
+  db.prepare(`INSERT OR REPLACE INTO user_roles (id, user_id, role_code) VALUES (?, ?, 'admin')`).run(`UR-${username}`, `USER-${username}`)
+}
