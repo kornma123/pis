@@ -1464,6 +1464,28 @@ http://your-server-ip:8080
 - **成本侧 case_no 仍 raw**（见上·chip `task_4d5a4d3f`·用户已启动）——达「全库 case_no 皆 canonical」不变量的收尾项。
 - **NFKC 不折 dash 变体**（U+2212 减号 / U+2013 en-dash / U+2010 hyphen ≠ U+002D）：`canonicalCaseNo` 本身的局限（**预存**·statement 路径早已同此局限·非本次引入）；dash-错配号在任何 seam 都不命中。扩 `canonicalCaseNo` 折 dash 会影响**全部** reconcile 匹配、可能误并合法异号 → 属**共享语义决策·待 PM**（未改·未 spawn·记此）。
 
-**治理**：分支 `claude/elastic-ellis-6551ce`（off master `55d2f83d`），已 `git merge origin/master`（7 提交·含项 B #80/C #81/rbac #82；仅 session-log append 冲突=保留双方）。改动仅 6 文件（src×3 + tests×3），未碰 dev DB / 未 `-A`（server/node_modules 非 gitignore 覆盖）。开 PR 到 master（独立·非栈·单独可合）。
+**治理**：分支 `claude/elastic-ellis-6551ce`（off master `55d2f83d`），已 `git merge origin/master`（7 提交·含项 B #80/C #81/rbac #82；仅 session-log append 冲突=保留双方）。改动仅 6 文件（src×3 + tests×3），未碰 dev DB / 未 `-A`（server/node_modules 非 gitignore 覆盖）。开 PR 到 master（独立·非栈·单独可合·PR #84）。
+
+*更新时间：2026-07-06*
+
+---
+
+## 2026-07-06 本次会话完成的工作 —— 构建纪律闸（Build Discipline Gate）立闸 + 存量清单
+
+**性质**：把 **P0 设计选择 #7**「完成=真数据跑通+消费者被服务」（非代码合并）从只在 P0 域执行，推广成**全系统机器可执行规则**，根除「功能先于消费者被建」五形态。off origin/master 开 `claude/kind-mcclintock-a09ec4`。**纯新增工具+文档·零改 app 源码·golden ¥13,152+¥27,870 天然零回归**（dev DB 与前后端源码全程未动，只读扫描）。
+
+**产出（新增独占文件）**：
+- **`scripts/build-discipline/`**（纯 Node·零依赖·正则静态扫描）：`lib/registry.cjs`（app 挂载/router 端点/前端调用[request+axios+fetch+fetch-var 回溯]/路径归一/匹配）+ 三检查 `check-frontend-to-backend.cjs`(C1)/`check-backend-consumers.cjs`(C2)/`check-config-engine.cjs`(C3) + `run-all.cjs`（`--only`/`--block`/`--json`/`--update-baseline`）+ `selftest.cjs`(22 断言) + `consumer-whitelist.json`(有名有期孵化) + `baseline.json`(delta 棘轮·45 键) + `README.md`。
+- **三检查**：C1 前端 API 调用必命中已注册后端路由（否则幽灵404）· C2 后端端点须≥1 消费者（否则进白名单带 owner+deadline·过期删）· C3 用户可写配置字段须自身 CRUD 外有读取点（否则空转，allocation_base 型）。
+- **`.github/workflows/build-discipline.yml`**（warn 模式·非 required·selftest 必过）+ **PR 模板**加「消费者是谁/入口在哪/若暂无→孵化死线」栏。
+- **存量清单** `docs/COREONE-构建纪律闸-存量违规清单-2026-07-06.md`（按危害 4 层：止骗>关风险>清废>补入口）+ **`docs/PM待拍板.md` 新增 M-6**（warn→block flip 决策·有 owner）。
+
+**存量盘点结果**（全 warn·不拦合并）：**C1=9 幽灵**（reports 6 死方法 + boms/cost-preview + logs/export + users/reset-password，逐条核实 0 误报）· **C2=33 无消费者**（18 写+15 读；含本会话 D 域新增 `POST /account-reconcile/supplements/:id/approve` 审批门**无前端 approve 按钮→collect 永 409**）+ 13 白名单豁免 · **C3=3 高置信空转**（allocation_base canonical→并入「修非 P0 域」F.3；两种命名 snake+camel 皆无引擎读）+ 83 低置信仅报告。**逐项处置在另一「修非 P0 域」task**（本 task 只立闸+出清单+防新增）。
+
+**核心防误报设计**（task 要求·warn 起步测误报率）：C1 动态 `fetch(变量)` 回溯赋值解析、无法回溯者进 `unverifiable` 列表人工过目（不静默）；C2 文本兜底按**端点完整形状精确正则**（param 处须 `${...}` 插值）只用「发请求的文件」；C3 置信分层（计算旋钮名才高置信）+ 兼配 camelCase。**delta 棘轮**：`baseline.json` 记存量，`--block` 只拦**新增** → 可立刻对 C1 开 block 不被 45 条存量红墙挡无关 PR（实证：新增→exit 1，干净→exit 0）；无 baseline fail-closed；exit-code footgun 护栏（`--update-baseline`⊥`--block`、`--block` 不可被 `--only` 排除）。
+
+**独立复核（工作模型机制5·两轮对抗面板）**：①3-agent 找误报/绕过/治理→0 误报 + 逮 4 解析缺口全加固 + delta 棘轮/owner 采纳；②4-agent verify 面板复核加固本身→逮 **1 HIGH**（C2 旧 literalBase 前缀 substring 兜底令死的兄弟子路由被误判消费）**已修**为精确形状正则，修后 C2 29→33（多揪 4 个全 grep 核实真·有后端无前端）+ 修 2 exit-code footgun + 文档计数订正。critic 终裁「ship-ready as honest warn-mode inventory + owned ramp」。
+
+**验证**：selftest 22/22 绿·warn gate exit 0·C1=9/C2=33/C3=3 baseline current·YAML/JSON 合法·app 源码零改动。**已披露边界**：覆盖诚实声明=五形态机器只查得 4 种（**孤儿路由**靠前端审计、**假能力**如 /abc/variance 假标准成本无机器检查·最高危仍靠人，已 hoist 到 README 顶防 PM 假门错觉）；C3 warn-only（启发式·计算内联在路由的口径分叉检不出）；keyOf param 折叠低危碰撞已文档化。**留 PM 拍**：M-6 何时切 block+设 required（推荐先切 0 误报的 C1）。
 
 *更新时间：2026-07-06*
