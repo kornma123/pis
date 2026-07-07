@@ -1396,3 +1396,29 @@ http://your-server-ip:8080
 **治理**：本条目随本实质提交（P0 拍板文档）捎带；复现脚本在会话 scratchpad（`cm-distribution.cjs`）。
 
 *更新时间：2026-07-06*
+
+---
+
+## 2026-07-06 本次会话完成的工作 —— P0 院级贡献毛利「四轮外审收敛终稿」落地（后端引擎影子模式 + mockup）
+
+**性质**：应 PM「实现 P0 院级贡献毛利四轮外审收敛终稿设计」。worktree `objective-mclaren-f477c2`、分支 `claude/objective-mclaren-f477c2`（off origin/master·不落后）。碰钱/口径 → TDD + 独立对抗复核。
+
+**背景纠正（开工先核实）**：`/hospital-pnl` **已有** `HospitalPnLDashboard.tsx`（提交 `a7c379df`），但它**恰是四轮外审推翻的旧设计**——按 `grossMargin` 升序排（=按率排名）、用「盈利绿/亏损红」措辞（CONTEXT.md 禁用词）、调 ABC 全成本 `partner-pnl` API。任务里「尚未建」指的是**新贡献毛利引擎/后端路由**（确无 backend hospital-pnl 路由）。故本会话=建**新并存 lane**（ADR-003），旧看板暂不动（等 mockup 拍板）。
+
+**后端（新独立 lane·影子模式·TDD·golden 零回归）**：
+- `src/utils/hospital-cm.ts`：per-case 贡献毛利引擎（P0 spec §2/§4/§10）——桶A(二抗显色 secondary_per_slide)+桶B(一抗①*/特染 labor-free/组织处理¥7)、同源闸(staining=hasMarker∧lab_revenue>0)、准入闸(诊断桶/非IHC桶单列)、缺价诚实降级、①*估值占比、院级上卷 + 状态真值表(G-1 经营线未定/G0/G1/G2)。**结构上无 labor/equipment 字段**=编译期保证。具名常量：`CM_TARGET=null`(拍不了绝对单值→G-1)、阈值、`P0_TISSUE_PROCESSING_MATERIAL_PER_BLOCK=7`(康湾台账校准)。
+- `src/utils/portfolio-health.ts`：四轮终稿**顶层两层框架**——第1层组合体检(∑CM÷固定池=覆盖倍数`coverageMultipleTrendOnly`只看趋势 + 产能利用率 + 两复活计数 measurableAccountCount/unmeasuredRevenueShare)；第2层人看对照表(绝对贡献降序·无排名列·率旁并列固定成本覆盖份额·同账户趋势)；§4a 产能费单算一次(反螺旋冻结·一个家不变量 sharedFixedPool+Σdedicated==totalFixedPool)；**§4b 行为层性质断言封存**(netContribution>=capacityCharge⇒不得自动点名·反例守卫)；影子模式闸 `PORTFOLIO_HEALTH_GATES_VERIFIED=false`；复活双触发具名常量 REVIVAL_ACCOUNT_CAP=30/REVIVAL_UNMEASURED_SHARE=0.30。
+- `src/utils/hospital-cm-service.ts`：DB 装载(§10.A SQL 契约)——lab_revenue 分子非 net_amount、revenue_source∈(statement,corrected)、marker 先按 case 聚合防扇出、复用 resolveAntibodyName/secondary_per_slide/特染 kit_price÷denom(labor-free)。tissue scope 未建 resolver → 一律「仅染色」(§7 诚实边界)。
+- `src/routes/hospital-pnl-v1.1.ts` + `app.ts` 挂 `/api/v1/hospital-pnl`：GET /health(体检)、GET /(对照表默认绝对贡献降序)、GET /trend；复用 `requirePermission('cost_analysis','R')`=**零 MODULES 漂移**；与 partner-pnl 并存。响应带 `shadowMode`/`shadowNote`。
+
+**TDD（4 新测试文件·47 用例全绿）**：`hospital-cm.test.ts`(手核 golden·两类必测 case 代送加做+代阅片·CI 断言 labor/equipment 结构性缺席)、`portfolio-health.test.ts`(ACC-D 性质断言=率最低 68.7%/绝对贡献最大 ¥36,994 不被自动点名·反例守卫·对照表默认绝对额降序·产能单算)、`hospital-cm-service.test.ts`(DB 路径 + RBAC admin 200/pathologist 403/无 token 401 + 同源闸 + 缺价)、`hospital-cm-constants-driftguard.test.ts`(常量立法锁)。
+
+**验证**：tsc 净；后端 vitest **全绿**(修后 94 files/799 tests·含 golden ¥13,152+¥27,870 **零回归**·新 lane 不碰 partner-pnl)；首次全跑偶发 statement-import 并发 flaky、复跑全绿(与本改动无关·仅新增测试文件移动了并发顺序)。
+
+**前端（mockup 先行红线·未写真 React）**：`docs/mockups/hospital-cm-两层框架-mockup.html`（两层视图·影子模式横幅·覆盖倍数只看趋势·两复活哨兵·对照表按绝对贡献降序顶梁柱在顶·"为什么率最低却排最上"说明·plain 中文无黑话）+ 会话内 show_widget 呈现供 PM 拍板。真页面待拍板后才写。
+
+**独立复核（机制5）+ 修复**：Workflow 五镜头对抗面板 `wf_9e39b91b-2dc`（labor泄漏/双计扇出/同源闸/断言方向/影子诚实 → 逐条对抗验证）逮到 **3 真 bug（confirmed）并已修 + 补 TDD**：① **HIGH §10.E 跨月复用 case_no 禁输出闸未实现**（lis_cases 键无月·全月视图会把同一份 marker/标量挂到多月双计）→ 加 `loadCrossMonthReuseKeys` 检测 + `makeWithheldCase` 禁输出、标 `cross_month_reuse`、计 `crossMonthReuseCaseCount`；② **MED coverage 恒真式=1.0**（G0 覆盖率闸死闸）→ `ihcCount` 透传进 `P0CaseCm`、改 §10.D 真谓词 `billableSlides>0 || ihcCount===0`；③ **MED 特染占位价信号丢弃**→ 透传 `stainIsPlaceholder`、加 `stainPlaceholderShare` 披露 + `MAX_STAIN_PLACEHOLDER_RATE=0.5` 进 needsData。5 新 TDD 直断修复行为；修后后端 vitest **94 files/799 tests 全绿**·golden 零回归。
+
+**已披露边界/待办**：①**影子模式**——三门 A/B/C(库存守恒/期间键/常量冻结·`~/Desktop/非P0域-修复方案.md`)未在本仓落地前，输出不得进经营研判(`PORTFOLIO_HEALTH_GATES_VERIFIED=false`)；②CM_TARGET 待首月真院 golden 校准(现 G-1 经营线未定)；③tissue scope resolver 未建 → 只出「染色贡献毛利」；④真实三件套数据未导入 → 引擎对真库当前返回空(签入 db 快照表为空)；⑤旧 `HospitalPnLDashboard`(按率排序·盈利措辞)待 mockup 拍板后迁移替换。
+
+*更新时间：2026-07-06*
