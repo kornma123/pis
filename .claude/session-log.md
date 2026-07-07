@@ -1440,3 +1440,42 @@ http://your-server-ip:8080
 **治理**：分支 `claude/elastic-cohen-447e6c`，**PR #82 已开**（off master；PM 已拍板具体口径）。合并前 `git merge origin/master` 消 session-log append 冲突（保留 master 的 B/C 段 + 本段）。待拍 chip `task_3abe1f3d` 已解。参考记忆 `coreone-rbac-live-vs-seed-matrix`。
 
 *更新时间：2026-07-06*
+
+## 2026-07-07 本次会话完成的工作 —— 关闭 case_no NFKC 归一的「成本侧半边」（补齐 LIS/收入侧的 `canonicalCaseNo`）
+
+**背景**：兄弟分支 `claude/elastic-ellis-6551ce`（提交 `f497e5c3`，未合 master）已把 **LIS/收入侧**病理号写 seam 统一到 `canonicalCaseNo`(NFKC+trim)（lis-import / reconciliation / billing-revenue / statement-import），并**显式登记本会话这条 chip**：「ABC 成本侧 outbound_abc_details.case_no 仍 raw（全角-only·零现网影响）」。本会话关闭该成本侧缺口。两分支**零文件重叠**、可任意顺序独立合并（本分支 off master `fa9003e3`、不含 f497e5c3）。
+
+**缺口**：成本侧写 raw case_no → 含全角/兼容字符的病理号在两条钱路 join 上与 canonical 的 LIS/收入侧对不上：① `backfillAbcPartnerIds`（`lis_cases.case_no = outbound_abc_details.case_no`·成本归院）② `getPartnerCostRollup(serviceMonth)`（`case_revenue.case_no = outbound_abc_details.case_no`·院级单月 P&L）。全角号成本成孤儿、不归院、不入单月毛利。
+
+**改动（四处成本侧写 seam·均导入 `../utils/classifier` 的 `canonicalCaseNo`）**：
+- `utils/cost-runs.ts` `writeOutboundAbcSnapshot`：函数头 `const caseNo = canonicalCaseNo(outbound.case_no) || null`，贯穿 `outbound_abc_details.case_no` 列写 + `storedCaseCount` + sourceSnapshot + fallback key（`caseNo-yearMonth`）；顺带 `runCostRecalculation` 的 cost_exception 诊断字段也归一（口径统一）。**防御性**：即便 `outbound_records.case_no` 是历史 raw，重算路径也把派生层写成 canonical。
+- `utils/cost-calculator.ts` `calculateSlideCostWithFee`：入口 `const caseNo = canonicalCaseNo(input.caseNo) || null`（**单一 choke point**·覆盖全部 caller），贯穿 `case_charge_groups` 的 `charge_group_id`、`ON CONFLICT(case_no,year_month,fee_standard_id)` 落库/查、以及逐病例组大小 `countCostedCaseOutbounds` 查询参数——三者用**同一** canonical 值 → 全角/半角不裂成两组、不双计。
+- `routes/abc-v1.1.ts:1847`（BOM 费预览）：`caseNo` 归一（预览即所存·口径一致；该端点 `applyCaseAggregation:false` 不落库）。
+- **未动**：`outbound-v1.1.ts` BOM 出库 create（其 case_no 硬编码 `null`，现流程从不喂真 case_no·非归一问题）。
+
+**验证**：
+- 新增 `tests/cost-side-caseno-canonical.test.ts`(7)：全角 `Ｓ２６－ＡＢＣ`（U+FF33/全角数字/U+FF0D）→ 经 `writeOutboundAbcSnapshot` 落库即 `S26-ABC`(canonical) → `backfillAbcPartnerIds` 归院 + `getPartnerCostRollup(serviceMonth)` join 命中（costTotal=50）；`case_charge_groups` 全角+半角三次调用归并**单行**、`outbound_count→3`（幂等键按 canonical 稳定·不裂/不双计）；末组锁「U+FF0D 折而 U+2212/U+2013/U+2010 不折」已知边界。
+- **变异测试证有牙**：临时 stash 掉源码改动 → 该测试 **5 失败**（case_no 存 raw 全角 / 不归院 / rollup 无此院 / charge_group 裂两行）；恢复后 7 全绿。
+- tsc 绿·**后端 vitest 96 files/831 tests 全绿**·golden ¥13,152+¥27,870 零回归（`canonicalCaseNo` 对 ASCII 恒等）。
+- **独立复核（机制5·codex 异构 high→medium）**：A/B/C/D 四点全 **OK**——无漏写 RAW seam（另一直接出库写存 null 非 raw）/ case_no 列值与 charge_group_id+ON CONFLICT+count 参数一致（无裂组双计）/ 无 golden 回归 / 无 import 环（classifier 运行时叶子、仅 type-only 依赖 partner-config）。codex 中途 `Reconnecting 2/5` 自愈后出全量结论。
+
+**另立·勿捆绑（需 PM 拍·共享语义）**：`canonicalCaseNo` **不折 dash 变体**（U+2212 minus / U+2013 en-dash / U+2010 hyphen → U+002D）；dash 失配的号在**任何** seam 都不命中。扩展它会波及**全部** reconcile 匹配、且可能误并「合法不同」的号——是账实/成本/收入全域共享的口径决策，非本 PR 范围。（U+FF0D 全角连字符属兼容字符·NFKC 已折·本 PR 已覆盖。）
+
+**治理**：分支 `claude/dazzling-curie-bb0d69`（off master `fa9003e3`）。dev DB 未脏（测试走 `:memory:`）；仅显式 `git add` 三源码 + 一新测试，node_modules symlink/dev DB 未纳（**禁 -A**）。与兄弟分支 f497e5c3 独立可合。参考记忆 `coreone-cost-methodology-shouldcost`、`coreone-d2-project-catalog`。
+
+*更新时间：2026-07-07*
+
+### 续：讨论循环 —— case_no grain 核实（组织+TCT）+ dash 归一落地（PM 拍板）
+
+**触发**：PM 澄清「病理号可作唯一标识，基本每病例唯一；除非一患者同时做组织+TCT，但那个病例还是唯一的」。据此跑 ultracode Workflow（`wf_5f8035ad-5f6`·4 读码维 → 合成 → **12 对抗证伪**）核实 case_no 作为唯一 join key 时「一号多项目类型」在 LIS/收入/成本三侧是否正确。
+
+**结论①（组织+TCT）——系统现状正确、无 bug**：合成官逐档判定 `depends_on_lis_export_shape`；对抗面板把 6 个候选 bug **全部 REFUTED / NEEDS_DOMAIN_INPUT，零 CONFIRMED**。关键发现=系统隐含假设「一病理号 = 一 registration type(组织 XOR 细胞学)」，三处 grain 一致印证（lis_cases 唯一键 (partner_id,case_no) 不含类型 + specimen_type 单值派生列 + 每例只跑一次 detectSpecimenType）；「样本类型混合」在源数据里是**跨例**（有的例是细胞学、有的是组织）非**例内**。**PM 已拍板决定档位**：组织+TCT **各给独立病理号（同号不混类型）** → 落「异号」档 = 各占一行、六计数列/specimen 分流/成本上卷各归各位、**无覆盖无丢数无错分流**。故 LIS upsert 的 `ON CONFLICT(partner_id,case_no) DO UPDATE` 整列覆盖是**有意幂等语义**（测试固化）、非泄漏；成本侧 per-case 均摊是 CHAIN-06 完全吸收不变量（Σ(1/N)=COUNT(DISTINCT case_no)）。**我的成本侧 canonicalCaseNo 改动不受影响、仍正确**。
+
+**结论②（dash 归一）——PM 拍板「横线纯录入格式·应统一」；先实现→对抗面板逮到非对称→本会话回退、改为「四侧同归一后的独立收敛」**：
+- 首实现=`classifier.ts canonicalCaseNo` 在 NFKC+trim 后加 `.replace(/[‐-―−]/g,'-')`（折 U+2010–U+2015 连字/破折族 + U+2212 减号），配 `tests/caseno-dash-canonical.test.ts`(14·逐码点+跨写法归一+golden 恒等+端到端钱路)，变异证有牙(10/14 红)、97 files/845 全绿。
+- **⚠️ ultracode 3-skeptic 对抗面板（`wf_dd44b3ce-32d`）逮到 1 个 low·latent 真隐患（semantic-reliance 镜头 claimHolds=false）**：dash 折叠**只在走 canonicalCaseNo 的侧生效**（收入 statement-import / 成本 / import-score），但 **master 的 LIS 写侧 `lis-import.ts` 尚未走 canonicalCaseNo**（该收敛在**兄弟分支 f497e5c3·未合**）→ **非对称折叠**：对「LIS 与 收入/成本两侧同为 en-dash、本可 byte-equal 命中」的 join，单方折 dash 反而**把命中拆成漏配**（把漏配从 revenue 内部搬到 revenue↔LIS 跨侧）。零现网影响（全 ASCII 恒等·golden 零回归），但属 latent 陷阱。blast-radius / regex-correctness 两镜头 claimHolds=true（无误并、正则精确无过折/ReDoS）。
+- **决策=回退 dash 折叠、不在本成本侧分支落**（呼应原 task「dash 决策 do NOT bundle」）：`canonicalCaseNo` 复原 NFKC-only + 留 deferral 注释（钉「四侧同归一前勿单方折」原因）；删 dash 测；cost-side 测 ④ 改为**守卫用例**（钉 canonicalCaseNo 暂不折·防提前单方加）。**dash 折叠推迟为独立收敛**：待 LIS 写侧也走 canonicalCaseNo（f497e5c3 落地、四侧统一）后，把折叠加进 canonicalCaseNo 一处即四侧原子生效。回退后 tsc 绿·**96 files/831 tests 全绿**·golden 零回归。
+
+**PM 待拍板状态**：dash「纯格式·应统一」PM 已拍（方向定），但**落地时机=四侧同归一后**（本会话不落，避免非对称）。记忆 `coreone-caseno-nfkc-canonical-split` 已更（dash=方向已定·实现待 LIS 侧收敛后统一加）。**这是对抗面板拦住「看似对却有 latent 坑」的实例**——正是机制5 的价值。
+
+*更新时间：2026-07-07*

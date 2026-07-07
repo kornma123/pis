@@ -39,7 +39,13 @@ export function startsWithPrefix(no: string, prefix: string): boolean {
   return p.length > 0 && n.length > 0 && n.startsWith(p)
 }
 
-/** 病理号规范化（NFKC 全角→半角 + trim）。用于病例匹配 / 落库分组，避免全角号 'Ｓ２６-００１' 与 LIS 半角号 'S26-001' 对不上（codex MEDIUM-3）。 */
+/** 病理号规范化（NFKC 全角→半角 + trim）。用于病例匹配 / 落库分组，避免全角号 'Ｓ２６-００１' 与 LIS 半角号 'S26-001' 对不上（codex MEDIUM-3）。
+ *
+ *  ⚠️ dash 变体归一（把 en-dash U+2013 / minus U+2212 / hyphen U+2010 等折成 ASCII '-'）PM 已拍板「病理号横线纯录入格式·应统一」，
+ *  但**故意暂不在此加**——必须四侧（LIS/收入/成本/对账）同经本函数才安全：master 的 LIS 写侧（lis-import.ts normalizeLisRow /
+ *  normalizeMarkerRow）尚未走 canonicalCaseNo（该收敛在兄弟分支 f497e5c3，未合）。若只在本函数折 dash → 收入/成本/import-score 折、
+ *  LIS 不折 = 非对称，会把「两侧同为 en-dash、本可 byte-equal 命中」的 join 反而拆开（对抗面板 wf_dd44b3ce·semantic-reliance 逮到）。
+ *  → dash 折叠推迟到 LIS 写侧也归一后，作为独立收敛统一加进本函数（四侧原子生效）。详见 session-log 2026-07-07。 */
 export function canonicalCaseNo(s: unknown): string {
   return nfkc(s)
 }
