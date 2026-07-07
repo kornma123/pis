@@ -1558,3 +1558,19 @@ http://your-server-ip:8080
 **产出**：CONTEXT.md（+组合体检层段）、`docs/COREONE-ADR-008-…-2026-07-07.md`（新）、`portfolio-health.ts`（D20）、mockup v2（落 D3-D19）。**后端待办记 PR**：固定成本池 config 表/标记持久化/逐行口径字段/谈判弹药下钻端点/UNMEASURED 清单端点/D14-D19 细分。**验证**：tsc 净·后端 vitest 全绿·golden 零回归。
 
 *更新时间：2026-07-07*
+
+## 2026-07-07 本次会话续 —— 病理号 dash 变体归一落地（四侧同归一后·收尾）〔分支 feat/caseno-dash-fold〕
+
+**背景**：case_no NFKC 归一「两批」（#84 LIS/收入 + #89 成本）**均已合 master** → 四侧写 seam 全经 `canonicalCaseNo`，dash 折叠的「四侧同归一」前置**已满足**（此前因 LIS 侧未归一暂缓·对抗面板 `wf_dd44b3ce` 逮到非对称）。本会话落地 PM 已拍的 dash 统一。
+
+**改动**：
+- `classifier.ts canonicalCaseNo`：NFKC+trim 后加 `.replace(/[‐-―−]/g,'-')`（折 U+2010–U+2015 连字/破折族 + U+2212 减号 → ASCII '-'；U+FF0D/U+FE63 NFKC 已折·U+002D 恒等）。**一处加·四侧原子生效**（LIS/收入/成本/对账写 seam 全经本函数）。
+- **配套修 2 个读侧旁路**（对抗面板 `wf_8e8997d5` matcher-sweep 逮到·**#84 起就有的全角失配、dash 使其扩到横线**）：`lis-cases-v1.1.ts` `PUT /:caseNo/specimen-type`（req.params.caseNo）与 `GET /markers`（req.query.caseNo）用**原始**病理号 `WHERE case_no=?` 精确查已归一库列 → raw 全角/en-dash 号误 404 / 空列表。修=两处输入先 `canonicalCaseNo`。（3 处 LIKE 模糊搜索非精确等值·非 harmful·未改。）
+
+**验证**：
+- 新增 `tests/caseno-dash-canonical.test.ts`(14·逐码点折叠+跨写法归一到同一 key+golden 恒等+端到端钱路 en-dash 成本 join) + `tests/lis-cases-caseno-canonical-lookup.test.ts`(3·PUT/GET markers 传 en-dash 号命中已归一行)；cost-side 测 ④ 由「守卫暂不折」翻转为「现折」。
+- **变异测试证有牙**：stash classifier dash-fold → dash 测 10/14 红；stash lis-cases 读侧修 → lookup 测 2/3 红；恢复后全绿。
+- tsc 绿·**后端 vitest 106 files/905 tests 全绿**·golden ¥13,152+¥27,870 零回归（ASCII 恒等）·build-discipline 闸 exit 0（C1/C2/C3 新增 0）。
+- **独立复核（机制5·合并 master 上重跑）**：ultracode 3-镜头对抗面板 `wf_8e8997d5`——writer-sweep=**对称**（所有写 seam 经 canonicalCaseNo·seed/迁移旁路非 harmful）·regex-golden=**正则精确+golden 恒等**·matcher-sweep=**逮到 2 读侧旁路**（已修+补测）。修后四侧写/读/库内 join 全对称。
+
+*更新时间：2026-07-07*

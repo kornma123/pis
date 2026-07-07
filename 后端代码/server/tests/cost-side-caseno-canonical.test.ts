@@ -117,15 +117,14 @@ describe('③ case_charge_groups：全角 caseNo 归一落库 + 幂等键不破 
   })
 })
 
-describe('④ 守卫：canonicalCaseNo 暂不折 dash 变体（PM 拍「应统一」但推迟到四侧同归一后·防单方非对称漏配）', () => {
-  // PM 2026-07-07 已拍「病理号横线纯录入格式·应统一」，但 dash 折叠必须四侧（LIS/收入/成本/对账）同时经 canonicalCaseNo 才安全。
-  // master 的 LIS 写侧(lis-import.ts)尚未走 canonicalCaseNo（在兄弟分支 f497e5c3，未合）→ 若此处单方折 dash，会把
-  // 「两侧同为 en-dash、本可命中」的 join 拆开（对抗面板 wf_dd44b3ce·semantic-reliance 逮到）。本用例钉「暂不折」，
-  // 防有人在 LIS 侧归一前提前单方加 dash 折叠。待四侧同归一后作为独立收敛统一加，届时改本断言为「折」。
-  it('en-dash/minus/hyphen 暂保留原样（NFKC 单独也不折）——四侧同归一前不单方折', () => {
-    expect('–'.normalize('NFKC')).not.toBe('-') //          NFKC 单独不折 en-dash（前提）
-    expect(canonicalCaseNo('P26–001')).toBe('P26–001') //   canonicalCaseNo 暂保留 en-dash（U+2013）
-    expect(canonicalCaseNo('P26−001')).toBe('P26−001') //   保留 minus（U+2212）
-    expect(canonicalCaseNo('P26‐001')).toBe('P26‐001') //   保留 hyphen（U+2010）
+describe('④ dash 变体归一已落地（四侧同归一后·#84 LIS + #89 成本 均合 master）—— 详尽用例见 caseno-dash-canonical.test.ts', () => {
+  // PM 2026-07-07 拍「病理号横线纯录入格式·应统一」；前置=四侧写 seam 均经 canonicalCaseNo（LIS #84 + 收入 + 成本 #89 + 对账），
+  // 已满足 → 在 canonicalCaseNo 一处加 dash 折叠即四侧原子生效。此处只钉「现折」冒烟，详尽逐码点/端到端见专门测试文件。
+  it('canonicalCaseNo 现折 en-dash/minus/hyphen 到 ASCII "-"（NFKC 单独不折·本函数折）', () => {
+    expect('–'.normalize('NFKC')).not.toBe('-') //          NFKC 单独不折 en-dash（前提未变）
+    expect(canonicalCaseNo('P26–001')).toBe('P26-001') //   en-dash U+2013 → 折
+    expect(canonicalCaseNo('P26−001')).toBe('P26-001') //   minus U+2212 → 折
+    expect(canonicalCaseNo('P26‐001')).toBe('P26-001') //   hyphen U+2010 → 折
+    expect(canonicalCaseNo('P26–001')).toBe(canonicalCaseNo('P26-001')) // 不同写法归一到同一 key
   })
 })

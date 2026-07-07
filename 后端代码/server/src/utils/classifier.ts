@@ -39,15 +39,19 @@ export function startsWithPrefix(no: string, prefix: string): boolean {
   return p.length > 0 && n.length > 0 && n.startsWith(p)
 }
 
-/** 病理号规范化（NFKC 全角→半角 + trim）。用于病例匹配 / 落库分组，避免全角号 'Ｓ２６-００１' 与 LIS 半角号 'S26-001' 对不上（codex MEDIUM-3）。
+/** 病理号里各种「短横线/破折号/减号」变体（NFKC 未折的残留：U+2010–U+2015 连字/破折族 + U+2212 减号）统一折成 ASCII '-'。
+ *  U+FF0D 全角连字符 / U+FE63 小号连字符 NFKC 已折为 '-'；U+002D 本就是目标（对 ASCII 恒等）。 */
+const DASH_VARIANTS = /[\u2010-\u2015\u2212]/g
+
+/** 病理号规范化（NFKC 全角→半角 + trim + dash 变体归一到 ASCII '-'）。用于病例匹配 / 落库分组，是 LIS/收入/成本/对账
+ *  **四侧共用的同一 canonical**，避免全角号 'Ｓ２６-００１' 或异体横线号 'S26–001'(en-dash) 与半角标准号 'S26-001' 对不上
+ *  （codex MEDIUM-3 全角 + 2026-07-07 dash 归一）。
  *
- *  ⚠️ dash 变体归一（把 en-dash U+2013 / minus U+2212 / hyphen U+2010 等折成 ASCII '-'）PM 已拍板「病理号横线纯录入格式·应统一」，
- *  但**故意暂不在此加**——必须四侧（LIS/收入/成本/对账）同经本函数才安全：master 的 LIS 写侧（lis-import.ts normalizeLisRow /
- *  normalizeMarkerRow）尚未走 canonicalCaseNo（该收敛在兄弟分支 f497e5c3，未合）。若只在本函数折 dash → 收入/成本/import-score 折、
- *  LIS 不折 = 非对称，会把「两侧同为 en-dash、本可 byte-equal 命中」的 join 反而拆开（对抗面板 wf_dd44b3ce·semantic-reliance 逮到）。
- *  → dash 折叠推迟到 LIS 写侧也归一后，作为独立收敛统一加进本函数（四侧原子生效）。详见 session-log 2026-07-07。 */
+ *  dash 归一 PM 拍板「病理号横线纯录入格式差异·非区分符·应统一」；**前置=四侧写 seam 均已经本函数**（LIS lis-import #84 /
+ *  收入 statement-import·billing-revenue / 成本 cost-runs·cost-calculator #89 / 对账 reconciliation），故在此一处加即四侧原子生效、
+ *  无非对称漏配。ASCII 恒等 → golden ¥13,152/¥27,870 零回归。（前置未满足时曾暂缓·对抗面板 wf_dd44b3ce 逮到非对称·见 session-log 2026-07-07。） */
 export function canonicalCaseNo(s: unknown): string {
-  return nfkc(s)
+  return nfkc(s).replace(DASH_VARIANTS, '-')
 }
 
 /** 文本含关键词（均归一+大小写折叠；空关键词不匹配）。 */
