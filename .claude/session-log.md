@@ -1410,3 +1410,25 @@ http://your-server-ip:8080
 **待续**：② floor-to-1 解析器根因 / B（导入闸）/ C（拆分常量冻结）/ F（ABC 抽查+弱锚闸）/ ⑦（统一旁路台账）。已披露的漏网成本点：`statement-revenue.ts:144`→C；`cost-calculator.ts:603`/`supplier-returns-v1.1.ts:27` 已有价格兜底、残余 0 与 A 设计一致（后续可统一走 resolver）。
 
 *更新时间：2026-07-06*
+
+## 2026-07-06 本次会话完成的工作 —— lab_director 退库/盘点 RBAC 口径拍板落地（承接项 E #76 遗留待拍 chip `task_3abe1f3d`）
+
+**背景**：非-P0 审计项 E 的 W 守卫修复（PR #76·merge commit `e488f905`）surface 出一个 SEED_MATRIX 口径待定项：`rbac-matrix.ts` 里 `lab_director` 对 `returns`/`stocktaking` 只 `R`、对 `transfers`/`scraps` 却 `W`；E 给写端点补 `requirePermission(module,'W')` 后，主任写退库/盘点会 403。
+
+**核实先行（改前逐条验，全属实 + 2 处补充）**：① SEED_MATRIX:31 确为 transfers/scraps=W、stocktaking/returns=R；② E 修复四路由写端点均有 W 守卫；③ 运行库无 lab_director 种子用户（实测 6 角色）。**补①**：`UserFormModal.tsx:7`「实验室主任」是可选角色→管理员随时可建、非纯理论；**补②**：前端 nav 是 capabilities 驱动（login 下发 `getEffectivePermissions`）、非回退 technician——真建的 lab_director 会看到 R 级只读、与后端一致（故用户原担心的「回退 technician 拿 W」不会发生）。
+
+**关键判断=不对称疑似漏配非有意设计**：主任已持 users/roles/reconciliation 审批 + transfers/scraps 写，唯独退库/盘点只读，说不通。**PM 拍板：提到 W**（四类手工库存操作统一可写）。
+
+**实现（一处口径 + 配套迁移 + 回归门禁·零前端改动）**：
+- `rbac-matrix.ts` lab_director `stocktaking/returns` R→W + 口径注释。
+- `rbac-p0-matrix-seed.test.ts` 加回归 `it` 锁 returns/stocktaking/transfers/scraps 四格=W（防矩阵口径静默回退）。
+- **配套 DB 迁移**（⚠️ 首拍误判「无需迁移」，被对抗面板逮到并订正）：`DatabaseManager.ts` 新增聚焦迁移 `reconcileLabDirectorInventoryPerms` + init 里调用，把既有库 lab_director 行的 returns/stocktaking 对齐 'W'（R→W 幂等·只动这一角色这两键·不碰其余·不覆盖脏值/'*'，纪律同 `reconcileSupplierReturnsPerms`）。新增 DB 路径回归测试 `rbac-lab-director-inventory-perms.test.ts`(4)，走 `getEffectivePermissionsForRoles` 真解析、覆盖纯对象断言逮不到的 shadowing 盲区。
+- **无需前端改动**：nav 已在 R 可见、返回页写按钮 gate 于 `canAccess(mod,'W')`→capabilities 转 W 后自动出现；补 ROLE_MENU_MAP 反成第二事实源（其 fallback 已=technician W）。（盘点页写按钮本就未 gate=既有轻 UX 瑕疵、非本改引入，本改反而消除「显按钮却 403」的错配。）
+
+**⚠️ 对抗面板订正（ultracode·`wf_78d462a8-497` 四镜头 refute）**：开 PR 前跑对抗验证，**逮到 1 个 med 级真缺陷**——首拍「无需 DB 迁移」premise 错：我只查了提交进库的 `coreone.db`（恰无 lab_director 行→回退 SEED_MATRIX 掩盖了缺陷），漏了 `DatabaseManager.ts:599` defaultRoles **持久化** lab_director 行、`getEffectivePermissionsForRoles` 先读 roles 行才回退矩阵。凡在 [ROLE-DIR 落库, 本改) 窗口初始化过的既有库会固化旧 R、单改矩阵静默无效。**恰是记忆 `coreone-rbac-live-vs-seed-matrix`/`coreone-pr8-e2e-rbac-migration-gap` 那个迁移缺口，被我错误地判为「不适用」**。→ 已加迁移 + DB 路径测试修复。其余三镜头（前端一致性/SoD 无环/测试无反向断言）均 claimHolds=true（SoD：lab_director 仅 account_reconcile:R 不能批财务对账、其可批的 BOM 对账不消费 inventory→无「自己录数自己批」环）。
+
+**验证**：tsc 绿·后端 vitest **93 files/814 tests 全绿**（含 golden ¥13,152+¥27,870 零回归 + 项 E W 守卫测试 + 新迁移 4 测试）；rbac 四文件(p0-seed 16/p3-route 10/supplier-backfill 4/lab-director-inventory 4=34)聚焦复跑绿。dev DB 未脏（测试走 `:memory:`）；仅显式 `git add` 源码文件、node_modules symlink 未纳（禁 -A）。
+
+**治理**：分支 `claude/elastic-cohen-447e6c`，**PR 待开**（PM 已拍板具体口径）。待拍 chip `task_3abe1f3d` 已解。参考记忆 `coreone-rbac-live-vs-seed-matrix`。
+
+*更新时间：2026-07-06*
