@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { getOverrideFrequency } from '../utils/override-log.js'
 
 const router = Router()
 
@@ -28,5 +29,14 @@ function getOperationLogs(req: any, res: any) {
 
 router.get('/', getOperationLogs)
 router.get('/operation', getOperationLogs)
+
+// 项⑦ 统一旁路台账体检：按 gate_type 聚合旁路使用频率（第 1 层体检指标——高频=闸阈值错或有人在绕）。
+// 挂在 logs 域（logs:R），复用现有审计查看权限。?sinceMonth=YYYY-MM 限窗。
+router.get('/override-frequency', (req: any, res: any) => {
+  try {
+    const freq = getOverrideFrequency(getDatabase(), { sinceMonth: req.query.sinceMonth })
+    success(res, freq)
+  } catch (err: any) { error(res, err.message) }
+})
 
 export default router

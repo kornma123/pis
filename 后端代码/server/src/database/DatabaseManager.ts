@@ -1198,6 +1198,22 @@ export function initializeDatabase(): void {
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  // 统一旁路台账（项⑦）：E/A/B/D 各道闸的人工旁路/软兜底汇入此表，供「旁路使用频率」体检。
+  //   gate_type=import_confirm(B)/ledger_drift_fallback(A)/supplement_approve(D)；reason 应用层强制非空。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS override_log (
+      id TEXT PRIMARY KEY,
+      gate_type TEXT NOT NULL,
+      module TEXT NOT NULL,
+      target_id TEXT,
+      operator TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      before_snapshot TEXT,
+      after_snapshot TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  database.exec(`CREATE INDEX IF NOT EXISTS idx_override_log_gate ON override_log(gate_type, created_at)`)
   database.exec(`
     CREATE TABLE IF NOT EXISTS abc_alert_rules (
       id TEXT PRIMARY KEY,
