@@ -9,6 +9,45 @@ export type InventoryConsistencyIssue = {
   impacts: Record<string, unknown>
 }
 
+/** 单物料的库存双账本漂移行（对账体检 / 向后取证用） */
+export type LedgerDriftRow = {
+  materialId: string
+  code?: string | null
+  name?: string | null
+  stock: number
+  batchRemaining: number
+  /** stock - Σ(status=1 batches.remaining)；>0 = 正向漂移（会致出库缺批次静默算低成本，危险方向） */
+  drift: number
+}
+
+/**
+ * 库存台账对账体检（reconcileStockLedger）——按物料算 `stock - Σ(status=1 batches.remaining)`，
+ * 只体检不改数。正向漂移（stock > Σremaining）是出库派生成本时会取不到批次、回退到均价/0 的危险方向。
+ * 与既有 `INVENTORY_BATCH_MISMATCH`（buildInventoryConsistencyIssues）同口径，此处给出可直接消费的漂移明细。
+ * onlyPositive=true 时只返回正向漂移（喂 P0 体检成本前重点看这批）。
+ */
+export function findLedgerDriftMaterials(db: any, onlyPositive = false): LedgerDriftRow[] {
+  const rows = db.prepare(`
+    SELECT i.material_id AS materialId, m.code, m.name, i.stock AS stock,
+           COALESCE(SUM(CASE WHEN b.status = 1 THEN b.remaining ELSE 0 END), 0) AS batchRemaining
+    FROM inventory i
+    JOIN materials m ON m.id = i.material_id AND m.is_deleted = 0
+    LEFT JOIN batches b ON b.material_id = i.material_id
+    GROUP BY i.material_id, m.code, m.name, i.stock
+    HAVING ABS(COALESCE(i.stock, 0) - batchRemaining) > 0.0001
+  `).all() as any[]
+  return rows
+    .map((r) => ({
+      materialId: r.materialId,
+      code: r.code ?? null,
+      name: r.name ?? null,
+      stock: Number(r.stock) || 0,
+      batchRemaining: Number(r.batchRemaining) || 0,
+      drift: (Number(r.stock) || 0) - (Number(r.batchRemaining) || 0),
+    }))
+    .filter((r) => (onlyPositive ? r.drift > 0.0001 : true))
+}
+
 export function buildInventoryConsistencyIssues(db: any): InventoryConsistencyIssue[] {
   const issues: InventoryConsistencyIssue[] = []
   const addIssue = (issue: InventoryConsistencyIssue) => issues.push(issue)

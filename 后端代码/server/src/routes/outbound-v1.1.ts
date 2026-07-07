@@ -13,9 +13,29 @@ import {
 import { buildBomSourceSnapshot, calculateSlideCostWithFee, getBomPerSampleDriverQty } from '../utils/cost-calculator.js'
 import { recordCostException } from '../utils/cost-exceptions.js'
 import { getActiveBomVersionId } from '../utils/bom-version.js'
+import { resolveOutboundUnitCost } from '../utils/outbound-cost.js'
 import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
+
+// 库存双账本漂移告警（项A）：出库时缺可消耗批次、单位成本走兜底 → 落 cost_exceptions（既有告警清单）。
+// 事务内调用；后续项⑦「统一旁路台账」再把此类软兜底汇入统一 override 日志。
+function recordLedgerDrift(db: any, outboundId: string, oi: any): void {
+  const srcLabel = oi.costSource === 'material_avg' ? '物料历史批次均价'
+    : oi.costSource === 'material_price' ? '物料基准价'
+    : '0（无价格来源·须补价）'
+  // fail-safe：告警落库失败绝不回滚合法出库（warn 阶段=不阻断）。与本文件 ABC 核算块同款吞错取向。
+  try {
+    recordCostException(db, {
+      sourceModule: 'outbound', sourceType: 'ledger_drift', sourceId: outboundId, outboundId,
+      exceptionType: 'ledger_drift', severity: 'warning',
+      message: `库存台账漂移：物料缺可消耗批次，单位成本按${srcLabel}兜底（绝不静默按 0 计）`,
+      details: { materialId: oi.materialId, unitCost: oi.unitCost, costSource: oi.costSource, note: oi.costNote, quantity: oi.quantity },
+    })
+  } catch (e) {
+    console.error('recordLedgerDrift failed (non-blocking):', e)
+  }
+}
 
 // 排序白名单：key = 前端/API 允许的排序字段名，value = 受控的 SQL 表达式（绝不拼接用户输入，防注入）。
 // 「数量」跨明细汇总（outbound_records 无数量列），用相关子查询求和 outbound_items.quantity。
@@ -107,7 +127,10 @@ router.get('/', (req, res) => {
     })
 
     successList(res, result, Number(page), Number(pageSize), count)
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }
+    error(res, err.message)
+  }
 })
 
 router.get('/stats', (req, res) => {
@@ -119,7 +142,10 @@ router.get('/stats', (req, res) => {
     const cancelled = (db.prepare("SELECT COUNT(*) as c FROM outbound_records WHERE is_deleted = 0 AND status = 'cancelled'").get() as any)?.c || 0
     const totalCost = (db.prepare("SELECT COALESCE(SUM(total_cost),0) as c FROM outbound_records WHERE is_deleted = 0 AND status = 'completed'").get() as any)?.c || 0
     success(res, { total, completed, pending, cancelled, totalCost })
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }
+    error(res, err.message)
+  }
 })
 
 router.post('/', (req, res) => {
@@ -159,11 +185,13 @@ router.post('/', (req, res) => {
         WHERE b.material_id = ? AND b.remaining > 0 AND b.status = 1 AND m.is_deleted = 0
         ORDER BY b.expiry_date ASC
       `).get(materialId) as any
-      const unitCost = batch?.inbound_price || 0
+      // 库存双账本守恒守卫（项A）：缺批次绝不静默回退 0（会喂低 CM 分母），走物料均价兜底 + 落漂移告警
+      const costRes = resolveOutboundUnitCost(db, materialId, batch)
+      const unitCost = costRes.unitCost
       const itemCost = unitCost * quantity
       totalCost += itemCost
 
-      outboundItems.push({ materialId, batchId: batch?.id || null, batchNo: batch?.batch_no || null, quantity, unitCost, itemCost, usage: item.usage || 'self', receiver: item.receiver || null })
+      outboundItems.push({ materialId, batchId: batch?.id || null, batchNo: batch?.batch_no || null, quantity, unitCost, itemCost, usage: item.usage || 'self', receiver: item.receiver || null, drift: costRes.drift, costSource: costRes.source, costNote: costRes.note })
     }
 
     const materialUnits = db.prepare('SELECT id, unit FROM materials WHERE id IN (' + items.map(() => '?').join(',') + ')').all(...items.map((i: any) => i.materialId)) as any[]
@@ -195,6 +223,8 @@ router.post('/', (req, res) => {
           INSERT INTO outbound_items (id, outbound_id, material_id, batch_id, batch_no, quantity, unit, unit_cost, total_cost, usage, receiver)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(itemId, id, oi.materialId, oi.batchId, oi.batchNo, oi.quantity, unitMap.get(oi.materialId) || 'pcs', oi.unitCost, oi.itemCost, oi.usage || 'self', oi.receiver || null)
+
+        if (oi.drift) recordLedgerDrift(db, id, oi)
 
         db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(oi.quantity, oi.materialId)
 
@@ -237,7 +267,10 @@ router.post('/', (req, res) => {
     }
 
     res.status(201).json(responseEnvelope)
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }
+    error(res, err.message)
+  }
 })
 
 router.post('/bom', (req, res) => {
@@ -293,10 +326,12 @@ router.post('/bom', (req, res) => {
         WHERE b.material_id = ? AND b.remaining > 0 AND b.status = 1 AND m.is_deleted = 0
         ORDER BY b.expiry_date ASC
       `).get(item.material_id) as any
-      const unitCost = batch?.inbound_price || 0
+      // 库存双账本守恒守卫（项A）：缺批次绝不静默回退 0
+      const costRes = resolveOutboundUnitCost(db, item.material_id, batch)
+      const unitCost = costRes.unitCost
       const itemCost = unitCost * quantity
       totalCost += itemCost
-      outboundItems.push({ materialId: item.material_id, batchId: batch?.id || null, batchNo: batch?.batch_no || null, quantity, unitCost, itemCost })
+      outboundItems.push({ materialId: item.material_id, batchId: batch?.id || null, batchNo: batch?.batch_no || null, quantity, unitCost, itemCost, drift: costRes.drift, costSource: costRes.source, costNote: costRes.note })
     }
 
     const materialUnits = db.prepare('SELECT id, unit FROM materials WHERE id IN (' + bomItems.map(() => '?').join(',') + ')').all(...bomItems.map((i: any) => i.material_id)) as any[]
@@ -326,6 +361,7 @@ router.post('/bom', (req, res) => {
           INSERT INTO outbound_items (id, outbound_id, material_id, batch_id, batch_no, quantity, unit, unit_cost, total_cost, usage, receiver)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(itemId, id, oi.materialId, oi.batchId, oi.batchNo, oi.quantity, unitMap.get(oi.materialId) || 'pcs', oi.unitCost, oi.itemCost, 'self', null)
+        if (oi.drift) recordLedgerDrift(db, id, oi)
         db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(oi.quantity, oi.materialId)
         if (oi.batchId) {
           db.prepare('UPDATE batches SET remaining = remaining - ? WHERE id = ?').run(oi.quantity, oi.batchId)
@@ -422,7 +458,10 @@ router.post('/bom', (req, res) => {
       throw err
     }
     res.status(201).json(responseEnvelope)
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }
+    error(res, err.message)
+  }
 })
 
 // 写入权限检查
@@ -459,10 +498,12 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         WHERE b.material_id = ? AND b.remaining > 0 AND b.status = 1 AND m.is_deleted = 0
         ORDER BY b.expiry_date ASC
       `).get(materialId) as any
-      const unitCost = batch?.inbound_price || 0
+      // 库存双账本守恒守卫（项A）：缺批次绝不静默回退 0
+      const costRes = resolveOutboundUnitCost(db, materialId, batch)
+      const unitCost = costRes.unitCost
       const itemCost = unitCost * quantity
       newTotalCost += itemCost
-      processedItems.push({ materialId, batchId: batch?.id || null, batchNo: batch?.batch_no || null, quantity, unitCost, itemCost, usage: item.usage || 'self', receiver: item.receiver || null })
+      processedItems.push({ materialId, batchId: batch?.id || null, batchNo: batch?.batch_no || null, quantity, unitCost, itemCost, usage: item.usage || 'self', receiver: item.receiver || null, drift: costRes.drift, costSource: costRes.source, costNote: costRes.note })
     }
 
     const materialUnits = db.prepare('SELECT id, unit FROM materials WHERE id IN (' + newItems.map(() => '?').join(',') + ')').all(...newItems.map((i: any) => i.materialId)) as any[]
@@ -506,6 +547,8 @@ router.put('/:id', requireWriteAccess, (req, res) => {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(itemId, id, pi.materialId, pi.batchId, pi.batchNo, pi.quantity, unitMap.get(pi.materialId) || 'pcs', pi.unitCost, pi.itemCost, pi.usage || 'self', pi.receiver || null)
 
+        if (pi.drift) recordLedgerDrift(db, id, pi)
+
         db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(pi.quantity, pi.materialId)
         if (pi.batchId) {
           db.prepare('UPDATE batches SET remaining = remaining - ? WHERE id = ?').run(pi.quantity, pi.batchId)
@@ -542,7 +585,10 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     }
 
     success(res, { id, totalCost: newTotalCost }, 'Outbound updated')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }
+    error(res, err.message)
+  }
 })
 
 router.delete('/:id', requireWriteAccess, (req, res) => {
@@ -584,7 +630,10 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
       db.exec('ROLLBACK')
       throw err
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }
+    error(res, err.message)
+  }
 })
 
 export default router

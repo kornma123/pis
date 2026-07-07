@@ -1396,3 +1396,15 @@ http://your-server-ip:8080
 **治理**：本条目随本实质提交（P0 拍板文档）捎带；复现脚本在会话 scratchpad（`cm-distribution.cjs`）。
 
 *更新时间：2026-07-06*
+
+## 2026-07-06 本次会话完成的工作 —— 非-P0 域首轮对抗审计修复批（项 E + 项 A）
+
+**背景**：按记忆 `coreone-non-p0-domain-audit` + 桌面《非P0域-修复方案.md》，逐项修 8 个非-P0 域首轮对抗审计发现的问题（顺序 E→A→D→B→C→F→⑦，先止血后立法，每项独立 PR）。本会话完成 E、A 两项。
+
+**① E·授权提权（PR #76，已合 master merge commit `e488f905`）**：app.ts 挂载层声称写权限由路由内 `requirePermission(module,'W')` 守卫，但 `users`/`roles`/`returns`/`scraps`/`transfers`/`stocktaking` 六路由的 16 个写端点内**根本无 W 守卫** → 持只读权限即可改权限矩阵提权 / 突变库存。修法=六文件补 inline `requireXxxWrite`（仿 projects/outbound）+ 新增 `tests/rbac-e-write-guard.test.ts`(30) 合成 reader/writer 做 W-403 双向断言（变异测试证守卫真生效）。向后取证：operation_logs 0 条越权写、无角色持 R-but-not-W → 潜在漏洞非确认事故（诚实披露 dev 审计账本近空、须生产复跑）。改 2 个既有 bare-mount stocktaking 测试注入写角色 req.user（仿 authenticateToken）。vitest 90/787 绿。独立复核 = review agent 确认 16 端点全覆盖、单挂载无旁路、模块键一致。**顺带 surface 一个 PM 待拍**：SEED_MATRIX 里 lab_director 对 returns/stocktaking 只 R，修复后其写这两模块会 403（现状影响理论性——ROLE_MENU_MAP 无 lab_director 项、运行库无该种子用户）→ 已 spawn chip `task_3abe1f3d` 待 PM 定该给 R 还是 W。
+
+**② A·库存双账本守恒（PR 本分支 `feat/inventory-ledger-guard-A`）**：出库三处 `unitCost = batch?.inbound_price || 0` 在「库存足却缺可消耗批次」（returns/scraps/盘盈只改 stock 不落 batches）时静默回退 0 → 成本算低 → 喂低 P0 CM 分母。修法=新增纯函数 `resolveOutboundUnitCost`（正常用批次价、**尊重真实 0 价**；漂移→物料均价/基准价兜底绝不静默 0；strict 模式抛 LEDGER_DRIFT 409）+ 漂移落 `cost_exceptions` 告警（fail-safe 吞错不回滚）+ `findLedgerDriftMaterials` 体检 + 只读取证脚本（dev 0 正向漂移·302 历史零成本行 2026-05）。新增 `tests/ledger-drift-guard.test.ts`(13)·mutation 验证。vitest 91/800 绿·golden 零回归。独立复核 = 5 镜头对抗面板逮 2 CONFIRMED（**D1 零价批次误判为漂移**、**recordLedgerDrift fail-closed**）已修；CM 回归/strict/idempotency 判 CLEAN。
+
+**待续**：D（账实复核 floor-to-1 人闸）/ B（导入闸）/ C（拆分常量冻结）/ F（ABC 抽查+弱锚闸）/ ⑦（统一旁路台账）。已披露的漏网成本点：`reconcile-compute.ts:84/97`→D、`statement-revenue.ts:144`→C；`cost-calculator.ts:603`/`supplier-returns-v1.1.ts:27` 已有价格兜底、残余 0 与 A 设计一致（后续可统一走 resolver）。
+
+*更新时间：2026-07-06*
