@@ -15,12 +15,13 @@ import { recordCostException } from '../utils/cost-exceptions.js'
 import { getActiveBomVersionId } from '../utils/bom-version.js'
 import { resolveOutboundUnitCost } from '../utils/outbound-cost.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { recordOverride } from '../utils/override-log.js'
 
 const router = Router()
 
 // 库存双账本漂移告警（项A）：出库时缺可消耗批次、单位成本走兜底 → 落 cost_exceptions（既有告警清单）。
-// 事务内调用；后续项⑦「统一旁路台账」再把此类软兜底汇入统一 override 日志。
-function recordLedgerDrift(db: any, outboundId: string, oi: any): void {
+// 事务内调用；项⑦「统一旁路台账」把此类软兜底一并汇入统一 override 日志（供旁路频率体检）。
+function recordLedgerDrift(db: any, outboundId: string, oi: any, operator: string): void {
   const srcLabel = oi.costSource === 'material_avg' ? '物料历史批次均价'
     : oi.costSource === 'material_price' ? '物料基准价'
     : '0（无价格来源·须补价）'
@@ -35,6 +36,13 @@ function recordLedgerDrift(db: any, outboundId: string, oi: any): void {
   } catch (e) {
     console.error('recordLedgerDrift failed (non-blocking):', e)
   }
+  // 项⑦：软兜底 = 系统自动旁路（无用户 confirm），reason 用系统兜底口径；operator 取出库操作人。
+  recordOverride(db, {
+    gateType: 'ledger_drift_fallback', module: 'outbound', targetId: outboundId, operator,
+    reason: oi.costNote || `缺批次·按${srcLabel}兜底`,
+    before: { materialId: oi.materialId, costSource: oi.costSource },
+    after: { unitCost: oi.unitCost, quantity: oi.quantity },
+  })
 }
 
 // 排序白名单：key = 前端/API 允许的排序字段名，value = 受控的 SQL 表达式（绝不拼接用户输入，防注入）。
@@ -224,7 +232,7 @@ router.post('/', (req, res) => {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(itemId, id, oi.materialId, oi.batchId, oi.batchNo, oi.quantity, unitMap.get(oi.materialId) || 'pcs', oi.unitCost, oi.itemCost, oi.usage || 'self', oi.receiver || null)
 
-        if (oi.drift) recordLedgerDrift(db, id, oi)
+        if (oi.drift) recordLedgerDrift(db, id, oi, operator)
 
         db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(oi.quantity, oi.materialId)
 
@@ -361,7 +369,7 @@ router.post('/bom', (req, res) => {
           INSERT INTO outbound_items (id, outbound_id, material_id, batch_id, batch_no, quantity, unit, unit_cost, total_cost, usage, receiver)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(itemId, id, oi.materialId, oi.batchId, oi.batchNo, oi.quantity, unitMap.get(oi.materialId) || 'pcs', oi.unitCost, oi.itemCost, 'self', null)
-        if (oi.drift) recordLedgerDrift(db, id, oi)
+        if (oi.drift) recordLedgerDrift(db, id, oi, operator)
         db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(oi.quantity, oi.materialId)
         if (oi.batchId) {
           db.prepare('UPDATE batches SET remaining = remaining - ? WHERE id = ?').run(oi.quantity, oi.batchId)
@@ -547,7 +555,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(itemId, id, pi.materialId, pi.batchId, pi.batchNo, pi.quantity, unitMap.get(pi.materialId) || 'pcs', pi.unitCost, pi.itemCost, pi.usage || 'self', pi.receiver || null)
 
-        if (pi.drift) recordLedgerDrift(db, id, pi)
+        if (pi.drift) recordLedgerDrift(db, id, pi, req.body.operator || 'system')
 
         db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(pi.quantity, pi.materialId)
         if (pi.batchId) {

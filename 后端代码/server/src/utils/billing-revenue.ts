@@ -11,6 +11,8 @@
  *  - 跳过「小计」「未收金额」等非明细噪声行（序号非数字 / 病理号='小计'）。
  */
 
+import { canonicalCaseNo } from './classifier.js' // 病理号落库/匹配归一，与 lis_cases、statement-import 同一 canonical（防全角号 case_revenue↔lis_cases 匹配漏）
+
 export interface BillingRawRow {
   [key: string]: unknown
 }
@@ -143,7 +145,9 @@ export function normalizeLine(row: BillingRawRow): BillingLine {
   if (!Number.isFinite(discount)) discount = gross > 0 ? round4(net / gross) : 0
   const chargeTime = str(row, 'chargeTime')
   return {
-    caseNo: str(row, 'caseNo'),
+    // 病理号是 join key（case_revenue/lines 落库 + lis_cases 命中探针）：与 lis_cases、statement-import 侧同一
+    // NFKC 归一，否则全角号在本导入器落 case_revenue 原样、lis_cases 侧归半角 → 账实核对/成本归属匹配漏。
+    caseNo: canonicalCaseNo(str(row, 'caseNo')),
     partnerName: str(row, 'partnerName'),
     registrationType: str(row, 'registrationType'),
     specimenName: str(row, 'specimenName'),

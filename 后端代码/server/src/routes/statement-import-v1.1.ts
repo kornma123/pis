@@ -20,6 +20,7 @@ import { canonicalCaseNo } from '../utils/classifier.js' // codex MEDIUM-3：落
 import { scoreStatement } from '../utils/import-score.js'
 import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
 import { buildImportAnchorReasons } from '../utils/import-gates.js'
+import { recordOverride } from '../utils/override-log.js'
 
 const router = Router()
 const requireImport = requireAnyRole('finance')
@@ -150,16 +151,27 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
     const curLab = round2(committable.reduce((s, r) => s + fin(r.labPortion), 0))
     const curSettle = round2(committable.reduce((s, r) => s + fin(r.settle), 0))
     const anchorReasons = buildImportAnchorReasons(db, partnerId, String(serviceMonth), curLab, curSettle, caseNos)
-    if (!confirmed && (unclassified > 0 || !closureOk || anchorReasons.length > 0)) {
-      const reasonParts: string[] = []
-      if (unclassified > 0) reasonParts.push(`未匹配 ${rev.counts.unmatched} 行 / 歧义 ${rev.counts.ambiguous} 行`)
-      if (!closureOk) reasonParts.push(!closureVerifiable ? '对账单无独立合计行，无法核对闭合'
-        : `逐行结算 ${rev.totalSettle} 与对账单合计 ${parsed.declaredTotal} 差 ${closureDiff}`)
-      reasonParts.push(...anchorReasons)
-      error(res,
-        `对账单未通过落库前核对，未确认不落库：${reasonParts.join('；')}。请先归类/核对，或重发带 confirm:true 显式确认。`,
-        'NEEDS_CONFIRM', 409)
-      return
+    // 汇总本次触发的核对闸理由（无论是否 confirm）
+    const gateReasons: string[] = []
+    if (unclassified > 0) gateReasons.push(`未匹配 ${rev.counts.unmatched} 行 / 歧义 ${rev.counts.ambiguous} 行`)
+    if (!closureOk) gateReasons.push(!closureVerifiable ? '对账单无独立合计行，无法核对闭合'
+      : `逐行结算 ${rev.totalSettle} 与对账单合计 ${parsed.declaredTotal} 差 ${closureDiff}`)
+    gateReasons.push(...anchorReasons)
+    const overrideReason = String((req.body as any)?.overrideReason ?? '').trim()
+    if (gateReasons.length > 0) {
+      if (!confirmed) {
+        error(res,
+          `对账单未通过落库前核对，未确认不落库：${gateReasons.join('；')}。请先归类/核对，或重发带 confirm:true 显式确认。`,
+          'NEEDS_CONFIRM', 409)
+        return
+      }
+      // 项⑦ 统一旁路台账：confirm 强制越过核对闸 = 人工旁路 → **必须填 overrideReason** 留痕（防旁路无声搬家）。
+      if (!overrideReason) {
+        error(res,
+          `确认落库越过了核对闸，必须在 overrideReason 填写旁路理由后重发：${gateReasons.join('；')}。`,
+          'OVERRIDE_REASON_REQUIRED', 400)
+        return
+      }
     }
 
     // 逐病理号聚合（无病理号行跳过计数）
@@ -211,6 +223,17 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
       backfillAbcPartnerIds(db)
       db.exec('COMMIT')
     } catch (e) { db.exec('ROLLBACK'); throw e }
+
+    // 项⑦：confirm 强制越过了核对闸 → 落一条旁路台账（operator + overrideReason + 前后快照），供旁路频率体检。
+    if (gateReasons.length > 0 && confirmed) {
+      recordOverride(db, {
+        gateType: 'import_confirm', module: 'statement_import', targetId: `${partnerId}:${serviceMonth}`,
+        operator: (req as any).user?.username ?? (req as any).user?.userId ?? 'system',
+        reason: overrideReason,
+        before: { gateReasons },
+        after: { caseCount, labRevenue: labTotal, serviceMonth },
+      })
+    }
 
     success(res, {
       partnerId, serviceMonth, configVersion: cfg.version, importBatch,

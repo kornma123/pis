@@ -1417,6 +1417,10 @@ http://your-server-ip:8080
 
 **⑤ C·拆分常量立法/披露（PR 本分支 `feat/split-const-freeze-C`·立法非改 bug）**：`SPLIT_DIAG_FEE=105`（拆分公式固定分母·决定范围内 vs 范围外份额·对外"高估约 2 倍"结论唯一来源）是模块级裸常量、改动不留痕不打标。档1=`105 as const`+新增 `SPLIT_FORMULA_VERSION`+结果透出 `caliber` 印记+纳入 caliberSignature（`{formula,lines}`）+drift-guard 测试（钉死 105/版本·收入侧=成本侧 DIAGNOSIS_ANCHOR_DEFAULT）。新增 `split-formula-caliber-freeze.test.ts`(4)。vitest 94/819 绿·golden 零回归·caliberSignature 格式变更安全（调用点同请求内比对·从不落库）。**分岔登记 PM 待拍板 P-2**：「高估 2 倍」出没出门（业务取证·未出门则完结档1·已出门触发披露/更正决策插队）。**后续**：档1 的落库+前端趋势打标（需列迁移+mockup）另 PR；档3 逐客户可配体检窗口内禁。独立复核=聚焦 review agent。
 
+**⑥ F·ABC 抽查+绿档+弱锚闸（PR 本分支 `feat/abc-weak-anchor-gate-F`）**：**绿档1 弱锚闸（核心立法）**=单片全成本 total 无条件含工时/设备 G2 估弱锚（antibody-cost.ts:140），今天安全仅因孤立只读展示层未喂毛利（grep 全仓零跨消费已核隔离）→ 新增 `forMargin(c)` 守卫把「未校准成本禁入毛利/去留」立为类型级(CalibratedCost brand)+运行期(抛错)硬约束，把 P0 教训在复发前立法。`weak-anchor-margin-gate.test.ts`(4)。**绿档2**=boms.standard_*_cost 7 恒0列从 bom-version 快照移除(无消费者)+列标 @deprecated。**三报表错诚实降级**：variance(totalStandard=物料实际占位·labor/equip/indirect 硬编码0)补 standardCalibrated:false+disclaimer；allocation_base 死参数(真实分摊按月度 disclosure.basis)补 allocationBaseEffective:false；幽灵报表接口(reports.ts 包 10 api·后端仅 4 真路由→6 个恒404·其中 2 个 live 页真调 personnel-efficiency/cost-monthly-comparison)——删/补待 PM(I-3+登记 PM待拍板 B-3)。vitest 95/823 绿·golden 零回归·tsc 绿。forMargin 是新增 opt-in 守卫(尚未 wire·今天无 caller 需要·复发前立法)。独立复核=聚焦 review agent。**后续**：幽灵接口删/补(PM)、前端 UX 诚实化(mockup)、forMargin wire 进毛利消费端(逐抗体成本接毛利时)。
+
+**⑦ 统一旁路台账（PR 本分支 `feat/unified-override-ledger-7`·系统性收尾·非-P0 审计末项）**：E/A/B/D 各闸修完后残留三处运行时人工旁路(B confirm 强制落库/A 出库软兜底/D 补收单签发)——原病「静默」会搬家到旁路里成新的无守卫写路径。新建 `override_log` 表 + `recordOverride`(fail-safe·空 reason→'(未提供理由)'·快照截断4000) + `getOverrideFrequency`(按 gate_type 聚合)。三处接线:B /commit 重构 confirm 门(gateReasons 触发时 confirm 越闸必带 overrideReason·否则 400 OVERRIDE_REASON_REQUIRED·COMMIT 后 recordOverride·干净 commit 不受影响零回归)；A recordLedgerDrift 加 operator+recordOverride(软兜底系统 reason)；D approve 后 recordOverride。体检端点 `GET /logs/override-frequency`(logs:R)+进 build-discipline 白名单(incubating·deadline 2026-10-06)。新增 `unified-override-ledger.test.ts`(5)+改 2 既有 B 测试补 overrideReason。vitest 98/838 绿·golden 零回归·build-discipline C1/C2/C3 新增0。C 改常量不入台账(代码部署非运行时)·E RBAC 硬闸无旁路。独立复核=3 镜头对抗面板。**非-P0 域审计 7 项(E→A→D→B→C→F→⑦)全部落地。**
+
 *更新时间：2026-07-06*
 
 ## 2026-07-06 本次会话完成的工作 —— lab_director 退库/盘点 RBAC 口径拍板落地（承接项 E #76 遗留待拍 chip `task_3abe1f3d`）
@@ -1477,5 +1481,80 @@ http://your-server-ip:8080
 - **决策=回退 dash 折叠、不在本成本侧分支落**（呼应原 task「dash 决策 do NOT bundle」）：`canonicalCaseNo` 复原 NFKC-only + 留 deferral 注释（钉「四侧同归一前勿单方折」原因）；删 dash 测；cost-side 测 ④ 改为**守卫用例**（钉 canonicalCaseNo 暂不折·防提前单方加）。**dash 折叠推迟为独立收敛**：待 LIS 写侧也走 canonicalCaseNo（f497e5c3 落地、四侧统一）后，把折叠加进 canonicalCaseNo 一处即四侧原子生效。回退后 tsc 绿·**96 files/831 tests 全绿**·golden 零回归。
 
 **PM 待拍板状态**：dash「纯格式·应统一」PM 已拍（方向定），但**落地时机=四侧同归一后**（本会话不落，避免非对称）。记忆 `coreone-caseno-nfkc-canonical-split` 已更（dash=方向已定·实现待 LIS 侧收敛后统一加）。**这是对抗面板拦住「看似对却有 latent 坑」的实例**——正是机制5 的价值。
+
+**⚠️ 订正（合并 origin/master 时·2026-07-07）**：本 PR 开分支时 `f497e5c3`（LIS/收入侧 canonicalCaseNo 收敛）尚未合，故上文写「未合」+ dash 折叠推迟。**现 `f497e5c3` 已随 PR #84 合入 master**（下方 master 版「case_no 归一不对称根治」段即该工作）→ **dash 折叠的「四侧同归一」前置已满足**：本成本侧 PR 合并后，LIS/收入/成本/import-score 四侧均经 canonicalCaseNo，dash 折叠可作为**独立后续 PR** 一处加进 canonicalCaseNo 即四侧原子生效（须在合并后的 master 上重跑对抗面板确认非对称已消再落）。本 PR 范围不变=**只含成本侧 NFKC 归一**（不含 dash）；`classifier.ts` deferral 注释保留（dash 后续 PR 里更新为「前置已满足」）。
+
+## 2026-07-06 本次会话完成的工作 —— case_no 归一不对称根治（**完成项 B #80 披露的 `task_77245a02` 根治项**）
+
+**背景**：非-P0 审计项 B 的对抗复核逮到一个系统性 `case_no`（病理号）归一不对称，并把根治单开为 chip `task_77245a02`（见项 B #80 已披露边界「case_no NFKC 失配假阴性·lis 入库未归一」）。本会话即完成该根治项。症结：`lis_cases.case_no` 落库用 `String().trim()`（无 NFKC），而消费侧 `case_revenue(_lines).case_no` 经 `canonicalCaseNo`（NFKC+trim）。含全角/兼容字符的号 → LIS 侧留原样、canonical 侧归半角 → **永不命中**（reconcile-compute `buildReconcileInputs` 账单↔LIS 匹配漏、buildCaseMarkers 抗体 JOIN 孤儿丢线索、项 B `import-gates.ts:60 dominantLedgerMonth` 期间键闸恒 null 静默失效）。方向=假阴性（漏非误）·多数病理号 ASCII 不受影响·非紧急，但根治点在**入库侧统一归一**。
+
+**修（3 处写入 seam·全走共享 `canonicalCaseNo`，与消费侧同一 canonical）**：
+- **①** `utils/lis-import.ts`：`normalizeLisRow.caseNo` + `normalizeMarkerRow.caseNo` → `canonicalCaseNo`（写 `lis_cases.case_no` 主导入 + `lis_case_markers.case_no`；一处修同时修好 reconcile 匹配 + 抗体 JOIN + `ON CONFLICT(partner_id,case_no)` 全角/半角去重）。
+- **②** `routes/reconciliation-v1.1.ts:~353`：遗留手工 `lis_cases` 导入路径也归一（不留第二条 raw 写路）。
+- **③** `utils/billing-revenue.ts`：`normalizeLine.caseNo` → `canonicalCaseNo`（**首轮复核衍生**：`case-revenue-v1.1.ts` 是**第二个**收入侧写者，此前 raw 落 `case_revenue(_lines)` 且用 raw 探 `lis_cases`/`resolveLisCanonicalPartner`；一处 seam 同时修写入+探针）。
+- 下游 `reconcile_diffs`/`reconcile_case_hints`/`supplement_orders` 的 case_no **继承 canonical**（只从已归一的 LIS/收入表读），无需各自再归一。
+- **修好项 B 期间键闸**：merge 后 `import-gates.ts:60 dominantLedgerMonth` 已在树。它 `SELECT ... FROM lis_cases WHERE case_no IN (<statement 传入的 canonical 列表>)`——修前 lis_cases 侧 raw → 全角号恒不命中 → 众数月恒 null → 期间键闸对全角静默失效；本 fix 归一 lis_cases 后该闸对全角真生效。
+
+**测试**：`lis-import.test.ts`（+全角 case_no 单测 + marker 归一）、`billing-revenue.test.ts`（+全角号 + 聚合键归一）、新 `reconcile-fullwidth-caseno.test.ts`（端到端证：全角 LIS 导入落半角 canonical + 账单半角 → `computeReconcile` matchRate=1，修前 union=2/matched=0）。
+
+**验证**：tsc 绿；后端 vitest 全绿（含 golden `partner-revenue-golden` ¥13,152 + `hemujia-purelab-golden` ¥27,870 零回归；canonicalCaseNo 对 ASCII 恒等，实数据不受影响）。dev DB 未污染（测试走 `:memory:`、探针只读）。**注**：merge origin/master（+项 B/C/rbac）后需以合并树复跑 vitest 确认联合绿（下方 PR 流程执行）。
+
+**独立复核（工作模型机制5·双轨）**：
+- 首轮 general-purpose 对抗读码 → 确认 3 处正确、无循环 import、NFKC 对 ASCII 恒等/幂等；**逮到 ③**（billing-revenue 第二收入写者 raw）已修。
+- ultracode 完整性 Workflow（`wf_5956f179-165`·8 agent：4 域枚举 → 综合矩阵 → 3-lens 对抗 refute）：**GAP_FOUND=成本侧**——`outbound_abc_details.case_no`（`cost-runs.ts:109` ← `outbound_records.case_no` raw 用户输入）在 `abc-partner-link.ts:24`（↔lis_cases 回填 partner）+ `:76`（↔case_revenue 院级 P&L 成本卷积）两条钱路 JOIN 仍 raw → 全角号成本掉出 partner P&L。**影响=全角-only·当前 ASCII 数据零影响·非 golden 回归**；属独立 ABC 成本/出库域（含 charge_group_id 派生键 + case_charge_groups + COUNT(DISTINCT) 幂等语义），另立**追踪 chip `task_4d5a4d3f`**（用户已启动·独立会话跑；本会话不扩到该域，防在不熟域引双计风险；工作模型域隔离纪律）。
+
+**已披露边界**：
+- **成本侧 case_no 仍 raw**（见上·chip `task_4d5a4d3f`·用户已启动）——达「全库 case_no 皆 canonical」不变量的收尾项。
+- **NFKC 不折 dash 变体**（U+2212 减号 / U+2013 en-dash / U+2010 hyphen ≠ U+002D）：`canonicalCaseNo` 本身的局限（**预存**·statement 路径早已同此局限·非本次引入）；dash-错配号在任何 seam 都不命中。扩 `canonicalCaseNo` 折 dash 会影响**全部** reconcile 匹配、可能误并合法异号 → 属**共享语义决策·待 PM**（未改·未 spawn·记此）。
+
+**治理**：分支 `claude/elastic-ellis-6551ce`（off master `55d2f83d`），已 `git merge origin/master`（7 提交·含项 B #80/C #81/rbac #82；仅 session-log append 冲突=保留双方）。改动仅 6 文件（src×3 + tests×3），未碰 dev DB / 未 `-A`（server/node_modules 非 gitignore 覆盖）。开 PR 到 master（独立·非栈·单独可合·PR #84）。
+
+*更新时间：2026-07-06*
+
+---
+
+## 2026-07-06 本次会话完成的工作 —— 构建纪律闸（Build Discipline Gate）立闸 + 存量清单
+
+**性质**：把 **P0 设计选择 #7**「完成=真数据跑通+消费者被服务」（非代码合并）从只在 P0 域执行，推广成**全系统机器可执行规则**，根除「功能先于消费者被建」五形态。off origin/master 开 `claude/kind-mcclintock-a09ec4`。**纯新增工具+文档·零改 app 源码·golden ¥13,152+¥27,870 天然零回归**（dev DB 与前后端源码全程未动，只读扫描）。
+
+**产出（新增独占文件）**：
+- **`scripts/build-discipline/`**（纯 Node·零依赖·正则静态扫描）：`lib/registry.cjs`（app 挂载/router 端点/前端调用[request+axios+fetch+fetch-var 回溯]/路径归一/匹配）+ 三检查 `check-frontend-to-backend.cjs`(C1)/`check-backend-consumers.cjs`(C2)/`check-config-engine.cjs`(C3) + `run-all.cjs`（`--only`/`--block`/`--json`/`--update-baseline`）+ `selftest.cjs`(22 断言) + `consumer-whitelist.json`(有名有期孵化) + `baseline.json`(delta 棘轮·45 键) + `README.md`。
+- **三检查**：C1 前端 API 调用必命中已注册后端路由（否则幽灵404）· C2 后端端点须≥1 消费者（否则进白名单带 owner+deadline·过期删）· C3 用户可写配置字段须自身 CRUD 外有读取点（否则空转，allocation_base 型）。
+- **`.github/workflows/build-discipline.yml`**（warn 模式·非 required·selftest 必过）+ **PR 模板**加「消费者是谁/入口在哪/若暂无→孵化死线」栏。
+- **存量清单** `docs/COREONE-构建纪律闸-存量违规清单-2026-07-06.md`（按危害 4 层：止骗>关风险>清废>补入口）+ **`docs/PM待拍板.md` 新增 M-6**（warn→block flip 决策·有 owner）。
+
+**存量盘点结果**（全 warn·不拦合并）：**C1=9 幽灵**（reports 6 死方法 + boms/cost-preview + logs/export + users/reset-password，逐条核实 0 误报）· **C2=33 无消费者**（18 写+15 读；含本会话 D 域新增 `POST /account-reconcile/supplements/:id/approve` 审批门**无前端 approve 按钮→collect 永 409**）+ 13 白名单豁免 · **C3=3 高置信空转**（allocation_base canonical→并入「修非 P0 域」F.3；两种命名 snake+camel 皆无引擎读）+ 83 低置信仅报告。**逐项处置在另一「修非 P0 域」task**（本 task 只立闸+出清单+防新增）。
+
+**核心防误报设计**（task 要求·warn 起步测误报率）：C1 动态 `fetch(变量)` 回溯赋值解析、无法回溯者进 `unverifiable` 列表人工过目（不静默）；C2 文本兜底按**端点完整形状精确正则**（param 处须 `${...}` 插值）只用「发请求的文件」；C3 置信分层（计算旋钮名才高置信）+ 兼配 camelCase。**delta 棘轮**：`baseline.json` 记存量，`--block` 只拦**新增** → 可立刻对 C1 开 block 不被 45 条存量红墙挡无关 PR（实证：新增→exit 1，干净→exit 0）；无 baseline fail-closed；exit-code footgun 护栏（`--update-baseline`⊥`--block`、`--block` 不可被 `--only` 排除）。
+
+**独立复核（工作模型机制5·两轮对抗面板）**：①3-agent 找误报/绕过/治理→0 误报 + 逮 4 解析缺口全加固 + delta 棘轮/owner 采纳；②4-agent verify 面板复核加固本身→逮 **1 HIGH**（C2 旧 literalBase 前缀 substring 兜底令死的兄弟子路由被误判消费）**已修**为精确形状正则，修后 C2 29→33（多揪 4 个全 grep 核实真·有后端无前端）+ 修 2 exit-code footgun + 文档计数订正。critic 终裁「ship-ready as honest warn-mode inventory + owned ramp」。
+
+**验证**：selftest 22/22 绿·warn gate exit 0·C1=9/C2=33/C3=3 baseline current·YAML/JSON 合法·app 源码零改动。**已披露边界**：覆盖诚实声明=五形态机器只查得 4 种（**孤儿路由**靠前端审计、**假能力**如 /abc/variance 假标准成本无机器检查·最高危仍靠人，已 hoist 到 README 顶防 PM 假门错觉）；C3 warn-only（启发式·计算内联在路由的口径分叉检不出）；keyOf param 折叠低危碰撞已文档化。**留 PM 拍**：M-6 何时切 block+设 required（推荐先切 0 误报的 C1）。
+
+*更新时间：2026-07-06*
+
+---
+
+## 2026-07-06 本次会话完成的工作 —— P0 院级贡献毛利「四轮外审收敛终稿」落地（后端引擎影子模式 + mockup）〔PR #77·分支 objective-mclaren-f477c2〕
+
+**性质**：应 PM「实现 P0 院级贡献毛利四轮外审收敛终稿设计」。碰钱/口径 → TDD + 独立对抗复核。**背景纠正**：`/hospital-pnl` 已有 `HospitalPnLDashboard.tsx`（`a7c379df`）但恰是四轮推翻的旧设计（按 grossMargin 升序=按率排名·盈利/亏损措辞）；任务「尚未建」指新贡献毛利引擎/后端路由（确无）→ 建**新并存 lane**（ADR-003）、旧看板暂不动。
+
+**后端（新独立 lane·影子模式·TDD·golden 零回归）**：`hospital-cm.ts`（per-case 引擎·桶A二抗+桶B一抗①*/特染/组织处理¥7·同源闸·准入闸·状态真值表 G-1·结构上无 labor/equipment）+ `portfolio-health.ts`（两层框架·覆盖倍数只看趋势·§4a 产能费单算·§4b 净贡献者不得自动点名封存·复活双触发常量）+ `hospital-cm-service.ts`（§10.A SQL 契约·lab_revenue 非 net_amount·marker 防扇出·§10.E 跨月复用禁输出）+ `hospital-pnl-v1.1.ts` 路由（复用 cost_analysis:R·零 MODULES 漂移·与 partner-pnl 并存）。
+
+**独立复核（机制5·`wf_9e39b91b`）逮 3 真 bug 并修 + TDD**：① HIGH §10.E 跨月复用双计闸未实现 → `loadCrossMonthReuseKeys`+`makeWithheldCase`；② coverage 恒真式 → `ihcCount` 透传+§10.D 真谓词；③ 特染占位价信号丢弃 → `stainPlaceholderShare` 披露。
+
+**前端 mockup 先行红线**（未写真 React）：`docs/mockups/hospital-cm-两层框架-mockup.html`。**验证**：后端 vitest 全绿·golden ¥13,152+¥27,870 零回归。
+
+*更新时间：2026-07-06*
+
+---
+
+## 2026-07-07 本次会话续 —— P0 贡献毛利 mockup grill-with-docs（20 分支拷问 → 落 docs + 修 D20 代码 + 重构 mockup）〔PR #77 续〕
+
+**性质**：PM `/grill-with-docs` relentless 逐分支拷问设计（一次一问·每问给推荐·domain-modeling 边捕术语/ADR），20 承重分支逐一拍板。
+
+**要点**：固定成本池（D1 财务手工月度 config·D2 只放固定开销排材料·D5 只整盘绝不摊单院[死亡螺旋护栏]·D13 变更留痕+趋势打标·D18 hero 改 ∑贡献毛利真值）→ 落 CONTEXT.md「组合体检层」术语段 + **新建 ADR-008**。对照表 UX（D3 人工抓手·D6 逐行口径+混时警示·D7 逐行率覆盖·D8 趋势积累中·D10 状态词降页面级·D11 顶梁柱教学移说明·D17 谈判弹药下钻）。UNMEASURED/复活（D12 可点开清单·D9 阈值占位待校准）。诚实边界 v1 披露（D14 关账后追溯补收·D15 作废/代阅片不声称分·D16 非IHC合桶·D19 三线混合率虚高）。**D20 代码真修**：`checkTerminationPreFilter` 遇「候选点名集非空+产能费未测」拒绝而非静默 ok（堵先重建点名再测产能→顶梁柱误伤的洞）+ TDD。
+
+**产出**：CONTEXT.md（+组合体检层段）、`docs/COREONE-ADR-008-…-2026-07-07.md`（新）、`portfolio-health.ts`（D20）、mockup v2（落 D3-D19）。**后端待办记 PR**：固定成本池 config 表/标记持久化/逐行口径字段/谈判弹药下钻端点/UNMEASURED 清单端点/D14-D19 细分。**验证**：tsc 净·后端 vitest 全绿·golden 零回归。
 
 *更新时间：2026-07-07*

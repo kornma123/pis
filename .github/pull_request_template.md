@@ -19,9 +19,17 @@ PR 治理规范见 .claude/rules/pr-governance.md。
 ## 合并顺序
 - merge-order: `_`（与看板一致；合并前再核「是否当前最上游可合项」）
 
+## 消费者与入口（构建纪律闸 · P0 设计选择 #7「完成=消费者被服务」，见 scripts/build-discipline/README.md）
+<!-- 本 PR 若新增/改动 前端 API 调用、后端路由、或持久化配置字段，逐项答；否则填「不涉及」。 -->
+- **新增后端路由的消费者是谁 / 入口在哪**：`<前端调用/定时任务/内部引用>`（若「暂无」→ 必须登进 `scripts/build-discipline/consumer-whitelist.json` 带 owner+孵化死线）
+- **新增前端调用命中的后端路由**：`routes/<file>.ts:<line>`（避免幽灵 404）
+- **新增配置字段的读取点**：`<引擎/工具文件>`（UI 让人设的口径参数须真有计算读它，别做 allocation_base 型空转旋钮）
+- **若暂无消费者 → 孵化死线**：`YYYY-MM-DD`（到期仍无消费者，默认删）
+
 ## 验证
 - 测试：新增 _ / 全量回归 _ passed；关键不变量（如黄金 ¥13,152）：_
 - tsc / lint：_
+- 构建纪律闸：`node scripts/build-discipline/run-all.cjs` 无**新增**违规（C1 幽灵404 / C2 无消费者 / C3 空转参数）
 
 ## 合并后动作
 - [ ] 重定向下游 PR 的 base（若本 PR 是其上游）

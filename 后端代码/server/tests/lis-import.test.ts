@@ -63,6 +63,20 @@ describe('normalizeLisRow：真实 LIS 行 → 规范化', () => {
     expect(c.ihcCount).toBe(12)
   })
 
+  it('全角/兼容字符病理号 → NFKC 归一（与 case_revenue/期间键闸同一 canonical，否则永不命中）', () => {
+    // 全角字母+全角数字：'Ｓ２６-０２７２５' → 半角 'S26-02725'
+    expect(normalizeLisRow({ 病理号: 'Ｓ２６-０２７２５', 送检医院: 'H' }).caseNo).toBe('S26-02725')
+    // 前后空白一并 trim
+    expect(normalizeLisRow({ 病理号: '  X26-00150  ', 送检医院: 'H' }).caseNo).toBe('X26-00150')
+    // 已是半角 ASCII → 原样（幂等，不误伤正常号）
+    expect(normalizeLisRow({ 病理号: 'S26-03046', 送检医院: 'H' }).caseNo).toBe('S26-03046')
+  })
+
+  it('抗体行病理号同样 NFKC 归一（buildCaseMarkers 的 case_no join 才命中）', async () => {
+    const { normalizeMarkerRow } = await import('../src/utils/lis-import.js')
+    expect(normalizeMarkerRow({ caseNo: 'Ｓ２６-０２７２５', markerName: 'ER', adviceType: 'Y000001' }).caseNo).toBe('S26-02725')
+  })
+
   it('toLisCaseQty：带入指定 specimenType，喂给 mapCaseToCharges', () => {
     const c = normalizeLisRow({ 病理号: 'A', 送检医院: 'H', 蜡块数: 2, 免疫组化数: 4 })
     const q = toLisCaseQty(c, 'tissue')

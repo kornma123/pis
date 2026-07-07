@@ -6,6 +6,7 @@
  */
 
 import { detectSpecimenType, type SpecimenType, type LisCaseQty } from './case-charge-mapping.js'
+import { canonicalCaseNo } from './classifier.js' // 病理号落库归一（NFKC+trim），与消费侧 case_revenue / 期间键闸同一 canonical，否则全角号永不命中
 
 export interface NormalizedLisCase {
   caseNo: string
@@ -82,7 +83,9 @@ function toDateish(v: unknown): string {
 export function normalizeLisRow(row: Record<string, unknown>): NormalizedLisCase {
   const specimenFields = { 送检部位: s(row, 'site'), 大体描述: s(row, 'gross'), 亚专科: s(row, 'subspecialty') }
   return {
-    caseNo: s(row, 'caseNo'),
+    // 病理号是账实核对/期间键闸的 join key：必须与 case_revenue(_lines) 侧（statement-import 落库前经 canonicalCaseNo）
+    // 同一 NFKC 归一，否则含全角/兼容字符的号在 lis_cases 侧留原样、canonical 侧归半角 → 永不命中（假阴性漏算）。
+    caseNo: canonicalCaseNo(s(row, 'caseNo')),
     partnerName: s(row, 'partnerName'),
     registrationType: s(row, 'registrationType'),
     status: s(row, 'status'),
@@ -129,7 +132,8 @@ export function normalizeMarkerRow(row: Record<string, unknown>): NormalizedMark
     }
     return ''
   }
-  return { caseNo: pickM('caseNo'), markerName: pickM('markerName'), adviceType: pickM('adviceType'), waxNo: pickM('waxNo'), sectionNo: pickM('sectionNo') }
+  // caseNo 走 canonicalCaseNo（pickM 已 NFKC，此处显式统一到与 lis_cases/case_revenue 同一 canonical，保证 buildCaseMarkers 的 case_no join 命中）。
+  return { caseNo: canonicalCaseNo(pickM('caseNo')), markerName: pickM('markerName'), adviceType: pickM('adviceType'), waxNo: pickM('waxNo'), sectionNo: pickM('sectionNo') }
 }
 
 /** 有效抗体行：需病理号 + 抗体名。 */

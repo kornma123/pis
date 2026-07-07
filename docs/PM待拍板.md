@@ -17,6 +17,7 @@
 | M-3 | **session-log 要不要真归档（不只加读法机制）？** | 已加"读末尾 N 段 + 跳过失真首块"的读法机制。文件 1300+ 行仍在长。选项：①维持（读法机制够用）②把 2026-06 前的旧段移到 `docs/session-log-archive-*.md` 留指针。风险：多会话并行追加，大搬动易与其他会话的 append 冲突。 | ①维持（搬动风险 > 收益；读法机制已解决"每次从失真读起"） | ☐ |
 | M-4 | **纯文档 PR 的 vitest（required）要不要也跳过？** | 已让 e2e 两侧 + backend-tests 的 push 侧对文档跳过。backend-tests 的 **PR 侧**故意没跳（否则 required check 挂起阻断合并）。要彻底跳需加 GitHub 官方"同名 no-op 占位 workflow"。成本：纯文档 PR 现多花约 1 分钟 vitest。 | 暂不做（1 分钟可接受，占位方案增复杂度）；除非文档 PR 频率变高 | ☐ |
 | M-5 | **已合并 worktree 的回收要不要定成例行？** | 本次已回收可证明安全的（已合并+干净）子集。项目有 20+ 棵已合并树堆积、有"改错树"前科。选项：①每次收官批顺手回收 ②定期清 ③不管。 | ①（合 PR 后顺手 `git worktree remove` 已合并的自己那棵） | ☐ |
+| M-6 | **构建纪律闸何时从 warn 切 block（对新增）+ 设为 required？** | 新建 `scripts/build-discipline/`（C1 幽灵404 / C2 无消费者 / C3 空转参数）现全 warn、非 required。已内建 **delta 棘轮**：`--block` 只拦**新增**违规、不被 45 条历史存量红墙挡无关 PR → **随时可切、无需先清存量**。C1 已实证 0 误报。**为什么要拍**：维持 warn = 一个永远 `exit 0` 的"门"，重蹈 e2e 常年红没人消费的覆辙、给 PM"有质量门自动在跑"的假象（本项目屡踩）。选项：①立刻切 `--block=C1` 并加进 master required checks（棘轮兜底安全、立刻有真拦截力）②等存量清一批再切 ③维持 warn。**连带**：C2/C3 何时切、白名单 deadline(2026-10-06) 兑现都依赖已切 block + 有人 review baseline.json diff。 | ①先切 C1 为 required（棘轮下安全），C2/C3 观察一轮再切 | ✅ **已拍(2026-07-07)：选①**——C1 切 `--block=C1`（对新增幽灵404判红）+ `gate` 加入 master required checks；C2/C3 仍 warn 观察一轮。落地=workflow 改 block + 移 PR 侧 paths-ignore + `gh api` 加 required context。**续拍(2026-07-07)：C2 也切 block**（`--block=C1,C2`·gate 已 required 无需再动分支保护）——C2 已验证精确、有 `consumer-whitelist.json` 兜底（孵化/误报可登记 owner+deadline 豁免）。**C3 保持 warn**（最模糊·硬拦会误伤"计算内联在路由"的合法配置字段喊狼·无干净豁免出口；日后要拦须先加 C3 逐字段豁免+精确化）。**仍待续拍**：C3 是否值得加豁免机制后再拦、白名单 deadline(2026-10-06) 兑现。 |
 
 ## 乙 · 成本域（细项在收官页，本表只放指针）
 
@@ -37,7 +38,7 @@
 |---|---|---|---|
 | B-1 | 进销存 wave-2 **主数据（D）** 口径 | wave-1 四线已落 master；wave-2 的主数据模块要 PM 定口径再开工 | ☐ |
 | B-2 | 进销存 wave-2 **BOM（F）** 口径 | 同上，BOM 缺 4 类维度待 PM 定 | ☐ |
-| B-3 | ABC **personnel-efficiency（I-3）** 页：修还是删？ | 该页有幽灵接口缺陷；ABC 处置清单已定"做or删待 PM"（I-2/I-4/I-5 方向 PM 已拍、属实现 backlog，不在此列） | ☐ |
+| B-3 | ABC **6 个幽灵报表接口**（reports.ts 恒 404）：修还是删？ | `前端代码/src/api/reports.ts` 包 10 个 api，但 `reports-v1.1.ts` 只定义 4 个真路由（cost-by-project/material/supplier/trend）→ **6 个恒 404**：`personnel-efficiency`/`cost-monthly-comparison`/`full-cost-by-project`/`cost-structure`/`cost-variance`/`cost-by-project-group`。**其中 2 个被 live 页真调用**（`personnel-efficiency`←PersonnelEfficiency.tsx、`cost-monthly-comparison`←CostDashboard.tsx，恒打 404），另 4 个是死 wrapper（无 live 页消费）。⚠️`/reports/cost-variance`(幽灵) ≠ `/abc/variance-analysis`(真·项F 已诚实降级)，勿混。取证=前端 network 恒 404、从未返回真数据 = 无真人被喂错数。二选一（PM 拍）：①删前端（页/路由/api）②补后端只读聚合路由。（I-2/I-4/I-5 方向 PM 已拍、属实现 backlog，不在此列） | ☐ |
 
 ---
 

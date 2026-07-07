@@ -1,0 +1,43 @@
+name: Build Discipline Gate
+
+# 构建纪律闸——把 P0 设计选择 #7「完成=真数据跑通+消费者被服务」推广成全系统机器可执行规则。
+# 三条检查：C1 前端→后端(幽灵404) / C2 后端→消费者(无人消费端点) / C3 配置→引擎(空转参数)。
+#
+# 拦截状态（PM 已拍 M-6·2026-07-07）：
+#   - **C1 + C2 已切 block**（`--block=C1,C2`）：对**新增**幽灵404 / 无消费者端点判红拦合并
+#     （delta 棘轮：只拦不在 baseline.json 里的）。C1 0 误报；C2 已验证精确 + 有 consumer-whitelist.json
+#     兜底（孵化/误报都可登记 owner+deadline 豁免）。存量 9+33 在 baseline、不拦无关 PR。
+#   - **C3 仍 warn**（只报告不拦）：C3 最模糊、硬拦会误伤"计算内联在路由"的合法配置字段（喊狼），
+#     且无干净豁免出口 → PM 拍 M-6 保持 warn。日后要拦须先加 C3 逐字段豁免 + 精确化。
+#   - selftest 必过（工具本身坏了即红）。
+#
+# ⚠️ 本 workflow 的 `gate` job 已是 master 分支保护的 **required status check**。
+#    故 **pull_request 侧不能 paths-ignore**（否则纯文档 PR 跳过本 job → required 永不上报 → PR 卡 "Expected"）。
+#    push 侧仍 paths-ignore（合并后纯文档跳过重复跑，无 required 顾虑）。同 backend-tests.yml 的 vitest 处理。
+
+on:
+  push:
+    branches: [master, main]
+    paths-ignore: ['**.md', 'docs/**', '.claude/**']
+  pull_request:
+    branches: [master, main]
+
+concurrency:
+  group: build-discipline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # 自测：守护闸工具自身没被静默改坏（解析器漂了/口径变哑）。失败即红。
+      - name: Selftest（工具不变量）
+        run: node scripts/build-discipline/selftest.cjs
+      # 主闸：C1+C2 对新增违规判红（exit 1 拦合并）；C3 仍 warn 只报告。存量报告一并打进 CI 日志。
+      - name: Gate（C1+C2 block 新增·C3 warn）
+        run: node scripts/build-discipline/run-all.cjs --block=C1,C2

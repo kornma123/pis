@@ -94,6 +94,9 @@ function costCenterSnapshot(row: any) {
     costType: row.cost_type,
     monthlyAmount: row.monthly_amount,
     allocationBase: row.allocation_base,
+    // 项F 诚实降级：allocationBase 是**死参数**——真实间接费分摊只按月度 abc_indirect_disclosure.basis
+    //   （collectPerCenterPools），从不读每个中心的 allocation_base。UI 下拉「样本数/收入/工时/面积」当前**零效果**。
+    allocationBaseEffective: false,
     description: row.description,
     status: Number(row.status) === 1 ? 'active' : 'inactive',
   }
@@ -138,6 +141,7 @@ router.get('/', (req, res) => {
       costTypeLabel: COST_TYPE_LABELS[r.cost_type] || r.cost_type,
       monthlyAmount: r.monthly_amount,
       allocationBase: r.allocation_base,
+      allocationBaseEffective: false, // 项F：死参数——真实分摊按月度 disclosure.basis，不读此列（详见 costCenterSnapshot 注释）
       description: r.description,
       status: r.status === 1 ? 'active' : 'inactive',
       createdAt: r.created_at,
@@ -192,6 +196,7 @@ router.get('/:id', (req, res) => {
       costTypeLabel: COST_TYPE_LABELS[r.cost_type] || r.cost_type,
       monthlyAmount: r.monthly_amount,
       allocationBase: r.allocation_base,
+      allocationBaseEffective: false, // 项F：死参数——真实分摊按月度 disclosure.basis，不读此列（详见 costCenterSnapshot 注释）
       description: r.description,
       status: r.status === 1 ? 'active' : 'inactive',
       createdAt: r.created_at,

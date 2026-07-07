@@ -19,7 +19,9 @@ async function login(u: string, p: string): Promise<string> {
 }
 async function commit(partnerId: string, grid: any[], serviceMonth: string, confirm?: boolean) {
   const request = (await import('supertest')).default
-  return request(app).post('/api/v1/statement-import/commit').set('Authorization', `Bearer ${financeToken}`).send({ partnerId, grid, serviceMonth, confirm })
+  // 项⑦：confirm 越闸带 overrideReason（无闸触发时忽略）
+  return request(app).post('/api/v1/statement-import/commit').set('Authorization', `Bearer ${financeToken}`)
+    .send({ partnerId, grid, serviceMonth, confirm, overrideReason: confirm ? '测试：确认越过锚闸' : undefined })
 }
 function seedHistory(partnerId: string, month: string, lab: number, net: number) {
   db.prepare(`INSERT INTO case_revenue (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source)
