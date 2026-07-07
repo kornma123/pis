@@ -1411,6 +1411,14 @@ http://your-server-ip:8080
 
 *更新时间：2026-07-06*
 
+## 2026-07-06 本次会话完成的工作 —— 非-P0 域审计修复批（续：项 B 导入闸）
+
+**④ B·对账单导入落库闸（PR 本分支 `feat/statement-import-gate-B`）**：/commit 闭合闸自指（totalSettle==declaredTotal 同源）→ 因守恒律把 IN 挪 OUT 逐行 settle 不变→平账，lab_revenue 静默缩水也落库；serviceMonth 只格式校验→传错月静默新建平行 case_revenue 行。修法=新增 `import-gates.ts` 两个不依赖当期口径的独立软锚（partnerRecentMedianLabShare 近 N 期在范围份额中位数 + dominantLedgerMonth 台账众数月）并入既有 NEEDS_CONFIRM（confirm 旁路）。新增 `import-gate-anchors.test.ts`(6·mutation 验证)+只读取证 `forensic-import-parallel-rows.cjs`。vitest 93/815 绿·golden 零回归。独立复核=4 镜头对抗面板（绕过自指 CLEAN·逮 5 项）：**已修** labShare 钳[0,1]（坏账 lab>net 不污染基线）+ 分母同口径（当期用可落库行 lab/settle 对齐历史 net_amount）+ MIN_PERIODS 2→3 + 阈值 0.15→0.20。**已披露边界**（软锚可 confirm·危害有上界）：阈值缺真数据标定（PM 待拍·用康湾台账标 P90-95）+ 锚基线双向性（早期坏口径当基线→正确月反被拦）+ case_no NFKC 失配假阴性（lis 入库未归一·chip `task_77245a02` 根治）。
+
+**⑤ C·拆分常量立法/披露（PR 本分支 `feat/split-const-freeze-C`·立法非改 bug）**：`SPLIT_DIAG_FEE=105`（拆分公式固定分母·决定范围内 vs 范围外份额·对外"高估约 2 倍"结论唯一来源）是模块级裸常量、改动不留痕不打标。档1=`105 as const`+新增 `SPLIT_FORMULA_VERSION`+结果透出 `caliber` 印记+纳入 caliberSignature（`{formula,lines}`）+drift-guard 测试（钉死 105/版本·收入侧=成本侧 DIAGNOSIS_ANCHOR_DEFAULT）。新增 `split-formula-caliber-freeze.test.ts`(4)。vitest 94/819 绿·golden 零回归·caliberSignature 格式变更安全（调用点同请求内比对·从不落库）。**分岔登记 PM 待拍板 P-2**：「高估 2 倍」出没出门（业务取证·未出门则完结档1·已出门触发披露/更正决策插队）。**后续**：档1 的落库+前端趋势打标（需列迁移+mockup）另 PR；档3 逐客户可配体检窗口内禁。独立复核=聚焦 review agent。
+
+*更新时间：2026-07-06*
+
 ## 2026-07-06 本次会话完成的工作 —— lab_director 退库/盘点 RBAC 口径拍板落地（承接项 E #76 遗留待拍 chip `task_3abe1f3d`）
 
 **背景**：非-P0 审计项 E 的 W 守卫修复（PR #76·merge commit `e488f905`）surface 出一个 SEED_MATRIX 口径待定项：`rbac-matrix.ts` 里 `lab_director` 对 `returns`/`stocktaking` 只 `R`、对 `transfers`/`scraps` 却 `W`；E 给写端点补 `requirePermission(module,'W')` 后，主任写退库/盘点会 403。
@@ -1429,6 +1437,6 @@ http://your-server-ip:8080
 
 **验证**：tsc 绿·后端 vitest **93 files/814 tests 全绿**（含 golden ¥13,152+¥27,870 零回归 + 项 E W 守卫测试 + 新迁移 4 测试）；rbac 四文件(p0-seed 16/p3-route 10/supplier-backfill 4/lab-director-inventory 4=34)聚焦复跑绿。dev DB 未脏（测试走 `:memory:`）；仅显式 `git add` 源码文件、node_modules symlink 未纳（禁 -A）。
 
-**治理**：分支 `claude/elastic-cohen-447e6c`，**PR 待开**（PM 已拍板具体口径）。待拍 chip `task_3abe1f3d` 已解。参考记忆 `coreone-rbac-live-vs-seed-matrix`。
+**治理**：分支 `claude/elastic-cohen-447e6c`，**PR #82 已开**（off master；PM 已拍板具体口径）。合并前 `git merge origin/master` 消 session-log append 冲突（保留 master 的 B/C 段 + 本段）。待拍 chip `task_3abe1f3d` 已解。参考记忆 `coreone-rbac-live-vs-seed-matrix`。
 
 *更新时间：2026-07-06*
