@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { calculateSlideCostWithFee } from '../utils/cost-calculator.js'
+import { canonicalCaseNo } from '../utils/classifier.js' // 病理号预览口径与落库同一 NFKC 归一（全角号预览即所存）
 import { recordCostException } from '../utils/cost-exceptions.js'
 import { ensurePeriodOpen, getOrCreatePeriod, normalizeMonth, runCostRecalculation, writeAuditLog } from '../utils/cost-runs.js'
 import { buildClosingReadiness } from '../utils/closing-readiness.js'
@@ -1844,7 +1845,7 @@ router.post('/bom-fee-mappings/:bomId/preview', requireCostWorkbenchRead, (req, 
     if (!bomCheck.ok) { error(res, bomCheck.message, bomCheck.code, bomCheck.status); return }
     const sampleCount = Math.max(1, Number(req.body?.sampleCount) || 1)
     const month = normalizeMonth(req.body?.yearMonth)
-    const caseNo = req.body?.caseNo || null
+    const caseNo = canonicalCaseNo(req.body?.caseNo) || null
     let previewMappings
     if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'mappings')) {
       const normalized = normalizeFeeMappingsInput(db, req.body.mappings, true)

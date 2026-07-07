@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { buildBomSourceSnapshot, calculateSlideCostWithFee, getBomPerSampleDriverQty } from './cost-calculator.js'
 import { errorMessage, recordCostException } from './cost-exceptions.js'
 import { getActiveBomVersionId } from './bom-version.js'
+import { canonicalCaseNo } from './classifier.js' // 病理号落库归一（NFKC+trim），与 lis_cases/case_revenue（消费侧 canonical）同一，堵成本侧全角号钱路 join 匹配漏
 
 const currentMonth = () => new Date().toISOString().slice(0, 7)
 
@@ -40,6 +41,9 @@ export const writeOutboundAbcSnapshot = (db: any, outbound: any, costRunId: stri
   const bomId = outbound.bom_id || outbound.project_bom_id
   if (!bomId) throw new Error('缺少 BOM，无法重算 ABC 成本')
 
+  // 病理号归一（NFKC+trim）：outbound_abc_details.case_no 是「成本↔LIS(partner 回填)」与「成本↔case_revenue(院级 P&L 服务月)」
+  // 两条钱路的 join key，须与 lis_cases/case_revenue（消费侧 canonicalCaseNo）同一归一，否则全角号成本成孤儿、不归院、不入单月毛利。
+  const caseNo = canonicalCaseNo(outbound.case_no) || null
   const sampleCount = Math.max(1, Number(outbound.sample_count) || 1)
   const materialCost = Number(outbound.total_cost) || 0
   // P0：真实块/片/例数 = 每样本驱动量 × 样本数（替代写死 block=1/slide=sampleCount，修期间费率分母）。
@@ -47,14 +51,14 @@ export const writeOutboundAbcSnapshot = (db: any, outbound: any, costRunId: stri
   const perSampleDriver = getBomPerSampleDriverQty(db, bomId)
   const storedBlockCount = Math.round(perSampleDriver.block * sampleCount)
   const storedSlideCount = Math.round((perSampleDriver.slide > 0 ? perSampleDriver.slide : 1) * sampleCount)
-  const storedCaseCount = outbound.case_no ? 1 : 0
+  const storedCaseCount = caseNo ? 1 : 0
   const result = calculateSlideCostWithFee(db, {
     bomId,
     slideCount: sampleCount,
     blockCount: 1,
     month: yearMonth,
     materialCost,
-    caseNo: outbound.case_no || null,
+    caseNo,
     // R1：逐单分摊按真实驱动量（块/片 = 每样本量 × 样本数；病例 = 本单实际病例数），与期间池同口径。
     sampleCount,
     caseCount: storedCaseCount,
@@ -65,7 +69,7 @@ export const writeOutboundAbcSnapshot = (db: any, outbound: any, costRunId: stri
     outboundNo: outbound.outbound_no,
     bomId,
     projectId: outbound.project_id || null,
-    caseNo: outbound.case_no || null,
+    caseNo,
     sampleCount,
     materialCost,
     bomSnapshot: buildBomSourceSnapshot(db, bomId),
@@ -106,8 +110,8 @@ export const writeOutboundAbcSnapshot = (db: any, outbound: any, costRunId: stri
     yearMonth,
     effectiveCostStatus,
     costRunId,
-    outbound.case_no || null,
-    result.chargeGroupId || (outbound.case_no ? `${outbound.case_no}-${yearMonth}` : outbound.id),
+    caseNo,
+    result.chargeGroupId || (caseNo ? `${caseNo}-${yearMonth}` : outbound.id),
     'v1',
     JSON.stringify(sourceSnapshot),
     getActiveBomVersionId(db, bomId), // 钉到当时活跃版本（历史可复现）
@@ -177,7 +181,7 @@ export const runCostRecalculation = (
           outboundNo: outbound.outbound_no,
           bomId: outbound.detail_bom_id || outbound.project_bom_id || null,
           projectId: outbound.project_id || null,
-          caseNo: outbound.case_no || null,
+          caseNo: canonicalCaseNo(outbound.case_no) || null,
           sampleCount: Math.max(1, Number(outbound.sample_count) || 1),
           action: 'configure_bom_fee_mapping',
         }

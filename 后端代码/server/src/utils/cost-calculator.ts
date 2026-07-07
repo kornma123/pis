@@ -1,3 +1,5 @@
+import { canonicalCaseNo } from './classifier.js' // 病理号落库/自连统一 NFKC 归一（+trim），与 lis_cases/case_revenue/statement-import 同一 canonical，堵 ABC 成本侧全角号 case_charge_groups 自成组、跨侧 join 匹配漏
+
 export interface SlideCostInput {
   bomId?: string
   slideCount?: number
@@ -496,9 +498,12 @@ export function calculateSlideCostWithFee(db: any, input: SlideCostInput) {
   const rawCaseCount = input.caseCount == null ? null : Math.max(0, Number(input.caseCount) || 0)
   const month = input.month || new Date().toISOString().slice(0, 7)
   const bomId = input.bomId || ''
+  // 病理号归一（NFKC+trim）：case_no 是 case_charge_groups 主键 + 逐病例组大小 COUNT 的 join key，
+  // 落库/自连须与 lis_cases/case_revenue（消费侧 canonicalCaseNo）同一归一，否则全角号成本自成一组、跨侧匹配漏。
+  const caseNo = canonicalCaseNo(input.caseNo) || null
   // R2：病例跨多出库时按组均摊（1/组大小），保证「每病例」作业成本只计一次、完全吸收。
-  const caseGroupSize = (input.caseNo && rawCaseCount != null && rawCaseCount > 0)
-    ? countCostedCaseOutbounds(db, input.caseNo, month)
+  const caseGroupSize = (caseNo && rawCaseCount != null && rawCaseCount > 0)
+    ? countCostedCaseOutbounds(db, caseNo, month)
     : 1
   const caseCount = rawCaseCount == null ? null : rawCaseCount / caseGroupSize
 
@@ -547,7 +552,7 @@ export function calculateSlideCostWithFee(db: any, input: SlideCostInput) {
     bom,
     slideCount,
     month,
-    caseNo: input.caseNo,
+    caseNo,
     applyCaseAggregation: input.applyCaseAggregation,
     feeMappingsOverride: input.feeMappingsOverride,
   })
