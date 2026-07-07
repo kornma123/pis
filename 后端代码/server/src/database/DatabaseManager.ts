@@ -86,6 +86,47 @@ export function reconcileSupplierReturnsPerms(database: DatabaseSync): void {
   }
 }
 
+/**
+ * 聚焦迁移：补齐 实验室主任(lab_director) 的 退库/盘点 写权限（returns/stocktaking → 'W'）。
+ *
+ * 背景（同 reconcileSupplierReturnsPerms 的 RBAC 迁移缺口，记忆 coreone-rbac-live-vs-seed-matrix）：
+ * roles.permissions 是单一事实源、会 shadow SEED_MATRIX——getEffectivePermissionsForRoles 先读
+ * roles 行、行缺失才回退矩阵（permissions.ts:46-48）。ROLE-DIR 自 defaultRoles 落库后，既有库的
+ * lab_director 行固化了当时的 returns:'R'/stocktaking:'R'；2026-07-06 PM 拍板把这两键改 'W' 只动了
+ * SEED_MATRIX，对既有库是静默无效（INSERT OR IGNORE 不覆盖既有行、backfillRolePerms 只补空值）。
+ * 此函数把既有 lab_director 行的这两键对齐到 'W'，保证口径在所有库生效、无需重建库。
+ * 纪律同 reconcileSupplierReturnsPerms：只动这一角色这两键、R→W 幂等、不碰其余键、
+ * 不覆盖脏值/'*'——保留库中其他有意的角色×矩阵不一致（如 finance 旧形态）。
+ */
+export function reconcileLabDirectorInventoryPerms(database: DatabaseSync): void {
+  const row = database.prepare('SELECT permissions FROM roles WHERE code = ?').get('lab_director') as
+    | { permissions: string }
+    | undefined
+  if (!row) return // 行缺失 → getEffectivePermissionsForRoles 回退 SEED_MATRIX（已含 'W'），无需迁移
+  let val: unknown
+  try {
+    val = typeof row.permissions === 'string' ? JSON.parse(row.permissions) : row.permissions
+  } catch {
+    return // 解析不了的脏值不动，避免覆盖
+  }
+  if (Array.isArray(val)) {
+    // 旧扁平数组形态（无 R/W 粒度，presence=可访问）：确保两键在列
+    if (val.includes('*')) return
+    let changed = false
+    for (const key of ['returns', 'stocktaking']) {
+      if (!val.includes(key)) { val.push(key); changed = true }
+    }
+    if (changed) database.prepare('UPDATE roles SET permissions = ? WHERE code = ?').run(JSON.stringify(val), 'lab_director')
+  } else if (val && typeof val === 'object') {
+    const obj = val as Record<string, unknown>
+    let changed = false
+    for (const key of ['returns', 'stocktaking']) {
+      if (obj[key] !== 'W') { obj[key] = 'W'; changed = true }
+    }
+    if (changed) database.prepare('UPDATE roles SET permissions = ? WHERE code = ?').run(JSON.stringify(obj), 'lab_director')
+  }
+}
+
 export function initializeDatabase(): void {
   const database = getDatabase()
 
@@ -619,6 +660,8 @@ export function initializeDatabase(): void {
   }
   // 聚焦迁移：补齐 仓管/采购 的 supplier_returns（既有库新增模块缺口，详见函数注释）
   reconcileSupplierReturnsPerms(database)
+  // 聚焦迁移：补齐 主任 的 退库/盘点 W（2026-07-06 PM 口径 R→W；既有库 lab_director 行 shadow 矩阵，详见函数注释）
+  reconcileLabDirectorInventoryPerms(database)
 
   // 成本可见性开关默认（可在「角色权限/设置」改）
   database.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('cost_visibility_roles', ?)")
@@ -834,6 +877,9 @@ export function initializeDatabase(): void {
   // —— BOM 扩展成本结构（标准成本快照 + 收费映射锚点）——
   ensureColumn('boms', 'fee_standard_id', 'TEXT')
   ensureColumn('boms', 'fee_category', 'TEXT')
+  // @deprecated（项F 绿档2）：以下 7 个 standard_*_cost 列全仓无非零写入（恒 0 噪声），
+  //   已从 bom_versions 快照 SELECT/对象移除，无任何消费者。保留列定义（不 drop，避免破坏性迁移），
+  //   但**勿再读写**——是假数据入口。真实成本走 outbound_items.unit_cost / ABC 成本池 / 逐抗体成本，非这些列。
   ensureColumn('boms', 'standard_labor_cost', 'DECIMAL(18, 4) DEFAULT 0')
   ensureColumn('boms', 'standard_equipment_cost', 'DECIMAL(18, 4) DEFAULT 0')
   ensureColumn('boms', 'standard_indirect_cost', 'DECIMAL(18, 4) DEFAULT 0')
@@ -1356,6 +1402,12 @@ export function initializeDatabase(): void {
   database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_hints_case ON reconcile_case_hints(hospital_month_id, case_no)`)
   // 幂等补列（旧库迁移 + :memory: 新库统一）
   ensureColumn('supplement_orders', 'collected_revenue', 'DECIMAL(18, 4)')
+  // 账实核对补收单 maker-checker（非-P0 审计项 D 止血）：认定人只能提交「待复核」补收单，须独立签发人 approve 后才可收款。
+  // 旧库既有补收单 ALTER 后默认 pending_review（连历史单也须过人闸再收，符合止血意图）。
+  ensureColumn('supplement_orders', 'review_status', "TEXT NOT NULL DEFAULT 'pending_review'") // pending_review|approved
+  ensureColumn('supplement_orders', 'submitted_by', 'TEXT')
+  ensureColumn('supplement_orders', 'reviewed_by', 'TEXT')
+  ensureColumn('supplement_orders', 'reviewed_at', 'DATETIME')
   ensureColumn('fee_standards', 'project_type', 'TEXT')
   ensureColumn('fee_standards', 'fee_per_slide', 'DECIMAL(18, 4) DEFAULT 0')
   ensureColumn('fee_standards', 'base_price', 'DECIMAL(18, 4) DEFAULT 0')

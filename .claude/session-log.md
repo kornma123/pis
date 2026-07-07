@@ -1397,49 +1397,123 @@ http://your-server-ip:8080
 
 *更新时间：2026-07-06*
 
----
+## 2026-07-06 本次会话完成的工作 —— 非-P0 域首轮对抗审计修复批（项 E + 项 A）
 
-## 2026-07-06 本次会话完成的工作 —— P0 院级贡献毛利「四轮外审收敛终稿」落地（后端引擎影子模式 + mockup）
+**背景**：按记忆 `coreone-non-p0-domain-audit` + 桌面《非P0域-修复方案.md》，逐项修 8 个非-P0 域首轮对抗审计发现的问题（顺序 E→A→D→B→C→F→⑦，先止血后立法，每项独立 PR）。本会话完成 E、A 两项。
 
-**性质**：应 PM「实现 P0 院级贡献毛利四轮外审收敛终稿设计」。worktree `objective-mclaren-f477c2`、分支 `claude/objective-mclaren-f477c2`（off origin/master·不落后）。碰钱/口径 → TDD + 独立对抗复核。
+**① E·授权提权（PR #76，已合 master merge commit `e488f905`）**：app.ts 挂载层声称写权限由路由内 `requirePermission(module,'W')` 守卫，但 `users`/`roles`/`returns`/`scraps`/`transfers`/`stocktaking` 六路由的 16 个写端点内**根本无 W 守卫** → 持只读权限即可改权限矩阵提权 / 突变库存。修法=六文件补 inline `requireXxxWrite`（仿 projects/outbound）+ 新增 `tests/rbac-e-write-guard.test.ts`(30) 合成 reader/writer 做 W-403 双向断言（变异测试证守卫真生效）。向后取证：operation_logs 0 条越权写、无角色持 R-but-not-W → 潜在漏洞非确认事故（诚实披露 dev 审计账本近空、须生产复跑）。改 2 个既有 bare-mount stocktaking 测试注入写角色 req.user（仿 authenticateToken）。vitest 90/787 绿。独立复核 = review agent 确认 16 端点全覆盖、单挂载无旁路、模块键一致。**顺带 surface 一个 PM 待拍**：SEED_MATRIX 里 lab_director 对 returns/stocktaking 只 R，修复后其写这两模块会 403（现状影响理论性——ROLE_MENU_MAP 无 lab_director 项、运行库无该种子用户）→ 已 spawn chip `task_3abe1f3d` 待 PM 定该给 R 还是 W。
 
-**背景纠正（开工先核实）**：`/hospital-pnl` **已有** `HospitalPnLDashboard.tsx`（提交 `a7c379df`），但它**恰是四轮外审推翻的旧设计**——按 `grossMargin` 升序排（=按率排名）、用「盈利绿/亏损红」措辞（CONTEXT.md 禁用词）、调 ABC 全成本 `partner-pnl` API。任务里「尚未建」指的是**新贡献毛利引擎/后端路由**（确无 backend hospital-pnl 路由）。故本会话=建**新并存 lane**（ADR-003），旧看板暂不动（等 mockup 拍板）。
+**② A·库存双账本守恒（PR 本分支 `feat/inventory-ledger-guard-A`）**：出库三处 `unitCost = batch?.inbound_price || 0` 在「库存足却缺可消耗批次」（returns/scraps/盘盈只改 stock 不落 batches）时静默回退 0 → 成本算低 → 喂低 P0 CM 分母。修法=新增纯函数 `resolveOutboundUnitCost`（正常用批次价、**尊重真实 0 价**；漂移→物料均价/基准价兜底绝不静默 0；strict 模式抛 LEDGER_DRIFT 409）+ 漂移落 `cost_exceptions` 告警（fail-safe 吞错不回滚）+ `findLedgerDriftMaterials` 体检 + 只读取证脚本（dev 0 正向漂移·302 历史零成本行 2026-05）。新增 `tests/ledger-drift-guard.test.ts`(13)·mutation 验证。vitest 91/800 绿·golden 零回归。独立复核 = 5 镜头对抗面板逮 2 CONFIRMED（**D1 零价批次误判为漂移**、**recordLedgerDrift fail-closed**）已修；CM 回归/strict/idempotency 判 CLEAN。
 
-**后端（新独立 lane·影子模式·TDD·golden 零回归）**：
-- `src/utils/hospital-cm.ts`：per-case 贡献毛利引擎（P0 spec §2/§4/§10）——桶A(二抗显色 secondary_per_slide)+桶B(一抗①*/特染 labor-free/组织处理¥7)、同源闸(staining=hasMarker∧lab_revenue>0)、准入闸(诊断桶/非IHC桶单列)、缺价诚实降级、①*估值占比、院级上卷 + 状态真值表(G-1 经营线未定/G0/G1/G2)。**结构上无 labor/equipment 字段**=编译期保证。具名常量：`CM_TARGET=null`(拍不了绝对单值→G-1)、阈值、`P0_TISSUE_PROCESSING_MATERIAL_PER_BLOCK=7`(康湾台账校准)。
-- `src/utils/portfolio-health.ts`：四轮终稿**顶层两层框架**——第1层组合体检(∑CM÷固定池=覆盖倍数`coverageMultipleTrendOnly`只看趋势 + 产能利用率 + 两复活计数 measurableAccountCount/unmeasuredRevenueShare)；第2层人看对照表(绝对贡献降序·无排名列·率旁并列固定成本覆盖份额·同账户趋势)；§4a 产能费单算一次(反螺旋冻结·一个家不变量 sharedFixedPool+Σdedicated==totalFixedPool)；**§4b 行为层性质断言封存**(netContribution>=capacityCharge⇒不得自动点名·反例守卫)；影子模式闸 `PORTFOLIO_HEALTH_GATES_VERIFIED=false`；复活双触发具名常量 REVIVAL_ACCOUNT_CAP=30/REVIVAL_UNMEASURED_SHARE=0.30。
-- `src/utils/hospital-cm-service.ts`：DB 装载(§10.A SQL 契约)——lab_revenue 分子非 net_amount、revenue_source∈(statement,corrected)、marker 先按 case 聚合防扇出、复用 resolveAntibodyName/secondary_per_slide/特染 kit_price÷denom(labor-free)。tissue scope 未建 resolver → 一律「仅染色」(§7 诚实边界)。
-- `src/routes/hospital-pnl-v1.1.ts` + `app.ts` 挂 `/api/v1/hospital-pnl`：GET /health(体检)、GET /(对照表默认绝对贡献降序)、GET /trend；复用 `requirePermission('cost_analysis','R')`=**零 MODULES 漂移**；与 partner-pnl 并存。响应带 `shadowMode`/`shadowNote`。
+**③ D·账实复核补收单 maker-checker 人闸（PR 本分支 `feat/reconcile-supplement-review-D`）**：verdict 认定端点在同一请求内直接 INSERT 真金补收单(supplement_orders)、无第二审核人；collect 仅 gate status → 单一 account_reconcile:W 用户可认定→发单→收款一条龙（floor-to-1 令 billCount 低估→误判漏收→驱动补收=方向偏差信号直通不可逆真金动作·唯一可能已伤真人）。止血=补收单加 review_status(默认 pending_review·ensureColumn 迁移)+submitted_by/reviewed_by/reviewed_at + 新增 POST /supplements/:id/approve(唯一→approved·SoD submitted_by≠operator·fail-closed 缺提交人也拒) + collect 前置门(未 approved→409 NOT_APPROVED) + reopen 回退复核态。overview 未改(到已补收唯一经 collect·已被门控)。新增 `reconcile-supplement-review-gate.test.ts`(8·含 SoD/gate/reopen/fail-closed)+改 2 既有 collect 测试补 reviewer2 approve+p0-harness 加 loginAs/seedReviewer+只读取证脚本 forensic-supplement-floor.cjs。vitest 全绿·golden 零回归·mutation 验证移除 gate→SG-2 红。独立复核=4 镜头对抗面板(绕过/迁移/泄漏全 CLEAN·逮 2 SoD CONFIRMED:空 submitted_by 短路已修 fail-closed·approve 用 W 非 requireAnyRole 披露为有意口径)。**② floor-to-1 解析器根因(聚合行/数量藏名)留后续 PR**。
 
-**TDD（4 新测试文件·47 用例全绿）**：`hospital-cm.test.ts`(手核 golden·两类必测 case 代送加做+代阅片·CI 断言 labor/equipment 结构性缺席)、`portfolio-health.test.ts`(ACC-D 性质断言=率最低 68.7%/绝对贡献最大 ¥36,994 不被自动点名·反例守卫·对照表默认绝对额降序·产能单算)、`hospital-cm-service.test.ts`(DB 路径 + RBAC admin 200/pathologist 403/无 token 401 + 同源闸 + 缺价)、`hospital-cm-constants-driftguard.test.ts`(常量立法锁)。
+**待续**：② floor-to-1 解析器根因 / B（导入闸）/ C（拆分常量冻结）/ F（ABC 抽查+弱锚闸）/ ⑦（统一旁路台账）。已披露的漏网成本点：`statement-revenue.ts:144`→C；`cost-calculator.ts:603`/`supplier-returns-v1.1.ts:27` 已有价格兜底、残余 0 与 A 设计一致（后续可统一走 resolver）。
 
-**验证**：tsc 净；后端 vitest **全绿**(修后 94 files/799 tests·含 golden ¥13,152+¥27,870 **零回归**·新 lane 不碰 partner-pnl)；首次全跑偶发 statement-import 并发 flaky、复跑全绿(与本改动无关·仅新增测试文件移动了并发顺序)。
+*更新时间：2026-07-06*
 
-**前端（mockup 先行红线·未写真 React）**：`docs/mockups/hospital-cm-两层框架-mockup.html`（两层视图·影子模式横幅·覆盖倍数只看趋势·两复活哨兵·对照表按绝对贡献降序顶梁柱在顶·"为什么率最低却排最上"说明·plain 中文无黑话）+ 会话内 show_widget 呈现供 PM 拍板。真页面待拍板后才写。
+## 2026-07-06 本次会话完成的工作 —— 非-P0 域审计修复批（续：项 B 导入闸）
 
-**独立复核（机制5）+ 修复**：Workflow 五镜头对抗面板 `wf_9e39b91b-2dc`（labor泄漏/双计扇出/同源闸/断言方向/影子诚实 → 逐条对抗验证）逮到 **3 真 bug（confirmed）并已修 + 补 TDD**：① **HIGH §10.E 跨月复用 case_no 禁输出闸未实现**（lis_cases 键无月·全月视图会把同一份 marker/标量挂到多月双计）→ 加 `loadCrossMonthReuseKeys` 检测 + `makeWithheldCase` 禁输出、标 `cross_month_reuse`、计 `crossMonthReuseCaseCount`；② **MED coverage 恒真式=1.0**（G0 覆盖率闸死闸）→ `ihcCount` 透传进 `P0CaseCm`、改 §10.D 真谓词 `billableSlides>0 || ihcCount===0`；③ **MED 特染占位价信号丢弃**→ 透传 `stainIsPlaceholder`、加 `stainPlaceholderShare` 披露 + `MAX_STAIN_PLACEHOLDER_RATE=0.5` 进 needsData。5 新 TDD 直断修复行为；修后后端 vitest **94 files/799 tests 全绿**·golden 零回归。
+**④ B·对账单导入落库闸（PR 本分支 `feat/statement-import-gate-B`）**：/commit 闭合闸自指（totalSettle==declaredTotal 同源）→ 因守恒律把 IN 挪 OUT 逐行 settle 不变→平账，lab_revenue 静默缩水也落库；serviceMonth 只格式校验→传错月静默新建平行 case_revenue 行。修法=新增 `import-gates.ts` 两个不依赖当期口径的独立软锚（partnerRecentMedianLabShare 近 N 期在范围份额中位数 + dominantLedgerMonth 台账众数月）并入既有 NEEDS_CONFIRM（confirm 旁路）。新增 `import-gate-anchors.test.ts`(6·mutation 验证)+只读取证 `forensic-import-parallel-rows.cjs`。vitest 93/815 绿·golden 零回归。独立复核=4 镜头对抗面板（绕过自指 CLEAN·逮 5 项）：**已修** labShare 钳[0,1]（坏账 lab>net 不污染基线）+ 分母同口径（当期用可落库行 lab/settle 对齐历史 net_amount）+ MIN_PERIODS 2→3 + 阈值 0.15→0.20。**已披露边界**（软锚可 confirm·危害有上界）：阈值缺真数据标定（PM 待拍·用康湾台账标 P90-95）+ 锚基线双向性（早期坏口径当基线→正确月反被拦）+ case_no NFKC 失配假阴性（lis 入库未归一·chip `task_77245a02` 根治）。
 
-**已披露边界/待办**：①**影子模式**——三门 A/B/C(库存守恒/期间键/常量冻结·`~/Desktop/非P0域-修复方案.md`)未在本仓落地前，输出不得进经营研判(`PORTFOLIO_HEALTH_GATES_VERIFIED=false`)；②CM_TARGET 待首月真院 golden 校准(现 G-1 经营线未定)；③tissue scope resolver 未建 → 只出「染色贡献毛利」；④真实三件套数据未导入 → 引擎对真库当前返回空(签入 db 快照表为空)；⑤旧 `HospitalPnLDashboard`(按率排序·盈利措辞)待 mockup 拍板后迁移替换。
+**⑤ C·拆分常量立法/披露（PR 本分支 `feat/split-const-freeze-C`·立法非改 bug）**：`SPLIT_DIAG_FEE=105`（拆分公式固定分母·决定范围内 vs 范围外份额·对外"高估约 2 倍"结论唯一来源）是模块级裸常量、改动不留痕不打标。档1=`105 as const`+新增 `SPLIT_FORMULA_VERSION`+结果透出 `caliber` 印记+纳入 caliberSignature（`{formula,lines}`）+drift-guard 测试（钉死 105/版本·收入侧=成本侧 DIAGNOSIS_ANCHOR_DEFAULT）。新增 `split-formula-caliber-freeze.test.ts`(4)。vitest 94/819 绿·golden 零回归·caliberSignature 格式变更安全（调用点同请求内比对·从不落库）。**分岔登记 PM 待拍板 P-2**：「高估 2 倍」出没出门（业务取证·未出门则完结档1·已出门触发披露/更正决策插队）。**后续**：档1 的落库+前端趋势打标（需列迁移+mockup）另 PR；档3 逐客户可配体检窗口内禁。独立复核=聚焦 review agent。
+
+**⑥ F·ABC 抽查+绿档+弱锚闸（PR 本分支 `feat/abc-weak-anchor-gate-F`）**：**绿档1 弱锚闸（核心立法）**=单片全成本 total 无条件含工时/设备 G2 估弱锚（antibody-cost.ts:140），今天安全仅因孤立只读展示层未喂毛利（grep 全仓零跨消费已核隔离）→ 新增 `forMargin(c)` 守卫把「未校准成本禁入毛利/去留」立为类型级(CalibratedCost brand)+运行期(抛错)硬约束，把 P0 教训在复发前立法。`weak-anchor-margin-gate.test.ts`(4)。**绿档2**=boms.standard_*_cost 7 恒0列从 bom-version 快照移除(无消费者)+列标 @deprecated。**三报表错诚实降级**：variance(totalStandard=物料实际占位·labor/equip/indirect 硬编码0)补 standardCalibrated:false+disclaimer；allocation_base 死参数(真实分摊按月度 disclosure.basis)补 allocationBaseEffective:false；幽灵报表接口(reports.ts 包 10 api·后端仅 4 真路由→6 个恒404·其中 2 个 live 页真调 personnel-efficiency/cost-monthly-comparison)——删/补待 PM(I-3+登记 PM待拍板 B-3)。vitest 95/823 绿·golden 零回归·tsc 绿。forMargin 是新增 opt-in 守卫(尚未 wire·今天无 caller 需要·复发前立法)。独立复核=聚焦 review agent。**后续**：幽灵接口删/补(PM)、前端 UX 诚实化(mockup)、forMargin wire 进毛利消费端(逐抗体成本接毛利时)。
+
+*更新时间：2026-07-06*
+
+## 2026-07-06 本次会话完成的工作 —— lab_director 退库/盘点 RBAC 口径拍板落地（承接项 E #76 遗留待拍 chip `task_3abe1f3d`）
+
+**背景**：非-P0 审计项 E 的 W 守卫修复（PR #76·merge commit `e488f905`）surface 出一个 SEED_MATRIX 口径待定项：`rbac-matrix.ts` 里 `lab_director` 对 `returns`/`stocktaking` 只 `R`、对 `transfers`/`scraps` 却 `W`；E 给写端点补 `requirePermission(module,'W')` 后，主任写退库/盘点会 403。
+
+**核实先行（改前逐条验，全属实 + 2 处补充）**：① SEED_MATRIX:31 确为 transfers/scraps=W、stocktaking/returns=R；② E 修复四路由写端点均有 W 守卫；③ 运行库无 lab_director 种子用户（实测 6 角色）。**补①**：`UserFormModal.tsx:7`「实验室主任」是可选角色→管理员随时可建、非纯理论；**补②**：前端 nav 是 capabilities 驱动（login 下发 `getEffectivePermissions`）、非回退 technician——真建的 lab_director 会看到 R 级只读、与后端一致（故用户原担心的「回退 technician 拿 W」不会发生）。
+
+**关键判断=不对称疑似漏配非有意设计**：主任已持 users/roles/reconciliation 审批 + transfers/scraps 写，唯独退库/盘点只读，说不通。**PM 拍板：提到 W**（四类手工库存操作统一可写）。
+
+**实现（一处口径 + 配套迁移 + 回归门禁·零前端改动）**：
+- `rbac-matrix.ts` lab_director `stocktaking/returns` R→W + 口径注释。
+- `rbac-p0-matrix-seed.test.ts` 加回归 `it` 锁 returns/stocktaking/transfers/scraps 四格=W（防矩阵口径静默回退）。
+- **配套 DB 迁移**（⚠️ 首拍误判「无需迁移」，被对抗面板逮到并订正）：`DatabaseManager.ts` 新增聚焦迁移 `reconcileLabDirectorInventoryPerms` + init 里调用，把既有库 lab_director 行的 returns/stocktaking 对齐 'W'（R→W 幂等·只动这一角色这两键·不碰其余·不覆盖脏值/'*'，纪律同 `reconcileSupplierReturnsPerms`）。新增 DB 路径回归测试 `rbac-lab-director-inventory-perms.test.ts`(4)，走 `getEffectivePermissionsForRoles` 真解析、覆盖纯对象断言逮不到的 shadowing 盲区。
+- **无需前端改动**：nav 已在 R 可见、返回页写按钮 gate 于 `canAccess(mod,'W')`→capabilities 转 W 后自动出现；补 ROLE_MENU_MAP 反成第二事实源（其 fallback 已=technician W）。（盘点页写按钮本就未 gate=既有轻 UX 瑕疵、非本改引入，本改反而消除「显按钮却 403」的错配。）
+
+**⚠️ 对抗面板订正（ultracode·`wf_78d462a8-497` 四镜头 refute）**：开 PR 前跑对抗验证，**逮到 1 个 med 级真缺陷**——首拍「无需 DB 迁移」premise 错：我只查了提交进库的 `coreone.db`（恰无 lab_director 行→回退 SEED_MATRIX 掩盖了缺陷），漏了 `DatabaseManager.ts:599` defaultRoles **持久化** lab_director 行、`getEffectivePermissionsForRoles` 先读 roles 行才回退矩阵。凡在 [ROLE-DIR 落库, 本改) 窗口初始化过的既有库会固化旧 R、单改矩阵静默无效。**恰是记忆 `coreone-rbac-live-vs-seed-matrix`/`coreone-pr8-e2e-rbac-migration-gap` 那个迁移缺口，被我错误地判为「不适用」**。→ 已加迁移 + DB 路径测试修复。其余三镜头（前端一致性/SoD 无环/测试无反向断言）均 claimHolds=true（SoD：lab_director 仅 account_reconcile:R 不能批财务对账、其可批的 BOM 对账不消费 inventory→无「自己录数自己批」环）。
+
+**验证**：tsc 绿·后端 vitest **93 files/814 tests 全绿**（含 golden ¥13,152+¥27,870 零回归 + 项 E W 守卫测试 + 新迁移 4 测试）；rbac 四文件(p0-seed 16/p3-route 10/supplier-backfill 4/lab-director-inventory 4=34)聚焦复跑绿。dev DB 未脏（测试走 `:memory:`）；仅显式 `git add` 源码文件、node_modules symlink 未纳（禁 -A）。
+
+**治理**：分支 `claude/elastic-cohen-447e6c`，**PR #82 已开**（off master；PM 已拍板具体口径）。合并前 `git merge origin/master` 消 session-log append 冲突（保留 master 的 B/C 段 + 本段）。待拍 chip `task_3abe1f3d` 已解。参考记忆 `coreone-rbac-live-vs-seed-matrix`。
+
+*更新时间：2026-07-06*
+
+## 2026-07-06 本次会话完成的工作 —— case_no 归一不对称根治（**完成项 B #80 披露的 `task_77245a02` 根治项**）
+
+**背景**：非-P0 审计项 B 的对抗复核逮到一个系统性 `case_no`（病理号）归一不对称，并把根治单开为 chip `task_77245a02`（见项 B #80 已披露边界「case_no NFKC 失配假阴性·lis 入库未归一」）。本会话即完成该根治项。症结：`lis_cases.case_no` 落库用 `String().trim()`（无 NFKC），而消费侧 `case_revenue(_lines).case_no` 经 `canonicalCaseNo`（NFKC+trim）。含全角/兼容字符的号 → LIS 侧留原样、canonical 侧归半角 → **永不命中**（reconcile-compute `buildReconcileInputs` 账单↔LIS 匹配漏、buildCaseMarkers 抗体 JOIN 孤儿丢线索、项 B `import-gates.ts:60 dominantLedgerMonth` 期间键闸恒 null 静默失效）。方向=假阴性（漏非误）·多数病理号 ASCII 不受影响·非紧急，但根治点在**入库侧统一归一**。
+
+**修（3 处写入 seam·全走共享 `canonicalCaseNo`，与消费侧同一 canonical）**：
+- **①** `utils/lis-import.ts`：`normalizeLisRow.caseNo` + `normalizeMarkerRow.caseNo` → `canonicalCaseNo`（写 `lis_cases.case_no` 主导入 + `lis_case_markers.case_no`；一处修同时修好 reconcile 匹配 + 抗体 JOIN + `ON CONFLICT(partner_id,case_no)` 全角/半角去重）。
+- **②** `routes/reconciliation-v1.1.ts:~353`：遗留手工 `lis_cases` 导入路径也归一（不留第二条 raw 写路）。
+- **③** `utils/billing-revenue.ts`：`normalizeLine.caseNo` → `canonicalCaseNo`（**首轮复核衍生**：`case-revenue-v1.1.ts` 是**第二个**收入侧写者，此前 raw 落 `case_revenue(_lines)` 且用 raw 探 `lis_cases`/`resolveLisCanonicalPartner`；一处 seam 同时修写入+探针）。
+- 下游 `reconcile_diffs`/`reconcile_case_hints`/`supplement_orders` 的 case_no **继承 canonical**（只从已归一的 LIS/收入表读），无需各自再归一。
+- **修好项 B 期间键闸**：merge 后 `import-gates.ts:60 dominantLedgerMonth` 已在树。它 `SELECT ... FROM lis_cases WHERE case_no IN (<statement 传入的 canonical 列表>)`——修前 lis_cases 侧 raw → 全角号恒不命中 → 众数月恒 null → 期间键闸对全角静默失效；本 fix 归一 lis_cases 后该闸对全角真生效。
+
+**测试**：`lis-import.test.ts`（+全角 case_no 单测 + marker 归一）、`billing-revenue.test.ts`（+全角号 + 聚合键归一）、新 `reconcile-fullwidth-caseno.test.ts`（端到端证：全角 LIS 导入落半角 canonical + 账单半角 → `computeReconcile` matchRate=1，修前 union=2/matched=0）。
+
+**验证**：tsc 绿；后端 vitest 全绿（含 golden `partner-revenue-golden` ¥13,152 + `hemujia-purelab-golden` ¥27,870 零回归；canonicalCaseNo 对 ASCII 恒等，实数据不受影响）。dev DB 未污染（测试走 `:memory:`、探针只读）。**注**：merge origin/master（+项 B/C/rbac）后需以合并树复跑 vitest 确认联合绿（下方 PR 流程执行）。
+
+**独立复核（工作模型机制5·双轨）**：
+- 首轮 general-purpose 对抗读码 → 确认 3 处正确、无循环 import、NFKC 对 ASCII 恒等/幂等；**逮到 ③**（billing-revenue 第二收入写者 raw）已修。
+- ultracode 完整性 Workflow（`wf_5956f179-165`·8 agent：4 域枚举 → 综合矩阵 → 3-lens 对抗 refute）：**GAP_FOUND=成本侧**——`outbound_abc_details.case_no`（`cost-runs.ts:109` ← `outbound_records.case_no` raw 用户输入）在 `abc-partner-link.ts:24`（↔lis_cases 回填 partner）+ `:76`（↔case_revenue 院级 P&L 成本卷积）两条钱路 JOIN 仍 raw → 全角号成本掉出 partner P&L。**影响=全角-only·当前 ASCII 数据零影响·非 golden 回归**；属独立 ABC 成本/出库域（含 charge_group_id 派生键 + case_charge_groups + COUNT(DISTINCT) 幂等语义），另立**追踪 chip `task_4d5a4d3f`**（用户已启动·独立会话跑；本会话不扩到该域，防在不熟域引双计风险；工作模型域隔离纪律）。
+
+**已披露边界**：
+- **成本侧 case_no 仍 raw**（见上·chip `task_4d5a4d3f`·用户已启动）——达「全库 case_no 皆 canonical」不变量的收尾项。
+- **NFKC 不折 dash 变体**（U+2212 减号 / U+2013 en-dash / U+2010 hyphen ≠ U+002D）：`canonicalCaseNo` 本身的局限（**预存**·statement 路径早已同此局限·非本次引入）；dash-错配号在任何 seam 都不命中。扩 `canonicalCaseNo` 折 dash 会影响**全部** reconcile 匹配、可能误并合法异号 → 属**共享语义决策·待 PM**（未改·未 spawn·记此）。
+
+**治理**：分支 `claude/elastic-ellis-6551ce`（off master `55d2f83d`），已 `git merge origin/master`（7 提交·含项 B #80/C #81/rbac #82；仅 session-log append 冲突=保留双方）。改动仅 6 文件（src×3 + tests×3），未碰 dev DB / 未 `-A`（server/node_modules 非 gitignore 覆盖）。开 PR 到 master（独立·非栈·单独可合·PR #84）。
 
 *更新时间：2026-07-06*
 
 ---
 
-## 2026-07-07 本次会话续 —— P0 贡献毛利 mockup grill-with-docs（20 分支拷问 → 落 docs + 修 D20 代码 + 重构 mockup）
+## 2026-07-06 本次会话完成的工作 —— 构建纪律闸（Build Discipline Gate）立闸 + 存量清单
 
-**性质**：接上条 PR #77，PM `/grill-with-docs docs/mockups/hospital-cm-两层框架-mockup.html`。relentless 逐分支拷问设计（每问给推荐·一次一问·domain-modeling 边捕术语/ADR），20 个承重分支逐一拍板。
+**性质**：把 **P0 设计选择 #7**「完成=真数据跑通+消费者被服务」（非代码合并）从只在 P0 域执行，推广成**全系统机器可执行规则**，根除「功能先于消费者被建」五形态。off origin/master 开 `claude/kind-mcclintock-a09ec4`。**纯新增工具+文档·零改 app 源码·golden ¥13,152+¥27,870 天然零回归**（dev DB 与前后端源码全程未动，只读扫描）。
 
-**拍板要点（D1-D20）**：
-- **固定成本池**（覆盖倍数分母·非 P0 三件套数据）：D1 财务手工月度 config·D2 只放固定开销·系统约束排材料（双计护栏）·D5 **只整盘绝不摊单院**（死亡螺旋护栏）·D13 变更留痕+趋势线打标（照 §C）·D18 hero 改 ∑贡献毛利（真值）·覆盖倍数降次级。→ 落 **CONTEXT.md 新「组合体检层」术语段**（固定成本池/覆盖倍数/不排名精确化/顶梁柱=净贡献者非榜首/UNMEASURED）+ **新建 ADR-008**。
-- **对照表 UX**：D3 轻量人工抓手（标记/备注/导出·须持久化·不回喂排名）·D6 逐行显口径+混时分组警示（不变量④）·D7 逐行显率覆盖+低时弱化率（ADR-004）·D8 趋势不足标「积累中」不硬画·D10 状态词降页面级横幅·D11 顶梁柱徽章不自动贴·教学移说明·真标绑 §4b·D17 逐行下钻谈判弹药（§5 月度主菜）。
-- **UNMEASURED/复活**：D12 可点开清单+复核节奏（在册不可漏）·D9 阈值 30/30% 标「占位·待校准」观测优先。
-- **诚实边界（v1 披露·细分另立项）**：D14 关账后追溯补收·D15 lab_revenue≤0 不声称分作废/代阅片·D16 非IHC桶合桶+缺marker数据提醒·D19 三线混合率虚高。
-- **D20 代码互锁（真修·非文档）**：`checkTerminationPreFilter` 遇「候选点名集非空 + 产能费未测」不再静默返 ok，直接判违反（复活前置=产能费实测且 §4b 能跑）——堵「先重建自动点名再测产能→顶梁柱照样误伤」的洞。`InvariantViolation.capacityCharge` 改 `number|null`。补 TDD。
+**产出（新增独占文件）**：
+- **`scripts/build-discipline/`**（纯 Node·零依赖·正则静态扫描）：`lib/registry.cjs`（app 挂载/router 端点/前端调用[request+axios+fetch+fetch-var 回溯]/路径归一/匹配）+ 三检查 `check-frontend-to-backend.cjs`(C1)/`check-backend-consumers.cjs`(C2)/`check-config-engine.cjs`(C3) + `run-all.cjs`（`--only`/`--block`/`--json`/`--update-baseline`）+ `selftest.cjs`(22 断言) + `consumer-whitelist.json`(有名有期孵化) + `baseline.json`(delta 棘轮·45 键) + `README.md`。
+- **三检查**：C1 前端 API 调用必命中已注册后端路由（否则幽灵404）· C2 后端端点须≥1 消费者（否则进白名单带 owner+deadline·过期删）· C3 用户可写配置字段须自身 CRUD 外有读取点（否则空转，allocation_base 型）。
+- **`.github/workflows/build-discipline.yml`**（warn 模式·非 required·selftest 必过）+ **PR 模板**加「消费者是谁/入口在哪/若暂无→孵化死线」栏。
+- **存量清单** `docs/COREONE-构建纪律闸-存量违规清单-2026-07-06.md`（按危害 4 层：止骗>关风险>清废>补入口）+ **`docs/PM待拍板.md` 新增 M-6**（warn→block flip 决策·有 owner）。
 
-**产出（本会话续·独占文件）**：CONTEXT.md（+组合体检层段）、`docs/COREONE-ADR-008-组合体检覆盖倍数-固定成本池口径-2026-07-07.md`（新）、`portfolio-health.ts`（D20 互锁）、`portfolio-health.test.ts`（D20 用例）、`docs/mockups/…mockup.html`（v2 重构落 D3-D19：空态屏/hero=∑CM/页级状态/逐行口径+率覆盖/谈判弹药下钻/UNMEASURED 可点开/人工抓手/复活占位/池变打标/疑含混线披露）。
+**存量盘点结果**（全 warn·不拦合并）：**C1=9 幽灵**（reports 6 死方法 + boms/cost-preview + logs/export + users/reset-password，逐条核实 0 误报）· **C2=33 无消费者**（18 写+15 读；含本会话 D 域新增 `POST /account-reconcile/supplements/:id/approve` 审批门**无前端 approve 按钮→collect 永 409**）+ 13 白名单豁免 · **C3=3 高置信空转**（allocation_base canonical→并入「修非 P0 域」F.3；两种命名 snake+camel 皆无引擎读）+ 83 低置信仅报告。**逐项处置在另一「修非 P0 域」task**（本 task 只立闸+出清单+防新增）。
 
-**验证**：tsc 净·P0 53 用例全绿·golden ¥13,152+¥27,870 零回归。
+**核心防误报设计**（task 要求·warn 起步测误报率）：C1 动态 `fetch(变量)` 回溯赋值解析、无法回溯者进 `unverifiable` 列表人工过目（不静默）；C2 文本兜底按**端点完整形状精确正则**（param 处须 `${...}` 插值）只用「发请求的文件」；C3 置信分层（计算旋钮名才高置信）+ 兼配 camelCase。**delta 棘轮**：`baseline.json` 记存量，`--block` 只拦**新增** → 可立刻对 C1 开 block 不被 45 条存量红墙挡无关 PR（实证：新增→exit 1，干净→exit 0）；无 baseline fail-closed；exit-code footgun 护栏（`--update-baseline`⊥`--block`、`--block` 不可被 `--only` 排除）。
 
-**后端待办（记 PR #77·grill 衍生·未实现）**：固定成本池 config 表+留痕+趋势打标；标记持久化；逐行口径字段（tissue scope resolver）；率覆盖逐院字段（已有 lineCoverage 可用）；谈判弹药下钻端点（逐抗体/线 CM）；UNMEASURED 清单端点；D14/D15/D16/D19 的细分/并入另立项。
+**独立复核（工作模型机制5·两轮对抗面板）**：①3-agent 找误报/绕过/治理→0 误报 + 逮 4 解析缺口全加固 + delta 棘轮/owner 采纳；②4-agent verify 面板复核加固本身→逮 **1 HIGH**（C2 旧 literalBase 前缀 substring 兜底令死的兄弟子路由被误判消费）**已修**为精确形状正则，修后 C2 29→33（多揪 4 个全 grep 核实真·有后端无前端）+ 修 2 exit-code footgun + 文档计数订正。critic 终裁「ship-ready as honest warn-mode inventory + owned ramp」。
+
+**验证**：selftest 22/22 绿·warn gate exit 0·C1=9/C2=33/C3=3 baseline current·YAML/JSON 合法·app 源码零改动。**已披露边界**：覆盖诚实声明=五形态机器只查得 4 种（**孤儿路由**靠前端审计、**假能力**如 /abc/variance 假标准成本无机器检查·最高危仍靠人，已 hoist 到 README 顶防 PM 假门错觉）；C3 warn-only（启发式·计算内联在路由的口径分叉检不出）；keyOf param 折叠低危碰撞已文档化。**留 PM 拍**：M-6 何时切 block+设 required（推荐先切 0 误报的 C1）。
+
+*更新时间：2026-07-06*
+
+---
+
+## 2026-07-06 本次会话完成的工作 —— P0 院级贡献毛利「四轮外审收敛终稿」落地（后端引擎影子模式 + mockup）〔PR #77·分支 objective-mclaren-f477c2〕
+
+**性质**：应 PM「实现 P0 院级贡献毛利四轮外审收敛终稿设计」。碰钱/口径 → TDD + 独立对抗复核。**背景纠正**：`/hospital-pnl` 已有 `HospitalPnLDashboard.tsx`（`a7c379df`）但恰是四轮推翻的旧设计（按 grossMargin 升序=按率排名·盈利/亏损措辞）；任务「尚未建」指新贡献毛利引擎/后端路由（确无）→ 建**新并存 lane**（ADR-003）、旧看板暂不动。
+
+**后端（新独立 lane·影子模式·TDD·golden 零回归）**：`hospital-cm.ts`（per-case 引擎·桶A二抗+桶B一抗①*/特染/组织处理¥7·同源闸·准入闸·状态真值表 G-1·结构上无 labor/equipment）+ `portfolio-health.ts`（两层框架·覆盖倍数只看趋势·§4a 产能费单算·§4b 净贡献者不得自动点名封存·复活双触发常量）+ `hospital-cm-service.ts`（§10.A SQL 契约·lab_revenue 非 net_amount·marker 防扇出·§10.E 跨月复用禁输出）+ `hospital-pnl-v1.1.ts` 路由（复用 cost_analysis:R·零 MODULES 漂移·与 partner-pnl 并存）。
+
+**独立复核（机制5·`wf_9e39b91b`）逮 3 真 bug 并修 + TDD**：① HIGH §10.E 跨月复用双计闸未实现 → `loadCrossMonthReuseKeys`+`makeWithheldCase`；② coverage 恒真式 → `ihcCount` 透传+§10.D 真谓词；③ 特染占位价信号丢弃 → `stainPlaceholderShare` 披露。
+
+**前端 mockup 先行红线**（未写真 React）：`docs/mockups/hospital-cm-两层框架-mockup.html`。**验证**：后端 vitest 全绿·golden ¥13,152+¥27,870 零回归。
+
+*更新时间：2026-07-06*
+
+---
+
+## 2026-07-07 本次会话续 —— P0 贡献毛利 mockup grill-with-docs（20 分支拷问 → 落 docs + 修 D20 代码 + 重构 mockup）〔PR #77 续〕
+
+**性质**：PM `/grill-with-docs` relentless 逐分支拷问设计（一次一问·每问给推荐·domain-modeling 边捕术语/ADR），20 承重分支逐一拍板。
+
+**要点**：固定成本池（D1 财务手工月度 config·D2 只放固定开销排材料·D5 只整盘绝不摊单院[死亡螺旋护栏]·D13 变更留痕+趋势打标·D18 hero 改 ∑贡献毛利真值）→ 落 CONTEXT.md「组合体检层」术语段 + **新建 ADR-008**。对照表 UX（D3 人工抓手·D6 逐行口径+混时警示·D7 逐行率覆盖·D8 趋势积累中·D10 状态词降页面级·D11 顶梁柱教学移说明·D17 谈判弹药下钻）。UNMEASURED/复活（D12 可点开清单·D9 阈值占位待校准）。诚实边界 v1 披露（D14 关账后追溯补收·D15 作废/代阅片不声称分·D16 非IHC合桶·D19 三线混合率虚高）。**D20 代码真修**：`checkTerminationPreFilter` 遇「候选点名集非空+产能费未测」拒绝而非静默 ok（堵先重建点名再测产能→顶梁柱误伤的洞）+ TDD。
+
+**产出**：CONTEXT.md（+组合体检层段）、`docs/COREONE-ADR-008-…-2026-07-07.md`（新）、`portfolio-health.ts`（D20）、mockup v2（落 D3-D19）。**后端待办记 PR**：固定成本池 config 表/标记持久化/逐行口径字段/谈判弹药下钻端点/UNMEASURED 清单端点/D14-D19 细分。**验证**：tsc 净·后端 vitest 全绿·golden 零回归。
 
 *更新时间：2026-07-07*

@@ -3,8 +3,13 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { v4 as uuidv4 } from 'uuid'
 import { parsePermissions } from '../middleware/rbac-matrix.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
+
+// 角色写入（改权限矩阵 = 提权面最大）：挂载层只 requirePermission('roles','R')，
+// 写端点必须自带 W 守卫，否则持 roles:R 者即可改矩阵给自己提权。仿 projects/outbound 模式。
+const requireRolesWrite = requirePermission('roles', 'W')
 
 // 规范化权限为对象矩阵 {module:'R'|'W'}（兼容旧数组/含 '*'），落库 + 返回统一形态
 function normalizePerms(raw: any): string {
@@ -31,7 +36,7 @@ router.get('/', (req, res) => {
   successList(res, list, page, pageSize, total)
 })
 
-router.post('/', (req, res) => {
+router.post('/', requireRolesWrite, (req, res) => {
   try {
     const database = getDatabase()
     const { code, name, description, permissions, status } = req.body
@@ -45,7 +50,7 @@ router.post('/', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.put('/:id', (req, res) => {
+router.put('/:id', requireRolesWrite, (req, res) => {
   try {
     const database = getDatabase()
     const { id } = req.params
@@ -87,7 +92,7 @@ router.put('/:id', (req, res) => {
   }
 })
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireRolesWrite, (req, res) => {
   try {
     const database = getDatabase()
     const { id } = req.params
