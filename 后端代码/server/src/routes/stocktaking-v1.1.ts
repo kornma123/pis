@@ -2,8 +2,13 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
+
+// 盘点写入（登记 + 入账副作用最强的 /:id/adjust 直改 inventory.stock）：挂载层只 requirePermission('stocktaking','R')，
+// 四个写端点必须自带 W 守卫，否则持 stocktaking:R 者即可越权调整库存。仿 projects/outbound 模式。
+const requireStocktakingWrite = requirePermission('stocktaking', 'W')
 
 function generateNo(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -40,7 +45,7 @@ router.get('/', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.post('/', (req, res) => {
+router.post('/', requireStocktakingWrite, (req, res) => {
   try {
     const { materialId, actualStock, operator, remark } = req.body
     if (!materialId || actualStock === undefined) { error(res, 'Missing fields', 'INVALID_PARAMETER', 400); return }
@@ -81,7 +86,7 @@ const ADJUST_REASONS: Record<string, string> = {
  * - 入账 = inventory.stock 改到实盘 + 写 stock_logs 'adjust' + status='confirmed' + 差异原因/说明落 remark。
  * - 操作人以登录用户(req.user)为准，忽略 body 伪造；成功写操作由全局 auditWrite 统一留痕 operation_logs。
  */
-router.post('/:id/adjust', (req, res) => {
+router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
   try {
     const { id } = req.params
     const { reason, remark } = req.body
@@ -142,7 +147,7 @@ router.post('/:id/adjust', (req, res) => {
  * 全行预校验，任一行非法 → 整单 422 回滚（all-or-nothing），不写任何记录、不动库存。
  * body: { items: [{ materialId, actualStock, remark? }], operator?, remark? }
  */
-router.post('/batch', (req, res) => {
+router.post('/batch', requireStocktakingWrite, (req, res) => {
   try {
     const { items, operator, remark } = req.body
     if (!Array.isArray(items) || items.length === 0) {
@@ -207,7 +212,7 @@ router.post('/batch', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireStocktakingWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()

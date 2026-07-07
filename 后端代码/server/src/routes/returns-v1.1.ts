@@ -2,8 +2,13 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
+
+// 退库写入（改 inventory.stock）：挂载层只 requirePermission('returns','R')，
+// 写端点必须自带 W 守卫，否则持 returns:R 者即可越权突变库存。仿 projects/outbound 模式。
+const requireReturnsWrite = requirePermission('returns', 'W')
 
 // 排序白名单（受控列，杜绝 ORDER BY 注入）
 const SORT_COLUMNS: Record<string, string> = { createdAt: 'r.created_at', quantity: 'r.quantity' }
@@ -77,7 +82,7 @@ router.get('/stats', (_req, res) => {
 })
 
 // 新增退库（物料退回仓库 → 库存 +数量；不设上限、无库存行则新建）
-router.post('/', (req, res) => {
+router.post('/', requireReturnsWrite, (req, res) => {
   try {
     const { materialId, quantity, reason, operator, remark } = req.body
     if (!materialId || quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0 || !reason) {
@@ -122,7 +127,7 @@ router.post('/', (req, res) => {
 })
 
 // 撤销退库（对称扣回已加的库存；库存不足则拒绝，防负库存）
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireReturnsWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
