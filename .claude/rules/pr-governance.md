@@ -264,6 +264,10 @@
 1. `gh pr list --state open` 拿当前真实 open 集（=实时事实源）；与看板对照，差异**记在心里、随下一个实质 PR 捎带更正**，**不为纯看板对账单开 PR / 提交**（§1 第 8 条）。
 2. 看有没有 `do-not-merge-alone` 的 PR 处在「即将被单独合」的风险位。
 3. 要合并？→ 确认是当前最上游可合项 → vitest required 绿 → **普通 `gh pr merge`（默认不加 `--admin`，见 §1 第 9 条）** →（如有下游）重定向下游 base。**看板状态不实时回改**。
+4. **回收旧 worktree（卫生债兜底·2026-07-07 立）**：`node scripts/gc-worktrees.cjs`（默认 **DRY-RUN 只报告**）看有几棵旧工作树可回收；确认无误后 `node scripts/gc-worktrees.cjs --prune` 真删（`git worktree remove --force` + 顺手 `git branch -d` 已合并本地分支）。
+   - **为什么要它**：`spawn_task` / `git worktree add` 造在 `.claude/worktrees/` 下的树，PR 合并后**无任何机制回收** → 债只涨（曾堆到 25 棵）。这一步就是那个兜底，让回收成为例行动作、不靠记性。
+   - **安全铁律**（完整依据见脚本头注释）：只回收「**已合并进 origin/master ∧ churn-only ∧ 非主仓/当前树/外部树/未合并/最近活动**」的树；**任何 churn 白名单之外的未提交改动 = 真工作 → 保留不删**（本项目有「改错树」前科，删错=丢真人未提交的活）。churn = 起后端/seed 写脏的 tracked dev DB(`coreone.db`+WAL) / node_modules 符号链接 / `.claude/skills-runtime`(venv) / `launch.json` / 会话留痕(`session-log.md`/`PM待拍板.md`)——**环境噪声、非工作产物**。存疑一律跳过。
+   - 改了脚本或 churn 白名单 → 必跑 `node scripts/gc-worktrees.selftest.cjs`（21 条对抗断言证「永不误删真工作」）保持全绿。
 
 ---
 

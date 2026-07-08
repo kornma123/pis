@@ -1623,3 +1623,19 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add `reconcile-compute.ts`+`reconcile-slide-count.test.ts`+`ReconcileWorkbench.tsx`+本 session-log）；dev DB 全程 :memory: 测试未污染。**已披露边界**：`low_confidence` 是展示层线索（无后端闸读它）·本修=消除假信号 + 抽不出标低置信分流人工，非自动挡补收（补收仍人工认定驱动）；只认乘号 `*N`·中文数字/裸括注数字不解析（真数据未见·保守按 1·under-count-safe）。
 
 *更新时间：2026-07-07*
+
+## 本次会话完成的工作（回收已合并 worktree + 建 worktree GC 兜底机制 → PR `chore/gc-worktrees`，2026-07-08）
+
+**线/工作树**：worktree `wonderful-newton-c93d6f`（off origin/master tip `47ce9623`，新鲜）。task = 主仓 `.claude/worktrees/` 堆了 25 棵工作树、约 20 棵分支早已合并却**无任何回收机制**（无 hook/无脚本/无 CI）→ 债只涨。**纯工具/治理·不碰任何业务代码·golden 天然零回归**。
+
+**交付（两件）**：
+1. **回收现有旧债**：新建 `scripts/gc-worktrees.cjs`，`--prune` 安全回收 **12 棵**「已合并 ∧ churn-only ∧ 非主仓/当前/外部/未合并/最近活动」旧树（+ `git branch -d` 12 个已合并本地分支），释放 ~3.7GB；`git worktree list` 26→14、**0 中止**。
+2. **防复发机制**：`gc-worktrees.cjs`（默认 **DRY-RUN 只报告**·`--prune` 才删·`--json`/`--no-fetch`/`--recency-hours=N`）+ 纯函数安全闸 `decide()` + `gc-worktrees.selftest.cjs`（27 条对抗断言）+ 接进 `pr-governance.md` §5 会话启动检查清单第 4 步。
+
+**安全铁律（本项目「改错树」前科·删错=丢真人未提交活）**：两条独立保证——①`is-ancestor(HEAD, origin/master)`=已提交历史全在 master（删树零提交损失·靠**本地可达性**非远端新鲜度）；②churn-only=无有价值未提交改动（churn=tracked dev DB / node_modules 符号链接 / skills-runtime venv / launch.json / 会话留痕，非工作产物）。churn 白名单外的未提交改动=真工作→保留。**实证保护**：`charming-bhabha`（未暂存 BOM 注释）、`dreamy-brattain`（ADR-008/mockup/build-discipline 改动）、3 棵未合并、4 棵最近活动(<6h)、3 棵外部手工树、当前树——**全部正确保留**。
+
+**独立复核（机制5·两轮对抗 Workflow 面板，各逮真缺陷并已修）**：①`wf_27700a82`（4 lens 攻击×verify×synth）判「不安全·先修」逮 **3 CONFIRMED（全 end-to-end 复现）**：**F1/high**=`gatherStatus` 未钉 `--untracked-files` → 仓库配 `status.showUntrackedFiles=no` 令 `git status` 装瞎、全新未跟踪源码不可见→误删（**改**：钉 `--untracked-files=normal` 覆盖配置）；**F2/low**=重命名 `RM x -> y.db-wal` 整串 endsWith `.db-wal` 被误判 churn（**改**：R/C 一律阻断项、绝不把 `old -> new` 喂 isChurn）；**F3/low**=prune re-verify→remove 间 du 拉宽 TOCTOU 窗（**改**：du 挪复核前 + remove 前最后一记裸 status + 头注「闭合」→「收窄」）；顺手收紧 `settings.local.json` 出 churn（可承载真配置）。②`wf_ee5cd70a`（**硬沙箱**·禁碰真仓）判 **SAFE TO PRUNE**（F2/F3/settings 均复现闭合、无新洞；F1 由 selftest 集成用例[致盲配置下 gatherStatus 仍见未跟踪]绿 + F3 agent 交叉确认 flag 已钉）。⚠️**复核教训**：首轮一个 agent `cd` 回退误在真仓造 `feature2` 桩分支 + 短暂删我脚本（已自恢复）→我独立核实 worktree 完好 + 删 `feature2`；二轮起加硬沙箱规则（只 mktemp、禁碰 `进销存`）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 脚本 + `pr-governance.md` + 本 session-log）；无 dirty coreone.db（未起后端）。**hook 决策**：`.claude/settings.json` 未 tracked（本地）→ SessionStart hook 非耐久·**未加**；耐久机制=committed 脚本 + §5 checklist（每会话注入·天然自现）。**已披露边界**（均写进脚本头注释）：残余 TOCTOU 亚秒窗（极低概率）+ 治理文档 churn（session-log/PM待拍板 唯一未提交编辑会被删·任务批准取舍）+ tracked assume-unchanged 位（本仓无此用法）。
+
+*更新时间：2026-07-08*
