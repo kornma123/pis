@@ -127,6 +127,47 @@ export function reconcileLabDirectorInventoryPerms(database: DatabaseSync): void
   }
 }
 
+/**
+ * 聚焦迁移：补齐 财务(finance) 的 账实核对(account_reconcile) 写权限。
+ *
+ * 背景（同上两个 reconcile* 的 RBAC 迁移缺口，记忆 coreone-rbac-live-vs-seed-matrix）：
+ * SEED_MATRIX 早已给 finance account_reconcile:'W'（财务是账实核对/补收签发的业务 owner，
+ * 见路由头「写端点要 W：财务/管理员」），但既有库（含提交进仓库、CI 直接 checkout 的
+ * data/coreone.db）的 finance 行是旧的最小数组 ['dashboard','cost_analysis','logs']、无此模块；
+ * roles.permissions 会 shadow SEED_MATRIX（getEffectivePermissionsForRoles 先读 roles 行、
+ * backfillRolePerms 只补空值不覆盖既有非空行）→ 既有库 finance 实际拿不到 account_reconcile → 403。
+ *
+ * 直接动因（PR #94 披露）：补收单独立签发(SoD)要求签发人≠提交人；若全库只有 admin 一个
+ * account_reconcile:'W' 用户，admin 提交的补收单无人可签 = 确定性死锁。补 finance 'W' 提供
+ * 第二签发人（≥2 人持 W），解锁 SoD。2026-07-07 PM 拍板「给财务也开这个权限」。
+ *
+ * 纪律同 reconcileSupplierReturnsPerms/LabDirector：只动 finance 这一角色这一键、幂等、
+ * 不碰其余键、不覆盖脏值/'*'——保留库中其他有意的角色×矩阵不一致（如 finance 旧退货 R 语义）。
+ * 兼容旧扁平数组（presence=W）与对象 {mod:'R'|'W'} 两形态。
+ */
+export function reconcileFinanceAccountReconcilePerms(database: DatabaseSync): void {
+  const row = database.prepare('SELECT permissions FROM roles WHERE code = ?').get('finance') as
+    | { permissions: string }
+    | undefined
+  if (!row) return // 行缺失 → getEffectivePermissionsForRoles 回退 SEED_MATRIX（已含 'W'），无需迁移
+  let val: unknown
+  try {
+    val = typeof row.permissions === 'string' ? JSON.parse(row.permissions) : row.permissions
+  } catch {
+    return // 解析不了的脏值不动，避免覆盖
+  }
+  if (Array.isArray(val)) {
+    if (val.includes('*') || val.includes('account_reconcile')) return
+    val.push('account_reconcile')
+    database.prepare('UPDATE roles SET permissions = ? WHERE code = ?').run(JSON.stringify(val), 'finance')
+  } else if (val && typeof val === 'object') {
+    const obj = val as Record<string, unknown>
+    if (obj.account_reconcile === 'W') return
+    obj.account_reconcile = 'W'
+    database.prepare('UPDATE roles SET permissions = ? WHERE code = ?').run(JSON.stringify(obj), 'finance')
+  }
+}
+
 export function initializeDatabase(): void {
   const database = getDatabase()
 
@@ -662,6 +703,8 @@ export function initializeDatabase(): void {
   reconcileSupplierReturnsPerms(database)
   // 聚焦迁移：补齐 主任 的 退库/盘点 W（2026-07-06 PM 口径 R→W；既有库 lab_director 行 shadow 矩阵，详见函数注释）
   reconcileLabDirectorInventoryPerms(database)
+  // 聚焦迁移：补齐 财务 的 account_reconcile W（PR #94 SoD 需第二签发人；既有库 finance 行 shadow 矩阵，详见函数注释）
+  reconcileFinanceAccountReconcilePerms(database)
 
   // 成本可见性开关默认（可在「角色权限/设置」改）
   database.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES ('cost_visibility_roles', ?)")
