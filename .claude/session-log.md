@@ -1574,3 +1574,20 @@ http://your-server-ip:8080
 - **独立复核（机制5·合并 master 上重跑）**：ultracode 3-镜头对抗面板 `wf_8e8997d5`——writer-sweep=**对称**（所有写 seam 经 canonicalCaseNo·seed/迁移旁路非 harmful）·regex-golden=**正则精确+golden 恒等**·matcher-sweep=**逮到 2 读侧旁路**（已修+补测）。修后四侧写/读/库内 join 全对称。
 
 *更新时间：2026-07-07*
+
+## 2026-07-07 本次会话续 —— P-2 旧盈利看板止血（呈现层·不写新前端）〔分支 fix/hospital-pnl-dashboard-stopgap〕
+
+**背景**：旧盈利看板 `前端代码/src/pages/hospital-pnl/HospitalPnLDashboard.tsx` 是用户此刻唯一能点开的「按客户账户看盈利」真前端（新两层框架仅在后端+mockup、前端未写）。四轮外审判它「正在线上误导决策者」：①按 grossMargin 升序把「最差」账户排最前（逐账户点名）②亏损家数计数+盈亏红绿（变相点名）③零标注。本次=几小时的**呈现层止血·不写新前端**（那是独立项）。权威 spec = 用户 Desktop 八层门禁 附录A/B(P-2)/DEC-1 复核意见①。
+
+**改动（只动本页 + 配套测试·后端零改动）**：
+- **翻默认排序**：抽 `sortPartnersForDisplay`（纯函数·`.slice()` 不改原数组）按院级毛利**降序**（顶梁柱在顶），替换原升序。核实 `top` 默认选中/KPI 聚合/趋势/`costMonthAxis` 行[0]/下钻均不依赖 list 顺序（爆炸半径受控）。
+- **去点名**：删 `lossCount` KPI 计数 + 「N 家负毛利」红徽章；账户级红/绿好坏框定全中性化（KPI 毛利去 valueColor、行背景 neg 红去掉、毛利/毛利率单元格→INK/slate·保留 −/+ 符号）；表标题「负毛利置顶」→「按毛利从高到低」；待复核病例面板红→中性 slate + 标题「负毛利病例筛查」→「待复核病例（毛利为负）」；删 Kpi 死 prop `valueColor/subColor`（堵一行改回复活颜色点名）。趋势多线图红/绿线条 + 完整度徽标 emerald 保留（正交语义·非账户排名·注释说清）。
+- **加迁移横幅**：页顶蓝色 info 横幅「本页盈利算法正在升级…当前按毛利从高到低仅供浏览参考，不代表对某家医院客户好坏的评判；请勿据此单独做去留决定」（说人话·遵 DESIGN 令牌 rounded-lg/border-blue-200/shadow-sm）+ 注脚「决策以院级毛利为准」→「本页毛利为迁移期参考值」。
+- **补回归门禁** `HospitalPnLDashboard.stopgap.test.tsx`（5 用例）：锁①默认排序不得最差在顶（纯函数+渲染双层）②不渲染点名/计数字段 ③账户级毛利呈中性色（仅约束毛利/毛利率两列·放行趋势线+完整度徽标）。
+
+**验证**：tsc 净·vite build 绿·stopgap 5 用例全绿·整仓前端 vitest 仅 3 个既有无关失败（utils.formatDate/QualityCostAnalysis/CostDashboard.adjustments·stash 变基证与本改动无关）。后端零改动 → 黄金 ¥13,152/¥27,870 天然零回归。
+- **变异证有牙**：排序改升序→排序 2 用例翻红；毛利单元格改回 rose/emerald→颜色用例翻红；均恢复。
+- **真跑端到端**（真实数据·非查渲染 shell）：临时 seed 3 院（和睦家+90k/东安县+12k/康湾诊所−3k·后端真算·完后 restore DB）→ 起前后端·admin 登录·真开 /hospital-pnl → DOM 确认顶梁柱和睦家在顶、康湾诊所(−3k)在底且中性(marginColor 全 rgb(10,37,64) INK·行背景非红)、无点名/计数、横幅在位、零 console error。后端 API 恰返回 worst-first 旧序=真验证客户端翻序生效。
+- **独立复核（机制5·DEC 层）**：ultracode 4 维对抗面板 `wf_1e54b34a`（爆炸半径/中性化/设计文案/测试边界·6 agent）→ 前 3 维 PASS；1 条 MED 确证（测试未锁颜色向量·假绿·verifier 复现）已补第 5 用例修复；dev-DB 脏 MED 经复核降 NIT（已 restore）；另采纳 LOW 术语统一（横幅/标题「贡献」→「毛利」对齐列头）+ NIT 删死 prop。
+
+*更新时间：2026-07-07*
