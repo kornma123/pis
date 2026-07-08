@@ -1591,3 +1591,19 @@ http://your-server-ip:8080
 - **独立复核（机制5·DEC 层）**：ultracode 4 维对抗面板 `wf_1e54b34a`（爆炸半径/中性化/设计文案/测试边界·6 agent）→ 前 3 维 PASS；1 条 MED 确证（测试未锁颜色向量·假绿·verifier 复现）已补第 5 用例修复；dev-DB 脏 MED 经复核降 NIT（已 restore）；另采纳 LOW 术语统一（横幅/标题「贡献」→「毛利」对齐列头）+ NIT 删死 prop。
 
 *更新时间：2026-07-07*
+
+## 2026-07-07 本次会话 —— P-1 补收流程解锁：补前端「签发」按钮（SoD 人闸·打通收款）〔PR #94〕
+
+**性质**：修唯一还没修的 🔴 功能级锁死（八层门禁 P-1/SEC-5/红线2）。上一轮 #79 给补收单加了独立签发人闸（认定人≠签发人），但**只建后端 approve 接口、无前端按钮**，下游 collect 硬性要求已签发→所有补收单卡在收款 409 `NOT_APPROVED`、整条闭环锁死（「有后端没前端」病灶）。
+
+**核实先行**：后端 SoD **已强制且已测**（`account-reconcile-v1.1.ts` approve 处理器 `!submitted_by||submitted_by===operator`→403·fail-closed；`reconcile-supplement-review-gate.test.ts` SG-1..8 全覆盖）→ **本次未改后端、未加后端测试**，只补前端消费者。
+
+**改动（5 文件·纯前端+闸）**：`api/account-reconcile.ts` 加 `approve(id,reason?)`；`SupplementTracking.tsx` 待补收单按 `reviewStatus` 分两态（pending_review→「签发」ReasonModal 确认·自签/缺认定人 disabled+提示；approved→「标记已补收」）+ 待签发徽章/认定人展示/看板待签发数/说人话脚注；`types/account-reconcile.ts` 补 reviewStatus/submittedBy/reviewedBy/reviewedAt + 待签发数；`baseline.json` 移除 C2 approve 行(45→44)；`selftest.cjs` 翻转 approve 门断言（现有消费者）。
+
+**验证**：后端 vitest **106f/905 绿**(含 golden ¥13,152/¥27,870 零回归·collect 只写 collected_revenue 不写 case_revenue)·前端 tsc/build 绿·**构建纪律闸 selftest+--block=C1,C2 exit0**·前端 3 既有无关失败(日期相关·stash 变基证)。**真跑端到端**(两账号真 HTTP + 浏览器 UI·完后 restore dev DB)：①admin 认定提交→②admin 自签 403 SELF_REVIEW_FORBIDDEN→③未签发收款 409 NOT_APPROVED→④独立 W-持有人签发 200→⑤收款 200 已补收 折实收¥160→⑥case_revenue=800 未变；浏览器：签发→SoD 弹窗→已签发→标记已补收→已补收 零 console error。
+
+**独立复核（机制5）**：codex 异构(high·5 条全无问题) + ultracode 6-agent 对抗面板 `wf_af0ead45`——5 单点 skeptic 全 HOLDS 零缺陷；completeness 提 4 潜伏/披露项（非本改动缺陷）：①运行库单 W-持有人 SoD 死锁（**只 admin 持 account_reconcile:W**·finance 数组无该模块·lab_director 仅 R·记 PM 待拍）②迁移遗留空 submitted_by 单永不可签（**已就 UX 止血**：noSubmitter 禁签；当前 dev/CI 库无 supplement_orders 表·纯生产潜伏）③approve/collect 不拦已关账=**补收 by design**（往月漏收记本月·不回填已关账 case_revenue·golden 不破）④前端/e2e 无自动化用例（后端 SG-1..8 全覆盖·前端靠浏览器走查·记后续补测）。CI 首推 gate 红=selftest 旧 fixture 断言 approve 无消费者被我加的消费者翻转→已改断言、gate 转绿。
+
+**CodeGraph 使用**：本会话真用了 `codegraph_explore` 追「补收 approve→collect」链路（一次调用即返回前端 api/页面/后端路由的 verbatim 源码 + 消费者关系 + blast-radius），有效替代多轮 grep/read 定位 SupplementTracking/ReasonModal/api 三处；**一处小瑕**：blast-radius 把 claude-mem 插件缓存里的 transcript-watcher.cjs 误列为 `collect` 的调用者（跨项目噪音·不影响判断）。机制整体正常可用。
+
+*更新时间：2026-07-07*
