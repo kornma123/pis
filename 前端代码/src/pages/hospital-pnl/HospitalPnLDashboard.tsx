@@ -7,14 +7,22 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { partnerPnlApi } from '@/api/partner-pnl'
 import type { PartnerPnl, CasePnl, PnlTrendPoint } from '@/types/partner-pnl'
 
-// —— 设计令牌（项目标准：浅色金融 + 海军蓝标题 #0a2540 + 主蓝强调 #3b82f6 + 盈利绿 #059669/亏损红 #e11d48 + 等宽数字）——
+// —— 设计令牌（项目标准：浅色金融 + 海军蓝标题 #0a2540 + 主蓝强调 #3b82f6 + 等宽数字）——
+// P-2 呈现层止血（八层门禁 · DEC 决策安全层）：本页是口径迁移期的旧视图。账户级*盈利判断*一律不再用红/绿
+// 把客户框成「好/坏」，也不把负毛利客户逐个点名；金额保留正负号即可。红/绿只用于「单家医院月度趋势」多线图
+// 的线条区分（一家医院自己的时间序列，非跨账户排名）与数据质量徽标（完整度/估算/未接通），均非账户优劣评判。
 const ACCENT = '#3b82f6'
 const CARD = 'bg-white rounded-xl border border-slate-200/80 shadow-[0_2px_5px_-1px_rgba(50,50,93,0.07),0_1px_3px_-1px_rgba(0,0,0,0.05)]'
 const INK = 'text-[#0a2540]'
 // codex F3：金额保留 2 位小数（明细/毛利需精确到分，Math.round 会把小额毛利/差额抹平）。
 const yuan = (n: number) => '¥' + (Number(n) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const pct = (r: number) => (r * 100).toFixed(1) + '%'
-const marginColor = (n: number) => (n < 0 ? 'text-rose-600' : 'text-emerald-600')
+
+// P-2 默认展示排序：按院级毛利「降序」——贡献最大的顶梁柱排在最上，绝不把最赚钱的大客户排到「最差」位置点名。
+// 抽成纯函数，供回归测试锁死「默认排序不得再是最差在顶 / 按毛利升序」（见 HospitalPnLDashboard.stopgap.test.tsx）。
+export function sortPartnersForDisplay(list: PartnerPnl[]): PartnerPnl[] {
+  return list.slice().sort((a, b) => b.grossMargin - a.grossMargin)
+}
 
 export default function HospitalPnLDashboard() {
   const [serviceMonth, setServiceMonth] = useState('')
@@ -38,7 +46,7 @@ export default function HospitalPnLDashboard() {
         partnerPnlApi.cases({ ...(serviceMonth ? { serviceMonth } : {}), onlyFlagged: true, pageSize: 50 }),
       ])
       if (my !== reqRef.current) return // 已有更新的请求在途 → 丢弃本次结果
-      const list = (ov?.list || []).slice().sort((a, b) => a.grossMargin - b.grossMargin)
+      const list = sortPartnersForDisplay(ov?.list || [])
       setRows(list)
       setFlagged(cs?.list || [])
       const top = selectedRef.current || list.slice().sort((a, b) => b.labRevenueTotal - a.labRevenueTotal)[0]?.partnerId || ''
@@ -64,7 +72,7 @@ export default function HospitalPnLDashboard() {
     const s = rows.reduce((a, r) => ({
       net: a.net + r.netRevenueTotal, lab: a.lab + r.labRevenueTotal, cost: a.cost + r.costTotal, gm: a.gm + r.grossMargin,
     }), { net: 0, lab: 0, cost: 0, gm: 0 })
-    return { ...s, rate: s.lab > 0 ? s.gm / s.lab : 0, lossCount: rows.filter((r) => r.grossMargin < 0).length }
+    return { ...s, rate: s.lab > 0 ? s.gm / s.lab : 0 }
   }, [rows])
 
   if (!canAccess('cost_analysis', 'R')) {
@@ -90,6 +98,15 @@ export default function HospitalPnLDashboard() {
         </div>
       </div>
 
+      {/* P-2 口径迁移横幅：本页是旧视图，正迁移到新的院级贡献毛利看板；当前排序仅供浏览、不评判客户优劣 */}
+      <div className="flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3 shadow-sm">
+        <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+        <p className="text-[13px] leading-relaxed text-slate-600">
+          本页的盈利算法正在升级到新版看板。当前表格按毛利从高到低排列，仅供浏览参考，
+          <span className="font-medium text-slate-700">不代表对某家医院客户好坏的评判</span>；请勿据此单独对某家客户做去留决定。
+        </p>
+      </div>
+
       {loading ? (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 animate-pulse">
           {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-[88px] rounded-xl bg-slate-100" />)}
@@ -109,23 +126,18 @@ export default function HospitalPnLDashboard() {
         <>
           {/* KPI */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <Kpi icon={Building2} label="合作医院" value={String(rows.length)} sub={`负毛利 ${kpi.lossCount} 家`} subColor={kpi.lossCount ? 'text-rose-600' : 'text-slate-400'} />
+            <Kpi icon={Building2} label="合作医院" value={String(rows.length)} sub={serviceMonth || '全部账期'} />
             <Kpi icon={Receipt} label="财务实收" value={yuan(kpi.net)} sub={serviceMonth || '全部账期'} />
             <Kpi icon={Landmark} label="实验室收入" value={yuan(kpi.lab)} sub="计入实验室的结算额" />
             <Kpi icon={Wallet} label="核算成本" value={yuan(kpi.cost)} sub="按医院汇总" />
-            <Kpi icon={TrendingUp} label="院级毛利" value={yuan(kpi.gm)} sub={`毛利率 ${pct(kpi.rate)}`} valueColor={marginColor(kpi.gm)} />
+            <Kpi icon={TrendingUp} label="院级毛利" value={yuan(kpi.gm)} sub={`毛利率 ${pct(kpi.rate)}`} />
           </div>
 
           {/* 院级 P&L 表 */}
           <div className={cn(CARD, 'overflow-hidden')}>
             <div className="flex items-center px-4 py-3 border-b border-slate-100">
-              <h2 className={cn('text-sm font-semibold', INK)}>院级盈亏 · 负毛利置顶</h2>
+              <h2 className={cn('text-sm font-semibold', INK)}>院级盈亏 · 按毛利从高到低</h2>
               <div className="ml-auto flex items-center gap-3 text-xs">
-                {kpi.lossCount > 0 && (
-                  <span className="inline-flex items-center gap-1 text-rose-600 bg-rose-50 px-2 py-1 rounded-full">
-                    <AlertTriangle className="w-3.5 h-3.5" /> {kpi.lossCount} 家负毛利
-                  </span>
-                )}
                 {rows[0]?.costMonthAxis === 'service_month' && (
                   <span className="inline-flex items-center gap-1 text-slate-400" title="本月成本已按服务月对齐：跨月使用的耗材成本归入病例的服务当月，与收入同月，避免单月毛利错期。">
                     <Info className="w-3.5 h-3.5" /> 成本按服务月对齐
@@ -151,21 +163,19 @@ export default function HospitalPnLDashboard() {
                 <tbody>
                   {rows.map((r) => {
                     const est = r.sourceCounts?.estimated ?? (r.qualityCounts.partial_quantities + r.qualityCounts.no_quantities)
-                    const neg = r.grossMargin < 0
                     return (
                       <tr key={r.partnerId} onClick={() => pickPartner(r.partnerId)}
                         role="button" tabIndex={0} aria-label={`查看 ${r.partnerName || r.partnerId} 月度趋势`}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickPartner(r.partnerId) } }}
-                        className={cn('border-t border-slate-50 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#3b82f6]/50',
-                          neg ? 'bg-rose-50/60 hover:bg-rose-50' : 'hover:bg-slate-50',
+                        className={cn('border-t border-slate-50 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#3b82f6]/50 hover:bg-slate-50',
                           selected === r.partnerId && 'ring-1 ring-inset ring-[#3b82f6]/30 bg-[#3b82f6]/[0.04]')}>
                         <td className={cn('px-4 py-3 font-medium', INK)}>{r.partnerName || r.partnerId}</td>
                         <td className="px-4 py-3 text-right text-slate-600">{yuan(r.netRevenueTotal)}</td>
                         <td className="px-4 py-3 text-right text-slate-600">{yuan(r.labRevenueTotal)}</td>
                         <td className="px-4 py-3 text-right text-slate-400">{r.diagnosisRevenueTotal > 0 ? yuan(r.diagnosisRevenueTotal) : '—'}</td>
                         <td className="px-4 py-3 text-right text-slate-600">{r.costMatched ? yuan(r.costTotal) : <span className="text-amber-600">未接通</span>}</td>
-                        <td className={cn('px-4 py-3 text-right font-medium', marginColor(r.grossMargin))}>{r.grossMargin < 0 ? '−' : '+'}{yuan(Math.abs(r.grossMargin)).slice(1)}</td>
-                        <td className={cn('px-4 py-3 text-right font-medium', marginColor(r.grossMargin))}>{pct(r.marginRate)}</td>
+                        <td className={cn('px-4 py-3 text-right font-medium', INK)}>{r.grossMargin < 0 ? '−' : '+'}{yuan(Math.abs(r.grossMargin)).slice(1)}</td>
+                        <td className="px-4 py-3 text-right font-medium text-slate-600">{pct(r.marginRate)}</td>
                         <td className="px-4 py-3">
                           {est > 0
                             ? <span className="inline-block text-[11px] text-amber-700 border border-amber-200 bg-amber-50 px-2 py-0.5 rounded" title="部分病例无对账单，按经验占比估算">估算 {est} 例</span>
@@ -204,19 +214,19 @@ export default function HospitalPnLDashboard() {
             </div>
 
             <div className={cn(CARD, 'p-4')}>
-              <h2 className={cn('text-sm font-semibold mb-3', INK)}>负毛利病例筛查</h2>
+              <h2 className={cn('text-sm font-semibold mb-3', INK)}>待复核病例（毛利为负）</h2>
               {flagged.length === 0 ? (
-                <div className="h-[260px] flex items-center justify-center text-sm text-slate-400">本期无负毛利病例</div>
+                <div className="h-[260px] flex items-center justify-center text-sm text-slate-400">本期无毛利为负的病例</div>
               ) : (
                 <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
                   {flagged.map((c) => (
-                    <div key={c.caseNo + c.serviceMonth} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-rose-50/70 border border-rose-100">
+                    <div key={c.caseNo + c.serviceMonth} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-100">
                       <div className="min-w-0">
                         <div className={cn('text-[13px] font-medium truncate', INK)}>{c.caseNo}</div>
                         <div className="text-[11px] text-slate-500 truncate">{c.partnerName}</div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-[13px] font-medium text-rose-600 tabular-nums">−{yuan(Math.abs(c.grossMargin)).slice(1)}</div>
+                        <div className={cn('text-[13px] font-medium tabular-nums', INK)}>−{yuan(Math.abs(c.grossMargin)).slice(1)}</div>
                         <div className="text-[11px] text-slate-400 tabular-nums">{pct(c.marginRate)}</div>
                       </div>
                     </div>
@@ -227,7 +237,7 @@ export default function HospitalPnLDashboard() {
           </div>
 
           <p className="text-xs text-slate-400 flex items-center gap-1.5">
-            <Info className="w-3.5 h-3.5" /> 实验室收入 = 对账单里计入实验室的项目结算额之和；无对账单的病例按经验占比估算（标「估算」），账单到位即校正。决策以院级毛利为准。
+            <Info className="w-3.5 h-3.5" /> 实验室收入 = 对账单里计入实验室的项目结算额之和；无对账单的病例按经验占比估算（标「估算」），账单到位即校正。本页毛利为迁移期参考值。
           </p>
         </>
       )}
@@ -235,14 +245,16 @@ export default function HospitalPnLDashboard() {
   )
 }
 
-function Kpi({ icon: Icon, label, value, sub, valueColor, subColor }: {
-  icon: any; label: string; value: string; sub: string; valueColor?: string; subColor?: string
+// P-2：Kpi 原有 valueColor/subColor（曾承载「院级毛利变红 / 负毛利家数红色计数」的账户级好坏框定）已随中性化
+// 全部下线；这里一并删除这两个 prop，从机制上杜绝「一行改回即复活颜色点名」的入口（值恒 INK、副标题恒中性灰）。
+function Kpi({ icon: Icon, label, value, sub }: {
+  icon: any; label: string; value: string; sub: string
 }) {
   return (
     <div className={cn(CARD, 'p-4')}>
       <div className="flex items-center gap-1.5 text-xs text-slate-400"><Icon className="w-3.5 h-3.5" /> {label}</div>
-      <div className={cn('text-[22px] font-semibold tracking-tight mt-2 tabular-nums', valueColor || INK)}>{value}</div>
-      <div className={cn('text-[11px] mt-1.5', subColor || 'text-slate-400')}>{sub}</div>
+      <div className={cn('text-[22px] font-semibold tracking-tight mt-2 tabular-nums', INK)}>{value}</div>
+      <div className="text-[11px] mt-1.5 text-slate-400">{sub}</div>
     </div>
   )
 }
