@@ -64,6 +64,15 @@ export const accountReconcileApi = {
   supplements: (serviceMonth: string, status?: string) =>
     request.get('/account-reconcile/supplements', { params: { serviceMonth, status } }) as unknown as Promise<SupplementResp>,
 
+  // 独立签发（SoD 人闸）：唯一把补收单 pending_review → approved 的入口，签发后方可收款。
+  // 认定人（submittedBy）不能签发自己提交的单——由后端强制（403 SELF_REVIEW_FORBIDDEN），前端仅提示。
+  approve: (supplementId: string, reason?: string) =>
+    request.post(`/account-reconcile/supplements/${supplementId}/approve`, { reason }) as unknown as Promise<{
+      id: string
+      reviewStatus: string
+      reviewedBy: string
+    }>,
+
   collect: (supplementId: string, collectedMonth?: string) =>
     request.post(`/account-reconcile/supplements/${supplementId}/collect`, { collectedMonth }) as unknown as Promise<{
       id: string

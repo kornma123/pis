@@ -1,7 +1,7 @@
 {
   "_doc": "构建纪律闸 baseline（棘轮基线）：当前已接受的存量违规键集合。--block 只对不在此集合里的「新增」判红。修掉存量后 --update-baseline 收紧，只减不增。",
   "generated": "运行 --update-baseline 生成（日期见 git 提交）",
-  "count": 45,
+  "count": 44,
   "keys": [
     "C1|GET|/boms/:/cost-preview",
     "C1|GET|/logs/export",
@@ -30,7 +30,6 @@
     "C2|GET|/partner-pnl/cross-partner-audit",
     "C2|GET|/partners",
     "C2|GET|/partners/:id",
-    "C2|POST|/account-reconcile/supplements/:id/approve",
     "C2|POST|/antibody-cost/antibodies",
     "C2|POST|/antibody-cost/antibody-aliases",
     "C2|POST|/antibody-cost/cost-params/calibrate",

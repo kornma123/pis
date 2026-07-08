@@ -12,6 +12,8 @@ export type VerdictReason =
   | '核对无误'
 export type FollowUp = 'supplement' | 'rework' | 'free' | 'external_fix' | 'data_fill' | 'settled'
 export type SupplementStatus = '待补收' | '已补收' | '已放弃'
+/** 补收单独立签发（SoD 人闸）复核态：pending_review=待他人签发 / approved=已签发·可收款。 */
+export type ReviewStatus = 'pending_review' | 'approved'
 
 /** 6 认定原因唯一术语串（做页当 lint，勿改字面）。 */
 export const VERDICT_REASONS: VerdictReason[] = [
@@ -114,6 +116,11 @@ export interface SupplementOrder {
   collectedRevenue: number | null
   giveUpReason: string | null
   operator: string | null
+  /** 独立签发人闸（SoD）：认定即提交 pending_review，须他人 approve 后方可收款。 */
+  reviewStatus: ReviewStatus
+  submittedBy: string | null
+  reviewedBy: string | null
+  reviewedAt: string | null
 }
 
 export interface SupplementBoard {
@@ -122,6 +129,7 @@ export interface SupplementBoard {
   已放弃金额: number
   已补收实收: number
   待补收数: number
+  待签发数: number
   补收率: number
 }
 
