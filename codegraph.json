@@ -1,0 +1,13 @@
+{
+  "exclude": [
+    ".claude-global/",
+    ".tools/",
+    ".stversions/",
+    ".playwright-mcp/",
+    ".codex/",
+    ".claude/skills/",
+    ".claude/skills-runtime/",
+    "dist/",
+    "**/dist/**"
+  ]
+}
