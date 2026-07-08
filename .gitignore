@@ -29,6 +29,7 @@ Thumbs.db
 .idea/
 
 # Claude Code / AI tools
+.codegraph/
 .claude/skills/
 .claude/skills-runtime/
 .claude/rules/skills-auto-trigger.md
