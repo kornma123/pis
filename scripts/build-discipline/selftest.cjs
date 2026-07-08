@@ -117,9 +117,11 @@ check('C2: 精确形状兜底——死的兄弟子路由不因共享前缀被误
   assert.ok(!rx.test("request.get('/alerts')"), '仅前缀 /alerts 不应匹配子路由 handle')
   assert.ok(!rx.test('request.post(`/alerts/${id}/totally-dead-xyz`)'), '不同尾段不应匹配')
 })
-check('C2: supplements/:id/approve（本会话新增·无前端 approve 按钮）被正确判无消费者', () => {
-  // maker-checker 审批门有后端无前端 → collect 永 409；精确兜底把它从 /supplements 前缀坍缩里揪出
-  assert.ok(viol2.has('POST /account-reconcile/supplements/:id/approve'), 'approve 门应判无消费者')
+check('C2: supplements/:id/approve 现有前端「签发」按钮 → 判为已消费（不再无消费者）', () => {
+  // PR #94 补了前端 accountReconcileApi.approve(`/account-reconcile/supplements/${id}/approve`)，
+  // maker-checker 审批门从「有后端无前端」解锁为有消费者；精确命中把它从违规里移出
+  // （对照 collect/giveup/reopen 同款模板字面量均被识别）。原断言（判无消费者）已随该消费者落地翻转。
+  assert.ok(!viol2.has('POST /account-reconcile/supplements/:id/approve'), 'approve 门现有前端消费者，不应再判无消费者')
 })
 check('C2: 过期 deadline 会翻成违规（注入未来 today）', () => {
   const future = c2.run({ today: '2099-01-01' })
