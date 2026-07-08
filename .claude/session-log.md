@@ -1607,3 +1607,19 @@ http://your-server-ip:8080
 **CodeGraph 使用**：本会话真用了 `codegraph_explore` 追「补收 approve→collect」链路（一次调用即返回前端 api/页面/后端路由的 verbatim 源码 + 消费者关系 + blast-radius），有效替代多轮 grep/read 定位 SupplementTracking/ReasonModal/api 三处；**一处小瑕**：blast-radius 把 claude-mem 插件缓存里的 transcript-watcher.cjs 误列为 `collect` 的调用者（跨项目噪音·不影响判断）。机制整体正常可用。
 
 *更新时间：2026-07-07*
+
+## 本次会话完成的工作（对账 floor-to-1 解析根因修复 → PR `fix/reconcile-floor-to-one-rootcause`，2026-07-07）
+
+**线/工作树**：worktree `stoic-moser-f9cbdc`（off origin/master tip `bf9695f5`，新鲜）。task = 八层门禁 GATE-3 / 附录 P-8「对账 floor-to-1 解析根因」——唯一还没修的根因级 🔴 风险。**碰钱口径**·护黄金锚。
+
+**根因（先摸清才动手）**：对账逐 case 比「账单免疫组化/特染件数 vs LIS 物理件数」。真温州对账单把一 case 的免疫组化聚合成**一行**、真实件数以乘号写文本里（`免疫组化*16`=16 片），配置驱动导入器（statement-import）**不落 qty 列**（默认 0）→ `reconcile-compute.ts:83` 旧 `Number(qty)>0?qty:1` 按 **1 片** → billCount(1)<lisCount(16) → 量产假「疑似漏收」。#79 只加末端人闸挡真金、根因没修。**真数据先行**：60 份对账单扫描确认 `免疫组化*N` 真实普遍（`*16`×24 等），逮 over-count 陷阱（价格数字）；摸清双导入路径（case-revenue 存 qty vs statement-import 丢 qty，bug 咬后者）。
+
+**改法（只动 `reconcile-compute.ts` 件数解析 + 测试；+1 行前端文案）**：新增纯函数 `parseSlideCount`——qty>0 用 qty；否则抽「线名×N」件数乘法（NFKC 容全角），**乘号须紧贴免疫组化/特染线名尾**（`LINE_NAME_TAIL`）+ 数字后非价/率单位（元¥%折/`/`），排除 `检测*2/项`·`会诊×2`·`2次*18元`·`每片×85元` 等费率语法、不认 Latin x/X（防 X100 编码）；抽不出的聚合行 `confident=false` → 该 case+线差异落库标 `low_confidence`（∨ 院级匹配偏低），普通单行按 1 高置信（不泛滥）。前端 `ReconcileWorkbench.tsx` 差异徽标 `匹配偏低（仅参考）`→`仅供参考，请核对`（复用 low_confidence 后旧文案对「件数存疑」误报·独立复核建议·未碰受保护系统）。
+
+**验证**：后端 tsc + vitest **108 files/933 tests 全绿**（新增 22 用例 + golden ¥13,152/¥27,870 零回归）；前端 tsc 绿。**真跑真数据**：10 真温州 case 旧各假漏收 14–16 片→修后 matchRate=1·diffs=0·假漏收=0；全语料 50 处 `免疫组化*N` 零错·IHC/SS 单元零 over-count。**变异测试**：改回恒 1 → 13 断言翻红。
+
+**独立复核（机制5·双引擎，各逮真缺陷并已修）**：① Claude 对抗面板 `wf_ba7bbb2c`（4 skeptic）——over-count skeptic 逮到旧正则 `[一-鿿]` 匹配任意 CJK（真样本 `352次*18元` confident 返回单价 18，今被 classifier 挡在 reconcile 外=潜伏）；swallow-leak/edge/golden-boundary 三 skeptic refuted=false（低置信仅展示层·不吞差异·golden 天然隔离·恰 3 文件）。② **codex 异构 high** 复核逮到第一版加固仍有缝（`FISH检测*2/项` 的 `检测*2` 会被当件数，因 `检测` 是 CJK 名非量词）→ 收敛到 `LINE_NAME_TAIL`（乘号须紧贴 免疫组化/组化/染色/特染 线名尾），双引擎发现的 over-count 全堵死、全语料 0 over-count。前置 blast-radius Workflow `wf_843fdfda`（consumers/golden/test-surface）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add `reconcile-compute.ts`+`reconcile-slide-count.test.ts`+`ReconcileWorkbench.tsx`+本 session-log）；dev DB 全程 :memory: 测试未污染。**已披露边界**：`low_confidence` 是展示层线索（无后端闸读它）·本修=消除假信号 + 抽不出标低置信分流人工，非自动挡补收（补收仍人工认定驱动）；只认乘号 `*N`·中文数字/裸括注数字不解析（真数据未见·保守按 1·under-count-safe）。
+
+*更新时间：2026-07-07*

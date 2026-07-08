@@ -20,6 +20,63 @@ export interface ReconcileInputs {
   lis: LisCase[]
   statementReady: boolean
   lisReady: boolean
+  /** 账单件数解析不可靠的 case+线（聚合行 floor-to-1、抽不出真实件数）→ 其差异落库时标 low_confidence，分流待人工。 */
+  billCountLowConf: Map<string, { ihc: boolean; ss: boolean }>
+}
+
+/**
+ * 账单聚合行「件数」解析（根因修复 floor-to-1，本文件旧「qty 缺一律按 1 片」）。
+ *
+ * 病灶：真实对账单（温州中心医院等，全部月份）把一 case 的免疫组化聚合成一行、真实件数以**乘号**写在服务
+ *   项目文本里（`免疫组化*16` = 16 片），且配置驱动导入器（statement-import）不落 qty 列（默认 0）→ 旧逻辑
+ *   一律按 1 片 → 系统性低估账单件数 → billCount(1) < lisCount(16) → 量产假的「疑似漏收，需补收」。
+ *
+ * 解析口径（碰钱·宁保守漏放也别 over-count；规则经 60 份真对账单实证 + 双引擎对抗复核加固）：
+ *  · qty>0（对账单带数量列 / 收费单据 path）→ 直接用 qty，不动（高置信）。
+ *  · qty 缺/0/负 → 从文本抽「件数乘法」`线名×N`：乘号（`*`/`×`/`✕`/`╳`，**不认 Latin x/X**——真数据只用 `*`、
+ *      且 `X100` 类编码会误吞）前须**紧贴免疫组化/特染线名尾**（`免疫组化`/`组化`/`染色`/`特染`…，见 LINE_NAME_TAIL），
+ *      而非任意 CJK 字——否则中文费率语法 `FISH检测*2/项`、`会诊×2`、`2次*18元` 会把测/诊/次×价当件数；数字后**不得**
+ *      紧跟价/率单位（元/¥/%/折 或 `/`）。命中唯一干净件数（1..上界）→ `免疫组化*16`→16、`61基因检测+免疫组化*2`→2、
+ *      `刚果红染色组化*1`→1（高置信）。经 NFKC 归一容全角 `＊１６`。
+ *  · **绝不**把价格/费率当件数（双引擎复核实证的真陷阱）：`免疫组化2次*18元`（量×单价）、`每片×85元`（每×价）、
+ *      `工资*2%`（百分率）、`FISH检测*2/项`（乘号贴在非线名「检测」上）、`FISH750*2`（乘号前是数字）、
+ *      `基础诊断费…免疫组化144`（无乘号）——一律不取。
+ *  · 抽不出干净件数但有费率/聚合信号（脏乘法 / `/个`·`/项` / 残缺乘号）→ 按 1、**confident=false**（低置信分流）。
+ *  · 多值冲突 / 件数越界（疑似价格误填）→ 按 1、confident=false。
+ *  · 无任何聚合/费率信号的普通单行（`免疫组化`）→ 按 1、confident=true（设计基线，不泛滥标低置信）。
+ */
+export const MAX_PARSED_SLIDES = 60 // 单 case 单行件数合理上界（真数据最大 20）；超过疑似价格/编码 → 不硬信、标低置信
+// 件数乘号前须紧贴的免疫组化/特染线名尾（真数据 `免疫组化*N`/`染色组化*1`/`特殊染色*3` 的名尾）；防把 检测/会诊/次×价 当件数。
+const LINE_NAME_TAIL = /(?:免疫组化|免疫组织化学|免组|组化|特殊染色|特染|染色)$/
+const PRICE_TAIL = /[元¥％%折/]/ // 数字后紧跟货币/百分/折扣/斜杠（`/项`·`/月` 费率）= 单价/费率，非件数
+// 抽不出干净件数但存在费率/聚合信号：CJK 紧跟乘号无合法件数、`每…×`、或 `/个`·`/项`·`/片` 费用明细单位。
+const AGG_SIGNAL = /[一-鿿][ \t]*[*×✕╳]|每[一-鿿]{0,2}[ \t]*[*×✕╳]|\/\s*[个项片]/
+
+export function parseSlideCount(chargeItem: string, qty: unknown): { count: number; confident: boolean } {
+  const q = Number(qty)
+  if (Number.isFinite(q) && q > 0) return { count: q, confident: true }
+  // NFKC 归一：全角乘号/全角数字（`免疫组化＊１６`）→ 半角（`免疫组化*16`），与项目 canonicalCaseNo 同哲学。
+  const text = String(chargeItem ?? '').normalize('NFKC')
+  const counts: number[] = []
+  let dirty = false // 命中费率乘法（量×价 / 每×价 / ×价元）= 费用明细，非件数
+  const re = /[*×✕╳][ \t]*0*(\d+)/g
+  for (let m: RegExpExecArray | null; (m = re.exec(text)); ) {
+    const n = Number(m[1])
+    const pre = text.slice(0, m.index).replace(/[ \t]+$/, '') // 乘号前（去尾空白）
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 1) // 数字后一字
+    // 件数 = 乘号须紧贴免疫组化/特染线名尾，且数字后非价/率单位；否则是费率乘法（检测/会诊/次×价）→ 脏，不计件数。
+    if (!LINE_NAME_TAIL.test(pre) || PRICE_TAIL.test(after)) { dirty = true; continue }
+    counts.push(n)
+  }
+  const distinct = [...new Set(counts)]
+  if (distinct.length === 1) {
+    const n = distinct[0]
+    if (Number.isInteger(n) && n >= 1 && n <= MAX_PARSED_SLIDES) return { count: n, confident: true }
+    return { count: 1, confident: false } // 件数=0 或超上界（疑似价格误填）→ 低置信
+  }
+  if (distinct.length > 1) return { count: 1, confident: false } // 多个冲突计数 → 歧义低置信
+  // 无干净件数：有费率/聚合信号 → 低置信分流；否则普通单行 → 高置信按 1（基线）。
+  return { count: 1, confident: !(dirty || AGG_SIGNAL.test(text)) }
 }
 
 /**
@@ -71,24 +128,25 @@ export function buildReconcileInputs(db: any, partnerId: string, serviceMonth: s
     .all(partnerId, serviceMonth) as Array<{ case_no: string; charge_item: string; qty: number; unit_price: number; gross_amount: number }>
 
   // 账单片数 = 逐 case 的免疫组化/特染「片数」。
-  //   片数取每行 qty（对账单带数量列时为真数量）；qty 缺/为 0（对账单常按每抗体一行、不填数量）→ **每计费行按 1 片计**（floor，永不为 0）。
-  //   ⚠️ 边界（未决 A4-邻）：若对账单把免疫组化聚合成一行且数量写在项名里（如「免疫组化*16」），此处按 1 片会低估——待 qty 解析增强；
-  //   现按 line-count 出的「疑似漏收」= 线索非定论、由财务终判（设计基线 §1.4）。单价取行 unit_price，缺则用 gross_amount/片数 反推。
-  const agg = new Map<string, { ihc: number; ss: number; ihcGross: number; ssGross: number }>()
+  //   片数取每行 qty（对账单带数量列时为真数量）；qty 缺/为 0 时经 parseSlideCount 从项名文本解析真实件数
+  //   （聚合行 `免疫组化*16`→16，根因修复 floor-to-1）；解析不出的聚合行标 lowConf（差异分流待人工，不当高置信漏收）。
+  //   普通单行（每抗体一行、无聚合信号）仍按 1 片、高置信（设计基线 §1.4）。单价取行 unit_price，缺则用 gross_amount/片数 反推。
+  const agg = new Map<string, { ihc: number; ss: number; ihcGross: number; ssGross: number; ihcLowConf: boolean; ssLowConf: boolean }>()
   for (const r of billRows) {
     const lineType = classifyChargeItem(r.charge_item)
     if (!lineType) continue // 组织学/诊断类不在本轮核对
     const key = r.case_no
     if (!key) continue
-    const slides = Number(r.qty) > 0 ? Number(r.qty) : 1
+    const { count: slides, confident } = parseSlideCount(r.charge_item, r.qty)
     const unit = Number(r.unit_price) || 0
     const gross = Number(r.gross_amount) || (unit > 0 ? unit * slides : 0)
-    const cur = agg.get(key) ?? { ihc: 0, ss: 0, ihcGross: 0, ssGross: 0 }
-    if (lineType === '免疫组化') { cur.ihc += slides; cur.ihcGross += gross }
-    else { cur.ss += slides; cur.ssGross += gross }
+    const cur = agg.get(key) ?? { ihc: 0, ss: 0, ihcGross: 0, ssGross: 0, ihcLowConf: false, ssLowConf: false }
+    if (lineType === '免疫组化') { cur.ihc += slides; cur.ihcGross += gross; if (!confident) cur.ihcLowConf = true }
+    else { cur.ss += slides; cur.ssGross += gross; if (!confident) cur.ssLowConf = true }
     agg.set(key, cur)
   }
   const billByCase = new Map<string, BillCase>()
+  const billCountLowConf = new Map<string, { ihc: boolean; ss: boolean }>()
   for (const [key, a] of agg) {
     billByCase.set(key, {
       caseNo: key,
@@ -97,6 +155,7 @@ export function buildReconcileInputs(db: any, partnerId: string, serviceMonth: s
       ihcUnitPrice: a.ihc > 0 && a.ihcGross > 0 ? a.ihcGross / a.ihc : undefined,
       ssUnitPrice: a.ss > 0 && a.ssGross > 0 ? a.ssGross / a.ss : undefined,
     })
+    if (a.ihcLowConf || a.ssLowConf) billCountLowConf.set(key, { ihc: a.ihcLowConf, ss: a.ssLowConf })
   }
 
   // LIS 月份来自 operate_time（兼容 '/' 分隔）；过滤该院该月。
@@ -122,6 +181,7 @@ export function buildReconcileInputs(db: any, partnerId: string, serviceMonth: s
     lis: [...lisByCase.values()],
     statementReady: billRows.length > 0,
     lisReady: lisRows.length > 0,
+    billCountLowConf,
   }
 }
 
@@ -174,7 +234,7 @@ export function runReconcile(db: any, partnerId: string, serviceMonth: string, o
     throw Object.assign(new Error('该院该月已关账·定版不可改（迟到数据记次月）'), { code: 'PERIOD_CLOSED' })
   }
 
-  const { bills, lis, statementReady, lisReady } = buildReconcileInputs(db, partnerId, serviceMonth)
+  const { bills, lis, statementReady, lisReady, billCountLowConf } = buildReconcileInputs(db, partnerId, serviceMonth)
   const result = computeReconcile(bills, lis)
 
   const hmId = existing?.id ?? uuidv4()
@@ -210,8 +270,11 @@ export function runReconcile(db: any, partnerId: string, serviceMonth: string, o
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   for (const d of result.diffs) {
+    // 差异 low_confidence = 院级匹配偏低(computeReconcile) ∨ 账单件数解析不可靠(该 case+线聚合行 floor-to-1)。
+    const lc = billCountLowConf.get(d.caseNo)
+    const countUnreliable = d.lineType === '免疫组化' ? !!lc?.ihc : !!lc?.ss
     insertDiff.run(uuidv4(), hmId, partnerId, serviceMonth, d.caseNo, d.lineType, d.billCount, d.lisCount, d.delta,
-      d.amountImpact, d.systemHint, d.lowConfidence ? 1 : 0)
+      d.amountImpact, d.systemHint, d.lowConfidence || countUnreliable ? 1 : 0)
   }
 
   // ③ 逐抗体细粒度初判（返工/多病灶）：读逐抗体明细 → 每 case 分组 → 落 reconcile_case_hints（与 diffs 同事务清建）。

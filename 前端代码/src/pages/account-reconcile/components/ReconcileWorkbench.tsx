@@ -218,7 +218,7 @@ function DiffCard({ d, readOnly, saving, onVerdict }: { d: ReconcileDiff; readOn
     <div className={`mb-2.5 grid grid-cols-1 items-center gap-x-5 gap-y-3 rounded-lg border px-4 py-3.5 md:grid-cols-[1fr_auto] ${reviewed ? 'border-green-200 bg-green-50/50' : 'border-gray-200 bg-white'}`}>
       <div>
         <div className="text-sm font-bold text-gray-900">病理号 {d.caseNo} <span className="ml-1.5 text-xs font-normal text-gray-500">{d.lineType}</span>
-          {d.lowConfidence && <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">匹配偏低（仅参考）</span>}
+          {d.lowConfidence && <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-600">仅供参考，请核对</span>}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-500">
           <span>账单<b className="ml-1 text-sm font-bold tabular-nums text-gray-900">{d.billCount}</b> 片</span>
