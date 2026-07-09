@@ -29,16 +29,11 @@
 const fs = require('fs')
 const path = require('path')
 const R = require('./lib/registry.cjs')
+const { MAX_DEADLINE_HORIZON_DAYS, MAX_WHITELIST_ENTRIES } = require('./lib/constants.cjs')
 
-const WHITELIST_PATH = path.join(__dirname, 'consumer-whitelist.json')
-
-// ── Fail-closed 治理常量（见文件头「白名单 fail-closed」注释；改宽前先想清楚为什么）──
-// deadline 上限：孵化窗口不得比 today 远超此天数。存量真实条目 deadline 现坐落 today+~90~93 天，
-// 取 120（约 4 个月）给足 grandfather 余量，同时对「填 2099」这类变相永久豁免仍是决定性拦截。
-const MAX_DEADLINE_HORIZON_DAYS = 120
-// 白名单条数上限：孵化应是例外。超过即视为「临时名单变成了常驻赦免簿」→ 硬停，逼清理。
-// 现有 5 条，给 12（>2×）成长余量后封顶；要再放宽须在 PR diff 里显式抬这个数并说明理由。
-const MAX_WHITELIST_ENTRIES = 12
+// 白名单路径：默认同目录 consumer-whitelist.json；`BD_WHITELIST_PATH` 可覆盖（仅 selftest 注入 fixture 用，
+// 让 run-all 的 exit-code 端到端断言能在临时目录跑坏白名单而不污染仓库文件）。
+const WHITELIST_PATH = process.env.BD_WHITELIST_PATH || path.join(__dirname, 'consumer-whitelist.json')
 
 /** ISO 日期字符串 +N 天 → ISO 日期字符串（UTC，避免本地时区把日期算偏一天）。 */
 function addDays(isoDate, days) {

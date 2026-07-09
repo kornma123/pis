@@ -19,8 +19,8 @@
  * 纯函数、零依赖、可被 selftest 直接注入内存对象测试（变异断言证有牙）。
  */
 
-// 与 check-backend-consumers 的白名单上限同口径（避免两处漂移）。
-const MAX_DEADLINE_HORIZON_DAYS = 120
+// 死线上限与白名单同口径——收口到 lib/constants.cjs（单一事实源，防两处漂移·独立复核 item 4）。
+const { MAX_DEADLINE_HORIZON_DAYS } = require('./constants.cjs')
 
 /** ISO 日期字符串 +N 天 → ISO 日期字符串（UTC）。 */
 function addDays(isoDate, days) {
@@ -63,13 +63,21 @@ function validateBaselineMeta(doc, today) {
 }
 
 /**
- * B.1 — 净条数天花板。doc.targetMaxCount 存在且 keys 超过它 → 错误（否则 null）。
- * 无 targetMaxCount = 不启用该规则（向后兼容旧 baseline）。
+ * B.1 — 净条数天花板。返回错误对象或 null。
+ * fail-closed（独立复核 item#2 逮到旧版 fail-open）：
+ *   - keys 非空但缺 targetMaxCount → 红（缺天花板本身=疏漏；否则「删掉这行=悄悄取消封顶」的旁路口敞开）。
+ *     run-all 的 --update-baseline 会给新基线自动播种 targetMaxCount，故正常流程永不缺这个字段。
+ *   - keys 为空（零存量）→ 无需天花板，返回 null。
+ *   - keys.length > targetMaxCount → 红（越顶）。
  */
 function checkBaselineCap(doc) {
   const keys = Array.isArray(doc && doc.keys) ? doc.keys : []
-  const target = doc && Number.isInteger(doc.targetMaxCount) ? doc.targetMaxCount : null
-  if (target === null) return null
+  if (keys.length === 0) return null
+  const hasTarget = doc && Number.isInteger(doc.targetMaxCount)
+  if (!hasTarget) {
+    return { type: 'missing-cap', detail: `baseline 有 ${keys.length} 条存量却无 targetMaxCount 天花板（fail-closed：缺天花板=红，防「删字段=悄悄取消封顶」旁路口）——补一个 targetMaxCount（run-all --update-baseline 会自动播种）` }
+  }
+  const target = doc.targetMaxCount
   if (keys.length > target) {
     return { type: 'over-cap', detail: `baseline ${keys.length} 条 > targetMaxCount ${target}（棘轮只减不增；抬高天花板须在 PR diff 里显式说明理由）` }
   }

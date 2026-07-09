@@ -12,7 +12,9 @@
  *   这让 PR 模板「无新增违规」变成机器可判定的事实。
  *
  * 用法：
- *   node scripts/build-discipline/run-all.cjs                  # warn，全量+delta 汇总（永远 exit 0）
+ *   node scripts/build-discipline/run-all.cjs                  # warn，全量+delta 汇总（无新增违规时 exit 0；
+ *                                                              #   但治理层 fail-closed 违规[白名单结构 A / baseline 死线·天花板·被依赖者 B]
+ *                                                              #   无条件 exit 1，与是否 --block 无关）
  *   node scripts/build-discipline/run-all.cjs --block=C1       # 仅对 C1 的**新增**判红（存量不拦）
  *   node scripts/build-discipline/run-all.cjs --block=C1,C2,C3 # 三条都对新增判红
  *   node scripts/build-discipline/run-all.cjs --update-baseline# 把当前违规写进 baseline（收紧棘轮）
@@ -29,7 +31,9 @@ const c2 = require('./check-backend-consumers.cjs')
 const c3 = require('./check-config-engine.cjs')
 const BG = require('./lib/baseline-governance.cjs')
 
-const BASELINE_PATH = path.join(__dirname, 'baseline.json')
+// baseline 路径：默认同目录 baseline.json；`BD_BASELINE_PATH` 可覆盖（仅 selftest 注入 fixture 用，
+// 让 exit-code 端到端断言能在临时目录跑坏基线而不污染仓库文件）。
+const BASELINE_PATH = process.env.BD_BASELINE_PATH || path.join(__dirname, 'baseline.json')
 
 function parseArgs(argv) {
   const args = { block: new Set(), only: null, json: false, updateBaseline: false }
@@ -118,6 +122,12 @@ function main() {
     console.error('✗ --update-baseline 与 --block 不可同用（前者会重写基线、把新增违规当存量收编，静默缴械拦截）。二选一。')
     process.exit(2)
   }
+  // 护栏（独立复核逮到）：--update-baseline 与 --only 不可同用——基线重写用的是 `results`（仅 --only 选中的检查），
+  // 会用局部快照重写整份基线、静默丢弃未跑检查(C2/C3)的键与其 meta 死线(B.1 安全网)，还绕过坏白名单的 refuse。
+  if (args.updateBaseline && args.only) {
+    console.error('✗ --update-baseline 与 --only 不可同用（会用局部快照重写整份基线，静默丢弃未跑检查的键与 meta 死线）。要收紧基线就跑全量 --update-baseline。')
+    process.exit(2)
+  }
   for (const id of args.block) {
     if (!run(id)) {
       console.error(`✗ --block=${id} 但被 --only 排除，其拦截永不会被评估（会假绿）。要拦 ${id} 就别用 --only 把它排除。`)
@@ -153,32 +163,39 @@ function main() {
   // ── Fail-closed 治理层（公理一）：白名单结构完整性(A) + baseline 死线/天花板/被依赖者(B) ──
   // 这些是「治理完整性」错误，独立于 --block/baseline delta。任一非空 → 无条件红（exit 1），
   // 不受 --only 豁免、不可 --update-baseline 洗白。缺省方向=红（忘填/过期/膨胀=疏漏顶回作者）。
-  const c2res = results.find((r) => r.id === 'C2')
-  const govErrors = []
-  if (c2res && Array.isArray(c2res.whitelistErrors)) {
-    for (const e of c2res.whitelistErrors) govErrors.push({ scope: '白名单结构(A)', detail: e.detail })
+  //
+  // ⚠️ C2 的白名单结构(A) 与消费集(B.2) **不受 --only 影响**（独立复核逮到的旁路口）：
+  //    即使 --only 把 C2 排除出打印/拦截集，也无条件跑一次 C2 拿治理数据——否则 `--only=C1`
+  //    会静默跳过白名单/被依赖者校验、放行坏白名单。c2.run() 是纯静态扫描、幂等、无副作用。
+  const c2res = results.find((r) => r.id === 'C2') || c2.run()
+  const consumedC2 = new Set(c2res.consumedKeys || [])
+
+  // A：白名单结构错误（基线更新碰不到白名单 → 这类错误不会被 --update-baseline 清除）。
+  const whitelistGovErrors = (Array.isArray(c2res.whitelistErrors) ? c2res.whitelistErrors : [])
+    .map((e) => ({ scope: '白名单结构(A)', detail: e.detail }))
+
+  // B：baseline 治理错误（meta 死线 / 天花板 / 被依赖者）——纯 doc + 消费集算出，可对任意 doc 复算
+  //    （--update-baseline 用它对「将写入的新 doc」复算，解开「修完却被旧 doc 过期 meta 死锁」的问题）。
+  const baselineGovErrorsOf = (doc) => {
+    const out = []
+    for (const e of BG.validateBaselineMeta(doc, today)) out.push({ scope: 'baseline死线(B.1)', detail: e.detail })
+    const capErr = BG.checkBaselineCap(doc)
+    if (capErr) out.push({ scope: 'baseline天花板(B.1)', detail: capErr.detail })
+    for (const e of BG.consumedInDeadAmnesty(doc, consumedC2)) out.push({ scope: '被依赖者(B.2)', detail: e.detail })
+    return out
   }
-  // baseline 治理（B）：meta 死线 + 净条数天花板 always；被依赖者(B.2)需 C2 的消费集。
-  for (const e of BG.validateBaselineMeta(baselineDoc, today)) govErrors.push({ scope: 'baseline死线(B.1)', detail: e.detail })
-  const capErr = BG.checkBaselineCap(baselineDoc)
-  if (capErr) govErrors.push({ scope: 'baseline天花板(B.1)', detail: capErr.detail })
-  if (c2res) {
-    const consumedC2 = new Set(c2res.consumedKeys || [])
-    for (const e of BG.consumedInDeadAmnesty(baselineDoc, consumedC2)) govErrors.push({ scope: '被依赖者(B.2)', detail: e.detail })
-  }
+
+  const govErrors = [...whitelistGovErrors, ...baselineGovErrorsOf(baselineDoc)]
 
   // 更新 baseline（收紧棘轮）
   if (args.updateBaseline) {
-    // fail-closed：治理错误未清时禁止收紧 baseline（防把结构违规洗成「存量已接受」）。
-    if (govErrors.length) {
-      console.error('✗ 治理层有 fail-closed 错误，禁止 --update-baseline（会把结构违规洗白成存量）。先清：')
-      for (const e of govErrors) console.error(`    · [${e.scope}] ${e.detail}`)
-      process.exit(2)
-    }
+    // 先算出「本次将写入的」新 doc（keys/meta/targetMaxCount），再对**新 doc** 判治理错误——
+    // 这样「存量已修 → 键掉出 → meta 剪掉 → 干净」的合法清理不会被旧 doc 上那条过期 meta 自我死锁
+    // （独立复核逮到的死锁）；而「仍没修 → 键还在 → 仍过期」照样被拒（fail-closed 不破）。
     const keys = []
     for (const r of results) for (const v of r.violations) keys.push(keyOf(r.id, v))
     keys.sort()
-    // 保留既有 meta（仅留仍在 keys 里的，剪掉悬空）与 targetMaxCount（这两个字段旧写法会被丢弃 → bug）。
+    // 保留既有 meta（仅留仍在 keys 里的，剪掉悬空）——旧写法会整丢 meta/targetMaxCount → bug。
     const keySet = new Set(keys)
     const prevMeta = baselineDoc && baselineDoc.meta && typeof baselineDoc.meta === 'object' ? baselineDoc.meta : null
     let meta = null
@@ -186,11 +203,17 @@ function main() {
       meta = {}
       for (const [k, v] of Object.entries(prevMeta)) if (keySet.has(k)) meta[k] = v
     }
-    const targetMaxCount = baselineDoc && Number.isInteger(baselineDoc.targetMaxCount) ? baselineDoc.targetMaxCount : null
-    // fail-closed：新存量条数不得越过天花板（防 --update-baseline 悄悄把新增违规吸进基线越顶）。
-    if (targetMaxCount !== null && keys.length > targetMaxCount) {
-      console.error(`✗ 新 baseline ${keys.length} 条 > targetMaxCount ${targetMaxCount}：棘轮只减不增。`)
-      console.error('  若确需抬高天花板，请在本次 PR 里显式改 baseline.json 的 targetMaxCount 并说明理由（勿让基线悄悄膨胀）。')
+    // targetMaxCount：沿用既有；缺失则**自动播种**为当前条数（每份新基线天生带天花板，堵「删字段=悄悄取消封顶」的旁路口）。
+    const targetMaxCount = baselineDoc && Number.isInteger(baselineDoc.targetMaxCount) ? baselineDoc.targetMaxCount : keys.length
+
+    const newDoc = { keys, meta: meta || undefined, targetMaxCount }
+    // fail-closed 拒绝：①白名单结构错误(A)（基线更新碰不到白名单、改不掉）；②**新 doc** 仍有 baseline 治理错误(B)
+    //   （含越天花板 over-cap：新条数 > targetMaxCount → checkBaselineCap 判红 → 这里拒）。
+    const refuse = [...whitelistGovErrors, ...baselineGovErrorsOf(newDoc)]
+    if (refuse.length) {
+      console.error('✗ 治理层 fail-closed 错误未清，禁止 --update-baseline（会把结构违规洗白成存量）。先清：')
+      for (const e of refuse) console.error(`    · [${e.scope}] ${e.detail}`)
+      console.error('  （越天花板？修掉存量降到 targetMaxCount 下，或在本次 PR 里显式抬高 baseline.json 的 targetMaxCount 并说明理由。）')
       process.exit(2)
     }
     const out = {
@@ -199,10 +222,10 @@ function main() {
       count: keys.length,
       keys,
     }
-    if (targetMaxCount !== null) out.targetMaxCount = targetMaxCount
+    out.targetMaxCount = targetMaxCount // 总是写（含自动播种）——每份基线都带天花板
     if (meta && Object.keys(meta).length) out.meta = meta
     fs.writeFileSync(BASELINE_PATH, JSON.stringify(out, null, 2) + '\n')
-    console.log(`\n✎ 已写 baseline：${keys.length} 条存量键${meta ? ` · 保留 ${Object.keys(meta).length} 条 meta 死线` : ''} → ${path.relative(process.cwd(), BASELINE_PATH)}`)
+    console.log(`\n✎ 已写 baseline：${keys.length} 条存量键${meta && Object.keys(meta).length ? ` · 保留 ${Object.keys(meta).length} 条 meta 死线` : ''} · 天花板 ${targetMaxCount} → ${path.relative(process.cwd(), BASELINE_PATH)}`)
     process.exit(0)
   }
 
