@@ -29,6 +29,8 @@ const path = require('path')
 const c1 = require('./check-frontend-to-backend.cjs')
 const c2 = require('./check-backend-consumers.cjs')
 const c3 = require('./check-config-engine.cjs')
+const c4 = require('./check-route-nav.cjs')
+const c5authz = require('./check-authz-combinators.cjs') // C5 授权组合子（独立轴·与 C1–C4 功能轴正交）
 const BG = require('./lib/baseline-governance.cjs')
 
 // baseline 路径：默认同目录 baseline.json；`BD_BASELINE_PATH` 可覆盖（仅 selftest 注入 fixture 用，
@@ -113,6 +115,15 @@ function printC3(r, isNew) {
   }
 }
 
+function printC4(r) {
+  console.log(`\n【${r.id}】${r.title} — ${r.intent}`)
+  console.log(`  App 路由 ${r.stats.appRoutes} · 注册 ${r.stats.registered}（active ${r.stats.active} · headless ${r.stats.headless} · deprecated ${r.stats.deprecated}）· 结构违规 ${r.errors.length}`)
+  if (r.errors.length) {
+    console.log('  结构违规（fail-closed·无条件红·无 baseline 收编）：')
+    for (const e of r.errors) console.log(`    ⛔ [${e.type}] ${e.detail}`)
+  }
+}
+
 function main() {
   const args = parseArgs(process.argv)
   const run = (id) => !args.only || args.only.includes(id)
@@ -160,6 +171,13 @@ function main() {
     }
   }
 
+  // ── C4 路由↔导航注册表（结构 fail-closed·无 baseline 棘轮·任一违规即无条件红）──
+  //    与 C2 白名单(A)/baseline(B) 治理同类：不受 --block/--only/baseline 影响，跑一次拿结构违规。
+  //    C4 无存量债（迁移时全部路由已声明干净），故不进 delta，纯结构校验即可。
+  const c4res = c4.run({ today })
+  printC4(c4res)
+  const routeNavGovErrors = c4res.errors.map((e) => ({ scope: e.scope, detail: e.detail }))
+
   // ── Fail-closed 治理层（公理一）：白名单结构完整性(A) + baseline 死线/天花板/被依赖者(B) ──
   // 这些是「治理完整性」错误，独立于 --block/baseline delta。任一非空 → 无条件红（exit 1），
   // 不受 --only 豁免、不可 --update-baseline 洗白。缺省方向=红（忘填/过期/膨胀=疏漏顶回作者）。
@@ -185,7 +203,19 @@ function main() {
     return out
   }
 
-  const govErrors = [...whitelistGovErrors, ...baselineGovErrorsOf(baselineDoc)]
+  // C5 授权组合子：路由 handler 里的「野生授权逻辑」（裸读请求用户 .role/.roles / 裸写 SoD 判决）——
+  //   零容忍、无 baseline 宽容（授权缺口不是可攒的存量债）。纯静态扫描、幂等、无副作用；与 --block/--only/baseline
+  //   无关，任一违规无条件红（fail-closed 公理一）。独立轴，与 C1–C4「功能先于消费者」正交。
+  const authzRes = c5authz.run()
+  const authzGovErrors = authzRes.violations.map((v) => ({
+    scope: '授权组合子(C5)',
+    detail: `${v.file}:${v.line} ${v.rule === 'role-access'
+      ? '裸读请求用户 .role/.roles（授权须走组合子 requireAdmin/isAdmin/requireAnyRole/requirePermission）'
+      : '裸写 SELF_REVIEW_FORBIDDEN 判决（SoD 须走 assertNotSelfReview 组合子）'} — ${v.snippet}`,
+  }))
+
+  // C4（路由↔导航注册表）+ C5（授权组合子）都是无 baseline 的结构 fail-closed 轴，一并汇入 govErrors。
+  const govErrors = [...whitelistGovErrors, ...baselineGovErrorsOf(baselineDoc), ...routeNavGovErrors, ...authzGovErrors]
 
   // 更新 baseline（收紧棘轮）
   if (args.updateBaseline) {
@@ -208,8 +238,10 @@ function main() {
 
     const newDoc = { keys, meta: meta || undefined, targetMaxCount }
     // fail-closed 拒绝：①白名单结构错误(A)（基线更新碰不到白名单、改不掉）；②**新 doc** 仍有 baseline 治理错误(B)
-    //   （含越天花板 over-cap：新条数 > targetMaxCount → checkBaselineCap 判红 → 这里拒）。
-    const refuse = [...whitelistGovErrors, ...baselineGovErrorsOf(newDoc)]
+    //   （含越天花板 over-cap：新条数 > targetMaxCount → checkBaselineCap 判红 → 这里拒）；
+    //   ③C4 路由注册表 + ④C5 授权组合子结构错误（均无 baseline·不可洗白，但红时 --update-baseline 也须拒 exit 2、
+    //     与 A/B 一致——否则 dev 本地只跑 --update-baseline 会拿到误导性 exit 0 而 C4/C5 仍红。独立复核逮到）。
+    const refuse = [...whitelistGovErrors, ...baselineGovErrorsOf(newDoc), ...routeNavGovErrors, ...authzGovErrors]
     if (refuse.length) {
       console.error('✗ 治理层 fail-closed 错误未清，禁止 --update-baseline（会把结构违规洗白成存量）。先清：')
       for (const e of refuse) console.error(`    · [${e.scope}] ${e.detail}`)
@@ -244,6 +276,7 @@ function main() {
     console.log(`  [${mode}] ${r.id} ${r.title}: 存量 ${pad(total)} · 新增 ${pad(nw)}  ${flag}`)
     if (willBlock && nw > 0) blockedFail = true
   }
+  console.log(`  [GOV  ] C4 ${c4res.title}: 结构违规 ${pad(c4res.errors.length)}  ${c4res.errors.length ? '❌ FAIL（无条件红·无 baseline·headless≤' + c4.MAX_HEADLESS_ROUTES + '）' : '✅ pass'}`)
   console.log('─'.repeat(72))
   if (args.block.size === 0) {
     console.log(`  模式：全部 warn（不拦合并）${baselineNote}。逐条稳定后加 --block=<ids> 切棘轮拦截（只拦新增）。`)
@@ -259,6 +292,8 @@ function main() {
     console.log('    · baseline死线(B.1) 到期 → 处置该存量（改前端死调用/补真只读路由）后 --update-baseline 清出，或经 PM 拍板在 baseline.json 里续期。')
     console.log('    · baseline天花板(B.1) → 修掉存量降到 targetMaxCount 下，或经说明抬高天花板。')
     console.log('    · 被依赖者(B.2) → 该端点已被消费、非死物 → node scripts/build-discipline/run-all.cjs --update-baseline 把它清出 C2 死物名单。')
+    console.log('    · 路由注册表(C4) → 新页在 前端代码/src/lib/route-registry.ts 登记（active+navGroup / 或 headless 带 owner+due+reason），或删掉 App.tsx 里的死路由。见 check-route-nav.cjs。')
+    console.log('    · 授权组合子(C5) → 把 handler 里的角色/SoD 判定提升进 middleware/authz-combinators.ts 的具名组合子（requireAdmin/isAdmin/assertNotSelfReview 等）；路由层不得裸读 req.user.role/.roles、不得裸写 SELF_REVIEW_FORBIDDEN。')
   }
   if (blockedFail) {
     console.log('\n  ✗ 有新增违规被拦。修法：')
@@ -275,7 +310,8 @@ function main() {
       new: r._new, fixed: r._fixed, violations: r.violations,
       lowConfidence: r.lowConfidence, exempt: r.exempt, stats: r.stats,
     }))
-    console.log(JSON.stringify({ results: slim, block: [...args.block], blockedFail, govErrors }, null, 2))
+    const routeNav = { id: c4res.id, title: c4res.title, errors: c4res.errors, stats: c4res.stats }
+    console.log(JSON.stringify({ results: slim, routeNav, block: [...args.block], blockedFail, govErrors }, null, 2))
   }
 
   process.exit(blockedFail || govErrors.length > 0 ? 1 : 0)

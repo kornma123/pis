@@ -19,6 +19,10 @@ import {
   PORTFOLIO_HEALTH_GATES_VERIFIED,
   REVIVAL_ACCOUNT_CAP,
   REVIVAL_UNMEASURED_SHARE,
+  READINESS_MIN_CLOSED_PERIODS,
+  READINESS_FOUNDATION_GATES,
+  READINESS_PARAM_VERSION,
+  DEFAULT_READINESS_OWNER,
 } from '../src/utils/portfolio-health.js'
 
 describe('CM 引擎常量（改 = 立法）', () => {
@@ -50,11 +54,31 @@ describe('CM 引擎常量（改 = 立法）', () => {
 })
 
 describe('组合体检 / 复活常量（改 = 立法）', () => {
-  it('影子模式：三门 A/B/C 未验收 → GATES_VERIFIED=false（翻 true 需三门落地 + 显式改此测试）', () => {
+  it('影子模式：全就绪谓词未绿 → GATES_VERIFIED=false（现在是 computeReadiness(现实态).ready·非手翻开关）', () => {
     expect(PORTFOLIO_HEALTH_GATES_VERIFIED).toBe(false)
   })
   it('复活双触发常量：可测账户数上限 30 · UNMEASURED 占比线 0.30', () => {
     expect(REVIVAL_ACCOUNT_CAP).toBe(30)
     expect(REVIVAL_UNMEASURED_SHARE).toBe(0.3)
+  })
+})
+
+describe('LEG·就绪谓词政策参数登记（改 = 立法·具名+版本化·专家 Q4/§二/§六.5）', () => {
+  it('就绪最小完整结算周期数 N=3（技术负责人签·系统时序参数）', () => {
+    expect(READINESS_MIN_CLOSED_PERIODS).toBe(3)
+  })
+  it('数据地基门集 = {inventory_conservation, period_key, constant_freeze}（库存守恒/期间键/常量冻结·具名闭合）', () => {
+    expect([...READINESS_FOUNDATION_GATES]).toEqual(['inventory_conservation', 'period_key', 'constant_freeze'])
+  })
+  it('阈值登记版本钉死 = 2026-07-09.a（改任一 READINESS_* 阈值/门集 = 同步 bump）', () => {
+    expect(READINESS_PARAM_VERSION).toBe('2026-07-09.a')
+  })
+  it('「谁签什么」映射钉死（比例原则·denominator=business 不可代签·改 = 立法）', () => {
+    expect(DEFAULT_READINESS_OWNER).toEqual({
+      foundation: 'tech', // 系统时序·技术负责人
+      denominator: 'business', // 碰钱/对外结论认账·业务决策方·不可代签
+      history: 'pm', // 纯日历·具名推进人月度过
+      first_period: 'tech', // 首周期校验·技术
+    })
   })
 })

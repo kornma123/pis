@@ -13,4 +13,9 @@ const MAX_DEADLINE_HORIZON_DAYS = 120
 // 现有 5 条，给 12（>2×）成长余量后封顶；要再放宽须在 PR diff 里显式抬这个数并说明理由。
 const MAX_WHITELIST_ENTRIES = 12
 
-module.exports = { MAX_DEADLINE_HORIZON_DAYS, MAX_WHITELIST_ENTRIES }
+// headless 路由条数上限（check-route-nav.cjs / C4）：headless 是「可 URL 直达但无顶层导航」的
+// 逃生门（孤儿分诊结论=待补入口/合并/退役）。它比老实声明更贵，膨胀 = 孤儿在堆积 → 硬停，逼降级。
+// 现有 7 条（迁移时分诊），给 12 成长余量后封顶；要放宽须在 PR diff 里显式抬这个数并说明理由。
+const MAX_HEADLESS_ROUTES = 12
+
+module.exports = { MAX_DEADLINE_HORIZON_DAYS, MAX_WHITELIST_ENTRIES, MAX_HEADLESS_ROUTES }

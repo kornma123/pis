@@ -8,6 +8,7 @@ import { recordCostException } from '../utils/cost-exceptions.js'
 import { ensurePeriodOpen, getOrCreatePeriod, normalizeMonth, runCostRecalculation, writeAuditLog } from '../utils/cost-runs.js'
 import { buildClosingReadiness } from '../utils/closing-readiness.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { assertNotSelfReview } from '../middleware/authz-combinators.js'
 import { logOperation } from '../utils/operation-logger.js'
 
 const router = Router()
@@ -326,11 +327,8 @@ const pendingAdjustmentCount = (db: any, yearMonth: string) => Number((db.prepar
   WHERE year_month = ? AND status = 'pending'
 `).get(yearMonth) as any)?.total) || 0
 
-const ensureAdjustmentReviewerDifferent = (res: any, row: any, operator: string) => {
-  if (row.submitted_by !== operator) return true
-  error(res, '不能审核自己提交的调整单', 'SELF_REVIEW_FORBIDDEN', 403)
-  return false
-}
+// SoD 自审拦截统一走具名守卫 assertNotSelfReview（见下方两处 approve 端点直接内联调用）——
+// 不再包本地 wrapper：让每个端点各自携带一个注册表符号调用，供下游权限影子矩阵按调用点精确枚举。
 
 const countableAbcCostClause = `
   COALESCE(cost_status, 'costed') NOT IN ('pending_cost', 'cost_exception')
@@ -2536,7 +2534,7 @@ router.post('/adjustments/:id/approve', requireCostWrite, (req, res) => {
     const row = db.prepare('SELECT * FROM abc_cost_adjustments WHERE id = ?').get(req.params.id) as any
     if (!row) { error(res, '调整单不存在', 'NOT_FOUND', 404); return }
     if (row.status !== 'pending') { error(res, '只有待审核调整单可以审核通过', 'INVALID_STATUS', 422); return }
-    if (!ensureAdjustmentReviewerDifferent(res, row, operator)) return
+    if (!assertNotSelfReview(res, { submitterId: row.submitted_by, actorId: operator, message: '不能审核自己提交的调整单' })) return
 
     db.prepare(`
       UPDATE abc_cost_adjustments
@@ -2571,7 +2569,7 @@ router.post('/adjustments/:id/reject', requireCostWrite, (req, res) => {
     const row = db.prepare('SELECT * FROM abc_cost_adjustments WHERE id = ?').get(req.params.id) as any
     if (!row) { error(res, '调整单不存在', 'NOT_FOUND', 404); return }
     if (row.status !== 'pending') { error(res, '只有待审核调整单可以驳回', 'INVALID_STATUS', 422); return }
-    if (!ensureAdjustmentReviewerDifferent(res, row, operator)) return
+    if (!assertNotSelfReview(res, { submitterId: row.submitted_by, actorId: operator, message: '不能审核自己提交的调整单' })) return
 
     db.prepare(`
       UPDATE abc_cost_adjustments
