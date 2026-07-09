@@ -15,6 +15,7 @@ import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { buildHospitalCmByPartner, buildHospitalCmTrend } from '../utils/hospital-cm-service.js'
 import { buildPortfolioHealth, buildComparisonTable, toAccountSummary, PORTFOLIO_HEALTH_GATES_VERIFIED } from '../utils/portfolio-health.js'
+import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：院级贡献毛利(拆分派生)输出自带「口径未认账」水印（LEG-2）
 
 const router = Router()
 const requireCostRead = requirePermission('cost_analysis', 'R')
@@ -36,7 +37,7 @@ router.get('/health', authenticateToken, requireCostRead, (req, res) => {
     const hospitals = buildHospitalCmByPartner(getDatabase(), { serviceMonth })
     const summaries = hospitals.map((h) => toAccountSummary(h))
     const health = buildPortfolioHealth(summaries, { fixedPool })
-    success(res, { ...health, serviceMonth: serviceMonth ?? null, shadowNote, fixedPoolProvided: fixedPool > 0 }, '组合体检（第 1 层·只看趋势）')
+    success(res, { ...health, serviceMonth: serviceMonth ?? null, shadowNote, fixedPoolProvided: fixedPool > 0, caliberRatification: splitCaliberRatification() }, '组合体检（第 1 层·只看趋势）')
   } catch (e: any) {
     error(res, e.message)
   }
@@ -55,7 +56,7 @@ router.get('/', authenticateToken, requireCostRead, (req, res) => {
     // 附院级明细（状态/口径/三诚实字段），对齐 comparison row 顺序
     const byId = new Map(hospitals.map((h) => [h.partnerId, h]))
     const enriched = rows.map((r) => ({ ...r, detail: byId.get(r.partnerId) ?? null }))
-    successList(res, enriched, 1, enriched.length || 1, enriched.length)
+    successList(res, enriched, 1, enriched.length || 1, enriched.length, { caliberRatification: splitCaliberRatification() })
   } catch (e: any) {
     error(res, e.message)
   }
@@ -66,6 +67,7 @@ router.get('/trend', authenticateToken, requireCostRead, (req, res) => {
   try {
     const { partnerId } = req.query as any
     if (!partnerId) { error(res, 'partnerId 必填', 'INVALID_PARAMETER', 400); return }
+    // /trend 返回裸时序数组（形状不改·防破坏消费者）；水印在同页 overview/`/` 响应上已带，与趋势图同视线。
     success(res, buildHospitalCmTrend(getDatabase(), partnerId))
   } catch (e: any) {
     error(res, e.message)

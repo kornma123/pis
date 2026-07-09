@@ -1733,3 +1733,42 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 测试文件 + 本 session-log）；未起后端·无 dev DB 污染。前端单测非 CI required 门（仅后端 vitest + gate required）。**未提交/未开 PR**（用户未要求）。参考记忆 `coreone-worktree-tests-and-codex-resilience`。
 
 *更新时间：2026-07-08*
+
+## 本次会话完成的工作（第4件·止损执法点：拆分口径未认账水印 + 导出声明，2026-07-09）
+
+**线/工作树**：worktree `silly-carson-3e64a8`（分支 `claude/silly-carson-3e64a8`·off origin/master `94c6b7db`，启动 `git fetch` 确认未落后）。任务 =「后续四项」**第4件工程侧止损执法点**（LEG-2/公理一）——业务侧「暂停新增对外使用 + 取证 + 认账签字」**不在本次**（PM/业务的活）。
+
+**背景**：政策分摊常量 `SPLIT_DIAG_FEE=105`（`statement-revenue.ts`）派生的「实验室收入/院级毛利/cmRate/grossMargin/confirmedLabRevenue」结论对外**可能高估约 2 倍**、且未经业务认账。要给「止损」提供**执法机制**（非只通知）：消费该结论的对外输出自带「口径未认账」水印 + 导出携带口径声明列。
+
+**交付（三件·全部只加展示/元数据·不动钱的计算）**：
+1. 新增 `后端代码/server/src/utils/caliber-ratification.ts`：`splitCaliberRatification()`（**只读占位** `SPLIT_CALIBER_RATIFICATION='UNRATIFIED'`·**无状态机/无签字流程**·`basisVersion` 复用既有 `SPLIT_FORMULA_VERSION` 不另立）+ `buildExportDeclaration`/`decorateExportRows`（导出声明六列 `_sourceTag/_basisNote/_basisVersion/_exportedAt/_periodRange/_ratified`·逐行随行剥不掉）。
+2. 水印挂到**每个消费拆分结论的对外输出响应**（附加字段 `caliberRatification`·additive）：statement-import(/preview,/commit)、hospital-pnl(/health,/)、partner-pnl(/,/cases)、account-reconcile(/overview,/workbench,/hospital-months/:id/complete)。**精度**：裸时序数组 `/trend` 形状不改（防破坏消费者·水印在同页 overview 已带、与趋势图同视线）；非消费端点(cross-partner-audit)**不误挂**。
+3. 前端 `HospitalPnLDashboard.tsx`（线上旧盈利视图·承载高估数字）在实验室收入/毛利数字**同视线**渲染水印横幅 + 院级盈亏表头徽标·**fail-closed**（仅后端明确 `ratified===true` 才免；字段缺席=仍显；认账后自动摘牌无需改前端）。
+
+**诚实天花板（§四.4）**：全仓核实**当前无任何导出通道消费拆分结论**——前端 `cost/`·`report/` 导出 + 后端 `abc-cost-export` 都是 **ABC 全成本口径**，账实核对页「导出」是未接线占位；`CostTrend` 的 `marginRate=profit/fee` 是 ABC 成本利润率非拆分（独立三查确认）→ `decorateExportRows` 作**执法就绪机制**交付、`docs/COREONE-拆分口径止损执法点-2026-07-09.md` 写明覆盖边界（启用前旧导出无法枚举/追签）。
+
+**验证**：后端 tsc 绿·全量 vitest **113 files/973 tests 全绿**（新增 `caliber-ratification.test.ts` 11 + `bv-split-caliber-watermark.test.ts` 8）；前端 tsc+build 绿·`HospitalPnLDashboard.watermark.test.tsx` 3 + 既有 stopgap 5 绿；**golden ¥13,152/¥27,870 零回归**（additive 字段·原数字并存不变）。
+**独立复核**：Workflow 5 镜头对抗面板（`wf_e82ba212`·boundary/watermark-completeness/golden-safety/export-honesty/frontend + 逐条 adversarial refute·10 agent high）→ **0 CONFIRMED**（synthesis 明确 empty-not-by-omission·ship as-is）。codex 异构轴两次 stdin 断流无输出 → 按 `codex-cli-usage.md` 规则由 Workflow 面板独立完成机制5 第二视角，不叠并发 codex。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 我的 4 路由 + 3 前端 + 1 util + 3 测试 + 1 doc + session-log）；测试用隔离 DB·tracked `coreone.db` 零污染。PR #105（按 pr-governance·独立非栈·vitest required 绿即可合）。
+
+## 本次会话完成的工作（旧盈利视图 `/hospital-pnl` 真实使用审计 → 纯只读文档，2026-07-09）
+
+**线/工作树**：worktree `cranky-panini-25f1fe`（分支 `claude/cranky-panini-25f1fe`·off origin/master，启动 `git fetch` 确认未落后）。任务=替换旧盈利视图（`前端代码/src/pages/hospital-pnl/HospitalPnLDashboard.tsx`，路由 `/hospital-pnl`）之前先审计真实使用，产出需求清单。**纯只读·零应用代码改动·仅新增一份文档 `docs/COREONE-旧盈利视图使用审计-2026-07-09.md`·golden ¥13,152/¥27,870 天然零回归。**
+
+**核心结论（最重要一条）**：该只读视图的真实使用**当前结构性无法测量**——三重缺口：① `operation_logs` 只记写（`middleware/audit-log.ts:37/296` `MUTATING={POST,PUT,PATCH,DELETE}`，GET 早返回天然不记）；② 前端零埋点（约 290 src 文件 grep 遥测关键字 0 命中）；③ 现有 `operation_logs`=13 行 seed 样例（同一时刻批量插入、0 pnl 命中）。故"谁访问/点了什么/筛了什么/导出了什么"四问**一条日志都答不出**，"有人真在用 vs 没人点"**无法区分**。唯一诚实边角=`app.ts:66-69` 易失 stdout `console.log(method, req.path)`（无用户/剥 query/无落盘 morgan/access.log→不改变结论）。
+
+**主要发现**：
+- 旧视图=纯只读（唯一消费 `partnerPnlApi`→GET `/partner-pnl`·`/cases`·`/trend`）、**零导出按钮**（组件 grep 0 命中）、nav 可达（侧栏+向导链接+深链 3 入口）。
+- 潜在人群=运行库 12 活跃账号仅 **4 人**（admin/finance/2 pathologist）持 `cost_analysis:R`；procurement 源码授 R 但 live 缺、pathologist live 有但源码矩阵不授（RBAC live≠SEED_MATRIX 漂移，见记忆 `coreone-rbac-live-vs-seed-matrix`）。
+- 专家三处高风险的真实形态：① 下钻=仅页内单院趋势图（无明细页/历史链接；但账户→病例下钻数据 `GET /cases` 已在、旧前端只取 `onlyFlagged` 子集）；② 导出=旧视图本就没有；③ 期间=仅单月切片+单院时序，**无跨期并列**（跨期对比属"新增能力"非"保留"）。
+- 导出治理死角=真实但**当前未激活**（低—中）：旧视图无导出、兄弟成本页导出维度仅 project/BOM/month 无 partner/hospital→无法从任一页导出重建医院排名；唯一残留=肉眼抄屏。两个未来触发点需设防（给 `/hospital-pnl` 加导出按钮 / 给 ABC profitability 加 partner 维度）。
+- **重要旁证**：后端 `hospital-pnl-v1.1.ts`（P0 院级贡献毛利·标准成本·影子模式·`app.ts:136` 挂载）**已建好但无任何前端消费者**（旧页实际打的是 `partner-pnl`·ADR-003 并存）——典型"功能先于消费者被建"（build-discipline C2 形态）。新视图落点更像"给已存在影子接口接线+退役旧 partner-pnl 前端"，顺序摊给 PM 拍。
+
+**独立复核（质疑关）**：Workflow 6-agent 并行取证（能力枚举/日志埋点/RBAC人群/导出死角）+ 2-agent 对抗 skeptic 复核两条承重结论（operation_logs 测不到使用 + 组件零导出）均 `refuted=false`；再 3-agent 成品文档对抗质疑关（overclaim/事实/建议 三镜头）全判"可定稿"，逐条订正 4 处（技术员分母混用 18→8 活跃/261→260 行/291→290 文件/§十遥测选项二补"后端 GET 审计反转既有『GET 不记』原则须 PM 破例"张力注）。⚠️ 中途遇一次网络故障致 Workflow 中断，`resumeFromRunId` 复跑（缓存命中日志取证 agent）恢复。
+
+**治理**：全程只读 `sqlite3 SELECT`·未起后端·**dev DB 未污染**（`git status` 确认 `coreone.db` clean）；**禁 `git add -A`**·只显式 add 本文档 + 本 session-log。纯 docs·vitest required 绿即可合·按 pr-governance 开 PR（合并后不回改看板状态·真相以 `gh pr list` 为准）。
+
+**⚠️ PM 权威回填（同日晚，PR #106 合并后）**：PM 定案「**功能根本没上线，直接替换就行了**」——旧盈利视图 `/hospital-pnl` **从未上线到生产**。→ 本审计一切"替换前顾虑"（补读侧遥测/导出治理死角/下钻跨期保留取舍）对本视图**全 moot**：无真实用户、无使用迁移，直接按新口径（P0 院级贡献毛利·影子后端 `hospital-pnl-v1.1.ts` 已建）替掉旧页 + 清 3 入口即可。已入记忆 `coreone-hospital-pnl-never-launched`；已给审计文档顶部补 PM 结论 banner（后续 docs PR）。**过程教训**：派"替换 X 前审计使用"任务先确认 X 是否真在产（本次对从未上线功能跑了完整使用审计，结论没错但可收敛为直接替换）。
+
+*更新时间：2026-07-09*
