@@ -38,13 +38,13 @@
 |---|---|---|---|
 | B-1 | 进销存 wave-2 **主数据（D）** 口径 | wave-1 四线已落 master；wave-2 的主数据模块要 PM 定口径再开工 | ☐ |
 | B-2 | 进销存 wave-2 **BOM（F）** 口径 | 同上，BOM 缺 4 类维度待 PM 定 | ☐ |
-| B-3 | ABC **6 个幽灵报表接口**（reports.ts 恒 404）：修还是删？ | `前端代码/src/api/reports.ts` 包 10 个 api，但 `reports-v1.1.ts` 只定义 4 个真路由（cost-by-project/material/supplier/trend）→ **6 个恒 404**：`personnel-efficiency`/`cost-monthly-comparison`/`full-cost-by-project`/`cost-structure`/`cost-variance`/`cost-by-project-group`。**其中 2 个被 live 页真调用**（`personnel-efficiency`←PersonnelEfficiency.tsx、`cost-monthly-comparison`←CostDashboard.tsx，恒打 404），另 4 个是死 wrapper（无 live 页消费）。⚠️`/reports/cost-variance`(幽灵) ≠ `/abc/variance-analysis`(真·项F 已诚实降级)，勿混。取证=前端 network 恒 404、从未返回真数据 = 无真人被喂错数。二选一（PM 拍）：①删前端（页/路由/api）②补后端只读聚合路由。（I-2/I-4/I-5 方向 PM 已拍、属实现 backlog，不在此列） | ☐ |
+| B-4 | **两个 admin 页的幽灵按钮**（导出日志 + 重置密码·恒 404）：修还是删？ | 与已办 B-3 同类（**半成品**：前端建了、后端从没建）。① **导出日志**：`系统/操作日志`页有真「导出日志」按钮→`LogExportModal`（日期区间+xlsx/csv 切换+4 个内容勾选）→`GET /logs/export`，但 `logs-v1.1.ts` 无 `/export` 路由→授权 admin 一点恒 404。② **重置密码**：`系统/用户`页每行 + 编辑弹窗两处「重置密码」按钮→`POST /users/:id/reset-password`，但 `users-v1.1.ts` 无此路由→admin 确认后恒 404（非授权用户是 mount 守卫 403）。**均非死代码**（真按钮、真页面、可达）→ 故意**不在「纯死代码删除批」硬删**（见「废弃功能删除第一批」分诊：活页面坏按钮=产品决策非机械删）。二选一（逐项 PM 拍）：①**建后端**只读日志导出 / 密码重置端点（这俩是很常规、多半想要的 admin 功能，推荐倾向①）②删前端按钮。⚠️两者 e2e 都是"点了不断言结果"的门面测试（USER-RESET-01/02 空断言、logs 用例仅验按钮显示）→ 恒 404 从没被 CI 逮到；PM 选①/②后应顺手把门面测试改成真断言。 | ☐ |
 
 ---
 
 ## 已拍存档（拍完移到这里，留决定 + 日期）
 
-- （暂无——本队列 2026-07-06 新建。历史已拍决策见 `pr-governance.md` 看板各 PR 行 + 成本域 ADR/收官页。）
+- **B-3**（ABC 6 个幽灵报表接口·恒 404·修还是删）→ **已办 2026-07-09（PR #103）**：PM 拍**①删前端**。已删 `personnel-efficiency` + `cost-monthly-comparison` 两个 live 页调用 + 4 个死 wrapper（`full-cost-by-project`/`cost-structure`/`cost-variance`/`cost-by-project-group`）；`reports.ts` 现仅剩 4 个命中真路由的方法。构建纪律闸 baseline 6 条 `C1|/reports/*` 键随之清出。（`/reports/cost-variance` 幽灵 ≠ `/abc/variance-analysis` 真页·后者 #99 已诚实降级，两者本就不同物。）
 
 ---
 

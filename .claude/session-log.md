@@ -1857,3 +1857,24 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 路由 + 1 测试 + 本 session-log）；测试用 `:memory:` DB·**dev DB 未污染**（git status 确认 clean）。→ 按 pr-governance 开独立 PR（vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板状态·真相以 `gh pr list` 为准）。参考记忆 `coreone-non-p0-domain-audit`、`coreone-rbac-live-vs-seed-matrix`、`coreone-worktree-tests-and-codex-resilience`。
 
 *更新时间：2026-07-09*
+
+## 本次会话完成的工作（废弃功能删除·第一批：纯死代码/幽灵·应用专家分诊框架，2026-07-09）
+
+**线/工作树**：worktree `affectionate-chebyshev-a48c11`（off origin/master·启动 `git fetch` 确认未落后）。task=按专家分诊框架清确认的死代码/幽灵（恒404报表页/没人调的死方法/重复路由/无码幽灵路由），高置信才硬删、模糊只标废弃、有数据资产则退役页面留数据；每项独立小 PR。**前置已核实**：路由注册表 Phase1（**PR#107 已合**）+ 授权组合子（**PR#109 已合**）+ 无 open PR → 可开工不撞车。
+
+**核心：候选清单在 PR#103（同日已合）后大幅缩水——「别照名单盲删·逐项现场复核」是本 task 最大价值**：
+- 候选 #1 幽灵报表页 / #2 `reports.ts` 死方法 / #4 forecast·equipment-efficiency → **PR#103 及更早 PR 已全清**（`reports.ts` 现仅 4 个命中真路由的方法·forecast/equipment grep 全仓为空）→ **本批无残留可删**。
+- 候选 #3 `materials.ts` 重复 `/next-code`（L56 与 L121 字节相同·L121 注册在 `/:id` 后不可达=死代码）→ **硬删（PR A #113·后端 only）**。
+- 候选 #5a `/boms/:/cost-preview`：`CostPreviewModal` 全仓从未挂载=孤儿组件 + 后端无此路由 → 整条链死代码 → **硬删（PR B #115·前端 only）**。
+- 候选 #5b `/logs/export` + #5c `/users/:/reset-password`：**改判 PM**——不是死代码，而是**活 admin 页上的坏按钮**（导出日志按钮 / 重置密码动作真渲染、真可点、后端从没建→授权 admin 一点恒 404）=半成品功能，产品决策非机械删 → 登记 `docs/PM待拍板.md` **B-4**（推荐倾向建后端·因这俩是常规想要的 admin 功能）。
+- 顺带：`docs/PM待拍板.md` **B-3**（6 幽灵报表接口·修还是删）**实测已被 PR#103 办结**（PM 选①删前端）→ 移入已拍存档。
+
+**PR A（#113 · `fix/materials-duplicate-next-code`）**：删 materials.ts 第二个不可达 `/next-code`（10 行·纯死代码）。后端 tsc 绿·**vitest 116 files/1041 tests 全绿·golden ¥13,152/¥27,870 零回归**·gate+selftest 绿（该路由被消费·C1/C2 存量计数不变）。
+
+**PR B（#115 · `chore/remove-orphan-cost-preview-modal`）**：删 `CostPreviewModal.tsx`（孤儿）+ `bomApi.getCostPreview`（唯一调用者是该孤儿）。**关键：对抗验证面板逮到必须扩容作用域**——`selftest.cjs` 扫真实仓库并硬断言 `boms cost-preview` 幽灵存在 + `C1 violations===3`（`gate` 是 master required check）→ 只删 3 处会把 required gate 弄红拦所有 PR。故同步：`selftest.cjs` 把 boms 断言迁到「已清理·防再引入」反向守卫 + 计数 3→2；`--update-baseline` 掉 boms C1 键（count 38→37）+ 手动收紧 `targetMaxCount` 38→37（棘轮只减不增·同 PR#103 精神）。前端 tsc+build 绿·**后端零改动 → golden 继承 master 绿**·gate+selftest 绿（C1 存量 2）·frontend vitest 仅 2 个本地负时区伪失败（`utils.test.ts` `new Date('2024-06-01')`·`TZ=UTC` 下 22/22 全绿·CI 天然绿·与本改动无关·非我 diff）。
+
+**独立复核（质疑关·机制5 第二视角）**：Workflow 9-agent 对抗验证面板（`wf_b7edacab`·5 verifier + 2 硬删项各 2 skeptic 证真无消费者）——materials both skeptic refuted=false（字节 diff+注册顺序证 L121 不可达）；cost-preview 死代码确认（skepticRefuted=false）**但逮到 selftest.cjs required-CI 地雷**（若无此步会 red 拦合并）；logs/reset 双 skeptic 确认活按钮=改判 PM 正确；扫尾确认 #1/#2/#4 已办 + 附带发现 3 个未被调用的 `reportsApi` wrapper（over live 路由·DRY cruft·非 404 幽灵·**不在纯死代码批**·留作日后 DRY 清理）。
+
+**治理**：两独立非栈 PR·off origin/master·**全程禁 `git add -A`**（只显式 add 各自源文件 + 本 session-log + PM待拍板 governance 捎带 PR B）·**dev DB 未污染**（vitest 后 `git checkout` 复原确认 clean）·symlink 主仓 node_modules（untracked·不 add）。vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板/本 log 状态·真相以 `gh pr list` 为准。参考记忆 `coreone-build-discipline-gate`、`coreone-feature-keep-cut-inventory`、`coreone-worktree-tests-and-codex-resilience`。
+
+*更新时间：2026-07-09*

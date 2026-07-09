@@ -1,9 +1,8 @@
 {
   "_doc": "构建纪律闸 baseline（棘轮基线）：当前已接受的存量违规键集合。--block 只对不在此集合里的「新增」判红。修掉存量后 --update-baseline 收紧，只减不增。meta=per-entry 死线兑现(B.1/B.3)；targetMaxCount=净条数天花板(B.1)。见 lib/baseline-governance.cjs。",
   "generated": "运行 --update-baseline 生成（日期见 git 提交）",
-  "count": 38,
+  "count": 37,
   "keys": [
-    "C1|GET|/boms/:/cost-preview",
     "C1|GET|/logs/export",
     "C1|POST|/users/:/reset-password",
     "C2|DELETE|/antibody-cost/antibodies/:id",
@@ -42,5 +41,5 @@
     "C3|indirect_cost_allocations.allocation_base_value",
     "C3|indirect_cost_centers.allocation_base"
   ],
-  "targetMaxCount": 38
+  "targetMaxCount": 37
 }
