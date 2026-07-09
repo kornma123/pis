@@ -51,14 +51,41 @@ node scripts/build-discipline/selftest.cjs
 
 无 `baseline.json` 时 **fail-closed**：全部计为新增（逼你先生成基线再谈 block，防基线丢失时静默放行）。
 
+## ★ 白名单 / baseline fail-closed（旁路口自堵·公理一）★
+
+> 背景（P-5/P-6）：闸有两个「豁免旁路口」——C2 白名单（孵化名单）与 baseline（存量赦免簿）。它们过去
+> **fail-open**（自己犯了闸要治的病）：`wl.deadline && wl.deadline < today` 对**缺 deadline** 的条目短路成
+> 「永不过期=永久放行」；白名单/baseline 都**无条数上限**、baseline 存量**无死线无负责人=无限期赦免**。
+> 现按 **fail-closed** 缺省方向重做：**忘填/过期/膨胀 = 红**（把疏漏顶回作者，绝不让「临时」沉淀成永久债）。
+
+这些是**治理完整性**违规，`run-all` 对其**无条件红**（exit 1）——**不受 `--block`/baseline delta 影响、不受 `--only` 豁免、不可 `--update-baseline` 洗白**。缺省方向即安全底线。
+
+**A · C2 白名单三条**（`check-backend-consumers.cjs` `validateWhitelist`）：
+1. **缺 `deadline` = 红**（缺省方向反转：忘填=已过期，而非永不过期放行）；坏格式（非 `YYYY-MM-DD`）亦红。
+2. **`deadline` ≤ `today + 120 天`**（`MAX_DEADLINE_HORIZON_DAYS`）：超上限=红（防填 2099 变相永久豁免）。存量真实条目坐落 today+~90 天，120 给足 grandfather 余量、对 2099 仍决定性拦截。
+3. **白名单条数 ≤ 12**（`MAX_WHITELIST_ENTRIES`）：超上限=红（防孵化名单膨胀成万年赦免簿）。
+   - 结构无效的条目**不豁免其覆盖端点**（旁路口堵上）：该端点直接进 C2 违规。
+
+**B · baseline 治理三条**（`lib/baseline-governance.cjs`）：
+1. **per-entry 死线兑现**（`baseline.meta[key]={owner,deadline,note}`）：给「害人型」存量挂负责人+死线，**过期未处置=红**（催：改前端死调用/补真只读路由后 `--update-baseline` 清出，或经 PM 拍板续期）。非强制全员挂——只给需要现在就动的。
+2. **净条数天花板**（`baseline.targetMaxCount`）：封顶存量条数，**超顶=红**；**非空 baseline 缺 `targetMaxCount` 本身也=红**（fail-closed：堵「删掉这行=悄悄取消封顶」的旁路口；`--update-baseline` 会给每份新基线自动播种一个天花板）。`--update-baseline` 也不许越顶吸入新增。抬高天花板须在 PR diff 里显式改+说明理由。
+3. **被依赖者禁入死物名单**：某 `C2|` baseline 键对应端点**现被消费**（活跃业务依赖）→ 红（被依赖=非死物，不许赖在「无消费者」死物豁免簿里；修法=`--update-baseline` 自然清出）。
+
+**不受 `--only` 影响**：白名单(A) 与 B.2 消费集校验会**无条件跑一次 C2** 取治理数据（即使 `--only` 把 C2 排除），`--update-baseline` 更禁与 `--only` 同用——否则 `--only=C1` 会静默跳过校验/用局部快照截断整份基线。`--update-baseline` 的拒绝判定用**将写入的新 doc** 复算（「存量已修→键掉出→干净」的合法清理不会被旧 doc 的过期 meta 自我死锁）。
+
+**已挂死线的害人型存量**（B.1/B.3）：`C1|GET|/reports/personnel-efficiency`、`C1|GET|/reports/cost-monthly-comparison`——前端 `前端代码/src/api/reports.ts` 仍 live 调、后端恒 404、真人被喂 404。死线 `2026-08-07`：到期仍没修 → 闸红，逼处置（改前端或补只读路由；均属业务代码，另立 task/PR）。
+> ⚠️ **爆炸半径（必须知情）**：`gate` 是 master **required check** 且 PR 侧无 `paths-ignore`，故该死线到期后闸红会**拦截所有到 master 的 PR**（含与报表无关者），直到有人 ①修根因（改 `reports.ts`/补只读路由）并 `--update-baseline` 清出，或 ②经 PM 拍板把 `baseline.json` 里这两条 `meta.deadline` 显式改后（可见 diff）。这是**有意的强制函数**（fail-closed），非 bug——把「真人被喂 404」的债顶到有人处置为止。
+
 ## 文件
 
 - `lib/registry.cjs` — 共享解析层（app 挂载 / router 端点 / 前端调用[request/axios/fetch/fetch-var 回溯] / 路径归一 / 匹配）。
-- `check-frontend-to-backend.cjs`（C1）/ `check-backend-consumers.cjs`（C2）/ `check-config-engine.cjs`（C3）。
-- `run-all.cjs` — 统一入口（`--only` / `--block` / `--json` / `--update-baseline`）。
-- `selftest.cjs` — 工具不变量自测（22 条已核实断言，防解析器静默漂）。
-- `consumer-whitelist.json` — C2 白名单（**有名有期的孵化**）。
-- `baseline.json` — delta 棘轮基线（当前已接受存量键；只减不增）。
+- `lib/constants.cjs` — fail-closed 治理常量单一事实源（`MAX_DEADLINE_HORIZON_DAYS=120` / `MAX_WHITELIST_ENTRIES=12`），两模块共用防漂移。
+- `lib/baseline-governance.cjs` — baseline fail-closed 治理（meta 死线 / 净条数天花板[含缺天花板=红] / 被依赖者禁入死物名单）·纯函数可测。
+- `check-frontend-to-backend.cjs`（C1）/ `check-backend-consumers.cjs`（C2·含白名单 fail-closed `validateWhitelist`）/ `check-config-engine.cjs`（C3）。
+- `run-all.cjs` — 统一入口（`--only` / `--block` / `--json` / `--update-baseline`）+ fail-closed 治理层汇总（无条件红·不受 `--only` 豁免）。fixture 注入用 `BD_BASELINE_PATH` / `BD_WHITELIST_PATH` 环境变量（仅 selftest）。
+- `selftest.cjs` — 工具不变量自测（53 条已核实断言：含 fail-closed 变异断言 + run-all.cjs exit-code 端到端「最后一公里」覆盖，证有牙、防解析器/闸静默漂）。
+- `consumer-whitelist.json` — C2 白名单（**有名有期的孵化**，fail-closed：缺 deadline/超上限/超条数=红）。
+- `baseline.json` — delta 棘轮基线（当前已接受存量键；只减不增）+ `meta`（per-entry 死线）+ `targetMaxCount`（净条数天花板）。
 
 ## 防误报（重要）
 

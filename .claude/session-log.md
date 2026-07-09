@@ -1640,6 +1640,22 @@ http://your-server-ip:8080
 
 *更新时间：2026-07-08*
 
+## 本次会话完成的工作（P-3 拒绝写审计 SEC-3 → PR `feat/reject-write-audit`，2026-07-08）
+
+**线/工作树**：worktree `laughing-kalam-0ebe9c`（off origin/master tip `3b2de78e`，新鲜）。task = 八层门禁 SEC-3 / 附录 P-3「取证脊柱的另一半」——门 E 那批权限守卫只证明「门关了」、证不了「有没有人在推门」（被拒越权写一条不入库、越权探测无痕）。**不碰钱·golden 天然零回归**。
+
+**交付（扩 `auditWrite`：成功与被拒都记）**：`audit-log.ts` finish 回调改**三互斥终态早返回**——(a)2xx 成功照旧写脱敏 body；(b)**4xx 被拒**→落 `outcome='denied'` 行，request_data 仅 `{status, 标量code}`、**绝不触达 req.body**（安全红线·物理隔离）；(c)3xx/5xx 不记（5xx=服务器故障非访问拒绝）。新增纯工厂 `createDenialTracker({now})`（同文件·无 DB/无 I/O·注入时钟）：滚动 60s 窗口、每主体每类(authz=403 / other=其它4xx)**独立**计数——①**聚合防刷**：每类 >AGG(20) 抑制逐条、**即时可持久 upsert** 一条 `denied_agg` 计数行（首次 INSERT 存 aggId·其后 UPDATE 同 id·无定时器无末窗悬挂）；②**越权探测告警**：authz distinct(method+path)>=5 或原始计数>=20 → 每窗一次落 `security_alert` 行 + `console.warn`（**先落库成功才 warn**·库故障不制造告警风暴·结构化对象防注入）；③Map 摊还清扫(每256事件/超cap)+过期整窗重置+MAX_SUBJECTS(1万)最旧先驱逐。`DatabaseManager.ts` 给 operation_logs 加**可空 `outcome` 列**（ensureColumn 幂等·只追加·NULL=成功）区分四态，避免 operation 字符串前缀 overload。
+
+**边界严守**：只动 `audit-log.ts` + 两测试(`bv-write-audit-middleware`/新 `denial-tracker`) + `DatabaseManager.ts`(只追加列)。**不碰路由/守卫**——**刻意未编辑 `logs-v1.1.ts`**（守边界）：denied/agg/alert 行经现有 `/api/v1/logs` 视图可见(operation/description 人读)、被拒记录进现有 `操作日志` 页=审计视图增益非回归（核实：operation_logs 唯一读消费者是 logs-v1.1.ts·按字段名映射·新列零破坏·所有 INSERT 具名列无位置破坏）。
+
+**验证**：后端 tsc 绿 + vitest **109 files/952 tests 全绿**（新增 15 用例·golden ¥13,152/¥27,870 零回归）。真 HTTP 集成：yishi1(pathologist)POST /suppliers→403 落 denied 行含 operator+FORBIDDEN·**body 的 password/marker 绝不入库**；5 个 distinct 403 端点→security_alert 行；22 条 404→denied_agg 聚合行。dev DB 全程 :memory:。
+
+**独立复核（机制5·双引擎收敛=零码 bug）**：先跑**设计批判面板**(4 lens·塑形：收敛 4xx 记录+outcome 列+scalarCode 只读标量+cleanPath 剥 query+工厂非类+即时聚合+distinct 告警+同步临界区)。①**Claude 对抗复核面板**`wf_02f3ad7d`(4 维 find×adversarial verify×synth)：security-redline 维**零 finding**、correctness/boundary **零 confirmed 码 bug**、`must_fix=[]`；4 条 CONFIRMED **全是缺回归测试**(LOW)、1 条 REFUTED——已全部补齐**变异可捕获**的守卫测试：request_data 精确 keyset `['code','status']`(杀 `{status,code,msg}` 变异)、真 PII 回显红线用例(POST 两次同名抗体触 409·error.message 回显 name·断言 denied 行不含)、cleanPath query 剥离用例(`?token=SEKRET`→断言 description 无 secret/无`?`)、5xx/3xx 不记(直驱 finish 钩子)、sweep 驱逐+过期(抓 sort 翻转/谓词翻转变异)。②**codex 异构(gpt-5.5·high)**：首轮读全文后**断流**(SSE 掐断)、resume 需 TTY 不可用→改**inline 关键片段**(短流规避)复核 4 承重点=**「no real bug」**(无 body 泄露/scalarCode 只读标量/aggId 不串窗类/全同步无 await)。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 4 文件 + 本 session-log）；提交前 `git checkout -- coreone.db` 复原(实际 :memory: 未脏)。**已披露缺口**（撞「不碰路由/守卫」硬约束·非缺陷·PR body 列明）：per-subject 单轴→多账号轮换可绕；认证态 404 IDOR 枚举/未挂载路径枚举不告警；per-IP 轴因未配 `trust proxy` 不做；多进程下阈值 per-process、内存态重启即失(持久行仍在)；成功路径 description 仍含 originalUrl(query)=既有行为未改。
+
+*更新时间：2026-07-08*
+
 ## 本次会话完成的工作（P-7 假标准成本停返 + 分摊口径空转控件摘除 → PR `fix/p7-fake-standard-and-allocation-dropdown`，2026-07-08）
 
 **线/工作树**：worktree `frosty-chaum-7a775f`（off origin/master tip `3b2de78e`，新鲜）。task = 八层门禁 **HON-3/HON-4**（附录B **P-7**）——两处「看着能用其实是假」，#86 只加免责声明字段、真身照活。**碰成本域·护黄金锚**。
@@ -1656,21 +1672,21 @@ http://your-server-ip:8080
 
 *更新时间：2026-07-08*
 
-## 本次会话完成的工作（清理 6 个幽灵报表端点：人员效率三件套 + 月度环比调用/UI + 4 个死 wrapper，2026-07-08）
+## 本次会话完成的工作（构建纪律闸 白名单/baseline fail-closed 收口 → PR `chore/build-discipline-fail-closed`，2026-07-08）
 
-**线/工作树**：worktree `gifted-nash-0acdc2`（off origin/master tip `fd91b493`，新鲜）。task = 构建纪律闸 **P-5/P-6 fail-closed 收口**（改动在 unmerged 分支 `chore/build-discipline-fail-closed`）**主动暴露的存量债「另立项」**：两条「害人型 live-404」(`/reports/personnel-efficiency` + `/reports/cost-monthly-comparison`) 被挂硬死线 2026-08-07。**PM 拍板（本会话 AskUserQuestion）：三处全删**——①人员效率三件套 ②月度环比调用+UI ③顺带 4 个死 wrapper。**纯前端删除·后端零改动·golden 天然零回归**。
+**线/工作树**：`elated-heyrovsky-4702ae`（分支 `chore/build-discipline-fail-closed` off origin/master `3b2de78e`）。task=P-5/P-6（CON-2/CON-5·公理一 fail-closed）：**构建纪律闸自己的两个豁免旁路口是 fail-open**（自己犯了它要治的病）。**纯工具/治理·零业务代码·golden 天然零回归**（只动 `scripts/build-discipline/*`）。
 
-**核实先行（讨论循环）**：①两条 live-404 确被 live 页调用（`PersonnelEfficiency.tsx`→路由 `/abc/personnel-efficiency`；`CostDashboard.tsx`→月度环比卡片）②后端 `reports-v1.1.ts` 只有 4 条真路由，6 个 ghost 恒 404 ③4 个死 wrapper（getCostByProjectGroup/getFullCostByProject/getCostStructure/getCostVariance）**零消费者** ④option B(补后端)对人员效率不可行（工时/效率数据地基不存在·成本模型 labor 恒 0），月度环比虽有现成卡片 UI 但 PM 仍选删。PM 待拍 B-3 / ABC 处置清单 I-3 由此收口。
+**病根**：`check-backend-consumers.cjs` 旧 `wl.deadline && wl.deadline < today` 对**缺 deadline** 的白名单条目短路成「永不过期=永久放行」；白名单/baseline 都**无条数上限**；baseline 存量**无死线无负责人=无限期赦免**，其中 2 条 `C1|GET|/reports/personnel-efficiency`+`/reports/cost-monthly-comparison` 是害人型——前端 `reports.ts` 仍 live 调、后端恒 404、真人被喂 404。
 
-**交付（删除面）**：
-- **人员效率三件套**：删 `PersonnelEfficiency.tsx` + `PersonnelEfficiency.render.test.tsx`；`App.tsx` 去 import+route；`index.ts` 去 export；`reports.ts` 去 `getPersonnelEfficiency`。
-- **月度环比（CostDashboard.tsx）**：删 `getCostMonthlyComparison` api + `loadComparison` + comparison state/effect + `MonthlyComparison`/`ComparisonDirection` 类型 + `getComparisonDirectionMeta`/`buildDashboardComparisonParams` 导出函数（含 `CostDashboard.test.ts` 里其单测）+ 月度环比卡片 JSX + `ArrowUp`/`ArrowDown` import。**保留** summary 卡片内联环比（`getChangeIcon`/`getChangeText`·由真实 `summary.costChange` 驱动·不受影响）。清 `CostDashboard.adjustments.render.test.tsx` 里 getCostMonthlyComparison mock（11 行 + vi.mock 块 + import）。
-- **4 个死 wrapper**：从 `reports.ts` 删（保留 4 个真方法 getCostByProject/Material/Supplier/Trend）。
+**交付（A 白名单 + B baseline 双轨 fail-closed）**：
+- **A·白名单三条**（`validateWhitelist`）：缺 deadline=红（缺省方向反转）/ deadline>today+120天=红 / 白名单>12条=红 / 坏格式=红；结构无效条目**不豁免其端点** + `hardFail`。常量收口到 `lib/constants.cjs`（单一事实源）。
+- **B·baseline 治理**（新增 `lib/baseline-governance.cjs`）：`meta[key]={owner,deadline,note}` per-entry 死线兑现（过期/缺/坏/悬空=红）；`targetMaxCount` 净条数天花板（**缺字段也判红**——防「删行=悄悄取消封顶」）；被消费端点禁入 C2 死物名单。给 2 条 live-404 挂 owner+deadline=**2026-08-07**（到期红→逼改前端/补路由，属业务代码另立 task/PR）；targetMaxCount=44 封顶。
+- **run-all**：govErrors **无条件 exit 1**（不受 --block/--only/baseline delta 影响）；`--only` 排除 C2 时**仍无条件跑一次 C2** 拿治理数据（堵旁路口）；`--update-baseline` 在治理错误时拒绝(exit 2)、禁与 --only 同用、post-prune 重算解死锁、保留/自动播种 meta+targetMaxCount。
 
-**验证**：前端 `tsc --noEmit` 绿；`vite build` 绿（2711 modules）；`CostDashboard.test.ts` 14/14 绿；**零新增测试失败**——`CostDashboard.adjustments.render.test.tsx` 2 失败 + `QualityCostAnalysis.test.tsx` 1 失败经**换入 origin/master 版本实测同样失败=纯预存**（日期敏感：测试硬编码 2026-06 而系统时钟已 2026-07；QCA 与 master 逐字节相同）。grep 全清、零 leftover 引用。
+**验证**：selftest **53 条全绿**（+31 条 fail-closed 变异断言证有牙·含 A1-A9/B1.x/B2.x/E1-E10 run-all exit-code）；gate `--block=C1,C2` exit 0（C1 存量9/C2 存量32/C3 存量3·新增 0）；`--update-baseline` 幂等无 churn。**三原始旁路口 end-to-end 复现已闭合**：`--only=C1`+坏白名单 exit0→**1**；`--only --update-baseline` 静默截断→**拒 exit2**；删 targetMaxCount exit0→**1**。合并 origin/master（#98/#99 P-7+BOM）后 gate/selftest/baseline 仍全绿无漂移。
 
-**⚠️ baseline 协调（本 worktree 未动 baseline.json·关键）**：死线 meta 挂在 **unmerged** 分支 `chore/build-discipline-fail-closed`（worktree `elated-heyrovsky-4702ae`·非 master）——`baseline-governance.cjs` 的 `expired`/`orphan-meta` 判定看 `baseline.keys`+`meta` 而非活违规集，故清红须**同时**删 key + meta 条目。本 worktree off 旧 master（无 meta/无 governance/run-all 是旧版）→ 在此跑 `--update-baseline` 只会产出无 meta 的 baseline、与 fail-closed 的 baseline 冲突/回退 governance 字段。**决策：本 PR 只删业务码、不碰 baseline.json**；baseline+meta 清理随 fail-closed 收口——**推荐 fail-closed 先合 master → 本 fix rebase 后跑 `--update-baseline`（6 key 自动出 + 2 meta 自动剪 + targetMaxCount 重播）**；或 fail-closed 会话收口时手删这 2 条 meta（因本 fix 已移除前端调用、key 已非违规）。
+**独立复核（机制5·两轮对抗 Workflow 面板）**：①`wf_124626ae`（5 lens 攻击×verify）13 findings→**10 CONFIRMED/3 PARTIAL/0 REFUTED**，逐条修 8 个可修项（--only 旁路口/targetMaxCount 删字段 fail-open/run-all exit-code 无覆盖/--update+--only 截断/过期 meta 清出死锁/常量漂移/陈旧注释）+ 2 条 PASS（越界+DB 审计）+ 1 条 teeth 结论（11 变异断言逐条有牙无恒真）→ commit `a1e3d567`。②`wf_0815a45e` 二轮验证修复（面板一 agent 卡 retry·已改用**直接复现原始 exploit** 决定性确认修复闭合，未空等）。
 
-**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 `git add 前端代码/src` + 本 session-log·node_modules 符号链接确认未 staged）；未起后端·无 dev DB 污染。PR/commit 待用户拍板。参考记忆 `coreone-build-discipline-gate`、`coreone-feature-keep-cut-inventory`；PM 待拍 B-3 / ABC I-3。
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add build-discipline 8 文件 + 本 session-log）；起测试后 `git checkout -- coreone.db` 复原；⚠️**两处坑记录**：(a) `git diff origin/master..HEAD`（two-dot）现幻影反向改 P-7/session-log（分支 off 旧 master·origin 已 +4 提交）→ 用 three-dot/merge-base 核实真实贡献=纯 build-discipline，已 merge origin/master 消幻影（记忆 `coreone-stale-fork-phantom-diff`）；(b) 害人型 live-404 死线 2026-08-07 到期会红 master gate 拦所有 PR=**有意时间炸弹**（B.3 逼处置），已在 PR body/README 充分披露 + spawn chip `task_364388dc` 修 reports.ts。参考记忆 `coreone-build-discipline-gate`。
 
 *更新时间：2026-07-08*
