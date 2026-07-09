@@ -3329,7 +3329,6 @@ router.get('/variance-analysis', (req, res) => {
           materialActual: 0,
           activityCost: 0,
           totalActual: 0,
-          totalStandard: 0,
           sampleCount: 0,
           recordCount: 0,
         })
@@ -3340,41 +3339,34 @@ router.get('/variance-analysis', (req, res) => {
       item.materialActual += materialActual
       item.activityCost += Number(row.activity_cost) || 0
       item.totalActual += totalActual
-      item.totalStandard += materialActual
       item.sampleCount += Number(row.sample_count) || 0
       item.recordCount += 1
     }
 
-    const list = [...groups.values()].map(item => {
-      const variance = item.totalActual - item.totalStandard
-      const varianceRate = item.totalStandard > 0 ? variance / item.totalStandard * 100 : 0
-      return {
-        ...item,
-        materialStandard: item.totalStandard,
-        laborStandard: 0,
-        equipmentStandard: 0,
-        indirectStandard: 0,
-        totalVariance: Math.round(variance * 100) / 100,
-        varianceRate: Math.round(varianceRate * 100) / 100,
-        status: Math.abs(varianceRate) > 10 ? 'danger' : Math.abs(varianceRate) > 5 ? 'warn' : 'match',
-        // 项F 诚实降级：totalStandard 实为「物料实际」占位（非独立标准成本），labor/equip/indirect 标准硬编码 0。
-        //   故 varianceRate 是「总成本超出物料的部分/物料」，**不是**「实际 vs 标准」的真实差异率——禁作成本管控依据。
-        standardCalibrated: false,
-        standardSource: 'material_actual_placeholder',
-        disclaimer: '标准成本=物料实际(占位)·labor/equip/indirect 标准未接入·varianceRate 非真实标准差异·禁作成本管控依据',
-      }
-    })
+    // HON-3（P-7 · 假标准成本停返）：标准成本需 BOM 标准工时/用量校准后才存在。
+    //   此前 totalStandard 用「物料实际」冒充标准、据此算 variance/varianceRate → **假差异**（拿实际算实际），
+    //   #86 仅加免责声明字段、假数字仍返回。现停返：standard/variance/varianceRate 一律 null（= 未校准不可用），
+    //   只透出**真实实际成本**（materialActual/activityCost/totalActual/sampleCount）。真实单片成本走「消耗对账」。
+    const list = [...groups.values()].map(item => ({
+      ...item,
+      materialStandard: null,
+      totalStandard: null,
+      totalVariance: null,
+      varianceRate: null,
+      status: 'uncalibrated',
+      standardCalibrated: false,
+      standardSource: 'uncalibrated',
+      disclaimer: '标准成本未接入（需 BOM 标准工时/用量校准）·「标准 vs 实际」差异暂不可用；本页仅展示真实实际成本，真实单片成本见「消耗对账」。',
+    }))
 
     const summary = {
       totalActual: Math.round(list.reduce((sum, item) => sum + item.totalActual, 0) * 100) / 100,
-      totalStandard: Math.round(list.reduce((sum, item) => sum + item.totalStandard, 0) * 100) / 100,
-      totalVariance: Math.round(list.reduce((sum, item) => sum + item.totalVariance, 0) * 100) / 100,
-      varianceRate: 0,
+      totalStandard: null,
+      totalVariance: null,
+      varianceRate: null,
       recordCount: rows.length,
+      standardCalibrated: false,
     }
-    summary.varianceRate = summary.totalStandard > 0
-      ? Math.round((summary.totalVariance / summary.totalStandard * 100) * 100) / 100
-      : 0
 
     success(res, { list, summary })
   } catch (err: any) { error(res, err.message) }

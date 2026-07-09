@@ -38,7 +38,9 @@ describe('AllocationModal', () => {
     expect(screen.getByText('确认后将接住：间接成本、月度分摊、项目成本、成本结账、审计记录')).toBeInTheDocument()
     expect(screen.getByText('年月 2026-06')).toBeInTheDocument()
     expect(screen.getByText('费用总额 ¥1200.00')).toBeInTheDocument()
-    expect(screen.getByText('分摊基础 样本数 300')).toBeInTheDocument()
+    // HON-4：分摊口径下拉已摘除，基础值不再贴「样本数」等空转口径标签
+    expect(screen.queryByText('分摊基础 样本数 300')).not.toBeInTheDocument()
+    expect(screen.getByText('分摊基础值 300')).toBeInTheDocument()
     expect(screen.getByText('单位分摊率 ¥4.0000')).toBeInTheDocument()
   })
 
