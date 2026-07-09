@@ -23,6 +23,9 @@ vi.mock('@/components/ui/Modal', () => ({
 
 describe('QualityCostAnalysis display labels', () => {
   beforeEach(() => {
+    // 固定系统时钟到 2026-06，使组件默认取的「当前月」与本用例硬编码的 2026-06 断言一致；
+    // 否则默认月随 wall-clock 漂移，仅在 2026 年 6 月能过（见同目录 QuarterlyAdjustment.test.tsx 同款做法）。
+    vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'))
     window.history.pushState({}, '', '/')
     vi.mocked(abcApi.getQualityCosts).mockReset()
     vi.mocked(abcApi.getQualityCostSummary).mockReset()

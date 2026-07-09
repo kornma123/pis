@@ -70,6 +70,9 @@ const readyClosingReadiness = {
 
 describe('CostDashboard adjustment refresh', () => {
   beforeEach(() => {
+    // 固定系统时钟到 2026-06，使组件默认取的「当前月」与本用例硬编码的 2026-06 断言/mock 数据一致；
+    // 否则默认月随 wall-clock 漂移，仅在 2026 年 6 月能过（见同目录 QuarterlyAdjustment.test.tsx 同款做法）。
+    vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'))
     window.localStorage.setItem('user', JSON.stringify({ role: 'finance', username: 'sunli' }))
 	    vi.mocked(abcApi.getDashboard).mockReset()
 	    vi.mocked(abcApi.getClosingReadiness).mockReset()
