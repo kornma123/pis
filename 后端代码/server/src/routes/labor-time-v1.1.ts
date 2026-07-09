@@ -4,8 +4,13 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { normalizeDisplayText, requireValidText, type TextGuardResult } from '../utils/text-guard.js'
 import { logOperation } from '../utils/operation-logger.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
+
+// 工时定义写入权限：挂载层仅按模块 R 放行（app.ts），写端点须内层 'W' 守卫（口径同 abc/cost-adjustment）。
+// 缺此守卫则任何 labor_times:R 角色即可增删改工时主数据（非-P0 审计发现的相邻授权缺口）。
+const requireLaborTimeWrite = requirePermission('labor_times', 'W')
 
 const PROJECT_TYPES = new Set(['all', 'ihc', 'he', 'ss', 'mp', 'cyto'])
 const REFERENCE_SOURCES = new Set(['supplier', 'industry', 'system'])
@@ -180,7 +185,7 @@ router.get('/:id', (req, res) => {
 })
 
 // 创建工时定义
-router.post('/', (req, res) => {
+router.post('/', requireLaborTimeWrite, (req, res) => {
   try {
     const { stepCode, stepName, projectType, standardMinutes, laborRatePerMinute, isEquipmentStep, description, sortOrder, referenceSource } = req.body
     const stepCodeText = requireValidText(stepCode, '步骤编号', 100)
@@ -209,7 +214,7 @@ router.post('/', (req, res) => {
 })
 
 // 更新工时定义
-router.put('/:id', (req, res) => {
+router.put('/:id', requireLaborTimeWrite, (req, res) => {
   try {
     const { id } = req.params
     const { stepCode, stepName, projectType, standardMinutes, laborRatePerMinute, isEquipmentStep, description, sortOrder, referenceSource } = req.body
@@ -267,7 +272,7 @@ router.put('/:id', (req, res) => {
 })
 
 // 删除工时定义
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireLaborTimeWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()

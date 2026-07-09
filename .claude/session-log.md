@@ -1792,3 +1792,28 @@ http://your-server-ip:8080
 **⚠️ PM 权威回填（同日晚，PR #106 合并后）**：PM 定案「**功能根本没上线，直接替换就行了**」——旧盈利视图 `/hospital-pnl` **从未上线到生产**。→ 本审计一切"替换前顾虑"（补读侧遥测/导出治理死角/下钻跨期保留取舍）对本视图**全 moot**：无真实用户、无使用迁移，直接按新口径（P0 院级贡献毛利·影子后端 `hospital-pnl-v1.1.ts` 已建）替掉旧页 + 清 3 入口即可。已入记忆 `coreone-hospital-pnl-never-launched`；已给审计文档顶部补 PM 结论 banner（后续 docs PR）。**过程教训**：派"替换 X 前审计使用"任务先确认 X 是否真在产（本次对从未上线功能跑了完整使用审计，结论没错但可收敛为直接替换）。
 
 *更新时间：2026-07-09*
+
+## 本次会话完成的工作（相邻授权缺口修复：labor-times/indirect-costs 写端点补 W 守卫，2026-07-09）
+
+**线/工作树**：worktree `magical-morse-8dd381`（分支 `claude/magical-morse-8dd381`）。task = 「授权组合子重构」PR 的独立复核发现的**相邻授权缺口**（属"缺检查"非"内联检查"，不在该重构范围）。同 #76（项 E）性质。
+
+**问题（已亲验）**：`app.ts` 挂载层按模块 R 放行、注释声称"写权限由路由内 `requirePermission(module,'W')` 守卫"，但三个文件的写端点无 inline W 守卫。经现网真实数据核实 + PM 讨论收敛到**只修两个"活"文件**：
+- `labor-time-v1.1.ts`（挂 `labor_times:R`）3 写端点、`indirect-cost-v1.1.ts`（挂 `abc_config:R`）4 写端点 = **7 个**越权写成本配置主数据（工时定义 / 间接成本中心 / 月度分摊），前端有真实写消费者（`api/master.ts`）→ 补守卫有实义。
+- `depletion-v1.1.ts` 3 写端点 = **无消费者死端点**（前端 depletionApi 只读·C2 在册·PM 确认弃用）→ 处置=废弃删除而非补守卫，**踢出本 PR**、spawn chip `task_a1dd766b` 跟踪到闭环（复核明确要求）。
+
+**讨论循环（摊假设→真数据→PM 拍）**：
+- 现网 `coreone.db`（只读查·库未动）**≠ SEED_MATRIX**：角色是老数组格式（列出模块=W）→ 无真实角色处于 R-only；`lab_director` 角色/用户不存在；labor_times/abc_config 现网仅 admin 持有（全 W）→ 补 W **近零行为变更**（同 #76）。
+- PM Q1 拍板：depletion「太重·没人用·之前要踢出去」→ 排除（我核实：前端零写调用 + C2 违规在册 → 属实）。PM Q2 拍板：finance 现网缺 labor_times/abc_config（历史遗留漂移）**不碰矩阵·另立**——本 PR 保持纯安全守卫、零矩阵改动。
+
+**修法（仿已正确的 abc-v1.1 requireCostWrite / projects）**：两文件各 import requirePermission + `const requireXxxWrite = requirePermission('<module>','W')` 插到每个写 handler 第二参。labor_times:W / abc_config:W（口径同挂载与同域兄弟）。GET 读端点全不动。
+
+**回归门禁**：新增 `tests/rbac-cost-config-write-guard.test.ts`（14 用例·合成 reader(R-only)/writer(W) 角色·drift-proof）做 W-403 双向断言（reader 持 R 过挂载层、被内层 W 拦成 403 → 归因 inline 守卫）。**变异测试**：临时移除 labor-times POST 守卫 → 对应 reader 断言精确翻红（1 failed/13 passed），证守卫真生效。
+
+**验证**（worktree symlink 主仓 node_modules 后真跑）：
+- 补守卫后本地 vitest **112 files/968 tests 全绿**；`git merge origin/master`（7 提交·PnL 水印/caliber 域·**与我文件零重叠**·clean）后重跑 **114 files/987 tests 全绿**；tsc `--noEmit` 绿。
+- 黄金 ¥13,152 + ¥27,870 零回归。
+- 独立复核：inline 完整性核（两文件逐 handler·app.ts 单挂载点无旁路）+ 变异测试 + **独立对抗 review agent**（1–6 项全 PASS=CONFIRMED-SOUND；第 7 项 depletion 排除判为"可接受 scoping 但洞真实、须跟踪闭环"→ 已 spawn chip 闭环）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 路由 + 1 测试 + 本 session-log）；测试用 `:memory:` DB·**dev DB 未污染**（git status 确认 clean）。→ 按 pr-governance 开独立 PR（vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板状态·真相以 `gh pr list` 为准）。参考记忆 `coreone-non-p0-domain-audit`、`coreone-rbac-live-vs-seed-matrix`、`coreone-worktree-tests-and-codex-resilience`。
+
+*更新时间：2026-07-09*
