@@ -53,8 +53,6 @@ export const bomApi = {
   create: (data: Partial<BOM>) => request.post('/boms', data),
   update: (id: string, data: Partial<BOM>) => request.put(`/boms/${id}`, data),
   delete: (id: string) => request.delete(`/boms/${id}`),
-  // 单张切片成本预览（移植自 abc-productization 分支的 CostPreviewModal 消费）
-  getCostPreview: (id: string) => request.get(`/boms/${id}/cost-preview`),
 }
 
 export const userApi = {
