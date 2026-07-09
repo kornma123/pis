@@ -16,6 +16,7 @@ import { writeAuditLog } from '../utils/cost-runs.js'
 import { recordOverride } from '../utils/override-log.js'
 import { buildReconcileInputs, runReconcile, partnerMonthLabRate } from '../utils/reconcile-compute.js'
 import { computeReconcile, verdictFollowUp, drivesSupplement, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
+import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：confirmedLabRevenue(拆分派生)输出自带「口径未认账」水印（LEG-2）
 
 const router = Router()
 
@@ -83,7 +84,7 @@ router.get('/overview', (req, res) => {
       补收实收,
       确认实收: Math.round((base确认实收 + 补收实收) * 100) / 100,
     }
-    successList(res, list, 1, list.length || 1, list.length, { board })
+    successList(res, list, 1, list.length || 1, list.length, { board, caliberRatification: splitCaliberRatification() })
   } catch (err: any) {
     error(res, err.message)
   }
@@ -133,6 +134,7 @@ router.get('/workbench', (req, res) => {
       diffs,
       unmatched,
       caseHints,
+      caliberRatification: splitCaliberRatification(), // confirmedLabRevenue 拆分派生 → 带「口径未认账」水印
     })
   } catch (err: any) {
     error(res, err.message)
@@ -187,7 +189,7 @@ router.post('/hospital-months/:id/complete', requirePermission('account_reconcil
     db.prepare(`UPDATE reconcile_hospital_months SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = ?, confirmed_lab_revenue = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(operatorOf(req), confirmed, hm.id)
     writeAuditLog(db, 'account_reconcile', 'complete', hm.id, { partnerId: hm.partner_id, serviceMonth: hm.service_month, confirmedLabRevenue: confirmed }, operatorOf(req))
-    success(res, { id: hm.id, status: '复核完成', confirmedLabRevenue: confirmed }, '复核完成')
+    success(res, { id: hm.id, status: '复核完成', confirmedLabRevenue: confirmed, caliberRatification: splitCaliberRatification() }, '复核完成')
   } catch (err: any) {
     error(res, err.message)
   }

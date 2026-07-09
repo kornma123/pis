@@ -17,6 +17,7 @@ import { assertCaliberChangeAllowed } from '../middleware/authz-combinators.js'
 import { loadConfig, peekConfig, saveConfig, normalizeConfig, caliberSignature, type PartnerConfigLine } from '../utils/partner-config.js'
 import { parseStatement, type Grid, type ColMap } from '../utils/statement-parser/index.js'
 import { computeStatementRevenue, type ClassifiedRow } from '../utils/statement-revenue.js'
+import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：拆分结论输出自带「口径未认账」水印（LEG-2）
 import { canonicalCaseNo } from '../utils/classifier.js' // codex MEDIUM-3：落库分组用 NFKC 规范化病理号
 import { scoreStatement } from '../utils/import-score.js'
 import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
@@ -107,6 +108,8 @@ router.post('/preview', authenticateToken, requireImport, (req, res) => {
         splitLisExpected: rev.splitLisExpected, splitLisMissing: rev.splitLisMissing,
       },
       score,
+      // 止损执法点（LEG-2）：labRevenue/diagnosisSettle 是 SPLIT_DIAG_FEE 派生的拆分结论 → 随响应带「口径未认账」水印。
+      caliberRatification: splitCaliberRatification(),
       // 待人工归类的行（未匹配/歧义）供测试台内联建规则
       needsAttention: rev.rows.filter((r) => r.status === 'unmatched' || r.status === 'ambiguous')
         .slice(0, 100).map((r) => ({ no: r.no, item: r.item, settle: r.settle, status: r.status })),
@@ -241,6 +244,8 @@ router.post('/commit', authenticateToken, requireImport, (req, res) => {
       caseCount, labRevenue: labTotal, diagnosisSettle: diagTotal, outSettle: outTotal, unallocatedSettle: unallocTotal,
       unmatchedSettle: rev.unmatchedSettle, ambiguousSettle: rev.ambiguousSettle, skippedNoCase,
       splitLisExpected: rev.splitLisExpected, splitLisMissing: rev.splitLisMissing,
+      // 止损执法点（LEG-2）：落库的 labRevenue/diagnosisSettle 是拆分结论 → 响应带「口径未认账」水印。
+      caliberRatification: splitCaliberRatification(),
     }, `已入库 ${caseCount} case·实验室收入 ¥${labTotal}（诊断桶 ¥${diagTotal}，移出 ¥${outTotal}，未匹配 ¥${rev.unmatchedSettle}）`)
   } catch (e: any) { error(res, e.message) }
 })
