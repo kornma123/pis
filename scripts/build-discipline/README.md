@@ -5,13 +5,18 @@
 > 目的：根除反复出现的「功能先于消费者被建」五形态：幽灵端点 / 有后端无前端 / 孤儿路由 / 空转参数 / 假能力。
 > 背景见记忆 `coreone-feature-keep-cut-inventory`「外审补正」段。
 
-## 三条检查
+## 检查项（C1–C3「功能先于消费者」轴 + C5「授权可枚举性」轴）
+
+> 注：**C4「路由↔导航注册表」由姊妹 PR（路由注册表 Phase 1）引入**（孤儿路由结构预防·完成 C1–C4 功能轴）。本文件的 C5 是另一条**正交轴**——授权可枚举性。两条检查都挂 run-all 的 fail-closed 层、各自独立（合并时两行并存）。
 
 | ID | 名称 | 根除的病 | 判定 |
 |----|------|---------|------|
 | **C1** | 前端→后端 | 幽灵 404 | 每条前端 API 调用（`request.METHOD` + `axios.METHOD` + `fetch('/api/v1/...')` + 回溯解析的 `fetch(变量)`）必须命中一个已注册后端路由（`app.ts` 挂载前缀 × `routes/*.ts` 的 `router.METHOD`），否则违规 |
 | **C2** | 后端→消费者 | 有后端无前端 / 死路由 | 每个后端端点须有 ≥1 生产消费者（前端调用 / 「发请求文件」文本兜底）；无则须进白名单带 `{owner, deadline}`；死线过期未接消费者 → 违规、默认删 |
 | **C3** | 配置→引擎 | 空转参数 | 每个用户可写的持久化配置字段（建表列 ∩ 出现在某路由 INSERT/UPDATE）须在其自身 CRUD 之外有读取点（snake_case 或 camelCase），否则=空转（`allocation_base` 型） |
+| **C5** | 授权组合子 | 野生授权逻辑（不可枚举的授权条件） | `routes/*.ts` 的 handler 里禁止裸写授权条件——① 禁对「请求用户」做 `.role`/`.roles` 访问（点/可选链/别名/解构/方括号）② 禁裸写 SoD 判决码 `SELF_REVIEW_FORBIDDEN` ③ 禁内联「请求用户身份（userId/username/id）=== 行字段」比对。授权只能经具名组合子表达（`middleware/authz-combinators.ts` + `permissions.ts` + `auth.ts`）→ 条件集可机器枚举（权限影子断言矩阵前置） |
+
+> **C5 是独立轴、零容忍**：与 C1/C2/C3 的「防新增·存量攒 baseline」不同，C5 **无 baseline 宽容**——任一野生授权即无条件红（授权缺口不是可攒的存量债），接在 run-all 的 fail-closed 治理层（公理一）。**覆盖边界（诚实）**：C5 是正则/tokenizer 级，闭包覆盖「直接对 `req.user` 的授权写法」；**不覆盖**先抽标量再比对的派生变量（`const uid=req.user.userId; if(uid===…)`）、经 helper 读角色（`resolveRequestRoles(req.user).includes(…)`）、capability 内联判决——这些靠「注册表 + 人工复核」兜底（要闭合需强制 `req.user` 唯一访问器，会牵动 ~30 处合法 attribution，超出结构重构范围）。
 
 ### ⚠️ 覆盖诚实声明：五形态里机器只查得了四种
 
@@ -81,7 +86,7 @@ node scripts/build-discipline/selftest.cjs
 - `lib/registry.cjs` — 共享解析层（app 挂载 / router 端点 / 前端调用[request/axios/fetch/fetch-var 回溯] / 路径归一 / 匹配）。
 - `lib/constants.cjs` — fail-closed 治理常量单一事实源（`MAX_DEADLINE_HORIZON_DAYS=120` / `MAX_WHITELIST_ENTRIES=12`），两模块共用防漂移。
 - `lib/baseline-governance.cjs` — baseline fail-closed 治理（meta 死线 / 净条数天花板[含缺天花板=红] / 被依赖者禁入死物名单）·纯函数可测。
-- `check-frontend-to-backend.cjs`（C1）/ `check-backend-consumers.cjs`（C2·含白名单 fail-closed `validateWhitelist`）/ `check-config-engine.cjs`（C3）。
+- `check-frontend-to-backend.cjs`（C1）/ `check-backend-consumers.cjs`（C2·含白名单 fail-closed `validateWhitelist`）/ `check-config-engine.cjs`（C3）/ `check-authz-combinators.cjs`（C5·授权组合子·独立轴·零容忍无 baseline，扫 `routes/*.ts` 先 `blankComments` 剥注释再匹配）。〔C4·路由↔导航注册表 `check-route-nav.cjs` 由姊妹 PR 引入〕
 - `run-all.cjs` — 统一入口（`--only` / `--block` / `--json` / `--update-baseline`）+ fail-closed 治理层汇总（无条件红·不受 `--only` 豁免）。fixture 注入用 `BD_BASELINE_PATH` / `BD_WHITELIST_PATH` 环境变量（仅 selftest）。
 - `selftest.cjs` — 工具不变量自测（53 条已核实断言：含 fail-closed 变异断言 + run-all.cjs exit-code 端到端「最后一公里」覆盖，证有牙、防解析器/闸静默漂）。
 - `consumer-whitelist.json` — C2 白名单（**有名有期的孵化**，fail-closed：缺 deadline/超上限/超条数=红）。

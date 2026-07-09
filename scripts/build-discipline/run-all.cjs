@@ -29,6 +29,7 @@ const path = require('path')
 const c1 = require('./check-frontend-to-backend.cjs')
 const c2 = require('./check-backend-consumers.cjs')
 const c3 = require('./check-config-engine.cjs')
+const c5authz = require('./check-authz-combinators.cjs') // C5 授权组合子（独立轴·与 C1–C4 功能轴正交）
 const BG = require('./lib/baseline-governance.cjs')
 
 // baseline 路径：默认同目录 baseline.json；`BD_BASELINE_PATH` 可覆盖（仅 selftest 注入 fixture 用，
@@ -185,7 +186,18 @@ function main() {
     return out
   }
 
-  const govErrors = [...whitelistGovErrors, ...baselineGovErrorsOf(baselineDoc)]
+  // C5 授权组合子：路由 handler 里的「野生授权逻辑」（裸读请求用户 .role/.roles / 裸写 SoD 判决）——
+  //   零容忍、无 baseline 宽容（授权缺口不是可攒的存量债）。纯静态扫描、幂等、无副作用；与 --block/--only/baseline
+  //   无关，任一违规无条件红（fail-closed 公理一）。独立轴，与 C1–C4「功能先于消费者」正交。
+  const authzRes = c5authz.run()
+  const authzGovErrors = authzRes.violations.map((v) => ({
+    scope: '授权组合子(C5)',
+    detail: `${v.file}:${v.line} ${v.rule === 'role-access'
+      ? '裸读请求用户 .role/.roles（授权须走组合子 requireAdmin/isAdmin/requireAnyRole/requirePermission）'
+      : '裸写 SELF_REVIEW_FORBIDDEN 判决（SoD 须走 assertNotSelfReview 组合子）'} — ${v.snippet}`,
+  }))
+
+  const govErrors = [...whitelistGovErrors, ...baselineGovErrorsOf(baselineDoc), ...authzGovErrors]
 
   // 更新 baseline（收紧棘轮）
   if (args.updateBaseline) {
@@ -259,6 +271,7 @@ function main() {
     console.log('    · baseline死线(B.1) 到期 → 处置该存量（改前端死调用/补真只读路由）后 --update-baseline 清出，或经 PM 拍板在 baseline.json 里续期。')
     console.log('    · baseline天花板(B.1) → 修掉存量降到 targetMaxCount 下，或经说明抬高天花板。')
     console.log('    · 被依赖者(B.2) → 该端点已被消费、非死物 → node scripts/build-discipline/run-all.cjs --update-baseline 把它清出 C2 死物名单。')
+    console.log('    · 授权组合子(C5) → 把 handler 里的角色/SoD 判定提升进 middleware/authz-combinators.ts 的具名组合子（requireAdmin/isAdmin/assertNotSelfReview 等）；路由层不得裸读 req.user.role/.roles、不得裸写 SELF_REVIEW_FORBIDDEN。')
   }
   if (blockedFail) {
     console.log('\n  ✗ 有新增违规被拦。修法：')

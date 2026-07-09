@@ -14,14 +14,15 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requireAnyRole } from '../middleware/permissions.js'
+import { assertCaliberChangeAllowed } from '../middleware/authz-combinators.js'
 import { loadConfig, saveConfig, getChanges, rollbackConfig, setBaseline, normalizeConfig, caliberSignature, getConfigVersion } from '../utils/partner-config.js'
 
 const router = Router()
 const requireConfig = requireAnyRole('finance') // 财务 + 管理员（admin 始终放行）
 const genId = (): string => `PC-${uuidv4()}`
 const userId = (req: any): string | undefined => req.user?.id
-/** 拆分/诊断口径 = 领域决策，仅 admin 可改（财务只配 in/out + 扣率 + 识别词）。 */
-const isAdmin = (req: any): boolean => req.user?.role === 'admin' || (req.user?.roles ?? []).includes('admin')
+// 拆分/诊断口径 = 领域决策，仅 admin 可改（财务只配 in/out + 扣率 + 识别词）——
+// 口径门禁经具名守卫 assertCaliberChangeAllowed 表达（roles-aware isAdmin 在组合子内部，路由层不再裸读 req.user.role）。
 
 function partnerExists(db: any, id: string): boolean {
   return !!db.prepare('SELECT 1 FROM partners WHERE id = ? AND is_deleted = 0').get(id)
@@ -60,9 +61,7 @@ router.put('/:id', authenticateToken, requireConfig, (req, res) => {
     try { normalized = normalizeConfig(config) } catch (ve: any) { error(res, ve.message || '配置格式无效', 'BAD_REQUEST', 400); return }
     const cur = loadConfig(db, req.params.id, genId) // 确保已 seed + 取现配置比对口径
     // 拆分/诊断口径门禁：本次改动了 split/diagnosis 线 → 仅 admin 可写（财务写 in/out + 扣率不受影响）。
-    if (caliberSignature(normalized) !== caliberSignature(cur.config) && !isAdmin(req)) {
-      error(res, '拆分/诊断口径仅管理员可改（国标费率与工艺拆分是口径决策，财务侧只读）', 'FORBIDDEN', 403); return
-    }
+    if (!assertCaliberChangeAllowed(req, res, caliberSignature(normalized) !== caliberSignature(cur.config), '拆分/诊断口径仅管理员可改（国标费率与工艺拆分是口径决策，财务侧只读）')) return
     const r = saveConfig(db, req.params.id, normalized, { changedBy: userId(req), tab, genId, expectedVersion })
     success(res, { partnerId: req.params.id, version: r.version, diffs: r.diffs }, r.diffs.length ? `已保存 v${r.version}（${r.diffs.length} 项变更）` : '无改动')
   } catch (e: any) {
@@ -85,9 +84,7 @@ router.post('/:id/rollback', authenticateToken, requireConfig, (req, res) => {
     if (!Number.isFinite(toVersion)) { error(res, 'toVersion 无效', 'BAD_REQUEST', 400); return }
     // 口径门禁：回滚到的版本若拆分线与现配置不同（等于借回滚改口径）→ 仅 admin。
     const target = getConfigVersion(db, req.params.id, toVersion)
-    if (target && caliberSignature(target) !== caliberSignature(loadConfig(db, req.params.id, genId).config) && !isAdmin(req)) {
-      error(res, '回滚会改动拆分/诊断口径，仅管理员可操作', 'FORBIDDEN', 403); return
-    }
+    if (!assertCaliberChangeAllowed(req, res, Boolean(target && caliberSignature(target) !== caliberSignature(loadConfig(db, req.params.id, genId).config)), '回滚会改动拆分/诊断口径，仅管理员可操作')) return
     const r = rollbackConfig(db, req.params.id, toVersion, { changedBy: userId(req), genId })
     success(res, { partnerId: req.params.id, version: r.version }, `已回滚到 v${toVersion}（生成新版本 v${r.version}）`)
   } catch (e: any) {
