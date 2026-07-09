@@ -1772,3 +1772,23 @@ http://your-server-ip:8080
 **⚠️ PM 权威回填（同日晚，PR #106 合并后）**：PM 定案「**功能根本没上线，直接替换就行了**」——旧盈利视图 `/hospital-pnl` **从未上线到生产**。→ 本审计一切"替换前顾虑"（补读侧遥测/导出治理死角/下钻跨期保留取舍）对本视图**全 moot**：无真实用户、无使用迁移，直接按新口径（P0 院级贡献毛利·影子后端 `hospital-pnl-v1.1.ts` 已建）替掉旧页 + 清 3 入口即可。已入记忆 `coreone-hospital-pnl-never-launched`；已给审计文档顶部补 PM 结论 banner（后续 docs PR）。**过程教训**：派"替换 X 前审计使用"任务先确认 X 是否真在产（本次对从未上线功能跑了完整使用审计，结论没错但可收敛为直接替换）。
 
 *更新时间：2026-07-09*
+
+## 本次会话完成的工作（全砍「消耗对账/depletion」死功能 + 收口授权缺口，2026-07-09）
+
+**线/工作树**：worktree `gifted-curran-d9270a`（分支 `claude/gifted-curran-d9270a`·off origin/master `0d41be3e`，启动 `git fetch` 确认未落后）。任务=收口 `depletion-v1.1.ts` 3 个写端点的授权缺口（POST /tracking、PUT /tracking/:id/remain、POST /tracking/:id/deplete·**无 inline W 守卫·仅挂载层 `cost_analysis:R` 保护** → 任何 cost_analysis:R 角色可越权写）。源自「labor-times/indirect-costs 补 W 守卫」PR 的独立对抗复核「把 depletion 相邻缺口跟踪到闭环」。
+
+**PM 决策（两轮讨论）**：①「使用中和已耗尽都没法记录啊，用户领了不一定用啊。所以消耗对账这个功能直接全砍了」→ **废弃删除**用户可见功能，而非给死端点补守卫；②确认「**保留内部库存锁**」。**关键纠偏（承重）**：原任务前提「连表一起删（batch_usage_tracking/batch_depletion）」**不成立**——`batch_usage_tracking` 是**出入库共用活表**（出库给自用领出批次写「在用」标记、入库删除/取消读它拦「别误删已领用库存」），删了砸出入库；故本次=删「用户可见的写功能+死读接口+假 UI」、**保留内部库存锁**。
+
+**交付（18 文件·10 改 8 删）**：
+- **后端**：删整个 `routes/depletion-v1.1.ts`（3 写+3 读端点）+ `app.ts` 挂载/import → **授权缺口从根消失**（无写端点=无从越权写）；删 `tests/p0-01-depletion-conservation.test.ts`（测的 deplete 路径已删）；`DatabaseManager.ts` 删 `batch_depletion` 表 CREATE（真孤儿·仅被已废写接口写）、**留 `batch_usage_tracking`**（加口径注释说明为何保留）；`middleware/auth.ts` 删死的 `/depletion` path→module 分支。
+- **前端**：删 4 死组件（`DepletionTab`/`DepletedTab`/`ConfirmDepleteModal`/`EditRemainModal`——后两是「点确认弹假成功、不存数」的假壳）+ 一个误提交的 `InventoryList.tsx.bak`（**仓库唯一 tracked .bak**·含旧 depletion 码·复核逮到）；`api/inventory.ts` 删 `depletionApi`；`useInventoryPage.ts`/`InventoryList.tsx` 删「使用中/已耗尽」标签页（现只余在库单视图·无 Tab 栏）；`useInventoryPage.test.ts` 去 depletionApi mock。
+- **E2E**：删 `inventory-list.spec.ts`「Tab切换」组（INV-TAB-01~08·app 从不消费 `?tab=`·纯 goto+wait 无断言）。
+- **构建纪律闸**：`baseline.json` 清 3 depletion C2 键（`GET /batches/:materialId`·`POST .../deplete`·`PUT .../remain`）+ 棘轮收紧 38→35；存量违规清单 doc 标注对应条目「已删除」。
+
+**验证**：后端 tsc 绿·vitest **112 files/971 tests 全绿**（-2=删的 p0-01·**golden ¥13,152/¥27,870 零回归**）；前端 tsc 绿·`useInventoryPage.test` 8/8·vite build 绿；构建纪律闸 `--block=C1,C2,C3` **PASS**（C2 32→29 与删路由同步·新增 0）+ selftest 全绿（targetMaxCount 35 对齐）；**真跑端到端**：起后端·`/depletion/*` 全部 **404**（含 3 个原裸奔写）·`GET /inventory` **200**·golden 不受影响。
+
+**独立复核**：2 个独立 Agent 对抗面板（①完整性+耦合 ②安全缺口+baseline+golden）均 **NO CONFIRMED ISSUES**；确认 `outbound/inbound-v1.1.ts` 与 origin/master **逐字一致**（内部锁耦合未碰）。**顺带发现（非本 PR 引入·已 spawn chip `task_6d3deaf5`·先摊 PM）**：outbound `POST /`（创建出库·**LIVE 被消费**）+ `POST /bom` 只 `outbound:R` 挂载守卫、**无 inline W**（同文件 PUT/DELETE 有 `requireWriteAccess`）——与 depletion 缺口同型「写动作仅读权限守着」，属同模块 R-vs-W 遗漏、独立追踪。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 我改的源码/文档/baseline + session-log）；真跑后 `git checkout -- coreone.db` 复原 tracked dev DB。按 pr-governance 独立非栈 PR（vitest required 绿即可合·e2e 非 required）。
+
+*更新时间：2026-07-09*

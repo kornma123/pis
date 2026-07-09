@@ -27,7 +27,6 @@ import logRoutes from './routes/logs-v1.1.js'
 import stocktakingRoutes from './routes/stocktaking-v1.1.js'
 import returnRoutes from './routes/returns-v1.1.js'
 import scrapRoutes from './routes/scraps-v1.1.js'
-import depletionRoutes from './routes/depletion-v1.1.js'
 import purchaseOrderRoutes from './routes/purchase-orders-v1.1.js'
 import transferRoutes from './routes/transfers-v1.1.js'
 import supplierReturnRoutes from './routes/supplier-returns-v1.1.js'
@@ -86,7 +85,6 @@ app.use('/api/v1/roles', authenticateToken, requirePermission('roles', 'R'), rol
 
 app.use('/api/v1/logs', authenticateToken, requirePermission('logs', 'R'), logRoutes)
 app.use('/api/v1/reports', authenticateToken, requirePermission('cost_analysis', 'R'), reportRoutes)
-app.use('/api/v1/depletion', authenticateToken, requirePermission('cost_analysis', 'R'), depletionRoutes)
 
 app.use('/api/v1/inventory', authenticateToken, requirePermission('inventory', 'R'), inventoryRoutes)
 app.use('/api/v1/alerts', authenticateToken, requirePermission('alerts', 'R'), alertRoutes)

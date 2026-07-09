@@ -48,7 +48,7 @@ function pathToPermission(req: AuthRequest): string {
   if (path.startsWith('/locations')) return 'locations'
   if (path.startsWith('/projects')) return 'projects'
   if (path.startsWith('/boms')) return 'bom'
-  if (path.startsWith('/reports') || path.startsWith('/depletion')) return 'cost_analysis'
+  if (path.startsWith('/reports')) return 'cost_analysis'
   if (path.startsWith('/alerts')) return 'alerts'
   if (path.startsWith('/logs')) return 'logs'
   if (path.startsWith('/purchase-orders')) return 'purchase_orders'
