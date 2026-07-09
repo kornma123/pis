@@ -1733,3 +1733,21 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 测试文件 + 本 session-log）；未起后端·无 dev DB 污染。前端单测非 CI required 门（仅后端 vitest + gate required）。**未提交/未开 PR**（用户未要求）。参考记忆 `coreone-worktree-tests-and-codex-resilience`。
 
 *更新时间：2026-07-08*
+
+## 2026-07-09 本次会话完成的工作 —— 路由注册表 Phase 1（第 1 件·CON-4/5/7）
+
+**PR [#107](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/107)** `feat(route-registry): 路由注册表 Phase 1`（分支 `claude/jolly-bun-2a46da` → master·独立非栈·off origin/master）。四件事计划**第 1 件·Phase 1**（第 3 件新盈利前端的前置）。依据 Desktop `方案-后续四项-实施计划(内部·真实标识符).md` §一 Phase1 + 孤儿分诊表。
+
+**做了什么（零行为变更）**：
+1. 新建 `前端代码/src/lib/route-registry.ts`——50 条 App 路由**单一声明源**（43 active + 7 headless）·`navGroup` 封闭枚举 `NAV_GROUPS`·`permModule` 声明·`deriveSidebarMenu()` 派生侧栏。
+2. `AppSidebar.tsx` 菜单改**从注册表派生**（删手写 `ALL_MAIN_MENU/ALL_SYSTEM_MENU`·–112 行）。**`permissions.ts` 零改动**（权限判定不接管·Phase 1 边界）。
+3. 构建纪律闸**第 4 检查 `check-route-nav.cjs`（C4）**——每条路由须声明并分组或 headless 带死线·**fail-closed 无条件红·无 baseline 棘轮**（迁移已声明干净零存量债）·接进 `run-all.cjs`(govError)+`selftest.cjs`。孤儿化在构造上不可能。
+4. 孤儿分诊：7 条无导航路由登记 `headless`（owner+死线 2026-10-07+分诊结论）·据 **PM 已拍 ABC 处置清单 #61** + 唯一资产读码 + 口径诚实（`/abc/variance` 已 #99/P-7 降级返 null·非现行造假）。`operation_logs` 无 path 列→dev 库无直 URL 证据·已在 reason 诚实说明。
+
+**验证**：前端 tsc+build 绿·`route-registry.test.ts` 23/23 GOLDEN 快照锁死零行为变更（菜单+权限矩阵逐字节）·selftest **72/72**（C4 变异 F1-F13 + exit-code E11-E13）·`run-all --block=C1,C2` exit 0·**后端 golden 111 files/954 tests 全绿**（¥13,152+¥27,870 零回归·纯前端导航层天然零影响）。前端全量 vitest 仅剩 `utils.formatDate`×2 既有时区 flake（沙箱 UTC-8·与 master 逐字节一致·非本 PR·见上一段 2026-07-08）。
+
+**独立复核**：Workflow 4 镜头对抗面板（zero-behavior-change/parser-robustness/gate-integration/triage+scope）+ 逐条 refute。**3 confirmed 全修 + 回归门禁锁**：① BLOCKER `element` 在 `path` 前解析漏（`<Route[^>]*path=` 在 JSX `>` 处截断→改按 `<Route` 分段·F12）② reason 含 `{}` 丢条目（`\{[^{}]*\}` 截断→改字符串感知配平抽块 `extractBraceBlocks`·F13）③ `--update-baseline` 在 C4 红时也拒 exit 2（原 refuse 漏 routeNavGovErrors·E13）。**1 refuted**（7 headless 同日到期=有意 fail-closed 强制函数·同 whitelist 死线口径）。
+
+**治理**：worktree symlink 主仓 前端/后端 node_modules 才跑测试（全程禁 `git add -A`·只显式 add 9 文件）·跑后端测试后 dev DB 复原（实测未脏）·commit `7a424ea7`。**留 PM/后续**：Phase 2 权限翻转 + 完整影子断言矩阵（需授权组合子先落）+ 7 headless 的删页/补入口/合并（各独立小 PR·据 #61 的 I-2/I-4/I-5）。参考记忆 `coreone-build-discipline-gate`、`coreone-worktree-tests-and-codex-resilience`、`coreone-feature-keep-cut-inventory`。
+
+*更新时间：2026-07-09*
