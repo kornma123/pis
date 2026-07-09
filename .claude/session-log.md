@@ -1655,3 +1655,22 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 8 源码/测试文件 + 本 session-log）；起后端后 `git checkout -- coreone.db` 复原（clean）；`.claude/launch.json` 留未跟踪（本地 dev 便利·非产物）。为浏览器走查曾临时把 `/abc/variance` 加进 `permissions.ts` NAV_PATH_MODULE、走查后 `git checkout` **已还原**（不进 PR）。参考记忆 `coreone-build-discipline-gate`、`coreone-feature-keep-cut-inventory`。
 
 *更新时间：2026-07-08*
+
+## 本次会话完成的工作（构建纪律闸 白名单/baseline fail-closed 收口 → PR `chore/build-discipline-fail-closed`，2026-07-08）
+
+**线/工作树**：`elated-heyrovsky-4702ae`（分支 `chore/build-discipline-fail-closed` off origin/master `3b2de78e`）。task=P-5/P-6（CON-2/CON-5·公理一 fail-closed）：**构建纪律闸自己的两个豁免旁路口是 fail-open**（自己犯了它要治的病）。**纯工具/治理·零业务代码·golden 天然零回归**（只动 `scripts/build-discipline/*`）。
+
+**病根**：`check-backend-consumers.cjs` 旧 `wl.deadline && wl.deadline < today` 对**缺 deadline** 的白名单条目短路成「永不过期=永久放行」；白名单/baseline 都**无条数上限**；baseline 存量**无死线无负责人=无限期赦免**，其中 2 条 `C1|GET|/reports/personnel-efficiency`+`/reports/cost-monthly-comparison` 是害人型——前端 `reports.ts` 仍 live 调、后端恒 404、真人被喂 404。
+
+**交付（A 白名单 + B baseline 双轨 fail-closed）**：
+- **A·白名单三条**（`validateWhitelist`）：缺 deadline=红（缺省方向反转）/ deadline>today+120天=红 / 白名单>12条=红 / 坏格式=红；结构无效条目**不豁免其端点** + `hardFail`。常量收口到 `lib/constants.cjs`（单一事实源）。
+- **B·baseline 治理**（新增 `lib/baseline-governance.cjs`）：`meta[key]={owner,deadline,note}` per-entry 死线兑现（过期/缺/坏/悬空=红）；`targetMaxCount` 净条数天花板（**缺字段也判红**——防「删行=悄悄取消封顶」）；被消费端点禁入 C2 死物名单。给 2 条 live-404 挂 owner+deadline=**2026-08-07**（到期红→逼改前端/补路由，属业务代码另立 task/PR）；targetMaxCount=44 封顶。
+- **run-all**：govErrors **无条件 exit 1**（不受 --block/--only/baseline delta 影响）；`--only` 排除 C2 时**仍无条件跑一次 C2** 拿治理数据（堵旁路口）；`--update-baseline` 在治理错误时拒绝(exit 2)、禁与 --only 同用、post-prune 重算解死锁、保留/自动播种 meta+targetMaxCount。
+
+**验证**：selftest **53 条全绿**（+31 条 fail-closed 变异断言证有牙·含 A1-A9/B1.x/B2.x/E1-E10 run-all exit-code）；gate `--block=C1,C2` exit 0（C1 存量9/C2 存量32/C3 存量3·新增 0）；`--update-baseline` 幂等无 churn。**三原始旁路口 end-to-end 复现已闭合**：`--only=C1`+坏白名单 exit0→**1**；`--only --update-baseline` 静默截断→**拒 exit2**；删 targetMaxCount exit0→**1**。合并 origin/master（#98/#99 P-7+BOM）后 gate/selftest/baseline 仍全绿无漂移。
+
+**独立复核（机制5·两轮对抗 Workflow 面板）**：①`wf_124626ae`（5 lens 攻击×verify）13 findings→**10 CONFIRMED/3 PARTIAL/0 REFUTED**，逐条修 8 个可修项（--only 旁路口/targetMaxCount 删字段 fail-open/run-all exit-code 无覆盖/--update+--only 截断/过期 meta 清出死锁/常量漂移/陈旧注释）+ 2 条 PASS（越界+DB 审计）+ 1 条 teeth 结论（11 变异断言逐条有牙无恒真）→ commit `a1e3d567`。②`wf_0815a45e` 二轮验证修复（面板一 agent 卡 retry·已改用**直接复现原始 exploit** 决定性确认修复闭合，未空等）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add build-discipline 8 文件 + 本 session-log）；起测试后 `git checkout -- coreone.db` 复原；⚠️**两处坑记录**：(a) `git diff origin/master..HEAD`（two-dot）现幻影反向改 P-7/session-log（分支 off 旧 master·origin 已 +4 提交）→ 用 three-dot/merge-base 核实真实贡献=纯 build-discipline，已 merge origin/master 消幻影（记忆 `coreone-stale-fork-phantom-diff`）；(b) 害人型 live-404 死线 2026-08-07 到期会红 master gate 拦所有 PR=**有意时间炸弹**（B.3 逼处置），已在 PR body/README 充分披露 + spawn chip `task_364388dc` 修 reports.ts。参考记忆 `coreone-build-discipline-gate`。
+
+*更新时间：2026-07-08*
