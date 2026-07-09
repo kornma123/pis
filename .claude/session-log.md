@@ -1709,3 +1709,27 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add build-discipline 2 文件 + 本 session-log；前端删除已在 `f6b8c485`）；未起后端·无 dev DB 污染。→ PR。参考记忆 `coreone-build-discipline-gate`、`coreone-feature-keep-cut-inventory`；chip `task_364388dc` 由此了结。
 
 *更新时间：2026-07-08*
+
+## 本次会话完成的工作（修复 3 个日期敏感硬编码前端单测 → 固定测试时钟到 2026-06，2026-07-08）
+
+**线/工作树**：worktree `dazzling-saha-ab301e`（分支 `claude/dazzling-saha-ab301e`·off origin/master `2e24d317`，启动 `git fetch` 确认未落后）。承接上一段（PR #103）留下的「3 预存红=日期敏感硬编码 2026-06」：那 3 个前端单测在 2026-06 之后随 wall-clock 漂移**恒红**（组件默认月取 `new Date().toISOString().slice(0,7)`=当前月，测试却把期望钉死在 `2026-06`）。**纯测试改动·零组件/生产码改动·golden 天然零回归**。
+
+**根因（读码 + 红基线复现确认）**：
+- `CostDashboard.tsx:313` 默认 `month`=当前月；两测断言 `createAdjustment({yearMonth:'2026-06',…})`（line 178）与弹窗文案 `调整期间 2026-06`（line 225）。红基线实测 `received "2026-07"`。
+- `QualityCostAnalysis.tsx:110` 默认 `formData.yearMonth`=当前月；一测断言弹窗 `月份 2026-06`（line 118）。
+- 组件「默认当前月」是**正确生产行为**，bug 纯在测试把期望钉死 2026-06。
+
+**修法（方向②·固定注入时钟，测试不依赖 wall-clock）**：两测文件各在 `beforeEach` 加 `vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'))`——**照抄同目录既有惯用法** `QuarterlyAdjustment.test.tsx:42`（`setSystemTime` 单独用、不配 `useFakeTimers` → 只钉 `Date`、不 fake `setTimeout/setInterval` → 不破 RTL 的 `waitFor`/`findBy*`）。钉到 2026-06 后组件派生月与全部硬编码 `2026-06` 断言/mock 数据内部一致。`vi` 两文件均已 import，无新增依赖。
+
+**验证**（worktree symlink 主仓 node_modules 后真跑）：
+- 目标命令 `npx vitest run …CostDashboard.adjustments.render.test.tsx …QualityCostAnalysis.test.tsx` = **2 files / 15 tests 全绿**。
+- **鲁棒性证明**：今日 wall-clock=2026-07-08，测试断言 2026-06 仍绿 → 只因注入时钟压过 wall-clock；日期继续推移**不再复红**。
+- **红→绿基线对比**（stash 我的改动跑 pristine 全量 vs 带修复全量）：pristine=5 红（我这 3 + `utils.test.ts formatDate`×2）；带修复=仅剩 `utils.formatDate`×2。**我这 3 个 fail→pass、零回归**。
+
+**⚠️ 顺带发现（未处置·非本 task 范围）**：
+- `src/lib/utils.test.ts > formatDate`×2：pristine 也红，但**根因不同**=本沙箱 TZ 为 `America/Los_Angeles`(UTC-8)——`formatDate`(utils.ts:8) 用 `new Date('2024-01-15')`(UTC 午夜)+`toLocaleDateString('zh-CN')`(本地 TZ)→日期回退一天。**仅在 UTC 以西时区红**；项目常规环境(中国 UTC+8)/UTC CI 应绿（故上一段 PR #103 只数到 3 个红、没数到它）。未改——环境专属、可能对用户根本不红，且属另一类（TZ 依赖）宜另立项。
+- `src/pages/cost-center/hooks/useCostCenterPage.test.ts`：全量并发跑时偶发 1 次 `waitFor` 超时；隔离单跑 12/12×3 全绿 → **flaky**、非本改动引入（文件互不 import·Vitest 逐文件隔离）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 测试文件 + 本 session-log）；未起后端·无 dev DB 污染。前端单测非 CI required 门（仅后端 vitest + gate required）。**未提交/未开 PR**（用户未要求）。参考记忆 `coreone-worktree-tests-and-codex-resilience`。
+
+*更新时间：2026-07-08*
