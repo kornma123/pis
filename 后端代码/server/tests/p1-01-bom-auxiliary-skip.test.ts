@@ -35,8 +35,14 @@ function seedMaterial(id: string, code: string, stock: number) {
 beforeAll(async () => {
   db = await getDb()
   const outboundRoutes = (await import('../src/routes/outbound-v1.1.js')).default
+  // /outbound POST 写端点现有 requirePermission('outbound','W') 守卫（依赖 req.user）。注入写角色用户，
+  // 模拟 authenticateToken 已设置 req.user（生产链路一致；本文件测 BOM 辅料跳过业务逻辑，非 RBAC）。
+  const injectWriteUser = (req: any, _res: any, next: any) => {
+    req.user = { userId: 'TEST-ADMIN', username: 'system', role: 'admin' }
+    next()
+  }
   app = await buildTestApp([
-    { path: '/api/v1/outbound', router: outboundRoutes },
+    { path: '/api/v1/outbound', router: outboundRoutes, middleware: [injectWriteUser] },
   ])
 
   // 项目

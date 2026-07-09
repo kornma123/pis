@@ -1857,3 +1857,28 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 路由 + 1 测试 + 本 session-log）；测试用 `:memory:` DB·**dev DB 未污染**（git status 确认 clean）。→ 按 pr-governance 开独立 PR（vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板状态·真相以 `gh pr list` 为准）。参考记忆 `coreone-non-p0-domain-audit`、`coreone-rbac-live-vs-seed-matrix`、`coreone-worktree-tests-and-codex-resilience`。
 
 *更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 本次会话：outbound 写端点补 W 守卫（相邻授权缺口·同 labor-times/indirect-costs #752e1571）
+
+**缺口**：`后端代码/server/src/routes/outbound-v1.1.ts` 挂载层仅 `outbound:R`（app.ts:98），同文件 PUT/DELETE 已用 `requirePermission('outbound','W')`，但两个**创建（写）**端点无 inline W 守卫 → 持 outbound:R（只读）角色可越权创建出库（减库存 + 写 batch_usage_tracking/stock_logs/ABC）：
+- `POST /`（:159→164·**LIVE**·前端 outboundApi.create）
+- `POST /bom`（:284→289·构建纪律 C2 无消费者死端点在册）
+
+源自「全砍 depletion 功能」PR 独立对抗复核顺带发现（PM 已拍板处置策略=补守卫）。
+
+**真实暴露面核实（live RBAC≠SEED_MATRIX）**：运行库 5 个活跃角色全用**旧扁平数组权限格式**（`parsePermissions` 一律映射为 W，无法表达 R-only）→ 能到达端点的 warehouse_manager/technician/pathologist 皆 outbound:W（守卫放行·零行为变更），procurement/finance 无 outbound（挂载层已 403）。缺口仅在**对象格式** `{outbound:'R'}`（SEED_MATRIX lab_director / 角色矩阵编辑器只读授予）路径下潜伏。→ **现网零影响**，属一致性+纵深防御修复。
+
+**修法**：把原在 :476 的 `requireWriteAccess = requirePermission('outbound','W')` 上提到文件顶部（:25），补挂两个 POST（PUT/DELETE 原已引用·逻辑不变）。全 4 写端点齐守·2 GET 读端点不动。
+
+**验证**（四轴独立三角）：
+- 新增 `tests/rbac-outbound-write-guard.test.ts`（8 用例·合成 reader/writer 角色·drift-proof·**变异测试证有牙**：先红[reader 400]→修后绿[reader 403]）覆盖全 4 写端点双向断言。
+- 修 `tests/p1-01-bom-auxiliary-skip.test.ts`（原裸 mount 无 auth→加 `injectWriteUser` admin 注入·同 stocktaking-two-phase/p1-04 house 模式·仅改 harness 不改 201/422 业务断言）。
+- 后端 vitest **117 files/1049 tests 全绿**（含新增 8·golden ¥13,152+¥27,870 零回归）·tsc 绿。
+- **真跑端到端**（起真后端 3001·6/6）：admin/warehouse_manager(outbound:W) POST→201 不破功能；procurement→403（挂载层）；R-only 合成角色 GET→200 仍可读、POST `/` 与 `/bom`→**403（新守卫生效）**。
+- 独立复核=grep 全端点清单（6 端点 2 读 4 写·单挂载点无旁路）+ codex 异构 review（`-s read-only high`·Q1-5 全 not-real/无真 bug）。
+
+**治理**：worktree symlink 主仓 node_modules（禁 `git add -A`·只显式 add 2 文件[路由+p1-01]+1 新测试+本 session-log）；起后端 + POST + R-only seed 脏了 tracked dev DB → 已 `git checkout -- data/coreone.db` + 删 WAL/SHM 复原（git status 仅剩我的源码）。→ 按 pr-governance 开独立 PR（base master·非栈·单独可合·vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板·真相以 `gh pr list` 为准）。参考记忆 `coreone-authz-combinators-c5-lint`、`coreone-rbac-live-vs-seed-matrix`、`coreone-worktree-tests-and-codex-resilience`、`coreone-dev-db-tracked-trap`。
+
+*更新时间：2026-07-09*

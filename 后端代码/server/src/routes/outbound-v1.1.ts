@@ -19,6 +19,11 @@ import { recordOverride } from '../utils/override-log.js'
 
 const router = Router()
 
+// 出库写入权限：挂载层仅按模块 R 放行（app.ts），写端点须内层 'W' 守卫（口径同 abc-v1.1 / labor-times / indirect-costs）。
+// 缺此守卫则任何 outbound:R（只读，如 SEED_MATRIX lab_director / 角色矩阵编辑器只读授予）角色即可越权创建出库
+// （减库存 + 写 batch_usage_tracking/stock_logs）。POST 创建端点此前遗漏、仅 PUT/DELETE 有守卫（相邻授权缺口·2026-07-09）。
+const requireWriteAccess = requirePermission('outbound', 'W')
+
 // 库存双账本漂移告警（项A）：出库时缺可消耗批次、单位成本走兜底 → 落 cost_exceptions（既有告警清单）。
 // 事务内调用；项⑦「统一旁路台账」把此类软兜底一并汇入统一 override 日志（供旁路频率体检）。
 function recordLedgerDrift(db: any, outboundId: string, oi: any, operator: string): void {
@@ -156,7 +161,7 @@ router.get('/stats', (req, res) => {
   }
 })
 
-router.post('/', (req, res) => {
+router.post('/', requireWriteAccess, (req, res) => {
   try {
     const { type, projectId, items, remark } = req.body
     if (!type || !Array.isArray(items) || items.length === 0) {
@@ -281,7 +286,7 @@ router.post('/', (req, res) => {
   }
 })
 
-router.post('/bom', (req, res) => {
+router.post('/bom', requireWriteAccess, (req, res) => {
   try {
     const { projectId, bomId, sampleCount, remark } = req.body
     if (!bomId || sampleCount === undefined || sampleCount === null) {
@@ -471,9 +476,6 @@ router.post('/bom', (req, res) => {
     error(res, err.message)
   }
 })
-
-// 写入权限检查
-const requireWriteAccess = requirePermission('outbound', 'W')
 
 router.put('/:id', requireWriteAccess, (req, res) => {
   try {
