@@ -1756,4 +1756,104 @@ http://your-server-ip:8080
 
 **治理**：**全程禁 `git add -A`**·只显式 add `portfolio-health.ts` + `readiness-predicate.test.ts`(新) + `hospital-cm-constants-driftguard.test.ts` + 本 session-log；未起后端。按 pr-governance 开 PR（base=master·独立非栈·vitest required 绿即可合·§1.9 默认不加 --admin）。
 
+## 2026-07-09 本次会话完成的工作 —— 路由注册表 Phase 1（第 1 件·CON-4/5/7）
+
+**PR [#107](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/107)** `feat(route-registry): 路由注册表 Phase 1`（分支 `claude/jolly-bun-2a46da` → master·独立非栈·off origin/master）。四件事计划**第 1 件·Phase 1**（第 3 件新盈利前端的前置）。依据 Desktop `方案-后续四项-实施计划(内部·真实标识符).md` §一 Phase1 + 孤儿分诊表。
+
+**做了什么（零行为变更）**：
+1. 新建 `前端代码/src/lib/route-registry.ts`——50 条 App 路由**单一声明源**（43 active + 7 headless）·`navGroup` 封闭枚举 `NAV_GROUPS`·`permModule` 声明·`deriveSidebarMenu()` 派生侧栏。
+2. `AppSidebar.tsx` 菜单改**从注册表派生**（删手写 `ALL_MAIN_MENU/ALL_SYSTEM_MENU`·–112 行）。**`permissions.ts` 零改动**（权限判定不接管·Phase 1 边界）。
+3. 构建纪律闸**第 4 检查 `check-route-nav.cjs`（C4）**——每条路由须声明并分组或 headless 带死线·**fail-closed 无条件红·无 baseline 棘轮**（迁移已声明干净零存量债）·接进 `run-all.cjs`(govError)+`selftest.cjs`。孤儿化在构造上不可能。
+4. 孤儿分诊：7 条无导航路由登记 `headless`（owner+死线 2026-10-07+分诊结论）·据 **PM 已拍 ABC 处置清单 #61** + 唯一资产读码 + 口径诚实（`/abc/variance` 已 #99/P-7 降级返 null·非现行造假）。`operation_logs` 无 path 列→dev 库无直 URL 证据·已在 reason 诚实说明。
+
+**验证**：前端 tsc+build 绿·`route-registry.test.ts` 23/23 GOLDEN 快照锁死零行为变更（菜单+权限矩阵逐字节）·selftest **72/72**（C4 变异 F1-F13 + exit-code E11-E13）·`run-all --block=C1,C2` exit 0·**后端 golden 111 files/954 tests 全绿**（¥13,152+¥27,870 零回归·纯前端导航层天然零影响）。前端全量 vitest 仅剩 `utils.formatDate`×2 既有时区 flake（沙箱 UTC-8·与 master 逐字节一致·非本 PR·见上一段 2026-07-08）。
+
+**独立复核**：Workflow 4 镜头对抗面板（zero-behavior-change/parser-robustness/gate-integration/triage+scope）+ 逐条 refute。**3 confirmed 全修 + 回归门禁锁**：① BLOCKER `element` 在 `path` 前解析漏（`<Route[^>]*path=` 在 JSX `>` 处截断→改按 `<Route` 分段·F12）② reason 含 `{}` 丢条目（`\{[^{}]*\}` 截断→改字符串感知配平抽块 `extractBraceBlocks`·F13）③ `--update-baseline` 在 C4 红时也拒 exit 2（原 refuse 漏 routeNavGovErrors·E13）。**1 refuted**（7 headless 同日到期=有意 fail-closed 强制函数·同 whitelist 死线口径）。
+
+**治理**：worktree symlink 主仓 前端/后端 node_modules 才跑测试（全程禁 `git add -A`·只显式 add 9 文件）·跑后端测试后 dev DB 复原（实测未脏）·commit `7a424ea7`。**留 PM/后续**：Phase 2 权限翻转 + 完整影子断言矩阵（需授权组合子先落）+ 7 headless 的删页/补入口/合并（各独立小 PR·据 #61 的 I-2/I-4/I-5）。参考记忆 `coreone-build-discipline-gate`、`coreone-worktree-tests-and-codex-resilience`、`coreone-feature-keep-cut-inventory`。
+
+*更新时间：2026-07-09*
+
+## 本次会话完成的工作（授权组合子 + lint —— 权限影子矩阵前置·迁移序第 1 步，2026-07-09）
+
+**线/工作树**：worktree `relaxed-elgamal-eb20b7`（分支 `claude/relaxed-elgamal-eb20b7`·off origin/master `94c6b7db`，启动 `git fetch` 确认未落后）。task = 专家终裁「后续四项」迁移序第 1 步：把散落在各 handler `if` 里的「授权条件」收进**具名组合子** + 一条 **lint** 堵住「野生授权逻辑」，让「条件集」从此可机器枚举，为后面的权限影子断言矩阵铺「枚举可靠」的地基。**纯结构重构·鉴权判定逐字节零变更·golden 天然零回归**（不碰钱）。
+
+**盘清单（穷举 + Workflow 独立复核确认完整·0 遗漏）**：后端路由里「对操作者身份做 allow/deny 决策」的内联授权共 **6 处/5 文件**——① alerts admin-only 门（route-entry）② reconciliation SoD 自审 ③ account-reconcile SoD（fail-closed）④ abc SoD（本地 wrapper·2 端点）⑤ cost-adjustment SoD（code=FORBIDDEN）⑥ partner-config/statement-import 口径门（roles-aware isAdmin·mid-handler）。明确排除：attribution（`operator=req.user.username` 仅写库/审计）、data-object 保护（`existing.code==='admin'`）、auth.ts DB 行 `user.role`（签 JWT/建 capability，非门禁）、已是组合子的 requirePermission/requireAnyRole。
+
+**交付**：
+- **新注册表 `middleware/authz-combinators.ts`**：`isAdmin`(roles-aware) / `requireAdmin({primaryRoleOnly,message,code})`(路由守卫) / `assertNotSelfReview(res,{submitterId,actorId,message,code,failClosedOnMissing})`(SoD 具名守卫) / `assertCaliberChangeAllowed(req,res,changed,message)`(口径门) + 导出 `SELF_REVIEW_FORBIDDEN` 码单一事实源。
+- **6 处提升逐字节等价**：alerts→`requireAdmin({primaryRoleOnly:true})`（只看 primary role·复刻旧语义·中间件位仍在 404 前）；4 处 SoD→`assertNotSelfReview`（内联在原位·排序不变，`failClosedOnMissing` 只 account-reconcile 传 true）；abc **2 端点直接内联**（去掉本地 wrapper→每端点携带注册表符号·下游矩阵可按调用点枚举）；2 处口径门→`assertCaliberChangeAllowed`（删两份本地 `isAdmin`·路由层不再裸读 `req.user.role`）。
+- **新 lint `scripts/build-discipline/check-authz-combinators.cjs`（C5·独立轴，与姊妹 PR 的 C4=路由注册表正交）**：只扫 `routes/*.ts`，先 `blankComments` 剥注释再匹配（防迁移注释误报）。规则①禁请求用户 `.role/.roles`（点/可选链/别名/解构/方括号，锚定 `req.user`/别名·不误伤 DB 行 `user.role` 与 `req.body` `data.roles`）②禁裸 `SELF_REVIEW_FORBIDDEN` 字面量 ③禁内联「请求用户身份 `userId/username/id` === 行字段」比对（堵 FORBIDDEN-码 SoD 规避）。接 run-all.cjs **fail-closed 层=零容忍无 baseline**（任一违规无条件红）。README 补 C5 + 覆盖边界诚实声明（派生标量/helper/capability 不在正则闭包·靠注册表+人工兜底）。
+- **夹具/测试**：`tests/authz-combinators.test.ts`（每个具名条件 trigger+pass 对·逐分支：primaryRoleOnly 忽略 roles / failClosed true·false / code 默认·覆盖 / caliber 三态）；selftest.cjs 加 C5 变异断言（每种野生写法必红 + attribution/注释/尾注/块注/DB 行/req.body 均不红 + E14 端到端 fail-closed exit 1 + E15 干净不误红 exit 0）。
+
+**独立复核（Workflow 7-agent：3 discovery + 4 红队·`wf_95829e45`）**：discovery **0 遗漏**（确认清单完整）；红队 CLEAR 独立确认 6 处逐字节等价 + 内联(非 pre-route)取舍正确（pre-route 会把 403 提到 404/409 前破坏等价）+ 内联清单无遗漏。采纳红队硬化 3 项：rule③ 身份比对规避、bracket-notation 规避、abc wrapper 内联（枚举可靠性）。**顺带发现相邻缺口（out-of-scope·已 spawn `task_e7374cf7`）**：depletion/labor-time/indirect-cost 写端点仅被挂载层 R 权限守卫、无 inline W → 任何读权限角色可写（属「缺检查」非「内联检查」，改它会变鉴权行为，须先摊 PM）。
+
+**验证**（worktree symlink 主仓 node_modules 后真跑）：后端 **vitest 112 files / 972 tests 全绿**（含 authz 夹具 + 全 RBAC/SoD 回归网 + golden ¥13,152+¥27,870 零回归）；`tsc --noEmit` 绿；构建纪律闸 **selftest exit 0**（含 C5 全部变异/no-FP/E14/E15）+ **`--block=C1,C2` gate exit 0**（C5 fail-closed 层 0 违规）。
+
+**⚠️ 姊妹 PR 命名撞车已解**：开 PR 时发现并行的 **PR #107（路由注册表 Phase 1）** 也给构建纪律闸加了检查、占用了「**C4**」（`check-route-nav.cjs`·孤儿路由结构预防）+ exit-code `E11–E13`。两者都改共享的 `run-all.cjs`/`selftest.cjs`/`README.md`（但互不碰对方独占文件）。因我的 authz 检查是**正交新轴**（授权可枚举性 vs 他们功能先于消费者/孤儿路由），把我的重命名为 **C5** + exit-code `E14/E15` + 变量 `c5authz`——两 PR 从此**加性合并**（谁后合谁在这 3 个共享文件做机械 keep-both，id/编号不冲突）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 本会话源码 + 本 session-log）；跑测试后 `git checkout -- 后端代码/server/data/coreone.db` 复原 dev DB。→ PR（pr-governance）。参考记忆 `coreone-worktree-tests-and-codex-resilience`、`coreone-build-discipline-gate`、`coreone-rbac-live-vs-seed-matrix`。
+
+## 本次会话完成的工作（第4件·止损执法点：拆分口径未认账水印 + 导出声明，2026-07-09）
+
+**线/工作树**：worktree `silly-carson-3e64a8`（分支 `claude/silly-carson-3e64a8`·off origin/master `94c6b7db`，启动 `git fetch` 确认未落后）。任务 =「后续四项」**第4件工程侧止损执法点**（LEG-2/公理一）——业务侧「暂停新增对外使用 + 取证 + 认账签字」**不在本次**（PM/业务的活）。
+
+**背景**：政策分摊常量 `SPLIT_DIAG_FEE=105`（`statement-revenue.ts`）派生的「实验室收入/院级毛利/cmRate/grossMargin/confirmedLabRevenue」结论对外**可能高估约 2 倍**、且未经业务认账。要给「止损」提供**执法机制**（非只通知）：消费该结论的对外输出自带「口径未认账」水印 + 导出携带口径声明列。
+
+**交付（三件·全部只加展示/元数据·不动钱的计算）**：
+1. 新增 `后端代码/server/src/utils/caliber-ratification.ts`：`splitCaliberRatification()`（**只读占位** `SPLIT_CALIBER_RATIFICATION='UNRATIFIED'`·**无状态机/无签字流程**·`basisVersion` 复用既有 `SPLIT_FORMULA_VERSION` 不另立）+ `buildExportDeclaration`/`decorateExportRows`（导出声明六列 `_sourceTag/_basisNote/_basisVersion/_exportedAt/_periodRange/_ratified`·逐行随行剥不掉）。
+2. 水印挂到**每个消费拆分结论的对外输出响应**（附加字段 `caliberRatification`·additive）：statement-import(/preview,/commit)、hospital-pnl(/health,/)、partner-pnl(/,/cases)、account-reconcile(/overview,/workbench,/hospital-months/:id/complete)。**精度**：裸时序数组 `/trend` 形状不改（防破坏消费者·水印在同页 overview 已带、与趋势图同视线）；非消费端点(cross-partner-audit)**不误挂**。
+3. 前端 `HospitalPnLDashboard.tsx`（线上旧盈利视图·承载高估数字）在实验室收入/毛利数字**同视线**渲染水印横幅 + 院级盈亏表头徽标·**fail-closed**（仅后端明确 `ratified===true` 才免；字段缺席=仍显；认账后自动摘牌无需改前端）。
+
+**诚实天花板（§四.4）**：全仓核实**当前无任何导出通道消费拆分结论**——前端 `cost/`·`report/` 导出 + 后端 `abc-cost-export` 都是 **ABC 全成本口径**，账实核对页「导出」是未接线占位；`CostTrend` 的 `marginRate=profit/fee` 是 ABC 成本利润率非拆分（独立三查确认）→ `decorateExportRows` 作**执法就绪机制**交付、`docs/COREONE-拆分口径止损执法点-2026-07-09.md` 写明覆盖边界（启用前旧导出无法枚举/追签）。
+
+**验证**：后端 tsc 绿·全量 vitest **113 files/973 tests 全绿**（新增 `caliber-ratification.test.ts` 11 + `bv-split-caliber-watermark.test.ts` 8）；前端 tsc+build 绿·`HospitalPnLDashboard.watermark.test.tsx` 3 + 既有 stopgap 5 绿；**golden ¥13,152/¥27,870 零回归**（additive 字段·原数字并存不变）。
+**独立复核**：Workflow 5 镜头对抗面板（`wf_e82ba212`·boundary/watermark-completeness/golden-safety/export-honesty/frontend + 逐条 adversarial refute·10 agent high）→ **0 CONFIRMED**（synthesis 明确 empty-not-by-omission·ship as-is）。codex 异构轴两次 stdin 断流无输出 → 按 `codex-cli-usage.md` 规则由 Workflow 面板独立完成机制5 第二视角，不叠并发 codex。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 我的 4 路由 + 3 前端 + 1 util + 3 测试 + 1 doc + session-log）；测试用隔离 DB·tracked `coreone.db` 零污染。PR #105（按 pr-governance·独立非栈·vitest required 绿即可合）。
+
+## 本次会话完成的工作（旧盈利视图 `/hospital-pnl` 真实使用审计 → 纯只读文档，2026-07-09）
+
+**线/工作树**：worktree `cranky-panini-25f1fe`（分支 `claude/cranky-panini-25f1fe`·off origin/master，启动 `git fetch` 确认未落后）。任务=替换旧盈利视图（`前端代码/src/pages/hospital-pnl/HospitalPnLDashboard.tsx`，路由 `/hospital-pnl`）之前先审计真实使用，产出需求清单。**纯只读·零应用代码改动·仅新增一份文档 `docs/COREONE-旧盈利视图使用审计-2026-07-09.md`·golden ¥13,152/¥27,870 天然零回归。**
+
+**核心结论（最重要一条）**：该只读视图的真实使用**当前结构性无法测量**——三重缺口：① `operation_logs` 只记写（`middleware/audit-log.ts:37/296` `MUTATING={POST,PUT,PATCH,DELETE}`，GET 早返回天然不记）；② 前端零埋点（约 290 src 文件 grep 遥测关键字 0 命中）；③ 现有 `operation_logs`=13 行 seed 样例（同一时刻批量插入、0 pnl 命中）。故"谁访问/点了什么/筛了什么/导出了什么"四问**一条日志都答不出**，"有人真在用 vs 没人点"**无法区分**。唯一诚实边角=`app.ts:66-69` 易失 stdout `console.log(method, req.path)`（无用户/剥 query/无落盘 morgan/access.log→不改变结论）。
+
+**主要发现**：
+- 旧视图=纯只读（唯一消费 `partnerPnlApi`→GET `/partner-pnl`·`/cases`·`/trend`）、**零导出按钮**（组件 grep 0 命中）、nav 可达（侧栏+向导链接+深链 3 入口）。
+- 潜在人群=运行库 12 活跃账号仅 **4 人**（admin/finance/2 pathologist）持 `cost_analysis:R`；procurement 源码授 R 但 live 缺、pathologist live 有但源码矩阵不授（RBAC live≠SEED_MATRIX 漂移，见记忆 `coreone-rbac-live-vs-seed-matrix`）。
+- 专家三处高风险的真实形态：① 下钻=仅页内单院趋势图（无明细页/历史链接；但账户→病例下钻数据 `GET /cases` 已在、旧前端只取 `onlyFlagged` 子集）；② 导出=旧视图本就没有；③ 期间=仅单月切片+单院时序，**无跨期并列**（跨期对比属"新增能力"非"保留"）。
+- 导出治理死角=真实但**当前未激活**（低—中）：旧视图无导出、兄弟成本页导出维度仅 project/BOM/month 无 partner/hospital→无法从任一页导出重建医院排名；唯一残留=肉眼抄屏。两个未来触发点需设防（给 `/hospital-pnl` 加导出按钮 / 给 ABC profitability 加 partner 维度）。
+- **重要旁证**：后端 `hospital-pnl-v1.1.ts`（P0 院级贡献毛利·标准成本·影子模式·`app.ts:136` 挂载）**已建好但无任何前端消费者**（旧页实际打的是 `partner-pnl`·ADR-003 并存）——典型"功能先于消费者被建"（build-discipline C2 形态）。新视图落点更像"给已存在影子接口接线+退役旧 partner-pnl 前端"，顺序摊给 PM 拍。
+
+**独立复核（质疑关）**：Workflow 6-agent 并行取证（能力枚举/日志埋点/RBAC人群/导出死角）+ 2-agent 对抗 skeptic 复核两条承重结论（operation_logs 测不到使用 + 组件零导出）均 `refuted=false`；再 3-agent 成品文档对抗质疑关（overclaim/事实/建议 三镜头）全判"可定稿"，逐条订正 4 处（技术员分母混用 18→8 活跃/261→260 行/291→290 文件/§十遥测选项二补"后端 GET 审计反转既有『GET 不记』原则须 PM 破例"张力注）。⚠️ 中途遇一次网络故障致 Workflow 中断，`resumeFromRunId` 复跑（缓存命中日志取证 agent）恢复。
+
+**治理**：全程只读 `sqlite3 SELECT`·未起后端·**dev DB 未污染**（`git status` 确认 `coreone.db` clean）；**禁 `git add -A`**·只显式 add 本文档 + 本 session-log。纯 docs·vitest required 绿即可合·按 pr-governance 开 PR（合并后不回改看板状态·真相以 `gh pr list` 为准）。
+
+**⚠️ PM 权威回填（同日晚，PR #106 合并后）**：PM 定案「**功能根本没上线，直接替换就行了**」——旧盈利视图 `/hospital-pnl` **从未上线到生产**。→ 本审计一切"替换前顾虑"（补读侧遥测/导出治理死角/下钻跨期保留取舍）对本视图**全 moot**：无真实用户、无使用迁移，直接按新口径（P0 院级贡献毛利·影子后端 `hospital-pnl-v1.1.ts` 已建）替掉旧页 + 清 3 入口即可。已入记忆 `coreone-hospital-pnl-never-launched`；已给审计文档顶部补 PM 结论 banner（后续 docs PR）。**过程教训**：派"替换 X 前审计使用"任务先确认 X 是否真在产（本次对从未上线功能跑了完整使用审计，结论没错但可收敛为直接替换）。
+
+*更新时间：2026-07-09*
+
+## 本次会话完成的工作（相邻授权缺口修复：labor-times/indirect-costs 写端点补 W 守卫，2026-07-09）
+
+**线/工作树**：worktree `magical-morse-8dd381`（分支 `claude/magical-morse-8dd381`）。task = 「授权组合子重构」PR 的独立复核发现的**相邻授权缺口**（属"缺检查"非"内联检查"，不在该重构范围）。同 #76（项 E）性质。
+
+**问题（已亲验）**：`app.ts` 挂载层按模块 R 放行、注释声称"写权限由路由内 `requirePermission(module,'W')` 守卫"，但三个文件的写端点无 inline W 守卫。经现网真实数据核实 + PM 讨论收敛到**只修两个"活"文件**：
+- `labor-time-v1.1.ts`（挂 `labor_times:R`）3 写端点、`indirect-cost-v1.1.ts`（挂 `abc_config:R`）4 写端点 = **7 个**越权写成本配置主数据（工时定义 / 间接成本中心 / 月度分摊），前端有真实写消费者（`api/master.ts`）→ 补守卫有实义。
+- `depletion-v1.1.ts` 3 写端点 = **无消费者死端点**（前端 depletionApi 只读·C2 在册·PM 确认弃用）→ 处置=废弃删除而非补守卫，**踢出本 PR**、spawn chip `task_a1dd766b` 跟踪到闭环（复核明确要求）。
+
+**讨论循环（摊假设→真数据→PM 拍）**：
+- 现网 `coreone.db`（只读查·库未动）**≠ SEED_MATRIX**：角色是老数组格式（列出模块=W）→ 无真实角色处于 R-only；`lab_director` 角色/用户不存在；labor_times/abc_config 现网仅 admin 持有（全 W）→ 补 W **近零行为变更**（同 #76）。
+- PM Q1 拍板：depletion「太重·没人用·之前要踢出去」→ 排除（我核实：前端零写调用 + C2 违规在册 → 属实）。PM Q2 拍板：finance 现网缺 labor_times/abc_config（历史遗留漂移）**不碰矩阵·另立**——本 PR 保持纯安全守卫、零矩阵改动。
+
+**修法（仿已正确的 abc-v1.1 requireCostWrite / projects）**：两文件各 import requirePermission + `const requireXxxWrite = requirePermission('<module>','W')` 插到每个写 handler 第二参。labor_times:W / abc_config:W（口径同挂载与同域兄弟）。GET 读端点全不动。
+
+**回归门禁**：新增 `tests/rbac-cost-config-write-guard.test.ts`（14 用例·合成 reader(R-only)/writer(W) 角色·drift-proof）做 W-403 双向断言（reader 持 R 过挂载层、被内层 W 拦成 403 → 归因 inline 守卫）。**变异测试**：临时移除 labor-times POST 守卫 → 对应 reader 断言精确翻红（1 failed/13 passed），证守卫真生效。
+
+**验证**（worktree symlink 主仓 node_modules 后真跑）：
+- 补守卫后本地 vitest **112 files/968 tests 全绿**；`git merge origin/master`（7 提交·PnL 水印/caliber 域·**与我文件零重叠**·clean）后重跑 **114 files/987 tests 全绿**；tsc `--noEmit` 绿。
+- 黄金 ¥13,152 + ¥27,870 零回归。
+- 独立复核：inline 完整性核（两文件逐 handler·app.ts 单挂载点无旁路）+ 变异测试 + **独立对抗 review agent**（1–6 项全 PASS=CONFIRMED-SOUND；第 7 项 depletion 排除判为"可接受 scoping 但洞真实、须跟踪闭环"→ 已 spawn chip 闭环）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 路由 + 1 测试 + 本 session-log）；测试用 `:memory:` DB·**dev DB 未污染**（git status 确认 clean）。→ 按 pr-governance 开独立 PR（vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板状态·真相以 `gh pr list` 为准）。参考记忆 `coreone-non-p0-domain-audit`、`coreone-rbac-live-vs-seed-matrix`、`coreone-worktree-tests-and-codex-resilience`。
+
 *更新时间：2026-07-09*

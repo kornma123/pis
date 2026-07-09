@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { canAccess } from '@/lib/permissions'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { partnerPnlApi } from '@/api/partner-pnl'
-import type { PartnerPnl, CasePnl, PnlTrendPoint } from '@/types/partner-pnl'
+import type { PartnerPnl, CasePnl, PnlTrendPoint, CaliberRatification } from '@/types/partner-pnl'
 
 // —— 设计令牌（项目标准：浅色金融 + 海军蓝标题 #0a2540 + 主蓝强调 #3b82f6 + 等宽数字）——
 // P-2 呈现层止血（八层门禁 · DEC 决策安全层）：本页是口径迁移期的旧视图。账户级*盈利判断*一律不再用红/绿
@@ -29,6 +29,8 @@ export default function HospitalPnLDashboard() {
   const [rows, setRows] = useState<PartnerPnl[]>([])
   const [flagged, setFlagged] = useState<CasePnl[]>([])
   const [trend, setTrend] = useState<PnlTrendPoint[]>([])
+  // 止损执法点（LEG-2）：拆分口径认账水印。fail-closed——null 视为未认账、照样显示水印。
+  const [ratification, setRatification] = useState<CaliberRatification | null>(null)
   const [selected, setSelected] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -48,6 +50,7 @@ export default function HospitalPnLDashboard() {
       if (my !== reqRef.current) return // 已有更新的请求在途 → 丢弃本次结果
       const list = sortPartnersForDisplay(ov?.list || [])
       setRows(list)
+      setRatification(ov?.caliberRatification ?? null) // 缺席则 null → 下方 fail-closed 仍显水印
       setFlagged(cs?.list || [])
       const top = selectedRef.current || list.slice().sort((a, b) => b.labRevenueTotal - a.labRevenueTotal)[0]?.partnerId || ''
       setSelected(top)
@@ -80,6 +83,8 @@ export default function HospitalPnLDashboard() {
   }
 
   const selectedName = rows.find((r) => r.partnerId === selected)?.partnerName || ''
+  // 止损执法点（LEG-2）：只有后端明确回 ratified===true 才免水印；null/未认账一律显示（fail-closed）。
+  const showWatermark = ratification?.ratified !== true
 
   return (
     <div className="space-y-5">
@@ -106,6 +111,21 @@ export default function HospitalPnLDashboard() {
           <span className="font-medium text-slate-700">不代表对某家医院客户好坏的评判</span>；请勿据此单独对某家客户做去留决定。
         </p>
       </div>
+
+      {/* 止损执法点（LEG-2）：拆分口径未认账水印——与实验室收入/毛利数字同视线、强制显示、不可折叠隐藏。 */}
+      {showWatermark && (
+        <div data-testid="split-caliber-watermark"
+          className="flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 shadow-sm">
+          <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+          <p className="text-[13px] leading-relaxed text-amber-900">
+            <span className="font-semibold">口径未经业务认账。</span>
+            本页的<span className="font-medium">实验室收入</span>与<span className="font-medium">院级毛利</span>，由一个尚未经业务方认账的拆分口径推算得出
+            （对外<span className="font-medium">可能显著高估约 2 倍</span>）——仅供内部参考，
+            <span className="font-medium">不得作为对外披露、结算或谈判的单独依据</span>，导出前请保留本口径声明。
+            {ratification?.basisVersion && <span className="text-amber-700">（口径版本 {ratification.basisVersion}）</span>}
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 animate-pulse">
@@ -137,6 +157,12 @@ export default function HospitalPnLDashboard() {
           <div className={cn(CARD, 'overflow-hidden')}>
             <div className="flex items-center px-4 py-3 border-b border-slate-100">
               <h2 className={cn('text-sm font-semibold', INK)}>院级盈亏 · 按毛利从高到低</h2>
+              {showWatermark && (
+                <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 border border-amber-300 bg-amber-50 px-2 py-0.5 rounded-full"
+                  title="本表实验室收入/毛利来自未经业务认账的拆分口径，可能显著高估，不得单独作为对外依据">
+                  <AlertTriangle className="w-3 h-3" /> 口径未认账
+                </span>
+              )}
               <div className="ml-auto flex items-center gap-3 text-xs">
                 {rows[0]?.costMonthAxis === 'service_month' && (
                   <span className="inline-flex items-center gap-1 text-slate-400" title="本月成本已按服务月对齐：跨月使用的耗材成本归入病例的服务当月，与收入同月，避免单月毛利错期。">

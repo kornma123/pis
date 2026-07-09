@@ -11,6 +11,7 @@ import { requirePermission } from '../middleware/permissions.js'
 import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
 import { auditCrossPartnerCaseNos } from '../utils/cross-partner-audit.js'
 import { buildPartnerPnl, loadCasePnlsWithCost, buildPartnerTrend } from '../utils/partner-pnl-service.js'
+import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：labRevenue/grossMargin(拆分派生)输出自带「口径未认账」水印（LEG-2）
 
 const router = Router()
 const requireCostRead = requirePermission('cost_analysis', 'R')
@@ -40,7 +41,7 @@ router.get('/', authenticateToken, requireCostRead, (req, res) => {
     const list = buildPartnerPnl(getDatabase(), { serviceMonth, partnerId })
     // 不分页（院数有限）；按毛利升序，负毛利（亏损院）置顶供筛查
     list.sort((a, b) => a.grossMargin - b.grossMargin)
-    successList(res, list, 1, list.length || 1, list.length)
+    successList(res, list, 1, list.length || 1, list.length, { caliberRatification: splitCaliberRatification() })
   } catch (e: any) { error(res, e.message) }
 })
 
@@ -55,7 +56,7 @@ router.get('/cases', authenticateToken, requireCostRead, (req, res) => {
     list.sort((a, b) => a.grossMargin - b.grossMargin) // 负毛利置顶
     const total = list.length
     const slice = list.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize)
-    successList(res, slice, page, pageSize, total)
+    successList(res, slice, page, pageSize, total, { caliberRatification: splitCaliberRatification() })
   } catch (e: any) { error(res, e.message) }
 })
 

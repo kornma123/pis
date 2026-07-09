@@ -1,5 +1,20 @@
 // 按医院(客户)成本/盈利 —— 与后端 partner-pnl 路由返回结构一一对应。
 
+/**
+ * 拆分口径认账水印（止损执法点·LEG-2）——与后端 `caliber-ratification.ts` 的 CaliberRatification 对应。
+ * 消费拆分结论（实验室收入 / 院级毛利）的对外输出随响应带；前端据 `ratified===false` 在与数字同视线处渲染水印。
+ * ⚠️ 字段缺席时 **fail-closed**：按未认账显示水印（宁可多提示、不可漏提示）。
+ */
+export interface CaliberRatification {
+  ratified: boolean
+  state: 'UNRATIFIED' | 'RATIFIED'
+  sourceTag: 'measured' | 'derived' | 'placeholder'
+  basisVersion: string
+  label: string
+  note: string
+  ratifiedAt: string | null
+}
+
 export interface PartnerPnl {
   partnerId: string
   partnerName?: string

@@ -9,6 +9,7 @@ import {
 } from '../utils/bom-version.js'
 import { runCostRecalculation } from '../utils/cost-runs.js'
 import { requireAnyRole } from '../middleware/permissions.js'
+import { assertNotSelfReview } from '../middleware/authz-combinators.js'
 import { canonicalCaseNo } from '../utils/classifier.js' // 病理号落库归一，与 lis-cases /import 及 case_revenue 同一 canonical（防全角号匹配漏）
 
 const router = Router()
@@ -500,7 +501,8 @@ router.post('/logs/:id/approve', requireReconcileApprove, (req, res) => {
     if (!row) { error(res, '提案不存在', 'NOT_FOUND', 404); return }
     if (row.type !== 'bom_fix_proposal') { error(res, '该记录不是可审核的修正提案', 'INVALID_STATUS', 422); return }
     if (row.status !== 'pending') { error(res, '只有待审核提案可以审核', 'INVALID_STATUS', 422); return }
-    if (row.operator === operator) { error(res, '不能审核自己提交的修正提案', 'SELF_REVIEW_FORBIDDEN', 403); return }
+    // SoD 自审拦截（提升进具名守卫，判定与响应逐字节不变）：不能审核自己提交的修正提案。
+    if (!assertNotSelfReview(res, { submitterId: row.operator, actorId: operator, message: '不能审核自己提交的修正提案' })) return
 
     const effectiveScope = req.body?.effectiveScope === 'retroactive' ? 'retroactive' : 'future_only'
     const bomId = row.applied_bom_id

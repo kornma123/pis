@@ -11,10 +11,12 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { assertNotSelfReview } from '../middleware/authz-combinators.js'
 import { writeAuditLog } from '../utils/cost-runs.js'
 import { recordOverride } from '../utils/override-log.js'
 import { buildReconcileInputs, runReconcile, partnerMonthLabRate } from '../utils/reconcile-compute.js'
 import { computeReconcile, verdictFollowUp, drivesSupplement, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
+import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：confirmedLabRevenue(拆分派生)输出自带「口径未认账」水印（LEG-2）
 
 const router = Router()
 
@@ -82,7 +84,7 @@ router.get('/overview', (req, res) => {
       补收实收,
       确认实收: Math.round((base确认实收 + 补收实收) * 100) / 100,
     }
-    successList(res, list, 1, list.length || 1, list.length, { board })
+    successList(res, list, 1, list.length || 1, list.length, { board, caliberRatification: splitCaliberRatification() })
   } catch (err: any) {
     error(res, err.message)
   }
@@ -132,6 +134,7 @@ router.get('/workbench', (req, res) => {
       diffs,
       unmatched,
       caseHints,
+      caliberRatification: splitCaliberRatification(), // confirmedLabRevenue 拆分派生 → 带「口径未认账」水印
     })
   } catch (err: any) {
     error(res, err.message)
@@ -186,7 +189,7 @@ router.post('/hospital-months/:id/complete', requirePermission('account_reconcil
     db.prepare(`UPDATE reconcile_hospital_months SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = ?, confirmed_lab_revenue = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(operatorOf(req), confirmed, hm.id)
     writeAuditLog(db, 'account_reconcile', 'complete', hm.id, { partnerId: hm.partner_id, serviceMonth: hm.service_month, confirmedLabRevenue: confirmed }, operatorOf(req))
-    success(res, { id: hm.id, status: '复核完成', confirmedLabRevenue: confirmed }, '复核完成')
+    success(res, { id: hm.id, status: '复核完成', confirmedLabRevenue: confirmed, caliberRatification: splitCaliberRatification() }, '复核完成')
   } catch (err: any) {
     error(res, err.message)
   }
@@ -299,11 +302,9 @@ router.post('/supplements/:id/approve', requirePermission('account_reconcile', '
     if (!so) return error(res, '补收单不存在', 'NOT_FOUND', 404)
     if (so.status !== '待补收') return error(res, '仅「待补收」补收单可签发', 'CONFLICT', 409)
     if (so.review_status === 'approved') return error(res, '已签发', 'CONFLICT', 409)
-    // SoD：不能签发自己提交/发起的补收单（认定人≠签发人）。
+    // SoD：不能签发自己提交/发起的补收单（认定人≠签发人）。提升进具名守卫，判定与响应逐字节不变。
     // fail-closed：submitted_by 缺失（空串/NULL）视为数据缺陷 → 拒签发，绝不因短路跳过 SoD（对抗复核 D-①）。
-    if (!so.submitted_by || so.submitted_by === operator) {
-      return error(res, '不能签发自己提交的补收单（或提交人缺失）', 'SELF_REVIEW_FORBIDDEN', 403)
-    }
+    if (!assertNotSelfReview(res, { submitterId: so.submitted_by, actorId: operator, message: '不能签发自己提交的补收单（或提交人缺失）', failClosedOnMissing: true })) return
     db.prepare(`UPDATE supplement_orders SET review_status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(operator, so.id)
     writeAuditLog(db, 'account_reconcile', 'supplement_approve', so.id, { amount: so.amount, submittedBy: so.submitted_by ?? null }, operator)

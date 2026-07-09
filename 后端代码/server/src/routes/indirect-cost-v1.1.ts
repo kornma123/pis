@@ -4,8 +4,13 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { logOperation } from '../utils/operation-logger.js'
 import { normalizeDisplayText, requireValidText, type TextGuardResult } from '../utils/text-guard.js'
+import { requirePermission } from '../middleware/permissions.js'
 
 const router = Router()
+
+// 间接成本中心写入权限：挂载层仅按模块 R 放行（app.ts），写端点须内层 'W' 守卫（口径同 abc-v1.1 requireCostWrite）。
+// 缺此守卫则任何 abc_config:R 角色即可增删改成本中心/录入分摊（非-P0 审计发现的相邻授权缺口）。
+const requireIndirectCostWrite = requirePermission('abc_config', 'W')
 
 const COST_TYPE_LABELS: Record<string, string> = {
   rent: '房租',
@@ -206,7 +211,7 @@ router.get('/:id', (req, res) => {
 })
 
 // 创建成本中心
-router.post('/', (req, res) => {
+router.post('/', requireIndirectCostWrite, (req, res) => {
   try {
     const { code, name, costType, monthlyAmount, allocationBase, description, status } = req.body
     const codeText = requireValidText(code, '成本中心编码', 100)
@@ -249,7 +254,7 @@ router.post('/', (req, res) => {
 })
 
 // 更新成本中心
-router.put('/:id', (req, res) => {
+router.put('/:id', requireIndirectCostWrite, (req, res) => {
   try {
     const { id } = req.params
     const { name, costType, monthlyAmount, allocationBase, description, status } = req.body
@@ -305,7 +310,7 @@ router.put('/:id', (req, res) => {
 })
 
 // 删除成本中心
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireIndirectCostWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
@@ -364,7 +369,7 @@ router.get('/:id/allocations', (req, res) => {
 })
 
 // 录入月度分摊
-router.post('/:id/allocations', (req, res) => {
+router.post('/:id/allocations', requireIndirectCostWrite, (req, res) => {
   try {
     const { id } = req.params
     const { yearMonth, totalAmount, allocationBaseValue } = req.body
