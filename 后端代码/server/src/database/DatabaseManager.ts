@@ -749,6 +749,12 @@ export function initializeDatabase(): void {
   database.exec(`CREATE INDEX IF NOT EXISTS idx_return_records_created ON return_records(created_at)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_scrap_records_created ON scrap_records(created_at)`)
 
+  // P-3 拒绝写审计（SEC-3）：operation_logs 增一个可空 outcome 列区分成功/拒绝/聚合/告警行。
+  //   NULL = 成功写（既有行 + 新成功行天然 NULL，现有 /logs 视图零回归）；
+  //   'denied' = 被拒写逐条明细；'denied_agg' = 超阈聚合计数行；'security_alert' = 越权探测告警行。
+  //   纯增量、不改既有列（符合「DatabaseManager 只追加」）。判别用 typed 列而非 operation 字符串前缀。
+  ensureColumn('operation_logs', 'outcome', 'TEXT')
+
   // 多角色 RBAC：用户主身份角色（展示用；权限走 user_roles 并集）
   ensureColumn('users', 'primary_role', 'TEXT')
 

@@ -1640,6 +1640,22 @@ http://your-server-ip:8080
 
 *更新时间：2026-07-08*
 
+## 本次会话完成的工作（P-3 拒绝写审计 SEC-3 → PR `feat/reject-write-audit`，2026-07-08）
+
+**线/工作树**：worktree `laughing-kalam-0ebe9c`（off origin/master tip `3b2de78e`，新鲜）。task = 八层门禁 SEC-3 / 附录 P-3「取证脊柱的另一半」——门 E 那批权限守卫只证明「门关了」、证不了「有没有人在推门」（被拒越权写一条不入库、越权探测无痕）。**不碰钱·golden 天然零回归**。
+
+**交付（扩 `auditWrite`：成功与被拒都记）**：`audit-log.ts` finish 回调改**三互斥终态早返回**——(a)2xx 成功照旧写脱敏 body；(b)**4xx 被拒**→落 `outcome='denied'` 行，request_data 仅 `{status, 标量code}`、**绝不触达 req.body**（安全红线·物理隔离）；(c)3xx/5xx 不记（5xx=服务器故障非访问拒绝）。新增纯工厂 `createDenialTracker({now})`（同文件·无 DB/无 I/O·注入时钟）：滚动 60s 窗口、每主体每类(authz=403 / other=其它4xx)**独立**计数——①**聚合防刷**：每类 >AGG(20) 抑制逐条、**即时可持久 upsert** 一条 `denied_agg` 计数行（首次 INSERT 存 aggId·其后 UPDATE 同 id·无定时器无末窗悬挂）；②**越权探测告警**：authz distinct(method+path)>=5 或原始计数>=20 → 每窗一次落 `security_alert` 行 + `console.warn`（**先落库成功才 warn**·库故障不制造告警风暴·结构化对象防注入）；③Map 摊还清扫(每256事件/超cap)+过期整窗重置+MAX_SUBJECTS(1万)最旧先驱逐。`DatabaseManager.ts` 给 operation_logs 加**可空 `outcome` 列**（ensureColumn 幂等·只追加·NULL=成功）区分四态，避免 operation 字符串前缀 overload。
+
+**边界严守**：只动 `audit-log.ts` + 两测试(`bv-write-audit-middleware`/新 `denial-tracker`) + `DatabaseManager.ts`(只追加列)。**不碰路由/守卫**——**刻意未编辑 `logs-v1.1.ts`**（守边界）：denied/agg/alert 行经现有 `/api/v1/logs` 视图可见(operation/description 人读)、被拒记录进现有 `操作日志` 页=审计视图增益非回归（核实：operation_logs 唯一读消费者是 logs-v1.1.ts·按字段名映射·新列零破坏·所有 INSERT 具名列无位置破坏）。
+
+**验证**：后端 tsc 绿 + vitest **109 files/952 tests 全绿**（新增 15 用例·golden ¥13,152/¥27,870 零回归）。真 HTTP 集成：yishi1(pathologist)POST /suppliers→403 落 denied 行含 operator+FORBIDDEN·**body 的 password/marker 绝不入库**；5 个 distinct 403 端点→security_alert 行；22 条 404→denied_agg 聚合行。dev DB 全程 :memory:。
+
+**独立复核（机制5·双引擎收敛=零码 bug）**：先跑**设计批判面板**(4 lens·塑形：收敛 4xx 记录+outcome 列+scalarCode 只读标量+cleanPath 剥 query+工厂非类+即时聚合+distinct 告警+同步临界区)。①**Claude 对抗复核面板**`wf_02f3ad7d`(4 维 find×adversarial verify×synth)：security-redline 维**零 finding**、correctness/boundary **零 confirmed 码 bug**、`must_fix=[]`；4 条 CONFIRMED **全是缺回归测试**(LOW)、1 条 REFUTED——已全部补齐**变异可捕获**的守卫测试：request_data 精确 keyset `['code','status']`(杀 `{status,code,msg}` 变异)、真 PII 回显红线用例(POST 两次同名抗体触 409·error.message 回显 name·断言 denied 行不含)、cleanPath query 剥离用例(`?token=SEKRET`→断言 description 无 secret/无`?`)、5xx/3xx 不记(直驱 finish 钩子)、sweep 驱逐+过期(抓 sort 翻转/谓词翻转变异)。②**codex 异构(gpt-5.5·high)**：首轮读全文后**断流**(SSE 掐断)、resume 需 TTY 不可用→改**inline 关键片段**(短流规避)复核 4 承重点=**「no real bug」**(无 body 泄露/scalarCode 只读标量/aggId 不串窗类/全同步无 await)。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 4 文件 + 本 session-log）；提交前 `git checkout -- coreone.db` 复原(实际 :memory: 未脏)。**已披露缺口**（撞「不碰路由/守卫」硬约束·非缺陷·PR body 列明）：per-subject 单轴→多账号轮换可绕；认证态 404 IDOR 枚举/未挂载路径枚举不告警；per-IP 轴因未配 `trust proxy` 不做；多进程下阈值 per-process、内存态重启即失(持久行仍在)；成功路径 description 仍含 originalUrl(query)=既有行为未改。
+
+*更新时间：2026-07-08*
+
 ## 本次会话完成的工作（P-7 假标准成本停返 + 分摊口径空转控件摘除 → PR `fix/p7-fake-standard-and-allocation-dropdown`，2026-07-08）
 
 **线/工作树**：worktree `frosty-chaum-7a775f`（off origin/master tip `3b2de78e`，新鲜）。task = 八层门禁 **HON-3/HON-4**（附录B **P-7**）——两处「看着能用其实是假」，#86 只加免责声明字段、真身照活。**碰成本域·护黄金锚**。
