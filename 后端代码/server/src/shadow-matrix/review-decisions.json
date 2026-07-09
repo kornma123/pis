@@ -1,0 +1,4 @@
+{
+  "_doc": "权限影子断言矩阵 · review 级 diff 的已批准裁决清单（终裁 6：review 不许静默过——每条 review 级 diff 必须在此登记，否则红，逼显式裁决）。键：守卫 diff = 「METHOD /path」端点键；可见性 diff = 「role|route」。BLOCK/escalated 永不能靠登记洗白（那是放宽·无条件红）；能登记的只有 review（收紧/drift/新端点/移除端点等非放宽变更）。当前 master 干净 → 空。",
+  "acknowledged": []
+}

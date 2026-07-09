@@ -1857,3 +1857,26 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 路由 + 1 测试 + 本 session-log）；测试用 `:memory:` DB·**dev DB 未污染**（git status 确认 clean）。→ 按 pr-governance 开独立 PR（vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板状态·真相以 `gh pr list` 为准）。参考记忆 `coreone-non-p0-domain-audit`、`coreone-rbac-live-vs-seed-matrix`、`coreone-worktree-tests-and-codex-resilience`。
 
 *更新时间：2026-07-09*
+
+## 本次会话完成的工作（权限影子断言矩阵：Phase-2 翻转门·只断言不接管，2026-07-09）
+
+**线/工作树**：worktree `serene-darwin-9e540d`（分支 `claude/serene-darwin-9e540d`·off origin/master）。task=「方案-后续四项」第 1 件（前置=路由注册表 Phase1 #107 + 授权具名组合子 #109 均已合）。
+
+**做了什么**：建「权限影子断言矩阵」——将来「权限从路由注册表派生」翻转的**机器门**。两个独立断言并列跑：**A·可见性**（role×route·现行 `permissions.ts` NAV_PATH_MODULE+角色特例 vs 派生 `route-registry.ts` permModule·不可见→可见=BLOCK/可见→不可见=review/收窄命中活跃写端点=escalated）+ **B·守卫**（endpoint×method·actual[运行时端点自省+源码守卫静态抽取] vs expected[已批准快照]·模块变/降级 W→R/少条件=BLOCK·任一侧无守卫=UNGUARDED 须白名单)。两道门=BLOCK==0 且 review/UNGUARDED 全须进已批准清单（不许静默过）。端点集地面真相=运行时 `app._router` 自省（终裁 3）。**本轮只断言不接管**——三份源纯读、零权限判定改动。
+
+**产物**（全新增·`后端代码/server/src/shadow-matrix/`）：`matrix-core.ts`（纯核心+`evaluateGate`）·`source-parsers.ts`（静态解析·const 别名解析·正则词法态）·`route-introspect.ts`（运行时自省）·`index.ts`（装配+`runMatrix`+operation_logs join）·`production-report.ts`（生产角色报告·翻转门产物）·`expected-guards.snapshot.json`（277 端点·`SHADOW_MATRIX_UPDATE=1` 重批）·`public-endpoints.allowlist.json`（6 公共/自读端点）·`review-decisions.json`（空）+ `tests/shadow-permission-matrix.test.ts`（26 用例·活体门+埋雷自测+解析器单测·ride vitest required）+ 文档 `docs/COREONE-权限影子断言矩阵-2026-07-09.md` + `docs/shadow-matrix-reports/README.md`。
+
+**对 master 的 diff 清单（交付验证）**：277 运行时端点·**0 BLOCK·0 review·0 escalated·0 可见性 diff·路由集相等**·6 UNGUARDED（全有意公共/自读=health+auth·已白名单）·0 悬空·0 未对应挂载。干净迁移（无手工映射 bug）。生产库 5 真实角色（无 lab_director/admin 行·≠fixture）同样 0 可见性 diff。
+
+**独立复核（机制 5·6 视角对抗 Workflow 面板）逮 4 真缺陷·均修+变异证有牙**：
+- **#1 HIGH**：解析器把守卫判别性选项抹平（`requireAdmin({primaryRoleOnly})`↔`requireAdmin()` 都记 'admin'；`assertNotSelfReview({failClosedOnMissing})` 都记 'sod:self-review'）→ 删选项=真放宽却判 equal 静默过门。**修**=编进 condition（`admin:primaryRole`/`admin:rolesAware`·`sod:self-review:failClosed`/`sod:self-review`）。**变异实证**：删真实 alerts `primaryRoleOnly`→门产 `PUT /alerts/rules/:id [BLOCK] 少了 [admin:primaryRole]`（修前静默·修后硬红·文件已复原·hash 校验）。
+- **#2 MED**：escalated 在真实路径恒死代码（`isActiveWriteRoute` 未接线）→ 接 operation_logs 真实数据源（活体门+生产报告都接·CI :memory 无写历史故 0·诚实）+ 端到端雷经 runMatrix 产出。
+- **#3 MED**：埋雷只打纯函数不穿装配→抽 `evaluateGate` 独立埋雷 + parser→assembly 端到端雷（临时文件写坏真守卫经 buildActualGuards→diffGuard 抓 BLOCK）。
+- **#4 LOW**：`blankComments` 无正则词法态（`/[",\n\r]/` 内引号失步·abc-v1.1 实测）→ 加正则字面量态 + 词法自测（每个被建模源 EOF state 必回 0）·277 端点解析零回归。
+- 面板另出 3 条**翻转前提**（非本轮 bug·记文档）：CI-A=fixture-only（生产报告须列翻转 required 前置）·快照批准治理（建议 CODEOWNERS）·页级 vs 方法级粒度（翻转设计前提·本矩阵已把 B 独立留空间）。
+
+**验证**（worktree symlink 主仓 node_modules）：tsc `--noEmit` 绿·shadow 26 用例绿·**全量 vitest 117 files/1067 tests 全绿**·黄金 ¥13,152+¥27,870 零回归。运行时自省 probe 实证 277 端点、守卫闭包匿名（故守卫语义走静态解析）。生产报告读真实库 readOnly·**dev DB byte-identical**（hash 校验·无 wal/shm）。
+
+**治理**：**全程禁 `git add -A`**（只显式 add shadow-matrix/* + 测试 + docs + .gitignore·node_modules 符号链接/materials.ts[非我改·03:10 checkout 态]/对抗 agent 遗留 probe 均不 add）；边界核实=`git diff HEAD` 仅 .gitignore·所有源 .ts 仍 03:10 checkout 态（对抗子代理带 Bash 只写了 scratch probe·已删·印证记忆 `workflow-subagent-bash-sandbox`）。生产报告 `production-visibility-*.{md,json}` 含本地绝对路径→ .gitignore 排除（仅入库 README 协议）。按 pr-governance 开 PR（vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板·真相以 `gh pr list` 为准）。参考记忆 `coreone-route-registry-phase1`、`coreone-authz-combinators-c5-lint`、`coreone-rbac-live-vs-seed-matrix`、`coreone-grill-gate-all-outputs`、`always-pm-plain-summary`。
+
+*更新时间：2026-07-09*

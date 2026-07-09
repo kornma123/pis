@@ -1,0 +1,1444 @@
+{
+  "_doc": "权限影子断言矩阵·已批准守卫快照（ratified）。键=运行时端点「METHOD /path」，值=guardId{module,level,conditions}。断言 B 拿它当 expected 比对当前 actual：模块变/降级 W→R/少条件=BLOCK。改端点守卫→人复核后 SHADOW_MATRIX_UPDATE=1 重批。",
+  "generated": "由 SHADOW_MATRIX_UPDATE=1 生成（日期见 git 提交）",
+  "count": 277,
+  "guards": {
+    "DELETE /api/v1/abc/activity-centers/:id": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/abc/cost-drivers/:id": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/antibody-cost/antibodies/:id": {
+      "module": "antibody_cost",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/antibody-cost/antibody-aliases/:id": {
+      "module": "antibody_cost",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/boms/:id": {
+      "module": "bom",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/categories/:id": {
+      "module": "categories",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/equipment-types/:id": {
+      "module": "equipment",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/equipment/:id": {
+      "module": "equipment",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/inbound/:id": {
+      "module": "inbound",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/indirect-costs/:id": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/labor-times/:id": {
+      "module": "labor_times",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/locations/:id": {
+      "module": "locations",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/materials/:id": {
+      "module": "materials",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/outbound/:id": {
+      "module": "outbound",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/partners/:id": {
+      "module": "partners",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/projects/:id": {
+      "module": "projects",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/returns/:id": {
+      "module": "returns",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/roles/:id": {
+      "module": "roles",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/scraps/:id": {
+      "module": "scraps",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/stocktaking/:id": {
+      "module": "stocktaking",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/supplier-returns/:id": {
+      "module": "supplier_returns",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/suppliers/:id": {
+      "module": "suppliers",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/transfers/:id": {
+      "module": "transfers",
+      "level": "W",
+      "conditions": []
+    },
+    "DELETE /api/v1/users/:id": {
+      "module": "users",
+      "level": "W",
+      "conditions": []
+    },
+    "GET /api/health": {
+      "module": null,
+      "level": null,
+      "conditions": []
+    },
+    "GET /api/v1/abc/activity-centers": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/activity-centers/:id": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/adjustments": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/alert-rules": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/audit-logs": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/batch-trace/:batchId": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/bom-fee-mappings/:bomId": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/bom-fee-mappings/audit": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/bom-links/:bomId": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/budgets": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/closing-readiness": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/cost-drivers": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/cost-pools": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/cost-runs": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/cost-runs/:id": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/dashboard": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/exceptions": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/export": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/fee-comparison": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/fee-standards": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/fee-standards/:id": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/periods": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/profitability": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/profitability/activity-breakdown": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/quality-costs": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/quality-costs/summary": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/slide-cost-trend": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/abc/variance-analysis": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/account-reconcile/overview": {
+      "module": "account_reconcile",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/account-reconcile/supplements": {
+      "module": "account_reconcile",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/account-reconcile/workbench": {
+      "module": "account_reconcile",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/alerts": {
+      "module": "alerts",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/alerts/rules": {
+      "module": "alerts",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/antibody-cost/antibodies": {
+      "module": "antibody_cost",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/antibody-cost/antibodies/resolve": {
+      "module": "antibody_cost",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/antibody-cost/antibody-aliases": {
+      "module": "antibody_cost",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/antibody-cost/cost-params": {
+      "module": "antibody_cost",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/antibody-cost/cost-preview": {
+      "module": "antibody_cost",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/antibody-cost/detection-systems": {
+      "module": "antibody_cost",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/antibody-cost/special-stains": {
+      "module": "antibody_cost",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/auth/cost-visibility": {
+      "module": null,
+      "level": null,
+      "conditions": []
+    },
+    "GET /api/v1/auth/me/capabilities": {
+      "module": null,
+      "level": null,
+      "conditions": []
+    },
+    "GET /api/v1/boms": {
+      "module": "bom",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/boms/:id": {
+      "module": "bom",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/case-revenue": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/categories": {
+      "module": "categories",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/categories/tree": {
+      "module": "categories",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/cost-adjustments": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/cost-adjustments/suggestions": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/depletion/batches/:materialId": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/depletion/depletion": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/depletion/tracking": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/equipment": {
+      "module": "equipment",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/equipment-types": {
+      "module": "equipment",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/equipment-types/:id": {
+      "module": "equipment",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/equipment-types/stats": {
+      "module": "equipment",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/equipment/:id": {
+      "module": "equipment",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/equipment/:id/usage": {
+      "module": "equipment",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/equipment/depreciation-stats": {
+      "module": "equipment",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/equipment/stats": {
+      "module": "equipment",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/hospital-pnl": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/hospital-pnl/health": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/hospital-pnl/trend": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/inbound": {
+      "module": "inbound",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/inbound/:id/check-deletable": {
+      "module": "inbound",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/inbound/stats": {
+      "module": "inbound",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/indirect-costs": {
+      "module": "abc_config",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/indirect-costs/:id": {
+      "module": "abc_config",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/indirect-costs/:id/allocations": {
+      "module": "abc_config",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/indirect-costs/stats": {
+      "module": "abc_config",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/inventory": {
+      "module": "inventory",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/inventory/stats": {
+      "module": "inventory",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/labor-times": {
+      "module": "labor_times",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/labor-times/:id": {
+      "module": "labor_times",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/labor-times/project-type/:type": {
+      "module": "labor_times",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/labor-times/stats": {
+      "module": "labor_times",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/lis-cases": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/lis-cases/batches": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": [
+        "anyRole:admin+finance"
+      ]
+    },
+    "GET /api/v1/lis-cases/markers": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/locations": {
+      "module": "locations",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/locations/tree": {
+      "module": "locations",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/logs": {
+      "module": "logs",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/logs/operation": {
+      "module": "logs",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/logs/override-frequency": {
+      "module": "logs",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/materials": {
+      "module": "materials",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/materials/:id": {
+      "module": "materials",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/materials/next-code": {
+      "module": "materials",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/ngs/partner-pnl": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/ngs/products": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/outbound": {
+      "module": "outbound",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/outbound/stats": {
+      "module": "outbound",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/partner-config": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "GET /api/v1/partner-config/:id": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "GET /api/v1/partner-config/:id/changes": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "GET /api/v1/partner-pnl": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/partner-pnl/cases": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/partner-pnl/cross-partner-audit": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/partner-pnl/trend": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/partners": {
+      "module": "partners",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/partners/:id": {
+      "module": "partners",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/project-catalog": {
+      "module": "projects",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/project-catalog/catalog": {
+      "module": "projects",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/project-catalog/catalog/:code/aliases": {
+      "module": "projects",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/project-catalog/lookup": {
+      "module": "projects",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/project-catalog/review-queue": {
+      "module": "projects",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/project-catalog/summary": {
+      "module": "projects",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/projects": {
+      "module": "projects",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/projects/:id": {
+      "module": "projects",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/purchase-orders": {
+      "module": "purchase_orders",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/purchase-orders/:id": {
+      "module": "purchase_orders",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/reconciliation/cases": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/reconciliation/logs": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/reconciliation/materials": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/reconciliation/projects": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/reconciliation/projects/:id/materials": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/reconciliation/summary": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/reports/cost-by-material": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/reports/cost-by-project": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/reports/cost-by-supplier": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/reports/cost-trend": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/returns": {
+      "module": "returns",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/returns/stats": {
+      "module": "returns",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/roles": {
+      "module": "roles",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/scraps": {
+      "module": "scraps",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/scraps/stats": {
+      "module": "scraps",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/statement-import/lis-coverage": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "GET /api/v1/stocktaking": {
+      "module": "stocktaking",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/supplier-returns": {
+      "module": "supplier_returns",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/supplier-returns/:id": {
+      "module": "supplier_returns",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/suppliers": {
+      "module": "suppliers",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/transfers": {
+      "module": "transfers",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/transfers/stats": {
+      "module": "transfers",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/users": {
+      "module": "users",
+      "level": "R",
+      "conditions": []
+    },
+    "PATCH /api/v1/materials/batch-status": {
+      "module": "materials",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/activity-centers": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/adjustments": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/adjustments/:id/approve": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": [
+        "sod:self-review"
+      ]
+    },
+    "POST /api/v1/abc/adjustments/:id/reject": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": [
+        "sod:self-review"
+      ]
+    },
+    "POST /api/v1/abc/alert-rules": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/bom-fee-mappings/:bomId/preview": {
+      "module": "abc_dashboard",
+      "level": "R",
+      "conditions": []
+    },
+    "POST /api/v1/abc/bom-fee-mappings/audit": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/budgets": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/cost-drivers": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/cost-pools": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/cost-pools/:action(sync|auto-collect|recalculate)": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/cost-runs": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/exceptions/:id/ignore": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/exceptions/:id/resolve": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/exceptions/:id/retry": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/periods": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/periods/:id/close": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/periods/:id/start-collection": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/abc/quality-costs": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/account-reconcile/close": {
+      "module": "account_reconcile",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/account-reconcile/compute": {
+      "module": "account_reconcile",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/account-reconcile/diffs/:id/verdict": {
+      "module": "account_reconcile",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/account-reconcile/hospital-months/:id/complete": {
+      "module": "account_reconcile",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/account-reconcile/hospital-months/:id/reopen": {
+      "module": "account_reconcile",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/account-reconcile/hospital-months/:id/reopen-close": {
+      "module": "account_reconcile",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/account-reconcile/supplements/:id/approve": {
+      "module": "account_reconcile",
+      "level": "W",
+      "conditions": [
+        "sod:self-review:failClosed"
+      ]
+    },
+    "POST /api/v1/account-reconcile/supplements/:id/collect": {
+      "module": "account_reconcile",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/account-reconcile/supplements/:id/giveup": {
+      "module": "account_reconcile",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/account-reconcile/supplements/:id/reopen": {
+      "module": "account_reconcile",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/alerts/:id/handle": {
+      "module": "alerts",
+      "level": "R",
+      "conditions": []
+    },
+    "POST /api/v1/alerts/generate": {
+      "module": "alerts",
+      "level": "R",
+      "conditions": []
+    },
+    "POST /api/v1/antibody-cost/antibodies": {
+      "module": "antibody_cost",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/antibody-cost/antibody-aliases": {
+      "module": "antibody_cost",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/antibody-cost/cost-params/calibrate": {
+      "module": "antibody_cost",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/auth/login": {
+      "module": null,
+      "level": null,
+      "conditions": []
+    },
+    "POST /api/v1/auth/logout": {
+      "module": null,
+      "level": null,
+      "conditions": []
+    },
+    "POST /api/v1/auth/refresh": {
+      "module": null,
+      "level": null,
+      "conditions": []
+    },
+    "POST /api/v1/boms": {
+      "module": "bom",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/case-revenue/import": {
+      "module": "reconciliation",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/case-revenue/preview": {
+      "module": "reconciliation",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/categories": {
+      "module": "categories",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/cost-adjustments": {
+      "module": "cost_analysis",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/cost-adjustments/:id/review": {
+      "module": "cost_analysis",
+      "level": "W",
+      "conditions": [
+        "sod:self-review"
+      ]
+    },
+    "POST /api/v1/depletion/tracking": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "POST /api/v1/depletion/tracking/:id/deplete": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "POST /api/v1/equipment": {
+      "module": "equipment",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/equipment-types": {
+      "module": "equipment",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/equipment/:id/usage": {
+      "module": "equipment",
+      "level": "R",
+      "conditions": []
+    },
+    "POST /api/v1/inbound": {
+      "module": "inbound",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/inbound/:id/cancel": {
+      "module": "inbound",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/indirect-costs": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/indirect-costs/:id/allocations": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/labor-times": {
+      "module": "labor_times",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/lis-cases/import": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": [
+        "anyRole:admin+finance"
+      ]
+    },
+    "POST /api/v1/lis-cases/import-markers": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": [
+        "anyRole:admin+finance"
+      ]
+    },
+    "POST /api/v1/lis-cases/preview": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": [
+        "anyRole:admin+finance"
+      ]
+    },
+    "POST /api/v1/locations": {
+      "module": "locations",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/materials": {
+      "module": "materials",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/ngs/import": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "POST /api/v1/ngs/preview": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "POST /api/v1/outbound": {
+      "module": "outbound",
+      "level": "R",
+      "conditions": []
+    },
+    "POST /api/v1/outbound/bom": {
+      "module": "outbound",
+      "level": "R",
+      "conditions": []
+    },
+    "POST /api/v1/partner-config/:id/baseline": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "POST /api/v1/partner-config/:id/rollback": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance",
+        "caliber-admin"
+      ]
+    },
+    "POST /api/v1/partner-pnl/backfill-abc-partner": {
+      "module": "reconciliation",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/partners": {
+      "module": "partners",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/projects": {
+      "module": "projects",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/purchase-orders": {
+      "module": "purchase_orders",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/reconciliation/cases/import": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "POST /api/v1/reconciliation/logs": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "POST /api/v1/reconciliation/logs/:id/approve": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": [
+        "anyRole:admin+finance+lab_director",
+        "sod:self-review"
+      ]
+    },
+    "POST /api/v1/reconciliation/logs/:id/reject": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": [
+        "anyRole:admin+finance+lab_director"
+      ]
+    },
+    "POST /api/v1/returns": {
+      "module": "returns",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/roles": {
+      "module": "roles",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/scraps": {
+      "module": "scraps",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/statement-import/classify-rule": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance",
+        "caliber-admin"
+      ]
+    },
+    "POST /api/v1/statement-import/commit": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "POST /api/v1/statement-import/preview": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "POST /api/v1/stocktaking": {
+      "module": "stocktaking",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/stocktaking/:id/adjust": {
+      "module": "stocktaking",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/stocktaking/batch": {
+      "module": "stocktaking",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/supplier-returns": {
+      "module": "supplier_returns",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/suppliers": {
+      "module": "suppliers",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/transfers/inbound": {
+      "module": "transfers",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/users": {
+      "module": "users",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/abc/activity-centers/:id": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/abc/bom-fee-mappings/:bomId": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/abc/bom-links/:bomId": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/abc/budgets/:id": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/abc/cost-drivers/:id": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/abc/quality-costs/:id": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/alerts/rules/:id": {
+      "module": "alerts",
+      "level": "W",
+      "conditions": [
+        "admin:primaryRole"
+      ]
+    },
+    "PUT /api/v1/antibody-cost/antibodies/:id": {
+      "module": "antibody_cost",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/antibody-cost/cost-params/:key": {
+      "module": "antibody_cost",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/auth/cost-visibility": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:admin+lab_director"
+      ]
+    },
+    "PUT /api/v1/boms/:id": {
+      "module": "bom",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/categories/:id": {
+      "module": "categories",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/depletion/tracking/:id/remain": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "PUT /api/v1/equipment-types/:id": {
+      "module": "equipment",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/equipment/:id": {
+      "module": "equipment",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/inbound/:id": {
+      "module": "inbound",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/indirect-costs/:id": {
+      "module": "abc_config",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/labor-times/:id": {
+      "module": "labor_times",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/lis-cases/:caseNo/specimen-type": {
+      "module": "reconciliation",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/locations/:id": {
+      "module": "locations",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/materials/:id": {
+      "module": "materials",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/outbound/:id": {
+      "module": "outbound",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/partner-config/:id": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance",
+        "caliber-admin"
+      ]
+    },
+    "PUT /api/v1/partners/:id": {
+      "module": "partners",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/projects/:id": {
+      "module": "projects",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/purchase-orders/:id/cancel": {
+      "module": "purchase_orders",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/purchase-orders/:id/receive": {
+      "module": "purchase_orders",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/reconciliation/cases/:id": {
+      "module": "reconciliation",
+      "level": "R",
+      "conditions": []
+    },
+    "PUT /api/v1/roles/:id": {
+      "module": "roles",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/supplier-returns/:id/refund-amount": {
+      "module": "supplier_returns",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/supplier-returns/:id/status": {
+      "module": "supplier_returns",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/suppliers/:id": {
+      "module": "suppliers",
+      "level": "W",
+      "conditions": []
+    },
+    "PUT /api/v1/users/:id": {
+      "module": "users",
+      "level": "W",
+      "conditions": []
+    }
+  }
+}
