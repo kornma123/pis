@@ -1734,6 +1734,28 @@ http://your-server-ip:8080
 
 *更新时间：2026-07-08*
 
+## 本次会话完成的工作（就绪谓词 computeReadiness 替代硬编码 GATES_VERIFIED 开关·DEC-6+LEG+公理一，2026-07-09）
+
+**线/工作树**：worktree `gifted-dhawan-5971de`·分支 `feat/readiness-predicate`（off origin/master `94c6b7db`·启动 `git fetch` 确认未落后）。「方案-后续四项」第 2 件（就绪开关）。**只动后端·纯谓词逻辑·portfolio-health 是影子 lane·不碰真实成本/毛利/收入侧·golden 天然零回归**。
+
+**做了什么**（spec = Desktop `方案-后续四项-实施计划(内部·真实标识符).md` §二 + §六.5 + 「谁签什么」表）：
+- `后端代码/server/src/utils/portfolio-health.ts` 硬编码 `PORTFOLIO_HEALTH_GATES_VERIFIED = false`（孤儿手翻开关）→ 换成**算出来的就绪谓词** `computeReadiness(input) → { ready, checklist:[{key,met,owner,due,configError?,overdue?}], findings }`。
+  - `就绪 = 数据地基门全绿 ∧ 固定成本池已配置且 RATIFIED(绑值版本 version===ratifiedVersion) ∧ 历史≥N(=3) ∧ 首个真实周期通过校验`。
+  - **认账绑值版本**（专家补丁①）：签的是"那个值(版本Y)"·值改→version 变→≠ratifiedVersion→自动回 UNRATIFIED。
+  - **due必填修公理一 + 改红不改炸**（§六.5）：未满足且漏填 due → 红色 `configError` + `missing_due` finding·**绝不 throw**；硬 assert 在 CI 测试（`tests/readiness-predicate.test.ts` 完备性断言=任何输入下"未满足∧due空"必被判红）。
+  - **滑动告警**（专家补丁③）：预计就绪日后移 = 一个事件 finding（上 GOV-3 豁免面板）。
+  - **过期变红**：注入 `asOf`（纯函数·恒不调 Date.now）·未满足且 due<asOf → overdue 红。
+  - **N=3 两限定进 LEG 参数登记**（具名+版本化+drift-guard）：`READINESS_MIN_CLOSED_PERIODS=3` / `READINESS_FOUNDATION_GATES` / `READINESS_PARAM_VERSION='2026-07-09.a'` / `DEFAULT_READINESS_OWNER`（谁签什么·denominator=business 不可代签）——均被 `tests/hospital-cm-constants-driftguard.test.ts` 钉死（改值不改测试=翻红）。
+  - `PORTFOLIO_HEALTH_GATES_VERIFIED` 保留为 backward-compat 别名 = `computeReadiness(CURRENT_KNOWN_READINESS_INPUT).ready`（现实=false）→ **route `hospital-pnl-v1.1.ts` 零改动**（本 task 边界：只动 portfolio-health + LEG 登记 + 测试）。
+
+**独立复核（工作模型机制5·两波对抗 Workflow 面板·ultracode）**：
+- 第 1 波（6 视角逐 spec 找缺陷→逐条 refute）：8 finding·**3 CONFIRMED**（均 MED，均已修）：①空串 due（''）绕过公理一红标（`==null` 挡不住 ''）②空白 version 被判"已认账"（`''!==''`=false）③`DEFAULT_READINESS_OWNER` 无 drift-guard 可静默改。修法=新增 `blank()` helper（null/空串/纯空格都当缺失·fail-closed）+ export owner map + drift-guard 钉死。
+- 第 2 波（确认修复·4 skeptic 猎新错）：三修复**验证真闭合·零回归**；逮 **1 LOW**（同 ''-vector：滑动告警比较未过 norm→空白 prev 误报"从<空>后移"）→ 已修（slip 比较也过 norm）。
+
+**验证**（worktree symlink 主仓 node_modules 后真跑）：tsc 绿·后端 vitest **112 files / 990 tests 全绿**（readiness 31 + driftguard 补 3 + portfolio 14 未变）·golden **¥13,152 + ¥27,870 零回归**（含 `tests/golden/` 5+5、`statement-revenue` 9 复核绿）·无 TDZ（const 下移·仅 buildPortfolioHealth 体内 call-time 引用）·dev DB 未污染。
+
+**治理**：**全程禁 `git add -A`**·只显式 add `portfolio-health.ts` + `readiness-predicate.test.ts`(新) + `hospital-cm-constants-driftguard.test.ts` + 本 session-log；未起后端。按 pr-governance 开 PR（base=master·独立非栈·vitest required 绿即可合·§1.9 默认不加 --admin）。
+
 ## 2026-07-09 本次会话完成的工作 —— 路由注册表 Phase 1（第 1 件·CON-4/5/7）
 
 **PR [#107](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/107)** `feat(route-registry): 路由注册表 Phase 1`（分支 `claude/jolly-bun-2a46da` → master·独立非栈·off origin/master）。四件事计划**第 1 件·Phase 1**（第 3 件新盈利前端的前置）。依据 Desktop `方案-后续四项-实施计划(内部·真实标识符).md` §一 Phase1 + 孤儿分诊表。
