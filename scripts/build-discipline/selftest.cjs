@@ -10,10 +10,13 @@
  */
 
 const assert = require('assert')
+const fs = require('fs')
+const path = require('path')
 const R = require('./lib/registry.cjs')
 const c1 = require('./check-frontend-to-backend.cjs')
 const c2 = require('./check-backend-consumers.cjs')
 const c3 = require('./check-config-engine.cjs')
+const BG = require('./lib/baseline-governance.cjs')
 
 let failures = 0
 function check(name, fn) {
@@ -140,6 +143,106 @@ check('C3: 纯展示字段(equipment.model)不进高置信', () => {
 })
 check('C3: camelCase 加固——discount_rate（引擎有 discountRate 同名概念）不再误判高置信', () => {
   assert.ok(!high3.has('case_revenue.discount_rate'), 'discount_rate 有引擎 camelCase 概念，不应高置信')
+})
+
+// ================= Fail-closed 治理层（P-5/P-6）—— 变异断言证「有牙」 =================
+// 核心：闸的旁路口（白名单/baseline 赦免簿）自己不能 fail-open。每条断言临时构造一个坏输入，
+// 断言校验器把它判红；同时锁「现有真实条目不被新规误伤」（no-false-positive）。
+
+const TODAY = '2026-07-06' // 与 C2 注入 today 同口径
+
+// ---- A. 白名单 fail-closed（validateWhitelist）----
+check('A1 变异·缺 deadline → 判红（缺省方向反转：忘填=已过期）', () => {
+  const errs = c2.validateWhitelist([{ path: '/x/*', method: '*', owner: 'o' }], TODAY)
+  assert.ok(errs.some((e) => e.type === 'missing-deadline'), '无 deadline 条目应报 missing-deadline')
+})
+check('A2 变异·deadline 超上限（2099）→ 判红', () => {
+  const errs = c2.validateWhitelist([{ path: '/x/*', method: '*', owner: 'o', deadline: '2099-01-01' }], TODAY)
+  assert.ok(errs.some((e) => e.type === 'deadline-too-far'), '2099 deadline 应报 deadline-too-far')
+})
+check('A3 变异·deadline 格式坏 → 判红', () => {
+  const errs = c2.validateWhitelist([{ path: '/x/*', method: '*', owner: 'o', deadline: 'soon' }], TODAY)
+  assert.ok(errs.some((e) => e.type === 'bad-deadline-format'), '坏格式 deadline 应报 bad-deadline-format')
+})
+check('A4 变异·条数超上限 → 判红', () => {
+  const many = Array.from({ length: c2.MAX_WHITELIST_ENTRIES + 1 }, (_, i) => ({ path: `/x${i}/*`, method: '*', owner: 'o', deadline: '2026-08-01' }))
+  const errs = c2.validateWhitelist(many, TODAY)
+  assert.ok(errs.some((e) => e.type === 'too-many-entries'), `${many.length} 条应报 too-many-entries`)
+})
+check('A5 no-false-positive·现有真实白名单（都带合法 deadline）不被新规误伤', () => {
+  const errs = c2.validateWhitelist(c2.loadWhitelist(), TODAY)
+  assert.strictEqual(errs.length, 0, `现有白名单应零结构错误，实际：${JSON.stringify(errs)}`)
+})
+check('A6 no-false-positive·现有真实白名单条数 ≤ 上限', () => {
+  assert.ok(c2.loadWhitelist().length <= c2.MAX_WHITELIST_ENTRIES, '现有白名单条数应在上限内')
+})
+check('A7 端点级变异·合法 deadline 条目豁免其端点（对照组）', () => {
+  const r = c2.run({ today: TODAY, whitelist: [{ path: '/partners', method: 'POST', owner: 'x', deadline: '2026-09-01' }] })
+  const viol = new Set(r.violations.map((v) => v.method + ' ' + v.path))
+  assert.ok(!viol.has('POST /partners'), '合法白名单应把 POST /partners 移出违规（豁免）')
+  assert.strictEqual(r.hardFail, false, '合法白名单 hardFail 应为 false')
+})
+check('A8 端点级变异·缺 deadline 条目不豁免其端点 + hardFail（fail-closed 核心）', () => {
+  const r = c2.run({ today: TODAY, whitelist: [{ path: '/partners', method: 'POST', owner: 'x' /* 无 deadline */ }] })
+  const viol = new Set(r.violations.map((v) => v.method + ' ' + v.path))
+  assert.ok(viol.has('POST /partners'), '无 deadline 白名单不得豁免 POST /partners（旁路口必须堵上）')
+  assert.strictEqual(r.hardFail, true, '结构错误应触发 hardFail=true')
+})
+check('A9 real run 不 hardFail·现有真实白名单结构健康', () => {
+  const r = c2.run({ today: TODAY })
+  assert.strictEqual(r.hardFail, false, '现有白名单不应触发 hardFail')
+})
+
+// ---- B. baseline 治理 fail-closed（baseline-governance）----
+check('B1.1 变异·baseline meta 死线过期 → 判红', () => {
+  const doc = { keys: ['C1|GET|/x'], meta: { 'C1|GET|/x': { owner: 'o', deadline: '2020-01-01' } } }
+  const errs = BG.validateBaselineMeta(doc, TODAY)
+  assert.ok(errs.some((e) => e.type === 'expired' && e.key === 'C1|GET|/x'), '过期 meta 死线应报 expired')
+})
+check('B1.2 对照·baseline meta 死线未过 → 不红', () => {
+  const doc = { keys: ['C1|GET|/x'], meta: { 'C1|GET|/x': { owner: 'o', deadline: '2026-09-01' } } }
+  assert.strictEqual(BG.validateBaselineMeta(doc, TODAY).length, 0, '未过期 meta 不应报错')
+})
+check('B1.3 变异·baseline meta 缺 deadline → 判红', () => {
+  const doc = { keys: ['C1|GET|/x'], meta: { 'C1|GET|/x': { owner: 'o' } } }
+  assert.ok(BG.validateBaselineMeta(doc, TODAY).some((e) => e.type === 'missing-deadline'), '缺 deadline 应报 missing-deadline')
+})
+check('B1.4 变异·悬空 meta（键不在 keys 里）→ 判红', () => {
+  const doc = { keys: ['C1|GET|/x'], meta: { 'C1|GET|/gone': { owner: 'o', deadline: '2026-09-01' } } }
+  assert.ok(BG.validateBaselineMeta(doc, TODAY).some((e) => e.type === 'orphan-meta'), '悬空 meta 应报 orphan-meta')
+})
+check('B1.5 变异·净条数越天花板 → 判红', () => {
+  assert.ok(BG.checkBaselineCap({ keys: ['a', 'b', 'c'], targetMaxCount: 2 }), '3 条 > 天花板 2 应报 over-cap')
+})
+check('B1.6 对照·净条数不越天花板 → 不红', () => {
+  assert.strictEqual(BG.checkBaselineCap({ keys: ['a', 'b'], targetMaxCount: 2 }), null, '2 条 = 天花板 2 不应报错')
+})
+check('B2.1 变异·被消费端点赖在 C2 死物名单 → 判红', () => {
+  const doc = { keys: ['C2|GET|/foo'] }
+  const bad = BG.consumedInDeadAmnesty(doc, new Set(['GET|/foo']))
+  assert.ok(bad.some((e) => e.key === 'C2|GET|/foo'), '被消费的 C2 键应报 consumed-in-dead-amnesty')
+})
+check('B2.2 对照·未被消费的 C2 键不误报', () => {
+  const doc = { keys: ['C2|GET|/foo'] }
+  assert.strictEqual(BG.consumedInDeadAmnesty(doc, new Set([])).length, 0, '未消费端点不应报 B.2')
+})
+
+// ---- 真实 baseline.json：既守死线有牙，又不误伤（no-false-positive）----
+const realBaseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'baseline.json'), 'utf8'))
+const realConsumed = new Set((c2.run({ today: TODAY }).consumedKeys) || [])
+check('B-real·当前真实 baseline 今日健康（死线未过 + 不越天花板 + 无被依赖者赖名单）', () => {
+  const errs = BG.validateBaseline(realBaseline, TODAY, realConsumed)
+  assert.strictEqual(errs.length, 0, `真实 baseline 今日应零治理错误，实际：${JSON.stringify(errs)}`)
+})
+check('B-real·live-404 死线到期后会真的红（有牙：注入到期后 today）', () => {
+  const afterDeadline = '2026-12-31' // 晚于 2 条 live-404 的 2026-08-07 死线
+  const errs = BG.validateBaselineMeta(realBaseline, afterDeadline)
+  const expiredKeys = errs.filter((e) => e.type === 'expired').map((e) => e.key)
+  assert.ok(expiredKeys.includes('C1|GET|/reports/personnel-efficiency'), 'personnel-efficiency 死线到期应红')
+  assert.ok(expiredKeys.includes('C1|GET|/reports/cost-monthly-comparison'), 'cost-monthly-comparison 死线到期应红')
+})
+check('B-real·targetMaxCount 与实际条数对齐（防基线悄悄膨胀）', () => {
+  assert.ok(realBaseline.keys.length <= realBaseline.targetMaxCount, `keys ${realBaseline.keys.length} 应 ≤ targetMaxCount ${realBaseline.targetMaxCount}`)
 })
 
 console.log(failures === 0 ? '\n全部通过。' : `\n${failures} 条失败。`)

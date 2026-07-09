@@ -27,6 +27,7 @@ const path = require('path')
 const c1 = require('./check-frontend-to-backend.cjs')
 const c2 = require('./check-backend-consumers.cjs')
 const c3 = require('./check-config-engine.cjs')
+const BG = require('./lib/baseline-governance.cjs')
 
 const BASELINE_PATH = path.join(__dirname, 'baseline.json')
 
@@ -53,13 +54,18 @@ function keyOf(checkId, v) {
   return `${checkId}|${v.method}|${v.path}`
 }
 
-function loadBaseline() {
+function loadBaselineDoc() {
   try {
-    const j = JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8'))
-    return new Set(Array.isArray(j.keys) ? j.keys : [])
+    return JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8'))
   } catch {
-    return null // 无 baseline 文件 → delta 模式退化为「全部视作新增」（首次或未生成时）
+    return null // 无 baseline 文件（首次或未生成）
   }
+}
+
+function loadBaseline() {
+  const doc = loadBaselineDoc()
+  if (!doc) return null // 无 baseline 文件 → delta 模式退化为「全部视作新增」（fail-closed）
+  return new Set(Array.isArray(doc.keys) ? doc.keys : [])
 }
 
 function pad(n) { return String(n).padStart(3) }
@@ -120,6 +126,8 @@ function main() {
   }
 
   const baseline = loadBaseline()
+  const baselineDoc = loadBaselineDoc()
+  const today = new Date().toISOString().slice(0, 10)
 
   const results = []
   const printers = { C1: printC1, C2: printC2, C3: printC3 }
@@ -142,18 +150,59 @@ function main() {
     }
   }
 
+  // ── Fail-closed 治理层（公理一）：白名单结构完整性(A) + baseline 死线/天花板/被依赖者(B) ──
+  // 这些是「治理完整性」错误，独立于 --block/baseline delta。任一非空 → 无条件红（exit 1），
+  // 不受 --only 豁免、不可 --update-baseline 洗白。缺省方向=红（忘填/过期/膨胀=疏漏顶回作者）。
+  const c2res = results.find((r) => r.id === 'C2')
+  const govErrors = []
+  if (c2res && Array.isArray(c2res.whitelistErrors)) {
+    for (const e of c2res.whitelistErrors) govErrors.push({ scope: '白名单结构(A)', detail: e.detail })
+  }
+  // baseline 治理（B）：meta 死线 + 净条数天花板 always；被依赖者(B.2)需 C2 的消费集。
+  for (const e of BG.validateBaselineMeta(baselineDoc, today)) govErrors.push({ scope: 'baseline死线(B.1)', detail: e.detail })
+  const capErr = BG.checkBaselineCap(baselineDoc)
+  if (capErr) govErrors.push({ scope: 'baseline天花板(B.1)', detail: capErr.detail })
+  if (c2res) {
+    const consumedC2 = new Set(c2res.consumedKeys || [])
+    for (const e of BG.consumedInDeadAmnesty(baselineDoc, consumedC2)) govErrors.push({ scope: '被依赖者(B.2)', detail: e.detail })
+  }
+
   // 更新 baseline（收紧棘轮）
   if (args.updateBaseline) {
+    // fail-closed：治理错误未清时禁止收紧 baseline（防把结构违规洗成「存量已接受」）。
+    if (govErrors.length) {
+      console.error('✗ 治理层有 fail-closed 错误，禁止 --update-baseline（会把结构违规洗白成存量）。先清：')
+      for (const e of govErrors) console.error(`    · [${e.scope}] ${e.detail}`)
+      process.exit(2)
+    }
     const keys = []
     for (const r of results) for (const v of r.violations) keys.push(keyOf(r.id, v))
     keys.sort()
-    fs.writeFileSync(BASELINE_PATH, JSON.stringify({
-      _doc: '构建纪律闸 baseline（棘轮基线）：当前已接受的存量违规键集合。--block 只对不在此集合里的「新增」判红。修掉存量后 --update-baseline 收紧，只减不增。',
+    // 保留既有 meta（仅留仍在 keys 里的，剪掉悬空）与 targetMaxCount（这两个字段旧写法会被丢弃 → bug）。
+    const keySet = new Set(keys)
+    const prevMeta = baselineDoc && baselineDoc.meta && typeof baselineDoc.meta === 'object' ? baselineDoc.meta : null
+    let meta = null
+    if (prevMeta) {
+      meta = {}
+      for (const [k, v] of Object.entries(prevMeta)) if (keySet.has(k)) meta[k] = v
+    }
+    const targetMaxCount = baselineDoc && Number.isInteger(baselineDoc.targetMaxCount) ? baselineDoc.targetMaxCount : null
+    // fail-closed：新存量条数不得越过天花板（防 --update-baseline 悄悄把新增违规吸进基线越顶）。
+    if (targetMaxCount !== null && keys.length > targetMaxCount) {
+      console.error(`✗ 新 baseline ${keys.length} 条 > targetMaxCount ${targetMaxCount}：棘轮只减不增。`)
+      console.error('  若确需抬高天花板，请在本次 PR 里显式改 baseline.json 的 targetMaxCount 并说明理由（勿让基线悄悄膨胀）。')
+      process.exit(2)
+    }
+    const out = {
+      _doc: '构建纪律闸 baseline（棘轮基线）：当前已接受的存量违规键集合。--block 只对不在此集合里的「新增」判红。修掉存量后 --update-baseline 收紧，只减不增。meta=per-entry 死线兑现(B.1/B.3)；targetMaxCount=净条数天花板(B.1)。见 lib/baseline-governance.cjs。',
       generated: '运行 --update-baseline 生成（日期见 git 提交）',
       count: keys.length,
       keys,
-    }, null, 2) + '\n')
-    console.log(`\n✎ 已写 baseline：${keys.length} 条存量键 → ${path.relative(process.cwd(), BASELINE_PATH)}`)
+    }
+    if (targetMaxCount !== null) out.targetMaxCount = targetMaxCount
+    if (meta && Object.keys(meta).length) out.meta = meta
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(out, null, 2) + '\n')
+    console.log(`\n✎ 已写 baseline：${keys.length} 条存量键${meta ? ` · 保留 ${Object.keys(meta).length} 条 meta 死线` : ''} → ${path.relative(process.cwd(), BASELINE_PATH)}`)
     process.exit(0)
   }
 
@@ -178,6 +227,16 @@ function main() {
   } else {
     console.log(`  拦截：${[...args.block].join(',')} 对**新增**违规判红（存量不拦）${baselineNote}。`)
   }
+  // Fail-closed 治理层：无条件红（与 --block/baseline 无关）。缺省方向=红。
+  if (govErrors.length) {
+    console.log(`\n  ⛔ 治理层 fail-closed 违规 ${govErrors.length} 条（无条件红·不受 --block/baseline/--only 影响）：`)
+    for (const e of govErrors) console.log(`    ⛔ [${e.scope}] ${e.detail}`)
+    console.log('  修法：')
+    console.log('    · 白名单结构(A) → 给条目补 deadline（缺=红）/ 收紧超上限 deadline / 删条目降到条数上限。见 consumer-whitelist.json。')
+    console.log('    · baseline死线(B.1) 到期 → 处置该存量（改前端死调用/补真只读路由）后 --update-baseline 清出，或经 PM 拍板在 baseline.json 里续期。')
+    console.log('    · baseline天花板(B.1) → 修掉存量降到 targetMaxCount 下，或经说明抬高天花板。')
+    console.log('    · 被依赖者(B.2) → 该端点已被消费、非死物 → node scripts/build-discipline/run-all.cjs --update-baseline 把它清出 C2 死物名单。')
+  }
   if (blockedFail) {
     console.log('\n  ✗ 有新增违规被拦。修法：')
     console.log('    · C1 幽灵404 → 补上后端路由，或删掉前端那个死调用（前端调的路径必须真有后端路由）。')
@@ -193,10 +252,10 @@ function main() {
       new: r._new, fixed: r._fixed, violations: r.violations,
       lowConfidence: r.lowConfidence, exempt: r.exempt, stats: r.stats,
     }))
-    console.log(JSON.stringify({ results: slim, block: [...args.block], blockedFail }, null, 2))
+    console.log(JSON.stringify({ results: slim, block: [...args.block], blockedFail, govErrors }, null, 2))
   }
 
-  process.exit(blockedFail ? 1 : 0)
+  process.exit(blockedFail || govErrors.length > 0 ? 1 : 0)
 }
 
 main()

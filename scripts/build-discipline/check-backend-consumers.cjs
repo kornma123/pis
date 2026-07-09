@@ -7,9 +7,20 @@
  *      —— 覆盖「动态 fetch(url) 变量拼 base」这类静态匹配不到、但确有消费的情况（防误报，见 task）。
  *
  * 未被消费的端点：
- *   - 命中白名单且 deadline 未过 → 豁免（孵化中，warning 级）。
- *   - 命中白名单但 deadline 已过 → 违规（孵化过期）。
+ *   - 命中白名单且条目「结构有效 ∧ deadline 未过」→ 豁免（孵化中，warning 级）。
+ *   - 命中白名单但条目结构无效（缺/坏/超上限 deadline）或 deadline 已过 → 违规（不豁免）。
  *   - 不在白名单 → 违规（无消费者、无 owner）。
+ *
+ * ★ 白名单 fail-closed（公理一·CON-2）★——白名单自己不能成为「它要治的病」的旁路口。
+ *   过去 `wl.deadline && wl.deadline < today` 对缺 deadline 的条目短路成 false=永不过期=永久放行（fail-open）。
+ *   现改成三条 fail-closed 规则（见 validateWhitelist）：
+ *     1. 缺 deadline = 判过期 = 红（缺省方向反转：忘填 = 已过期，而非永不过期放行）。
+ *     2. deadline 上限 today+MAX_DEADLINE_HORIZON_DAYS（防填 2099 变相永久豁免）。
+ *     3. 白名单条数上限 MAX_WHITELIST_ENTRIES（防孵化名单膨胀成万年赦免簿）。
+ *   为什么缺省方向是「红」：忘填期限属人为疏漏，安全底线是「疑罪从有」——把疏漏顶回给作者，
+ *   而不是让一个没期限的豁免悄悄变成永久债。这三条是「治理完整性」违规，独立于端点是否被消费；
+ *   即使坏条目覆盖的端点碰巧被消费，坏条目本身仍是死重结构违规。run-all 对其 fail-closed
+ *   （hardFail：不受 baseline 收编、不受 --only 豁免、不可 --update-baseline 洗白）。
  *
  * 说明：本项目无 cron/定时任务、无跨路由内部 import（已核实），故消费者=前端。
  *       测试/e2e 覆盖不算「生产消费者」，仅作旁注（needs-real-consumer 的整个意义就在此）。
@@ -20,6 +31,56 @@ const path = require('path')
 const R = require('./lib/registry.cjs')
 
 const WHITELIST_PATH = path.join(__dirname, 'consumer-whitelist.json')
+
+// ── Fail-closed 治理常量（见文件头「白名单 fail-closed」注释；改宽前先想清楚为什么）──
+// deadline 上限：孵化窗口不得比 today 远超此天数。存量真实条目 deadline 现坐落 today+~90~93 天，
+// 取 120（约 4 个月）给足 grandfather 余量，同时对「填 2099」这类变相永久豁免仍是决定性拦截。
+const MAX_DEADLINE_HORIZON_DAYS = 120
+// 白名单条数上限：孵化应是例外。超过即视为「临时名单变成了常驻赦免簿」→ 硬停，逼清理。
+// 现有 5 条，给 12（>2×）成长余量后封顶；要再放宽须在 PR diff 里显式抬这个数并说明理由。
+const MAX_WHITELIST_ENTRIES = 12
+
+/** ISO 日期字符串 +N 天 → ISO 日期字符串（UTC，避免本地时区把日期算偏一天）。 */
+function addDays(isoDate, days) {
+  const d = new Date(isoDate + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/** 单条白名单是否结构性无效（缺/坏格式/超上限 deadline）——无效条目不得豁免其覆盖端点。 */
+function whitelistEntryInvalid(entry, maxDeadline) {
+  if (!entry.deadline) return true
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.deadline)) return true
+  if (entry.deadline > maxDeadline) return true
+  return false
+}
+
+/**
+ * 白名单结构完整性校验（fail-closed 的核心）。返回错误数组（空 = 健康）。
+ * 这些是「治理完整性」错误，独立于端点是否被消费——即使坏条目覆盖的端点碰巧被消费，
+ * 坏条目本身仍是结构违规（死重），必须红。run-all 对本错误 fail-closed。
+ */
+function validateWhitelist(whitelist, today) {
+  const errors = []
+  const maxDeadline = addDays(today, MAX_DEADLINE_HORIZON_DAYS)
+  if (whitelist.length > MAX_WHITELIST_ENTRIES) {
+    errors.push({
+      type: 'too-many-entries',
+      detail: `白名单 ${whitelist.length} 条 > 上限 ${MAX_WHITELIST_ENTRIES}（孵化名单膨胀=万年赦免风险；封顶逼清理）`,
+    })
+  }
+  for (const e of whitelist) {
+    const id = `${e.method || '*'} ${e.path}`
+    if (!e.deadline) {
+      errors.push({ type: 'missing-deadline', entry: id, detail: `${id}：缺 deadline（fail-closed：忘填=已过期=红，owner ${e.owner || '?'}）` })
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(e.deadline)) {
+      errors.push({ type: 'bad-deadline-format', entry: id, detail: `${id}：deadline "${e.deadline}" 非 YYYY-MM-DD` })
+    } else if (e.deadline > maxDeadline) {
+      errors.push({ type: 'deadline-too-far', entry: id, detail: `${id}：deadline ${e.deadline} > 上限 ${maxDeadline}（today+${MAX_DEADLINE_HORIZON_DAYS}d，防变相永久豁免）` })
+    }
+  }
+  return errors
+}
 
 function loadWhitelist() {
   try {
@@ -43,13 +104,17 @@ function whitelistCovers(entry, ep) {
   return R.segsMatch(segs, ep.segs)
 }
 
-// today 用注入值（便于测试）；默认取运行时日期。
+// today 用注入值（便于测试）；默认取运行时日期。opts.whitelist 可注入白名单（便于变异测试）。
 function run(opts = {}) {
   const today = opts.today || new Date().toISOString().slice(0, 10)
   const { endpoints } = R.buildBackendRegistry()
   const { calls } = R.parseFrontendCalls()
   const blob = R.frontendCallContextBlob()
-  const whitelist = loadWhitelist()
+  const whitelist = opts.whitelist || loadWhitelist()
+
+  // 白名单结构完整性（fail-closed）——先于端点判定；坏条目不豁免其端点、且整体 hardFail。
+  const whitelistErrors = validateWhitelist(whitelist, today)
+  const maxDeadline = addDays(today, MAX_DEADLINE_HORIZON_DAYS)
 
   // 1) 前端精确命中的端点集合
   const consumed = new Set()
@@ -60,6 +125,7 @@ function run(opts = {}) {
 
   const violations = []
   const exempt = []
+  const consumedKeys = [] // 'METHOD|relPath' —— 供 run-all 的 B.2「被消费端点不该赖在死物名单」交叉核对
   let consumedCount = 0
   let textRefCount = 0
 
@@ -67,6 +133,7 @@ function run(opts = {}) {
     const key = ep.method + ' ' + ep.relPath
     if (consumed.has(key)) {
       consumedCount++
+      consumedKeys.push(ep.method + '|' + ep.relPath)
       continue
     }
     // 文本引用兜底（精确形状匹配）：仅当**完整端点形状**（各字面段 + param 处为 ${...} 模板插值）
@@ -74,13 +141,16 @@ function run(opts = {}) {
     const rx = R.endpointCallRegex(ep.relPath)
     if (rx && rx.test(blob)) {
       textRefCount++
+      consumedKeys.push(ep.method + '|' + ep.relPath)
       continue // 视为「动态消费」——不进违规
     }
     // 未被消费 → 查白名单
     const wl = whitelist.find((e) => whitelistCovers(e, ep))
     if (wl) {
-      const expired = wl.deadline && wl.deadline < today
-      if (expired) {
+      if (whitelistEntryInvalid(wl, maxDeadline)) {
+        // fail-closed：缺/坏/超上限 deadline 的条目不豁免其端点（防旁路口敞开）。
+        violations.push({ ...epRec(ep), reason: `白名单条目无效·不豁免（缺/坏/超上限 deadline，owner ${wl.owner || '?'}）`, cls: 'expired' })
+      } else if (wl.deadline < today) {
         violations.push({ ...epRec(ep), reason: `孵化过期（deadline ${wl.deadline} < ${today}，owner ${wl.owner}）`, cls: 'expired' })
       } else {
         exempt.push({ ...epRec(ep), owner: wl.owner, deadline: wl.deadline })
@@ -96,12 +166,17 @@ function run(opts = {}) {
     intent: '每个后端端点须有 ≥1 生产消费者，否则进白名单（有名有期的孵化）',
     violations,
     exempt,
+    // fail-closed 结构层：白名单本身的治理完整性错误。run-all 见 hardFail 即红（不受 baseline/only 影响）。
+    whitelistErrors,
+    hardFail: whitelistErrors.length > 0,
+    consumedKeys,
     stats: {
       totalEndpoints: endpoints.length,
       consumedByCall: consumedCount,
       consumedByText: textRefCount,
       exemptWhitelisted: exempt.length,
       unconsumedViolations: violations.length,
+      whitelistErrors: whitelistErrors.length,
     },
   }
 }
@@ -110,4 +185,13 @@ function epRec(ep) {
   return { method: ep.method, path: ep.relPath, routeFile: 'routes/' + ep.routeFile, line: ep.line }
 }
 
-module.exports = { run, whitelistCovers, loadWhitelist }
+module.exports = {
+  run,
+  whitelistCovers,
+  loadWhitelist,
+  validateWhitelist,
+  whitelistEntryInvalid,
+  addDays,
+  MAX_DEADLINE_HORIZON_DAYS,
+  MAX_WHITELIST_ENTRIES,
+}
