@@ -5,8 +5,6 @@ import {
   TrendingDown,
   Minus,
   AlertTriangle,
-  ArrowUp,
-  ArrowDown,
   Database,
   Play,
   RefreshCw,
@@ -20,7 +18,6 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recha
 import { toast } from 'sonner'
 import { Link, useSearchParams } from 'react-router-dom'
 import { abcApi } from '@/api/abc'
-import { reportsApi } from '@/api/reports'
 import { getUserRole } from '@/lib/permissions'
 import { downloadTextFile, formatCurrency } from '@/lib/utils'
 import { ProfitBadge } from '@/components/ui/ProfitBadge'
@@ -158,33 +155,6 @@ interface ClosingReadiness {
   sources: Record<string, unknown>
 }
 
-type ComparisonDirection = 'up' | 'down' | 'flat'
-
-interface MonthlyComparison {
-  currentMonth: {
-    month: string
-    totalCost: number
-    sampleCount: number
-    recordCount: number
-    isComplete: boolean
-    dataDays: number
-  }
-  previousMonth: {
-    month: string
-    totalCost: number
-    sampleCount: number
-    recordCount: number
-    isComplete: boolean
-    dataDays: number
-  }
-  changes: {
-    totalChange: number
-    totalChangeRate: number
-    direction: ComparisonDirection
-    note: string
-  }
-}
-
 const PIE_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6',
   '#ef4444', '#06b6d4', '#f97316', '#14b8a6',
@@ -282,31 +252,6 @@ export const applyReviewedAdjustmentToSummary = (
   }
 }
 
-export function getComparisonDirectionMeta(direction?: ComparisonDirection) {
-  if (direction === 'up') {
-    return {
-      cardClassName: 'bg-red-50',
-      labelClassName: 'text-red-600',
-      valueClassName: 'text-red-600',
-      icon: 'up' as const,
-    }
-  }
-  if (direction === 'down') {
-    return {
-      cardClassName: 'bg-green-50',
-      labelClassName: 'text-green-600',
-      valueClassName: 'text-green-600',
-      icon: 'down' as const,
-    }
-  }
-  return {
-    cardClassName: 'bg-gray-50',
-    labelClassName: 'text-gray-600',
-    valueClassName: 'text-gray-700',
-    icon: 'flat' as const,
-  }
-}
-
 export function getDashboardOpenExceptionCount(summaryCount: number | undefined, visibleAlertsCount: number) {
   return Number.isFinite(summaryCount) ? Number(summaryCount) : visibleAlertsCount
 }
@@ -355,10 +300,6 @@ function getFirstCostRunFailure(summary?: CostRun['summary']) {
   return summary?.failures?.find(item => item?.outboundNo || item?.message)
 }
 
-export function buildDashboardComparisonParams(month: string) {
-  return { month, source: 'abc' as const }
-}
-
 export function buildInitialCostDashboardFilters(searchParams: URLSearchParams, defaultMonth: string) {
   return {
     month: searchParams.get('month') || searchParams.get('yearMonth') || defaultMonth,
@@ -379,7 +320,6 @@ export default function CostDashboard() {
   const [profitByProject, setProfitByProject] = useState<ProjectProfit[]>([])
   const [costByActivity, setCostByActivity] = useState<CostByActivity[]>([])
   const [alerts, setAlerts] = useState<CostException[]>([])
-  const [comparison, setComparison] = useState<MonthlyComparison | null>(null)
   const [currentPeriod, setCurrentPeriod] = useState<CostPeriod | null>(null)
   const [costRuns, setCostRuns] = useState<CostRun[]>([])
   const [adjustments, setAdjustments] = useState<CostAdjustment[]>([])
@@ -394,7 +334,6 @@ export default function CostDashboard() {
 
   useEffect(() => {
     loadDashboard()
-    loadComparison()
   }, [month, dashboardKeyword])
 
   const loadDashboard = async () => {
@@ -431,15 +370,6 @@ export default function CostDashboard() {
       toast.error('加载看板数据失败')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const loadComparison = async () => {
-    try {
-      const data = await reportsApi.getCostMonthlyComparison(buildDashboardComparisonParams(month))
-      setComparison(data)
-    } catch {
-      // 月度环比加载失败不影响主看板
     }
   }
 
@@ -567,7 +497,6 @@ export default function CostDashboard() {
 
   const periodStatus = currentPeriod ? PERIOD_STATUS[currentPeriod.status] || PERIOD_STATUS.open : null
   const canManageCostPeriod = role === 'admin' || role === 'finance'
-  const comparisonDirectionMeta = getComparisonDirectionMeta(comparison?.changes?.direction)
   const openAlertCount = getDashboardOpenExceptionCount(summary?.openExceptionCount, alerts.length)
   const closeBlockReason = getClosePeriodBlockReason(
     currentPeriod?.status,
@@ -944,66 +873,6 @@ export default function CostDashboard() {
           </div>
         )}
       </div>
-
-      {/* 月度环比卡片 */}
-      {comparison && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900">月度环比</h3>
-            {comparison.changes?.note && (
-              <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
-                {comparison.changes.note}
-              </span>
-            )}
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* 当月 */}
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <div className="text-xs text-blue-600 font-medium mb-1">
-                {comparison.currentMonth?.month || '当月'}
-                {!comparison.currentMonth?.isComplete && (
-                  <span className="ml-1 text-blue-400">(进行中)</span>
-                )}
-              </div>
-              <div className="text-xl font-bold text-gray-900">{formatCurrency(comparison.currentMonth?.totalCost)}</div>
-              <div className="text-xs text-gray-500 mt-1">
-                {comparison.currentMonth?.sampleCount || 0} 片 / {comparison.currentMonth?.recordCount || 0} 条
-              </div>
-            </div>
-            {/* 上月 */}
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <div className="text-xs text-gray-500 font-medium mb-1">
-                {comparison.previousMonth?.month || '上月'}
-              </div>
-              <div className="text-xl font-bold text-gray-900">{formatCurrency(comparison.previousMonth?.totalCost)}</div>
-              <div className="text-xs text-gray-500 mt-1">
-                {comparison.previousMonth?.sampleCount || 0} 片 / {comparison.previousMonth?.recordCount || 0} 条
-              </div>
-            </div>
-            {/* 变化 */}
-            <div className={`p-3 rounded-lg ${comparisonDirectionMeta.cardClassName}`}>
-              <div className={`text-xs font-medium mb-1 ${comparisonDirectionMeta.labelClassName}`}>
-                环比变化
-              </div>
-              <div className="flex items-center gap-2">
-                {comparisonDirectionMeta.icon === 'up' ? (
-                  <ArrowUp className="h-5 w-5 text-red-500" />
-                ) : comparisonDirectionMeta.icon === 'down' ? (
-                  <ArrowDown className="h-5 w-5 text-green-500" />
-                ) : (
-                  <Minus className="h-5 w-5 text-gray-500" />
-                )}
-                <span className={`text-xl font-bold ${comparisonDirectionMeta.valueClassName}`}>
-                  {comparison.changes?.totalChangeRate?.toFixed(1) || 0}%
-                </span>
-              </div>
-              <div className="text-xs text-gray-500 mt-1">
-                {comparison.changes?.totalChange > 0 ? '+' : ''}{formatCurrency(comparison.changes?.totalChange || 0)}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
