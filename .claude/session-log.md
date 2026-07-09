@@ -1733,3 +1733,23 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 测试文件 + 本 session-log）；未起后端·无 dev DB 污染。前端单测非 CI required 门（仅后端 vitest + gate required）。**未提交/未开 PR**（用户未要求）。参考记忆 `coreone-worktree-tests-and-codex-resilience`。
 
 *更新时间：2026-07-08*
+
+## 本次会话完成的工作（第4件·止损执法点：拆分口径未认账水印 + 导出声明，2026-07-09）
+
+**线/工作树**：worktree `silly-carson-3e64a8`（分支 `claude/silly-carson-3e64a8`·off origin/master `94c6b7db`，启动 `git fetch` 确认未落后）。任务 =「后续四项」**第4件工程侧止损执法点**（LEG-2/公理一）——业务侧「暂停新增对外使用 + 取证 + 认账签字」**不在本次**（PM/业务的活）。
+
+**背景**：政策分摊常量 `SPLIT_DIAG_FEE=105`（`statement-revenue.ts`）派生的「实验室收入/院级毛利/cmRate/grossMargin/confirmedLabRevenue」结论对外**可能高估约 2 倍**、且未经业务认账。要给「止损」提供**执法机制**（非只通知）：消费该结论的对外输出自带「口径未认账」水印 + 导出携带口径声明列。
+
+**交付（三件·全部只加展示/元数据·不动钱的计算）**：
+1. 新增 `后端代码/server/src/utils/caliber-ratification.ts`：`splitCaliberRatification()`（**只读占位** `SPLIT_CALIBER_RATIFICATION='UNRATIFIED'`·**无状态机/无签字流程**·`basisVersion` 复用既有 `SPLIT_FORMULA_VERSION` 不另立）+ `buildExportDeclaration`/`decorateExportRows`（导出声明六列 `_sourceTag/_basisNote/_basisVersion/_exportedAt/_periodRange/_ratified`·逐行随行剥不掉）。
+2. 水印挂到**每个消费拆分结论的对外输出响应**（附加字段 `caliberRatification`·additive）：statement-import(/preview,/commit)、hospital-pnl(/health,/)、partner-pnl(/,/cases)、account-reconcile(/overview,/workbench,/hospital-months/:id/complete)。**精度**：裸时序数组 `/trend` 形状不改（防破坏消费者·水印在同页 overview 已带、与趋势图同视线）；非消费端点(cross-partner-audit)**不误挂**。
+3. 前端 `HospitalPnLDashboard.tsx`（线上旧盈利视图·承载高估数字）在实验室收入/毛利数字**同视线**渲染水印横幅 + 院级盈亏表头徽标·**fail-closed**（仅后端明确 `ratified===true` 才免；字段缺席=仍显；认账后自动摘牌无需改前端）。
+
+**诚实天花板（§四.4）**：全仓核实**当前无任何导出通道消费拆分结论**——前端 `cost/`·`report/` 导出 + 后端 `abc-cost-export` 都是 **ABC 全成本口径**，账实核对页「导出」是未接线占位；`CostTrend` 的 `marginRate=profit/fee` 是 ABC 成本利润率非拆分（独立三查确认）→ `decorateExportRows` 作**执法就绪机制**交付、`docs/COREONE-拆分口径止损执法点-2026-07-09.md` 写明覆盖边界（启用前旧导出无法枚举/追签）。
+
+**验证**：后端 tsc 绿·全量 vitest **113 files/973 tests 全绿**（新增 `caliber-ratification.test.ts` 11 + `bv-split-caliber-watermark.test.ts` 8）；前端 tsc+build 绿·`HospitalPnLDashboard.watermark.test.tsx` 3 + 既有 stopgap 5 绿；**golden ¥13,152/¥27,870 零回归**（additive 字段·原数字并存不变）。
+**独立复核**：Workflow 5 镜头对抗面板（`wf_e82ba212`·boundary/watermark-completeness/golden-safety/export-honesty/frontend + 逐条 adversarial refute·10 agent high）→ **0 CONFIRMED**（synthesis 明确 empty-not-by-omission·ship as-is）。codex 异构轴两次 stdin 断流无输出 → 按 `codex-cli-usage.md` 规则由 Workflow 面板独立完成机制5 第二视角，不叠并发 codex。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 我的 4 路由 + 3 前端 + 1 util + 3 测试 + 1 doc + session-log）；测试用隔离 DB·tracked `coreone.db` 零污染。PR 待开（按 pr-governance·vitest required 绿即可合）。
+
+*更新时间：2026-07-09*
