@@ -1751,4 +1751,6 @@ http://your-server-ip:8080
 
 **治理**：全程只读 `sqlite3 SELECT`·未起后端·**dev DB 未污染**（`git status` 确认 `coreone.db` clean）；**禁 `git add -A`**·只显式 add 本文档 + 本 session-log。纯 docs·vitest required 绿即可合·按 pr-governance 开 PR（合并后不回改看板状态·真相以 `gh pr list` 为准）。
 
+**⚠️ PM 权威回填（同日晚，PR #106 合并后）**：PM 定案「**功能根本没上线，直接替换就行了**」——旧盈利视图 `/hospital-pnl` **从未上线到生产**。→ 本审计一切"替换前顾虑"（补读侧遥测/导出治理死角/下钻跨期保留取舍）对本视图**全 moot**：无真实用户、无使用迁移，直接按新口径（P0 院级贡献毛利·影子后端 `hospital-pnl-v1.1.ts` 已建）替掉旧页 + 清 3 入口即可。已入记忆 `coreone-hospital-pnl-never-launched`；已给审计文档顶部补 PM 结论 banner（后续 docs PR）。**过程教训**：派"替换 X 前审计使用"任务先确认 X 是否真在产（本次对从未上线功能跑了完整使用审计，结论没错但可收敛为直接替换）。
+
 *更新时间：2026-07-09*
