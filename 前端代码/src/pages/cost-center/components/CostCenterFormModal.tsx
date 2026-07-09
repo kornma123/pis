@@ -21,17 +21,9 @@ const COST_TYPE_OPTIONS = [
   { value: 'other', label: '其他' },
 ]
 
-const ALLOCATION_BASE_OPTIONS = [
-  { value: 'sample_count', label: '样本数' },
-  { value: 'revenue', label: '收入' },
-  { value: 'labor_hours', label: '工时' },
-  { value: 'area', label: '面积' },
-]
-
 export function CostCenterFormModal({ open, type, form, onClose, onChange, onSubmit }: Props) {
   if (!open) return null
   const costTypeLabel = COST_TYPE_OPTIONS.find(item => item.value === form.costType)?.label || '待选择'
-  const allocationBaseLabel = ALLOCATION_BASE_OPTIONS.find(item => item.value === form.allocationBase)?.label || '待选择'
   const statusLabel = form.status === 'active' ? '已启用' : '已停用'
 
   return (
@@ -104,12 +96,12 @@ export function CostCenterFormModal({ open, type, form, onClose, onChange, onSub
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 分摊基础
               </label>
-              <SearchableSelect
-                value={form.allocationBase}
-                onChange={(val) => onChange({ ...form, allocationBase: val })}
-                options={ALLOCATION_BASE_OPTIONS}
-                placeholder="请选择"
-              />
+              {/* HON-4（P-7 · 分摊口径空转控件摘除）：逐成本中心单选口径（样本数/收入/工时/面积）从不被引擎读取，
+                  「选了不听」→ 摘掉交互下拉，改为只读说明，避免用户误以为选了会生效。真实分摊见下方说明。 */}
+              <div className="min-h-[40px] px-3 py-2 rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-600 leading-relaxed">
+                间接费用目前按<span className="font-medium text-gray-700">每月统一规则</span>分摊（默认按各成本中心的直接成本比例）。
+                按成本中心单独选择分摊口径的功能尚未开放。
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -145,7 +137,7 @@ export function CostCenterFormModal({ open, type, form, onClose, onChange, onSub
               <div>成本中心 {form.name || '待填写'}</div>
               <div>费用类型 {costTypeLabel}</div>
               <div>月度金额 ¥{Number(form.monthlyAmount || 0).toFixed(2)}</div>
-              <div>分摊基础 {allocationBaseLabel}</div>
+              <div>分摊 按每月统一规则</div>
               <div>状态 {statusLabel}</div>
             </div>
           </div>

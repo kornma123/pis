@@ -1,18 +1,14 @@
-import React, { Fragment, useState, useEffect, useMemo } from 'react'
-import { Search, TrendingUp, TrendingDown, Minus, AlertTriangle, ChevronDown, ChevronRight, Download } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Search, TrendingUp, AlertTriangle, Download } from 'lucide-react'
 import { toast } from 'sonner'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, LineChart, Line,
-} from 'recharts'
 import { abcApi } from '@/api/abc'
 import { downloadTextFile, formatCurrency } from '@/lib/utils'
 
 interface VarianceSummary {
   totalActual: number
-  totalStandard: number
-  totalVariance: number
-  varianceRate: number
+  // 标准/差异/差异率后端恒返回 null（未校准），本页不渲染，故不纳入类型（避免死字段）。
+  standardCalibrated?: boolean
+  recordCount?: number
 }
 
 interface VarianceItem {
@@ -24,23 +20,12 @@ interface VarianceItem {
   bomName?: string
   unit?: string
   materialActual: number
-  materialStandard: number
-  laborActual: number
-  laborStandard: number
-  equipmentActual: number
-  equipmentStandard: number
-  qcActual: number
-  indirectActual: number
-  indirectStandard: number
+  activityCost?: number
   totalActual: number
-  totalStandard: number
-  totalVariance: number
-  varianceRate: number
   sampleCount: number
   month?: string
+  standardCalibrated?: boolean
 }
-
-const VARIANCE_THRESHOLD = 10 // 10% 差异阈值
 
 const COMPARE_TYPES = [
   { value: 'project', label: '按项目' },
@@ -53,6 +38,7 @@ const csvCell = (value: string | number | undefined | null) => {
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
+// HON-3（P-7）：标准成本未接入 → 停止导出「标准/差异/差异率」假列，只导出真实实际成本。
 export function buildCostVarianceExportCsv(
   rows: VarianceItem[],
   dimensionLabel: string,
@@ -62,35 +48,17 @@ export function buildCostVarianceExportCsv(
     dimensionLabel,
     '月份',
     '样本数',
-    '标准成本',
     '实际成本',
-    '成本差异',
-    '差异率',
     '材料实际',
-    '材料标准',
-    '人工实际',
-    '人工标准',
-    '设备实际',
-    '设备标准',
-    '间接实际',
-    '间接标准',
+    '作业成本',
   ]
   const body = rows.map(item => [
     getDimensionName(item),
     item.month || '',
     item.sampleCount ?? 0,
-    item.totalStandard ?? 0,
     item.totalActual ?? 0,
-    item.totalVariance ?? 0,
-    `${Number(item.varianceRate || 0).toFixed(2)}%`,
     item.materialActual ?? 0,
-    item.materialStandard ?? 0,
-    item.laborActual ?? 0,
-    item.laborStandard ?? 0,
-    item.equipmentActual ?? 0,
-    item.equipmentStandard ?? 0,
-    item.indirectActual ?? 0,
-    item.indirectStandard ?? 0,
+    item.activityCost ?? 0,
   ])
   return [header, ...body].map(row => row.map(csvCell).join(',')).join('\n')
 }
@@ -114,8 +82,10 @@ export default function CostVarianceAnalysis() {
   const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 7))
   const [compareType, setCompareType] = useState('project')
   const [searchKeyword, setSearchKeyword] = useState('')
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-  const monthRangeValidation = useMemo(() => validateMonthRange(startDate, endDate), [startDate, endDate])
+  const monthRangeValidation = React.useMemo(() => validateMonthRange(startDate, endDate), [startDate, endDate])
+
+  // 标准成本是否已校准（后端目前恒为 false → 差异分析降级为「仅展示实际成本」）
+  const standardCalibrated = summary?.standardCalibrated === true
 
   useEffect(() => {
     if (!monthRangeValidation.valid) {
@@ -140,32 +110,10 @@ export default function CostVarianceAnalysis() {
     } catch {
       setSummary(null)
       setItems([])
-      toast.error('加载差异分析数据失败')
+      toast.error('加载实际成本数据失败')
     } finally {
       setLoading(false)
     }
-  }
-
-  const formatPercent = (value: number) => `${value.toFixed(2)}%`
-
-  const getVarianceColor = (rate: number) => {
-    if (Math.abs(rate) > VARIANCE_THRESHOLD) return 'text-red-600'
-    if (rate > 0) return 'text-amber-600'
-    return 'text-green-600'
-  }
-
-  const getVarianceBg = (rate: number) => {
-    if (Math.abs(rate) > VARIANCE_THRESHOLD) return 'bg-red-50'
-    return ''
-  }
-
-  const toggleRow = (id: string) => {
-    setExpandedRows(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
   }
 
   const filteredItems = items.filter(v => {
@@ -179,14 +127,7 @@ export default function CostVarianceAnalysis() {
   })
 
   const groupColumnLabel = compareType === 'month' ? '月份' : compareType === 'bom' ? 'BOM名称' : '项目名称'
-  const quantityColumnLabel = '样本数'
   const searchPlaceholder = compareType === 'month' ? '搜索月份...' : compareType === 'bom' ? '搜索BOM名称...' : '搜索项目名称...'
-
-  const getRowId = (item: VarianceItem) => {
-    if (compareType === 'month') return item.id || item.month || `${item.projectId || 'project'}-${item.bomId || 'bom'}`
-    if (compareType === 'bom') return item.id || item.bomId || `${item.bomName || 'bom'}-${item.month || 'month'}`
-    return item.id || item.projectId || `${item.projectName || 'project'}-${item.month || 'month'}`
-  }
 
   const getDisplayName = (item: VarianceItem) => {
     if (compareType === 'month') return item.month || item.projectName || '未分月'
@@ -194,73 +135,39 @@ export default function CostVarianceAnalysis() {
     return item.projectName || '未关联项目'
   }
 
+  const getRowId = (item: VarianceItem) => {
+    if (compareType === 'month') return item.id || item.month || `${item.projectId || 'project'}-${item.bomId || 'bom'}`
+    if (compareType === 'bom') return item.id || item.bomId || `${item.bomName || 'bom'}-${item.month || 'month'}`
+    return item.id || item.projectId || `${item.projectName || 'project'}-${item.month || 'month'}`
+  }
+
   const handleExport = () => {
     if (filteredItems.length === 0) {
-      toast.error('暂无可导出的差异数据')
+      toast.error('暂无可导出的成本数据')
       return
     }
     const csv = buildCostVarianceExportCsv(filteredItems, groupColumnLabel, getDisplayName)
     downloadTextFile(
-      `abc-cost-variance-${compareType}-${startDate}-${endDate}.csv`,
+      `abc-cost-actual-${compareType}-${startDate}-${endDate}.csv`,
       csv,
       'text/csv;charset=utf-8',
     )
     toast.success('导出完成')
   }
 
-  // 趋势图数据
-  const trendData = useMemo(() => {
-    const monthMap = new Map<string, { actual: number; standard: number }>()
-    for (const item of items) {
-      const m = item.month || ''
-      if (!m) continue
-      if (!monthMap.has(m)) monthMap.set(m, { actual: 0, standard: 0 })
-      const entry = monthMap.get(m)!
-      entry.actual += item.totalActual || 0
-      entry.standard += item.totalStandard || 0
-    }
-    return [...monthMap.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, vals]) => ({
-        month,
-        actual: vals.actual,
-        standard: vals.standard,
-        variance: vals.actual - vals.standard,
-        varianceRate: vals.standard ? ((vals.actual - vals.standard) / vals.standard * 100) : 0,
-      }))
-  }, [items])
-
+  const uncalibratedCard = { label: '', value: '待校准' as const }
   const summaryCards = [
     {
-      label: '标准成本',
-      value: summary?.totalStandard || 0,
-      icon: Minus,
-      color: 'text-gray-600',
-      bgColor: 'bg-gray-50',
-    },
-    {
       label: '实际成本',
-      value: summary?.totalActual || 0,
+      value: formatCurrency(summary?.totalActual || 0),
       icon: TrendingUp,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
+      muted: false,
     },
-    {
-      label: '成本差异',
-      value: summary?.totalVariance || 0,
-      icon: summary?.totalVariance && summary.totalVariance > 0 ? TrendingUp : TrendingDown,
-      color: (summary?.totalVariance || 0) > 0 ? 'text-red-600' : 'text-green-600',
-      bgColor: (summary?.totalVariance || 0) > 0 ? 'bg-red-50' : 'bg-green-50',
-      isCurrency: true,
-    },
-    {
-      label: '差异率',
-      value: summary?.varianceRate || 0,
-      icon: (summary?.varianceRate || 0) > 0 ? TrendingUp : TrendingDown,
-      color: Math.abs(summary?.varianceRate || 0) > VARIANCE_THRESHOLD ? 'text-red-600' : 'text-green-600',
-      bgColor: Math.abs(summary?.varianceRate || 0) > VARIANCE_THRESHOLD ? 'bg-red-50' : 'bg-green-50',
-      isPercent: true,
-    },
+    { ...uncalibratedCard, label: '标准成本', muted: true },
+    { ...uncalibratedCard, label: '成本差异', muted: true },
+    { ...uncalibratedCard, label: '差异率', muted: true },
   ]
 
   return (
@@ -269,11 +176,11 @@ export default function CostVarianceAnalysis() {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">成本差异分析</h1>
-          {/* L5-5（§2.4）：明确区分计划值 vs 核算值，消除"两套引擎"对同一标签给两个数的困惑 */}
+          {/* HON-3：不再以「计划值 vs 核算值」的对比口吻引导（标准成本未校准、本页不做该对比）；
+              诚实说明本页当前只展示实际成本。 */}
           <p className="text-sm text-gray-500 mt-1">
-            <span className="font-medium text-gray-600">标准成本</span>（计划值：BOM 标准工时/用量，供定价与预算）
-            vs <span className="font-medium text-gray-600">实际成本</span>（核算值：月度 ABC 按真实动因归集），
-            差异 = 标准 − 实际（流程优化空间，非算错）。
+            展示各维度的<span className="font-medium text-gray-600">实际成本</span>（月度 ABC 按真实动因核算）。
+            标准成本尚未校准，本页暂不做「标准 vs 实际」差异对比。
           </p>
         </div>
         <div className="flex flex-col items-start gap-1 lg:items-end">
@@ -321,88 +228,42 @@ export default function CostVarianceAnalysis() {
         </div>
       </div>
 
-      {/* 差异汇总卡片 */}
+      {/* 降级提示：标准成本待校准，差异分析暂不可用 */}
+      {!standardCalibrated && (
+        <div className="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-800">
+            <div className="font-medium text-amber-900">标准成本待校准 · 差异分析暂不可用</div>
+            <p className="mt-0.5">
+              标准成本需按 BOM 标准工时/用量校准后才能计算「标准 vs 实际」差异。系统尚未接入标准成本，
+              因此本页不再显示差异数字，仅展示各维度的<span className="font-medium">真实实际成本</span>。
+              需要真实单片成本，请前往「消耗对账」页查看。
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 汇总卡片：实际成本真实；标准/差异/差异率待校准 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryCards.map(card => {
-          const Icon = card.icon
+          const Icon = 'icon' in card ? card.icon : null
           return (
             <div key={card.label} className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center gap-2 mb-2">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${card.bgColor}`}>
-                  <Icon className={`h-4 w-4 ${card.color}`} />
-                </div>
+                {Icon && (
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${(card as any).bgColor}`}>
+                    <Icon className={`h-4 w-4 ${(card as any).color}`} />
+                  </div>
+                )}
                 <span className="text-sm text-gray-500">{card.label}</span>
               </div>
-              <div className={`text-2xl font-bold ${card.isPercent || card.isCurrency ? card.color : 'text-gray-900'}`}>
-                {card.isPercent
-                  ? formatPercent(card.value as number)
-                  : formatCurrency(card.value as number)}
+              <div className={`text-2xl font-bold ${card.muted ? 'text-gray-300' : (card as any).color}`}>
+                {card.value}
               </div>
             </div>
           )
         })}
       </div>
-
-      {/* 阈值提示 */}
-      <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-        <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-        <span className="text-sm text-amber-700">
-          差异率超过 ±{VARIANCE_THRESHOLD}% 的项目已高亮显示
-        </span>
-      </div>
-
-      {/* 趋势图 */}
-      {trendData.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">差异趋势</h3>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* 成本对比柱状图 */}
-            <div>
-              <h4 className="text-xs text-gray-500 mb-2">标准 vs 实际成本</h4>
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={trendData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} tickFormatter={v => `¥${(v / 10000).toFixed(0)}万`} />
-                  <Tooltip
-                    formatter={(value: number, name: string) => [
-                      formatCurrency(value),
-                      name === 'standard' ? '标准成本' : '实际成本',
-                    ]}
-                    contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                  />
-                  <Legend formatter={v => v === 'standard' ? '标准成本' : '实际成本'} />
-                  <Bar dataKey="standard" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="actual" fill="#10b981" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            {/* 差异率折线图 */}
-            <div>
-              <h4 className="text-xs text-gray-500 mb-2">差异率趋势</h4>
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={trendData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} tickFormatter={v => `${v}%`} />
-                  <Tooltip
-                    formatter={(value: number) => [`${value.toFixed(2)}%`, '差异率']}
-                    contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="varianceRate"
-                    stroke="#ef4444"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    activeDot={{ r: 5 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 搜索栏 */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -418,102 +279,51 @@ export default function CostVarianceAnalysis() {
         </div>
       </div>
 
-      {/* 差异明细表格 */}
+      {/* 实际成本明细表格（不再渲染标准/差异假数字） */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-gray-100 text-xs text-gray-500">
+          仅展示各维度的真实实际成本；标准成本与差异待校准后再显示。
+        </div>
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8"></th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{groupColumnLabel}</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">{quantityColumnLabel}</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">标准成本</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">样本数</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">材料实际</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">作业成本</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">实际成本</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">差异</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">差异率</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-gray-400">加载中...</td>
+                <td colSpan={5} className="px-4 py-12 text-center text-gray-400">加载中...</td>
               </tr>
             ) : filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-gray-400">暂无差异数据</td>
+                <td colSpan={5} className="px-4 py-12 text-center text-gray-400">暂无实际成本数据</td>
               </tr>
             ) : (
               filteredItems.map(item => {
-                const isOverThreshold = Math.abs(item.varianceRate) > VARIANCE_THRESHOLD
                 const rowId = getRowId(item)
-                const isExpanded = expandedRows.has(rowId)
                 return (
-                  <Fragment key={rowId}>
-                    <tr
-                      key={rowId}
-                      className={`hover:bg-gray-50 cursor-pointer ${getVarianceBg(item.varianceRate)}`}
-                      onClick={() => toggleRow(rowId)}
-                    >
-                      <td className="px-4 py-3">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-gray-400" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-gray-400" />
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        <div className="flex items-center gap-2">
-                          {getDisplayName(item)}
-                          {isOverThreshold && (
-                            <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 text-right font-mono">
-                        {item.sampleCount}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">
-                        {formatCurrency(item.totalStandard)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">
-                        {formatCurrency(item.totalActual)}
-                      </td>
-                      <td className={`px-4 py-3 text-sm text-right font-mono font-medium ${getVarianceColor(item.varianceRate)}`}>
-                        {item.totalVariance > 0 ? '+' : ''}{formatCurrency(item.totalVariance)}
-                      </td>
-                      <td className={`px-4 py-3 text-sm text-right font-mono font-medium ${getVarianceColor(item.varianceRate)}`}>
-                        {item.varianceRate > 0 ? '+' : ''}{formatPercent(item.varianceRate)}
-                      </td>
-                    </tr>
-                    {/* 下钻明细 */}
-                    {isExpanded && (
-                      <tr key={`${rowId}-detail`} className="bg-gray-50">
-                        <td colSpan={7} className="px-8 py-3">
-                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs">
-                            <div>
-                              <span className="text-gray-500">材料:</span>
-                              <span className="ml-1 font-mono text-gray-700">{formatCurrency(item.materialActual)} / {formatCurrency(item.materialStandard)}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">人工:</span>
-                              <span className="ml-1 font-mono text-gray-700">{formatCurrency(item.laborActual)} / {formatCurrency(item.laborStandard)}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">设备:</span>
-                              <span className="ml-1 font-mono text-gray-700">{formatCurrency(item.equipmentActual)} / {formatCurrency(item.equipmentStandard)}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">质控实际:</span>
-                              <span className="ml-1 font-mono text-gray-700">{formatCurrency(item.qcActual)}</span>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">间接:</span>
-                              <span className="ml-1 font-mono text-gray-700">{formatCurrency(item.indirectActual)} / {formatCurrency(item.indirectStandard)}</span>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
+                  <tr key={rowId} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      {getDisplayName(item)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-right font-mono">
+                      {item.sampleCount}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-right font-mono">
+                      {formatCurrency(item.materialActual)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 text-right font-mono">
+                      {formatCurrency(item.activityCost ?? 0)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono font-medium">
+                      {formatCurrency(item.totalActual)}
+                    </td>
+                  </tr>
                 )
               })
             )}
