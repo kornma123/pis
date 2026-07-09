@@ -13,6 +13,7 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requireAnyRole } from '../middleware/permissions.js'
+import { assertCaliberChangeAllowed } from '../middleware/authz-combinators.js'
 import { loadConfig, peekConfig, saveConfig, normalizeConfig, caliberSignature, type PartnerConfigLine } from '../utils/partner-config.js'
 import { parseStatement, type Grid, type ColMap } from '../utils/statement-parser/index.js'
 import { computeStatementRevenue, type ClassifiedRow } from '../utils/statement-revenue.js'
@@ -26,8 +27,8 @@ const router = Router()
 const requireImport = requireAnyRole('finance')
 const genId = (): string => `PC-${uuidv4()}`
 const userId = (req: any): string | undefined => req.user?.userId // auth 挂载 userId 非 id（配置 changedBy 防恒 NULL）
-/** 拆分/诊断口径 = 领域决策，仅 admin 可改（财务只配 in/out + 扣率 + 识别词）。 */
-const isAdmin = (req: any): boolean => req.user?.role === 'admin' || (req.user?.roles ?? []).includes('admin')
+// 拆分/诊断口径 = 领域决策，仅 admin 可改（财务只配 in/out + 扣率 + 识别词）——
+// 口径门禁经具名守卫 assertCaliberChangeAllowed 表达（roles-aware isAdmin 在组合子内部，路由层不再裸读 req.user.role）。
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100
 const round4 = (n: number): number => Math.round((n + Number.EPSILON) * 10000) / 10000
 const fin = (n: number | undefined): number => (Number.isFinite(n) ? (n as number) : 0)
@@ -283,9 +284,7 @@ router.post('/classify-rule', authenticateToken, requireImport, (req, res) => {
     try { normalized = normalizeConfig(config) } catch (ve: any) { error(res, ve?.message || '配置格式无效', 'BAD_REQUEST', 400); return }
 
     // 拆分/诊断口径门禁：本次改动了 split/diagnosis 线（新建/改率/改识别词）→ 仅 admin 可写（财务只读拆分线）。
-    if (caliberSignature(normalized) !== caliberSignature(cur.config) && !isAdmin(req)) {
-      error(res, '拆分/诊断口径仅管理员可改（国标费率与工艺拆分是口径决策，财务侧只读）', 'FORBIDDEN', 403); return
-    }
+    if (!assertCaliberChangeAllowed(req, res, caliberSignature(normalized) !== caliberSignature(cur.config), '拆分/诊断口径仅管理员可改（国标费率与工艺拆分是口径决策，财务侧只读）')) return
 
     // codex MEDIUM-2：测试台基于某版预览归类时传 expectedVersion → 乐观锁防并发覆盖（配置页已改到更新版时 409，要求重新预览）。
     const r = saveConfig(db, partnerId, normalized, { changedBy: userId(req), tab: '业务分类', genId, expectedVersion })

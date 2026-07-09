@@ -4,6 +4,7 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { assertNotSelfReview } from '../middleware/authz-combinators.js'
 import { logOperation } from '../utils/operation-logger.js'
 
 const router = Router()
@@ -207,9 +208,8 @@ router.post('/:id/review', authenticateToken, requirePermission('cost_analysis',
     if (existing.review_status !== 'pending') {
       error(res, '该调整已审核', 'CONFLICT', 409); return
     }
-    if (existing.submitted_by === userId) {
-      error(res, '不能审核自己提交的调整', 'FORBIDDEN', 403); return
-    }
+    // SoD 自审拦截（提升进具名守卫）：不能审核自己提交的调整。保留原 code='FORBIDDEN' 逐字节不变。
+    if (!assertNotSelfReview(res, { submitterId: existing.submitted_by, actorId: userId, message: '不能审核自己提交的调整', code: 'FORBIDDEN' })) return
 
     // 乐观锁：仅当状态仍为 pending 时更新
     const result = db.prepare(`

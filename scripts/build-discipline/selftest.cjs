@@ -18,6 +18,7 @@ const R = require('./lib/registry.cjs')
 const c1 = require('./check-frontend-to-backend.cjs')
 const c2 = require('./check-backend-consumers.cjs')
 const c3 = require('./check-config-engine.cjs')
+const c5authz = require('./check-authz-combinators.cjs')
 const BG = require('./lib/baseline-governance.cjs')
 
 let failures = 0
@@ -147,6 +148,45 @@ check('C3: 纯展示字段(equipment.model)不进高置信', () => {
 })
 check('C3: camelCase 加固——discount_rate（引擎有 discountRate 同名概念）不再误判高置信', () => {
   assert.ok(!high3.has('case_revenue.discount_rate'), 'discount_rate 有引擎 camelCase 概念，不应高置信')
+})
+
+// ---- C5 授权组合子（野生授权逻辑 lint）——变异证「有牙」 + no-false-positive ----
+// 授权条件必须只经 middleware/authz-combinators.ts 的具名组合子表达；路由 handler 里的「野生授权」
+// （裸读请求用户 .role/.roles、裸写 SoD 判决 SELF_REVIEW_FORBIDDEN）→ 红。这里锁「有牙」（每种野生写法必被捕）
+// 与「不误伤」（attribution/注释/DB 行 user.role 不红）。真实 routes/ 零违规由此下方与 E1(exit 0) 双重守。
+check('C5: 真实 routes/ 零野生授权（6 处内联已提升进组合子·干净）', () => {
+  const r = c5authz.run()
+  assert.strictEqual(r.violations.length, 0, `实际 ${r.violations.length}: ${JSON.stringify(r.violations.slice(0, 3))}`)
+})
+check('C5 变异·规则①：植 if(req.user.role) → role-access 红', () => {
+  assert.ok(c5authz.scanSource('router.put("/x",(req,res)=>{ if(req.user.role==="admin"){} })').some((x) => x.rule === 'role-access'),
+    'req.user.role 未被捕')
+})
+check('C5 变异·规则①：(req as any).user.roles / 别名 / 解构 / 可选链 / 方括号 均红（无漏网写法）', () => {
+  assert.ok(c5authz.scanSource('if((req as any).user.roles.includes("admin")){}').some((x) => x.rule === 'role-access'), '(req as any).user.roles 漏网')
+  assert.ok(c5authz.scanSource('const user=(req as any).user;\nif(user.role!=="admin"){}').some((x) => x.rule === 'role-access'), '别名 user.role 漏网')
+  assert.ok(c5authz.scanSource('const {role}=req.user;\nif(role==="admin"){}').some((x) => x.rule === 'role-access'), '解构 {role}=req.user 漏网')
+  assert.ok(c5authz.scanSource('const ok=req.user?.roles?.includes("admin");').some((x) => x.rule === 'role-access'), '可选链 req.user?.roles 漏网')
+  assert.ok(c5authz.scanSource('if(req.user["role"]==="admin"){}').some((x) => x.rule === 'role-access'), '方括号 req.user["role"] 漏网')
+})
+check('C5 变异·规则③：内联身份比对（req.user.userId/username === 行字段）→ identity-compare 红（堵 FORBIDDEN-码 SoD 规避）', () => {
+  assert.ok(c5authz.scanSource('if(row.submitted_by===req.user.userId){error(res,"x","FORBIDDEN",403)}').some((x) => x.rule === 'identity-compare'), '正向 req.user.userId=== 漏网')
+  assert.ok(c5authz.scanSource('if(req.user.username!==row.op){}').some((x) => x.rule === 'identity-compare'), '反向 req.user.username!== 漏网')
+  assert.ok(c5authz.scanSource('const u=req.user;\nif(u.userId===row.x){}').some((x) => x.rule === 'identity-compare'), '别名身份比对漏网')
+})
+check('C5 变异·规则②：植 error(res,x,SELF_REVIEW_FORBIDDEN,403) → self-review-literal 红', () => {
+  assert.ok(c5authz.scanSource('error(res,"x","SELF_REVIEW_FORBIDDEN",403)').some((x) => x.rule === 'self-review-literal'),
+    'SELF_REVIEW_FORBIDDEN 字面量未被捕')
+})
+// no-false-positive：镜像真实 routes/ 语料里合法的非-actor .role/.roles/身份读，证「不误伤」（fail-closed 检查最怕误报）。
+check('C5 no-false-positive：attribution / 注释 / 尾注 / DB 行 / req.body 数据对象 均不红', () => {
+  assert.strictEqual(c5authz.scanSource('const operator=req.user?.username??req.user?.userId??"unknown";').length, 0, 'attribution username(??) 误报')
+  assert.strictEqual(c5authz.scanSource('const userId=(req as any).user?.userId').length, 0, 'attribution userId(赋值) 误报')
+  assert.strictEqual(c5authz.scanSource('// old: if(req.user.role==="admin")\nconst x=1').length, 0, '整行注释里的 req.user.role 误报')
+  assert.strictEqual(c5authz.scanSource('doThing(); // 见 req.user.role 与 SELF_REVIEW_FORBIDDEN 迁移说明').length, 0, '尾注里的 token 误报（trailing //）')
+  assert.strictEqual(c5authz.scanSource('/* 块注释 req.user.role SELF_REVIEW_FORBIDDEN */\nconst z=1').length, 0, '块注释里的 token 误报')
+  assert.strictEqual(c5authz.scanSource('const user=db.prepare("...").get(id);\nconst r=user.role;').length, 0, 'auth.ts 式 DB 行 user.role 误报（非 req.user 别名）')
+  assert.strictEqual(c5authz.scanSource('const data=req.body;\nif(Array.isArray(data.roles)){ data.role }').length, 0, 'users.ts 式 req.body data.role/data.roles 误报')
 })
 
 // ================= Fail-closed 治理层（P-5/P-6）—— 变异断言证「有牙」 =================
@@ -331,6 +371,22 @@ try {
     // （原用 /reports/personnel-efficiency，已随「清理幽灵报表端点」删除、不再是现违规，故换存量幽灵 /logs/export）
     const bp = fixture('deadlock-blocked.json', { keys: ['C1|GET|/logs/export'], targetMaxCount: 100, meta: { 'C1|GET|/logs/export': { owner: 't', deadline: '2020-01-01' } } })
     assert.strictEqual(runGate(['--update-baseline'], { BD_BASELINE_PATH: bp }), 2)
+  })
+  check('E14 exit-code·C5 野生授权（注入 temp routes 的 req.user.role）→ 无条件 exit 1（warn 模式也红·fail-closed 公理一）', () => {
+    // BD_AUTHZ_ROUTES_DIR 把 C5 的扫描目标指到临时目录（同 BD_BASELINE_PATH 注入手法）——证「C5 已接进 run-all
+    // 的 fail-closed 层」：一处野生授权即无条件红，且不受 --block/baseline 影响（这里 warn 模式无 --block 仍红）。
+    const rdir = path.join(TMP, 'wild-routes')
+    fs.mkdirSync(rdir, { recursive: true })
+    fs.writeFileSync(path.join(rdir, 'evil-v1.1.ts'), 'router.put("/x",(req,res)=>{ if(req.user.role==="admin"){} })\n')
+    const bp = fixture('h-c4.json', healthyBaseline)
+    assert.strictEqual(runGate([], { BD_BASELINE_PATH: bp, BD_AUTHZ_ROUTES_DIR: rdir }), 1)
+  })
+  check('E15 exit-code·C5 干净 temp routes（无野生授权）不误红 → exit 0（no-false-positive 端到端）', () => {
+    const rdir = path.join(TMP, 'clean-routes')
+    fs.mkdirSync(rdir, { recursive: true })
+    fs.writeFileSync(path.join(rdir, 'ok-v1.1.ts'), 'const operator=req.user?.username??"unknown";\nsuccess(res,{operator})\n')
+    const bp = fixture('h-c4-clean.json', healthyBaseline)
+    assert.strictEqual(runGate([], { BD_BASELINE_PATH: bp, BD_AUTHZ_ROUTES_DIR: rdir }), 0)
   })
 } finally {
   fs.rmSync(TMP, { recursive: true, force: true })
