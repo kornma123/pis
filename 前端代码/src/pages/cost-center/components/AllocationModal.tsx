@@ -15,10 +15,7 @@ interface Props {
 
 export function AllocationModal({ open, row, allocationForm, allocations, onClose, onChangeForm, onSubmit }: Props) {
   if (!open || !row) return null
-  const allocationBaseLabel = row.allocationBase === 'sample_count' ? '样本数' :
-    row.allocationBase === 'revenue' ? '收入' :
-    row.allocationBase === 'labor_hours' ? '工时' :
-    row.allocationBase === 'area' ? '面积' : row.allocationBase
+  // HON-4：分摊口径下拉已摘除；此处不再按已废弃的 allocationBase 字段给基础值贴「样本数/收入…」标签。
   const allocationRate = Number(allocationForm.allocationBaseValue || 0) > 0
     ? Number(allocationForm.totalAmount || 0) / Number(allocationForm.allocationBaseValue)
     : 0
@@ -79,10 +76,7 @@ export function AllocationModal({ open, row, allocationForm, allocations, onClos
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              分摊基础值（{row.allocationBase === 'sample_count' ? '样本数' :
-                row.allocationBase === 'revenue' ? '收入' :
-                row.allocationBase === 'labor_hours' ? '工时' :
-                row.allocationBase === 'area' ? '面积' : row.allocationBase}）
+              分摊基础值 <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
@@ -133,7 +127,7 @@ export function AllocationModal({ open, row, allocationForm, allocations, onClos
             <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-emerald-900 sm:grid-cols-2">
               <div>年月 {allocationForm.yearMonth || '待填写'}</div>
               <div>费用总额 ¥{Number(allocationForm.totalAmount || 0).toFixed(2)}</div>
-              <div>分摊基础 {allocationBaseLabel} {Number(allocationForm.allocationBaseValue || 0)}</div>
+              <div>分摊基础值 {Number(allocationForm.allocationBaseValue || 0)}</div>
               <div>单位分摊率 ¥{allocationRate.toFixed(4)}</div>
             </div>
           </div>

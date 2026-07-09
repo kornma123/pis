@@ -55,6 +55,12 @@ router.get('/:id', (req, res) => {
       price: i.price, stock: i.stock, costRatio: 0,
     }))
 
+    // 材料成本口径：主料与辅料用量一并累加（不按 is_alternative 过滤）。
+    // 注意：字段名 is_alternative/main_item_id 易被误读为"主料—替代料=二选一"，实则本仓
+    //   语义为 主料(0)/辅料(1)，辅料（通用试剂/耗材/质控）与主料**同时消耗**（"都要用"），
+    //   故必须计入成本；勿据字段名加 `WHERE is_alternative=0` 而漏计辅料（会低估成本）。
+    //   语义锚点：outbound-v1.1.ts（辅料缺货跳过、主料缺阻断）+ tests/p1-01-bom-auxiliary-skip、
+    //   tests/bom-cost-auxiliary-included。
     const totalCost = materials.reduce((sum: number, m: any) => sum + (m.price || 0) * m.usagePerSample, 0)
     materials.forEach((m: any) => { m.costRatio = totalCost > 0 ? (m.price || 0) * m.usagePerSample / totalCost : 0 })
 
