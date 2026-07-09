@@ -5,25 +5,26 @@
 > 目的：根除反复出现的「功能先于消费者被建」五形态：幽灵端点 / 有后端无前端 / 孤儿路由 / 空转参数 / 假能力。
 > 背景见记忆 `coreone-feature-keep-cut-inventory`「外审补正」段。
 
-## 检查项（C1–C3「功能先于消费者」轴 + C5「授权可枚举性」轴）
+## 检查项（C1–C4「功能先于消费者」轴 + C5「授权可枚举性」轴）
 
-> 注：**C4「路由↔导航注册表」由姊妹 PR（路由注册表 Phase 1）引入**（孤儿路由结构预防·完成 C1–C4 功能轴）。本文件的 C5 是另一条**正交轴**——授权可枚举性。两条检查都挂 run-all 的 fail-closed 层、各自独立（合并时两行并存）。
+> **两条正交轴**：C1–C4 治「功能先于消费者被建」（幽灵端点 C1 / 无消费者 C2 / 空转参数 C3 / 孤儿路由 C4）；C5 是另一条**正交轴**——授权可枚举性（野生授权逻辑）。C4（路由↔导航注册表）与 C5（授权组合子）都挂 run-all 的 fail-closed 治理层、各自独立无 baseline 棘轮。
 
 | ID | 名称 | 根除的病 | 判定 |
 |----|------|---------|------|
 | **C1** | 前端→后端 | 幽灵 404 | 每条前端 API 调用（`request.METHOD` + `axios.METHOD` + `fetch('/api/v1/...')` + 回溯解析的 `fetch(变量)`）必须命中一个已注册后端路由（`app.ts` 挂载前缀 × `routes/*.ts` 的 `router.METHOD`），否则违规 |
 | **C2** | 后端→消费者 | 有后端无前端 / 死路由 | 每个后端端点须有 ≥1 生产消费者（前端调用 / 「发请求文件」文本兜底）；无则须进白名单带 `{owner, deadline}`；死线过期未接消费者 → 违规、默认删 |
 | **C3** | 配置→引擎 | 空转参数 | 每个用户可写的持久化配置字段（建表列 ∩ 出现在某路由 INSERT/UPDATE）须在其自身 CRUD 之外有读取点（snake_case 或 camelCase），否则=空转（`allocation_base` 型） |
+| **C4** | 路由→导航注册表 | 孤儿路由 / 新页无归宿 | 每条 `App.tsx` 应用路由（`/login`、`*` 除外）必须在 `前端代码/src/lib/route-registry.ts` 声明：`active`（须 `navGroup ∈` 封闭枚举 NAV_GROUPS + `label`）或 `headless`（须 `owner`+`due`死线+`reason`·fail-closed）或 `deprecated`（须 `reason`）；否则红。菜单从注册表派生（不再各处手写 MenuItem）→ **孤儿化在构造上不可能** |
 | **C5** | 授权组合子 | 野生授权逻辑（不可枚举的授权条件） | `routes/*.ts` 的 handler 里禁止裸写授权条件——① 禁对「请求用户」做 `.role`/`.roles` 访问（点/可选链/别名/解构/方括号）② 禁裸写 SoD 判决码 `SELF_REVIEW_FORBIDDEN` ③ 禁内联「请求用户身份（userId/username/id）=== 行字段」比对。授权只能经具名组合子表达（`middleware/authz-combinators.ts` + `permissions.ts` + `auth.ts`）→ 条件集可机器枚举（权限影子断言矩阵前置） |
 
 > **C5 是独立轴、零容忍**：与 C1/C2/C3 的「防新增·存量攒 baseline」不同，C5 **无 baseline 宽容**——任一野生授权即无条件红（授权缺口不是可攒的存量债），接在 run-all 的 fail-closed 治理层（公理一）。**覆盖边界（诚实）**：C5 是正则/tokenizer 级，闭包覆盖「直接对 `req.user` 的授权写法」；**不覆盖**先抽标量再比对的派生变量（`const uid=req.user.userId; if(uid===…)`）、经 helper 读角色（`resolveRequestRoles(req.user).includes(…)`）、capability 内联判决——这些靠「注册表 + 人工复核」兜底（要闭合需强制 `req.user` 唯一访问器，会牵动 ~30 处合法 attribution，超出结构重构范围）。
 
-### ⚠️ 覆盖诚实声明：五形态里机器只查得了四种
+### ⚠️ 覆盖诚实声明：五形态里机器查得了四种半
 
-「功能先于消费者被建」有**五形态**，本闸机器可查 **4 种**：幽灵端点（C1）· 有后端无前端（C2）· 死路由（C2）· 空转参数（C3）。
-- **孤儿路由**（后端+前端页都有、只缺侧栏入口）= 可发现性缺口非"该删"，**本闸不检出**——靠既有前端审计 + 侧栏比对（见 I-1 PR#65）。
-- **假能力**（第 5 形态·项目定为**最高危 Tier「止骗」**，如 `/abc/variance` 假标准成本：`totalStandard=materialActual`、labor/equip/indirect 硬编码 0）= 「输出口径假」而非字段空转，**本闸无对应机器检查**，靠人工审计（处置口径见记忆 `coreone-feature-keep-cut-inventory`）。
-> 所以别把「三条检查」读成「五形态全自动拦住了」——**最高危的假能力仍靠人**。这条写在这里就是防「以为质量门自动在跑」的假象（本项目屡次踩过的坑）。
+「功能先于消费者被建」有**五形态**，本闸机器可查：幽灵端点（C1）· 有后端无前端（C2）· 死路由（C2）· 空转参数（C3）· **孤儿路由（C4·结构预防）**。
+- **孤儿路由**（后端+前端页都有、只缺侧栏入口）现由 **C4 结构预防**：新页无注册表声明即红；无导航入口的页必须显式 `headless` 带死线（=periodic 重新分诊·忘填≠永久绿），不能悄悄漂成孤儿。**但 C4 不替人拍「这页该删还是该补入口」**——它把孤儿从「静默漂移」变成「显式带死线的待办」，去留仍是人的分诊（见 I-1 PR#65 / ABC 处置清单 #61）。
+- **假能力**（第 5 形态·项目定为**最高危 Tier「止骗」**，如 `/abc/variance` 曾假标准成本：`totalStandard=materialActual`、labor/equip/indirect 硬编码 0·已 #99/P-7 诚实降级为返 null）= 「输出口径假」而非字段空转，**本闸无对应机器检查**，靠人工审计（处置口径见记忆 `coreone-feature-keep-cut-inventory`）。
+> 所以别把「四条检查」读成「五形态全自动拦住了」——**最高危的假能力仍靠人**。这条写在这里就是防「以为质量门自动在跑」的假象（本项目屡次踩过的坑）。
 
 ## 用法
 
@@ -81,14 +82,16 @@ node scripts/build-discipline/selftest.cjs
 **已挂死线的害人型存量**（B.1/B.3）：`C1|GET|/reports/personnel-efficiency`、`C1|GET|/reports/cost-monthly-comparison`——前端 `前端代码/src/api/reports.ts` 仍 live 调、后端恒 404、真人被喂 404。死线 `2026-08-07`：到期仍没修 → 闸红，逼处置（改前端或补只读路由；均属业务代码，另立 task/PR）。
 > ⚠️ **爆炸半径（必须知情）**：`gate` 是 master **required check** 且 PR 侧无 `paths-ignore`，故该死线到期后闸红会**拦截所有到 master 的 PR**（含与报表无关者），直到有人 ①修根因（改 `reports.ts`/补只读路由）并 `--update-baseline` 清出，或 ②经 PM 拍板把 `baseline.json` 里这两条 `meta.deadline` 显式改后（可见 diff）。这是**有意的强制函数**（fail-closed），非 bug——把「真人被喂 404」的债顶到有人处置为止。
 
+**C · C4 路由注册表（`check-route-nav.cjs`）**：与白名单(A)/baseline(B) 同款 fail-closed，但**无 baseline 棘轮**——迁移时已把全部路由声明干净、零存量债，故任一违规（未声明新页 / active 缺 navGroup / 越封闭枚举 / headless 缺死线或过期或超上限 / headless 超条数 / 悬空声明 / deprecated 缺理由）即**无条件红**（不受 `--block`/`--only`/baseline 影响）。`headless` 死线同 C2 白名单口径（`due` 缺=红·YYYY-MM-DD·未过期·≤ `today+MAX_DEADLINE_HORIZON_DAYS`）、条数 ≤ `MAX_HEADLESS_ROUTES=12`。地面真相 = `App.tsx` 的 `<Route path>` 清单（运行时路由器的静态镜像），声明源 = `route-registry.ts`，两侧双向对账（`undeclared` + `dangling` 双查，防「迁移弄丢从两边同时消失」）。fixture 注入用 `BD_APP_TSX_PATH` / `BD_ROUTE_REGISTRY_PATH`（仅 selftest）。
+
 ## 文件
 
 - `lib/registry.cjs` — 共享解析层（app 挂载 / router 端点 / 前端调用[request/axios/fetch/fetch-var 回溯] / 路径归一 / 匹配）。
-- `lib/constants.cjs` — fail-closed 治理常量单一事实源（`MAX_DEADLINE_HORIZON_DAYS=120` / `MAX_WHITELIST_ENTRIES=12`），两模块共用防漂移。
+- `lib/constants.cjs` — fail-closed 治理常量单一事实源（`MAX_DEADLINE_HORIZON_DAYS=120` / `MAX_WHITELIST_ENTRIES=12` / `MAX_HEADLESS_ROUTES=12`），多模块共用防漂移。
 - `lib/baseline-governance.cjs` — baseline fail-closed 治理（meta 死线 / 净条数天花板[含缺天花板=红] / 被依赖者禁入死物名单）·纯函数可测。
-- `check-frontend-to-backend.cjs`（C1）/ `check-backend-consumers.cjs`（C2·含白名单 fail-closed `validateWhitelist`）/ `check-config-engine.cjs`（C3）/ `check-authz-combinators.cjs`（C5·授权组合子·独立轴·零容忍无 baseline，扫 `routes/*.ts` 先 `blankComments` 剥注释再匹配）。〔C4·路由↔导航注册表 `check-route-nav.cjs` 由姊妹 PR 引入〕
-- `run-all.cjs` — 统一入口（`--only` / `--block` / `--json` / `--update-baseline`）+ fail-closed 治理层汇总（无条件红·不受 `--only` 豁免）。fixture 注入用 `BD_BASELINE_PATH` / `BD_WHITELIST_PATH` 环境变量（仅 selftest）。
-- `selftest.cjs` — 工具不变量自测（53 条已核实断言：含 fail-closed 变异断言 + run-all.cjs exit-code 端到端「最后一公里」覆盖，证有牙、防解析器/闸静默漂）。
+- `check-frontend-to-backend.cjs`（C1）/ `check-backend-consumers.cjs`（C2·含白名单 fail-closed `validateWhitelist`）/ `check-config-engine.cjs`（C3）/ `check-route-nav.cjs`（C4·路由↔导航注册表结构 fail-closed `validateRouteNav`）/ `check-authz-combinators.cjs`（C5·授权组合子·独立轴·零容忍无 baseline，扫 `routes/*.ts` 先 `blankComments` 剥注释再匹配）。
+- `run-all.cjs` — 统一入口（`--only` / `--block` / `--json` / `--update-baseline`）+ fail-closed 治理层汇总（无条件红·不受 `--only` 豁免；含 C4 路由结构违规 + C5 授权违规）。fixture 注入用 `BD_BASELINE_PATH` / `BD_WHITELIST_PATH` / `BD_APP_TSX_PATH` / `BD_ROUTE_REGISTRY_PATH` / `BD_AUTHZ_ROUTES_DIR` 环境变量（仅 selftest）。
+- `selftest.cjs` — 工具不变量自测（含 C1–C5 fail-closed 变异断言 + 解析器边界断言 + run-all.cjs exit-code 端到端「最后一公里」覆盖，证有牙、防解析器/闸静默漂）。
 - `consumer-whitelist.json` — C2 白名单（**有名有期的孵化**，fail-closed：缺 deadline/超上限/超条数=红）。
 - `baseline.json` — delta 棘轮基线（当前已接受存量键；只减不增）+ `meta`（per-entry 死线）+ `targetMaxCount`（净条数天花板）。
 

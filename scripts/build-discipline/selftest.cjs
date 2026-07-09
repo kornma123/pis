@@ -18,6 +18,7 @@ const R = require('./lib/registry.cjs')
 const c1 = require('./check-frontend-to-backend.cjs')
 const c2 = require('./check-backend-consumers.cjs')
 const c3 = require('./check-config-engine.cjs')
+const c4 = require('./check-route-nav.cjs')
 const c5authz = require('./check-authz-combinators.cjs')
 const BG = require('./lib/baseline-governance.cjs')
 
@@ -306,6 +307,81 @@ check('B-real·targetMaxCount 与实际条数对齐（防基线悄悄膨胀）',
   assert.ok(realBaseline.keys.length <= realBaseline.targetMaxCount, `keys ${realBaseline.keys.length} 应 ≤ targetMaxCount ${realBaseline.targetMaxCount}`)
 })
 
+// ================= F. 路由↔导航注册表 fail-closed（check-route-nav / C4）—— 变异断言证有牙 =================
+// 每条临时构造一个坏输入，断言 validateRouteNav 判红；同时锁「真实注册表不被新规误伤」（no-false-positive）。
+// TODAY 沿用上面固定值（deterministic no-false-positive 控制·非真实 today），故真实 headless 死线(2026-10-07)
+// 在此不过期、不超上限；真死线到期在真 gate 用 new Date() 兑现（intended·见 E12 用真实 today）。
+const NG4 = ['overview', 'inventory', 'system'] // 测试用封闭枚举
+const okActive4 = (p, navGroup = 'overview') => ({ path: p, label: 'X', navGroup, permModule: null, status: 'active' })
+const okHeadless4 = (p, due) => ({ path: p, permModule: null, status: 'headless', owner: 'o', due, reason: 'r' })
+const V4 = (routes, entries) => c4.validateRouteNav({ routes, entries, navGroups: NG4, today: TODAY }).errors
+const types4 = (errs) => new Set(errs.map((e) => e.type))
+
+check('F-real·真实注册表 C4 零结构违规（no-false-positive·registry 完整+合法·bijective App↔registry）', () => {
+  const r = c4.run({ today: TODAY })
+  assert.strictEqual(r.errors.length, 0, `真实注册表应零结构违规，实际：${JSON.stringify(r.errors)}`)
+  assert.strictEqual(r.stats.appRoutes, r.stats.registered, 'App 路由数应与注册条数相等（双向无遗漏）')
+})
+check('F1 变异·App 路由未在注册表声明 → undeclared-route（新页无归宿的核心拦截）', () => {
+  assert.ok(types4(V4([{ path: '/a' }, { path: '/b' }], [okActive4('/a')])).has('undeclared-route'))
+})
+check('F2 变异·active 缺 navGroup → active-without-navgroup', () => {
+  assert.ok(types4(V4([{ path: '/a' }], [{ path: '/a', label: 'X', permModule: null, status: 'active' }])).has('active-without-navgroup'))
+})
+check('F3 变异·active navGroup 越封闭枚举 → unknown-navgroup（防现场编分组）', () => {
+  assert.ok(types4(V4([{ path: '/a' }], [okActive4('/a', 'made-up-group')])).has('unknown-navgroup'))
+})
+check('F4 变异·headless 缺 due → headless-missing-deadline（fail-closed·忘填=红）', () => {
+  assert.ok(types4(V4([{ path: '/a' }], [{ path: '/a', permModule: null, status: 'headless', owner: 'o', reason: 'r' }])).has('headless-missing-deadline'))
+})
+check('F5 变异·headless due 已过期 → headless-expired', () => {
+  assert.ok(types4(V4([{ path: '/a' }], [okHeadless4('/a', '2020-01-01')])).has('headless-expired'))
+})
+check('F6 变异·headless due 超上限(2099) → headless-deadline-too-far', () => {
+  assert.ok(types4(V4([{ path: '/a' }], [okHeadless4('/a', '2099-01-01')])).has('headless-deadline-too-far'))
+})
+check('F7 变异·headless 条数超上限 → too-many-headless（逃生门膨胀=红）', () => {
+  const many = Array.from({ length: c4.MAX_HEADLESS_ROUTES + 1 }, (_, i) => okHeadless4('/h' + i, '2026-08-01'))
+  assert.ok(types4(V4(many.map((e) => ({ path: e.path })), many)).has('too-many-headless'))
+})
+check('F8 变异·注册表声明了 App 无的路由 → dangling-registry（防迁移弄丢从两边同时消失）', () => {
+  assert.ok(types4(V4([{ path: '/a' }], [okActive4('/a'), okActive4('/ghost')])).has('dangling-registry'))
+})
+check('F9 变异·deprecated 缺 reason → deprecated-missing-reason', () => {
+  assert.ok(types4(V4([{ path: '/a' }], [{ path: '/a', permModule: null, status: 'deprecated' }])).has('deprecated-missing-reason'))
+})
+check('F10 变异·未知 status → unknown-status', () => {
+  assert.ok(types4(V4([{ path: '/a' }], [{ path: '/a', permModule: null, status: 'wip' }])).has('unknown-status'))
+})
+check('F11 no-false-positive·全合法(active+headless+deprecated) → 零违规（对照组）', () => {
+  const routes = [{ path: '/a' }, { path: '/b' }, { path: '/c' }]
+  const entries = [okActive4('/a'), okHeadless4('/b', '2026-08-01'), { path: '/c', permModule: null, status: 'deprecated', reason: 'gone' }]
+  assert.strictEqual(V4(routes, entries).length, 0, '合法结构不应误报')
+})
+// F12/F13：解析器边界（独立复核对抗面板逮到的两处·真跑 fixture 文件证 parseAppRoutes/parseRegistry 不漏）
+check('F12 解析器·element 属性在 path 前（值含 JSX >）→ parseAppRoutes 仍捕获（防孤儿静默变绿·原 [^>]* 会漏·BLOCKER）', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bd-c4-app-'))
+  try {
+    const f = path.join(dir, 'App.tsx')
+    fs.writeFileSync(f, '<Route element={<Orphan/>} path="/orphan" />\n<Route\n  element={<M/>}\n  path="/multi" />\n<Route path="/plain" element={<P/>} />\n<Route path="*" element={<N/>} />\n')
+    const paths = c4.parseAppRoutes(f).map((r) => r.path)
+    assert.ok(paths.includes('/orphan'), 'element 在前的路由须被捕获（原 <Route[^>]*path= 会在 <Orphan/> 的 > 处截断→漏）')
+    assert.ok(paths.includes('/multi'), '多行 element 在前的路由须被捕获')
+    assert.ok(paths.includes('/plain'), 'path 在前的路由须被捕获')
+    assert.ok(!paths.includes('*'), '结构路由 * 应排除')
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+check('F13 解析器·注册表字段值含花括号 → parseRegistry 不丢条目（防合法 reason 被误报未声明·原 \\{[^{}]*\\} 会截断）', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bd-c4-reg-'))
+  try {
+    const f = path.join(dir, 'reg.ts')
+    fs.writeFileSync(f, "export const NAV_GROUPS: readonly NavGroup[] = ['overview'] as const\nexport const ROUTE_REGISTRY = [\n { path: '/x', label: 'X', navGroup: 'overview', permModule: null, status: 'active' },\n { path: '/hl', permModule: null, status: 'headless', owner: 'o', due: '2026-08-01', reason: 'see {foo} and {bar}' },\n]\n")
+    const entries = c4.parseRegistry(f).entries
+    assert.ok(entries.map((e) => e.path).includes('/hl'), 'reason 含 {} 的条目不应被丢（已改字符串感知配平抽块）')
+    assert.strictEqual(entries.length, 2, '两条都应解析到')
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
 // ================= run-all.cjs exit-code 端到端（「最后一公里」接线·独立复核逮到的覆盖缺口）=================
 // 上面的断言只测纯校验器；下面用 spawnSync 真跑 run-all.cjs 断 exit code，锁「govErrors→exit1 / refuse→exit2 /
 // 健康→exit0」这段接线不被静默改回。fixture 走 BD_BASELINE_PATH / BD_WHITELIST_PATH 注入临时目录，
@@ -371,6 +447,35 @@ try {
     // （原用 /reports/personnel-efficiency，已随「清理幽灵报表端点」删除、不再是现违规，故换存量幽灵 /logs/export）
     const bp = fixture('deadlock-blocked.json', { keys: ['C1|GET|/logs/export'], targetMaxCount: 100, meta: { 'C1|GET|/logs/export': { owner: 't', deadline: '2020-01-01' } } })
     assert.strictEqual(runGate(['--update-baseline'], { BD_BASELINE_PATH: bp }), 2)
+  })
+  // C4 路由注册表：注入 fixture App.tsx + route-registry.ts，端到端断「漏声明→exit1 / 一致→exit0」这段接线。
+  const c4App = (paths) => paths.map((p) => `<Route path="${p}" element={<X/>} />`).join('\n') + '\n'
+  const c4Reg = (rows) => "export const NAV_GROUPS: readonly NavGroup[] = ['overview'] as const\nexport const ROUTE_REGISTRY = [\n" + rows.map((r) => '  ' + r).join('\n') + '\n]\n'
+  const c4ActiveRow = (p) => `{ path: '${p}', label: 'X', navGroup: 'overview', permModule: null, status: 'active' },`
+  check('E11 exit-code·注册表漏声明 App 路由 → run-all 无条件 exit 1（C4 fail-closed）', () => {
+    const bp = fixture('h-c4-broken.json', healthyBaseline)
+    const appP = path.join(TMP, 'App-c4-broken.tsx')
+    fs.writeFileSync(appP, c4App(['/a', '/b', '/login', '*'])) // /b 未声明
+    const regP = path.join(TMP, 'reg-c4-broken.ts')
+    fs.writeFileSync(regP, c4Reg([c4ActiveRow('/a')]))
+    assert.strictEqual(runGate([], { BD_BASELINE_PATH: bp, BD_APP_TSX_PATH: appP, BD_ROUTE_REGISTRY_PATH: regP }), 1)
+  })
+  check('E12 exit-code·注册表与 App 一致 + 健康 baseline → exit 0（C4 clean 不误红）', () => {
+    const bp = fixture('h-c4-ok.json', healthyBaseline)
+    const appP = path.join(TMP, 'App-c4-ok.tsx')
+    fs.writeFileSync(appP, c4App(['/a', '/b', '/login', '*']))
+    const regP = path.join(TMP, 'reg-c4-ok.ts')
+    fs.writeFileSync(regP, c4Reg([c4ActiveRow('/a'), c4ActiveRow('/b')]))
+    assert.strictEqual(runGate([], { BD_BASELINE_PATH: bp, BD_APP_TSX_PATH: appP, BD_ROUTE_REGISTRY_PATH: regP }), 0)
+  })
+  check('E13 exit-code·C4 结构违规时 --update-baseline 也拒 exit 2（与 A/B govError 一致·独立复核逮到）', () => {
+    // /b 未声明 → C4 红。--update-baseline 须拒（否则 dev 本地只跑它会拿误导性 exit 0 而 C4 仍红）。
+    const bp = fixture('h-c4-upd.json', healthyBaseline)
+    const appP = path.join(TMP, 'App-c4-upd.tsx')
+    fs.writeFileSync(appP, c4App(['/a', '/b', '/login', '*']))
+    const regP = path.join(TMP, 'reg-c4-upd.ts')
+    fs.writeFileSync(regP, c4Reg([c4ActiveRow('/a')]))
+    assert.strictEqual(runGate(['--update-baseline'], { BD_BASELINE_PATH: bp, BD_APP_TSX_PATH: appP, BD_ROUTE_REGISTRY_PATH: regP }), 2)
   })
   check('E14 exit-code·C5 野生授权（注入 temp routes 的 req.user.role）→ 无条件 exit 1（warn 模式也红·fail-closed 公理一）', () => {
     // BD_AUTHZ_ROUTES_DIR 把 C5 的扫描目标指到临时目录（同 BD_BASELINE_PATH 注入手法）——证「C5 已接进 run-all

@@ -2,107 +2,18 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { getUserRole, getAccessiblePaths } from '@/lib/permissions'
+import { deriveSidebarMenu, allActivePaths, type MenuItem } from '@/lib/route-registry'
 import {
-  LayoutDashboard,
-  Package,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  ClipboardCheck,
-  FlaskConical,
-  ClipboardList,
-  BarChart3,
-  FolderTree,
-  Boxes,
-  Bell,
-  Activity,
-  Truck,
-  MapPin,
   Users,
-  Shield,
-  FileText,
   ChevronLeft,
   ChevronRight,
   PanelLeft,
   PanelRight,
-  ShoppingCart,
-  Undo2,
-  Trash2,
-  ArrowRightLeft,
-  CornerUpLeft,
-  Wrench,
-  Clock,
-  TrendingUp,
-  Layers,
-  Settings,
-  Scale,
-  Database,
-  AlertTriangle,
-  History,
-  GitBranch,
-  Container,
-  Receipt,
-  Wallet,
-  ShieldCheck,
-  CalendarClock,
 } from 'lucide-react'
 
-interface MenuItem {
-  label: string
-  path: string
-  icon: React.ElementType
-}
-
-const ALL_MAIN_MENU: MenuItem[] = [
-  { label: '仪表盘', path: '/', icon: LayoutDashboard },
-  { label: '库存列表', path: '/inventory', icon: Package },
-  { label: '入库记录', path: '/inbound', icon: ArrowDownToLine },
-  { label: '出库记录', path: '/outbound', icon: ArrowUpFromLine },
-  { label: '退库管理', path: '/returns', icon: Undo2 },
-  { label: '退货给供应商', path: '/supplier-returns', icon: CornerUpLeft },
-  { label: '报废管理', path: '/scraps', icon: Trash2 },
-  { label: '调拨管理', path: '/transfers', icon: ArrowRightLeft },
-  { label: '库存盘点', path: '/stocktaking', icon: ClipboardCheck },
-  { label: '检测项目', path: '/projects', icon: FlaskConical },
-  { label: 'BOM清单', path: '/bom', icon: ClipboardList },
-  { label: '消耗对账', path: '/reconciliation', icon: Activity },
-  { label: '物料成本分析', path: '/cost-analysis', icon: BarChart3 },
-  { label: '物料分类', path: '/categories', icon: FolderTree },
-  { label: '耗材管理', path: '/materials', icon: Boxes },
-  { label: '预警中心', path: '/alerts', icon: Bell },
-  // ===== 按医院成本/盈利 =====
-  { label: '医院盈利看板', path: '/hospital-pnl', icon: TrendingUp },
-  { label: '账实核对', path: '/account-reconcile', icon: Scale },
-  { label: '合作医院配置', path: '/partner-config', icon: Settings },
-  { label: 'LIS 病例', path: '/lis-cases', icon: Database },
-  { label: '导入测试台', path: '/import-console', icon: FlaskConical },
-  { label: '财务月度导入', path: '/import-wizard', icon: FileText },
-  // ===== ABC 成本核算导航（移植自 abc-productization 分支）=====
-  { label: 'ABC成本看板', path: '/abc/dashboard', icon: BarChart3 },
-  { label: '单片成本分析', path: '/abc/slide-cost', icon: Layers },
-  { label: '盈利分析', path: '/abc/profitability', icon: TrendingUp },
-  { label: '成本异常台账', path: '/abc/alerts', icon: AlertTriangle },
-  { label: '成本审计追溯', path: '/abc/audit', icon: History },
-  // ----- ABC 配置类（参数唯一录入入口，I-1 补导航）-----
-  { label: 'ABC配置', path: '/abc/activity-centers', icon: Settings },
-  { label: '成本动因', path: '/abc/cost-drivers', icon: GitBranch },
-  { label: '成本池', path: '/abc/cost-pools', icon: Container },
-  { label: '收费映射配置', path: '/abc/fee-mappings', icon: Receipt },
-  { label: '成本预算', path: '/abc/budgets', icon: Wallet },
-  { label: '质量成本', path: '/abc/quality-costs', icon: ShieldCheck },
-  { label: '季度成本调整', path: '/abc/quarterly-adjustment', icon: CalendarClock },
-  { label: '设备管理', path: '/equipment', icon: Wrench },
-  { label: '标准工时库', path: '/labor-times', icon: Clock },
-  { label: '间接成本中心', path: '/indirect-costs', icon: Settings },
-]
-
-const ALL_SYSTEM_MENU: MenuItem[] = [
-  { label: '采购订单', path: '/purchase-orders', icon: ShoppingCart },
-  { label: '供应商管理', path: '/suppliers', icon: Truck },
-  { label: '库位管理', path: '/locations', icon: MapPin },
-  { label: '用户管理', path: '/users', icon: Users },
-  { label: '角色权限', path: '/roles', icon: Shield },
-  { label: '操作日志', path: '/logs', icon: FileText },
-]
+// 菜单从路由注册表（@/lib/route-registry）派生——不再各处手写 MenuItem。
+// 顺序/文案/图标/分区均由注册表声明顺序决定，与迁移前 ALL_MAIN_MENU + ALL_SYSTEM_MENU
+// 逐字节一致（route-registry.test.ts 快照锁死·零行为变更）。
 
 function getRoleLabel(role: string | null): string {
   const labels: Record<string, string> = {
@@ -123,17 +34,16 @@ export default function AppSidebar() {
 
   const role = useMemo(() => getUserRole(), [location.pathname])
   const allowedPaths = useMemo(() => {
-    if (!role) return ALL_MAIN_MENU.map(m => m.path).concat(ALL_SYSTEM_MENU.map(m => m.path))
+    // 未登录：显示全部 active 项（与迁移前 ALL_MAIN_MENU+ALL_SYSTEM_MENU 全集一致）。
+    if (!role) return allActivePaths()
     return getAccessiblePaths()
   }, [role, location.pathname])
 
-  const mainMenuItems = useMemo(() =>
-    ALL_MAIN_MENU.filter(item => allowedPaths.includes(item.path)),
-  [allowedPaths])
-
-  const systemMenuItems = useMemo(() =>
-    ALL_SYSTEM_MENU.filter(item => allowedPaths.includes(item.path)),
-  [allowedPaths])
+  // 从注册表派生（active 项·按声明顺序·分主菜单/系统菜单区·按 allowedPaths 过滤）。
+  const { main: mainMenuItems, system: systemMenuItems } = useMemo(
+    () => deriveSidebarMenu(allowedPaths),
+    [allowedPaths]
+  )
 
   // Close mobile sidebar on route change
   useEffect(() => {
