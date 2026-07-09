@@ -1690,3 +1690,22 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add build-discipline 8 文件 + 本 session-log）；起测试后 `git checkout -- coreone.db` 复原；⚠️**两处坑记录**：(a) `git diff origin/master..HEAD`（two-dot）现幻影反向改 P-7/session-log（分支 off 旧 master·origin 已 +4 提交）→ 用 three-dot/merge-base 核实真实贡献=纯 build-discipline，已 merge origin/master 消幻影（记忆 `coreone-stale-fork-phantom-diff`）；(b) 害人型 live-404 死线 2026-08-07 到期会红 master gate 拦所有 PR=**有意时间炸弹**（B.3 逼处置），已在 PR body/README 充分披露 + spawn chip `task_364388dc` 修 reports.ts。参考记忆 `coreone-build-discipline-gate`。
 
 *更新时间：2026-07-08*
+
+## 本次会话完成的工作（清理 6 个幽灵报表端点 + --update-baseline 清出死线 meta + 同步 selftest → 承接 fail-closed chip `task_364388dc`，2026-07-08）
+
+**线/工作树**：worktree `gifted-nash-0acdc2`（分支 `claude/gifted-nash-0acdc2`·off origin/master `fd91b493`，后 `git merge origin/master 827b5873`）。task = 上一段 fail-closed 收口（PR #101）**主动暴露**并挂 2026-08-07 死线的两条「害人型 live-404」(`/reports/personnel-efficiency` + `/reports/cost-monthly-comparison`) 的处置（即 fail-closed 会话 spawn 的 chip `task_364388dc`）。**PM 拍板：三处全删**——①人员效率三件套 ②月度环比调用+UI ③顺带 4 个零消费者死 wrapper。**纯前端删除 + 构建纪律闸 baseline/selftest 同步·后端零改动·golden 天然零回归**。
+
+**核实先行（讨论循环）**：①两条 live-404 确被 live 页真调（`PersonnelEfficiency.tsx`→路由 `/abc/personnel-efficiency`；`CostDashboard.tsx`→月度环比卡片）②后端 `reports-v1.1.ts` 仅 4 条真路由、6 个 ghost 恒 404 ③4 个死 wrapper（getCostByProjectGroup/getFullCostByProject/getCostStructure/getCostVariance）**零消费者** ④option B(补后端)对人员效率不可行（工时/效率数据地基不存在·成本模型 labor 恒 0）；月度环比虽有现成卡片 UI，PM 仍选删。PM 待拍 B-3 / ABC I-3 由此收口。
+
+**交付（3 提交）**：
+- **`f6b8c485` 前端删除**（+19/−757·9 文件）：人员效率三件套（`PersonnelEfficiency.tsx`+其测试+`App.tsx` route/import+`index.ts` export+`reports.ts` api 方法）；月度环比（`CostDashboard.tsx` 的 api 调用/`loadComparison`/卡片/`getComparisonDirectionMeta`+`buildDashboardComparisonParams` 两导出 helper 及其单测·**保留** summary 卡内联环比[真实 `costChange` 驱动]）；`reports.ts` 4 个死 wrapper；清 `CostDashboard.adjustments.render.test.tsx` 的 getCostMonthlyComparison mock。
+- **`4d83dd12` merge origin/master**：带入 fail-closed #101 治理机制 + audit #100——**仅 session-log append 冲突**（前端文件零重叠），取 master 版 + 本段续接。
+- **build-discipline 同步**（本提交）：删 6 前端调用后跑 `run-all.cjs --update-baseline` → 6 条 `C1|GET|/reports/*` 键自动掉出、2 条死线 meta 经 governance「剪悬空 meta」自动清除；baseline **44→38** 键、手工把 `targetMaxCount` 44→38 收紧棘轮（visible diff）。**同步 selftest**：4 条断言硬编码旧幽灵存量（6 reports 幽灵 / 总数 9 / 2 条 live-404 死线 meta 当样本）随清理失效→逐条**保牙重定向**（①「6 reports 幽灵命中」→反向守卫「已清理·不再命中」防再引入 ②「恰好 9」→「恰好 3」 ③「live-404 死线到期会红」→清理后快照守卫「6 键+2 meta 已清出」·死线机制牙仍在 fixture 用例 E2 ④E10 样本键 `/reports/personnel-efficiency`→存量幽灵 `/logs/export`）。
+
+**验证**（合并树上真跑）：构建纪律闸 **selftest exit 0（全部通过）** + **gate `--block=C1,C2` exit 0**（= CI `gate` required check 两步）；前端 `tsc --noEmit` + `vite build` 绿。后端**零改动**（`git diff origin/master...HEAD -- 后端代码` 空）→ golden ¥13,152+¥27,870 继承 master 绿。**零新增测试失败**（3 预存红=日期敏感硬编码 2026-06·pristine master 同样红）。
+
+**⚠️ 承接 fail-closed 的死线炸弹拆除**：#101 给这 2 条 live-404 挂 2026-08-07 死线（到期 gate 无条件红→拦所有 PR）；本 PR 删前端死调用 + --update-baseline 清出 keys/meta = **在到期前拆除**（真实 baseline 现无 per-entry 死线 meta·gate 今日绿）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add build-discipline 2 文件 + 本 session-log；前端删除已在 `f6b8c485`）；未起后端·无 dev DB 污染。→ PR。参考记忆 `coreone-build-discipline-gate`、`coreone-feature-keep-cut-inventory`；chip `task_364388dc` 由此了结。
+
+*更新时间：2026-07-08*
