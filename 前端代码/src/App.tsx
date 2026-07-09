@@ -53,7 +53,6 @@ import CostVarianceAnalysis from '@/pages/cost/CostVarianceAnalysis'
 import CostAlerts from '@/pages/cost/CostAlerts'
 import AuditTrail from '@/pages/cost/AuditTrail'
 import QuarterlyAdjustment from '@/pages/cost/QuarterlyAdjustment'
-import PersonnelEfficiency from '@/pages/cost/PersonnelEfficiency'
 import CostModelValidation from '@/pages/cost/CostModelValidation'
 
 function App() {
@@ -112,7 +111,6 @@ function App() {
           <Route path="/abc/alerts" element={<CostAlerts />} />
           <Route path="/abc/audit" element={<AuditTrail />} />
           <Route path="/abc/quarterly-adjustment" element={<QuarterlyAdjustment />} />
-          <Route path="/abc/personnel-efficiency" element={<PersonnelEfficiency />} />
           <Route path="/abc/model-validation" element={<CostModelValidation />} />
         </Route>
         <Route path="*" element={<NotFound />} />

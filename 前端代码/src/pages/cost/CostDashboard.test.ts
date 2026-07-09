@@ -2,35 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   applyCreatedAdjustmentToSummary,
   applyReviewedAdjustmentToSummary,
-  buildDashboardComparisonParams,
   buildCostAlertsOverviewLink,
   buildCostRunExceptionLink,
   getClosePeriodBlockReason,
-  getComparisonDirectionMeta,
   getCostRunProcessedCount,
   getCostRunSucceededCount,
   getDashboardOpenExceptionCount,
 } from './CostDashboard'
-
-describe('getComparisonDirectionMeta', () => {
-  it('成本上升时使用红色上升状态', () => {
-    expect(getComparisonDirectionMeta('up')).toEqual({
-      cardClassName: 'bg-red-50',
-      labelClassName: 'text-red-600',
-      valueClassName: 'text-red-600',
-      icon: 'up',
-    })
-  })
-
-  it('成本持平时使用中性状态', () => {
-    expect(getComparisonDirectionMeta('flat')).toEqual({
-      cardClassName: 'bg-gray-50',
-      labelClassName: 'text-gray-600',
-      valueClassName: 'text-gray-700',
-      icon: 'flat',
-    })
-  })
-})
 
 describe('getDashboardOpenExceptionCount', () => {
   it('优先使用看板全量开放异常数，避免最近 10 条低估', () => {
@@ -51,12 +29,6 @@ describe('buildCostAlertsOverviewLink', () => {
 describe('buildCostRunExceptionLink', () => {
   it('按重算任务和月份过滤成本异常', () => {
     expect(buildCostRunExceptionLink('run-1', '2026-04')).toBe('/abc/alerts?keyword=run-1&yearMonth=2026-04&status=open&includeUnassigned=1')
-  })
-})
-
-describe('buildDashboardComparisonParams', () => {
-  it('成本看板月度环比使用 ABC 快照口径', () => {
-    expect(buildDashboardComparisonParams('2026-04')).toEqual({ month: '2026-04', source: 'abc' })
   })
 })
 

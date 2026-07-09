@@ -3,7 +3,6 @@ import React from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { abcApi } from '@/api/abc'
-import { reportsApi } from '@/api/reports'
 import CostDashboard from './CostDashboard'
 
 vi.mock('recharts', () => ({
@@ -25,12 +24,6 @@ vi.mock('@/api/abc', () => ({
     approveAdjustment: vi.fn(),
     rejectAdjustment: vi.fn(),
     createAdjustment: vi.fn(),
-  },
-}))
-
-vi.mock('@/api/reports', () => ({
-  reportsApi: {
-    getCostMonthlyComparison: vi.fn(),
   },
 }))
 
@@ -86,7 +79,6 @@ describe('CostDashboard adjustment refresh', () => {
     vi.mocked(abcApi.approveAdjustment).mockReset()
     vi.mocked(abcApi.rejectAdjustment).mockReset()
     vi.mocked(abcApi.createAdjustment).mockReset()
-	    vi.mocked(reportsApi.getCostMonthlyComparison).mockReset()
 	    vi.mocked(abcApi.getClosingReadiness).mockResolvedValue(readyClosingReadiness)
 	  })
 
@@ -121,7 +113,6 @@ describe('CostDashboard adjustment refresh', () => {
       submittedBy: 'admin',
       reviewedBy: 'sunli',
     })
-    vi.mocked(reportsApi.getCostMonthlyComparison).mockResolvedValue(null)
 
     render(
       <MemoryRouter>
@@ -167,7 +158,6 @@ describe('CostDashboard adjustment refresh', () => {
       status: 'pending',
       submittedBy: 'sunli',
     })
-    vi.mocked(reportsApi.getCostMonthlyComparison).mockResolvedValue(null)
 
     render(
       <MemoryRouter>
@@ -212,7 +202,6 @@ describe('CostDashboard adjustment refresh', () => {
     })
     vi.mocked(abcApi.getCostRuns).mockResolvedValue(emptyListResponse)
     vi.mocked(abcApi.getAdjustments).mockResolvedValue(emptyListResponse)
-    vi.mocked(reportsApi.getCostMonthlyComparison).mockResolvedValue(null)
 
     render(
       <MemoryRouter>
@@ -254,7 +243,6 @@ describe('CostDashboard adjustment refresh', () => {
       }],
     })
     vi.mocked(abcApi.getAdjustments).mockResolvedValue(emptyListResponse)
-    vi.mocked(reportsApi.getCostMonthlyComparison).mockResolvedValue(null)
 
     render(
       <MemoryRouter>
@@ -290,7 +278,6 @@ describe('CostDashboard adjustment refresh', () => {
       }],
     })
     vi.mocked(abcApi.getAdjustments).mockResolvedValue(emptyListResponse)
-    vi.mocked(reportsApi.getCostMonthlyComparison).mockResolvedValue(null)
 
     render(
       <MemoryRouter>
@@ -332,7 +319,6 @@ describe('CostDashboard adjustment refresh', () => {
         submittedBy: 'sunli',
       }],
     })
-    vi.mocked(reportsApi.getCostMonthlyComparison).mockResolvedValue(null)
 
     render(
       <MemoryRouter initialEntries={['/abc/dashboard?month=2099-03&keyword=ADJ-AUDIT-DEEP-001']}>
@@ -369,7 +355,6 @@ describe('CostDashboard adjustment refresh', () => {
       }],
     })
     vi.mocked(abcApi.getAdjustments).mockResolvedValue(emptyListResponse)
-    vi.mocked(reportsApi.getCostMonthlyComparison).mockResolvedValue(null)
 
     render(
       <MemoryRouter initialEntries={['/abc/dashboard?month=2099-04&keyword=RUN-AUDIT-DEEP-001']}>
@@ -400,7 +385,6 @@ describe('CostDashboard adjustment refresh', () => {
     })
     vi.mocked(abcApi.getCostRuns).mockResolvedValue(emptyListResponse)
     vi.mocked(abcApi.getAdjustments).mockResolvedValue(emptyListResponse)
-    vi.mocked(reportsApi.getCostMonthlyComparison).mockResolvedValue(null)
 
     render(
       <MemoryRouter initialEntries={['/abc/dashboard?month=2099-05']}>
@@ -466,7 +450,6 @@ describe('CostDashboard adjustment refresh', () => {
 	      ],
 	      sources: {},
 	    })
-	    vi.mocked(reportsApi.getCostMonthlyComparison).mockResolvedValue(null)
 
 	    render(
 	      <MemoryRouter>
@@ -490,7 +473,6 @@ describe('CostDashboard adjustment refresh', () => {
 	    vi.mocked(abcApi.getCostRuns).mockResolvedValue(emptyListResponse)
 	    vi.mocked(abcApi.getAdjustments).mockResolvedValue(emptyListResponse)
 	    vi.mocked(abcApi.getClosingReadiness).mockRejectedValue(new Error('closing readiness unavailable'))
-	    vi.mocked(reportsApi.getCostMonthlyComparison).mockResolvedValue(null)
 
 	    render(
 	      <MemoryRouter>

@@ -1655,3 +1655,22 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 8 源码/测试文件 + 本 session-log）；起后端后 `git checkout -- coreone.db` 复原（clean）；`.claude/launch.json` 留未跟踪（本地 dev 便利·非产物）。为浏览器走查曾临时把 `/abc/variance` 加进 `permissions.ts` NAV_PATH_MODULE、走查后 `git checkout` **已还原**（不进 PR）。参考记忆 `coreone-build-discipline-gate`、`coreone-feature-keep-cut-inventory`。
 
 *更新时间：2026-07-08*
+
+## 本次会话完成的工作（清理 6 个幽灵报表端点：人员效率三件套 + 月度环比调用/UI + 4 个死 wrapper，2026-07-08）
+
+**线/工作树**：worktree `gifted-nash-0acdc2`（off origin/master tip `fd91b493`，新鲜）。task = 构建纪律闸 **P-5/P-6 fail-closed 收口**（改动在 unmerged 分支 `chore/build-discipline-fail-closed`）**主动暴露的存量债「另立项」**：两条「害人型 live-404」(`/reports/personnel-efficiency` + `/reports/cost-monthly-comparison`) 被挂硬死线 2026-08-07。**PM 拍板（本会话 AskUserQuestion）：三处全删**——①人员效率三件套 ②月度环比调用+UI ③顺带 4 个死 wrapper。**纯前端删除·后端零改动·golden 天然零回归**。
+
+**核实先行（讨论循环）**：①两条 live-404 确被 live 页调用（`PersonnelEfficiency.tsx`→路由 `/abc/personnel-efficiency`；`CostDashboard.tsx`→月度环比卡片）②后端 `reports-v1.1.ts` 只有 4 条真路由，6 个 ghost 恒 404 ③4 个死 wrapper（getCostByProjectGroup/getFullCostByProject/getCostStructure/getCostVariance）**零消费者** ④option B(补后端)对人员效率不可行（工时/效率数据地基不存在·成本模型 labor 恒 0），月度环比虽有现成卡片 UI 但 PM 仍选删。PM 待拍 B-3 / ABC 处置清单 I-3 由此收口。
+
+**交付（删除面）**：
+- **人员效率三件套**：删 `PersonnelEfficiency.tsx` + `PersonnelEfficiency.render.test.tsx`；`App.tsx` 去 import+route；`index.ts` 去 export；`reports.ts` 去 `getPersonnelEfficiency`。
+- **月度环比（CostDashboard.tsx）**：删 `getCostMonthlyComparison` api + `loadComparison` + comparison state/effect + `MonthlyComparison`/`ComparisonDirection` 类型 + `getComparisonDirectionMeta`/`buildDashboardComparisonParams` 导出函数（含 `CostDashboard.test.ts` 里其单测）+ 月度环比卡片 JSX + `ArrowUp`/`ArrowDown` import。**保留** summary 卡片内联环比（`getChangeIcon`/`getChangeText`·由真实 `summary.costChange` 驱动·不受影响）。清 `CostDashboard.adjustments.render.test.tsx` 里 getCostMonthlyComparison mock（11 行 + vi.mock 块 + import）。
+- **4 个死 wrapper**：从 `reports.ts` 删（保留 4 个真方法 getCostByProject/Material/Supplier/Trend）。
+
+**验证**：前端 `tsc --noEmit` 绿；`vite build` 绿（2711 modules）；`CostDashboard.test.ts` 14/14 绿；**零新增测试失败**——`CostDashboard.adjustments.render.test.tsx` 2 失败 + `QualityCostAnalysis.test.tsx` 1 失败经**换入 origin/master 版本实测同样失败=纯预存**（日期敏感：测试硬编码 2026-06 而系统时钟已 2026-07；QCA 与 master 逐字节相同）。grep 全清、零 leftover 引用。
+
+**⚠️ baseline 协调（本 worktree 未动 baseline.json·关键）**：死线 meta 挂在 **unmerged** 分支 `chore/build-discipline-fail-closed`（worktree `elated-heyrovsky-4702ae`·非 master）——`baseline-governance.cjs` 的 `expired`/`orphan-meta` 判定看 `baseline.keys`+`meta` 而非活违规集，故清红须**同时**删 key + meta 条目。本 worktree off 旧 master（无 meta/无 governance/run-all 是旧版）→ 在此跑 `--update-baseline` 只会产出无 meta 的 baseline、与 fail-closed 的 baseline 冲突/回退 governance 字段。**决策：本 PR 只删业务码、不碰 baseline.json**；baseline+meta 清理随 fail-closed 收口——**推荐 fail-closed 先合 master → 本 fix rebase 后跑 `--update-baseline`（6 key 自动出 + 2 meta 自动剪 + targetMaxCount 重播）**；或 fail-closed 会话收口时手删这 2 条 meta（因本 fix 已移除前端调用、key 已非违规）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 `git add 前端代码/src` + 本 session-log·node_modules 符号链接确认未 staged）；未起后端·无 dev DB 污染。PR/commit 待用户拍板。参考记忆 `coreone-build-discipline-gate`、`coreone-feature-keep-cut-inventory`；PM 待拍 B-3 / ABC I-3。
+
+*更新时间：2026-07-08*
