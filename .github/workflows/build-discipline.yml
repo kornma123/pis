@@ -9,6 +9,9 @@ name: Build Discipline Gate
 #     兜底（孵化/误报都可登记 owner+deadline 豁免）。存量 9+33 在 baseline、不拦无关 PR。
 #   - **C3 仍 warn**（只报告不拦）：C3 最模糊、硬拦会误伤"计算内联在路由"的合法配置字段（喊狼），
 #     且无干净豁免出口 → PM 拍 M-6 保持 warn。日后要拦须先加 C3 逐字段豁免 + 精确化。
+#   - **C4 路由↔导航注册表 = 结构 fail-closed·无条件红**（不需 --block）：任一 App.tsx 路由未在
+#     route-registry.ts 声明 / active 缺 navGroup / headless 缺死线或过期或超上限 → run-all 无条件 exit 1
+#     （与白名单/baseline 治理同类·无 baseline 棘轮，迁移时已声明干净零存量债）。
 #   - selftest 必过（工具本身坏了即红）。
 #
 # ⚠️ 本 workflow 的 `gate` job 已是 master 分支保护的 **required status check**。
