@@ -1752,6 +1752,26 @@ http://your-server-ip:8080
 
 *更新时间：2026-07-09*
 
+## 本次会话完成的工作（授权组合子 + lint —— 权限影子矩阵前置·迁移序第 1 步，2026-07-09）
+
+**线/工作树**：worktree `relaxed-elgamal-eb20b7`（分支 `claude/relaxed-elgamal-eb20b7`·off origin/master `94c6b7db`，启动 `git fetch` 确认未落后）。task = 专家终裁「后续四项」迁移序第 1 步：把散落在各 handler `if` 里的「授权条件」收进**具名组合子** + 一条 **lint** 堵住「野生授权逻辑」，让「条件集」从此可机器枚举，为后面的权限影子断言矩阵铺「枚举可靠」的地基。**纯结构重构·鉴权判定逐字节零变更·golden 天然零回归**（不碰钱）。
+
+**盘清单（穷举 + Workflow 独立复核确认完整·0 遗漏）**：后端路由里「对操作者身份做 allow/deny 决策」的内联授权共 **6 处/5 文件**——① alerts admin-only 门（route-entry）② reconciliation SoD 自审 ③ account-reconcile SoD（fail-closed）④ abc SoD（本地 wrapper·2 端点）⑤ cost-adjustment SoD（code=FORBIDDEN）⑥ partner-config/statement-import 口径门（roles-aware isAdmin·mid-handler）。明确排除：attribution（`operator=req.user.username` 仅写库/审计）、data-object 保护（`existing.code==='admin'`）、auth.ts DB 行 `user.role`（签 JWT/建 capability，非门禁）、已是组合子的 requirePermission/requireAnyRole。
+
+**交付**：
+- **新注册表 `middleware/authz-combinators.ts`**：`isAdmin`(roles-aware) / `requireAdmin({primaryRoleOnly,message,code})`(路由守卫) / `assertNotSelfReview(res,{submitterId,actorId,message,code,failClosedOnMissing})`(SoD 具名守卫) / `assertCaliberChangeAllowed(req,res,changed,message)`(口径门) + 导出 `SELF_REVIEW_FORBIDDEN` 码单一事实源。
+- **6 处提升逐字节等价**：alerts→`requireAdmin({primaryRoleOnly:true})`（只看 primary role·复刻旧语义·中间件位仍在 404 前）；4 处 SoD→`assertNotSelfReview`（内联在原位·排序不变，`failClosedOnMissing` 只 account-reconcile 传 true）；abc **2 端点直接内联**（去掉本地 wrapper→每端点携带注册表符号·下游矩阵可按调用点枚举）；2 处口径门→`assertCaliberChangeAllowed`（删两份本地 `isAdmin`·路由层不再裸读 `req.user.role`）。
+- **新 lint `scripts/build-discipline/check-authz-combinators.cjs`（C5·独立轴，与姊妹 PR 的 C4=路由注册表正交）**：只扫 `routes/*.ts`，先 `blankComments` 剥注释再匹配（防迁移注释误报）。规则①禁请求用户 `.role/.roles`（点/可选链/别名/解构/方括号，锚定 `req.user`/别名·不误伤 DB 行 `user.role` 与 `req.body` `data.roles`）②禁裸 `SELF_REVIEW_FORBIDDEN` 字面量 ③禁内联「请求用户身份 `userId/username/id` === 行字段」比对（堵 FORBIDDEN-码 SoD 规避）。接 run-all.cjs **fail-closed 层=零容忍无 baseline**（任一违规无条件红）。README 补 C5 + 覆盖边界诚实声明（派生标量/helper/capability 不在正则闭包·靠注册表+人工兜底）。
+- **夹具/测试**：`tests/authz-combinators.test.ts`（每个具名条件 trigger+pass 对·逐分支：primaryRoleOnly 忽略 roles / failClosed true·false / code 默认·覆盖 / caliber 三态）；selftest.cjs 加 C5 变异断言（每种野生写法必红 + attribution/注释/尾注/块注/DB 行/req.body 均不红 + E14 端到端 fail-closed exit 1 + E15 干净不误红 exit 0）。
+
+**独立复核（Workflow 7-agent：3 discovery + 4 红队·`wf_95829e45`）**：discovery **0 遗漏**（确认清单完整）；红队 CLEAR 独立确认 6 处逐字节等价 + 内联(非 pre-route)取舍正确（pre-route 会把 403 提到 404/409 前破坏等价）+ 内联清单无遗漏。采纳红队硬化 3 项：rule③ 身份比对规避、bracket-notation 规避、abc wrapper 内联（枚举可靠性）。**顺带发现相邻缺口（out-of-scope·已 spawn `task_e7374cf7`）**：depletion/labor-time/indirect-cost 写端点仅被挂载层 R 权限守卫、无 inline W → 任何读权限角色可写（属「缺检查」非「内联检查」，改它会变鉴权行为，须先摊 PM）。
+
+**验证**（worktree symlink 主仓 node_modules 后真跑）：后端 **vitest 112 files / 972 tests 全绿**（含 authz 夹具 + 全 RBAC/SoD 回归网 + golden ¥13,152+¥27,870 零回归）；`tsc --noEmit` 绿；构建纪律闸 **selftest exit 0**（含 C5 全部变异/no-FP/E14/E15）+ **`--block=C1,C2` gate exit 0**（C5 fail-closed 层 0 违规）。
+
+**⚠️ 姊妹 PR 命名撞车已解**：开 PR 时发现并行的 **PR #107（路由注册表 Phase 1）** 也给构建纪律闸加了检查、占用了「**C4**」（`check-route-nav.cjs`·孤儿路由结构预防）+ exit-code `E11–E13`。两者都改共享的 `run-all.cjs`/`selftest.cjs`/`README.md`（但互不碰对方独占文件）。因我的 authz 检查是**正交新轴**（授权可枚举性 vs 他们功能先于消费者/孤儿路由），把我的重命名为 **C5** + exit-code `E14/E15` + 变量 `c5authz`——两 PR 从此**加性合并**（谁后合谁在这 3 个共享文件做机械 keep-both，id/编号不冲突）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 本会话源码 + 本 session-log）；跑测试后 `git checkout -- 后端代码/server/data/coreone.db` 复原 dev DB。→ PR（pr-governance）。参考记忆 `coreone-worktree-tests-and-codex-resilience`、`coreone-build-discipline-gate`、`coreone-rbac-live-vs-seed-matrix`。
+
 ## 本次会话完成的工作（第4件·止损执法点：拆分口径未认账水印 + 导出声明，2026-07-09）
 
 **线/工作树**：worktree `silly-carson-3e64a8`（分支 `claude/silly-carson-3e64a8`·off origin/master `94c6b7db`，启动 `git fetch` 确认未落后）。任务 =「后续四项」**第4件工程侧止损执法点**（LEG-2/公理一）——业务侧「暂停新增对外使用 + 取证 + 认账签字」**不在本次**（PM/业务的活）。

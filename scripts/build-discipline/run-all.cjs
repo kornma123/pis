@@ -30,6 +30,7 @@ const c1 = require('./check-frontend-to-backend.cjs')
 const c2 = require('./check-backend-consumers.cjs')
 const c3 = require('./check-config-engine.cjs')
 const c4 = require('./check-route-nav.cjs')
+const c5authz = require('./check-authz-combinators.cjs') // C5 授权组合子（独立轴·与 C1–C4 功能轴正交）
 const BG = require('./lib/baseline-governance.cjs')
 
 // baseline 路径：默认同目录 baseline.json；`BD_BASELINE_PATH` 可覆盖（仅 selftest 注入 fixture 用，
@@ -202,7 +203,19 @@ function main() {
     return out
   }
 
-  const govErrors = [...whitelistGovErrors, ...baselineGovErrorsOf(baselineDoc), ...routeNavGovErrors]
+  // C5 授权组合子：路由 handler 里的「野生授权逻辑」（裸读请求用户 .role/.roles / 裸写 SoD 判决）——
+  //   零容忍、无 baseline 宽容（授权缺口不是可攒的存量债）。纯静态扫描、幂等、无副作用；与 --block/--only/baseline
+  //   无关，任一违规无条件红（fail-closed 公理一）。独立轴，与 C1–C4「功能先于消费者」正交。
+  const authzRes = c5authz.run()
+  const authzGovErrors = authzRes.violations.map((v) => ({
+    scope: '授权组合子(C5)',
+    detail: `${v.file}:${v.line} ${v.rule === 'role-access'
+      ? '裸读请求用户 .role/.roles（授权须走组合子 requireAdmin/isAdmin/requireAnyRole/requirePermission）'
+      : '裸写 SELF_REVIEW_FORBIDDEN 判决（SoD 须走 assertNotSelfReview 组合子）'} — ${v.snippet}`,
+  }))
+
+  // C4（路由↔导航注册表）+ C5（授权组合子）都是无 baseline 的结构 fail-closed 轴，一并汇入 govErrors。
+  const govErrors = [...whitelistGovErrors, ...baselineGovErrorsOf(baselineDoc), ...routeNavGovErrors, ...authzGovErrors]
 
   // 更新 baseline（收紧棘轮）
   if (args.updateBaseline) {
@@ -226,9 +239,9 @@ function main() {
     const newDoc = { keys, meta: meta || undefined, targetMaxCount }
     // fail-closed 拒绝：①白名单结构错误(A)（基线更新碰不到白名单、改不掉）；②**新 doc** 仍有 baseline 治理错误(B)
     //   （含越天花板 over-cap：新条数 > targetMaxCount → checkBaselineCap 判红 → 这里拒）；
-    //   ③C4 路由注册表结构错误（C4 无 baseline·不可洗白，但 C4 红时 --update-baseline 也须拒 exit 2、
-    //     与 A/B 一致——否则 dev 本地只跑 --update-baseline 会拿到误导性 exit 0 而 C4 仍红。独立复核逮到）。
-    const refuse = [...whitelistGovErrors, ...baselineGovErrorsOf(newDoc), ...routeNavGovErrors]
+    //   ③C4 路由注册表 + ④C5 授权组合子结构错误（均无 baseline·不可洗白，但红时 --update-baseline 也须拒 exit 2、
+    //     与 A/B 一致——否则 dev 本地只跑 --update-baseline 会拿到误导性 exit 0 而 C4/C5 仍红。独立复核逮到）。
+    const refuse = [...whitelistGovErrors, ...baselineGovErrorsOf(newDoc), ...routeNavGovErrors, ...authzGovErrors]
     if (refuse.length) {
       console.error('✗ 治理层 fail-closed 错误未清，禁止 --update-baseline（会把结构违规洗白成存量）。先清：')
       for (const e of refuse) console.error(`    · [${e.scope}] ${e.detail}`)
@@ -280,6 +293,7 @@ function main() {
     console.log('    · baseline天花板(B.1) → 修掉存量降到 targetMaxCount 下，或经说明抬高天花板。')
     console.log('    · 被依赖者(B.2) → 该端点已被消费、非死物 → node scripts/build-discipline/run-all.cjs --update-baseline 把它清出 C2 死物名单。')
     console.log('    · 路由注册表(C4) → 新页在 前端代码/src/lib/route-registry.ts 登记（active+navGroup / 或 headless 带 owner+due+reason），或删掉 App.tsx 里的死路由。见 check-route-nav.cjs。')
+    console.log('    · 授权组合子(C5) → 把 handler 里的角色/SoD 判定提升进 middleware/authz-combinators.ts 的具名组合子（requireAdmin/isAdmin/assertNotSelfReview 等）；路由层不得裸读 req.user.role/.roles、不得裸写 SELF_REVIEW_FORBIDDEN。')
   }
   if (blockedFail) {
     console.log('\n  ✗ 有新增违规被拦。修法：')

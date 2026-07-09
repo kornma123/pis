@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { requireAdmin } from '../middleware/authz-combinators.js'
 
 const router = Router()
 
@@ -20,12 +21,10 @@ router.get('/rules', (_req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.put('/rules/:id', requirePermission('alerts', 'W'), (req, res) => {
+// 授权提升：admin-only 门（原内联 `if (!user || user.role !== 'admin')`）→ 具名路由守卫 requireAdmin。
+// primaryRoleOnly=true 逐字节复刻旧站点「只看 primary role、不看 roles[]」的语义；message/code 保持原值。
+router.put('/rules/:id', requirePermission('alerts', 'W'), requireAdmin({ primaryRoleOnly: true, message: 'Forbidden', code: 'FORBIDDEN' }), (req, res) => {
   try {
-    const user = (req as any).user
-    if (!user || user.role !== 'admin') {
-      return error(res, 'Forbidden', 'FORBIDDEN', 403)
-    }
     const { id } = req.params
     const { threshold, thresholdDays, enabled } = req.body
     const db = getDatabase()
