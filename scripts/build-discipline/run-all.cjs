@@ -12,7 +12,9 @@
  *   这让 PR 模板「无新增违规」变成机器可判定的事实。
  *
  * 用法：
- *   node scripts/build-discipline/run-all.cjs                  # warn，全量+delta 汇总（永远 exit 0）
+ *   node scripts/build-discipline/run-all.cjs                  # warn，全量+delta 汇总（无新增违规时 exit 0；
+ *                                                              #   但治理层 fail-closed 违规[白名单结构 A / baseline 死线·天花板·被依赖者 B]
+ *                                                              #   无条件 exit 1，与是否 --block 无关）
  *   node scripts/build-discipline/run-all.cjs --block=C1       # 仅对 C1 的**新增**判红（存量不拦）
  *   node scripts/build-discipline/run-all.cjs --block=C1,C2,C3 # 三条都对新增判红
  *   node scripts/build-discipline/run-all.cjs --update-baseline# 把当前违规写进 baseline（收紧棘轮）
@@ -27,8 +29,11 @@ const path = require('path')
 const c1 = require('./check-frontend-to-backend.cjs')
 const c2 = require('./check-backend-consumers.cjs')
 const c3 = require('./check-config-engine.cjs')
+const BG = require('./lib/baseline-governance.cjs')
 
-const BASELINE_PATH = path.join(__dirname, 'baseline.json')
+// baseline 路径：默认同目录 baseline.json；`BD_BASELINE_PATH` 可覆盖（仅 selftest 注入 fixture 用，
+// 让 exit-code 端到端断言能在临时目录跑坏基线而不污染仓库文件）。
+const BASELINE_PATH = process.env.BD_BASELINE_PATH || path.join(__dirname, 'baseline.json')
 
 function parseArgs(argv) {
   const args = { block: new Set(), only: null, json: false, updateBaseline: false }
@@ -53,13 +58,18 @@ function keyOf(checkId, v) {
   return `${checkId}|${v.method}|${v.path}`
 }
 
-function loadBaseline() {
+function loadBaselineDoc() {
   try {
-    const j = JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8'))
-    return new Set(Array.isArray(j.keys) ? j.keys : [])
+    return JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8'))
   } catch {
-    return null // 无 baseline 文件 → delta 模式退化为「全部视作新增」（首次或未生成时）
+    return null // 无 baseline 文件（首次或未生成）
   }
+}
+
+function loadBaseline() {
+  const doc = loadBaselineDoc()
+  if (!doc) return null // 无 baseline 文件 → delta 模式退化为「全部视作新增」（fail-closed）
+  return new Set(Array.isArray(doc.keys) ? doc.keys : [])
 }
 
 function pad(n) { return String(n).padStart(3) }
@@ -112,6 +122,12 @@ function main() {
     console.error('✗ --update-baseline 与 --block 不可同用（前者会重写基线、把新增违规当存量收编，静默缴械拦截）。二选一。')
     process.exit(2)
   }
+  // 护栏（独立复核逮到）：--update-baseline 与 --only 不可同用——基线重写用的是 `results`（仅 --only 选中的检查），
+  // 会用局部快照重写整份基线、静默丢弃未跑检查(C2/C3)的键与其 meta 死线(B.1 安全网)，还绕过坏白名单的 refuse。
+  if (args.updateBaseline && args.only) {
+    console.error('✗ --update-baseline 与 --only 不可同用（会用局部快照重写整份基线，静默丢弃未跑检查的键与 meta 死线）。要收紧基线就跑全量 --update-baseline。')
+    process.exit(2)
+  }
   for (const id of args.block) {
     if (!run(id)) {
       console.error(`✗ --block=${id} 但被 --only 排除，其拦截永不会被评估（会假绿）。要拦 ${id} 就别用 --only 把它排除。`)
@@ -120,6 +136,8 @@ function main() {
   }
 
   const baseline = loadBaseline()
+  const baselineDoc = loadBaselineDoc()
+  const today = new Date().toISOString().slice(0, 10)
 
   const results = []
   const printers = { C1: printC1, C2: printC2, C3: printC3 }
@@ -142,18 +160,72 @@ function main() {
     }
   }
 
+  // ── Fail-closed 治理层（公理一）：白名单结构完整性(A) + baseline 死线/天花板/被依赖者(B) ──
+  // 这些是「治理完整性」错误，独立于 --block/baseline delta。任一非空 → 无条件红（exit 1），
+  // 不受 --only 豁免、不可 --update-baseline 洗白。缺省方向=红（忘填/过期/膨胀=疏漏顶回作者）。
+  //
+  // ⚠️ C2 的白名单结构(A) 与消费集(B.2) **不受 --only 影响**（独立复核逮到的旁路口）：
+  //    即使 --only 把 C2 排除出打印/拦截集，也无条件跑一次 C2 拿治理数据——否则 `--only=C1`
+  //    会静默跳过白名单/被依赖者校验、放行坏白名单。c2.run() 是纯静态扫描、幂等、无副作用。
+  const c2res = results.find((r) => r.id === 'C2') || c2.run()
+  const consumedC2 = new Set(c2res.consumedKeys || [])
+
+  // A：白名单结构错误（基线更新碰不到白名单 → 这类错误不会被 --update-baseline 清除）。
+  const whitelistGovErrors = (Array.isArray(c2res.whitelistErrors) ? c2res.whitelistErrors : [])
+    .map((e) => ({ scope: '白名单结构(A)', detail: e.detail }))
+
+  // B：baseline 治理错误（meta 死线 / 天花板 / 被依赖者）——纯 doc + 消费集算出，可对任意 doc 复算
+  //    （--update-baseline 用它对「将写入的新 doc」复算，解开「修完却被旧 doc 过期 meta 死锁」的问题）。
+  const baselineGovErrorsOf = (doc) => {
+    const out = []
+    for (const e of BG.validateBaselineMeta(doc, today)) out.push({ scope: 'baseline死线(B.1)', detail: e.detail })
+    const capErr = BG.checkBaselineCap(doc)
+    if (capErr) out.push({ scope: 'baseline天花板(B.1)', detail: capErr.detail })
+    for (const e of BG.consumedInDeadAmnesty(doc, consumedC2)) out.push({ scope: '被依赖者(B.2)', detail: e.detail })
+    return out
+  }
+
+  const govErrors = [...whitelistGovErrors, ...baselineGovErrorsOf(baselineDoc)]
+
   // 更新 baseline（收紧棘轮）
   if (args.updateBaseline) {
+    // 先算出「本次将写入的」新 doc（keys/meta/targetMaxCount），再对**新 doc** 判治理错误——
+    // 这样「存量已修 → 键掉出 → meta 剪掉 → 干净」的合法清理不会被旧 doc 上那条过期 meta 自我死锁
+    // （独立复核逮到的死锁）；而「仍没修 → 键还在 → 仍过期」照样被拒（fail-closed 不破）。
     const keys = []
     for (const r of results) for (const v of r.violations) keys.push(keyOf(r.id, v))
     keys.sort()
-    fs.writeFileSync(BASELINE_PATH, JSON.stringify({
-      _doc: '构建纪律闸 baseline（棘轮基线）：当前已接受的存量违规键集合。--block 只对不在此集合里的「新增」判红。修掉存量后 --update-baseline 收紧，只减不增。',
+    // 保留既有 meta（仅留仍在 keys 里的，剪掉悬空）——旧写法会整丢 meta/targetMaxCount → bug。
+    const keySet = new Set(keys)
+    const prevMeta = baselineDoc && baselineDoc.meta && typeof baselineDoc.meta === 'object' ? baselineDoc.meta : null
+    let meta = null
+    if (prevMeta) {
+      meta = {}
+      for (const [k, v] of Object.entries(prevMeta)) if (keySet.has(k)) meta[k] = v
+    }
+    // targetMaxCount：沿用既有；缺失则**自动播种**为当前条数（每份新基线天生带天花板，堵「删字段=悄悄取消封顶」的旁路口）。
+    const targetMaxCount = baselineDoc && Number.isInteger(baselineDoc.targetMaxCount) ? baselineDoc.targetMaxCount : keys.length
+
+    const newDoc = { keys, meta: meta || undefined, targetMaxCount }
+    // fail-closed 拒绝：①白名单结构错误(A)（基线更新碰不到白名单、改不掉）；②**新 doc** 仍有 baseline 治理错误(B)
+    //   （含越天花板 over-cap：新条数 > targetMaxCount → checkBaselineCap 判红 → 这里拒）。
+    const refuse = [...whitelistGovErrors, ...baselineGovErrorsOf(newDoc)]
+    if (refuse.length) {
+      console.error('✗ 治理层 fail-closed 错误未清，禁止 --update-baseline（会把结构违规洗白成存量）。先清：')
+      for (const e of refuse) console.error(`    · [${e.scope}] ${e.detail}`)
+      console.error('  （越天花板？修掉存量降到 targetMaxCount 下，或在本次 PR 里显式抬高 baseline.json 的 targetMaxCount 并说明理由。）')
+      process.exit(2)
+    }
+    const out = {
+      _doc: '构建纪律闸 baseline（棘轮基线）：当前已接受的存量违规键集合。--block 只对不在此集合里的「新增」判红。修掉存量后 --update-baseline 收紧，只减不增。meta=per-entry 死线兑现(B.1/B.3)；targetMaxCount=净条数天花板(B.1)。见 lib/baseline-governance.cjs。',
       generated: '运行 --update-baseline 生成（日期见 git 提交）',
       count: keys.length,
       keys,
-    }, null, 2) + '\n')
-    console.log(`\n✎ 已写 baseline：${keys.length} 条存量键 → ${path.relative(process.cwd(), BASELINE_PATH)}`)
+    }
+    out.targetMaxCount = targetMaxCount // 总是写（含自动播种）——每份基线都带天花板
+    if (meta && Object.keys(meta).length) out.meta = meta
+    fs.writeFileSync(BASELINE_PATH, JSON.stringify(out, null, 2) + '\n')
+    console.log(`\n✎ 已写 baseline：${keys.length} 条存量键${meta && Object.keys(meta).length ? ` · 保留 ${Object.keys(meta).length} 条 meta 死线` : ''} · 天花板 ${targetMaxCount} → ${path.relative(process.cwd(), BASELINE_PATH)}`)
     process.exit(0)
   }
 
@@ -178,6 +250,16 @@ function main() {
   } else {
     console.log(`  拦截：${[...args.block].join(',')} 对**新增**违规判红（存量不拦）${baselineNote}。`)
   }
+  // Fail-closed 治理层：无条件红（与 --block/baseline 无关）。缺省方向=红。
+  if (govErrors.length) {
+    console.log(`\n  ⛔ 治理层 fail-closed 违规 ${govErrors.length} 条（无条件红·不受 --block/baseline/--only 影响）：`)
+    for (const e of govErrors) console.log(`    ⛔ [${e.scope}] ${e.detail}`)
+    console.log('  修法：')
+    console.log('    · 白名单结构(A) → 给条目补 deadline（缺=红）/ 收紧超上限 deadline / 删条目降到条数上限。见 consumer-whitelist.json。')
+    console.log('    · baseline死线(B.1) 到期 → 处置该存量（改前端死调用/补真只读路由）后 --update-baseline 清出，或经 PM 拍板在 baseline.json 里续期。')
+    console.log('    · baseline天花板(B.1) → 修掉存量降到 targetMaxCount 下，或经说明抬高天花板。')
+    console.log('    · 被依赖者(B.2) → 该端点已被消费、非死物 → node scripts/build-discipline/run-all.cjs --update-baseline 把它清出 C2 死物名单。')
+  }
   if (blockedFail) {
     console.log('\n  ✗ 有新增违规被拦。修法：')
     console.log('    · C1 幽灵404 → 补上后端路由，或删掉前端那个死调用（前端调的路径必须真有后端路由）。')
@@ -193,10 +275,10 @@ function main() {
       new: r._new, fixed: r._fixed, violations: r.violations,
       lowConfidence: r.lowConfidence, exempt: r.exempt, stats: r.stats,
     }))
-    console.log(JSON.stringify({ results: slim, block: [...args.block], blockedFail }, null, 2))
+    console.log(JSON.stringify({ results: slim, block: [...args.block], blockedFail, govErrors }, null, 2))
   }
 
-  process.exit(blockedFail ? 1 : 0)
+  process.exit(blockedFail || govErrors.length > 0 ? 1 : 0)
 }
 
 main()
