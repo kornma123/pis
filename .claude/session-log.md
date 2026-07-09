@@ -1639,3 +1639,19 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 脚本 + `pr-governance.md` + 本 session-log）；无 dirty coreone.db（未起后端）。**hook 决策**：`.claude/settings.json` 未 tracked（本地）→ SessionStart hook 非耐久·**未加**；耐久机制=committed 脚本 + §5 checklist（每会话注入·天然自现）。**已披露边界**（均写进脚本头注释）：残余 TOCTOU 亚秒窗（极低概率）+ 治理文档 churn（session-log/PM待拍板 唯一未提交编辑会被删·任务批准取舍）+ tracked assume-unchanged 位（本仓无此用法）。
 
 *更新时间：2026-07-08*
+
+## 本次会话完成的工作（P-7 假标准成本停返 + 分摊口径空转控件摘除 → PR `fix/p7-fake-standard-and-allocation-dropdown`，2026-07-08）
+
+**线/工作树**：worktree `frosty-chaum-7a775f`（off origin/master tip `3b2de78e`，新鲜）。task = 八层门禁 **HON-3/HON-4**（附录B **P-7**）——两处「看着能用其实是假」，#86 只加免责声明字段、真身照活。**碰成本域·护黄金锚**。
+
+**A · 假标准成本停返（HON-3·展示型假数据）**：`abc-v1.1.ts` GET `/variance-analysis` 此前 `totalStandard = materialActual`（**用实际冒充标准**）→ 据此算假 `variance/varianceRate`（拿实际算实际）。**改**：standard/materialStandard/variance/varianceRate 一律返回 `null`、`status='uncalibrated'`、`standardCalibrated:false`，只透真实实际成本（materialActual/activityCost/totalActual/sampleCount）。前端 `CostVarianceAnalysis.tsx` 降级：琥珀「标准成本待校准·差异分析暂不可用」提示 + 3 张「待校准」灰卡 + 1 张真实实际成本卡；删假趋势图、表格只留实际成本列、CSV 停导标准/差异列、指向「消耗对账」。**订正标题下误导性「计划值 vs 核算值」引导语**（对抗面板 completeness-critic 逮到的唯一 MED·HON-3 正是要退休这框架）。真身已由消耗对账页交付。
+
+**B · 分摊口径空转控件摘除（HON-4·交互型空转必摘）**：`CostCenterFormModal.tsx` 的「分摊基础」下拉（样本数/收入/工时/面积·**选了不听**——引擎恒按月度 `abc_indirect_disclosure.basis`[默认 by_direct_cost]分摊、从不读逐中心 `allocation_base`）→ **摘掉交互下拉、换只读说明**「按每月统一规则分摊」；确认区改「分摊 按每月统一规则」。`IndirectCostCenterList.tsx` 列显示改常量「统一规则」；`AllocationModal.tsx` 基础值标签/摘要与死字段解耦（去「（样本数）」）。**后端 `indirect-cost-v1.1.ts` 零改动**（保留列+写校验兼容·#86 已标 `allocationBaseEffective:false`）。
+
+**验证**：后端 vitest **109 files/934 tests 全绿**（新增 TDD `bv-variance-uncalibrated.test.ts` 锁「停返假标准/透真实际」+ golden ¥13,152/¥27,870 零回归）；前端 tsc + vite build 绿·5 页组件测试全绿。**构建纪律闸** `build-discipline/run-all.cjs` **新增 0**（C1/C2/C3 均 0 新增；C3 存量 `indirect_cost_centers.allocation_base` 仍列——按 task 保留后端列做写兼容，HON-4 只摘交互控件非删 DB 列)。**真跑端到端**：起前后端·真登录→variance 端点真返 null 标准 + 真实际；浏览器真开 `/abc/variance` 降级页（琥珀提示+待校准灰卡+仅实际成本列·零 console error）+ `/indirect-costs` 新增弹窗（下拉消失·只读文本在·零 error）。
+
+**独立复核（机制5·双引擎）**：① **codex 异构 high**（读端点+grep 消费者）判 **NO 耦合**——端点纯只读 SELECT 无写、无任何 code 读 variance 输出或 `totalStandard` 算成本/毛利；真 P&L 读 `outbound_abc_details.total_cost`、golden 是收入侧测试。② **ultracode 5-lens 对抗面板** `wf_82686aa2`：4/5 lens refuted=false（无 golden 耦合/无残留假数/下拉真摘且写兼容/无崩溃且测试有牙）、**0 blocker/high**；completeness-critic 逮 1 **MED=标题下误导性「计划值 vs 核算值」引导语仍在** → **已修**（订正引导语 + 加测试门禁 `queryByText 计划值`=null）。**已披露边界**（面板 nit/low·均出 P-7 范围·未修）：①`reportsApi.getCostVariance` 死方法指向不存在的 `/reports/cost-variance`（存量幽灵 404·无消费者·可另清）②`allocationBaseValue` 经 `cost-calculator.ts:474 calculateIndirectCost` 仍活（非死·故只解耦标签未动逻辑）③`/abc/variance` 孤儿路由未接导航（可发现性·非本 task 的假数据议题）。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 8 源码/测试文件 + 本 session-log）；起后端后 `git checkout -- coreone.db` 复原（clean）；`.claude/launch.json` 留未跟踪（本地 dev 便利·非产物）。为浏览器走查曾临时把 `/abc/variance` 加进 `permissions.ts` NAV_PATH_MODULE、走查后 `git checkout` **已还原**（不进 PR）。参考记忆 `coreone-build-discipline-gate`、`coreone-feature-keep-cut-inventory`。
+
+*更新时间：2026-07-08*

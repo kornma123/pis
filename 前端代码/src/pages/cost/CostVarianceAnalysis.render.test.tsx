@@ -2,19 +2,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { abcApi } from '@/api/abc'
-import { reportsApi } from '@/api/reports'
 import { downloadTextFile } from '@/lib/utils'
 import CostVarianceAnalysis from './CostVarianceAnalysis'
 
 vi.mock('@/api/abc', () => ({
   abcApi: {
     getVarianceAnalysis: vi.fn(),
-  },
-}))
-
-vi.mock('@/api/reports', () => ({
-  reportsApi: {
-    getCostVariance: vi.fn(),
   },
 }))
 
@@ -26,33 +19,24 @@ vi.mock('@/lib/utils', async () => {
   }
 })
 
-vi.mock('recharts', () => {
-  const passthrough = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>
-  return {
-    BarChart: passthrough,
-    Bar: () => <div />,
-    XAxis: () => <div />,
-    YAxis: () => <div />,
-    CartesianGrid: () => <div />,
-    Tooltip: () => <div />,
-    ResponsiveContainer: passthrough,
-    Legend: () => <div />,
-    Cell: () => <div />,
-    LineChart: passthrough,
-    Line: () => <div />,
-  }
+// HON-3（P-7）：标准成本停返后，本页降级为「仅展示实际成本」。以下用例锁定：
+//   ① 不再渲染任何假差异率/差异数；② 显示「待校准」降级态；③ 实际成本真实透出、可导出。
+const uncalibratedSummary = (totalActual: number) => ({
+  totalActual,
+  totalStandard: null,
+  totalVariance: null,
+  varianceRate: null,
+  standardCalibrated: false,
 })
 
-describe('CostVarianceAnalysis date range validation', () => {
+describe('CostVarianceAnalysis 降级（标准成本停返）', () => {
   beforeEach(() => {
     vi.mocked(abcApi.getVarianceAnalysis).mockReset()
-    vi.mocked(reportsApi.getCostVariance).mockReset()
     vi.mocked(downloadTextFile).mockReset()
     vi.mocked(abcApi.getVarianceAnalysis).mockResolvedValue({
-      summary: { totalActual: 0, totalStandard: 0, totalVariance: 0, varianceRate: 0 },
+      summary: uncalibratedSummary(0),
       list: [],
     })
-    vi.mocked(reportsApi.getCostVariance).mockResolvedValue({ summary: null, items: [] })
   })
 
   it('shows a visible month range validation error before requesting reversed report dates', async () => {
@@ -72,28 +56,19 @@ describe('CostVarianceAnalysis date range validation', () => {
     })
   })
 
-  it('loads current ABC variance data and renders list rows from the list contract', async () => {
+  it('renders real actual cost but never fabricates a variance rate, and shows the uncalibrated notice', async () => {
     vi.mocked(abcApi.getVarianceAnalysis).mockResolvedValueOnce({
-      summary: { totalActual: 1200, totalStandard: 1000, totalVariance: 200, varianceRate: 20 },
+      summary: uncalibratedSummary(1200),
       list: [
         {
           projectId: 'project-1',
           projectName: '胃癌筛查项目',
           materialActual: 1000,
-          materialStandard: 1000,
-          laborActual: 0,
-          laborStandard: 0,
-          equipmentActual: 0,
-          equipmentStandard: 0,
-          qcActual: 0,
-          indirectActual: 200,
-          indirectStandard: 0,
+          activityCost: 200,
           totalActual: 1200,
-          totalStandard: 1000,
-          totalVariance: 200,
-          varianceRate: 20,
           sampleCount: 5,
           month: '2026-06',
+          standardCalibrated: false,
         },
       ],
     })
@@ -101,23 +76,22 @@ describe('CostVarianceAnalysis date range validation', () => {
     render(<CostVarianceAnalysis />)
 
     expect(await screen.findByText('胃癌筛查项目')).toBeInTheDocument()
-    expect(screen.getByText('+20.00%')).toBeInTheDocument()
-    await waitFor(() => {
-      expect(abcApi.getVarianceAnalysis).toHaveBeenCalledWith(expect.objectContaining({
-        compareType: 'project',
-      }))
-    })
-    expect(reportsApi.getCostVariance).not.toHaveBeenCalled()
+    // 降级提示可见
+    expect(screen.getByText('标准成本待校准 · 差异分析暂不可用')).toBeInTheDocument()
+    // 标准/差异/差异率显示「待校准」，不再渲染任何假差异率
+    expect(screen.getAllByText('待校准').length).toBeGreaterThanOrEqual(3)
+    expect(screen.queryByText('+20.00%')).not.toBeInTheDocument()
+    expect(screen.queryByText(/%$/)).not.toBeInTheDocument()
+    // HON-3：标题下不再以「计划值 vs 核算值」的对比口吻误导用户（该框架正是本次要退休的）
+    expect(document.body.textContent).not.toContain('计划值')
+    expect(document.body.textContent).toContain('暂不做「标准 vs 实际」差异对比')
   })
 
-  it('uses the supported BOM variance dimension instead of the legacy material dimension', async () => {
+  it('uses the supported BOM dimension for actual cost grouping', async () => {
     vi.mocked(abcApi.getVarianceAnalysis)
+      .mockResolvedValueOnce({ summary: uncalibratedSummary(0), list: [] })
       .mockResolvedValueOnce({
-        summary: { totalActual: 0, totalStandard: 0, totalVariance: 0, varianceRate: 0 },
-        list: [],
-      })
-      .mockResolvedValueOnce({
-        summary: { totalActual: 850, totalStandard: 800, totalVariance: 50, varianceRate: 6.25 },
+        summary: uncalibratedSummary(850),
         list: [
           {
             id: 'bom-1',
@@ -126,20 +100,11 @@ describe('CostVarianceAnalysis date range validation', () => {
             projectId: 'project-1',
             projectName: '不应作为BOM维度主标签',
             materialActual: 800,
-            materialStandard: 800,
-            laborActual: 0,
-            laborStandard: 0,
-            equipmentActual: 0,
-            equipmentStandard: 0,
-            qcActual: 0,
-            indirectActual: 50,
-            indirectStandard: 0,
+            activityCost: 50,
             totalActual: 850,
-            totalStandard: 800,
-            totalVariance: 50,
-            varianceRate: 6.25,
             sampleCount: 8,
             month: '2026-06',
+            standardCalibrated: false,
           },
         ],
       })
@@ -158,29 +123,20 @@ describe('CostVarianceAnalysis date range validation', () => {
     })
   })
 
-  it('clears stale variance rows when a refreshed request fails', async () => {
+  it('clears stale rows when a refreshed request fails', async () => {
     vi.mocked(abcApi.getVarianceAnalysis)
       .mockResolvedValueOnce({
-        summary: { totalActual: 1200, totalStandard: 1000, totalVariance: 200, varianceRate: 20 },
+        summary: uncalibratedSummary(1200),
         list: [
           {
             projectId: 'project-1',
             projectName: '胃癌筛查项目',
             materialActual: 1000,
-            materialStandard: 1000,
-            laborActual: 0,
-            laborStandard: 0,
-            equipmentActual: 0,
-            equipmentStandard: 0,
-            qcActual: 0,
-            indirectActual: 200,
-            indirectStandard: 0,
+            activityCost: 200,
             totalActual: 1200,
-            totalStandard: 1000,
-            totalVariance: 200,
-            varianceRate: 20,
             sampleCount: 5,
             month: '2026-06',
+            standardCalibrated: false,
           },
         ],
       })
@@ -194,52 +150,34 @@ describe('CostVarianceAnalysis date range validation', () => {
     await waitFor(() => expect(abcApi.getVarianceAnalysis).toHaveBeenCalledTimes(2))
     await waitFor(() => {
       expect(screen.queryByText('胃癌筛查项目')).not.toBeInTheDocument()
-      expect(screen.getByText('暂无差异数据')).toBeInTheDocument()
+      expect(screen.getByText('暂无实际成本数据')).toBeInTheDocument()
     })
   })
 
-  it('exports the current filtered variance rows with the visible business dimension', async () => {
+  it('exports only real actual-cost columns (no fabricated standard/variance columns)', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     vi.mocked(abcApi.getVarianceAnalysis).mockResolvedValueOnce({
-      summary: { totalActual: 1200, totalStandard: 1000, totalVariance: 200, varianceRate: 20 },
+      summary: uncalibratedSummary(1700),
       list: [
         {
           projectId: 'project-1',
           projectName: '胃癌筛查项目',
           materialActual: 1000,
-          materialStandard: 1000,
-          laborActual: 0,
-          laborStandard: 0,
-          equipmentActual: 0,
-          equipmentStandard: 0,
-          qcActual: 0,
-          indirectActual: 200,
-          indirectStandard: 0,
+          activityCost: 200,
           totalActual: 1200,
-          totalStandard: 1000,
-          totalVariance: 200,
-          varianceRate: 20,
           sampleCount: 5,
           month: '2026-06',
+          standardCalibrated: false,
         },
         {
           projectId: 'project-2',
           projectName: '未筛选项目',
           materialActual: 500,
-          materialStandard: 500,
-          laborActual: 0,
-          laborStandard: 0,
-          equipmentActual: 0,
-          equipmentStandard: 0,
-          qcActual: 0,
-          indirectActual: 0,
-          indirectStandard: 0,
+          activityCost: 0,
           totalActual: 500,
-          totalStandard: 500,
-          totalVariance: 0,
-          varianceRate: 0,
           sampleCount: 2,
           month: '2026-06',
+          standardCalibrated: false,
         },
       ],
     })
@@ -253,12 +191,14 @@ describe('CostVarianceAnalysis date range validation', () => {
 
       await waitFor(() => expect(downloadTextFile).toHaveBeenCalledTimes(1))
       const [filename, content, mimeType] = vi.mocked(downloadTextFile).mock.calls[0]
-      expect(filename).toMatch(/^abc-cost-variance-project-/)
+      expect(filename).toMatch(/^abc-cost-actual-project-/)
       expect(mimeType).toBe('text/csv;charset=utf-8')
-      expect(content).toContain('项目名称,月份,样本数,标准成本,实际成本,成本差异,差异率')
-      expect(content).toContain('胃癌筛查项目,2026-06,5,1000,1200,200,20.00%')
+      expect(content).toContain('项目名称,月份,样本数,实际成本,材料实际,作业成本')
+      expect(content).toContain('胃癌筛查项目,2026-06,5,1200,1000,200')
       expect(content).not.toContain('未筛选项目')
-      expect(reportsApi.getCostVariance).not.toHaveBeenCalled()
+      // 停返的假列不得出现在导出中
+      expect(content).not.toContain('差异率')
+      expect(content).not.toContain('标准成本')
       expect(consoleErrorSpy.mock.calls.some(call =>
         call.some(part => String(part).includes('Encountered two children with the same key'))
       )).toBe(false)

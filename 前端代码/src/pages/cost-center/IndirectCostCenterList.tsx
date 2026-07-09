@@ -117,11 +117,10 @@ export default function IndirectCostCenterList() {
                     <td className="px-4 py-3 font-medium text-gray-900">{row.name}</td>
                     <td className="px-4 py-3 text-gray-500">{row.costTypeLabel || row.costType}</td>
                     <td className="px-4 py-3 text-gray-700">¥{row.monthlyAmount?.toFixed(2) || '0.00'}</td>
-                    <td className="px-4 py-3 text-gray-500">
-                      {row.allocationBase === 'sample_count' ? '样本数' :
-                       row.allocationBase === 'revenue' ? '收入' :
-                       row.allocationBase === 'labor_hours' ? '工时' :
-                       row.allocationBase === 'area' ? '面积' : row.allocationBase}
+                    <td className="px-4 py-3 text-gray-400">
+                      {/* HON-4：逐中心分摊口径从不被引擎读取；不再按中心展示「样本数/收入…」的空转选项，
+                          统一显示真实分摊方式（按每月统一规则），避免误导。 */}
+                      <span title="间接费用按每月统一规则分摊，未按成本中心单独选择的口径">统一规则</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
