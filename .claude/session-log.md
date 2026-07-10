@@ -1857,3 +1857,26 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 2 路由 + 1 测试 + 本 session-log）；测试用 `:memory:` DB·**dev DB 未污染**（git status 确认 clean）。→ 按 pr-governance 开独立 PR（vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板状态·真相以 `gh pr list` 为准）。参考记忆 `coreone-non-p0-domain-audit`、`coreone-rbac-live-vs-seed-matrix`、`coreone-worktree-tests-and-codex-resilience`。
 
 *更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 本次会话完成的工作 —— 新盈利框架真前端（第2层对照表 + 校准视图·两层框架·替换从未上线的旧 /hospital-pnl）
+
+**线/工作树**：worktree `loving-mayer-2125f4`，分支 `feat/hospital-cm-two-layer-frontend`（off origin/master tip·HEAD 不落后）。task=方案-后续四项 §三（真前端·HON-1/3 + DEC-7 + 公理二）。承接 #107（路由注册表 Phase1）+ #110（就绪谓词 computeReadiness）+ #106（旧视图使用审计）+ #108（PM 拍板旧 /hospital-pnl 从未上线·直接替换·审计顾虑 moot）。
+
+**做的事**：把新口径影子后端 `/api/v1/hospital-pnl`（P0 院级贡献毛利·标准成本·四轮外审两层框架·此前**无前端消费者**=C2 端点）接出**真前端**，替换消费旧 `partner-pnl`（ABC 全成本）的旧「医院盈利看板」。
+- **后端（我的地盘）**：`hospital-pnl-v1.1.ts` 新增 `GET /readiness`（就绪清单·校准视图数据源·始终可读）+ `GET /full-health`（**完整体检态数据端点·URL 后门焊到数据层**：就绪谓词为假→403+降级载荷·完整数值绝不出门）+ `probeReadinessInput`（真实探测·现实=三门未绿/池未认账/历史0/首周期未校验→ready=false·诚实·绝不臆造 true）；`hospital-cm-service.ts` 趋势点加 `caliber`（逐月口径·③/⑨）+ **批量 `buildHospitalCmTrendByPartner`**（一次装载·避免对照表逐院 N+1 重建价格账本索引·与逐院版逐点等价）。
+- **前端**（`前端代码/src/pages/hospital-cm/`）：`HospitalCmDashboard`（orchestrator·就绪谓词运行时切换校准态/完整态·**完整态组件仅 ready 时挂载·谓词假⇒不在 DOM**·无 URL 参数能强制唤出）+ `ComparisonTable`（第2层·缺省绝对贡献降序·可自选任意列重排·不排名/不裁决词）+ `CalibrationView`（就绪清单⑦）+ `PortfolioHero`（第1层校准态·⑤只看趋势·⑥未配置不渲染0）+ `FullPhysicalExam`（完整态·仅 ready 挂载）+ `exportComparison.ts`（⑪导出带逐行口径声明列+公式注入中和）+ `api/hospital-cm.ts` + `types/hospital-cm.ts`。
+- **11 诚实必带元素全实现**：①排序≠评判常显 ②率旁并列覆盖份额 ③趋势同账户历史 ④来源标签+未认账水印(fail-closed) ⑤只看趋势一等公民 ⑥未配置不渲染0 ⑦就绪清单(owner+due·空due/过期→红) ⑧UNMEASURED 灰行+原因(诚实披露覆盖边界=仅含有账单流水的院) ⑨口径变更竖标(已实现)+历史失真月标(诚实标注待数据接入) ⑩观察中徽标(可测未过质量门·且不露份额防泄漏) ⑪导出元数据。
+- **退役旧视图**：删 `HospitalPnLDashboard.tsx`+2 测试；App.tsx `/hospital-pnl`→`Navigate` 重定向 `/hospital-cm`（保深链不死）；route-registry `/hospital-cm` active + `/hospital-pnl` deprecated；permissions `NAV_PATH_MODULE` 换 `/hospital-cm`→cost_analysis；向导链接改指 `/hospital-cm`。**姊妹影子矩阵任务只读 registry/permissions·我 append+一处状态改·最小churn**。
+
+**验证（真跑端到端·非查渲染）**：
+- **后端 vitest 117 files/1049 tests 全绿**·**golden ¥13,152+¥27,870 零回归**（新端点纯只读·未碰 computeCaseCm/rollupHospitalCm/statement-revenue 算术）。前端 tsc+vite build 绿·前端 vitest 316 passed（仅 2 个 pre-existing `formatDate` 时区基线失败·未碰 utils）·hospital-cm 16 + route-registry 快照更新 23 绿。C4 路由门 0 违规·**新增 C1/C2=0**（端点被消费+存在）。
+- **live 后端 curl 真跑**：`/readiness` 200(ready=false·4条清单带owner/due)·`/full-health` **403**(READINESS_NOT_MET·无完整数值泄漏·`?serviceMonth`/`?asOf` 均无法强制唤出)·`/` 200(空列表+水印)·`/health` 200(shadowMode)·无 token→401。
+- **live 浏览器真跑**（admin 登录→`/hospital-cm`·preview）：校准清单0/4带owner(业务决策方不可代签)/目标日期·未认账水印(fail-closed)·「未配置」非0·诚实空态·**`full-physical-exam` 不在 DOM**(DOM 红线)·**零 console 报错**。
+
+**独立复核（机制5·ultracode Workflow 对抗面板 `wf_16763f7f-0c2`·7 skeptic 逐维证伪）**：**5/7 维 clean·零 HIGH**——URL后门焊死/golden零回归/不点名DEC-2/诚实元素①-⑥/退役接线**全 clean**。逮 2 MED + 3 LOW（**已全修**）：① N+1 批量趋势(索引重建)→`buildHospitalCmTrendByPartner` 一次装载+逐点等价断言 ② ⑧UNMEASURED 数据依赖(纯代送院不进 case_revenue 永缺席)→脚注诚实披露覆盖边界·不再over-claim「盲区消失」 ③ ⑨历史失真月标只承诺未实现→脚注改诚实现状(仅口径变更月有标·失真月待数据接入) ④ ⑩观察行仍露覆盖份额(由隐藏cm派生)→改「—」防泄漏 ⑤ 导出CSV公式注入(=+-@开头)→csvCell 前置单引号钝化+回归测试。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 新增/改动源文件+2测试+session-log）；测试主用 `:memory:`·全量套件跑脏 dev DB→**提交前 `git checkout` 复原至基线 `150f1094`**（git status 确认 clean）；`.claude/launch.json`(preview 用·env 噪声)**不提交**。→ 按 pr-governance 开独立 PR（base=master·body 写全关系/风险·vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板状态·真相以 `gh pr list` 为准）。**已披露边界**：完整体检态 ready 分支当前不可达(现实 ready=false·恒403)=形状正确的运行时切换态非 dead-code 隐患；⑧仅覆盖有账单流水的院(脚注披露)；⑨失真月标待数据接入(脚注披露)。参考记忆 `coreone-p0-contribution-margin-design`、`coreone-hospital-pnl-never-launched`、`coreone-readiness-predicate-computeReadiness`、`coreone-route-registry-phase1`、`coreone-acceptance-not-shell-check`。
+
+*更新时间：2026-07-09*

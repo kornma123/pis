@@ -160,7 +160,7 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   { path: '/alerts', label: '预警中心', icon: Bell, navGroup: 'consumption', permModule: 'alerts', status: 'active' },
 
   // ----- 按医院成本/盈利 -----
-  { path: '/hospital-pnl', label: '医院盈利看板', icon: TrendingUp, navGroup: 'hospital-pnl', permModule: 'cost_analysis', status: 'active' },
+  { path: '/hospital-cm', label: '院级贡献毛利', icon: TrendingUp, navGroup: 'hospital-pnl', permModule: 'cost_analysis', status: 'active' },
   { path: '/account-reconcile', label: '账实核对', icon: Scale, navGroup: 'hospital-pnl', permModule: 'account_reconcile', status: 'active' },
   // 以下四页按角色(finance/admin)放行（无单一模块能力），permModule=null·见 permissions.getAccessiblePaths。
   { path: '/partner-config', label: '合作医院配置', icon: Settings, navGroup: 'hospital-pnl', permModule: null, status: 'active' },
@@ -207,6 +207,12 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   { path: '/abc/trend', permModule: 'slide_cost', status: 'headless', owner: 'PM待拍（报表平台 I-2）', due: '2026-10-07', reason: '切片成本/利润率趋势（读 /abc/slide-cost-trend·#61 §3A 合并候选 I-2）·合并须并入逐 BOM 切片折线+季度维度角度' },
   { path: '/abc/variance', permModule: 'abc_dashboard', status: 'headless', owner: 'PM待拍（口径 I-4）', due: '2026-10-07', reason: '成本差异·标准成本已诚实降级（#99/P-7 后端恒返回 null + 前端仅展示实际成本）·口径修正 I-4 后再定收编/下线（#61 §3B 待定）' },
   { path: '/abc/model-validation', permModule: 'slide_cost', status: 'headless', owner: 'PM待拍（报表平台 I-2）', due: '2026-10-07', reason: 'BOM what-if 成本试算器（纯只读·无写操作·#61 §3A 合并候选 I-2→并入 /abc/slide-cost）' },
+
+  // ===== deprecated（计划退役·真正删页是后续独立 PR）=====
+  // 旧「医院盈利看板」从未上线（PM 拍板 #108）→ 直接替换为 /hospital-cm（院级贡献毛利·P0 标准成本）。
+  //   App.tsx 保留 /hospital-pnl 一条重定向到 /hospital-cm（保旧深链不成死链）→ C4 要求它在此声明。
+  //   组件 HospitalPnLDashboard.tsx 已退役删除；不进侧栏（deprecated 不派生菜单）。
+  { path: '/hospital-pnl', permModule: 'cost_analysis', status: 'deprecated', reason: '旧医院盈利看板（消费 ABC 全成本 partner-pnl）从未上线·PM #108 拍板直接替换→重定向到 /hospital-cm（P0 院级贡献毛利）；组件已删' },
 ]
 
 // ============================================================================
