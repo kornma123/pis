@@ -1128,12 +1128,12 @@
     },
     "POST /api/v1/outbound": {
       "module": "outbound",
-      "level": "R",
+      "level": "W",
       "conditions": []
     },
     "POST /api/v1/outbound/bom": {
       "module": "outbound",
-      "level": "R",
+      "level": "W",
       "conditions": []
     },
     "POST /api/v1/partner-config/:id/baseline": {
