@@ -2,6 +2,8 @@
 
 面向病理免疫组化特染领域的进销存与单张切片成本控制系统（PSI）。
 
+> Agent / AI 开工统一入口：[`docs/agent-operating-contract.md`](docs/agent-operating-contract.md)。Codex 与 Claude Code 都由各自根入口跳到这同一份契约；分支、PR、测试和 worktree 状态必须现场查询。
+
 ## 技术栈
 
 | 层级 | 技术 |
@@ -29,7 +31,8 @@
 ├── .github/workflows/ # GitHub Actions CI
 ├── .claude/           # Claude Code 配置（ECC 模式）
 ├── docs/              # 项目文档
-└── CLAUDE.md          # AI 开发指导
+├── AGENTS.md          # Codex / 通用 Agent 薄入口
+└── CLAUDE.md          # Claude Code 薄入口
 ```
 
 ## 快速启动
@@ -76,7 +79,7 @@ npm run dev
 ## 测试
 
 ```bash
-# E2E 测试（自动启动前后端）
+# E2E 测试（先核对当前 spec、现有浏览器运行时和 tracked DB 边界）
 cd 前端代码
 npx playwright test
 
@@ -113,11 +116,13 @@ npm run test
 
 ## 文档
 
+- [Agent Operating Contract / 跨工具工作机制](docs/agent-operating-contract.md)
 - [功能需求规格 (FRS)](COREONE-功能需求规格文档-FRS-v1.1.md)
-- [GitHub 工作流指南](GITHUB-WORKFLOW-GUIDE.md)
-- [E2E 测试执行指南](E2E-Test-Execution-Guide.md)
-- [AI 开发指导 (CLAUDE.md)](CLAUDE.md)
+- [Golden Registry](docs/golden-registry.md)
+- [PR 治理稳定规则](.claude/rules/pr-governance.md)
+
+`GITHUB-WORKFLOW-GUIDE.md`、`E2E-Test-Execution-Guide.md` 与 `E2E-Test-Generation-Guide.md` 是历史取证文件，已加 SUPERSEDED 阻断头，不得再作为开工或 Playwright 安装指令。
 
 ---
 
-*本项目采用 everything-claude-code (ECC) 模式进行 AI 辅助开发。*
+*本项目的跨工具协作以 Agent Operating Contract 为准。*

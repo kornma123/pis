@@ -54,8 +54,8 @@
 - **Express 路由** 按功能模块拆分，一个模块一个文件
 - **node:sqlite DatabaseSync** 是唯一数据库接口，不要用 sqlite3
 - **所有路由** 必须有认证中间件 (除 `/api/v1/auth` 和 `/api/health`)
-- **权限检查** 使用 `requireRole()`，在路由注册时声明
-- **输入验证** 使用 express-validator，在路由处理函数前执行
+- **权限检查** 以 `requirePermission(module, level)` 的数据驱动 RBAC 为生产主线；角色、管理员与职责分离等例外条件使用 `authz-combinators.ts` 的具名组合子。`requireRole()` 仅是遗留测试兼容层，不作为新生产路由规范
+- **输入验证** 遵循相邻活路由的显式契约：类型转换、必填、范围、枚举/白名单与稳定错误码都要有可执行测试。`express-validator` 虽是依赖，但活代码没有把它作为全路由统一入口；新代码不得仅因纸面规则强制换库
 - **SQL 查询** 使用参数化/占位符，禁止字符串拼接
 - **响应格式** 统一使用 `success: true/false` + `data` / `error` 结构
 - **错误处理** 统一走 `errorHandler` 中间件
@@ -141,4 +141,4 @@ test(e2e): 补充入库流程 E2E 用例
 
 ---
 
-*与项目根目录 CLAUDE.md 配套使用。如有冲突，以 CLAUDE.md 为准。*
+*与 `docs/agent-operating-contract.md` 配套使用；协作规则冲突时以共用契约为准，领域安全细节以本文件与活代码/测试共同裁决。*

@@ -1,3 +1,6 @@
+> **SUPERSEDED — DO NOT USE AS OPERATING INSTRUCTIONS.**
+> 本文件的账户、用例数量、页面清单、安装命令和执行顺序都是历史快照。当前规则见 `docs/agent-operating-contract.md` 与 `.claude/rules/coreone-guardrails.md`；本地缺浏览器时先核对现有运行时和项目约束，不照抄下文安装指令。
+
 # COREONE E2E 测试执行指南
 
 > **版本**: v2.2
