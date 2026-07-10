@@ -1,0 +1,13 @@
+# 部署打包用 `git archive` 时排除这些路径（export-ignore）——不该进部署包的
+# 测试/一次性调试/种子脚本与开发治理目录。`git archive` 本就只含已跟踪文件，
+# 故未跟踪的 .env / token.json / 本地库天然被排除；此处再排除已跟踪的调试面。
+后端代码/server/scripts/seed-*.ts export-ignore
+后端代码/server/scripts/role-based-testing.ts export-ignore
+后端代码/server/scripts/forensic-*.cjs export-ignore
+后端代码/server/tests export-ignore
+# 已跟踪的 dev 数据库（含 admin/admin123 等种子账号哈希）——绝不进部署包，
+# 否则生产会带着默认账号库启动。生产由 app 首次运行建空库（fail-closed 不种默认账号）。
+后端代码/server/data export-ignore
+前端代码/e2e export-ignore
+.claude export-ignore
+.github export-ignore

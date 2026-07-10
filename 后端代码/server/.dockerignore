@@ -1,0 +1,36 @@
+# 安全（P1·2026-07-10 复审）：.gitignore 不影响 Docker build context——
+# 这里显式挡住密钥/凭据/本地库/调试脚本，防 Dockerfile 的 `COPY . .` 把它们打进镜像层。
+
+# 密钥与凭据（绝不进镜像）
+.env
+.env.*
+token.json
+*.pem
+*.key
+
+# 本地/开发数据库（含真实数据；生产用挂载卷）
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# 依赖与编译产物（镜像内 npm ci / 运行时 tsx 编译，勿覆盖）
+node_modules
+dist
+coverage
+
+# 测试与一次性调试/种子脚本（不该进生产镜像）
+# 注意：保留 scripts/reset-passwords.ts（运维改密）与 scripts/start-production.mjs（npm start）
+tests
+e2e
+*.test.ts
+scripts/seed-*.ts
+scripts/role-based-testing.ts
+scripts/forensic-*.cjs
+
+# 杂项
+.git
+.gitignore
+.dockerignore
+*.log

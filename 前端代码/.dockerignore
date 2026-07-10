@@ -1,0 +1,22 @@
+# 安全（P1·2026-07-10 复审）：挡住密钥/凭据，防 build context 泄露。
+# 注意：本项目前端 .env 里误含后端 JWT_SECRET——绝不能进 build context / 镜像层。
+# 构建所需的 VITE_API_BASE_URL 由 Dockerfile 的 ENV 显式提供，无需 .env。
+.env
+.env.*
+
+# 依赖与产物（builder 内 npm ci / npm run build 生成）
+node_modules
+dist
+
+# 测试与报告
+e2e
+e2e-report
+test-results
+playwright-report
+*.spec.ts
+
+# 杂项
+.git
+.gitignore
+.dockerignore
+*.log

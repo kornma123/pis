@@ -103,8 +103,11 @@ function scanCommitRange(range) {
   }
 
   for (const commit of commits) {
+    // -m：展开 merge commit 对**每个父**的差异。默认 diff-tree 对 merge 输出 0 个文件，
+    //     会漏掉"合并冲突解决时引入密钥、后续提交再删除"（最终树干净、无 -m 范围扫描也漏）。
+    //     Set 去重跨父重复路径。
     const files = new Set(splitNul(git([
-      'diff-tree', '--root', '--no-commit-id', '--name-only', '-z', '-r', '--no-renames', commit,
+      'diff-tree', '-m', '--root', '--no-commit-id', '--name-only', '-z', '-r', '--no-renames', commit,
     ])))
     for (const file of files) {
       if (skip(file)) continue

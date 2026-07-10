@@ -34,6 +34,7 @@ try {
   git(['add', 'clean.txt'])
   git(['commit', '-qm', 'base'])
   const base = git(['rev-parse', 'HEAD'])
+  const mainBranch = git(['rev-parse', '--abbrev-ref', 'HEAD'])
 
   const fakeKey = `sk-kimi-${'A'.repeat(48)}`
   fs.writeFileSync(path.join(repo, 'transient.txt'), `${fakeKey}\n`)
@@ -51,6 +52,29 @@ try {
   assert(historyAware.status === 1, 'range scan must catch a secret deleted by a later commit')
   assert(historyAware.stderr.includes('kimi-api-key'), 'range scan should report the matching rule')
 
+  // Merge commit introduces a secret (conflict-resolution style), a later commit deletes it.
+  // Final tree is clean; only `diff-tree -m` surfaces the secret inside the merge commit.
+  git(['checkout', '-q', '-b', 'sidebranch', base])
+  fs.writeFileSync(path.join(repo, 'shared.txt'), 'side\n')
+  git(['add', 'shared.txt'])
+  git(['commit', '-qm', 'side branch file'])
+  git(['checkout', '-q', mainBranch])
+  fs.writeFileSync(path.join(repo, 'mainonly.txt'), 'main\n')
+  git(['add', 'mainonly.txt'])
+  git(['commit', '-qm', 'main branch file'])
+  const preMerge = git(['rev-parse', 'HEAD'])
+  git(['merge', '--no-commit', '--no-ff', 'sidebranch'])
+  fs.writeFileSync(path.join(repo, 'leaked-in-merge.txt'), `${fakeKey}\n`)
+  git(['add', 'leaked-in-merge.txt'])
+  git(['commit', '-qm', 'merge resolution introduces secret'])
+  fs.rmSync(path.join(repo, 'leaked-in-merge.txt'))
+  git(['add', '-u'])
+  git(['commit', '-qm', 'delete secret added in merge'])
+  const mergeHead = git(['rev-parse', 'HEAD'])
+  const mergeScan = runScanner(['--range', `${preMerge}..${mergeHead}`])
+  assert(mergeScan.status === 1, 'range scan must catch a secret introduced by a merge commit and deleted later')
+  assert(mergeScan.stderr.includes('kimi-api-key'), 'merge-range scan should report the matching rule')
+
   fs.writeFileSync(path.join(repo, '.env.example'), `${fakeKey}\n`)
   git(['add', '.env.example'])
   const envExample = runScanner()
@@ -63,7 +87,7 @@ try {
   const broadMarker = runScanner()
   assert(broadMarker.status === 1, 'allow marker must not bypass checks outside the scoped denylist path')
 
-  console.log('secret-scan selftest passed: 4/4')
+  console.log('secret-scan selftest passed: 5/5')
 } finally {
   fs.rmSync(repo, { recursive: true, force: true })
 }

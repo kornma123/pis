@@ -2055,3 +2055,24 @@ http://your-server-ip:8080
 
 **仍属运维/PM（非代码·诚实口径）**：🔴事故层止血未闭（吊销 Kimi Key/轮换生产 JWT/重置生产账号——须运维执行证据）；secret-scan 提升 required（PM 决策）；清史 blast=89 远程分支+worktree（`filter-repo --mirror` 覆盖全 refs·协调面大）。
 *更新时间：2026-07-09*
+
+---
+
+## 2026-07-10 —— 🔴 独立复审第三轮 BLOCK 修复（PR #119·打包泄露 + merge-commit 扫描漏洞）
+
+**背景**：第三轮复审确认前两轮已修，但新逮 2 个 P1：①**部署包/Docker 镜像仍携带敏感文件**（`.gitignore` 不管 Docker `COPY . .` build context 也不管 `tar` 打包）②**secret-scan 漏扫 merge commit**（`git diff-tree` 无 `-m` 对 merge 输出 0 文件，实测 merge `609a5766`=0 文件·`-m`=40 文件）。均已复现属实并修。
+
+**P1-1 打包/镜像泄露 → 三处堵**：
+- 新增 `后端代码/server/.dockerignore`：挡 `.env`/`.env.*`/`token.json`/`data/`+`*.db`/seed-*.ts/role-based-testing.ts/forensic-*.cjs/tests/node_modules（保留 reset-passwords.ts + start-production.mjs 供运维/npm start）。
+- 新增 `前端代码/.dockerignore`：挡 `.env`（**前端 .env 误含后端 JWT_SECRET**）+ node_modules/dist/e2e（构建所需 VITE_API_BASE_URL 由 Dockerfile ENV 提供）。
+- 部署打包 `tar -c 前端代码/ 后端代码/…`（含未跟踪 .env/token.json）→ 改 **`git archive HEAD`**（只含已跟踪文件→未跟踪密钥天然排除）+ 仓库根 **`.gitattributes` export-ignore**（再排除已跟踪的调试/种子脚本 + `后端代码/server/data`〔dev 库含 admin/admin123 种子哈希，绝不进包·生产靠 named volume `coreone-data` 首启建空库 fail-closed 不种默认账号〕）+ 打包后 grep 自检行。
+- **验证**：`git archive --worktree-attributes` 实跑→包内**无** .env/token.json/*.db/seed/debug（647 文件·app 源码在）。docker-compose 用 named volume 非 bind mount，dev 库本就不会自动成生产库（双保险）。
+
+**P1-2 merge-commit 漏扫 → -m 修 + 变异证有牙**：
+- `check-no-secrets.cjs` 范围扫描 `git diff-tree` 加 **`-m`**（展开 merge 对每个父的差异·Set 去重）→ 抓"合并冲突解决时引入密钥、后续删除"。
+- selftest 加**第 5 场景**（造 merge commit 引入 fakeKey→后续删→范围扫描须 status 1）；**变异证**：临时删 `-m`→selftest 退 1（fail）·恢复 →5/5。真实 `origin/master..HEAD` 现扫 4 commit（含 merge）绿。
+
+**验证**：selftest 5/5·working-tree 扫描绿·range 扫描（含 merge）绿·git status 仅本轮 6 文件（无误纳）。纯扫描器/打包配置·零 TS 改动→vitest/tsc 不受影响（上轮 122 files/1130 绿仍成立）。
+
+**仍属运维/PM（不变）**：🔴事故层止血（吊销 Kimi/轮换生产 JWT/重置账号·须执行证据）+ **建议 `rm 本地 token.json`（真实 admin JWT·轮换后删）** + secret-scan 提升 required（PM 决策）+ 清史。
+*更新时间：2026-07-10*
