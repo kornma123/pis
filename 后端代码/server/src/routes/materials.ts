@@ -118,16 +118,6 @@ function generateMaterialCode(db: any, categoryId: string): string {
   return `${prefix}-${String(num).padStart(5, '0')}`
 }
 
-router.get('/next-code', (req, res) => {
-  try {
-    const { categoryId } = req.query
-    if (!categoryId) { error(res, 'categoryId required', 'INVALID_PARAMETER', 400); return }
-    const db = getDatabase()
-    const code = generateMaterialCode(db, categoryId as string)
-    success(res, { code })
-  } catch (err: any) { error(res, err.message) }
-})
-
 router.post('/', requireMaterialWrite, (req, res) => {
   try {
     const { name, spec, unit, specQty, specUnit, categoryId, supplierId, price, minStock, maxStock, safetyStock, locationId, remark, code: userCode } = req.body

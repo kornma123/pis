@@ -1,0 +1,11 @@
+{
+  "_doc": "权限影子断言矩阵 · UNGUARDED 端点白名单（SEC-1：任一侧无守卫的端点不许静默过，必须在此显式登记且给理由）。矩阵把「无 module 且无条件」的端点判 UNGUARDED；只有登记在此的公共/自读端点算「已批准」，其余 UNGUARDED = 缺口 → 红。新增公共端点须在 PR 里连同理由加进来（一次显式决定）。",
+  "endpoints": [
+    { "endpoint": "GET /api/health", "reason": "健康检查·无鉴权（app.ts 直接挂载·探活用）" },
+    { "endpoint": "POST /api/v1/auth/login", "reason": "登录·公开入口（发 token 前不可能有鉴权）" },
+    { "endpoint": "POST /api/v1/auth/refresh", "reason": "刷新 token·公开入口（凭 refresh 语义自证，非 RBAC 模块）" },
+    { "endpoint": "POST /api/v1/auth/logout", "reason": "登出·公开入口（清客户端态·无副作用需鉴权）" },
+    { "endpoint": "GET /api/v1/auth/me/capabilities", "reason": "自读·任何登录用户读自己的能力集（authenticateToken 已保证登录·非 RBAC 模块守卫）" },
+    { "endpoint": "GET /api/v1/auth/cost-visibility", "reason": "自读·登录用户读成本可见性配置（PUT 侧才 anyRole:admin+lab_director·GET 只读放开）" }
+  ]
+}
