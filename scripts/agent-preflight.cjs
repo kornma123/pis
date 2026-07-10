@@ -166,6 +166,66 @@ function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex')
 }
 
+// --- 高危 git 指令检测：按语义 token 解析，不枚举字面串（PR#122 复核 REQUEST-CHANGES 结论）。---
+// 复核逮到：字面正则既能被引号/refspec/全局选项等价绕过，又会把 `master:feature`、`feature/master`
+// 这类安全命令误判成直推 master。改为解析参数、去配对引号，只按 refspec 目标端 / 全仓 pathspec 判定。
+
+const PROTECTED_BRANCHES = new Set(['master', 'main'])
+const GIT_VALUE_OPTS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
+const WHOLE_REPO_PATHSPEC = new Set(['.', './', ':/', '-A', '--all'])
+
+function stripQuotes(token) {
+  if (token.length >= 2 && ((token[0] === '"' && token.endsWith('"')) || (token[0] === "'" && token.endsWith("'")))) {
+    return token.slice(1, -1)
+  }
+  return token
+}
+
+function tokenizeCommand(segment) {
+  const tokens = []
+  const re = /"[^"]*"|'[^']*'|\S+/g
+  let match
+  while ((match = re.exec(segment))) tokens.push(stripQuotes(match[0]))
+  return tokens
+}
+
+// 每个 `git` 词后取到行尾 / shell 分隔符（; | & 反引号）为止，切成 token 序列。
+function extractGitCommands(text) {
+  const commands = []
+  const re = /\bgit\b([^\n`;|&]*)/gi
+  let match
+  while ((match = re.exec(text))) commands.push(tokenizeCommand(match[1]))
+  return commands
+}
+
+// refspec 的目标端（冒号后；无冒号即整个 ref）落在受保护分支上 = 直推 master/main。
+function isProtectedPushDest(refspec) {
+  const ref = refspec.replace(/^\+/, '')
+  const dest = ref.includes(':') ? ref.slice(ref.lastIndexOf(':') + 1) : ref
+  return PROTECTED_BRANCHES.has(dest.replace(/^refs\/heads\//, ''))
+}
+
+function isDirectMasterPush(tokens) {
+  const at = tokens.indexOf('push')
+  if (at < 0) return false
+  const nonFlag = tokens.slice(at + 1).filter((token) => !token.startsWith('-'))
+  if (!nonFlag.length) return false
+  // 约定 `git push <remote> <refspec...>`：首个非 flag 是 remote，其余是 refspec；
+  // 只有一个非 flag 时它可能是 remote 或直接 refspec，一并检查（over-catch 属保守，不漏判）。
+  const candidates = nonFlag.length > 1 ? nonFlag.slice(1) : nonFlag
+  return candidates.some(isProtectedPushDest)
+}
+
+function isWholeRepoAdd(tokens) {
+  let i = 0
+  while (i < tokens.length && tokens[i] !== 'add') i += GIT_VALUE_OPTS.has(tokens[i]) ? 2 : 1
+  if (i >= tokens.length) return false
+  return tokens
+    .slice(i + 1)
+    .filter((token) => token !== '--')
+    .some((arg) => WHOLE_REPO_PATHSPEC.has(arg))
+}
+
 function addCheck(checks, id, status, summary, details = []) {
   checks.push({ id, status, summary, details: Array.isArray(details) ? details : [details] })
 }
@@ -308,18 +368,18 @@ function inspectAuthority(root, args, checks) {
     '.claude/rules/pr-governance.md',
     'README.md',
   ]
-  const highRiskRules = [
-    { name: 'bulk staging', re: /git\s+add\s+(?:\.|-A|--all)(?:\s|`|$)/i },
-    // 覆盖 refspec 变体：`master` / `HEAD:master` / `master:master` / `+master` / `refs/heads/master`；
-    // master 前必须是 ref 边界（空白/冒号/加号/斜杠），避免误伤 `feature-master-fix` 这类分支名。
-    { name: 'direct master push', re: /git\s+push\b[^\n]*(?:^|[\s:+/])(?:refs\/heads\/)?(?:master|main)(?::|\s|`|$)/i },
+  // 名称类退役指令仍用正则（纯串匹配，无语义歧义）；git 指令类改用 token 解析（见文件上方 helper）。
+  const highRiskNameRules = [
     { name: 'retired dual-workbench model', re: /双工作台|会话\s*A\s*\(Roo\)/i },
     { name: 'retired specialist agent', re: /\b(?:planner|tdd-guide|code-reviewer|security-reviewer|build-error-resolver|e2e-runner|database-reviewer)\b/i },
   ]
   const highRiskFindings = []
   for (const file of activeInstructionFiles) {
     const text = contents[file] || ''
-    for (const rule of highRiskRules) if (rule.re.test(text)) highRiskFindings.push(`${file}: ${rule.name}`)
+    for (const rule of highRiskNameRules) if (rule.re.test(text)) highRiskFindings.push(`${file}: ${rule.name}`)
+    const gitCommands = extractGitCommands(text)
+    if (gitCommands.some(isDirectMasterPush)) highRiskFindings.push(`${file}: direct master push`)
+    if (gitCommands.some(isWholeRepoAdd)) highRiskFindings.push(`${file}: bulk staging`)
   }
   if (highRiskFindings.length) addCheck(checks, 'drift.high-risk-rules', 'FAIL', 'high-risk retired instructions found in active entry documents', highRiskFindings)
   else addCheck(checks, 'drift.high-risk-rules', 'PASS', 'no retired agent/workbench/direct-push/bulk-stage instruction in active entries')
@@ -328,14 +388,19 @@ function inspectAuthority(root, args, checks) {
   const dynamicFindings = []
   for (const file of stableFiles) {
     const text = contents[file] || ''
-    // 长裸 SHA（≥12 hex）或带 git 上下文的短 SHA（commit/sha/@ 前缀，≥7 hex）。
-    // 短 SHA 必须要求上下文，否则会误伤 `defaced` 等纯 a-f 英文单词。
+    // 长裸 SHA（≥12 hex），或带 commit/sha 上下文（中英分隔符 :：=）的短 SHA（≥7 hex）。
+    // 短 SHA 必须要求上下文，否则误伤 `defaced` 等纯 a-f 英文单词；不再认无上下文的裸 `@`。
     if (/\b[0-9a-f]{12,40}\b/i.test(text)) dynamicFindings.push(`${file}: literal SHA`)
-    else if (/(?:\bcommit\b|\bsha\b|@)\s*[`'"]?[0-9a-f]{7,40}\b/i.test(text)) dynamicFindings.push(`${file}: literal short SHA`)
+    else if (/\b(?:commit|sha)\b\s*[:：=]?\s*[`'"]?[0-9a-f]{7,40}\b/i.test(text)) dynamicFindings.push(`${file}: literal short SHA`)
     if (/\/pull\/\d+\b/.test(text)) dynamicFindings.push(`${file}: literal PR URL`)
-    if (/(?:^|[\s(（【])#\d+\b/.test(text)) dynamicFindings.push(`${file}: literal PR reference`)
-    // 前导负向后顾（非字母）防止 `vitest`/`latest`/`fastest` 里的 `test` 子串被误判为计数漂移。
-    if (/(?<![a-zA-Z])(?:tests?|测试)(?:数量|总数)?[\s=：:]*\d+\b/i.test(text)) dynamicFindings.push(`${file}: literal test count`)
+    // #N / PR#N / [#N（markdown 链接） / (#N；markdown 标题「# 标题」有空格故 #\d 不命中。
+    if (/(?:^|[\s(（【\[]|PR)#\d+/i.test(text)) dynamicFindings.push(`${file}: literal PR reference`)
+    // 测试计数双向识别：`N tests`/`N 个测试`/`N 测试`，或带分隔符的 `tests: N`/`测试数量：N`。
+    // 要求「数字紧邻计数词」或「计数词+分隔符+数字」，故 `vitest`(无数字)放行、`Test 1 verifies`(散文序数无分隔符)不误伤，
+    // 而 `vitest 757 tests`(含真计数)按契约判红——修正上版把真计数锁成放行的反向错误。
+    if (/\d+\s*个?\s*(?:tests?\b|测试)/i.test(text) || /(?:tests?\b|测试(?:数量|总数)?)\s*[:：=]\s*\d+/i.test(text)) {
+      dynamicFindings.push(`${file}: literal test count`)
+    }
   }
   const governance = contents['.claude/rules/pr-governance.md'] || ''
   if (/活跃\s*PR\s*看板|\b(?:OPEN|MERGED|BLOCKED)\s*\(20\d\d-/i.test(governance)) dynamicFindings.push('.claude/rules/pr-governance.md: live-status ledger')

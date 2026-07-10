@@ -259,50 +259,49 @@ check('legacy Git/E2E guides require a SUPERSEDED blocking header', () => {
 
 // --- Hardening 回归门（2026-07-09 Claude 补，源自 PR#121 对抗复核逮到的绕过/误伤缺口）---
 
-check('direct-master-push refspec 变体（HEAD:master / master:master / +master）被拒', () => {
-  for (const push of ['git push origin HEAD:master', 'git push origin master:master', 'git push -f origin +master', 'git push origin refs/heads/master']) {
+// 往指定权威文件追加一段文本后跑 develop，断言 verdict/exit。
+// FAIL=该段应被漂移门拦；WARN(exit0)=该段合法、仅剩 owned-dirty（即「不误伤」的正控）。
+function checkDoc(name, file, snippet, verdict, exit) {
+  check(name, () => {
     const repo = setupRepo()
     try {
-      write(repo.work, 'AGENTS.md', `# Codex adapter\n\nRead [the shared contract](${CONTRACT}) before acting.\n\n${push}\n`)
-      expectVerdict(run(repo.work, ['--mode=develop', '--owned=AGENTS.md']), 'FAIL', 1)
+      append(repo.work, file, `\n${snippet}\n`)
+      expectVerdict(run(repo.work, ['--mode=develop', `--owned=${file}`]), verdict, exit)
     } finally {
       fs.rmSync(repo.tmp, { recursive: true, force: true })
     }
-  }
-})
+  })
+}
 
-check('bulk-staging git add --all 被拒（不只 . 和 -A）', () => {
-  const repo = setupRepo()
-  try {
-    write(repo.work, 'AGENTS.md', `# Codex adapter\n\nRead [the shared contract](${CONTRACT}) before acting.\n\nRun git add --all before commit.\n`)
-    expectVerdict(run(repo.work, ['--mode=develop', '--owned=AGENTS.md']), 'FAIL', 1)
-  } finally {
-    fs.rmSync(repo.tmp, { recursive: true, force: true })
-  }
-})
+// #1 直推 master：按 refspec 目标端语义判定（token 解析，去引号），拦绕过、不误伤安全命令。
+for (const push of [
+  'git push origin master', 'git push origin "master"', "git push origin 'HEAD:master'",
+  'git push origin HEAD:master', 'git push -f origin +master', 'git push origin refs/heads/master',
+]) checkDoc(`直推 master 被拒: ${push}`, 'AGENTS.md', push, 'FAIL', 1)
+for (const safe of [
+  'git push origin master:feature', 'git push origin feature/master',
+  'git push origin feature; master remains untouched',
+]) checkDoc(`安全 push 不误伤: ${safe}`, 'AGENTS.md', safe, 'WARN', 0)
 
-check('稳定文档里的短 SHA（commit 上下文）与 #NN PR 引用被拒', () => {
-  for (const snippet of ['merge commit 4a806b82', '见 #121 的历史', 'sha 1234567 已合']) {
-    const repo = setupRepo()
-    try {
-      append(repo.work, CONTRACT, `\n${snippet}\n`)
-      expectVerdict(run(repo.work, ['--mode=develop', `--owned=${CONTRACT}`]), 'FAIL', 1)
-    } finally {
-      fs.rmSync(repo.tmp, { recursive: true, force: true })
-    }
-  }
-})
+// #2 批量暂存：token 归一化识别全仓 pathspec/选项（含 -- . / ./ / :/ / 全局 -C / 引号）。
+for (const add of ['git add -A', 'git add .', 'git add --all', 'git add -- .', 'git add ./', 'git add :/', 'git -C . add --all', 'git add "--all"']) {
+  checkDoc(`批量暂存被拒: ${add}`, 'AGENTS.md', add, 'FAIL', 1)
+}
+checkDoc('精确暂存不误伤: git add src/foo.ts', 'AGENTS.md', 'git add src/foo.ts', 'WARN', 0)
 
-check('test-count 检测不误伤 "vitest N tests"（子串 test 不算计数漂移）', () => {
-  const repo = setupRepo()
-  try {
-    // 只加 vitest 计数、无其它动态事实：修复前 test-count 正则会把它误判为漂移→FAIL；修复后应只剩 owned-dirty WARN。
-    append(repo.work, '.claude/rules/pr-governance.md', '\n后端 vitest 757 tests，backend vitest 89 files。\n')
-    expectVerdict(run(repo.work, ['--mode=develop', '--owned=.claude/rules/pr-governance.md']), 'WARN', 0)
-  } finally {
-    fs.rmSync(repo.tmp, { recursive: true, force: true })
-  }
-})
+// #3 稳定文档动态事实：带上下文短 SHA（中英分隔符）与 #N/PR#N/[#N 引用被拒；裸 @ 不再误报。
+for (const snippet of ['merge commit 4a806b82', 'commit: 4a806b82', 'base SHA = 4a806b82', '见 #121 的历史', 'PR#121 已合', '参见 [#121](https://x/pull/121)']) {
+  checkDoc(`动态事实被拒: ${snippet}`, CONTRACT, snippet, 'FAIL', 1)
+}
+checkDoc('裸 @handle 不误报为 SHA: @deadbee', CONTRACT, '联系 @deadbee 复核', 'WARN', 0)
+
+// #4 测试计数双向识别（Codex REQUEST-CHANGES 核心）：真计数按契约判红；无计数的运行器名放行。
+for (const count of ['757 tests', 'vitest 757 tests', '共 757 个测试', 'tests: 580', '测试数量：42']) {
+  checkDoc(`测试计数被拒: ${count}`, CONTRACT, count, 'FAIL', 1)
+}
+for (const ok of ['使用 vitest runner 跑单测', 'Test 1 verifies fresh mode']) {
+  checkDoc(`非计数不误伤: ${ok}`, CONTRACT, ok, 'WARN', 0)
+}
 
 check('缺失成本域权威索引（契约权威链第 7 项）触发 authority.files 失败', () => {
   const repo = setupRepo()
