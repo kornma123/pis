@@ -7,6 +7,7 @@ import { useUrlParams } from '@/hooks/useUrlParams'
 
 export interface FormData {
   username: string
+  password: string
   realName: string
   role: string // 主角色（兼容旧字段；= primaryRole）
   roles: string[] // 数据驱动 RBAC：多角色（鉴权按并集）
@@ -15,6 +16,42 @@ export interface FormData {
   phone: string
   email: string
   status: 'active' | 'inactive'
+}
+
+const PASSWORD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*_-+'
+const COMMON_WEAK_PASSWORD_FRAGMENTS = ['password', 'qwerty', 'letmein', 'welcome', 'changeme', 'admin']
+const PASSWORD_SEQUENCES = [
+  '0123456789', '9876543210', 'abcdefghijklmnopqrstuvwxyz', 'zyxwvutsrqponmlkjihgfedcba',
+  'qwertyuiop', 'poiuytrewq', 'asdfghjkl', 'lkjhgfdsa',
+]
+
+export function generateStrongInitialPassword(): string {
+  for (;;) {
+    const chars = [...PASSWORD_ALPHABET]
+    const random = crypto.getRandomValues(new Uint32Array(chars.length))
+    for (let index = chars.length - 1; index > 0; index -= 1) {
+      const swapIndex = random[index] % (index + 1)
+      ;[chars[index], chars[swapIndex]] = [chars[swapIndex], chars[index]]
+    }
+    const candidate = chars.slice(0, 20).join('')
+    const normalized = candidate.toLowerCase()
+    const canonicalWords = normalized
+      .replace(/[@4]/gu, 'a')
+      .replace(/0/gu, 'o')
+      .replace(/[1!|]/gu, 'i')
+      .replace(/3/gu, 'e')
+      .replace(/[$5]/gu, 's')
+      .replace(/7/gu, 't')
+      .replace(/[^a-z0-9]/gu, '')
+    const hasSequence = PASSWORD_SEQUENCES.some(sequence => {
+      for (let index = 0; index <= sequence.length - 4; index += 1) {
+        if (normalized.includes(sequence.slice(index, index + 4))) return true
+      }
+      return false
+    })
+    const hasWeakFragment = COMMON_WEAK_PASSWORD_FRAGMENTS.some(fragment => canonicalWords.includes(fragment))
+    if (!hasSequence && !hasWeakFragment) return candidate
+  }
 }
 
 // SoD 不相容组合（前端实时提示；后端权威校验）
@@ -84,7 +121,7 @@ export function useUsersPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
   const [form, setForm] = useState<FormData>({
-    username: '', realName: '', role: 'operator', roles: [], primaryRole: '', department: '', phone: '', email: '', status: 'active'
+    username: '', password: '', realName: '', role: 'operator', roles: [], primaryRole: '', department: '', phone: '', email: '', status: 'active'
   })
 
   const [roles, setRoles] = useState<RoleItem[]>([])
@@ -133,7 +170,7 @@ export function useUsersPage() {
 
   const openCreate = () => {
     setEditingId(null)
-    setForm({ username: '', realName: '', role: 'operator', roles: [], primaryRole: '', department: '', phone: '', email: '', status: 'active' })
+    setForm({ username: '', password: generateStrongInitialPassword(), realName: '', role: 'operator', roles: [], primaryRole: '', department: '', phone: '', email: '', status: 'active' })
     setModalType('create')
   }
 
@@ -141,7 +178,7 @@ export function useUsersPage() {
     setEditingId(row.id)
     const rowRoles = Array.isArray((row as any).roles) && (row as any).roles.length ? (row as any).roles : [row.role]
     setForm({
-      username: row.username, realName: row.realName, role: row.role,
+      username: row.username, password: '', realName: row.realName, role: row.role,
       roles: rowRoles, primaryRole: (row as any).primaryRole || row.role,
       department: row.department || '', phone: row.phone || '', email: row.email || '',
       status: row.status
@@ -163,8 +200,18 @@ export function useUsersPage() {
       toast.error('请至少分配一个角色')
       return
     }
+    if (!editingId && !form.password) {
+      toast.error('请生成或填写初始密码')
+      return
+    }
     const primary = form.primaryRole && form.roles.includes(form.primaryRole) ? form.primaryRole : form.roles[0]
-    const payload = { ...form, role: primary, primaryRole: primary }
+    const { password, ...profile } = form
+    const payload = {
+      ...profile,
+      role: primary,
+      primaryRole: primary,
+      ...(!editingId || password ? { password } : {}),
+    }
     try {
       const res: any = editingId
         ? await request.put(`/users/${editingId}`, payload)
@@ -207,21 +254,6 @@ export function useUsersPage() {
     } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
   }
 
-  const handleResetPassword = async (id: string) => {
-    openConfirm({
-      title: '确认重置密码',
-      description: '确认重置该用户密码？重置后用户需使用新密码登录。',
-      confirmText: '重置',
-      confirmVariant: 'primary',
-      onConfirm: async () => {
-        try {
-          await request.post(`/users/${id}/reset-password`, {})
-          toast.success('密码重置成功')
-        } catch { /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */ }
-      },
-    })
-  }
-
   const handleSearch = () => { setPage(1) }
   const handleReset = () => {
     setKeyword(''); setRoleFilter(''); setStatusFilter(''); setSelectedRoleId(''); setPage(1)
@@ -242,7 +274,7 @@ export function useUsersPage() {
     stats,
     handleSearch, handleReset,
     openCreate, openEdit, openDetail,
-    handleSubmit, handleDelete, handleToggleStatus, handleResetPassword,
+    handleSubmit, handleDelete, handleToggleStatus,
     getAvatarChar,
   }
 }

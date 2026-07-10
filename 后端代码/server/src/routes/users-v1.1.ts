@@ -4,12 +4,18 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { detectSoDConflicts, requirePermission } from '../middleware/permissions.js'
+import { accountPasswordProblem, hashMatchesKnownLeakedDefaultPassword } from '../config/security.js'
 
 const router = Router()
 
 // 用户写入（改角色/改密码 = 提权入口）：挂载层只 requirePermission('users','R')，
 // 写端点必须自带 W 守卫，否则持 users:R 者即可增删改用户、改他人角色给自己提权。仿 projects/outbound 模式。
 const requireUsersWrite = requirePermission('users', 'W')
+
+function passwordWriteProblem(password: unknown): string | null {
+  if (typeof password !== 'string') return '必须是字符串'
+  return accountPasswordProblem(password)
+}
 
 // 同步用户多角色 → user_roles + primary_role + users.role(主角色,兼容旧链路)
 function syncUserRoles(db: any, userId: string, roles: string[], primaryRole?: string): void {
@@ -57,6 +63,8 @@ router.post('/', requireUsersWrite, (req, res) => {
   try {
     const { username, password, realName, role, roles, primaryRole, department, phone } = req.body
     if (!username || !password || !realName) { error(res, 'Username, password and realName required', 'INVALID_PARAMETER', 400); return }
+    const passwordProblem = passwordWriteProblem(password)
+    if (passwordProblem) { error(res, `Password ${passwordProblem}`, 'INVALID_PARAMETER', 400); return }
     const db = getDatabase()
     const id = uuidv4()
     const hashedPassword = bcrypt.hashSync(password, 12)
@@ -85,6 +93,18 @@ router.put('/:id', requireUsersWrite, (req, res) => {
     if ((existing.username === 'admin' || existing.id === 'USER-001') && data.status !== undefined && data.status !== 'active') {
       error(res, 'Cannot disable admin account', 'BUSINESS_CONFLICT', 409); return
     }
+    if (Object.prototype.hasOwnProperty.call(data, 'password')) {
+      const passwordProblem = passwordWriteProblem(data.password)
+      if (passwordProblem) { error(res, `Password ${passwordProblem}`, 'INVALID_PARAMETER', 400); return }
+    }
+    const isReactivating = data.status === 'active' && existing.status !== 1
+    if (
+      isReactivating
+      && hashMatchesKnownLeakedDefaultPassword(existing.password)
+      && !Object.prototype.hasOwnProperty.call(data, 'password')
+    ) {
+      error(res, 'Password must be replaced before reactivating this account', 'INVALID_PARAMETER', 400); return
+    }
     const fields: string[] = []; const params: any[] = []
     if (data.realName !== undefined) { fields.push('real_name = ?'); params.push(data.realName) }
     if (data.role !== undefined) { fields.push('role = ?'); params.push(data.role) }
@@ -92,7 +112,7 @@ router.put('/:id', requireUsersWrite, (req, res) => {
     if (data.phone !== undefined) { fields.push('phone = ?'); params.push(data.phone) }
     if (data.email !== undefined) { fields.push('email = ?'); params.push(data.email) }
     if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status === 'active' ? 1 : 0) }
-    if (data.password) { fields.push('password = ?'); params.push(bcrypt.hashSync(data.password, 12)) }
+    if (data.password !== undefined) { fields.push('password = ?'); params.push(bcrypt.hashSync(data.password, 12)) }
     if (fields.length > 0) { params.push(id); db.prepare(`UPDATE users SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params) }
     // 多角色同步（roles[] 提供时覆盖 user_roles + primary_role + users.role）
     let sodWarning: string[] = []

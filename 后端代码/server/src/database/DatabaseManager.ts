@@ -1,6 +1,10 @@
 import { DatabaseSync } from 'node:sqlite'
 import bcrypt from 'bcryptjs'
-import { allowDefaultFixtureUsers, initialAdminPasswordProblem } from '../config/security.js'
+import {
+  allowDefaultFixtureUsers,
+  hashMatchesKnownLeakedDefaultPassword,
+  initialAdminPasswordProblem,
+} from '../config/security.js'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
@@ -21,6 +25,25 @@ fs.mkdirSync(dirname(DB_PATH), { recursive: true })
 
 let db: DatabaseSync | null = null
 
+const USERS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    real_name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'operator',
+    department TEXT,
+    phone TEXT,
+    email TEXT,
+    status INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT,
+    updated_by TEXT,
+    is_deleted INTEGER NOT NULL DEFAULT 0
+  )
+`
+
 export function getDatabase(): DatabaseSync {
   if (!db) {
     db = new DatabaseSync(DB_PATH)
@@ -36,6 +59,24 @@ export function resetDatabase(): void {
   if (fs.existsSync(DB_PATH)) {
     fs.unlinkSync(DB_PATH)
     console.log('Old database removed:', DB_PATH)
+  }
+}
+
+function usersTableExists(database: DatabaseSync): boolean {
+  return Boolean(
+    database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get()
+  )
+}
+
+function normalizeInitialAdminPassword(password: string | undefined): string | undefined {
+  return password === '' ? undefined : password
+}
+
+function assertInitialAdminPasswordUsable(password: string | undefined): void {
+  if (password === undefined) return
+  const problem = initialAdminPasswordProblem(password)
+  if (problem) {
+    throw new Error(`[SECURITY] ADMIN_INITIAL_PASSWORD 不合格：${problem}；生产环境拒绝启动，未创建或修改 admin。`)
   }
 }
 
@@ -169,20 +210,69 @@ export function reconcileFinanceAccountReconcilePerms(database: DatabaseSync): v
   }
 }
 
+const HISTORICAL_DEFAULT_USERNAMES = [
+  'admin',
+  'cangguan',
+  'jishuyuan1',
+  'yishi1',
+  'caigou',
+  'caiwu',
+] as const
+
+/**
+ * 生产级启动门禁：只核验历史上由默认种子创建的六个账号，bcrypt 工作量有明确上界。
+ * status/is_deleted 旧库缺列或值为 NULL 时按活跃处理；username/password 缺列则无法安全核验，拒绝启动。
+ */
+export function assertNoActiveLeakedDefaultPasswords(database: DatabaseSync): void {
+  const columns = database.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>
+  const columnNames = new Set(columns.map(column => column.name))
+  if (!columnNames.has('username') || !columnNames.has('password')) {
+    throw new Error('[SECURITY] 拒绝启动：既有 users 表必须同时包含 username 与 password 列，无法安全核验历史账号。')
+  }
+
+  const placeholders = HISTORICAL_DEFAULT_USERNAMES.map(() => '?').join(', ')
+  const conditions = [`username IN (${placeholders})`]
+  if (columnNames.has('status')) conditions.push('(status IS NULL OR status <> 0)')
+  if (columnNames.has('is_deleted')) conditions.push('(is_deleted IS NULL OR is_deleted <> 1)')
+  const historicalUsers = database
+    .prepare(`SELECT username, password FROM users WHERE ${conditions.join(' AND ')}`)
+    .all(...HISTORICAL_DEFAULT_USERNAMES) as Array<{ username: string; password: string }>
+  const compromisedUsernames = historicalUsers
+    .filter(user => hashMatchesKnownLeakedDefaultPassword(user.password))
+    .map(user => user.username)
+
+  if (compromisedUsernames.length > 0) {
+    throw new Error(
+      `[SECURITY] 拒绝启动：以下活跃账号仍使用已泄露的默认口令：${compromisedUsernames.join(', ')}。` +
+        '请先运行受控 reset-passwords 流程轮换这些账号；禁用或软删除账号不会触发此门禁。'
+    )
+  }
+}
+
 /**
  * 默认账号种子（安全止血·fail-closed，见 config/security.ts）。抽成独立可测函数。
  * - allowFixtures=true（仅显式 dev/test）：种固定口令夹具账号
  *   admin/admin123 + 5 角色/CoreOne2026! 并强制启用（E2E 依赖，行为与历史一致）。
- * - allowFixtures=false（**未声明环境=生产级**）：不种任何固定口令账号、不强制启用；仅当无 admin
- *   且提供**合格**的 ADMIN_INITIAL_PASSWORD（非泄露值 + ≥12 位）时受控创建 admin。
+ * - allowFixtures=false（**未声明环境=生产级**）：先核验历史六账号；不种固定口令账号、不强制启用；
+ *   仅当无 admin 且提供合格的 ADMIN_INITIAL_PASSWORD 时受控创建 admin。
  */
 export function seedDefaultUsers(
   database: DatabaseSync,
   opts?: { allowFixtures?: boolean; adminInitialPassword?: string }
 ): void {
   const allowFixtures = opts?.allowFixtures ?? allowDefaultFixtureUsers()
-  const adminInitialPassword = opts?.adminInitialPassword ?? process.env.ADMIN_INITIAL_PASSWORD
+  const adminInitialPassword = normalizeInitialAdminPassword(
+    opts?.adminInitialPassword ?? process.env.ADMIN_INITIAL_PASSWORD
+  )
+  if (!allowFixtures) assertNoActiveLeakedDefaultPasswords(database)
+  seedDefaultUsersAfterCredentialCheck(database, allowFixtures, adminInitialPassword)
+}
 
+function seedDefaultUsersAfterCredentialCheck(
+  database: DatabaseSync,
+  allowFixtures: boolean,
+  adminInitialPassword: string | undefined
+): void {
   const existingAdmin = database.prepare('SELECT id FROM users WHERE username = ?').get('admin') as
     | { id: string }
     | undefined
@@ -219,19 +309,16 @@ export function seedDefaultUsers(
     return
   }
 
-  // 生产级（未声明环境）：不种固定口令账号、不强制启用既有账号。
+  assertInitialAdminPasswordUsable(adminInitialPassword)
+
+  // 生产级不种固定口令账号、不强制启用既有账号。
   if (!existingAdmin) {
-    if (adminInitialPassword) {
-      const problem = initialAdminPasswordProblem(adminInitialPassword)
-      if (problem) {
-        console.warn(`[SECURITY] 拒绝用 ADMIN_INITIAL_PASSWORD 创建 admin：${problem}。未创建默认 admin。`)
-      } else {
-        const hashedPassword = bcrypt.hashSync(adminInitialPassword, 12)
-        database
-          .prepare('INSERT INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
-        console.warn('[SECURITY] 已用 ADMIN_INITIAL_PASSWORD 创建初始 admin；请首次登录后立即改密。')
-      }
+    if (adminInitialPassword !== undefined) {
+      const hashedPassword = bcrypt.hashSync(adminInitialPassword, 12)
+      database
+        .prepare('INSERT INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
+      console.warn('[SECURITY] 已用 ADMIN_INITIAL_PASSWORD 创建初始 admin；请首次登录后立即改密。')
     } else {
       console.warn(
         '[SECURITY] 未声明 dev/test 的环境未创建默认 admin（无已知口令账号）。请注入合格的 ADMIN_INITIAL_PASSWORD 或通过受控方式创建管理员。'
@@ -242,6 +329,19 @@ export function seedDefaultUsers(
 
 export function initializeDatabase(): void {
   const database = getDatabase()
+  const allowFixtures = allowDefaultFixtureUsers()
+  const adminInitialPassword = normalizeInitialAdminPassword(process.env.ADMIN_INITIAL_PASSWORD)
+  // 显式提供的弱初始口令必须在任何 DDL/迁移写入前拒绝，避免失败启动留下半升级数据库。
+  if (!allowFixtures) assertInitialAdminPasswordUsable(adminInitialPassword)
+  const hadUsersTable = usersTableExists(database)
+
+  // 旧库必须在任何 DDL/迁移写之前核验；新库只先创建 canonical users 表，再核验空表。
+  if (hadUsersTable) {
+    if (!allowFixtures) assertNoActiveLeakedDefaultPasswords(database)
+  } else {
+    database.exec(USERS_TABLE_SQL)
+    if (!allowFixtures) assertNoActiveLeakedDefaultPasswords(database)
+  }
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS material_categories (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, parent_id TEXT, level INTEGER NOT NULL, sort_order INTEGER DEFAULT 0, status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
@@ -408,9 +508,6 @@ export function initializeDatabase(): void {
   `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS alerts (id TEXT PRIMARY KEY, type TEXT NOT NULL, level TEXT NOT NULL, material_id TEXT NOT NULL, material_name TEXT, current_stock INTEGER, threshold INTEGER, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', handled_by TEXT, handled_at TEXT, remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
-  `)
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password TEXT NOT NULL, real_name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'operator', department TEXT, phone TEXT, email TEXT, status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, description TEXT, permissions TEXT NOT NULL DEFAULT '[]', status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_deleted INTEGER NOT NULL DEFAULT 0)
@@ -705,7 +802,12 @@ export function initializeDatabase(): void {
 
   // 默认账号种子（安全止血·fail-closed）：仅显式 dev/test 才种
   // 固定口令夹具账号并强制启用；**未声明环境=生产级=不种默认凭据、不强制启用**（见 seedDefaultUsers）。
-  seedDefaultUsers(database)
+  // 上面已完成唯一一次生产 bcrypt 预检；此处直接进入种子逻辑，避免重复扫描。
+  seedDefaultUsersAfterCredentialCheck(
+    database,
+    allowFixtures,
+    adminInitialPassword
+  )
 
   // 插入默认角色（E2E 测试依赖）+ 数据驱动 RBAC 初始种子矩阵（RBAC §8.2）
   const defaultRoles = [

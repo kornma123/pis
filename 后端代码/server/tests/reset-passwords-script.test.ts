@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import bcrypt from 'bcryptjs'
+import { seedDefaultUsers } from '../src/database/DatabaseManager.js'
 
 const tempDirs: string[] = []
 
@@ -18,6 +19,29 @@ function runReset(env: NodeJS.ProcessEnv) {
     env,
     encoding: 'utf8',
   })
+}
+
+const STANDARD_USERS = ['admin', 'cangguan', 'jishuyuan1', 'yishi1', 'caigou', 'caiwu'] as const
+
+function toFullwidthAscii(value: string): string {
+  return value.replace(/[!-~]/gu, character => String.fromCharCode(character.charCodeAt(0) + 0xfee0))
+}
+
+function createUsersDatabase(dbPath: string, usernames: readonly string[] = STANDARD_USERS): void {
+  const db = new DatabaseSync(dbPath)
+  db.exec(`CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE,
+    password TEXT,
+    status INTEGER DEFAULT 1,
+    is_deleted INTEGER DEFAULT 0
+  )`)
+  const insert = db.prepare('INSERT INTO users (id, username, password) VALUES (?, ?, ?)')
+  for (const username of usernames) {
+    const oldPassword = username === 'admin' ? 'admin123' : 'CoreOne2026!'
+    insert.run(`USER-${username}`, username, bcrypt.hashSync(oldPassword, 4))
+  }
+  db.close()
 }
 
 describe('reset-passwords production guard', () => {
@@ -93,6 +117,8 @@ describe('reset-passwords production guard', () => {
     })
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('ghost')
+    expect(result.stdout).not.toContain('✅ 已重置口令：admin')
+    expect(result.stdout).not.toContain('完成：')
 
     const check = new DatabaseSync(dbPath)
     const row = check.prepare("SELECT password FROM users WHERE username='admin'").get() as {
@@ -100,5 +126,138 @@ describe('reset-passwords production guard', () => {
     }
     check.close()
     expect(bcrypt.compareSync('old-password', row.password)).toBe(true) // 未被改（整体回滚）
+  })
+
+  it('atomically resets all six standard accounts through dedicated environment variables', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-reset-passwords-'))
+    tempDirs.push(dir)
+    const dbPath = join(dir, 'coreone.db')
+    createUsersDatabase(dbPath)
+
+    const passwords = {
+      admin: 'Owner-Rotated-2026!',
+      cangguan: 'Warehouse-Rotated-2026!',
+      jishuyuan1: 'Technician-Rotated-2026!',
+      yishi1: 'Pathologist-Rotated-2026!',
+      caigou: 'Procurement-Rotated-2026!',
+      caiwu: 'Finance-Rotated-2026!',
+    }
+    const result = runReset({
+      ...process.env,
+      DATABASE_PATH: dbPath,
+      RESET_ADMIN_PASSWORD: passwords.admin,
+      RESET_CANGGUAN_PASSWORD: passwords.cangguan,
+      RESET_JISHUYUAN1_PASSWORD: passwords.jishuyuan1,
+      RESET_YISHI1_PASSWORD: passwords.yishi1,
+      RESET_CAIGOU_PASSWORD: passwords.caigou,
+      RESET_CAIWU_PASSWORD: passwords.caiwu,
+    })
+
+    expect(result.status).toBe(0)
+    const check = new DatabaseSync(dbPath)
+    for (const username of STANDARD_USERS) {
+      const row = check.prepare('SELECT password FROM users WHERE username = ?').get(username) as { password: string }
+      expect(bcrypt.compareSync(passwords[username], row.password)).toBe(true)
+    }
+    expect(() => seedDefaultUsers(check, { allowFixtures: false })).not.toThrow()
+    check.close()
+  })
+
+  it('rejects a duplicate username across dedicated variables and JSON before writing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-reset-passwords-'))
+    tempDirs.push(dir)
+    const dbPath = join(dir, 'coreone.db')
+    createUsersDatabase(dbPath, ['admin'])
+
+    const result = runReset({
+      ...process.env,
+      DATABASE_PATH: dbPath,
+      RESET_ADMIN_PASSWORD: 'Admin-Rotated-2026!',
+      RESET_PASSWORDS_JSON: JSON.stringify({ admin: 'Second-Admin-Password-2026!' }),
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('admin')
+    expect(result.stderr).toMatch(/重复/)
+    expect(result.stdout).not.toContain('✅')
+
+    const check = new DatabaseSync(dbPath)
+    const row = check.prepare("SELECT password FROM users WHERE username='admin'").get() as { password: string }
+    check.close()
+    expect(bcrypt.compareSync('admin123', row.password)).toBe(true)
+  })
+
+  it('rejects reusing one password for multiple targets before beginning the transaction', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-reset-passwords-'))
+    tempDirs.push(dir)
+    const dbPath = join(dir, 'coreone.db')
+    createUsersDatabase(dbPath, ['admin', 'caiwu'])
+    const reusedPassword = 'Shared-N7v!Q2m@R8x#'
+
+    const result = runReset({
+      ...process.env,
+      DATABASE_PATH: dbPath,
+      RESET_ADMIN_PASSWORD: reusedPassword,
+      RESET_CAIWU_PASSWORD: reusedPassword,
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toMatch(/复用|相同口令/)
+    expect(result.stderr).not.toContain(reusedPassword)
+    expect(result.stdout).not.toContain('✅')
+
+    const check = new DatabaseSync(dbPath)
+    const rows = check.prepare('SELECT username, password FROM users ORDER BY username').all() as Array<{
+      username: string
+      password: string
+    }>
+    check.close()
+    expect(rows.every(row => bcrypt.compareSync(row.username === 'admin' ? 'admin123' : 'CoreOne2026!', row.password))).toBe(true)
+  })
+
+  it('rejects NFKC-equivalent password reuse before beginning the transaction', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-reset-passwords-'))
+    tempDirs.push(dir)
+    const dbPath = join(dir, 'coreone.db')
+    createUsersDatabase(dbPath, ['admin', 'caiwu'])
+    const sharedCanonicalPassword = 'Shared-N7v!Q2m@R8x#'
+    const fullwidthEquivalent = toFullwidthAscii(sharedCanonicalPassword)
+    expect(fullwidthEquivalent.normalize('NFKC')).toBe(sharedCanonicalPassword)
+
+    const result = runReset({
+      ...process.env,
+      DATABASE_PATH: dbPath,
+      RESET_ADMIN_PASSWORD: sharedCanonicalPassword,
+      RESET_CAIWU_PASSWORD: fullwidthEquivalent,
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toMatch(/复用|相同口令/)
+    expect(result.stderr).not.toContain(sharedCanonicalPassword)
+    expect(result.stderr).not.toContain(fullwidthEquivalent)
+
+    const check = new DatabaseSync(dbPath)
+    const rows = check.prepare('SELECT username, password FROM users ORDER BY username').all() as Array<{
+      username: string
+      password: string
+    }>
+    check.close()
+    expect(rows.every(row => bcrypt.compareSync(row.username === 'admin' ? 'admin123' : 'CoreOne2026!', row.password))).toBe(true)
+  })
+
+  it.each([
+    ['purely numeric', '1234567890123456'],
+    ['single repeated character', 'aaaaaaaaaaaaaaaa'],
+  ])('rejects %s passwords before writing', (_label, password) => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-reset-passwords-'))
+    tempDirs.push(dir)
+    const result = runReset({
+      ...process.env,
+      DATABASE_PATH: join(dir, 'unused.db'),
+      RESET_ADMIN_PASSWORD: password,
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('口令')
   })
 })

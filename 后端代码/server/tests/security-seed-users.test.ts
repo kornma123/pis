@@ -24,6 +24,26 @@ function freshDb(): DatabaseSync {
 const count = (db: DatabaseSync): number =>
   (db.prepare('SELECT COUNT(*) c FROM users').get() as { c: number }).c
 
+function insertUserWithPassword(
+  db: DatabaseSync,
+  username: string,
+  password: string,
+  opts: { status?: number; isDeleted?: number } = {}
+): void {
+  db.prepare(
+    'INSERT INTO users (id,username,password,real_name,role,department,status,is_deleted) VALUES (?,?,?,?,?,?,?,?)'
+  ).run(
+    `USER-${username}`,
+    username,
+    bcrypt.hashSync(password, 4),
+    username,
+    username === 'admin' ? 'admin' : 'finance',
+    '病理科',
+    opts.status ?? 1,
+    opts.isDeleted ?? 0
+  )
+}
+
 describe('seedDefaultUsers —— 生产级（allowFixtures=false）默认安全', () => {
   it('不种任何固定口令账号', () => {
     const db = freshDb()
@@ -33,25 +53,43 @@ describe('seedDefaultUsers —— 生产级（allowFixtures=false）默认安全
 
   it('仅合格 ADMIN_INITIAL_PASSWORD 才受控创建 admin（且不是 admin123）', () => {
     const db = freshDb()
-    seedDefaultUsers(db, { allowFixtures: false, adminInitialPassword: 'S7rong-Passw0rd!' })
+    const strongPassword = 'N7v!Q2m@R8x#T4k%Z9p&L3d^'
+    seedDefaultUsers(db, { allowFixtures: false, adminInitialPassword: strongPassword })
     const admin = db.prepare("SELECT password FROM users WHERE username='admin'").get() as
       | { password: string }
       | undefined
     expect(admin).toBeTruthy()
-    expect(bcrypt.compareSync('S7rong-Passw0rd!', admin!.password)).toBe(true)
+    expect(bcrypt.compareSync(strongPassword, admin!.password)).toBe(true)
     expect(bcrypt.compareSync('admin123', admin!.password)).toBe(false)
   })
 
   it('拒绝用泄露口令 admin123 创建 admin', () => {
     const db = freshDb()
-    seedDefaultUsers(db, { allowFixtures: false, adminInitialPassword: 'admin123' })
+    expect(() => seedDefaultUsers(db, { allowFixtures: false, adminInitialPassword: 'admin123' })).toThrow()
     expect(db.prepare("SELECT id FROM users WHERE username='admin'").get()).toBeFalsy()
   })
 
   it('拒绝过短 ADMIN_INITIAL_PASSWORD', () => {
     const db = freshDb()
-    seedDefaultUsers(db, { allowFixtures: false, adminInitialPassword: 'short' })
+    expect(() => seedDefaultUsers(db, { allowFixtures: false, adminInitialPassword: 'short' })).toThrow()
     expect(db.prepare("SELECT id FROM users WHERE username='admin'").get()).toBeFalsy()
+  })
+
+  it('将 docker compose 传入的空字符串归一为未提供，但显式空白仍拒绝', () => {
+    const emptyDb = freshDb()
+    expect(() => seedDefaultUsers(emptyDb, { allowFixtures: false, adminInitialPassword: '' })).not.toThrow()
+    expect(emptyDb.prepare("SELECT id FROM users WHERE username='admin'").get()).toBeFalsy()
+
+    const whitespaceDb = freshDb()
+    expect(() => seedDefaultUsers(whitespaceDb, { allowFixtures: false, adminInitialPassword: '   ' })).toThrow()
+    expect(whitespaceDb.prepare("SELECT id FROM users WHERE username='admin'").get()).toBeFalsy()
+  })
+
+  it('非历史账号即便沿用公开口令也不进入有界启动扫描', () => {
+    const db = freshDb()
+    insertUserWithPassword(db, 'custom-user', 'CoreOne2026!')
+
+    expect(() => seedDefaultUsers(db, { allowFixtures: false })).not.toThrow()
   })
 
   it('不强制重新启用被软删除的既有 admin', () => {
@@ -66,6 +104,22 @@ describe('seedDefaultUsers —— 生产级（allowFixtures=false）默认安全
     }
     expect(admin.is_deleted).toBe(1) // 仍禁用 —— 生产级绝不擅自复活
     expect(admin.status).toBe(0)
+  })
+
+  it('旧库仍有活跃 admin/admin123 与 caiwu/CoreOne2026! 时拒绝启动', () => {
+    const db = freshDb()
+    insertUserWithPassword(db, 'admin', 'admin123')
+    insertUserWithPassword(db, 'caiwu', 'CoreOne2026!')
+
+    expect(() => seedDefaultUsers(db, { allowFixtures: false })).toThrow(/admin.*caiwu|caiwu.*admin/)
+  })
+
+  it('已禁用或软删除的泄露口令账号不阻断启动', () => {
+    const db = freshDb()
+    insertUserWithPassword(db, 'admin', 'admin123', { status: 0 })
+    insertUserWithPassword(db, 'caiwu', 'CoreOne2026!', { isDeleted: 1 })
+
+    expect(() => seedDefaultUsers(db, { allowFixtures: false })).not.toThrow()
   })
 })
 

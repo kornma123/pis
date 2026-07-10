@@ -42,7 +42,7 @@ describe('RBAC-P6：创建/更新多角色用户', () => {
     const request = (await import('supertest')).default
     const adminToken = await login('admin', 'admin123')
     const res = await request(app).post('/api/v1/users').set('Authorization', `Bearer ${adminToken}`)
-      .send({ username: 'multi1', password: 'CoreOne2026!', realName: '多角色1', roles: ['technician', 'finance'], primaryRole: 'finance' })
+      .send({ username: 'multi1', password: 'Multi1-N7v!Q2m@R8x#', realName: '多角色1', roles: ['technician', 'finance'], primaryRole: 'finance' })
     expect(res.status).toBe(201)
     expect(res.body.data.roles.sort()).toEqual(['finance', 'technician'])
     expect(res.body.data.primaryRole).toBe('finance')
@@ -60,7 +60,7 @@ describe('RBAC-P6：创建/更新多角色用户', () => {
     const request = (await import('supertest')).default
     const adminToken = await login('admin', 'admin123')
     const res = await request(app).post('/api/v1/users').set('Authorization', `Bearer ${adminToken}`)
-      .send({ username: 'multi2', password: 'CoreOne2026!', realName: '多角色2', roles: ['procurement', 'finance'] })
+      .send({ username: 'multi2', password: 'Multi2-T4k%Z9p&L3d^', realName: '多角色2', roles: ['procurement', 'finance'] })
     expect(res.status).toBe(201) // 不阻断
     expect(res.body.data.sodWarning).toContain('procurement+finance')
   })
@@ -69,7 +69,7 @@ describe('RBAC-P6：创建/更新多角色用户', () => {
     const request = (await import('supertest')).default
     const adminToken = await login('admin', 'admin123')
     const created = await request(app).post('/api/v1/users').set('Authorization', `Bearer ${adminToken}`)
-      .send({ username: 'multi3', password: 'CoreOne2026!', realName: '多角色3', roles: ['technician'] })
+      .send({ username: 'multi3', password: 'Multi3-B6y*C1w(H5s)', realName: '多角色3', roles: ['technician'] })
     const uid = created.body.data.id
     const put = await request(app).put(`/api/v1/users/${uid}`).set('Authorization', `Bearer ${adminToken}`)
       .send({ roles: ['warehouse_manager', 'procurement'], primaryRole: 'procurement' })

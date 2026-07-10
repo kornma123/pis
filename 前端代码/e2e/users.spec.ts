@@ -13,6 +13,7 @@ const ROLES = {
 } as const
 type RoleKey = keyof typeof ROLES
 const ROLE_KEYS: RoleKey[] = ['admin', 'warehouse_manager', 'technician', 'pathologist', 'procurement', 'finance']
+const STRONG_TEST_PASSWORD = 'Users-E2E-Strong-2026!'
 
 async function loginAs(page: Page, role: RoleKey) {
   await page.goto(`${FE_BASE}/login`)
@@ -169,33 +170,34 @@ test.describe('用户管理 -> 筛选功能', () => {
 // ───────────────────────────────────────────────
 test.describe('用户管理 -> 新建用户', () => {
   test('USER-CREATE-01. 正常用例：admin新建用户成功', async ({ page }) => {
+    const token = await apiLogin('admin')
+    const username = `testuser-${Date.now()}`
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     await page.click('text=/新建用户|新建/i'); await page.waitForTimeout(500)
-    const inputs = page.locator('input[type="text"]')
-    if (await inputs.count() >= 2) {
-      await inputs.nth(0).fill(`testuser-${Date.now()}`)
-      await inputs.nth(1).fill('测试姓名')
-    }
-    const pwd = page.locator('input[type="password"]').first()
-    if (await pwd.isVisible().catch(() => false)) await pwd.fill('password123')
-    await page.click('text=/创建用户|保存/i'); await page.waitForTimeout(1000)
+    const modal = page.locator('.fixed.inset-0.z-50')
+    const inputs = modal.locator('input')
+    await inputs.nth(0).fill(username)
+    await inputs.nth(1).fill('测试姓名')
+    await modal.getByRole('button', { name: '技术员', exact: true }).click()
+    const password = modal.locator('input[autocomplete="new-password"]')
+    await expect(password).toHaveAttribute('type', 'password')
+    expect((await password.inputValue()).length).toBeGreaterThanOrEqual(12)
+    await modal.getByRole('button', { name: '创建用户' }).click()
+    await expect(modal).toBeHidden()
+
+    const lookup = await apiFetch(token, 'GET', `/users?keyword=${encodeURIComponent(username)}`)
+    expect(lookup.status).toBe(200)
+    const created = (lookup.data?.data?.list || []).find((user: any) => user.username === username)
+    expect(created).toMatchObject({ username, realName: '测试姓名', role: 'technician', status: 'active' })
   })
   test('USER-CREATE-02. 正常用例：新建用户选择角色', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     await page.click('text=/新建用户|新建/i'); await page.waitForTimeout(800)
-    const inputs = page.locator('.fixed.z-50 input[type="text"]')
-    if (await inputs.count() >= 2) {
-      await inputs.nth(0).fill(`testuser-role-${Date.now()}`)
-      await inputs.nth(1).fill('角色测试')
-    }
-    const roleSel = page.locator('.fixed.z-50 select').first()
-    if (await roleSel.isVisible().catch(() => false)) {
-      const opts = await roleSel.locator('option').count()
-      if (opts > 1) { await roleSel.selectOption({ index: 1 }); await page.waitForTimeout(300) }
-    }
-    const saveBtn = page.locator('.fixed.z-50 button:has-text(/创建用户|保存/)').first()
-    if (await saveBtn.isVisible().catch(() => false)) await saveBtn.click()
-    await page.waitForTimeout(1000)
+    const modal = page.locator('.fixed.inset-0.z-50')
+    const procurementRole = modal.getByRole('button', { name: '采购员', exact: true })
+    await procurementRole.click()
+    await expect(procurementRole).toHaveClass(/bg-blue-500/)
+    await modal.getByRole('button', { name: '取消' }).click()
   })
   test('USER-CREATE-03. 正常用例：新建用户选择部门', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
@@ -206,8 +208,9 @@ test.describe('用户管理 -> 新建用户', () => {
       await inputs.nth(1).fill('部门测试')
     }
     const deptSel = page.locator('select').filter({ hasText: /请选择部门|病理科|检验科/i }).first()
-    if (await deptSel.isVisible().catch(() => false)) { await deptSel.selectOption({ index: 1 }); await page.waitForTimeout(300) }
-    await page.click('text=/创建用户|保存/i'); await page.waitForTimeout(1000)
+    await deptSel.selectOption({ label: '病理科' })
+    await expect(deptSel).toHaveValue('病理科')
+    await page.locator('.fixed.inset-0.z-50').getByRole('button', { name: '取消' }).click()
   })
   test('USER-CREATE-04. 空数据边界：必填项为空提交被阻止', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
@@ -228,8 +231,8 @@ test.describe('用户管理 -> 新建用户', () => {
   test('USER-CREATE-07. 业务冲突：username已存在返回409', async ({ page }) => {
     const token = await apiLogin('admin')
     const username = `dupe-${Date.now()}`
-    await apiFetch(token, 'POST', '/users', { username, password: 'pass', realName: 'test', role: 'technician' })
-    const res = await apiFetch(token, 'POST', '/users', { username, password: 'pass', realName: 'test2', role: 'technician' })
+    await apiFetch(token, 'POST', '/users', { username, password: STRONG_TEST_PASSWORD, realName: 'test', role: 'technician' })
+    const res = await apiFetch(token, 'POST', '/users', { username, password: STRONG_TEST_PASSWORD, realName: 'test2', role: 'technician' })
     expect([409, 400]).toContain(res.status)
   })
   for (const role of ['technician', 'pathologist', 'procurement', 'finance', 'warehouse_manager'] as RoleKey[]) {
@@ -266,7 +269,7 @@ test.describe('用户管理 -> 编辑用户', () => {
   })
   test('USER-EDIT-02. 正常用例：admin修改用户状态', async ({ page }) => {
     const token = await apiLogin('admin')
-    const createRes = await apiFetch(token, 'POST', '/users', { username: `testuser-edit-${Date.now()}`, password: 'pass', realName: '编辑测试', role: 'technician', status: 'active' })
+    const createRes = await apiFetch(token, 'POST', '/users', { username: `testuser-edit-${Date.now()}`, password: STRONG_TEST_PASSWORD, realName: '编辑测试', role: 'technician', status: 'active' })
     const testId = createRes.data?.data?.id || createRes.data?.id
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     const editBtn = testId ? page.locator(`[data-id="${testId}"] >> text=/编辑|修改/i`).first() : page.locator('text=/编辑|修改/i').first()
@@ -345,7 +348,7 @@ test.describe('用户管理 -> 编辑用户', () => {
 test.describe('用户管理 -> 删除用户', () => {
   test('USER-DELETE-01. 正常用例：admin删除用户成功', async ({ page }) => {
     const token = await apiLogin('admin')
-    const createRes = await apiFetch(token, 'POST', '/users', { username: `testuser-del-${Date.now()}`, password: 'pass', realName: 'del', role: 'technician' })
+    const createRes = await apiFetch(token, 'POST', '/users', { username: `testuser-del-${Date.now()}`, password: STRONG_TEST_PASSWORD, realName: 'del', role: 'technician' })
     const id = createRes.data?.data?.id || createRes.data?.id
     if (!id) return
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
@@ -362,7 +365,7 @@ test.describe('用户管理 -> 删除用户', () => {
   })
   test('USER-DELETE-03. 并发：并发删除同一用户', async ({ page }) => {
     const token = await apiLogin('admin')
-    const createRes = await apiFetch(token, 'POST', '/users', { username: `testuser-con-${Date.now()}`, password: 'pass', realName: 'con', role: 'technician' })
+    const createRes = await apiFetch(token, 'POST', '/users', { username: `testuser-con-${Date.now()}`, password: STRONG_TEST_PASSWORD, realName: 'con', role: 'technician' })
     const id = createRes.data?.data?.id || createRes.data?.id
     if (!id) return
     const reqs = Array.from({ length: 2 }, () => apiFetch(token, 'DELETE', `/users/${id}`))
@@ -388,7 +391,7 @@ test.describe('用户管理 -> 删除用户', () => {
 test.describe('用户管理 -> 启用停用用户', () => {
   test('USER-TOGGLE-01. 正常用例：admin停用用户成功', async ({ page }) => {
     const token = await apiLogin('admin')
-    const createRes = await apiFetch(token, 'POST', '/users', { username: `testuser-toggle-${Date.now()}`, password: 'pass', realName: '停用测试', role: 'technician', status: 'active' })
+    const createRes = await apiFetch(token, 'POST', '/users', { username: `testuser-toggle-${Date.now()}`, password: STRONG_TEST_PASSWORD, realName: '停用测试', role: 'technician', status: 'active' })
     const testId = createRes.data?.data?.id || createRes.data?.id
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     const toggle = testId ? page.locator(`[data-id="${testId}"] >> text=/停用/i`).first() : page.locator('text=/停用/i').first()
@@ -414,28 +417,32 @@ test.describe('用户管理 -> 启用停用用户', () => {
 })
 
 // ───────────────────────────────────────────────
-// 7. 重置密码
+// 7. 修改密码
 // ───────────────────────────────────────────────
-test.describe('用户管理 -> 重置密码', () => {
-  test('USER-RESET-01. 正常用例：admin重置用户密码成功', async ({ page }) => {
+test.describe('用户管理 -> 修改密码', () => {
+  test('USER-RESET-01. 正常用例：编辑弹窗提供强密码字段', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
-    const resetBtn = page.locator('text=/重置密码|重置/i').first()
-    if (await resetBtn.isVisible().catch(() => false)) { await resetBtn.click(); await page.waitForTimeout(800) }
+    const editBtn = page.locator('text=/编辑|修改/i').first()
+    await editBtn.click(); await page.waitForTimeout(500)
+    await expect(page.locator('input[autocomplete="new-password"]')).toBeVisible()
+    await expect(page.getByRole('button', { name: '随机生成' })).toBeVisible()
   })
-  test('USER-RESET-02. 正常用例：编辑弹窗内重置密码', async ({ page }) => {
+  test('USER-RESET-02. 正常用例：编辑弹窗内生成新密码', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     const editBtn = page.locator('text=/编辑|修改/i').first()
     if (await editBtn.isVisible().catch(() => false)) {
       await editBtn.click(); await page.waitForTimeout(500)
-      const reset = page.locator('text=/重置密码|重置/i').first()
-      if (await reset.isVisible().catch(() => false)) { await reset.click(); await page.waitForTimeout(800) }
+      const password = page.locator('input[autocomplete="new-password"]')
+      await expect(password).toHaveValue('')
+      await page.getByRole('button', { name: '随机生成' }).click()
+      await expect(password).not.toHaveValue('')
       const cancel = page.locator('text=/取消|关闭/i').first()
       if (await cancel.isVisible().catch(() => false)) await cancel.click()
     }
   })
-  test('USER-RESET-03. 权限：非admin重置密码返回403', async () => {
+  test('USER-RESET-03. 权限：非admin修改密码返回403', async () => {
     const token = await apiLogin('technician')
-    const res = await apiFetch(token, 'POST', '/users/test-id/reset-password', {})
+    const res = await apiFetch(token, 'PUT', '/users/test-id', { password: STRONG_TEST_PASSWORD })
     expect(res.status).toBe(403)
   })
 })
@@ -562,10 +569,14 @@ test.describe('用户管理 -> 业务流程树', () => {
     const toggle = page.locator('text=/停用|启用/i').first()
     if (await toggle.isVisible().catch(() => false)) { await toggle.click(); await page.waitForTimeout(800) }
   })
-  test('BF-USER-05. 分支：重置用户密码', async ({ page }) => {
+  test('BF-USER-05. 分支：编辑用户新密码', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
-    const reset = page.locator('text=/重置密码|重置/i').first()
-    if (await reset.isVisible().catch(() => false)) { await reset.click(); await page.waitForTimeout(800) }
+    const edit = page.locator('text=/编辑|修改/i').first()
+    if (await edit.isVisible().catch(() => false)) {
+      await edit.click(); await page.waitForTimeout(500)
+      await expect(page.locator('input[autocomplete="new-password"]')).toBeVisible()
+      await page.locator('text=/取消|关闭/i').first().click()
+    }
   })
   test('BF-USER-06. 分支：筛选后查看用户详情', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
@@ -597,10 +608,10 @@ test.describe('用户管理 -> 盲点分析补充', () => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     await expect(page.locator('table tbody span:text-matches(/正常|禁用/)').first()).toBeVisible()
   })
-  test('BLIND-USER-03. 新建用户初始密码默认显示', async ({ page }) => {
+  test('BLIND-USER-03. 新建用户生成强初始密码', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     await page.click('text=/新建用户|新建/i'); await page.waitForTimeout(500)
-    await expect(page.locator('text=/初始密码|Abc@123456|随机生成/i').first()).toBeVisible()
+    await expect(page.locator('text=/初始密码|随机生成/i').first()).toBeVisible()
     const cancel = page.locator('text=/取消|关闭/i').first()
     if (await cancel.isVisible().catch(() => false)) await cancel.click()
   })

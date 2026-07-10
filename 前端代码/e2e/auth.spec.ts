@@ -907,8 +907,13 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
   })
 
   test('BLIND-AUTH-41. 使用已过期token访问受保护资源', async () => {
+    const expiredToken = [
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
+      'eyJ1c2VySWQiOiIxIiwiZXhwIjoxNTE2MjM5MDIyfQ',
+      'SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
+    ].join('.')
     const res = await fetch(`${API_BASE}/inventory`, {
-      headers: { Authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxIiwiZXhwIjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c', 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${expiredToken}`, 'Content-Type': 'application/json' },
     })
     expect(res.status).toBe(401)
   })

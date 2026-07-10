@@ -80,11 +80,25 @@ export ADMIN_INITIAL_PASSWORD
 
 # npm start 会在导入应用前强制 NODE_ENV=production。
 npm start
+# 首次启动确认成功后按 Ctrl-C 停止前台进程，再清掉一次性变量并无该变量重启。
 unset ADMIN_INITIAL_PASSWORD
+# 显式空值同时覆盖可能残留在 .env 里的同名值。
+ADMIN_INITIAL_PASSWORD='' npm start
 ```
 
 `npm start` 不会信任 `.env` 中的 `NODE_ENV=development`。若遗留了开发占位
-`JWT_SECRET`，生产启动会直接报错退出，不会种默认 admin。
+`JWT_SECRET`，生产启动会直接报错退出，不会种默认 admin。生产启动只对历史默认种子创建的
+`admin`、`cangguan`、`jishuyuan1`、`yishi1`、`caigou`、`caiwu` 六账号做有界核验；其中任一
+仍活跃、未删除且匹配公开旧口令时都会 fail-closed 拒绝启动。旧库缺少 `status/is_deleted` 时
+按活跃处理；缺少 `username/password` 时因无法安全核验而拒绝启动。
+
+旧生产库升级时，先用 `docker compose run --rm --no-deps` 在同一数据库 volume 上执行
+`npm run reset-passwords`：一次传入 `RESET_ADMIN_PASSWORD`、`RESET_CANGGUAN_PASSWORD`、
+`RESET_JISHUYUAN1_PASSWORD`、`RESET_YISHI1_PASSWORD`、`RESET_CAIGOU_PASSWORD`、
+`RESET_CAIWU_PASSWORD`，确认原子更新 6 个账号成功后才能启动 backend。口令应逐个用
+`read -rsp` 读取并通过仅含变量名的 `-e VARIABLE_NAME` 传入，不能把实际值写在命令行；完整
+升级顺序和旧口令全量 `401` 验收见仓库根 `部署说明.md`。六个新口令必须彼此不同；任一账号
+缺失、重复目标、复用口令或弱口令都会在提交前整体失败，不会留下半量改密或成功误报。
 
 ## API 接口
 
@@ -128,7 +142,7 @@ unset ADMIN_INITIAL_PASSWORD
 
 ### 系统管理
 
-- `GET/POST /api/v1/users` — 用户（admin 专属）
+- `GET/POST /api/v1/users` — 用户（admin 专属；POST/PUT 密码统一执行强度与 bcrypt 72 字节门禁）
 - `GET/POST /api/v1/roles` — 角色（admin 专属）
 - `GET /api/v1/logs` — 操作日志
 
@@ -176,8 +190,14 @@ npm run test:node
 | PORT | 否 | 3001 | 服务端口 |
 | NODE_ENV | 否 | 开发配置为 development | `npm start` 强制 production；测试显式为 test |
 | FRONTEND_URL | 否 | — | CORS 允许的源 |
-| JWT_SECRET | **是** | — | JWT 签名密钥 |
+| JWT_SECRET | **是** | — | JWT 签名密钥；≥32 字符且拒绝低熵、常见与顺序模式 |
 | JWT_EXPIRES_IN | 否 | 8h | Access Token 有效期 |
 | REFRESH_TOKEN_EXPIRES_IN | 否 | 7d | Refresh Token 有效期 |
 | DATABASE_PATH | 否 | ./data/coreone.db | 数据库文件路径 |
-| ADMIN_INITIAL_PASSWORD | 否 | — | 仅首次生产建库受控创建 admin；需 ≥12 位且不得使用已泄露口令 |
+| ADMIN_INITIAL_PASSWORD | 否 | — | 仅首次生产建库受控创建 admin；空串视为未提供，非空需满足统一账号口令策略，否则拒绝启动 |
+| RESET_ADMIN_PASSWORD | 否 | — | 仅 `npm run reset-passwords` 使用；原子轮换历史 admin |
+| RESET_CANGGUAN_PASSWORD | 否 | — | 仅重置脚本使用；原子轮换 cangguan |
+| RESET_JISHUYUAN1_PASSWORD | 否 | — | 仅重置脚本使用；原子轮换 jishuyuan1 |
+| RESET_YISHI1_PASSWORD | 否 | — | 仅重置脚本使用；原子轮换 yishi1 |
+| RESET_CAIGOU_PASSWORD | 否 | — | 仅重置脚本使用；原子轮换 caigou |
+| RESET_CAIWU_PASSWORD | 否 | — | 仅重置脚本使用；原子轮换 caiwu |

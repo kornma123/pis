@@ -2076,3 +2076,29 @@ http://your-server-ip:8080
 
 **仍属运维/PM（不变）**：🔴事故层止血（吊销 Kimi/轮换生产 JWT/重置账号·须执行证据）+ **建议 `rm 本地 token.json`（真实 admin JWT·轮换后删）** + secret-scan 提升 required（PM 决策）+ 清史。
 *更新时间：2026-07-10*
+
+---
+
+## 2026-07-10 续 —— 🔴 PR #119 第四轮独立复审最终收口（扫描器 + 口令链 + 用户页）
+
+**线/边界**：在隔离 worktree `/Users/maxiaoyuan/.codex/worktrees/pr119-final-hardening/进销存` 修 PR #119 head，不触碰主工作树用户未跟踪文件，不合并。分支保护继续只要求当前 master 已存在的 `vitest` + `gate`；`secret-scan` workflow 在 #119 合入 master **之后**再设 required，避免主线还没该 check 时把 PR 治理锁死。
+
+**扫描器对抗收口**：范围扫改用 raw blob OID，merge/rename/非 UTF-8 路径不再变成空结果；UTF-8/UTF-16/GB18030 严格解码，binary 扫 ASCII runs，archive/超限/读取/解码失败全部 fail-closed；root scanner 和历史 auth denylist 只许 SHA/path/rule/line-hash 精确豁免。终审又复现「GB18030 lead byte 吞掉 ASCII secret 首字节」，改为只在 legacy fallback 时追加 ASCII-preserving 第二视图并去重；RED 复现后 selftest **50/50** 绿，独立 scanner review=CLEAN。workflow 取消会让旧扫描中途取消的 concurrency，保留完整 PR/push 历史检查。
+
+**运行时口令链**：
+- `security.ts` 把 JWT/账号口令强度口径统一：NFKC 后 Unicode 长度、bcrypt 72-byte 上限、字符多样性/Shannon 熵、近似重复/短模式/顺序串/常见弱口令/已泄露值全拒绝。终审命中 NFKC bypass：全角/混合全角公开默认值可绕 exact compare。现在 JWT 指纹与默认口令均同时查 raw + NFKC，重置脚本的多账号口令唯一性也用 NFKC key。该组 RED **3 fail** → GREEN **2 files/37 tests**。
+- `DatabaseManager` 在任何 DDL/迁移前校验显式 `ADMIN_INITIAL_PASSWORD`；旧库在任何写入前只有界扫历史 6 账号（最多 12 次 bcrypt compare），缺 username/password 列拒启。新回归证明弱值/空白显式值拒启后业务表数=0。
+- `users-v1.1` POST/PUT 都执行同一策略；禁用但仍保留历史泄露 hash 的账号不得无密码重启，必须在同一 PUT 内带合格新口令，状态+hash 同一 SQL 原子落库。
+- `reset-passwords` 支持 6 个独立 env + JSON 扩展，拒重复账号/口令复用/策略不合格，全部目标存在才事务 COMMIT，成功日志只在 COMMIT 后输出。
+
+**用户页/真契约**：原页面展示必败的静态「初始密码」且 payload 不发 password，另有两个真可点但后端从不存在的 `POST /users/:id/reset-password` 幽灵入口。现在创建/编辑表单真实提交 password，安全随机生成 20 个 NFKC 后互异字符，且映射后续端 common-fragment/sequence 规则；默认 `type=password` 遮罩，只有管理员显式点击才显示、10 秒自动恢复。删掉幽灵 reset 按钮/请求，改走真实 PUT。Playwright `users.spec.ts` 不再静默跳过：创建流真选角色+验证自动密码+提交+API GET 回查，改密流验真实 PUT 权限；`--list` **97 条**解析绿（未跑浏览器运行态）。
+
+**治理同步**：删 reset 幽灵后同步 build-discipline selftest 改为「不得回归」反向守卫，C1 幽灵 2→1；baseline `count/keys/targetMaxCount` **34→33**，棘轮只减不增。`docs/PM待拍板.md` B-4 现只留 logs/export，密码项标为 #119 已解；2026-07-06 存量快照追加 2026-07-10 后续状态。build-discipline selftest 全绿；`run-all --block=C1,C2,C3` 新增违规 0、required gate 绿。
+
+**最终验证**：后端 tsc 绿·安全聚焦 **6 files/63 tests**·后端串行全量 **124 files/1160 tests**全绿；前端 tsc + Vite 生产 build 绿·UTC 单 worker 全量 **51 files/320 tests**全绿；secret-scan selftest **50/50**·工作树 **1073 tracked paths**·`origin/master..HEAD` 5 commit range 全绿；workflow YAML·部署文档 bash fence·`git diff --check` 全绿。两路独立运行时/整体终审 + scanner 专项终审均=CLEAN。
+
+**诚实边界**：本机没有 Docker，故 Compose/旧库升级只做代码、YAML、shell fence 与 temp SQLite 验证，未真跑容器；Playwright 只做 97 条用例解析，未做页面运行态 E2E。生产 Kimi key 吊销、JWT 轮换、生产 6 账号改密与清历史仍需运维/仓库协调，不能用本 PR 代码绿冒充已完成。
+
+**PM 大白话**：这一轮不只是「把测试跑绿」，而是把几个可绕过的缝逐个变成会当场拦住的硬门：扫描器不再被编码吞前缀，禁用的旧口令账号不能一键复活，全角字也不能伪装成「新口令」，页面改密走的是真接口不是假按钮。代码已达到可交 Codex 再审的状态，但真正的生产密钥/账号轮换还必须由运维拿出执行证据。
+
+*更新时间：2026-07-10*
