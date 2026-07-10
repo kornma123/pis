@@ -79,6 +79,16 @@ async function login(username: string, password: string): Promise<string> {
   return res.data.token
 }
 
+async function expectRequestFailure(action: () => Promise<unknown>, expectedStatus = 400): Promise<void> {
+  try {
+    await action()
+  } catch (err: any) {
+    if (!String(err?.message || err).startsWith(`HTTP ${expectedStatus}:`)) throw err
+    return
+  }
+  throw new Error(`Expected request to fail with HTTP ${expectedStatus}`)
+}
+
 // ==================== 测试套件 ====================
 async function runTests() {
   log('🚀 自动化API测试开始')
@@ -1149,30 +1159,15 @@ async function runTests() {
   })
 
   await recordTest('BOUNDARY', '创建物料负价格被拒绝', async () => {
-    try {
-      await postJSON('/materials', { code: 'TEST-PRICE-NEG', name: '负价格测试', unit: '瓶', categoryId: 'CAT-HE-01', price: -1 }, tokens.admin)
-      throw new Error('Should fail')
-    } catch (e: any) {
-      // Expected to fail
-    }
+    await expectRequestFailure(() => postJSON('/materials', { code: 'TEST-PRICE-NEG', name: '负价格测试', unit: '瓶', categoryId: 'CAT-HE-01', price: -1 }, tokens.admin))
   })
 
   await recordTest('BOUNDARY', '入库数量=0', async () => {
-    try {
-      await postJSON('/inbound', { type: 'purchase', materialId: 'MAT-HE-001', quantity: 0, locationId: 'LOC-A01' }, tokens.admin)
-      throw new Error('Should fail')
-    } catch (e: any) {
-      // Expected to fail
-    }
+    await expectRequestFailure(() => postJSON('/inbound', { type: 'purchase', materialId: 'MAT-HE-001', quantity: 0, locationId: 'LOC-A01' }, tokens.admin))
   })
 
   await recordTest('BOUNDARY', '入库负数数量被拒绝', async () => {
-    try {
-      await postJSON('/inbound', { type: 'purchase', materialId: 'MAT-HE-001', quantity: -5, locationId: 'LOC-A01' }, tokens.admin)
-      throw new Error('Should fail')
-    } catch (e: any) {
-      // Expected to fail
-    }
+    await expectRequestFailure(() => postJSON('/inbound', { type: 'purchase', materialId: 'MAT-HE-001', quantity: -5, locationId: 'LOC-A01' }, tokens.admin))
   })
 
   await recordTest('BOUNDARY', '超大数据量分页', async () => {

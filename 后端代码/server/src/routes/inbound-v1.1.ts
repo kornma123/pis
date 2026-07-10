@@ -24,6 +24,13 @@ function generateInboundNo(): string {
   return `IB-${date}-${timestamp}-${random}`
 }
 
+function parseFinitePositiveNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
 router.get('/', (req, res) => {
   try {
     let { page = 1, pageSize = 20, status, type, materialId, keyword, startDate, endDate } = req.query
@@ -142,8 +149,12 @@ router.get('/:id/check-deletable', (req, res) => {
 router.post('/', requireWriteAccess, (req, res) => {
   try {
     const { type, materialId, batchNo, quantity, price, supplierId, locationId, purchaseOrderId, productionDate, expiryDate, remark } = req.body
-    if (!type || !materialId || !quantity || !locationId) {
+    if (!type || !materialId || quantity === undefined || !locationId) {
       error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
+    }
+    const normalizedQuantity = parseFinitePositiveNumber(quantity)
+    if (normalizedQuantity === null) {
+      error(res, 'Quantity must be a finite positive number', 'INVALID_PARAMETER', 400); return
     }
 
     const db = getDatabase()
@@ -160,7 +171,7 @@ router.post('/', requireWriteAccess, (req, res) => {
     if (!material) { error(res, 'Material not found', 'NOT_FOUND', 404); return }
 
     const unit = material.unit
-    const amount = (price || 0) * quantity
+    const amount = (price || 0) * normalizedQuantity
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
 
     // 查询采购订单信息
@@ -177,19 +188,19 @@ router.post('/', requireWriteAccess, (req, res) => {
       db.prepare(`
         INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_no, quantity, unit, price, amount, supplier_id, location_id, production_date, expiry_date, operator, status, remark, purchase_order_id, purchase_order_no)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)
-      `).run(id, inboundNo, type, materialId, batchNo || null, quantity, unit, price || 0, amount, supplierId || null, locationId, productionDate || null, expiryDate || null, operator, remark || null, purchaseOrderId || null, purchaseOrderNo)
+      `).run(id, inboundNo, type, materialId, batchNo || null, normalizedQuantity, unit, price || 0, amount, supplierId || null, locationId, productionDate || null, expiryDate || null, operator, remark || null, purchaseOrderId || null, purchaseOrderNo)
 
       if (batchNo) {
         const existingBatch = db.prepare('SELECT * FROM batches WHERE material_id = ? AND batch_no = ? AND status = 1').get(materialId, batchNo) as any
         if (existingBatch) {
           db.prepare('UPDATE batches SET quantity = quantity + ?, remaining = remaining + ? WHERE id = ?')
-            .run(quantity, quantity, existingBatch.id)
+            .run(normalizedQuantity, normalizedQuantity, existingBatch.id)
         } else {
           const batchId = uuidv4()
           db.prepare(`
             INSERT INTO batches (id, material_id, batch_no, quantity, remaining, production_date, expiry_date, inbound_id, inbound_price, supplier_id, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-          `).run(batchId, materialId, batchNo, quantity, quantity, productionDate || null, expiryDate || null, id, price || 0, supplierId || null)
+          `).run(batchId, materialId, batchNo, normalizedQuantity, normalizedQuantity, productionDate || null, expiryDate || null, id, price || 0, supplierId || null)
         }
       }
 
@@ -197,7 +208,7 @@ router.post('/', requireWriteAccess, (req, res) => {
       if (purchaseOrderId) {
         const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(purchaseOrderId) as any
         if (order) {
-          const newReceived = Number(order.received_qty) + quantity
+          const newReceived = Number(order.received_qty) + normalizedQuantity
           const orderedQty = Number(order.ordered_qty)
           const poStatus = newReceived >= orderedQty ? 'completed' : 'partial'
           db.prepare('UPDATE purchase_orders SET received_qty = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
@@ -208,21 +219,21 @@ router.post('/', requireWriteAccess, (req, res) => {
       const existingInv = db.prepare('SELECT * FROM inventory WHERE material_id = ?').get(materialId) as any
       if (existingInv) {
         db.prepare("UPDATE inventory SET stock = stock + ?, location_id = ?, last_inbound_id = ?, last_inbound_date = date('now','localtime'), update_time = CURRENT_TIMESTAMP WHERE material_id = ?")
-          .run(quantity, locationId, id, materialId)
+          .run(normalizedQuantity, locationId, id, materialId)
       } else {
         db.prepare(`
           INSERT INTO inventory (id, material_id, stock, locked_stock, location_id, last_inbound_id, last_inbound_date, update_time)
           VALUES (?, ?, ?, 0, ?, ?, date('now','localtime'), CURRENT_TIMESTAMP)
-        `).run(uuidv4(), materialId, quantity, locationId, id)
+        `).run(uuidv4(), materialId, normalizedQuantity, locationId, id)
       }
 
       const logId = uuidv4()
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
         VALUES (?, 'inbound', ?, ?, COALESCE((SELECT stock FROM inventory WHERE material_id = ?), 0) - ?, COALESCE((SELECT stock FROM inventory WHERE material_id = ?), 0), ?, 'inbound', ?)
-      `).run(logId, materialId, quantity, materialId, quantity, materialId, id, operator)
+      `).run(logId, materialId, normalizedQuantity, materialId, normalizedQuantity, materialId, id, operator)
 
-      responseEnvelope = buildSuccessEnvelope({ id, inboundNo, type, materialId, quantity, status: 'completed', purchaseOrderId, purchaseOrderNo }, 'Inbound created')
+      responseEnvelope = buildSuccessEnvelope({ id, inboundNo, type, materialId, quantity: normalizedQuantity, status: 'completed', purchaseOrderId, purchaseOrderNo }, 'Inbound created')
       if (idemKey) finalizeIdempotency(db, idemKey, 201, responseEnvelope)
       db.exec('COMMIT')
     } catch (err) {
@@ -243,9 +254,18 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!record) { error(res, 'Not found', 'NOT_FOUND', 404); return }
 
+    let normalizedQuantity: number | undefined
+    if (quantity !== undefined) {
+      const parsedQuantity = parseFinitePositiveNumber(quantity)
+      if (parsedQuantity === null) {
+        error(res, 'Quantity must be a finite positive number', 'INVALID_PARAMETER', 400); return
+      }
+      normalizedQuantity = parsedQuantity
+    }
+
     const fields: string[] = []; const params: any[] = []
     if (batchNo !== undefined) { fields.push('batch_no = ?'); params.push(batchNo || null) }
-    if (quantity !== undefined) { fields.push('quantity = ?'); params.push(quantity) }
+    if (normalizedQuantity !== undefined) { fields.push('quantity = ?'); params.push(normalizedQuantity) }
     if (price !== undefined) { fields.push('price = ?'); params.push(price || 0) }
     if (supplierId !== undefined) { fields.push('supplier_id = ?'); params.push(supplierId || null) }
     if (locationId !== undefined) { fields.push('location_id = ?'); params.push(locationId) }
@@ -255,7 +275,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     if (status !== undefined) { fields.push('status = ?'); params.push(status) }
 
     const oldQty = Number(record.quantity)
-    const newQty = quantity !== undefined ? Number(quantity) : oldQty
+    const newQty = normalizedQuantity !== undefined ? normalizedQuantity : oldQty
     const oldBatch = record.batch_no
     const newBatch = batchNo !== undefined ? batchNo : oldBatch
     const oldStatus = record.status
