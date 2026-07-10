@@ -8,6 +8,7 @@
 - **owner / author**: Codex（分支 `codex/agent-operating-contract`）
 - **reviewer**: 待 Claude Code / Codex 异构复核
 - **首次 fetch 后 base SHA**: `87923aba78a69a240bf82bab637c06febf29e366`
+- **开 PR 前同步后的 base SHA**: `0d05c663f43ddf828b1b2d35e0718c9e9288224a`（已含 DATA-1；PR #119 此时仍未合并）
 - **worktree**: `/Users/maxiaoyuan/.codex/worktrees/agent-operating-contract/进销存`
 - **PR URL**: 创建后以 GitHub / 最终回报为准
 - **merge authority**: required checks + 异构复核 + PM 明确批准；本任务不自动合并
@@ -73,6 +74,7 @@ preflight 自身不联网也不改 Git；fetch 是操作者在 develop 前的显
 - `node scripts/build-discipline/run-all.cjs --block=C1,C2`: C1/C2 无新增违规，C4/C5 结构门通过；C3 保持既有 warn 口径。
 - `node scripts/agent-preflight.cjs --mode=develop ...`: 当前只有 owned-dirty WARN，无 foreign/excluded dirty；全部权威与漂移检查通过。
 - 默认 worktree 报告现场列出 14 个“可回收候选”，仅输出未删除；是否清理由各 owner 另行确认。
+- 合入开 PR 前最新 master 后再次运行 develop preflight：PASS，behind=0、dirty=0，authority source 为当前工作树。
 - `git diff --check`: 提交前执行并记录在 PR body。
 
 ## 迁移、回滚与未覆盖边界
