@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import AppLayout from './components/layout/AppLayout'
 import Dashboard from './pages/Dashboard'
@@ -32,7 +32,7 @@ import EquipmentDepreciationStats from '@/pages/equipment/EquipmentDepreciationS
 import LaborTimeList from '@/pages/labor/LaborTimeList'
 import IndirectCostCenterList from '@/pages/cost-center/IndirectCostCenterList'
 import CostDashboard from '@/pages/cost/CostDashboard'
-import HospitalPnLDashboard from '@/pages/hospital-pnl/HospitalPnLDashboard'
+import HospitalCmDashboard from '@/pages/hospital-cm/HospitalCmDashboard'
 import PartnerConfigPage from '@/pages/partner-config/PartnerConfigPage'
 import AccountReconcilePage from '@/pages/account-reconcile/AccountReconcilePage'
 import ImportConsolePage from '@/pages/import-console/ImportConsolePage'
@@ -89,7 +89,9 @@ function App() {
           <Route path="/equipment/depreciation" element={<EquipmentDepreciationStats />} />
           <Route path="/labor-times" element={<LaborTimeList />} />
           <Route path="/indirect-costs" element={<IndirectCostCenterList />} />
-          <Route path="/hospital-pnl" element={<HospitalPnLDashboard />} />
+          <Route path="/hospital-cm" element={<HospitalCmDashboard />} />
+          {/* 旧「医院盈利看板」从未上线（PM 拍板 #108）→ 直接替换为院级贡献毛利看板；重定向保旧深链不成死链。 */}
+          <Route path="/hospital-pnl" element={<Navigate to="/hospital-cm" replace />} />
           <Route path="/account-reconcile" element={<AccountReconcilePage />} />
           <Route path="/partner-config" element={<PartnerConfigPage />} />
           <Route path="/import-console" element={<ImportConsolePage />} />

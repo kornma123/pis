@@ -33,7 +33,7 @@ const GOLDEN_MAIN: Array<[string, string]> = [
   ['物料分类', '/categories'],
   ['耗材管理', '/materials'],
   ['预警中心', '/alerts'],
-  ['医院盈利看板', '/hospital-pnl'],
+  ['院级贡献毛利', '/hospital-cm'], // 旧「医院盈利看板」/hospital-pnl 从未上线(PM #108)→替换为院级贡献毛利·P0 标准成本
   ['账实核对', '/account-reconcile'],
   ['合作医院配置', '/partner-config'],
   ['LIS 病例', '/lis-cases'],

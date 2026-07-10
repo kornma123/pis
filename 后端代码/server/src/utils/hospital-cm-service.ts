@@ -252,6 +252,8 @@ export interface HospitalCmTrendPoint {
   labRevenueInRate: number
   cmRate: number
   revenueCaseCount: number
+  /** 该月口径（§三.9·LEG-3）：跨月口径变更（仅染色→完整/混合）在趋势线上要标竖线，否则口径切换被读成业务波动。 */
+  caliber: '完整' | '仅染色' | '混合'
 }
 
 /** 某院月度趋势（按 service_month 时序·同账户历史·供第 2 层对照表的 trend 列）。 */
@@ -268,7 +270,37 @@ export function buildHospitalCmTrend(db: DbLike, partnerId: string): HospitalCmT
   const points: HospitalCmTrendPoint[] = []
   for (const [m, arr] of byMonth) {
     const h = rollupHospitalCm(arr, { serviceMonth: m })
-    points.push({ serviceMonth: m, hospitalCm: h.hospitalCm, labRevenueInRate: h.labRevenueInRate, cmRate: h.cmRate, revenueCaseCount: h.revenueCaseCount })
+    points.push({ serviceMonth: m, hospitalCm: h.hospitalCm, labRevenueInRate: h.labRevenueInRate, cmRate: h.cmRate, revenueCaseCount: h.revenueCaseCount, caliber: h.caliber })
   }
   return points.sort((a, b) => a.serviceMonth.localeCompare(b.serviceMonth))
+}
+
+/**
+ * **批量**院月趋势（一次装载·避免对照表逐院 N+1 重建价格账本/同义词索引）。
+ * 与 `buildHospitalCmTrend(db, pid)` **逐点等价**（同一 loadHospitalCmCases→rollupHospitalCm 路径），
+ * 但索引/同义词只建一次、case+marker 只全扫一次 → 对照表 N 家医院一次成型（而非 N 次重建）。
+ * 返回 Map<partnerId, 时序（升序）>。
+ */
+export function buildHospitalCmTrendByPartner(db: DbLike): Map<string, HospitalCmTrendPoint[]> {
+  const cases = loadHospitalCmCases(db, {}) // 全院全月一次装载（索引/同义词建一次）
+  const byPartnerMonth = new Map<string, Map<string, P0CaseCm[]>>()
+  for (const c of cases) {
+    if (!c.serviceMonth) continue
+    const months = byPartnerMonth.get(c.partnerId) ?? new Map<string, P0CaseCm[]>()
+    const arr = months.get(c.serviceMonth) ?? []
+    arr.push(c)
+    months.set(c.serviceMonth, arr)
+    byPartnerMonth.set(c.partnerId, months)
+  }
+  const out = new Map<string, HospitalCmTrendPoint[]>()
+  for (const [pid, months] of byPartnerMonth) {
+    const points: HospitalCmTrendPoint[] = []
+    for (const [m, arr] of months) {
+      const h = rollupHospitalCm(arr, { serviceMonth: m })
+      points.push({ serviceMonth: m, hospitalCm: h.hospitalCm, labRevenueInRate: h.labRevenueInRate, cmRate: h.cmRate, revenueCaseCount: h.revenueCaseCount, caliber: h.caliber })
+    }
+    points.sort((a, b) => a.serviceMonth.localeCompare(b.serviceMonth))
+    out.set(pid, points)
+  }
+  return out
 }

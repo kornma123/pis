@@ -118,7 +118,7 @@ function ActiveDetail({ item, hospitals, q, needConfirm, onCommit }: {
         <div className="text-[15px] font-semibold text-gray-900">{partnerName} · 已入库 {c.caseCount} 例</div>
         <div className="mt-1 text-[13px] text-gray-500">实验室收入 <b className="tabular-nums text-gray-900">{yuan(c.labRevenue)}</b> · 诊断与报告 {yuan(c.diagnosisSettle)} · 外送转出 {yuan(c.outSettle)}{c.unmatchedSettle > 0 && <> · 未识别 {yuan(c.unmatchedSettle)}（未计入）</>}</div>
         <div className="mt-4 flex items-center justify-center gap-2">
-          <Link to="/hospital-pnl" className={btnPri}>去看院级盈亏看板<ArrowRight className="h-4 w-4" /></Link>
+          <Link to="/hospital-cm" className={btnPri}>去看院级贡献毛利看板<ArrowRight className="h-4 w-4" /></Link>
           <button className={btnCls} onClick={() => q.removeItem(item.id)}>从队列移除</button>
         </div>
       </div>

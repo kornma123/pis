@@ -103,7 +103,7 @@ export const NAV_PATH_MODULE: Record<string, string> = {
   '/categories': 'categories', '/materials': 'materials', '/alerts': 'alerts',
   '/purchase-orders': 'purchase_orders', '/suppliers': 'suppliers', '/locations': 'locations',
   '/users': 'users', '/roles': 'roles', '/logs': 'logs',
-  '/hospital-pnl': 'cost_analysis',
+  '/hospital-cm': 'cost_analysis', // 院级贡献毛利看板（替换从未上线的旧 /hospital-pnl·PM #108·同 cost_analysis:R 读门·零 MODULES 漂移）
   // 注：/partner-config、/import-console、/import-wizard 不走模块能力（财务无 partners 等模块能力），
   //   改为按角色(finance/admin)放行——见 getAccessiblePaths，口径与后端 requireAnyRole('finance') 一致。
 
