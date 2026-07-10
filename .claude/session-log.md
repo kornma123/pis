@@ -1982,3 +1982,21 @@ http://your-server-ip:8080
 **验证**：`CI=1 playwright test e2e/hospital-cm.spec.ts` **4/4 绿**；前端 tsc 绿·C4 路由门 0 违规（顶层重定向路由仍在注册表 deprecated·match）·前端 vitest 316 passed(仅 2 pre-existing formatDate 时区基线)；dev DB 复原 clean。→ follow-up PR（base=master·vitest required 绿即可合）。参考记忆 [[coreone-hospital-cm-two-layer-frontend]]。
 
 *更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 本次会话 —— DATA-1 入库数值护栏与假绿测试修复
+
+**线/工作树**：独立 worktree `/Users/maxiaoyuan/.codex/worktrees/6749/进销存`，分支 `codex/data-1-inbound-material-guards`，开工前 `git fetch origin --prune`，基线 `origin/master=87923aba78a69a240bf82bab637c06febf29e366`。开工时唯一 open PR 为 #119；本任务未触碰其 auth / middleware/auth / DatabaseManager / docker-compose / env / token-debug / workflows / secret-scan / 密码重置文件域。
+
+**修复**：
+- `inbound-v1.1.ts` 的 POST/PUT 在事务和幂等键占位前把 quantity 归一为有限正数；`<=0`、`"Infinity"`、`"NaN"`、非数值字符串和非 number/string 输入统一返回 `400 INVALID_PARAMETER`，不进入入库记录、批次、库存、采购单收货量或库存日志写链。合法数字字符串继续兼容，落库和响应使用归一后的 number。
+- `materials.ts` 的创建/更新把 price 限定为有限非负数；创建时省略 price 仍默认为 0，显式负数、非有限值、空串/非数值输入统一 400，且不创建物料/库存行、不改已有物料。
+- `auto-api-test.ts` 三个边界用例不再把自己抛出的 `Should fail` 吞掉；改成只接受明确 HTTP 400 的 helper。该脚本仅修假绿，不作为完成证据。
+- 新增 required Vitest `tests/data-1-numeric-guards.test.ts`（`:memory:` + Supertest，20 用例）：POST/PUT quantity 覆盖 `-5`、`0`、`"Infinity"`、`"abc"`、`"NaN"`、合法正数；材料 create/update 覆盖负数、非有限、非数值、0/正数。非法请求逐次快照断言 `inbound_records`、`batches`、`inventory`、`purchase_orders.received_qty/status`、`stock_logs` 或材料/库存行零变化。
+
+**TDD 与验证**：实现前聚焦测试 **17 failed / 3 passed**（负数可写、非有限多为 500、材料非法价格被 201/200 接受）；实现后聚焦 **20/20 绿**。`npm run build` 绿；相关串行 Vitest **4 files / 46 tests 绿**（含 inbound 幂等、无 key 兼容、库存链、权限）；golden/ABC 精度 **3 files / 23 tests 绿**；完整 required Vitest 串行 **119 files / 1102 tests 全绿**；`git diff --check` 绿。
+
+**明确边界**：未给 batches/inventory 加 DB CHECK；未改 `DatabaseManager.ts`、tracked `coreone.db` 或历史负 remaining 漂移；未扩展到全系统其他数值端点。原因是本任务只收口 inbound POST/PUT 与 materials price 的服务端入口，DB CHECK 会改变存量数据/迁移面并超出本 PR 风险边界。
+
+*更新时间：2026-07-09*
