@@ -26,6 +26,8 @@ const AUTHORITY_FILES = [
   '.claude/rules/coreone-guardrails.md',
   '.claude/rules/pr-governance.md',
   '.claude/rules/codex-cli-usage.md',
+  // 契约 §1 权威链第 7 项：成本域任务按需读取，但文件始终在仓库中 → 存在性纳入检查，防悄悄删/改名后权威链断链。
+  'docs/COREONE-成本域文档-权威索引-2026-07-06.md',
 ]
 const LEGACY_GUIDES = [
   'GITHUB-WORKFLOW-GUIDE.md',
@@ -307,8 +309,10 @@ function inspectAuthority(root, args, checks) {
     'README.md',
   ]
   const highRiskRules = [
-    { name: 'bulk staging', re: /git\s+add\s+(?:\.|-A)(?:\s|`|$)/i },
-    { name: 'direct master push', re: /git\s+push(?:\s+[^\s`]+){0,3}\s+(?:master|main)(?:\s|`|$)/i },
+    { name: 'bulk staging', re: /git\s+add\s+(?:\.|-A|--all)(?:\s|`|$)/i },
+    // 覆盖 refspec 变体：`master` / `HEAD:master` / `master:master` / `+master` / `refs/heads/master`；
+    // master 前必须是 ref 边界（空白/冒号/加号/斜杠），避免误伤 `feature-master-fix` 这类分支名。
+    { name: 'direct master push', re: /git\s+push\b[^\n]*(?:^|[\s:+/])(?:refs\/heads\/)?(?:master|main)(?::|\s|`|$)/i },
     { name: 'retired dual-workbench model', re: /双工作台|会话\s*A\s*\(Roo\)/i },
     { name: 'retired specialist agent', re: /\b(?:planner|tdd-guide|code-reviewer|security-reviewer|build-error-resolver|e2e-runner|database-reviewer)\b/i },
   ]
@@ -324,9 +328,14 @@ function inspectAuthority(root, args, checks) {
   const dynamicFindings = []
   for (const file of stableFiles) {
     const text = contents[file] || ''
+    // 长裸 SHA（≥12 hex）或带 git 上下文的短 SHA（commit/sha/@ 前缀，≥7 hex）。
+    // 短 SHA 必须要求上下文，否则会误伤 `defaced` 等纯 a-f 英文单词。
     if (/\b[0-9a-f]{12,40}\b/i.test(text)) dynamicFindings.push(`${file}: literal SHA`)
+    else if (/(?:\bcommit\b|\bsha\b|@)\s*[`'"]?[0-9a-f]{7,40}\b/i.test(text)) dynamicFindings.push(`${file}: literal short SHA`)
     if (/\/pull\/\d+\b/.test(text)) dynamicFindings.push(`${file}: literal PR URL`)
-    if (/(?:tests?|测试)(?:数量|总数|=|：|:)?\s*\d+\b/i.test(text)) dynamicFindings.push(`${file}: literal test count`)
+    if (/(?:^|[\s(（【])#\d+\b/.test(text)) dynamicFindings.push(`${file}: literal PR reference`)
+    // 前导负向后顾（非字母）防止 `vitest`/`latest`/`fastest` 里的 `test` 子串被误判为计数漂移。
+    if (/(?<![a-zA-Z])(?:tests?|测试)(?:数量|总数)?[\s=：:]*\d+\b/i.test(text)) dynamicFindings.push(`${file}: literal test count`)
   }
   const governance = contents['.claude/rules/pr-governance.md'] || ''
   if (/活跃\s*PR\s*看板|\b(?:OPEN|MERGED|BLOCKED)\s*\(20\d\d-/i.test(governance)) dynamicFindings.push('.claude/rules/pr-governance.md: live-status ledger')

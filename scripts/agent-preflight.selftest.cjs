@@ -58,6 +58,7 @@ function installAuthorityFixture(root) {
   write(root, '.claude/rules/coreone-guardrails.md', '# Guardrails\n')
   write(root, '.claude/rules/pr-governance.md', '# PR governance\n\nRuntime state: `gh pr list`.\n')
   write(root, '.claude/rules/codex-cli-usage.md', '# Codex usage\n')
+  write(root, 'docs/COREONE-成本域文档-权威索引-2026-07-06.md', '# 成本域文档权威索引\n')
   write(root, 'README.md', `# Project\n\nSee [operating contract](${CONTRACT}).\n`)
   const superseded = `> **SUPERSEDED — DO NOT USE AS OPERATING INSTRUCTIONS.** See \`${CONTRACT}\`.\n\n`
   write(root, 'GITHUB-WORKFLOW-GUIDE.md', superseded + '# Historical Git guide\n')
@@ -251,6 +252,66 @@ check('legacy Git/E2E guides require a SUPERSEDED blocking header', () => {
   try {
     write(repo.work, 'GITHUB-WORKFLOW-GUIDE.md', '# Active-looking old guide\n\ngit push origin master\n')
     expectVerdict(run(repo.work, ['--mode=develop', '--owned=GITHUB-WORKFLOW-GUIDE.md']), 'FAIL', 1)
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+// --- Hardening 回归门（2026-07-09 Claude 补，源自 PR#121 对抗复核逮到的绕过/误伤缺口）---
+
+check('direct-master-push refspec 变体（HEAD:master / master:master / +master）被拒', () => {
+  for (const push of ['git push origin HEAD:master', 'git push origin master:master', 'git push -f origin +master', 'git push origin refs/heads/master']) {
+    const repo = setupRepo()
+    try {
+      write(repo.work, 'AGENTS.md', `# Codex adapter\n\nRead [the shared contract](${CONTRACT}) before acting.\n\n${push}\n`)
+      expectVerdict(run(repo.work, ['--mode=develop', '--owned=AGENTS.md']), 'FAIL', 1)
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  }
+})
+
+check('bulk-staging git add --all 被拒（不只 . 和 -A）', () => {
+  const repo = setupRepo()
+  try {
+    write(repo.work, 'AGENTS.md', `# Codex adapter\n\nRead [the shared contract](${CONTRACT}) before acting.\n\nRun git add --all before commit.\n`)
+    expectVerdict(run(repo.work, ['--mode=develop', '--owned=AGENTS.md']), 'FAIL', 1)
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('稳定文档里的短 SHA（commit 上下文）与 #NN PR 引用被拒', () => {
+  for (const snippet of ['merge commit 4a806b82', '见 #121 的历史', 'sha 1234567 已合']) {
+    const repo = setupRepo()
+    try {
+      append(repo.work, CONTRACT, `\n${snippet}\n`)
+      expectVerdict(run(repo.work, ['--mode=develop', `--owned=${CONTRACT}`]), 'FAIL', 1)
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  }
+})
+
+check('test-count 检测不误伤 "vitest N tests"（子串 test 不算计数漂移）', () => {
+  const repo = setupRepo()
+  try {
+    // 只加 vitest 计数、无其它动态事实：修复前 test-count 正则会把它误判为漂移→FAIL；修复后应只剩 owned-dirty WARN。
+    append(repo.work, '.claude/rules/pr-governance.md', '\n后端 vitest 757 tests，backend vitest 89 files。\n')
+    expectVerdict(run(repo.work, ['--mode=develop', '--owned=.claude/rules/pr-governance.md']), 'WARN', 0)
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('缺失成本域权威索引（契约权威链第 7 项）触发 authority.files 失败', () => {
+  const repo = setupRepo()
+  try {
+    // 提交删除，使工作树保持干净——隔离 authority.files 信号，避免被 foreign-dirty 掩盖成假绿。
+    fs.rmSync(path.join(repo.work, 'docs/COREONE-成本域文档-权威索引-2026-07-06.md'))
+    git(repo.work, ['add', '-A'])
+    git(repo.work, ['commit', '-q', '-m', 'drop cost-domain index'])
+    expectVerdict(run(repo.work, ['--mode=develop']), 'FAIL', 1)
   } finally {
     fs.rmSync(repo.tmp, { recursive: true, force: true })
   }
