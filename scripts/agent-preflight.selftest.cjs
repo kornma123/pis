@@ -331,6 +331,24 @@ for (const ok of ['Test: 200 means success', '测试：200 表示接口成功'])
   checkDoc(`非计数不误伤(轮2): ${ok}`, CONTRACT, ok, 'WARN', 0)
 }
 
+// ===== PR#122 复核轮3：push 通配/别名/转义/注释；add 按「有无正向 pathspec」判作用域 =====
+
+// #1c push --branches 别名、heads 通配 refspec、shell 转义被拒；行内注释、非 heads 通配不误伤。
+for (const push of ['git push origin --branches', 'git push origin refs/heads/*:refs/heads/*', 'git push origin m\\aster']) {
+  checkDoc(`直推 master 被拒(轮3): ${JSON.stringify(push)}`, 'AGENTS.md', push, 'FAIL', 1)
+}
+for (const safe of ['git push origin feature # master remains protected', 'git push origin feature:refs/tags/v1']) {
+  checkDoc(`安全 push 不误伤(轮3): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0)
+}
+// #2c add 作用域按「有无正向 pathspec」：--no-ignore-removal / 仅排除式 pathspec = 全仓被拒；-A/-u 带正向路径不误伤。
+for (const add of ['git add --no-ignore-removal', 'git add -- :!tmp.log', 'git add :!tmp.log']) {
+  checkDoc(`批量暂存被拒(轮3): ${JSON.stringify(add)}`, 'AGENTS.md', add, 'FAIL', 1)
+}
+// 注意负控路径不能含契约路径，否则会触发 adapter「恰好引用一次」检查而非本条要验的 add 逻辑。
+for (const safe of ['git add -A scripts/agent-preflight.cjs', 'git add -u -- 前端代码/src/foo.ts']) {
+  checkDoc(`精确暂存不误伤(轮3): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0)
+}
+
 check('缺失成本域权威索引（契约权威链第 7 项）触发 authority.files 失败', () => {
   const repo = setupRepo()
   try {

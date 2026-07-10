@@ -170,21 +170,24 @@ function sha256(text) {
 // 复核逮到：字面正则既能被引号/refspec/全局选项等价绕过，又会把 `master:feature`、`feature/master`
 // 这类安全命令误判成直推 master。改为解析参数、去配对引号，只按 refspec 目标端 / 全仓 pathspec 判定。
 
-const PROTECTED_BRANCHES = new Set(['master', 'main'])
 const GIT_VALUE_OPTS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
-// push 到所有分支/镜像 = 必然覆盖受保护分支，等同直推 master（PR#122 复核轮2）。
-const PUSH_ALL_FLAGS = new Set(['--all', '--mirror'])
-// 全仓暂存：pathspec `.`/`./`/`:/`、`-A/--all`，以及 `-u/--update`（暂存所有已跟踪改动，PR#122 复核轮2）。
-const WHOLE_REPO_PATHSPEC = new Set(['.', './', ':/', '-A', '--all', '-u', '--update'])
+// push 全部分支/镜像 = 必然覆盖受保护分支，等同直推 master（`--branches` 是 `--all` 的官方别名·复核轮2/3）。
+const PUSH_ALL_FLAGS = new Set(['--all', '--mirror', '--branches'])
+// `git add` 决定「暂存哪些改动」的选项（-A/--all/--no-ignore-removal 三同义 + -u/--update）；作用域另由 pathspec 决定（复核轮3）。
+const ADD_ALL_FLAGS = new Set(['-A', '--all', '--no-ignore-removal', '-u', '--update'])
+// 显式全仓 pathspec（无论有无 all-flag 都覆盖全仓）。
+const WHOLE_REPO_PATHSPEC = new Set(['.', './', ':/'])
+// 排除式 pathspec（`:!x` / `:^x` / `:(exclude)x`）：本身不限定正向范围，只在全仓基础上排除（复核轮3）。
+const EXCLUDE_PATHSPEC = /^:(?:!|\^|\(exclude\))/
 
-// 反斜杠续行归一：`\<换行>` → 空格，使跨行的一条命令按整条解析（PR#122 复核轮2）。
+// 反斜杠续行归一：`\<换行>` → 空格，使跨行的一条命令按整条解析（复核轮2）。
 function normalizeContinuations(text) {
   return text.replace(/\\\r?\n/g, ' ')
 }
 
-// 去掉 token 里的所有引号（含 token 内部的引号，如 `HEAD:'master'`）——语义比对只认裸值。
+// 去 shell 转义（`m\aster` → `master`）再去引号（含 token 内部引号 `HEAD:'master'`）——语义比对只认裸值（复核轮2/3）。
 function dequote(token) {
-  return token.replace(/['"]/g, '')
+  return token.replace(/\\(.)/g, '$1').replace(/['"]/g, '')
 }
 
 function tokenizeCommand(segment) {
@@ -195,21 +198,26 @@ function tokenizeCommand(segment) {
   return tokens
 }
 
-// 先做续行归一，再对每个 `git` 词取到行尾 / shell 分隔符（; | & 反引号）为止，切成 token 序列。
+// 先做续行归一，再对每个 `git` 词取到行尾 / shell 分隔符（; | & 反引号）为止；去 shell 注释（空白后的 #）后切 token（复核轮3）。
 function extractGitCommands(text) {
   const commands = []
   const re = /\bgit\b([^\n`;|&]*)/gi
   let match
   const normalized = normalizeContinuations(text)
-  while ((match = re.exec(normalized))) commands.push(tokenizeCommand(match[1]))
+  while ((match = re.exec(normalized))) commands.push(tokenizeCommand(match[1].split(/\s#/)[0]))
   return commands
 }
 
-// refspec 的目标端（冒号后；无冒号即整个 ref）落在受保护分支上 = 直推 master/main。
+// refspec 的目标端（冒号后；无冒号即整个 ref）落在受保护分支或 heads 通配上 = 直推 master/main（复核轮3 补通配）。
 function isProtectedPushDest(refspec) {
   const ref = refspec.replace(/^\+/, '')
   const dest = ref.includes(':') ? ref.slice(ref.lastIndexOf(':') + 1) : ref
-  return PROTECTED_BRANCHES.has(dest.replace(/^refs\/heads\//, ''))
+  let head
+  if (dest.startsWith('refs/heads/')) head = dest.slice('refs/heads/'.length)
+  else if (dest.startsWith('refs/')) return false // 非 heads 命名空间（tags/notes/…）不是分支推送
+  else head = dest
+  if (head.includes('*')) return true // heads 通配（如 refs/heads/*）会命中 master/main
+  return head === 'master' || head === 'main'
 }
 
 function isDirectMasterPush(tokens) {
@@ -225,14 +233,25 @@ function isDirectMasterPush(tokens) {
   return candidates.some(isProtectedPushDest)
 }
 
+// git add 的真实作用域：-A/-u/... 仅在【无正向限定 pathspec】时才作用于全仓；有 `.`/`./`/`:/` 则本就全仓；
+// 仅排除式 pathspec（`:!x`）以全仓为起点再排除，也算全仓（复核轮3：修正「有无 pathspec 语义」）。
 function isWholeRepoAdd(tokens) {
   let i = 0
   while (i < tokens.length && tokens[i] !== 'add') i += GIT_VALUE_OPTS.has(tokens[i]) ? 2 : 1
   if (i >= tokens.length) return false
-  return tokens
-    .slice(i + 1)
-    .filter((token) => token !== '--')
-    .some((arg) => WHOLE_REPO_PATHSPEC.has(arg))
+  let sawDoubleDash = false
+  let allFlag = false
+  let wholePathspec = false
+  let excludePathspec = false
+  let positivePathspec = false
+  for (const arg of tokens.slice(i + 1)) {
+    if (!sawDoubleDash && arg === '--') { sawDoubleDash = true; continue }
+    if (!sawDoubleDash && arg.startsWith('-')) { if (ADD_ALL_FLAGS.has(arg)) allFlag = true; continue }
+    if (WHOLE_REPO_PATHSPEC.has(arg)) wholePathspec = true
+    else if (EXCLUDE_PATHSPEC.test(arg)) excludePathspec = true
+    else positivePathspec = true
+  }
+  return wholePathspec || ((allFlag || excludePathspec) && !positivePathspec)
 }
 
 function addCheck(checks, id, status, summary, details = []) {
