@@ -73,22 +73,36 @@ function main(): void {
     }
   }
 
+  if (!process.env.DATABASE_PATH) {
+    console.warn(
+      '⚠️ 未设置 DATABASE_PATH —— 将操作 DatabaseManager 默认库路径（通常是本地开发库）。生产请显式设置 DATABASE_PATH。'
+    )
+  }
+
   const db = getDatabase()
   const find = db.prepare('SELECT id FROM users WHERE username = ?')
   const update = db.prepare('UPDATE users SET password = ? WHERE username = ?')
 
   let updated = 0
   const notFound: string[] = []
-  for (const t of targets) {
-    const row = find.get(t.username) as { id: string } | undefined
-    if (!row) {
-      notFound.push(t.username)
-      continue
+  // 事务：全部成功才提交；任一异常整体回滚（不留半量更新）。
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    for (const t of targets) {
+      const row = find.get(t.username) as { id: string } | undefined
+      if (!row) {
+        notFound.push(t.username)
+        continue
+      }
+      const hashed = bcrypt.hashSync(t.password, 12)
+      update.run(hashed, t.username)
+      updated += 1
+      console.log(`✅ 已重置口令：${t.username}`)
     }
-    const hashed = bcrypt.hashSync(t.password, 12)
-    update.run(hashed, t.username)
-    updated += 1
-    console.log(`✅ 已重置口令：${t.username}`)
+    db.exec('COMMIT')
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
   }
 
   if (notFound.length) console.warn(`⚠️ 未找到以下账号（跳过）：${notFound.join(', ')}`)

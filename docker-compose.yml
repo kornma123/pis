@@ -16,6 +16,8 @@ services:
       - JWT_EXPIRES_IN=8h
       - REFRESH_TOKEN_EXPIRES_IN=7d
       - DATABASE_PATH=/app/data/coreone.db
+      # 可选：受控创建初始 admin（不设=不创建任何默认账号）。口令须 ≥12 位、非默认弱口令。
+      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-}
     volumes:
       - coreone-data:/app/data
     networks:

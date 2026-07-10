@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, error } from '../utils/response.js'
 import { JWT_SECRET, authenticateToken } from '../middleware/auth.js'
+import { isFixtureEnv } from '../config/security.js'
 import { getEffectivePermissions, getUserRoleCodes, canSeeCost, getCostVisibilityRoles, requireAnyRole } from '../middleware/permissions.js'
 
 const router = Router()
@@ -30,10 +31,10 @@ router.post('/login', (req, res) => {
     const db = getDatabase()
     let user = db.prepare('SELECT * FROM users WHERE username = ? AND status = 1 AND is_deleted = 0').get(username) as any
 
-    // 兜底修复：仅在「开发/测试」环境恢复被软删除的夹具用户（E2E 软删后无法恢复的副作用）。
-    // 安全止血：生产环境「绝不」在登录时自动恢复软删除账号——否则禁用一个被攻破/默认账号
-    //   会被任何一次登录探测悄悄撤销（原逻辑对任意用户名、且在校验口令前就恢复，是账号封禁失效缺陷）。
-    if (!user && process.env.NODE_ENV !== 'production') {
+    // 兜底修复：仅在显式声明的 dev/test 环境恢复被软删除的夹具用户（E2E 软删后无法恢复的副作用）。
+    // 安全止血（fail-closed）：未声明为 dev/test 的环境「绝不」在登录时自动恢复软删除账号——否则
+    //   禁用一个被攻破/默认账号会被任何一次登录探测悄悄撤销（原逻辑对任意用户名、且在校验口令前就恢复）。
+    if (!user && isFixtureEnv()) {
       const softDeletedUser = db.prepare('SELECT * FROM users WHERE username = ? AND is_deleted = 1').get(username) as any
       if (softDeletedUser) {
         // 自动恢复被软删除的用户（E2E 测试副作用，仅开发/测试）

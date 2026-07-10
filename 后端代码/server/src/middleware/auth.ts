@@ -2,29 +2,18 @@ import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { getUserRoleCodes } from './permissions.js'
+import { assertJwtSecretUsable } from '../config/security.js'
 
 const jwtSecret = process.env.JWT_SECRET
 if (!jwtSecret) {
   throw new Error('JWT_SECRET environment variable is required')
 }
-// 安全止血：拒绝「已泄露/占位」的默认密钥与过弱密钥。这些值曾提交进公开仓库，
-// 用它们签发/校验 JWT 等于门户大开——任何人都能伪造任意角色（含 admin）的令牌。
-// 生产环境硬拒启动；开发/测试仅告警（沿用占位默认值以保持本地与 CI 连续性，不阻断）。
-const COMPROMISED_JWT_SECRETS = new Set<string>([
-  'coreone-jwt-secret-key-2024', // secret-scan:allow 已泄露的历史签名密钥（此处为拒绝清单，非泄露）
-  'coreone-secret-key-2024', // secret-scan:allow 更早的硬编码回退密钥（已移除，一并拒绝）
-  'your-jwt-secret-key-change-in-production', // secret-scan:allow .env.example 占位默认值
-])
-if (COMPROMISED_JWT_SECRETS.has(jwtSecret) || jwtSecret.length < 32) {
-  const reason = COMPROMISED_JWT_SECRETS.has(jwtSecret)
-    ? 'JWT_SECRET 使用了已泄露/占位的默认值'
-    : 'JWT_SECRET 过短（要求 ≥32 字符的高熵随机值）'
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      `${reason}；生产环境拒绝启动。请在部署环境注入强随机密钥，例如：openssl rand -base64 48`
-    )
-  }
-  console.warn(`[SECURITY] ${reason}。仅开发/测试环境放行——切勿用于生产部署。`)
+// 安全止血（fail-closed）：用已泄露/占位/过弱密钥签发/校验 JWT 等于门户大开——任何人都能
+// 伪造任意角色（含 admin）令牌。**默认拒绝启动**；仅显式 dev/test 放行并告警（见 config/security.ts）。
+// 判据 fail-closed：未声明 NODE_ENV（未设置/拼错/production/staging…）一律按生产级=拒绝。
+const secretCheck = assertJwtSecretUsable(jwtSecret)
+if (!secretCheck.ok) {
+  console.warn(`[SECURITY] ${secretCheck.reason}。仅显式 dev/test 环境放行——切勿用于生产部署。`)
 }
 export const JWT_SECRET = jwtSecret
 

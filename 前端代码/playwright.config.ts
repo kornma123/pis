@@ -39,6 +39,9 @@ export default defineConfig({
       url: 'http://localhost:3001/api/health',
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
+      // E2E 后端须以 development 运行：既落 app.listen（NODE_ENV!=='test'），又启用夹具账号种子
+      // （安全止血后 fail-closed：仅显式 dev/test 才种 admin/admin123 等，E2E 登录依赖它）。
+      env: { ...process.env, NODE_ENV: 'development' },
     },
     {
       command: 'npx vite --host',

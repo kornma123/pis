@@ -11,6 +11,10 @@
  *
  * 允许清单：任何一行含 `secret-scan:allow` 即跳过（用于 auth.ts 的拒绝清单定义等「记录而非泄露」处）。
  * 用法：node scripts/check-no-secrets.cjs   （CI: .github/workflows/secret-scan.yml）
+ *
+ * 已知局限（诚实口径）：只扫描当前工作树（tracked 文件的最终状态），**不扫历史/PR 中间提交**——
+ *   "先提交再删除"仍会绿。彻底根治泄露仍需清史（filter-repo）。本检测是「防新增泄露落地」的机器门，
+ *   非历史审计工具。建议把本检查提升为 master required check（分支保护，PM 决策）。
  */
 'use strict'
 const { execSync } = require('node:child_process')
@@ -37,8 +41,7 @@ const SKIP_EXT = new Set([
   '.gz', '.tgz', '.lock',
 ])
 const SKIP_PATH_SUFFIX = [
-  'scripts/check-no-secrets.cjs',
-  '.env.example',
+  'scripts/check-no-secrets.cjs', // 检测器自身含明文规则，必然"命中"——跳过
 ]
 
 function tracked() {

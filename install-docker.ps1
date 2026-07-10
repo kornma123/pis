@@ -80,6 +80,17 @@ Write-Host ""
 
 Set-Location $PSScriptRoot
 
+# 安全：容器缺少 JWT_SECRET 会拒绝启动。若本机 .env 未提供，则生成强随机密钥并持久化到 .env。
+$envFile = Join-Path $PSScriptRoot ".env"
+$hasSecret = (Test-Path $envFile) -and (Select-String -Path $envFile -Pattern '^JWT_SECRET=' -Quiet)
+if (-not $env:JWT_SECRET -and -not $hasSecret) {
+    $bytes = New-Object 'System.Byte[]' 48
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $secret = [Convert]::ToBase64String($bytes)
+    Add-Content -Path $envFile -Value "JWT_SECRET=$secret"
+    Write-Host "已生成强随机 JWT_SECRET 并写入 .env（compose 将读取）。" -ForegroundColor Yellow
+}
+
 Write-Host "构建并启动容器..." -ForegroundColor Yellow
 docker compose up -d --build
 
@@ -92,7 +103,7 @@ Write-Host ""
 Write-Host "COREONE 已启动！" -ForegroundColor Green
 Write-Host ""
 Write-Host "访问地址: http://localhost:8080" -ForegroundColor Cyan
-Write-Host "默认账号: admin / admin123" -ForegroundColor Cyan
+Write-Host "登录: 系统不再内置默认账号。如需初始管理员，设置 ADMIN_INITIAL_PASSWORD 后重启，或用 npm run reset-passwords。" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "常用命令:" -ForegroundColor Gray
 Write-Host "  docker compose logs -f    # 查看日志" -ForegroundColor Gray

@@ -2004,3 +2004,21 @@ http://your-server-ip:8080
 **留作后续硬化 PR（非 bleed-stop·本 PR 未含）**：登录限速/锁定、refresh-token type 校验、fail-open 复议、JWT `algorithms:['HS256']` 固定、首登强制改密。
 
 *更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 续 —— 🔴 独立复审 BLOCK 修复批（P0 fail-open + P1/P2·PR #119 第二轮）
+
+**背景**：PR #119 CI 全绿，但独立复审（fresh-clone 复现）判 **BLOCK**——发现**可复现的 P0 远程接管**：我上一版用 `NODE_ENV === 'production'` 作安全开关是 **fail-open**——**未设置/拼错 NODE_ENV**（部署常态）就绕过全部止血：种默认 admin、接受泄露密钥、登录自动复活软删除账号。复审全部成立，已按其合并门槛修。
+
+**核心修（fail-closed）**：新增 `src/config/security.ts` 单一判据——**危险夹具行为只在显式 `test`/`development`（或显式 `COREONE_SEED_DEFAULT_USERS=1`）放行；未声明环境一律按生产级=安全**。三处消费改用它：auth.ts（`assertJwtSecretUsable`·未声明环境遇泄露/占位/过弱密钥**抛错拒启**·dev/test 仅告警）、DatabaseManager（抽出可测 `seedDefaultUsers()`·未声明环境不种默认凭据/不强制启用·`ADMIN_INITIAL_PASSWORD` 须非泄露值+≥12）、routes/auth.ts（登录自动恢复软删除仅 `isFixtureEnv()`）。**泄露密钥明文移出运行时源码**→改 SHA-256 指纹比对（P2#8·清史不再受阻；明文仅存在于扫描器检测规则）。
+
+**配套**：e2e 后端改以 `NODE_ENV=development` 运行（既 `app.listen`[非 test] 又种夹具·playwright.config webServer.env + e2e.yml/e2e-full.yml）；`npm start` 路径修 `dist/src/app.js`（P1#4）；deploy 文档/installer 改为**先注入 JWT_SECRET 再启动**+**不再宣传默认 admin**（docker-compose 加 `ADMIN_INITIAL_PASSWORD` 透传·部署说明.md·install-docker.ps1 生成并持久化 JWT_SECRET 到 .env）；secret-scan 去掉 `.env.example` 跳过 + 诚实标注"只扫工作树非历史·建议提升为 required"（P1#5）；reset-passwords 加事务 + DATABASE_PATH 告警（P2#7）。
+
+**新增测试（P1#3·安全分支）**：`tests/security-env-guards.test.ts`（判据·含 `delete process.env.NODE_ENV` 测真实未设置路径——**踩到默认参数陷阱**：显式传 undefined 会触发 `=process.env.NODE_ENV` 默认值[vitest 里=test]，故真实未设置须删环境变量测）+ `tests/security-seed-users.test.ts`（`seedDefaultUsers` 生产级不种/拒 admin123/拒短/不复活·夹具环境行为不变）。
+
+**验证（≥ 复审的严格度）**：backend+frontend tsc 绿 · secret-scan 绿 · **vitest 120 files/1106 tests 全绿**×2（本地 .env / CI-sim 无 .env 注入 JWT_SECRET）· golden ¥13,152+¥27,870 零回归 · docker-compose YAML 有效。⭐**运行时冒烟三态（temp DB·不碰 tracked coreone.db）复现复审场景并证已闭**：A) `NODE_ENV=production`+强密钥→health 200 但 `admin/admin123` 登录 **401**（无默认 admin）；B) **未设 NODE_ENV**+占位密钥→**exit 1 不监听**（拒启）；C) `development`→`admin/admin123` **200**（夹具不回归）。
+
+**未纳入本 PR（诚实口径·PM 决策）**：secret-scan 提升为 **required**（分支保护改动·归 PM·待拍）；清史 blast 更正（P1#6：实为 **89 远程分支含泄露 + 20 worktree**，`filter-repo --mirror` 覆盖全 refs 但协调面大，非"blast 小"）；登录限速/token-type/fail-open/alg 固定仍属后续硬化 PR。
+
+*更新时间：2026-07-09*

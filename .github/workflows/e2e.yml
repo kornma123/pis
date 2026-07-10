@@ -19,6 +19,8 @@ env:
   # CI 专用一次性密钥（绝非生产值）。后端 .env 已从版本库移除，playwright webServer 启动的
   # 后端（tsx src/app.ts）需要非空 JWT_SECRET 才能启动。真实密钥仅经部署环境注入。
   JWT_SECRET: ci-throwaway-not-a-real-secret-do-not-use-in-prod
+  # E2E 后端以 development 运行：fail-closed 安全默认下，仅显式 dev/test 才种夹具账号（E2E 登录依赖）。
+  NODE_ENV: development
 
 jobs:
   e2e:

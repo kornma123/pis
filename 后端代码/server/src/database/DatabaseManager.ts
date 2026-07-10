@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import bcrypt from 'bcryptjs'
+import { allowDefaultFixtureUsers, initialAdminPasswordProblem } from '../config/security.js'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
@@ -165,6 +166,77 @@ export function reconcileFinanceAccountReconcilePerms(database: DatabaseSync): v
     if (obj.account_reconcile === 'W') return
     obj.account_reconcile = 'W'
     database.prepare('UPDATE roles SET permissions = ? WHERE code = ?').run(JSON.stringify(obj), 'finance')
+  }
+}
+
+/**
+ * 默认账号种子（安全止血·fail-closed，见 config/security.ts）。抽成独立可测函数。
+ * - allowFixtures=true（显式 dev/test 或 COREONE_SEED_DEFAULT_USERS=1）：种固定口令夹具账号
+ *   admin/admin123 + 5 角色/CoreOne2026! 并强制启用（E2E 依赖，行为与历史一致）。
+ * - allowFixtures=false（**未声明环境=生产级**）：不种任何固定口令账号、不强制启用；仅当无 admin
+ *   且提供**合格**的 ADMIN_INITIAL_PASSWORD（非泄露值 + ≥12 位）时受控创建 admin。
+ */
+export function seedDefaultUsers(
+  database: DatabaseSync,
+  opts?: { allowFixtures?: boolean; adminInitialPassword?: string }
+): void {
+  const allowFixtures = opts?.allowFixtures ?? allowDefaultFixtureUsers()
+  const adminInitialPassword = opts?.adminInitialPassword ?? process.env.ADMIN_INITIAL_PASSWORD
+
+  const existingAdmin = database.prepare('SELECT id FROM users WHERE username = ?').get('admin') as
+    | { id: string }
+    | undefined
+
+  if (allowFixtures) {
+    if (!existingAdmin) {
+      const hashedPassword = bcrypt.hashSync('admin123', 12)
+      database
+        .prepare('INSERT INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
+    }
+    // 确保 admin 始终可用（防止 E2E 测试软删除后无法恢复）
+    database.prepare('UPDATE users SET is_deleted = 0, status = 1 WHERE username = ?').run('admin')
+
+    // 插入 E2E 测试所需的标准角色用户 (密码: CoreOne2026!)
+    const testUsers = [
+      { id: 'USER-WHM', username: 'cangguan', realName: '王仓库', role: 'warehouse_manager', department: '病理科' },
+      { id: 'USER-TECH1', username: 'jishuyuan1', realName: '张技术', role: 'technician', department: '病理科' },
+      { id: 'USER-DOC1', username: 'yishi1', realName: '刘医师', role: 'pathologist', department: '病理科' },
+      { id: 'USER-PRO', username: 'caigou', realName: '赵采购', role: 'procurement', department: '设备科' },
+      { id: 'USER-FIN', username: 'caiwu', realName: '孙财务', role: 'finance', department: '财务科' },
+    ]
+    const hashedTestPw = bcrypt.hashSync('CoreOne2026!', 12)
+    const insertUser = database.prepare(
+      'INSERT OR IGNORE INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    )
+    for (const u of testUsers) {
+      insertUser.run(u.id, u.username, hashedTestPw, u.realName, u.role, u.department, 1)
+    }
+    // 确保 E2E 测试用户始终可用（防止被软删除后无法恢复）
+    database
+      .prepare("UPDATE users SET is_deleted = 0, status = 1 WHERE username IN ('cangguan','jishuyuan1','yishi1','caigou','caiwu')")
+      .run()
+    return
+  }
+
+  // 生产级（未声明环境）：不种固定口令账号、不强制启用既有账号。
+  if (!existingAdmin) {
+    if (adminInitialPassword) {
+      const problem = initialAdminPasswordProblem(adminInitialPassword)
+      if (problem) {
+        console.warn(`[SECURITY] 拒绝用 ADMIN_INITIAL_PASSWORD 创建 admin：${problem}。未创建默认 admin。`)
+      } else {
+        const hashedPassword = bcrypt.hashSync(adminInitialPassword, 12)
+        database
+          .prepare('INSERT INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
+        console.warn('[SECURITY] 已用 ADMIN_INITIAL_PASSWORD 创建初始 admin；请首次登录后立即改密。')
+      }
+    } else {
+      console.warn(
+        '[SECURITY] 未声明 dev/test 的环境未创建默认 admin（无已知口令账号）。请注入合格的 ADMIN_INITIAL_PASSWORD 或通过受控方式创建管理员。'
+      )
+    }
   }
 }
 
@@ -631,59 +703,9 @@ export function initializeDatabase(): void {
     )
   `)
 
-  // ── 默认账号种子（安全止血：生产环境默认不种已知口令账号，也不强制重新启用）──────────────
-  // 背景：本仓库曾公开，默认口令(admin123 / CoreOne2026!)与旧签名密钥一并泄露。
-  //   ① 生产（NODE_ENV=production）默认「不」创建已知口令账号、也「不」执行强制启用，
-  //      使被禁用/软删除的默认账号能持久生效；如需受控初始化管理员，注入 ADMIN_INITIAL_PASSWORD
-  //      （仅当 admin 不存在时创建，绝不强制启用既有 admin）。
-  //   ② 开发/测试/CI（含 e2e 依赖的固定夹具账号）行为不变——保留原有固定口令与强制启用，
-  //      维持本地开发与回归（committed coreone.db / vitest / e2e）连续性。
-  //   如确需在生产临时复现测试夹具，显式设 COREONE_SEED_DEFAULT_USERS=1（不安全，仅限受控环境）。
-  const seedDefaultFixtureUsers =
-    process.env.NODE_ENV !== 'production' || process.env.COREONE_SEED_DEFAULT_USERS === '1'
-
-  const stmt = database.prepare('SELECT * FROM users WHERE username = ?')
-  const defaultUser = stmt.get('admin') as any
-
-  if (seedDefaultFixtureUsers) {
-    // 开发/测试：保持原有固定口令夹具 + 强制启用（E2E 依赖，行为与历史一致）
-    if (!defaultUser) {
-      const hashedPassword = bcrypt.hashSync('admin123', 12)
-      database.prepare('INSERT INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
-    }
-    // 确保 admin 始终可用（防止 E2E 测试软删除后无法恢复）
-    database.prepare('UPDATE users SET is_deleted = 0, status = 1 WHERE username = ?').run('admin')
-
-    // 插入 E2E 测试所需的标准角色用户 (密码: CoreOne2026!)
-    const testUsers = [
-      { id: 'USER-WHM', username: 'cangguan', realName: '王仓库', role: 'warehouse_manager', department: '病理科' },
-      { id: 'USER-TECH1', username: 'jishuyuan1', realName: '张技术', role: 'technician', department: '病理科' },
-      { id: 'USER-DOC1', username: 'yishi1', realName: '刘医师', role: 'pathologist', department: '病理科' },
-      { id: 'USER-PRO', username: 'caigou', realName: '赵采购', role: 'procurement', department: '设备科' },
-      { id: 'USER-FIN', username: 'caiwu', realName: '孙财务', role: 'finance', department: '财务科' },
-    ]
-    const hashedTestPw = bcrypt.hashSync('CoreOne2026!', 12)
-    const insertUser = database.prepare(
-      'INSERT OR IGNORE INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    )
-    for (const u of testUsers) {
-      insertUser.run(u.id, u.username, hashedTestPw, u.realName, u.role, u.department, 1)
-    }
-    // 确保 E2E 测试用户始终可用（防止被软删除后无法恢复）
-    database.prepare("UPDATE users SET is_deleted = 0, status = 1 WHERE username IN ('cangguan','jishuyuan1','yishi1','caigou','caiwu')").run()
-  } else if (!defaultUser) {
-    // 生产（未显式 opt-in）：仅当无 admin 时用注入的强口令受控创建；绝不强制启用既有账号。
-    const initialAdminPw = process.env.ADMIN_INITIAL_PASSWORD
-    if (initialAdminPw && initialAdminPw.length >= 8) {
-      const hashedPassword = bcrypt.hashSync(initialAdminPw, 12)
-      database.prepare('INSERT INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
-      console.warn('[SECURITY] 已用 ADMIN_INITIAL_PASSWORD 创建初始 admin；请首次登录后立即改密。')
-    } else {
-      console.warn('[SECURITY] 生产环境未创建默认 admin（无已知口令账号）。请注入 ADMIN_INITIAL_PASSWORD 或通过受控方式创建管理员。')
-    }
-  }
+  // 默认账号种子（安全止血·fail-closed）：仅显式 dev/test 或 COREONE_SEED_DEFAULT_USERS=1 才种
+  // 固定口令夹具账号并强制启用；**未声明环境=生产级=不种默认凭据、不强制启用**（见 seedDefaultUsers）。
+  seedDefaultUsers(database)
 
   // 插入默认角色（E2E 测试依赖）+ 数据驱动 RBAC 初始种子矩阵（RBAC §8.2）
   const defaultRoles = [
