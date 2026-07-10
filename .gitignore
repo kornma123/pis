@@ -20,6 +20,17 @@
 .env.local
 .env.*.local
 
+# 泄露风险文件（安全止血 2026-07-09）：本地保留可用，但绝不入库
+# （gitignore 的 # 只在行首才是注释，故说明单独成行，勿写行内注释）
+# token.json = 保存的登录响应（含真实签名令牌）
+# start-claude.* = 本地启动脚本（曾硬编码 API Key）
+# 后端代码/server/debug-* = 调试脚本（曾硬编码默认口令）
+token.json
+start-claude.bat
+start-claude.ps1
+后端代码/server/debug-*.js
+后端代码/server/debug-*.cjs
+
 # OS files
 .DS_Store
 Thumbs.db

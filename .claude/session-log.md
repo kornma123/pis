@@ -1982,3 +1982,25 @@ http://your-server-ip:8080
 **验证**：`CI=1 playwright test e2e/hospital-cm.spec.ts` **4/4 绿**；前端 tsc 绿·C4 路由门 0 违规（顶层重定向路由仍在注册表 deprecated·match）·前端 vitest 316 passed(仅 2 pre-existing formatDate 时区基线)；dev DB 复原 clean。→ follow-up PR（base=master·vitest required 绿即可合）。参考记忆 [[coreone-hospital-cm-two-layer-frontend]]。
 
 *更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 本次会话续 —— 🔴 安全止血：公开仓库泄露签名密钥 + 默认凭据（并揪出第二枚活密钥）
+
+**触发**：用户报「疑似遭遇网络攻击」+ 独立复核指认公开仓库泄露固定 JWT 签名密钥 + 默认凭据（可远程伪造任意角色 JWT / admin/admin123 登录）。**核实=真数据先行**（报告用英文路径 backend/frontend·实际是 后端代码/前端代码）：全部属实 + **完备性 sweep（Workflow 5-agent 多镜头 + 对抗验证）逮到报告漏掉的更大暴露面**。
+
+**确认泄露（public 仓库 + git 历史·全部按已泄露处置）**：① JWT 签名密钥 `coreone-jwt-secret-key-…`〔脱敏〕（后端/前端 .env + docker-compose 默认回退 + 历史 bfa51840/3e33e81b）② 🆕 **第二枚活密钥 = Anthropic/Kimi API Key `sk-kimi-WWWy…`**（start-claude.bat/.ps1 + 历史 cc8659c9/a68a9c33·**须厂商侧吊销**）③ 🆕 token.json（真实 admin JWT）；🆕 更早的第二个 secret 字面值 `coreone-secret-key-…`〔脱敏〕（代码已移除·仍在 3 份 tracked 文档）④ 默认口令 admin123 / CoreOne2026!（5 角色）+ 每次启动强制重新启用。
+
+**🆕 auth 面缺陷（生产可达·报告未提）**：登录**自动恢复软删除账号**（禁用即失效被撤销）；无登录限速/锁定；refresh token 可当 access token（无 type 校验）；DB 异常时禁用校验 fail-open。**确认单一签名密钥 → 轮换即失效全部令牌**。
+
+**本 PR 代码止血（4 编辑 + CI 清理 + 重置脚本）**：docker-compose 删默认回退→`${JWT_SECRET:?}` 缺失即拒启；auth.ts 生产拒绝已泄露/占位/过短密钥（dev/test 仅 warn·NODE_ENV=test 故 CI 不红）+ 拒绝清单纳入两枚泄露值（`secret-scan:allow` 标记）；DatabaseManager 种子生产不再种默认凭据/不强制启用（dev/test 逐字不变·`ADMIN_INITIAL_PASSWORD` 受控 opt-in）；routes/auth.ts 登录生产不再自动恢复软删除账号。**CI 清理**：`git rm --cached` 两 .env + token.json + start-claude.* + 7 debug 脚本（本地保留·补 .gitignore）；**3 workflow 注入 CI 一次性 JWT_SECRET**（否则去 .env 后 vitest required 门变红——已 CI-sim 证明）；scrub 3 文档第二密钥字面值；新增 `scripts/check-no-secrets.cjs`（窄规则 + allow 标记）+ secret-scan workflow。**重置脚本** `后端代码/server/scripts/reset-passwords.ts`（env 传口令·拒弱/默认·不打印·不擅自启用）+ `npm run reset-passwords`。
+
+**验证**：backend tsc 绿·secret-scan 绿·**vitest 118 files/1082 tests 全绿**（golden ¥13,152+¥27,870 零回归）×2（本地 .env / **CI-sim 无 .env 仅注入 JWT_SECRET** 均绿）·docker-compose YAML(js-yaml) 有效。独立复核=Workflow 5-agent sweep+对抗验证（确认 4 代码编辑 SOUND 不破 CI·untrack .env 必配 CI 注入·secret-scan 需 allowlist·轮换失效全令牌）+ 逐条 Read 亲核。
+
+**PM 拍板（AskUserQuestion）**：① 仓库**保持 public**（不转 private）② **先轮换/吊销再清历史**（备好 filter-repo 清史步骤·**不 force-push**·待运维侧轮换后执行）③ 开**完整 PR**。
+
+**🔴 待用户运维侧执行（我无权触达其服务器/厂商账号·真正 bleed-stop）**：① 厂商吊销 Kimi/Anthropic key ② 轮换 JWT_SECRET（`openssl rand -base64 48`·仅经环境注入·重启失效全令牌）③ 重置 admin+5 角色口令 ④ 查 operation_logs/abc_audit_logs 异常。**清历史待轮换后执行**（清单：两 .env / token.json / start-claude.* / 两枚 secret 字面值 / coreone.db 内 bcrypt 哈希；无 open PR/fork 故 blast 小）。
+
+**留作后续硬化 PR（非 bleed-stop·本 PR 未含）**：登录限速/锁定、refresh-token type 校验、fail-open 复议、JWT `algorithms:['HS256']` 固定、首登强制改密。
+
+*更新时间：2026-07-09*

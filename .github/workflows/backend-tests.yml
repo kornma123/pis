@@ -24,6 +24,12 @@ jobs:
   vitest:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # CI 专用一次性密钥（绝非生产值）。后端 .env 已从版本库移除（曾含泄露的签名密钥），
+      # 因此这里必须显式注入非空 JWT_SECRET —— 否则 auth.ts 的空值检查会抛错、整套 vitest
+      # （master 的 required 门）直接变红。测试运行在 NODE_ENV=test，故 auth.ts 的「已泄露/
+      # 过弱密钥」分支只 console.warn、不阻断。真实密钥仅经部署环境注入。
+      JWT_SECRET: ci-throwaway-not-a-real-secret-do-not-use-in-prod
     defaults:
       run:
         working-directory: 后端代码/server

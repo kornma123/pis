@@ -30,11 +30,13 @@ router.post('/login', (req, res) => {
     const db = getDatabase()
     let user = db.prepare('SELECT * FROM users WHERE username = ? AND status = 1 AND is_deleted = 0').get(username) as any
 
-    // 兜底修复：如果登录失败，检查是否是admin或E2E测试用户被软删除了
-    if (!user) {
+    // 兜底修复：仅在「开发/测试」环境恢复被软删除的夹具用户（E2E 软删后无法恢复的副作用）。
+    // 安全止血：生产环境「绝不」在登录时自动恢复软删除账号——否则禁用一个被攻破/默认账号
+    //   会被任何一次登录探测悄悄撤销（原逻辑对任意用户名、且在校验口令前就恢复，是账号封禁失效缺陷）。
+    if (!user && process.env.NODE_ENV !== 'production') {
       const softDeletedUser = db.prepare('SELECT * FROM users WHERE username = ? AND is_deleted = 1').get(username) as any
       if (softDeletedUser) {
-        // 自动恢复被软删除的用户（E2E测试副作用）
+        // 自动恢复被软删除的用户（E2E 测试副作用，仅开发/测试）
         db.prepare('UPDATE users SET is_deleted = 0, status = 1 WHERE username = ?').run(username)
         // 重新查询
         user = db.prepare('SELECT * FROM users WHERE username = ? AND status = 1 AND is_deleted = 0').get(username) as any

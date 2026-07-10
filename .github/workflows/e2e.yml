@@ -16,6 +16,9 @@ concurrency:
 env:
   # 消除 Node.js 20 弃用警告，强制 action 使用 Node.js 24 运行时
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # CI 专用一次性密钥（绝非生产值）。后端 .env 已从版本库移除，playwright webServer 启动的
+  # 后端（tsx src/app.ts）需要非空 JWT_SECRET 才能启动。真实密钥仅经部署环境注入。
+  JWT_SECRET: ci-throwaway-not-a-real-secret-do-not-use-in-prod
 
 jobs:
   e2e:

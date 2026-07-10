@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/app.js",
     "seed": "tsx scripts/seed-acceptance-data.ts",
+    "reset-passwords": "tsx scripts/reset-passwords.ts",
     "lint": "eslint src/",
     "test": "vitest run",
     "test:node": "node --experimental-sqlite node_modules/vitest/vitest.mjs run"

@@ -10,7 +10,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - JWT_SECRET=${JWT_SECRET:-coreone-jwt-secret-key-2024}
+      # 安全：绝不内置默认密钥。JWT_SECRET 必须由部署环境注入（缺失即拒绝启动）。
+      # 生成示例：openssl rand -base64 48
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required — inject a strong random secret via the deploy environment; the old default was leaked and must not be reused}
       - JWT_EXPIRES_IN=8h
       - REFRESH_TOKEN_EXPIRES_IN=7d
       - DATABASE_PATH=/app/data/coreone.db
