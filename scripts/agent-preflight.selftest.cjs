@@ -303,6 +303,34 @@ for (const ok of ['使用 vitest runner 跑单测', 'Test 1 verifies fresh mode'
   checkDoc(`非计数不误伤: ${ok}`, CONTRACT, ok, 'WARN', 0)
 }
 
+// ===== PR#122 复核轮2：日常 shell / CI / 中文 / markdown 写法 =====
+
+// #1b push 续行/内引号/--all/--mirror 被拒。
+for (const push of ['git push origin \\\n  master', "git push origin HEAD:'master'", 'git push origin --all', 'git push --mirror origin']) {
+  checkDoc(`直推 master 被拒(轮2): ${JSON.stringify(push)}`, 'AGENTS.md', push, 'FAIL', 1)
+}
+// #2b add 续行/-u/--update 被拒。
+for (const add of ['git add -- \\\n  .', 'git add -u', 'git add --update']) {
+  checkDoc(`批量暂存被拒(轮2): ${JSON.stringify(add)}`, 'AGENTS.md', add, 'FAIL', 1)
+}
+// #3b 中文/markdown/commit-id 短 SHA 被拒；UUID 分段不误报。
+for (const snippet of ['当前提交：4a806b82', 'commit id: 4a806b82', 'commit **4a806b82**']) {
+  checkDoc(`短 SHA 被拒(轮2): ${snippet}`, CONTRACT, snippet, 'FAIL', 1)
+}
+checkDoc('UUID 不误报为 SHA', CONTRACT, '追踪号 123e4567-e89b-12d3-a456-426614174000', 'WARN', 0)
+// #4b markdown 包裹 #N 与 `PR 122` 被拒；`规则 #1` 不误报。
+for (const snippet of ['`#122`', '**#122**', 'PR 122 已合']) {
+  checkDoc(`PR 引用被拒(轮2): ${snippet}`, CONTRACT, snippet, 'FAIL', 1)
+}
+checkDoc('规则编号 #N 不误报为 PR 引用', CONTRACT, '规则 #1 必须遵守', 'WARN', 0)
+// #5b 标准测试输出/中文标签计数被拒；单数 Test: / 裸 测试： 不误报。
+for (const count of ['Tests 580 passed (580)', 'test count: 42', '测试总数 42', '共 42 项测试', '测试用例：42']) {
+  checkDoc(`测试计数被拒(轮2): ${count}`, CONTRACT, count, 'FAIL', 1)
+}
+for (const ok of ['Test: 200 means success', '测试：200 表示接口成功']) {
+  checkDoc(`非计数不误伤(轮2): ${ok}`, CONTRACT, ok, 'WARN', 0)
+}
+
 check('缺失成本域权威索引（契约权威链第 7 项）触发 authority.files 失败', () => {
   const repo = setupRepo()
   try {

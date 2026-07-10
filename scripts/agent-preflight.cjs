@@ -172,29 +172,36 @@ function sha256(text) {
 
 const PROTECTED_BRANCHES = new Set(['master', 'main'])
 const GIT_VALUE_OPTS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
-const WHOLE_REPO_PATHSPEC = new Set(['.', './', ':/', '-A', '--all'])
+// push 到所有分支/镜像 = 必然覆盖受保护分支，等同直推 master（PR#122 复核轮2）。
+const PUSH_ALL_FLAGS = new Set(['--all', '--mirror'])
+// 全仓暂存：pathspec `.`/`./`/`:/`、`-A/--all`，以及 `-u/--update`（暂存所有已跟踪改动，PR#122 复核轮2）。
+const WHOLE_REPO_PATHSPEC = new Set(['.', './', ':/', '-A', '--all', '-u', '--update'])
 
-function stripQuotes(token) {
-  if (token.length >= 2 && ((token[0] === '"' && token.endsWith('"')) || (token[0] === "'" && token.endsWith("'")))) {
-    return token.slice(1, -1)
-  }
-  return token
+// 反斜杠续行归一：`\<换行>` → 空格，使跨行的一条命令按整条解析（PR#122 复核轮2）。
+function normalizeContinuations(text) {
+  return text.replace(/\\\r?\n/g, ' ')
+}
+
+// 去掉 token 里的所有引号（含 token 内部的引号，如 `HEAD:'master'`）——语义比对只认裸值。
+function dequote(token) {
+  return token.replace(/['"]/g, '')
 }
 
 function tokenizeCommand(segment) {
   const tokens = []
   const re = /"[^"]*"|'[^']*'|\S+/g
   let match
-  while ((match = re.exec(segment))) tokens.push(stripQuotes(match[0]))
+  while ((match = re.exec(segment))) tokens.push(dequote(match[0]))
   return tokens
 }
 
-// 每个 `git` 词后取到行尾 / shell 分隔符（; | & 反引号）为止，切成 token 序列。
+// 先做续行归一，再对每个 `git` 词取到行尾 / shell 分隔符（; | & 反引号）为止，切成 token 序列。
 function extractGitCommands(text) {
   const commands = []
   const re = /\bgit\b([^\n`;|&]*)/gi
   let match
-  while ((match = re.exec(text))) commands.push(tokenizeCommand(match[1]))
+  const normalized = normalizeContinuations(text)
+  while ((match = re.exec(normalized))) commands.push(tokenizeCommand(match[1]))
   return commands
 }
 
@@ -208,7 +215,9 @@ function isProtectedPushDest(refspec) {
 function isDirectMasterPush(tokens) {
   const at = tokens.indexOf('push')
   if (at < 0) return false
-  const nonFlag = tokens.slice(at + 1).filter((token) => !token.startsWith('-'))
+  const rest = tokens.slice(at + 1)
+  if (rest.some((token) => PUSH_ALL_FLAGS.has(token))) return true
+  const nonFlag = rest.filter((token) => !token.startsWith('-'))
   if (!nonFlag.length) return false
   // 约定 `git push <remote> <refspec...>`：首个非 flag 是 remote，其余是 refspec；
   // 只有一个非 flag 时它可能是 remote 或直接 refspec，一并检查（over-catch 属保守，不漏判）。
@@ -388,17 +397,25 @@ function inspectAuthority(root, args, checks) {
   const dynamicFindings = []
   for (const file of stableFiles) {
     const text = contents[file] || ''
-    // 长裸 SHA（≥12 hex），或带 commit/sha 上下文（中英分隔符 :：=）的短 SHA（≥7 hex）。
-    // 短 SHA 必须要求上下文，否则误伤 `defaced` 等纯 a-f 英文单词；不再认无上下文的裸 `@`。
-    if (/\b[0-9a-f]{12,40}\b/i.test(text)) dynamicFindings.push(`${file}: literal SHA`)
-    else if (/\b(?:commit|sha)\b\s*[:：=]?\s*[`'"]?[0-9a-f]{7,40}\b/i.test(text)) dynamicFindings.push(`${file}: literal short SHA`)
+    // 先剥 markdown 行内包裹（`code`/**bold**），供 SHA/计数 检测，避免 `commit **4a**` 这类被包裹绕过。
+    const plain = text.replace(/[`*]/g, '')
+    // 长裸 SHA（≥12 hex），两侧不得是 hex/连字符——排除 UUID 分段（如 …a456-426614174000）。
+    if (/(?<![0-9a-f-])[0-9a-f]{12,40}(?![0-9a-f-])/i.test(plain)) dynamicFindings.push(`${file}: literal SHA`)
+    // 短 SHA（≥7 hex）必须带上下文：commit(/id/hash/sha)、sha、或中文「提交/基线」+ 中英分隔符 :：=。
+    // 要求上下文，否则误伤 `defaced` 等纯 a-f 英文单词；不再认无上下文的裸 `@`。
+    else if (/(?:\b(?:commit(?:\s+(?:id|hash|sha))?|sha)\b|提交|基线)\s*[:：=]?\s*[0-9a-f]{7,40}\b/i.test(plain)) dynamicFindings.push(`${file}: literal short SHA`)
+    // PR 引用（用原文，markdown 包裹本身即引用信号）：/pull/N、[#N]、`#N`、**#N**、PR/pull(±#)N；
+    // 弱语义词（依赖/上游/见/合并/merge…）必须带 #，避免把「规则 #1」「见 3 处」误当 PR 引用。
     if (/\/pull\/\d+\b/.test(text)) dynamicFindings.push(`${file}: literal PR URL`)
-    // #N / PR#N / [#N（markdown 链接） / (#N；markdown 标题「# 标题」有空格故 #\d 不命中。
-    if (/(?:^|[\s(（【\[]|PR)#\d+/i.test(text)) dynamicFindings.push(`${file}: literal PR reference`)
-    // 测试计数双向识别：`N tests`/`N 个测试`/`N 测试`，或带分隔符的 `tests: N`/`测试数量：N`。
-    // 要求「数字紧邻计数词」或「计数词+分隔符+数字」，故 `vitest`(无数字)放行、`Test 1 verifies`(散文序数无分隔符)不误伤，
-    // 而 `vitest 757 tests`(含真计数)按契约判红——修正上版把真计数锁成放行的反向错误。
-    if (/\d+\s*个?\s*(?:tests?\b|测试)/i.test(text) || /(?:tests?\b|测试(?:数量|总数)?)\s*[:：=]\s*\d+/i.test(text)) {
+    else if (/\[#\d+\]|`#\d+`|\*\*#\d+\*\*/.test(text)) dynamicFindings.push(`${file}: literal PR reference`)
+    else if (/(?:PR|pull(?:\s+request)?)\s*#?\s*\d+/i.test(text)) dynamicFindings.push(`${file}: literal PR reference`)
+    else if (/(?:依赖|上游|完成|取代|参见|见|合并|merge)\s*#\s*\d+/i.test(text)) dynamicFindings.push(`${file}: literal PR reference`)
+    // 测试计数（Codex 复核轮1+轮2）：英文复数 `Tests N` / `N tests` / `test count N`；
+    // 中文 `N 项|个|条 测试` / `测试 数量|总数|用例 N`。单数 `Test:`、裸 `测试：数字` 属散文，不当计数。
+    if (
+      /\btests\b[\s:：=]*\d+|\d+\s*tests?\b|\btest\s+count\b[\s:：=]*\d+/i.test(plain) ||
+      /\d+\s*[个项条]\s*测试|测试\s*(?:数量|总数|用例)\s*[:：=]?\s*\d+/.test(plain)
+    ) {
       dynamicFindings.push(`${file}: literal test count`)
     }
   }
