@@ -171,7 +171,7 @@ export function reconcileFinanceAccountReconcilePerms(database: DatabaseSync): v
 
 /**
  * 默认账号种子（安全止血·fail-closed，见 config/security.ts）。抽成独立可测函数。
- * - allowFixtures=true（显式 dev/test 或 COREONE_SEED_DEFAULT_USERS=1）：种固定口令夹具账号
+ * - allowFixtures=true（仅显式 dev/test）：种固定口令夹具账号
  *   admin/admin123 + 5 角色/CoreOne2026! 并强制启用（E2E 依赖，行为与历史一致）。
  * - allowFixtures=false（**未声明环境=生产级**）：不种任何固定口令账号、不强制启用；仅当无 admin
  *   且提供**合格**的 ADMIN_INITIAL_PASSWORD（非泄露值 + ≥12 位）时受控创建 admin。
@@ -703,7 +703,7 @@ export function initializeDatabase(): void {
     )
   `)
 
-  // 默认账号种子（安全止血·fail-closed）：仅显式 dev/test 或 COREONE_SEED_DEFAULT_USERS=1 才种
+  // 默认账号种子（安全止血·fail-closed）：仅显式 dev/test 才种
   // 固定口令夹具账号并强制启用；**未声明环境=生产级=不种默认凭据、不强制启用**（见 seedDefaultUsers）。
   seedDefaultUsers(database)
 

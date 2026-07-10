@@ -14,7 +14,7 @@
  *  - 口令只经环境变量传入（不要写进命令行明文历史/进程列表可见处时请谨慎）。脚本绝不打印口令。
  *  - 只更新已存在账号的口令；不改 is_deleted/status（不擅自重新启用被禁用账号）。
  *  - 拒绝弱口令（<12 字符）与已知泄露默认值（admin123 / CoreOne2026!）。
- *  - DATABASE_PATH 缺省时回退到 DatabaseManager 的默认库路径（本地开发库）。生产务必显式指定。
+ *  - DATABASE_PATH 必填；缺失时直接退出，避免误改本地库后却以为生产已重置。
  */
 import bcrypt from 'bcryptjs'
 import { getDatabase } from '../src/database/DatabaseManager.js'
@@ -74,9 +74,8 @@ function main(): void {
   }
 
   if (!process.env.DATABASE_PATH) {
-    console.warn(
-      '⚠️ 未设置 DATABASE_PATH —— 将操作 DatabaseManager 默认库路径（通常是本地开发库）。生产请显式设置 DATABASE_PATH。'
-    )
+    console.error('❌ 必须显式设置 DATABASE_PATH；未做任何更改。')
+    process.exit(1)
   }
 
   const db = getDatabase()
@@ -85,7 +84,8 @@ function main(): void {
 
   let updated = 0
   const notFound: string[] = []
-  // 事务：全部成功才提交；任一异常整体回滚（不留半量更新）。
+  // 事务：所有目标账号都存在才提交；任一不存在 → 整体回滚 + 非零退出（脚本只重置、绝不创建，
+  // 也不留半量更新——避免事故处理中把"更新 0 个"误当成"已改密成功"）。
   db.exec('BEGIN IMMEDIATE')
   try {
     for (const t of targets) {
@@ -99,14 +99,20 @@ function main(): void {
       updated += 1
       console.log(`✅ 已重置口令：${t.username}`)
     }
+    if (notFound.length) {
+      db.exec('ROLLBACK')
+      console.error(
+        `❌ 未找到账号：${notFound.join(', ')}。脚本只能重置已存在账号、不能创建；已整体回滚，未做任何更改。`
+      )
+      process.exit(1)
+    }
     db.exec('COMMIT')
   } catch (e) {
     db.exec('ROLLBACK')
     throw e
   }
 
-  if (notFound.length) console.warn(`⚠️ 未找到以下账号（跳过）：${notFound.join(', ')}`)
-  console.log(`\n完成：更新 ${updated} 个账号口令。${notFound.length ? `未找到 ${notFound.length} 个。` : ''}`)
+  console.log(`\n完成：更新 ${updated} 个账号口令。`)
   console.log('提醒：口令未被打印；请通过你自己保存的强口令登录并考虑首登后再次改密。')
 }
 

@@ -35,20 +35,20 @@ cd 后端代码/server
 npm install
 ```
 
-## 配置环境变量
+## 配置本地开发环境
 
 ```bash
 cp .env.example .env
 ```
 
-编辑 `.env`：
+编辑 `.env`（只用于 `npm run dev`）：
 
 ```env
 PORT=3001
 NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
 
-# JWT 认证（生产环境务必修改）
+# JWT 认证（本地开发占位值）
 JWT_SECRET=your-jwt-secret-key-change-in-production
 JWT_EXPIRES_IN=8h
 REFRESH_TOKEN_EXPIRES_IN=7d
@@ -69,8 +69,22 @@ npm run dev
 
 ```bash
 npm run build
+
+# 生产密钥必须来自部署环境/密钥管理器，不要写进仓库。
+export JWT_SECRET="$(openssl rand -base64 48)"
+export DATABASE_PATH=/var/lib/coreone/coreone.db
+
+# 可选：首次建库时受控创建 admin；输入不回显也不进 shell 历史。
+read -rsp "Initial admin password: " ADMIN_INITIAL_PASSWORD && echo
+export ADMIN_INITIAL_PASSWORD
+
+# npm start 会在导入应用前强制 NODE_ENV=production。
 npm start
+unset ADMIN_INITIAL_PASSWORD
 ```
+
+`npm start` 不会信任 `.env` 中的 `NODE_ENV=development`。若遗留了开发占位
+`JWT_SECRET`，生产启动会直接报错退出，不会种默认 admin。
 
 ## API 接口
 
@@ -160,9 +174,10 @@ npm run test:node
 | 变量名 | 必填 | 默认值 | 说明 |
 |--------|------|--------|------|
 | PORT | 否 | 3001 | 服务端口 |
-| NODE_ENV | 否 | development | 运行环境 |
+| NODE_ENV | 否 | 开发配置为 development | `npm start` 强制 production；测试显式为 test |
 | FRONTEND_URL | 否 | — | CORS 允许的源 |
 | JWT_SECRET | **是** | — | JWT 签名密钥 |
 | JWT_EXPIRES_IN | 否 | 8h | Access Token 有效期 |
 | REFRESH_TOKEN_EXPIRES_IN | 否 | 7d | Refresh Token 有效期 |
 | DATABASE_PATH | 否 | ./data/coreone.db | 数据库文件路径 |
+| ADMIN_INITIAL_PASSWORD | 否 | — | 仅首次生产建库受控创建 admin；需 ≥12 位且不得使用已泄露口令 |

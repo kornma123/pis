@@ -2,7 +2,7 @@
  * 安全默认（fail-closed）——安全止血 2026-07-09 复审后重做。
  *
  * ⚠️ 设计铁律：**默认安全**。危险的"开发夹具"行为（种默认口令账号 / 接受已泄露密钥 /
- * 登录自动恢复软删除账号）**只在显式声明的 test/development 环境**（或显式 opt-in 开关）才放行。
+ * 登录自动恢复软删除账号）**只在显式声明的 test/development 环境**才放行。
  * 任何**未声明**的 NODE_ENV（未设置、拼错、production、staging…）一律按生产级=安全处理。
  *
  * 背景：上一版用 `NODE_ENV === 'production'` 作为"安全开关"是 fail-open——部署漏配/拼错
@@ -20,13 +20,13 @@ export function isFixtureEnv(nodeEnv: string | undefined = process.env.NODE_ENV)
 
 /**
  * 是否允许种固定口令的夹具账号（admin/admin123 等）。
- * 默认关闭；仅显式 test/development，或显式 COREONE_SEED_DEFAULT_USERS=1（受控演示）才开。
+ * 默认关闭；仅显式 test/development 才开。生产/预发不提供任何
+ * “临时开回默认账号”的环境变量旁路。
  */
 export function allowDefaultFixtureUsers(
-  nodeEnv: string | undefined = process.env.NODE_ENV,
-  seedFlag: string | undefined = process.env.COREONE_SEED_DEFAULT_USERS
+  nodeEnv: string | undefined = process.env.NODE_ENV
 ): boolean {
-  return isFixtureEnv(nodeEnv) || seedFlag === '1'
+  return isFixtureEnv(nodeEnv)
 }
 
 export function sha256(input: string): string {

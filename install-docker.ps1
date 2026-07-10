@@ -103,7 +103,7 @@ Write-Host ""
 Write-Host "COREONE 已启动！" -ForegroundColor Green
 Write-Host ""
 Write-Host "访问地址: http://localhost:8080" -ForegroundColor Cyan
-Write-Host "登录: 系统不再内置默认账号。如需初始管理员，设置 ADMIN_INITIAL_PASSWORD 后重启，或用 npm run reset-passwords。" -ForegroundColor Cyan
+Write-Host "登录: 系统不再内置默认账号。初始 admin 的创建与已有账号重置请按 部署说明.md 执行。" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "常用命令:" -ForegroundColor Gray
 Write-Host "  docker compose logs -f    # 查看日志" -ForegroundColor Gray

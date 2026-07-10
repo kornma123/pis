@@ -2036,3 +2036,22 @@ http://your-server-ip:8080
 
 **明确边界**：未给 batches/inventory 加 DB CHECK；未改 `DatabaseManager.ts`、tracked `coreone.db` 或历史负 remaining 漂移；未扩展到全系统其他数值端点。原因是本任务只收口 inbound POST/PUT 与 materials price 的服务端入口，DB CHECK 会改变存量数据/迁移面并超出本 PR 风险边界。
 *更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 续² —— 🔴 独立复审第二轮 BLOCK 修复（PR #119·fail-closed 加固收口）
+
+**背景**：第二轮独立复审确认第一轮 P0（fail-open）已修，但仍 BLOCK：①PR 与 master 冲突/CI 过期 ②生产仍保留 `COREONE_SEED_DEFAULT_USERS=1` 默认账号旁路 ③重置脚本"零修改仍成功退出" ④开发服务 0.0.0.0 局域网暴露固定凭据 ⑤secret-scan 仍只扫工作树/非 required。本轮全部收口（本树已有并行会话开工，我在其基础上补齐两处缺口并统一验证/提交）。
+
+**已落地（含并行会话产出 + 我补齐）**：
+- **P1‑1 冲突/CI 过期** → 已 `merge origin/master`（含 #120），HEAD=merge commit，`HEAD..origin/master` 空；本次推送后 CI 在最新 base 重跑。
+- **P1‑2 生产默认账号旁路** → `security.ts` `allowDefaultFixtureUsers` **彻底删除 `COREONE_SEED_DEFAULT_USERS` 旁路**（只认显式 test/development）；DatabaseManager 注释同步。**冒烟证**：`NODE_ENV=production COREONE_SEED_DEFAULT_USERS=1` → `admin/admin123` 登录 **401**（不再种）。
+- **P1‑3 重置脚本假成功**（我补齐缺口）→ 原并行版已加"必填 DATABASE_PATH+校验先行+事务"，但**缺目标账号仍 COMMIT+exit 0**；我补 **任一目标不存在→整体 ROLLBACK+exit 1**（脚本只重置不创建）+ 新增 TDD（缺账号→exit 1、admin 口令未被改）。部署说明.md 已订正"reset 只更新已存在账号、不创建 admin"+ 正确初始 admin 路径（临时 ADMIN_INITIAL_PASSWORD 重建后删除）。
+- **P1‑4 开发服务 LAN 暴露**（我补齐）→ `app.ts` listen 改 **夹具环境绑 `127.0.0.1`、生产绑 `0.0.0.0`**（`isFixtureEnv()`；容器仍可达）。**冒烟证**：development → `running on 127.0.0.1`；production → `0.0.0.0`。
+- **P1‑5 secret-scan** → `check-no-secrets.cjs` 加 `--range base..head` **扫 PR/push 每个提交的变更文件态**（逮"先提交后删除"）+ `secret-scan.yml` `fetch-depth:0`+跑 selftest+range 扫；新增 `check-no-secrets.selftest.cjs`（4 断言变异证有牙）。**提升为 required 仍属 PM 决策**（未擅改分支保护）。
+- **npm start** → `start-production.mjs` 启动器**在 dotenv 前强制 `NODE_ENV=production`**（防遗留 dev .env 复活夹具）+ 修 `dist/src/app.js` 路径（build 证该文件存在）。
+
+**验证（≥复审严格度）**：backend tsc 绿 · scanner selftest 4/4 + working-tree 扫描绿 · **vitest 122 files/1130 tests 全绿**×2（本地 .env / CI-sim 无 .env 注入 JWT_SECRET）· golden ¥13,152+¥27,870 零回归 · build 出 `dist/src/app.js`。运行时冒烟四态（temp DB·不碰 tracked coreone.db）全过：production 无 admin(401)/production+旁路 flag 仍无 admin(401)/development admin123(200)+绑 127.0.0.1/未设 env+占位密钥拒启。
+
+**仍属运维/PM（非代码·诚实口径）**：🔴事故层止血未闭（吊销 Kimi Key/轮换生产 JWT/重置生产账号——须运维执行证据）；secret-scan 提升 required（PM 决策）；清史 blast=89 远程分支+worktree（`filter-repo --mirror` 覆盖全 refs·协调面大）。
+*更新时间：2026-07-09*

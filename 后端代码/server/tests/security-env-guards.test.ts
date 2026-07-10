@@ -7,6 +7,8 @@
  *    的用例用 `delete process.env.NODE_ENV` + 无参调用来测（这才是生产未配 NODE_ENV 的真实路径）。
  */
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   isFixtureEnv,
   allowDefaultFixtureUsers,
@@ -39,29 +41,31 @@ describe('isFixtureEnv —— 只认显式 test/development', () => {
 })
 
 describe('allowDefaultFixtureUsers —— 默认关闭', () => {
-  it('生产 / staging / 空串（无 opt-in）→ 不种默认账号', () => {
-    for (const v of NON_FIXTURE) expect(allowDefaultFixtureUsers(v, undefined)).toBe(false)
+  it('生产 / staging / 空串 → 不种默认账号', () => {
+    for (const v of NON_FIXTURE) expect(allowDefaultFixtureUsers(v)).toBe(false)
   })
   it('显式 test/development → 种', () => {
-    expect(allowDefaultFixtureUsers('test', undefined)).toBe(true)
-    expect(allowDefaultFixtureUsers('development', undefined)).toBe(true)
+    expect(allowDefaultFixtureUsers('test')).toBe(true)
+    expect(allowDefaultFixtureUsers('development')).toBe(true)
   })
-  it('COREONE_SEED_DEFAULT_USERS=1 才 opt-in；=0 不开', () => {
-    expect(allowDefaultFixtureUsers('production', '1')).toBe(true)
-    expect(allowDefaultFixtureUsers('production', '0')).toBe(false)
-    expect(allowDefaultFixtureUsers('staging', undefined)).toBe(false)
+  it('生产环境无默认账号 opt-in 旁路', () => {
+    const savedFlag = process.env.COREONE_SEED_DEFAULT_USERS
+    process.env.COREONE_SEED_DEFAULT_USERS = '1'
+    try {
+      expect(allowDefaultFixtureUsers('production')).toBe(false)
+      expect(allowDefaultFixtureUsers('staging')).toBe(false)
+    } finally {
+      if (savedFlag === undefined) delete process.env.COREONE_SEED_DEFAULT_USERS
+      else process.env.COREONE_SEED_DEFAULT_USERS = savedFlag
+    }
   })
   it('真正未设置 NODE_ENV（无参）→ false', () => {
     const savedEnv = process.env.NODE_ENV
-    const savedFlag = process.env.COREONE_SEED_DEFAULT_USERS
     delete process.env.NODE_ENV
-    delete process.env.COREONE_SEED_DEFAULT_USERS
     try {
       expect(allowDefaultFixtureUsers()).toBe(false)
     } finally {
       process.env.NODE_ENV = savedEnv
-      if (savedFlag === undefined) delete process.env.COREONE_SEED_DEFAULT_USERS
-      else process.env.COREONE_SEED_DEFAULT_USERS = savedFlag
     }
   })
 })
@@ -116,5 +120,20 @@ describe('initialAdminPasswordProblem —— 拒绝泄露口令与过短', () =>
   })
   it('合格强口令 → null', () => {
     expect(initialAdminPasswordProblem('S7rong-Passw0rd!')).toBeNull()
+  })
+})
+
+describe('npm start production entrypoint', () => {
+  it('forces production before importing the compiled application', () => {
+    const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as {
+      scripts: Record<string, string>
+    }
+    expect(packageJson.scripts.start).toContain('scripts/start-production.mjs')
+
+    const launcher = readFileSync(resolve('scripts/start-production.mjs'), 'utf8')
+    const forceIndex = launcher.indexOf("process.env.NODE_ENV = 'production'")
+    const importIndex = launcher.indexOf("import('../dist/src/app.js')")
+    expect(forceIndex).toBeGreaterThanOrEqual(0)
+    expect(importIndex).toBeGreaterThan(forceIndex)
   })
 })
