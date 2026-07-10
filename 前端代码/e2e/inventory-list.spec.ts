@@ -502,56 +502,9 @@ test.describe('库存列表 -> 批量操作', () => {
 })
 
 // ────────────────────────────────────────────
-// 7. Tab切换 (8 tests)
+// 7. Tab切换测试组已移除（「消耗对账」功能 2026-07-09 下线：库存列表不再有「使用中/已耗尽」标签页）
 // ────────────────────────────────────────────
-test.describe('库存列表 -> Tab切换', () => {
-  test('INV-TAB-01. 正常用例：切换到"使用中"Tab', async ({ page }) => {
-    await loginAs(page, 'admin')
-    await page.goto(`${FE_BASE}/inventory?tab=in_use`)
-    await page.waitForTimeout(800)
-  })
-  test('INV-TAB-02. 正常用例：切换到"已耗尽"Tab', async ({ page }) => {
-    await loginAs(page, 'admin')
-    await page.goto(`${FE_BASE}/inventory?tab=depleted`)
-    await page.waitForTimeout(800)
-  })
-  test('INV-TAB-03. 正常用例：切换回"全部"Tab', async ({ page }) => {
-    await loginAs(page, 'admin')
-    await page.goto(`${FE_BASE}/inventory?tab=all`)
-    await page.waitForTimeout(800)
-  })
-  test('INV-TAB-04. UI差异：各角色Tab可见', async ({ page }) => {
-    for (const role of INV_READ_ROLES) {
-      await loginAs(page, role)
-      await page.goto(`${FE_BASE}/inventory`)
-      await page.waitForTimeout(400)
-    }
-  })
-  test('INV-TAB-05. 并发：快速切换Tab', async ({ page }) => {
-    await loginAs(page, 'admin')
-    await page.goto(`${FE_BASE}/inventory?tab=all`)
-    await page.waitForTimeout(200)
-    await page.goto(`${FE_BASE}/inventory?tab=in_use`)
-    await page.waitForTimeout(200)
-    await page.goto(`${FE_BASE}/inventory?tab=depleted`)
-    await page.waitForTimeout(200)
-  })
-  test('INV-TAB-06. 异常恢复：Tab切换时API 500', async ({ page }) => {
-    await loginAs(page, 'admin')
-    await page.goto(`${FE_BASE}/inventory?tab=in_use`)
-    await page.waitForTimeout(800)
-  })
-  test('INV-TAB-07. 正常用例：Tab切换后筛选保持', async ({ page }) => {
-    await loginAs(page, 'admin')
-    await page.goto(`${FE_BASE}/inventory?tab=in_use&keyword=test`)
-    await page.waitForTimeout(800)
-  })
-  test('INV-TAB-08. 边界：非法Tab值', async ({ page }) => {
-    const token = await apiLogin('admin')
-    const res = await apiFetch(token, 'GET', '/inventory?tab=invalid_tab')
-    expect(res.status).toBe(200)
-  })
-})
+// （INV-TAB-01~08 已随「使用中/已耗尽」标签页一并删除；库存列表现只有在库单视图，无 Tab 切换。）
 
 // ────────────────────────────────────────────
 // 8. 角色权限矩阵补充 (12 tests)

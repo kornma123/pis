@@ -1,7 +1,7 @@
 {
   "_doc": "构建纪律闸 baseline（棘轮基线）：当前已接受的存量违规键集合。--block 只对不在此集合里的「新增」判红。修掉存量后 --update-baseline 收紧，只减不增。meta=per-entry 死线兑现(B.1/B.3)；targetMaxCount=净条数天花板(B.1)。见 lib/baseline-governance.cjs。",
   "generated": "运行 --update-baseline 生成（日期见 git 提交）",
-  "count": 37,
+  "count": 34,
   "keys": [
     "C1|GET|/logs/export",
     "C1|POST|/users/:/reset-password",
@@ -18,7 +18,6 @@
     "C2|GET|/antibody-cost/special-stains",
     "C2|GET|/auth/cost-visibility",
     "C2|GET|/auth/me/capabilities",
-    "C2|GET|/depletion/batches/:materialId",
     "C2|GET|/logs/operation",
     "C2|GET|/partner-pnl/cross-partner-audit",
     "C2|GET|/partners",
@@ -27,19 +26,17 @@
     "C2|POST|/antibody-cost/antibody-aliases",
     "C2|POST|/antibody-cost/cost-params/calibrate",
     "C2|POST|/auth/logout",
-    "C2|POST|/depletion/tracking/:id/deplete",
     "C2|POST|/outbound/bom",
     "C2|POST|/partners",
     "C2|PUT|/alerts/rules/:id",
     "C2|PUT|/antibody-cost/antibodies/:id",
     "C2|PUT|/antibody-cost/cost-params/:key",
     "C2|PUT|/auth/cost-visibility",
-    "C2|PUT|/depletion/tracking/:id/remain",
     "C2|PUT|/partners/:id",
     "C2|PUT|/supplier-returns/:id/refund-amount",
     "C3|abc_cost_drivers.calculation_method",
     "C3|indirect_cost_allocations.allocation_base_value",
     "C3|indirect_cost_centers.allocation_base"
   ],
-  "targetMaxCount": 37
+  "targetMaxCount": 34
 }

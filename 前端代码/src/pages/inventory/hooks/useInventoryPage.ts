@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
-import { inventoryApi, outboundApi, depletionApi, scrapApi } from '@/api/inventory'
+import { inventoryApi, outboundApi, scrapApi } from '@/api/inventory'
 import { bomApi } from '@/api/master'
 import { materialApi, projectApi, userApi } from '@/api/master'
 import type { InventoryItem, InventoryStats, Project } from '@/types'
@@ -19,7 +19,6 @@ interface InventoryRow extends InventoryItem {
 type SortField = 'quantity' | 'expiry' | null
 type SortDirection = 'asc' | 'desc'
 type QuickFilterType = 'all' | 'low-stock' | 'expiring-soon' | 'expiring-month' | 'expired' | 'out-of-stock'
-type TabType = 'in-stock' | 'in-use' | 'depleted'
 
 export function useInventoryPage() {
   // ===== URL 参数同步 =====
@@ -48,26 +47,8 @@ export function useInventoryPage() {
   const [batchScrapModalOpen, setBatchScrapModalOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<InventoryRow | null>(null)
 
-  // ===== 耗尽跟踪弹窗状态 =====
-  const [editRemainModalOpen, setEditRemainModalOpen] = useState(false)
-  const [confirmDepleteModalOpen, setConfirmDepleteModalOpen] = useState(false)
-  const [selectedDepletionItem, setSelectedDepletionItem] = useState<any | null>(null)
-  const [editRemainValue, setEditRemainValue] = useState('')
-  const [editRemainReason, setEditRemainReason] = useState('')
-  const [depleteType, setDepleteType] = useState<'normal' | 'expired'>('normal')
-  const [depleteRemainValue, setDepleteRemainValue] = useState('0')
-  const [expiredReason, setExpiredReason] = useState('')
-  const [expiredRemark, setExpiredRemark] = useState('')
-
-  // ===== Tab 切换 =====
-  const [activeTab, setActiveTab] = useState<TabType>('in-stock')
-
   // ===== 分组展开状态 =====
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-
-  // ===== 耗尽跟踪数据 =====
-  const [depletionTracking, setDepletionTracking] = useState<any[]>([])
-  const [depletedRecords, setDepletedRecords] = useState<any[]>([])
 
   // ===== 项目和用户列表 =====
   const [projectList, setProjectList] = useState<Project[]>([])
@@ -183,24 +164,6 @@ export function useInventoryPage() {
     }
   }, [])
 
-  const fetchDepletionTracking = useCallback(async () => {
-    try {
-      const res: any = await depletionApi.getTracking({ status: 'in-use' })
-      setDepletionTracking(res?.list || [])
-    } catch (e) {
-      console.error(e)
-    }
-  }, [])
-
-  const fetchDepletedRecords = useCallback(async () => {
-    try {
-      const res: any = await depletionApi.getDepletion()
-      setDepletedRecords(res?.list || [])
-    } catch (e) {
-      console.error(e)
-    }
-  }, [])
-
   const fetchBomList = useCallback(async () => {
     setBomLoading(true)
     try {
@@ -242,9 +205,7 @@ export function useInventoryPage() {
     fetchStats()
     fetchProjects()
     fetchUsers()
-    fetchDepletionTracking()
-    fetchDepletedRecords()
-  }, [fetchStats, fetchProjects, fetchUsers, fetchDepletionTracking, fetchDepletedRecords])
+  }, [fetchStats, fetchProjects, fetchUsers])
 
   const computedStats = useMemo(() => {
     if (!stats) {
@@ -616,8 +577,6 @@ export function useInventoryPage() {
     stats,
     computedStats,
     quickFilterCounts,
-    depletionTracking,
-    depletedRecords,
     projectList,
     userList,
 
@@ -630,7 +589,6 @@ export function useInventoryPage() {
     sortDirection,
     selectedIds,
     expandedGroups,
-    activeTab,
 
     // 弹窗状态
     outboundModalOpen,
@@ -638,15 +596,6 @@ export function useInventoryPage() {
     batchOutboundModalOpen,
     batchScrapModalOpen,
     selectedItem,
-    editRemainModalOpen,
-    confirmDepleteModalOpen,
-    selectedDepletionItem,
-    editRemainValue,
-    editRemainReason,
-    depleteType,
-    depleteRemainValue,
-    expiredReason,
-    expiredRemark,
     materialSelectorOpen,
     materialList,
     materialKeyword,
@@ -673,21 +622,11 @@ export function useInventoryPage() {
     setSortDirection,
     setSelectedIds,
     setExpandedGroups,
-    setActiveTab,
     setOutboundModalOpen,
     setDetailModalOpen,
     setBatchOutboundModalOpen,
     setBatchScrapModalOpen,
     setSelectedItem,
-    setEditRemainModalOpen,
-    setConfirmDepleteModalOpen,
-    setSelectedDepletionItem,
-    setEditRemainValue,
-    setEditRemainReason,
-    setDepleteType,
-    setDepleteRemainValue,
-    setExpiredReason,
-    setExpiredRemark,
     setMaterialSelectorOpen,
     setMaterialList,
     setMaterialKeyword,
