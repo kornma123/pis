@@ -19,6 +19,17 @@
 - **excluded files**: auth、`middleware/auth`、DatabaseManager、docker-compose、环境/密钥/debug、backend/e2e/secret-scan workflows、入库/物料路由及测试、产品业务功能、成本算法、权限矩阵、tracked DB。
 - **owner 规则**: 一项文件一个实现 owner；另一模型只复核不代写。本 owner 当前只维护这一条实现 PR。
 
+## 依赖图
+
+```text
+origin/master（已含 DATA-1 / #120） ──> 本 PR（独立、非栈式）
+PR #119（认证/密钥修复） ── 无代码依赖、全域排除 ──┘
+
+本 PR ──> required checks ──> Claude/Codex 异构复核 ──> PM 明确批准 ──> 人工合并
+```
+
+若 PR #119 在本 PR 评审期间先合入 master，本分支必须再同步 master、确认零越界并重跑验证；不能借同步机会修改其 auth/secret 域。
+
 ## 现场审计：当前状态 → 目标状态
 
 | 现场事实 | 风险 | 本任务目标 |
