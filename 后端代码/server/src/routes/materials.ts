@@ -9,6 +9,13 @@ const router = Router()
 // 物料写入权限：仅 admin 可操作
 const requireMaterialWrite = requirePermission('materials', 'W')
 
+function parseFiniteNonNegativeNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
 router.get('/', (req, res) => {
   try {
     let { page = 1, pageSize = 20, keyword, categoryId, supplierId, status } = req.query
@@ -125,6 +132,11 @@ router.post('/', requireMaterialWrite, (req, res) => {
       error(res, 'Name, unit and category required', 'INVALID_PARAMETER', 400)
       return
     }
+    const normalizedPrice = price === undefined ? 0 : parseFiniteNonNegativeNumber(price)
+    if (normalizedPrice === null) {
+      error(res, 'Price must be a finite non-negative number', 'INVALID_PARAMETER', 400)
+      return
+    }
 
     const db = getDatabase()
     const id = uuidv4()
@@ -140,7 +152,7 @@ router.post('/', requireMaterialWrite, (req, res) => {
     db.prepare(`
       INSERT INTO materials (id, code, name, spec, unit, spec_qty, spec_unit, category_id, supplier_id, price, min_stock, max_stock, safety_stock, location_id, status, remark)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-    `).run(id, finalCode, name, spec || null, unit, specQty || 0, specUnit || null, categoryId, supplierId || null, price || 0, minStock || 0, maxStock || 999999, safetyStock || 0, locationId || null, remark || null)
+    `).run(id, finalCode, name, spec || null, unit, specQty || 0, specUnit || null, categoryId, supplierId || null, normalizedPrice, minStock || 0, maxStock || 999999, safetyStock || 0, locationId || null, remark || null)
 
     const invId = uuidv4()
     db.prepare(`INSERT INTO inventory (id, material_id, stock, locked_stock, location_id) VALUES (?, ?, 0, 0, ?)`)
@@ -162,6 +174,16 @@ router.put('/:id', requireMaterialWrite, (req, res) => {
     const existing = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(id)
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
 
+    let normalizedPrice: number | undefined
+    if (data.price !== undefined) {
+      const parsedPrice = parseFiniteNonNegativeNumber(data.price)
+      if (parsedPrice === null) {
+        error(res, 'Price must be a finite non-negative number', 'INVALID_PARAMETER', 400)
+        return
+      }
+      normalizedPrice = parsedPrice
+    }
+
     const fields: string[] = []
     const params: any[] = []
 
@@ -173,7 +195,7 @@ router.put('/:id', requireMaterialWrite, (req, res) => {
     if (data.specUnit !== undefined) { fields.push('spec_unit = ?'); params.push(data.specUnit) }
     if (data.categoryId !== undefined) { fields.push('category_id = ?'); params.push(data.categoryId) }
     if (data.supplierId !== undefined) { fields.push('supplier_id = ?'); params.push(data.supplierId) }
-    if (data.price !== undefined) { fields.push('price = ?'); params.push(data.price) }
+    if (normalizedPrice !== undefined) { fields.push('price = ?'); params.push(normalizedPrice) }
     if (data.minStock !== undefined) { fields.push('min_stock = ?'); params.push(data.minStock) }
     if (data.maxStock !== undefined) { fields.push('max_stock = ?'); params.push(data.maxStock) }
     if (data.safetyStock !== undefined) { fields.push('safety_stock = ?'); params.push(data.safetyStock) }
