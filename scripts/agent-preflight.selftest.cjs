@@ -59,6 +59,7 @@ function installAuthorityFixture(root) {
   write(root, '.claude/rules/pr-governance.md', '# PR governance\n\nRuntime state: `gh pr list`.\n')
   write(root, '.claude/rules/codex-cli-usage.md', '# Codex usage\n')
   write(root, 'docs/COREONE-成本域文档-权威索引-2026-07-06.md', '# 成本域文档权威索引\n')
+  write(root, 'sub/fixture.txt', 'subdirectory fixture\n')
   write(root, 'README.md', `# Project\n\nSee [operating contract](${CONTRACT}).\n`)
   const superseded = `> **SUPERSEDED — DO NOT USE AS OPERATING INSTRUCTIONS.** See \`${CONTRACT}\`.\n\n`
   write(root, 'GITHUB-WORKFLOW-GUIDE.md', superseded + '# Historical Git guide\n')
@@ -261,12 +262,18 @@ check('legacy Git/E2E guides require a SUPERSEDED blocking header', () => {
 
 // 往指定权威文件追加一段文本后跑 develop，断言 verdict/exit。
 // FAIL=该段应被漂移门拦；WARN(exit0)=该段合法、仅剩 owned-dirty（即「不误伤」的正控）。
-function checkDoc(name, file, snippet, verdict, exit) {
+function checkDoc(name, file, snippet, verdict, exit, checkId = null, checkStatus = null) {
   check(name, () => {
     const repo = setupRepo()
     try {
       append(repo.work, file, `\n${snippet}\n`)
-      expectVerdict(run(repo.work, ['--mode=develop', `--owned=${file}`]), verdict, exit)
+      const result = run(repo.work, ['--mode=develop', `--owned=${file}`])
+      expectVerdict(result, verdict, exit)
+      if (checkId) {
+        const target = result.json.checks.find((item) => item.id === checkId)
+        assert.ok(target, `missing check ${checkId}`)
+        assert.equal(target.status, checkStatus || (verdict === 'FAIL' ? 'FAIL' : 'PASS'))
+      }
     } finally {
       fs.rmSync(repo.tmp, { recursive: true, force: true })
     }
@@ -347,6 +354,233 @@ for (const add of ['git add --no-ignore-removal', 'git add -- :!tmp.log', 'git a
 // 注意负控路径不能含契约路径，否则会触发 adapter「恰好引用一次」检查而非本条要验的 add 逻辑。
 for (const safe of ['git add -A scripts/agent-preflight.cjs', 'git add -u -- 前端代码/src/foo.ts']) {
   checkDoc(`精确暂存不误伤(轮3): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0)
+}
+
+// ===== PR#122 复核轮4：真 Git/shell 语义，不再用字符串分类器自证 =====
+
+// #1d push matching refspec 会更新所有同名分支（包含 master/main）；限定目录通配与同名 tag 不应误拦。
+for (const push of ['git push origin :', 'git push origin +:']) {
+  checkDoc(`matching refspec 直推保护分支被拒(轮4): ${JSON.stringify(push)}`, 'AGENTS.md', push, 'FAIL', 1, 'drift.high-risk-rules')
+}
+for (const safe of [
+  'git push origin refs/heads/release/*:refs/heads/release/*',
+  'git push origin tag master',
+  'git push -o --all origin feature',
+  'git push origin HEAD:"master;backup"',
+  'git push --dry-run origin master',
+  'git push -n origin master',
+]) {
+  checkDoc(`安全 push 不误伤(轮4): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0, 'drift.high-risk-rules')
+}
+
+// #2d shell 重定向/分组不是 pathspec；这些命令仍会真实全仓暂存，必须被拒。
+for (const add of [
+  'git add -A >/dev/null',
+  'git add --all 2>&1',
+  '(git add .)',
+  'git add -- :!tmp.log >/dev/null',
+  'git add >/dev/null -A',
+]) {
+  checkDoc(`shell 包裹下的全仓暂存被拒(轮4): ${JSON.stringify(add)}`, 'AGENTS.md', add, 'FAIL', 1, 'drift.high-risk-rules')
+}
+
+// #3d add 的有效 cwd、别名、短选项组合与 pathspec magic 都按真实作用域判定。
+for (const add of [
+  'git add ./.',
+  'git add -Av',
+  'git add --al',
+  'git add --upd',
+  'git stage -A',
+  "git add -- ':(top)'",
+  "git add -- ':(glob)**'",
+  'git -C sub add ..',
+]) {
+  checkDoc(`等价全仓暂存被拒(轮4): ${JSON.stringify(add)}`, 'AGENTS.md', add, 'FAIL', 1, 'drift.high-risk-rules')
+}
+for (const safe of [
+  'git -C sub add .',
+  'git add -n -A',
+  'git add --dry-run .',
+  'git add -An',
+  'git stage -n -A',
+  'git add -- -A',
+  'git push add -A',
+]) {
+  checkDoc(`非全仓或不落索引的 add 不误伤(轮4): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0, 'drift.high-risk-rules')
+}
+
+// #4d 动态事实限定在单行语义中：常见摘要判红，标题+编号列表/序号/普通 pull 动词不误红。
+for (const snippet of [
+  'Tests passed: 580',
+  'base=7dbcb359',
+  '#122 已合并',
+  '测试 42 个全部通过',
+]) {
+  checkDoc(`动态事实被拒(轮4): ${JSON.stringify(snippet)}`, CONTRACT, snippet, 'FAIL', 1, 'drift.dynamic-facts')
+}
+for (const safe of [
+  '## Tests\n\n1. Keep the runner hermetic.',
+  '第 42 个测试验证新鲜模式',
+  'pull 122 records from source',
+  'HTTP 200 表示成功',
+  'base=master',
+]) {
+  checkDoc(`稳定文档文本不误伤(轮4): ${JSON.stringify(safe)}`, CONTRACT, safe, 'WARN', 0, 'drift.dynamic-facts')
+}
+
+// ===== PR#122 复核轮5：空 argv、选项否定/缩写、可执行子 shell 与 pathspec 模式 =====
+
+// #1e push 必须按 Git 真实的唯一长选项前缀和“后写覆盖前写”解析；空 push-option 不能吞掉 remote。
+for (const push of [
+  'git push -n --no-dry-run origin master',
+  'git push --dry-run --no-dry-run origin master',
+  'git push --mir origin',
+  'git push --del origin tag master',
+  "git push -o '' origin master",
+]) {
+  checkDoc(`Git 选项语义下的直推被拒(轮5): ${JSON.stringify(push)}`, 'AGENTS.md', push, 'FAIL', 1, 'drift.high-risk-rules')
+}
+for (const safe of [
+  'git push --no-dry-run -n origin master',
+  'git push --dry origin master',
+  'git push --push-op --all origin feature',
+  'git push --repo=origin master',
+]) {
+  checkDoc(`Git 选项语义下的安全 push 不误伤(轮5): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0, 'drift.high-risk-rules')
+}
+
+// #2e 真会执行的 shell -c / 命令替换要递归扫描；单引号中的字面量不执行。
+for (const command of [
+  'sh -c "git push origin master"',
+  "bash -c 'git add -A'",
+  'echo "$(git push origin master)"',
+  'echo "`git add -A`"',
+]) {
+  checkDoc(`可执行子 shell 中的高危 Git 被拒(轮5): ${JSON.stringify(command)}`, 'AGENTS.md', command, 'FAIL', 1, 'drift.high-risk-rules')
+}
+for (const safe of [
+  "echo '$(git push origin master)'",
+  "printf '%s' 'sh -c \"git push origin master\"'",
+]) {
+  checkDoc(`不执行的 shell 字面量不误伤(轮5): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0, 'drift.high-risk-rules')
+}
+
+// #3e add 保留空引号 argv，尊重 dry-run 选项顺序，并按全局 literal/glob/noglob 模式解释 pathspec。
+for (const add of [
+  'git -C "" add .',
+  "git -C '' add -A",
+  'git add -n --no-dry-run -A',
+  'git add --dry-run --no-dry-run .',
+  "git add -- '*'",
+  "git add -- '**'",
+  "git add -- ':(top)**'",
+  "git --glob-pathspecs add -- '**'",
+]) {
+  checkDoc(`Git 真实作用域的全仓 add 被拒(轮5): ${JSON.stringify(add)}`, 'AGENTS.md', add, 'FAIL', 1, 'drift.high-risk-rules')
+}
+for (const safe of [
+  'git add --no-dry-run -n -A',
+  "git add -- ':(attr:foo)'",
+  "git --literal-pathspecs add ':(top)'",
+  "git --noglob-pathspecs add -- '**'",
+  "git -C sub add -- '*'",
+]) {
+  checkDoc(`非全仓或不落索引的 add 不误伤(轮5): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0, 'drift.high-risk-rules')
+}
+
+// #4e 动态事实只识别强语义信号：pull #N 是 PR，规则序号与 HTTP 状态不是。
+checkDoc('pull #N PR 引用被拒(轮5)', CONTRACT, 'pull #122', 'FAIL', 1, 'drift.dynamic-facts')
+for (const safe of [
+  'Rule #1 open the file before editing.',
+  '规则 #1 open the file before editing.',
+  'Tests 200 response handling',
+  'This section tests 200 and 404 responses',
+  'APR 2026 planning notes',
+  '意见 #1 需要讨论',
+]) {
+  checkDoc(`非动态事实文本不误伤(轮5): ${JSON.stringify(safe)}`, CONTRACT, safe, 'WARN', 0, 'drift.dynamic-facts')
+}
+
+// ===== PR#122 复核轮6：终审反例（shell 值选项/扩展引号、等价 glob、外部 pathspec、紧凑动态标签） =====
+
+// #1f shell -c 前的 -o/-O 会吃掉一个值；-c 后的 $0/args 和 `--` 后的脚本名不会被执行。
+for (const command of [
+  "bash -o pipefail -c 'git push origin master'",
+  "bash -O extglob -c 'git add -A'",
+  "zsh -o SH_WORD_SPLIT -c 'git push origin master'",
+]) {
+  checkDoc(`带值 shell 选项后的高危 -c 被拒(轮6): ${JSON.stringify(command)}`, 'AGENTS.md', command, 'FAIL', 1, 'drift.high-risk-rules')
+}
+for (const safe of [
+  "bash -c 'true' git push origin master",
+  "bash -- -c 'git push origin master'",
+]) {
+  checkDoc(`shell 脚本位置参数不误当执行(轮6): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0, 'drift.high-risk-rules')
+}
+
+// #2f Bash/Zsh 的 $'ANSI-C' / $"locale" 引号会生成真 argv，包括用 hex 转义拼出受保护分支。
+for (const command of [
+  "git push origin $'master'",
+  'git push origin $"master"',
+  "$'git' push origin master",
+  "git push origin $'ma\\x73ter'",
+]) {
+  checkDoc(`shell 扩展引号不得绕过 push(轮6): ${JSON.stringify(command)}`, 'AGENTS.md', command, 'FAIL', 1, 'drift.high-risk-rules')
+}
+checkDoc('ANSI-C 转义后并非 master 不误伤(轮6)', 'AGENTS.md', "git push origin $'ma\\aster'", 'WARN', 0, 'drift.high-risk-rules')
+
+// #3f 根目录等价 all-glob 都是全仓；pathspec-from-file 内容无法静态证明，故 fail-closed。
+for (const add of [
+  "git add -- './*'",
+  "git add -- './**'",
+  "git add -- '***'",
+  "git add -- ':(glob)**/*'",
+  'git add --pathspec-from-file=paths',
+  'git add --pathspec-from-file paths',
+  'git add --refresh --no-refresh .',
+]) {
+  checkDoc(`等价全仓/外部 pathspec 的 add 被拒(轮6): ${JSON.stringify(add)}`, 'AGENTS.md', add, 'FAIL', 1, 'drift.high-risk-rules')
+}
+for (const safe of [
+  'git add --refresh .',
+  'git add --no-refresh --refresh .',
+  'git add -n --pathspec-from-file=paths',
+]) {
+  checkDoc(`只刷新索引或 dry-run 不误伤(轮6): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0, 'drift.high-risk-rules')
+}
+
+// #4f GitHub 常见紧凑 PR/SHA 标签仍是动态事实；普通单词与 HTTP 响应标题不是。
+for (const snippet of [
+  'PR122 已合并',
+  'HEAD=7dbcb359',
+  'baseSha=7dbcb359',
+  'head_sha=7dbcb359',
+]) {
+  checkDoc(`紧凑动态事实被拒(轮6): ${JSON.stringify(snippet)}`, CONTRACT, snippet, 'FAIL', 1, 'drift.dynamic-facts')
+}
+for (const safe of [
+  'header=7dbcb359',
+  'Tests: 200 and 404 response handling',
+]) {
+  checkDoc(`动态事实近似文本不误伤(轮6): ${JSON.stringify(safe)}`, CONTRACT, safe, 'WARN', 0, 'drift.dynamic-facts')
+}
+
+// ===== PR#122 复核轮7：三条终审尾边界 =====
+
+for (const safe of [
+  "echo $'$(git push origin master)'",
+  "echo $'`git push origin master`'",
+]) {
+  checkDoc(`ANSI-C 引号内命令替换是字面量(轮7): ${JSON.stringify(safe)}`, 'AGENTS.md', safe, 'WARN', 0, 'drift.high-risk-rules')
+}
+for (const add of ["git add -- ':/*'", "git add -- ':/**'"]) {
+  checkDoc(`短格式 top 全仓 pathspec 被拒(轮7): ${JSON.stringify(add)}`, 'AGENTS.md', add, 'FAIL', 1, 'drift.high-risk-rules')
+}
+for (const count of ['Tests: 580 (580)', 'Tests: 580, all passed']) {
+  checkDoc(`强语义测试计数仍被拒(轮7): ${JSON.stringify(count)}`, CONTRACT, count, 'FAIL', 1, 'drift.dynamic-facts')
+}
+for (const safe of ['Tests: 200, 404 response handling', 'Tests: 200 (OK) and 404 (not found)']) {
+  checkDoc(`HTTP 状态列表不误伤(轮7): ${JSON.stringify(safe)}`, CONTRACT, safe, 'WARN', 0, 'drift.dynamic-facts')
 }
 
 check('缺失成本域权威索引（契约权威链第 7 项）触发 authority.files 失败', () => {

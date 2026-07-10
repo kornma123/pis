@@ -170,88 +170,517 @@ function sha256(text) {
 // 复核逮到：字面正则既能被引号/refspec/全局选项等价绕过，又会把 `master:feature`、`feature/master`
 // 这类安全命令误判成直推 master。改为解析参数、去配对引号，只按 refspec 目标端 / 全仓 pathspec 判定。
 
-const GIT_VALUE_OPTS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
-// push 全部分支/镜像 = 必然覆盖受保护分支，等同直推 master（`--branches` 是 `--all` 的官方别名·复核轮2/3）。
-const PUSH_ALL_FLAGS = new Set(['--all', '--mirror', '--branches'])
-// `git add` 决定「暂存哪些改动」的选项（-A/--all/--no-ignore-removal 三同义 + -u/--update）；作用域另由 pathspec 决定（复核轮3）。
-const ADD_ALL_FLAGS = new Set(['-A', '--all', '--no-ignore-removal', '-u', '--update'])
-// 显式全仓 pathspec（无论有无 all-flag 都覆盖全仓）。
-const WHOLE_REPO_PATHSPEC = new Set(['.', './', ':/'])
-// 排除式 pathspec（`:!x` / `:^x` / `:(exclude)x`）：本身不限定正向范围，只在全仓基础上排除（复核轮3）。
-const EXCLUDE_PATHSPEC = /^:(?:!|\^|\(exclude\))/
+const GIT_VALUE_OPTS = new Set(['-c', '--git-dir', '--work-tree', '--namespace', '--exec-path'])
+// Git parse-options 接受“唯一长选项前缀”；列出同一子命令的全部长选项，才能正确区分 `--mir`
+// 与有歧义的缩写，也能先吞掉 `--push-op --all` 中作为值的 `--all`。
+const PUSH_LONG_OPTIONS = [
+  '--verbose', '--no-verbose', '--quiet', '--no-quiet', '--repo', '--no-repo',
+  '--all', '--no-all', '--branches', '--no-branches', '--mirror', '--no-mirror',
+  '--delete', '--no-delete', '--tags', '--no-tags', '--dry-run', '--no-dry-run',
+  '--porcelain', '--no-porcelain', '--force', '--no-force', '--force-with-lease', '--no-force-with-lease',
+  '--force-if-includes', '--no-force-if-includes', '--recurse-submodules', '--no-recurse-submodules',
+  '--thin', '--no-thin', '--receive-pack', '--no-receive-pack', '--exec', '--no-exec',
+  '--set-upstream', '--no-set-upstream', '--progress', '--no-progress', '--prune', '--no-prune',
+  '--no-verify', '--verify', '--follow-tags', '--no-follow-tags', '--signed', '--no-signed',
+  '--atomic', '--no-atomic', '--push-option', '--no-push-option', '--ipv4', '--ipv6',
+]
+const PUSH_REQUIRED_VALUE_OPTIONS = new Set(['--repo', '--push-option', '--receive-pack', '--exec', '--recurse-submodules'])
+const ADD_LONG_OPTIONS = [
+  '--dry-run', '--no-dry-run', '--verbose', '--no-verbose', '--interactive', '--no-interactive',
+  '--patch', '--no-patch', '--edit', '--no-edit', '--force', '--no-force', '--update', '--no-update',
+  '--renormalize', '--no-renormalize', '--intent-to-add', '--no-intent-to-add', '--all', '--no-all',
+  '--ignore-removal', '--no-ignore-removal', '--refresh', '--no-refresh', '--ignore-errors', '--no-ignore-errors',
+  '--ignore-missing', '--no-ignore-missing', '--sparse', '--no-sparse', '--chmod', '--no-chmod',
+  '--pathspec-from-file', '--no-pathspec-from-file', '--pathspec-file-nul', '--no-pathspec-file-nul',
+]
+const ADD_REQUIRED_VALUE_OPTIONS = new Set(['--chmod', '--pathspec-from-file'])
 
 // 反斜杠续行归一：`\<换行>` → 空格，使跨行的一条命令按整条解析（复核轮2）。
 function normalizeContinuations(text) {
   return text.replace(/\\\r?\n/g, ' ')
 }
 
-// 去 shell 转义（`m\aster` → `master`）再去引号（含 token 内部引号 `HEAD:'master'`）——语义比对只认裸值（复核轮2/3）。
-function dequote(token) {
-  return token.replace(/\\(.)/g, '$1').replace(/['"]/g, '')
+function findBacktickSubstitutionEnd(text, start) {
+  for (let index = start + 1; index < text.length; index += 1) {
+    if (text[index] === '\\' && text[index + 1] !== undefined) index += 1
+    else if (text[index] === '`') return index
+  }
+  return -1
 }
 
-function tokenizeCommand(segment) {
-  const tokens = []
-  const re = /"[^"]*"|'[^']*'|\S+/g
+function findCommandSubstitutionEnd(text, start) {
+  let depth = 1
+  let quote = null
+  for (let index = start + 2; index < text.length; index += 1) {
+    const char = text[index]
+    const next = text[index + 1]
+    if (quote) {
+      if (char === quote) quote = null
+      else if (char === '\\' && quote === '"' && next !== undefined) index += 1
+      else if (quote === '"' && char === '$' && next === '(') {
+        const nestedEnd = findCommandSubstitutionEnd(text, index)
+        if (nestedEnd !== -1) index = nestedEnd
+      } else if (quote === '"' && char === '`') {
+        const nestedEnd = findBacktickSubstitutionEnd(text, index)
+        if (nestedEnd !== -1) index = nestedEnd
+      }
+      continue
+    }
+    if (char === '\\' && next !== undefined) {
+      index += 1
+      continue
+    }
+    if (char === "'" || char === '"') {
+      quote = char
+      continue
+    }
+    if (char === '$' && next === '(') {
+      const nestedEnd = findCommandSubstitutionEnd(text, index)
+      if (nestedEnd !== -1) index = nestedEnd
+      continue
+    }
+    if (char === '`') {
+      const nestedEnd = findBacktickSubstitutionEnd(text, index)
+      if (nestedEnd !== -1) index = nestedEnd
+      continue
+    }
+    if (char === '(') depth += 1
+    else if (char === ')' && --depth === 0) return index
+  }
+  return -1
+}
+
+function decodeAnsiCEscape(text, slashAt) {
+  const escaped = text[slashAt + 1]
+  if (escaped === undefined) return { value: '\\', end: slashAt }
+  const simple = {
+    a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v',
+    '\\': '\\', "'": "'", '"': '"', '?': '?',
+  }
+  if (Object.prototype.hasOwnProperty.call(simple, escaped)) return { value: simple[escaped], end: slashAt + 1 }
+  if (escaped === '\n') return { value: '', end: slashAt + 1 }
+
+  const tail = text.slice(slashAt + 1)
   let match
-  while ((match = re.exec(segment))) tokens.push(dequote(match[0]))
-  return tokens
+  if ((match = tail.match(/^x([0-9a-f]{1,2})/i))) {
+    return { value: String.fromCodePoint(Number.parseInt(match[1], 16)), end: slashAt + match[0].length }
+  }
+  if ((match = tail.match(/^u([0-9a-f]{1,4})/i)) || (match = tail.match(/^U([0-9a-f]{1,8})/i))) {
+    const codePoint = Number.parseInt(match[1], 16)
+    return { value: codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : '\ufffd', end: slashAt + match[0].length }
+  }
+  if ((match = tail.match(/^([0-7]{1,3})/))) {
+    return { value: String.fromCodePoint(Number.parseInt(match[1], 8)), end: slashAt + match[0].length }
+  }
+  if (escaped === 'c' && text[slashAt + 2] !== undefined) {
+    return { value: String.fromCodePoint(text.codePointAt(slashAt + 2) & 31), end: slashAt + 2 }
+  }
+  return { value: `\\${escaped}`, end: slashAt + 1 }
 }
 
-// 先做续行归一，再对每个 `git` 词取到行尾 / shell 分隔符（; | & 反引号）为止；去 shell 注释（空白后的 #）后切 token（复核轮3）。
-function extractGitCommands(text) {
+// 单遍 shell 词法器：只解释取得 argv 所需的引号、转义、命令边界与重定向；绝不执行文档里的命令。
+// 重定向操作符及 operand 不进入 argv，但其后的参数继续解析（例如 `git add >/dev/null -A`）。
+function tokenizeShellCommands(text, nestedScripts = []) {
   const commands = []
-  const re = /\bgit\b([^\n`;|&]*)/gi
-  let match
+  let command = []
+  let word = ''
+  let wordStarted = false
+  let quote = null
+  let skipRedirectionTarget = false
   const normalized = normalizeContinuations(text)
-  while ((match = re.exec(normalized))) commands.push(tokenizeCommand(match[1].split(/\s#/)[0]))
+
+  const flushWord = () => {
+    if (!wordStarted) return
+    if (skipRedirectionTarget) skipRedirectionTarget = false
+    else command.push(word)
+    word = ''
+    wordStarted = false
+  }
+  const flushCommand = () => {
+    flushWord()
+    skipRedirectionTarget = false
+    if (command.length) commands.push(command)
+    command = []
+  }
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index]
+    const next = normalized[index + 1]
+
+    // Bash/Zsh 扩展引号：$'...' 产生 ANSI-C 解码后的 argv，$"..." 产生双引号 argv。
+    if (!quote && char === '$' && (next === "'" || next === '"')) {
+      quote = next === "'" ? 'ansi-c' : '"'
+      wordStarted = true
+      index += 1
+      continue
+    }
+
+    // 单引号内是字面量；其他上下文的 $() / 反引号会真正执行，交给上层递归扫描。
+    if (quote !== "'" && quote !== 'ansi-c' && char === '$' && next === '(') {
+      const end = findCommandSubstitutionEnd(normalized, index)
+      if (end !== -1) {
+        nestedScripts.push(normalized.slice(index + 2, end))
+        word += '$()'
+        wordStarted = true
+        index = end
+        continue
+      }
+    }
+    if (quote !== "'" && quote !== 'ansi-c' && char === '`') {
+      const end = findBacktickSubstitutionEnd(normalized, index)
+      if (end !== -1) {
+        nestedScripts.push(normalized.slice(index + 1, end))
+        word += '`...`'
+        wordStarted = true
+        index = end
+        continue
+      }
+    }
+
+    if (quote === 'ansi-c') {
+      if (char === "'") quote = null
+      else if (char === '\\') {
+        const decoded = decodeAnsiCEscape(normalized, index)
+        word += decoded.value
+        wordStarted = true
+        index = decoded.end
+      } else {
+        word += char
+        wordStarted = true
+      }
+      continue
+    }
+
+    if (quote) {
+      if (char === quote) quote = null
+      else if (quote === '"' && char === '\\' && next !== undefined) {
+        word += next
+        wordStarted = true
+        index += 1
+      } else {
+        word += char
+        wordStarted = true
+      }
+      continue
+    }
+
+    if (char === '\\' && next !== undefined) {
+      word += next
+      wordStarted = true
+      index += 1
+      continue
+    }
+    if (char === "'" || char === '"') {
+      quote = char
+      wordStarted = true
+      continue
+    }
+
+    // shell 注释只在新 token 起点生效；引号内或 token 中间的 # 是普通字符。
+    if (char === '#' && !wordStarted && !skipRedirectionTarget) {
+      while (index + 1 < normalized.length && normalized[index + 1] !== '\n') index += 1
+      flushCommand()
+      continue
+    }
+
+    const redirection = char === '>' || char === '<' || (char === '&' && next === '>')
+    if (redirection) {
+      // 紧贴操作符的纯数字是 fd（2>），不是命令参数；foo>out 中 foo 仍是参数。
+      if (wordStarted && /^\d+$/.test(word)) {
+        word = ''
+        wordStarted = false
+      }
+      else flushWord()
+      if (char === '&') {
+        index += 1 // consume &>
+        if (normalized[index + 1] === '>') index += 1 // &>>
+      } else {
+        while (normalized[index + 1] === char) index += 1 // >> / << / <<<
+        if (normalized[index + 1] === '&' || normalized[index + 1] === '|') index += 1 // >& / <& / >|
+      }
+      skipRedirectionTarget = true
+      continue
+    }
+
+    if (/\s/.test(char)) {
+      flushWord()
+      if (char === '\n') flushCommand()
+      continue
+    }
+    if (char === ';' || char === '|' || char === '&' || char === '(' || char === ')' || char === '`') {
+      flushCommand()
+      continue
+    }
+    word += char
+    wordStarted = true
+  }
+  flushCommand()
   return commands
+}
+
+function isGitExecutable(token) {
+  const executable = token.split(/[\\/]/).pop().toLowerCase()
+  return executable === 'git' || executable === 'git.exe'
+}
+
+function isShellExecutable(token) {
+  const executable = token.split(/[\\/]/).pop().toLowerCase()
+  return executable === 'sh' || executable === 'bash' || executable === 'zsh'
+}
+
+function findShellCommandString(words, shellAt) {
+  const valueOptions = new Set(['-o', '+o', '-O', '+O', '--rcfile', '--init-file'])
+  for (let index = shellAt + 1; index < words.length; index += 1) {
+    const arg = words[index]
+    if (arg === '--') return null
+    if (valueOptions.has(arg)) {
+      index += 1
+      continue
+    }
+    if (/^-[^-]*c/.test(arg)) return words[index + 1] === undefined ? null : words[index + 1]
+    if (arg.startsWith('-') || arg.startsWith('+')) continue
+    return null // 首个非选项是脚本文件，其后参数都不会被 shell 当命令执行。
+  }
+  return null
+}
+
+function extractGitCommands(text, depth = 0) {
+  const commands = []
+  const nestedScripts = []
+  for (const words of tokenizeShellCommands(text, nestedScripts)) {
+    const gitAt = words.findIndex(isGitExecutable)
+    const shellAt = words.findIndex(isShellExecutable)
+    if (shellAt >= 0 && (gitAt < 0 || shellAt < gitAt)) {
+      const commandString = findShellCommandString(words, shellAt)
+      if (commandString !== null) nestedScripts.push(commandString)
+      continue
+    }
+    if (gitAt >= 0) commands.push(words.slice(gitAt + 1))
+  }
+  if (depth < 8) for (const script of nestedScripts) commands.push(...extractGitCommands(script, depth + 1))
+  return commands
+}
+
+function findGitSubcommand(tokens, names, root) {
+  let effectiveCwd = path.resolve(root)
+  let pathspecMode = 'default'
+  for (let index = 0; index < tokens.length; index += 1) {
+    const arg = tokens[index]
+    if (arg === '-C') {
+      if (tokens[index + 1] !== undefined) effectiveCwd = path.resolve(effectiveCwd, tokens[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('-C') && arg.length > 2) {
+      effectiveCwd = path.resolve(effectiveCwd, arg.slice(2))
+      continue
+    }
+    if (arg === '--literal-pathspecs') {
+      pathspecMode = 'literal'
+      continue
+    }
+    if (arg === '--glob-pathspecs') {
+      pathspecMode = 'glob'
+      continue
+    }
+    if (arg === '--noglob-pathspecs') {
+      pathspecMode = 'noglob'
+      continue
+    }
+    if (GIT_VALUE_OPTS.has(arg)) {
+      index += 1
+      continue
+    }
+    if (arg.startsWith('-')) continue
+    return names.has(arg) ? { index, effectiveCwd, pathspecMode } : null
+  }
+  return null
+}
+
+function resolveLongOption(token, candidates) {
+  const name = token.split('=', 1)[0]
+  if (candidates.includes(name)) return name
+  const matches = candidates.filter((candidate) => candidate.startsWith(name))
+  return matches.length === 1 ? matches[0] : null
 }
 
 // refspec 的目标端（冒号后；无冒号即整个 ref）落在受保护分支或 heads 通配上 = 直推 master/main（复核轮3 补通配）。
 function isProtectedPushDest(refspec) {
   const ref = refspec.replace(/^\+/, '')
+  if (ref === ':') return true // `:` / `+:` = matching branches，会更新同名 master/main
   const dest = ref.includes(':') ? ref.slice(ref.lastIndexOf(':') + 1) : ref
-  let head
-  if (dest.startsWith('refs/heads/')) head = dest.slice('refs/heads/'.length)
-  else if (dest.startsWith('refs/')) return false // 非 heads 命名空间（tags/notes/…）不是分支推送
-  else head = dest
-  if (head.includes('*')) return true // heads 通配（如 refs/heads/*）会命中 master/main
-  return head === 'master' || head === 'main'
+  const protectedRefs = dest.startsWith('refs/')
+    ? ['refs/heads/master', 'refs/heads/main']
+    : ['master', 'main']
+  if (!dest.includes('*')) return protectedRefs.includes(dest)
+  const pattern = new RegExp(`^${dest.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`)
+  return protectedRefs.some((candidate) => pattern.test(candidate))
 }
 
-function isDirectMasterPush(tokens) {
-  const at = tokens.indexOf('push')
-  if (at < 0) return false
-  const rest = tokens.slice(at + 1)
-  if (rest.some((token) => PUSH_ALL_FLAGS.has(token))) return true
-  const nonFlag = rest.filter((token) => !token.startsWith('-'))
-  if (!nonFlag.length) return false
-  // 约定 `git push <remote> <refspec...>`：首个非 flag 是 remote，其余是 refspec；
-  // 只有一个非 flag 时它可能是 remote 或直接 refspec，一并检查（over-catch 属保守，不漏判）。
-  const candidates = nonFlag.length > 1 ? nonFlag.slice(1) : nonFlag
-  return candidates.some(isProtectedPushDest)
+function parsePushArgs(tokens, pushAt) {
+  const positionals = []
+  let options = true
+  let allBranches = false
+  let mirror = false
+  let dryRun = false
+  let deleteMode = false
+
+  for (let index = pushAt + 1; index < tokens.length; index += 1) {
+    const arg = tokens[index]
+    if (options && arg === '--') {
+      options = false
+      continue
+    }
+    if (options && arg.startsWith('--')) {
+      const option = resolveLongOption(arg, PUSH_LONG_OPTIONS)
+      if (option === '--dry-run') dryRun = true
+      else if (option === '--no-dry-run') dryRun = false
+      else if (option === '--delete') deleteMode = true
+      else if (option === '--no-delete') deleteMode = false
+      else if (option === '--all' || option === '--branches') allBranches = true
+      else if (option === '--no-all' || option === '--no-branches') allBranches = false
+      else if (option === '--mirror') mirror = true
+      else if (option === '--no-mirror') mirror = false
+      if (option && PUSH_REQUIRED_VALUE_OPTIONS.has(option) && !arg.includes('=')) index += 1
+      continue
+    }
+    if (options && arg.startsWith('-') && arg !== '-') {
+      const flags = arg.slice(1)
+      for (let flagAt = 0; flagAt < flags.length; flagAt += 1) {
+        const flag = flags[flagAt]
+        if (flag === 'n') dryRun = true
+        else if (flag === 'd') deleteMode = true
+        else if (flag === 'o') {
+          if (flagAt === flags.length - 1) index += 1
+          break
+        }
+      }
+      continue
+    }
+    positionals.push(arg)
+  }
+  return { positionals, pushesAll: allBranches || mirror, dryRun, deleteMode }
 }
 
-// git add 的真实作用域：-A/-u/... 仅在【无正向限定 pathspec】时才作用于全仓；有 `.`/`./`/`:/` 则本就全仓；
-// 仅排除式 pathspec（`:!x`）以全仓为起点再排除，也算全仓（复核轮3：修正「有无 pathspec 语义」）。
-function isWholeRepoAdd(tokens) {
-  let i = 0
-  while (i < tokens.length && tokens[i] !== 'add') i += GIT_VALUE_OPTS.has(tokens[i]) ? 2 : 1
-  if (i >= tokens.length) return false
-  let sawDoubleDash = false
-  let allFlag = false
+function isDirectMasterPush(tokens, root) {
+  const invocation = findGitSubcommand(tokens, new Set(['push']), root)
+  if (!invocation) return false
+  const parsed = parsePushArgs(tokens, invocation.index)
+  if (parsed.dryRun) return false
+  if (parsed.pushesAll) return true
+  // Git 仍把第一个 positional 当 repository，即使同时写了 `--repo=<x>`；后续才是 refspec。
+  const rawRefspecs = parsed.positionals.slice(1)
+  const refspecs = []
+  for (let index = 0; index < rawRefspecs.length; index += 1) {
+    if (!parsed.deleteMode && rawRefspecs[index] === 'tag' && rawRefspecs[index + 1] !== undefined) {
+      index += 1 // `tag <name>` 明确进入 refs/tags，不是同名分支
+      continue
+    }
+    refspecs.push(rawRefspecs[index])
+  }
+  return refspecs.some(isProtectedPushDest)
+}
+
+function pathspecMagic(pathspec) {
+  const match = pathspec.match(/^:\(([^)]*)\)(.*)$/)
+  if (!match) return null
+  return { flags: new Set(match[1].split(',').filter(Boolean)), pattern: match[2] }
+}
+
+function isExcludePathspec(pathspec, pathspecMode) {
+  if (pathspecMode === 'literal') return false
+  if (/^:[!^]/.test(pathspec)) return true
+  const magic = pathspecMagic(pathspec)
+  return Boolean(magic && magic.flags.has('exclude'))
+}
+
+function isWholeTreeWildcard(pattern) {
+  const normalized = pattern.replace(/^(?:\.\/)+/, '')
+  return /^\*+$/.test(normalized) || /^(?:\*\*\/)+\*+$/.test(normalized)
+}
+
+function isWholeRepoPathspec(pathspec, effectiveCwd, root, pathspecMode) {
+  const resolvedRoot = path.resolve(root)
+  const atRoot = path.resolve(effectiveCwd) === resolvedRoot
+  if (pathspecMode === 'literal') return path.resolve(effectiveCwd, pathspec) === resolvedRoot
+  if (pathspec.startsWith(':/')) {
+    const topPattern = pathspec.slice(2)
+    return !topPattern || (pathspecMode !== 'noglob' && isWholeTreeWildcard(topPattern))
+  }
+  const magic = pathspecMagic(pathspec)
+  if (magic) {
+    if (magic.flags.has('exclude')) return false
+    if ([...magic.flags].some((flag) => flag === 'attr' || flag.startsWith('attr:'))) return false
+    const base = magic.flags.has('top') ? resolvedRoot : effectiveCwd
+    const baseIsRoot = path.resolve(base) === resolvedRoot
+    if (!magic.pattern) return baseIsRoot
+    if (path.resolve(base, magic.pattern) === resolvedRoot) return true
+    const wildcardEnabled = magic.flags.has('glob') || (pathspecMode !== 'noglob' && !magic.flags.has('literal'))
+    if (wildcardEnabled && isWholeTreeWildcard(magic.pattern)) return baseIsRoot
+    return false
+  }
+  if (pathspec.startsWith(':')) return false
+  if (path.resolve(effectiveCwd, pathspec) === resolvedRoot) return true
+  if (pathspecMode !== 'noglob' && atRoot && isWholeTreeWildcard(pathspec)) return true
+  return false
+}
+
+// git add/stage 的真实作用域：解析有效 cwd、短选项组合、dry-run 与 pathspec；只拦会落索引的全仓操作。
+function isWholeRepoAdd(tokens, root) {
+  const invocation = findGitSubcommand(tokens, new Set(['add', 'stage']), root)
+  if (!invocation) return false
+  let options = true
+  let allMode = false
+  let updateMode = false
+  let renormalizeMode = false
+  let dryRun = false
+  let refreshOnly = false
+  let pathspecFromFile = false
+  const pathspecs = []
+  for (let index = invocation.index + 1; index < tokens.length; index += 1) {
+    const arg = tokens[index]
+    if (options && arg === '--') {
+      options = false
+      continue
+    }
+    if (options && arg.startsWith('--')) {
+      const option = resolveLongOption(arg, ADD_LONG_OPTIONS)
+      if (option === '--dry-run') dryRun = true
+      else if (option === '--no-dry-run') dryRun = false
+      else if (option === '--refresh') refreshOnly = true
+      else if (option === '--no-refresh') refreshOnly = false
+      else if (option === '--pathspec-from-file') pathspecFromFile = true
+      else if (option === '--no-pathspec-from-file') pathspecFromFile = false
+      else if (option === '--all' || option === '--no-ignore-removal') allMode = true
+      else if (option === '--no-all' || option === '--ignore-removal') allMode = false
+      else if (option === '--update') updateMode = true
+      else if (option === '--no-update') updateMode = false
+      else if (option === '--renormalize') renormalizeMode = true
+      else if (option === '--no-renormalize') renormalizeMode = false
+      if (option && ADD_REQUIRED_VALUE_OPTIONS.has(option) && !arg.includes('=')) index += 1
+      continue
+    }
+    if (options && arg.startsWith('-') && arg !== '-') {
+      const flags = arg.slice(1)
+      if (flags.includes('n')) dryRun = true
+      if (flags.includes('A')) allMode = true
+      if (flags.includes('u')) updateMode = true
+      continue
+    }
+    pathspecs.push(arg)
+  }
+  if (dryRun || refreshOnly) return false
+
   let wholePathspec = false
   let excludePathspec = false
   let positivePathspec = false
-  for (const arg of tokens.slice(i + 1)) {
-    if (!sawDoubleDash && arg === '--') { sawDoubleDash = true; continue }
-    if (!sawDoubleDash && arg.startsWith('-')) { if (ADD_ALL_FLAGS.has(arg)) allFlag = true; continue }
-    if (WHOLE_REPO_PATHSPEC.has(arg)) wholePathspec = true
-    else if (EXCLUDE_PATHSPEC.test(arg)) excludePathspec = true
+  for (const pathspec of pathspecs) {
+    if (isExcludePathspec(pathspec, invocation.pathspecMode)) excludePathspec = true
+    else if (isWholeRepoPathspec(pathspec, invocation.effectiveCwd, root, invocation.pathspecMode)) wholePathspec = true
     else positivePathspec = true
   }
-  return wholePathspec || ((allFlag || excludePathspec) && !positivePathspec)
+  const allFlag = allMode || updateMode || renormalizeMode
+  return pathspecFromFile || wholePathspec || ((allFlag || excludePathspec) && !positivePathspec)
 }
 
 function addCheck(checks, id, status, summary, details = []) {
@@ -406,8 +835,8 @@ function inspectAuthority(root, args, checks) {
     const text = contents[file] || ''
     for (const rule of highRiskNameRules) if (rule.re.test(text)) highRiskFindings.push(`${file}: ${rule.name}`)
     const gitCommands = extractGitCommands(text)
-    if (gitCommands.some(isDirectMasterPush)) highRiskFindings.push(`${file}: direct master push`)
-    if (gitCommands.some(isWholeRepoAdd)) highRiskFindings.push(`${file}: bulk staging`)
+    if (gitCommands.some((tokens) => isDirectMasterPush(tokens, root))) highRiskFindings.push(`${file}: direct master push`)
+    if (gitCommands.some((tokens) => isWholeRepoAdd(tokens, root))) highRiskFindings.push(`${file}: bulk staging`)
   }
   if (highRiskFindings.length) addCheck(checks, 'drift.high-risk-rules', 'FAIL', 'high-risk retired instructions found in active entry documents', highRiskFindings)
   else addCheck(checks, 'drift.high-risk-rules', 'PASS', 'no retired agent/workbench/direct-push/bulk-stage instruction in active entries')
@@ -416,25 +845,32 @@ function inspectAuthority(root, args, checks) {
   const dynamicFindings = []
   for (const file of stableFiles) {
     const text = contents[file] || ''
-    // 先剥 markdown 行内包裹（`code`/**bold**），供 SHA/计数 检测，避免 `commit **4a**` 这类被包裹绕过。
-    const plain = text.replace(/[`*]/g, '')
+    // 动态事实必须在同一行形成完整语义；逐行检查避免 `## Tests\n\n1.` 被跨段拼成计数。
+    const lines = text.split(/\r?\n/)
+    const plainLines = lines.map((line) => line.replace(/[`*]/g, ''))
     // 长裸 SHA（≥12 hex），两侧不得是 hex/连字符——排除 UUID 分段（如 …a456-426614174000）。
-    if (/(?<![0-9a-f-])[0-9a-f]{12,40}(?![0-9a-f-])/i.test(plain)) dynamicFindings.push(`${file}: literal SHA`)
+    if (plainLines.some((line) => /(?<![0-9a-f-])[0-9a-f]{12,40}(?![0-9a-f-])/i.test(line))) dynamicFindings.push(`${file}: literal SHA`)
     // 短 SHA（≥7 hex）必须带上下文：commit(/id/hash/sha)、sha、或中文「提交/基线」+ 中英分隔符 :：=。
-    // 要求上下文，否则误伤 `defaced` 等纯 a-f 英文单词；不再认无上下文的裸 `@`。
-    else if (/(?:\b(?:commit(?:\s+(?:id|hash|sha))?|sha)\b|提交|基线)\s*[:：=]?\s*[0-9a-f]{7,40}\b/i.test(plain)) dynamicFindings.push(`${file}: literal short SHA`)
-    // PR 引用（用原文，markdown 包裹本身即引用信号）：/pull/N、[#N]、`#N`、**#N**、PR/pull(±#)N；
-    // 弱语义词（依赖/上游/见/合并/merge…）必须带 #，避免把「规则 #1」「见 3 处」误当 PR 引用。
-    if (/\/pull\/\d+\b/.test(text)) dynamicFindings.push(`${file}: literal PR URL`)
-    else if (/\[#\d+\]|`#\d+`|\*\*#\d+\*\*/.test(text)) dynamicFindings.push(`${file}: literal PR reference`)
-    else if (/(?:PR|pull(?:\s+request)?)\s*#?\s*\d+/i.test(text)) dynamicFindings.push(`${file}: literal PR reference`)
-    else if (/(?:依赖|上游|完成|取代|参见|见|合并|merge)\s*#\s*\d+/i.test(text)) dynamicFindings.push(`${file}: literal PR reference`)
-    // 测试计数（Codex 复核轮1+轮2）：英文复数 `Tests N` / `N tests` / `test count N`；
-    // 中文 `N 项|个|条 测试` / `测试 数量|总数|用例 N`。单数 `Test:`、裸 `测试：数字` 属散文，不当计数。
-    if (
-      /\btests\b[\s:：=]*\d+|\d+\s*tests?\b|\btest\s+count\b[\s:：=]*\d+/i.test(plain) ||
-      /\d+\s*[个项条]\s*测试|测试\s*(?:数量|总数|用例)\s*[:：=]?\s*\d+/.test(plain)
-    ) {
+    // `base=<sha>` 也是契约 §2 明列的动态 Git 事实；要求上下文，避免误伤 `defaced` 等普通单词。
+    else if (plainLines.some((line) => /(?:\b(?:commit(?:[ \t]+(?:id|hash|sha))?|sha|base|head|(?:base|head)[_-]?sha)\b|提交|基线)[ \t]*[:：=]?[ \t]*[0-9a-f]{7,40}\b/i.test(line))) dynamicFindings.push(`${file}: literal short SHA`)
+    // PR 引用（用原文，markdown 包裹本身即引用信号）：/pull/N、[#N]、`#N`、**#N**、PR/pull request N。
+    // `pull #N` 无歧义；裸 `pull N` 可能是“拉取 N 条记录”。裸 #N 的 open 要求 `is open`/`OPEN`，避免误伤规则步骤。
+    if (lines.some((line) => /\/pull\/\d+\b/.test(line))) dynamicFindings.push(`${file}: literal PR URL`)
+    else if (lines.some((line) => /\[#\d+\]|`#\d+`|\*\*#\d+\*\*/.test(line))) dynamicFindings.push(`${file}: literal PR reference`)
+    else if (lines.some((line) => /\bPR(?=[ \t]*#?[ \t]*\d)[ \t]*#?[ \t]*\d+|\bpull[ \t]+request\b[ \t]*#?[ \t]*\d+|\bpull\b[ \t]+#[ \t]*\d+/i.test(line))) dynamicFindings.push(`${file}: literal PR reference`)
+    else if (lines.some((line) => /(?:依赖|上游|完成|取代|参见|详见|合并)[ \t]*#[ \t]*\d+|\b(?:merge|depends[ \t]+on|upstream|see|supersedes?|fixed[ \t]+in)\b[ \t]*#[ \t]*\d+/i.test(line))) dynamicFindings.push(`${file}: literal PR reference`)
+    else if (lines.some((line) => /(?:^|[^\p{L}\p{N}])见[ \t]*#[ \t]*\d+/u.test(line))) dynamicFindings.push(`${file}: literal PR reference`)
+    else if (lines.some((line) => /#\d+[ \t]*(?:(?:已|未|尚未)[ \t]*(?:合并|合入|关闭|取代)|(?:merged|closed|blocked)\b|is[ \t]+(?:open|merged|closed|blocked)\b)/i.test(line) || /#\d+[ \t]*OPEN\b/.test(line))) dynamicFindings.push(`${file}: literal PR reference`)
+    // 测试计数（Codex 复核轮1+轮2）：英文只接受冒号/状态词/`N tests` 这类强计数信号；
+    // 中文计数先剥「第 N 个测试」序号；单数 `Test:`、裸 `测试：数字`、HTTP 状态仍不当计数。
+    const hasTestCount = plainLines.some((line) => {
+      const withoutOrdinals = line.replace(/第[ \t]*\d+[ \t]*[个项条][ \t]*测试/g, '')
+      return (
+        /\btests\b[ \t]*[:：=][ \t]*\d+\b(?=[ \t]*(?:$|(?:passed|failed|skipped|total|tests?)\b|,[ \t]*(?:all[ \t]+)?(?:passed|failed|skipped|total)\b|\([ \t]*\d+[ \t]*\)))|\btests\b[ \t]+(?:passed|failed|skipped|total|count)[ \t]*[:：=]?[ \t]*\d+\b|\btests\b[ \t]+\d+[ \t]+(?:passed|failed|skipped|total)\b|\b\d+[ \t]+tests?\b|\btest[ \t]+count\b[ \t]*[:：=]?[ \t]*\d+/i.test(withoutOrdinals) ||
+        /\d+[ \t]*[个项条][ \t]*测试|测试[ \t]*(?:数量|总数|用例)[ \t]*[:：=]?[ \t]*\d+|测试[ \t]+\d+[ \t]*个[ \t]*(?:全部[ \t]*)?(?:通过|失败)/.test(withoutOrdinals)
+      )
+    })
+    if (hasTestCount) {
       dynamicFindings.push(`${file}: literal test count`)
     }
   }
