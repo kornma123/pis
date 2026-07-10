@@ -82,3 +82,7 @@ skills-lock.json
 
 # Docker Desktop Installer (large binary, don't commit)
 DockerDesktopInstaller.exe
+
+# 权限影子矩阵·生产角色报告（按需生成的翻转门产物·含本地绝对路径·不入库·协议见 docs/shadow-matrix-reports/README.md）
+docs/shadow-matrix-reports/production-visibility-*.json
+docs/shadow-matrix-reports/production-visibility-*.md

@@ -1,15 +1,11 @@
 import { Upload } from 'lucide-react'
 import { useInventoryPage } from './hooks/useInventoryPage'
 import { InventoryTable } from './components/InventoryTable'
-import { DepletionTab } from './components/DepletionTab'
-import { DepletedTab } from './components/DepletedTab'
 import { OutboundModal } from './components/OutboundModal'
 import { MaterialSelectorModal } from './components/MaterialSelectorModal'
 import { InventoryDetailModal } from './components/InventoryDetailModal'
 import { BatchOutboundModal } from './components/BatchOutboundModal'
 import { BatchScrapModal } from './components/BatchScrapModal'
-import { EditRemainModal } from './components/EditRemainModal'
-import { ConfirmDepleteModal } from './components/ConfirmDepleteModal'
 
 export default function InventoryList() {
   const page = useInventoryPage()
@@ -31,90 +27,40 @@ export default function InventoryList() {
         </button>
       </div>
 
-      {/* Tab 切换 */}
-      <div className="flex items-center gap-0 border-b border-gray-200">
-        {[
-          { key: 'in-stock' as const, label: '在库' },
-          { key: 'in-use' as const, label: '使用中' },
-          { key: 'depleted' as const, label: '已耗尽' },
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => page.setActiveTab(tab.key)}
-            className={`px-5 py-3 text-sm font-medium transition-all duration-150 ease relative ${
-              page.activeTab === tab.key
-                ? 'text-blue-500'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab.label}
-            {page.activeTab === tab.key && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />
-            )}
-          </button>
-        ))}
-      </div>
-
-      {page.activeTab === 'in-stock' && (
-        <InventoryTable
-          data={page.data}
-          loading={page.loading}
-          total={page.total}
-          page={page.page}
-          pageSize={page.pageSize}
-          keyword={page.keyword}
-          category={page.category}
-          location={page.location}
-          quickFilter={page.quickFilter}
-          sortField={page.sortField}
-          sortDirection={page.sortDirection}
-          selectedIds={page.selectedIds}
-          expandedGroups={page.expandedGroups}
-          stats={page.computedStats}
-          quickFilterCounts={page.quickFilterCounts}
-          onKeywordChange={page.setKeyword}
-          onCategoryChange={page.setCategory}
-          onLocationChange={page.setLocation}
-          onQuickFilter={page.handleQuickFilter}
-          onSort={page.handleSort}
-          onSearch={page.handleSearch}
-          onReset={page.handleReset}
-          onToggleSelectAll={page.toggleSelectAll}
-          onToggleSelectOne={page.toggleSelectOne}
-          onClearSelection={page.clearSelection}
-          onToggleGroup={page.toggleGroup}
-          onDetail={page.viewDetail}
-          onOutbound={page.openOutboundModal}
-          onPageChange={page.setPage}
-          onPageSizeChange={page.setPageSize}
-          onBatchOutbound={page.openBatchOutbound}
-          onBatchScrap={() => page.setBatchScrapModalOpen(true)}
-        />
-      )}
-
-      {page.activeTab === 'in-use' && (
-        <DepletionTab
-          items={page.depletionTracking}
-          onEditRemain={(dep) => {
-            page.setSelectedDepletionItem(dep)
-            page.setEditRemainValue(String(dep.remaining))
-            page.setEditRemainReason('')
-            page.setEditRemainModalOpen(true)
-          }}
-          onConfirmDeplete={(dep) => {
-            page.setSelectedDepletionItem(dep)
-            page.setDepleteType('normal')
-            page.setDepleteRemainValue('0')
-            page.setExpiredReason('')
-            page.setExpiredRemark('')
-            page.setConfirmDepleteModalOpen(true)
-          }}
-        />
-      )}
-
-      {page.activeTab === 'depleted' && (
-        <DepletedTab records={page.depletedRecords} />
-      )}
+      <InventoryTable
+        data={page.data}
+        loading={page.loading}
+        total={page.total}
+        page={page.page}
+        pageSize={page.pageSize}
+        keyword={page.keyword}
+        category={page.category}
+        location={page.location}
+        quickFilter={page.quickFilter}
+        sortField={page.sortField}
+        sortDirection={page.sortDirection}
+        selectedIds={page.selectedIds}
+        expandedGroups={page.expandedGroups}
+        stats={page.computedStats}
+        quickFilterCounts={page.quickFilterCounts}
+        onKeywordChange={page.setKeyword}
+        onCategoryChange={page.setCategory}
+        onLocationChange={page.setLocation}
+        onQuickFilter={page.handleQuickFilter}
+        onSort={page.handleSort}
+        onSearch={page.handleSearch}
+        onReset={page.handleReset}
+        onToggleSelectAll={page.toggleSelectAll}
+        onToggleSelectOne={page.toggleSelectOne}
+        onClearSelection={page.clearSelection}
+        onToggleGroup={page.toggleGroup}
+        onDetail={page.viewDetail}
+        onOutbound={page.openOutboundModal}
+        onPageChange={page.setPage}
+        onPageSizeChange={page.setPageSize}
+        onBatchOutbound={page.openBatchOutbound}
+        onBatchScrap={() => page.setBatchScrapModalOpen(true)}
+      />
 
       <OutboundModal
         open={page.outboundModalOpen}
@@ -187,30 +133,6 @@ export default function InventoryList() {
         onConfirm={page.confirmBatchScrap}
         onChangeReason={page.setScrapReason}
         onChangeRemark={page.setScrapRemark}
-      />
-
-      <EditRemainModal
-        open={page.editRemainModalOpen}
-        item={page.selectedDepletionItem}
-        remainValue={page.editRemainValue}
-        reason={page.editRemainReason}
-        onClose={() => page.setEditRemainModalOpen(false)}
-        onChangeValue={page.setEditRemainValue}
-        onChangeReason={page.setEditRemainReason}
-      />
-
-      <ConfirmDepleteModal
-        open={page.confirmDepleteModalOpen}
-        item={page.selectedDepletionItem}
-        depleteType={page.depleteType}
-        remainValue={page.depleteRemainValue}
-        expiredReason={page.expiredReason}
-        expiredRemark={page.expiredRemark}
-        onClose={() => page.setConfirmDepleteModalOpen(false)}
-        onChangeType={page.setDepleteType}
-        onChangeRemainValue={page.setDepleteRemainValue}
-        onChangeExpiredReason={page.setExpiredReason}
-        onChangeExpiredRemark={page.setExpiredRemark}
       />
     </div>
   )

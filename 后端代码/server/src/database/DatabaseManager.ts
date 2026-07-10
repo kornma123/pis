@@ -414,6 +414,10 @@ export function initializeDatabase(): void {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  // batch_usage_tracking：批次「在用」台账。出库时给自用领出的批次建 in-use 记录、出库撤销时删除；
+  // 入库删除/取消用它拦「该批次正在使用中、不可误删」。用户可见的「消耗对账」功能已下线（2026-07-09），
+  // 但此表是出入库共用的库存完整性机制（inbound/outbound 直接读写），保留。
+  // （原配套的 batch_depletion 表随功能一并删除——它此前仅被已废的 /depletion 写接口写入。）
   database.exec(`
     CREATE TABLE IF NOT EXISTS batch_usage_tracking (
       id TEXT PRIMARY KEY,
@@ -435,28 +439,6 @@ export function initializeDatabase(): void {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS batch_depletion (
-      id TEXT PRIMARY KEY,
-      tracking_id TEXT NOT NULL,
-      material_id TEXT NOT NULL,
-      material_name TEXT,
-      batch TEXT NOT NULL,
-      spec TEXT,
-      total_qty DECIMAL(18, 4) NOT NULL DEFAULT 0,
-      remain_qty DECIMAL(18, 4) NOT NULL DEFAULT 0,
-      unit TEXT NOT NULL DEFAULT 'ml',
-      start_date TEXT,
-      end_date TEXT,
-      days_used INTEGER DEFAULT 0,
-      actual_days INTEGER DEFAULT 0,
-      deplete_type TEXT DEFAULT 'normal',
-      deplete_reason TEXT,
-      operator TEXT,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `)
-
   // 成本对账：LIS病例数据
   database.exec(`
     CREATE TABLE IF NOT EXISTS lis_cases (

@@ -1833,6 +1833,26 @@ http://your-server-ip:8080
 
 *更新时间：2026-07-09*
 
+## 本次会话完成的工作（全砍「消耗对账/depletion」死功能 + 收口授权缺口，2026-07-09）
+
+**线/工作树**：worktree `gifted-curran-d9270a`（分支 `claude/gifted-curran-d9270a`·off origin/master `0d41be3e`，启动 `git fetch` 确认未落后）。任务=收口 `depletion-v1.1.ts` 3 个写端点的授权缺口（POST /tracking、PUT /tracking/:id/remain、POST /tracking/:id/deplete·**无 inline W 守卫·仅挂载层 `cost_analysis:R` 保护** → 任何 cost_analysis:R 角色可越权写）。源自「labor-times/indirect-costs 补 W 守卫」PR 的独立对抗复核「把 depletion 相邻缺口跟踪到闭环」。
+
+**PM 决策（两轮讨论）**：①「使用中和已耗尽都没法记录啊，用户领了不一定用啊。所以消耗对账这个功能直接全砍了」→ **废弃删除**用户可见功能，而非给死端点补守卫；②确认「**保留内部库存锁**」。**关键纠偏（承重）**：原任务前提「连表一起删（batch_usage_tracking/batch_depletion）」**不成立**——`batch_usage_tracking` 是**出入库共用活表**（出库给自用领出批次写「在用」标记、入库删除/取消读它拦「别误删已领用库存」），删了砸出入库；故本次=删「用户可见的写功能+死读接口+假 UI」、**保留内部库存锁**。
+
+**交付（18 文件·10 改 8 删）**：
+- **后端**：删整个 `routes/depletion-v1.1.ts`（3 写+3 读端点）+ `app.ts` 挂载/import → **授权缺口从根消失**（无写端点=无从越权写）；删 `tests/p0-01-depletion-conservation.test.ts`（测的 deplete 路径已删）；`DatabaseManager.ts` 删 `batch_depletion` 表 CREATE（真孤儿·仅被已废写接口写）、**留 `batch_usage_tracking`**（加口径注释说明为何保留）；`middleware/auth.ts` 删死的 `/depletion` path→module 分支。
+- **前端**：删 4 死组件（`DepletionTab`/`DepletedTab`/`ConfirmDepleteModal`/`EditRemainModal`——后两是「点确认弹假成功、不存数」的假壳）+ 一个误提交的 `InventoryList.tsx.bak`（**仓库唯一 tracked .bak**·含旧 depletion 码·复核逮到）；`api/inventory.ts` 删 `depletionApi`；`useInventoryPage.ts`/`InventoryList.tsx` 删「使用中/已耗尽」标签页（现只余在库单视图·无 Tab 栏）；`useInventoryPage.test.ts` 去 depletionApi mock。
+- **E2E**：删 `inventory-list.spec.ts`「Tab切换」组（INV-TAB-01~08·app 从不消费 `?tab=`·纯 goto+wait 无断言）。
+- **构建纪律闸**：`baseline.json` 清 3 depletion C2 键（`GET /batches/:materialId`·`POST .../deplete`·`PUT .../remain`）+ 棘轮收紧 38→35；存量违规清单 doc 标注对应条目「已删除」。
+
+**验证**：后端 tsc 绿·vitest **112 files/971 tests 全绿**（-2=删的 p0-01·**golden ¥13,152/¥27,870 零回归**）；前端 tsc 绿·`useInventoryPage.test` 8/8·vite build 绿；构建纪律闸 `--block=C1,C2,C3` **PASS**（C2 32→29 与删路由同步·新增 0）+ selftest 全绿（targetMaxCount 35 对齐）；**真跑端到端**：起后端·`/depletion/*` 全部 **404**（含 3 个原裸奔写）·`GET /inventory` **200**·golden 不受影响。
+
+**独立复核**：2 个独立 Agent 对抗面板（①完整性+耦合 ②安全缺口+baseline+golden）均 **NO CONFIRMED ISSUES**；确认 `outbound/inbound-v1.1.ts` 与 origin/master **逐字一致**（内部锁耦合未碰）。**顺带发现（非本 PR 引入·已 spawn chip `task_6d3deaf5`·先摊 PM）**：outbound `POST /`（创建出库·**LIVE 被消费**）+ `POST /bom` 只 `outbound:R` 挂载守卫、**无 inline W**（同文件 PUT/DELETE 有 `requireWriteAccess`）——与 depletion 缺口同型「写动作仅读权限守着」，属同模块 R-vs-W 遗漏、独立追踪。
+
+**治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 我改的源码/文档/baseline + session-log）；真跑后 `git checkout -- coreone.db` 复原 tracked dev DB。按 pr-governance 独立非栈 PR（vitest required 绿即可合·e2e 非 required）。
+
+*更新时间：2026-07-09*
+
 ## 本次会话完成的工作（相邻授权缺口修复：labor-times/indirect-costs 写端点补 W 守卫，2026-07-09）
 
 **线/工作树**：worktree `magical-morse-8dd381`（分支 `claude/magical-morse-8dd381`）。task = 「授权组合子重构」PR 的独立复核发现的**相邻授权缺口**（属"缺检查"非"内联检查"，不在该重构范围）。同 #76（项 E）性质。
@@ -1878,5 +1898,71 @@ http://your-server-ip:8080
 **独立复核（机制5·ultracode Workflow 对抗面板 `wf_16763f7f-0c2`·7 skeptic 逐维证伪）**：**5/7 维 clean·零 HIGH**——URL后门焊死/golden零回归/不点名DEC-2/诚实元素①-⑥/退役接线**全 clean**。逮 2 MED + 3 LOW（**已全修**）：① N+1 批量趋势(索引重建)→`buildHospitalCmTrendByPartner` 一次装载+逐点等价断言 ② ⑧UNMEASURED 数据依赖(纯代送院不进 case_revenue 永缺席)→脚注诚实披露覆盖边界·不再over-claim「盲区消失」 ③ ⑨历史失真月标只承诺未实现→脚注改诚实现状(仅口径变更月有标·失真月待数据接入) ④ ⑩观察行仍露覆盖份额(由隐藏cm派生)→改「—」防泄漏 ⑤ 导出CSV公式注入(=+-@开头)→csvCell 前置单引号钝化+回归测试。
 
 **治理**：worktree symlink 主仓 node_modules（**全程禁 `git add -A`**·只显式 add 新增/改动源文件+2测试+session-log）；测试主用 `:memory:`·全量套件跑脏 dev DB→**提交前 `git checkout` 复原至基线 `150f1094`**（git status 确认 clean）；`.claude/launch.json`(preview 用·env 噪声)**不提交**。→ 按 pr-governance 开独立 PR（base=master·body 写全关系/风险·vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板状态·真相以 `gh pr list` 为准）。**已披露边界**：完整体检态 ready 分支当前不可达(现实 ready=false·恒403)=形状正确的运行时切换态非 dead-code 隐患；⑧仅覆盖有账单流水的院(脚注披露)；⑨失真月标待数据接入(脚注披露)。参考记忆 `coreone-p0-contribution-margin-design`、`coreone-hospital-pnl-never-launched`、`coreone-readiness-predicate-computeReadiness`、`coreone-route-registry-phase1`、`coreone-acceptance-not-shell-check`。
+
+*更新时间：2026-07-09*
+
+---
+
+## 本次会话完成的工作（废弃功能删除·第一批：纯死代码/幽灵·应用专家分诊框架，2026-07-09）
+
+**线/工作树**：worktree `affectionate-chebyshev-a48c11`（off origin/master·启动 `git fetch` 确认未落后）。task=按专家分诊框架清确认的死代码/幽灵（恒404报表页/没人调的死方法/重复路由/无码幽灵路由），高置信才硬删、模糊只标废弃、有数据资产则退役页面留数据；每项独立小 PR。**前置已核实**：路由注册表 Phase1（**PR#107 已合**）+ 授权组合子（**PR#109 已合**）+ 无 open PR → 可开工不撞车。
+
+**核心：候选清单在 PR#103（同日已合）后大幅缩水——「别照名单盲删·逐项现场复核」是本 task 最大价值**：
+- 候选 #1 幽灵报表页 / #2 `reports.ts` 死方法 / #4 forecast·equipment-efficiency → **PR#103 及更早 PR 已全清**（`reports.ts` 现仅 4 个命中真路由的方法·forecast/equipment grep 全仓为空）→ **本批无残留可删**。
+- 候选 #3 `materials.ts` 重复 `/next-code`（L56 与 L121 字节相同·L121 注册在 `/:id` 后不可达=死代码）→ **硬删（PR A #113·后端 only）**。
+- 候选 #5a `/boms/:/cost-preview`：`CostPreviewModal` 全仓从未挂载=孤儿组件 + 后端无此路由 → 整条链死代码 → **硬删（PR B #115·前端 only）**。
+- 候选 #5b `/logs/export` + #5c `/users/:/reset-password`：**改判 PM**——不是死代码，而是**活 admin 页上的坏按钮**（导出日志按钮 / 重置密码动作真渲染、真可点、后端从没建→授权 admin 一点恒 404）=半成品功能，产品决策非机械删 → 登记 `docs/PM待拍板.md` **B-4**（推荐倾向建后端·因这俩是常规想要的 admin 功能）。
+- 顺带：`docs/PM待拍板.md` **B-3**（6 幽灵报表接口·修还是删）**实测已被 PR#103 办结**（PM 选①删前端）→ 移入已拍存档。
+
+**PR A（#113 · `fix/materials-duplicate-next-code`）**：删 materials.ts 第二个不可达 `/next-code`（10 行·纯死代码）。后端 tsc 绿·**vitest 116 files/1041 tests 全绿·golden ¥13,152/¥27,870 零回归**·gate+selftest 绿（该路由被消费·C1/C2 存量计数不变）。
+
+**PR B（#115 · `chore/remove-orphan-cost-preview-modal`）**：删 `CostPreviewModal.tsx`（孤儿）+ `bomApi.getCostPreview`（唯一调用者是该孤儿）。**关键：对抗验证面板逮到必须扩容作用域**——`selftest.cjs` 扫真实仓库并硬断言 `boms cost-preview` 幽灵存在 + `C1 violations===3`（`gate` 是 master required check）→ 只删 3 处会把 required gate 弄红拦所有 PR。故同步：`selftest.cjs` 把 boms 断言迁到「已清理·防再引入」反向守卫 + 计数 3→2；`--update-baseline` 掉 boms C1 键（count 38→37）+ 手动收紧 `targetMaxCount` 38→37（棘轮只减不增·同 PR#103 精神）。前端 tsc+build 绿·**后端零改动 → golden 继承 master 绿**·gate+selftest 绿（C1 存量 2）·frontend vitest 仅 2 个本地负时区伪失败（`utils.test.ts` `new Date('2024-06-01')`·`TZ=UTC` 下 22/22 全绿·CI 天然绿·与本改动无关·非我 diff）。
+
+**独立复核（质疑关·机制5 第二视角）**：Workflow 9-agent 对抗验证面板（`wf_b7edacab`·5 verifier + 2 硬删项各 2 skeptic 证真无消费者）——materials both skeptic refuted=false（字节 diff+注册顺序证 L121 不可达）；cost-preview 死代码确认（skepticRefuted=false）**但逮到 selftest.cjs required-CI 地雷**（若无此步会 red 拦合并）；logs/reset 双 skeptic 确认活按钮=改判 PM 正确；扫尾确认 #1/#2/#4 已办 + 附带发现 3 个未被调用的 `reportsApi` wrapper（over live 路由·DRY cruft·非 404 幽灵·**不在纯死代码批**·留作日后 DRY 清理）。
+
+**治理**：两独立非栈 PR·off origin/master·**全程禁 `git add -A`**（只显式 add 各自源文件 + 本 session-log + PM待拍板 governance 捎带 PR B）·**dev DB 未污染**（vitest 后 `git checkout` 复原确认 clean）·symlink 主仓 node_modules（untracked·不 add）。vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板/本 log 状态·真相以 `gh pr list` 为准。参考记忆 `coreone-build-discipline-gate`、`coreone-feature-keep-cut-inventory`、`coreone-worktree-tests-and-codex-resilience`。
+
+*更新时间：2026-07-09*
+
+## 本次会话完成的工作（权限影子断言矩阵：Phase-2 翻转门·只断言不接管，2026-07-09）
+
+**线/工作树**：worktree `serene-darwin-9e540d`（分支 `claude/serene-darwin-9e540d`·off origin/master）。task=「方案-后续四项」第 1 件（前置=路由注册表 Phase1 #107 + 授权具名组合子 #109 均已合）。
+
+**做了什么**：建「权限影子断言矩阵」——将来「权限从路由注册表派生」翻转的**机器门**。两个独立断言并列跑：**A·可见性**（role×route·现行 `permissions.ts` NAV_PATH_MODULE+角色特例 vs 派生 `route-registry.ts` permModule·不可见→可见=BLOCK/可见→不可见=review/收窄命中活跃写端点=escalated）+ **B·守卫**（endpoint×method·actual[运行时端点自省+源码守卫静态抽取] vs expected[已批准快照]·模块变/降级 W→R/少条件=BLOCK·任一侧无守卫=UNGUARDED 须白名单)。两道门=BLOCK==0 且 review/UNGUARDED 全须进已批准清单（不许静默过）。端点集地面真相=运行时 `app._router` 自省（终裁 3）。**本轮只断言不接管**——三份源纯读、零权限判定改动。
+
+**产物**（全新增·`后端代码/server/src/shadow-matrix/`）：`matrix-core.ts`（纯核心+`evaluateGate`）·`source-parsers.ts`（静态解析·const 别名解析·正则词法态）·`route-introspect.ts`（运行时自省）·`index.ts`（装配+`runMatrix`+operation_logs join）·`production-report.ts`（生产角色报告·翻转门产物）·`expected-guards.snapshot.json`（277 端点·`SHADOW_MATRIX_UPDATE=1` 重批）·`public-endpoints.allowlist.json`（6 公共/自读端点）·`review-decisions.json`（空）+ `tests/shadow-permission-matrix.test.ts`（26 用例·活体门+埋雷自测+解析器单测·ride vitest required）+ 文档 `docs/COREONE-权限影子断言矩阵-2026-07-09.md` + `docs/shadow-matrix-reports/README.md`。
+
+**对 master 的 diff 清单（交付验证）**：277 运行时端点·**0 BLOCK·0 review·0 escalated·0 可见性 diff·路由集相等**·6 UNGUARDED（全有意公共/自读=health+auth·已白名单）·0 悬空·0 未对应挂载。干净迁移（无手工映射 bug）。生产库 5 真实角色（无 lab_director/admin 行·≠fixture）同样 0 可见性 diff。
+
+**独立复核（机制 5·6 视角对抗 Workflow 面板）逮 4 真缺陷·均修+变异证有牙**：
+- **#1 HIGH**：解析器把守卫判别性选项抹平（`requireAdmin({primaryRoleOnly})`↔`requireAdmin()` 都记 'admin'；`assertNotSelfReview({failClosedOnMissing})` 都记 'sod:self-review'）→ 删选项=真放宽却判 equal 静默过门。**修**=编进 condition（`admin:primaryRole`/`admin:rolesAware`·`sod:self-review:failClosed`/`sod:self-review`）。**变异实证**：删真实 alerts `primaryRoleOnly`→门产 `PUT /alerts/rules/:id [BLOCK] 少了 [admin:primaryRole]`（修前静默·修后硬红·文件已复原·hash 校验）。
+- **#2 MED**：escalated 在真实路径恒死代码（`isActiveWriteRoute` 未接线）→ 接 operation_logs 真实数据源（活体门+生产报告都接·CI :memory 无写历史故 0·诚实）+ 端到端雷经 runMatrix 产出。
+- **#3 MED**：埋雷只打纯函数不穿装配→抽 `evaluateGate` 独立埋雷 + parser→assembly 端到端雷（临时文件写坏真守卫经 buildActualGuards→diffGuard 抓 BLOCK）。
+- **#4 LOW**：`blankComments` 无正则词法态（`/[",\n\r]/` 内引号失步·abc-v1.1 实测）→ 加正则字面量态 + 词法自测（每个被建模源 EOF state 必回 0）·277 端点解析零回归。
+- 面板另出 3 条**翻转前提**（非本轮 bug·记文档）：CI-A=fixture-only（生产报告须列翻转 required 前置）·快照批准治理（建议 CODEOWNERS）·页级 vs 方法级粒度（翻转设计前提·本矩阵已把 B 独立留空间）。
+
+**验证**（worktree symlink 主仓 node_modules）：tsc `--noEmit` 绿·shadow 26 用例绿·**全量 vitest 117 files/1067 tests 全绿**·黄金 ¥13,152+¥27,870 零回归。运行时自省 probe 实证 277 端点、守卫闭包匿名（故守卫语义走静态解析）。生产报告读真实库 readOnly·**dev DB byte-identical**（hash 校验·无 wal/shm）。
+
+**治理**：**全程禁 `git add -A`**（只显式 add shadow-matrix/* + 测试 + docs + .gitignore·node_modules 符号链接/materials.ts[非我改·03:10 checkout 态]/对抗 agent 遗留 probe 均不 add）；边界核实=`git diff HEAD` 仅 .gitignore·所有源 .ts 仍 03:10 checkout 态（对抗子代理带 Bash 只写了 scratch probe·已删·印证记忆 `workflow-subagent-bash-sandbox`）。生产报告 `production-visibility-*.{md,json}` 含本地绝对路径→ .gitignore 排除（仅入库 README 协议）。按 pr-governance 开 PR（vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板·真相以 `gh pr list` 为准）。参考记忆 `coreone-route-registry-phase1`、`coreone-authz-combinators-c5-lint`、`coreone-rbac-live-vs-seed-matrix`、`coreone-grill-gate-all-outputs`、`always-pm-plain-summary`。
+
+*更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 本次会话：outbound 写端点补 W 守卫（相邻授权缺口·同 labor-times/indirect-costs #752e1571·PR#114 已合）
+
+**缺口**：`后端代码/server/src/routes/outbound-v1.1.ts` 挂载层仅 `outbound:R`（app.ts:98），同文件 PUT/DELETE 已用 `requirePermission('outbound','W')`，但两个**创建（写）**端点无 inline W 守卫 → 持 outbound:R（只读）角色可越权创建出库（减库存 + 写 batch_usage_tracking/stock_logs/ABC）：
+- `POST /`（**LIVE**·前端 outboundApi.create）
+- `POST /bom`（构建纪律 C2 无消费者死端点在册）
+
+源自「全砍 depletion 功能」PR 独立对抗复核顺带发现（chip `task_6d3deaf5`·PM 已拍板处置策略=补守卫）。
+
+**真实暴露面核实（live RBAC≠SEED_MATRIX）**：运行库 5 个活跃角色全用**旧扁平数组权限格式**（`parsePermissions` 一律映射为 W，无法表达 R-only）→ 能到达端点的 warehouse_manager/technician/pathologist 皆 outbound:W（守卫放行·零行为变更），procurement/finance 无 outbound（挂载层已 403）。缺口仅在**对象格式** `{outbound:'R'}`（SEED_MATRIX lab_director / 角色矩阵编辑器只读授予）路径下潜伏。→ **现网零影响**，属一致性+纵深防御修复。
+
+**修法**：把原在 :476 的 `requireWriteAccess = requirePermission('outbound','W')` 上提到文件顶部（:25），补挂两个 POST（PUT/DELETE 原已引用·逻辑不变）。全 4 写端点齐守·2 GET 读端点不动。
+
+**验证**（四轴独立三角）：新增 `tests/rbac-outbound-write-guard.test.ts`（8 用例·合成 reader/writer·**变异证有牙**：修前 reader 400→修后 403）覆盖全 4 写端点双向断言；修 `tests/p1-01-bom-auxiliary-skip.test.ts`（原裸 mount 无 auth→加 `injectWriteUser` admin 注入·同 stocktaking/p1-04 house 模式·仅改 harness）；后端 vitest **117 files/1049 tests 全绿**（golden ¥13,152+¥27,870 零回归）·tsc 绿；**真跑端到端 6/6**（W 角色仍出库·procurement 挂载层 403·R-only GET 200/POST 403）；独立复核=grep 全端点（6=2读+4写单挂载点）+ codex 异构 review（Q1-5 无真 bug）。
+
+**治理**：worktree symlink 主仓 node_modules（禁 `git add -A`·只显式 add 路由+2 测试+本 session-log）；起后端 + POST + R-only seed 脏 tracked dev DB → `git checkout` + 删 WAL/SHM 复原。**PR#114 vitest+gate required 双绿后普通 `--merge`（无 --admin）落 master**；合并前 `git merge origin/master` 消 session-log append 冲突=取 master 版 + 尾部追加本段（避免 append 级联·同 pr-governance 惯例）。参考记忆 `coreone-outbound-write-rbac-gap-fix`、`coreone-authz-combinators-c5-lint`、`coreone-rbac-live-vs-seed-matrix`、`coreone-dev-db-tracked-trap`。
 
 *更新时间：2026-07-09*

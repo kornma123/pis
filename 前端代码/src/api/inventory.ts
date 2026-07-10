@@ -142,10 +142,3 @@ export const transferApi = {
   delete: (id: string) =>
     request.delete(`/transfers/${id}`),
 }
-
-export const depletionApi = {
-  getTracking: (params?: { status?: string }) =>
-    request.get<{ list: any[] }>('/depletion/tracking', { params }),
-  getDepletion: () =>
-    request.get<{ list: any[] }>('/depletion/depletion'),
-}

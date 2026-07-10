@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { useInventoryPage } from './useInventoryPage'
-import { inventoryApi, outboundApi, depletionApi, scrapApi } from '@/api/inventory'
+import { inventoryApi, outboundApi, scrapApi } from '@/api/inventory'
 import { bomApi, materialApi, projectApi, userApi } from '@/api/master'
 import { toast } from 'sonner'
 
@@ -41,8 +41,6 @@ describe('useInventoryPage', () => {
 
     vi.mocked(outboundApi.create).mockResolvedValue({} as any)
     vi.mocked(scrapApi.create).mockResolvedValue({} as any)
-    vi.mocked(depletionApi.getTracking).mockResolvedValue({ list: [] } as any)
-    vi.mocked(depletionApi.getDepletion).mockResolvedValue({ list: [] } as any)
     vi.mocked(projectApi.getList).mockResolvedValue({ list: [] } as any)
     vi.mocked(userApi.getList).mockResolvedValue({ list: [] } as any)
     vi.mocked(materialApi.getList).mockResolvedValue({ list: [] } as any)
