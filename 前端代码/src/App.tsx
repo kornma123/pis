@@ -60,6 +60,10 @@ function App() {
     <>
       <Routes>
         <Route path="/login" element={<Login />} />
+        {/* 旧「医院盈利看板」从未上线（PM #108）→ 重定向到院级贡献毛利看板。放在 AppLayout 之外（顶层）：
+            AppLayout 的可达性守卫会把不在 accessiblePaths 的路径先重定向到 /，会抢在内层 <Navigate> 之前，
+            故顶层拦截确保 /hospital-pnl → /hospital-cm（而非落到仪表盘）。*/}
+        <Route path="/hospital-pnl" element={<Navigate to="/hospital-cm" replace />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/inventory" element={<InventoryList />} />
@@ -90,8 +94,6 @@ function App() {
           <Route path="/labor-times" element={<LaborTimeList />} />
           <Route path="/indirect-costs" element={<IndirectCostCenterList />} />
           <Route path="/hospital-cm" element={<HospitalCmDashboard />} />
-          {/* 旧「医院盈利看板」从未上线（PM 拍板 #108）→ 直接替换为院级贡献毛利看板；重定向保旧深链不成死链。 */}
-          <Route path="/hospital-pnl" element={<Navigate to="/hospital-cm" replace />} />
           <Route path="/account-reconcile" element={<AccountReconcilePage />} />
           <Route path="/partner-config" element={<PartnerConfigPage />} />
           <Route path="/import-console" element={<ImportConsolePage />} />

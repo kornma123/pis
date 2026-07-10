@@ -1966,3 +1966,19 @@ http://your-server-ip:8080
 **治理**：worktree symlink 主仓 node_modules（禁 `git add -A`·只显式 add 路由+2 测试+本 session-log）；起后端 + POST + R-only seed 脏 tracked dev DB → `git checkout` + 删 WAL/SHM 复原。**PR#114 vitest+gate required 双绿后普通 `--merge`（无 --admin）落 master**；合并前 `git merge origin/master` 消 session-log append 冲突=取 master 版 + 尾部追加本段（避免 append 级联·同 pr-governance 惯例）。参考记忆 `coreone-outbound-write-rbac-gap-fix`、`coreone-authz-combinators-c5-lint`、`coreone-rbac-live-vs-seed-matrix`、`coreone-dev-db-tracked-trap`。
 
 *更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 本次会话续 —— 院级贡献毛利 E2E 红线 spec + 重定向修复（#117 follow-up）
+
+**背景**：#117（院级贡献毛利两层框架真前端）已合 master。任务验收列了「E2E 绿」，我此前用 supertest(403)+组件测试(不在 DOM)+live curl/浏览器**三方证过两条红线**、但未落 Playwright E2E spec。本会话补齐（分支 `test/hospital-cm-e2e` off origin/master·含 #117）。
+
+**做的事**：新增 `前端代码/e2e/hospital-cm.spec.ts`（4 用例·真浏览器+真后端）——① 校准态渲染 + **DOM 红线**（谓词假⇒`full-physical-exam` 不在 DOM）② **数据层红线**（`/full-health` 403 无泄漏·`/readiness` 200 ready=false）③ `?mode=full` 深链不能强制唤出 ④ 旧 `/hospital-pnl` 重定向到 `/hospital-cm`。
+
+**⭐E2E 逮到真 bug（这就是 E2E 的价值）**：#117 里 `/hospital-pnl`→`/hospital-cm` 重定向**不生效**——`AppLayout` 可达性守卫（`hasAccess=allowedPaths.includes(pathname)` 否则 `Navigate to="/"`）会抢在内层 `<Navigate>` 之前，把已从 `NAV_PATH_MODULE` 移除的 `/hospital-pnl` 先重定向到仪表盘 `/`（非死链但非目标）。**修**=把 `/hospital-pnl` 重定向路由从 AppLayout 内层上提到**顶层**（`/login` 之后、AppLayout 之前）→ 绕过守卫→真到 `/hospital-cm`。修后 E2E 4/4 绿。**没加 `/hospital-pnl` 回 NAV_PATH_MODULE**（会破姊妹影子矩阵 #116 的可见性断言=deprecated 路由不该"可见"）。
+
+**环境坑（记录）**：`playwright.config.ts` 非-CI 分支 `executablePath` 硬编码 Windows 路径（`C:\Users\86185\...`·项目在 Windows 开发）→ mac 本地跑须 `CI=1`（令 launchOptions=undefined 走默认浏览器解析）或 `PLAYWRIGHT_CHROMIUM_PATH`；CI 侧天然走 `process.env.CI` 分支正常。本 spec **非 PR 门 required**（e2e.yml 只跑 auth+supplier-returns）→ 纳夜间全量 + 本地 `CI=1` 保绿。
+
+**验证**：`CI=1 playwright test e2e/hospital-cm.spec.ts` **4/4 绿**；前端 tsc 绿·C4 路由门 0 违规（顶层重定向路由仍在注册表 deprecated·match）·前端 vitest 316 passed(仅 2 pre-existing formatDate 时区基线)；dev DB 复原 clean。→ follow-up PR（base=master·vitest required 绿即可合）。参考记忆 [[coreone-hospital-cm-two-layer-frontend]]。
+
+*更新时间：2026-07-09*
