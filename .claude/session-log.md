@@ -1901,3 +1901,23 @@ http://your-server-ip:8080
 **治理**：**全程禁 `git add -A`**（只显式 add shadow-matrix/* + 测试 + docs + .gitignore·node_modules 符号链接/materials.ts[非我改·03:10 checkout 态]/对抗 agent 遗留 probe 均不 add）；边界核实=`git diff HEAD` 仅 .gitignore·所有源 .ts 仍 03:10 checkout 态（对抗子代理带 Bash 只写了 scratch probe·已删·印证记忆 `workflow-subagent-bash-sandbox`）。生产报告 `production-visibility-*.{md,json}` 含本地绝对路径→ .gitignore 排除（仅入库 README 协议）。按 pr-governance 开 PR（vitest required 绿即可合·默认不加 `--admin`·合并后不回改看板·真相以 `gh pr list` 为准）。参考记忆 `coreone-route-registry-phase1`、`coreone-authz-combinators-c5-lint`、`coreone-rbac-live-vs-seed-matrix`、`coreone-grill-gate-all-outputs`、`always-pm-plain-summary`。
 
 *更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 本次会话：outbound 写端点补 W 守卫（相邻授权缺口·同 labor-times/indirect-costs #752e1571·PR#114 已合）
+
+**缺口**：`后端代码/server/src/routes/outbound-v1.1.ts` 挂载层仅 `outbound:R`（app.ts:98），同文件 PUT/DELETE 已用 `requirePermission('outbound','W')`，但两个**创建（写）**端点无 inline W 守卫 → 持 outbound:R（只读）角色可越权创建出库（减库存 + 写 batch_usage_tracking/stock_logs/ABC）：
+- `POST /`（**LIVE**·前端 outboundApi.create）
+- `POST /bom`（构建纪律 C2 无消费者死端点在册）
+
+源自「全砍 depletion 功能」PR 独立对抗复核顺带发现（chip `task_6d3deaf5`·PM 已拍板处置策略=补守卫）。
+
+**真实暴露面核实（live RBAC≠SEED_MATRIX）**：运行库 5 个活跃角色全用**旧扁平数组权限格式**（`parsePermissions` 一律映射为 W，无法表达 R-only）→ 能到达端点的 warehouse_manager/technician/pathologist 皆 outbound:W（守卫放行·零行为变更），procurement/finance 无 outbound（挂载层已 403）。缺口仅在**对象格式** `{outbound:'R'}`（SEED_MATRIX lab_director / 角色矩阵编辑器只读授予）路径下潜伏。→ **现网零影响**，属一致性+纵深防御修复。
+
+**修法**：把原在 :476 的 `requireWriteAccess = requirePermission('outbound','W')` 上提到文件顶部（:25），补挂两个 POST（PUT/DELETE 原已引用·逻辑不变）。全 4 写端点齐守·2 GET 读端点不动。
+
+**验证**（四轴独立三角）：新增 `tests/rbac-outbound-write-guard.test.ts`（8 用例·合成 reader/writer·**变异证有牙**：修前 reader 400→修后 403）覆盖全 4 写端点双向断言；修 `tests/p1-01-bom-auxiliary-skip.test.ts`（原裸 mount 无 auth→加 `injectWriteUser` admin 注入·同 stocktaking/p1-04 house 模式·仅改 harness）；后端 vitest **117 files/1049 tests 全绿**（golden ¥13,152+¥27,870 零回归）·tsc 绿；**真跑端到端 6/6**（W 角色仍出库·procurement 挂载层 403·R-only GET 200/POST 403）；独立复核=grep 全端点（6=2读+4写单挂载点）+ codex 异构 review（Q1-5 无真 bug）。
+
+**治理**：worktree symlink 主仓 node_modules（禁 `git add -A`·只显式 add 路由+2 测试+本 session-log）；起后端 + POST + R-only seed 脏 tracked dev DB → `git checkout` + 删 WAL/SHM 复原。**PR#114 vitest+gate required 双绿后普通 `--merge`（无 --admin）落 master**；合并前 `git merge origin/master` 消 session-log append 冲突=取 master 版 + 尾部追加本段（避免 append 级联·同 pr-governance 惯例）。参考记忆 `coreone-outbound-write-rbac-gap-fix`、`coreone-authz-combinators-c5-lint`、`coreone-rbac-live-vs-seed-matrix`、`coreone-dev-db-tracked-trap`。
+
+*更新时间：2026-07-09*
