@@ -100,9 +100,9 @@ test.describe('用户管理 -> 查看用户列表', () => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
     await page.unroute('**/api/v1/users**')
   })
-  test('USER-LIST-07. 权限：technician访问返回403', async ({ page }) => {
+  test('USER-LIST-07. 权限：technician访问用户页重定向首页', async ({ page }) => {
     await loginAs(page, 'technician'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1200)
-    await expect(page.locator('text=/无权访问|403|Forbidden/i').first()).toBeVisible()
+    await expect(page).toHaveURL(`${FE_BASE}/`)
   })
   test('USER-LIST-08. 并发：快速刷新页面多次', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`)
@@ -642,7 +642,7 @@ test.describe('用户管理 -> 盲点分析补充', () => {
   })
   test('BLIND-USER-02. 状态标签颜色区分', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
-    await expect(page.locator('table tbody span:text-matches(/正常|禁用/)').first()).toBeVisible()
+    await expect(page.locator('table tbody span').filter({ hasText: /正常|禁用/ }).first()).toBeVisible()
   })
   test('BLIND-USER-03. 新建用户生成强初始密码', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)

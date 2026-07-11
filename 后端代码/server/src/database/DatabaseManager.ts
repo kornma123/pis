@@ -147,12 +147,9 @@ function assertInitialAdminPasswordUsable(password: string | undefined): void {
  * 幂等：已含则不重复写。含 '*'(admin) 不处理。
  *
  * ⚠️ 范围注记（有意为之，勿擅自扩大）：本迁移刻意只动 warehouse_manager / procurement
- * 两个角色的 supplier_returns 一项，不做「全角色 × 全矩阵」对齐。原因：SEED_MATRIX 同时
- * 还给 finance supplier_returns 'R'、technician outbound/stocktaking 等，而既有 e2e
- *（如 finance 访问退货期望 403、BF-PERM technician 访问出库被拦 等）是按「旧权限模型」断言、
- * 且当前全部为绿；全量对齐会改动这些「现为绿」的用例 —— 那属于另一个独立的 RBAC 对齐决策。
- * 因此这里只修复触发了 e2e 失败的两角色一项，保证零回归。库与矩阵在 finance 等处仍存在
- * 有意的不一致，详见 PR 说明 / session-log / 记忆 coreone-pr8-e2e-rbac-migration-gap。
+ * 两个角色的 supplier_returns 一项，不做「全角色 × 全矩阵」覆盖。SEED_MATRIX 是全新安装的
+ * 默认权限；既有部署的 roles.permissions 可能包含经角色管理页确认过的本地策略，不能在启动时
+ * 无条件重写。若要把其它既有角色强制对齐默认矩阵，须作为独立 RBAC 迁移逐项评审。
  */
 export function reconcileSupplierReturnsPerms(database: DatabaseSync): void {
   for (const code of ['warehouse_manager', 'procurement']) {
@@ -624,7 +621,8 @@ export function initializeDatabase(): void {
       status TEXT NOT NULL DEFAULT 'pending',
       remark TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      is_deleted INTEGER NOT NULL DEFAULT 0
     )
   `)
   // batch_usage_tracking：批次「在用」台账。出库时给自用领出的批次建 in-use 记录、出库撤销时删除；

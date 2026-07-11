@@ -39,7 +39,11 @@ jobs:
           node-version: 22
       - name: Generate ephemeral CI JWT secret
         shell: bash
-        run: echo "JWT_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+        run: |
+          jwt_secret="$(openssl rand -base64 48)"
+          echo "::add-mask::$jwt_secret"
+          echo "JWT_SECRET=$jwt_secret" >> "$GITHUB_ENV"
+          unset jwt_secret
       - name: Install
         run: npm ci
       - name: Run backend vitest (含 golden ¥27,870 / ¥13,152)

@@ -18,6 +18,10 @@ describe('RBAC-P1：Schema/Seed', () => {
     expect(cols('app_settings')).toEqual(expect.arrayContaining(['key', 'value']))
   })
 
+  it('全新 purchase_orders 表含软删除列，供应商退货列表 JOIN 可直接使用', () => {
+    expect(cols('purchase_orders')).toContain('is_deleted')
+  })
+
   it('新增 lab_director 角色', () => {
     const r = db.prepare("SELECT * FROM roles WHERE code = 'lab_director'").get() as any
     expect(r).toBeTruthy()

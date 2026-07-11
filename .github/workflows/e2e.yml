@@ -40,7 +40,11 @@ jobs:
 
       - name: Generate ephemeral CI JWT secret
         shell: bash
-        run: echo "JWT_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+        run: |
+          jwt_secret="$(openssl rand -base64 48)"
+          echo "::add-mask::$jwt_secret"
+          echo "JWT_SECRET=$jwt_secret" >> "$GITHUB_ENV"
+          unset jwt_secret
 
       # 1. 安装后端依赖
       # 后端 app.ts 启动时会自动调用 initializeDatabase() 创建表结构，无需额外 seed

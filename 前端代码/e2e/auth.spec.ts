@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test'
 
-const FE_BASE = 'http://localhost:8080'
-const API_BASE = 'http://127.0.0.1:3001/api/v1'
+const FE_BASE = `http://localhost:${process.env.E2E_FRONTEND_PORT || '8080'}`
+const API_BASE = `http://127.0.0.1:${process.env.E2E_BACKEND_PORT || '3001'}/api/v1`
 
 const ROLES = {
   admin: { username: 'admin', password: 'admin123' },
@@ -557,11 +557,17 @@ test.describe('认证与登录 -> 角色权限矩阵补充', () => {
 // 七、业务流程树
 // ═══════════════════════════════════════════════════════════════
 test.describe('认证与登录 -> 业务流程树', () => {
+  const allowedPaths: { role: RoleKey; path: string; heading: string }[] = [
+    { role: 'technician', path: '/outbound', heading: '出库记录' },
+    { role: 'technician', path: '/stocktaking', heading: '库存盘点' },
+    { role: 'procurement', path: '/cost-analysis', heading: '物料成本分析' },
+    { role: 'warehouse_manager', path: '/bom', heading: 'BOM清单' },
+  ]
   const forbiddenPaths: { role: RoleKey; paths: string[] }[] = [
-    { role: 'technician', paths: ['/inbound', '/outbound', '/stocktaking', '/users', '/roles'] },
-    { role: 'procurement', paths: ['/outbound', '/stocktaking', '/cost-analysis'] },
+    { role: 'technician', paths: ['/inbound', '/users', '/roles'] },
+    { role: 'procurement', paths: ['/outbound', '/stocktaking'] },
     { role: 'finance', paths: ['/inbound', '/outbound', '/stocktaking'] },
-    { role: 'warehouse_manager', paths: ['/projects', '/bom', '/users'] },
+    { role: 'warehouse_manager', paths: ['/projects', '/users'] },
     { role: 'pathologist', paths: ['/users', '/roles', '/logs'] },
   ]
 
@@ -578,6 +584,15 @@ test.describe('认证与登录 -> 业务流程树', () => {
         expect(isRedirected || hasForbiddenText).toBe(true)
       })
     }
+  }
+
+  for (const { role, path, heading } of allowedPaths) {
+    test(`BF-PERM-ALLOW-${role}-${path.replace(/\//g, '')}. ${role}可访问${path}`, async ({ page }) => {
+      await loginAs(page, role)
+      await page.goto(`${FE_BASE}${path}`)
+      await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible({ timeout: 10000 })
+      await expect.poll(() => new URL(page.url()).pathname).toBe(path)
+    })
   }
 })
 
