@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test'
 
-const FE_BASE = 'http://localhost:8080'
-const API_BASE = 'http://127.0.0.1:3001/api/v1'
+const FE_BASE = `http://localhost:${process.env.E2E_FRONTEND_PORT || '8080'}`
+const API_BASE = `http://127.0.0.1:${process.env.E2E_BACKEND_PORT || '3001'}/api/v1`
 
 const ROLES = {
   admin: { username: 'admin', password: 'admin123' },
@@ -14,8 +14,8 @@ const ROLES = {
 type RoleKey = keyof typeof ROLES
 const ROLE_KEYS: RoleKey[] = ['admin', 'warehouse_manager', 'technician', 'pathologist', 'procurement', 'finance']
 const WRITE_ROLES: RoleKey[] = ['admin', 'warehouse_manager']
-const READ_ROLES: RoleKey[] = ['admin', 'warehouse_manager', 'procurement']
-const NO_ACCESS_ROLES: RoleKey[] = ['technician', 'pathologist', 'finance']
+const READ_ROLES: RoleKey[] = ['admin', 'warehouse_manager', 'procurement', 'finance']
+const NO_ACCESS_ROLES: RoleKey[] = ['technician', 'pathologist']
 
 async function loginAs(page: Page, role: RoleKey) {
   await page.goto(`${FE_BASE}/login`)
@@ -617,7 +617,7 @@ test.describe('退货给供应商 -> 角色权限矩阵', () => {
   const permScenes = [
     { id: 'TC-PERM-SR-001', role: 'technician' as RoleKey, method: 'GET', path: '/supplier-returns', expect: 403 },
     { id: 'TC-PERM-SR-002', role: 'pathologist' as RoleKey, method: 'GET', path: '/supplier-returns', expect: 403 },
-    { id: 'TC-PERM-SR-003', role: 'finance' as RoleKey, method: 'GET', path: '/supplier-returns', expect: 403 },
+    { id: 'TC-PERM-SR-003', role: 'finance' as RoleKey, method: 'GET', path: '/supplier-returns', expect: 200 },
     { id: 'TC-PERM-SR-004', role: 'technician' as RoleKey, method: 'POST', path: '/supplier-returns', expect: 403 },
     { id: 'TC-PERM-SR-005', role: 'pathologist' as RoleKey, method: 'POST', path: '/supplier-returns', expect: 403 },
     { id: 'TC-PERM-SR-006', role: 'finance' as RoleKey, method: 'POST', path: '/supplier-returns', expect: 403 },

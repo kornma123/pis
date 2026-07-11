@@ -61,7 +61,7 @@ function flushQueue(token: string | null) {
   pendingQueue = []
 }
 
-/** 调用后端 /auth/refresh 换取新 token；成功返回新 token，失败返回 null */
+/** 调用后端 /auth/refresh，同时原子刷新 token 与 DB 当前能力；成功返回新 token。 */
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = localStorage.getItem('refreshToken')
   if (!refreshToken) return null
@@ -72,7 +72,10 @@ async function refreshAccessToken(): Promise<string | null> {
     if (!body?.success) return null
     const newToken: string | undefined = body.data?.token
     const newRefresh: string | undefined = body.data?.refreshToken
-    if (!newToken) return null
+    const refreshedUser: unknown = body.data?.user
+    if (!newToken || !refreshedUser || typeof refreshedUser !== 'object') return null
+    const serializedUser = JSON.stringify(refreshedUser)
+    localStorage.setItem('user', serializedUser)
     localStorage.setItem('token', newToken)
     if (newRefresh) localStorage.setItem('refreshToken', newRefresh)
     return newToken

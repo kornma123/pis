@@ -58,7 +58,7 @@ beforeAll(async () => {
   // 模拟 authenticateToken 已设置 req.user（生产链路一致；本文件测两阶段业务逻辑，非 RBAC，RBAC 见 rbac-e-write-guard）。
   // username 保持 'system' 以维持原 operator 取值不变。
   const injectWriteUser = (req: any, _res: any, next: any) => {
-    req.user = { userId: 'TEST-ADMIN', username: 'system', role: 'admin' }
+    req.user = { userId: 'TEST-ADMIN', username: 'system', role: 'admin', roles: ['admin'] }
     next()
   }
   app = await buildTestApp([{ path: '/api/v1/stocktaking', router: stocktakingRoutes, middleware: [injectWriteUser] }])

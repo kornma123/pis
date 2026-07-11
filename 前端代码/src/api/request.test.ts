@@ -101,9 +101,10 @@ describe('request', () => {
   it('P1-10: should try /auth/refresh on 401 then replay original request', async () => {
     localStorage.setItem('token', 'old-token')
     localStorage.setItem('refreshToken', 'refresh-1')
-    // refresh 成功返回新 token
+    // refresh 成功同时返回 DB 当前能力
+    const refreshedUser = { role: '', primaryRole: null, roles: [], capabilities: {}, canSeeCost: false }
     vi.mocked(axios.post).mockResolvedValue({
-      data: { success: true, data: { token: 'new-token' } },
+      data: { success: true, data: { token: 'new-token', user: refreshedUser } },
     } as any)
 
     const error = { config: { url: '/inventory', headers: {} }, response: { status: 401 } }
@@ -116,6 +117,7 @@ describe('request', () => {
     )
     // 新 token 已写入
     expect(localStorage.getItem('token')).toBe('new-token')
+    expect(JSON.parse(localStorage.getItem('user') || 'null')).toEqual(refreshedUser)
     // 原请求被重放，且带上新 token
     expect(result.__replayed).toBe(true)
     expect(result.config.headers.Authorization).toBe('Bearer new-token')

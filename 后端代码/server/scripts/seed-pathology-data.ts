@@ -5,9 +5,9 @@
  * 更新: 大幅扩展免疫组化试剂种类，覆盖临床常用全部抗体
  */
 
-import { getDatabase, initializeDatabase } from '../src/database/DatabaseManager.js'
 import { v4 as uuidv4 } from 'uuid'
 import bcrypt from 'bcryptjs'
+import { isFixtureEnv } from '../src/config/security.js'
 
 const now = new Date().toISOString()
 const dateStr = now.slice(0, 10).replace(/-/g, '')
@@ -1382,7 +1382,13 @@ function seedAlertRules(db: any) {
 // ============================================
 // 主函数
 // ============================================
-function main() {
+async function main() {
+  if (!isFixtureEnv()) {
+    throw new Error('[SECURITY] seed-pathology-data 只允许在显式 development/test 环境执行。')
+  }
+
+  // 门禁通过后才加载数据库模块，避免生产误执行在拒绝前创建/打开目标数据库。
+  const { getDatabase, initializeDatabase } = await import('../src/database/DatabaseManager.js')
   log('============================================')
   log('病理科基础数据初始化开始')
   log('============================================')
@@ -1407,10 +1413,11 @@ function main() {
     log('病理科基础数据初始化完成')
     log('============================================')
   } catch (err: any) {
-    log(`初始化失败: ${err.message}`)
-    console.error(err)
-    process.exit(1)
+    throw new Error(`初始化失败: ${err.message}`, { cause: err })
   }
 }
 
-main()
+main().catch((err: unknown) => {
+  console.error(err instanceof Error ? err.message : err)
+  process.exitCode = 1
+})

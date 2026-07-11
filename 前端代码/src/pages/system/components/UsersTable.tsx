@@ -25,7 +25,6 @@ interface Props {
   onOpenDetail: (row: User) => void
   onOpenEdit: (row: User) => void
   onToggleStatus: (row: User) => void
-  onResetPassword: (id: string) => void
   onDelete: (id: string) => void
 }
 
@@ -35,7 +34,7 @@ export function UsersTable({
   onKeywordChange, onRoleFilterChange, onStatusFilterChange, onSelectedRoleIdChange,
   onSearch, onReset,
   onPageChange, onPageSizeChange,
-  onOpenDetail, onOpenEdit, onToggleStatus, onResetPassword, onDelete,
+  onOpenDetail, onOpenEdit, onToggleStatus, onDelete,
 }: Props) {
   return (
     <div className="grid grid-cols-[300px_1fr] gap-5">
@@ -161,7 +160,6 @@ export function UsersTable({
                       <button onClick={() => onToggleStatus(row)} className="h-8 px-3 text-[13px] text-gray-700 hover:bg-gray-100 rounded-md transition-colors">
                         {row.status === 'active' ? '停用' : '启用'}
                       </button>
-                      <button onClick={() => onResetPassword(row.id)} className="h-8 px-3 text-[13px] text-gray-700 hover:bg-gray-100 rounded-md transition-colors">重置密码</button>
                       <button onClick={() => onDelete(row.id)} className="h-8 px-3 text-[13px] text-red-500 hover:bg-red-50 rounded-md transition-colors">删除</button>
                     </div>
                   </td>

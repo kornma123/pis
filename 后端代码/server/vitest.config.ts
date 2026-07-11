@@ -27,6 +27,9 @@ export default defineConfig({
       'tests/locations.test.ts', 'tests/roles.test.ts', 'tests/users.test.ts',
     ],
     testTimeout: 30000,
+    // 安全回归会并行执行真实 bcrypt cost=12；Windows/低核 CI 上初始化 SQLite 的
+    // beforeAll 可能被 CPU 争用拖过 Vitest 默认 10 秒，但并非挂死。与 testTimeout 对齐。
+    hookTimeout: 30000,
     globals: true,
     environment: 'node',
     // 每文件强制独立内存库，消除跨文件 SQLite 污染（详见 tests/db-isolation.setup.ts）

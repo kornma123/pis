@@ -11,7 +11,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { getDatabase } from '../database/DatabaseManager.js'
 import {
   type Level, type PermMap,
-  SEED_MATRIX, adminAllPermissions, parsePermissions, mergePermissions, hasLevel,
+  adminAllPermissions, parsePermissions, mergePermissions, hasLevel,
 } from './rbac-matrix.js'
 
 // 透传纯矩阵 API，便于其它模块从单一入口引用
@@ -22,30 +22,42 @@ export {
   adminAllPermissions, parsePermissions, mergePermissions, hasLevel,
 } from './rbac-matrix.js'
 
-/** 取用户全部角色码（user_roles ∪ users.role 兜底） */
+/** 取用户全部活跃角色码（user_roles ∪ users.role 兜底）；停用/软删除/缺失角色均不授权。 */
 export function getUserRoleCodes(db: any, userId: string): string[] {
   const codes = new Set<string>()
   try {
-    const rows = db.prepare('SELECT role_code FROM user_roles WHERE user_id = ?').all(userId) as Array<{ role_code: string }>
+    const rows = db.prepare(`
+      SELECT ur.role_code
+      FROM user_roles ur
+      INNER JOIN roles r ON r.code = ur.role_code
+      WHERE ur.user_id = ? AND r.status = 1 AND r.is_deleted = 0
+    `).all(userId) as Array<{ role_code: string }>
     for (const r of rows) if (r.role_code) codes.add(r.role_code)
   } catch {
     /* user_roles 表尚未建（P1 前）→ 走兜底 */
   }
   if (codes.size === 0) {
-    const u = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined
+    const u = db.prepare(`
+      SELECT u.role
+      FROM users u
+      INNER JOIN roles r ON r.code = u.role
+      WHERE u.id = ? AND r.status = 1 AND r.is_deleted = 0
+    `).get(userId) as { role?: string } | undefined
     if (u?.role) codes.add(u.role)
   }
   return [...codes]
 }
 
-/** 角色集合 → 有效权限并集（admin → 全 W；roles 行缺失退回 SEED_MATRIX） */
+/** 角色集合 → 活跃 DB 角色权限并集；停用、软删除或缺失角色一律不回退静态种子。 */
 export function getEffectivePermissionsForRoles(db: any, roleCodes: string[]): PermMap {
-  if (roleCodes.includes('admin')) return adminAllPermissions()
   const effective: PermMap = {}
   for (const code of roleCodes) {
-    const row = db.prepare('SELECT permissions FROM roles WHERE code = ? AND is_deleted = 0').get(code) as { permissions?: string } | undefined
-    if (row) mergePermissions(effective, parsePermissions(row.permissions))
-    else if (SEED_MATRIX[code]) mergePermissions(effective, SEED_MATRIX[code])
+    const row = db.prepare('SELECT permissions, status, is_deleted FROM roles WHERE code = ?').get(code) as
+      | { permissions?: string; status: number; is_deleted: number }
+      | undefined
+    if (!row || row.status !== 1 || row.is_deleted !== 0) continue
+    if (code === 'admin') return adminAllPermissions()
+    mergePermissions(effective, parsePermissions(row.permissions))
   }
   return effective
 }
@@ -61,8 +73,8 @@ interface AuthRequest extends Request {
 
 /**
  * 解析请求用户的角色集合（多角色感知 + 健壮）：
- *   优先 req.user.roles（authenticateToken 已挂）→ 否则按 userId 查 DB → 最后退回 token 内单 role。
- * 兼容仅注入 {role} 的测试链路 + 生产 per-request 解析。
+ *   优先 req.user.roles（authenticateToken 已挂）→ 否则按 userId 查 DB。
+ * 带 userId 时 DB 异常/空结果绝不退回 token.role；仅无 userId 的显式测试 shim 可用单 role。
  */
 export function resolveRequestRoles(user: { userId?: string; role?: string; roles?: string[] }): string[] {
   if (user.roles && user.roles.length) return user.roles
@@ -71,8 +83,9 @@ export function resolveRequestRoles(user: { userId?: string; role?: string; role
       const codes = getUserRoleCodes(getDatabase(), user.userId)
       if (codes.length) return codes
     } catch {
-      /* DB 不可用 → 退回 token role */
+      return []
     }
+    return []
   }
   return user.role ? [user.role] : []
 }

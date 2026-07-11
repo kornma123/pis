@@ -66,7 +66,7 @@
 |---|---|---|
 | 新生产 JWT | `<JWT_SECRET_REFERENCE>` | JWT secret 值 |
 | 新 JWT 版本 | `<JWT_SECRET_VERSION_ID>` | 可恢复明文的材料 |
-| 六账号口令包 | `<PASSWORD_BUNDLE_REFERENCE>` | 任一口令或散列 |
+| 八账号口令包 | `<PASSWORD_BUNDLE_REFERENCE>` | 任一口令或散列 |
 | 旧 access token | `<OLD_ACCESS_TOKEN_HANDLE>` | token 值 |
 | 旧 refresh token | `<OLD_REFRESH_TOKEN_HANDLE>` | token 值 |
 | 生产数据库访问 | `<DATABASE_CREDENTIAL_REFERENCE>` | 连接串、用户口令 |
@@ -90,18 +90,20 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 
 当前事故报告必须把关闭依据如实记录为负责人确认及订阅不可用，不得改写为厂商 401 技术验证。
 
-## 3. 六账号范围
+## 3. 八账号范围
 
 | 用户名 | 角色 | 新口令引用 | 改密结果 | 默认口令拒绝证据 | 新登录证据 | 旧会话失效证据 |
 |---|---|---|---|---|---|---|
 | `admin` | `admin` | `<ADMIN_PASSWORD_SECRET_REFERENCE>` | `<ADMIN_RESET_RESULT>` | `<ADMIN_DEFAULT_DENIAL_EVIDENCE>` | `<ADMIN_NEW_LOGIN_EVIDENCE>` | `<ADMIN_OLD_SESSION_EVIDENCE>` |
 | `cangguan` | `warehouse_manager` | `<CANGGUAN_PASSWORD_SECRET_REFERENCE>` | `<CANGGUAN_RESET_RESULT>` | `<CANGGUAN_DEFAULT_DENIAL_EVIDENCE>` | `<CANGGUAN_NEW_LOGIN_EVIDENCE>` | `<CANGGUAN_OLD_SESSION_EVIDENCE>` |
 | `jishuyuan1` | `technician` | `<JISHUYUAN1_PASSWORD_SECRET_REFERENCE>` | `<JISHUYUAN1_RESET_RESULT>` | `<JISHUYUAN1_DEFAULT_DENIAL_EVIDENCE>` | `<JISHUYUAN1_NEW_LOGIN_EVIDENCE>` | `<JISHUYUAN1_OLD_SESSION_EVIDENCE>` |
+| `jishuyuan2` | `technician` | `<JISHUYUAN2_PASSWORD_SECRET_REFERENCE>` | `<JISHUYUAN2_RESET_RESULT>` | `<JISHUYUAN2_DEFAULT_DENIAL_EVIDENCE>` | `<JISHUYUAN2_NEW_LOGIN_EVIDENCE>` | `<JISHUYUAN2_OLD_SESSION_EVIDENCE>` |
 | `yishi1` | `pathologist` | `<YISHI1_PASSWORD_SECRET_REFERENCE>` | `<YISHI1_RESET_RESULT>` | `<YISHI1_DEFAULT_DENIAL_EVIDENCE>` | `<YISHI1_NEW_LOGIN_EVIDENCE>` | `<YISHI1_OLD_SESSION_EVIDENCE>` |
+| `yishi2` | `pathologist` | `<YISHI2_PASSWORD_SECRET_REFERENCE>` | `<YISHI2_RESET_RESULT>` | `<YISHI2_DEFAULT_DENIAL_EVIDENCE>` | `<YISHI2_NEW_LOGIN_EVIDENCE>` | `<YISHI2_OLD_SESSION_EVIDENCE>` |
 | `caigou` | `procurement` | `<CAIGOU_PASSWORD_SECRET_REFERENCE>` | `<CAIGOU_RESET_RESULT>` | `<CAIGOU_DEFAULT_DENIAL_EVIDENCE>` | `<CAIGOU_NEW_LOGIN_EVIDENCE>` | `<CAIGOU_OLD_SESSION_EVIDENCE>` |
 | `caiwu` | `finance` | `<CAIWU_PASSWORD_SECRET_REFERENCE>` | `<CAIWU_RESET_RESULT>` | `<CAIWU_DEFAULT_DENIAL_EVIDENCE>` | `<CAIWU_NEW_LOGIN_EVIDENCE>` | `<CAIWU_OLD_SESSION_EVIDENCE>` |
 
-要求：六个口令必须互异、由密码管理器生成、通过受控环境变量或 secret injection 提供；应用与操作日志只允许记录用户名和结果。
+要求：八个口令必须互异、由密码管理器生成、通过受控环境变量或 secret injection 提供；应用与操作日志只允许记录用户名和结果。
 
 ## 4. 上线前门禁
 
@@ -112,13 +114,13 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 | 生产环境身份确认 | `<ENVIRONMENT_IDENTITY_GATE>` | URL、平台、项目、数据库和实例清单相互一致 | `<ENVIRONMENT_IDENTITY_EVIDENCE>` |
 | PR #119 处置审批 | `<PR119_APPROVAL_GATE>` | 已明确批准部署，或有等效安全变更且完成审查 | `<PR119_APPROVAL_EVIDENCE>` |
 | 默认账号策略 | `<DEFAULT_ACCOUNT_GATE>` | 生产不创建、恢复或重建历史夹具凭据 | `<DEFAULT_ACCOUNT_EVIDENCE>` |
-| 六账号强口令 | `<PASSWORD_RESET_GATE>` | 六账号全部存在、原子改密、结果为 6/6 | `<PASSWORD_RESET_EVIDENCE>` |
+| 八账号强口令 | `<PASSWORD_RESET_GATE>` | 八账号全部存在、原子改密、结果为 8/8 | `<PASSWORD_RESET_EVIDENCE>` |
 | JWT secret | `<JWT_SECRET_GATE>` | secret store 中新建强随机版本；应用无 fallback | `<JWT_SECRET_EVIDENCE>` |
 | 全实例一致性 | `<INSTANCE_CONSISTENCY_GATE>` | 所有实例只加载同一新版本，无旧实例存活 | `<INSTANCE_EVIDENCE>` |
 | 旧 access token | `<OLD_ACCESS_TOKEN_GATE>` | 每个实例请求 `/api/v1/auth/me` 均为 401 | `<OLD_ACCESS_EVIDENCE>` |
 | 旧 refresh token | `<OLD_REFRESH_TOKEN_GATE>` | 每个实例请求 `/api/v1/auth/refresh` 均为 401 | `<OLD_REFRESH_EVIDENCE>` |
-| 新登录 | `<NEW_LOGIN_GATE>` | 六账号使用新口令均成功 | `<NEW_LOGIN_EVIDENCE>` |
-| 历史默认口令 | `<DEFAULT_PASSWORD_GATE>` | 六账号的历史默认登录尝试均为 401 | `<DEFAULT_PASSWORD_EVIDENCE>` |
+| 新登录 | `<NEW_LOGIN_GATE>` | 八账号使用新口令均成功 | `<NEW_LOGIN_EVIDENCE>` |
+| 历史默认口令 | `<DEFAULT_PASSWORD_GATE>` | 八账号的历史默认登录尝试均为 401 | `<DEFAULT_PASSWORD_EVIDENCE>` |
 | Secret 扫描 | `<SECRET_SCAN_GATE>` | 工作树、构建产物和部署配置无真实秘密 | `<SECRET_SCAN_EVIDENCE>` |
 | 健康与回归 | `<HEALTH_REGRESSION_GATE>` | 健康检查、鉴权和关键业务回归均通过 | `<REGRESSION_EVIDENCE>` |
 
@@ -130,7 +132,7 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 2. 在 secret store 创建 `<PASSWORD_BUNDLE_REFERENCE>` 和 `<JWT_SECRET_REFERENCE>`；不生成终端可见输出。
 3. 取得对 PR #119 或等效修复的单独部署批准。
 4. 部署不种固定账号、不使用 JWT fallback 的后端版本。
-5. 使用受控初始化流程创建六账号并写入六个互异强口令。
+5. 使用受控初始化流程创建八账号并写入八个互异强口令。
 6. 一次性启动全部后端实例，确认它们加载 `<JWT_SECRET_VERSION_ID>`。
 7. 完成第 7 节验收后才接入生产流量。
 
@@ -138,10 +140,10 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 
 1. 阻断外部流量并停止全部后端实例；禁止新旧 JWT 版本混跑。
 2. 验证数据库身份为 `<DATABASE_IDENTITY_REFERENCE>`，创建加密快照 `<PRECHANGE_DATABASE_SNAPSHOT_ID>`。
-3. 在单个数据库事务中确认六账号全部存在，并完成 6/6 改密；任一缺失或失败必须整体回滚。
+3. 在单个数据库事务中确认八账号全部存在，并完成 8/8 改密；任一缺失或失败必须整体回滚。
 4. 提交后不得恢复历史口令；失败恢复采用全新口令包前滚。
 5. 写入 `<JWT_SECRET_VERSION_ID>`，一次性替换全部实例。
-6. 仅在六账号改密成功后部署带生产启动门禁的 #119 或等效版本，避免门禁拒绝启动。
+6. 仅在八账号改密成功后部署带生产启动门禁的 #119 或等效版本，避免门禁拒绝启动。
 7. 完成第 7 节验收后才接入生产流量。
 
 ## 6. 执行记录模板
@@ -207,8 +209,8 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 
 | 验证项 | 预期 | 实际 | 证据 |
 |---|---|---|---|
-| 六账号新口令登录 | 6/6 成功 | `<NEW_PASSWORD_LOGIN_RESULT>` | `<NEW_LOGIN_EVIDENCE>` |
-| 六账号历史默认登录 | 全部 HTTP 401 | `<DEFAULT_PASSWORD_LOGIN_RESULT>` | `<DEFAULT_PASSWORD_EVIDENCE>` |
+| 八账号新口令登录 | 8/8 成功 | `<NEW_PASSWORD_LOGIN_RESULT>` | `<NEW_LOGIN_EVIDENCE>` |
+| 八账号历史默认登录 | 全部 HTTP 401 | `<DEFAULT_PASSWORD_LOGIN_RESULT>` | `<DEFAULT_PASSWORD_EVIDENCE>` |
 | 重启后账号状态 | 不被恢复为历史夹具状态 | `<POST_RESTART_ACCOUNT_RESULT>` | `<POST_RESTART_ACCOUNT_EVIDENCE>` |
 
 验证客户端只输出用户名、实例 ID、时间、HTTP 状态和错误代码，不输出口令、token 或请求体。
@@ -222,8 +224,8 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 
 ## 9. 失败处理：只允许前滚
 
-- 六账号事务提交前失败：数据库事务回滚；修正原因后用同一未暴露口令包或全新口令包重试。
-- 六账号事务提交后失败：禁止恢复历史口令；生成全新口令包继续前滚。
+- 八账号事务提交前失败：数据库事务回滚；修正原因后用同一未暴露口令包或全新口令包重试。
+- 八账号事务提交后失败：禁止恢复历史口令；生成全新口令包继续前滚。
 - JWT 发布失败：禁止恢复已泄露或历史 JWT；修正配置后用新的 secret 版本完成全实例替换。
 - 实例版本不一致：保持流量关闭，清除旧实例并重新验证全部实例。
 - #119 启动门禁拒绝启动：保持服务离线，先完成数据库账号修复；未经批准不得绕过门禁。

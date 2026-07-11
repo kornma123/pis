@@ -33,7 +33,7 @@ beforeAll(async () => {
   // 写端点现有 requirePermission('stocktaking','W') 守卫（依赖 req.user）。注入写角色用户，
   // 模拟 authenticateToken 已设置 req.user（生产链路一致；本文件测批量业务逻辑，非 RBAC）。
   const injectWriteUser = (req: any, _res: any, next: any) => {
-    req.user = { userId: 'TEST-ADMIN', username: 'system', role: 'admin' }
+    req.user = { userId: 'TEST-ADMIN', username: 'system', role: 'admin', roles: ['admin'] }
     next()
   }
   app = await buildTestApp([

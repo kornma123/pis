@@ -121,7 +121,7 @@ export function CostDriverList() {
       const params = new URLSearchParams()
       const keyword = keywordOverride.trim()
       if (keyword) params.set('keyword', keyword)
-      const url = `/api/v1/abc/cost-drivers${params.toString() ? `?${params.toString()}` : ''}`
+      const url = `/api/v1/abc/cost-drivers${params.toString() ? '?' + params.toString() : ''}`
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
       })

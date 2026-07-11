@@ -6,12 +6,17 @@ on:
   schedule:
     - cron: '0 2 * * *'  # 每天凌晨 2 点 UTC
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # E2E 后端以 development 运行：fail-closed 安全默认下，仅显式 dev/test 才种夹具账号（E2E 登录依赖）。
+  NODE_ENV: development
 
 jobs:
   e2e-full:
@@ -20,12 +25,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
+
+      - name: Generate ephemeral CI JWT secret
+        shell: bash
+        run: |
+          jwt_secret="$(openssl rand -base64 48)"
+          echo "::add-mask::$jwt_secret"
+          echo "JWT_SECRET=$jwt_secret" >> "$GITHUB_ENV"
+          unset jwt_secret
 
       - name: Install backend dependencies
         working-directory: 后端代码/server
@@ -47,7 +62,7 @@ jobs:
 
       - name: Upload E2E report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: e2e-report-full
           path: 前端代码/e2e-report/
