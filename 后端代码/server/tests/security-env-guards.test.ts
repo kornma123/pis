@@ -19,6 +19,7 @@ import {
 } from '../src/config/security.js'
 
 const PLACEHOLDER = 'your-jwt-secret-key-change-in-production' // 公开占位值（在指纹拒绝清单内）
+const PUBLIC_CI_PLACEHOLDER = 'ci-throwaway-not-a-real-secret-do-not-use-in-prod'
 const STRONG = 'x9K2mQ7pL4nR8vT1wZ3aB6cD0eF5gH2j' // 32 位强随机样例
 const STRONG_BASE64 = 'M3Nq8K6sF4pV9zR2xC7tL5wH1dB0gY+/aE6uQ9iJ2oP=' // 强随机 base64 形态样例
 const STRONG_ACCOUNT_PASSWORD = 'N7v!Q2m@R8x#T4k%Z9p&L3d^'
@@ -82,6 +83,7 @@ describe('allowDefaultFixtureUsers —— 默认关闭', () => {
 describe('jwtSecretProblem —— 识别泄露/占位/过短', () => {
   it('占位默认值（指纹命中）→ 非空原因', () => {
     expect(jwtSecretProblem(PLACEHOLDER)).toBeTruthy()
+    expect(jwtSecretProblem(PUBLIC_CI_PLACEHOLDER)).toBeTruthy()
   })
   it('拒绝 NFKC 规范化后等价的全角占位默认值', () => {
     expect(toFullwidthAscii(PLACEHOLDER).normalize('NFKC')).toBe(PLACEHOLDER)

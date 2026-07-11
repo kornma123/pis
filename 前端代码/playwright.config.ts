@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const backendPort = process.env.E2E_BACKEND_PORT || '3001'
+const frontendPort = process.env.E2E_FRONTEND_PORT || '8080'
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
@@ -12,7 +15,7 @@ export default defineConfig({
     ['list'],
   ],
   use: {
-    baseURL: 'http://localhost:8080',
+    baseURL: `http://localhost:${frontendPort}`,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -36,18 +39,22 @@ export default defineConfig({
   webServer: [
     {
       command: 'cd ../后端代码/server && npx tsx src/app.ts',
-      url: 'http://localhost:3001/api/health',
+      url: `http://localhost:${backendPort}/api/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
       // E2E 后端须以 development 运行：既落 app.listen（NODE_ENV!=='test'），又启用夹具账号种子
       // （安全止血后 fail-closed：仅显式 dev/test 才种 admin/admin123 等，E2E 登录依赖它）。
-      env: { ...process.env, NODE_ENV: 'development' },
+      env: { ...process.env, NODE_ENV: 'development', PORT: backendPort },
     },
     {
-      command: 'npx vite --host',
-      url: 'http://localhost:8080',
+      command: `npx vite --host --port ${frontendPort}`,
+      url: `http://localhost:${frontendPort}`,
       reuseExistingServer: !process.env.CI,
       timeout: 120000,
+      env: {
+        ...process.env,
+        VITE_API_BASE_URL: `http://127.0.0.1:${backendPort}/api/v1`,
+      },
     },
   ],
 })

@@ -5,9 +5,22 @@
 后端代码/server/scripts/role-based-testing.ts export-ignore
 后端代码/server/scripts/forensic-*.cjs export-ignore
 后端代码/server/tests export-ignore
-# 已跟踪的 dev 数据库（含 admin/admin123 等种子账号哈希）——绝不进部署包，
-# 否则生产会带着默认账号库启动。生产由 app 首次运行建空库（fail-closed 不种默认账号）。
+# 防复发：即使本地数据库将来被误跟踪，也绝不进入部署包。PR #119
+# 终审已从最终树删除历史数据库；生产库只允许来自挂载卷。
 后端代码/server/data export-ignore
+后端代码/server/*.log export-ignore
+后端代码/server/fix-* export-ignore
+后端代码/server/test-*.cjs export-ignore
+后端代码/server/token*.json export-ignore
 前端代码/e2e export-ignore
+前端代码/e2e-report export-ignore
+前端代码/*.txt export-ignore
+前端代码/*.log export-ignore
+前端代码/dashboard-*.json export-ignore
+前端代码/failed.json export-ignore
+前端代码/roles-run.json export-ignore
+前端代码/analyze-failures.js export-ignore
+前端代码/fix-* export-ignore
+前端代码/$null export-ignore
 .claude export-ignore
 .github export-ignore

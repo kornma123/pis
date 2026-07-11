@@ -16,6 +16,9 @@ on:
   pull_request:
     branches: [master, main, feat/phase2-lab-revenue-split]
 
+permissions:
+  contents: read
+
 concurrency:
   group: backend-tests-${{ github.ref }}
   cancel-in-progress: true
@@ -24,20 +27,19 @@ jobs:
   vitest:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # CI 专用一次性密钥（绝非生产值）。后端 .env 已从版本库移除（曾含泄露的签名密钥），
-      # 因此这里必须显式注入非空 JWT_SECRET —— 否则 auth.ts 的空值检查会抛错、整套 vitest
-      # （master 的 required 门）直接变红。测试运行在 NODE_ENV=test，故 auth.ts 的「已泄露/
-      # 过弱密钥」分支只 console.warn、不阻断。真实密钥仅经部署环境注入。
-      JWT_SECRET: ci-throwaway-not-a-real-secret-do-not-use-in-prod
     defaults:
       run:
         working-directory: 后端代码/server
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
+      - name: Generate ephemeral CI JWT secret
+        shell: bash
+        run: echo "JWT_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
       - name: Install
         run: npm ci
       - name: Run backend vitest (含 golden ¥27,870 / ¥13,152)

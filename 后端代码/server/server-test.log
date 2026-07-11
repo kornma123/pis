@@ -1,7 +1,0 @@
-Database initialized successfully
-(node:35496) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-COREONE Backend Server running on port 3001
-API Base URL: http://localhost:3001/api/v1
-
-d:\Git\COREONE\最新代码\后端代码\server>

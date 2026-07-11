@@ -11,10 +11,12 @@ const router = Router()
 const JWT_EXPIRES = '8h'
 
 /** 当前用户能力载荷（数据驱动 RBAC：角色并集权限 + 成本可见性，前端 nav/守卫/仪表盘单一来源） */
-function buildCapabilityPayload(db: any, userId: string, fallbackRole?: string) {
+function buildCapabilityPayload(db: any, userId: string, ...preferredRoles: Array<string | undefined>) {
   const roles = getUserRoleCodes(db, userId)
+  const primaryRole = preferredRoles.find(role => role && roles.includes(role)) || roles[0] || null
   return {
-    roles: roles.length ? roles : (fallbackRole ? [fallbackRole] : []),
+    primaryRole,
+    roles,
     capabilities: getEffectivePermissions(db, userId),
     canSeeCost: canSeeCost(db, userId),
   }
@@ -50,19 +52,19 @@ router.post('/login', (req, res) => {
       return
     }
 
+    const cap = buildCapabilityPayload(db, user.id, user.primary_role, user.role)
     const token = jwt.sign(
-      { userId: user.id, username: user.username, role: user.role },
+      { userId: user.id, username: user.username, role: cap.primaryRole || '', type: 'access' },
       JWT_SECRET,
-      { expiresIn: JWT_EXPIRES }
+      { expiresIn: JWT_EXPIRES, algorithm: 'HS256' }
     )
 
     const refreshToken = jwt.sign(
       { userId: user.id, type: 'refresh' },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '7d', algorithm: 'HS256' }
     )
 
-    const cap = buildCapabilityPayload(db, user.id, user.role)
     success(res, {
       token,
       refreshToken,
@@ -71,8 +73,8 @@ router.post('/login', (req, res) => {
         id: user.id,
         username: user.username,
         realName: user.real_name,
-        role: user.role,
-        primaryRole: user.primary_role || user.role,
+        role: cap.primaryRole,
+        primaryRole: cap.primaryRole,
         roles: cap.roles,
         capabilities: cap.capabilities,
         canSeeCost: cap.canSeeCost,
@@ -91,7 +93,7 @@ router.post('/refresh', (req, res) => {
       return
     }
 
-    const decoded = jwt.verify(refreshToken, JWT_SECRET) as { userId: string; type: string }
+    const decoded = jwt.verify(refreshToken, JWT_SECRET, { algorithms: ['HS256'] }) as { userId: string; type: string }
     if (decoded.type !== 'refresh') {
       error(res, 'Invalid refresh token', 'UNAUTHORIZED', 401)
       return
@@ -105,13 +107,27 @@ router.post('/refresh', (req, res) => {
       return
     }
 
+    const cap = buildCapabilityPayload(db, user.id, user.primary_role, user.role)
     const token = jwt.sign(
-      { userId: user.id, username: user.username, role: user.role },
+      { userId: user.id, username: user.username, role: cap.primaryRole || '', type: 'access' },
       JWT_SECRET,
-      { expiresIn: JWT_EXPIRES }
+      { expiresIn: JWT_EXPIRES, algorithm: 'HS256' }
     )
 
-    success(res, { token, expiresIn: 28800 }, 'Refresh success')
+    success(res, {
+      token,
+      expiresIn: 28800,
+      user: {
+        id: user.id,
+        username: user.username,
+        realName: user.real_name,
+        role: cap.primaryRole,
+        primaryRole: cap.primaryRole,
+        roles: cap.roles,
+        capabilities: cap.capabilities,
+        canSeeCost: cap.canSeeCost,
+      },
+    }, 'Refresh success')
   } catch (err: any) {
     error(res, err.message, 'UNAUTHORIZED', 401)
   }
@@ -123,8 +139,8 @@ router.get('/me/capabilities', authenticateToken, (req, res) => {
     const db = getDatabase()
     const userId = (req as any).user.userId as string
     const u = db.prepare('SELECT role, primary_role FROM users WHERE id = ?').get(userId) as any
-    const cap = buildCapabilityPayload(db, userId, u?.role)
-    success(res, { primaryRole: u?.primary_role || u?.role || null, ...cap })
+    const cap = buildCapabilityPayload(db, userId, u?.primary_role, u?.role)
+    success(res, cap)
   } catch (err: any) {
     error(res, err.message, 'INTERNAL_ERROR', 500)
   }

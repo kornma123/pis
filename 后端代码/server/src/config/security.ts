@@ -40,6 +40,7 @@ const COMPROMISED_SECRET_FINGERPRINTS = new Set<string>([
   '0fb1a6d8b6413a4413034b700fa112dba37fb4cb4e65f3d2d746b6d12b83326c', // 旧默认 JWT 签名密钥（已泄露）
   '6b2a39b284cc4721e6fc096b025685c98534b2facc4d3080a5551b64ff06703c', // 更早的硬编码回退密钥（已泄露）
   '03e0d1ff6a48214ad0117e482f047bce1440e3328b84e3e23a10e0a1468612f5', // .env.example 占位默认值
+  '4715c13a5563d002b790320478f01e12e0db7b62d91d66c07a113a75aaf18490', // 历史 CI 公开占位值
 ])
 
 const MIN_JWT_SECRET_LEN = 32

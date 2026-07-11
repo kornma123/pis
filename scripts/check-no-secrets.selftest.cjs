@@ -5,6 +5,7 @@ const { spawnSync, execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const zlib = require('node:zlib')
 
 const scanner = path.resolve(__dirname, 'check-no-secrets.cjs')
 const { isHistoricalAllow } = require(scanner)
@@ -26,11 +27,12 @@ function gitWithInput(args, input) {
   }).trim()
 }
 
-function runScanner(args = []) {
+function runScanner(args = [], timeout) {
   return spawnSync(process.execPath, [scanner, ...args], {
     cwd: repo,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
+    timeout,
   })
 }
 
@@ -74,6 +76,83 @@ function expectTrackedSecret(file, content, message, expectedRule) {
   }
 }
 
+function makeEmptyTarHeader() {
+  const header = Buffer.alloc(512)
+  header.write('payload.txt', 0, 'ascii')
+  header.write('0000644\0', 100, 'ascii')
+  header.write('0000000\0', 108, 'ascii')
+  header.write('0000000\0', 116, 'ascii')
+  header.write('00000000000\0', 124, 'ascii')
+  header.write('00000000000\0', 136, 'ascii')
+  header.fill(0x20, 148, 156)
+  header.write('0', 156, 'ascii')
+  header.write('ustar\0', 257, 'ascii')
+  header.write('00', 263, 'ascii')
+  const checksum = header.reduce((sum, byte) => sum + byte, 0)
+  header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 'ascii')
+  return header
+}
+
+function makeEmptyZip() {
+  return Buffer.from([
+    0x50, 0x4b, 0x05, 0x06,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00,
+  ])
+}
+
+function makeZip64Envelope() {
+  const record = Buffer.alloc(56)
+  Buffer.from([0x50, 0x4b, 0x06, 0x06]).copy(record)
+  record.writeBigUInt64LE(44n, 4)
+  record.writeUInt16LE(45, 12)
+  record.writeUInt16LE(45, 14)
+  const locator = Buffer.alloc(20)
+  Buffer.from([0x50, 0x4b, 0x06, 0x07]).copy(locator)
+  locator.writeBigUInt64LE(0n, 8)
+  locator.writeUInt32LE(1, 16)
+  const eocd = makeEmptyZip()
+  eocd.writeUInt16LE(0xffff, 8)
+  eocd.writeUInt16LE(0xffff, 10)
+  eocd.writeUInt32LE(0xffffffff, 12)
+  eocd.writeUInt32LE(0xffffffff, 16)
+  return Buffer.concat([record, locator, eocd])
+}
+
+function makeZip64RecordEndCollisionEnvelope() {
+  // A legal outer Zip64 record may contain arbitrary extensible data. Put a
+  // second structurally plausible PK\x06\x06 inside it whose declared end is
+  // the same locator offset, but whose central-directory geometry is invalid.
+  // The scanner must retain both candidates instead of letting the inner one
+  // overwrite the valid outer record in its end-offset index.
+  const record = Buffer.alloc(120)
+  Buffer.from([0x50, 0x4b, 0x06, 0x06]).copy(record)
+  record.writeBigUInt64LE(108n, 4)
+  record.writeUInt16LE(45, 12)
+  record.writeUInt16LE(45, 14)
+
+  const innerOffset = 60
+  Buffer.from([0x50, 0x4b, 0x06, 0x06]).copy(record, innerOffset)
+  record.writeBigUInt64LE(48n, innerOffset + 4)
+  record.writeUInt16LE(45, innerOffset + 12)
+  record.writeUInt16LE(45, innerOffset + 14)
+  record.writeBigUInt64LE(1n, innerOffset + 40)
+
+  const locator = Buffer.alloc(20)
+  Buffer.from([0x50, 0x4b, 0x06, 0x07]).copy(locator)
+  locator.writeBigUInt64LE(0n, 8)
+  locator.writeUInt32LE(1, 16)
+  const eocd = makeEmptyZip()
+  eocd.writeUInt16LE(0xffff, 8)
+  eocd.writeUInt16LE(0xffff, 10)
+  eocd.writeUInt32LE(0xffffffff, 12)
+  eocd.writeUInt32LE(0xffffffff, 16)
+  return Buffer.concat([record, locator, eocd])
+}
+
 try {
   git(['init', '-q'])
   git(['config', 'user.name', 'secret-scan-selftest'])
@@ -86,6 +165,9 @@ try {
   const mainBranch = git(['rev-parse', '--abbrev-ref', 'HEAD'])
 
   const fakeKey = `sk-kimi-${'A'.repeat(48)}`
+  const jwtVariable = ['JWT', '_SECRET'].join('')
+  const publicExample = 'your-jwt-secret-key-change-in-production'
+  const formerCiPlaceholder = 'ci-throwaway-not-a-real-secret-do-not-use-in-prod'
   fs.writeFileSync(path.join(repo, 'transient.txt'), `${fakeKey}\n`)
   git(['add', 'transient.txt'])
   git(['commit', '-qm', 'introduce fake secret'])
@@ -138,6 +220,27 @@ try {
     'a path that merely ends in scripts/check-no-secrets.cjs must still be scanned',
     'kimi-api-key',
   )
+  stageFixture(
+    '后端代码/server/.env.example',
+    `${jwtVariable}=${publicExample}\n`,
+  )
+  try {
+    expectStatus(runScanner(), 0, 'only the exact documented backend .env.example placeholder may be tracked')
+  } finally {
+    removeFixture('后端代码/server/.env.example')
+  }
+  expectTrackedSecret(
+    '.github/workflows/public-placeholder.yml',
+    `env:\n  ${jwtVariable}: ${formerCiPlaceholder}\n`,
+    'the former public CI placeholder must not be a global scanner exemption',
+    'jwt-secret-assignment',
+  )
+  expectTrackedSecret(
+    'docker-compose.yml',
+    `services:\n  backend:\n    environment:\n      ${jwtVariable}: ${publicExample}\n`,
+    'the example placeholder must be allowed only at its exact documentation path and line',
+    'jwt-secret-assignment',
+  )
 
   // The root scanner contains exact rule-definition lines, but the rest of that file must
   // still be scanned. Appending an unrelated credential may not inherit a whole-file skip.
@@ -156,11 +259,221 @@ try {
   } finally {
     removeFixture('opaque.zip')
   }
-  stageFixture('renamed-archive.png', Buffer.from('PK\x03\x04compressed fixture'))
+  stageFixture('tracked.db', Buffer.from('not-even-a-complete-database'))
+  try {
+    expectStatus(runScanner(), 2, 'tracked database extensions must fail closed even when their bytes look harmless')
+  } finally {
+    removeFixture('tracked.db')
+  }
+  stageFixture(
+    'renamed-sqlite.png',
+    Buffer.concat([
+      Buffer.from('apparently-safe-prefix'),
+      Buffer.from('SQLite format 3\0', 'ascii'),
+      Buffer.alloc(128),
+      Buffer.from('trailing-bytes'),
+    ]),
+  )
+  try {
+    expectStatus(runScanner(), 2, 'renaming a SQLite database to a media extension must not bypass the gate')
+  } finally {
+    removeFixture('renamed-sqlite.png')
+  }
+  const sqliteHistoryBase = git(['rev-parse', 'HEAD'])
+  fs.writeFileSync(
+    path.join(repo, 'historical-sqlite.png'),
+    Buffer.concat([Buffer.from('prefix'), Buffer.from('SQLite format 3\0', 'ascii'), Buffer.alloc(64)]),
+  )
+  git(['add', 'historical-sqlite.png'])
+  git(['commit', '-qm', 'introduce renamed sqlite payload'])
+  fs.rmSync(path.join(repo, 'historical-sqlite.png'))
+  git(['add', '-u'])
+  git(['commit', '-qm', 'delete renamed sqlite payload'])
+  const sqliteHistoryHead = git(['rev-parse', 'HEAD'])
+  expectStatus(
+    runScanner(['--range', `${sqliteHistoryBase}..${sqliteHistoryHead}`]),
+    2,
+    'range scanning must fail closed for an embedded SQLite header deleted by a later commit',
+  )
+  stageFixture('credential.p12', Buffer.from('opaque credential container'))
+  try {
+    expectStatus(runScanner(), 2, 'opaque credential containers must fail closed')
+  } finally {
+    removeFixture('credential.p12')
+  }
+  stageFixture('renamed-archive.png', makeEmptyZip())
   try {
     expectStatus(runScanner(), 2, 'archive magic must fail closed even behind a binary-looking extension')
   } finally {
     removeFixture('renamed-archive.png')
+  }
+
+  stageFixture(
+    'polyglot.png',
+    Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from('apparently-safe-prefix'),
+      makeEmptyZip(),
+    ]),
+  )
+  try {
+    expectStatus(runScanner(), 2, 'embedded archive magic in a polyglot must fail closed')
+  } finally {
+    removeFixture('polyglot.png')
+  }
+
+  stageFixture(
+    'zip-with-trailing-bytes.png',
+    Buffer.concat([Buffer.from('prefix'), makeEmptyZip(), Buffer.from('allowed-by-zip-readers')]),
+  )
+  try {
+    expectStatus(runScanner(), 2, 'a structurally valid ZIP with arbitrary prefix and trailing bytes must fail closed')
+  } finally {
+    removeFixture('zip-with-trailing-bytes.png')
+  }
+
+  stageFixture(
+    'zip64-with-prefix-and-trailing-bytes.png',
+    Buffer.concat([Buffer.from('prefix'), makeZip64Envelope(), Buffer.from('trailing-bytes')]),
+  )
+  try {
+    expectStatus(runScanner(), 2, 'a Zip64 envelope with arbitrary prefix and trailing bytes must fail closed')
+  } finally {
+    removeFixture('zip64-with-prefix-and-trailing-bytes.png')
+  }
+
+  stageFixture(
+    'zip64-record-end-collision.png',
+    Buffer.concat([Buffer.from('prefix'), makeZip64RecordEndCollisionEnvelope(), Buffer.from('trailing')]),
+  )
+  try {
+    expectStatus(
+      runScanner(),
+      2,
+      'an embedded Zip64 record candidate must not overwrite a valid outer record with the same end offset',
+    )
+  } finally {
+    removeFixture('zip64-record-end-collision.png')
+  }
+
+  const zip64SentinelFloodCandidate = Buffer.alloc(22)
+  Buffer.from([0x50, 0x4b, 0x05, 0x06]).copy(zip64SentinelFloodCandidate)
+  zip64SentinelFloodCandidate.writeUInt16LE(0xffff, 8)
+  zip64SentinelFloodCandidate.writeUInt16LE(0xffff, 10)
+  zip64SentinelFloodCandidate.writeUInt32LE(0xffffffff, 12)
+  zip64SentinelFloodCandidate.writeUInt32LE(0xffffffff, 16)
+  const zip64SentinelFlood = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    ...Array.from({ length: Math.ceil((1024 * 1024) / zip64SentinelFloodCandidate.length) }, () => (
+      zip64SentinelFloodCandidate
+    )),
+  ]).subarray(0, 1024 * 1024)
+  stageFixture('zip64-sentinel-flood.png', zip64SentinelFlood)
+  try {
+    expectStatus(
+      runScanner([], 5000),
+      0,
+      'many Zip64 sentinel candidates must remain linear and must not become false-positive archives',
+    )
+  } finally {
+    removeFixture('zip64-sentinel-flood.png')
+  }
+
+  stageFixture(
+    'prefixed-bzip2.png',
+    Buffer.concat([
+      Buffer.from('apparently-safe-prefix'),
+      Buffer.concat([Buffer.from('BZ'), Buffer.from('h91AY&SY')]),
+      Buffer.from('opaque-bzip2-payload'),
+      Buffer.from('trailing-bytes'),
+    ]),
+  )
+  try {
+    expectStatus(runScanner(), 2, 'a bzip2 stream behind an arbitrary prefix must fail closed')
+  } finally {
+    removeFixture('prefixed-bzip2.png')
+  }
+
+  const embeddedArchives = [
+    ['7z', Buffer.concat([Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]), Buffer.alloc(26)])],
+    ['rar', Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x01, 0x00])],
+    ['xz', Buffer.concat([Buffer.from([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00]), Buffer.alloc(6)])],
+    ['zstd', Buffer.concat([Buffer.from([0x28, 0xb5, 0x2f, 0xfd]), Buffer.from([0x00, 0x00])])],
+    ['lz4', Buffer.concat([Buffer.from([0x04, 0x22, 0x4d, 0x18]), Buffer.from([0x40, 0x40, 0x00])])],
+  ]
+  for (const [format, header] of embeddedArchives) {
+    stageFixture(
+      `prefixed-${format}.png`,
+      Buffer.concat([Buffer.from('apparently-safe-prefix'), header, Buffer.alloc(32), Buffer.from('trailing-bytes')]),
+    )
+    try {
+      expectStatus(runScanner(), 2, `${format} magic behind an arbitrary prefix must fail closed`)
+    } finally {
+      removeFixture(`prefixed-${format}.png`)
+    }
+  }
+
+  stageFixture(
+    'prefixed-gzip-with-trailing-bytes.png',
+    Buffer.concat([
+      Buffer.from('apparently-safe-prefix'),
+      zlib.gzipSync(Buffer.from('opaque payload')),
+      Buffer.from('trailing-bytes'),
+    ]),
+  )
+  try {
+    expectStatus(runScanner(), 2, 'a gzip stream with arbitrary prefix and trailing bytes must fail closed')
+  } finally {
+    removeFixture('prefixed-gzip-with-trailing-bytes.png')
+  }
+
+  const gzipCandidate = Buffer.alloc(24, 0x41)
+  Buffer.from([0x1f, 0x8b, 0x08, 0x08]).copy(gzipCandidate)
+  stageFixture('gzip-candidate-flood.png', Buffer.concat(Array.from({ length: 5000 }, () => gzipCandidate)))
+  try {
+    expectStatus(runScanner([], 5000), 2, 'many plausible gzip headers must fail closed without repeated decompression')
+  } finally {
+    removeFixture('gzip-candidate-flood.png')
+  }
+
+  stageFixture(
+    'short-magic-is-not-an-archive.png',
+    Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.from('random-BZh-and-\x1f\x8b-bytes')]),
+  )
+  try {
+    expectStatus(runScanner(), 0, 'short magic inside media must not cause an unvalidated archive false positive')
+  } finally {
+    removeFixture('short-magic-is-not-an-archive.png')
+  }
+
+  stageFixture(
+    'prefixed-tar.png',
+    Buffer.concat([Buffer.from('apparently-safe-prefix'), makeEmptyTarHeader()]),
+  )
+  try {
+    expectStatus(runScanner(), 2, 'a valid tar header behind an arbitrary prefix must fail closed')
+  } finally {
+    removeFixture('prefixed-tar.png')
+  }
+
+  stageFixture(
+    'large-secret.bin',
+    Buffer.from('version https://git-lfs.github.com/spec/v1\noid sha256:' + 'a'.repeat(64) + '\nsize 123\n'),
+  )
+  try {
+    expectStatus(runScanner(), 2, 'Git LFS pointers must fail closed when payload history is not scanned')
+  } finally {
+    removeFixture('large-secret.bin')
+  }
+
+  stageFixture(
+    'large-secret-crlf.bin',
+    Buffer.from('version https://git-lfs.github.com/spec/v1\r\noid sha256:' + 'b'.repeat(64) + '\r\nsize 456\r\n'),
+  )
+  try {
+    expectStatus(runScanner(), 2, 'CRLF Git LFS pointers must also fail closed')
+  } finally {
+    removeFixture('large-secret-crlf.bin')
   }
 
   const utf16le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`${fakeKey}\r\n`, 'utf16le')])
@@ -276,9 +589,11 @@ try {
   expectStatus(rawPathScan, 1, 'range scan must read changed content by raw blob id, not decoded path')
   assert(rawPathScan.stderr.includes('kimi-api-key'), 'raw-path range scan should report the matching rule', rawPathScan)
 
-  // Spaces and newlines are valid filename bytes and must remain supported.
+  // Spaces are portable filename bytes; POSIX also permits newlines. Exercise
+  // the strongest path supported by the host without making Windows selftests
+  // fail before the scanner runs.
   const oddPathBase = git(['rev-parse', 'HEAD'])
-  const oddPath = 'space and\nnewline.txt'
+  const oddPath = process.platform === 'win32' ? 'space in filename.txt' : 'space and\nnewline.txt'
   fs.writeFileSync(path.join(repo, oddPath), `${fakeKey}\n`)
   git(['add', '--', oddPath])
   git(['commit', '-qm', 'secret under odd path'])

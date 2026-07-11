@@ -9,6 +9,9 @@ on:
     branches: [main, master]
     paths-ignore: ['**.md', 'docs/**', '.claude/**']
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -16,9 +19,6 @@ concurrency:
 env:
   # 消除 Node.js 20 弃用警告，强制 action 使用 Node.js 24 运行时
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # CI 专用一次性密钥（绝非生产值）。后端 .env 已从版本库移除，playwright webServer 启动的
-  # 后端（tsx src/app.ts）需要非空 JWT_SECRET 才能启动。真实密钥仅经部署环境注入。
-  JWT_SECRET: ci-throwaway-not-a-real-secret-do-not-use-in-prod
   # E2E 后端以 development 运行：fail-closed 安全默认下，仅显式 dev/test 才种夹具账号（E2E 登录依赖）。
   NODE_ENV: development
 
@@ -29,12 +29,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
+
+      - name: Generate ephemeral CI JWT secret
+        shell: bash
+        run: echo "JWT_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
 
       # 1. 安装后端依赖
       # 后端 app.ts 启动时会自动调用 initializeDatabase() 创建表结构，无需额外 seed
@@ -52,22 +58,22 @@ jobs:
         working-directory: 前端代码
         run: npx playwright install --with-deps chromium
 
-      # 4. 运行 E2E 测试（PR 门只跑这 2 个核心 spec，缩短 CI 时间）
-      # ⚠️ 诚实口径（2026-07-06 机制审查订正原注释）：这里只跑 auth+supplier-returns 两个 spec。
-      #    e2e/ 下其余 ~16 个 spec **不在 PR 门里跑**，也**未逐一在本地保绿**——全量回归靠夜间
+      # 4. 运行 E2E 测试（PR 门只跑这 3 个核心 spec，缩短 CI 时间）
+      # ⚠️ 诚实口径：这里只跑 auth、supplier-returns 与 users 三个 spec；users 覆盖改密后旧口令失效。
+      #    e2e/ 下其余 spec **不在 PR 门里跑**，也**未逐一在本地保绿**——全量回归靠夜间
       #    e2e-full.yml（每晚 02:00 UTC），但该全量目前长期整体飘红、失败信号尚无人系统消费。
       #    故本 job 绿 ≠ 全量回归绿；e2e 亦非 required check（不阻断合并）。真拦门的是 backend-tests(vitest)。
       #    详见 .claude/rules/coreone-guardrails.md「E2E 现状」+ docs/PM待拍板.md（回归网重建=待拍项）。
       - name: Run E2E tests (core)
         working-directory: 前端代码
-        run: npx playwright test e2e/auth.spec.ts e2e/supplier-returns.spec.ts --reporter=list --workers=1
+        run: npx playwright test e2e/auth.spec.ts e2e/supplier-returns.spec.ts e2e/users.spec.ts --reporter=list --workers=1
         env:
           CI: true
 
       # 5. 上传测试报告（失败时也会上传）
       - name: Upload E2E report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: e2e-report
           path: 前端代码/e2e-report/

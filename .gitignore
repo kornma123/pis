@@ -30,6 +30,12 @@ start-claude.bat
 start-claude.ps1
 后端代码/server/debug-*.js
 后端代码/server/debug-*.cjs
+后端代码/server/fix-*.js
+后端代码/server/fix-*.cjs
+后端代码/server/test-sqlite.cjs
+后端代码/server/check-db.js
+后端代码/server/token*.json
+后端代码/server/ts-errors*.txt
 
 # OS files
 .DS_Store
@@ -84,6 +90,7 @@ Thumbs.db
 # Test artifacts
 前端代码/coverage/
 前端代码/test-results/
+前端代码/e2e-report/
 e2e-report-tmp/
 test-results/
 

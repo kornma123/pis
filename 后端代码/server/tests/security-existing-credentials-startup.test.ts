@@ -9,6 +9,7 @@ const tempDirs: string[] = []
 const originalNodeEnv = process.env.NODE_ENV
 const originalDatabasePath = process.env.DATABASE_PATH
 const originalAdminInitialPassword = process.env.ADMIN_INITIAL_PASSWORD
+const originalAllowDatabaseCreate = process.env.COREONE_ALLOW_DATABASE_CREATE
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
@@ -18,6 +19,8 @@ afterEach(() => {
   else process.env.DATABASE_PATH = originalDatabasePath
   if (originalAdminInitialPassword === undefined) delete process.env.ADMIN_INITIAL_PASSWORD
   else process.env.ADMIN_INITIAL_PASSWORD = originalAdminInitialPassword
+  if (originalAllowDatabaseCreate === undefined) delete process.env.COREONE_ALLOW_DATABASE_CREATE
+  else process.env.COREONE_ALLOW_DATABASE_CREATE = originalAllowDatabaseCreate
   vi.resetModules()
 })
 
@@ -29,6 +32,86 @@ async function loadProductionDatabaseModule(dbPath: string) {
 }
 
 describe('production startup guard for existing credentials', () => {
+  it.each([
+    ['production', undefined],
+    ['staging', undefined],
+    ['prod', undefined],
+    [undefined, undefined],
+    ['production', 'relative-coreone.db'],
+  ] as const)(
+    'requires an explicit absolute DATABASE_PATH outside fixtures: NODE_ENV=%s DATABASE_PATH=%s',
+    async (nodeEnv, databasePath) => {
+      if (nodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = nodeEnv
+      if (databasePath === undefined) delete process.env.DATABASE_PATH
+      else process.env.DATABASE_PATH = databasePath
+      vi.resetModules()
+
+      await expect(import('../src/database/DatabaseManager.js')).rejects.toThrow(/DATABASE_PATH/)
+    }
+  )
+
+  it.each(['jishuyuan2', 'yishi2'])(
+    'fails closed for every historical pathology seed account omitted by the original six-account guard: %s',
+    async username => {
+      const dir = mkdtempSync(join(tmpdir(), 'coreone-existing-credentials-'))
+      tempDirs.push(dir)
+      const dbPath = join(dir, 'coreone.db')
+      const oldDb = new DatabaseSync(dbPath)
+      oldDb.exec(`CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        status INTEGER NOT NULL DEFAULT 1,
+        is_deleted INTEGER NOT NULL DEFAULT 0
+      )`)
+      oldDb.prepare('INSERT INTO users (id, username, password) VALUES (?, ?, ?)')
+        .run(`USER-${username}`, username, bcrypt.hashSync('CoreOne2026!', 4))
+      oldDb.close()
+
+      const databaseModule = await loadProductionDatabaseModule(dbPath)
+      try {
+        expect(() => databaseModule.assertNoActiveLeakedDefaultPasswords(databaseModule.getDatabase()))
+          .toThrow(new RegExp(username))
+      } finally {
+        databaseModule.resetDatabase()
+      }
+    }
+  )
+
+  it('refuses a missing production database unless one-time creation is explicitly authorized', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-existing-credentials-'))
+    tempDirs.push(dir)
+    const dbPath = join(dir, 'missing.db')
+
+    await expect(loadProductionDatabaseModule(dbPath)).rejects.toThrow(/COREONE_ALLOW_DATABASE_CREATE/)
+  })
+
+  it('refuses a zero-byte production database without the one-time creation flag', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-existing-credentials-'))
+    tempDirs.push(dir)
+    const dbPath = join(dir, 'empty.db')
+    const empty = new DatabaseSync(dbPath)
+    empty.close()
+
+    await expect(loadProductionDatabaseModule(dbPath)).rejects.toThrow(/空|COREONE_ALLOW_DATABASE_CREATE/)
+  })
+
+  it('refuses an unrelated but valid SQLite database before any COREONE DDL', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-existing-credentials-'))
+    tempDirs.push(dir)
+    const dbPath = join(dir, 'wrong.db')
+    const wrong = new DatabaseSync(dbPath)
+    wrong.exec('CREATE TABLE unrelated (id TEXT PRIMARY KEY)')
+    wrong.close()
+
+    await expect(loadProductionDatabaseModule(dbPath)).rejects.toThrow(/COREONE|users/)
+    const verify = new DatabaseSync(dbPath, { readOnly: true })
+    const tables = verify.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>
+    verify.close()
+    expect(tables.map(row => row.name)).toEqual(['unrelated'])
+  })
+
   it('fails closed when an upgraded database still has active leaked default passwords', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'coreone-existing-credentials-'))
     tempDirs.push(dir)
@@ -90,17 +173,13 @@ describe('production startup guard for existing credentials', () => {
     oldDb.exec('CREATE TABLE users (id TEXT PRIMARY KEY)')
     oldDb.close()
 
-    const databaseModule = await loadProductionDatabaseModule(dbPath)
-    try {
-      expect(() => databaseModule.initializeDatabase()).toThrow(/username.*password|password.*username/)
-      const tables = databaseModule
-        .getDatabase()
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-        .all() as Array<{ name: string }>
-      expect(tables.map(row => row.name)).toEqual(['users'])
-    } finally {
-      databaseModule.resetDatabase()
-    }
+    await expect(loadProductionDatabaseModule(dbPath)).rejects.toThrow(/username.*password|password.*username/)
+    const verify = new DatabaseSync(dbPath, { readOnly: true })
+    const tables = verify
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+      .all() as Array<{ name: string }>
+    verify.close()
+    expect(tables.map(row => row.name)).toEqual(['users'])
   })
 
   it('creates the canonical users table and a strong initial admin on a new production database', async () => {
@@ -108,6 +187,7 @@ describe('production startup guard for existing credentials', () => {
     tempDirs.push(dir)
     const dbPath = join(dir, 'coreone.db')
     process.env.ADMIN_INITIAL_PASSWORD = 'N7v!Q2m@R8x#T4k%Z9p&L3d^'
+    process.env.COREONE_ALLOW_DATABASE_CREATE = '1'
 
     const databaseModule = await loadProductionDatabaseModule(dbPath)
     try {
@@ -119,6 +199,7 @@ describe('production startup guard for existing credentials', () => {
       expect(bcrypt.compareSync(process.env.ADMIN_INITIAL_PASSWORD, admin.password)).toBe(true)
     } finally {
       delete process.env.ADMIN_INITIAL_PASSWORD
+      delete process.env.COREONE_ALLOW_DATABASE_CREATE
       databaseModule.resetDatabase()
     }
   })
@@ -130,6 +211,7 @@ describe('production startup guard for existing credentials', () => {
       tempDirs.push(dir)
       const dbPath = join(dir, 'coreone.db')
       process.env.ADMIN_INITIAL_PASSWORD = weakPassword
+      process.env.COREONE_ALLOW_DATABASE_CREATE = '1'
 
       const databaseModule = await loadProductionDatabaseModule(dbPath)
       try {
@@ -140,6 +222,7 @@ describe('production startup guard for existing credentials', () => {
           .all() as Array<{ name: string }>
         expect(tables).toEqual([])
       } finally {
+        delete process.env.COREONE_ALLOW_DATABASE_CREATE
         databaseModule.resetDatabase()
       }
     }

@@ -8,14 +8,16 @@
  *   RESET_ADMIN_PASSWORD='<强口令>' \
  *   RESET_CANGGUAN_PASSWORD='<强口令>' \
  *   RESET_JISHUYUAN1_PASSWORD='<强口令>' \
+ *   RESET_JISHUYUAN2_PASSWORD='<强口令>' \
  *   RESET_YISHI1_PASSWORD='<强口令>' \
+ *   RESET_YISHI2_PASSWORD='<强口令>' \
  *   RESET_CAIGOU_PASSWORD='<强口令>' \
  *   RESET_CAIWU_PASSWORD='<强口令>' \
  *   DATABASE_PATH=/app/data/coreone.db \
  *   npm run reset-passwords
  *
  * 说明：
- *  - 上述六个独立变量用于标准账号；RESET_PASSWORDS_JSON 仍可扩展其他账号。
+ *  - 上述八个独立变量用于历史标准账号；RESET_PASSWORDS_JSON 仍可扩展其他账号。
  *  - 同一账号不得同时出现在独立变量与 JSON 中；重复目标会在写库前整体拒绝。
  *  - 多个目标必须使用彼此不同的口令；复用会在开启事务前整体拒绝，且错误不打印口令。
  *  - 口令只经环境变量传入（不要写进命令行明文历史/进程列表可见处时请谨慎）。脚本绝不打印口令。
@@ -24,22 +26,15 @@
  *  - DATABASE_PATH 必填；缺失时直接退出，避免误改本地库后却以为生产已重置。
  */
 import bcrypt from 'bcryptjs'
+import { existsSync, realpathSync, statSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
+import { HISTORICAL_DEFAULT_ACCOUNTS } from '../src/config/historical-default-accounts.js'
 import { accountPasswordProblem } from '../src/config/security.js'
-import { getDatabase } from '../src/database/DatabaseManager.js'
-
-const DEDICATED_PASSWORD_TARGETS = [
-  { envName: 'RESET_ADMIN_PASSWORD', username: 'admin' },
-  { envName: 'RESET_CANGGUAN_PASSWORD', username: 'cangguan' },
-  { envName: 'RESET_JISHUYUAN1_PASSWORD', username: 'jishuyuan1' },
-  { envName: 'RESET_YISHI1_PASSWORD', username: 'yishi1' },
-  { envName: 'RESET_CAIGOU_PASSWORD', username: 'caigou' },
-  { envName: 'RESET_CAIWU_PASSWORD', username: 'caiwu' },
-] as const
 
 function collectTargets(): Array<{ username: string; password: string }> {
   const out: Array<{ username: string; password: string }> = []
-  for (const target of DEDICATED_PASSWORD_TARGETS) {
-    const password = process.env[target.envName]
+  for (const target of HISTORICAL_DEFAULT_ACCOUNTS) {
+    const password = process.env[target.resetEnv]
     if (password !== undefined) out.push({ username: target.username, password })
   }
 
@@ -72,7 +67,7 @@ function validate(username: string, password: string): string | null {
   return accountPasswordProblem(password)
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const targets = collectTargets()
   if (targets.length === 0) {
     console.error(
@@ -111,11 +106,20 @@ function main(): void {
     passwordOwners.set(canonicalPassword, target.username)
   }
 
-  if (!process.env.DATABASE_PATH) {
-    console.error('❌ 必须显式设置 DATABASE_PATH；未做任何更改。')
+  const configuredDatabasePath = process.env.DATABASE_PATH
+  if (!configuredDatabasePath || !isAbsolute(configuredDatabasePath)) {
+    console.error('❌ 必须显式设置绝对路径 DATABASE_PATH；未做任何更改。')
     process.exit(1)
   }
+  if (!existsSync(configuredDatabasePath) || !statSync(configuredDatabasePath).isFile()) {
+    console.error('❌ DATABASE_PATH 必须指向已存在的生产数据库文件；未创建文件、未做任何更改。')
+    process.exit(1)
+  }
+  const databasePath = realpathSync(configuredDatabasePath)
+  process.env.DATABASE_PATH = databasePath
+  console.log(`目标数据库（已解析）：${databasePath}`)
 
+  const { getDatabase } = await import('../src/database/DatabaseManager.js')
   const db = getDatabase()
   const find = db.prepare('SELECT id FROM users WHERE username = ?')
   const update = db.prepare('UPDATE users SET password = ? WHERE username = ?')
@@ -154,4 +158,7 @@ function main(): void {
   console.log('提醒：口令未被打印；请通过你自己保存的强口令登录并考虑首登后再次改密。')
 }
 
-main()
+main().catch(error => {
+  console.error(`❌ 重置失败：${error instanceof Error ? error.message : '未知错误'}；未确认成功前不得启动服务。`)
+  process.exit(1)
+})

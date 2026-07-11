@@ -59,6 +59,12 @@ cd 前端代码
 # 已配置 VITE_API_BASE_URL，一般无需修改
 ```
 
+`.env.example` 只用于显式 `development`。任何非 `development`/`test` 环境都会按生产级
+fail-closed：必须提供强随机 `JWT_SECRET` 和绝对 `DATABASE_PATH`；生产默认要求目标库已存在，
+仅全新首装可一次性设置 `COREONE_ALLOW_DATABASE_CREATE=1`，成功后须清除并以 0 重启。系统不会
+自动创建历史默认账号。生产升级、8 个历史账号原子改密、备份/恢复与验收步骤见
+[部署指南](部署说明.md)。
+
 ### 3. 启动开发服务
 
 ```bash

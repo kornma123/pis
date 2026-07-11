@@ -2089,7 +2089,7 @@ http://your-server-ip:8080
 - `security.ts` 把 JWT/账号口令强度口径统一：NFKC 后 Unicode 长度、bcrypt 72-byte 上限、字符多样性/Shannon 熵、近似重复/短模式/顺序串/常见弱口令/已泄露值全拒绝。终审命中 NFKC bypass：全角/混合全角公开默认值可绕 exact compare。现在 JWT 指纹与默认口令均同时查 raw + NFKC，重置脚本的多账号口令唯一性也用 NFKC key。该组 RED **3 fail** → GREEN **2 files/37 tests**。
 - `DatabaseManager` 在任何 DDL/迁移前校验显式 `ADMIN_INITIAL_PASSWORD`；旧库在任何写入前只有界扫历史 6 账号（最多 12 次 bcrypt compare），缺 username/password 列拒启。新回归证明弱值/空白显式值拒启后业务表数=0。
 - `users-v1.1` POST/PUT 都执行同一策略；禁用但仍保留历史泄露 hash 的账号不得无密码重启，必须在同一 PUT 内带合格新口令，状态+hash 同一 SQL 原子落库。
-- `reset-passwords` 支持 6 个独立 env + JSON 扩展，拒重复账号/口令复用/策略不合格，全部目标存在才事务 COMMIT，成功日志只在 COMMIT 后输出。
+- `reset-passwords` 支持完整 8 个历史账号的独立 env + JSON 扩展，拒重复账号/口令复用/策略不合格，全部目标存在才事务 COMMIT，成功日志只在 COMMIT 后输出。
 
 **用户页/真契约**：原页面展示必败的静态「初始密码」且 payload 不发 password，另有两个真可点但后端从不存在的 `POST /users/:id/reset-password` 幽灵入口。现在创建/编辑表单真实提交 password，安全随机生成 20 个 NFKC 后互异字符，且映射后续端 common-fragment/sequence 规则；默认 `type=password` 遮罩，只有管理员显式点击才显示、10 秒自动恢复。删掉幽灵 reset 按钮/请求，改走真实 PUT。Playwright `users.spec.ts` 不再静默跳过：创建流真选角色+验证自动密码+提交+API GET 回查，改密流验真实 PUT 权限；`--list` **97 条**解析绿（未跑浏览器运行态）。
 

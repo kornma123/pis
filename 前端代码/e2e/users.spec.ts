@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test'
 
-const FE_BASE = 'http://localhost:8080'
-const API_BASE = 'http://127.0.0.1:3001/api/v1'
+const FE_BASE = `http://localhost:${process.env.E2E_FRONTEND_PORT || '8080'}`
+const API_BASE = `http://127.0.0.1:${process.env.E2E_BACKEND_PORT || '3001'}/api/v1`
 
 const ROLES = {
   admin: { username: 'admin', password: 'admin123' },
@@ -34,6 +34,15 @@ async function apiLogin(role: RoleKey): Promise<string> {
   })
   const data = (await res.json()) as any
   return data.data?.token || data.token
+}
+
+async function apiLoginStatus(username: string, password: string): Promise<number> {
+  const response = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  return response.status
 }
 
 async function apiFetch(token: string, method: string, path: string, body?: any) {
@@ -427,18 +436,45 @@ test.describe('用户管理 -> 修改密码', () => {
     await expect(page.locator('input[autocomplete="new-password"]')).toBeVisible()
     await expect(page.getByRole('button', { name: '随机生成' })).toBeVisible()
   })
-  test('USER-RESET-02. 正常用例：编辑弹窗内生成新密码', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/users`); await page.waitForTimeout(1500)
-    const editBtn = page.locator('text=/编辑|修改/i').first()
-    if (await editBtn.isVisible().catch(() => false)) {
-      await editBtn.click(); await page.waitForTimeout(500)
-      const password = page.locator('input[autocomplete="new-password"]')
-      await expect(password).toHaveValue('')
-      await page.getByRole('button', { name: '随机生成' }).click()
-      await expect(password).not.toHaveValue('')
-      const cancel = page.locator('text=/取消|关闭/i').first()
-      if (await cancel.isVisible().catch(() => false)) await cancel.click()
-    }
+  test('USER-RESET-02. 关键路径：保存新密码后旧密码失效且新密码可登录', async ({ page }) => {
+    const adminToken = await apiLogin('admin')
+    const username = `testuser-password-${Date.now()}`
+    const oldPassword = STRONG_TEST_PASSWORD
+    const newPassword = 'Users-E2E-Rotated-2026!'
+    const created = await apiFetch(adminToken, 'POST', '/users', {
+      username,
+      password: oldPassword,
+      realName: '改密关键路径',
+      role: 'technician',
+      roles: ['technician'],
+      primaryRole: 'technician',
+      status: 'active',
+    })
+    expect(created.status).toBe(201)
+    const testId = created.data?.data?.id || created.data?.id
+    expect(testId).toBeTruthy()
+    expect(await apiLoginStatus(username, oldPassword)).toBe(200)
+
+    await loginAs(page, 'admin')
+    await page.goto(`${FE_BASE}/users`)
+    await page.getByPlaceholder('搜索用户名、姓名...').fill(username)
+    await page.getByRole('button', { name: '查询' }).click()
+    const row = page.locator('tbody tr').filter({ hasText: username })
+    await expect(row).toBeVisible()
+    await row.getByRole('button', { name: '编辑' }).click()
+
+    const password = page.locator('input[autocomplete="new-password"]')
+    await expect(password).toHaveValue('')
+    await password.fill(newPassword)
+    const updateResponse = page.waitForResponse(response => (
+      response.request().method() === 'PUT' && response.url().endsWith(`/api/v1/users/${testId}`)
+    ))
+    await page.getByRole('button', { name: '保存' }).click()
+    expect((await updateResponse).status()).toBe(200)
+    await expect(page.getByText('编辑用户')).not.toBeVisible()
+
+    expect(await apiLoginStatus(username, oldPassword)).toBe(401)
+    expect(await apiLoginStatus(username, newPassword)).toBe(200)
   })
   test('USER-RESET-03. 权限：非admin修改密码返回403', async () => {
     const token = await apiLogin('technician')

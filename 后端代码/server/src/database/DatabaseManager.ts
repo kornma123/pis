@@ -5,7 +5,8 @@ import {
   hashMatchesKnownLeakedDefaultPassword,
   initialAdminPasswordProblem,
 } from '../config/security.js'
-import { join, dirname } from 'path'
+import { HISTORICAL_DEFAULT_ACCOUNTS } from '../config/historical-default-accounts.js'
+import { join, dirname, isAbsolute } from 'path'
 import { fileURLToPath } from 'url'
 import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
 import { CHARGE_CODE_SEED, chargeDefToRow } from '../utils/charge-catalog.js'
@@ -19,7 +20,57 @@ import fs from 'fs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-const DB_PATH = process.env.DATABASE_PATH || join(__dirname, '../../data/coreone.db')
+function assertExistingCoreoneDatabase(databasePath: string): void {
+  let probe: DatabaseSync | undefined
+  try {
+    // Node 22 runtime supports readOnly; the repository's older @types/node 20
+    // declaration does not yet expose that experimental option.
+    probe = new DatabaseSync(databasePath, { readOnly: true } as any)
+    const quickCheck = probe.prepare('PRAGMA quick_check').get() as { quick_check?: string } | undefined
+    if (quickCheck?.quick_check !== 'ok') throw new Error('SQLite quick_check failed')
+    const hasUsers = probe
+      .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'users'")
+      .get() as { ok?: number } | undefined
+    if (!hasUsers?.ok) throw new Error('missing COREONE users table')
+    const columns = new Set(
+      (probe.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>).map(column => column.name)
+    )
+    const missing = ['username', 'password'].filter(column => !columns.has(column))
+    if (missing.length) throw new Error(`users missing required columns: ${missing.join(', ')}`)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'unknown validation failure'
+    throw new Error(`[SECURITY] DATABASE_PATH 不是可识别的 COREONE 生产库：${detail}`)
+  } finally {
+    probe?.close()
+  }
+}
+
+const configuredDatabasePath = process.env.DATABASE_PATH
+const fixtureDatabase = allowDefaultFixtureUsers()
+if (!fixtureDatabase && (!configuredDatabasePath || !isAbsolute(configuredDatabasePath))) {
+  throw new Error('[SECURITY] 生产级环境必须显式设置绝对路径 DATABASE_PATH；拒绝静默创建或检查错误数据库。')
+}
+const DB_PATH = configuredDatabasePath || join(__dirname, '../../data/coreone.db')
+
+if (!fixtureDatabase) {
+  if (fs.existsSync(DB_PATH)) {
+    const stat = fs.statSync(DB_PATH)
+    if (!stat.isFile()) {
+      throw new Error('[SECURITY] DATABASE_PATH 必须指向普通数据库文件。')
+    }
+    if (stat.size === 0) {
+      if (process.env.COREONE_ALLOW_DATABASE_CREATE !== '1') {
+        throw new Error('[SECURITY] DATABASE_PATH 是空文件；仅全新首装可一次性设置 COREONE_ALLOW_DATABASE_CREATE=1。')
+      }
+    } else {
+      assertExistingCoreoneDatabase(DB_PATH)
+    }
+  } else if (process.env.COREONE_ALLOW_DATABASE_CREATE !== '1') {
+    throw new Error(
+      '[SECURITY] DATABASE_PATH 指向的生产数据库不存在；仅全新首装可一次性设置 COREONE_ALLOW_DATABASE_CREATE=1。'
+    )
+  }
+}
 
 fs.mkdirSync(dirname(DB_PATH), { recursive: true })
 
@@ -210,17 +261,10 @@ export function reconcileFinanceAccountReconcilePerms(database: DatabaseSync): v
   }
 }
 
-const HISTORICAL_DEFAULT_USERNAMES = [
-  'admin',
-  'cangguan',
-  'jishuyuan1',
-  'yishi1',
-  'caigou',
-  'caiwu',
-] as const
+const HISTORICAL_DEFAULT_USERNAMES = HISTORICAL_DEFAULT_ACCOUNTS.map(account => account.username)
 
 /**
- * 生产级启动门禁：只核验历史上由默认种子创建的六个账号，bcrypt 工作量有明确上界。
+ * 生产级启动门禁：只核验历史上由默认种子创建的八个账号，bcrypt 工作量有明确上界。
  * status/is_deleted 旧库缺列或值为 NULL 时按活跃处理；username/password 缺列则无法安全核验，拒绝启动。
  */
 export function assertNoActiveLeakedDefaultPasswords(database: DatabaseSync): void {
@@ -253,7 +297,7 @@ export function assertNoActiveLeakedDefaultPasswords(database: DatabaseSync): vo
  * 默认账号种子（安全止血·fail-closed，见 config/security.ts）。抽成独立可测函数。
  * - allowFixtures=true（仅显式 dev/test）：种固定口令夹具账号
  *   admin/admin123 + 5 角色/CoreOne2026! 并强制启用（E2E 依赖，行为与历史一致）。
- * - allowFixtures=false（**未声明环境=生产级**）：先核验历史六账号；不种固定口令账号、不强制启用；
+ * - allowFixtures=false（**未声明环境=生产级**）：先核验历史八账号；不种固定口令账号、不强制启用；
  *   仅当无 admin 且提供合格的 ADMIN_INITIAL_PASSWORD 时受控创建 admin。
  */
 export function seedDefaultUsers(

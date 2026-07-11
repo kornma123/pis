@@ -72,3 +72,24 @@ describe('RBAC-P4：GET /me/capabilities', () => {
     db.prepare("DELETE FROM user_roles WHERE id = 'UR-caigou-fin'").run()
   })
 })
+
+describe('RBAC-P4：refresh 同步 DB 当前能力', () => {
+  it('角色停用后 refresh 返回空角色/空能力，客户端不会继续缓存旧授权', async () => {
+    const request = (await import('supertest')).default
+    const body = await login('caiwu', 'CoreOne2026!')
+    db.prepare("UPDATE roles SET status = 0 WHERE code = 'finance'").run()
+    try {
+      const res = await request(app).post('/api/v1/auth/refresh').send({ refreshToken: body.data.refreshToken })
+      expect(res.status).toBe(200)
+      expect(res.body.data.user).toMatchObject({
+        role: null,
+        primaryRole: null,
+        roles: [],
+        capabilities: {},
+        canSeeCost: false,
+      })
+    } finally {
+      db.prepare("UPDATE roles SET status = 1 WHERE code = 'finance'").run()
+    }
+  })
+})

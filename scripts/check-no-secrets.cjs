@@ -45,8 +45,12 @@ const RULES = [
 // as text. This catches embedded tokens without making normal PNG/SQLite/font
 // bytes look like a text-decoding failure.
 const BINARY_EXT = new Set([
-  '.db', '.db-wal', '.db-shm', '.sqlite', '.sqlite3', '.png', '.jpg', '.jpeg', '.gif', '.ico',
-  '.webm', '.mp4', '.mov', '.pdf', '.woff', '.woff2', '.ttf', '.eot',
+  '.png', '.jpg', '.jpeg', '.gif', '.ico', '.webm', '.mp4', '.mov', '.pdf',
+  '.woff', '.woff2', '.ttf', '.eot',
+])
+
+const OPAQUE_SENSITIVE_EXT = new Set([
+  '.db', '.db-wal', '.db-shm', '.sqlite', '.sqlite3', '.p12', '.pfx', '.jks', '.keystore', '.pem', '.key',
 ])
 
 const ARCHIVE_EXT = new Set([
@@ -68,10 +72,8 @@ const ARCHIVE_MAGIC = [
   { name: 'tar', offset: 257, bytes: Buffer.from('ustar') },
 ]
 
-const PUBLIC_JWT_SECRET_PLACEHOLDERS = new Set([
-  'ci-throwaway-not-a-real-secret-do-not-use-in-prod',
-  'your-jwt-secret-key-change-in-production',
-])
+const PUBLIC_EXAMPLE_JWT_PATH = Buffer.from('后端代码/server/.env.example')
+const PUBLIC_EXAMPLE_JWT_LINE = ['JWT', '_SECRET=your-jwt-secret-key-change-in-production'].join('')
 
 const HISTORICAL_ALLOW_COMMIT = 'a4063fff8046db87d2b0a8eae8833b8d337eb4ed'
 const HISTORICAL_ALLOW_PATH = '后端代码/server/src/middleware/auth.ts'
@@ -138,7 +140,13 @@ function displayPath(pathBuffer) {
 
 function pathKind(pathBuffer) {
   try {
-    const extension = path.extname(decodePath(pathBuffer)).toLowerCase()
+    const decoded = decodePath(pathBuffer)
+    const extension = path.extname(decoded).toLowerCase()
+    const basename = path.basename(decoded).toLowerCase()
+    if (OPAQUE_SENSITIVE_EXT.has(extension)) return 'opaque-sensitive'
+    if (basename === '.env' || (/^\.env\./u.test(basename) && !/^\.env\.(?:example|sample|template)$/u.test(basename))) {
+      return 'opaque-sensitive'
+    }
     if (ARCHIVE_EXT.has(extension)) return 'archive'
     return BINARY_EXT.has(extension) ? 'binary' : 'text'
   } catch {
@@ -237,6 +245,12 @@ function isRootScannerAllow(file, line, rule, source) {
     && HISTORICAL_ROOT_COMMENT_ALLOW.has([source.oid, rule, digest].join('\0'))
 }
 
+function isPublicExampleAllow(file, line, rule) {
+  return rule === 'jwt-secret-assignment'
+    && file.equals(PUBLIC_EXAMPLE_JWT_PATH)
+    && line === PUBLIC_EXAMPLE_JWT_LINE
+}
+
 function hasLiteralJwtSecretAssignment(line) {
   const assignment = line.match(/\bJWT_SECRET["']?\s*(?::|=)\s*(.+)$/i)
   if (!assignment) return false
@@ -253,7 +267,6 @@ function hasLiteralJwtSecretAssignment(line) {
   }
 
   if (value.length < 32 || /\$|\{\{|<[^>]+>/.test(value)) return false
-  if (PUBLIC_JWT_SECRET_PLACEHOLDERS.has(value)) return false
   return true
 }
 
@@ -266,13 +279,266 @@ function matchingRule(line) {
 }
 
 function archiveFormat(buf) {
-  const match = ARCHIVE_MAGIC.find(({ offset, bytes }) => (
-    buf.length >= offset + bytes.length && buf.subarray(offset, offset + bytes.length).equals(bytes)
+  const match = ARCHIVE_MAGIC.find(({ name, offset, bytes }) => (
+    !['tar', 'gzip', 'bzip2', 'rar'].includes(name)
+    && buf.length >= offset + bytes.length
+    && buf.subarray(offset, offset + bytes.length).equals(bytes)
   ))
-  return match?.name || null
+  if (match) return match.name
+
+  // ZIP permits both an arbitrary executable/media prefix and trailing bytes.
+  // Search the bounded input in full and validate its central-directory geometry;
+  // never inflate members. Zip64 sentinels require the adjacent locator/record.
+  const zipEocd = Buffer.from([0x50, 0x4b, 0x05, 0x06])
+  const zip64Locator = Buffer.from([0x50, 0x4b, 0x06, 0x07])
+  const zip64Eocd = Buffer.from([0x50, 0x4b, 0x06, 0x06])
+  const centralSignature = Buffer.from([0x50, 0x4b, 0x01, 0x02])
+
+  // Pre-index structurally valid Zip64 EOCD records by their physical end.
+  // A candidate flood must stay linear: never search backwards from every
+  // classic EOCD sentinel (that turns repeated PK\x05\x06 into O(n^2)).
+  const zip64RecordsByEnd = new Map()
+  let zip64RecordOffset = buf.indexOf(zip64Eocd)
+  while (zip64RecordOffset !== -1) {
+    if (zip64RecordOffset + 56 <= buf.length) {
+      const payloadSizeBig = buf.readBigUInt64LE(zip64RecordOffset + 4)
+      const maxPayloadSize = BigInt(buf.length - zip64RecordOffset - 12)
+      if (payloadSizeBig >= 44n && payloadSizeBig <= maxPayloadSize) {
+        const payloadSize = Number(payloadSizeBig)
+        const recordEnd = zip64RecordOffset + 12 + payloadSize
+        const recordDisk = buf.readUInt32LE(zip64RecordOffset + 16)
+        const centralDisk = buf.readUInt32LE(zip64RecordOffset + 20)
+        const entriesOnDisk = buf.readBigUInt64LE(zip64RecordOffset + 24)
+        const totalEntries = buf.readBigUInt64LE(zip64RecordOffset + 32)
+        const centralSizeBig = buf.readBigUInt64LE(zip64RecordOffset + 40)
+        const centralOffsetBig = buf.readBigUInt64LE(zip64RecordOffset + 48)
+        if (
+          recordDisk === 0
+          && centralDisk === 0
+          && entriesOnDisk === totalEntries
+          && centralSizeBig <= BigInt(Number.MAX_SAFE_INTEGER)
+          && centralOffsetBig <= BigInt(Number.MAX_SAFE_INTEGER)
+        ) {
+          const recordsAtEnd = zip64RecordsByEnd.get(recordEnd) || []
+          recordsAtEnd.push({
+            offset: zip64RecordOffset,
+            totalEntries,
+            centralSize: Number(centralSizeBig),
+            centralOffset: Number(centralOffsetBig),
+          })
+          zip64RecordsByEnd.set(recordEnd, recordsAtEnd)
+        }
+      }
+    }
+    zip64RecordOffset = buf.indexOf(zip64Eocd, zip64RecordOffset + 1)
+  }
+
+  let zipOffset = buf.indexOf(zipEocd)
+  while (zipOffset !== -1) {
+    if (zipOffset + 22 <= buf.length) {
+      const commentLength = buf.readUInt16LE(zipOffset + 20)
+      const diskNumber = buf.readUInt16LE(zipOffset + 4)
+      const centralDisk = buf.readUInt16LE(zipOffset + 6)
+      const entriesOnDisk = buf.readUInt16LE(zipOffset + 8)
+      const totalEntries = buf.readUInt16LE(zipOffset + 10)
+      const centralSize = buf.readUInt32LE(zipOffset + 12)
+      const centralOffset = buf.readUInt32LE(zipOffset + 16)
+      const eocdEnd = zipOffset + 22 + commentLength
+      const usesZip64 = diskNumber === 0xffff || centralDisk === 0xffff
+        || entriesOnDisk === 0xffff || totalEntries === 0xffff
+        || centralSize === 0xffffffff || centralOffset === 0xffffffff
+      if (eocdEnd <= buf.length && usesZip64 && zipOffset >= 20) {
+        const locatorOffset = zipOffset - 20
+        if (buf.subarray(locatorOffset, locatorOffset + 4).equals(zip64Locator)) {
+          const locatorDisk = buf.readUInt32LE(locatorOffset + 4)
+          const recordRelativeOffsetBig = buf.readBigUInt64LE(locatorOffset + 8)
+          const totalDisks = buf.readUInt32LE(locatorOffset + 16)
+          const records = zip64RecordsByEnd.get(locatorOffset) || []
+          if (
+            locatorDisk === 0
+            && totalDisks === 1
+            && recordRelativeOffsetBig <= BigInt(Number.MAX_SAFE_INTEGER)
+          ) {
+            for (const record of records) {
+              const archiveBase = record.offset - Number(recordRelativeOffsetBig)
+              const centralPhysicalOffset = archiveBase + record.centralOffset
+              const centralEnd = centralPhysicalOffset + record.centralSize
+              const centralLooksValid = record.totalEntries === 0n
+                ? record.centralSize === 0
+                : centralPhysicalOffset >= 0
+                  && centralPhysicalOffset + centralSignature.length <= buf.length
+                  && buf.subarray(
+                    centralPhysicalOffset,
+                    centralPhysicalOffset + centralSignature.length,
+                  ).equals(centralSignature)
+              if (archiveBase >= 0 && centralEnd === record.offset && centralLooksValid) return 'zip64'
+            }
+          }
+        }
+      }
+      const archiveBase = zipOffset - centralSize - centralOffset
+      const centralLooksValid = totalEntries === 0
+        ? centralSize === 0 && centralOffset === 0
+        : archiveBase >= 0
+          && archiveBase + centralOffset + centralSignature.length <= buf.length
+          && buf.subarray(
+            archiveBase + centralOffset,
+            archiveBase + centralOffset + centralSignature.length,
+          ).equals(centralSignature)
+      if (
+        eocdEnd <= buf.length
+        && diskNumber === 0
+        && centralDisk === 0
+        && entriesOnDisk === totalEntries
+        && archiveBase >= 0
+        && centralLooksValid
+      ) return 'zip'
+    }
+    zipOffset = buf.indexOf(zipEocd, zipOffset + 1)
+  }
+
+  // Long archive signatures may appear after arbitrary SFX/media prefixes. We
+  // only inspect bounded headers; this remains linear and immune to archive bombs.
+  const embeddedMagic = [
+    { name: '7z', bytes: Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]), minimum: 32 },
+    { name: 'rar4', bytes: Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00]), minimum: 7 },
+    { name: 'rar5', bytes: Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x01, 0x00]), minimum: 8 },
+    { name: 'xz', bytes: Buffer.from([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00]), minimum: 12 },
+    { name: 'zstd', bytes: Buffer.from([0x28, 0xb5, 0x2f, 0xfd]), minimum: 6 },
+    { name: 'lz4', bytes: Buffer.from([0x04, 0x22, 0x4d, 0x18]), minimum: 7 },
+    { name: 'lz4-legacy', bytes: Buffer.from([0x02, 0x21, 0x4c, 0x18]), minimum: 8 },
+  ]
+  for (const candidate of embeddedMagic) {
+    let offset = buf.indexOf(candidate.bytes)
+    while (offset !== -1) {
+      if (offset + candidate.minimum <= buf.length) {
+        if (candidate.name === 'lz4') {
+          const flags = buf[offset + 4]
+          const descriptor = buf[offset + 5]
+          if ((flags & 0xc2) === 0x40 && (descriptor & 0x8f) === 0 && (descriptor & 0x70) >= 0x40) return candidate.name
+        } else if (candidate.name === 'zstd') {
+          if ((buf[offset + 4] & 0x08) === 0) return candidate.name
+        } else {
+          return candidate.name
+        }
+      }
+      offset = buf.indexOf(candidate.bytes, offset + 1)
+    }
+  }
+
+  // LZ4/Zstandard skippable frames can contain arbitrary bytes and share this
+  // little-endian magic range (0x184D2A50..0x184D2A5F).
+  for (let offset = 0; offset + 8 <= buf.length; offset++) {
+    if (buf[offset] >= 0x50 && buf[offset] <= 0x5f
+      && buf[offset + 1] === 0x2a && buf[offset + 2] === 0x4d && buf[offset + 3] === 0x18) {
+      return 'skippable-compressed-frame'
+    }
+  }
+
+  // BZip2: validate block-size and first block/end marker so ordinary "BZh"
+  // text is not a false positive.
+  const bzipMagic = Buffer.from('BZh')
+  const bzipBlock = Buffer.from([0x31, 0x41, 0x59, 0x26, 0x53, 0x59])
+  const bzipEnd = Buffer.from([0x17, 0x72, 0x45, 0x38, 0x50, 0x90])
+  let bzipOffset = buf.indexOf(bzipMagic)
+  while (bzipOffset !== -1) {
+    const level = buf[bzipOffset + 3]
+    const markerOffset = bzipOffset + 4
+    if (level >= 0x31 && level <= 0x39 && markerOffset + 6 <= buf.length) {
+      const marker = buf.subarray(markerOffset, markerOffset + 6)
+      if (marker.equals(bzipBlock) || marker.equals(bzipEnd)) return 'bzip2'
+    }
+    bzipOffset = buf.indexOf(bzipMagic, bzipOffset + 1)
+  }
+
+  // GZIP has a short signature. Parse only its bounded RFC 1952 header and
+  // require room for the trailer; never call gunzip on attacker-controlled data.
+  const gzipMagic = Buffer.from([0x1f, 0x8b])
+  let gzipOffset = buf.indexOf(gzipMagic)
+  while (gzipOffset !== -1) {
+    if (gzipOffset + 18 <= buf.length && buf[gzipOffset + 2] === 8 && (buf[gzipOffset + 3] & 0xe0) === 0) {
+      const flags = buf[gzipOffset + 3]
+      let cursor = gzipOffset + 10
+      if (flags & 0x04) {
+        if (cursor + 2 > buf.length) return 'gzip'
+        const extraLength = buf.readUInt16LE(cursor)
+        cursor += 2 + extraLength
+      }
+      const headerLimit = Math.min(buf.length - 8, gzipOffset + 10 + 65_536)
+      const skipNulTerminated = (flag) => {
+        if (!(flags & flag)) return true
+        if (cursor > headerLimit) return false
+        const relativeEnd = buf.subarray(cursor, headerLimit + 1).indexOf(0)
+        if (relativeEnd === -1) return false
+        cursor += relativeEnd + 1
+        return true
+      }
+      if (cursor > headerLimit) return 'gzip'
+      if (!skipNulTerminated(0x08) || !skipNulTerminated(0x10)) return 'gzip'
+      if (cursor <= buf.length) {
+        if (flags & 0x02) cursor += 2
+        if (cursor + 8 <= buf.length) return 'gzip'
+      }
+    }
+    gzipOffset = buf.indexOf(gzipMagic, gzipOffset + 1)
+  }
+
+  // A polyglot may prepend arbitrary bytes before a valid tar stream. Validate
+  // the containing 512-byte header checksum rather than matching "ustar" alone.
+  const tarMagic = Buffer.from('ustar')
+  let searchFrom = 0
+  while (searchFrom < buf.length) {
+    const magicOffset = buf.indexOf(tarMagic, searchFrom)
+    if (magicOffset === -1) break
+    const headerOffset = magicOffset - 257
+    if (headerOffset >= 0 && headerOffset + 512 <= buf.length) {
+      const header = buf.subarray(headerOffset, headerOffset + 512)
+      const storedText = header.subarray(148, 156).toString('ascii').replace(/[\0 ]+$/u, '')
+      if (/^[0-7]+$/u.test(storedText)) {
+        const stored = Number.parseInt(storedText, 8)
+        let calculated = 0
+        for (let index = 0; index < header.length; index++) {
+          calculated += index >= 148 && index < 156 ? 0x20 : header[index]
+        }
+        if (calculated === stored) return 'tar'
+      }
+    }
+    searchFrom = magicOffset + 1
+  }
+  return null
 }
 
 function scanBuffer(file, buf, source, kind = pathKind(file)) {
+  if (/^version https:\/\/git-lfs\.github\.com\/spec\/v1\r?\n/u.test(buf.subarray(0, 200).toString('ascii'))) {
+    recordFailure(file, source, 'Git LFS pointer cannot be inspected safely; commit the reviewed payload directly or use a trusted LFS-aware gate')
+    return
+  }
+  const sqliteHeader = Buffer.from('SQLite format 3\0', 'ascii')
+  const sqliteOffset = buf.indexOf(sqliteHeader)
+  let embeddedWal = false
+  for (const walMagic of [Buffer.from([0x37, 0x7f, 0x06, 0x82]), Buffer.from([0x37, 0x7f, 0x06, 0x83])]) {
+    let offset = buf.indexOf(walMagic)
+    while (offset !== -1 && offset + 32 <= buf.length) {
+      const version = buf.readUInt32BE(offset + 4)
+      const pageSize = buf.readUInt32BE(offset + 8)
+      const validPageSize = pageSize === 1
+        || (pageSize >= 512 && pageSize <= 65_536 && (pageSize & (pageSize - 1)) === 0)
+      if (version === 3_007_000 && validPageSize) {
+        embeddedWal = true
+        break
+      }
+      offset = buf.indexOf(walMagic, offset + 1)
+    }
+    if (embeddedWal) break
+  }
+  if (
+    kind === 'opaque-sensitive'
+    || sqliteOffset !== -1
+    || embeddedWal
+  ) {
+    recordFailure(file, source, 'tracked or embedded database/credential artifact cannot be inspected safely; remove it from Git')
+    return
+  }
   const detectedArchive = archiveFormat(buf)
   if (kind === 'archive' || detectedArchive) {
     const detail = detectedArchive ? ` (${detectedArchive} magic)` : ''
@@ -293,7 +559,12 @@ function scanBuffer(file, buf, source, kind = pathKind(file)) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
       const rule = matchingRule(line)
-      if (!rule || isHistoricalAllow(file, line, rule, source) || isRootScannerAllow(file, line, rule, source)) continue
+      if (
+        !rule
+        || isHistoricalAllow(file, line, rule, source)
+        || isRootScannerAllow(file, line, rule, source)
+        || isPublicExampleAllow(file, line, rule)
+      ) continue
       const matchKey = `${rule}\0${i + 1}\0${line}`
       if (seenMatches.has(matchKey)) continue
       seenMatches.add(matchKey)
