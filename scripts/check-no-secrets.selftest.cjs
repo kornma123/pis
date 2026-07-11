@@ -655,6 +655,46 @@ try {
     'the current working tree must never inherit the historical marker allow',
   )
 
+  const historicalCiPath = Buffer.from('.github/workflows/backend-tests.yml')
+  const historicalCiLine = `      ${jwtVariable}: ${[
+    'ci-throwaway-not-a-real',
+    '-secret-do-not-use-in-prod',
+  ].join('')}`
+  assert(
+    isHistoricalAllow(historicalCiPath, historicalCiLine, 'jwt-secret-assignment', historicalSource),
+    'the exact public CI placeholder should be allowed only at its immutable historical tuple',
+  )
+  assert(
+    !isHistoricalAllow(
+      historicalCiPath,
+      `${historicalCiLine}-changed`,
+      'jwt-secret-assignment',
+      historicalSource,
+    ),
+    'a changed CI placeholder line must not inherit the historical exception',
+  )
+
+  const historicalReadmePath = Buffer.from('后端代码/server/README.md')
+  const historicalReadmeSource = { kind: 'commit', commit: 'eeb19cbec3f91dd8ecf8e532d2525fac2b2c7f17' }
+  assert(
+    isHistoricalAllow(
+      historicalReadmePath,
+      `${jwtVariable}=${publicExample}`,
+      'jwt-secret-assignment',
+      historicalReadmeSource,
+    ),
+    'the exact public README example should be allowed only at its immutable historical tuple',
+  )
+  assert(
+    !isHistoricalAllow(
+      historicalReadmePath,
+      `${jwtVariable}=${publicExample}`,
+      'jwt-secret-assignment',
+      { kind: 'commit', commit: '0'.repeat(40) },
+    ),
+    'the same README example in another commit must not inherit the historical exception',
+  )
+
   console.log(`secret-scan selftest passed: ${assertions}/${assertions}`)
 } finally {
   fs.rmSync(repo, { recursive: true, force: true })

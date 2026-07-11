@@ -88,8 +88,9 @@ const HISTORICAL_ROOT_COMMENT_ALLOW = new Set([
   ['5348c4ca6b31463a6ced24ffe6405d7ac8f0d2ee', 'leaked-jwt-secret-v0', '4a53e87e88c3fd3ea3ce308bd1c6775a62c7b061eea0f04641a6a2219d8c78a2'].join('\0'),
 ])
 const HISTORICAL_ALLOW = new Set([
-  // Exact SHA + path + rule + SHA-256(line). These two immutable lines are a
-  // runtime denylist in PR #119's initial commit, not reusable marker grants.
+  // Exact SHA + path + rule + SHA-256(line). These immutable lines are either
+  // runtime denylists or public CI/docs examples from earlier PR #119 commits.
+  // The tuple cannot grant an exception to another commit, path, rule, or line.
   [
     HISTORICAL_ALLOW_COMMIT,
     HISTORICAL_ALLOW_PATH,
@@ -101,6 +102,66 @@ const HISTORICAL_ALLOW = new Set([
     HISTORICAL_ALLOW_PATH,
     'leaked-jwt-secret-v0',
     '6d388f072d6d94e347f53b62bf9b8fa8bcc61fce9424b8dd5967a259699a63d9',
+  ].join('\0'),
+  [
+    'a4063fff8046db87d2b0a8eae8833b8d337eb4ed',
+    '.github/workflows/backend-tests.yml',
+    'jwt-secret-assignment',
+    '3c166d87d4a4921d890dc91e4ebb334dfd292ad60a645b7f834edcac600ad1cd',
+  ].join('\0'),
+  [
+    'a4063fff8046db87d2b0a8eae8833b8d337eb4ed',
+    '.github/workflows/e2e-full.yml',
+    'jwt-secret-assignment',
+    '704165a9bb8147924137e9973667f9912c81116f25f845a06b3c515bcefb90ff',
+  ].join('\0'),
+  [
+    'a4063fff8046db87d2b0a8eae8833b8d337eb4ed',
+    '.github/workflows/e2e.yml',
+    'jwt-secret-assignment',
+    '704165a9bb8147924137e9973667f9912c81116f25f845a06b3c515bcefb90ff',
+  ].join('\0'),
+  [
+    '9d85f8347474bb265b134d9d68bd6df002dc5654',
+    '.github/workflows/e2e-full.yml',
+    'jwt-secret-assignment',
+    '704165a9bb8147924137e9973667f9912c81116f25f845a06b3c515bcefb90ff',
+  ].join('\0'),
+  [
+    '9d85f8347474bb265b134d9d68bd6df002dc5654',
+    '.github/workflows/e2e.yml',
+    'jwt-secret-assignment',
+    '704165a9bb8147924137e9973667f9912c81116f25f845a06b3c515bcefb90ff',
+  ].join('\0'),
+  [
+    '609a57665b081d22493961a1173b8a796ab4e035',
+    '.github/workflows/backend-tests.yml',
+    'jwt-secret-assignment',
+    '3c166d87d4a4921d890dc91e4ebb334dfd292ad60a645b7f834edcac600ad1cd',
+  ].join('\0'),
+  [
+    '609a57665b081d22493961a1173b8a796ab4e035',
+    '.github/workflows/e2e-full.yml',
+    'jwt-secret-assignment',
+    '704165a9bb8147924137e9973667f9912c81116f25f845a06b3c515bcefb90ff',
+  ].join('\0'),
+  [
+    '609a57665b081d22493961a1173b8a796ab4e035',
+    '.github/workflows/e2e.yml',
+    'jwt-secret-assignment',
+    '704165a9bb8147924137e9973667f9912c81116f25f845a06b3c515bcefb90ff',
+  ].join('\0'),
+  [
+    'eeb19cbec3f91dd8ecf8e532d2525fac2b2c7f17',
+    '后端代码/server/README.md',
+    'jwt-secret-assignment',
+    'c56b22fc5d459400977660f2050a1be116a26c05f6bc37858014b810a3db2817',
+  ].join('\0'),
+  [
+    'd629a5f1a5b0233b3e12f0c1ce71a9310f65e8ff',
+    '后端代码/server/README.md',
+    'jwt-secret-assignment',
+    'c56b22fc5d459400977660f2050a1be116a26c05f6bc37858014b810a3db2817',
   ].join('\0'),
 ])
 
@@ -227,7 +288,7 @@ function sha256(value) {
 }
 
 function isHistoricalAllow(file, line, rule, source) {
-  if (source.kind !== 'commit' || !line.includes(ALLOW_MARKER)) return false
+  if (source.kind !== 'commit') return false
   let decodedFile
   try {
     decodedFile = decodePath(file)
