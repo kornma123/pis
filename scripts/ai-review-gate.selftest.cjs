@@ -24,10 +24,12 @@ const metadata = {
   baseSha: '1111111111111111111111111111111111111111',
   mergeBase: '2222222222222222222222222222222222222222',
   headSha: HEAD_SHA,
-  model: 'gpt-5.4-mini-2026-03-17',
+  provider: 'deepseek',
+  model: 'deepseek-v4-pro',
   runUrl: RUN_URL,
-  codexVersion: '0.144.1',
-  actionSha: '52fe01ec70a42f454c9d2ebd47598f9fd6893d56',
+  apiVersion: 'deepseek-chat-completions/v1',
+  runnerSha256: 'b'.repeat(64),
+  workflowSha: '1111111111111111111111111111111111111111',
   patchSha256: 'a'.repeat(64),
   policyVersion: 'coreone-ai-review/v1',
 };
@@ -61,6 +63,9 @@ test('PASS with no blocker produces success', () => {
   assert.match(result.body, new RegExp(HEAD_SHA));
   assert.match(result.body, new RegExp(metadata.baseSha));
   assert.match(result.body, new RegExp(metadata.mergeBase));
+  assert.match(result.body, /deepseek-v4-pro/);
+  assert.match(result.body, /deepseek-chat-completions\/v1/);
+  assert.doesNotMatch(result.body, /codex-action|@openai\/codex/i);
 });
 
 test('P2/P3 findings remain advisory', () => {
@@ -156,7 +161,12 @@ test('invalid immutable metadata fails closed', () => {
   assert.equal(evaluateReview({ ...metadata, baseSha: 'master', rawJson: raw() }).state, 'error');
   assert.equal(evaluateReview({ ...metadata, mergeBase: '', rawJson: raw() }).state, 'error');
   assert.equal(evaluateReview({ ...metadata, runUrl: 'https://evil.example/run', rawJson: raw() }).state, 'error');
-  assert.equal(evaluateReview({ ...metadata, actionSha: 'v1', rawJson: raw() }).state, 'error');
+  assert.equal(evaluateReview({ ...metadata, provider: 'openai', rawJson: raw() }).state, 'error');
+  assert.equal(evaluateReview({ ...metadata, model: 'gpt-5.4-mini', rawJson: raw() }).state, 'error');
+  assert.equal(evaluateReview({ ...metadata, apiVersion: 'responses/v1', rawJson: raw() }).state, 'error');
+  assert.equal(evaluateReview({ ...metadata, runnerSha256: 'unknown', rawJson: raw() }).state, 'error');
+  assert.equal(evaluateReview({ ...metadata, workflowSha: 'master', rawJson: raw() }).state, 'error');
+  assert.equal(evaluateReview({ ...metadata, workflowSha: '3'.repeat(40), rawJson: raw() }).state, 'error');
   assert.equal(evaluateReview({ ...metadata, patchSha256: 'unknown', rawJson: raw() }).state, 'error');
 });
 
@@ -236,18 +246,8 @@ test('JSON Schema and prompt policy stay aligned with the publisher', () => {
   assert.match(prompt, /Policy ID: coreone-ai-review\/v1/);
   assert.match(prompt, /PASS is allowed only when there are no P0\/P1 findings/);
   assert.match(prompt, /Return only the schema-conforming JSON object/);
-
-  const permissionConfig = fs.readFileSync(
-    path.join(__dirname, '..', '.github', 'codex', 'ai-review-config.toml'),
-    'utf8',
-  );
-  assert.match(permissionConfig, /default_permissions = "patch-review"/);
-  assert.match(permissionConfig, /":root" = "deny"/);
-  assert.match(permissionConfig, /":minimal" = "read"/);
-  assert.match(permissionConfig, /":tmpdir" = "deny"/);
-  assert.match(permissionConfig, /":slash_tmp" = "deny"/);
-  assert.match(permissionConfig, /\[permissions\.patch-review\.filesystem\.":workspace_roots"\]\s+"\." = "read"/);
-  assert.match(permissionConfig, /\[permissions\.patch-review\.network\]\s+enabled = false/);
+  assert.match(prompt, /You have no tools/);
+  assert.doesNotMatch(prompt, /permission profile|text tools|current directory/i);
 });
 
 test('secret-bearing workflow keeps its security invariants', () => {
@@ -260,6 +260,10 @@ test('secret-bearing workflow keeps its security invariants', () => {
   assert.match(workflow, /github\.event\.changes\.base != null/);
   assert.doesNotMatch(workflow, /^\s{2}pull_request:/m);
   assert.doesNotMatch(workflow, /^\s+(?:paths|paths-ignore):/m);
+  assert.match(workflow, /BASE_SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /WORKFLOW_SHA: \$\{\{ github\.workflow_sha \}\}/);
+  assert.ok((workflow.match(/ref: \$\{\{ github\.workflow_sha \}\}/g) || []).length >= 2);
+  assert.doesNotMatch(workflow, /github\.event\.pull_request\.base\.sha/);
   assert.match(workflow, /DIFF_BASE="\$\(git merge-base/);
   assert.match(workflow, /--no-ext-diff/);
   assert.match(workflow, /--no-textconv/);
@@ -271,20 +275,39 @@ test('secret-bearing workflow keeps its security invariants', () => {
   assert.match(workflow, /name: ai-review\n\s+deployment: false/);
   assert.match(workflow, /head\.repo\.full_name == github\.repository/);
   assert.match(workflow, /author_association == 'OWNER'/);
-  assert.match(
-    workflow,
-    /openai\/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56/,
-  );
-  assert.match(workflow, /AI_REVIEW_MODEL: gpt-5\.4-mini-2026-03-17/);
-  assert.match(workflow, /codex-home: \$\{\{ runner\.temp \}\}\/ai-review-codex-home/);
-  assert.match(workflow, /permission-profile: patch-review/);
-  assert.match(workflow, /safety-strategy: drop-sudo/);
+  assert.match(workflow, /AI_REVIEW_PROVIDER: deepseek/);
+  assert.match(workflow, /AI_REVIEW_MODEL: deepseek-v4-pro/);
+  assert.match(workflow, /AI_REVIEW_API_VERSION: deepseek-chat-completions\/v1/);
+  assert.match(workflow, /DEEPSEEK_API_KEY: \$\{\{ secrets\.OPENAI_API_KEY \}\}/);
+  assert.match(workflow, /node review-input\/deepseek-ai-review\.cjs/);
+  assert.match(workflow, /cp scripts\/deepseek-ai-review\.cjs review-input\/deepseek-ai-review\.cjs/);
+  assert.match(workflow, /cp scripts\/ai-review-gate\.cjs review-input\/ai-review-gate\.cjs/);
+  assert.match(workflow, /runner_sha256=/);
+  assert.match(workflow, /publisher_sha256=/);
+  assert.match(workflow, /manifest_sha=/);
+  assert.match(workflow, /node scripts\/check-no-secrets\.cjs --range/);
+  assert.doesNotMatch(workflow, /openai\/codex-action|codex-home|permission-profile|safety-strategy/);
+  assert.doesNotMatch(workflow, /codex-config\.toml|AI_REVIEW_CODEX|AI_REVIEW_ACTION/);
   assert.doesNotMatch(workflow, /--skip-git-repo-check/);
-  assert.match(workflow, /Verify patch artifact integrity/);
+  assert.match(workflow, /Verify trusted review artifact integrity/);
+  assert.match(workflow, /actual_manifest_sha.*EXPECTED_MANIFEST_SHA/);
+  assert.match(workflow, /actual_patch_sha.*EXPECTED_PATCH_SHA/);
+  assert.match(workflow, /actual_runner_sha.*EXPECTED_RUNNER_SHA/);
+  assert.match(workflow, /actual_publisher_sha.*EXPECTED_PUBLISHER_SHA/);
+  assert.match(workflow, /actual_prompt_sha.*EXPECTED_PROMPT_SHA/);
+  assert.match(workflow, /actual_schema_sha.*EXPECTED_SCHEMA_SHA/);
   assert.match(workflow, /github\.event\.changes\.base == null && github\.run_id \|\| 'review'/);
   assert.match(workflow, /owns_pending_status\(\)/);
   assert.ok((workflow.match(/if ! owns_pending_status/g) || []).length >= 2);
   assert.doesNotMatch(workflow, /ref:\s*\$\{\{\s*github\.event\.pull_request\.head\.sha/);
+
+  const runModelStart = workflow.indexOf('\n  run_model:');
+  const publisherStart = workflow.indexOf('\n  publish_review:');
+  assert.ok(runModelStart >= 0 && publisherStart > runModelStart);
+  const runModel = workflow.slice(runModelStart, publisherStart);
+  assert.doesNotMatch(runModel, /actions\/checkout/);
+  assert.equal((workflow.match(/\$\{\{ secrets\./g) || []).length, 1);
+  assert.equal((runModel.match(/\$\{\{ secrets\.OPENAI_API_KEY \}\}/g) || []).length, 1);
 });
 
 test('integrity workflow always lints both AI workflows', () => {
@@ -302,6 +325,9 @@ test('integrity workflow always lints both AI workflows', () => {
   );
   assert.match(workflow, /\.github\/workflows\/ai-review-gate\.yml/);
   assert.match(workflow, /\.github\/workflows\/ai-review-integrity\.yml/);
+  assert.match(workflow, /node --check scripts\/deepseek-ai-review\.cjs/);
+  assert.match(workflow, /node --check scripts\/deepseek-ai-review\.selftest\.cjs/);
+  assert.match(workflow, /node scripts\/deepseek-ai-review\.selftest\.cjs/);
 });
 
 test('CLI writes deterministic review and status payload files', () => {
@@ -317,10 +343,12 @@ test('CLI writes deterministic review and status payload files', () => {
         AI_REVIEW_BASE_SHA: metadata.baseSha,
         AI_REVIEW_MERGE_BASE: metadata.mergeBase,
         AI_REVIEW_HEAD_SHA: HEAD_SHA,
+        AI_REVIEW_PROVIDER: metadata.provider,
         AI_REVIEW_MODEL: metadata.model,
         AI_REVIEW_RUN_URL: RUN_URL,
-        AI_REVIEW_CODEX_VERSION: metadata.codexVersion,
-        AI_REVIEW_ACTION_SHA: metadata.actionSha,
+        AI_REVIEW_API_VERSION: metadata.apiVersion,
+        AI_REVIEW_RUNNER_SHA256: metadata.runnerSha256,
+        AI_REVIEW_WORKFLOW_SHA: metadata.workflowSha,
         AI_REVIEW_PATCH_SHA256: metadata.patchSha256,
         AI_REVIEW_POLICY_VERSION: metadata.policyVersion,
         AI_REVIEW_OUTPUT_DIR: temp,

@@ -59,5 +59,9 @@ jobs:
         run: |
           node --check scripts/ai-review-gate.cjs
           node --check scripts/ai-review-gate.selftest.cjs
+          node --check scripts/deepseek-ai-review.cjs
+          node --check scripts/deepseek-ai-review.selftest.cjs
       - name: Run AI review gate self-test
-        run: node scripts/ai-review-gate.selftest.cjs
+        run: |
+          node scripts/ai-review-gate.selftest.cjs
+          node scripts/deepseek-ai-review.selftest.cjs
