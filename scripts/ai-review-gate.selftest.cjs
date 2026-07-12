@@ -254,7 +254,7 @@ test('secret-bearing workflow keeps its security invariants', () => {
   const workflow = fs.readFileSync(
     path.join(__dirname, '..', '.github', 'workflows', 'ai-review-gate.yml'),
     'utf8',
-  );
+  ).replace(/\r\n?/g, '\n');
   assert.match(workflow, /^\s{2}pull_request_target:/m);
   assert.match(workflow, /types: \[opened, synchronize, reopened, ready_for_review, edited\]/);
   assert.match(workflow, /github\.event\.changes\.base != null/);
@@ -279,6 +279,7 @@ test('secret-bearing workflow keeps its security invariants', () => {
   assert.match(workflow, /codex-home: \$\{\{ runner\.temp \}\}\/ai-review-codex-home/);
   assert.match(workflow, /permission-profile: patch-review/);
   assert.match(workflow, /safety-strategy: drop-sudo/);
+  assert.doesNotMatch(workflow, /--skip-git-repo-check/);
   assert.match(workflow, /Verify patch artifact integrity/);
   assert.match(workflow, /github\.event\.changes\.base == null && github\.run_id \|\| 'review'/);
   assert.match(workflow, /owns_pending_status\(\)/);
@@ -290,7 +291,7 @@ test('integrity workflow always lints both AI workflows', () => {
   const workflow = fs.readFileSync(
     path.join(__dirname, '..', '.github', 'workflows', 'ai-review-integrity.yml'),
     'utf8',
-  );
+  ).replace(/\r\n?/g, '\n');
   assert.match(workflow, /^\s{2}pull_request:/m);
   assert.match(workflow, /types: \[opened, synchronize, reopened, ready_for_review, edited\]/);
   assert.doesNotMatch(workflow, /^\s+(?:paths|paths-ignore):/m);
