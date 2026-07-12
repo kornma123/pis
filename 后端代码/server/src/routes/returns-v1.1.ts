@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { checkedAdd, parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
 
 const router = Router()
 
@@ -85,33 +86,43 @@ router.get('/stats', (_req, res) => {
 router.post('/', requireReturnsWrite, (req, res) => {
   try {
     const { materialId, quantity, reason, operator, remark } = req.body
-    if (!materialId || quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0 || !reason) {
+    const qty = parseFinitePositiveNumber(quantity)
+    if (!materialId || qty === null || !reason) {
       error(res, 'Missing or invalid fields', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
     const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
+    const preflightInv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
+    const preflightBeforeStock = preflightInv ? parseFiniteNumber(preflightInv.stock) : 0
+    const preflightAfterStock = preflightBeforeStock === null ? null : checkedAdd(preflightBeforeStock, qty)
+    if (preflightBeforeStock === null || preflightAfterStock === null) {
+      error(res, 'Return quantity exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
+    }
 
-    const qty = Number(quantity)
     db.exec('BEGIN IMMEDIATE')
     try {
+      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
+      const beforeStock = inv ? parseFiniteNumber(inv.stock) : 0
+      const afterStock = beforeStock === null ? null : checkedAdd(beforeStock, qty)
+      if (beforeStock === null || afterStock === null) {
+        db.exec('ROLLBACK')
+        error(res, 'Return quantity exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
+        return
+      }
       const id = uuidv4()
       db.prepare('INSERT INTO return_records (id, return_no, material_id, quantity, reason, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .run(id, generateNo(), materialId, qty, reason, operator || 'system', remark || null)
 
       // 退回仓库 → 库存增加（无库存行则新建，库位取物料默认库位）
-      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-      const beforeStock = inv ? inv.stock : 0
       if (inv) {
-        db.prepare('UPDATE inventory SET stock = stock + ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(qty, materialId)
+        db.prepare('UPDATE inventory SET stock = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(afterStock, materialId)
       } else {
         db.prepare(`
           INSERT INTO inventory (id, material_id, stock, locked_stock, location_id, update_time)
           VALUES (?, ?, ?, 0, ?, CURRENT_TIMESTAMP)
         `).run(uuidv4(), materialId, qty, material.location_id || null)
       }
-      const afterStock = beforeStock + qty
-
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
         VALUES (?, 'return', ?, ?, ?, ?, ?, 'return', ?)
