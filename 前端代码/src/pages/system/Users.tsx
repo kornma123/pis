@@ -64,7 +64,6 @@ export default function Users() {
         onOpenDetail={page.openDetail}
         onOpenEdit={page.openEdit}
         onToggleStatus={page.handleToggleStatus}
-        onResetPassword={page.handleResetPassword}
         onDelete={page.handleDelete}
       />
 
@@ -76,7 +75,6 @@ export default function Users() {
         onClose={() => page.setModalType(null)}
         onChange={page.setForm}
         onSubmit={page.handleSubmit}
-        onResetPassword={() => page.editingId && page.handleResetPassword(page.editingId)}
       />
 
       {/* Detail Modal */}

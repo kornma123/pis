@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/errorHandler.js'
 import { authenticateToken } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
 import { auditWrite } from './middleware/audit-log.js'
+import { isFixtureEnv } from './config/security.js'
 
 // 路由导入
 import authRoutes from './routes/auth.js'
@@ -154,8 +155,11 @@ app.use((_req, res) => {
 
 // 测试环境下不自动启动服务器（测试用 supertest 的 request(app)，无需常驻端口）
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`COREONE Backend Server running on port ${PORT}`)
+  // 安全（P1-4）：开发/夹具环境内置固定默认账号，只绑回环 127.0.0.1，避免在局域网暴露默认凭据；
+  // 生产（无默认账号）绑 0.0.0.0——容器内需被 nginx/宿主访问。
+  const HOST = isFixtureEnv() ? '127.0.0.1' : '0.0.0.0'
+  app.listen(Number(PORT), HOST, () => {
+    console.log(`COREONE Backend Server running on ${HOST}:${PORT}`)
     console.log(`API Base URL: http://localhost:${PORT}/api/v1`)
   })
 }

@@ -238,7 +238,7 @@ batch_depletion: id, batch_id, material_id, depletion_rate,
 
 ### 4.3 JWT 认证
 
-- **Secret**: `coreone-secret-key-2024`
+- **Secret**: 由部署环境注入的 `JWT_SECRET`（旧硬编码弱密钥已泄露并从代码移除，勿再使用）
 - **Token有效期**: 8小时 (28800秒)
 - **RefreshToken有效期**: 7天
 - **认证头**: `Authorization: Bearer <token>`

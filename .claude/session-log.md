@@ -1985,6 +1985,43 @@ http://your-server-ip:8080
 
 ---
 
+## 2026-07-09 本次会话续 —— 🔴 安全止血：公开仓库泄露签名密钥 + 默认凭据（并揪出第二枚活密钥）
+
+**触发**：用户报「疑似遭遇网络攻击」+ 独立复核指认公开仓库泄露固定 JWT 签名密钥 + 默认凭据（可远程伪造任意角色 JWT / admin/admin123 登录）。**核实=真数据先行**（报告用英文路径 backend/frontend·实际是 后端代码/前端代码）：全部属实 + **完备性 sweep（Workflow 5-agent 多镜头 + 对抗验证）逮到报告漏掉的更大暴露面**。
+
+**确认泄露（public 仓库 + git 历史·全部按已泄露处置）**：① JWT 签名密钥 `coreone-jwt-secret-key-…`〔脱敏〕（后端/前端 .env + docker-compose 默认回退 + 历史 bfa51840/3e33e81b）② 🆕 **第二枚活密钥 = Anthropic/Kimi API Key `sk-kimi-WWWy…`**（start-claude.bat/.ps1 + 历史 cc8659c9/a68a9c33·**须厂商侧吊销**）③ 🆕 token.json（真实 admin JWT）；🆕 更早的第二个 secret 字面值 `coreone-secret-key-…`〔脱敏〕（代码已移除·仍在 3 份 tracked 文档）④ 默认口令 admin123 / CoreOne2026!（5 角色）+ 每次启动强制重新启用。
+
+**🆕 auth 面缺陷（生产可达·报告未提）**：登录**自动恢复软删除账号**（禁用即失效被撤销）；无登录限速/锁定；refresh token 可当 access token（无 type 校验）；DB 异常时禁用校验 fail-open。**确认单一签名密钥 → 轮换即失效全部令牌**。
+
+**本 PR 代码止血（4 编辑 + CI 清理 + 重置脚本）**：docker-compose 删默认回退→`${JWT_SECRET:?}` 缺失即拒启；auth.ts 生产拒绝已泄露/占位/过短密钥（dev/test 仅 warn·NODE_ENV=test 故 CI 不红）+ 拒绝清单纳入两枚泄露值（`secret-scan:allow` 标记）；DatabaseManager 种子生产不再种默认凭据/不强制启用（dev/test 逐字不变·`ADMIN_INITIAL_PASSWORD` 受控 opt-in）；routes/auth.ts 登录生产不再自动恢复软删除账号。**CI 清理**：`git rm --cached` 两 .env + token.json + start-claude.* + 7 debug 脚本（本地保留·补 .gitignore）；**3 workflow 注入 CI 一次性 JWT_SECRET**（否则去 .env 后 vitest required 门变红——已 CI-sim 证明）；scrub 3 文档第二密钥字面值；新增 `scripts/check-no-secrets.cjs`（窄规则 + allow 标记）+ secret-scan workflow。**重置脚本** `后端代码/server/scripts/reset-passwords.ts`（env 传口令·拒弱/默认·不打印·不擅自启用）+ `npm run reset-passwords`。
+
+**验证**：backend tsc 绿·secret-scan 绿·**vitest 118 files/1082 tests 全绿**（golden ¥13,152+¥27,870 零回归）×2（本地 .env / **CI-sim 无 .env 仅注入 JWT_SECRET** 均绿）·docker-compose YAML(js-yaml) 有效。独立复核=Workflow 5-agent sweep+对抗验证（确认 4 代码编辑 SOUND 不破 CI·untrack .env 必配 CI 注入·secret-scan 需 allowlist·轮换失效全令牌）+ 逐条 Read 亲核。
+
+**PM 拍板（AskUserQuestion）**：① 仓库**保持 public**（不转 private）② **先轮换/吊销再清历史**（备好 filter-repo 清史步骤·**不 force-push**·待运维侧轮换后执行）③ 开**完整 PR**。
+
+**🔴 待用户运维侧执行（我无权触达其服务器/厂商账号·真正 bleed-stop）**：① 厂商吊销 Kimi/Anthropic key ② 轮换 JWT_SECRET（`openssl rand -base64 48`·仅经环境注入·重启失效全令牌）③ 重置 admin+5 角色口令 ④ 查 operation_logs/abc_audit_logs 异常。**清历史待轮换后执行**（清单：两 .env / token.json / start-claude.* / 两枚 secret 字面值 / coreone.db 内 bcrypt 哈希；无 open PR/fork 故 blast 小）。
+
+**留作后续硬化 PR（非 bleed-stop·本 PR 未含）**：登录限速/锁定、refresh-token type 校验、fail-open 复议、JWT `algorithms:['HS256']` 固定、首登强制改密。
+
+*更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 续 —— 🔴 独立复审 BLOCK 修复批（P0 fail-open + P1/P2·PR #119 第二轮）
+
+**背景**：PR #119 CI 全绿，但独立复审（fresh-clone 复现）判 **BLOCK**——发现**可复现的 P0 远程接管**：我上一版用 `NODE_ENV === 'production'` 作安全开关是 **fail-open**——**未设置/拼错 NODE_ENV**（部署常态）就绕过全部止血：种默认 admin、接受泄露密钥、登录自动复活软删除账号。复审全部成立，已按其合并门槛修。
+
+**核心修（fail-closed）**：新增 `src/config/security.ts` 单一判据——**危险夹具行为只在显式 `test`/`development`（或显式 `COREONE_SEED_DEFAULT_USERS=1`）放行；未声明环境一律按生产级=安全**。三处消费改用它：auth.ts（`assertJwtSecretUsable`·未声明环境遇泄露/占位/过弱密钥**抛错拒启**·dev/test 仅告警）、DatabaseManager（抽出可测 `seedDefaultUsers()`·未声明环境不种默认凭据/不强制启用·`ADMIN_INITIAL_PASSWORD` 须非泄露值+≥12）、routes/auth.ts（登录自动恢复软删除仅 `isFixtureEnv()`）。**泄露密钥明文移出运行时源码**→改 SHA-256 指纹比对（P2#8·清史不再受阻；明文仅存在于扫描器检测规则）。
+
+**配套**：e2e 后端改以 `NODE_ENV=development` 运行（既 `app.listen`[非 test] 又种夹具·playwright.config webServer.env + e2e.yml/e2e-full.yml）；`npm start` 路径修 `dist/src/app.js`（P1#4）；deploy 文档/installer 改为**先注入 JWT_SECRET 再启动**+**不再宣传默认 admin**（docker-compose 加 `ADMIN_INITIAL_PASSWORD` 透传·部署说明.md·install-docker.ps1 生成并持久化 JWT_SECRET 到 .env）；secret-scan 去掉 `.env.example` 跳过 + 诚实标注"只扫工作树非历史·建议提升为 required"（P1#5）；reset-passwords 加事务 + DATABASE_PATH 告警（P2#7）。
+
+**新增测试（P1#3·安全分支）**：`tests/security-env-guards.test.ts`（判据·含 `delete process.env.NODE_ENV` 测真实未设置路径——**踩到默认参数陷阱**：显式传 undefined 会触发 `=process.env.NODE_ENV` 默认值[vitest 里=test]，故真实未设置须删环境变量测）+ `tests/security-seed-users.test.ts`（`seedDefaultUsers` 生产级不种/拒 admin123/拒短/不复活·夹具环境行为不变）。
+
+**验证（≥ 复审的严格度）**：backend+frontend tsc 绿 · secret-scan 绿 · **vitest 120 files/1106 tests 全绿**×2（本地 .env / CI-sim 无 .env 注入 JWT_SECRET）· golden ¥13,152+¥27,870 零回归 · docker-compose YAML 有效。⭐**运行时冒烟三态（temp DB·不碰 tracked coreone.db）复现复审场景并证已闭**：A) `NODE_ENV=production`+强密钥→health 200 但 `admin/admin123` 登录 **401**（无默认 admin）；B) **未设 NODE_ENV**+占位密钥→**exit 1 不监听**（拒启）；C) `development`→`admin/admin123` **200**（夹具不回归）。
+
+**未纳入本 PR（诚实口径·PM 决策）**：secret-scan 提升为 **required**（分支保护改动·归 PM·待拍）；清史 blast 更正（P1#6：实为 **89 远程分支含泄露 + 20 worktree**，`filter-repo --mirror` 覆盖全 refs 但协调面大，非"blast 小"）；登录限速/token-type/fail-open/alg 固定仍属后续硬化 PR。
+---
+
 ## 2026-07-09 本次会话 —— DATA-1 入库数值护栏与假绿测试修复
 
 **线/工作树**：独立 worktree `/Users/maxiaoyuan/.codex/worktrees/6749/进销存`，分支 `codex/data-1-inbound-material-guards`，开工前 `git fetch origin --prune`，基线 `origin/master=87923aba78a69a240bf82bab637c06febf29e366`。开工时唯一 open PR 为 #119；本任务未触碰其 auth / middleware/auth / DatabaseManager / docker-compose / env / token-debug / workflows / secret-scan / 密码重置文件域。
@@ -1998,5 +2035,70 @@ http://your-server-ip:8080
 **TDD 与验证**：实现前聚焦测试 **17 failed / 3 passed**（负数可写、非有限多为 500、材料非法价格被 201/200 接受）；实现后聚焦 **20/20 绿**。`npm run build` 绿；相关串行 Vitest **4 files / 46 tests 绿**（含 inbound 幂等、无 key 兼容、库存链、权限）；golden/ABC 精度 **3 files / 23 tests 绿**；完整 required Vitest 串行 **119 files / 1102 tests 全绿**；`git diff --check` 绿。
 
 **明确边界**：未给 batches/inventory 加 DB CHECK；未改 `DatabaseManager.ts`、tracked `coreone.db` 或历史负 remaining 漂移；未扩展到全系统其他数值端点。原因是本任务只收口 inbound POST/PUT 与 materials price 的服务端入口，DB CHECK 会改变存量数据/迁移面并超出本 PR 风险边界。
-
 *更新时间：2026-07-09*
+
+---
+
+## 2026-07-09 续² —— 🔴 独立复审第二轮 BLOCK 修复（PR #119·fail-closed 加固收口）
+
+**背景**：第二轮独立复审确认第一轮 P0（fail-open）已修，但仍 BLOCK：①PR 与 master 冲突/CI 过期 ②生产仍保留 `COREONE_SEED_DEFAULT_USERS=1` 默认账号旁路 ③重置脚本"零修改仍成功退出" ④开发服务 0.0.0.0 局域网暴露固定凭据 ⑤secret-scan 仍只扫工作树/非 required。本轮全部收口（本树已有并行会话开工，我在其基础上补齐两处缺口并统一验证/提交）。
+
+**已落地（含并行会话产出 + 我补齐）**：
+- **P1‑1 冲突/CI 过期** → 已 `merge origin/master`（含 #120），HEAD=merge commit，`HEAD..origin/master` 空；本次推送后 CI 在最新 base 重跑。
+- **P1‑2 生产默认账号旁路** → `security.ts` `allowDefaultFixtureUsers` **彻底删除 `COREONE_SEED_DEFAULT_USERS` 旁路**（只认显式 test/development）；DatabaseManager 注释同步。**冒烟证**：`NODE_ENV=production COREONE_SEED_DEFAULT_USERS=1` → `admin/admin123` 登录 **401**（不再种）。
+- **P1‑3 重置脚本假成功**（我补齐缺口）→ 原并行版已加"必填 DATABASE_PATH+校验先行+事务"，但**缺目标账号仍 COMMIT+exit 0**；我补 **任一目标不存在→整体 ROLLBACK+exit 1**（脚本只重置不创建）+ 新增 TDD（缺账号→exit 1、admin 口令未被改）。部署说明.md 已订正"reset 只更新已存在账号、不创建 admin"+ 正确初始 admin 路径（临时 ADMIN_INITIAL_PASSWORD 重建后删除）。
+- **P1‑4 开发服务 LAN 暴露**（我补齐）→ `app.ts` listen 改 **夹具环境绑 `127.0.0.1`、生产绑 `0.0.0.0`**（`isFixtureEnv()`；容器仍可达）。**冒烟证**：development → `running on 127.0.0.1`；production → `0.0.0.0`。
+- **P1‑5 secret-scan** → `check-no-secrets.cjs` 加 `--range base..head` **扫 PR/push 每个提交的变更文件态**（逮"先提交后删除"）+ `secret-scan.yml` `fetch-depth:0`+跑 selftest+range 扫；新增 `check-no-secrets.selftest.cjs`（4 断言变异证有牙）。**提升为 required 仍属 PM 决策**（未擅改分支保护）。
+- **npm start** → `start-production.mjs` 启动器**在 dotenv 前强制 `NODE_ENV=production`**（防遗留 dev .env 复活夹具）+ 修 `dist/src/app.js` 路径（build 证该文件存在）。
+
+**验证（≥复审严格度）**：backend tsc 绿 · scanner selftest 4/4 + working-tree 扫描绿 · **vitest 122 files/1130 tests 全绿**×2（本地 .env / CI-sim 无 .env 注入 JWT_SECRET）· golden ¥13,152+¥27,870 零回归 · build 出 `dist/src/app.js`。运行时冒烟四态（temp DB·不碰 tracked coreone.db）全过：production 无 admin(401)/production+旁路 flag 仍无 admin(401)/development admin123(200)+绑 127.0.0.1/未设 env+占位密钥拒启。
+
+**仍属运维/PM（非代码·诚实口径）**：🔴事故层止血未闭（吊销 Kimi Key/轮换生产 JWT/重置生产账号——须运维执行证据）；secret-scan 提升 required（PM 决策）；清史 blast=89 远程分支+worktree（`filter-repo --mirror` 覆盖全 refs·协调面大）。
+*更新时间：2026-07-09*
+
+---
+
+## 2026-07-10 —— 🔴 独立复审第三轮 BLOCK 修复（PR #119·打包泄露 + merge-commit 扫描漏洞）
+
+**背景**：第三轮复审确认前两轮已修，但新逮 2 个 P1：①**部署包/Docker 镜像仍携带敏感文件**（`.gitignore` 不管 Docker `COPY . .` build context 也不管 `tar` 打包）②**secret-scan 漏扫 merge commit**（`git diff-tree` 无 `-m` 对 merge 输出 0 文件，实测 merge `609a5766`=0 文件·`-m`=40 文件）。均已复现属实并修。
+
+**P1-1 打包/镜像泄露 → 三处堵**：
+- 新增 `后端代码/server/.dockerignore`：挡 `.env`/`.env.*`/`token.json`/`data/`+`*.db`/seed-*.ts/role-based-testing.ts/forensic-*.cjs/tests/node_modules（保留 reset-passwords.ts + start-production.mjs 供运维/npm start）。
+- 新增 `前端代码/.dockerignore`：挡 `.env`（**前端 .env 误含后端 JWT_SECRET**）+ node_modules/dist/e2e（构建所需 VITE_API_BASE_URL 由 Dockerfile ENV 提供）。
+- 部署打包 `tar -c 前端代码/ 后端代码/…`（含未跟踪 .env/token.json）→ 改 **`git archive HEAD`**（只含已跟踪文件→未跟踪密钥天然排除）+ 仓库根 **`.gitattributes` export-ignore**（再排除已跟踪的调试/种子脚本 + `后端代码/server/data`〔dev 库含 admin/admin123 种子哈希，绝不进包·生产靠 named volume `coreone-data` 首启建空库 fail-closed 不种默认账号〕）+ 打包后 grep 自检行。
+- **验证**：`git archive --worktree-attributes` 实跑→包内**无** .env/token.json/*.db/seed/debug（647 文件·app 源码在）。docker-compose 用 named volume 非 bind mount，dev 库本就不会自动成生产库（双保险）。
+
+**P1-2 merge-commit 漏扫 → -m 修 + 变异证有牙**：
+- `check-no-secrets.cjs` 范围扫描 `git diff-tree` 加 **`-m`**（展开 merge 对每个父的差异·Set 去重）→ 抓"合并冲突解决时引入密钥、后续删除"。
+- selftest 加**第 5 场景**（造 merge commit 引入 fakeKey→后续删→范围扫描须 status 1）；**变异证**：临时删 `-m`→selftest 退 1（fail）·恢复 →5/5。真实 `origin/master..HEAD` 现扫 4 commit（含 merge）绿。
+
+**验证**：selftest 5/5·working-tree 扫描绿·range 扫描（含 merge）绿·git status 仅本轮 6 文件（无误纳）。纯扫描器/打包配置·零 TS 改动→vitest/tsc 不受影响（上轮 122 files/1130 绿仍成立）。
+
+**仍属运维/PM（不变）**：🔴事故层止血（吊销 Kimi/轮换生产 JWT/重置账号·须执行证据）+ **建议 `rm 本地 token.json`（真实 admin JWT·轮换后删）** + secret-scan 提升 required（PM 决策）+ 清史。
+*更新时间：2026-07-10*
+
+---
+
+## 2026-07-10 续 —— 🔴 PR #119 第四轮独立复审最终收口（扫描器 + 口令链 + 用户页）
+
+**线/边界**：在隔离 worktree `/Users/maxiaoyuan/.codex/worktrees/pr119-final-hardening/进销存` 修 PR #119 head，不触碰主工作树用户未跟踪文件，不合并。分支保护继续只要求当前 master 已存在的 `vitest` + `gate`；`secret-scan` workflow 在 #119 合入 master **之后**再设 required，避免主线还没该 check 时把 PR 治理锁死。
+
+**扫描器对抗收口**：范围扫改用 raw blob OID，merge/rename/非 UTF-8 路径不再变成空结果；UTF-8/UTF-16/GB18030 严格解码，binary 扫 ASCII runs，archive/超限/读取/解码失败全部 fail-closed；root scanner 和历史 auth denylist 只许 SHA/path/rule/line-hash 精确豁免。终审又复现「GB18030 lead byte 吞掉 ASCII secret 首字节」，改为只在 legacy fallback 时追加 ASCII-preserving 第二视图并去重；RED 复现后 selftest **50/50** 绿，独立 scanner review=CLEAN。workflow 取消会让旧扫描中途取消的 concurrency，保留完整 PR/push 历史检查。
+
+**运行时口令链**：
+- `security.ts` 把 JWT/账号口令强度口径统一：NFKC 后 Unicode 长度、bcrypt 72-byte 上限、字符多样性/Shannon 熵、近似重复/短模式/顺序串/常见弱口令/已泄露值全拒绝。终审命中 NFKC bypass：全角/混合全角公开默认值可绕 exact compare。现在 JWT 指纹与默认口令均同时查 raw + NFKC，重置脚本的多账号口令唯一性也用 NFKC key。该组 RED **3 fail** → GREEN **2 files/37 tests**。
+- `DatabaseManager` 在任何 DDL/迁移前校验显式 `ADMIN_INITIAL_PASSWORD`；旧库在任何写入前只有界扫历史 6 账号（最多 12 次 bcrypt compare），缺 username/password 列拒启。新回归证明弱值/空白显式值拒启后业务表数=0。
+- `users-v1.1` POST/PUT 都执行同一策略；禁用但仍保留历史泄露 hash 的账号不得无密码重启，必须在同一 PUT 内带合格新口令，状态+hash 同一 SQL 原子落库。
+- `reset-passwords` 支持完整 8 个历史账号的独立 env + JSON 扩展，拒重复账号/口令复用/策略不合格，全部目标存在才事务 COMMIT，成功日志只在 COMMIT 后输出。
+
+**用户页/真契约**：原页面展示必败的静态「初始密码」且 payload 不发 password，另有两个真可点但后端从不存在的 `POST /users/:id/reset-password` 幽灵入口。现在创建/编辑表单真实提交 password，安全随机生成 20 个 NFKC 后互异字符，且映射后续端 common-fragment/sequence 规则；默认 `type=password` 遮罩，只有管理员显式点击才显示、10 秒自动恢复。删掉幽灵 reset 按钮/请求，改走真实 PUT。Playwright `users.spec.ts` 不再静默跳过：创建流真选角色+验证自动密码+提交+API GET 回查，改密流验真实 PUT 权限；`--list` **97 条**解析绿（未跑浏览器运行态）。
+
+**治理同步**：删 reset 幽灵后同步 build-discipline selftest 改为「不得回归」反向守卫，C1 幽灵 2→1；baseline `count/keys/targetMaxCount` **34→33**，棘轮只减不增。`docs/PM待拍板.md` B-4 现只留 logs/export，密码项标为 #119 已解；2026-07-06 存量快照追加 2026-07-10 后续状态。build-discipline selftest 全绿；`run-all --block=C1,C2,C3` 新增违规 0、required gate 绿。
+
+**最终验证**：后端 tsc 绿·安全聚焦 **6 files/63 tests**·后端串行全量 **124 files/1160 tests**全绿；前端 tsc + Vite 生产 build 绿·UTC 单 worker 全量 **51 files/320 tests**全绿；secret-scan selftest **50/50**·工作树 **1073 tracked paths**·`origin/master..HEAD` 5 commit range 全绿；workflow YAML·部署文档 bash fence·`git diff --check` 全绿。两路独立运行时/整体终审 + scanner 专项终审均=CLEAN。
+
+**诚实边界**：本机没有 Docker，故 Compose/旧库升级只做代码、YAML、shell fence 与 temp SQLite 验证，未真跑容器；Playwright 只做 97 条用例解析，未做页面运行态 E2E。生产 Kimi key 吊销、JWT 轮换、生产 6 账号改密与清历史仍需运维/仓库协调，不能用本 PR 代码绿冒充已完成。
+
+**PM 大白话**：这一轮不只是「把测试跑绿」，而是把几个可绕过的缝逐个变成会当场拦住的硬门：扫描器不再被编码吞前缀，禁用的旧口令账号不能一键复活，全角字也不能伪装成「新口令」，页面改密走的是真接口不是假按钮。代码已达到可交 Codex 再审的状态，但真正的生产密钥/账号轮换还必须由运维拿出执行证据。
+
+*更新时间：2026-07-10*

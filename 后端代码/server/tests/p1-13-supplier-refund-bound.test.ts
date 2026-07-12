@@ -25,7 +25,7 @@ beforeAll(async () => {
   // P1-14 给写端点加了 requireWriteAccess（依赖 req.user.role），故此处注入一个写角色用户，
   // 模拟 authenticateToken 已设置 req.user（生产链路一致）。
   const injectWriteUser = (req: any, _res: any, next: any) => {
-    req.user = { userId: 'TEST-ADMIN', username: 'admin', role: 'admin' }
+    req.user = { userId: 'TEST-ADMIN', username: 'admin', role: 'admin', roles: ['admin'] }
     next()
   }
   app = await buildTestApp([

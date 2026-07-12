@@ -198,7 +198,7 @@ limit = pageSize
 |------|------|
 | Token 类型 | JWT (JSON Web Token) |
 | 签名算法 | HS256 |
-| Secret Key | `coreone-secret-key-2024` |
+| Secret Key | 由环境变量 `JWT_SECRET` 注入（旧硬编码弱密钥已泄露并移除，勿使用） |
 | Access Token 有效期 | 8 小时（28800 秒） |
 | Refresh Token 有效期 | 7 天（604800 秒） |
 | Token 传输位置 | HTTP Header: `Authorization: Bearer <token>` |

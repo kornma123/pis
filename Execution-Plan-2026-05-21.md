@@ -169,7 +169,7 @@
 | **目标文件** | `后端代码/server/src/middleware/auth.ts`  |
 | | `后端代码/server/src/routes/auth.ts` |
 | | `后端代码/server/src/app.ts` |
-| **根因** | `JWT_SECRET = process.env.JWT_SECRET \|\| 'coreone-secret-key-2024'` 存在默认值，部署时若未设置环境变量则使用弱密钥 |
+| **根因** | `JWT_SECRET = process.env.JWT_SECRET \|\| '〔已脱敏·旧弱密钥〕'` 存在默认值，部署时若未设置环境变量则使用弱密钥 |
 | **修复方案** | ① `middleware/auth.ts`: 移除默认值，未设置时抛异常阻止启动 ② `routes/auth.ts`: 导入共享 `JWT_SECRET` 常量 ③ `app.ts`: `import 'dotenv/config'` 提前到首行，确保环境变量在模块加载前就绪 |
 | **验证方式** | ① 未设置 JWT_SECRET 时启动失败（已验证） ② 设置后正常启动 ③ 登录/鉴权功能正常 |
 | **状态** | ✅ 已完成 |

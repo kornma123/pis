@@ -53,17 +53,6 @@ function seedReturn(id: string, status: string, refund: number): string {
 beforeAll(async () => {
   db = await getDb()
 
-  // 已知 master 迁移顺序缺陷：purchase_orders.is_deleted 的 ALTER 迁移在该表 CREATE 之前执行，
-  // 全新内存库里该列缺失，导致 GET supplier-returns 的 LEFT JOIN purchase_orders ... po.is_deleted
-  // 报 “no such column”。长期运行库已有该列；此处对齐真实环境，补齐缺列（不属本 feature 范围，
-  // 已另起任务修复 DatabaseManager 迁移顺序）。
-  try {
-    const poCols = db.prepare('PRAGMA table_info(purchase_orders)').all() as any[]
-    if (!poCols.find((c: any) => c.name === 'is_deleted')) {
-      db.exec('ALTER TABLE purchase_orders ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0')
-    }
-  } catch { /* ignore */ }
-
   const authRoutes = (await import('../src/routes/auth.js')).default
   const supplierReturnRoutes = (await import('../src/routes/supplier-returns-v1.1.js')).default
   const { authenticateToken, requireRole } = await import('../src/middleware/auth.js')

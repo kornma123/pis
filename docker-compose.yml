@@ -1,19 +1,24 @@
-version: '3.8'
-
 services:
   backend:
     build:
       context: ./后端代码/server
       dockerfile: Dockerfile
+    image: coreone-backend:${COREONE_IMAGE_TAG:-local}
     container_name: coreone-backend
     restart: unless-stopped
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - JWT_SECRET=${JWT_SECRET:-coreone-jwt-secret-key-2024}
+      # 安全：绝不内置默认密钥。JWT_SECRET 必须由部署环境注入（缺失即拒绝启动）。
+      # 生成示例：openssl rand -base64 48
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required — inject a strong random secret via the deploy environment; the old default was leaked and must not be reused}
       - JWT_EXPIRES_IN=8h
       - REFRESH_TOKEN_EXPIRES_IN=7d
       - DATABASE_PATH=/app/data/coreone.db
+      # 仅全新首装可临时设为 1；旧库升级必须保持 0，避免漏挂 volume 时静默创建空库。
+      - COREONE_ALLOW_DATABASE_CREATE=${COREONE_ALLOW_DATABASE_CREATE:-0}
+      # 可选：受控创建初始 admin（不设=不创建任何默认账号）。口令须 ≥12 位、非默认弱口令。
+      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-}
     volumes:
       - coreone-data:/app/data
     networks:
@@ -29,6 +34,7 @@ services:
     build:
       context: ./前端代码
       dockerfile: Dockerfile
+    image: coreone-frontend:${COREONE_IMAGE_TAG:-local}
     container_name: coreone-frontend
     restart: unless-stopped
     ports:

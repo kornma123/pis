@@ -2,10 +2,18 @@ import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { getUserRoleCodes } from './permissions.js'
+import { assertJwtSecretUsable } from '../config/security.js'
 
 const jwtSecret = process.env.JWT_SECRET
 if (!jwtSecret) {
   throw new Error('JWT_SECRET environment variable is required')
+}
+// 安全止血（fail-closed）：用已泄露/占位/过弱密钥签发/校验 JWT 等于门户大开——任何人都能
+// 伪造任意角色（含 admin）令牌。**默认拒绝启动**；仅显式 dev/test 放行并告警（见 config/security.ts）。
+// 判据 fail-closed：未声明 NODE_ENV（未设置/拼错/production/staging…）一律按生产级=拒绝。
+const secretCheck = assertJwtSecretUsable(jwtSecret)
+if (!secretCheck.ok) {
+  console.warn(`[SECURITY] ${secretCheck.reason}。仅显式 dev/test 环境放行——切勿用于生产部署。`)
 }
 export const JWT_SECRET = jwtSecret
 
@@ -71,9 +79,17 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
     return
   }
 
-  let decoded: { userId: string; username: string; role: string }
+  let decoded: { userId: string; username: string; role: string; type: 'access' }
   try {
-    decoded = jwt.verify(token, JWT_SECRET) as { userId: string; username: string; role: string }
+    const verified = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] })
+    if (
+      typeof verified === 'string'
+      || verified.type !== 'access'
+      || typeof verified.userId !== 'string'
+      || typeof verified.username !== 'string'
+      || typeof verified.role !== 'string'
+    ) throw new Error('invalid access token claims')
+    decoded = verified as typeof decoded
   } catch {
     res.status(401).json({ success: false, error: { message: 'Invalid token', code: 'UNAUTHORIZED' } })
     return
@@ -83,22 +99,30 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   // 数据驱动多角色 RBAC：不再因 role 变更强制 401（ROLE_CHANGED 已移除）——
   //   改为每请求解析用户全部角色（user_roles ∪ users.role）并挂 req.user.roles，
   //   鉴权按角色权限并集即时生效（改角色/改矩阵无需重登）。
-  // DB 异常时退回仅签名校验（不因 DB 抖动锁死全部请求）。
   const enriched: { userId: string; username: string; role: string; roles?: string[] } = { ...decoded }
   try {
     const db = getDatabase()
-    const u = db.prepare('SELECT status, is_deleted, role FROM users WHERE id = ?').get(decoded.userId) as
-      | { status: number; is_deleted: number; role: string }
+    const u = db.prepare('SELECT status, is_deleted, role, primary_role FROM users WHERE id = ?').get(decoded.userId) as
+      | { status: number; is_deleted: number; role: string; primary_role?: string }
       | undefined
 
     if (!u || u.is_deleted === 1 || u.status !== 1) {
       res.status(401).json({ success: false, error: { message: '账号已停用或不存在，请重新登录', code: 'ACCOUNT_DISABLED' } })
       return
     }
-    enriched.role = u.role || decoded.role // DB 主角色为准（用于 requireRole 兼容 shim）
-    enriched.roles = getUserRoleCodes(db, decoded.userId)
+    const activeRoles = getUserRoleCodes(db, decoded.userId)
+    const preferredRole = u.primary_role || u.role
+    enriched.roles = activeRoles
+    // 遗留单角色守卫也只能看到当前活跃角色；不得保留 token/用户行中的已停用角色码。
+    enriched.role = activeRoles.includes(preferredRole) ? preferredRole : (activeRoles[0] || '')
   } catch {
-    // DB 不可用：降级为仅签名校验，避免数据库抖动导致全站 401
+    // 身份状态与角色均以 DB 为当前真值。DB 异常时继续信任旧 token 会复活已停用/降权账号，
+    // 因此宁可返回临时不可用，也绝不降级为“只验签名”。
+    res.status(503).json({
+      success: false,
+      error: { message: 'Authentication state temporarily unavailable', code: 'AUTH_STATE_UNAVAILABLE' },
+    })
+    return
   }
 
   req.user = enriched

@@ -1,6 +1,12 @@
 import { DatabaseSync } from 'node:sqlite'
 import bcrypt from 'bcryptjs'
-import { join, dirname } from 'path'
+import {
+  allowDefaultFixtureUsers,
+  hashMatchesKnownLeakedDefaultPassword,
+  initialAdminPasswordProblem,
+} from '../config/security.js'
+import { HISTORICAL_DEFAULT_ACCOUNTS } from '../config/historical-default-accounts.js'
+import { join, dirname, isAbsolute } from 'path'
 import { fileURLToPath } from 'url'
 import { SEED_MATRIX } from '../middleware/rbac-matrix.js'
 import { CHARGE_CODE_SEED, chargeDefToRow } from '../utils/charge-catalog.js'
@@ -14,11 +20,80 @@ import fs from 'fs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-const DB_PATH = process.env.DATABASE_PATH || join(__dirname, '../../data/coreone.db')
+function assertExistingCoreoneDatabase(databasePath: string): void {
+  let probe: DatabaseSync | undefined
+  try {
+    // Node 22 runtime supports readOnly; the repository's older @types/node 20
+    // declaration does not yet expose that experimental option.
+    probe = new DatabaseSync(databasePath, { readOnly: true } as any)
+    const quickCheck = probe.prepare('PRAGMA quick_check').get() as { quick_check?: string } | undefined
+    if (quickCheck?.quick_check !== 'ok') throw new Error('SQLite quick_check failed')
+    const hasUsers = probe
+      .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'users'")
+      .get() as { ok?: number } | undefined
+    if (!hasUsers?.ok) throw new Error('missing COREONE users table')
+    const columns = new Set(
+      (probe.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>).map(column => column.name)
+    )
+    const missing = ['username', 'password'].filter(column => !columns.has(column))
+    if (missing.length) throw new Error(`users missing required columns: ${missing.join(', ')}`)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'unknown validation failure'
+    throw new Error(`[SECURITY] DATABASE_PATH 不是可识别的 COREONE 生产库：${detail}`)
+  } finally {
+    probe?.close()
+  }
+}
+
+const configuredDatabasePath = process.env.DATABASE_PATH
+const fixtureDatabase = allowDefaultFixtureUsers()
+if (!fixtureDatabase && (!configuredDatabasePath || !isAbsolute(configuredDatabasePath))) {
+  throw new Error('[SECURITY] 生产级环境必须显式设置绝对路径 DATABASE_PATH；拒绝静默创建或检查错误数据库。')
+}
+const DB_PATH = configuredDatabasePath || join(__dirname, '../../data/coreone.db')
+
+if (!fixtureDatabase) {
+  if (fs.existsSync(DB_PATH)) {
+    const stat = fs.statSync(DB_PATH)
+    if (!stat.isFile()) {
+      throw new Error('[SECURITY] DATABASE_PATH 必须指向普通数据库文件。')
+    }
+    if (stat.size === 0) {
+      if (process.env.COREONE_ALLOW_DATABASE_CREATE !== '1') {
+        throw new Error('[SECURITY] DATABASE_PATH 是空文件；仅全新首装可一次性设置 COREONE_ALLOW_DATABASE_CREATE=1。')
+      }
+    } else {
+      assertExistingCoreoneDatabase(DB_PATH)
+    }
+  } else if (process.env.COREONE_ALLOW_DATABASE_CREATE !== '1') {
+    throw new Error(
+      '[SECURITY] DATABASE_PATH 指向的生产数据库不存在；仅全新首装可一次性设置 COREONE_ALLOW_DATABASE_CREATE=1。'
+    )
+  }
+}
 
 fs.mkdirSync(dirname(DB_PATH), { recursive: true })
 
 let db: DatabaseSync | null = null
+
+const USERS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    real_name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'operator',
+    department TEXT,
+    phone TEXT,
+    email TEXT,
+    status INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT,
+    updated_by TEXT,
+    is_deleted INTEGER NOT NULL DEFAULT 0
+  )
+`
 
 export function getDatabase(): DatabaseSync {
   if (!db) {
@@ -38,6 +113,24 @@ export function resetDatabase(): void {
   }
 }
 
+function usersTableExists(database: DatabaseSync): boolean {
+  return Boolean(
+    database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get()
+  )
+}
+
+function normalizeInitialAdminPassword(password: string | undefined): string | undefined {
+  return password === '' ? undefined : password
+}
+
+function assertInitialAdminPasswordUsable(password: string | undefined): void {
+  if (password === undefined) return
+  const problem = initialAdminPasswordProblem(password)
+  if (problem) {
+    throw new Error(`[SECURITY] ADMIN_INITIAL_PASSWORD 不合格：${problem}；生产环境拒绝启动，未创建或修改 admin。`)
+  }
+}
+
 /**
  * 聚焦迁移：仓库管理员 / 采购 的「退货给供应商」(supplier_returns) 权限补齐。
  *
@@ -54,12 +147,9 @@ export function resetDatabase(): void {
  * 幂等：已含则不重复写。含 '*'(admin) 不处理。
  *
  * ⚠️ 范围注记（有意为之，勿擅自扩大）：本迁移刻意只动 warehouse_manager / procurement
- * 两个角色的 supplier_returns 一项，不做「全角色 × 全矩阵」对齐。原因：SEED_MATRIX 同时
- * 还给 finance supplier_returns 'R'、technician outbound/stocktaking 等，而既有 e2e
- *（如 finance 访问退货期望 403、BF-PERM technician 访问出库被拦 等）是按「旧权限模型」断言、
- * 且当前全部为绿；全量对齐会改动这些「现为绿」的用例 —— 那属于另一个独立的 RBAC 对齐决策。
- * 因此这里只修复触发了 e2e 失败的两角色一项，保证零回归。库与矩阵在 finance 等处仍存在
- * 有意的不一致，详见 PR 说明 / session-log / 记忆 coreone-pr8-e2e-rbac-migration-gap。
+ * 两个角色的 supplier_returns 一项，不做「全角色 × 全矩阵」覆盖。SEED_MATRIX 是全新安装的
+ * 默认权限；既有部署的 roles.permissions 可能包含经角色管理页确认过的本地策略，不能在启动时
+ * 无条件重写。若要把其它既有角色强制对齐默认矩阵，须作为独立 RBAC 迁移逐项评审。
  */
 export function reconcileSupplierReturnsPerms(database: DatabaseSync): void {
   for (const code of ['warehouse_manager', 'procurement']) {
@@ -168,8 +258,131 @@ export function reconcileFinanceAccountReconcilePerms(database: DatabaseSync): v
   }
 }
 
+const HISTORICAL_DEFAULT_USERNAMES = HISTORICAL_DEFAULT_ACCOUNTS.map(account => account.username)
+
+/**
+ * 生产级启动门禁：只核验历史上由默认种子创建的八个账号，bcrypt 工作量有明确上界。
+ * status/is_deleted 旧库缺列或值为 NULL 时按活跃处理；username/password 缺列则无法安全核验，拒绝启动。
+ */
+export function assertNoActiveLeakedDefaultPasswords(database: DatabaseSync): void {
+  const columns = database.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>
+  const columnNames = new Set(columns.map(column => column.name))
+  if (!columnNames.has('username') || !columnNames.has('password')) {
+    throw new Error('[SECURITY] 拒绝启动：既有 users 表必须同时包含 username 与 password 列，无法安全核验历史账号。')
+  }
+
+  const placeholders = HISTORICAL_DEFAULT_USERNAMES.map(() => '?').join(', ')
+  const conditions = [`username IN (${placeholders})`]
+  if (columnNames.has('status')) conditions.push('(status IS NULL OR status <> 0)')
+  if (columnNames.has('is_deleted')) conditions.push('(is_deleted IS NULL OR is_deleted <> 1)')
+  const historicalUsers = database
+    .prepare(`SELECT username, password FROM users WHERE ${conditions.join(' AND ')}`)
+    .all(...HISTORICAL_DEFAULT_USERNAMES) as Array<{ username: string; password: string }>
+  const compromisedUsernames = historicalUsers
+    .filter(user => hashMatchesKnownLeakedDefaultPassword(user.password))
+    .map(user => user.username)
+
+  if (compromisedUsernames.length > 0) {
+    throw new Error(
+      `[SECURITY] 拒绝启动：以下活跃账号仍使用已泄露的默认口令：${compromisedUsernames.join(', ')}。` +
+        '请先运行受控 reset-passwords 流程轮换这些账号；禁用或软删除账号不会触发此门禁。'
+    )
+  }
+}
+
+/**
+ * 默认账号种子（安全止血·fail-closed，见 config/security.ts）。抽成独立可测函数。
+ * - allowFixtures=true（仅显式 dev/test）：种固定口令夹具账号
+ *   admin/admin123 + 5 角色/CoreOne2026! 并强制启用（E2E 依赖，行为与历史一致）。
+ * - allowFixtures=false（**未声明环境=生产级**）：先核验历史八账号；不种固定口令账号、不强制启用；
+ *   仅当无 admin 且提供合格的 ADMIN_INITIAL_PASSWORD 时受控创建 admin。
+ */
+export function seedDefaultUsers(
+  database: DatabaseSync,
+  opts?: { allowFixtures?: boolean; adminInitialPassword?: string }
+): void {
+  const allowFixtures = opts?.allowFixtures ?? allowDefaultFixtureUsers()
+  const adminInitialPassword = normalizeInitialAdminPassword(
+    opts?.adminInitialPassword ?? process.env.ADMIN_INITIAL_PASSWORD
+  )
+  if (!allowFixtures) assertNoActiveLeakedDefaultPasswords(database)
+  seedDefaultUsersAfterCredentialCheck(database, allowFixtures, adminInitialPassword)
+}
+
+function seedDefaultUsersAfterCredentialCheck(
+  database: DatabaseSync,
+  allowFixtures: boolean,
+  adminInitialPassword: string | undefined
+): void {
+  const existingAdmin = database.prepare('SELECT id FROM users WHERE username = ?').get('admin') as
+    | { id: string }
+    | undefined
+
+  if (allowFixtures) {
+    if (!existingAdmin) {
+      const hashedPassword = bcrypt.hashSync('admin123', 12)
+      database
+        .prepare('INSERT INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
+    }
+    // 确保 admin 始终可用（防止 E2E 测试软删除后无法恢复）
+    database.prepare('UPDATE users SET is_deleted = 0, status = 1 WHERE username = ?').run('admin')
+
+    // 插入 E2E 测试所需的标准角色用户 (密码: CoreOne2026!)
+    const testUsers = [
+      { id: 'USER-WHM', username: 'cangguan', realName: '王仓库', role: 'warehouse_manager', department: '病理科' },
+      { id: 'USER-TECH1', username: 'jishuyuan1', realName: '张技术', role: 'technician', department: '病理科' },
+      { id: 'USER-DOC1', username: 'yishi1', realName: '刘医师', role: 'pathologist', department: '病理科' },
+      { id: 'USER-PRO', username: 'caigou', realName: '赵采购', role: 'procurement', department: '设备科' },
+      { id: 'USER-FIN', username: 'caiwu', realName: '孙财务', role: 'finance', department: '财务科' },
+    ]
+    const hashedTestPw = bcrypt.hashSync('CoreOne2026!', 12)
+    const insertUser = database.prepare(
+      'INSERT OR IGNORE INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    )
+    for (const u of testUsers) {
+      insertUser.run(u.id, u.username, hashedTestPw, u.realName, u.role, u.department, 1)
+    }
+    // 确保 E2E 测试用户始终可用（防止被软删除后无法恢复）
+    database
+      .prepare("UPDATE users SET is_deleted = 0, status = 1 WHERE username IN ('cangguan','jishuyuan1','yishi1','caigou','caiwu')")
+      .run()
+    return
+  }
+
+  assertInitialAdminPasswordUsable(adminInitialPassword)
+
+  // 生产级不种固定口令账号、不强制启用既有账号。
+  if (!existingAdmin) {
+    if (adminInitialPassword !== undefined) {
+      const hashedPassword = bcrypt.hashSync(adminInitialPassword, 12)
+      database
+        .prepare('INSERT INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
+      console.warn('[SECURITY] 已用 ADMIN_INITIAL_PASSWORD 创建初始 admin；请首次登录后立即改密。')
+    } else {
+      console.warn(
+        '[SECURITY] 未声明 dev/test 的环境未创建默认 admin（无已知口令账号）。请注入合格的 ADMIN_INITIAL_PASSWORD 或通过受控方式创建管理员。'
+      )
+    }
+  }
+}
+
 export function initializeDatabase(): void {
   const database = getDatabase()
+  const allowFixtures = allowDefaultFixtureUsers()
+  const adminInitialPassword = normalizeInitialAdminPassword(process.env.ADMIN_INITIAL_PASSWORD)
+  // 显式提供的弱初始口令必须在任何 DDL/迁移写入前拒绝，避免失败启动留下半升级数据库。
+  if (!allowFixtures) assertInitialAdminPasswordUsable(adminInitialPassword)
+  const hadUsersTable = usersTableExists(database)
+
+  // 旧库必须在任何 DDL/迁移写之前核验；新库只先创建 canonical users 表，再核验空表。
+  if (hadUsersTable) {
+    if (!allowFixtures) assertNoActiveLeakedDefaultPasswords(database)
+  } else {
+    database.exec(USERS_TABLE_SQL)
+    if (!allowFixtures) assertNoActiveLeakedDefaultPasswords(database)
+  }
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS material_categories (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, parent_id TEXT, level INTEGER NOT NULL, sort_order INTEGER DEFAULT 0, status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
@@ -338,9 +551,6 @@ export function initializeDatabase(): void {
     CREATE TABLE IF NOT EXISTS alerts (id TEXT PRIMARY KEY, type TEXT NOT NULL, level TEXT NOT NULL, material_id TEXT NOT NULL, material_name TEXT, current_stock INTEGER, threshold INTEGER, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', handled_by TEXT, handled_at TEXT, remark TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
   `)
   database.exec(`
-    CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password TEXT NOT NULL, real_name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'operator', department TEXT, phone TEXT, email TEXT, status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
-  `)
-  database.exec(`
     CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, description TEXT, permissions TEXT NOT NULL DEFAULT '[]', status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)
   // 数据驱动多角色 RBAC：一个用户可持多角色（鉴权按所有角色权限并集）
@@ -411,7 +621,8 @@ export function initializeDatabase(): void {
       status TEXT NOT NULL DEFAULT 'pending',
       remark TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      is_deleted INTEGER NOT NULL DEFAULT 0
     )
   `)
   // batch_usage_tracking：批次「在用」台账。出库时给自用领出的批次建 in-use 记录、出库撤销时删除；
@@ -631,34 +842,14 @@ export function initializeDatabase(): void {
     )
   `)
 
-  // 插入默认用户 (密码: admin123)
-  const stmt = database.prepare('SELECT * FROM users WHERE username = ?')
-  const defaultUser = stmt.get('admin') as any
-  if (!defaultUser) {
-    const hashedPassword = bcrypt.hashSync('admin123', 12)
-    database.prepare('INSERT INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run('USER-001', 'admin', hashedPassword, '管理员', 'admin', '病理科', 1)
-  }
-  // 确保 admin 始终可用（防止 E2E 测试软删除后无法恢复）
-  database.prepare('UPDATE users SET is_deleted = 0, status = 1 WHERE username = ?').run('admin')
-
-  // 插入 E2E 测试所需的标准角色用户 (密码: CoreOne2026!)
-  const testUsers = [
-    { id: 'USER-WHM', username: 'cangguan', realName: '王仓库', role: 'warehouse_manager', department: '病理科' },
-    { id: 'USER-TECH1', username: 'jishuyuan1', realName: '张技术', role: 'technician', department: '病理科' },
-    { id: 'USER-DOC1', username: 'yishi1', realName: '刘医师', role: 'pathologist', department: '病理科' },
-    { id: 'USER-PRO', username: 'caigou', realName: '赵采购', role: 'procurement', department: '设备科' },
-    { id: 'USER-FIN', username: 'caiwu', realName: '孙财务', role: 'finance', department: '财务科' },
-  ]
-  const hashedTestPw = bcrypt.hashSync('CoreOne2026!', 12)
-  const insertUser = database.prepare(
-    'INSERT OR IGNORE INTO users (id, username, password, real_name, role, department, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  // 默认账号种子（安全止血·fail-closed）：仅显式 dev/test 才种
+  // 固定口令夹具账号并强制启用；**未声明环境=生产级=不种默认凭据、不强制启用**（见 seedDefaultUsers）。
+  // 上面已完成唯一一次生产 bcrypt 预检；此处直接进入种子逻辑，避免重复扫描。
+  seedDefaultUsersAfterCredentialCheck(
+    database,
+    allowFixtures,
+    adminInitialPassword
   )
-  for (const u of testUsers) {
-    insertUser.run(u.id, u.username, hashedTestPw, u.realName, u.role, u.department, 1)
-  }
-  // 确保 E2E 测试用户始终可用（防止被软删除后无法恢复）
-  database.prepare("UPDATE users SET is_deleted = 0, status = 1 WHERE username IN ('cangguan','jishuyuan1','yishi1','caigou','caiwu')").run()
 
   // 插入默认角色（E2E 测试依赖）+ 数据驱动 RBAC 初始种子矩阵（RBAC §8.2）
   const defaultRoles = [

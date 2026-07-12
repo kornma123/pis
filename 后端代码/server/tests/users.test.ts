@@ -40,14 +40,14 @@ async function run() {
   })
 
   await test('USER-04 创建用户', async () => {
-    const res = await postJSON('/users', { username: uniqueUser, password: 'Test123!', realName: '测试用户', role: 'technician' }, adminToken)
+    const res = await postJSON('/users', { username: uniqueUser, password: 'User-N7v!Q2m@R8x#', realName: '测试用户', role: 'technician' }, adminToken)
     assertTrue(res.success, 'success')
     assertTrue(res.data.id, 'has id')
   })
 
   await test('USER-11 重复用户名409', async () => {
     try {
-      await postJSON('/users', { username: uniqueUser, password: 'Test123!', realName: '测试用户2', role: 'technician' }, adminToken)
+      await postJSON('/users', { username: uniqueUser, password: 'User-T4k%Z9p&L3d^', realName: '测试用户2', role: 'technician' }, adminToken)
       throw new Error('should fail')
     } catch (e: any) {
       assertTrue(e.message.includes('409') || e.message.includes('exists'), 'should be 409')
@@ -56,7 +56,7 @@ async function run() {
 
   await test('USER-12 缺少username返回400', async () => {
     try {
-      await postJSON('/users', { password: 'Test123!', realName: '测试用户' }, adminToken)
+      await postJSON('/users', { password: 'User-B6y*C1w(H5s)', realName: '测试用户' }, adminToken)
       throw new Error('should fail')
     } catch (e: any) {
       assertTrue(e.message.includes('400') || e.message.includes('required'), 'should be 400')

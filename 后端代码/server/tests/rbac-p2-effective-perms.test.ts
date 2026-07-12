@@ -4,7 +4,11 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import express from 'express'
 import { buildTestApp, getDb } from './p0-harness.js'
-import { getEffectivePermissions } from '../src/middleware/permissions.js'
+import {
+  getEffectivePermissions,
+  getEffectivePermissionsForRoles,
+  getUserRoleCodes,
+} from '../src/middleware/permissions.js'
 
 let app: any
 let db: any
@@ -23,13 +27,14 @@ beforeAll(async () => {
   db = await getDb()
   const authRoutes = (await import('../src/routes/auth.js')).default
   const { authenticateToken } = await import('../src/middleware/auth.js')
-  const { requirePermission } = await import('../src/middleware/permissions.js')
+  const { requirePermission, requireAnyRole } = await import('../src/middleware/permissions.js')
 
   // 临时测试路由：用 requirePermission 守卫
   const testRouter = express.Router()
   testRouter.get('/inv-read', requirePermission('inventory', 'R'), (_req, res) => res.json({ ok: true }))
   testRouter.get('/out-write', requirePermission('outbound', 'W'), (_req, res) => res.json({ ok: true }))
-  testRouter.get('/whoami', (req: any, res) => res.json({ roles: req.user?.roles }))
+  testRouter.get('/finance-only', requireAnyRole('finance'), (_req, res) => res.json({ ok: true }))
+  testRouter.get('/whoami', (req: any, res) => res.json({ role: req.user?.role, roles: req.user?.roles }))
 
   app = await buildTestApp([
     { path: '/api/v1/auth', router: authRoutes },
@@ -105,5 +110,31 @@ describe('RBAC-P2：authenticateToken 挂 roles + 改角色即时生效（无 RO
     w = await request(app).get('/api/v1/rbactest/out-write').set('Authorization', `Bearer ${token}`)
     expect(w.status).toBe(200)
     db.prepare('DELETE FROM user_roles WHERE id = ?').run('UR-caiwu-tech')
+  })
+
+  it.each([
+    ['停用', 'status', 0],
+    ['软删除', 'is_deleted', 1],
+  ] as const)('%s角色后，同 token 不再继承角色码、静态矩阵或角色守卫权限', async (_label, column, value) => {
+    const request = (await import('supertest')).default
+    const uid = userId('caiwu')
+    const token = await login('caiwu', 'CoreOne2026!')
+    db.prepare(`UPDATE roles SET ${column} = ? WHERE code = 'finance'`).run(value)
+    try {
+      expect(getUserRoleCodes(db, uid)).not.toContain('finance')
+      expect(getEffectivePermissions(db, uid)).toEqual({})
+      expect(getEffectivePermissionsForRoles(db, ['finance'])).toEqual({})
+
+      const who = await request(app).get('/api/v1/rbactest/whoami').set('Authorization', `Bearer ${token}`)
+      expect(who.status).toBe(200)
+      expect(who.body).toEqual({ role: '', roles: [] })
+
+      const permission = await request(app).get('/api/v1/rbactest/inv-read').set('Authorization', `Bearer ${token}`)
+      expect(permission.status).toBe(403)
+      const roleGuard = await request(app).get('/api/v1/rbactest/finance-only').set('Authorization', `Bearer ${token}`)
+      expect(roleGuard.status).toBe(403)
+    } finally {
+      db.prepare("UPDATE roles SET status = 1, is_deleted = 0 WHERE code = 'finance'").run()
+    }
   })
 })

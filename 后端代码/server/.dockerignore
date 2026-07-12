@@ -1,0 +1,24 @@
+# 生产镜像采用 allowlist：新增文件默认不进入 build context，避免未来的
+# 本地数据库、凭据、日志或一次性运维脚本被 `COPY . .` 静默带入镜像层。
+**
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+!src/**
+!scripts/
+!scripts/reset-passwords.ts
+!scripts/start-production.mjs
+!Dockerfile
+!.dockerignore
+
+# 即使未来 allowlist 放宽，秘密类型仍保持最终 deny。
+**/.env
+**/.env.*
+**/.npmrc
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore

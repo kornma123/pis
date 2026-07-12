@@ -4,16 +4,19 @@ import jwt from 'jsonwebtoken'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, error } from '../utils/response.js'
 import { JWT_SECRET, authenticateToken } from '../middleware/auth.js'
+import { isFixtureEnv } from '../config/security.js'
 import { getEffectivePermissions, getUserRoleCodes, canSeeCost, getCostVisibilityRoles, requireAnyRole } from '../middleware/permissions.js'
 
 const router = Router()
 const JWT_EXPIRES = '8h'
 
 /** 当前用户能力载荷（数据驱动 RBAC：角色并集权限 + 成本可见性，前端 nav/守卫/仪表盘单一来源） */
-function buildCapabilityPayload(db: any, userId: string, fallbackRole?: string) {
+function buildCapabilityPayload(db: any, userId: string, ...preferredRoles: Array<string | undefined>) {
   const roles = getUserRoleCodes(db, userId)
+  const primaryRole = preferredRoles.find(role => role && roles.includes(role)) || roles[0] || null
   return {
-    roles: roles.length ? roles : (fallbackRole ? [fallbackRole] : []),
+    primaryRole,
+    roles,
     capabilities: getEffectivePermissions(db, userId),
     canSeeCost: canSeeCost(db, userId),
   }
@@ -30,11 +33,13 @@ router.post('/login', (req, res) => {
     const db = getDatabase()
     let user = db.prepare('SELECT * FROM users WHERE username = ? AND status = 1 AND is_deleted = 0').get(username) as any
 
-    // 兜底修复：如果登录失败，检查是否是admin或E2E测试用户被软删除了
-    if (!user) {
+    // 兜底修复：仅在显式声明的 dev/test 环境恢复被软删除的夹具用户（E2E 软删后无法恢复的副作用）。
+    // 安全止血（fail-closed）：未声明为 dev/test 的环境「绝不」在登录时自动恢复软删除账号——否则
+    //   禁用一个被攻破/默认账号会被任何一次登录探测悄悄撤销（原逻辑对任意用户名、且在校验口令前就恢复）。
+    if (!user && isFixtureEnv()) {
       const softDeletedUser = db.prepare('SELECT * FROM users WHERE username = ? AND is_deleted = 1').get(username) as any
       if (softDeletedUser) {
-        // 自动恢复被软删除的用户（E2E测试副作用）
+        // 自动恢复被软删除的用户（E2E 测试副作用，仅开发/测试）
         db.prepare('UPDATE users SET is_deleted = 0, status = 1 WHERE username = ?').run(username)
         // 重新查询
         user = db.prepare('SELECT * FROM users WHERE username = ? AND status = 1 AND is_deleted = 0').get(username) as any
@@ -47,19 +52,19 @@ router.post('/login', (req, res) => {
       return
     }
 
+    const cap = buildCapabilityPayload(db, user.id, user.primary_role, user.role)
     const token = jwt.sign(
-      { userId: user.id, username: user.username, role: user.role },
+      { userId: user.id, username: user.username, role: cap.primaryRole || '', type: 'access' },
       JWT_SECRET,
-      { expiresIn: JWT_EXPIRES }
+      { expiresIn: JWT_EXPIRES, algorithm: 'HS256' }
     )
 
     const refreshToken = jwt.sign(
       { userId: user.id, type: 'refresh' },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '7d', algorithm: 'HS256' }
     )
 
-    const cap = buildCapabilityPayload(db, user.id, user.role)
     success(res, {
       token,
       refreshToken,
@@ -68,8 +73,8 @@ router.post('/login', (req, res) => {
         id: user.id,
         username: user.username,
         realName: user.real_name,
-        role: user.role,
-        primaryRole: user.primary_role || user.role,
+        role: cap.primaryRole,
+        primaryRole: cap.primaryRole,
         roles: cap.roles,
         capabilities: cap.capabilities,
         canSeeCost: cap.canSeeCost,
@@ -88,7 +93,7 @@ router.post('/refresh', (req, res) => {
       return
     }
 
-    const decoded = jwt.verify(refreshToken, JWT_SECRET) as { userId: string; type: string }
+    const decoded = jwt.verify(refreshToken, JWT_SECRET, { algorithms: ['HS256'] }) as { userId: string; type: string }
     if (decoded.type !== 'refresh') {
       error(res, 'Invalid refresh token', 'UNAUTHORIZED', 401)
       return
@@ -102,13 +107,27 @@ router.post('/refresh', (req, res) => {
       return
     }
 
+    const cap = buildCapabilityPayload(db, user.id, user.primary_role, user.role)
     const token = jwt.sign(
-      { userId: user.id, username: user.username, role: user.role },
+      { userId: user.id, username: user.username, role: cap.primaryRole || '', type: 'access' },
       JWT_SECRET,
-      { expiresIn: JWT_EXPIRES }
+      { expiresIn: JWT_EXPIRES, algorithm: 'HS256' }
     )
 
-    success(res, { token, expiresIn: 28800 }, 'Refresh success')
+    success(res, {
+      token,
+      expiresIn: 28800,
+      user: {
+        id: user.id,
+        username: user.username,
+        realName: user.real_name,
+        role: cap.primaryRole,
+        primaryRole: cap.primaryRole,
+        roles: cap.roles,
+        capabilities: cap.capabilities,
+        canSeeCost: cap.canSeeCost,
+      },
+    }, 'Refresh success')
   } catch (err: any) {
     error(res, err.message, 'UNAUTHORIZED', 401)
   }
@@ -120,8 +139,8 @@ router.get('/me/capabilities', authenticateToken, (req, res) => {
     const db = getDatabase()
     const userId = (req as any).user.userId as string
     const u = db.prepare('SELECT role, primary_role FROM users WHERE id = ?').get(userId) as any
-    const cap = buildCapabilityPayload(db, userId, u?.role)
-    success(res, { primaryRole: u?.primary_role || u?.role || null, ...cap })
+    const cap = buildCapabilityPayload(db, userId, u?.primary_role, u?.role)
+    success(res, cap)
   } catch (err: any) {
     error(res, err.message, 'INTERNAL_ERROR', 500)
   }

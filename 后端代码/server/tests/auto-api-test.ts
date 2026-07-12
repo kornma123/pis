@@ -212,13 +212,13 @@ async function runTests() {
   const testUsername = `testuser_${Date.now().toString(36)}`
 
   await recordTest('USER', 'ADMIN-创建新用户', async () => {
-    const res = await postJSON('/users', { username: testUsername, password: 'Test123!', realName: '测试用户', role: 'technician' }, tokens.admin)
+    const res = await postJSON('/users', { username: testUsername, password: 'Auto-N7v!Q2m@R8x#', realName: '测试用户', role: 'technician' }, tokens.admin)
     if (!res.success) throw new Error('Create failed')
   })
 
   await recordTest('USER', 'ADMIN-用户名唯一性', async () => {
     try {
-      await postJSON('/users', { username: testUsername, password: 'Test123!', realName: '测试用户2', role: 'technician' }, tokens.admin)
+      await postJSON('/users', { username: testUsername, password: 'Auto-T4k%Z9p&L3d^', realName: '测试用户2', role: 'technician' }, tokens.admin)
       throw new Error('Should fail')
     } catch (e: any) {
       if (!e.message.includes('exists') && !e.message.includes('UNIQUE') && !e.message.includes('409')) throw e
