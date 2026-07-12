@@ -9,6 +9,10 @@ const { execFileSync, spawnSync } = require('node:child_process')
 const SCRIPT = path.join(__dirname, 'agent-preflight.cjs')
 const CONTRACT = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
+const PM_AI_WORK_MODEL_FILES = [
+  'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
+  'docs/工作模型-COREONE项目版-2026-06-30.md',
+]
 
 let failures = 0
 let checksRun = 0
@@ -325,6 +329,21 @@ for (const count of ['757 tests', 'vitest 757 tests', '共 757 个测试', 'test
 }
 for (const ok of ['使用 vitest runner 跑单测', 'Test 1 verifies fresh mode']) {
   checkDoc(`非计数不误伤: ${ok}`, CONTRACT, ok, 'WARN', 0)
+}
+
+// 工作模型同属稳定 PM–AI 契约：逐文件证明 PR/SHA/测试快照会红，同时稳定规则文本不被误伤。
+for (const file of PM_AI_WORK_MODEL_FILES) {
+  checkDoc(`[work-model-dynamic-facts] PR snapshot rejected: ${file}`, file, 'PR #987 is OPEN', 'FAIL', 1, 'drift.dynamic-facts')
+  checkDoc(`[work-model-dynamic-facts] SHA snapshot rejected: ${file}`, file, 'base SHA = deadbee', 'FAIL', 1, 'drift.dynamic-facts')
+  checkDoc(`[work-model-dynamic-facts] test-count snapshot rejected: ${file}`, file, 'tests: 42 passed', 'FAIL', 1, 'drift.dynamic-facts')
+  checkDoc(
+    `[work-model-dynamic-facts] stable rules are allowed: ${file}`,
+    file,
+    '当前 PR 与状态只放 GitHub，不在稳定正文保存编号。\n当前 SHA 由 Git 查询，不在稳定正文保存具体值。\nIf tests fail, delivery must stop.',
+    'WARN',
+    0,
+    'drift.dynamic-facts',
+  )
 }
 
 // ===== PR#122 复核轮2：日常 shell / CI / 中文 / markdown 写法 =====
