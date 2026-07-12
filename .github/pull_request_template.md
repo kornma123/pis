@@ -6,14 +6,14 @@
 ## Issue / 会话交接
 <!--
 完整交付：Issue 填 Closes #N；部分交付/仅关联：填 Refs #N。
-未完成 follow-up 只能填“无”或开放 Issue 编号，不能只写“以后处理”。
+未完成 follow-up 只能填“无”或“#N — 一句话说明”，不能只写“以后处理”；请直接替换下划线。
 规则与示例：docs/github-issue-pr-management-loop.md#4-pr-与多会话交接合同
 -->
 - **Issue**: `Closes #N` / `Refs #N`
 - **当前 owner / 模型**: _
 - **交接状态**: _（实现中 / 待复核 / 待 PM / 待验收 / 阻塞 / 可合并）
 - **下一 owner / 触发条件**: _
-- **未完成 follow-up**: _（无 / `#N — 一句话说明`）
+- **未完成 follow-up**: _
 
 ## 任务身份
 - **task id**:

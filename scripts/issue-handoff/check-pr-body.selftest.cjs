@@ -113,6 +113,12 @@ const repositoryTemplate = fs.readFileSync(
   path.resolve(__dirname, '../../.github/pull_request_template.md'),
   'utf8',
 );
+const followUpPlaceholder = '- **未完成 follow-up**: _';
+assert.equal(
+  repositoryTemplate.split(followUpPlaceholder).length - 1,
+  1,
+  'repository template must expose one plain follow-up placeholder without inline hint text',
+);
 const filledRepositoryTemplate = repositoryTemplate
   .replace('- **Issue**: `Closes #N` / `Refs #N`', '- **Issue**: Closes #128')
   .replace('- **当前 owner / 模型**: _', '- **当前 owner / 模型**: Codex / GPT-5')
@@ -121,7 +127,7 @@ const filledRepositoryTemplate = repositoryTemplate
     '- **交接状态**: 待复核',
   )
   .replace('- **下一 owner / 触发条件**: _', '- **下一 owner / 触发条件**: Claude 在 CI 通过后复核')
-  .replace('- **未完成 follow-up**: _（无 / `#N — 一句话说明`）', '- **未完成 follow-up**: 无')
+  .replace(followUpPlaceholder, followUpPlaceholder.replace('_', '无'))
   .replace('- **task id**:', '- **task id**: template-compatibility')
   .replace('- **owner / author**:', '- **owner / author**: Codex')
   .replace('- **reviewer**:', '- **reviewer**: Claude')
@@ -138,6 +144,6 @@ const filledRepositoryTemplate = repositoryTemplate
   .replace('- **迁移方式**:', '- **迁移方式**: 无迁移')
   .replace('- **回滚方式**:', '- **回滚方式**: revert PR')
   .replace('- **未覆盖边界**:', '- **未覆盖边界**: 不修改分支保护');
-expectPass('current repository PR template compatibility', filledRepositoryTemplate, [128]);
+expectPass('repository PR template passes after placeholder-only filling', filledRepositoryTemplate, [128]);
 
 console.log('Issue / handoff contract selftest: PASS (24 scenarios)');
