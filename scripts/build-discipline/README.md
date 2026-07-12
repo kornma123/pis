@@ -1,5 +1,7 @@
 # 构建纪律闸（Build Discipline Gate）
 
+> 同一个 `gate` job 还先运行跨工具治理检查：`scripts/agent-preflight.selftest.cjs` 证明 fresh/behind/orphan/dirty/review 等判定有牙，`scripts/agent-preflight.cjs --rules-only` 防 AGENTS/CLAUDE 入口分叉、旧工作方式复活和动态状态混入稳定规则。job id 不变，文档 PR 同样会上报 required context。
+
 > 把 **P0 设计选择 #7**——「**完成 = 真数据跑通 + 人工核对一致 · 消费者被服务**」，不是「代码合并」——
 > 从只在 P0 成本域执行，推广成**全系统机器可执行规则**。
 > 目的：根除反复出现的「功能先于消费者被建」五形态：幽灵端点 / 有后端无前端 / 孤儿路由 / 空转参数 / 假能力。

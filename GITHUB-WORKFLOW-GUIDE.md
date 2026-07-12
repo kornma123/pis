@@ -1,3 +1,6 @@
+> **SUPERSEDED — DO NOT USE AS OPERATING INSTRUCTIONS.**
+> 本文件仅保留历史取证价值；当前 worktree、提交、PR 与合并规则见 `docs/agent-operating-contract.md` 和 `.claude/rules/pr-governance.md`。下文的直接推送与批量暂存示例不得执行。
+
 # COREONE GitHub 工作流指导文档
 
 > **创建时间**: 2026-05-21  

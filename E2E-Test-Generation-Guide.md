@@ -1,3 +1,6 @@
+> **SUPERSEDED — DO NOT USE AS OPERATING INSTRUCTIONS.**
+> 本文件的路由、模块、测试数量与生成流程仅作历史取证。当前规则见 `docs/agent-operating-contract.md`、活代码路由注册表和 `.claude/rules/coreone-guardrails.md`。
+
 # COREONE E2E 测试模块生成指南
 
 > **用途**: 指导按模块逐个生成 `.spec.ts` 文件，确保每个模块的测试代码与 `E2E-Coverage-Matrix.md` 一一对应，并融合角色权限矩阵、数据状态笛卡尔积、业务流程树、盲点分析的全部约束。

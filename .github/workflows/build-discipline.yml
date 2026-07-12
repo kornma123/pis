@@ -43,6 +43,12 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
+      # 跨工具治理：先证明 preflight 自身有牙，再从本次 checkout 的 HEAD 读取两套薄入口和共用契约。
+      # job id 仍是 gate，required context 不变；PR 侧不加 paths-ignore，文档 PR 也会收到结果。
+      - name: Agent preflight selftest
+        run: node scripts/agent-preflight.selftest.cjs
+      - name: Agent contract drift check
+        run: node scripts/agent-preflight.cjs --mode=review --target-ref=HEAD --rules-only --no-worktree-report
       # 自测：守护闸工具自身没被静默改坏（解析器漂了/口径变哑）。失败即红。
       - name: Selftest（工具不变量）
         run: node scripts/build-discipline/selftest.cjs
