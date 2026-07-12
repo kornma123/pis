@@ -17,9 +17,9 @@ concurrency:
 
 env:
   AI_REVIEW_CONTEXT: ai-review-gate
-  AI_REVIEW_MODEL: gpt-5.4-mini-2026-03-17
-  AI_REVIEW_CODEX_VERSION: 0.144.1
-  AI_REVIEW_ACTION_SHA: 52fe01ec70a42f454c9d2ebd47598f9fd6893d56
+  AI_REVIEW_PROVIDER: deepseek
+  AI_REVIEW_MODEL: deepseek-v4-pro
+  AI_REVIEW_API_VERSION: deepseek-chat-completions/v1
   AI_REVIEW_POLICY_VERSION: coreone-ai-review/v1
   AI_REVIEW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}?attempt=${{ github.run_attempt }}
 
@@ -54,28 +54,41 @@ jobs:
     permissions:
       contents: read
     outputs:
+      base_sha: ${{ steps.prepare.outputs.base_sha }}
+      workflow_sha: ${{ steps.prepare.outputs.workflow_sha }}
       patch_sha: ${{ steps.prepare.outputs.patch_sha }}
+      runner_sha: ${{ steps.prepare.outputs.runner_sha }}
+      publisher_sha: ${{ steps.prepare.outputs.publisher_sha }}
+      prompt_sha: ${{ steps.prepare.outputs.prompt_sha }}
+      schema_sha: ${{ steps.prepare.outputs.schema_sha }}
+      manifest_sha: ${{ steps.prepare.outputs.manifest_sha }}
       merge_base: ${{ steps.prepare.outputs.merge_base }}
     steps:
       - name: Checkout the trusted base commit
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.workflow_sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Build bounded patch without checking out PR code
         id: prepare
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         shell: bash
         run: |
           set -euo pipefail
           [[ "${BASE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${PR_NUMBER}" =~ ^[0-9]+$ ]]
+          if [ "${WORKFLOW_SHA}" != "${BASE_SHA}" ]; then
+            echo "Trusted workflow SHA does not match the target branch snapshot." >&2
+            exit 1
+          fi
 
           git -c protocol.version=2 fetch \
             --no-tags \
@@ -96,6 +109,10 @@ jobs:
             echo "Unable to establish the pull request merge base." >&2
             exit 1
           fi
+
+          # Prevent an accidentally committed credential from being sent to an
+          # external reviewer. This scanner comes from the trusted workflow SHA.
+          node scripts/check-no-secrets.cjs --range "${DIFF_BASE}..${HEAD_SHA}"
 
           if git diff --no-ext-diff --no-textconv --numstat "${DIFF_BASE}" "${HEAD_SHA}" -- |
             awk '$1 == "-" || $2 == "-" { found = 1 } END { exit(found ? 0 : 1) }'; then
@@ -175,23 +192,42 @@ jobs:
             exit 1
           fi
 
+          cp .github/codex/ai-review-prompt.md review-input/prompt.md
+          cp .github/codex/ai-review-schema.json review-input/schema.json
+          cp scripts/deepseek-ai-review.cjs review-input/deepseek-ai-review.cjs
+          cp scripts/ai-review-gate.cjs review-input/ai-review-gate.cjs
+
           patch_sha="$(sha256sum review-input/pr.patch | awk '{ print $1 }')"
+          runner_sha="$(sha256sum review-input/deepseek-ai-review.cjs | awk '{ print $1 }')"
+          publisher_sha="$(sha256sum review-input/ai-review-gate.cjs | awk '{ print $1 }')"
+          prompt_sha="$(sha256sum review-input/prompt.md | awk '{ print $1 }')"
+          schema_sha="$(sha256sum review-input/schema.json | awk '{ print $1 }')"
           printf '%s\n' \
             "repository=${GITHUB_REPOSITORY}" \
             "pull_request=${PR_NUMBER}" \
             "base_sha=${BASE_SHA}" \
+            "workflow_sha=${WORKFLOW_SHA}" \
             "merge_base=${DIFF_BASE}" \
             "head_sha=${HEAD_SHA}" \
             "patch_sha256=${patch_sha}" \
+            "runner_sha256=${runner_sha}" \
+            "publisher_sha256=${publisher_sha}" \
+            "prompt_sha256=${prompt_sha}" \
+            "schema_sha256=${schema_sha}" \
             "files=${file_count}" \
             "changed_lines=${changed_lines}" \
             "patch_bytes=${patch_bytes}" \
             "policy=${AI_REVIEW_POLICY_VERSION}" > review-input/manifest.txt
 
-          cp .github/codex/ai-review-prompt.md review-input/prompt.md
-          cp .github/codex/ai-review-schema.json review-input/schema.json
-          cp .github/codex/ai-review-config.toml review-input/codex-config.toml
+          manifest_sha="$(sha256sum review-input/manifest.txt | awk '{ print $1 }')"
+          echo "base_sha=${BASE_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "workflow_sha=${WORKFLOW_SHA}" >> "${GITHUB_OUTPUT}"
           echo "patch_sha=${patch_sha}" >> "${GITHUB_OUTPUT}"
+          echo "runner_sha=${runner_sha}" >> "${GITHUB_OUTPUT}"
+          echo "publisher_sha=${publisher_sha}" >> "${GITHUB_OUTPUT}"
+          echo "prompt_sha=${prompt_sha}" >> "${GITHUB_OUTPUT}"
+          echo "schema_sha=${schema_sha}" >> "${GITHUB_OUTPUT}"
+          echo "manifest_sha=${manifest_sha}" >> "${GITHUB_OUTPUT}"
           echo "merge_base=${DIFF_BASE}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload inert review input
@@ -215,9 +251,8 @@ jobs:
       deployment: false
     permissions:
       actions: read
-      contents: read
     outputs:
-      review_json: ${{ steps.run_codex.outputs.final-message }}
+      review_json: ${{ steps.run_deepseek.outputs.review_json }}
     steps:
       - name: Download inert review input
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -225,52 +260,89 @@ jobs:
           name: ai-review-input-${{ github.run_id }}-${{ github.run_attempt }}
           path: review-input
 
-      - name: Verify patch artifact integrity
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Verify trusted review artifact integrity
         env:
+          EXPECTED_BASE_SHA: ${{ needs.prepare_review_input.outputs.base_sha }}
+          EXPECTED_WORKFLOW_SHA: ${{ needs.prepare_review_input.outputs.workflow_sha }}
           EXPECTED_PATCH_SHA: ${{ needs.prepare_review_input.outputs.patch_sha }}
+          EXPECTED_RUNNER_SHA: ${{ needs.prepare_review_input.outputs.runner_sha }}
+          EXPECTED_PUBLISHER_SHA: ${{ needs.prepare_review_input.outputs.publisher_sha }}
+          EXPECTED_PROMPT_SHA: ${{ needs.prepare_review_input.outputs.prompt_sha }}
+          EXPECTED_SCHEMA_SHA: ${{ needs.prepare_review_input.outputs.schema_sha }}
+          EXPECTED_MANIFEST_SHA: ${{ needs.prepare_review_input.outputs.manifest_sha }}
         shell: bash
         run: |
           set -euo pipefail
+          [[ "${EXPECTED_BASE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${EXPECTED_WORKFLOW_SHA}" =~ ^[0-9a-f]{40}$ ]]
           [[ "${EXPECTED_PATCH_SHA}" =~ ^[0-9a-f]{64}$ ]]
+          [[ "${EXPECTED_RUNNER_SHA}" =~ ^[0-9a-f]{64}$ ]]
+          [[ "${EXPECTED_PUBLISHER_SHA}" =~ ^[0-9a-f]{64}$ ]]
+          [[ "${EXPECTED_PROMPT_SHA}" =~ ^[0-9a-f]{64}$ ]]
+          [[ "${EXPECTED_SCHEMA_SHA}" =~ ^[0-9a-f]{64}$ ]]
+          [[ "${EXPECTED_MANIFEST_SHA}" =~ ^[0-9a-f]{64}$ ]]
+          if [ "${EXPECTED_BASE_SHA}" != "${EXPECTED_WORKFLOW_SHA}" ]; then
+            echo "Trusted workflow SHA does not match the target branch snapshot." >&2
+            exit 1
+          fi
+
           test -f review-input/pr.patch
           test -f review-input/manifest.txt
           test -f review-input/prompt.md
           test -f review-input/schema.json
-          test -f review-input/codex-config.toml
+          test -f review-input/deepseek-ai-review.cjs
+          test -f review-input/ai-review-gate.cjs
           test ! -L review-input/pr.patch
           test ! -L review-input/manifest.txt
           test ! -L review-input/prompt.md
           test ! -L review-input/schema.json
-          test ! -L review-input/codex-config.toml
+          test ! -L review-input/deepseek-ai-review.cjs
+          test ! -L review-input/ai-review-gate.cjs
 
+          actual_manifest_sha="$(sha256sum review-input/manifest.txt | awk '{ print $1 }')"
           actual_patch_sha="$(sha256sum review-input/pr.patch | awk '{ print $1 }')"
+          actual_runner_sha="$(sha256sum review-input/deepseek-ai-review.cjs | awk '{ print $1 }')"
+          actual_publisher_sha="$(sha256sum review-input/ai-review-gate.cjs | awk '{ print $1 }')"
+          actual_prompt_sha="$(sha256sum review-input/prompt.md | awk '{ print $1 }')"
+          actual_schema_sha="$(sha256sum review-input/schema.json | awk '{ print $1 }')"
+
+          manifest_base_sha="$(awk -F= '$1 == "base_sha" { print $2 }' review-input/manifest.txt)"
+          manifest_workflow_sha="$(awk -F= '$1 == "workflow_sha" { print $2 }' review-input/manifest.txt)"
           manifest_patch_sha="$(awk -F= '$1 == "patch_sha256" { print $2 }' review-input/manifest.txt)"
-          if [ "${actual_patch_sha}" != "${EXPECTED_PATCH_SHA}" ] ||
-            [ "${manifest_patch_sha}" != "${EXPECTED_PATCH_SHA}" ]; then
-            echo "Downloaded patch does not match the trusted preparation digest." >&2
+          manifest_runner_sha="$(awk -F= '$1 == "runner_sha256" { print $2 }' review-input/manifest.txt)"
+          manifest_publisher_sha="$(awk -F= '$1 == "publisher_sha256" { print $2 }' review-input/manifest.txt)"
+          manifest_prompt_sha="$(awk -F= '$1 == "prompt_sha256" { print $2 }' review-input/manifest.txt)"
+          manifest_schema_sha="$(awk -F= '$1 == "schema_sha256" { print $2 }' review-input/manifest.txt)"
+
+          if [ "${actual_manifest_sha}" != "${EXPECTED_MANIFEST_SHA}" ] ||
+            [ "${manifest_base_sha}" != "${EXPECTED_BASE_SHA}" ] ||
+            [ "${manifest_workflow_sha}" != "${EXPECTED_WORKFLOW_SHA}" ] ||
+            [ "${actual_patch_sha}" != "${EXPECTED_PATCH_SHA}" ] ||
+            [ "${manifest_patch_sha}" != "${EXPECTED_PATCH_SHA}" ] ||
+            [ "${actual_runner_sha}" != "${EXPECTED_RUNNER_SHA}" ] ||
+            [ "${manifest_runner_sha}" != "${EXPECTED_RUNNER_SHA}" ] ||
+            [ "${actual_publisher_sha}" != "${EXPECTED_PUBLISHER_SHA}" ] ||
+            [ "${manifest_publisher_sha}" != "${EXPECTED_PUBLISHER_SHA}" ] ||
+            [ "${actual_prompt_sha}" != "${EXPECTED_PROMPT_SHA}" ] ||
+            [ "${manifest_prompt_sha}" != "${EXPECTED_PROMPT_SHA}" ] ||
+            [ "${actual_schema_sha}" != "${EXPECTED_SCHEMA_SHA}" ] ||
+            [ "${manifest_schema_sha}" != "${EXPECTED_SCHEMA_SHA}" ]; then
+            echo "Downloaded review input does not match the trusted preparation digests." >&2
             exit 1
           fi
 
-          codex_home="${RUNNER_TEMP}/ai-review-codex-home"
-          mkdir -p "${codex_home}"
-          install -m 0600 review-input/codex-config.toml "${codex_home}/config.toml"
-
-      # Keep Codex last in this secret-bearing job. It receives no repository checkout
-      # and cannot publish a review or status.
-      - name: Run Codex against the patch
-        id: run_codex
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt-file: review-input/prompt.md
-          output-schema-file: review-input/schema.json
-          working-directory: review-input
-          codex-home: ${{ runner.temp }}/ai-review-codex-home
-          permission-profile: patch-review
-          safety-strategy: drop-sudo
-          codex-version: ${{ env.AI_REVIEW_CODEX_VERSION }}
-          model: ${{ env.AI_REVIEW_MODEL }}
-          effort: high
+      # Keep the only secret-bearing step last. The historical repository secret
+      # name is retained for compatibility but is exposed only as DEEPSEEK_API_KEY.
+      - name: Run DeepSeek V4 Pro against the patch
+        id: run_deepseek
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node review-input/deepseek-ai-review.cjs
 
   publish_review:
     name: Publish formal AI review
@@ -288,7 +360,7 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.workflow_sha }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -299,10 +371,12 @@ jobs:
         env:
           AI_REVIEW_ANALYSIS_RESULT: ${{ needs.run_model.result }}
           AI_REVIEW_JSON: ${{ needs.run_model.outputs.review_json }}
-          AI_REVIEW_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          AI_REVIEW_BASE_SHA: ${{ github.sha }}
           AI_REVIEW_MERGE_BASE: ${{ needs.prepare_review_input.outputs.merge_base }}
           AI_REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           AI_REVIEW_PATCH_SHA256: ${{ needs.prepare_review_input.outputs.patch_sha }}
+          AI_REVIEW_RUNNER_SHA256: ${{ needs.prepare_review_input.outputs.runner_sha }}
+          AI_REVIEW_WORKFLOW_SHA: ${{ github.workflow_sha }}
           AI_REVIEW_OUTPUT_DIR: ${{ runner.temp }}
         run: node scripts/ai-review-gate.cjs
 

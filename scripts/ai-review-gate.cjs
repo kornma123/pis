@@ -117,10 +117,12 @@ function validateMetadata({
   baseSha,
   mergeBase,
   headSha,
+  provider,
   model,
   runUrl,
-  codexVersion,
-  actionSha,
+  apiVersion,
+  runnerSha256,
+  workflowSha,
   patchSha256,
   policyVersion,
 }) {
@@ -134,14 +136,22 @@ function validateMetadata({
   if (!/^[0-9a-f]{40}$/.test(headSha || '')) {
     errors.push('head SHA is not a full lowercase commit SHA');
   }
-  if (!/^[A-Za-z0-9._:-]{1,100}$/.test(model || '')) {
-    errors.push('model identifier is invalid');
+  if (provider !== 'deepseek') {
+    errors.push('review provider must be deepseek');
   }
-  if (!/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/.test(codexVersion || '')) {
-    errors.push('Codex CLI version is not pinned');
+  if (model !== 'deepseek-v4-pro') {
+    errors.push('review model must be deepseek-v4-pro');
   }
-  if (!/^[0-9a-f]{40}$/.test(actionSha || '')) {
-    errors.push('codex-action is not pinned to a full commit SHA');
+  if (apiVersion !== 'deepseek-chat-completions/v1') {
+    errors.push('DeepSeek API contract version is invalid');
+  }
+  if (!/^[0-9a-f]{64}$/.test(runnerSha256 || '')) {
+    errors.push('DeepSeek runner SHA-256 is invalid');
+  }
+  if (!/^[0-9a-f]{40}$/.test(workflowSha || '')) {
+    errors.push('trusted workflow SHA is invalid');
+  } else if (workflowSha !== baseSha) {
+    errors.push('trusted workflow SHA does not match the target branch snapshot');
   }
   if (!/^[0-9a-f]{64}$/.test(patchSha256 || '')) {
     errors.push('patch SHA-256 is invalid');
@@ -209,10 +219,12 @@ function renderReviewBody({
   headSha,
   baseSha,
   mergeBase,
+  provider,
   model,
   runUrl,
-  codexVersion,
-  actionSha,
+  apiVersion,
+  runnerSha256,
+  workflowSha,
   patchSha256,
   policyVersion,
   automationComplete,
@@ -226,10 +238,12 @@ function renderReviewBody({
   lines.push(`- 审查提交：${inlineCode(headSha || 'unavailable')}`);
   lines.push(`- 目标分支快照：${inlineCode(baseSha || 'unavailable')}`);
   lines.push(`- PR merge-base：${inlineCode(mergeBase || 'unavailable')}`);
+  lines.push(`- 提供方：${inlineCode(provider || 'unavailable')}`);
   lines.push(`- 模型：${inlineCode(model || 'unavailable')}`);
   lines.push(`- 策略：${inlineCode(policyVersion || 'unavailable')}`);
   lines.push(`- 审查补丁 SHA-256：${inlineCode(patchSha256 || 'unavailable')}`);
-  lines.push(`- 执行器：${inlineCode(`openai/codex-action@${actionSha || 'unavailable'}`)} / ${inlineCode(`@openai/codex@${codexVersion || 'unavailable'}`)}`);
+  lines.push(`- 调用契约：${inlineCode(apiVersion || 'unavailable')}`);
+  lines.push(`- 可信执行器：${inlineCode(`workflow@${workflowSha || 'unavailable'}`)} / ${inlineCode(`runner-sha256:${runnerSha256 || 'unavailable'}`)}`);
   const safeRunUrl = safeActionsRunUrl(runUrl);
   lines.push(safeRunUrl ? `- 取证：[GitHub Actions run](${safeRunUrl})` : '- 取证：unavailable');
   lines.push('');
@@ -277,10 +291,12 @@ function evaluateReview({
   baseSha,
   mergeBase,
   headSha,
+  provider,
   model,
   runUrl,
-  codexVersion,
-  actionSha,
+  apiVersion,
+  runnerSha256,
+  workflowSha,
   patchSha256,
   policyVersion,
 }) {
@@ -288,10 +304,12 @@ function evaluateReview({
     baseSha,
     mergeBase,
     headSha,
+    provider,
     model,
     runUrl,
-    codexVersion,
-    actionSha,
+    apiVersion,
+    runnerSha256,
+    workflowSha,
     patchSha256,
     policyVersion,
   });
@@ -351,10 +369,12 @@ function evaluateReview({
     headSha,
     baseSha,
     mergeBase,
+    provider,
     model,
     runUrl,
-    codexVersion,
-    actionSha,
+    apiVersion,
+    runnerSha256,
+    workflowSha,
     patchSha256,
     policyVersion,
   });
@@ -417,10 +437,12 @@ function main() {
     baseSha: env.AI_REVIEW_BASE_SHA || '',
     mergeBase: env.AI_REVIEW_MERGE_BASE || '',
     headSha: env.AI_REVIEW_HEAD_SHA || '',
+    provider: env.AI_REVIEW_PROVIDER || '',
     model: env.AI_REVIEW_MODEL || '',
     runUrl: env.AI_REVIEW_RUN_URL || '',
-    codexVersion: env.AI_REVIEW_CODEX_VERSION || '',
-    actionSha: env.AI_REVIEW_ACTION_SHA || '',
+    apiVersion: env.AI_REVIEW_API_VERSION || '',
+    runnerSha256: env.AI_REVIEW_RUNNER_SHA256 || '',
+    workflowSha: env.AI_REVIEW_WORKFLOW_SHA || '',
     patchSha256: env.AI_REVIEW_PATCH_SHA256 || '',
     policyVersion: env.AI_REVIEW_POLICY_VERSION || '',
   });
