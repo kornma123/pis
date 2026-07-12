@@ -1,0 +1,133 @@
+name: 工作项 / 风险 / 治理债
+description: 创建可实施、可验收且不重复的 COREONE 工作项
+title: "[TASK] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先搜索开放 / 关闭 Issues、开放 PR 和近期合并 PR。不要把旧文档待办原样搬进 GitHub。
+        同类小项可用一个 umbrella + checklist；不同风险、owner 或交付物再拆分。
+
+  - type: dropdown
+    id: classification
+    attributes:
+      label: 单一分类
+      description: 选择最能决定 owner 与关闭方式的一类。
+      options:
+        - 事故 / 安全硬化
+        - 明确可实施的工程任务
+        - 有截止日期的治理债
+        - 外部运维依赖
+        - 父级 tracking（只聚合权威链接，不承接实现）
+    validations:
+      required: true
+
+  - type: textarea
+    id: business_impact
+    attributes:
+      label: 业务影响
+      description: 先用非技术语言说明不处理会影响谁、造成什么结果。
+      placeholder: 用户 / 业务会遇到什么问题；为什么现在值得处理。
+    validations:
+      required: true
+
+  - type: textarea
+    id: sources
+    attributes:
+      label: 来源链接
+      description: 链接到权威文档、PR、评论、运行记录或外部依赖；不要只写文件名。
+      placeholder: "- https://github.com/..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_evidence
+    attributes:
+      label: 现状证据
+      description: 写明核对日期、分支 / SHA 和可复现事实；标出旧材料为何已过期。
+      placeholder: 2026-MM-DD 在 master <SHA> 复核：...
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围
+      description: 本 Issue 真正交付什么，可用 checklist。
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_scope
+    attributes:
+      label: 非范围
+      description: 明确不做什么，特别是已有 PR / 并行任务和相邻规划项。
+      placeholder: "- 不重复 ...\n- 不修改 ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 写成 PM 能判断真假的结果，包含测试或运行证据。
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依赖
+      description: 写清前置决策、外部 owner、数据、PR 或环境依赖；没有则填“无”。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 优先级
+      options:
+        - P0 - 立即止血 / 阻断上线
+        - P1 - 下个交付窗口前
+        - P2 - 排期处理 / 到期前复核
+        - P3 - 触发后再处理
+    validations:
+      required: true
+
+  - type: input
+    id: suggested_owner
+    attributes:
+      label: 建议 owner
+      description: 填角色或具名负责人；建议不等于已接受。
+      placeholder: PM / QA / 后端认证 owner / 外部运维联系人
+    validations:
+      required: true
+
+  - type: input
+    id: due_or_trigger
+    attributes:
+      label: 截止时间或触发条件
+      placeholder: YYYY-MM-DD；或“首次外部验收前”
+    validations:
+      required: true
+
+  - type: textarea
+    id: relationships
+    attributes:
+      label: 与现有 PR / Issue 的关系
+      description: 说明 Closes / Refs / Depends on / Supersedes，以及为何不重复。
+      placeholder: "Refs #123；#119 已完成 ...，本 Issue 不重开。"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: dedup_confirmation
+    attributes:
+      label: 去重确认
+      options:
+        - label: 已实时核对开放 / 关闭 Issues、开放 PR 和近期合并 PR；没有把过期文档待办直接照搬。
+          required: true
+        - label: 已确认本项是实际交付；若只做父级跟踪，则具体实现与验收仍以子 PR / Issue 为权威。
+          required: true

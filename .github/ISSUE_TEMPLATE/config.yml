@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: COREONE Issue / PR 闭环规则
+    url: https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/blob/master/docs/github-issue-pr-management-loop.md
+    about: 先看去重、主源、关闭和多会话交接规则，再创建工作项。

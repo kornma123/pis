@@ -1,0 +1,125 @@
+name: PM 决策
+description: 用清晰的二 / 三选一形成可追踪决策，不替 PM 偷做决定
+title: "[DECISION] "
+labels:
+  - kind/pm-decision
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先讲业务影响，再给二 / 三个互斥选项。可以给推荐，但必须保留 PM 的选择权。
+        PM 可直接在 Issue 评论中回复 “A / B / C + 条件”；决策落档并链接工程子 Issue 后关闭。
+
+  - type: textarea
+    id: impact_and_recommendation
+    attributes:
+      label: 业务影响与推荐
+      description: 用非技术语言说明影响，并把推荐与理由放在最前面。
+      placeholder: 不拍板会影响谁、造成什么结果。推荐选 B，因为 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: 二 / 三选一
+      description: 只提供互斥的 A / B，或 A / B / C；每项写清收益、代价和风险。
+      placeholder: "- A｜...\n- B｜...（推荐）\n- C｜..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: sources
+    attributes:
+      label: 来源链接
+      placeholder: "- https://github.com/..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_evidence
+    attributes:
+      label: 现状证据
+      description: 写明核对日期、master SHA 和能证明问题仍存在的事实。
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围
+      placeholder: 决策和决策后的交付包含什么。
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_scope
+    attributes:
+      label: 非范围
+      placeholder: 不重复哪些已完成 / 并行任务；不扩入哪些相邻规划项。
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 决策后的验收标准
+      description: 分别写出各选项落地后怎样算完成，以及何时创建工程子 Issue。
+      placeholder: "若选 A：...\n若选 B：..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依赖
+      description: 没有则填“无”。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 优先级
+      options:
+        - P0 - 立即决策
+        - P1 - 下个交付窗口前
+        - P2 - 排期 / 到期前
+        - P3 - 触发后再拍板
+    validations:
+      required: true
+
+  - type: input
+    id: suggested_owner
+    attributes:
+      label: 决策 owner / 实施 owner 建议
+      placeholder: PM；决策后由 QA / 前端 / 后端 ...
+    validations:
+      required: true
+
+  - type: input
+    id: due_or_trigger
+    attributes:
+      label: 截止时间或触发条件
+      placeholder: YYYY-MM-DD；或“外部验收前”
+    validations:
+      required: true
+
+  - type: textarea
+    id: relationships
+    attributes:
+      label: 与现有 PR / Issue 的关系
+      description: 说明去重依据；决策后保留一个权威实施入口，确因不同 owner / 风险拆分时由 umbrella 关联不重叠子 Issue；无需实施则不建。
+      placeholder: "Refs #...；不重复 #... 已完成范围。"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: decision_confirmation
+    attributes:
+      label: 决策质量确认
+      options:
+        - label: 选项互斥且可由 PM 判断，没有把技术偏好伪装成既定决定。
+          required: true
+        - label: 已实时核对开放 / 关闭 Issues、开放 PR 和近期合并 PR。
+          required: true

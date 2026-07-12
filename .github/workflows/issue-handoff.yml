@@ -1,0 +1,228 @@
+name: Issue / Handoff Contract
+
+# Trust root: pull_request_target loads this workflow and checker from master.
+# It reads PR metadata as data, checks out only the trusted base SHA, and never
+# fetches, checks out, installs, or executes candidate PR code.
+on:
+  pull_request_target:
+    branches: [master]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: issue-handoff-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  HANDOFF_CONTEXT: issue-handoff-contract
+  HANDOFF_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}?attempt=${{ github.run_attempt }}
+
+jobs:
+  mark_pending:
+    name: Mark handoff check pending
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      statuses: write
+    steps:
+      - name: Write pending status to the PR head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state=pending \
+            -f context="${HANDOFF_CONTEXT}" \
+            -f description="Validating Issue and cross-session handoff" \
+            -f target_url="${HANDOFF_RUN_URL}" >/dev/null
+
+  validate:
+    name: Validate trusted Issue / handoff contract
+    needs: mark_pending
+    if: ${{ needs.mark_pending.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Checkout trusted base commit only
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate PR body and live Issue targets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          result_file="${RUNNER_TEMP}/issue-handoff-result.json"
+          set +e
+          node scripts/issue-handoff/check-pr-body.cjs \
+            --event-file "${GITHUB_EVENT_PATH}" \
+            --json > "${result_file}"
+          checker_exit=$?
+          set -e
+
+          jq . "${result_file}"
+          if [ "${checker_exit}" -ne 0 ]; then
+            jq -r '.errors[] | "::error::" + .' "${result_file}"
+            cat >> "${GITHUB_STEP_SUMMARY}" <<'EOF'
+          ## 如何补齐 Issue / 会话交接
+
+          规则与可复制片段见：`docs/github-issue-pr-management-loop.md#4-pr-与多会话交接合同`
+
+          ```md
+          ## Issue / 会话交接
+          - **Issue**: Closes #<主 Issue 编号>
+          - **当前 owner / 模型**: <负责人 / 使用模型>
+          - **交接状态**: 待复核
+          - **下一 owner / 触发条件**: <谁在什么条件下接手>
+          - **未完成 follow-up**: 无
+          ```
+          EOF
+            exit "${checker_exit}"
+          fi
+
+          mapfile -t issue_numbers < <(jq -r '.issueNumbers[]' "${result_file}")
+          if [ "${#issue_numbers[@]}" -lt 1 ]; then
+            echo "No Issue number was returned by the trusted checker." >&2
+            exit 1
+          fi
+
+          for issue_number in "${issue_numbers[@]}"; do
+            [[ "${issue_number}" =~ ^[0-9]+$ ]]
+            issue_json="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${issue_number}")"
+
+            if jq -e 'has("pull_request")' >/dev/null <<< "${issue_json}"; then
+              echo "#${issue_number} is a pull request, not an Issue." >&2
+              exit 1
+            fi
+            if [ "$(jq -r '.state' <<< "${issue_json}")" != "open" ]; then
+              echo "Issue #${issue_number} is not open." >&2
+              exit 1
+            fi
+          done
+
+          echo "Validated ${#issue_numbers[@]} open Issue link(s) from trusted PR metadata."
+
+  publish:
+    name: Publish handoff status to PR head
+    needs: [mark_pending, validate]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Publish terminal status without overwriting a newer run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PENDING_RESULT: ${{ needs.mark_pending.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${PR_NUMBER}" =~ ^[0-9]+$ ]]
+          [[ "${HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${GITHUB_RUN_ID}" =~ ^[0-9]+$ ]]
+          [[ "${GITHUB_RUN_ATTEMPT}" =~ ^[0-9]+$ ]]
+
+          current_head="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
+          if [ "${current_head}" != "${HEAD_SHA}" ]; then
+            echo "A newer PR head exists; this run will not publish stale status."
+            exit 0
+          fi
+
+          read_latest_status() {
+            gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/statuses?per_page=100" \
+              --jq 'map(select(.context == "issue-handoff-contract")) | .[0] | [.state, .target_url] | @tsv'
+          }
+
+          owns_pending_status() {
+            local latest_status latest_state latest_url
+            latest_status="$(read_latest_status)"
+            IFS=$'\t' read -r latest_state latest_url <<< "${latest_status}"
+            [ "${latest_state:-}" = "pending" ] && [ "${latest_url:-}" = "${HANDOFF_RUN_URL}" ]
+          }
+
+          status_url_is_newer_run() {
+            local status_url="$1" status_run status_attempt
+            if [[ ! "${status_url}" =~ /actions/runs/([0-9]+)\?attempt=([0-9]+)$ ]]; then
+              return 2
+            fi
+            status_run="${BASH_REMATCH[1]}"
+            status_attempt="${BASH_REMATCH[2]}"
+            [ "${status_run}" -gt "${GITHUB_RUN_ID}" ] || {
+              [ "${status_run}" -eq "${GITHUB_RUN_ID}" ] &&
+                [ "${status_attempt}" -gt "${GITHUB_RUN_ATTEMPT}" ]
+            }
+          }
+
+          if [ "${PENDING_RESULT}" != "success" ]; then
+            latest_status="$(read_latest_status)"
+            IFS=$'\t' read -r latest_state latest_url <<< "${latest_status}"
+            if [ -n "${latest_url:-}" ] && [ "${latest_url:-}" != "${HANDOFF_RUN_URL}" ]; then
+              if status_url_is_newer_run "${latest_url}"; then
+                echo "A newer run owns the latest status; this run will not overwrite it."
+                exit 0
+              else
+                url_check=$?
+                if [ "${url_check}" -eq 2 ]; then
+                  echo "The latest status has an unknown owner URL; refusing to overwrite it."
+                  exit 0
+                fi
+                echo "The latest status belongs to an older run; publishing this run's infrastructure error."
+              fi
+            fi
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+              -f state=error \
+              -f context="${HANDOFF_CONTEXT}" \
+              -f description="Handoff validation infrastructure failed closed" \
+              -f target_url="${HANDOFF_RUN_URL}" >/dev/null
+            echo "Unable to establish the pending status." >&2
+            exit 1
+          fi
+
+          if ! owns_pending_status; then
+            echo "A newer run owns the head status; this run will not overwrite it."
+            exit 0
+          fi
+
+          if [ "${VALIDATE_RESULT}" = "success" ]; then
+            final_state=success
+            final_description="Issue and cross-session handoff are complete"
+          else
+            final_state=failure
+            final_description="Issue or cross-session handoff is incomplete"
+          fi
+
+          # Commit Status has no compare-and-swap operation. Concurrency plus a
+          # second ownership read immediately before publication narrows the
+          # same-SHA body-edit race without ever overwriting a known newer run.
+          if ! owns_pending_status; then
+            echo "A newer run took ownership before publication; terminal status is suppressed."
+            exit 0
+          fi
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state="${final_state}" \
+            -f context="${HANDOFF_CONTEXT}" \
+            -f description="${final_description}" \
+            -f target_url="${HANDOFF_RUN_URL}" >/dev/null
+
+          if [ "${final_state}" != "success" ]; then
+            exit 1
+          fi
