@@ -114,10 +114,14 @@ const repositoryTemplate = fs.readFileSync(
   'utf8',
 );
 const filledRepositoryTemplate = repositoryTemplate
+  .replace('- **Issue**: `Closes #N` / `Refs #N`', '- **Issue**: Closes #128')
+  .replace('- **当前 owner / 模型**: _', '- **当前 owner / 模型**: Codex / GPT-5')
   .replace(
-    '## 任务身份',
-    '## Issue / 会话交接\n- **Issue**: Closes #128\n- **当前 owner / 模型**: Codex / GPT-5\n- **交接状态**: 待复核\n- **下一 owner / 触发条件**: Claude 在 CI 通过后复核\n- **未完成 follow-up**: 无\n\n## 任务身份',
+    '- **交接状态**: _（实现中 / 待复核 / 待 PM / 待验收 / 阻塞 / 可合并）',
+    '- **交接状态**: 待复核',
   )
+  .replace('- **下一 owner / 触发条件**: _', '- **下一 owner / 触发条件**: Claude 在 CI 通过后复核')
+  .replace('- **未完成 follow-up**: _（无 / `#N — 一句话说明`）', '- **未完成 follow-up**: 无')
   .replace('- **task id**:', '- **task id**: template-compatibility')
   .replace('- **owner / author**:', '- **owner / author**: Codex')
   .replace('- **reviewer**:', '- **reviewer**: Claude')
