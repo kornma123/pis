@@ -269,7 +269,6 @@ jobs:
           permission-profile: patch-review
           safety-strategy: drop-sudo
           codex-version: ${{ env.AI_REVIEW_CODEX_VERSION }}
-          codex-args: '["--skip-git-repo-check"]'
           model: ${{ env.AI_REVIEW_MODEL }}
           effort: high
 
