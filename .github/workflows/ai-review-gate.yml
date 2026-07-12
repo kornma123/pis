@@ -1,0 +1,411 @@
+name: AI Review Gate
+
+# Trust root: pull_request_target loads this workflow from master.
+# PR code is converted to a patch in a no-secret job and is never checked out or executed.
+on:
+  pull_request_target:
+    branches: [master]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions: {}
+
+concurrency:
+  # Title/body-only edits are deliberate no-ops. Give those runs a unique group
+  # so they cannot cancel an in-flight review for the same PR.
+  group: ai-review-target-${{ github.event.pull_request.number }}-${{ github.event.action == 'edited' && github.event.changes.base == null && github.run_id || 'review' }}
+  cancel-in-progress: true
+
+env:
+  AI_REVIEW_CONTEXT: ai-review-gate
+  AI_REVIEW_MODEL: gpt-5.4-mini-2026-03-17
+  AI_REVIEW_CODEX_VERSION: 0.144.1
+  AI_REVIEW_ACTION_SHA: 52fe01ec70a42f454c9d2ebd47598f9fd6893d56
+  AI_REVIEW_POLICY_VERSION: coreone-ai-review/v1
+  AI_REVIEW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}?attempt=${{ github.run_attempt }}
+
+jobs:
+  mark_pending:
+    name: Mark AI review pending
+    if: ${{ github.event.pull_request.draft == false && (github.event.action != 'edited' || github.event.changes.base != null) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      statuses: write
+    steps:
+      - name: Write pending status to the PR head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state=pending \
+            -f context="${AI_REVIEW_CONTEXT}" \
+            -f description="AI review is running for ${HEAD_SHA:0:12}" \
+            -f target_url="${AI_REVIEW_RUN_URL}" >/dev/null
+
+  prepare_review_input:
+    name: Prepare trusted review input
+    needs: mark_pending
+    if: ${{ needs.mark_pending.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      patch_sha: ${{ steps.prepare.outputs.patch_sha }}
+      merge_base: ${{ steps.prepare.outputs.merge_base }}
+    steps:
+      - name: Checkout the trusted base commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build bounded patch without checking out PR code
+        id: prepare
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${BASE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${PR_NUMBER}" =~ ^[0-9]+$ ]]
+
+          git -c protocol.version=2 fetch \
+            --no-tags \
+            --no-recurse-submodules \
+            origin \
+            "+refs/pull/${PR_NUMBER}/head:refs/remotes/origin/ai-review-head"
+
+          actual_head="$(git rev-parse refs/remotes/origin/ai-review-head)"
+          if [ "${actual_head}" != "${HEAD_SHA}" ]; then
+            echo "PR head moved while preparing review input." >&2
+            exit 1
+          fi
+
+          DIFF_BASE="$(git merge-base "${BASE_SHA}" "${HEAD_SHA}")"
+          if [ -z "${DIFF_BASE}" ] ||
+            ! git merge-base --is-ancestor "${DIFF_BASE}" "${BASE_SHA}" ||
+            ! git merge-base --is-ancestor "${DIFF_BASE}" "${HEAD_SHA}"; then
+            echo "Unable to establish the pull request merge base." >&2
+            exit 1
+          fi
+
+          if git diff --no-ext-diff --no-textconv --numstat "${DIFF_BASE}" "${HEAD_SHA}" -- |
+            awk '$1 == "-" || $2 == "-" { found = 1 } END { exit(found ? 0 : 1) }'; then
+            echo "Binary changes are not eligible for automated patch-only review." >&2
+            exit 1
+          fi
+          if git diff --no-ext-diff --no-textconv --raw "${DIFF_BASE}" "${HEAD_SHA}" -- |
+            awk '$1 == ":160000" || $2 == "160000" { found = 1 } END { exit(found ? 0 : 1) }'; then
+            echo "Submodule/gitlink changes are not eligible for automated patch-only review." >&2
+            exit 1
+          fi
+
+          mkdir -p review-input
+          raw_diff="$(mktemp)"
+          trap 'rm -f "${raw_diff}"' EXIT
+          git diff \
+            --no-ext-diff \
+            --no-textconv \
+            --raw \
+            --no-abbrev \
+            --no-renames \
+            -z \
+            "${DIFF_BASE}" "${HEAD_SHA}" -- > "${raw_diff}"
+
+          while IFS= read -r -d '' metadata && IFS= read -r -d '' changed_path; do
+            read -r old_mode new_mode old_oid new_oid change_status <<< "${metadata#:}"
+            if [ -z "${old_mode:-}" ] || [ -z "${new_mode:-}" ] ||
+              [ -z "${old_oid:-}" ] || [ -z "${new_oid:-}" ] ||
+              [ -z "${change_status:-}" ] || [ -z "${changed_path:-}" ]; then
+              echo "Unable to parse a changed blob while checking Git LFS pointers." >&2
+              exit 1
+            fi
+
+            for blob_oid in "${old_oid}" "${new_oid}"; do
+              if [[ "${blob_oid}" =~ ^0{40}$ ]]; then
+                continue
+              fi
+              if [ "$(git cat-file -t "${blob_oid}")" != "blob" ]; then
+                echo "A changed object is not a regular Git blob." >&2
+                exit 1
+              fi
+              blob_size="$(git cat-file -s "${blob_oid}")"
+              if [ "${blob_size}" -le 1024 ]; then
+                if git cat-file blob "${blob_oid}" |
+                  node scripts/ai-review-gate.cjs --check-lfs-pointer; then
+                  echo "Git LFS pointer changes require a separate trusted content review." >&2
+                  exit 1
+                else
+                  pointer_check_status=$?
+                  if [ "${pointer_check_status}" -ne 1 ]; then
+                    echo "Git LFS pointer validation failed unexpectedly." >&2
+                    exit 1
+                  fi
+                fi
+              fi
+            done
+          done < "${raw_diff}"
+          rm -f "${raw_diff}"
+          trap - EXIT
+
+          git diff \
+            --no-ext-diff \
+            --no-textconv \
+            --find-renames \
+            "${DIFF_BASE}" "${HEAD_SHA}" -- > review-input/pr.patch
+
+          file_count="$(git diff --no-ext-diff --no-textconv --name-only "${DIFF_BASE}" "${HEAD_SHA}" -- | awk 'END { print NR + 0 }')"
+          changed_lines="$(git diff --no-ext-diff --no-textconv --numstat "${DIFF_BASE}" "${HEAD_SHA}" -- | awk '$1 ~ /^[0-9]+$/ { add += $1 } $2 ~ /^[0-9]+$/ { del += $2 } END { print add + del + 0 }')"
+          patch_bytes="$(wc -c < review-input/pr.patch | tr -d ' ')"
+
+          if [ "${file_count}" -lt 1 ]; then
+            echo "The PR patch is empty." >&2
+            exit 1
+          fi
+          if [ "${file_count}" -gt 200 ] || [ "${changed_lines}" -gt 20000 ] || [ "${patch_bytes}" -gt 2000000 ]; then
+            echo "PR exceeds the AI review safety limit: files=${file_count}, lines=${changed_lines}, bytes=${patch_bytes}." >&2
+            exit 1
+          fi
+
+          patch_sha="$(sha256sum review-input/pr.patch | awk '{ print $1 }')"
+          printf '%s\n' \
+            "repository=${GITHUB_REPOSITORY}" \
+            "pull_request=${PR_NUMBER}" \
+            "base_sha=${BASE_SHA}" \
+            "merge_base=${DIFF_BASE}" \
+            "head_sha=${HEAD_SHA}" \
+            "patch_sha256=${patch_sha}" \
+            "files=${file_count}" \
+            "changed_lines=${changed_lines}" \
+            "patch_bytes=${patch_bytes}" \
+            "policy=${AI_REVIEW_POLICY_VERSION}" > review-input/manifest.txt
+
+          cp .github/codex/ai-review-prompt.md review-input/prompt.md
+          cp .github/codex/ai-review-schema.json review-input/schema.json
+          cp .github/codex/ai-review-config.toml review-input/codex-config.toml
+          echo "patch_sha=${patch_sha}" >> "${GITHUB_OUTPUT}"
+          echo "merge_base=${DIFF_BASE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload inert review input
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ai-review-input-${{ github.run_id }}-${{ github.run_attempt }}
+          path: review-input/
+          if-no-files-found: error
+          retention-days: 1
+
+  run_model:
+    name: Run isolated AI review
+    needs: prepare_review_input
+    # Current single-owner phase: external forks and non-owner actors never enter
+    # the Environment-backed secret job. Publisher still emits a terminal error.
+    if: ${{ needs.prepare_review_input.result == 'success' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.author_association == 'OWNER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: ai-review
+      deployment: false
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      review_json: ${{ steps.run_codex.outputs.final-message }}
+    steps:
+      - name: Download inert review input
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ai-review-input-${{ github.run_id }}-${{ github.run_attempt }}
+          path: review-input
+
+      - name: Verify patch artifact integrity
+        env:
+          EXPECTED_PATCH_SHA: ${{ needs.prepare_review_input.outputs.patch_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${EXPECTED_PATCH_SHA}" =~ ^[0-9a-f]{64}$ ]]
+          test -f review-input/pr.patch
+          test -f review-input/manifest.txt
+          test -f review-input/prompt.md
+          test -f review-input/schema.json
+          test -f review-input/codex-config.toml
+          test ! -L review-input/pr.patch
+          test ! -L review-input/manifest.txt
+          test ! -L review-input/prompt.md
+          test ! -L review-input/schema.json
+          test ! -L review-input/codex-config.toml
+
+          actual_patch_sha="$(sha256sum review-input/pr.patch | awk '{ print $1 }')"
+          manifest_patch_sha="$(awk -F= '$1 == "patch_sha256" { print $2 }' review-input/manifest.txt)"
+          if [ "${actual_patch_sha}" != "${EXPECTED_PATCH_SHA}" ] ||
+            [ "${manifest_patch_sha}" != "${EXPECTED_PATCH_SHA}" ]; then
+            echo "Downloaded patch does not match the trusted preparation digest." >&2
+            exit 1
+          fi
+
+          codex_home="${RUNNER_TEMP}/ai-review-codex-home"
+          mkdir -p "${codex_home}"
+          install -m 0600 review-input/codex-config.toml "${codex_home}/config.toml"
+
+      # Keep Codex last in this secret-bearing job. It receives no repository checkout
+      # and cannot publish a review or status.
+      - name: Run Codex against the patch
+        id: run_codex
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: review-input/prompt.md
+          output-schema-file: review-input/schema.json
+          working-directory: review-input
+          codex-home: ${{ runner.temp }}/ai-review-codex-home
+          permission-profile: patch-review
+          safety-strategy: drop-sudo
+          codex-version: ${{ env.AI_REVIEW_CODEX_VERSION }}
+          codex-args: '["--skip-git-repo-check"]'
+          model: ${{ env.AI_REVIEW_MODEL }}
+          effort: high
+
+  publish_review:
+    name: Publish formal AI review
+    needs: [mark_pending, prepare_review_input, run_model]
+    if: ${{ always() && github.event.pull_request.draft == false && (github.event.action != 'edited' || github.event.changes.base != null) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - name: Checkout the trusted publisher
+        id: checkout
+        continue-on-error: true
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prepare deterministic payloads
+        id: payload
+        if: ${{ steps.checkout.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          AI_REVIEW_ANALYSIS_RESULT: ${{ needs.run_model.result }}
+          AI_REVIEW_JSON: ${{ needs.run_model.outputs.review_json }}
+          AI_REVIEW_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          AI_REVIEW_MERGE_BASE: ${{ needs.prepare_review_input.outputs.merge_base }}
+          AI_REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          AI_REVIEW_PATCH_SHA256: ${{ needs.prepare_review_input.outputs.patch_sha }}
+          AI_REVIEW_OUTPUT_DIR: ${{ runner.temp }}
+        run: node scripts/ai-review-gate.cjs
+
+      - name: Publish COMMENTED review and terminal head status
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MARK_PENDING_OUTCOME: ${{ needs.mark_pending.result }}
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          PAYLOAD_OUTCOME: ${{ steps.payload.outcome }}
+          REVIEW_PAYLOAD: ${{ steps.payload.outputs.review_payload }}
+          STATUS_PAYLOAD: ${{ steps.payload.outputs.status_payload }}
+          FINAL_STATE: ${{ steps.payload.outputs.state }}
+          SHOULD_FAIL: ${{ steps.payload.outputs.should_fail }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current_head="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
+          if [ "${current_head}" != "${HEAD_SHA}" ]; then
+            echo "A newer PR head exists; this run will not publish or overwrite its status."
+            exit 0
+          fi
+
+          read_latest_status() {
+            gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/statuses?per_page=100" \
+              --jq 'map(select(.context == "ai-review-gate")) | .[0] | [.state, .target_url] | @tsv'
+          }
+
+          owns_pending_status() {
+            local latest_status latest_state latest_url
+            latest_status="$(read_latest_status)"
+            IFS=$'\t' read -r latest_state latest_url <<< "${latest_status}"
+            [ "${latest_state:-}" = "pending" ] && [ "${latest_url:-}" = "${AI_REVIEW_RUN_URL}" ]
+          }
+
+          publish_error_status() {
+            if ! owns_pending_status; then
+              echo "This run no longer owns the pending status; error publication is suppressed."
+              return 1
+            fi
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+              -f state=error \
+              -f context="${AI_REVIEW_CONTEXT}" \
+              -f description="AI review infrastructure failed closed" \
+              -f target_url="${AI_REVIEW_RUN_URL}" >/dev/null
+          }
+
+          if [ "${MARK_PENDING_OUTCOME}" != "success" ]; then
+            latest_status="$(read_latest_status)"
+            IFS=$'\t' read -r latest_state latest_url <<< "${latest_status}"
+            if [ "${latest_state:-}" = "pending" ] && [ "${latest_url:-}" != "${AI_REVIEW_RUN_URL}" ]; then
+              echo "Another run owns the pending status; this failed run will not overwrite it."
+              exit 0
+            fi
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+              -f state=pending \
+              -f context="${AI_REVIEW_CONTEXT}" \
+              -f description="AI review is failing closed for ${HEAD_SHA:0:12}" \
+              -f target_url="${AI_REVIEW_RUN_URL}" >/dev/null
+            if ! publish_error_status; then
+              exit 0
+            fi
+            echo "This run could not establish its pending status." >&2
+            exit 1
+          fi
+          if ! owns_pending_status; then
+            echo "A newer run owns the head status; this run will not overwrite it."
+            exit 0
+          fi
+
+          if [ "${CHECKOUT_OUTCOME}" != "success" ] || [ "${PAYLOAD_OUTCOME}" != "success" ]; then
+            if ! publish_error_status; then
+              exit 0
+            fi
+            echo "Trusted publisher or deterministic payload rendering failed." >&2
+            exit 1
+          fi
+
+          if ! gh api --method POST "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+            --input "${REVIEW_PAYLOAD}" >/dev/null; then
+            if ! publish_error_status; then
+              exit 0
+            fi
+            echo "Formal COMMENTED review publication failed." >&2
+            exit 1
+          fi
+
+          # Narrow the same-SHA rerun race after the Review API call. Commit Status
+          # has no compare-and-swap primitive; concurrency plus this second ownership
+          # check prevents an older run from normally replacing a newer pending run.
+          if ! owns_pending_status; then
+            echo "A newer run took ownership after review publication; terminal status is suppressed."
+            exit 0
+          fi
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            --input "${STATUS_PAYLOAD}" >/dev/null
+
+          if [ "${SHOULD_FAIL}" = "true" ] || [ "${FINAL_STATE}" != "success" ]; then
+            echo "AI review gate ended in ${FINAL_STATE}." >&2
+            exit 1
+          fi
