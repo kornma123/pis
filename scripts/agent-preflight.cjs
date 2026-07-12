@@ -16,12 +16,15 @@ const { execFileSync, spawnSync } = require('node:child_process')
 const CONTRACT_PATH = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
 const ENTRYPOINTS = ['AGENTS.md', 'CLAUDE.md']
+const PM_AI_WORK_MODEL_FILES = [
+  'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
+  'docs/工作模型-COREONE项目版-2026-06-30.md',
+]
 const AUTHORITY_FILES = [
   ...ENTRYPOINTS,
   CONTRACT_PATH,
   'docs/agent-handoffs/TEMPLATE.md',
-  'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
-  'docs/工作模型-COREONE项目版-2026-06-30.md',
+  ...PM_AI_WORK_MODEL_FILES,
   'docs/golden-registry.md',
   '.claude/rules/coreone-guardrails.md',
   '.claude/rules/pr-governance.md',
@@ -2079,7 +2082,7 @@ function inspectAuthority(root, args, checks) {
   if (highRiskFindings.length) addCheck(checks, 'drift.high-risk-rules', 'FAIL', 'high-risk retired instructions found in active entry documents', highRiskFindings)
   else addCheck(checks, 'drift.high-risk-rules', 'PASS', 'no retired agent/workbench/direct-push/bulk-stage instruction in active entries')
 
-  const stableFiles = ['AGENTS.md', 'CLAUDE.md', CONTRACT_PATH, '.claude/rules/pr-governance.md']
+  const stableFiles = ['AGENTS.md', 'CLAUDE.md', CONTRACT_PATH, '.claude/rules/pr-governance.md', ...PM_AI_WORK_MODEL_FILES]
   const dynamicFindings = []
   for (const file of stableFiles) {
     const text = contents[file] || ''
