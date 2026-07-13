@@ -117,6 +117,13 @@ describe('第 1 层 组合体检：覆盖倍数只看趋势 + 影子模式 + 复
     expect(h.reopenAutomationQuestion).toBe(false) // 3 ≤ 30 且无 UNMEASURED
   })
 
+  it('本次请求的实时 readiness 为真时可退出影子态；不再被模块级旧常量永久锁死', () => {
+    const h = buildPortfolioHealth(ACCOUNTS, { fixedPool: 40000, gatesVerified: true })
+    expect(h.shadowMode).toBe(false)
+    expect(h.gatesVerified).toBe(true)
+    expect(h.coverageMultipleTrendOnly).toBe(false)
+  })
+
   it('复活双触发②：UNMEASURED 收入占比越线 → 重开自动化问题（表没变大但看不见的钱变多了）', () => {
     // 加一个 UNMEASURED 账户（代送/会诊/外送·measurable=false·不进表行数但占收入）
     const unmeasured: AccountCmSummary = { partnerId: 'ACC-U', inScopeRevenue: 0, avoidableCost: 0, cm: 0, cmRate: 0, measurable: false, unmeasuredRevenue: 200000 }

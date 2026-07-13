@@ -270,7 +270,7 @@ describe('LEG 参数登记 drift-guard（改 = 显式立法·具名+版本化）
     expect([...READINESS_FOUNDATION_GATES]).toEqual(['inventory_conservation', 'period_key', 'constant_freeze'])
   })
   it('阈值登记版本钉死（改任一 READINESS_* 阈值/门集 = 同步 bump 此版本）', () => {
-    expect(READINESS_PARAM_VERSION).toBe('2026-07-09.a')
+    expect(READINESS_PARAM_VERSION).toBe('2026-07-13.a')
   })
   it('⭐「谁签什么」缺省映射行为钉死（CONFIRMED#3·空/缺 schedule 时 checklist owner 落缺省）', () => {
     // 空 schedule → 各条件 owner 走缺省映射；denominator 必须是 business（碰钱·不可代签）

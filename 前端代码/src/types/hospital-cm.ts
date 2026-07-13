@@ -48,7 +48,8 @@ export interface Readiness {
   ready: boolean
   checklist: ReadinessCondition[]
   findings: ReadinessFinding[]
-  asOf?: string
+  asOf: string
+  asOfSource: 'server'
   shadowNote?: string
   caliberRatification?: CaliberRatification
 }

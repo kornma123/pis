@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>院级贡献毛利 · 真实解锁闭环 mockup</title>
+  <style>
+    :root {
+      --ink: #0a2540;
+      --text: #111827;
+      --muted: #64748b;
+      --weak: #94a3b8;
+      --line: #e2e8f0;
+      --surface: #ffffff;
+      --canvas: #f8fafc;
+      --blue: #3b82f6;
+      --blue-dark: #2563eb;
+      --blue-soft: #eff6ff;
+      --green: #047857;
+      --green-soft: #ecfdf5;
+      --amber: #b45309;
+      --amber-soft: #fffbeb;
+      --red: #be123c;
+      --red-soft: #fff1f2;
+      --shadow: 0 2px 5px -1px rgba(50, 50, 93, .07), 0 1px 3px -1px rgba(0, 0, 0, .05);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--text);
+      font: 400 13px/1.55 Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    button, summary { font: inherit; }
+    button:focus-visible, summary:focus-visible { outline: 3px solid rgba(59, 130, 246, .16); outline-offset: 2px; }
+
+    .page { width: min(1080px, calc(100% - 36px)); margin: 0 auto; padding: 28px 0 64px; }
+    .eyebrow { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    h1 { margin: 0; color: var(--ink); font-size: 24px; font-weight: 600; letter-spacing: -.02em; }
+    .intro { max-width: 880px; color: var(--muted); margin: 6px 0 18px; }
+    .prototype-note { color: var(--amber); font-size: 12px; margin: 0 0 14px; }
+
+    .state-switcher {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 8px;
+      margin: 0 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .state-button {
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--muted);
+      background: #fff;
+      cursor: pointer;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+    .state-button[aria-pressed="true"] { color: var(--blue-dark); border-color: #bfdbfe; background: var(--blue-soft); font-weight: 600; }
+    .dom-status { margin-left: auto; align-self: center; color: var(--muted); font-size: 12px; padding: 0 8px; }
+
+    .banner { border: 1px solid; border-radius: 8px; padding: 12px 15px; margin-bottom: 16px; }
+    .banner strong { font-weight: 600; }
+    .banner.amber { color: #78350f; background: var(--amber-soft); border-color: #fde68a; }
+    .banner.green { color: #065f46; background: var(--green-soft); border-color: #a7f3d0; }
+    .banner.red { color: #9f1239; background: var(--red-soft); border-color: #fecdd3; }
+
+    .section-label { margin: 20px 0 8px; color: var(--weak); font-size: 11px; font-weight: 600; letter-spacing: .05em; }
+    .card { padding: 20px 22px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+    .card h2 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 600; }
+    .card-note { margin: 3px 0 16px; color: var(--muted); font-size: 12px; }
+
+    .hero { display: grid; grid-template-columns: 1.4fr repeat(2, 1fr); gap: 12px; }
+    .metric { min-height: 118px; padding: 14px; border: 1px solid #edf2f7; border-radius: 9px; background: var(--canvas); }
+    .metric-label { color: var(--muted); font-size: 12px; }
+    .metric-value { margin: 5px 0 4px; color: var(--ink); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .metric-value.empty { color: var(--muted); font-size: 17px; }
+    .metric-copy { color: var(--muted); font-size: 11px; }
+
+    .badge { display: inline-flex; align-items: center; min-height: 22px; padding: 1px 8px; border: 1px solid; border-radius: 999px; font-size: 11px; font-weight: 500; }
+    .badge.green { color: var(--green); border-color: #a7f3d0; background: var(--green-soft); }
+    .badge.amber { color: var(--amber); border-color: #fde68a; background: var(--amber-soft); }
+    .badge.red { color: var(--red); border-color: #fecdd3; background: var(--red-soft); }
+    .badge.gray { color: var(--muted); border-color: var(--line); background: #f1f5f9; }
+
+    .checklist { display: grid; gap: 10px; }
+    .check {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #fff;
+    }
+    .check-state { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .check-state.pass { color: var(--green); background: var(--green-soft); }
+    .check-state.wait { color: var(--amber); background: var(--amber-soft); }
+    .check-state.fail { color: var(--red); background: var(--red-soft); }
+    .check-title { color: var(--ink); font-weight: 600; }
+    .check-detail { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .check-meta { color: var(--muted); text-align: right; font-size: 11px; font-variant-numeric: tabular-nums; }
+    details { margin-top: 7px; }
+    summary { color: var(--blue-dark); cursor: pointer; list-style-position: inside; }
+    .evidence { margin: 7px 0 0; padding: 10px 12px; color: var(--muted); border-left: 3px solid #bfdbfe; background: var(--blue-soft); font-size: 11px; }
+
+    .quality-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .quality-box { padding: 14px; border: 1px solid var(--line); border-radius: 9px; }
+    .quality-box h3 { margin: 0 0 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
+    .quality-box p { margin: 4px 0; color: var(--muted); font-size: 12px; }
+    .quality-box strong { color: var(--text); font-weight: 600; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { color: var(--muted); font-size: 11px; font-weight: 500; text-align: left; }
+    th, td { padding: 10px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; }
+    td.unknown { color: var(--muted); }
+    .table-note { margin: 10px 0 0; color: var(--muted); font-size: 11px; }
+
+    .full-exam { border-color: #a7f3d0; }
+    .full-header { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    .evidence-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; color: var(--muted); font-size: 11px; }
+    .evidence-strip span { padding: 5px 8px; border-radius: 6px; background: #f1f5f9; }
+
+    .decision { margin-top: 24px; }
+    .decision ul { margin: 10px 0 0; padding-left: 19px; color: var(--muted); }
+    .decision li { margin: 5px 0; }
+
+    @media (max-width: 800px) {
+      .page { width: min(100% - 24px, 1080px); }
+      .hero, .quality-grid { grid-template-columns: 1fr; }
+      .check { grid-template-columns: 34px 1fr; }
+      .check-meta { grid-column: 2; text-align: left; }
+      .dom-status { width: 100%; margin-left: 0; }
+      .table-scroll { overflow-x: auto; }
+      table { min-width: 720px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="eyebrow">COREONE / hospital-cm / PM 审阅原型</div>
+    <h1>院级贡献毛利看板</h1>
+    <p class="intro">仍然只有两层：第一层看整盘，第二层人工对照医院。本 mockup 只补“真实证据如何解锁、失效后如何收回、历史失真与未测覆盖如何诚实展示”，不增加第三层或新仪表盘。</p>
+    <p class="prototype-note"><strong>演示说明：</strong>本页全部金额、月份、账户数、百分比、版本号和证据标签均为纯交互示例，不对应任何真实医院、周期或既有 golden，也绝不能作为 ready 证据。</p>
+
+    <nav class="state-switcher" aria-label="原型状态切换">
+      <button class="state-button" data-state="calibration" aria-pressed="true">1. 校准态</button>
+      <button class="state-button" data-state="ready" aria-pressed="false">2. 解锁态示意</button>
+      <button class="state-button" data-state="revoked" aria-pressed="false">3. 值变化后失效</button>
+      <span id="dom-status" class="dom-status" aria-live="polite"></span>
+    </nav>
+
+    <div id="state-root"></div>
+
+    <section class="card decision">
+      <h2>这版请 PM 只判断 5 件事</h2>
+      <ul>
+        <li>没有可算数据时，主数显示“暂无可计算数据”，不再显示 ¥0。</li>
+        <li>医院全集或可测收入分母不完整时，“未测占比”显示“不可计算”，只列已识别账户、已知金额和缺失原因；只有金额非负、分母大于 0、期间/币种/口径一致、集合互斥无重复等机器前提也全满足后才展示公式化下限。</li>
+        <li>每道就绪门都能展开看来源、最后检查时间、版本和“什么变化会让它失效”。</li>
+        <li>固定池值、口径版本或关账证据变化后，系统立即回到校准态；完整体检组件从 DOM 移除，旧完整数值不保留。</li>
+        <li>拆分口径是否升级为完整态硬门仍待 PM 拍板；本 mockup 不预设该决定。</li>
+      </ul>
+    </section>
+  </main>
+
+  <template id="state-calibration">
+    <div class="banner amber"><strong>校准态 · 暂不用于经营判断。</strong> 真实证据尚未齐全；系统继续开放数据修复与人工对照，但完整体检数值不出门。</div>
+
+    <div class="section-label">第 1 层 · 整盘体检</div>
+    <section class="card">
+      <h2>整盘生意体检</h2>
+      <p class="card-note">没有真实数据时不把“不知道”渲染成 0。</p>
+      <div class="hero">
+        <div class="metric">
+          <div class="metric-label">本月贡献毛利合计</div>
+          <div class="metric-value empty">暂无可计算数据</div>
+          <div class="metric-copy">三件套尚未形成可验证周期；不展示 ¥0。</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">够盖几倍固定开销</div>
+          <div class="metric-value empty">未配置</div>
+          <div class="metric-copy">固定成本池尚无已认账版本。</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">未测覆盖</div>
+          <div class="metric-value empty">金额覆盖未知</div>
+          <div class="metric-copy">在册账户全集与无病例号结算尚未接入；不显示 0%。</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>校准就绪清单</h2>
+      <p class="card-note">0 / 4 项满足。状态只能由当前有效证据计算，页面没有手工“开启完整态”的开关。</p>
+      <div class="checklist">
+        <article class="check">
+          <div class="check-state wait">0/3</div>
+          <div>
+            <div class="check-title">数据地基门全绿</div>
+            <div class="check-detail">库存守恒：待运行；期间键：无有效周期；院级 CM 公式 2026-07-12.a 已冻结。拆分口径认账是否另设硬门仍待 PM 决定，不计入 A 的两项数据完整性探针与一项代码/口径漂移门。</div>
+            <details><summary>查看证据与失效条件</summary><div class="evidence">来源：库存一致性探针、院月期间键验证、不可变代码 manifest 与公式行为签名。任一数据探针失败、输入指纹或代码/口径签名变化，条件立即变红。</div></details>
+          </div>
+          <div class="check-meta">技术/数据责任角色<br><span class="badge red">具名 owner 待指派</span><br>2026-09-30</div>
+        </article>
+        <article class="check">
+          <div class="check-state wait">待签</div>
+          <div>
+            <div class="check-title">固定成本池已配置并认账</div>
+            <div class="check-detail">尚无月度值版本；财务签字人仍待 PM 指定。</div>
+            <details><summary>查看证据与失效条件</summary><div class="evidence">认账必须绑定金额版本与证据哈希。金额一改就生成新版本，旧认账保留审计但不再放行。</div></details>
+          </div>
+          <div class="check-meta">财务业务责任角色<br><span class="badge red">具名 owner 待指派</span><br>2026-08-31</div>
+        </article>
+        <article class="check">
+          <div class="check-state wait">0/3</div>
+          <div>
+            <div class="check-title">最近连续 3 个完整周期已验证</div>
+            <div class="check-detail">关账记录不能直接计数；还缺医院范围快照、三件套、期间键与质量验证。</div>
+            <details><summary>查看证据与失效条件</summary><div class="evidence">只数“完整组合范围 + 已关账 + 质量通过 + 输入与公式版本冻结”的周期。反关账、重导或来源哈希变化会使对应周期失效。</div></details>
+          </div>
+          <div class="check-meta">PM / 数据责任角色<br><span class="badge red">具名 owner 待指派</span><br>2026-10-31</div>
+        </article>
+        <article class="check">
+          <div class="check-state wait">待验</div>
+          <div>
+            <div class="check-title">首个真实周期独立验证</div>
+            <div class="check-detail">尚无脱敏成本侧 Locked Golden；测试 fixture 不计作真实证据。</div>
+            <details><summary>查看证据与失效条件</summary><div class="evidence">必须有 source manifest、脱敏手核样本、独立验证人和 CI golden。验证人与导入/计算人不能是同一人。</div></details>
+          </div>
+          <div class="check-meta">技术 owner + 独立 reviewer<br><span class="badge red">二者均待指派</span><br>2026-10-31</div>
+        </article>
+      </div>
+    </section>
+
+    <div class="section-label">第 2 层 · 人工对照与数据边界</div>
+    <section class="card">
+      <h2>历史质量与未测覆盖</h2>
+      <p class="card-note">历史失真不再只写脚注；金额未知也不再折成 0。</p>
+      <div class="quality-grid">
+        <div class="quality-box">
+          <h3>历史周期</h3>
+          <p><span class="badge red">交互示例</span> 示例月 A：缺成本基线版本，趋势断线。</p>
+          <p><span class="badge amber">交互示例</span> 示例月 B：导入曾绕过期间键。</p>
+          <p><span class="badge gray">尚无有效期</span> 不计入“3 个完整周期”。</p>
+        </div>
+        <div class="quality-box">
+          <h3>在册账户覆盖</h3>
+          <p><strong>已识别、当前口径不可测：</strong>若干账户（示意）。</p>
+          <p><strong>有活动信号、金额未知：</strong>若干纯代送/会诊账户（示意）。</p>
+          <p><strong>未测金额占比：</strong>不可计算；账户全集未完整前不提供百分比或“下限”。</p>
+        </div>
+      </div>
+      <p class="table-note">纯代送/会诊在可靠收入与外部成本到位前，保持“不可测”；不会显示贡献毛利 0，也不会进入排序。</p>
+    </section>
+  </template>
+
+  <template id="state-ready">
+    <div class="banner green"><strong>解锁态交互示意。</strong> 下列数据和证据均为虚构占位；真实证据齐全后只允许人工经营判断，系统仍不自动点名、排名、生成砍院或谈价清单。</div>
+
+    <div class="section-label">第 1 层 · 整盘体检</div>
+    <section class="card full-exam" data-testid="full-physical-exam">
+      <div class="full-header"><div><h2>完整体检</h2><p class="card-note">演示数值；真实页面必须绑定所选周期的验证证据。</p></div><span class="badge green">4 / 4 已通过</span></div>
+      <div class="hero">
+        <div class="metric"><div class="metric-label">本月贡献毛利合计</div><div class="metric-value">¥69,621</div><div class="metric-copy">默认仍按绝对贡献展示，不按“最差”排序。</div></div>
+        <div class="metric"><div class="metric-label">固定开销覆盖倍数</div><div class="metric-value">1.74×</div><div class="metric-copy">固定池 2026-10.v3；业务方已认账。</div></div>
+        <div class="metric"><div class="metric-label">未测覆盖</div><div class="metric-value">18.4% 示例下限</div><div class="metric-copy">仅演示：名册/可测金额完整、未知账户已归未测、金额非负且分母大于 0、同期间币种口径、集合互斥无重复时的下限形态；否则为 null。</div></div>
+      </div>
+      <div class="evidence-strip"><span>示例数据截止：月份 C</span><span>院级 CM 公式：示例版本</span><span>固定池：示例 v3 / RATIFIED</span><span>连续有效周期：示例 3 期</span><span>首周期证据：示例（尚不存在）</span><span>独立复核：交互示意（尚未发生）</span></div>
+    </section>
+
+    <section class="card">
+      <h2>解锁依据</h2>
+      <p class="card-note">完成状态不是手填布尔值，而是由当前有效证据实时派生。</p>
+      <div class="checklist">
+        <article class="check"><div class="check-state pass">通过</div><div><div class="check-title">数据地基门全绿</div><div class="check-detail">两项数据完整性探针与一项代码/口径漂移门均通过；输入指纹与口径版本一致。</div></div><div class="check-meta">检查于 2026-10-31<br>证据 3 份</div></article>
+        <article class="check"><div class="check-state pass">通过</div><div><div class="check-title">固定成本池已认账</div><div class="check-detail">金额版本 2026-10.v3 与认账版本完全一致。</div></div><div class="check-meta">业务签字<br>证据 1 份</div></article>
+        <article class="check"><div class="check-state pass">通过</div><div><div class="check-title">最近连续 3 期有效</div><div class="check-detail">示例月份 A / B / C 均已结算且通过质量验证；这不是实际周期证据。</div></div><div class="check-meta">交互示意<br>3 / 3</div></article>
+        <article class="check"><div class="check-state pass">通过</div><div><div class="check-title">首个真实周期独立验证</div><div class="check-detail">示意 source manifest、手核和 CI golden 如何绑定；真实证据尚未取得。</div></div><div class="check-meta">交互示意<br>尚未发生</div></article>
+      </div>
+    </section>
+
+    <div class="section-label">第 2 层 · 各医院人工对照</div>
+    <section class="card">
+      <h2>各医院对照表</h2>
+      <p class="card-note">默认按绝对贡献从大到小；系统不自动下结论。历史失真月不连线、不计入 3 期。</p>
+      <div class="table-scroll"><table><thead><tr><th>医院</th><th class="number">贡献毛利</th><th class="number">贡献毛利率</th><th>历史质量</th><th>未测边界</th></tr></thead><tbody>
+        <tr><td>医院甲</td><td class="number">¥36,994</td><td class="number">68.7%</td><td><span class="badge green">3 期可比</span></td><td>非 IHC 收入 8.0%</td></tr>
+        <tr><td>医院乙</td><td class="number">¥22,348</td><td class="number">86.0%</td><td><span class="badge amber">1 期按当前口径重述</span></td><td>会诊收入已知、成本不可测</td></tr>
+        <tr><td>纯代送账户丙</td><td class="number unknown">—</td><td class="number unknown">—</td><td><span class="badge gray">不可比较</span></td><td>金额未知；不渲染为 0</td></tr>
+      </tbody></table></div>
+      <p class="table-note">CSV 同样把不可测数值留空并附原因；不会把“—”导成 0。</p>
+    </section>
+  </template>
+
+  <template id="state-revoked">
+    <div class="banner red"><strong>证据已失效 · 已自动退回校准态。</strong> 固定成本池从 2026-10.v3 改为 v4，旧认账不再有效；完整体检组件已从 DOM 移除。</div>
+
+    <div class="section-label">第 1 层 · 整盘体检</div>
+    <section class="card">
+      <h2>完整数值已收回</h2>
+      <p class="card-note">不会缓存或继续展示上一次完整体检的金额；重新认账并通过全部证据后才恢复。</p>
+      <div class="hero">
+        <div class="metric"><div class="metric-label">本月贡献毛利合计</div><div class="metric-value empty">校准中</div><div class="metric-copy">仍可修数据，但不输出完整判断。</div></div>
+        <div class="metric"><div class="metric-label">固定开销覆盖倍数</div><div class="metric-value empty">已收回</div><div class="metric-copy">分母版本变化，旧值不再有效。</div></div>
+        <div class="metric"><div class="metric-label">预计重新就绪</div><div class="metric-value empty">待业务重新认账</div><div class="metric-copy">若预计日后移，会产生具名告警事件。</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>失效原因</h2>
+      <p class="card-note">3 / 4 项仍有效；任一门失效都足以关闭完整态。</p>
+      <div class="checklist">
+        <article class="check"><div class="check-state pass">通过</div><div><div class="check-title">数据地基门全绿</div><div class="check-detail">证据仍在有效期内。</div></div><div class="check-meta">技术/数据 owner</div></article>
+        <article class="check"><div class="check-state fail">失效</div><div><div class="check-title">固定成本池认账已失效</div><div class="check-detail">当前版本 2026-10.v4 ≠ 已认账版本 2026-10.v3；需要业务方重新认账具体值。</div><details open><summary>查看变更事件</summary><div class="evidence">2026-11-02：固定池金额更新，原因“年度调薪”。系统自动记下旧版本、新版本、修改人和原因；未人工修改 ready。</div></details></div><div class="check-meta">财务业务 owner<br><span class="badge red">待重新认账</span></div></article>
+        <article class="check"><div class="check-state pass">通过</div><div><div class="check-title">最近连续 3 期有效</div><div class="check-detail">周期证据未变化。</div></div><div class="check-meta">3 / 3</div></article>
+        <article class="check"><div class="check-state pass">通过</div><div><div class="check-title">首个真实周期独立验证</div><div class="check-detail">示例 golden 证据未变化；真实证据尚未取得。</div></div><div class="check-meta">交互示意</div></article>
+      </div>
+    </section>
+
+    <div class="section-label">第 2 层 · 历史与覆盖边界</div>
+    <section class="card">
+      <h2>本次变化如何影响趋势</h2>
+      <p class="card-note">固定池变化只给覆盖倍数趋势打标；绝不摊到单个医院，也不改写院级贡献毛利历史。</p>
+      <div class="quality-grid"><div class="quality-box"><h3>覆盖倍数趋势</h3><p><span class="badge amber">2026-11 分母变更</span></p><p>新旧版本之间不直接比较，待 v4 重新认账。</p></div><div class="quality-box"><h3>院级对照表</h3><p>仍可看标准成本口径数据质量，但不展示完整体检结论。</p><p>默认排序规则与“不自动点名”红线不变。</p></div></div>
+    </section>
+  </template>
+
+  <script>
+    const root = document.getElementById('state-root');
+    const domStatus = document.getElementById('dom-status');
+    const buttons = Array.from(document.querySelectorAll('[data-state]'));
+
+    function renderState(state) {
+      const template = document.getElementById(`state-${state}`);
+      root.replaceChildren(template.content.cloneNode(true));
+      buttons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.state === state)));
+      const fullExists = document.querySelector('[data-testid="full-physical-exam"]') !== null;
+      domStatus.textContent = fullExists
+        ? '完整组件：已进入 DOM（仅 ready=true）'
+        : '完整组件：不在 DOM（fail-closed）';
+    }
+
+    buttons.forEach((button) => button.addEventListener('click', () => renderState(button.dataset.state)));
+    renderState('calibration');
+  </script>
+</body>
+</html>

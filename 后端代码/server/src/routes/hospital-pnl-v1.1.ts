@@ -14,20 +14,27 @@ import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { buildHospitalCmByPartner, buildHospitalCmTrend, buildHospitalCmTrendByPartner } from '../utils/hospital-cm-service.js'
+import { HOSPITAL_CM_FORMULA_VERSION } from '../utils/hospital-cm.js'
 import {
   buildPortfolioHealth,
   buildComparisonTable,
   toAccountSummary,
-  PORTFOLIO_HEALTH_GATES_VERIFIED,
-  computeReadiness,
-  CURRENT_KNOWN_READINESS_INPUT,
-  type ReadinessInput,
   type FixedPoolState,
 } from '../utils/portfolio-health.js'
 import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：院级贡献毛利(拆分派生)输出自带「口径未认账」水印（LEG-2）
+import {
+  FOUNDATION_PROBE_REASON_CODES,
+  currentHospitalCmReadinessSourceFingerprint,
+  getHospitalCmReadinessSnapshot,
+  HospitalCmReadinessProbeError,
+  recordHospitalCmFoundationProbeRun,
+  shanghaiBusinessDate,
+  type HospitalCmReadinessDb,
+} from '../utils/hospital-cm-readiness-runtime.js'
 
 const router = Router()
 const requireCostRead = requirePermission('cost_analysis', 'R')
+const requireCostWrite = requirePermission('cost_analysis', 'W')
 
 // ────────────────────────────────────────────────────────────────────────────
 // 就绪谓词消费端（route = portfolio-health.ts 注释里点名的「另 task·消费端」）——
@@ -36,58 +43,22 @@ const requireCostRead = requirePermission('cost_analysis', 'R')
 //   ⚠️ probe 只读、绝不臆造 ready=true；将来这些地基落地后从真实来源读，ready 自动转绿。
 // ────────────────────────────────────────────────────────────────────────────
 
-interface DbLike {
-  prepare: (sql: string) => { get: (...a: unknown[]) => unknown; all: (...a: unknown[]) => unknown[] }
-}
-
-/** asOf 归一：接受 `?asOf=YYYY-MM-DD` 注入（供测试/过期判定）；缺/坏 → 用 wall clock（route 层允许读时钟）。 */
-function normAsOf(raw: unknown): string {
-  const s = typeof raw === 'string' ? raw.trim() : ''
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  return new Date().toISOString().slice(0, 10)
-}
-
 /**
  * 探测固定成本池认账状态（HON-5·denominator 条件）。
  * 本项目**尚无**「已认账固定成本池」持久表 → 一律返回**未配置**（不渲染 0·认账不可代签）。
  * ⚠️ `/health` 的 `?fixedPool=` query 是财务临时给的非认账值，**绝不**当已认账放行（认账绑值版本·业务方签）。
  * 将来 LEG-2 落地「固定成本池认账登记」表后从此读 { configured, value, version, ratifiedVersion }。
  */
-function probeFixedPool(_db: DbLike): FixedPoolState {
+function probeFixedPool(_db: HospitalCmReadinessDb): FixedPoolState {
   return { configured: false, value: null, version: null, ratifiedVersion: null }
 }
 
-/**
- * 探测「已结算 ∧ 过期间键校验」的完整周期数（history 条件·verifiedClosedPeriods）。
- * 本项目尚无「已校验完整结算周期」跟踪表 → 0（纯日历·加速不了·due=预计就绪日）。
- */
-function probeVerifiedClosedPeriods(_db: DbLike): number {
-  return 0
+/** 影子模式提示由本次请求的真实 readiness 派生，不再读取模块加载时的静态常量。 */
+function shadowNoteFor(ready: boolean): string | undefined {
+  return ready
+    ? undefined
+    : '影子模式：真实证据尚未满足全部就绪门 → 覆盖倍数只看趋势·完整体检数据不出门·输出仅供校准观察'
 }
-
-/** 探测数据地基三门（库存守恒/期间键/常量冻结）逐门绿否。无运行时持久校验态 → 全 false（fail-closed·诚实）。 */
-function probeFoundationGates(_db: DbLike): ReadinessInput['foundationGatesGreen'] {
-  return { inventory_conservation: false, period_key: false, constant_freeze: false }
-}
-
-/**
- * 组装就绪谓词输入（真实探测·非硬编码）。schedule（owner+死线）复用已登记的现实快照
- * `CURRENT_KNOWN_READINESS_INPUT`（LEG 登记的 due/owner），把探测到的真状态覆盖进去 + 注入 asOf 供过期判定。
- */
-function probeReadinessInput(db: DbLike, asOf: string): ReadinessInput {
-  return {
-    ...CURRENT_KNOWN_READINESS_INPUT,
-    foundationGatesGreen: probeFoundationGates(db),
-    fixedPool: probeFixedPool(db),
-    verifiedClosedPeriods: probeVerifiedClosedPeriods(db),
-    asOf,
-  }
-}
-
-/** 影子模式提示（三门未验收前·随每个响应带·让"输出不得进经营研判"是被看到的）。 */
-const shadowNote = PORTFOLIO_HEALTH_GATES_VERIFIED
-  ? undefined
-  : '影子模式：三门(库存守恒/期间键/常量冻结)未验收 + 标准成本校准里程碑未过 → 覆盖倍数只看趋势·经营线未定(CM_TARGET 未拍板)·输出仅供观察、不得进经营研判'
 
 /**
  * GET /health —— 第 1 层组合体检（不点名任何账户）。
@@ -101,7 +72,7 @@ router.get('/health', authenticateToken, requireCostRead, (req, res) => {
     const hospitals = buildHospitalCmByPartner(getDatabase(), { serviceMonth })
     const summaries = hospitals.map((h) => toAccountSummary(h))
     const health = buildPortfolioHealth(summaries, { fixedPool })
-    success(res, { ...health, serviceMonth: serviceMonth ?? null, shadowNote, fixedPoolProvided: fixedPool > 0, caliberRatification: splitCaliberRatification() }, '组合体检（第 1 层·只看趋势）')
+    success(res, { ...health, serviceMonth: serviceMonth ?? null, shadowNote: shadowNoteFor(false), fixedPoolProvided: fixedPool > 0, hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION, caliberRatification: splitCaliberRatification() }, '组合体检（第 1 层·只看趋势）')
   } catch (e: any) {
     error(res, e.message)
   }
@@ -127,7 +98,7 @@ router.get('/', authenticateToken, requireCostRead, (req, res) => {
       detail: byId.get(r.partnerId) ?? null,
       trendPoints: trendsByPartner.get(r.partnerId) ?? [], // 同账户历史（③）·跨月口径变更可标（⑨）
     }))
-    successList(res, enriched, 1, enriched.length || 1, enriched.length, { caliberRatification: splitCaliberRatification() })
+    successList(res, enriched, 1, enriched.length || 1, enriched.length, { hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION, caliberRatification: splitCaliberRatification() })
   } catch (e: any) {
     error(res, e.message)
   }
@@ -149,15 +120,59 @@ router.get('/trend', authenticateToken, requireCostRead, (req, res) => {
  * GET /readiness —— 就绪谓词清单（校准视图渲染这个·DEC-6 + LEG + 公理一）。
  * **始终可读**（cost_analysis:R）：校准态就是要把「为何还不能信绝对值」摊在用户眼前。
  * 返回 `computeReadiness(真实探测)` = { ready, checklist:[{key,met,owner,due,configError,overdue}], findings }。
- * query: asOf?（YYYY-MM-DD·注入过期判定·缺则 wall clock）
+ * 不接受 `asOf` 或其它 URL 注入。过期判定只认服务器 Asia/Shanghai 业务日期，调用者不能回填旧日期隐藏逾期。
  */
 router.get('/readiness', authenticateToken, requireCostRead, (req, res) => {
   try {
-    const asOf = normAsOf((req.query as any).asOf)
-    const readiness = computeReadiness(probeReadinessInput(getDatabase() as DbLike, asOf))
-    success(res, { ...readiness, asOf, shadowNote, caliberRatification: splitCaliberRatification() }, '就绪谓词清单（校准视图）')
+    if (Object.keys(req.query).length > 0) {
+      error(res, 'readiness 的过期判定只认服务器业务日期，不接受 URL 时间注入', 'UNSUPPORTED_QUERY_PARAMETER', 400)
+      return
+    }
+    const readiness = getHospitalCmReadinessSnapshot(getDatabase() as HospitalCmReadinessDb, shanghaiBusinessDate())
+    success(res, { ...readiness, shadowNote: shadowNoteFor(readiness.ready), hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION, caliberRatification: splitCaliberRatification() }, '就绪谓词清单（校准视图）')
   } catch (e: any) {
-    error(res, e.message)
+    console.error('[hospital-cm] readiness read failed', e)
+    error(res, '就绪状态读取失败，完整体检继续保持关闭', 'READINESS_READ_FAILED', 500)
+  }
+})
+
+/**
+ * POST /readiness/probes/foundation —— 显式重跑真实数据地基探针并追加证据。
+ * 调用者只能给受控原因码与工单引用，不能提交 ready/met/passed/checks 等结论；结果全部由服务器读取当前数据库计算。
+ */
+router.post('/readiness/probes/foundation', authenticateToken, requireCostWrite, (req, res) => {
+  try {
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body as Record<string, unknown> : {}
+    const unsupported = Object.keys(body).filter((key) => !['reasonCode', 'ticketRef'].includes(key))
+    if (unsupported.length > 0) {
+      error(res, '探针端点不接受调用者提交检查结论或其它状态字段', 'READINESS_RESULT_INPUT_FORBIDDEN', 400)
+      return
+    }
+    const reasonCode = typeof body.reasonCode === 'string' ? body.reasonCode.trim() : ''
+    if (!FOUNDATION_PROBE_REASON_CODES.includes(reasonCode as any)) {
+      error(res, `reasonCode 必须是 ${FOUNDATION_PROBE_REASON_CODES.join(' / ')}`, 'READINESS_PROBE_REASON_INVALID', 400)
+      return
+    }
+    if (body.ticketRef != null && typeof body.ticketRef !== 'string') {
+      error(res, 'ticketRef 必须是字符串', 'READINESS_PROBE_TICKET_REF_INVALID', 400)
+      return
+    }
+    const db = getDatabase() as HospitalCmReadinessDb
+    const run = recordHospitalCmFoundationProbeRun(db, {
+      triggeredByUserId: (req as any).user?.userId,
+      triggeredByUsername: (req as any).user?.username,
+      reasonCode: reasonCode as (typeof FOUNDATION_PROBE_REASON_CODES)[number],
+      ticketRef: body.ticketRef as string | null | undefined,
+      cooldownSeconds: 15 * 60,
+    })
+    const readiness = getHospitalCmReadinessSnapshot(db, shanghaiBusinessDate())
+    success(res, { run, readiness }, '数据地基真实探针已执行并追加证据', 201)
+  } catch (e: any) {
+    if (e instanceof HospitalCmReadinessProbeError) error(res, e.message, e.code, e.status)
+    else {
+      console.error('[hospital-cm] foundation probe failed', e)
+      error(res, '数据地基探针执行失败，未保存本次证据', 'READINESS_PROBE_INTERNAL_ERROR', 500)
+    }
   }
 })
 
@@ -169,12 +184,11 @@ router.get('/readiness', authenticateToken, requireCostRead, (req, res) => {
  *   防有人绕过前端渲染逻辑、直接打 API 拿完整态数据。E2E 断言 `ready=false ⇒ 本端点 403/降级`。
  *   现实（探测 = 三门未绿/池未认账/历史 0/首周期未校验）→ ready=false → **恒 403**（诚实·影子期本就不该出完整判断）。
  *
- * query: serviceMonth?, asOf?
+ * query: serviceMonth?。任何 `asOf` 参数不会参与判定；readiness 只认服务器业务日期。
  */
 router.get('/full-health', authenticateToken, requireCostRead, (req, res) => {
   try {
-    const asOf = normAsOf((req.query as any).asOf)
-    const readiness = computeReadiness(probeReadinessInput(getDatabase() as DbLike, asOf))
+    const readiness = getHospitalCmReadinessSnapshot(getDatabase() as HospitalCmReadinessDb, shanghaiBusinessDate())
     if (!readiness.ready) {
       // 降级载荷：只回就绪清单（=为何被挡）+ 影子提示，**绝不含**任何完整体检数值（totalCm/coverageMultiple 等）。
       res.status(403).json({
@@ -184,23 +198,28 @@ router.get('/full-health', authenticateToken, requireCostRead, (req, res) => {
           message: '完整体检态未就绪：就绪谓词为假，完整数据不出门（影子模式·请用对照表/校准视图）。',
         },
         readiness, // 为何被挡（checklist + findings）——非完整体检数据本身
-        shadowNote,
+        shadowNote: shadowNoteFor(false),
       })
       return
     }
     // ready=true（当前不可达·三门+认账+历史≥N+首周期全绿后才到）：完整体检态·绝对判断启用。
     const { serviceMonth } = req.query as any
-    const fixedPool = probeFixedPool(getDatabase() as DbLike)
+    const fixedPool = probeFixedPool(getDatabase() as HospitalCmReadinessDb)
     const hospitals = buildHospitalCmByPartner(getDatabase(), { serviceMonth })
     const summaries = hospitals.map((h) => toAccountSummary(h))
-    const health = buildPortfolioHealth(summaries, { fixedPool: fixedPool.value ?? 0 })
+    const health = buildPortfolioHealth(summaries, { fixedPool: fixedPool.value ?? 0, gatesVerified: readiness.ready })
+    if (currentHospitalCmReadinessSourceFingerprint(getDatabase() as HospitalCmReadinessDb) !== readiness.sourceStateFingerprint) {
+      error(res, '完整体检计算期间数据源发生变化，本次不返回数值；请重试', 'READINESS_SOURCE_CHANGED_DURING_READ', 409)
+      return
+    }
     success(
       res,
-      { ...health, fullState: true, readiness, serviceMonth: serviceMonth ?? null, caliberRatification: splitCaliberRatification() },
+      { ...health, fullState: true, readiness, serviceMonth: serviceMonth ?? null, hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION, caliberRatification: splitCaliberRatification() },
       '完整体检态（第 1 层·覆盖倍数绝对判断已启用）',
     )
   } catch (e: any) {
-    error(res, e.message)
+    console.error('[hospital-cm] full-health read failed', e)
+    error(res, '完整体检读取失败，本次不返回任何完整数值', 'FULL_HEALTH_READ_FAILED', 500)
   }
 })
 

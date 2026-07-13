@@ -15,6 +15,7 @@ import { NGS_PRODUCT_SEED, ngsProductToRow } from '../utils/ngs-catalog.js'
 import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } from '../utils/antibody-catalog.js'
 import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
 import { ANTIBODY_SYNONYM_SEED, ANTIBODY_MISSING_PRICE_SEED } from '../utils/antibody-name-map.js'
+import { ensureHospitalCmReadinessSchema } from '../utils/hospital-cm-readiness-runtime.js'
 import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -1973,6 +1974,10 @@ export function initializeDatabase(): void {
     ['SS-AFB', '抗酸(AFB)', 195, 50, 14, '标称次数=50 占位·待补真实盒装次数', 'G2真实盒价'],
   ]
   stainSeed.forEach((r) => insertStain.run(r[0], r[1], r[2], r[3], r[4], r[5], r[6]))
+
+  // 院级贡献毛利 readiness 控制面（A）：只落 owner/due 与追加式真实探针证据。
+  // 不 seed 任何 passed/ready，不写固定成本池、历史周期或首周期验证事实。
+  ensureHospitalCmReadinessSchema(database)
 
   // ===========================================================================
   // D2 统一检测项目目录（project_catalog / code_mappings）—— 地基线 D
