@@ -159,10 +159,21 @@ function probeInventoryConservation(db: FoundationProbeDb, sourceState: Hospital
            FROM materials m
            LEFT JOIN inventory i ON i.material_id = m.id
           WHERE m.is_deleted = 0 AND m.status = 1 AND i.material_id IS NULL) AS missingInventoryRows,
+        (SELECT COUNT(*)
+           FROM inventory
+          WHERE typeof(stock) NOT IN ('integer', 'real')
+             OR stock >= 1e999
+             OR stock <= -1e999) AS nonFiniteInventoryRows,
         COALESCE(SUM(CASE WHEN stock < -0.0001 THEN 1 ELSE 0 END), 0) AS negativeInventoryRows,
         COALESCE(SUM(CASE WHEN ABS(stock - batch_remaining) > 0.0001 THEN 1 ELSE 0 END), 0) AS driftRows,
         COALESCE(SUM(stock), 0) AS inventoryTotal,
         COALESCE(SUM(batch_remaining), 0) AS activeBatchTotal,
+        (SELECT COUNT(*)
+           FROM batches
+          WHERE status = 1
+            AND (typeof(remaining) NOT IN ('integer', 'real')
+              OR remaining >= 1e999
+              OR remaining <= -1e999)) AS nonFiniteBatchRows,
         (SELECT COUNT(*) FROM batches WHERE status = 1 AND COALESCE(remaining, 0) < -0.0001) AS negativeBatchRows,
         (SELECT COUNT(*)
            FROM batches b
@@ -189,6 +200,8 @@ function probeInventoryConservation(db: FoundationProbeDb, sourceState: Hospital
       activeMaterialRows: numberOf(raw.activeMaterialRows),
       ledgerRows: numberOf(raw.ledgerRows),
       missingInventoryRows: numberOf(raw.missingInventoryRows),
+      nonFiniteInventoryRows: numberOf(raw.nonFiniteInventoryRows),
+      nonFiniteBatchRows: numberOf(raw.nonFiniteBatchRows),
       negativeInventoryRows: numberOf(raw.negativeInventoryRows),
       negativeBatchRows: numberOf(raw.negativeBatchRows),
       orphanBatchRows: numberOf(raw.orphanBatchRows),
@@ -215,6 +228,7 @@ function probeInventoryConservation(db: FoundationProbeDb, sourceState: Hospital
     let resultCode = 'PASSED'
     if (summary.activeMaterialRows === 0 || summary.ledgerRows === 0) resultCode = 'EMPTY_INVENTORY_BASELINE'
     else if (summary.missingInventoryRows > 0) resultCode = 'MISSING_INVENTORY_BASELINE'
+    else if (summary.nonFiniteInventoryRows > 0 || summary.nonFiniteBatchRows > 0) resultCode = 'NON_FINITE_INVENTORY_FACT'
     else if (summary.negativeInventoryRows > 0 || summary.negativeBatchRows > 0) resultCode = 'NEGATIVE_INVENTORY_FACT'
     else if (summary.orphanBatchRows > 0 || summary.orphanInventoryRows > 0) resultCode = 'ORPHAN_INVENTORY_FACT'
     else if (summary.driftRows > 0) resultCode = 'LEDGER_DRIFT'

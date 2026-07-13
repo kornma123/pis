@@ -263,6 +263,31 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
     expect(latest.foundationGatesGreen.inventory_conservation).toBe(false)
   })
 
+  it('库存与活跃批次同时为正无穷时也必须 fail-closed', async () => {
+    const db = await getDb()
+    seedBalancedInventory(db)
+    db.prepare(`UPDATE inventory SET stock = ? WHERE id = 'INV-HCM-READY'`).run(Number.POSITIVE_INFINITY)
+    db.prepare(`UPDATE batches SET remaining = ? WHERE id = 'BAT-HCM-READY'`).run(Number.POSITIVE_INFINITY)
+
+    const run = recordHospitalCmFoundationProbeRun(db, {
+      triggeredByUserId: 'USER-001',
+      triggeredByUsername: 'admin',
+      reasonCode: 'DATA_REPAIR_RECHECK',
+      now: '2026-07-12T08:03:00.000Z',
+    })
+
+    expect(run.checks.find((check) => check.key === 'inventory_conservation')).toMatchObject({
+      met: false,
+      status: 'failed',
+      resultCode: 'NON_FINITE_INVENTORY_FACT',
+      summary: {
+        nonFiniteInventoryRows: 1,
+        nonFiniteBatchRows: 1,
+      },
+    })
+    expect(getHospitalCmReadinessSnapshot(db, '2026-07-12').foundationGatesGreen.inventory_conservation).toBe(false)
+  })
+
   it('库存总量不变且探针仍通过的等量调拨，也会因 source revision 使旧证据失效', async () => {
     const db = await getDb()
     seedBalancedInventory(db)

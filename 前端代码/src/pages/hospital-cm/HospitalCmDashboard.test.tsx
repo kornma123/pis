@@ -58,6 +58,8 @@ function mkHealth(over: Partial<PortfolioHealth> = {}): PortfolioHealth {
 function mkReadiness(over: Partial<Readiness> = {}): Readiness {
   return {
     ready: false,
+    asOf: '2026-07-13',
+    asOfSource: 'server',
     checklist: [
       { key: 'foundation', label: '数据地基门全绿', met: false, owner: 'tech', due: '2026-09-30' },
       { key: 'denominator', label: '固定成本池已认账', met: false, owner: 'business', due: '2026-08-31' },
