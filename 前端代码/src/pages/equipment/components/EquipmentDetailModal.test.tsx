@@ -121,7 +121,9 @@ describe('EquipmentDetailModal', () => {
     expect(equipmentApi.getUsage).toHaveBeenCalledTimes(2)
   })
 
-  it('hides asset edit action for read-only viewers while keeping usage registration', async () => {
+  // #138：登记使用是写操作（后端 POST /equipment/:id/usage 要求 equipment:W）。前端与之对齐——
+  // 只读用户（canEdit=false）既看不到「编辑设备」也看不到「登记使用」写表单，但使用记录（读）不回归。
+  it('hides both edit and usage registration for read-only viewers, keeps usage history', async () => {
     render(
       <EquipmentDetailModal
         open
@@ -133,7 +135,11 @@ describe('EquipmentDetailModal', () => {
     )
 
     await waitFor(() => expect(equipmentApi.getUsage).toHaveBeenCalledTimes(1))
+    // 写操作入口对只读用户隐藏（与后端 equipment:W 守卫一致）
     expect(screen.queryByRole('button', { name: '编辑设备' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '登记使用' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '登记使用' })).not.toBeInTheDocument()
+    // 读不回归：使用记录历史仍可查看
+    expect(await screen.findByText('60 分钟')).toBeInTheDocument()
+    expect(screen.getByText('admin')).toBeInTheDocument()
   })
 })

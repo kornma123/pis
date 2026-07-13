@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { usePagination } from '@/hooks/usePagination'
 import { equipmentApi } from '@/api/master'
-import { getUserPermissions, getUserRole } from '@/lib/permissions'
+import { canAccess } from '@/lib/permissions'
 import type { Equipment, EquipmentType } from '@/types'
 import { toast } from 'sonner'
 
@@ -22,15 +22,12 @@ export interface EquipmentForm {
   typeId: string
 }
 
+// 设备资产写操作（新增/编辑/删除/登记使用）的前端显隐判据，与后端 requirePermission('equipment','W') 对齐。
+// 读能力矩阵（登录响应下发的 user.capabilities，单一来源），而非早前退化为「role∈{admin,technician}」、
+// 且依赖后端从不下发的 user.permissions 数组的旧判据——那会把同样持 equipment:W 的角色（如 finance/lab_director）
+// 在前端误藏，而后端却放行（前端藏了·后端放行）。capabilities 缺失时 canAccess 放行，真实边界仍由后端守卫兜底。
 function canManageEquipment() {
-  const role = getUserRole()
-  if (['admin', 'technician'].includes(role || '')) {
-    return true
-  }
-  const permissions = getUserPermissions()
-  return permissions.includes('*')
-    || permissions.includes('equipment')
-    || permissions.some(permission => ['equipment:add', 'equipment:edit', 'equipment:delete'].includes(permission))
+  return canAccess('equipment', 'W')
 }
 
 function calculateAnnualDepreciation(form: EquipmentForm) {
