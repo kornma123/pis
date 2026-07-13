@@ -10,7 +10,7 @@
 发生冲突时按以下顺序处理：
 
 1. 本契约：跨工具工作方式、所有权和权限边界。
-2. `docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md` 与 `docs/工作模型-COREONE项目版-2026-06-30.md`：讨论、摊假设、真数据、BDD/TDD、真人验收与独立复核。
+2. `docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md` 与 `docs/工作模型-COREONE项目版-2026-06-30.md`：讨论、摊假设、真数据、BDD/TDD、真人验收与独立复核。其在「需求→mockup→写码→真跑验收」主链与「报告/结论」横切各阶段的执行循环细化，见质量 Loop 家族唯一入口 `docs/COREONE-质量Loop总览-2026-07-12.md`（从属本条工作模型与本契约，冲突一律以后二者为准；只指路、不复制其规则，故不构成独立权威档位）。
 3. `docs/golden-registry.md`：已登记的业务黄金锚及其机器断言。
 4. `.claude/rules/coreone-guardrails.md`：活代码对应的安全、编码、数据库和测试护栏。
 5. `.claude/rules/pr-governance.md`：稳定的 PR、依赖和合并纪律。

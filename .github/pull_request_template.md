@@ -1,6 +1,7 @@
 <!--
 跨工具契约见 docs/agent-operating-contract.md，PR 稳定规则见 .claude/rules/pr-governance.md。
 实时 open/merged/checks 真相以 GitHub / `gh` 为准；下列字段是本任务 handoff，不是全仓实时看板。
+本变更若属需求 / 前端 mockup / 写码 / 验收类，应已过对应质量循环，见 docs/COREONE-质量Loop总览-2026-07-12.md（方法论细化，非 required 合并门）。
 -->
 
 ## Issue / 会话交接
