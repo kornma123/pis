@@ -10,6 +10,7 @@ import {
 import { runCostRecalculation } from '../utils/cost-runs.js'
 import { requireAnyRole } from '../middleware/permissions.js'
 import { assertNotSelfReview } from '../middleware/authz-combinators.js'
+import { parseFiniteNonNegativeNumber } from '../utils/numeric-input.js'
 import { canonicalCaseNo } from '../utils/classifier.js' // 病理号落库归一，与 lis-cases /import 及 case_revenue 同一 canonical（防全角号匹配漏）
 
 const router = Router()
@@ -446,15 +447,30 @@ router.get('/logs', (req, res) => {
  */
 router.post('/logs', (req, res) => {
   try {
-    const db = getDatabase()
     const { type, targetId, targetName, field, oldValue, newValue, reason, projectId, materialId, newUsage } = req.body
     const operator = (req as any).user?.username || 'system'
+    const isExplicitBomFixProposal = type === 'bom_fix' || type === 'bom_fix_proposal'
+    const hasCompleteLegacyProposal = Boolean(projectId && materialId && newUsage !== undefined)
+    const isBomFixProposal = isExplicitBomFixProposal || hasCompleteLegacyProposal
+    let normalizedUsage: number | null = null
+
+    // 显式 BOM 修正必须完整；旧调用未传 type 时，仅完整三元组才沿用提案路径。
+    // 普通 note 即便带单个关联字段仍保持 generic-log 向后兼容。
+    // 在获取数据库和任何业务写入前完成严格归一，避免宽松 Number() 接受布尔、空白或 Infinity。
+    if (isBomFixProposal) {
+      if (!projectId || !materialId || newUsage === undefined) {
+        error(res, 'BOM 修正提案参数不完整', 'INVALID_PARAMETER', 400); return
+      }
+      normalizedUsage = parseFiniteNonNegativeNumber(newUsage)
+      if (normalizedUsage === null) { error(res, '修正用量非法', 'INVALID_PARAMETER', 400); return }
+      if (!reason || !String(reason).trim()) { error(res, '请填写修正原因', 'INVALID_PARAMETER', 400); return }
+    }
+
+    const db = getDatabase()
 
     // —— BOM 标准用量修正提案路径 ——
-    if (projectId && materialId && newUsage !== undefined) {
-      const usage = Number(newUsage)
-      if (isNaN(usage) || usage < 0) { error(res, '修正用量非法', 'INVALID_PARAMETER', 400); return }
-      if (!reason || !String(reason).trim()) { error(res, '请填写修正原因', 'INVALID_PARAMETER', 400); return }
+    if (isBomFixProposal) {
+      const usage = normalizedUsage as number
       const project = db.prepare('SELECT bom_id FROM projects WHERE id = ? AND is_deleted = 0').get(projectId) as any
       if (!project?.bom_id) { error(res, '项目未关联 BOM，无法提交修正', 'INVALID_PARAMETER', 400); return }
       const item = db.prepare('SELECT usage_per_sample FROM bom_items WHERE bom_id = ? AND material_id = ?')
@@ -504,6 +520,10 @@ router.post('/logs/:id/approve', requireReconcileApprove, (req, res) => {
     // SoD 自审拦截（提升进具名守卫，判定与响应逐字节不变）：不能审核自己提交的修正提案。
     if (!assertNotSelfReview(res, { submitterId: row.operator, actorId: operator, message: '不能审核自己提交的修正提案' })) return
 
+    // 防御历史脏提案或绕库写入：审批生效前再次校验持久化值，且必须早于写事务。
+    const proposedUsage = parseFiniteNonNegativeNumber(row.proposed_usage)
+    if (proposedUsage === null) { error(res, '修正提案用量非法', 'INVALID_PARAMETER', 400); return }
+
     const effectiveScope = req.body?.effectiveScope === 'retroactive' ? 'retroactive' : 'future_only'
     const bomId = row.applied_bom_id
     const materialId = row.material_id
@@ -520,7 +540,7 @@ router.post('/logs/:id/approve', requireReconcileApprove, (req, res) => {
       const previousSnapshot = getLatestBomVersionSnapshot(db, bomId) || buildBomVersionSnapshot(db, bomId)
       // 写回标准 + 升版本
       db.prepare('UPDATE bom_items SET usage_per_sample = ? WHERE bom_id = ? AND material_id = ?')
-        .run(Number(row.proposed_usage), bomId, materialId)
+        .run(proposedUsage, bomId, materialId)
       const bom = db.prepare('SELECT version FROM boms WHERE id = ?').get(bomId) as any
       const vp = String(bom?.version || 'v1.0').replace('v', '').split('.').map(Number)
       const newVersion = `v${vp[0] || 1}.${(vp[1] || 0) + 1}`
