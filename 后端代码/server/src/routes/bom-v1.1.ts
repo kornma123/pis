@@ -5,9 +5,22 @@ import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { writeBomVersionSnapshot, getLatestBomVersionSnapshot, buildBomVersionSnapshot } from '../utils/bom-version.js'
+import { parseFiniteNonNegativeNumber } from '../utils/numeric-input.js'
 
 const router = Router()
 const requireBomWrite = requirePermission('bom', 'W')
+
+function normalizeBomMaterialUsage(materials: unknown[]): Record<string, unknown>[] | null {
+  const normalized: Record<string, unknown>[] = []
+  for (const material of materials) {
+    if (material === null || typeof material !== 'object' || Array.isArray(material)) return null
+    const item = material as Record<string, unknown>
+    const usagePerSample = parseFiniteNonNegativeNumber(item.usagePerSample)
+    if (usagePerSample === null) return null
+    normalized.push({ ...item, usagePerSample })
+  }
+  return normalized
+}
 
 router.get('/', (req, res) => {
   try {
@@ -80,19 +93,18 @@ router.post('/', authenticateToken, requireBomWrite, (req, res) => {
     if (!code || !name || !type) {
       error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
     }
+    if (materials !== undefined && !Array.isArray(materials)) {
+      error(res, 'Invalid materials', 'INVALID_PARAMETER', 400); return
+    }
+    const list = normalizeBomMaterialUsage(materials ?? [])
+    if (list === null) {
+      error(res, 'Invalid usage_per_sample', 'INVALID_PARAMETER', 400); return
+    }
+
     const db = getDatabase()
     const id = uuidv4()
     const version = 'v1.0'
     const operator = (req as any).user?.username
-    const list = Array.isArray(materials) ? materials : []
-
-    // 先校验全部用量，避免事务中途因非法值回滚
-    for (const m of list) {
-      const usage = Number(m.usagePerSample)
-      if (isNaN(usage) || usage < 0) {
-        error(res, 'Invalid usage_per_sample', 'INVALID_PARAMETER', 400); return
-      }
-    }
 
     db.exec('BEGIN IMMEDIATE')
     try {
@@ -101,7 +113,7 @@ router.post('/', authenticateToken, requireBomWrite, (req, res) => {
 
       for (const m of list) {
         db.prepare('INSERT INTO bom_items (id, bom_id, material_id, usage_per_sample, unit) VALUES (?, ?, ?, ?, ?)')
-          .run(uuidv4(), id, m.materialId, Number(m.usagePerSample), m.unit)
+          .run(uuidv4(), id, m.materialId, m.usagePerSample, m.unit)
       }
 
       // 落初始版本快照
@@ -127,16 +139,16 @@ router.put('/:id', authenticateToken, requireBomWrite, (req, res) => {
     const existing = db.prepare('SELECT * FROM boms WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
 
-    const hasMaterials = Array.isArray(materials)
-    // 先校验全部用量
-    if (hasMaterials) {
-      for (const m of materials) {
-        const usage = Number(m.usagePerSample)
-        if (isNaN(usage) || usage < 0) {
-          error(res, 'Invalid usage_per_sample', 'INVALID_PARAMETER', 400); return
-        }
-      }
+    if (materials !== undefined && !Array.isArray(materials)) {
+      error(res, 'Invalid materials', 'INVALID_PARAMETER', 400); return
     }
+    const normalizedMaterials = materials === undefined
+      ? undefined
+      : normalizeBomMaterialUsage(materials)
+    if (normalizedMaterials === null) {
+      error(res, 'Invalid usage_per_sample', 'INVALID_PARAMETER', 400); return
+    }
+    const hasMaterials = normalizedMaterials !== undefined
 
     const versionParts = existing.version.replace('v', '').split('.').map(Number)
     versionParts[1] = (versionParts[1] || 0) + 1
@@ -152,9 +164,9 @@ router.put('/:id', authenticateToken, requireBomWrite, (req, res) => {
 
       if (hasMaterials) {
         db.prepare('DELETE FROM bom_items WHERE bom_id = ?').run(id)
-        for (const m of materials) {
+        for (const m of normalizedMaterials) {
           db.prepare('INSERT INTO bom_items (id, bom_id, material_id, usage_per_sample, unit) VALUES (?, ?, ?, ?, ?)')
-            .run(uuidv4(), id, m.materialId, Number(m.usagePerSample), m.unit)
+            .run(uuidv4(), id, m.materialId, m.usagePerSample, m.unit)
         }
       }
 
