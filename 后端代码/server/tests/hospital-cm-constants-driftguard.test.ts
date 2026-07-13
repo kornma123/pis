@@ -12,6 +12,8 @@ import {
   SECONDARY_PER_SLIDE_DEFAULT,
   P0_TISSUE_PROCESSING_MATERIAL_PER_BLOCK,
   CM_THRESHOLDS,
+  currentHospitalCmFormulaBehaviorArtifact,
+  HOSPITAL_CM_FORMULA_VERSION,
   CM_TARGET,
   CM_MARGIN_FOR_VARLABOR,
 } from '../src/utils/hospital-cm.js'
@@ -24,8 +26,16 @@ import {
   READINESS_PARAM_VERSION,
   DEFAULT_READINESS_OWNER,
 } from '../src/utils/portfolio-health.js'
+import { sha256 } from '../src/utils/hospital-cm-foundation-probes.js'
 
 describe('CM 引擎常量（改 = 立法）', () => {
+  it('院级贡献毛利业务公式版本钉死；计算/上卷/成本装载语义变化必须 bump', () => {
+    expect(HOSPITAL_CM_FORMULA_VERSION).toBe('2026-07-12.a')
+  })
+  it('计算与上卷的规范正反例行为签名钉死；实现变了但忘记 bump 也会先红灯', () => {
+    expect(sha256(currentHospitalCmFormulaBehaviorArtifact()))
+      .toBe('a809ea02ebb648cc0b94b37fa47a92d387378cce3b3116caa961ebac938e60a5')
+  })
   it('真抗体码白名单 = {Y000001, Y000003}（与 reconcile-account 同源）', () => {
     expect([...P0_ANTIBODY_ADVICE_TYPES].sort()).toEqual(['Y000001', 'Y000003'])
   })
@@ -70,8 +80,8 @@ describe('LEG·就绪谓词政策参数登记（改 = 立法·具名+版本化·
   it('数据地基门集 = {inventory_conservation, period_key, constant_freeze}（库存守恒/期间键/常量冻结·具名闭合）', () => {
     expect([...READINESS_FOUNDATION_GATES]).toEqual(['inventory_conservation', 'period_key', 'constant_freeze'])
   })
-  it('阈值登记版本钉死 = 2026-07-09.a（改任一 READINESS_* 阈值/门集 = 同步 bump）', () => {
-    expect(READINESS_PARAM_VERSION).toBe('2026-07-09.a')
+  it('阈值登记版本钉死 = 2026-07-13.a（改任一 READINESS_* 阈值/门集 = 同步 bump）', () => {
+    expect(READINESS_PARAM_VERSION).toBe('2026-07-13.a')
   })
   it('「谁签什么」映射钉死（比例原则·denominator=business 不可代签·改 = 立法）', () => {
     expect(DEFAULT_READINESS_OWNER).toEqual({

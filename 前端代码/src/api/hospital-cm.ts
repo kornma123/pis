@@ -24,8 +24,8 @@ export const hospitalCmApi = {
     request.get('/hospital-pnl/health', { params }) as unknown as Promise<PortfolioHealth>,
 
   /** GET /hospital-pnl/readiness —— 就绪谓词清单（校准视图渲染·始终可读）。 */
-  readiness: (params?: { asOf?: string }) =>
-    request.get('/hospital-pnl/readiness', { params }) as unknown as Promise<Readiness>,
+  readiness: () =>
+    request.get('/hospital-pnl/readiness') as unknown as Promise<Readiness>,
 
   /**
    * GET /hospital-pnl/full-health —— 第 1 层**完整体检态**（覆盖倍数绝对判断·**就绪后才 200**）。
