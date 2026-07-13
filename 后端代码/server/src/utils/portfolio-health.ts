@@ -24,7 +24,7 @@ import type { HospitalCm } from './hospital-cm.js'
 //    比例原则：碰钱/对外结论参数（固定成本池、拆分常量）业务方签；系统时序工程参数（N 期、门集、通过标准）技术负责人签，同样具名可见。
 
 /** LEG·就绪谓词阈值登记版本（改任一 READINESS_* 阈值/门集 = bump 本版本 + 同步改 drift-guard 测试 = 显式立法动作）。 */
-export const READINESS_PARAM_VERSION = '2026-07-09.a'
+export const READINESS_PARAM_VERSION = '2026-07-13.a'
 
 /**
  * LEG·就绪最小完整结算周期数 N（**技术负责人签**·系统时序工程参数·非碰钱/对外结论参数）。
@@ -224,7 +224,7 @@ export interface PortfolioHealth {
   fixedPool: number // 固定成本池
   coverageMultiple: number // 覆盖倍数 = totalCm / fixedPool
   /** 覆盖倍数**只看趋势·不信绝对值**（校准前）——做进产品的**显式标注**、非小字。绝对值判断待标准成本校准里程碑后启用。 */
-  coverageMultipleTrendOnly: true
+  coverageMultipleTrendOnly: boolean
   capacityUtilization: number | null // 产能利用率（未实测 → null·第 3 层门控）
   // —— 复活双触发（做进体检显示·让触发是被观测到的·不靠谁记备忘录）——
   measurableAccountCount: number // 进表的可测账户数（不是在册数·UNMEASURED 不增行）
@@ -242,6 +242,8 @@ export interface PortfolioHealthInput {
   fixedPool: number
   plannedSharedCapacity?: number // 给了 + actualSharedUsage → 算利用率
   actualSharedUsage?: number
+  /** 本次请求实时算出的完整 readiness；缺省/false 均 fail-closed，禁止回退读取模块级静态常量。 */
+  gatesVerified?: boolean
 }
 
 /**
@@ -268,12 +270,13 @@ export function buildPortfolioHealth(accounts: AccountCmSummary[], input: Portfo
       ? r4(input.actualSharedUsage / input.plannedSharedCapacity)
       : null
 
-  const shadowMode = !PORTFOLIO_HEALTH_GATES_VERIFIED
+  const gatesVerified = input.gatesVerified === true
+  const shadowMode = !gatesVerified
   return {
     totalCm,
     fixedPool,
     coverageMultiple,
-    coverageMultipleTrendOnly: true,
+    coverageMultipleTrendOnly: shadowMode,
     capacityUtilization,
     measurableAccountCount,
     unmeasuredRevenueShare,
@@ -281,7 +284,7 @@ export function buildPortfolioHealth(accounts: AccountCmSummary[], input: Portfo
     revivalCap: REVIVAL_ACCOUNT_CAP,
     revivalUnmeasuredShareLine: REVIVAL_UNMEASURED_SHARE,
     shadowMode,
-    gatesVerified: PORTFOLIO_HEALTH_GATES_VERIFIED,
+    gatesVerified,
     disclaimer: shadowMode
       ? '影子模式·三门(库存守恒/期间键/常量冻结)未验收——覆盖倍数只看趋势·不信绝对值·输出不得进经营研判'
       : '覆盖倍数绝对值判断已启用（标准成本校准里程碑已过）',
@@ -363,6 +366,8 @@ export interface ReadinessCondition {
   detail?: string
   /** 未满足且 due 空 = 配置错（违反公理一）→ 渲染**红**（非静默绿）。运行时软标·硬 assert 在 CI 测试。 */
   configError?: boolean
+  /** 责任人与（需要时）独立复核人尚未具名指派；治理证据不完整时必须 fail-closed。 */
+  assignmentError?: boolean
   /** 注入 asOf 且未满足且 due < asOf → 过期 → 渲染**红**·上 GOV-3 豁免面板。 */
   overdue?: boolean
 }

@@ -20,6 +20,14 @@
 // 具名常量（P0 spec §5/§10.B·值待 PM 校准，先给保守默认；改常量 = 显式立法动作，drift-guard 测试守）
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 院级贡献毛利业务公式版本。
+ *
+ * 这不是 readiness 探针版本：任何会改变 `computeCaseCm`、`rollupHospitalCm`
+ * 或成本装载语义的变更，都必须显式 bump 本版本，并让历史周期证据绑定该值。
+ */
+export const HOSPITAL_CM_FORMULA_VERSION = '2026-07-12.a' as const
+
 /** 真抗体申请类型白名单（§10.B）。一行 = 一片一抗（不去重）；Y000006 HE深切重切 / Y000007 白片 / 其它码不计。
  *  与 `reconcile-account.ts` 的 ANTIBODY_ADVICE 同源（Y000001/Y000003）。 */
 export const P0_ANTIBODY_ADVICE_TYPES = new Set(['Y000001', 'Y000003'])
@@ -403,5 +411,97 @@ export function rollupHospitalCm(
     state,
     confidence,
     businessLineDefined,
+  }
+}
+
+/**
+ * 公式行为制品：用规范正反例同时执行单例计算与院级上卷。
+ * readiness 常量门对该结果做签名，因此即使开发者忘记 bump 公式版本，行为变化也会让旧证据自动失效。
+ * 这里不使用数据库或测试 fixture，也不代表真实业务周期，只是可重复的代码语义指纹。
+ */
+export function currentHospitalCmFormulaBehaviorArtifact(): Record<string, unknown> {
+  const staining = computeCaseCm({
+    caseNo: 'BEHAVIOR-STAINING',
+    partnerId: 'BEHAVIOR-PARTNER',
+    serviceMonth: '2000-01',
+    labRevenue: 1000,
+    revenueSource: 'statement',
+    markers: [
+      { markerName: 'KNOWN', adviceType: 'Y000001' },
+      { markerName: 'MISSING', adviceType: 'Y000003' },
+      { markerName: 'NOT-BILLABLE', adviceType: 'Y000007' },
+    ],
+    specialStainCount: 2,
+    blockCount: 3,
+    ihcCount: 2,
+    tissueProcessing: true,
+  }, (markerName) => ({ perTestPrice: markerName === 'KNOWN' ? 100 : null }), {
+    secondaryPerSlide: 15,
+    stainPerSlide: 8,
+    tissueMaterialPerBlock: 7,
+  })
+  const diagnosis = computeCaseCm({
+    caseNo: 'BEHAVIOR-DIAGNOSIS',
+    partnerId: 'BEHAVIOR-PARTNER',
+    serviceMonth: '2000-01',
+    labRevenue: 0,
+    revenueSource: 'statement',
+    markers: [{ markerName: 'KNOWN', adviceType: 'Y000001' }],
+    specialStainCount: 0,
+    blockCount: 0,
+    ihcCount: 1,
+    tissueProcessing: false,
+  }, () => ({ perTestPrice: 100 }))
+  const nonIhc = computeCaseCm({
+    caseNo: 'BEHAVIOR-NON-IHC',
+    partnerId: 'BEHAVIOR-PARTNER',
+    serviceMonth: '2000-01',
+    labRevenue: 250,
+    revenueSource: 'corrected',
+    markers: [],
+    specialStainCount: 0,
+    blockCount: 1,
+    ihcCount: 0,
+    tissueProcessing: null,
+  }, () => ({ perTestPrice: null }))
+  const rollup = rollupHospitalCm([staining, diagnosis, nonIhc], {
+    partnerName: 'BEHAVIOR-PARTNER',
+    serviceMonth: '2000-01',
+    settled: true,
+  })
+
+  return {
+    cases: [staining, diagnosis, nonIhc].map((item) => ({
+      bucket: item.bucket,
+      caliber: item.caliber,
+      labRevenue: item.labRevenue,
+      bucketA: item.bucketA,
+      bucketB: item.bucketB,
+      avoidableCost: item.avoidableCost,
+      cm: item.cm,
+      billableSlides: item.billableSlides,
+      missingPriceSlides: item.missingPriceSlides,
+      specialStainSlides: item.specialStainSlides,
+      needsTissueScope: item.needsTissueScope,
+    })),
+    rollup: {
+      hospitalCm: rollup.hospitalCm,
+      labRevenueInRate: rollup.labRevenueInRate,
+      cmRate: rollup.cmRate,
+      cmPerSlide: rollup.cmPerSlide,
+      cmPerCase: rollup.cmPerCase,
+      revenueCaseCount: rollup.revenueCaseCount,
+      diagnosisCaseCount: rollup.diagnosisCaseCount,
+      nonIhcRevenue: rollup.nonIhcRevenue,
+      nonIhcCaseCount: rollup.nonIhcCaseCount,
+      billableSlides: rollup.billableSlides,
+      bucketA: rollup.bucketA,
+      bucketB: rollup.bucketB,
+      quality: rollup.quality,
+      caliber: rollup.caliber,
+      state: rollup.state,
+      confidence: rollup.confidence,
+      businessLineDefined: rollup.businessLineDefined,
+    },
   }
 }
