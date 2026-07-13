@@ -1,7 +1,7 @@
 {
   "_doc": "权限影子断言矩阵·已批准守卫快照（ratified）。键=运行时端点「METHOD /path」，值=guardId{module,level,conditions}。断言 B 拿它当 expected 比对当前 actual：模块变/降级 W→R/少条件=BLOCK。改端点守卫→人复核后 SHADOW_MATRIX_UPDATE=1 重批。",
   "generated": "由 SHADOW_MATRIX_UPDATE=1 生成（日期见 git 提交）",
-  "count": 274,
+  "count": 278,
   "guards": {
     "DELETE /api/v1/abc/activity-centers/:id": {
       "module": "abc_config",
@@ -429,6 +429,11 @@
       "conditions": []
     },
     "GET /api/v1/hospital-pnl/readiness": {
+      "module": "cost_analysis",
+      "level": "R",
+      "conditions": []
+    },
+    "GET /api/v1/hospital-pnl/readiness/fixed-pools": {
       "module": "cost_analysis",
       "level": "R",
       "conditions": []
@@ -1038,6 +1043,21 @@
     },
     "POST /api/v1/equipment/:id/usage": {
       "module": "equipment",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/hospital-pnl/readiness/fixed-pools": {
+      "module": "cost_analysis",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/hospital-pnl/readiness/fixed-pools/:versionId/ratifications": {
+      "module": "cost_analysis",
+      "level": "W",
+      "conditions": []
+    },
+    "POST /api/v1/hospital-pnl/readiness/fixed-pools/:versionId/revocations": {
+      "module": "cost_analysis",
       "level": "W",
       "conditions": []
     },
