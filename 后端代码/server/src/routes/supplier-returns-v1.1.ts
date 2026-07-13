@@ -20,7 +20,7 @@ const requireWriteAccess = requirePermission('supplier_returns', 'W')
 
 // P1-13/P1-14: 退款额来源成本上界 = 来源单价 × 数量。
 // 来源单价优先取关联入库单 price，其次该物料批次最近 inbound_price，最后 material.price。
-// hasSource=false 表示所有候选均缺失/NULL（沿用“不设上界”）；价格 0 是真实免费来源，cap=0 仍必须比较。
+// hasSource=false 表示所有候选均缺失/NULL/0（沿用“不设上界”）；0 继续回退到下一价格来源。
 // valid=false 表示来源数据本身非法，必须 fail closed。
 function resolveRefundCap(db: any, materialId: string, quantity: number, inboundRecordId?: string | null): { cap: number; valid: boolean; hasSource: boolean } {
   const normalizedQuantity = parseFinitePositiveNumber(quantity)
@@ -39,6 +39,7 @@ function resolveRefundCap(db: any, materialId: string, quantity: number, inbound
     if (rawCost === null || rawCost === undefined) continue
     const sourceUnitCost = parseFiniteNonNegativeNumber(rawCost)
     if (sourceUnitCost === null) return { cap: 0, valid: false, hasSource: true }
+    if (sourceUnitCost === 0) continue
     const cap = checkedMultiply(sourceUnitCost, normalizedQuantity)
     return cap === null
       ? { cap: 0, valid: false, hasSource: true }

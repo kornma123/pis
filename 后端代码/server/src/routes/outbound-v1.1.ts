@@ -99,11 +99,23 @@ function buildStockMutationPlan(db: any, steps: StockMutationStep[]): StockMutat
     if (step.batchId) {
       batchBefore = batchBalances.get(step.batchId)
       if (batchBefore === undefined) {
-        const batch = db.prepare('SELECT remaining FROM batches WHERE id = ?').get(step.batchId) as any
+        const batch = db.prepare('SELECT material_id, remaining, status FROM batches WHERE id = ?').get(step.batchId) as any
         if (batch) {
-          const parsedRemaining = parseFiniteNumber(batch.remaining)
-          if (parsedRemaining === null) return null
-          batchBefore = parsedRemaining
+          if (batch.material_id !== step.materialId) return null
+          // A selected batch that became inactive while this request waited for the
+          // write lock is no longer a valid subtraction source. Keep it undefined so
+          // the locked batch sufficiency check rejects the whole transaction.
+          if (step.operation === 'subtract' && Number(batch.status) !== 1) {
+            batchBefore = undefined
+          } else {
+            const parsedRemaining = parseFiniteNumber(batch.remaining)
+            if (parsedRemaining === null) return null
+            batchBefore = parsedRemaining
+          }
+        } else if (step.operation === 'add') {
+          // PUT must not restore an old item into aggregate inventory when its batch
+          // ledger has disappeared.
+          return null
         }
       }
       if (batchBefore !== undefined) {
@@ -130,6 +142,15 @@ function buildStockMutationPlan(db: any, steps: StockMutationStep[]): StockMutat
 
 function hasInsufficientInventory(plan: StockMutationPlan[], steps: StockMutationStep[]): boolean {
   return plan.some((mutation, index) => steps[index].operation === 'subtract' && mutation.inventoryAfter < 0)
+}
+
+function hasInsufficientBatch(plan: StockMutationPlan[], steps: StockMutationStep[]): boolean {
+  return plan.some((mutation, index) => {
+    const step = steps[index]
+    return step.operation === 'subtract'
+      && Boolean(step.batchId)
+      && (mutation.batchAfter === undefined || mutation.batchAfter < 0)
+  })
 }
 
 function recheckOutboundCosts(db: any, items: any[]): { items: any[]; totalCost: number } | null {
@@ -346,6 +367,7 @@ router.post('/', requireWriteAccess, (req, res) => {
     // 事务保护：出库涉及 records + items + inventory + batches + stock_logs 多表操作
     db.exec('BEGIN IMMEDIATE')
     try {
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
       // 事务内重新校验库存，防止并发窗口
       for (const item of normalizedItems) {
         const { materialId, quantity } = item
@@ -368,8 +390,12 @@ router.post('/', requireWriteAccess, (req, res) => {
         error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422)
         return
       }
+      if (hasInsufficientBatch(transactionStockPlan, stockSteps)) {
+        db.exec('ROLLBACK')
+        error(res, 'Insufficient batch stock', 'STOCK_INSUFFICIENT', 422)
+        return
+      }
       totalCost = recheckedCosts.totalCost
-      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
 
       db.prepare(`
         INSERT INTO outbound_records (id, outbound_no, type, project_id, total_cost, operator, status, remark)
@@ -512,6 +538,7 @@ router.post('/bom', requireWriteAccess, (req, res) => {
 
     db.exec('BEGIN IMMEDIATE')
     try {
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
       const executableOutboundItems: any[] = []
       const lockedInventoryBalances = new Map<string, number>()
       for (const item of outboundItems) {
@@ -547,13 +574,22 @@ router.post('/bom', requireWriteAccess, (req, res) => {
       }))
       const transactionStockPlan = buildStockMutationPlan(db, transactionSteps)
       const recheckedCosts = recheckOutboundCosts(db, executableOutboundItems)
-      if (!transactionStockPlan || hasInsufficientInventory(transactionStockPlan, transactionSteps) || !recheckedCosts) {
+      if (!transactionStockPlan || !recheckedCosts) {
         db.exec('ROLLBACK')
         error(res, 'Outbound arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
         return
       }
+      if (hasInsufficientInventory(transactionStockPlan, transactionSteps)) {
+        db.exec('ROLLBACK')
+        error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422)
+        return
+      }
+      if (hasInsufficientBatch(transactionStockPlan, transactionSteps)) {
+        db.exec('ROLLBACK')
+        error(res, 'Insufficient batch stock', 'STOCK_INSUFFICIENT', 422)
+        return
+      }
       totalCost = recheckedCosts.totalCost
-      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
       db.prepare(`
         INSERT INTO outbound_records (id, outbound_no, type, project_id, total_cost, operator, status, remark)
         VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)
@@ -774,6 +810,11 @@ router.put('/:id', requireWriteAccess, (req, res) => {
       if (hasInsufficientInventory(transactionPlan, transactionSteps)) {
         db.exec('ROLLBACK')
         error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422)
+        return
+      }
+      if (hasInsufficientBatch(transactionPlan, transactionSteps)) {
+        db.exec('ROLLBACK')
+        error(res, 'Insufficient batch stock', 'STOCK_INSUFFICIENT', 422)
         return
       }
       const oldPlan = transactionPlan.slice(0, transactionOldItems.length)

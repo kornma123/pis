@@ -137,6 +137,8 @@ type InboundUpdateNumericPlan = {
   }
 }
 
+const INBOUND_INVENTORY_NOT_FOUND = Symbol('INBOUND_INVENTORY_NOT_FOUND')
+
 function checkInboundCancellationRules(db: any, record: any, id: string): InboundCancelCheck {
   const rawOutboundTotal = (db.prepare(`
     SELECT COALESCE(SUM(oi.quantity),0) as total FROM outbound_items oi
@@ -172,7 +174,7 @@ function buildInboundUpdateNumericPlan(
   requestedBatchNo: string | undefined,
   requestedStatus: string | undefined,
   requestedPrice: number | undefined,
-): InboundUpdateNumericPlan | null {
+): InboundUpdateNumericPlan | typeof INBOUND_INVENTORY_NOT_FOUND | null {
   const oldQty = parseFiniteNumber(record.quantity)
   if (oldQty === null) return null
   const newQty = requestedQuantity ?? oldQty
@@ -195,7 +197,7 @@ function buildInboundUpdateNumericPlan(
   const parsedInventory = inventory ? parseFiniteNumber(inventory.stock) : 0
   if (parsedInventory === null) return null
   const inventoryChanged = mode === 'cancel' || mode === 'restore' || (mode === 'edit' && qtyDiff !== 0)
-  if (inventoryChanged && !inventory) return null
+  if (inventoryChanged && !inventory) return INBOUND_INVENTORY_NOT_FOUND
   let inventoryAfter = parsedInventory
   if (mode === 'cancel') {
     const next = checkedSubtract(parsedInventory, oldQty)
@@ -614,6 +616,9 @@ router.put('/:id', requireWriteAccess, (req, res) => {
       }
     }
     const preflightPlan = buildInboundUpdateNumericPlan(db, record, normalizedQuantity, batchNo, status, normalizedPrice)
+    if (preflightPlan === INBOUND_INVENTORY_NOT_FOUND) {
+      error(res, 'Inventory record not found', 'INVENTORY_NOT_FOUND', 422); return
+    }
     if (!preflightPlan) {
       error(res, 'Inbound update arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
     }
@@ -644,6 +649,11 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         }
       }
       const transactionPlan = buildInboundUpdateNumericPlan(db, transactionRecord, normalizedQuantity, batchNo, status, normalizedPrice)
+      if (transactionPlan === INBOUND_INVENTORY_NOT_FOUND) {
+        db.exec('ROLLBACK')
+        error(res, 'Inventory record not found', 'INVENTORY_NOT_FOUND', 422)
+        return
+      }
       if (!transactionPlan) {
         db.exec('ROLLBACK')
         error(res, 'Inbound update arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400)

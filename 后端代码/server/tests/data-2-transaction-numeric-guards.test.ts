@@ -20,6 +20,7 @@ import {
   parseFiniteNumber,
   parseFinitePositiveNumber,
 } from '../src/utils/numeric-input.js'
+import { fingerprintRequest } from '../src/utils/idempotency.js'
 
 const RAW_1E400 = '__RAW_JSON_1E400__'
 
@@ -416,6 +417,19 @@ describe('DATA-2 inbound / purchase-order numeric guards', () => {
     )
   })
 
+  it('inbound update reports a missing inventory row explicitly before opening a transaction', async () => {
+    const f = seedFixture('inbound-update-missing-inventory')
+    db.prepare('DELETE FROM inventory WHERE material_id = ?').run(f.materialId)
+    const before = snapshot(f)
+    await expectRejectedWithoutBusinessEffects(
+      auth(request(app).put(`/api/v1/inbound/${f.inboundId}`)).send({ quantity: 6 }),
+      f,
+      before,
+      422,
+      'INVENTORY_NOT_FOUND',
+    )
+  })
+
   it('inbound quantity edit reuses finite plan values in the stock log', async () => {
     const f = seedFixture('inbound-update-finite-log')
     db.prepare('UPDATE inbound_records SET quantity = ? WHERE id = ?').run(8e307, f.inboundId)
@@ -463,6 +477,33 @@ describe('DATA-2 inbound / purchase-order numeric guards', () => {
     }
 
     expect(snapshot(f)).toEqual(before)
+  })
+
+  it('inbound update reports inventory removed while waiting for the lock and rolls back business changes', async () => {
+    const f = seedFixture('inbound-update-inventory-lock-drift')
+    const before = snapshot(f)
+    const expectedAfterDrift = JSON.parse(JSON.stringify(before)) as Record<string, unknown>
+    expectedAfterDrift.inventory = []
+    const originalExec = Object.getPrototypeOf(db).exec.bind(db) as (sql: string) => void
+    let injected = false
+    execSpy.mockImplementation((sql: string) => {
+      if (!injected && /^BEGIN\s+IMMEDIATE$/i.test(sql)) {
+        injected = true
+        db.prepare('DELETE FROM inventory WHERE material_id = ?').run(f.materialId)
+      }
+      originalExec(sql)
+    })
+
+    try {
+      const response = await auth(request(app).put(`/api/v1/inbound/${f.inboundId}`)).send({ quantity: 6 })
+      expect.soft(response.status).toBe(422)
+      expect.soft(response.body?.error?.code).toBe('INVENTORY_NOT_FOUND')
+    } finally {
+      execSpy.mockImplementation(originalExec)
+      execSpy.mockClear()
+    }
+
+    expect(snapshot(f)).toEqual(expectedAfterDrift)
   })
 
   it('raw JSON 1e400 purchase orderedQty is rejected without creating a purchase order', async () => {
@@ -525,6 +566,207 @@ describe('DATA-2 outbound numeric guards', () => {
         { materialId: f.materialId, quantity: 60 },
       ],
     }), f, before, 422, 'STOCK_INSUFFICIENT')
+  })
+
+  it('ordinary outbound rejects duplicate lines that each fit but together exceed the selected first batch', async () => {
+    const f = seedFixture('outbound-first-batch-insufficient', { stock: 10 })
+    db.prepare("UPDATE batches SET quantity = 6, remaining = 6, expiry_date = '2026-07-13' WHERE id = ?").run(f.batchId)
+    db.prepare(`
+      INSERT INTO batches
+        (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, supplier_id, expiry_date, status)
+      VALUES (?, ?, ?, 4, 4, ?, 10, ?, '2027-07-13', 1)
+    `).run(`batch-later-${f.suffix}`, f.materialId, `B-LATER-${f.suffix}`, f.inboundId, f.supplierId)
+    const before = snapshot(f)
+    const key = `${f.keyPrefix}first-batch-insufficient`
+
+    const response = await auth(request(app).post('/api/v1/outbound'), key).send({
+      type: 'project',
+      projectId: f.projectId,
+      items: [
+        { materialId: f.materialId, quantity: 4 },
+        { materialId: f.materialId, quantity: 3 },
+      ],
+    })
+
+    expect.soft(response.status).toBe(422)
+    expect.soft(response.body?.error?.code).toBe('STOCK_INSUFFICIENT')
+    expect.soft(beginImmediateCalls()).toHaveLength(1)
+    expect.soft(snapshot(f)).toEqual(before)
+  })
+
+  it('ordinary outbound rechecks the selected batch after lock acquisition and preserves a concurrent batch drift', async () => {
+    const f = seedFixture('outbound-first-batch-lock-drift', { stock: 10 })
+    db.prepare("UPDATE batches SET quantity = 10, remaining = 10, expiry_date = '2026-07-13' WHERE id = ?").run(f.batchId)
+    db.prepare(`
+      INSERT INTO batches
+        (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, supplier_id, expiry_date, status)
+      VALUES (?, ?, ?, 7, 7, ?, 10, ?, '2027-07-13', 1)
+    `).run(`batch-later-${f.suffix}`, f.materialId, `B-LATER-${f.suffix}`, f.inboundId, f.supplierId)
+    const before = snapshot(f)
+    const expectedAfterDrift = JSON.parse(JSON.stringify(before)) as Record<string, unknown>
+    const driftedBatch = (expectedAfterDrift.batches as Array<{ id: string; remaining: number }>).find((batch) => batch.id === f.batchId)
+    if (!driftedBatch) throw new Error('seeded batch missing from snapshot')
+    driftedBatch.remaining = 3
+    const key = `${f.keyPrefix}first-batch-lock-drift`
+    const originalExec = Object.getPrototypeOf(db).exec.bind(db) as (sql: string) => void
+    let injected = false
+    execSpy.mockImplementation((sql: string) => {
+      if (!injected && /^BEGIN\s+IMMEDIATE$/i.test(sql)) {
+        injected = true
+        db.prepare('UPDATE batches SET remaining = 3 WHERE id = ?').run(f.batchId)
+      }
+      originalExec(sql)
+    })
+
+    try {
+      const response = await auth(request(app).post('/api/v1/outbound'), key).send({
+        type: 'project',
+        projectId: f.projectId,
+        items: [{ materialId: f.materialId, quantity: 7 }],
+      })
+      expect.soft(response.status).toBe(422)
+      expect.soft(response.body?.error?.code).toBe('STOCK_INSUFFICIENT')
+    } finally {
+      execSpy.mockImplementation(originalExec)
+      execSpy.mockClear()
+    }
+
+    expect(snapshot(f)).toEqual(expectedAfterDrift)
+  })
+
+  it('ordinary outbound rejects a selected batch that became inactive while waiting for the lock', async () => {
+    const f = seedFixture('outbound-batch-status-lock-drift', { stock: 10 })
+    db.prepare('UPDATE batches SET quantity = 10, remaining = 10 WHERE id = ?').run(f.batchId)
+    const before = snapshot(f)
+    const expectedAfterDrift = JSON.parse(JSON.stringify(before)) as Record<string, unknown>
+    const driftedBatch = (expectedAfterDrift.batches as Array<{ id: string; status: number }>).find((batch) => batch.id === f.batchId)
+    if (!driftedBatch) throw new Error('seeded batch missing from snapshot')
+    driftedBatch.status = 0
+    const key = `${f.keyPrefix}batch-status-lock-drift`
+    const originalExec = Object.getPrototypeOf(db).exec.bind(db) as (sql: string) => void
+    let injected = false
+    execSpy.mockImplementation((sql: string) => {
+      if (!injected && /^BEGIN\s+IMMEDIATE$/i.test(sql)) {
+        injected = true
+        db.prepare('UPDATE batches SET status = 0 WHERE id = ?').run(f.batchId)
+      }
+      originalExec(sql)
+    })
+
+    try {
+      const response = await auth(request(app).post('/api/v1/outbound'), key).send({
+        type: 'project',
+        projectId: f.projectId,
+        items: [{ materialId: f.materialId, quantity: 5 }],
+      })
+      expect.soft(response.status).toBe(422)
+      expect.soft(response.body?.error?.code).toBe('STOCK_INSUFFICIENT')
+    } finally {
+      execSpy.mockImplementation(originalExec)
+      execSpy.mockClear()
+    }
+
+    expect(snapshot(f)).toEqual(expectedAfterDrift)
+  })
+
+  it('BOM outbound rejects inside the lock when the selected first batch cannot cover the quantity', async () => {
+    const f = seedFixture('outbound-bom-first-batch-insufficient', { stock: 10 })
+    db.prepare("UPDATE batches SET quantity = 3, remaining = 3, expiry_date = '2026-07-13' WHERE id = ?").run(f.batchId)
+    db.prepare(`
+      INSERT INTO batches
+        (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, supplier_id, expiry_date, status)
+      VALUES (?, ?, ?, 7, 7, ?, 10, ?, '2027-07-13', 1)
+    `).run(`batch-later-${f.suffix}`, f.materialId, `B-LATER-${f.suffix}`, f.inboundId, f.supplierId)
+    const before = snapshot(f)
+    const key = `${f.keyPrefix}bom-first-batch-insufficient`
+
+    const response = await auth(request(app).post('/api/v1/outbound/bom'), key).send({
+      projectId: f.projectId,
+      bomId: f.bomId,
+      sampleCount: 7,
+    })
+
+    expect.soft(response.status).toBe(422)
+    expect.soft(response.body?.error?.code).toBe('STOCK_INSUFFICIENT')
+    expect.soft(beginImmediateCalls()).toHaveLength(1)
+    expect.soft(snapshot(f)).toEqual(before)
+  })
+
+  it.each([
+    {
+      label: 'ordinary',
+      path: '/api/v1/outbound',
+      scope: 'outbound:create',
+      body: (f: Fixture) => ({
+        type: 'project',
+        projectId: f.projectId,
+        items: [{ materialId: f.materialId, quantity: 5 }],
+      }),
+    },
+    {
+      label: 'BOM',
+      path: '/api/v1/outbound/bom',
+      scope: 'outbound:bom',
+      body: (f: Fixture) => ({ projectId: f.projectId, bomId: f.bomId, sampleCount: 5 }),
+    },
+  ])('$label outbound replays a same-key result committed while waiting for the lock before reporting stale stock', async ({ label, path, scope, body }) => {
+    const f = seedFixture(`outbound-${label}-claim-race`, { stock: 5 })
+    const key = `${f.keyPrefix}${label}-claim-race`
+    const payload = body(f)
+    const fingerprint = fingerprintRequest(payload)
+    const replayBody = {
+      success: true,
+      data: { id: `already-committed-${f.suffix}`, outboundNo: `OB-COMMITTED-${f.suffix}` },
+      message: 'Outbound created',
+    }
+    const originalExec = Object.getPrototypeOf(db).exec.bind(db) as (sql: string) => void
+    let injected = false
+    execSpy.mockImplementation((sql: string) => {
+      if (!injected && /^BEGIN\s+IMMEDIATE$/i.test(sql)) {
+        injected = true
+        db.prepare(`
+          INSERT INTO outbound_records
+            (id, outbound_no, type, project_id, total_cost, operator, status)
+          VALUES (?, ?, ?, ?, 50, 'concurrent', 'completed')
+        `).run(replayBody.data.id, replayBody.data.outboundNo, label === 'BOM' ? 'bom' : 'project', f.projectId)
+        db.prepare(`
+          INSERT INTO outbound_items
+            (id, outbound_id, material_id, batch_id, batch_no, quantity, unit, unit_cost, total_cost, usage)
+          VALUES (?, ?, ?, ?, ?, 5, '瓶', 10, 50, 'self')
+        `).run(`committed-item-${f.suffix}`, replayBody.data.id, f.materialId, f.batchId, `B-${f.suffix}`)
+        db.prepare(`
+          INSERT INTO stock_logs
+            (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
+          VALUES (?, 'outbound', ?, -5, 5, 0, ?, 'outbound', 'concurrent')
+        `).run(`committed-log-${f.suffix}`, f.materialId, replayBody.data.id)
+        db.prepare(`
+          INSERT INTO idempotency_keys
+            (idempotency_key, scope, request_fingerprint, status_code, response_body, operator)
+          VALUES (?, ?, ?, 201, ?, 'concurrent')
+        `).run(key, scope, fingerprint, JSON.stringify(replayBody))
+        db.prepare('UPDATE inventory SET stock = 0 WHERE material_id = ?').run(f.materialId)
+        db.prepare('UPDATE batches SET remaining = 0, status = 0 WHERE id = ?').run(f.batchId)
+      }
+      originalExec(sql)
+    })
+
+    try {
+      const response = await auth(request(app).post(path), key).send(payload)
+      expect(response.status).toBe(201)
+      expect(response.body).toEqual(replayBody)
+    } finally {
+      execSpy.mockImplementation(originalExec)
+      execSpy.mockClear()
+    }
+
+    expect(rows('SELECT id FROM outbound_records WHERE project_id = ?', f.projectId))
+      .toEqual([{ id: replayBody.data.id }])
+    expect(rows('SELECT id, outbound_id FROM outbound_items WHERE material_id = ?', f.materialId))
+      .toEqual([{ id: `committed-item-${f.suffix}`, outbound_id: replayBody.data.id }])
+    expect(rows('SELECT id, related_id FROM stock_logs WHERE material_id = ?', f.materialId))
+      .toEqual([{ id: `committed-log-${f.suffix}`, related_id: replayBody.data.id }])
+    expect(rows('SELECT idempotency_key, status_code FROM idempotency_keys WHERE idempotency_key = ?', key))
+      .toEqual([{ idempotency_key: key, status_code: 201 }])
   })
 
   it('finite outbound quantity whose itemCost overflows is rejected before idempotency or transaction', async () => {
@@ -693,6 +935,33 @@ describe('DATA-2 outbound numeric guards', () => {
         { materialId: f.materialId, quantity: 60 },
       ],
     }), f, before, 422, 'STOCK_INSUFFICIENT')
+  })
+
+  it('outbound update rolls back when the selected first batch remains insufficient after restoring old items', async () => {
+    const f = seedFixture('outbound-update-first-batch-insufficient', { stock: 10 })
+    const outboundId = seedOutboundForUpdate(f)
+    db.prepare('UPDATE inventory SET stock = 9 WHERE material_id = ?').run(f.materialId)
+    db.prepare("UPDATE batches SET quantity = 3, remaining = 3, expiry_date = '2026-07-13' WHERE id = ?").run(f.batchId)
+    db.prepare(`
+      INSERT INTO batches
+        (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, supplier_id, expiry_date, status)
+      VALUES (?, ?, ?, 7, 7, ?, 10, ?, '2027-07-13', 1)
+    `).run(`batch-later-${f.suffix}`, f.materialId, `B-LATER-${f.suffix}`, f.inboundId, f.supplierId)
+    const before = snapshot(f)
+
+    const response = await auth(request(app).put(`/api/v1/outbound/${outboundId}`)).send({
+      type: 'project',
+      projectId: f.projectId,
+      items: [
+        { materialId: f.materialId, quantity: 4 },
+        { materialId: f.materialId, quantity: 3 },
+      ],
+    })
+
+    expect.soft(response.status).toBe(422)
+    expect.soft(response.body?.error?.code).toBe('STOCK_INSUFFICIENT')
+    expect.soft(beginImmediateCalls()).toHaveLength(1)
+    expect.soft(snapshot(f)).toEqual(before)
   })
 
   it('outbound update applies restore-old then subtract-new plan with accurate stock evidence', async () => {
@@ -923,6 +1192,26 @@ describe('DATA-2 supplier-return quantity/refund numeric guards', () => {
     await expectRejectedWithoutBusinessEffects(response, f, before)
   })
 
+  it('supplier-return create falls back from a linked zero-price receipt to the next positive source', async () => {
+    const f = seedFixture('supplier-return-create-linked-zero-fallback')
+    db.prepare('UPDATE inbound_records SET price = 0 WHERE id = ?').run(f.inboundId)
+
+    const response = await auth(request(app).post('/api/v1/supplier-returns')).send({
+      materialId: f.materialId,
+      quantity: 1,
+      supplierId: f.supplierId,
+      inboundRecordId: f.inboundId,
+      reason: 'quality_issue',
+      refundAmount: 5,
+    })
+
+    expect(response.status).toBe(200)
+    expect(rows(`
+      SELECT refund_amount FROM supplier_returns
+      WHERE material_id = ? AND id != ? ORDER BY created_at DESC
+    `, f.materialId, f.supplierReturnId)).toEqual([{ refund_amount: 5 }])
+  })
+
   it('supplier-return locked recheck preserves a newer stock balance and rolls back when it is insufficient', async () => {
     const f = seedFixture('supplier-return-stock-drift', { stock: 10 })
     const before = snapshot(f)
@@ -1013,17 +1302,48 @@ describe('DATA-2 supplier-return quantity/refund numeric guards', () => {
       .toEqual([{ refund_amount: 5 }])
   })
 
-  it('refund correction treats a linked zero-price receipt as a real zero cap, not as missing cost', async () => {
-    const f = seedFixture('supplier-return-refund-zero-source')
+  it('refund correction falls back from a linked zero-price receipt to the next positive source', async () => {
+    const f = seedFixture('supplier-return-refund-linked-zero-fallback')
     db.prepare('UPDATE inbound_records SET price = 0 WHERE id = ?').run(f.inboundId)
-    const before = snapshot(f)
+    const response = await auth(request(app).put(`/api/v1/supplier-returns/${f.supplierReturnId}/refund-amount`))
+      .send({ refundAmount: 5 })
+    expect(response.status).toBe(200)
+    expect(rows('SELECT refund_amount FROM supplier_returns WHERE id = ?', f.supplierReturnId))
+      .toEqual([{ refund_amount: 5 }])
+  })
+
+  it('refund correction falls back from an unlinked zero-price batch and still enforces the material-price cap', async () => {
+    const f = seedFixture('supplier-return-refund-batch-zero-fallback')
+    db.prepare('UPDATE supplier_returns SET inbound_record_id = NULL WHERE id = ?').run(f.supplierReturnId)
+    db.prepare('UPDATE batches SET inbound_price = 0 WHERE id = ?').run(f.batchId)
+
+    const accepted = await auth(request(app).put(`/api/v1/supplier-returns/${f.supplierReturnId}/refund-amount`))
+      .send({ refundAmount: 5 })
+    expect(accepted.status).toBe(200)
+
+    execSpy.mockClear()
+    const beforeRejected = snapshot(f)
+    execSpy.mockClear()
     await expectRejectedWithoutBusinessEffects(
-      auth(request(app).put(`/api/v1/supplier-returns/${f.supplierReturnId}/refund-amount`)).send({ refundAmount: 1 }),
+      auth(request(app).put(`/api/v1/supplier-returns/${f.supplierReturnId}/refund-amount`)).send({ refundAmount: 11 }),
       f,
-      before,
+      beforeRejected,
       422,
       'REFUND_EXCEEDS_SOURCE_COST',
     )
+  })
+
+  it('refund correction keeps the legacy no-cap behavior when every source is zero or NULL', async () => {
+    const f = seedFixture('supplier-return-refund-all-zero-or-null')
+    db.prepare('UPDATE inbound_records SET price = NULL WHERE id = ?').run(f.inboundId)
+    db.prepare('UPDATE batches SET inbound_price = 0 WHERE id = ?').run(f.batchId)
+    db.prepare('UPDATE materials SET price = 0 WHERE id = ?').run(f.materialId)
+
+    const response = await auth(request(app).put(`/api/v1/supplier-returns/${f.supplierReturnId}/refund-amount`))
+      .send({ refundAmount: 999 })
+    expect(response.status).toBe(200)
+    expect(rows('SELECT refund_amount FROM supplier_returns WHERE id = ?', f.supplierReturnId))
+      .toEqual([{ refund_amount: 999 }])
   })
 })
 
