@@ -16,6 +16,7 @@ import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } f
 import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
 import { ANTIBODY_SYNONYM_SEED, ANTIBODY_MISSING_PRICE_SEED } from '../utils/antibody-name-map.js'
 import { ensureHospitalCmReadinessSchema } from '../utils/hospital-cm-readiness-runtime.js'
+import { ensureHospitalCmPeriodEvidenceSchema } from '../utils/hospital-cm-period-evidence.js'
 import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -1978,6 +1979,12 @@ export function initializeDatabase(): void {
   // 院级贡献毛利 readiness 控制面（A+B）：owner/due、追加式真实探针证据、空的月度固定池版本/认账表。
   // 不 seed 任何 passed/ready，不 seed 金额/RATIFIED，不写历史周期或首周期验证事实。
   ensureHospitalCmReadinessSchema(database)
+
+  // C1 周期证据底座（#183 增量 C）：batch manifest / 月度范围快照 / close-reopen revision 镜像 /
+  // 周期验证 run-check 存储与读侧失效判定。只建 append-only 存储与触发器,不 seed 任何 manifest、
+  // 周期通过或首期验证;legacy 已关账行保持无事件 = 永远只是待验证 candidate(状态机归 C3）。
+  // 依赖 reconcile_hospital_months 已在上文建表（close 镜像触发器挂其上）。
+  ensureHospitalCmPeriodEvidenceSchema(database)
 
   // ===========================================================================
   // D2 统一检测项目目录（project_catalog / code_mappings）—— 地基线 D
