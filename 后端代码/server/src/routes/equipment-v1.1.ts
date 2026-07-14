@@ -549,8 +549,9 @@ router.get('/:id/usage', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-// 登记设备使用
-router.post('/:id/usage', (req, res) => {
+// 登记设备使用（写端点：登记使用量会影响折旧/成本，须 equipment:W；
+// 挂载层仅要求 equipment:R，故与同文件 POST / · PUT/:id · DELETE/:id 一致在路由内补 W 守卫）
+router.post('/:id/usage', requireEquipmentWrite, (req, res) => {
   try {
     const { id } = req.params
     const { projectId, outboundId, usageMinutes, usageCount, usageDate } = req.body

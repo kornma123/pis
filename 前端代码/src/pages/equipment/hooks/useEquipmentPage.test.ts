@@ -50,23 +50,25 @@ describe('useEquipmentPage', () => {
     vi.clearAllMocks()
     window.history.replaceState(null, '', '/')
     localStorage.clear()
-    localStorage.setItem('user', JSON.stringify({ role: 'admin' }))
+    localStorage.setItem('user', JSON.stringify({ role: 'admin', capabilities: { equipment: 'W' } }))
     vi.mocked(equipmentApi.getTypes).mockResolvedValue({ list: [], pagination: { total: 0 } } as any)
     vi.mocked(equipmentApi.getList).mockResolvedValue({ list: [equipment], pagination: { total: 1 } } as any)
     vi.mocked(equipmentApi.getStats).mockResolvedValue({ total: 1, active: 1, inactive: 0, scrapped: 0, totalValue: 100000 } as any)
     vi.mocked(equipmentApi.update).mockResolvedValue({ id: 'eq-1' } as any)
   })
 
-  it('allows technician users with equipment module access to manage assets', () => {
-    localStorage.setItem('user', JSON.stringify({ role: 'technician' }))
+  it('allows users holding equipment:W capability to manage assets', () => {
+    // 判据读能力矩阵（后端登录下发），与后端 requirePermission('equipment','W') 对齐——
+    // 不再硬编码 role∈{admin,technician}，故 technician/finance/lab_director 等任何持 equipment:W 者一致放行。
+    localStorage.setItem('user', JSON.stringify({ role: 'technician', capabilities: { equipment: 'W' } }))
 
     const { result } = renderHook(() => useEquipmentPage())
 
     expect(result.current.canManageEquipmentAssets).toBe(true)
   })
 
-  it('keeps pathologist users read-only for equipment assets', () => {
-    localStorage.setItem('user', JSON.stringify({ role: 'pathologist', permissions: ['equipment:view'] }))
+  it('keeps equipment:R-only users read-only for equipment assets', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'pathologist', capabilities: { equipment: 'R' } }))
 
     const { result } = renderHook(() => useEquipmentPage())
 

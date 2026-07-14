@@ -1038,7 +1038,7 @@
     },
     "POST /api/v1/equipment/:id/usage": {
       "module": "equipment",
-      "level": "R",
+      "level": "W",
       "conditions": []
     },
     "POST /api/v1/hospital-pnl/readiness/probes/foundation": {
