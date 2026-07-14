@@ -10,9 +10,7 @@ import {
   finalizeIdempotency,
   isIdempotencyConflict,
 } from '../utils/idempotency.js'
-import { buildBomSourceSnapshot, calculateSlideCostWithFee, getBomPerSampleDriverQty } from '../utils/cost-calculator.js'
 import { recordCostException } from '../utils/cost-exceptions.js'
-import { getActiveBomVersionId } from '../utils/bom-version.js'
 import { resolveOutboundUnitCost } from '../utils/outbound-cost.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { recordOverride } from '../utils/override-log.js'
@@ -30,6 +28,11 @@ const router = Router()
 // 缺此守卫则任何 outbound:R（只读，如 SEED_MATRIX lab_director / 角色矩阵编辑器只读授予）角色即可越权创建出库
 // （减库存 + 写 batch_usage_tracking/stock_logs）。POST 创建端点此前遗漏、仅 PUT/DELETE 有守卫（相邻授权缺口·2026-07-09）。
 const requireWriteAccess = requirePermission('outbound', 'W')
+const LIVE_OUTBOUND_TYPES = new Set(['direct', 'project', 'transfer', 'scrap'])
+
+function isLiveOutboundType(value: unknown): value is string {
+  return typeof value === 'string' && LIVE_OUTBOUND_TYPES.has(value)
+}
 
 // 库存双账本漂移告警（项A）：出库时缺可消耗批次、单位成本走兜底 → 落 cost_exceptions（既有告警清单）。
 // 事务内调用；项⑦「统一旁路台账」把此类软兜底一并汇入统一 override 日志（供旁路频率体检）。
@@ -291,7 +294,7 @@ router.get('/stats', (req, res) => {
 router.post('/', requireWriteAccess, (req, res) => {
   try {
     const { type, projectId, items, remark } = req.body
-    if (!type || !Array.isArray(items) || items.length === 0) {
+    if (!isLiveOutboundType(type) || !Array.isArray(items) || items.length === 0) {
       error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
     }
 
@@ -455,256 +458,11 @@ router.post('/', requireWriteAccess, (req, res) => {
   }
 })
 
-router.post('/bom', requireWriteAccess, (req, res) => {
-  try {
-    const { projectId, bomId, sampleCount, remark } = req.body
-    if (!bomId || sampleCount === undefined || sampleCount === null) {
-      error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
-    }
-    const sc = parseFinitePositiveNumber(sampleCount)
-    if (sc === null) {
-      error(res, 'Invalid sampleCount', 'INVALID_PARAMETER', 400); return
-    }
-
-    const db = getDatabase()
-    const idemKey = readIdempotencyKey(req)
-    const idemScope = 'outbound:bom'
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
-    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
-
-    const outboundNo = generateOutboundNo()
-    const id = uuidv4()
-    const operator = req.body.operator || 'system'
-    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
-
-    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND is_deleted = 0').get(projectId) as any
-    if (!project) { error(res, 'Project not found', 'NOT_FOUND', 404); return }
-
-    const bomItems = db.prepare(`
-      SELECT bi.*, m.name, m.spec FROM bom_items bi
-      JOIN materials m ON bi.material_id = m.id AND m.is_deleted = 0
-      WHERE bi.bom_id = ?
-    `).all(bomId) as any[]
-    if (!bomItems || bomItems.length === 0) {
-      error(res, 'BOM is empty', 'INVALID_PARAMETER', 400); return
-    }
-
-    let totalCost = 0
-    const outboundItems: any[] = []
-
-    for (const item of bomItems) {
-      const quantity = checkedMultiply(item.usage_per_sample, sc)
-      if (quantity === null) {
-        error(res, 'BOM quantity exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
-      }
-      if (quantity <= 0) continue
-      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(item.material_id) as any
-      if (!inv || inv.stock < quantity) {
-        // P1-01: 辅料(is_alternative=1，如通用试剂/耗材/质控)缺货跳过该项，不计出库、不阻断整单；
-        //        主料(is_alternative=0)缺货才阻断整单。
-        if (item.is_alternative === 1) continue
-        error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
-      }
-      const batch = db.prepare(`
-        SELECT b.* FROM batches b
-        JOIN materials m ON b.material_id = m.id
-        WHERE b.material_id = ? AND b.remaining > 0 AND b.status = 1 AND m.is_deleted = 0
-        ORDER BY b.expiry_date ASC
-      `).get(item.material_id) as any
-      // 库存双账本守恒守卫（项A）：缺批次绝不静默回退 0
-      const costRes = resolveOutboundUnitCost(db, item.material_id, batch)
-      const unitCost = costRes.unitCost
-      const itemCost = checkedMultiply(unitCost, quantity)
-      const nextTotalCost = itemCost === null ? null : checkedAdd(totalCost, itemCost)
-      if (itemCost === null || nextTotalCost === null) {
-        error(res, 'Outbound cost exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
-      }
-      totalCost = nextTotalCost
-      outboundItems.push({ materialId: item.material_id, batchId: batch?.id || null, batchNo: batch?.batch_no || null, quantity, unitCost, itemCost, drift: costRes.drift, costSource: costRes.source, costNote: costRes.note, isAlternative: item.is_alternative === 1 })
-    }
-
-    const preflightStockPlan = buildStockMutationPlan(db, outboundItems.map((item) => ({
-      materialId: item.materialId,
-      batchId: item.batchId,
-      quantity: item.quantity,
-      operation: 'subtract' as const,
-    })))
-    if (!preflightStockPlan) {
-      error(res, 'Outbound stock arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
-    }
-
-    const materialUnits = db.prepare('SELECT id, unit FROM materials WHERE id IN (' + bomItems.map(() => '?').join(',') + ')').all(...bomItems.map((i: any) => i.material_id)) as any[]
-    const unitMap = new Map(materialUnits.map((m: any) => [m.id, m.unit]))
-
-    db.exec('BEGIN IMMEDIATE')
-    try {
-      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
-      const executableOutboundItems: any[] = []
-      const lockedInventoryBalances = new Map<string, number>()
-      for (const item of outboundItems) {
-        let lockedStock = lockedInventoryBalances.get(item.materialId)
-        if (lockedStock === undefined) {
-          const invCheck = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(item.materialId) as any
-          if (!invCheck) {
-            if (item.isAlternative) continue
-            db.exec('ROLLBACK')
-            error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
-          }
-          const parsedStock = parseFiniteNumber(invCheck.stock)
-          if (parsedStock === null) {
-            db.exec('ROLLBACK')
-            error(res, 'Outbound stock arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
-          }
-          lockedStock = parsedStock
-        }
-        if (lockedStock < item.quantity) {
-          // P1-01: 辅料在锁内新近缺货时，从实际执行项中移除；主料缺货仍回滚整单。
-          if (item.isAlternative) continue
-          db.exec('ROLLBACK')
-          error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
-        }
-        lockedInventoryBalances.set(item.materialId, lockedStock - item.quantity)
-        executableOutboundItems.push(item)
-      }
-      const transactionSteps = executableOutboundItems.map((item) => ({
-        materialId: item.materialId,
-        batchId: item.batchId,
-        quantity: item.quantity,
-        operation: 'subtract' as const,
-      }))
-      const transactionStockPlan = buildStockMutationPlan(db, transactionSteps)
-      const recheckedCosts = recheckOutboundCosts(db, executableOutboundItems)
-      if (!transactionStockPlan || !recheckedCosts) {
-        db.exec('ROLLBACK')
-        error(res, 'Outbound arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
-        return
-      }
-      if (hasInsufficientInventory(transactionStockPlan, transactionSteps)) {
-        db.exec('ROLLBACK')
-        error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422)
-        return
-      }
-      if (hasInsufficientBatch(transactionStockPlan, transactionSteps)) {
-        db.exec('ROLLBACK')
-        error(res, 'Insufficient batch stock', 'STOCK_INSUFFICIENT', 422)
-        return
-      }
-      totalCost = recheckedCosts.totalCost
-      db.prepare(`
-        INSERT INTO outbound_records (id, outbound_no, type, project_id, total_cost, operator, status, remark)
-        VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)
-      `).run(id, outboundNo, 'bom', projectId || null, totalCost, operator, remark || null)
-      for (let index = 0; index < recheckedCosts.items.length; index++) {
-        const oi = recheckedCosts.items[index]
-        const mutation = transactionStockPlan[index]
-        const itemId = uuidv4()
-        db.prepare(`
-          INSERT INTO outbound_items (id, outbound_id, material_id, batch_id, batch_no, quantity, unit, unit_cost, total_cost, usage, receiver)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(itemId, id, oi.materialId, oi.batchId, oi.batchNo, oi.quantity, unitMap.get(oi.materialId) || 'pcs', oi.unitCost, oi.itemCost, 'self', null)
-        if (oi.drift) recordLedgerDrift(db, id, oi, operator)
-        db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(mutation.inventoryAfter, oi.materialId)
-        if (oi.batchId && mutation.batchAfter !== undefined) {
-          db.prepare('UPDATE batches SET remaining = ?, status = ? WHERE id = ?')
-            .run(mutation.batchAfter, mutation.batchAfter <= 0 ? 0 : 1, oi.batchId)
-        }
-        const logId = uuidv4()
-        db.prepare(`
-          INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
-          VALUES (?, 'outbound', ?, ?, ?, ?, ?, 'outbound', ?)
-        `).run(logId, oi.materialId, -oi.quantity, mutation.inventoryBefore, mutation.inventoryAfter, id, operator)
-      }
-
-      // ===== ABC 成本核算：写入 outbound_abc_details（失败不阻断出库）=====
-      try {
-        const costMonth = new Date().toISOString().slice(0, 7)
-        const perSampleDriver = getBomPerSampleDriverQty(db, bomId)
-        const storedBlockCount = Math.round(perSampleDriver.block * sc)
-        const storedSlideCount = Math.round((perSampleDriver.slide > 0 ? perSampleDriver.slide : 1) * sc)
-        const slideCostResult = calculateSlideCostWithFee(db, {
-          bomId,
-          slideCount: sc,
-          blockCount: 1,
-          month: costMonth,
-          materialCost: totalCost,
-          caseNo: null,
-          applyCaseAggregation: true,
-          sampleCount: sc,
-          caseCount: 0,
-        })
-        const missingFeeMapping = slideCostResult.feeBreakdown.length === 0
-        const abcDetailId = uuidv4()
-        db.prepare(`
-          INSERT INTO outbound_abc_details
-          (id, outbound_id, bom_id, project_id, sample_count, slide_count, block_count, case_count,
-           material_cost, activity_cost, total_cost, cost_per_slide,
-           fee_category, fee_standard_id, fee_amount, profit, profit_rate,
-           activity_details, cost_month, cost_status, case_no, charge_group_id, calculation_version, source_snapshot, bom_version_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          abcDetailId, id, bomId, projectId || null,
-          sc, storedSlideCount, storedBlockCount, 0,
-          slideCostResult.materialCost, slideCostResult.totalActivityCost, slideCostResult.totalCost,
-          sc > 0 ? slideCostResult.totalCost / sc : 0,
-          slideCostResult.feeCategory, slideCostResult.feeStandardId,
-          slideCostResult.feeAmount, slideCostResult.profit, slideCostResult.profitRate,
-          JSON.stringify(slideCostResult.activityCosts),
-          costMonth,
-          missingFeeMapping ? 'cost_exception' : 'costed',
-          null,
-          id,
-          'v1',
-          JSON.stringify({
-            outboundId: id, outboundNo, bomId, projectId: projectId || null, caseNo: null,
-            sampleCount: sc, materialCost: totalCost,
-            bomSnapshot: buildBomSourceSnapshot(db, bomId),
-            feeBreakdown: slideCostResult.feeBreakdown,
-            calculatedAt: new Date().toISOString(),
-          }),
-          getActiveBomVersionId(db, bomId), // 钉到当时活跃版本（历史可复现）
-        )
-        db.prepare(`
-          UPDATE outbound_records SET
-            abc_total_cost = ?, abc_activity_cost = ?, fee_amount = ?, profit = ?, cost_status = ?
-          WHERE id = ?
-        `).run(
-          slideCostResult.totalCost, slideCostResult.totalActivityCost,
-          slideCostResult.feeAmount, slideCostResult.profit,
-          missingFeeMapping ? 'cost_exception' : 'costed', id,
-        )
-        if (missingFeeMapping) {
-          recordCostException(db, {
-            sourceModule: 'abc', sourceType: 'bom_outbound', sourceId: id,
-            projectId: projectId || null, bomId, outboundId: id, yearMonth: costMonth,
-            exceptionType: 'missing_fee_mapping', severity: 'warning',
-            message: 'BOM未配置收费映射，出库收费与利润核算不可确认',
-            details: { outboundNo, bomId, projectId: projectId || null, caseNo: null, sampleCount: sc, action: 'configure_bom_fee_mapping' },
-          })
-        }
-      } catch (abcErr) {
-        console.error('ABC cost calculation failed (non-blocking):', abcErr)
-      }
-
-      responseEnvelope = buildSuccessEnvelope({ id, outboundNo, type: 'bom', projectId, totalCost, status: 'completed', createdAt: new Date().toISOString() }, 'BOM outbound created')
-      if (idemKey) finalizeIdempotency(db, idemKey, 201, responseEnvelope)
-      db.exec('COMMIT')
-    } catch (err) {
-      db.exec('ROLLBACK')
-      if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
-      throw err
-    }
-    res.status(201).json(responseEnvelope)
-  } catch (err: any) {
-    if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }
-    error(res, err.message)
-  }
-})
-
 router.put('/:id', requireWriteAccess, (req, res) => {
   try {
     const { id } = req.params
     const { type, projectId, items: newItems, remark } = req.body
-    if (!Array.isArray(newItems) || newItems.length === 0) {
+    if ((type !== undefined && !isLiveOutboundType(type)) || !Array.isArray(newItems) || newItems.length === 0) {
       error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
     }
 
@@ -720,6 +478,9 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!record) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (record.type === 'bom') {
+      error(res, 'Historical BOM outbound records are read-only', 'OUTBOUND_TYPE_RETIRED', 409); return
+    }
 
     const oldItems = db.prepare('SELECT * FROM outbound_items WHERE outbound_id = ?').all(id) as any[]
 
@@ -900,6 +661,9 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
+    if (record.type === 'bom') {
+      error(res, 'Historical BOM outbound records are read-only', 'OUTBOUND_TYPE_RETIRED', 409); return
+    }
 
     const items = db.prepare('SELECT * FROM outbound_items WHERE outbound_id = ?').all(id) as any[]
 

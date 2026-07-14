@@ -1717,13 +1717,6 @@ test.describe('入库管理 -> 业务流程树', () => {
     await page.goto(`${FE_BASE}/inbound`)
     await page.waitForTimeout(1000)
   })
-  test('BF-IN-14. 分支：BOM一键出库后尝试删除关联入库单', async ({ page }) => {
-    const token = await apiLogin('admin')
-    const id = await getAnyInboundId(token)
-    if (!id) { test.skip(); return }
-    const chk = await apiFetch(token, 'GET', `/inbound/${id}/check-deletable`)
-    expect(chk.status).toBe(200)
-  })
   test('BF-IN-15. 分支：批量操作后检查入库列表', async ({ page }) => {
     await loginAs(page, 'admin')
     await page.goto(`${FE_BASE}/inbound`)

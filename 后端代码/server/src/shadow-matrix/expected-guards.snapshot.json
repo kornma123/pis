@@ -1,7 +1,7 @@
 {
   "_doc": "权限影子断言矩阵·已批准守卫快照（ratified）。键=运行时端点「METHOD /path」，值=guardId{module,level,conditions}。断言 B 拿它当 expected 比对当前 actual：模块变/降级 W→R/少条件=BLOCK。改端点守卫→人复核后 SHADOW_MATRIX_UPDATE=1 重批。",
   "generated": "由 SHADOW_MATRIX_UPDATE=1 生成（日期见 git 提交）",
-  "count": 278,
+  "count": 277,
   "guards": {
     "DELETE /api/v1/abc/activity-centers/:id": {
       "module": "abc_config",
@@ -1137,11 +1137,6 @@
       ]
     },
     "POST /api/v1/outbound": {
-      "module": "outbound",
-      "level": "W",
-      "conditions": []
-    },
-    "POST /api/v1/outbound/bom": {
       "module": "outbound",
       "level": "W",
       "conditions": []
