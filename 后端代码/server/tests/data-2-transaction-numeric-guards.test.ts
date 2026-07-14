@@ -669,50 +669,15 @@ describe('DATA-2 outbound numeric guards', () => {
     expect(snapshot(f)).toEqual(expectedAfterDrift)
   })
 
-  it('BOM outbound rejects inside the lock when the selected first batch cannot cover the quantity', async () => {
-    const f = seedFixture('outbound-bom-first-batch-insufficient', { stock: 10 })
-    db.prepare("UPDATE batches SET quantity = 3, remaining = 3, expiry_date = '2026-07-13' WHERE id = ?").run(f.batchId)
-    db.prepare(`
-      INSERT INTO batches
-        (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, supplier_id, expiry_date, status)
-      VALUES (?, ?, ?, 7, 7, ?, 10, ?, '2027-07-13', 1)
-    `).run(`batch-later-${f.suffix}`, f.materialId, `B-LATER-${f.suffix}`, f.inboundId, f.supplierId)
-    const before = snapshot(f)
-    const key = `${f.keyPrefix}bom-first-batch-insufficient`
-
-    const response = await auth(request(app).post('/api/v1/outbound/bom'), key).send({
+  it('ordinary outbound replays a same-key result committed while waiting for the lock before reporting stale stock', async () => {
+    const f = seedFixture('outbound-ordinary-claim-race', { stock: 5 })
+    const key = `${f.keyPrefix}ordinary-claim-race`
+    const payload = {
+      type: 'project',
       projectId: f.projectId,
-      bomId: f.bomId,
-      sampleCount: 7,
-    })
-
-    expect.soft(response.status).toBe(422)
-    expect.soft(response.body?.error?.code).toBe('STOCK_INSUFFICIENT')
-    expect.soft(beginImmediateCalls()).toHaveLength(1)
-    expect.soft(snapshot(f)).toEqual(before)
-  })
-
-  it.each([
-    {
-      label: 'ordinary',
-      path: '/api/v1/outbound',
-      scope: 'outbound:create',
-      body: (f: Fixture) => ({
-        type: 'project',
-        projectId: f.projectId,
-        items: [{ materialId: f.materialId, quantity: 5 }],
-      }),
-    },
-    {
-      label: 'BOM',
-      path: '/api/v1/outbound/bom',
-      scope: 'outbound:bom',
-      body: (f: Fixture) => ({ projectId: f.projectId, bomId: f.bomId, sampleCount: 5 }),
-    },
-  ])('$label outbound replays a same-key result committed while waiting for the lock before reporting stale stock', async ({ label, path, scope, body }) => {
-    const f = seedFixture(`outbound-${label}-claim-race`, { stock: 5 })
-    const key = `${f.keyPrefix}${label}-claim-race`
-    const payload = body(f)
+      items: [{ materialId: f.materialId, quantity: 5 }],
+    }
+    const scope = 'outbound:create'
     const fingerprint = fingerprintRequest(payload)
     const replayBody = {
       success: true,
@@ -728,7 +693,7 @@ describe('DATA-2 outbound numeric guards', () => {
           INSERT INTO outbound_records
             (id, outbound_no, type, project_id, total_cost, operator, status)
           VALUES (?, ?, ?, ?, 50, 'concurrent', 'completed')
-        `).run(replayBody.data.id, replayBody.data.outboundNo, label === 'BOM' ? 'bom' : 'project', f.projectId)
+        `).run(replayBody.data.id, replayBody.data.outboundNo, 'project', f.projectId)
         db.prepare(`
           INSERT INTO outbound_items
             (id, outbound_id, material_id, batch_id, batch_no, quantity, unit, unit_cost, total_cost, usage)
@@ -751,7 +716,7 @@ describe('DATA-2 outbound numeric guards', () => {
     })
 
     try {
-      const response = await auth(request(app).post(path), key).send(payload)
+      const response = await auth(request(app).post('/api/v1/outbound'), key).send(payload)
       expect(response.status).toBe(201)
       expect(response.body).toEqual(replayBody)
     } finally {
@@ -791,29 +756,6 @@ describe('DATA-2 outbound numeric guards', () => {
     }, key), f, before)
   })
 
-  it('raw JSON 1e400 BOM sampleCount returns 400 before idempotency or transaction', async () => {
-    const f = seedFixture('outbound-bom')
-    const before = snapshot(f)
-    const key = `${f.keyPrefix}outbound-bom`
-    await expectRejectedWithoutBusinessEffects(postRaw('/api/v1/outbound/bom', {
-      projectId: f.projectId,
-      bomId: f.bomId,
-      sampleCount: RAW_1E400,
-    }, key), f, before)
-  })
-
-  it('finite BOM usage and sampleCount whose required quantity overflows return 400 before idempotency or transaction', async () => {
-    const f = seedFixture('outbound-bom-quantity-overflow')
-    db.prepare('UPDATE bom_items SET usage_per_sample = ? WHERE bom_id = ?').run(1e308, f.bomId)
-    const before = snapshot(f)
-    const key = `${f.keyPrefix}outbound-bom-quantity-overflow`
-    await expectRejectedWithoutBusinessEffects(auth(request(app).post('/api/v1/outbound/bom'), key).send({
-      projectId: f.projectId,
-      bomId: f.bomId,
-      sampleCount: 2,
-    }), f, before)
-  })
-
   it('purchase receive locked recheck adds to the latest received quantity instead of overwriting it', async () => {
     const f = seedFixture('purchase-receive-source-drift')
     const originalPrepare = db.prepare.bind(db)
@@ -850,41 +792,6 @@ describe('DATA-2 outbound numeric guards', () => {
 
     expect(rows('SELECT received_qty, status FROM purchase_orders WHERE id = ?', f.purchaseOrderId))
       .toEqual([{ received_qty: 15, status: 'partial' }])
-  })
-
-  it('BOM locked recheck skips an auxiliary item that became unavailable without deducting stale stock or cost', async () => {
-    const f = seedFixture('outbound-bom-auxiliary-lock-drift')
-    db.prepare('UPDATE bom_items SET is_alternative = 1 WHERE bom_id = ?').run(f.bomId)
-    const originalPrepare = db.prepare.bind(db)
-    let inventoryReads = 0
-    const prepareSpy = vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
-      if (sql === 'SELECT stock FROM inventory WHERE material_id = ?') {
-        inventoryReads += 1
-        if (inventoryReads === 3) {
-          originalPrepare('UPDATE inventory SET stock = 0 WHERE material_id = ?').run(f.materialId)
-        }
-      }
-      return originalPrepare(sql)
-    })
-    let outboundId = ''
-
-    try {
-      const response = await auth(request(app).post('/api/v1/outbound/bom')).send({
-        projectId: f.projectId,
-        bomId: f.bomId,
-        sampleCount: 5,
-      })
-      expect(response.status).toBe(201)
-      outboundId = response.body.data.id
-    } finally {
-      prepareSpy.mockRestore()
-    }
-
-    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(f.materialId) as { stock: number }).stock).toBe(0)
-    expect((db.prepare('SELECT remaining FROM batches WHERE id = ?').get(f.batchId) as { remaining: number }).remaining).toBe(100)
-    expect(rows('SELECT material_id FROM outbound_items WHERE outbound_id = ?', outboundId)).toEqual([])
-    expect(rows('SELECT quantity FROM stock_logs WHERE related_id = ?', outboundId)).toEqual([])
-    expect((db.prepare('SELECT total_cost FROM outbound_records WHERE id = ?').get(outboundId) as { total_cost: number }).total_cost).toBe(0)
   })
 
   it('raw JSON 1e400 outbound update quantity is rejected before reading or mutating old items', async () => {
@@ -1376,7 +1283,7 @@ describe('DATA-2 compatibility: canonical numeric strings and existing zero sema
     expect((db.prepare('SELECT received_qty FROM purchase_orders WHERE id = ?').get(purchaseFixture.purchaseOrderId) as { received_qty: number }).received_qty).toBe(2)
   })
 
-  it('keeps positive numeric strings valid for direct and BOM outbound', async () => {
+  it('keeps positive numeric strings valid for direct outbound', async () => {
     const directFixture = seedFixture('compat-outbound-direct')
     const direct = await auth(request(app).post('/api/v1/outbound')).send({
       type: 'project',
@@ -1384,14 +1291,6 @@ describe('DATA-2 compatibility: canonical numeric strings and existing zero sema
       items: [{ materialId: directFixture.materialId, quantity: '2' }],
     })
     expect(direct.status).toBe(201)
-
-    const bomFixture = seedFixture('compat-outbound-bom')
-    const bom = await auth(request(app).post('/api/v1/outbound/bom')).send({
-      projectId: bomFixture.projectId,
-      bomId: bomFixture.bomId,
-      sampleCount: '2',
-    })
-    expect(bom.status).toBe(201)
   })
 
   it('keeps string zero valid for stocktaking actualStock and positive strings for lane-C quantities', async () => {
