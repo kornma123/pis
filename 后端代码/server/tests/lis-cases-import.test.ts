@@ -309,7 +309,10 @@ describe('#163 阶段1：跨月同号导入硬拒（不覆盖早月事实行）'
   it('codex 三次复核 HIGH：incoming 畸形日期（2026/5/foo 垃圾尾部 / 2026-05-99 日越界 / 2026-13 月越界）严格拒收，不静默覆盖有效登记日与数量', async () => {
     const first = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: '2026-05-10', 蜡块数: 1 }])
     expect(first.body.data.inserted).toBe(1)
-    for (const bad of ['2026/5/foo', '2026-05-99', '2026-13-01', '2026/5junk', '2026-059']) {
+    // 含 codex 四次复核：日历不存在日（2026-02-31/2026-04-31）、非闰年 2月29、非法时间（Tfoo/99:99:99）
+    const bads = ['2026/5/foo', '2026-05-99', '2026-13-01', '2026/5junk', '2026-059',
+      '2026-02-31', '2025-02-29', '2026-04-31', '2026-05-10Tfoo', '2026-05-10 99:99:99']
+    for (const bad of bads) {
       const res = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: bad, 蜡块数: 9 }])
       expect(res.body.data.rejectedInvalidDate).toBe(1) // 非法日期 → 拒收（非跨月）
       expect(res.body.data.updated).toBe(0)
@@ -318,6 +321,50 @@ describe('#163 阶段1：跨月同号导入硬拒（不覆盖早月事实行）'
     const row = db.prepare(`SELECT operate_time, block_count FROM lis_cases WHERE case_no='CM26-7001'`).get() as any
     expect(row.operate_time).toBe('2026-05-10') // 有效登记日未被任何畸形输入覆盖
     expect(row.block_count).toBe(1) // 数量未被覆盖
+  })
+
+  it('codex 四次复核 HIGH：日历不存在日（2026-02-31）同月重传不得覆盖有效行——库中 2026-02-10 + 重传 2026-02-31 被拒、数量不变', async () => {
+    const first = await imp([{ 病理号: 'CM26-CAL1', 送检医院: H, 登记时间: '2026-02-10', 蜡块数: 5 }])
+    expect(first.body.data.inserted).toBe(1)
+    const bad = await imp([{ 病理号: 'CM26-CAL1', 送检医院: H, 登记时间: '2026-02-31', 蜡块数: 99 }]) // 二月无31日
+    expect(bad.body.data.rejectedInvalidDate).toBe(1) // 旧代码会判「同月」放行覆盖；现按真实日历拒
+    expect(bad.body.data.updated).toBe(0)
+    const row = db.prepare(`SELECT operate_time, block_count FROM lis_cases WHERE case_no='CM26-CAL1'`).get() as any
+    expect(row.operate_time).toBe('2026-02-10')
+    expect(row.block_count).toBe(5) // 有效二月数据未被覆盖
+  })
+
+  it('codex 四次复核：合法闰日 2028-02-29 与合法时间戳被接受（严格≠误拒真实日期）', async () => {
+    const leap = await imp([{ 病理号: 'CM26-LEAP', 送检医院: H, 登记时间: '2028-02-29', 蜡块数: 1 }])
+    expect(leap.body.data.inserted).toBe(1)
+    expect((db.prepare(`SELECT operate_time FROM lis_cases WHERE case_no='CM26-LEAP'`).get() as any).operate_time).toBe('2028-02-29')
+    const ts = await imp([{ 病理号: 'CM26-TS02', 送检医院: H, 登记时间: '2026/5/9 8:05:03', 蜡块数: 1 }]) // 单位数时补零到 08
+    expect(ts.body.data.inserted).toBe(1)
+    expect((db.prepare(`SELECT operate_time FROM lis_cases WHERE case_no='CM26-TS02'`).get() as any).operate_time).toBe('2026-05-09 08:05:03')
+  })
+
+  it('codex 四次复核 MEDIUM：非法日期行在建院前被拒——全新医院 + 非法日期 → 不建 partner、不建 case、两计数为 0', async () => {
+    const NEWH = '仅出现在非法日期行的全新医院'
+    const res = await imp([{ 病理号: 'CM26-NP01', 送检医院: NEWH, 登记时间: '2026-02-31', 蜡块数: 3 }])
+    expect(res.body.data.rejectedInvalidDate).toBe(1)
+    expect(res.body.data.inserted).toBe(0)
+    expect(res.body.data.partnersCreated).toBe(0) // 建院在日期校验之后 → 不建院
+    expect(res.body.data.partnersMatched).toBe(0)
+    expect(db.prepare(`SELECT 1 FROM partners WHERE name = ?`).get(NEWH)).toBeUndefined() // partners 表无此院
+    expect(db.prepare(`SELECT 1 FROM lis_cases WHERE case_no='CM26-NP01'`).get()).toBeUndefined()
+  })
+
+  it('codex 四次复核 MEDIUM：/preview 与 /import 校验口径一致——非法日期在预览即计非法、不计 valid、不列 newHospitals', async () => {
+    const request = await req()
+    const PVH = '仅出现在预览非法日期行的全新医院'
+    const payload = { cases: [{ 病理号: 'CM26-PV01', 送检医院: PVH, 登记时间: '2026-02-31', 蜡块数: 2 }] }
+    const preview = await request(app).post('/api/v1/lis-cases/preview').set('Authorization', `Bearer ${adminToken}`).send(payload)
+    expect(preview.body.data.invalidDate).toBe(1) // 预览即识别非法
+    expect(preview.body.data.valid).toBe(0)
+    expect(preview.body.data.newHospitals).not.toContain(PVH) // 不把非法行的医院列为待新建
+    const imp1 = await imp(payload.cases)
+    expect(imp1.body.data.rejectedInvalidDate).toBe(1) // 导入同口径拒收（预览与导入一致，不再前后矛盾）
+    expect(imp1.body.data.inserted).toBe(0)
   })
 
   it('incoming 畸形日期首导即拒、不建行（不把垃圾 operate_time 落库）', async () => {

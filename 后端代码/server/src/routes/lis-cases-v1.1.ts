@@ -50,23 +50,30 @@ function parseYmd(dateish: unknown): { y: string; mo: number; d?: string } | nul
 }
 
 /**
- * incoming 侧**严格**校验（codex 三次复核 · 与 existing 宽松策略分离）：operateTime 必须是合法日期串——
- * `YYYY[-/]M[-/]D`（日 1–31）或纯 `YYYY[-/]M`，可带空格/T 引导的时间尾部；否则 `valid=false`（调用方拒收进回执、
- * 不 upsert）。防 `'2026/5/foo'`/`'2026-05-99'` 等「合法年月前缀 + 垃圾尾部/越界日」被宽松 parseYmd 当五月放行、
- * 静默覆盖有效登记日与数量。归一日期段到补零 canonical、**保留合法时间尾部**（MEDIUM：operate_time 在详情页作
- * 「登记时间」展示，不得丢时分）。existing 侧不用它（仍走宽松 monthOf 保护历史脏行不被跨月覆盖）。
+ * incoming 侧**严格**校验（codex 三/四次复核 · 与 existing 宽松策略分离）：operateTime 必须是**日历上真实存在**的
+ * 日期串——`YYYY[-/]M[-/]D`（日按月大小 + 闰年校验，如 2026-02-31 / 2025-02-29 / 2026-04-31 一律拒）或纯
+ * `YYYY[-/]M`，可带空格/T 引导的 `HH:MM[:SS]` 时间尾部（时 0–23 / 分秒 0–59，`Tfoo`/`99:99:99` 一律拒）；否则
+ * `valid=false`（调用方拒收进回执、不 upsert）。防「合法年月前缀 + 垃圾尾部/越界日/日历不存在日/非法时间」被当成
+ * 同月放行、静默覆盖有效登记日与数量。归一日期段到补零 canonical、**保留合法时间尾部并补零时分秒**（MEDIUM：
+ * operate_time 在详情页作「登记时间」展示，不得丢时分）。existing 侧不用它（仍走宽松 monthOf 保护历史脏行）。
  */
 function parseStrictDate(dateish: string): { valid: true; canonical: string } | { valid: false } {
-  const m = /^\s*(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?([ T].*)?\s*$/.exec(dateish)
+  const m = /^\s*(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?(?:([ T])(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*$/.exec(dateish)
   if (!m) return { valid: false }
-  const mo = Number(m[2])
+  const year = Number(m[1]), mo = Number(m[2])
   if (mo < 1 || mo > 12) return { valid: false }
   const ym = `${m[1]}-${String(mo).padStart(2, '0')}`
-  if (m[3] === undefined) return m[4] ? { valid: false } : { valid: true, canonical: ym } // 纯年月不允许残留尾部
+  if (m[3] === undefined) return m[4] === undefined ? { valid: true, canonical: ym } : { valid: false } // 纯年月不许带时间
   const d = Number(m[3])
-  if (d < 1 || d > 31) return { valid: false }
-  const tail = m[4] ? m[4].replace(/\s+$/, '') : '' // 保留合法时间尾部（如 ' 10:30:45' / 'T09:00'）
-  return { valid: true, canonical: `${ym}-${String(d).padStart(2, '0')}${tail}` }
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1]
+  if (d < 1 || d > daysInMonth) return { valid: false } // 真实日历日（含闰年/月大小），拒 2026-02-31 之类
+  const datePart = `${ym}-${String(d).padStart(2, '0')}`
+  if (m[4] === undefined) return { valid: true, canonical: datePart } // 无时间尾部
+  const hh = Number(m[5]), mi = Number(m[6]), ss = m[7] === undefined ? undefined : Number(m[7])
+  if (hh > 23 || mi > 59 || (ss !== undefined && ss > 59)) return { valid: false } // 时分秒范围
+  const hms = `${String(hh).padStart(2, '0')}:${String(mi).padStart(2, '0')}${ss !== undefined ? ':' + String(ss).padStart(2, '0') : ''}`
+  return { valid: true, canonical: `${datePart}${m[4]}${hms}` } // 保留原分隔符（空格/T）+ 补零时分秒
 }
 
 /**
@@ -137,7 +144,7 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
     let skipped = 0
     let rejectedCrossMonth = 0 // #163 阶段1：同 (partner_id, case_no) 但派生月冲突 → 硬拒不覆盖
     const rejectedCrossMonthSamples: Array<{ caseNo: string; partnerName: string; existingMonth: string; incomingMonth: string }> = []
-    let rejectedInvalidDate = 0 // incoming 登记时间畸形（垃圾尾部/日越界）→ 拒收不 upsert（防静默覆盖有效登记日·codex 三次复核）
+    let rejectedInvalidDate = 0 // incoming 登记时间畸形（垃圾尾部/日越界/日历不存在日/非法时间）→ 拒收不 upsert（防静默覆盖有效登记日·codex 三/四次复核）
     const rejectedInvalidDateSamples: Array<{ caseNo: string; partnerName: string; value: string }> = []
     // 整批事务：任一行 SQL 失败则整体回滚，避免半批落库；拒收/跳行是正常分支、不触发回滚（回执分项计数）
     db.exec('BEGIN IMMEDIATE')
@@ -145,21 +152,11 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
       for (const row of cases) {
         const c = normalizeLisRow(row)
         if (!isValidLisRow(c)) { skipped++; continue }
-        // 医院 upsert（缓存避免重复查）
-        let partnerId = partnerCache.get(c.partnerName)
-        if (!partnerId) {
-          const ref = findOrCreatePartner(db, c.partnerName, uuidv4, { createdBy: operator })
-          partnerId = ref.id
-          partnerCache.set(c.partnerName, partnerId)
-          if (ref.created) partnersCreated++
-        }
-        const existingRow = existsStmt.get(partnerId, c.caseNo) as { operate_time: string | null } | undefined // upsert 前查存在性 → 拆新增/更新
-        // #163 阶段1硬拒：库行已有可解析月锚时，只放行「同月重传」（可重传语义不变）。
-        // 导入月不同 → 拒（跨月覆盖 = 不可逆销毁早月事实行）；导入月不可解析('') 也拒（放行会把
-        // operate_time 覆盖成空 = 抹掉月锚，同样不可逆）。库行无月锚('') 不拦：给旧无日期行留补
-        // incoming 严格校验（codex 三次复核 · existing 宽松/incoming 严格分离）：登记时间非空但畸形
-        // （'2026/5/foo' 垃圾尾部、'2026-05-99' 日越界）→ 拒收、不 upsert，进回执。防它被宽松解析当成合法
-        // 月而放行、把有效登记日与数量静默覆盖。空登记时间视为「无日期」放行（补日期修复通道，canonicalOp=null）。
+        // incoming 严格校验（codex 三/四次复核 · existing 宽松/incoming 严格分离）：登记时间非空但畸形
+        // （'2026/5/foo' 垃圾尾部 / '2026-05-99' 日越界 / '2026-02-31' 日历不存在 / '99:99:99' 非法时间）→
+        // 拒收、不 upsert，进回执。防它被当同月放行、把有效登记日与数量静默覆盖。空登记时间视为「无日期」放行
+        // （补日期修复通道，canonicalOp=null）。**在建院前校验**（codex 四次 MEDIUM）：非法日期行不建医院、不污染
+        // partnersCreated/partnersMatched 计数，回执「未落库」才完整。
         const opRaw = c.operateTime || ''
         let canonicalOp: string | null = null
         if (opRaw !== '') {
@@ -173,6 +170,15 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
           }
           canonicalOp = strict.canonical // 已补零、保留时间尾部
         }
+        // 医院 upsert（缓存避免重复查）
+        let partnerId = partnerCache.get(c.partnerName)
+        if (!partnerId) {
+          const ref = findOrCreatePartner(db, c.partnerName, uuidv4, { createdBy: operator })
+          partnerId = ref.id
+          partnerCache.set(c.partnerName, partnerId)
+          if (ref.created) partnersCreated++
+        }
+        const existingRow = existsStmt.get(partnerId, c.caseNo) as { operate_time: string | null } | undefined // upsert 前查存在性 → 拆新增/更新
         // #163 阶段1硬拒：库行已有可解析月锚时，只放行「同月重传」（可重传语义不变）。导入月不同 → 拒（跨月
         // 覆盖 = 不可逆销毁早月事实行）；导入月不可解析('') 也拒（放行会把 operate_time 覆盖成空 = 抹掉月锚）。
         // 库行无月锚('') 不拦：给旧无日期行留补日期的修复通道。existing 侧 monthOf 先宽松归一再取前7位 → 与
@@ -235,21 +241,25 @@ router.post('/preview', authenticateToken, requireImport, (req, res) => {
     const hospitals = new Map<string, boolean>() // name -> existing
     const specimen = { tissue: 0, tissue_complex: 0, cytology: 0 }
     let valid = 0, skipped = 0
+    let invalidDate = 0 // 与 /import 同口径（codex 四次 MEDIUM）：登记时间非法的行预览即计非法，不计 valid、不列 newHospitals
     for (const row of cases) {
       const c = normalizeLisRow(row)
       if (!isValidLisRow(c)) { skipped++; continue }
+      const opRaw = c.operateTime || ''
+      if (opRaw !== '' && !parseStrictDate(opRaw).valid) { invalidDate++; continue } // 与 /import 严格校验同源
       valid++
       if (!hospitals.has(c.partnerName)) hospitals.set(c.partnerName, !!partnerExists.get(c.partnerName))
       specimen[c.autoSpecimenType]++
     }
     const newHospitals = [...hospitals.entries()].filter(([, ex]) => !ex).map(([n]) => n)
     success(res, {
-      valid, skipped,
+      valid, skipped, invalidDate,
       hospitalCount: hospitals.size,
       newHospitals,
       specimenDistribution: specimen,
       warnings: [
         ...(skipped ? [`${skipped} 行缺病理号/医院将被跳过`] : []),
+        ...(invalidDate ? [`${invalidDate} 行登记时间格式非法，将被拒收（不落库、不新建医院）`] : []),
         ...(newHospitals.length ? [`将新建 ${newHospitals.length} 家医院（默认仅技术，service_scope 后续可在合作医院页设置）`] : []),
       ],
     }, '预览（未落库）')
