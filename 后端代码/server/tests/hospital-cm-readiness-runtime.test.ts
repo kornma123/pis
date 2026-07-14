@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { getDb } from './p0-harness.js'
 import {
   ensureHospitalCmReadinessSchema,
+  currentHospitalCmReadinessSourceFingerprint,
   getHospitalCmReadinessSnapshot,
   recordHospitalCmFoundationProbeRun,
   shanghaiBusinessDate,
@@ -92,7 +93,16 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
 
   it('新表没有 writable ready 字段，初始化只有四条机器可读里程碑', async () => {
     const db = await getDb()
-    for (const table of ['hospital_cm_readiness_milestones', 'hospital_cm_readiness_milestone_events', 'hospital_cm_readiness_probe_runs', 'hospital_cm_readiness_probe_checks', 'hospital_cm_readiness_source_revisions']) {
+    for (const table of [
+      'hospital_cm_readiness_milestones',
+      'hospital_cm_readiness_milestone_events',
+      'hospital_cm_readiness_probe_runs',
+      'hospital_cm_readiness_probe_checks',
+      'hospital_cm_readiness_source_revisions',
+      'hospital_cm_fixed_pool_versions',
+      'hospital_cm_fixed_pool_ratification_events',
+      'hospital_cm_fixed_pool_idempotency',
+    ]) {
       const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
       expect(columns.length).toBeGreaterThan(0)
       expect(columns.map((column) => column.name)).not.toContain('ready')
@@ -111,6 +121,8 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
     ])
     expect((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_readiness_milestone_events').get() as any).n).toBe(4)
     expect((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_readiness_probe_runs').get() as any).n).toBe(0)
+    expect((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_fixed_pool_versions').get() as any).n).toBe(0)
+    expect((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_fixed_pool_ratification_events').get() as any).n).toBe(0)
 
     const snapshot = getHospitalCmReadinessSnapshot(db, '2026-07-13')
     expect(snapshot.ready).toBe(false)
@@ -150,11 +162,25 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
 
       const columns = db.prepare('PRAGMA table_info(hospital_cm_readiness_milestones)').all() as Array<{ name: string }>
       expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+        'owner_user_id',
+        'owner_assignment_revision',
+        'reviewer_user_id',
+        'completion_evidence_ref',
+        'completion_evidence_hash',
+      ]))
+      const eventColumns = db.prepare('PRAGMA table_info(hospital_cm_readiness_milestone_events)').all() as Array<{ name: string }>
+      expect(eventColumns.map((column) => column.name)).toEqual(expect.arrayContaining([
+        'owner_user_id',
+        'owner_assignment_revision',
+        'reviewer_user_id',
         'completion_evidence_ref',
         'completion_evidence_hash',
       ]))
       expect((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_readiness_milestones').get() as any).n).toBe(4)
       expect((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_readiness_milestone_events').get() as any).n).toBe(4)
+      expect((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_fixed_pool_versions').get() as any).n).toBe(0)
+      expect((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_fixed_pool_ratification_events').get() as any).n).toBe(0)
+      expect((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_fixed_pool_idempotency').get() as any).n).toBe(0)
       expect((db.prepare(`
         SELECT completion_evidence_ref AS ref, completion_evidence_hash AS hash
         FROM hospital_cm_readiness_milestones
@@ -380,7 +406,7 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
     expect(after).toBe(before)
   })
 
-  it('探针证据 append-only：UPDATE / DELETE 均被数据库拒绝', async () => {
+  it('探针证据 append-only：UPDATE / DELETE / OR REPLACE 均被数据库拒绝', async () => {
     const db = await getDb()
     const run = recordHospitalCmFoundationProbeRun(db, {
       triggeredByUserId: 'USER-001', triggeredByUsername: 'admin', reasonCode: 'RELEASE_ACCEPTANCE', now: NOW,
@@ -390,6 +416,14 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
       .toThrow(/READINESS_EVIDENCE_APPEND_ONLY/)
     expect(() => db.prepare('DELETE FROM hospital_cm_readiness_probe_checks WHERE run_id = ?').run(run.id))
       .toThrow(/READINESS_EVIDENCE_APPEND_ONLY/)
+    expect(() => db.prepare(`
+      INSERT OR REPLACE INTO hospital_cm_readiness_probe_runs
+      SELECT * FROM hospital_cm_readiness_probe_runs WHERE id = ?
+    `).run(run.id)).toThrow(/READINESS_EVIDENCE_APPEND_ONLY/)
+    expect(() => db.prepare(`
+      INSERT OR REPLACE INTO hospital_cm_readiness_probe_checks
+      SELECT * FROM hospital_cm_readiness_probe_checks WHERE run_id = ? LIMIT 1
+    `).run(run.id)).toThrow(/READINESS_EVIDENCE_APPEND_ONLY/)
   })
 
   it('探针 run 与三项 check 是原子写入：任一 check 失败则整批回滚', async () => {
@@ -603,6 +637,35 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
       .toThrow(/READINESS_MILESTONE_REQUIRED/)
   })
 
+  it('owner_role 变化属于新指派，必须同步递增 assignment revision', async () => {
+    const db = await getDb()
+    db.exec('SAVEPOINT milestone_owner_role_revision_test')
+    try {
+      expect(() => db.prepare(`
+        UPDATE hospital_cm_readiness_milestones
+        SET previous_due_date = due_date, previous_projected_date = projected_date,
+            revision = revision + 1, owner_role = 'tech',
+            change_reason = '测试角色变化必须换指派版本', updated_by = 'SECURITY-TEST'
+        WHERE condition_key = 'denominator'
+      `).run()).toThrow(/READINESS_MILESTONE_OWNER_ASSIGNMENT_REVISION_INVALID/)
+
+      db.prepare(`
+        UPDATE hospital_cm_readiness_milestones
+        SET previous_due_date = due_date, previous_projected_date = projected_date,
+            revision = revision + 1, owner_assignment_revision = owner_assignment_revision + 1,
+            owner_role = 'tech', change_reason = '测试角色变化同步换指派版本', updated_by = 'SECURITY-TEST'
+        WHERE condition_key = 'denominator'
+      `).run()
+      expect(db.prepare(`
+        SELECT owner_role AS ownerRole, owner_assignment_revision AS assignmentRevision
+        FROM hospital_cm_readiness_milestones WHERE condition_key = 'denominator'
+      `).get()).toEqual({ ownerRole: 'tech', assignmentRevision: 1 })
+    } finally {
+      db.exec('ROLLBACK TO milestone_owner_role_revision_test')
+      db.exec('RELEASE milestone_owner_role_revision_test')
+    }
+  })
+
   it('首周期独立复核角色不可清空，责任人与复核人不能同人或用大小写空白变体兼任', async () => {
     const db = await getDb()
     const attemptedRevision = (assignment: string) => db.prepare(`
@@ -615,9 +678,9 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
 
     expect(() => attemptedRevision('reviewer_role = NULL, reviewer_name = NULL'))
       .toThrow(/READINESS_MILESTONE_REVIEWER_INVALID/)
-    expect(() => attemptedRevision("owner_name = 'Reviewer One', reviewer_name = 'Reviewer One'"))
+    expect(() => attemptedRevision("owner_assignment_revision = owner_assignment_revision + 1, owner_user_id = 'USER-SAME', owner_name = 'Reviewer One', reviewer_user_id = 'USER-SAME', reviewer_name = 'Reviewer One'"))
       .toThrow(/READINESS_MILESTONE_REVIEWER_INVALID/)
-    expect(() => attemptedRevision("owner_name = '  Reviewer.One  ', reviewer_name = 'reviewer.one'"))
+    expect(() => attemptedRevision("owner_assignment_revision = owner_assignment_revision + 1, owner_user_id = 'USER-SAME', owner_name = '  Reviewer.One  ', reviewer_user_id = 'USER-SAME', reviewer_name = 'reviewer.one'"))
       .toThrow(/READINESS_MILESTONE_REVIEWER_INVALID/)
 
     const milestone = getHospitalCmReadinessSnapshot(db, '2026-07-13').milestones
@@ -675,6 +738,15 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
         DELETE FROM hospital_cm_readiness_milestone_events
         WHERE condition_key = 'foundation' AND revision = 2
       `).run()).toThrow(/READINESS_MILESTONE_EVENT_APPEND_ONLY/)
+      expect(() => db.prepare(`
+        INSERT OR REPLACE INTO hospital_cm_readiness_milestone_events
+        SELECT * FROM hospital_cm_readiness_milestone_events
+        WHERE condition_key = 'foundation' AND revision = 2
+      `).run()).toThrow(/READINESS_MILESTONE_EVENT_APPEND_ONLY/)
+      expect(() => db.prepare(`
+        INSERT OR REPLACE INTO hospital_cm_readiness_milestones
+        SELECT * FROM hospital_cm_readiness_milestones WHERE condition_key = 'denominator'
+      `).run()).toThrow(/READINESS_MILESTONE_REQUIRED/)
     } finally {
       db.exec('ROLLBACK TO milestone_event_history_test')
       db.exec('RELEASE milestone_event_history_test')
@@ -698,7 +770,8 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
         UPDATE hospital_cm_readiness_milestones
         SET previous_due_date = due_date, previous_projected_date = projected_date,
             revision = revision + 1, change_reason = '登记完成证据', updated_by = 'TECH-OWNER-1',
-            owner_name = 'TECH-OWNER-1', completion_evidence_ref = 'probe:RUN-1',
+            owner_assignment_revision = owner_assignment_revision + 1,
+            owner_user_id = 'USER-TECH-OWNER-1', owner_name = 'TECH-OWNER-1', completion_evidence_ref = 'probe:RUN-1',
             completion_evidence_hash = ?
         WHERE condition_key = 'foundation'
       `).run(hash)
@@ -717,6 +790,46 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
     } finally {
       db.exec('ROLLBACK TO milestone_completion_evidence_test')
       db.exec('RELEASE milestone_completion_evidence_test')
+    }
+  })
+
+  it('最终防竞态指纹覆盖全部里程碑稳定身份与独立复核门', () => {
+    const db = createIsolatedProbePerformanceDb()
+    try {
+      const month = '2026-07'
+      const initial = getHospitalCmReadinessSnapshot(db, '2026-07-13', { serviceMonth: month })
+      db.prepare(`
+        UPDATE hospital_cm_readiness_milestones
+        SET previous_due_date = due_date, previous_projected_date = projected_date,
+            revision = revision + 1, owner_assignment_revision = owner_assignment_revision + 1,
+            owner_user_id = 'USER-PM-1', owner_name = 'PM-1',
+            change_reason = '测试：具名 history owner', updated_by = 'SECURITY-TEST'
+        WHERE condition_key = 'history'
+      `).run()
+      expect(currentHospitalCmReadinessSourceFingerprint(db, month)).not.toBe(initial.sourceStateFingerprint)
+
+      db.prepare(`
+        UPDATE hospital_cm_readiness_milestones
+        SET previous_due_date = due_date, previous_projected_date = projected_date,
+            revision = revision + 1, owner_assignment_revision = owner_assignment_revision + 1,
+            owner_user_id = 'USER-TECH-1', owner_name = 'TECH-1',
+            reviewer_user_id = 'USER-REVIEW-1', reviewer_name = 'REVIEW-1',
+            change_reason = '测试：具名首周期责任人与复核人', updated_by = 'SECURITY-TEST'
+        WHERE condition_key = 'first_period'
+      `).run()
+      const beforeIndependenceBreak = getHospitalCmReadinessSnapshot(db, '2026-07-13', { serviceMonth: month })
+      db.prepare(`
+        UPDATE hospital_cm_readiness_milestones
+        SET previous_due_date = due_date, previous_projected_date = projected_date,
+            revision = revision + 1, reviewer_user_id = owner_user_id, reviewer_name = 'DIFFERENT-DISPLAY-NAME',
+            change_reason = '测试：稳定 ID 相同但显示名不同', updated_by = 'SECURITY-TEST'
+        WHERE condition_key = 'first_period'
+      `).run()
+      expect(currentHospitalCmReadinessSourceFingerprint(db, month)).not.toBe(beforeIndependenceBreak.sourceStateFingerprint)
+      expect(getHospitalCmReadinessSnapshot(db, '2026-07-13', { serviceMonth: month }).findings)
+        .toContainEqual(expect.objectContaining({ type: 'milestone_reviewer_not_independent', conditionKey: 'first_period' }))
+    } finally {
+      db.close()
     }
   })
 
