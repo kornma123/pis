@@ -8,6 +8,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
 import type { Test } from 'supertest'
 import { buildTestApp, getDb, loginAdmin } from './p0-harness.js'
+import * as numericInput from '../src/utils/numeric-input.js'
 
 let app: any
 let auditedApp: any
@@ -150,6 +151,31 @@ beforeAll(async () => {
 })
 
 describe('DATA-5 BOM usagePerSample numeric guard', () => {
+  it('fails closed before business effects if the shared parser ever returns a non-finite value', async () => {
+    const parserSpy = vi.spyOn(numericInput, 'parseFiniteNonNegativeNumber').mockReturnValue(Infinity)
+    const code = nextId('POST-PARSER-CONTRACT')
+    const beforeInventory = inventoryState()
+
+    try {
+      const { result: response, execCalls } = await recordExec(() => auth(
+        request(app).post('/api/v1/boms'),
+      ).send({
+        code,
+        name: 'DATA-5 parser contract BOM',
+        type: 'ihc',
+        materials: [{ materialId, usagePerSample: 1, unit: 'mL' }],
+      }))
+
+      expect(response.status).toBe(400)
+      expect(response.body?.error?.code).toBe('INVALID_PARAMETER')
+      expect(bomCodeState(code)).toEqual([])
+      expect(inventoryState()).toEqual(beforeInventory)
+      expectNoTransaction(execCalls)
+    } finally {
+      parserSpy.mockRestore()
+    }
+  })
+
   it.each(INVALID_USAGE_VALUES)(
     'POST rejects coercive, negative, or non-finite usagePerSample=%j before business effects',
     async (invalidValue) => {

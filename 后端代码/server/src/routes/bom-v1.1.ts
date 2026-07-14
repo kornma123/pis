@@ -16,7 +16,9 @@ function normalizeBomMaterialUsage(materials: unknown[]): Record<string, unknown
     if (material === null || typeof material !== 'object' || Array.isArray(material)) return null
     const item = material as Record<string, unknown>
     const usagePerSample = parseFiniteNonNegativeNumber(item.usagePerSample)
-    if (usagePerSample === null) return null
+    // Keep the BOM write boundary fail-closed even if the shared parser's
+    // contract regresses in a future change.
+    if (usagePerSample === null || !Number.isFinite(usagePerSample) || usagePerSample < 0) return null
     normalized.push({ ...item, usagePerSample })
   }
   return normalized
