@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {
   computeReadiness,
   CURRENT_KNOWN_READINESS_INPUT,
@@ -18,6 +18,12 @@ import {
   type HospitalCmFoundationProbeCheck,
   type HospitalCmReadinessSourceState,
 } from './hospital-cm-foundation-probes.js'
+import {
+  ensureHospitalCmFixedPoolSchema,
+  readHospitalCmFixedPoolControlFingerprint,
+  readHospitalCmFixedPoolState,
+  type HospitalCmFixedPoolRuntimeState,
+} from './hospital-cm-fixed-pool.js'
 
 interface ReadinessStatement {
   get: (...args: unknown[]) => unknown
@@ -54,8 +60,11 @@ export function ensureHospitalCmReadinessSchema(db: HospitalCmReadinessDb): void
     CREATE TABLE IF NOT EXISTS hospital_cm_readiness_milestones (
       condition_key TEXT PRIMARY KEY CHECK (condition_key IN ('foundation','denominator','history','first_period')),
       owner_role TEXT NOT NULL CHECK (owner_role IN ('tech','business','pm')),
+      owner_user_id TEXT,
+      owner_assignment_revision INTEGER NOT NULL DEFAULT 0 CHECK (owner_assignment_revision >= 0),
       owner_name TEXT,
       reviewer_role TEXT CHECK (reviewer_role IS NULL OR reviewer_role = 'independent_reviewer'),
+      reviewer_user_id TEXT,
       reviewer_name TEXT,
       due_date TEXT NOT NULL,
       previous_due_date TEXT,
@@ -143,6 +152,15 @@ export function ensureHospitalCmReadinessSchema(db: HospitalCmReadinessDb): void
   if (!milestoneColumnNames.has('completion_evidence_hash')) {
     db.exec('ALTER TABLE hospital_cm_readiness_milestones ADD COLUMN completion_evidence_hash TEXT')
   }
+  if (!milestoneColumnNames.has('owner_user_id')) {
+    db.exec('ALTER TABLE hospital_cm_readiness_milestones ADD COLUMN owner_user_id TEXT')
+  }
+  if (!milestoneColumnNames.has('owner_assignment_revision')) {
+    db.exec('ALTER TABLE hospital_cm_readiness_milestones ADD COLUMN owner_assignment_revision INTEGER NOT NULL DEFAULT 0')
+  }
+  if (!milestoneColumnNames.has('reviewer_user_id')) {
+    db.exec('ALTER TABLE hospital_cm_readiness_milestones ADD COLUMN reviewer_user_id TEXT')
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS hospital_cm_readiness_milestone_events (
@@ -150,8 +168,11 @@ export function ensureHospitalCmReadinessSchema(db: HospitalCmReadinessDb): void
       condition_key TEXT NOT NULL CHECK (condition_key IN ('foundation','denominator','history','first_period')),
       revision INTEGER NOT NULL CHECK (revision >= 1),
       owner_role TEXT NOT NULL CHECK (owner_role IN ('tech','business','pm')),
+      owner_user_id TEXT,
+      owner_assignment_revision INTEGER NOT NULL DEFAULT 0 CHECK (owner_assignment_revision >= 0),
       owner_name TEXT,
       reviewer_role TEXT CHECK (reviewer_role IS NULL OR reviewer_role = 'independent_reviewer'),
+      reviewer_user_id TEXT,
       reviewer_name TEXT,
       previous_due_date TEXT,
       due_date TEXT NOT NULL,
@@ -191,15 +212,49 @@ export function ensureHospitalCmReadinessSchema(db: HospitalCmReadinessDb): void
         )
       )
       BEGIN SELECT RAISE(ABORT, 'READINESS_MILESTONE_REVIEWER_INVALID'); END;
-    CREATE TRIGGER IF NOT EXISTS trg_hcm_readiness_milestones_append_event
+    CREATE TRIGGER IF NOT EXISTS trg_hcm_readiness_milestones_identity_guard
+      BEFORE UPDATE ON hospital_cm_readiness_milestones
+      WHEN (NEW.owner_user_id IS NULL) <> (NEW.owner_name IS NULL)
+        OR (NEW.reviewer_user_id IS NULL) <> (NEW.reviewer_name IS NULL)
+      BEGIN SELECT RAISE(ABORT, 'READINESS_MILESTONE_IDENTITY_INCOMPLETE'); END;
+    DROP TRIGGER IF EXISTS trg_hcm_readiness_milestones_owner_assignment_guard;
+    CREATE TRIGGER trg_hcm_readiness_milestones_owner_assignment_guard
+      BEFORE UPDATE ON hospital_cm_readiness_milestones
+      WHEN NEW.owner_assignment_revision <> OLD.owner_assignment_revision + CASE
+        WHEN NEW.owner_role IS NOT OLD.owner_role
+          OR NEW.owner_user_id IS NOT OLD.owner_user_id
+          OR NEW.owner_name IS NOT OLD.owner_name THEN 1
+        ELSE 0
+      END
+      BEGIN SELECT RAISE(ABORT, 'READINESS_MILESTONE_OWNER_ASSIGNMENT_REVISION_INVALID'); END;
+  `)
+
+  const milestoneEventColumns = db.prepare('PRAGMA table_info(hospital_cm_readiness_milestone_events)').all() as Array<{ name: string }>
+  const milestoneEventColumnNames = new Set(milestoneEventColumns.map((column) => column.name))
+  if (!milestoneEventColumnNames.has('owner_user_id')) {
+    db.exec('ALTER TABLE hospital_cm_readiness_milestone_events ADD COLUMN owner_user_id TEXT')
+  }
+  if (!milestoneEventColumnNames.has('owner_assignment_revision')) {
+    db.exec('ALTER TABLE hospital_cm_readiness_milestone_events ADD COLUMN owner_assignment_revision INTEGER NOT NULL DEFAULT 0')
+  }
+  if (!milestoneEventColumnNames.has('reviewer_user_id')) {
+    db.exec('ALTER TABLE hospital_cm_readiness_milestone_events ADD COLUMN reviewer_user_id TEXT')
+  }
+
+  // A 旧库的 trigger 不会被 CREATE IF NOT EXISTS 更新；前向重建以便事件同步快照稳定 userId。
+  db.exec(`
+    DROP TRIGGER IF EXISTS trg_hcm_readiness_milestones_append_event;
+    CREATE TRIGGER trg_hcm_readiness_milestones_append_event
       AFTER UPDATE ON hospital_cm_readiness_milestones
       BEGIN
         INSERT INTO hospital_cm_readiness_milestone_events
-          (condition_key, revision, owner_role, owner_name, reviewer_role, reviewer_name,
+          (condition_key, revision, owner_role, owner_user_id, owner_assignment_revision, owner_name,
+           reviewer_role, reviewer_user_id, reviewer_name,
            previous_due_date, due_date, previous_projected_date, projected_date,
            change_reason, changed_by, changed_at, completion_evidence_ref, completion_evidence_hash)
         VALUES
-          (NEW.condition_key, NEW.revision, NEW.owner_role, NEW.owner_name, NEW.reviewer_role, NEW.reviewer_name,
+          (NEW.condition_key, NEW.revision, NEW.owner_role, NEW.owner_user_id, NEW.owner_assignment_revision, NEW.owner_name,
+           NEW.reviewer_role, NEW.reviewer_user_id, NEW.reviewer_name,
            NEW.previous_due_date, NEW.due_date, NEW.previous_projected_date, NEW.projected_date,
            NEW.change_reason, NEW.updated_by, STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now'),
            NEW.completion_evidence_ref, NEW.completion_evidence_hash);
@@ -207,10 +262,13 @@ export function ensureHospitalCmReadinessSchema(db: HospitalCmReadinessDb): void
   `)
 
   const insertRevision = db.prepare(`
-    INSERT OR IGNORE INTO hospital_cm_readiness_source_revisions (source_key, revision)
-    VALUES (?, 0)
+    INSERT INTO hospital_cm_readiness_source_revisions (source_key, revision)
+    SELECT ?, 0
+    WHERE NOT EXISTS (
+      SELECT 1 FROM hospital_cm_readiness_source_revisions WHERE source_key = ?
+    )
   `)
-  for (const sourceTable of HOSPITAL_CM_READINESS_SOURCE_TABLES) insertRevision.run(sourceTable)
+  for (const sourceTable of HOSPITAL_CM_READINESS_SOURCE_TABLES) insertRevision.run(sourceTable, sourceTable)
 
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS trg_hcm_readiness_source_revision_no_delete
@@ -239,10 +297,13 @@ export function ensureHospitalCmReadinessSchema(db: HospitalCmReadinessDb): void
   }
 
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO hospital_cm_readiness_milestones
+    INSERT INTO hospital_cm_readiness_milestones
       (condition_key, owner_role, owner_name, reviewer_role, reviewer_name, due_date, previous_due_date,
        projected_date, previous_projected_date, revision, change_reason, updated_by)
-    VALUES (?, ?, NULL, ?, NULL, ?, ?, ?, ?, 1, ?, 'migration:A')
+    SELECT ?, ?, NULL, ?, NULL, ?, ?, ?, ?, 1, ?, 'migration:A'
+    WHERE NOT EXISTS (
+      SELECT 1 FROM hospital_cm_readiness_milestones WHERE condition_key = ?
+    )
   `)
   for (const milestone of MILESTONE_SEED) {
     insert.run(
@@ -254,19 +315,77 @@ export function ensureHospitalCmReadinessSchema(db: HospitalCmReadinessDb): void
       milestone.projectedDate,
       milestone.projectedDate,
       'PM 已登记基线节点；日期调整须走独立审批增量',
+      milestone.conditionKey,
     )
   }
 
   db.exec(`
-    INSERT OR IGNORE INTO hospital_cm_readiness_milestone_events
-      (condition_key, revision, owner_role, owner_name, reviewer_role, reviewer_name,
+    INSERT INTO hospital_cm_readiness_milestone_events
+      (condition_key, revision, owner_role, owner_user_id, owner_assignment_revision, owner_name,
+       reviewer_role, reviewer_user_id, reviewer_name,
        previous_due_date, due_date, previous_projected_date, projected_date,
        change_reason, changed_by, changed_at, completion_evidence_ref, completion_evidence_hash)
-    SELECT condition_key, revision, owner_role, owner_name, reviewer_role, reviewer_name,
+    SELECT condition_key, revision, owner_role, owner_user_id, owner_assignment_revision, owner_name,
+           reviewer_role, reviewer_user_id, reviewer_name,
            previous_due_date, due_date, previous_projected_date, projected_date,
            change_reason, updated_by, updated_at, completion_evidence_ref, completion_evidence_hash
-    FROM hospital_cm_readiness_milestones;
+    FROM hospital_cm_readiness_milestones AS milestone
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM hospital_cm_readiness_milestone_events AS event
+      WHERE event.condition_key = milestone.condition_key
+        AND event.revision = milestone.revision
+    );
   `)
+
+  // SQLite 默认 recursive_triggers=OFF，INSERT OR REPLACE 可能绕过 UPDATE/DELETE guard。
+  // readiness 的稳定键全部在 INSERT 阶段拒绝冲突，避免旧 owner/旧探针证据被原地复活。
+  db.exec(`
+    DROP TRIGGER IF EXISTS trg_hcm_readiness_probe_runs_duplicate_guard;
+    DROP TRIGGER IF EXISTS trg_hcm_readiness_probe_checks_duplicate_guard;
+    DROP TRIGGER IF EXISTS trg_hcm_readiness_source_revisions_duplicate_guard;
+    DROP TRIGGER IF EXISTS trg_hcm_readiness_milestones_duplicate_guard;
+    DROP TRIGGER IF EXISTS trg_hcm_readiness_milestone_events_duplicate_guard;
+    CREATE TRIGGER trg_hcm_readiness_probe_runs_duplicate_guard
+      BEFORE INSERT ON hospital_cm_readiness_probe_runs
+      WHEN EXISTS (
+             SELECT 1 FROM hospital_cm_readiness_probe_runs
+             WHERE id = NEW.id OR run_number = NEW.run_number
+           )
+      BEGIN SELECT RAISE(ABORT, 'READINESS_EVIDENCE_APPEND_ONLY'); END;
+    CREATE TRIGGER trg_hcm_readiness_probe_checks_duplicate_guard
+      BEFORE INSERT ON hospital_cm_readiness_probe_checks
+      WHEN EXISTS (
+             SELECT 1 FROM hospital_cm_readiness_probe_checks
+             WHERE run_id = NEW.run_id AND gate_key = NEW.gate_key
+           )
+      BEGIN SELECT RAISE(ABORT, 'READINESS_EVIDENCE_APPEND_ONLY'); END;
+    CREATE TRIGGER trg_hcm_readiness_source_revisions_duplicate_guard
+      BEFORE INSERT ON hospital_cm_readiness_source_revisions
+      WHEN EXISTS (
+             SELECT 1 FROM hospital_cm_readiness_source_revisions
+             WHERE source_key = NEW.source_key
+           )
+      BEGIN SELECT RAISE(ABORT, 'READINESS_SOURCE_REVISION_REQUIRED'); END;
+    CREATE TRIGGER trg_hcm_readiness_milestones_duplicate_guard
+      BEFORE INSERT ON hospital_cm_readiness_milestones
+      WHEN EXISTS (
+             SELECT 1 FROM hospital_cm_readiness_milestones
+             WHERE condition_key = NEW.condition_key
+           )
+      BEGIN SELECT RAISE(ABORT, 'READINESS_MILESTONE_REQUIRED'); END;
+    CREATE TRIGGER trg_hcm_readiness_milestone_events_duplicate_guard
+      BEFORE INSERT ON hospital_cm_readiness_milestone_events
+      WHEN EXISTS (
+             SELECT 1 FROM hospital_cm_readiness_milestone_events
+             WHERE event_number = NEW.event_number
+                OR (condition_key = NEW.condition_key AND revision = NEW.revision)
+           )
+      BEGIN SELECT RAISE(ABORT, 'READINESS_MILESTONE_EVENT_APPEND_ONLY'); END;
+  `)
+
+  // B 只建空的月度版本/认账控制面；绝不 seed 金额、owner 或 RATIFIED。
+  ensureHospitalCmFixedPoolSchema(db)
 }
 
 export const FOUNDATION_PROBE_REASON_CODES = ['MONTHLY_REVIEW', 'DATA_REPAIR_RECHECK', 'RELEASE_ACCEPTANCE'] as const
@@ -452,8 +571,11 @@ export function recordHospitalCmFoundationProbeRun(
 interface MilestoneRow {
   conditionKey: ReadinessConditionKey
   ownerRole: ReadinessOwnerRole
+  ownerUserId: string | null
+  ownerAssignmentRevision: number
   ownerName: string | null
   reviewerRole: 'independent_reviewer' | null
+  reviewerUserId: string | null
   reviewerName: string | null
   due: string
   previousDue: string | null
@@ -470,8 +592,11 @@ function readMilestones(db: HospitalCmReadinessDb): MilestoneRow[] {
   return db.prepare(`
     SELECT condition_key AS conditionKey,
            owner_role AS ownerRole,
+           owner_user_id AS ownerUserId,
+           owner_assignment_revision AS ownerAssignmentRevision,
            owner_name AS ownerName,
            reviewer_role AS reviewerRole,
+           reviewer_user_id AS reviewerUserId,
            reviewer_name AS reviewerName,
            due_date AS due,
            previous_due_date AS previousDue,
@@ -644,7 +769,70 @@ export interface HospitalCmReadinessSnapshot {
   sources: Record<ReadinessConditionKey, Record<string, unknown>>
 }
 
-export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: string): HospitalCmReadinessSnapshot {
+function compositeReadinessFingerprint(
+  foundationFingerprint: string,
+  fixedPoolFingerprint: string,
+  serviceMonth: string | null,
+  milestoneFingerprint: string,
+): string {
+  return createHash('sha256').update(JSON.stringify({
+    foundationFingerprint,
+    fixedPoolFingerprint,
+    serviceMonth,
+    milestoneFingerprint,
+  })).digest('hex')
+}
+
+function milestoneControlFingerprint(milestones: MilestoneRow[]): string {
+  return createHash('sha256').update(JSON.stringify(milestones.map((milestone) => ({
+    conditionKey: milestone.conditionKey,
+    revision: Number(milestone.revision),
+    ownerRole: milestone.ownerRole,
+    ownerUserId: milestone.ownerUserId,
+    ownerAssignmentRevision: Number(milestone.ownerAssignmentRevision),
+    ownerName: milestone.ownerName,
+    reviewerRole: milestone.reviewerRole,
+    reviewerUserId: milestone.reviewerUserId,
+    reviewerName: milestone.reviewerName,
+    due: milestone.due,
+    previousDue: milestone.previousDue,
+    projectedDate: milestone.projectedDate,
+    previousProjectedDate: milestone.previousProjectedDate,
+    completionEvidenceRef: milestone.completionEvidenceRef,
+    completionEvidenceHash: milestone.completionEvidenceHash,
+  })))).digest('hex')
+}
+
+function unavailableFixedPoolState(serviceMonth: string): HospitalCmFixedPoolRuntimeState {
+  return {
+    serviceMonth,
+    configured: false,
+    value: null,
+    amountMinor: null,
+    currency: null,
+    versionId: null,
+    versionNumber: null,
+    version: null,
+    ratifiedVersion: null,
+    contentHash: null,
+    currentDecision: null,
+    currentDecisionEventId: null,
+    invalidationCode: 'NOT_CONFIGURED',
+    policyCurrent: false,
+    ownerAssigned: false,
+    ownerActive: false,
+    ownerAssignmentRevision: 0,
+    ratification: null,
+    stateFingerprint: 'UNAVAILABLE',
+  }
+}
+
+export function getHospitalCmReadinessSnapshot(
+  db: HospitalCmReadinessDb,
+  asOf: string,
+  opts: { serviceMonth?: string } = {},
+): HospitalCmReadinessSnapshot {
+  const targetServiceMonth = opts.serviceMonth ?? null
   let sourceBefore: HospitalCmReadinessSourceState
   let sourceStateAvailable = true
   try {
@@ -652,6 +840,15 @@ export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: 
   } catch {
     sourceBefore = unavailableSourceState()
     sourceStateAvailable = false
+  }
+  let fixedPoolFingerprintBefore = targetServiceMonth == null ? 'NO_TARGET_SERVICE_MONTH' : 'UNAVAILABLE'
+  let fixedPoolSourceAvailable = true
+  if (targetServiceMonth != null) {
+    try {
+      fixedPoolFingerprintBefore = readHospitalCmFixedPoolControlFingerprint(db, targetServiceMonth)
+    } catch {
+      fixedPoolSourceAvailable = false
+    }
   }
   const milestones = readMilestones(db)
   const latest = readLatestRun(db)
@@ -663,6 +860,18 @@ export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: 
     sourceStateAvailable = false
   }
   const sourceStable = sourceStateAvailable && sourceBefore.stateFingerprint === sourceAfter.stateFingerprint
+  let fixedPoolState: HospitalCmFixedPoolRuntimeState | null = null
+  let fixedPoolFingerprintAfter = targetServiceMonth == null ? 'NO_TARGET_SERVICE_MONTH' : 'UNAVAILABLE'
+  if (targetServiceMonth != null) {
+    try {
+      fixedPoolState = readHospitalCmFixedPoolState(db, targetServiceMonth)
+      fixedPoolFingerprintAfter = fixedPoolState.stateFingerprint
+    } catch {
+      fixedPoolSourceAvailable = false
+      fixedPoolState = unavailableFixedPoolState(targetServiceMonth)
+    }
+  }
+  const fixedPoolSourceStable = fixedPoolSourceAvailable && fixedPoolFingerprintBefore === fixedPoolFingerprintAfter
   const persistedByKey = new Map((latest?.checks ?? []).map((check) => [check.key, check]))
   const versionMatches = latest?.run.probeVersion === HOSPITAL_CM_FOUNDATION_PROBE_VERSION
   const latestCheckKeys = latest?.checks.map((check) => check.key) ?? []
@@ -703,10 +912,13 @@ export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: 
     { owner: milestone.ownerRole, due: milestone.due },
   ]))
   const history = milestoneByKey.get('history')
+  const fixedPoolForReadiness = targetServiceMonth != null && fixedPoolSourceStable && fixedPoolState != null
+    ? fixedPoolState
+    : { configured: false, value: null, version: null, ratifiedVersion: null }
   const computed = computeReadiness({
     ...CURRENT_KNOWN_READINESS_INPUT,
     foundationGatesGreen,
-    fixedPool: { configured: false, value: null, version: null, ratifiedVersion: null },
+    fixedPool: fixedPoolForReadiness,
     verifiedClosedPeriods: 0,
     firstRealPeriodValidated: false,
     schedule,
@@ -719,7 +931,7 @@ export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: 
   const assignmentErrors = new Map<ReadinessConditionKey, string[]>()
   for (const milestone of milestones) {
     const missingAssignments: string[] = []
-    if (!milestone.ownerName?.trim()) {
+    if (!milestone.ownerUserId?.trim() || !milestone.ownerName?.trim()) {
       missingAssignments.push('具名责任人未指派')
       extraFindings.push({
         type: 'milestone_owner_unassigned',
@@ -736,7 +948,7 @@ export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: 
         reviewerRole: milestone.reviewerRole,
         message: `里程碑 ${milestone.conditionKey} 必须保留 independent_reviewer 角色 → fail-closed`,
       })
-    } else if (milestone.reviewerRole != null && !milestone.reviewerName?.trim()) {
+    } else if (milestone.reviewerRole != null && (!milestone.reviewerUserId?.trim() || !milestone.reviewerName?.trim())) {
       missingAssignments.push('具名独立复核人未指派')
       extraFindings.push({
         type: 'milestone_reviewer_unassigned',
@@ -746,6 +958,18 @@ export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: 
       })
     }
     if (
+      milestone.conditionKey === 'first_period'
+      && milestone.ownerUserId?.trim()
+      && milestone.reviewerUserId?.trim()
+      && milestone.ownerUserId.trim() === milestone.reviewerUserId.trim()
+    ) {
+      missingAssignments.push('责任人与独立复核人不得为同一人')
+      extraFindings.push({
+        type: 'milestone_reviewer_not_independent',
+        conditionKey: milestone.conditionKey,
+        message: `里程碑 ${milestone.conditionKey} 的责任人与独立复核人为同一稳定用户身份 → fail-closed`,
+      })
+    } else if (
       milestone.conditionKey === 'first_period'
       && milestone.ownerName?.trim()
       && milestone.reviewerName?.trim()
@@ -789,6 +1013,21 @@ export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: 
       type: 'source_revision_incomplete',
       conditionKey: 'foundation',
       message: 'readiness 数据源 revision 控制面不完整 → 全部地基门 fail-closed',
+    })
+  }
+  if (!fixedPoolSourceAvailable) {
+    extraFindings.push({
+      type: 'fixed_pool_source_unavailable',
+      conditionKey: 'denominator',
+      serviceMonth: targetServiceMonth,
+      message: '固定成本池版本/认账控制面不可用 → denominator fail-closed',
+    })
+  } else if (!fixedPoolSourceStable) {
+    extraFindings.push({
+      type: 'fixed_pool_source_changed_during_read',
+      conditionKey: 'denominator',
+      serviceMonth: targetServiceMonth,
+      message: '固定成本池在 readiness 读取期间发生变化 → denominator fail-closed',
     })
   }
   if (latest != null && !latestRunEvidenceConsistent) {
@@ -869,10 +1108,11 @@ export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: 
       ownerRole: milestone.ownerRole,
       ownerLabel: OWNER_LABEL[milestone.ownerRole],
       ownerName: milestone.ownerName,
-      ownerAssigned: Boolean(milestone.ownerName?.trim()),
+      ownerAssignmentRevision: Number(milestone.ownerAssignmentRevision),
+      ownerAssigned: Boolean(milestone.ownerUserId?.trim() && milestone.ownerName?.trim()),
       reviewerRole: milestone.reviewerRole,
       reviewerName: milestone.reviewerName,
-      reviewerAssigned: Boolean(milestone.reviewerName?.trim()),
+      reviewerAssigned: Boolean(milestone.reviewerUserId?.trim() && milestone.reviewerName?.trim()),
       due: milestone.due,
       previousDue: milestone.previousDue,
       projectedDate: milestone.projectedDate,
@@ -896,6 +1136,57 @@ export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: 
     }
   })
 
+  const denominatorSource: Record<string, unknown> = targetServiceMonth == null
+    ? {
+        state: 'connected',
+        table: 'hospital_cm_fixed_pool_versions',
+        targetPhase: 'B',
+        targetServiceMonth: null,
+        configured: false,
+        value: null,
+        currentVersion: null,
+        currentContentHash: null,
+        ratifiedVersion: null,
+        ratification: null,
+        invalidationCode: 'TARGET_SERVICE_MONTH_REQUIRED',
+        note: '不隐式选取全局最新值；C 必须从已关账且质量通过的目标周期派生月份',
+      }
+    : {
+        state: 'connected',
+        table: 'hospital_cm_fixed_pool_versions',
+        targetPhase: 'B',
+        targetServiceMonth,
+        configured: fixedPoolState?.configured === true,
+        value: null, // readiness 公共载荷只露版本/证据，不泄漏分母金额。
+        currency: fixedPoolState?.currency ?? null,
+        currentVersionId: fixedPoolState?.versionId ?? null,
+        currentVersion: fixedPoolState?.version ?? null,
+        currentContentHash: fixedPoolState?.contentHash ?? null,
+        ratifiedVersion: fixedPoolState?.ratifiedVersion ?? null,
+        currentDecision: fixedPoolState?.currentDecision ?? null,
+        invalidationCode: fixedPoolState?.invalidationCode ?? 'NOT_CONFIGURED',
+        policyCurrent: fixedPoolState?.policyCurrent === true,
+        ownerAssigned: fixedPoolState?.ownerAssigned === true,
+        ownerActive: fixedPoolState?.ownerActive === true,
+        ownerAssignmentRevision: fixedPoolState?.ownerAssignmentRevision ?? 0,
+        ratification: fixedPoolState?.ratification == null ? null : {
+          eventId: fixedPoolState.ratification.eventId,
+          version: fixedPoolState.ratification.version,
+          decision: fixedPoolState.ratification.decision,
+          evidenceRef: fixedPoolState.ratification.evidenceRef,
+          evidenceHash: fixedPoolState.ratification.evidenceHash,
+          decidedByUsername: fixedPoolState.ratification.decidedByUsername,
+          decidedAt: fixedPoolState.ratification.decidedAt,
+        },
+      }
+
+  const sourceStateFingerprint = compositeReadinessFingerprint(
+    sourceAfter.stateFingerprint,
+    fixedPoolFingerprintAfter,
+    targetServiceMonth,
+    milestoneControlFingerprint(milestones),
+  )
+
   return {
     ...computed,
     ready: computed.ready && assignmentErrors.size === 0,
@@ -904,13 +1195,13 @@ export function getHospitalCmReadinessSnapshot(db: HospitalCmReadinessDb, asOf: 
     asOf,
     asOfSource: 'server',
     policyVersion: READINESS_PARAM_VERSION,
-    sourceStateFingerprint: sourceAfter.stateFingerprint,
+    sourceStateFingerprint,
     foundationGatesGreen,
     foundationEvidence,
     milestones: milestoneView,
     sources: {
       foundation: { state: 'connected', table: 'hospital_cm_readiness_probe_runs', probeVersion: HOSPITAL_CM_FOUNDATION_PROBE_VERSION },
-      denominator: { state: 'not_connected', targetPhase: 'B', value: null, ratification: null },
+      denominator: denominatorSource,
       history: { state: 'not_connected', targetPhase: 'C', verifiedClosedPeriods: 0 },
       first_period: { state: 'not_connected', targetPhase: 'C', independentlyValidated: false },
     },
@@ -929,6 +1220,14 @@ export function shanghaiBusinessDate(now = new Date()): string {
 }
 
 /** full-health 在真正回数前复核一次，防多进程写入造成“旧 readiness + 新金额”的混合快照。 */
-export function currentHospitalCmReadinessSourceFingerprint(db: HospitalCmReadinessDb): string {
-  return readHospitalCmReadinessSourceState(db).stateFingerprint
+export function currentHospitalCmReadinessSourceFingerprint(
+  db: HospitalCmReadinessDb,
+  serviceMonth: string | null = null,
+): string {
+  return compositeReadinessFingerprint(
+    readHospitalCmReadinessSourceState(db).stateFingerprint,
+    readHospitalCmFixedPoolControlFingerprint(db, serviceMonth),
+    serviceMonth,
+    milestoneControlFingerprint(readMilestones(db)),
+  )
 }

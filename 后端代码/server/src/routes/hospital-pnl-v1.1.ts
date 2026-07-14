@@ -8,7 +8,7 @@
  * 影子模式（终稿 §5）：三门 A/B/C 未验收 → 响应显式标 `shadowMode`·输出不得进经营研判。
  * 后视镜（§5·Q10#3）：靠对账/三件套导入天然滞后 → 响应带 `dataAsOf` 概念（这里透出 serviceMonth）。
  */
-import { Router } from 'express'
+import { Router, type Response } from 'express'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
@@ -19,7 +19,6 @@ import {
   buildPortfolioHealth,
   buildComparisonTable,
   toAccountSummary,
-  type FixedPoolState,
 } from '../utils/portfolio-health.js'
 import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：院级贡献毛利(拆分派生)输出自带「口径未认账」水印（LEG-2）
 import {
@@ -31,6 +30,14 @@ import {
   shanghaiBusinessDate,
   type HospitalCmReadinessDb,
 } from '../utils/hospital-cm-readiness-runtime.js'
+import {
+  createHospitalCmFixedPoolVersion,
+  HospitalCmFixedPoolError,
+  isHospitalCmFixedPoolServiceMonth,
+  listHospitalCmFixedPoolVersions,
+  readHospitalCmFixedPoolState,
+  recordHospitalCmFixedPoolDecision,
+} from '../utils/hospital-cm-fixed-pool.js'
 
 const router = Router()
 const requireCostRead = requirePermission('cost_analysis', 'R')
@@ -43,14 +50,39 @@ const requireCostWrite = requirePermission('cost_analysis', 'W')
 //   ⚠️ probe 只读、绝不臆造 ready=true；将来这些地基落地后从真实来源读，ready 自动转绿。
 // ────────────────────────────────────────────────────────────────────────────
 
-/**
- * 探测固定成本池认账状态（HON-5·denominator 条件）。
- * 本项目**尚无**「已认账固定成本池」持久表 → 一律返回**未配置**（不渲染 0·认账不可代签）。
- * ⚠️ `/health` 的 `?fixedPool=` query 是财务临时给的非认账值，**绝不**当已认账放行（认账绑值版本·业务方签）。
- * 将来 LEG-2 落地「固定成本池认账登记」表后从此读 { configured, value, version, ratifiedVersion }。
- */
-function probeFixedPool(_db: HospitalCmReadinessDb): FixedPoolState {
-  return { configured: false, value: null, version: null, ratifiedVersion: null }
+function actorOf(req: any): { userId: string; username: string } {
+  return { userId: req.user?.userId, username: req.user?.username }
+}
+
+function bodyObject(req: any): Record<string, unknown> {
+  return req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+    ? req.body as Record<string, unknown>
+    : {}
+}
+
+function rejectUnsupportedBody(
+  res: Response,
+  body: Record<string, unknown>,
+  allowed: readonly string[],
+): boolean {
+  const unsupported = Object.keys(body).filter((key) => !allowed.includes(key))
+  if (unsupported.length === 0) return false
+  error(
+    res,
+    '固定成本池端点不接受调用者提交版本、操作人或 ready/ratified 结论字段',
+    'FIXED_POOL_RESULT_INPUT_FORBIDDEN',
+    400,
+  )
+  return true
+}
+
+function respondFixedPoolError(res: Response, cause: unknown, fallbackCode: string, fallbackMessage: string): void {
+  if (cause instanceof HospitalCmFixedPoolError) {
+    error(res, cause.message, cause.code, cause.status)
+    return
+  }
+  console.error('[hospital-cm] fixed pool operation failed', cause)
+  error(res, fallbackMessage, fallbackCode, 500)
 }
 
 /** 影子模式提示由本次请求的真实 readiness 派生，不再读取模块加载时的静态常量。 */
@@ -115,6 +147,111 @@ router.get('/trend', authenticateToken, requireCostRead, (req, res) => {
     error(res, e.message)
   }
 })
+
+/** GET /readiness/fixed-pools?serviceMonth=YYYY-MM —— 有权限的成本读者查月度版本/认账审计链。 */
+router.get('/readiness/fixed-pools', authenticateToken, requireCostRead, (req, res) => {
+  try {
+    const unsupported = Object.keys(req.query).filter((key) => ![
+      'serviceMonth', 'limit', 'beforeVersionEvent', 'beforeDecisionEvent',
+    ].includes(key))
+    if (unsupported.length > 0) {
+      error(res, '固定成本池审计视图只接受 serviceMonth 与分页参数', 'UNSUPPORTED_QUERY_PARAMETER', 400)
+      return
+    }
+    const serviceMonth = (req.query as any).serviceMonth
+    if (!isHospitalCmFixedPoolServiceMonth(serviceMonth)) {
+      error(res, 'serviceMonth 必须是合法 YYYY-MM', 'FIXED_POOL_SERVICE_MONTH_INVALID', 400)
+      return
+    }
+    success(res, listHospitalCmFixedPoolVersions(getDatabase() as HospitalCmReadinessDb, serviceMonth, {
+      limit: (req.query as any).limit,
+      beforeVersionEvent: (req.query as any).beforeVersionEvent,
+      beforeDecisionEvent: (req.query as any).beforeDecisionEvent,
+    }), '固定成本池月度版本与认账审计链')
+  } catch (cause) {
+    respondFixedPoolError(res, cause, 'FIXED_POOL_READ_FAILED', '固定成本池记录读取失败')
+  }
+})
+
+/** POST /readiness/fixed-pools —— 财务月度配置只追加新版本，不覆盖旧值。 */
+router.post('/readiness/fixed-pools', authenticateToken, requireCostWrite, (req, res) => {
+  try {
+    const body = bodyObject(req)
+    if (rejectUnsupportedBody(res, body, [
+      'serviceMonth', 'amountMinor', 'currency', 'scopeAttestation',
+      'sourceEvidenceRef', 'sourceEvidenceHash', 'changeReason',
+    ])) return
+    const version = createHospitalCmFixedPoolVersion(getDatabase() as HospitalCmReadinessDb, {
+      serviceMonth: body.serviceMonth,
+      amountMinor: body.amountMinor,
+      currency: body.currency,
+      scopeAttestation: body.scopeAttestation,
+      sourceEvidenceRef: body.sourceEvidenceRef,
+      sourceEvidenceHash: body.sourceEvidenceHash,
+      changeReason: body.changeReason,
+      actor: actorOf(req),
+      idempotencyKey: req.get('Idempotency-Key'),
+    })
+    const readiness = getHospitalCmReadinessSnapshot(
+      getDatabase() as HospitalCmReadinessDb,
+      shanghaiBusinessDate(),
+      { serviceMonth: version.serviceMonth },
+    )
+    success(
+      res,
+      { version, readiness },
+      '固定成本池版本写入已记录或幂等返回；当前有效状态以 readiness 为准',
+      201,
+    )
+  } catch (cause) {
+    respondFixedPoolError(res, cause, 'FIXED_POOL_WRITE_FAILED', '固定成本池版本写入失败')
+  }
+})
+
+function fixedPoolDecisionHandler(decision: 'RATIFIED' | 'REVOKED') {
+  return (req: any, res: Response): void => {
+    try {
+      const body = bodyObject(req)
+      if (rejectUnsupportedBody(res, body, ['expectedContentHash', 'evidenceRef', 'evidenceHash', 'reason'])) return
+      const event = recordHospitalCmFixedPoolDecision(getDatabase() as HospitalCmReadinessDb, {
+        versionId: req.params.versionId,
+        decision,
+        expectedContentHash: body.expectedContentHash,
+        evidenceRef: body.evidenceRef,
+        evidenceHash: body.evidenceHash,
+        reason: body.reason,
+        actor: actorOf(req),
+        idempotencyKey: req.get('Idempotency-Key'),
+      })
+      const readiness = getHospitalCmReadinessSnapshot(
+        getDatabase() as HospitalCmReadinessDb,
+        shanghaiBusinessDate(),
+        { serviceMonth: event.version.slice(0, 7) },
+      )
+      success(
+        res,
+        { decision: event, readiness },
+        '固定成本池认账决策已记录或幂等返回；当前有效状态以 readiness 为准',
+        201,
+      )
+    } catch (cause) {
+      respondFixedPoolError(res, cause, 'FIXED_POOL_DECISION_FAILED', '固定成本池认账事件写入失败')
+    }
+  }
+}
+
+router.post(
+  '/readiness/fixed-pools/:versionId/ratifications',
+  authenticateToken,
+  requireCostWrite,
+  fixedPoolDecisionHandler('RATIFIED'),
+)
+router.post(
+  '/readiness/fixed-pools/:versionId/revocations',
+  authenticateToken,
+  requireCostWrite,
+  fixedPoolDecisionHandler('REVOKED'),
+)
 
 /**
  * GET /readiness —— 就绪谓词清单（校准视图渲染这个·DEC-6 + LEG + 公理一）。
@@ -188,7 +325,17 @@ router.post('/readiness/probes/foundation', authenticateToken, requireCostWrite,
  */
 router.get('/full-health', authenticateToken, requireCostRead, (req, res) => {
   try {
-    const readiness = getHospitalCmReadinessSnapshot(getDatabase() as HospitalCmReadinessDb, shanghaiBusinessDate())
+    const rawServiceMonth = (req.query as any).serviceMonth
+    if (rawServiceMonth != null && !isHospitalCmFixedPoolServiceMonth(rawServiceMonth)) {
+      error(res, 'serviceMonth 必须是合法 YYYY-MM', 'FIXED_POOL_SERVICE_MONTH_INVALID', 400)
+      return
+    }
+    const serviceMonth = isHospitalCmFixedPoolServiceMonth(rawServiceMonth) ? rawServiceMonth : null
+    const readiness = getHospitalCmReadinessSnapshot(
+      getDatabase() as HospitalCmReadinessDb,
+      shanghaiBusinessDate(),
+      serviceMonth == null ? {} : { serviceMonth },
+    )
     if (!readiness.ready) {
       // 降级载荷：只回就绪清单（=为何被挡）+ 影子提示，**绝不含**任何完整体检数值（totalCm/coverageMultiple 等）。
       res.status(403).json({
@@ -203,12 +350,25 @@ router.get('/full-health', authenticateToken, requireCostRead, (req, res) => {
       return
     }
     // ready=true（当前不可达·三门+认账+历史≥N+首周期全绿后才到）：完整体检态·绝对判断启用。
-    const { serviceMonth } = req.query as any
-    const fixedPool = probeFixedPool(getDatabase() as HospitalCmReadinessDb)
+    if (serviceMonth == null) {
+      error(res, '完整体检必须绑定明确 serviceMonth，不允许隐式挑选固定池月份', 'FULL_HEALTH_SERVICE_MONTH_REQUIRED', 409)
+      return
+    }
+    const fixedPool = readHospitalCmFixedPoolState(getDatabase() as HospitalCmReadinessDb, serviceMonth)
+    const selectedVersionId = (readiness.sources.denominator as any).currentVersionId
+    if (
+      fixedPool.versionId == null
+      || fixedPool.versionId !== selectedVersionId
+      || fixedPool.ratifiedVersion !== fixedPool.version
+      || fixedPool.value == null
+    ) {
+      error(res, '固定成本池快照与 readiness 所绑版本不一致，本次不返回数值', 'READINESS_SOURCE_CHANGED_DURING_READ', 409)
+      return
+    }
     const hospitals = buildHospitalCmByPartner(getDatabase(), { serviceMonth })
     const summaries = hospitals.map((h) => toAccountSummary(h))
-    const health = buildPortfolioHealth(summaries, { fixedPool: fixedPool.value ?? 0, gatesVerified: readiness.ready })
-    if (currentHospitalCmReadinessSourceFingerprint(getDatabase() as HospitalCmReadinessDb) !== readiness.sourceStateFingerprint) {
+    const health = buildPortfolioHealth(summaries, { fixedPool: fixedPool.value, gatesVerified: readiness.ready })
+    if (currentHospitalCmReadinessSourceFingerprint(getDatabase() as HospitalCmReadinessDb, serviceMonth) !== readiness.sourceStateFingerprint) {
       error(res, '完整体检计算期间数据源发生变化，本次不返回数值；请重试', 'READINESS_SOURCE_CHANGED_DURING_READ', 409)
       return
     }

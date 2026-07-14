@@ -3,6 +3,13 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import {
+  checkedAdd,
+  checkedMultiply,
+  parseFiniteNonNegativeNumber,
+  parseFiniteNumber,
+  parseFinitePositiveNumber,
+} from '../utils/numeric-input.js'
 
 const router = Router()
 
@@ -73,17 +80,25 @@ router.get('/:id', (req, res) => {
 router.post('/', requirePOWrite, (req, res) => {
   try {
     const { materialId, materialName, supplierId, orderedQty, unit, unitPrice, expectedDate, remark } = req.body
-    if (!materialId || orderedQty === undefined || orderedQty === null || isNaN(Number(orderedQty)) || Number(orderedQty) <= 0) {
+    const normalizedOrderedQty = parseFinitePositiveNumber(orderedQty)
+    if (!materialId || normalizedOrderedQty === null) {
       error(res, '物料和采购数量必填', 'INVALID_PARAMETER', 400); return
+    }
+    const normalizedUnitPrice = unitPrice === undefined ? 0 : parseFiniteNonNegativeNumber(unitPrice)
+    if (normalizedUnitPrice === null) {
+      error(res, '采购单价必须是有限非负数', 'INVALID_PARAMETER', 400); return
+    }
+    const totalAmount = checkedMultiply(normalizedUnitPrice, normalizedOrderedQty)
+    if (totalAmount === null) {
+      error(res, '采购总金额超出可处理范围', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
     const id = uuidv4()
     const orderNo = generateOrderNo()
-    const totalAmount = (unitPrice || 0) * orderedQty
     db.prepare(`
       INSERT INTO purchase_orders (id, order_no, material_id, material_name, supplier_id, ordered_qty, received_qty, unit, unit_price, total_amount, expected_date, status, remark)
       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'pending', ?)
-    `).run(id, orderNo, materialId, materialName || '', supplierId || null, orderedQty, unit || '个', unitPrice || 0, totalAmount, expectedDate || null, remark || '')
+    `).run(id, orderNo, materialId, materialName || '', supplierId || null, normalizedOrderedQty, unit || '个', normalizedUnitPrice, totalAmount, expectedDate || null, remark || '')
     success(res, { id, orderNo }, '采购订单创建成功')
   } catch (err: any) { error(res, err.message) }
 })
@@ -92,22 +107,49 @@ router.post('/', requirePOWrite, (req, res) => {
 router.put('/:id/receive', requirePOWrite, (req, res) => {
   try {
     const { quantity } = req.body
-    if (quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0) {
+    const normalizedQuantity = parseFinitePositiveNumber(quantity)
+    if (normalizedQuantity === null) {
       error(res, '入库数量必填', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
     const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!order) { error(res, '订单不存在', 'NOT_FOUND', 404); return }
-    const orderedQty = Number(order.ordered_qty)
-    const receivedQty = Number(order.received_qty)
-    const newReceived = receivedQty + quantity
+    const orderedQty = parseFiniteNumber(order.ordered_qty)
+    const receivedQty = parseFiniteNumber(order.received_qty)
+    const newReceived = receivedQty === null ? null : checkedAdd(receivedQty, normalizedQuantity)
+    if (orderedQty === null || newReceived === null) {
+      error(res, '采购数量超出可处理范围', 'INVALID_PARAMETER', 400); return
+    }
     if (newReceived > orderedQty) {
       error(res, '入库数量超过订单数量', 'INVALID_PARAMETER', 400); return
     }
-    const status = newReceived >= orderedQty ? 'completed' : 'partial'
-    db.prepare('UPDATE purchase_orders SET received_qty = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0')
-      .run(newReceived, status, req.params.id)
-    success(res, { id: req.params.id, receivedQty: newReceived, status }, '更新成功')
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const lockedOrder = db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
+      if (!lockedOrder) {
+        db.exec('ROLLBACK')
+        error(res, '订单已变化，请刷新后重试', 'CONCURRENT_MODIFICATION', 409); return
+      }
+      const lockedOrderedQty = parseFiniteNumber(lockedOrder.ordered_qty)
+      const lockedReceivedQty = parseFiniteNumber(lockedOrder.received_qty)
+      const lockedNewReceived = lockedReceivedQty === null ? null : checkedAdd(lockedReceivedQty, normalizedQuantity)
+      if (lockedOrderedQty === null || lockedNewReceived === null) {
+        db.exec('ROLLBACK')
+        error(res, '采购数量超出可处理范围', 'INVALID_PARAMETER', 400); return
+      }
+      if (lockedNewReceived > lockedOrderedQty) {
+        db.exec('ROLLBACK')
+        error(res, '入库数量超过订单数量', 'INVALID_PARAMETER', 400); return
+      }
+      const status = lockedNewReceived >= lockedOrderedQty ? 'completed' : 'partial'
+      db.prepare('UPDATE purchase_orders SET received_qty = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0')
+        .run(lockedNewReceived, status, req.params.id)
+      db.exec('COMMIT')
+      success(res, { id: req.params.id, receivedQty: lockedNewReceived, status }, '更新成功')
+    } catch (e) {
+      db.exec('ROLLBACK')
+      throw e
+    }
   } catch (err: any) { error(res, err.message) }
 })
 

@@ -11,6 +11,14 @@ import {
   finalizeIdempotency,
   isIdempotencyConflict,
 } from '../utils/idempotency.js'
+import {
+  checkedAdd,
+  checkedMultiply,
+  checkedSubtract,
+  parseFiniteNonNegativeNumber,
+  parseFiniteNumber,
+  parseFinitePositiveNumber,
+} from '../utils/numeric-input.js'
 
 const router = Router()
 
@@ -24,11 +32,319 @@ function generateInboundNo(): string {
   return `IB-${date}-${timestamp}-${random}`
 }
 
-function parseFinitePositiveNumber(value: unknown): number | null {
-  if (typeof value !== 'number' && typeof value !== 'string') return null
-  if (typeof value === 'string' && value.trim() === '') return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+type InboundCreateNumericPlan = {
+  existingBatch: any | null
+  batchQuantityAfter?: number
+  batchRemainingAfter?: number
+  purchaseOrder: any | null
+  purchaseOrderReceivedAfter?: number
+  purchaseOrderStatus?: string
+  inventory: any | null
+  inventoryBefore: number
+  inventoryAfter: number
+}
+
+function buildInboundCreateNumericPlan(
+  db: any,
+  materialId: string,
+  batchNo: string | undefined,
+  purchaseOrderId: string | undefined,
+  quantity: number,
+): InboundCreateNumericPlan | null {
+  const existingBatch = batchNo
+    ? db.prepare('SELECT * FROM batches WHERE material_id = ? AND batch_no = ? AND status = 1').get(materialId, batchNo) as any
+    : null
+  let batchQuantityAfter: number | undefined
+  let batchRemainingAfter: number | undefined
+  if (existingBatch) {
+    const currentQuantity = parseFiniteNumber(existingBatch.quantity)
+    const currentRemaining = parseFiniteNumber(existingBatch.remaining)
+    batchQuantityAfter = currentQuantity === null ? undefined : checkedAdd(currentQuantity, quantity) ?? undefined
+    batchRemainingAfter = currentRemaining === null ? undefined : checkedAdd(currentRemaining, quantity) ?? undefined
+    if (batchQuantityAfter === undefined || batchRemainingAfter === undefined) return null
+  }
+
+  const purchaseOrder = purchaseOrderId
+    ? db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(purchaseOrderId) as any
+    : null
+  let purchaseOrderReceivedAfter: number | undefined
+  let purchaseOrderStatus: string | undefined
+  if (purchaseOrder) {
+    const receivedQty = parseFiniteNumber(purchaseOrder.received_qty)
+    const orderedQty = parseFiniteNumber(purchaseOrder.ordered_qty)
+    purchaseOrderReceivedAfter = receivedQty === null ? undefined : checkedAdd(receivedQty, quantity) ?? undefined
+    if (orderedQty === null || purchaseOrderReceivedAfter === undefined) return null
+    purchaseOrderStatus = purchaseOrderReceivedAfter >= orderedQty ? 'completed' : 'partial'
+  }
+
+  const inventory = db.prepare('SELECT * FROM inventory WHERE material_id = ?').get(materialId) as any
+  const inventoryBefore = inventory ? parseFiniteNumber(inventory.stock) : 0
+  const inventoryAfter = inventoryBefore === null ? null : checkedAdd(inventoryBefore, quantity)
+  if (inventoryBefore === null || inventoryAfter === null) return null
+
+  return {
+    existingBatch,
+    batchQuantityAfter,
+    batchRemainingAfter,
+    purchaseOrder,
+    purchaseOrderReceivedAfter,
+    purchaseOrderStatus,
+    inventory,
+    inventoryBefore,
+    inventoryAfter,
+  }
+}
+
+type InboundCancelCheck =
+  | { kind: 'ok' }
+  | { kind: 'numeric' }
+  | { kind: 'business'; message: string }
+
+type InboundBatchMutation = {
+  row: any | null
+  batchNo: string
+  quantityAfter: number
+  remainingAfter: number
+  statusAfter: number
+  inboundPrice?: number
+}
+
+type InboundUpdateNumericPlan = {
+  record: any
+  mode: 'cancel' | 'restore' | 'edit' | 'metadata'
+  oldQty: number
+  newQty: number
+  qtyDiff: number
+  oldBatch: string | null
+  newBatch: string | null
+  inventory: any | null
+  inventoryBefore: number
+  inventoryAfter: number
+  inventoryChanged: boolean
+  oldBatchMutation?: InboundBatchMutation
+  newBatchMutation?: InboundBatchMutation
+  purchaseOrder?: {
+    row: any
+    receivedAfter: number
+    statusAfter: string
+  }
+  log: {
+    quantity: number
+    type: string
+    remark: string
+    beforeStock: number
+    afterStock: number
+  }
+}
+
+const INBOUND_INVENTORY_NOT_FOUND = Symbol('INBOUND_INVENTORY_NOT_FOUND')
+
+function checkInboundCancellationRules(db: any, record: any, id: string): InboundCancelCheck {
+  const rawOutboundTotal = (db.prepare(`
+    SELECT COALESCE(SUM(oi.quantity),0) as total FROM outbound_items oi
+    JOIN outbound_records o ON oi.outbound_id = o.id
+    WHERE oi.material_id = ? AND oi.batch_no = ? AND o.is_deleted = 0
+  `).get(record.material_id, record.batch_no) as any)?.total ?? 0
+  const outboundTotal = parseFiniteNumber(rawOutboundTotal)
+  if (outboundTotal === null) return { kind: 'numeric' }
+  if (outboundTotal > 0) {
+    return { kind: 'business', message: `该批次已有出库记录 ${outboundTotal} ${record.unit}，不可取消` }
+  }
+
+  const inUse = db.prepare("SELECT 1 FROM batch_usage_tracking WHERE material_id = ? AND batch = ? AND status = 'in-use' LIMIT 1")
+    .get(record.material_id, record.batch_no)
+  if (inUse) return { kind: 'business', message: '该批次库存正在使用中，不可取消' }
+
+  const rawOtherInbound = (db.prepare(`
+    SELECT COALESCE(SUM(quantity),0) as total FROM inbound_records
+    WHERE material_id = ? AND batch_no = ? AND status = 'completed' AND is_deleted = 0 AND id != ?
+  `).get(record.material_id, record.batch_no, id) as any)?.total ?? 0
+  const otherInbound = parseFiniteNumber(rawOtherInbound)
+  if (otherInbound === null) return { kind: 'numeric' }
+  if (otherInbound < outboundTotal) {
+    return { kind: 'business', message: '取消后库存将变为负数，不可取消' }
+  }
+  return { kind: 'ok' }
+}
+
+function buildInboundUpdateNumericPlan(
+  db: any,
+  record: any,
+  requestedQuantity: number | undefined,
+  requestedBatchNo: string | undefined,
+  requestedStatus: string | undefined,
+  requestedPrice: number | undefined,
+): InboundUpdateNumericPlan | typeof INBOUND_INVENTORY_NOT_FOUND | null {
+  const oldQty = parseFiniteNumber(record.quantity)
+  if (oldQty === null) return null
+  const newQty = requestedQuantity ?? oldQty
+  const qtyDiff = checkedSubtract(newQty, oldQty)
+  if (qtyDiff === null) return null
+
+  const oldBatch = record.batch_no || null
+  const newBatch = requestedBatchNo !== undefined ? (requestedBatchNo || null) : oldBatch
+  const oldStatus = record.status
+  const newStatus = requestedStatus !== undefined ? requestedStatus : oldStatus
+  const mode: InboundUpdateNumericPlan['mode'] = oldStatus === 'completed' && newStatus === 'cancelled'
+    ? 'cancel'
+    : oldStatus === 'cancelled' && newStatus === 'completed'
+      ? 'restore'
+      : oldStatus === 'completed' && newStatus !== 'cancelled'
+        ? 'edit'
+        : 'metadata'
+
+  const inventory = db.prepare('SELECT * FROM inventory WHERE material_id = ?').get(record.material_id) as any
+  const parsedInventory = inventory ? parseFiniteNumber(inventory.stock) : 0
+  if (parsedInventory === null) return null
+  const inventoryChanged = mode === 'cancel' || mode === 'restore' || (mode === 'edit' && qtyDiff !== 0)
+  if (inventoryChanged && !inventory) return INBOUND_INVENTORY_NOT_FOUND
+  let inventoryAfter = parsedInventory
+  if (mode === 'cancel') {
+    const next = checkedSubtract(parsedInventory, oldQty)
+    if (next === null) return null
+    inventoryAfter = next
+  } else if (mode === 'restore') {
+    const next = checkedAdd(parsedInventory, oldQty)
+    if (next === null) return null
+    inventoryAfter = next
+  } else if (mode === 'edit' && qtyDiff !== 0) {
+    const next = checkedAdd(parsedInventory, qtyDiff)
+    if (next === null) return null
+    inventoryAfter = next
+  }
+
+  const buildBatchMutation = (
+    batchNoValue: string,
+    operand: number,
+    operation: 'add' | 'subtract',
+    forceActive: boolean,
+  ): InboundBatchMutation | null | undefined => {
+    const row = db.prepare('SELECT * FROM batches WHERE material_id = ? AND batch_no = ?').get(record.material_id, batchNoValue) as any
+    if (!row) {
+      if (operation === 'subtract') return undefined
+      const inboundPrice = requestedPrice ?? parseFiniteNumber(record.price ?? 0)
+      if (inboundPrice === null) return null
+      return { row: null, batchNo: batchNoValue, quantityAfter: operand, remainingAfter: operand, statusAfter: 1, inboundPrice }
+    }
+    const quantityBefore = parseFiniteNumber(row.quantity)
+    const remainingBefore = parseFiniteNumber(row.remaining)
+    if (quantityBefore === null || remainingBefore === null) return null
+    const quantityAfter = operation === 'add'
+      ? checkedAdd(quantityBefore, operand)
+      : checkedSubtract(quantityBefore, operand)
+    const remainingAfter = operation === 'add'
+      ? checkedAdd(remainingBefore, operand)
+      : checkedSubtract(remainingBefore, operand)
+    if (quantityAfter === null || remainingAfter === null) return null
+    return {
+      row,
+      batchNo: batchNoValue,
+      quantityAfter,
+      remainingAfter,
+      statusAfter: forceActive ? 1 : (remainingAfter <= 0 ? 0 : Number(row.status)),
+    }
+  }
+
+  let oldBatchMutation: InboundBatchMutation | undefined
+  let newBatchMutation: InboundBatchMutation | undefined
+  if (mode === 'cancel' && oldBatch) {
+    const mutation = buildBatchMutation(oldBatch, oldQty, 'subtract', false)
+    if (mutation === null) return null
+    oldBatchMutation = mutation
+  } else if (mode === 'restore' && oldBatch) {
+    const mutation = buildBatchMutation(oldBatch, oldQty, 'add', true)
+    if (!mutation) return null
+    oldBatchMutation = mutation
+  } else if (mode === 'edit') {
+    const batchChanged = newBatch !== oldBatch
+    if (batchChanged) {
+      if (oldBatch) {
+        const mutation = buildBatchMutation(oldBatch, oldQty, 'subtract', false)
+        if (mutation === null) return null
+        oldBatchMutation = mutation
+      }
+      if (newBatch) {
+        const mutation = buildBatchMutation(newBatch, newQty, 'add', true)
+        if (!mutation) return null
+        newBatchMutation = mutation
+      }
+    } else if (oldBatch && qtyDiff !== 0) {
+      const row = db.prepare('SELECT * FROM batches WHERE material_id = ? AND batch_no = ?').get(record.material_id, oldBatch) as any
+      if (row) {
+        const quantityBefore = parseFiniteNumber(row.quantity)
+        const remainingBefore = parseFiniteNumber(row.remaining)
+        const quantityAfter = quantityBefore === null ? null : checkedAdd(quantityBefore, qtyDiff)
+        const remainingAfter = remainingBefore === null ? null : checkedAdd(remainingBefore, qtyDiff)
+        if (quantityAfter === null || remainingAfter === null) return null
+        oldBatchMutation = {
+          row,
+          batchNo: oldBatch,
+          quantityAfter,
+          remainingAfter,
+          statusAfter: Number(row.status),
+        }
+      }
+    }
+  }
+
+  let purchaseOrder: InboundUpdateNumericPlan['purchaseOrder']
+  if ((mode === 'cancel' || mode === 'restore') && record.purchase_order_id) {
+    const row = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(record.purchase_order_id) as any
+    if (row) {
+      const receivedBefore = parseFiniteNumber(row.received_qty)
+      if (receivedBefore === null) return null
+      if (mode === 'cancel') {
+        const subtracted = checkedSubtract(receivedBefore, oldQty)
+        if (subtracted === null) return null
+        const receivedAfter = Math.max(0, subtracted)
+        purchaseOrder = {
+          row,
+          receivedAfter,
+          statusAfter: receivedAfter === 0 ? 'pending' : 'partial',
+        }
+      } else {
+        const orderedQty = parseFiniteNumber(row.ordered_qty)
+        const receivedAfter = checkedAdd(receivedBefore, oldQty)
+        if (orderedQty === null || receivedAfter === null) return null
+        purchaseOrder = {
+          row,
+          receivedAfter,
+          statusAfter: receivedAfter >= orderedQty ? 'completed' : 'partial',
+        }
+      }
+    }
+  }
+
+  let logQuantity = 0
+  let logType = 'update'
+  let logRemark = '更新入库记录'
+  if (mode === 'cancel') { logQuantity = -oldQty; logType = 'cancel'; logRemark = '取消入库记录' }
+  else if (mode === 'restore') { logQuantity = oldQty; logType = 'restore'; logRemark = '恢复入库记录' }
+  else if (newQty !== oldQty) logQuantity = qtyDiff
+
+  return {
+    record,
+    mode,
+    oldQty,
+    newQty,
+    qtyDiff,
+    oldBatch,
+    newBatch,
+    inventory,
+    inventoryBefore: parsedInventory,
+    inventoryAfter,
+    inventoryChanged,
+    oldBatchMutation,
+    newBatchMutation,
+    purchaseOrder,
+    log: {
+      quantity: logQuantity,
+      type: logType,
+      remark: logRemark,
+      beforeStock: parsedInventory,
+      afterStock: inventoryAfter,
+    },
+  }
 }
 
 router.get('/', (req, res) => {
@@ -156,6 +472,14 @@ router.post('/', requireWriteAccess, (req, res) => {
     if (normalizedQuantity === null) {
       error(res, 'Quantity must be a finite positive number', 'INVALID_PARAMETER', 400); return
     }
+    const normalizedPrice = price === undefined ? 0 : parseFiniteNonNegativeNumber(price)
+    if (normalizedPrice === null) {
+      error(res, 'Price must be a finite non-negative number', 'INVALID_PARAMETER', 400); return
+    }
+    const amount = checkedMultiply(normalizedPrice, normalizedQuantity)
+    if (amount === null) {
+      error(res, 'Amount exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
+    }
 
     const db = getDatabase()
     const idemKey = readIdempotencyKey(req)
@@ -171,55 +495,52 @@ router.post('/', requireWriteAccess, (req, res) => {
     if (!material) { error(res, 'Material not found', 'NOT_FOUND', 404); return }
 
     const unit = material.unit
-    const amount = (price || 0) * normalizedQuantity
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
 
-    // 查询采购订单信息
-    let purchaseOrderNo: string | null = null
-    if (purchaseOrderId) {
-      const po = db.prepare('SELECT order_no FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(purchaseOrderId) as any
-      if (po) purchaseOrderNo = po.order_no
+    const preflightPlan = buildInboundCreateNumericPlan(db, materialId, batchNo, purchaseOrderId, normalizedQuantity)
+    if (!preflightPlan) {
+      error(res, 'Inbound quantity exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
     }
+    let purchaseOrderNo: string | null = preflightPlan.purchaseOrder?.order_no || null
 
     // 事务保护：入库涉及 records + batches + inventory + stock_logs 多表操作
     db.exec('BEGIN IMMEDIATE')
     try {
+      const transactionPlan = buildInboundCreateNumericPlan(db, materialId, batchNo, purchaseOrderId, normalizedQuantity)
+      if (!transactionPlan) {
+        db.exec('ROLLBACK')
+        error(res, 'Inbound quantity exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
+        return
+      }
+      purchaseOrderNo = transactionPlan.purchaseOrder?.order_no || null
       if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
       db.prepare(`
         INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_no, quantity, unit, price, amount, supplier_id, location_id, production_date, expiry_date, operator, status, remark, purchase_order_id, purchase_order_no)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)
-      `).run(id, inboundNo, type, materialId, batchNo || null, normalizedQuantity, unit, price || 0, amount, supplierId || null, locationId, productionDate || null, expiryDate || null, operator, remark || null, purchaseOrderId || null, purchaseOrderNo)
+      `).run(id, inboundNo, type, materialId, batchNo || null, normalizedQuantity, unit, normalizedPrice, amount, supplierId || null, locationId, productionDate || null, expiryDate || null, operator, remark || null, purchaseOrderId || null, purchaseOrderNo)
 
       if (batchNo) {
-        const existingBatch = db.prepare('SELECT * FROM batches WHERE material_id = ? AND batch_no = ? AND status = 1').get(materialId, batchNo) as any
-        if (existingBatch) {
-          db.prepare('UPDATE batches SET quantity = quantity + ?, remaining = remaining + ? WHERE id = ?')
-            .run(normalizedQuantity, normalizedQuantity, existingBatch.id)
+        if (transactionPlan.existingBatch) {
+          db.prepare('UPDATE batches SET quantity = ?, remaining = ? WHERE id = ?')
+            .run(transactionPlan.batchQuantityAfter, transactionPlan.batchRemainingAfter, transactionPlan.existingBatch.id)
         } else {
           const batchId = uuidv4()
           db.prepare(`
             INSERT INTO batches (id, material_id, batch_no, quantity, remaining, production_date, expiry_date, inbound_id, inbound_price, supplier_id, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-          `).run(batchId, materialId, batchNo, normalizedQuantity, normalizedQuantity, productionDate || null, expiryDate || null, id, price || 0, supplierId || null)
+          `).run(batchId, materialId, batchNo, normalizedQuantity, normalizedQuantity, productionDate || null, expiryDate || null, id, normalizedPrice, supplierId || null)
         }
       }
 
       // 更新采购订单收货数量
-      if (purchaseOrderId) {
-        const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ? AND is_deleted = 0').get(purchaseOrderId) as any
-        if (order) {
-          const newReceived = Number(order.received_qty) + normalizedQuantity
-          const orderedQty = Number(order.ordered_qty)
-          const poStatus = newReceived >= orderedQty ? 'completed' : 'partial'
-          db.prepare('UPDATE purchase_orders SET received_qty = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-            .run(newReceived, poStatus, purchaseOrderId)
-        }
+      if (purchaseOrderId && transactionPlan.purchaseOrder) {
+        db.prepare('UPDATE purchase_orders SET received_qty = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(transactionPlan.purchaseOrderReceivedAfter, transactionPlan.purchaseOrderStatus, purchaseOrderId)
       }
 
-      const existingInv = db.prepare('SELECT * FROM inventory WHERE material_id = ?').get(materialId) as any
-      if (existingInv) {
-        db.prepare("UPDATE inventory SET stock = stock + ?, location_id = ?, last_inbound_id = ?, last_inbound_date = date('now','localtime'), update_time = CURRENT_TIMESTAMP WHERE material_id = ?")
-          .run(normalizedQuantity, locationId, id, materialId)
+      if (transactionPlan.inventory) {
+        db.prepare("UPDATE inventory SET stock = ?, location_id = ?, last_inbound_id = ?, last_inbound_date = date('now','localtime'), update_time = CURRENT_TIMESTAMP WHERE material_id = ?")
+          .run(transactionPlan.inventoryAfter, locationId, id, materialId)
       } else {
         db.prepare(`
           INSERT INTO inventory (id, material_id, stock, locked_stock, location_id, last_inbound_id, last_inbound_date, update_time)
@@ -230,8 +551,8 @@ router.post('/', requireWriteAccess, (req, res) => {
       const logId = uuidv4()
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
-        VALUES (?, 'inbound', ?, ?, COALESCE((SELECT stock FROM inventory WHERE material_id = ?), 0) - ?, COALESCE((SELECT stock FROM inventory WHERE material_id = ?), 0), ?, 'inbound', ?)
-      `).run(logId, materialId, normalizedQuantity, materialId, normalizedQuantity, materialId, id, operator)
+        VALUES (?, 'inbound', ?, ?, ?, ?, ?, 'inbound', ?)
+      `).run(logId, materialId, normalizedQuantity, transactionPlan.inventoryBefore, transactionPlan.inventoryAfter, id, operator)
 
       responseEnvelope = buildSuccessEnvelope({ id, inboundNo, type, materialId, quantity: normalizedQuantity, status: 'completed', purchaseOrderId, purchaseOrderNo }, 'Inbound created')
       if (idemKey) finalizeIdempotency(db, idemKey, 201, responseEnvelope)
@@ -250,9 +571,6 @@ router.put('/:id', requireWriteAccess, (req, res) => {
   try {
     const { id } = req.params
     const { batchNo, quantity, price, supplierId, locationId, productionDate, expiryDate, remark, status } = req.body
-    const db = getDatabase()
-    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
-    if (!record) { error(res, 'Not found', 'NOT_FOUND', 404); return }
 
     let normalizedQuantity: number | undefined
     if (quantity !== undefined) {
@@ -263,10 +581,23 @@ router.put('/:id', requireWriteAccess, (req, res) => {
       normalizedQuantity = parsedQuantity
     }
 
+    let normalizedPrice: number | undefined
+    if (price !== undefined) {
+      const parsedPrice = parseFiniteNonNegativeNumber(price)
+      if (parsedPrice === null) {
+        error(res, 'Price must be a finite non-negative number', 'INVALID_PARAMETER', 400); return
+      }
+      normalizedPrice = parsedPrice
+    }
+
+    const db = getDatabase()
+    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    if (!record) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+
     const fields: string[] = []; const params: any[] = []
     if (batchNo !== undefined) { fields.push('batch_no = ?'); params.push(batchNo || null) }
     if (normalizedQuantity !== undefined) { fields.push('quantity = ?'); params.push(normalizedQuantity) }
-    if (price !== undefined) { fields.push('price = ?'); params.push(price || 0) }
+    if (normalizedPrice !== undefined) { fields.push('price = ?'); params.push(normalizedPrice) }
     if (supplierId !== undefined) { fields.push('supplier_id = ?'); params.push(supplierId || null) }
     if (locationId !== undefined) { fields.push('location_id = ?'); params.push(locationId) }
     if (productionDate !== undefined) { fields.push('production_date = ?'); params.push(productionDate || null) }
@@ -274,15 +605,78 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     if (remark !== undefined) { fields.push('remark = ?'); params.push(remark || '') }
     if (status !== undefined) { fields.push('status = ?'); params.push(status) }
 
-    const oldQty = Number(record.quantity)
-    const newQty = normalizedQuantity !== undefined ? normalizedQuantity : oldQty
-    const oldBatch = record.batch_no
-    const newBatch = batchNo !== undefined ? batchNo : oldBatch
+    const requestedNewStatus = status !== undefined ? status : record.status
+    if (record.status === 'completed' && requestedNewStatus === 'cancelled') {
+      const cancelCheck = checkInboundCancellationRules(db, record, id)
+      if (cancelCheck.kind === 'numeric') {
+        error(res, 'Inbound update arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
+      }
+      if (cancelCheck.kind === 'business') {
+        error(res, cancelCheck.message, 'BUSINESS_RULE', 400); return
+      }
+    }
+    const preflightPlan = buildInboundUpdateNumericPlan(db, record, normalizedQuantity, batchNo, status, normalizedPrice)
+    if (preflightPlan === INBOUND_INVENTORY_NOT_FOUND) {
+      error(res, 'Inventory record not found', 'INVENTORY_NOT_FOUND', 422); return
+    }
+    if (!preflightPlan) {
+      error(res, 'Inbound update arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
+    }
+    const { oldQty, newQty, oldBatch, newBatch } = preflightPlan
     const oldStatus = record.status
-    const newStatus = status !== undefined ? status : oldStatus
+    const newStatus = requestedNewStatus
 
     db.exec('BEGIN IMMEDIATE')
     try {
+      const transactionRecord = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+      if (!transactionRecord) {
+        db.exec('ROLLBACK')
+        error(res, 'Not found', 'NOT_FOUND', 404)
+        return
+      }
+      const transactionNewStatus = status !== undefined ? status : transactionRecord.status
+      if (transactionRecord.status === 'completed' && transactionNewStatus === 'cancelled') {
+        const cancelCheck = checkInboundCancellationRules(db, transactionRecord, id)
+        if (cancelCheck.kind === 'numeric') {
+          db.exec('ROLLBACK')
+          error(res, 'Inbound update arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
+          return
+        }
+        if (cancelCheck.kind === 'business') {
+          db.exec('ROLLBACK')
+          error(res, cancelCheck.message, 'BUSINESS_RULE', 400)
+          return
+        }
+      }
+      const transactionPlan = buildInboundUpdateNumericPlan(db, transactionRecord, normalizedQuantity, batchNo, status, normalizedPrice)
+      if (transactionPlan === INBOUND_INVENTORY_NOT_FOUND) {
+        db.exec('ROLLBACK')
+        error(res, 'Inventory record not found', 'INVENTORY_NOT_FOUND', 422)
+        return
+      }
+      if (!transactionPlan) {
+        db.exec('ROLLBACK')
+        error(res, 'Inbound update arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
+        return
+      }
+      const stableDependencyKeys = [
+        'material_id',
+        'status',
+        'purchase_order_id',
+        'price',
+        'production_date',
+        'expiry_date',
+        'supplier_id',
+        'unit',
+      ] as const
+      const sourceChanged = transactionPlan.oldQty !== preflightPlan.oldQty
+        || transactionPlan.oldBatch !== preflightPlan.oldBatch
+        || stableDependencyKeys.some((key) => (transactionRecord[key] ?? null) !== (record[key] ?? null))
+      if (sourceChanged) {
+        db.exec('ROLLBACK')
+        error(res, 'Inbound record changed during update; please retry', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
       // ===== 1. 取消操作（completed → cancelled）=====
       if (oldStatus === 'completed' && newStatus === 'cancelled') {
         const outboundTotal = (db.prepare(`
@@ -389,7 +783,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
               db.prepare(`
                 INSERT INTO batches (id, material_id, batch_no, quantity, remaining, production_date, expiry_date, inbound_id, inbound_price, supplier_id, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-              `).run(bid, record.material_id, newBatch, newQty, newQty, productionDate || record.production_date, expiryDate || record.expiry_date, id, price !== undefined ? price : record.price || 0, supplierId !== undefined ? supplierId : record.supplier_id)
+              `).run(bid, record.material_id, newBatch, newQty, newQty, productionDate || record.production_date, expiryDate || record.expiry_date, id, normalizedPrice !== undefined ? normalizedPrice : record.price || 0, supplierId !== undefined ? supplierId : record.supplier_id)
             }
           }
           if (qtyDiff !== 0) {
@@ -411,17 +805,21 @@ router.put('/:id', requireWriteAccess, (req, res) => {
       }
 
       // 5. 记录日志
-      const currentStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any)?.stock || 0
-      let logQty = 0, logType = 'update', logRemark = '更新入库记录'
-      if (oldStatus === 'completed' && newStatus === 'cancelled') { logQty = -oldQty; logType = 'cancel'; logRemark = '取消入库记录' }
-      else if (oldStatus === 'cancelled' && newStatus === 'completed') { logQty = oldQty; logType = 'restore'; logRemark = '恢复入库记录' }
-      else if (newQty !== oldQty) { logQty = newQty - oldQty }
-
       const logId = uuidv4()
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'inbound_update', ?, ?)
-      `).run(logId, logType, record.material_id, logQty, currentStock - logQty, currentStock, id, req.body.operator || 'system', logRemark)
+      `).run(
+        logId,
+        transactionPlan.log.type,
+        transactionRecord.material_id,
+        transactionPlan.log.quantity,
+        transactionPlan.log.beforeStock,
+        transactionPlan.log.afterStock,
+        id,
+        req.body.operator || 'system',
+        transactionPlan.log.remark,
+      )
 
       db.exec('COMMIT')
 
