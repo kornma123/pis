@@ -37,21 +37,43 @@ const MAX_LIS_IMPORT_ROWS = 1000
 // 阶段2（待 #168 合并后开）= 读侧按各结算月收入占比分摊单份物料成本（Q2'=A）+ 读侧
 // loadCrossMonthReuseKeys 收窄为异常兜底 + #151 探针「跨月复用即禁出」不变量重定义；同样无 schema、无迁移。
 const CROSS_MONTH_SAMPLE_LIMIT = 50 // 回执样例上限，与 /import-markers 的 unmatchedCases 同款
+const VALID_YM = /^\d{4}-(0[1-9]|1[0-2])$/ // 合法 'YYYY-MM'（月补零 01–12），与下游 service_month 形态一致
+
+/** 结构化提取 {年, 月(1–12), 日?}，失败回 null。canonicalOperateTime 与 monthOf 共用同一解析，保证「能归一 ⟺ 有月锚」。 */
+function parseYmd(dateish: unknown): { y: string; mo: number; d?: string } | null {
+  if (dateish == null || dateish === '') return null
+  const m = /^\s*(\d{4})[-/](\d{1,2})(?!\d)(?:[-/](\d{1,2})(?!\d))?/.exec(String(dateish))
+  if (!m) return null
+  const mo = Number(m[2])
+  if (mo < 1 || mo > 12) return null
+  return { y: m[1], mo, d: m[3] }
+}
+
 /**
- * operate_time（toDateish 归一的 'YYYY-MM-DD'、源文件文本日期 '2026/5/9'、纯月份 '2026-05'、带时间戳等）→ 'YYYY-MM'。
- * 结构化提取年+月并校验月 1–12，不完整/月越界/畸形串回 ''（不可解析哨兵）。
- * 关键（codex 复核逮到）：用真实提取而非 slice(0,7)——后者把非补零 '2026/5/9' 截成 '2026-5-' 漏判为不可
- * 解析令守卫 fail-open。只裁月、不校验日：月份判定不依赖日的合法性，且守卫两侧月派生须与下游按月口径
- * substr(operate_time,1,7) 的可见性同源（L1 面板逮到——若对 '2026-05-99' 之类合法月+非法日加日校验回 ''，
- * 会让下游算作五月的库行在守卫侧变无锚 → 反被跨月行静默覆盖，即在既有行侧开同类 fail-open）。
+ * operate_time 落库归一（codex 二次复核逮到的根修）：把「下游 substr(前7位) 认不出月、但结构化能解析」的
+ * 斜杠非补零形态（'2026/5/9' → 下游 slice 得 '2026-5-'）补零成 canonical 'YYYY-MM-DD'（'2026-05-09'），
+ * 使其落库后下游按月核对能命中。**关键：下游已能认出月的形态一律原样保留**（'2026/05/20'/'2026-05-10'/带时间戳、
+ * 甚至日非法 '2026-05-99'——它们 replace('/','-').slice(0,7) 已是合法 YYYY-MM），最小侵入、不丢日/时间/原始值；
+ * 乱码等结构化也解析不了的原样保留（下游同盲）。空/NULL 保留（无日期修复通道）。
+ */
+function canonicalOperateTime(dateish: string | null): string | null {
+  if (dateish == null || dateish === '') return dateish
+  if (VALID_YM.test(dateish.replace(/\//g, '-').slice(0, 7))) return dateish // 下游 substr 已能认出月 → 原样（含日/时间）
+  const p = parseYmd(dateish)
+  if (!p) return dateish // 下游认不出且结构化也解析不了（乱码/'2026-13'）→ 原样，下游同盲
+  const ym = `${p.y}-${String(p.mo).padStart(2, '0')}`
+  return p.d === undefined ? ym : `${ym}-${String(Number(p.d)).padStart(2, '0')}` // 斜杠非补零 → 补零 canonical
+}
+
+/**
+ * operate_time → 'YYYY-MM'。先 canonicalOperateTime 归一，再 replace('/','-').slice(0,7)——与下游按月口径
+ * substr(replace(operate_time,'/','-'),1,7) **逐字同源**，保证守卫月判定恒 ⊇ 下游可见性（不再有「monthOf 结构化
+ * 比下游 slice 聪明」的背离：'2026-059' 两侧都得 '2026-05'、'2026/5/9' 归一后两侧都得 '2026-05'）。不可解析回 ''。
  */
 function monthOf(dateish: unknown): string {
-  if (dateish == null || dateish === '') return ''
-  const m = /^\s*(\d{4})[-/](\d{1,2})(?!\d)/.exec(String(dateish))
-  if (!m) return ''
-  const month = Number(m[2])
-  if (month < 1 || month > 12) return ''
-  return `${m[1]}-${String(month).padStart(2, '0')}`
+  const canon = canonicalOperateTime(dateish == null ? null : String(dateish))
+  const head = String(canon ?? '').replace(/\//g, '-').slice(0, 7)
+  return VALID_YM.test(head) ? head : ''
 }
 
 /** POST /import —— 批量导入 LIS 病例（含医院 upsert + 数量 + 自动样本判定；跨月同号硬拒 #163 阶段1） */
@@ -110,13 +132,16 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
         // #163 阶段1硬拒：库行已有可解析月锚时，只放行「同月重传」（可重传语义不变）。
         // 导入月不同 → 拒（跨月覆盖 = 不可逆销毁早月事实行）；导入月不可解析('') 也拒（放行会把
         // operate_time 覆盖成空 = 抹掉月锚，同样不可逆）。库行无月锚('') 不拦：给旧无日期行留补
-        // 日期的修复通道（增量纠错，非跨月覆盖）。monthOf 只裁月不校验日 → 与下游 substr(operate_time,1,7)
-        // 的按月可见性同源（'2026-05-99'/'2026/5/9' 两侧都锚五月；L1 面板逮到若加日校验会让下游算五月的
-        // 库行在守卫侧变无锚→被跨月覆盖，故不校验日）。代价（交 PM 知情）：月锚一旦落成「有效但内容
-        // 错误」的月份，暂无 API 更正通道（带留痕更正端点属遗留跟进 #163 comment 候选，非本阶段）。
+        // 日期的修复通道（增量纠错，非跨月覆盖）。monthOf 先归一再取前7位 → 与下游 substr(operate_time,1,7)
+        // 逐字同源，守卫月判定恒 ⊇ 下游可见性（无「结构化比 slice 聪明」的背离）。落库统一 canonicalOperateTime
+        // 归一（codex 二次复核逮到的根修）：把 '2026/5/9' 这类下游 slice 认不出的斜杠非补零形态补零成
+        // '2026-05-09'，否则同月重传它会把 operate_time 改成下游认不出的形态、令病例从月度核对中消失。
+        // 代价（交 PM 知情）：月锚一旦落成「有效但内容错误」的月份，暂无 API 更正通道（带留痕更正端点属
+        // 遗留跟进 #163 comment 候选，非本阶段）。
+        const canonicalOp = canonicalOperateTime(c.operateTime || null)
         if (existingRow) {
           const existingMonth = monthOf(existingRow.operate_time)
-          const incomingMonth = monthOf(c.operateTime)
+          const incomingMonth = monthOf(canonicalOp)
           if (existingMonth !== '' && incomingMonth !== existingMonth) {
             rejectedCrossMonth++
             if (rejectedCrossMonthSamples.length < CROSS_MONTH_SAMPLE_LIMIT) {
@@ -126,7 +151,7 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
           }
         }
         upsert.run(
-          `LC-${uuidv4()}`, c.caseNo, partnerId, operator, c.status || 'normal', c.operateTime || null, importBatch,
+          `LC-${uuidv4()}`, c.caseNo, partnerId, operator, c.status || 'normal', canonicalOp, importBatch,
           c.heSlideCount, c.blockCount, c.ihcCount, c.specialStainCount, c.eberCount, c.pdl1Count,
           c.autoSpecimenType,
         )

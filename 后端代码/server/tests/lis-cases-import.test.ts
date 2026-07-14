@@ -276,10 +276,10 @@ describe('#163 阶段1：跨月同号导入硬拒（不覆盖早月事实行）'
   })
 
   it('非补零/斜杠日期形（源文件文本日期）也被守卫识别：API 首导 2026/5/9，八月同号重传被拒（codex 复核 · slice(0,7) 漏判修复）', async () => {
-    // toDateish 对文本日期原样落库（只转 Excel 序列号）→ '2026/5/9' 原样进 operate_time；
-    // monthOf 必须结构化提取年月而非 slice(0,7)，否则库行月锚漏成 '' → 八月行 fail-open 覆盖五月。
+    // '2026/5/9' 下游 slice 得 '2026-5-' 认不出 → 落库归一为 canonical '2026-05-09'（下游可见）；守卫锚五月。
     const first = await imp([{ 病理号: 'CM26-6001', 送检医院: H, 登记时间: '2026/5/9', 蜡块数: 2 }])
     expect(first.body.data.inserted).toBe(1)
+    expect((db.prepare(`SELECT operate_time FROM lis_cases WHERE case_no='CM26-6001'`).get() as any).operate_time).toBe('2026-05-09') // 落库归一，下游 substr 可见
     const cross = await imp([{ 病理号: 'CM26-6001', 送检医院: H, 登记时间: '2026-08-01', 蜡块数: 9 }])
     expect(cross.body.data.rejectedCrossMonth).toBe(1)
     expect(cross.body.data.rejectedCrossMonthSamples[0]).toMatchObject({ existingMonth: '2026-05', incomingMonth: '2026-08' })
@@ -291,14 +291,46 @@ describe('#163 阶段1：跨月同号导入硬拒（不覆盖早月事实行）'
     expect((db.prepare(`SELECT block_count FROM lis_cases WHERE case_no='CM26-6001'`).get() as any).block_count).toBe(7)
   })
 
-  it('月越界(2026-13)判不可解析拒收；日非法但月合法(2026-05-99)只裁月=五月 → 与既有五月锚同月放行（不校验日，避免既有行侧 fail-open）', async () => {
+  it('codex 二次复核 HIGH 回归：同月重传斜杠非补零(2026/5/9)不得使病例从月度核对消失 — operate_time 落库归一为下游可见形态', async () => {
+    // 场景：先导补零 2026-05-10（下游 substr→2026-05 可见）；同月重传 2026/5/9 若原样落库→下游 substr→'2026-5-' 认不出→病例从五月消失。
+    const first = await imp([{ 病理号: 'CM26-9001', 送检医院: H, 登记时间: '2026-05-10', 蜡块数: 3 }])
+    expect(first.body.data.inserted).toBe(1)
+    const retrans = await imp([{ 病理号: 'CM26-9001', 送检医院: H, 登记时间: '2026/5/9', 蜡块数: 8 }])
+    expect(retrans.body.data.updated).toBe(1) // 同月重传放行
+    expect(retrans.body.data.rejectedCrossMonth).toBe(0)
+    const row = db.prepare(`SELECT operate_time, block_count FROM lis_cases WHERE case_no='CM26-9001'`).get() as any
+    expect(row.operate_time).toBe('2026-05-09') // 归一落库，非 '2026/5/9'
+    expect(row.block_count).toBe(8) // 数据更新
+    // 下游按月口径 substr(replace(operate_time,'/','-'),1,7) 仍命中五月（病例不消失）
+    expect(row.operate_time.replace(/\//g, '-').slice(0, 7)).toBe('2026-05')
+  })
+
+  it('codex 二次复核：2026-059（YYYY-MM 紧跟数字畸形）并非"不可达"，守卫与下游同源都算五月 → 八月同号被拒（纠正 PR 正文表述）', async () => {
+    const first = await imp([{ 病理号: 'CM26-9101', 送检医院: H, 登记时间: '2026-059', 蜡块数: 2 }])
+    expect(first.body.data.inserted).toBe(1)
+    const cross = await imp([{ 病理号: 'CM26-9101', 送检医院: H, 登记时间: '2026-08-01', 蜡块数: 9 }])
+    expect(cross.body.data.rejectedCrossMonth).toBe(1) // monthOf('2026-059')='2026-05'（与下游 substr 同源）有锚 → 八月拒
+    expect(cross.body.data.rejectedCrossMonthSamples[0]).toMatchObject({ existingMonth: '2026-05', incomingMonth: '2026-08' })
+    expect((db.prepare(`SELECT block_count FROM lis_cases WHERE case_no='CM26-9101'`).get() as any).block_count).toBe(2)
+  })
+
+  it('既有历史脏行（归一上线前落的非补零 2026/5/9）existing 侧仍受保护：八月同号被拒（monthOf 内部归一 → existing 宽松保护原始事实，codex 建议）', async () => {
+    // 直改库模拟归一功能上线前已落的历史脏行（下游 substr 对它得 '2026-5-' 认不出五月，但原始事实=五月登记，不应被跨月静默覆盖）
+    await imp([{ 病理号: 'CM26-9201', 送检医院: H, 登记时间: '2026-05-10', 蜡块数: 2 }])
+    db.prepare(`UPDATE lis_cases SET operate_time='2026/5/9' WHERE case_no='CM26-9201'`).run()
+    const cross = await imp([{ 病理号: 'CM26-9201', 送检医院: H, 登记时间: '2026-08-01', 蜡块数: 9 }])
+    expect(cross.body.data.rejectedCrossMonth).toBe(1) // existing monthOf('2026/5/9') 内部归一→'2026-05' 有锚 → 八月拒
+    expect((db.prepare(`SELECT block_count FROM lis_cases WHERE case_no='CM26-9201'`).get() as any).block_count).toBe(2)
+  })
+
+  it('月越界(2026-13)下游 slice 也非合法 YYYY-MM → 同盲判空月拒收；日非法但月合法(2026-05-99)与下游 substr 同源=五月 → 同月放行', async () => {
     const y = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: '2026-05-10', 蜡块数: 1 }])
     expect(y.body.data.inserted).toBe(1)
     const badMonth = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: '2026-13-01', 蜡块数: 9 }])
-    expect(badMonth.body.data.rejectedCrossMonth).toBe(1) // 月13越界=不可解析，有锚则拒（不覆盖）
+    expect(badMonth.body.data.rejectedCrossMonth).toBe(1) // '2026-13' 非合法 YYYY-MM（月13），守卫/下游同盲；有锚则拒（不覆盖）
     expect(badMonth.body.data.rejectedCrossMonthSamples[0]).toMatchObject({ existingMonth: '2026-05', incomingMonth: '' })
     const badDay = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: '2026-05-99', 蜡块数: 4 }])
-    expect(badDay.body.data.updated).toBe(1) // monthOf 只裁月：2026-05-99=五月，与库行五月锚同月 → 放行更新
+    expect(badDay.body.data.updated).toBe(1) // monthOf('2026-05-99')=slice '2026-05'，与库行五月锚同月（与下游 substr 同源）→ 放行更新
     expect(badDay.body.data.rejectedCrossMonth).toBe(0)
     expect((db.prepare(`SELECT block_count FROM lis_cases WHERE case_no='CM26-7001'`).get() as any).block_count).toBe(4)
   })
