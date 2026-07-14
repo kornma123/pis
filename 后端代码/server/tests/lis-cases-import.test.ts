@@ -275,12 +275,32 @@ describe('#163 阶段1：跨月同号导入硬拒（不覆盖早月事实行）'
     expect(new Set(rows.map((r) => r.partner_id)).size).toBe(2)
   })
 
-  it('口径 pin：库行日期为非补零形（legacy）＝按月口径不可见 → 视同无锚放行（与下游 substr 月过滤同盲；阶段2清洗存量后自动闭合）', async () => {
-    // 正常导入线不会再产生此形态（toDateish 输出恒补零）；直改库模拟 legacy 行
-    db.prepare(`UPDATE lis_cases SET operate_time='2026/5/9' WHERE case_no='CM26-2001'`).run()
-    const res = await imp([{ 病理号: 'CM26-2001', 送检医院: H, 登记时间: '2026-08-01', 蜡块数: 3 }])
-    expect(res.body.data.updated).toBe(1) // 有意 fail-open：existingMonth='' 视同无锚，钉成口径而非留成暗坑
-    expect(res.body.data.rejectedCrossMonth).toBe(0)
+  it('非补零/斜杠日期形（源文件文本日期）也被守卫识别：API 首导 2026/5/9，八月同号重传被拒（codex 复核 · slice(0,7) 漏判修复）', async () => {
+    // toDateish 对文本日期原样落库（只转 Excel 序列号）→ '2026/5/9' 原样进 operate_time；
+    // monthOf 必须结构化提取年月而非 slice(0,7)，否则库行月锚漏成 '' → 八月行 fail-open 覆盖五月。
+    const first = await imp([{ 病理号: 'CM26-6001', 送检医院: H, 登记时间: '2026/5/9', 蜡块数: 2 }])
+    expect(first.body.data.inserted).toBe(1)
+    const cross = await imp([{ 病理号: 'CM26-6001', 送检医院: H, 登记时间: '2026-08-01', 蜡块数: 9 }])
+    expect(cross.body.data.rejectedCrossMonth).toBe(1)
+    expect(cross.body.data.rejectedCrossMonthSamples[0]).toMatchObject({ existingMonth: '2026-05', incomingMonth: '2026-08' })
+    expect((db.prepare(`SELECT block_count FROM lis_cases WHERE case_no='CM26-6001'`).get() as any).block_count).toBe(2) // 五月数据未被八月覆盖
+    // 同月不同书写形态（斜杠非补零 vs 补零）判为同月 → 放行更新
+    const same = await imp([{ 病理号: 'CM26-6001', 送检医院: H, 登记时间: '2026-05-28', 蜡块数: 7 }])
+    expect(same.body.data.updated).toBe(1)
+    expect(same.body.data.rejectedCrossMonth).toBe(0)
+    expect((db.prepare(`SELECT block_count FROM lis_cases WHERE case_no='CM26-6001'`).get() as any).block_count).toBe(7)
+  })
+
+  it('月/日范围校验：越界月(2026-13)判不可解析拒收；日非法(2026-05-99)不再仅凭前七位当五月，同判不可解析拒收（codex 诉求）', async () => {
+    const y = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: '2026-05-10', 蜡块数: 1 }])
+    expect(y.body.data.inserted).toBe(1)
+    const badMonth = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: '2026-13-01', 蜡块数: 9 }])
+    expect(badMonth.body.data.rejectedCrossMonth).toBe(1) // 月13越界=不可解析，有锚则拒（不覆盖）
+    expect(badMonth.body.data.rejectedCrossMonthSamples[0]).toMatchObject({ existingMonth: '2026-05', incomingMonth: '' })
+    const badDay = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: '2026-05-99', 蜡块数: 4 }])
+    expect(badDay.body.data.rejectedCrossMonth).toBe(1) // 日99越界=不可解析（非"前七位=五月"放行），fail-closed 拒
+    expect(badDay.body.data.rejectedCrossMonthSamples[0]).toMatchObject({ existingMonth: '2026-05', incomingMonth: '' })
+    expect((db.prepare(`SELECT block_count FROM lis_cases WHERE case_no='CM26-7001'`).get() as any).block_count).toBe(1) // 始终未被覆盖
   })
 })
 

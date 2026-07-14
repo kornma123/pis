@@ -6,7 +6,7 @@
  *  - 样本类型人工覆盖（PUT /:caseNo/specimen-type）= 单例技术更正、留痕 → reconciliation W（技术员可录入）。
  *
  * 增量纠错架构：
- *  - 原始事实层：6 数量列 + partner，幂等 upsert（同月重传覆盖；跨月同号硬拒不覆盖——#163 阶段1止血，月键根修见该票阶段2）。
+ *  - 原始事实层：6 数量列 + partner，幂等 upsert（同月重传覆盖；跨月同号硬拒——「病理号唯一」执法闸，#163 阶段1；阶段2=读侧收入占比配月，无 schema 变更）。
  *  - 派生推断：specimen_type 导入自动判(source=auto)；人工覆盖 → source=manual，重传**不覆盖** manual；改动留痕 reconciliation_logs。
  */
 import { Router } from 'express'
@@ -30,17 +30,28 @@ const SPECIMEN_TYPES = ['tissue', 'tissue_complex', 'cytology']
 // 事件循环，令登录/库存等所有请求一起挂起（误传一个几万行文件即可触发）。超限即拒、提示分批。
 const MAX_LIS_IMPORT_ROWS = 1000
 
-// —— #163 阶段1：跨月同号导入硬拒 ——
-// 医院按月/按年重置病理号是常见现实，而 lis_cases 身份键 (partner_id, case_no) 不含月：
-// 晚月同号 upsert 会静默改写早月原始事实行（数量标量覆盖），物理丢失、迁移救不回。
-// 月键根修（schema 加 lis_month）在 #163 阶段2、两项口径待 PM 拍板；此处只做写层止血。
-const VALID_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/
+// —— #163 阶段1：跨月同号导入硬拒（「病理号唯一」业务规则的写端执法闸）——
+// PM 2026-07-13 拍板：同一病理号唯一、可跨结算月、不可能两人共号 → 身份键 (partner_id, case_no)
+// 维持不变（「键加月/方案A」整体退役、无 schema 变更、无迁移）。据此本闸语义转正：同院同号但登记
+// 月冲突 = 数据更正或上游错误，硬拒＋回执待人工，绝不静默改写早月原始事实行（数量标量覆盖不可逆）。
+// 阶段2（待 #168 合并后开）= 读侧按各结算月收入占比分摊单份物料成本（Q2'=A）+ guard 收窄为异常
+// 兜底 + #151 探针「跨月复用即禁出」不变量重定义；同样无 schema、无迁移。
 const CROSS_MONTH_SAMPLE_LIMIT = 50 // 回执样例上限，与 /import-markers 的 unmatchedCases 同款
-/** operate_time（经 toDateish 归一的 'YYYY-MM-DD'，或历史原样串）→ 'YYYY-MM'；验形失败回 ''（不可解析哨兵，与阶段2同义）。'/'→'-' 与下游按月过滤同款兼容。 */
+/**
+ * operate_time（toDateish 归一的 'YYYY-MM-DD'、源文件文本日期 '2026/5/9'、纯月份 '2026-05'、带时间戳等）→ 'YYYY-MM'。
+ * 结构化提取年/月[/日]并校验范围（月 1–12、日 1–31），任何不完整/越界/畸形串回 ''（不可解析哨兵）。
+ * 关键（codex 复核逮到）：用真实提取而非 slice(0,7)——后者把非补零 '2026/5/9' 截成 '2026-5-' 漏判为不可
+ * 解析令守卫 fail-open，也会把 '2026-05-99' 仅凭前七位错当五月。执法闸从严：越界/畸形一律判不可解析，
+ * 有月锚时走 fail-closed 拒收（不覆盖）。日取粗范围校验（不建月历表：月份判定不依赖日的精确合法性）。
+ */
 function monthOf(dateish: unknown): string {
   if (dateish == null || dateish === '') return ''
-  const m = String(dateish).trim().replace(/\//g, '-').slice(0, 7)
-  return VALID_MONTH.test(m) ? m : ''
+  const m = /^\s*(\d{4})[-/](\d{1,2})(?!\d)(?:[-/](\d{1,2})(?!\d))?/.exec(String(dateish))
+  if (!m) return ''
+  const month = Number(m[2])
+  const day = m[3] === undefined ? 1 : Number(m[3])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return ''
+  return `${m[1]}-${String(month).padStart(2, '0')}`
 }
 
 /** POST /import —— 批量导入 LIS 病例（含医院 upsert + 数量 + 自动样本判定；跨月同号硬拒 #163 阶段1） */
@@ -101,8 +112,8 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
         // operate_time 覆盖成空 = 抹掉月锚，同样不可逆）。库行无月锚('') 不拦：这类行在系统
         // 按月口径下本就不可见（下游 substr 月过滤同盲），且给旧无日期行留补日期的修复通道
         // （增量纠错，非跨月覆盖）。代价（L1 面板 CONFIRMED·交 PM 知情）：月锚一旦落成
-        // 「验形有效但内容错误」的月份，除阶段2迁移外无 API 更正通道（原「重传覆盖」语义即
-        // 此场景的事实修复通道，本守卫移除之；显式带留痕的月锚更正端点属新口径，待 PM 拍板）。
+        // 「有效但内容错误」的月份，暂无 API 更正通道（原「重传覆盖」语义即此场景的事实修复通道，
+        // 本守卫移除之）；带留痕的登记月更正端点属遗留跟进（#163 comment 已登记候选），非本阶段。
         if (existingRow) {
           const existingMonth = monthOf(existingRow.operate_time)
           const incomingMonth = monthOf(c.operateTime)
@@ -245,11 +256,10 @@ router.put('/:caseNo/specimen-type', authenticateToken, requireWrite, (req, res)
  * 该表无送检医院列 → 病理号 join lis_cases 定医院；查无 / 跨院撞号 → 认不出，单列不落。
  * 幂等：按 (partner_id, case_no) 整例删插（补传 = 该例抗体全量刷新，不残留旧行）。
  * ⚠️ #163 阶段1已知残留：抗体清单源表无任何日期列 → 本端点无法为导入行派生月，跨月同号的
- *   整例删插在此层不可检测（晚月清单会覆盖早月抗体行）。勿在无月信号下猜月（多数月推断等
- *   = 新记账约定，按「约定不下沉」须 PM 拍板）。/import 回执的冲突号仅对直接读 JSON 的调用方
- *   可见——现行导入向导不显示拒收、且同一次点击内自动连导抗体清单（L1 面板 CONFIRMED），
- *   故此残留在 UI 主流程当前无有效缓解；收口候选（待 PM）= 前端展示拒收并按被拒号过滤 markers。
- *   根修 = #163 阶段2 多实例歧义规则（同号多月实例归 unmatched）。
+ *   整例删插在此层不可检测（晚月清单会覆盖早月抗体行）。勿在无月信号下猜月（属新记账约定，
+ *   按「约定不下沉」须 PM 拍板）。/import 回执的冲突号仅对直接读 JSON 的调用方可见——现行导入
+ *   向导不显示拒收、且同一次点击内自动连导抗体清单（L1 面板 CONFIRMED），故此残留在 UI 主流程
+ *   当前无有效缓解；收口 = 前端展示拒收并按被拒号过滤 markers（#163 comment 已登记遗留跟进）。
  */
 router.post('/import-markers', authenticateToken, requireImport, (req, res) => {
   try {
