@@ -222,26 +222,36 @@ export function buildCaseMarkers(db: any, partnerId: string, serviceMonth: strin
 
 /**
  * 跑某院某月账实核对并落库（幂等重算：清旧 diffs 重建）。
- * 关账后（定版）拒绝重算——迟到数据记次月，不改定版（§1.5）。
+ * 关账后（定版）拒绝重算——迟到数据记次月，不改定版（§1.5）；判定在 BEGIN IMMEDIATE 拿锁后复核，
+ * 堵「预检通过 → 另一连接关账 → 覆写定版」的竞态窗口（见 tests/reconcile-close-race.test.ts）。
  * ⚠️ 重算会清空未关账院·月的已填认定（设计取舍：待复核态重跑=重置认定；正式改判请走「重新打开」）。
  */
 export function runReconcile(db: any, partnerId: string, serviceMonth: string, operator: string | null): RunReconcileResult {
   const partner = db.prepare('SELECT id, name FROM partners WHERE id = ?').get(partnerId) as { id: string; name: string } | undefined
-  const existing = db
-    .prepare('SELECT * FROM reconcile_hospital_months WHERE partner_id = ? AND service_month = ?')
-    .get(partnerId, serviceMonth) as any
-  if (existing && existing.status === '已关账') {
-    throw Object.assign(new Error('该院该月已关账·定版不可改（迟到数据记次月）'), { code: 'PERIOD_CLOSED' })
+  const readHospitalMonth = () =>
+    db.prepare('SELECT * FROM reconcile_hospital_months WHERE partner_id = ? AND service_month = ?').get(partnerId, serviceMonth) as any
+  const assertNotClosed = (row: any) => {
+    if (row && row.status === '已关账') {
+      throw Object.assign(new Error('该院该月已关账·定版不可改（迟到数据记次月）'), { code: 'PERIOD_CLOSED' })
+    }
   }
+  // 事务外预检：已关账就不必白跑取数+计算（快速失败）。非权威——权威判定在拿锁后（见事务内）。
+  assertNotClosed(readHospitalMonth())
 
   const { bills, lis, statementReady, lisReady, billCountLowConf } = buildReconcileInputs(db, partnerId, serviceMonth)
   const result = computeReconcile(bills, lis)
 
-  const hmId = existing?.id ?? uuidv4()
   const nowExpr = 'CURRENT_TIMESTAMP'
+  let hmId = ''
   // 一个事务原子写入：院·月 + diffs + 清待补收 + 细粒度线索——任一步失败整体回滚，不留半截快照。
   db.exec('BEGIN IMMEDIATE')
   try {
+  // 拿锁后复核（对齐 readiness probe run 姿势）：预检到拿锁之间，另一连接可能已关账（/close 为自提交
+  // UPDATE）或已建行——沿用事务外快照会覆写已关账定版的 match_rate/diffs/待补收，或 INSERT 撞 UNIQUE。
+  // BEGIN IMMEDIATE 持写锁 → 此处读到的行在本事务结束前不会被他人改写，以它为权威。
+  const existing = readHospitalMonth()
+  assertNotClosed(existing)
+  hmId = existing?.id ?? uuidv4()
   if (existing) {
     db.prepare(
       `UPDATE reconcile_hospital_months
