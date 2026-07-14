@@ -34,23 +34,23 @@ const MAX_LIS_IMPORT_ROWS = 1000
 // PM 2026-07-13 拍板：同一病理号唯一、可跨结算月、不可能两人共号 → 身份键 (partner_id, case_no)
 // 维持不变（「键加月/方案A」整体退役、无 schema 变更、无迁移）。据此本闸语义转正：同院同号但登记
 // 月冲突 = 数据更正或上游错误，硬拒＋回执待人工，绝不静默改写早月原始事实行（数量标量覆盖不可逆）。
-// 阶段2（待 #168 合并后开）= 读侧按各结算月收入占比分摊单份物料成本（Q2'=A）+ guard 收窄为异常
-// 兜底 + #151 探针「跨月复用即禁出」不变量重定义；同样无 schema、无迁移。
+// 阶段2（待 #168 合并后开）= 读侧按各结算月收入占比分摊单份物料成本（Q2'=A）+ 读侧
+// loadCrossMonthReuseKeys 收窄为异常兜底 + #151 探针「跨月复用即禁出」不变量重定义；同样无 schema、无迁移。
 const CROSS_MONTH_SAMPLE_LIMIT = 50 // 回执样例上限，与 /import-markers 的 unmatchedCases 同款
 /**
  * operate_time（toDateish 归一的 'YYYY-MM-DD'、源文件文本日期 '2026/5/9'、纯月份 '2026-05'、带时间戳等）→ 'YYYY-MM'。
- * 结构化提取年/月[/日]并校验范围（月 1–12、日 1–31），任何不完整/越界/畸形串回 ''（不可解析哨兵）。
+ * 结构化提取年+月并校验月 1–12，不完整/月越界/畸形串回 ''（不可解析哨兵）。
  * 关键（codex 复核逮到）：用真实提取而非 slice(0,7)——后者把非补零 '2026/5/9' 截成 '2026-5-' 漏判为不可
- * 解析令守卫 fail-open，也会把 '2026-05-99' 仅凭前七位错当五月。执法闸从严：越界/畸形一律判不可解析，
- * 有月锚时走 fail-closed 拒收（不覆盖）。日取粗范围校验（不建月历表：月份判定不依赖日的精确合法性）。
+ * 解析令守卫 fail-open。只裁月、不校验日：月份判定不依赖日的合法性，且守卫两侧月派生须与下游按月口径
+ * substr(operate_time,1,7) 的可见性同源（L1 面板逮到——若对 '2026-05-99' 之类合法月+非法日加日校验回 ''，
+ * 会让下游算作五月的库行在守卫侧变无锚 → 反被跨月行静默覆盖，即在既有行侧开同类 fail-open）。
  */
 function monthOf(dateish: unknown): string {
   if (dateish == null || dateish === '') return ''
-  const m = /^\s*(\d{4})[-/](\d{1,2})(?!\d)(?:[-/](\d{1,2})(?!\d))?/.exec(String(dateish))
+  const m = /^\s*(\d{4})[-/](\d{1,2})(?!\d)/.exec(String(dateish))
   if (!m) return ''
   const month = Number(m[2])
-  const day = m[3] === undefined ? 1 : Number(m[3])
-  if (month < 1 || month > 12 || day < 1 || day > 31) return ''
+  if (month < 1 || month > 12) return ''
   return `${m[1]}-${String(month).padStart(2, '0')}`
 }
 
@@ -109,11 +109,11 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
         const existingRow = existsStmt.get(partnerId, c.caseNo) as { operate_time: string | null } | undefined // upsert 前查存在性 → 拆新增/更新
         // #163 阶段1硬拒：库行已有可解析月锚时，只放行「同月重传」（可重传语义不变）。
         // 导入月不同 → 拒（跨月覆盖 = 不可逆销毁早月事实行）；导入月不可解析('') 也拒（放行会把
-        // operate_time 覆盖成空 = 抹掉月锚，同样不可逆）。库行无月锚('') 不拦：这类行在系统
-        // 按月口径下本就不可见（下游 substr 月过滤同盲），且给旧无日期行留补日期的修复通道
-        // （增量纠错，非跨月覆盖）。代价（L1 面板 CONFIRMED·交 PM 知情）：月锚一旦落成
-        // 「有效但内容错误」的月份，暂无 API 更正通道（原「重传覆盖」语义即此场景的事实修复通道，
-        // 本守卫移除之）；带留痕的登记月更正端点属遗留跟进（#163 comment 已登记候选），非本阶段。
+        // operate_time 覆盖成空 = 抹掉月锚，同样不可逆）。库行无月锚('') 不拦：给旧无日期行留补
+        // 日期的修复通道（增量纠错，非跨月覆盖）。monthOf 只裁月不校验日 → 与下游 substr(operate_time,1,7)
+        // 的按月可见性同源（'2026-05-99'/'2026/5/9' 两侧都锚五月；L1 面板逮到若加日校验会让下游算五月的
+        // 库行在守卫侧变无锚→被跨月覆盖，故不校验日）。代价（交 PM 知情）：月锚一旦落成「有效但内容
+        // 错误」的月份，暂无 API 更正通道（带留痕更正端点属遗留跟进 #163 comment 候选，非本阶段）。
         if (existingRow) {
           const existingMonth = monthOf(existingRow.operate_time)
           const incomingMonth = monthOf(c.operateTime)
@@ -150,7 +150,7 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
       rejectedCrossMonthSamples,
       partnersCreated,
       partnersMatched: partnerCache.size,
-    }, `导入 ${imported} 例（新增 ${inserted}·更新 ${updated}，${partnerCache.size} 家医院，新建 ${partnersCreated} 家）${rejectedCrossMonth ? `；${rejectedCrossMonth} 例与库中既有病例同号但月份对不上（跨月重号或日期无法解析），已拒收、未覆盖原数据` : ''}`)
+    }, `导入 ${imported} 例（新增 ${inserted}·更新 ${updated}，${partnerCache.size} 家医院，新建 ${partnersCreated} 家）${rejectedCrossMonth ? `；${rejectedCrossMonth} 例与库中既有病例同号但登记月份不一致（同号跨月冲突或日期无法解析），已拒收、未覆盖原数据` : ''}`)
   } catch (e: any) {
     error(res, e.message || '导入失败')
   }

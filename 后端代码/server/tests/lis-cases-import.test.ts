@@ -291,16 +291,27 @@ describe('#163 阶段1：跨月同号导入硬拒（不覆盖早月事实行）'
     expect((db.prepare(`SELECT block_count FROM lis_cases WHERE case_no='CM26-6001'`).get() as any).block_count).toBe(7)
   })
 
-  it('月/日范围校验：越界月(2026-13)判不可解析拒收；日非法(2026-05-99)不再仅凭前七位当五月，同判不可解析拒收（codex 诉求）', async () => {
+  it('月越界(2026-13)判不可解析拒收；日非法但月合法(2026-05-99)只裁月=五月 → 与既有五月锚同月放行（不校验日，避免既有行侧 fail-open）', async () => {
     const y = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: '2026-05-10', 蜡块数: 1 }])
     expect(y.body.data.inserted).toBe(1)
     const badMonth = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: '2026-13-01', 蜡块数: 9 }])
     expect(badMonth.body.data.rejectedCrossMonth).toBe(1) // 月13越界=不可解析，有锚则拒（不覆盖）
     expect(badMonth.body.data.rejectedCrossMonthSamples[0]).toMatchObject({ existingMonth: '2026-05', incomingMonth: '' })
     const badDay = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: '2026-05-99', 蜡块数: 4 }])
-    expect(badDay.body.data.rejectedCrossMonth).toBe(1) // 日99越界=不可解析（非"前七位=五月"放行），fail-closed 拒
-    expect(badDay.body.data.rejectedCrossMonthSamples[0]).toMatchObject({ existingMonth: '2026-05', incomingMonth: '' })
-    expect((db.prepare(`SELECT block_count FROM lis_cases WHERE case_no='CM26-7001'`).get() as any).block_count).toBe(1) // 始终未被覆盖
+    expect(badDay.body.data.updated).toBe(1) // monthOf 只裁月：2026-05-99=五月，与库行五月锚同月 → 放行更新
+    expect(badDay.body.data.rejectedCrossMonth).toBe(0)
+    expect((db.prepare(`SELECT block_count FROM lis_cases WHERE case_no='CM26-7001'`).get() as any).block_count).toBe(4)
+  })
+
+  it('既有行侧对齐下游可见性：库行日非法但月合法(2026-05-99)仍受跨月保护，八月同号被拒（L1 面板 CONFIRMED · 避免 existing fail-open）', async () => {
+    // 源文件文本日期 '2026-05-99'：toDateish 原样落库、isValidLisRow 不校验日期 → 直落 operate_time；
+    // 下游 substr(operate_time,1,7) 把它算作五月（可见），故守卫月派生须同源=五月有锚，否则被八月静默覆盖。
+    const first = await imp([{ 病理号: 'CM26-8001', 送检医院: H, 登记时间: '2026-05-99', 蜡块数: 2 }])
+    expect(first.body.data.inserted).toBe(1)
+    const cross = await imp([{ 病理号: 'CM26-8001', 送检医院: H, 登记时间: '2026-08-01', 蜡块数: 9 }])
+    expect(cross.body.data.rejectedCrossMonth).toBe(1)
+    expect(cross.body.data.rejectedCrossMonthSamples[0]).toMatchObject({ existingMonth: '2026-05', incomingMonth: '2026-08' })
+    expect((db.prepare(`SELECT block_count, operate_time FROM lis_cases WHERE case_no='CM26-8001'`).get() as any).block_count).toBe(2) // 五月行未被八月覆盖
   })
 })
 
