@@ -4,16 +4,15 @@
  * 背景（「全砍 depletion 功能」PR 独立对抗复核·2026-07-09 顺带发现·同 labor-times/indirect-costs (#752e1571)
  * 与 #76 项 E 性质）：app.ts 挂载层按模块 R 放行（`requirePermission('outbound','R')`），
  * 同文件的 PUT /:id、DELETE /:id 已正确用 `requirePermission('outbound','W')` 内层守卫，
- * 但两个**创建（写）**端点无 inline W 守卫：
+ * 但创建（写）端点此前无 inline W 守卫：
  *   - POST /            （创建出库/领用·LIVE·前端 outboundApi.create）—— 减库存 + 写 batch_usage_tracking + stock_logs
- *   - POST /bom         （BOM 出库·构建纪律 C2 无消费者死端点在册）
  * → 持 outbound:R（只读）的角色即可越权创建出库（减库存/写台账）。SEED_MATRIX 的 lab_director:{outbound:'R'}
  *   正是这样一个「只读出库」角色；角色矩阵编辑器（对象格式 {outbound:'R'}）也能造出这种只读授予。
  * 修法=把已有的 `requireWriteAccess = requirePermission('outbound','W')` 上提到文件顶部，
- *   补挂到两个 POST（PUT/DELETE 原已引用，逻辑不变）。GET 读端点不动。
+ *   补挂到 POST（PUT/DELETE 原已引用，逻辑不变）。GET 读端点不动。
  *
  * 现网真实用户零行为变更：运行库全部角色用旧扁平数组权限格式（parsePermissions 一律映射为 W），
- *   无法表达 R-only；能到达这两个端点的角色（warehouse_manager/technician/pathologist）皆持 outbound:W
+ *   无法表达 R-only；能到达该端点的角色（warehouse_manager/technician/pathologist）皆持 outbound:W
  *   → 新守卫对它们放行。缺口仅在**对象格式** {outbound:'R'}（SEED_MATRIX / 矩阵编辑器）路径下潜伏。
  *
  * 本测试用**合成角色**（对象矩阵权限，不依赖运行库/种子形态，drift-proof）做 W-403 双向断言：
@@ -21,7 +20,7 @@
  *   - writer（outbound:W）打写端点 → ≠403（守卫放行，写体校验另算 400/404）。
  * 约定同 rbac-cost-config-write-guard / rbac-p3 / rbac-e：403 = RBAC 拦截；≠403（400/404/409/422/500）= 守卫放行。
  *
- * 变异测试（人工）：把 outbound-v1.1.ts 里任一 POST 的 `requireWriteAccess` 移除
+ * 变异测试（人工）：把 outbound-v1.1.ts 里 POST / 的 `requireWriteAccess` 移除
  *   → 对应 reader 断言会从 403 翻成 ≠403（红），证守卫真生效、非摆设。
  */
 import { describe, it, expect, beforeAll } from 'vitest'
@@ -88,7 +87,6 @@ beforeAll(async () => {
 // 每个写端点：{ method, path }。PUT/DELETE 用不存在 id（守卫在业务查找前跑，reader 应 403 而非 404）。
 const WRITE_ENDPOINTS: Array<{ label: string; method: 'POST' | 'PUT' | 'DELETE'; path: string }> = [
   { label: 'POST /outbound (创建出库·LIVE)', method: 'POST', path: '/api/v1/outbound' },
-  { label: 'POST /outbound/bom (BOM出库)', method: 'POST', path: '/api/v1/outbound/bom' },
   // 已有 requireWriteAccess 守卫，纳入门禁防未来误删
   { label: 'PUT /outbound/:id (改出库)', method: 'PUT', path: '/api/v1/outbound/nonexistent' },
   { label: 'DELETE /outbound/:id (删出库)', method: 'DELETE', path: '/api/v1/outbound/nonexistent' },

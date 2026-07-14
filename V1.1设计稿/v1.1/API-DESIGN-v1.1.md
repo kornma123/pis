@@ -766,25 +766,13 @@ POST /api/v1/outbound
 }
 ```
 
-### 6.3 BOM一键出库
+### 6.3 BOM一键出库（已下线）
 
-```http
-POST /api/v1/outbound/bom
-```
+`POST /api/v1/outbound/bom` 已于 2026-07-14 下线：项目尚未上线且没有前端或外部消费者，继续保留会形成无人验证的库存写入口。
 
-**请求体**:
-```json
-{
-  "projectId": "HE-001",
-  "bomId": "BOM-001",
-  "sampleCount": 10,
-  "remark": "HE制片BOM领用"
-}
-```
+当前唯一受支持的出库创建合同是 6.2 的 `POST /api/v1/outbound`，`type` 仅接受 `direct`、`project`、`transfer`、`scrap`；不得用普通合同传入 `type = 'bom'` 绕过下线。历史 `type = 'bom'` 出库数据只读，并保留查询、成本回溯和重算兼容；本次下线不删除历史数据，也不改变既有成本口径。
 
-**业务规则**:
-- 根据BOM配置和样本数计算物料需求
-- 自动按FIFO分配批次
+库存页的“按检测项目添加”仍保留：它只负责把 BOM 物料批量加入普通出库明细，最终逐项调用 `POST /api/v1/outbound` 且使用 `type = 'direct'`；它不是已下线的按样本数自动扣库端点。
 
 ---
 
