@@ -20,8 +20,13 @@ import {
   type FoundationGate,
 } from './portfolio-health.js'
 import { SPLIT_DIAG_FEE, SPLIT_FORMULA_VERSION } from './statement-revenue.js'
+import {
+  FIXED_POOL_SCOPE_ATTESTATION,
+  FIXED_POOL_SOURCE_KIND,
+  HOSPITAL_CM_FIXED_POOL_POLICY_VERSION,
+} from './hospital-cm-fixed-pool.js'
 
-export const HOSPITAL_CM_FOUNDATION_PROBE_VERSION = '2026-07-12.a'
+export const HOSPITAL_CM_FOUNDATION_PROBE_VERSION = '2026-07-13.b'
 export const HOSPITAL_CM_READINESS_SOURCE_TABLES = [
   'materials',
   'inventory',
@@ -380,6 +385,11 @@ export function currentHospitalCmConstantManifest(): Record<string, unknown> {
       defaultOwners: DEFAULT_READINESS_OWNER,
     },
     revenueSplit: { diagnosisFee: SPLIT_DIAG_FEE, formulaVersion: SPLIT_FORMULA_VERSION },
+    fixedPool: {
+      policyVersion: HOSPITAL_CM_FIXED_POOL_POLICY_VERSION,
+      scopeAttestation: FIXED_POOL_SCOPE_ATTESTATION,
+      sourceKind: FIXED_POOL_SOURCE_KIND,
+    },
     hospitalCm: {
       formulaVersion: HOSPITAL_CM_FORMULA_VERSION,
       formulaBehaviorArtifact: currentHospitalCmFormulaBehaviorArtifact(),
@@ -403,7 +413,7 @@ export function currentHospitalCmConstantManifest(): Record<string, unknown> {
  * 受代码评审与 drift-guard 保护的基线签名。口径常量变化时，必须显式 bump 版本、更新本签名并让差异进入 PR。
  * 它不是数据库开关，也没有运行时“设为通过”的入口。
  */
-export const EXPECTED_HOSPITAL_CM_CONSTANT_MANIFEST_FINGERPRINT = '4233fa066b3ac2df4b78d23e574bdaf5bb96c41bf2fcbae27778d12c790db0e7'
+export const EXPECTED_HOSPITAL_CM_CONSTANT_MANIFEST_FINGERPRINT = 'ee1698b353070e73323aaf5eac0bdba8b6050d22b296271948fa870290b4fca1'
 
 function probeConstantFreeze(sourceState: HospitalCmReadinessSourceState): HospitalCmFoundationProbeCheck {
   const key: FoundationGate = 'constant_freeze'
