@@ -1975,8 +1975,8 @@ export function initializeDatabase(): void {
   ]
   stainSeed.forEach((r) => insertStain.run(r[0], r[1], r[2], r[3], r[4], r[5], r[6]))
 
-  // 院级贡献毛利 readiness 控制面（A）：只落 owner/due 与追加式真实探针证据。
-  // 不 seed 任何 passed/ready，不写固定成本池、历史周期或首周期验证事实。
+  // 院级贡献毛利 readiness 控制面（A+B）：owner/due、追加式真实探针证据、空的月度固定池版本/认账表。
+  // 不 seed 任何 passed/ready，不 seed 金额/RATIFIED，不写历史周期或首周期验证事实。
   ensureHospitalCmReadinessSchema(database)
 
   // ===========================================================================
