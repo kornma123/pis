@@ -311,7 +311,9 @@ describe('#163 阶段1：跨月同号导入硬拒（不覆盖早月事实行）'
     expect(first.body.data.inserted).toBe(1)
     // 含 codex 四次复核：日历不存在日（2026-02-31/2026-04-31）、非闰年 2月29、非法时间（Tfoo/99:99:99）
     const bads = ['2026/5/foo', '2026-05-99', '2026-13-01', '2026/5junk', '2026-059',
-      '2026-02-31', '2025-02-29', '2026-04-31', '2026-05-10Tfoo', '2026-05-10 99:99:99']
+      '2026-02-31', '2025-02-29', '2026-04-31', '2026-05-10Tfoo', '2026-05-10 99:99:99',
+      '2026-05-10T24:00:00Z', '2026-05-10T23:60:00Z', '2026-05-10T23:59:60Z',
+      '2026-05-10T10:30:00+15:00', '2026-05-10T10:30:00+14:01', '2026-05-10T10:30:00+08:60']
     for (const bad of bads) {
       const res = await imp([{ 病理号: 'CM26-7001', 送检医院: H, 登记时间: bad, 蜡块数: 9 }])
       expect(res.body.data.rejectedInvalidDate).toBe(1) // 非法日期 → 拒收（非跨月）
@@ -341,6 +343,27 @@ describe('#163 阶段1：跨月同号导入硬拒（不覆盖早月事实行）'
     const ts = await imp([{ 病理号: 'CM26-TS02', 送检医院: H, 登记时间: '2026/5/9 8:05:03', 蜡块数: 1 }]) // 单位数时补零到 08
     expect(ts.body.data.inserted).toBe(1)
     expect((db.prepare(`SELECT operate_time FROM lis_cases WHERE case_no='CM26-TS02'`).get() as any).operate_time).toBe('2026-05-09 08:05:03')
+  })
+
+  it('codex 五次复核 HIGH：全局接口契约允许的 ISO 8601 Z/毫秒/时区偏移不得被严格日期校验误拒', async () => {
+    const rows = [
+      { caseNo: 'CM26-ISO-Z', value: '2026-05-12T10:30:00Z' },
+      { caseNo: 'CM26-ISO-MS', value: '2026-05-12T10:30:00.000Z' },
+      { caseNo: 'CM26-ISO-OFFSET', value: '2026-05-12T10:30:00+08:00' },
+      { caseNo: 'CM26-ISO-MAX-OFFSET', value: '2026-05-12T10:30:00+14:00' },
+    ]
+    const request = await req()
+    const preview = await request(app).post('/api/v1/lis-cases/preview').set('Authorization', `Bearer ${adminToken}`)
+      .send({ cases: rows.map(({ caseNo, value }) => ({ 病理号: caseNo, 送检医院: H, 登记时间: value })) })
+    expect(preview.body.data.valid).toBe(rows.length)
+    expect(preview.body.data.invalidDate).toBe(0)
+
+    for (const { caseNo, value } of rows) {
+      const res = await imp([{ 病理号: caseNo, 送检医院: H, 登记时间: value, 蜡块数: 1 }])
+      expect(res.body.data.inserted).toBe(1)
+      expect(res.body.data.rejectedInvalidDate).toBe(0)
+      expect((db.prepare('SELECT operate_time FROM lis_cases WHERE case_no = ?').get(caseNo) as any).operate_time).toBe(value)
+    }
   })
 
   it('codex 四次复核 MEDIUM：非法日期行在建院前被拒——全新医院 + 非法日期 → 不建 partner、不建 case、两计数为 0', async () => {

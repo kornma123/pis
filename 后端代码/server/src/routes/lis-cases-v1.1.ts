@@ -50,15 +50,16 @@ function parseYmd(dateish: unknown): { y: string; mo: number; d?: string } | nul
 }
 
 /**
- * incoming 侧**严格**校验（codex 三/四次复核 · 与 existing 宽松策略分离）：operateTime 必须是**日历上真实存在**的
+ * incoming 侧**严格**校验（codex 三/四/五次复核 · 与 existing 宽松策略分离）：operateTime 必须是**日历上真实存在**的
  * 日期串——`YYYY[-/]M[-/]D`（日按月大小 + 闰年校验，如 2026-02-31 / 2025-02-29 / 2026-04-31 一律拒）或纯
- * `YYYY[-/]M`，可带空格/T 引导的 `HH:MM[:SS]` 时间尾部（时 0–23 / 分秒 0–59，`Tfoo`/`99:99:99` 一律拒）；否则
+ * `YYYY[-/]M`，可带空格/T 引导的 `HH:MM[:SS[.fraction]][Z|±HH:MM]` 时间尾部（兼容全局 ISO 8601 请求契约；
+ * 时 0–23 / 分秒 0–59、时区最大 ±14:00，`Tfoo`/`99:99:99` 一律拒）；否则
  * `valid=false`（调用方拒收进回执、不 upsert）。防「合法年月前缀 + 垃圾尾部/越界日/日历不存在日/非法时间」被当成
  * 同月放行、静默覆盖有效登记日与数量。归一日期段到补零 canonical、**保留合法时间尾部并补零时分秒**（MEDIUM：
  * operate_time 在详情页作「登记时间」展示，不得丢时分）。existing 侧不用它（仍走宽松 monthOf 保护历史脏行）。
  */
 function parseStrictDate(dateish: string): { valid: true; canonical: string } | { valid: false } {
-  const m = /^\s*(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?(?:([ T])(\d{1,2}):(\d{2})(?::(\d{2}))?)?\s*$/.exec(dateish)
+  const m = /^\s*(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?(?:([ T])(\d{1,2}):(\d{2})(?::(\d{2})(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})?)?\s*$/i.exec(dateish)
   if (!m) return { valid: false }
   const year = Number(m[1]), mo = Number(m[2])
   if (mo < 1 || mo > 12) return { valid: false }
@@ -72,8 +73,16 @@ function parseStrictDate(dateish: string): { valid: true; canonical: string } | 
   if (m[4] === undefined) return { valid: true, canonical: datePart } // 无时间尾部
   const hh = Number(m[5]), mi = Number(m[6]), ss = m[7] === undefined ? undefined : Number(m[7])
   if (hh > 23 || mi > 59 || (ss !== undefined && ss > 59)) return { valid: false } // 时分秒范围
+  const zone = (m[9] || '').toUpperCase()
+  if (zone && zone !== 'Z') {
+    const zoneMatch = /^[+-](\d{2}):(\d{2})$/.exec(zone)
+    if (!zoneMatch) return { valid: false }
+    const [, zoneHourRaw, zoneMinuteRaw] = zoneMatch
+    const zoneHour = Number(zoneHourRaw), zoneMinute = Number(zoneMinuteRaw)
+    if (zoneHour > 14 || zoneMinute > 59 || (zoneHour === 14 && zoneMinute !== 0)) return { valid: false }
+  }
   const hms = `${String(hh).padStart(2, '0')}:${String(mi).padStart(2, '0')}${ss !== undefined ? ':' + String(ss).padStart(2, '0') : ''}`
-  return { valid: true, canonical: `${datePart}${m[4]}${hms}` } // 保留原分隔符（空格/T）+ 补零时分秒
+  return { valid: true, canonical: `${datePart}${m[4]}${hms}${m[8] || ''}${zone}` } // 保留时间精度/时区，不做可能跨日的隐式换算
 }
 
 /**
