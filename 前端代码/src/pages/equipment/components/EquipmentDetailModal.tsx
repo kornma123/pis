@@ -178,6 +178,8 @@ export function EquipmentDetailModal({ open, row, onClose, onEdit, canEdit = tru
         <section>
           <div className="flex items-center justify-between gap-3 mb-3">
             <h3 className="text-sm font-semibold text-gray-900">最近使用记录</h3>
+            {/* 登记使用是写操作（后端要求 equipment:W）：与「编辑设备」按钮一致仅对有写权限者显示；只读用户仍可查看下方使用记录 */}
+            {canEdit && (
             <div className="flex flex-wrap items-end gap-2">
               <label className="block">
                 <span className="block text-xs text-gray-500 mb-1">关联项目（可选）</span>
@@ -230,6 +232,7 @@ export function EquipmentDetailModal({ open, row, onClose, onEdit, canEdit = tru
                 登记使用
               </button>
             </div>
+            )}
           </div>
           <div className="overflow-hidden rounded-md border border-gray-200">
             <table className="w-full text-sm">
