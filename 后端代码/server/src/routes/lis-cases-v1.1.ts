@@ -39,7 +39,7 @@ const MAX_LIS_IMPORT_ROWS = 1000
 const CROSS_MONTH_SAMPLE_LIMIT = 50 // 回执样例上限，与 /import-markers 的 unmatchedCases 同款
 const VALID_YM = /^\d{4}-(0[1-9]|1[0-2])$/ // 合法 'YYYY-MM'（月补零 01–12），与下游 service_month 形态一致
 
-/** 结构化提取 {年, 月(1–12), 日?}，失败回 null。canonicalOperateTime 与 monthOf 共用同一解析，保证「能归一 ⟺ 有月锚」。 */
+/** 结构化提取 {年, 月(1–12), 日?}（**宽松·不锚定结尾**，只喂 existing 侧 monthOf 读历史脏行派生月），失败回 null。 */
 function parseYmd(dateish: unknown): { y: string; mo: number; d?: string } | null {
   if (dateish == null || dateish === '') return null
   const m = /^\s*(\d{4})[-/](\d{1,2})(?!\d)(?:[-/](\d{1,2})(?!\d))?/.exec(String(dateish))
@@ -50,13 +50,32 @@ function parseYmd(dateish: unknown): { y: string; mo: number; d?: string } | nul
 }
 
 /**
- * operate_time 落库归一（codex 二次复核逮到的根修）：把「下游 substr(前7位) 认不出月、但结构化能解析」的
- * 斜杠非补零形态（'2026/5/9' → 下游 slice 得 '2026-5-'）补零成 canonical 'YYYY-MM-DD'（'2026-05-09'），
- * 使其落库后下游按月核对能命中。**关键：下游已能认出月的形态一律原样保留**（'2026/05/20'/'2026-05-10'/带时间戳、
- * 甚至日非法 '2026-05-99'——它们 replace('/','-').slice(0,7) 已是合法 YYYY-MM），最小侵入。第一分支（原样保留）
- * 完整保留日/时间/原始值；仅 parseYmd 补零分支（斜杠非补零如 '2026/5/9'）只重写到日、丢弃其后 sub-day 尾部
- * （'2026/5/9 10:30'→'2026-05-09'，罕见组合，对按月口径与守卫判定无影响）。乱码等结构化也解析不了的原样保留
- * （下游同盲）。空/NULL 保留（无日期修复通道）。
+ * incoming 侧**严格**校验（codex 三次复核 · 与 existing 宽松策略分离）：operateTime 必须是合法日期串——
+ * `YYYY[-/]M[-/]D`（日 1–31）或纯 `YYYY[-/]M`，可带空格/T 引导的时间尾部；否则 `valid=false`（调用方拒收进回执、
+ * 不 upsert）。防 `'2026/5/foo'`/`'2026-05-99'` 等「合法年月前缀 + 垃圾尾部/越界日」被宽松 parseYmd 当五月放行、
+ * 静默覆盖有效登记日与数量。归一日期段到补零 canonical、**保留合法时间尾部**（MEDIUM：operate_time 在详情页作
+ * 「登记时间」展示，不得丢时分）。existing 侧不用它（仍走宽松 monthOf 保护历史脏行不被跨月覆盖）。
+ */
+function parseStrictDate(dateish: string): { valid: true; canonical: string } | { valid: false } {
+  const m = /^\s*(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?([ T].*)?\s*$/.exec(dateish)
+  if (!m) return { valid: false }
+  const mo = Number(m[2])
+  if (mo < 1 || mo > 12) return { valid: false }
+  const ym = `${m[1]}-${String(mo).padStart(2, '0')}`
+  if (m[3] === undefined) return m[4] ? { valid: false } : { valid: true, canonical: ym } // 纯年月不允许残留尾部
+  const d = Number(m[3])
+  if (d < 1 || d > 31) return { valid: false }
+  const tail = m[4] ? m[4].replace(/\s+$/, '') : '' // 保留合法时间尾部（如 ' 10:30:45' / 'T09:00'）
+  return { valid: true, canonical: `${ym}-${String(d).padStart(2, '0')}${tail}` }
+}
+
+/**
+ * **existing 侧**月锚宽松归一（供 monthOf 读库行/历史脏行派生月；**非 incoming 落库路径**——incoming 走
+ * parseStrictDate 严格校验+补零）：把「下游 substr(前7位) 认不出月、但结构化能解析」的斜杠非补零形态
+ * （'2026/5/9' → 下游 slice 得 '2026-5-'）补零，使 monthOf 能锚定历史非补零脏行、保护其不被跨月覆盖。
+ * **下游已能认出月的形态一律原样保留**（'2026/05/20'/'2026-05-10'/带时间戳、日非法 '2026-05-99'——它们
+ * replace('/','-').slice(0,7) 已是合法 YYYY-MM）。仅供月派生，返回值只需月正确（不追求日/时间保真）；乱码等
+ * 结构化也解析不了的原样保留（下游同盲）。空/NULL 保留。
  */
 function canonicalOperateTime(dateish: string | null): string | null {
   if (dateish == null || dateish === '') return dateish
@@ -118,6 +137,8 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
     let skipped = 0
     let rejectedCrossMonth = 0 // #163 阶段1：同 (partner_id, case_no) 但派生月冲突 → 硬拒不覆盖
     const rejectedCrossMonthSamples: Array<{ caseNo: string; partnerName: string; existingMonth: string; incomingMonth: string }> = []
+    let rejectedInvalidDate = 0 // incoming 登记时间畸形（垃圾尾部/日越界）→ 拒收不 upsert（防静默覆盖有效登记日·codex 三次复核）
+    const rejectedInvalidDateSamples: Array<{ caseNo: string; partnerName: string; value: string }> = []
     // 整批事务：任一行 SQL 失败则整体回滚，避免半批落库；拒收/跳行是正常分支、不触发回滚（回执分项计数）
     db.exec('BEGIN IMMEDIATE')
     try {
@@ -136,13 +157,27 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
         // #163 阶段1硬拒：库行已有可解析月锚时，只放行「同月重传」（可重传语义不变）。
         // 导入月不同 → 拒（跨月覆盖 = 不可逆销毁早月事实行）；导入月不可解析('') 也拒（放行会把
         // operate_time 覆盖成空 = 抹掉月锚，同样不可逆）。库行无月锚('') 不拦：给旧无日期行留补
-        // 日期的修复通道（增量纠错，非跨月覆盖）。monthOf 先归一再取前7位 → 与下游结算/对账 substr 读者族
-        // 等价，守卫月判定恒 ⊇ 该族可见性（无「结构化比 slice 聪明」的背离）。落库统一 canonicalOperateTime
-        // 归一（codex 二次复核逮到的根修）：把 '2026/5/9' 这类下游 slice 认不出的斜杠非补零形态补零成
-        // '2026-05-09'，否则同月重传它会把 operate_time 改成下游认不出的形态、令病例从月度核对中消失。
-        // 代价（交 PM 知情）：月锚一旦落成「有效但内容错误」的月份，暂无 API 更正通道（带留痕更正端点属
-        // 遗留跟进 #163 comment 候选，非本阶段）。
-        const canonicalOp = canonicalOperateTime(c.operateTime || null)
+        // incoming 严格校验（codex 三次复核 · existing 宽松/incoming 严格分离）：登记时间非空但畸形
+        // （'2026/5/foo' 垃圾尾部、'2026-05-99' 日越界）→ 拒收、不 upsert，进回执。防它被宽松解析当成合法
+        // 月而放行、把有效登记日与数量静默覆盖。空登记时间视为「无日期」放行（补日期修复通道，canonicalOp=null）。
+        const opRaw = c.operateTime || ''
+        let canonicalOp: string | null = null
+        if (opRaw !== '') {
+          const strict = parseStrictDate(opRaw)
+          if (!strict.valid) {
+            rejectedInvalidDate++
+            if (rejectedInvalidDateSamples.length < CROSS_MONTH_SAMPLE_LIMIT) {
+              rejectedInvalidDateSamples.push({ caseNo: c.caseNo, partnerName: c.partnerName, value: opRaw })
+            }
+            continue
+          }
+          canonicalOp = strict.canonical // 已补零、保留时间尾部
+        }
+        // #163 阶段1硬拒：库行已有可解析月锚时，只放行「同月重传」（可重传语义不变）。导入月不同 → 拒（跨月
+        // 覆盖 = 不可逆销毁早月事实行）；导入月不可解析('') 也拒（放行会把 operate_time 覆盖成空 = 抹掉月锚）。
+        // 库行无月锚('') 不拦：给旧无日期行留补日期的修复通道。existing 侧 monthOf 先宽松归一再取前7位 → 与
+        // 下游结算/对账 substr 读者族等价，且能锚定历史非补零脏行（'2026/5/9'）保护其不被跨月覆盖。incoming 侧
+        // canonicalOp 已经 parseStrictDate 严格校验+补零，落库后下游按月核对必命中（不再从月度消失）。
         if (existingRow) {
           const existingMonth = monthOf(existingRow.operate_time)
           const incomingMonth = monthOf(canonicalOp)
@@ -177,9 +212,13 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
       skipped,
       rejectedCrossMonth,
       rejectedCrossMonthSamples,
+      rejectedInvalidDate,
+      rejectedInvalidDateSamples,
       partnersCreated,
       partnersMatched: partnerCache.size,
-    }, `导入 ${imported} 例（新增 ${inserted}·更新 ${updated}，${partnerCache.size} 家医院，新建 ${partnersCreated} 家）${rejectedCrossMonth ? `；${rejectedCrossMonth} 例与库中既有病例同号但登记月份不一致（同号跨月冲突或日期无法解析），已拒收、未覆盖原数据` : ''}`)
+    }, `导入 ${imported} 例（新增 ${inserted}·更新 ${updated}，${partnerCache.size} 家医院，新建 ${partnersCreated} 家）`
+      + `${rejectedCrossMonth ? `；${rejectedCrossMonth} 例与库中既有病例同号但登记月份不一致（同号跨月冲突），已拒收、未覆盖原数据` : ''}`
+      + `${rejectedInvalidDate ? `；${rejectedInvalidDate} 例登记时间格式非法（无法解析），已拒收、未落库` : ''}`)
   } catch (e: any) {
     error(res, e.message || '导入失败')
   }
