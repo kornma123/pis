@@ -341,9 +341,13 @@ describe('#163 阶段1：跨月同号导入硬拒（不覆盖早月事实行）'
     await imp([{ 病理号: 'CM26-SQL1', 送检医院: H, 登记时间: '2026/5/9', 蜡块数: 8 }]) // 同月重传斜杠非补零
     // 用与生产下游相同的 SQL（reconcile-compute / statement-import 月度过滤）直查
     const visible = db.prepare(
-      `SELECT case_no FROM lis_cases WHERE substr(replace(operate_time,'/','-'),1,7) = ? AND case_no = ?`,
+      `SELECT case_no FROM lis_cases WHERE substr(replace(operate_time,'/','-'),1,7) = ? AND case_no = ?`, // reconcile-compute / import-gates 家族（replace 在里）
     ).get('2026-05', 'CM26-SQL1') as any
     expect(visible?.case_no).toBe('CM26-SQL1') // 病例未从五月月度核对中消失
+    const visible2 = db.prepare(
+      `SELECT case_no FROM lis_cases WHERE replace(substr(COALESCE(operate_time,''),1,7),'/','-') = ? AND case_no = ?`, // statement-import 家族（substr 在里，可交换恒等）
+    ).get('2026-05', 'CM26-SQL1') as any
+    expect(visible2?.case_no).toBe('CM26-SQL1') // 下游两支书写都命中五月
   })
 
   it('既有历史脏行（归一上线前落的非补零 2026/5/9）existing 侧仍受保护：八月同号被拒（monthOf 内部归一 → existing 宽松保护原始事实，codex 建议）', async () => {
