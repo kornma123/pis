@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { checkedSubtract, parseFiniteNonNegativeNumber, parseFiniteNumber } from '../utils/numeric-input.js'
 
 const router = Router()
 
@@ -49,8 +50,8 @@ router.post('/', requireStocktakingWrite, (req, res) => {
   try {
     const { materialId, actualStock, operator, remark } = req.body
     if (!materialId || actualStock === undefined) { error(res, 'Missing fields', 'INVALID_PARAMETER', 400); return }
-    if (isNaN(Number(actualStock))) { error(res, 'Invalid actual stock', 'INVALID_PARAMETER', 400); return }
-    if (Number(actualStock) < 0) { error(res, 'actualStock 不能为负数', 'INVALID_PARAMETER', 400); return }
+    const normalizedActualStock = parseFiniteNonNegativeNumber(actualStock)
+    if (normalizedActualStock === null) { error(res, 'Invalid actual stock', 'INVALID_PARAMETER', 400); return }
     const db = getDatabase()
     const material = db.prepare('SELECT 1 FROM materials WHERE id = ? AND is_deleted = 0').get(materialId)
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
@@ -58,12 +59,16 @@ router.post('/', requireStocktakingWrite, (req, res) => {
     // 两阶段·第一阶段「登记」：只记录盘点结果，不入账（不改 inventory、不写 stock_logs）。
     // 差异=0 → completed（账实相符，无需入账）；差异≠0 → pending（待「处理差异」入账）。
     // 真正的库存调整改由 POST /:id/adjust 完成，把「清点」与「审批入账」拆成两步（内控分离）。
-    const systemStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock || 0
-    const difference = Number(actualStock) - Number(systemStock)
+    const rawSystemStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock ?? 0
+    const systemStock = parseFiniteNumber(rawSystemStock)
+    const difference = systemStock === null ? null : checkedSubtract(normalizedActualStock, systemStock)
+    if (systemStock === null || difference === null) {
+      error(res, 'Stocktaking difference exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
+    }
     const status = difference === 0 ? 'completed' : 'pending'
     const id = uuidv4()
     db.prepare('INSERT INTO stocktaking_records (id, stocktaking_no, material_id, system_stock, actual_stock, difference, operator, status, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, generateNo(), materialId, systemStock, Number(actualStock), difference, operator || 'system', status, remark || null)
+      .run(id, generateNo(), materialId, systemStock, normalizedActualStock, difference, operator || 'system', status, remark || null)
 
     success(res, { id, status }, '盘点记录已创建')
   } catch (err: any) { error(res, err.message) }
@@ -154,10 +159,9 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
       error(res, '盘点明细不能为空', 'INVALID_PARAMETER', 400); return
     }
 
-    const db = getDatabase()
-
     // ── 全行预校验（任一非法整单拒绝，未进事务前不写任何数据）──
     const seen = new Set<string>()
+    const normalizedItems: any[] = []
     for (let i = 0; i < items.length; i++) {
       const it = items[i]
       const rowLabel = `第 ${i + 1} 行`
@@ -166,12 +170,38 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
       if (!materialId || actualStock === undefined || actualStock === null) {
         error(res, `${rowLabel}缺少物料或实盘数量`, 'INVALID_PARAMETER', 422); return
       }
-      if (isNaN(Number(actualStock))) { error(res, `${rowLabel}实盘数量无效`, 'INVALID_PARAMETER', 422); return }
-      if (Number(actualStock) < 0) { error(res, `${rowLabel}实盘数量不能为负数`, 'INVALID_PARAMETER', 422); return }
+      const normalizedActualStock = parseFiniteNumber(actualStock)
+      if (normalizedActualStock === null) { error(res, `${rowLabel}实盘数量无效`, 'INVALID_PARAMETER', 422); return }
+      // 兼容既有批量盘点契约：该端点的任意非法 actualStock 均返回 422。
+      if (normalizedActualStock < 0) { error(res, `${rowLabel}实盘数量不能为负数`, 'INVALID_PARAMETER', 422); return }
       if (seen.has(materialId)) { error(res, `${rowLabel}物料重复`, 'INVALID_PARAMETER', 422); return }
       seen.add(materialId)
+      normalizedItems.push({ ...it, actualStock: normalizedActualStock })
+    }
+
+    const db = getDatabase()
+    for (let i = 0; i < normalizedItems.length; i++) {
+      const { materialId } = normalizedItems[i]
+      const rowLabel = `第 ${i + 1} 行`
       const material = db.prepare('SELECT 1 FROM materials WHERE id = ? AND is_deleted = 0').get(materialId)
       if (!material) { error(res, `${rowLabel}物料不存在或已删除`, 'NOT_FOUND', 422); return }
+    }
+
+    const buildBatchPlan = (): any[] | null => {
+      const plan: any[] = []
+      for (const item of normalizedItems) {
+        const rawSystemStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(item.materialId) as any)?.stock ?? 0
+        const systemStock = parseFiniteNumber(rawSystemStock)
+        const difference = systemStock === null ? null : checkedSubtract(item.actualStock, systemStock)
+        if (systemStock === null || difference === null) return null
+        plan.push({ ...item, systemStock, difference })
+      }
+      return plan
+    }
+
+    const preflightPlan = buildBatchPlan()
+    if (!preflightPlan) {
+      error(res, 'Stocktaking difference exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
     }
 
     // ── 全行合法，单事务内创建（all-or-nothing）──
@@ -179,11 +209,15 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
     const op = operator || 'system'
     db.exec('BEGIN IMMEDIATE')
     try {
+      const transactionPlan = buildBatchPlan()
+      if (!transactionPlan) {
+        db.exec('ROLLBACK')
+        error(res, 'Stocktaking difference exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
+        return
+      }
       const ids: string[] = []
-      for (const it of items) {
-        const { materialId, actualStock, remark: rowRemark } = it
-        const systemStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock || 0
-        const difference = Number(actualStock) - Number(systemStock)
+      for (const item of transactionPlan) {
+        const { materialId, actualStock, systemStock, difference, remark: rowRemark } = item
         const id = uuidv4()
         ids.push(id)
         db.prepare('INSERT INTO stocktaking_records (id, stocktaking_no, sheet_no, material_id, system_stock, actual_stock, difference, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
