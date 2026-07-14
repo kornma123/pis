@@ -53,8 +53,10 @@ function parseYmd(dateish: unknown): { y: string; mo: number; d?: string } | nul
  * operate_time 落库归一（codex 二次复核逮到的根修）：把「下游 substr(前7位) 认不出月、但结构化能解析」的
  * 斜杠非补零形态（'2026/5/9' → 下游 slice 得 '2026-5-'）补零成 canonical 'YYYY-MM-DD'（'2026-05-09'），
  * 使其落库后下游按月核对能命中。**关键：下游已能认出月的形态一律原样保留**（'2026/05/20'/'2026-05-10'/带时间戳、
- * 甚至日非法 '2026-05-99'——它们 replace('/','-').slice(0,7) 已是合法 YYYY-MM），最小侵入、不丢日/时间/原始值；
- * 乱码等结构化也解析不了的原样保留（下游同盲）。空/NULL 保留（无日期修复通道）。
+ * 甚至日非法 '2026-05-99'——它们 replace('/','-').slice(0,7) 已是合法 YYYY-MM），最小侵入。第一分支（原样保留）
+ * 完整保留日/时间/原始值；仅 parseYmd 补零分支（斜杠非补零如 '2026/5/9'）只重写到日、丢弃其后 sub-day 尾部
+ * （'2026/5/9 10:30'→'2026-05-09'，罕见组合，对按月口径与守卫判定无影响）。乱码等结构化也解析不了的原样保留
+ * （下游同盲）。空/NULL 保留（无日期修复通道）。
  */
 function canonicalOperateTime(dateish: string | null): string | null {
   if (dateish == null || dateish === '') return dateish
@@ -66,9 +68,11 @@ function canonicalOperateTime(dateish: string | null): string | null {
 }
 
 /**
- * operate_time → 'YYYY-MM'。先 canonicalOperateTime 归一，再 replace('/','-').slice(0,7)——与下游按月口径
- * substr(replace(operate_time,'/','-'),1,7) **逐字同源**，保证守卫月判定恒 ⊇ 下游可见性（不再有「monthOf 结构化
- * 比下游 slice 聪明」的背离：'2026-059' 两侧都得 '2026-05'、'2026/5/9' 归一后两侧都得 '2026-05'）。不可解析回 ''。
+ * operate_time → 'YYYY-MM'。先 canonicalOperateTime 归一，再 replace('/','-').slice(0,7)——与下游**结算/对账
+ * substr 读者族**（reconcile-compute / statement-import / import-gates；substr 与 replace 两种可交换书写、结果
+ * 恒等）等价，保证守卫月判定恒 ⊇ 该族可见性（不再有「monthOf 结构化比 slice 聪明」的背离：'2026-059' 两侧都
+ * 得 '2026-05'、'2026/5/9' 归一后两侧都得 '2026-05'）。注：reconciliation-v1.1 的字典序区间读者是另一口径（非
+ * slash-tolerant），本不变量不覆盖它，但落库归一对它只改善不回归（project_id 分支、与本守卫正交）。不可解析回 ''。
  */
 function monthOf(dateish: unknown): string {
   const canon = canonicalOperateTime(dateish == null ? null : String(dateish))
@@ -132,8 +136,8 @@ router.post('/import', authenticateToken, requireImport, (req, res) => {
         // #163 阶段1硬拒：库行已有可解析月锚时，只放行「同月重传」（可重传语义不变）。
         // 导入月不同 → 拒（跨月覆盖 = 不可逆销毁早月事实行）；导入月不可解析('') 也拒（放行会把
         // operate_time 覆盖成空 = 抹掉月锚，同样不可逆）。库行无月锚('') 不拦：给旧无日期行留补
-        // 日期的修复通道（增量纠错，非跨月覆盖）。monthOf 先归一再取前7位 → 与下游 substr(operate_time,1,7)
-        // 逐字同源，守卫月判定恒 ⊇ 下游可见性（无「结构化比 slice 聪明」的背离）。落库统一 canonicalOperateTime
+        // 日期的修复通道（增量纠错，非跨月覆盖）。monthOf 先归一再取前7位 → 与下游结算/对账 substr 读者族
+        // 等价，守卫月判定恒 ⊇ 该族可见性（无「结构化比 slice 聪明」的背离）。落库统一 canonicalOperateTime
         // 归一（codex 二次复核逮到的根修）：把 '2026/5/9' 这类下游 slice 认不出的斜杠非补零形态补零成
         // '2026-05-09'，否则同月重传它会把 operate_time 改成下游认不出的形态、令病例从月度核对中消失。
         // 代价（交 PM 知情）：月锚一旦落成「有效但内容错误」的月份，暂无 API 更正通道（带留痕更正端点属
