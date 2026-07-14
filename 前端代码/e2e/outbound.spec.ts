@@ -62,11 +62,6 @@ async function getAnyOutboundId(token: string): Promise<string> {
   const r = await apiFetch(token, 'GET', '/outbound?page=1&pageSize=1')
   return r.data?.data?.list?.[0]?.id || ''
 }
-async function getAnyBomId(token: string): Promise<string> {
-  const r = await apiFetch(token, 'GET', '/boms?page=1&pageSize=1')
-  return r.data?.data?.list?.[0]?.id || ''
-}
-
 async function cleanupTestData(token: string) {
   try {
     const r = await apiFetch(token, 'GET', '/outbound?page=1&pageSize=200')
@@ -650,142 +645,6 @@ test.describe('出库管理 -> 创建报废出库单', () => {
 })
 
 // ────────────────────────────────────────────
-// 6. BOM一键出库 (14 tests)
-// ────────────────────────────────────────────
-test.describe('出库管理 -> BOM一键出库', () => {
-  test('OUT-BOM-01. 正常用例：admin执行BOM一键出库', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 10, remark: 'E2E BOM出库',
-    })
-    expect([201, 400, 422]).toContain(res.status)
-  })
-  test('OUT-BOM-02. 空数据边界：BOM中某物料库存不足', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 99999,
-    })
-    expect([422, 201]).toContain(res.status)
-  })
-  test('OUT-BOM-03. 表单校验：未传bomId返回400', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    if (!pid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, sampleCount: 10,
-    })
-    expect(res.status).toBe(400)
-  })
-  test('OUT-BOM-04. 表单校验：未传sampleCount返回400', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid,
-    })
-    expect(res.status).toBe(400)
-  })
-  test('OUT-BOM-05. 业务冲突：项目已停用', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 1, remark: 'E2E停用项目',
-    })
-    expect([201, 400, 422]).toContain(res.status)
-  })
-  test('OUT-BOM-06. 边界：sampleCount=0', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 0,
-    })
-    expect([400, 201]).toContain(res.status)
-  })
-  test('OUT-BOM-07. 权限：procurement执行BOM出库返回403', async () => {
-    const token = await apiLogin('procurement')
-    const adminToken = await apiLogin('admin')
-    const pid = await getAnyProjectId(adminToken)
-    const bid = await getAnyBomId(adminToken)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 1,
-    })
-    expect(res.status).toBe(403)
-  })
-  test('OUT-BOM-08. 权限：finance执行BOM出库返回403', async () => {
-    const token = await apiLogin('finance')
-    const adminToken = await apiLogin('admin')
-    const pid = await getAnyProjectId(adminToken)
-    const bid = await getAnyBomId(adminToken)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 1,
-    })
-    expect(res.status).toBe(403)
-  })
-  test('OUT-BOM-09. 并发：快速双击BOM出库', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const body = { projectId: pid, bomId: bid, sampleCount: 1, remark: 'E2E并发BOM' }
-    const [r1, r2] = await Promise.all([apiFetch(token, 'POST', '/outbound/bom', body), apiFetch(token, 'POST', '/outbound/bom', body)])
-    expect(r1.status === 201 || r2.status === 201).toBe(true)
-  })
-  test('OUT-BOM-10. 正常用例：BOM出库后按FIFO分配批次', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 1, remark: 'E2EFIFO',
-    })
-    expect([201, 422]).toContain(res.status)
-  })
-  test('OUT-BOM-11. 异常恢复：网络中断后重试BOM出库', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 1, remark: 'E2E恢复BOM',
-    })
-    expect([201, 422]).toContain(res.status)
-  })
-  test('OUT-BOM-12. UI差异：admin显示BOM出库入口', async ({ page }) => {
-    await loginAs(page, 'admin')
-    await page.goto(`${FE_BASE}/outbound`)
-    await page.waitForTimeout(1000)
-  })
-  test('OUT-BOM-13. UI差异：technician显示BOM出库入口', async ({ page }) => {
-    await loginAs(page, 'technician')
-    await page.goto(`${FE_BASE}/outbound`)
-    await page.waitForTimeout(1000)
-  })
-  test('OUT-BOM-14. 边界：超大sampleCount', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 999999,
-    })
-    expect([422, 201]).toContain(res.status)
-  })
-})
-
-// ────────────────────────────────────────────
 // 7. 查看出库详情 (6 tests)
 // ────────────────────────────────────────────
 test.describe('出库管理 -> 查看出库详情', () => {
@@ -980,21 +839,6 @@ test.describe('出库管理 -> 业务流程树', () => {
     await page.reload()
     await page.waitForTimeout(800)
   })
-  test('BF-OUT-07. 分支：选择项目后切换BOM', async ({ page }) => {
-    await loginAs(page, 'admin')
-    await page.goto(`${FE_BASE}/outbound`)
-    await page.waitForTimeout(1000)
-  })
-  test('BF-OUT-08. 分支：样本数为0', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 0,
-    })
-    expect([400, 201]).toContain(res.status)
-  })
   test('BF-OUT-09. 分支：出库后取消关联入库单', async () => {
     const token = await apiLogin('admin')
     const outId = await getAnyOutboundId(token)
@@ -1028,16 +872,6 @@ test.describe('出库管理 -> 业务流程树', () => {
     if (!mid) { test.skip(); return }
     const res = await apiFetch(token, 'POST', '/outbound', {
       type: 'scrap', items: [{ materialId: mid, quantity: 1 }], remark: 'E2E报废主路径',
-    })
-    expect([201, 422]).toContain(res.status)
-  })
-  test('BF-OUT-13. 分支：BOM一键出库后检查项目成本', async () => {
-    const token = await apiLogin('admin')
-    const pid = await getAnyProjectId(token)
-    const bid = await getAnyBomId(token)
-    if (!pid || !bid) { test.skip(); return }
-    const res = await apiFetch(token, 'POST', '/outbound/bom', {
-      projectId: pid, bomId: bid, sampleCount: 1, remark: 'E2E成本检查',
     })
     expect([201, 422]).toContain(res.status)
   })

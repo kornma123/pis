@@ -120,6 +120,62 @@ describe('useInventoryPage', () => {
     })
   })
 
+  it('keeps BOM-selected materials on the ordinary direct outbound contract', async () => {
+    vi.mocked(bomApi.getDetail).mockResolvedValue({
+      materials: [{
+        id: 'mat-from-bom',
+        code: 'BOM-MAT-001',
+        name: 'BOM耗材',
+        spec: '1ml',
+        unit: '盒',
+        stock: 10,
+        usagePerSample: 2,
+      }],
+    } as any)
+
+    const { result } = renderHook(() => useInventoryPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await result.current.loadBomDetail('bom-1')
+    })
+    await waitFor(() => expect(result.current.bomMaterials).toHaveLength(1))
+
+    act(() => {
+      result.current.toggleCheckMaterial('mat-from-bom')
+    })
+    await waitFor(() => expect(result.current.checkedMaterialIds.has('mat-from-bom')).toBe(true))
+
+    act(() => {
+      result.current.confirmAddMaterials()
+    })
+    await waitFor(() => expect(result.current.outboundMaterials).toHaveLength(1))
+
+    act(() => {
+      result.current.updateOutboundUser(result.current.outboundMaterials[0].rowId, 'admin')
+    })
+    await act(async () => {
+      await result.current.confirmOutbound()
+    })
+
+    expect(outboundApi.create).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(outboundApi.create).mock.calls[0][0] as any
+    expect(payload).toEqual({
+      type: 'direct',
+      projectId: undefined,
+      remark: '',
+      operator: 'admin',
+      items: [{
+        materialId: 'mat-from-bom',
+        quantity: 1,
+        usage: 'self',
+        receiver: null,
+      }],
+    })
+    expect(payload).not.toHaveProperty('bomId')
+    expect(payload).not.toHaveProperty('sampleCount')
+  })
+
   it('should validate batch scrap — no selection', async () => {
     const { result } = renderHook(() => useInventoryPage())
     await waitFor(() => expect(result.current.loading).toBe(false))
