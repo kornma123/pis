@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { checkedSubtract, parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
 
 const router = Router()
 
@@ -85,22 +86,34 @@ router.get('/stats', (_req, res) => {
 router.post('/', requireScrapsWrite, (req, res) => {
   try {
     const { materialId, quantity, reason, operator, remark } = req.body
-    if (!materialId || quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0 || !reason) {
+    const qty = parseFinitePositiveNumber(quantity)
+    if (!materialId || qty === null || !reason) {
       error(res, 'Missing or invalid fields', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
     const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
     const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-    if (!inv || inv.stock < Number(quantity)) { error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return }
+    if (!inv || inv.stock < qty) { error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return }
 
-    const qty = Number(quantity)
     db.exec('BEGIN IMMEDIATE')
     try {
+      const lockedInv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
+      const beforeStock = lockedInv ? parseFiniteNumber(lockedInv.stock) : null
+      const afterStock = beforeStock === null ? null : checkedSubtract(beforeStock, qty)
+      if (beforeStock === null || afterStock === null) {
+        db.exec('ROLLBACK')
+        error(res, '库存计算超出支持的数值范围', 'INVALID_PARAMETER', 400); return
+      }
+      if (afterStock < 0) {
+        db.exec('ROLLBACK')
+        error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
+      }
+
       const id = uuidv4()
       db.prepare('INSERT INTO scrap_records (id, scrap_no, material_id, quantity, reason, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?)')
         .run(id, generateNo(), materialId, qty, reason, operator || 'system', remark || null)
-      db.prepare('UPDATE inventory SET stock = stock - ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(qty, materialId)
+      db.prepare('UPDATE inventory SET stock = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(afterStock, materialId)
 
       const afterCheck = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock
       if (afterCheck < 0) {
@@ -109,11 +122,10 @@ router.post('/', requireScrapsWrite, (req, res) => {
         return
       }
 
-      const afterStock = (inv?.stock || 0) - qty
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
         VALUES (?, 'scrap', ?, ?, ?, ?, ?, 'scrap', ?)
-      `).run(uuidv4(), materialId, -qty, inv?.stock || 0, afterStock, id, operator || 'system')
+      `).run(uuidv4(), materialId, -qty, beforeStock, afterStock, id, operator || 'system')
 
       db.exec('COMMIT')
       success(res, { id }, 'Scrap created')

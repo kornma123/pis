@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
 
 const router = Router()
 
@@ -83,7 +84,8 @@ router.get('/stats', (_req, res) => {
 router.post('/inbound', requireTransfersWrite, (req, res) => {
   try {
     const { materialId, batchNo, quantity, fromLocationId, fromLocationName, toLocationId, operator, remark } = req.body
-    if (!materialId || !toLocationId || quantity === undefined || quantity === null || isNaN(Number(quantity)) || Number(quantity) <= 0) {
+    const qty = parseFinitePositiveNumber(quantity)
+    if (!materialId || !toLocationId || qty === null) {
       error(res, '物料、目标库位和数量必填', 'INVALID_PARAMETER', 400)
       return
     }
@@ -107,10 +109,18 @@ router.post('/inbound', requireTransfersWrite, (req, res) => {
     const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
     if (!inv) { error(res, '该物料暂无库存，无法调拨（如需入库请使用入库）', 'STOCK_INSUFFICIENT', 422); return }
 
-    const qty = Number(quantity)
-    const beforeStock = inv.stock
     db.exec('BEGIN IMMEDIATE')
     try {
+      const lockedInv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
+      if (!lockedInv) {
+        db.exec('ROLLBACK')
+        error(res, '该物料暂无库存，无法调拨（如需入库请使用入库）', 'STOCK_INSUFFICIENT', 422); return
+      }
+      const lockedStock = parseFiniteNumber(lockedInv.stock)
+      if (lockedStock === null) {
+        db.exec('ROLLBACK')
+        error(res, '库存超出支持的数值范围', 'INVALID_PARAMETER', 400); return
+      }
       const inboundNo = `TF-${Date.now()}`
       const id = uuidv4()
       db.prepare(`
@@ -125,7 +135,7 @@ router.post('/inbound', requireTransfersWrite, (req, res) => {
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'transfer', ?, 0, ?, ?, ?, 'transfer', ?, ?)
-      `).run(uuidv4(), materialId, beforeStock, beforeStock, id, operator || 'system', `库位调拨 ${qty}（总量不变）`)
+      `).run(uuidv4(), materialId, lockedStock, lockedStock, id, operator || 'system', `库位调拨 ${qty}（总量不变）`)
 
       db.exec('COMMIT')
       success(res, { id, inboundNo, materialId, quantity: qty, fromLocationId, fromLocationName, toLocationId }, 'Transfer created')
