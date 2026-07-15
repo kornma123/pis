@@ -20,6 +20,6 @@ Claude Code 会话开始任何工作前必须完整读取唯一共用契约：
 - 先用 `node scripts/agent-preflight.cjs` 选择 `develop` 或 `review` 模式；新开发先由操作者执行 `git fetch origin`。
 - 只调用当前会话实际列出的内建能力、插件或技能；历史日志中的能力名称不构成可用性证明。
 - 子任务只有在文件所有权互斥且 handoff 自包含时才能并行；同一文件仍只有一个实现 owner。
-- 面向 PM 的交付结尾附一段大白话：做了什么、结果是什么、对业务或用户意味着什么。
+- 直接面向用户的最终回复按共用契约 §6.1「所有用户交付会话的产品化结尾」收口；本入口不复制字段。
 - 做需求 / 前端 mockup / 写码 / 真跑验收 / 报告结论类任务时，按质量 Loop 家族唯一入口 `docs/COREONE-质量Loop总览-2026-07-12.md` 选对应循环并贴对应会话注入块（规则细则以工作模型与共用契约为准，本入口不复制）。
 - 使用 Claude Code 处理 PRD 时，统一视为当前会话的 PRD 阶段，并读取 `docs/Claude-Code-PRD-GitHub协作范式.md`。PM 定稿只结束 PRD 内容闸；还须有合并后的 PRD、PM 确认的工程 Issue 和新一轮 ownership / preflight，才可切换到 mockup 或写码阶段。

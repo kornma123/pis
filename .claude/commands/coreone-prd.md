@@ -14,7 +14,7 @@ argument-hint: "[#Issue 或完整 URL]"
 5. 使用 `docs/templates/COREONE-PRD-template.md` 产出 `DRAFT（未经 PM 定稿）`，包含事实来源、数据边界、假设、验收例、自我质疑和 PM 拍板包。
 6. 只使用 PUBLIC / 已脱敏信息；发现 PII、密钥、生产数据、原始医院/供应商报表或未公开精确商业参数时停止，改为请求脱敏摘要或 source manifest。
 7. 只起草 PRD 和 GitHub 交接评论；不做 mockup、不写业务代码、不批量创建实现 Issues、不改变正式 review state、不合并。
-8. 最后给出可直接贴到主 Issue/PR 的 `[PRD-DRAFT] Claude Code 阶段交接` 评论，以及下一 owner / 触发条件。
+8. 在回复主体中给出可直接贴到主 Issue/PR 的 `[PRD-DRAFT] Claude Code 阶段交接` 评论，以及下一 owner / 触发条件；交互式根任务会话的最终用户可读收口仍按 `docs/agent-operating-contract.md` §6.1。
 
 没有 PM 的明确、可链接“定稿”证据，当前会话不得结束 PRD 内容闸。即使已经定稿，也必须先合并 PRD、取得 PM 确认的工程 Issue，并重新认领与通过 develop preflight，才可在新会话或新任务中进入实现阶段。
 
