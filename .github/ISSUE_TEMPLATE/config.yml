@@ -3,3 +3,6 @@ contact_links:
   - name: COREONE Issue / PR 闭环规则
     url: https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/blob/master/docs/github-issue-pr-management-loop.md
     about: 先看去重、主源、关闭和多会话交接规则，再创建工作项。
+  - name: Claude Code PRD 协作范式
+    url: https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/blob/master/docs/Claude-Code-PRD-GitHub%E5%8D%8F%E4%BD%9C%E8%8C%83%E5%BC%8F.md
+    about: 用 Claude Code 生成 PRD、让 PM 定稿并进入实现前先看这套入口。

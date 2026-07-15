@@ -83,12 +83,14 @@ jobs:
 
           ```md
           ## Issue / 会话交接
-          - **Issue**: Closes #<主 Issue 编号>
+          - **Issue**: Refs #<主 Issue 编号>
           - **当前 owner / 模型**: <负责人 / 使用模型>
           - **交接状态**: 待复核
           - **下一 owner / 触发条件**: <谁在什么条件下接手>
           - **未完成 follow-up**: 无
           ```
+
+          若该 PR 合并即完成全部验收，可把 `Refs` 改为 `Closes`；仍需合并后真跑或 PM 验收时必须保留 `Refs`，验收通过后手工关闭 Issue。
           EOF
             exit "${checker_exit}"
           fi

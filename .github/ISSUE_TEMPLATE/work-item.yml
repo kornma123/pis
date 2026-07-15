@@ -49,6 +49,33 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: prd_baseline
+    attributes:
+      label: PRD 固定基线
+      description: PRD 驱动任务必须填 repo-relative/path.md@merged-SHA；非 PRD 工作项填 N/A。
+      placeholder: docs/prd/PRD-123-name.md@<master first-parent merge SHA>
+    validations:
+      required: true
+
+  - type: textarea
+    id: requirement_acceptance_map
+    attributes:
+      label: RQ → AC 映射
+      description: 每行填写本 Issue 覆盖的一条需求到验收映射；必须与固定 PRD 的同一表行一致。非 PRD 工作项填 N/A。
+      placeholder: "RQ-01 -> AC-01, AC-02\nRQ-02 -> AC-03"
+    validations:
+      required: true
+
+  - type: textarea
+    id: mockup_gate
+    attributes:
+      label: Mockup 闸点
+      description: 填 path@merged-SHA 与 PM 批准普通评论 URL；纯后端等填 NOT_APPLICABLE:具体原因 与 PM 批准评论 URL。
+      placeholder: "docs/mockups/example.md@<SHA>\nhttps://github.com/...#issuecomment-..."
+    validations:
+      required: true
+
   - type: textarea
     id: scope
     attributes:
@@ -102,6 +129,21 @@ body:
       label: 建议 owner
       description: 填角色或具名负责人；建议不等于已接受。
       placeholder: PM / QA / 后端认证 owner / 外部运维联系人
+    validations:
+      required: true
+
+  - type: textarea
+    id: ownership_contract
+    attributes:
+      label: Ownership 受控块
+      description: 创建时保持 unassigned；实际开工由 claude-task start --claim=true 原子认领，不能只靠评论占用。
+      value: |
+        <!-- coreone-owner:start -->
+        - **current owner**: unassigned
+        - **stage / model / surface**: intake / unassigned / GitHub
+        - **owned artifact / files**: 待认领
+        - **claimed at / next trigger**: 未认领 / PM 确认范围后
+        <!-- coreone-owner:end -->
     validations:
       required: true
 

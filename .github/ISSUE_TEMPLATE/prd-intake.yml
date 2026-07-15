@@ -1,0 +1,188 @@
+name: PRD 输入 / 定稿
+description: 把一个产品想法变成可追踪、可复核、可由 PM 定稿的 COREONE PRD
+title: "[PRD] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本 Issue 是一份 PRD 的唯一工作单。先搜索已有 Issues、PR 和已合并 PR，避免重复。
+        Claude Code 产出默认是 DRAFT；PM 明确回复“定稿”前，不进入 mockup 或写码。
+        规则入口：`docs/Claude-Code-PRD-GitHub协作范式.md`。
+
+  - type: dropdown
+    id: purpose
+    attributes:
+      label: PRD 用途
+      description: 默认选择内部探索；对外可信需要更严格的事实和脱敏证据。
+      options:
+        - 内部探索（推荐）
+        - 对外 / 对医院可信
+
+  - type: textarea
+    id: business_goal
+    attributes:
+      label: 目标与为什么现在做
+      description: 希望谁的什么问题得到改善；为什么这件事现在比其他事项更重要。
+      placeholder: |
+        目标：...
+        为什么现在做：...
+        业务结果：...
+    validations:
+      required: true
+
+  - type: textarea
+    id: users_and_scenarios
+    attributes:
+      label: 用户与真实场景
+      description: 写清谁用、什么时候用、现在怎样做，并给一个已脱敏真实例子。
+      placeholder: |
+        用户 / 角色：...
+        使用场景：...
+        当前做法与代价：...
+        脱敏例子：...
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 优先级
+      options:
+        - P0 - 立即止血 / 阻断上线
+        - P1 - 下个交付窗口前
+        - P2 - 排期处理
+        - P3 - 触发后再处理
+    validations:
+      required: true
+
+  - type: textarea
+    id: must_have
+    attributes:
+      label: 必须有
+      description: 这次不可缺的结果；不要先写技术方案。
+      placeholder: "- ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: 明确不做
+      description: 写清本 PRD 不覆盖的相邻功能、版本和模块。
+      placeholder: "- 不做 ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: unacceptable
+    attributes:
+      label: 不可接受结果
+      description: 即使功能能运行，也绝不能出现什么。
+      placeholder: "- 不能错钱 / 串院 / 越权 / 暴露敏感信息 / ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_examples
+    attributes:
+      label: 验收例子
+      description: 用 Given / When / Then 或“真实输入 → 用户动作 → 可判断结果”描述。
+      placeholder: |
+        - Given ...
+          When ...
+          Then ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 权威来源与现状证据
+      description: 可选。提供你手头已有的链接或资料即可；实时 Issue/PR 去重、文件行号、核对日期和 ref/SHA 由 Claude Code 认领后补齐。
+      placeholder: |
+        - 2026-MM-DD，master@<SHA>：...
+        - https://github.com/...
+
+  - type: checkboxes
+    id: risk_signals
+    attributes:
+      label: 风险升档信号
+      description: 勾选所有命中项；均未命中可不勾，并在“补充说明”写“未命中”。
+      options:
+        - label: 金额、成本、收入、口径或 golden
+        - label: 数据导入、跨表派生、迁移或历史重算
+        - label: RBAC、认证、账号、审计或敏感数据
+        - label: 关键用户流程或财务决策界面
+        - label: 生产、密钥、不可逆动作或外部利益相关者
+        - label: 以上均未命中或我不确定，请 Claude Code 认领后核对
+
+  - type: dropdown
+    id: data_boundary
+    attributes:
+      label: 提供给 Claude Code 的数据边界
+      options:
+        - 只含公开仓库内容和已脱敏信息
+        - 受控证据只提供 manifest / hash / 脱敏结论
+        - 材料尚未准备好；未上传敏感原件，待脱敏后继续
+    validations:
+      required: true
+
+  - type: textarea
+    id: decisions_and_unknowns
+    attributes:
+      label: 已拍板决定与开放问题
+      description: 把“已经决定”和“仍需 PM 选择”分开；不确定时给 A/B/C 选项。
+      placeholder: |
+        已拍板：...
+        待决定：...
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依赖、owner 与触发条件
+      description: 包含数据、外部角色、上游 PRD/Issue、截止时间；没有则填“无”。
+
+  - type: textarea
+    id: ownership_contract
+    attributes:
+      label: Ownership 受控块
+      description: 创建时保持 unassigned；PRD owner 开工时由 claude-task start --claim=true 原子认领。
+      value: |
+        <!-- coreone-owner:start -->
+        - **current owner**: unassigned
+        - **stage / model / surface**: PRD intake / unassigned / GitHub
+        - **owned artifact / files**: 待认领
+        - **claimed at / next trigger**: 未认领 / PRD owner 开工
+        <!-- coreone-owner:end -->
+    validations:
+      required: true
+
+  - type: input
+    id: suggested_artifact
+    attributes:
+      label: 建议 PRD 产物路径
+      description: 可选；留空时由 Claude Code 按主 Issue 编号建议路径。
+      placeholder: docs/prd/PRD-<id>-<slug>.md
+
+  - type: textarea
+    id: relationships
+    attributes:
+      label: 与已有 Issue / PR / PRD 的关系
+      description: 可选；知道时提供。完整去重和 Refs / Depends on / Supersedes 关系由 Claude Code 现场核对。
+      placeholder: "Refs #...；不重复 #... 的原因是 ..."
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: 补充说明
+      description: 可写无风险升档、期望时点或其他不会放进敏感原件的信息。
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: 提交确认
+      options:
+        - label: 本 Issue 和附件不含 PII、密钥、生产数据或未公开的精确商业参数。
+          required: true
+        - label: 理解 Claude Code 生成内容默认是 DRAFT；只有 PM 的明确可链接评论才能把 PRD 标为定稿。
+          required: true
