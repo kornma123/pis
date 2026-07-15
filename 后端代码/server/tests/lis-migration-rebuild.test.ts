@@ -44,7 +44,7 @@ describe('T1.1 旧库整表重建迁移', () => {
 
     // 3) 增列补齐（重建动态保留全部 ensureColumn 列）
     const cols = (db.prepare(`PRAGMA table_info(lis_cases)`).all() as any[]).map((c) => c.name)
-    expect(cols).toEqual(expect.arrayContaining(['partner_id', 'he_slide_count', 'specimen_type']))
+    expect(cols).toEqual(expect.arrayContaining(['partner_id', 'he_slide_count', 'specimen_type', 'import_batch']))
 
     // 4) 复合唯一索引生效：跨院同号可并存（OLD-CASE-1 已存在 partner_id=NULL，加 P-A 不冲突）
     db.prepare(`INSERT INTO lis_cases (id, case_no, partner_id) VALUES ('NEW-A','OLD-CASE-1','P-A')`).run()
