@@ -15,6 +15,7 @@ import { NGS_PRODUCT_SEED, ngsProductToRow } from '../utils/ngs-catalog.js'
 import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } from '../utils/antibody-catalog.js'
 import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
 import { ANTIBODY_SYNONYM_SEED, ANTIBODY_MISSING_PRICE_SEED } from '../utils/antibody-name-map.js'
+import { ensureHospitalCmAccountRosterSchema } from '../utils/hospital-cm-account-roster.js'
 import { ensureHospitalCmReadinessSchema } from '../utils/hospital-cm-readiness-runtime.js'
 import fs from 'fs'
 
@@ -1978,6 +1979,10 @@ export function initializeDatabase(): void {
   // 院级贡献毛利 readiness 控制面（A+B）：owner/due、追加式真实探针证据、空的月度固定池版本/认账表。
   // 不 seed 任何 passed/ready，不 seed 金额/RATIFIED，不写历史周期或首周期验证事实。
   ensureHospitalCmReadinessSchema(database)
+
+  // hospital-cm #182 D2 B0：只建空的候选来源名册控制面。
+  // 不 seed 账户、不认定来源权威、不接 readiness/FULL/PARTIAL/NONE。
+  ensureHospitalCmAccountRosterSchema(database)
 
   // ===========================================================================
   // D2 统一检测项目目录（project_catalog / code_mappings）—— 地基线 D
