@@ -14,7 +14,7 @@ import { requirePermission } from '../middleware/permissions.js'
 import { assertNotSelfReview } from '../middleware/authz-combinators.js'
 import { writeAuditLog } from '../utils/cost-runs.js'
 import { recordOverride } from '../utils/override-log.js'
-import { buildReconcileInputs, runReconcile, partnerMonthLabRate } from '../utils/reconcile-compute.js'
+import { buildReconcileInputs, runReconcile, partnerMonthLabRate, tryCloseHospitalMonth } from '../utils/reconcile-compute.js'
 import { computeReconcile, verdictFollowUp, drivesSupplement, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
 import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：confirmedLabRevenue(拆分派生)输出自带「口径未认账」水印（LEG-2）
 
@@ -229,7 +229,10 @@ router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) =>
       if (!hm) { skipped.push({ partnerId, reason: '未计算' }); continue }
       if (hm.status === '已关账') { skipped.push({ partnerId, reason: '已关账' }); continue }
       if (hm.status !== '复核完成') { skipped.push({ partnerId, reason: '未复核完成（挂起）' }); continue }
-      db.prepare(`UPDATE reconcile_hospital_months SET status = '已关账', closed_at = CURRENT_TIMESTAMP, closed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(operator, hm.id)
+      if (!tryCloseHospitalMonth(db, hm.id, operator)) {
+        skipped.push({ partnerId, reason: '状态已变化（挂起）' })
+        continue
+      }
       writeAuditLog(db, 'account_reconcile', 'close', hm.id, { partnerId, serviceMonth, confirmedLabRevenue: hm.confirmed_lab_revenue }, operator)
       closed.push(partnerId)
     }

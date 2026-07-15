@@ -221,6 +221,23 @@ export function buildCaseMarkers(db: any, partnerId: string, serviceMonth: strin
 }
 
 /**
+ * 仅在院月仍处于「复核完成」时原子关账。
+ *
+ * `/close` 的事务外预检只用于生成友好提示，不能作为写入依据：预检后另一请求可能重算并把
+ * 状态退回「待复核」。条件更新的 changes 才是唯一成功判据，避免旧关账请求覆盖新差异。
+ */
+export function tryCloseHospitalMonth(db: any, hospitalMonthId: string, operator: string | null): boolean {
+  const result = db
+    .prepare(
+      `UPDATE reconcile_hospital_months
+       SET status = '已关账', closed_at = CURRENT_TIMESTAMP, closed_by = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status = '复核完成'`,
+    )
+    .run(operator, hospitalMonthId)
+  return Number(result.changes) === 1
+}
+
+/**
  * 跑某院某月账实核对并落库（幂等重算：清旧 diffs 重建）。
  * 关账后（定版）拒绝重算——迟到数据记次月，不改定版（§1.5）；判定在 BEGIN IMMEDIATE 拿锁后复核，
  * 堵「预检通过 → 另一连接关账 → 覆写定版」的竞态窗口（见 tests/reconcile-close-race.test.ts）。
