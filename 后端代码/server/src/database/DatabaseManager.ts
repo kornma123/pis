@@ -15,6 +15,7 @@ import { NGS_PRODUCT_SEED, ngsProductToRow } from '../utils/ngs-catalog.js'
 import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } from '../utils/antibody-catalog.js'
 import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
 import { ANTIBODY_SYNONYM_SEED, ANTIBODY_MISSING_PRICE_SEED } from '../utils/antibody-name-map.js'
+import { ensureHospitalCmAccountRosterSchema } from '../utils/hospital-cm-account-roster.js'
 import { ensureHospitalCmReadinessSchema } from '../utils/hospital-cm-readiness-runtime.js'
 import { ensureHospitalCmPeriodEvidenceSchema } from '../utils/hospital-cm-period-evidence.js'
 import fs from 'fs'
@@ -1985,6 +1986,10 @@ export function initializeDatabase(): void {
   // 周期通过或首期验证;legacy 已关账行保持无事件 = 永远只是待验证 candidate(状态机归 C3）。
   // 依赖 reconcile_hospital_months 已在上文建表（close 镜像触发器挂其上）。
   ensureHospitalCmPeriodEvidenceSchema(database)
+
+  // hospital-cm #182 D2 B0：只建空的候选来源名册控制面。
+  // 不 seed 账户、不认定来源权威、不接 readiness/FULL/PARTIAL/NONE。
+  ensureHospitalCmAccountRosterSchema(database)
 
   // ===========================================================================
   // D2 统一检测项目目录（project_catalog / code_mappings）—— 地基线 D
