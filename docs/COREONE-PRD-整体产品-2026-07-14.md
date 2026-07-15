@@ -1,7 +1,7 @@
 # COREONE 整体产品 PRD — 病理实验室进销存 · 成本 · 结算 · 院级贡献毛利
 
 > **状态**:v1.3 **文档定稿 · 决策台账零待 PM 选择**(2026-07-15)。PM 已先明确说「定稿」([决定记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4978904201)),再批准 §10 剩余推荐、指定 O-2 四个角色统一称「管理员」并授权满足新头门禁后普通合并 PR #190([批量决策与合并授权](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4979266101))。这里的「文档定稿/决策清零」只确认本文可作为后续需求输入与范围导航;不等于「口径定稿」或实施完成,不升级 B/C、RATIFIED 或 Locked Golden,不代表部署/上线、真实业务验收或对外承诺。
-> **修订说明**:v1.0(2026-07-14)首版;v1.1(2026-07-15)逐项处理 PR #190 的[既有复核 P1/P2](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4976504018)与动态事实,并落实[首批 PM 拍板记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4977403367);v1.2 记录文档定稿决定及其权限边界;v1.3 将 §10 全部剩余推荐转为 PM 已决策项、记录 O-2「管理员」与独立性边界,并吸收 E0 mockup 已合入 master 的动态事实。首轮 4 镜头只留下汇总、逐项记录未进入仓库或 GitHub,故本版不把「17/17」当可独立复核证据,边界与本轮可访问处置见 §13。本次取证基线 = 云端 `origin/master@d86d6c42` + GitHub 现场事实(2026-07-15);SHA 只是取证时点,实时状态一律现场查 GitHub/Git。
+> **修订说明**:v1.0(2026-07-14)首版;v1.1(2026-07-15)逐项处理 PR #190 的[既有复核 P1/P2](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4976504018)与动态事实,并落实[首批 PM 拍板记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4977403367);v1.2 记录文档定稿决定及其权限边界;v1.3 将 §10 全部剩余推荐转为 PM 已决策项、记录 O-2「管理员」与独立性边界,并吸收 E0 mockup 已合入 master 的动态事实。首轮 4 镜头只留下汇总、逐项记录未进入仓库或 GitHub,故本版不把「17/17」当可独立复核证据,边界与本轮可访问处置见 §13。本次取证基线 = 云端 `origin/master@fb9b8ecc` + GitHub 现场事实(2026-07-15);SHA 只是取证时点,实时状态一律现场查 GitHub/Git。
 > **定位**:本文是**项目级总 PRD**——定产品边界、口径底线、验收基线、路线图与决策/实施边界,是后续所有开发工作的**总入口和范围基准**。它不替代单功能 PRD:新功能/大改动仍按 [PRD 质量 Loop](COREONE-PRD质量Loop-2026-07-12.md) 走自己的薄 PRD 与 mockup→写码→验收链,只是以本文为上游。各模块深规格住在 [FRS 套件](FRS/README.md) 与各域权威文档,本文对各域只做点名+最小现状摘要、绝不复制规则;摘要与域权威或活代码冲突时,以后者为准并回来修本文(附录 A 使用规则④;防镜像漂移要求见[质量 Loop 契约](COREONE-质量Loop契约-2026-07-12.md))。
 > **风险档**:R2(收入、成本、库存事实、权限、经营判断)。
 > **碰钱边界(B-5,2026-07-13 已拍)**:本文所有碰钱数字按**内部探索版**口径双轴标注(`evidence_strength` A/B/C + `authority_status`);**对外/对医院可信版**三硬门(≥2 家不同商业模式医院真实三件套 golden、成本结构经完整真数据定向、具名隐私/合规 owner 完成正式判断)未达成前,任何数字不得对外输出。PM 于 2026-07-15 接受的 grade C 只限内部探索观察:恒带「未经业务确认」提示,禁止对医院/第三方输出,不得作为最终盈利判断或真实解锁证据,并进入后续校准队列。(源:[PM 决策索引 B-5](PM待拍板.md))
@@ -173,7 +173,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 
 ## 6. 全项目验收基线(真数据例,结果可判 yes/no)
 
-> ⚠️ 表中月份与医院为示例位,实际验收月以届时已关账真实月为准(细节级假设,§12④)。本表是**基线定义**:注明「守住/已修」的行仅表示仓库实现/验证已达,不表示已部署;其余行在对应能力交付后才生效(现状分界见 §4)。**复算边界**:仓内代码与脱敏 fixture 可由 fresh clone 运行。16 院 Candidate 锚当前仅同 hash 原件持有者可复算,公开第三方不可独立复算。K-8 的边界更严:即使持有同 hash 原件,在匹配/别名规则、98 项成员与 94 项排除清单、派生包可取得前,仍不能独立复算 81/98。公开第三方只能核对本文披露的来源、等级与边界;#181 完成受控归档且对应工具/派生包可取得前,本文不作第三方可复算承诺。
+> ⚠️ 表中月份与医院为示例位,实际验收月以届时已关账真实月为准(细节级假设,§12④)。本表是**基线定义**:注明「守住/已修」的行仅表示仓库实现/验证已达,不表示已部署;其余行在对应能力交付后才生效(现状分界见 §4)。**复算边界**:仓内代码与脱敏 fixture 可由 fresh clone 运行。16 院 Candidate 锚当前仅同 hash 原件持有者可复算,公开第三方不可独立复算;其归档/复算链由 [#181](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/181) 跟踪。K-8 的边界更严:即使持有同 hash 原件,在匹配/别名规则、98 项成员与 94 项排除清单、派生包可取得前,仍不能独立复算 81/98;其证据/复算链由 [#165](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/165) 跟踪。公开第三方只能核对本文披露的来源、等级与边界;各自受控归档、规则/清单与工具/派生包齐备前,本文不作第三方可复算承诺。
 
 | 域 | 验收例 | 判定 |
 |---|---|---|
