@@ -24,7 +24,7 @@ Excluded：
 
 ## 四个状态帧
 
-| 帧 | 所选月份 | 月份状态 | 完整体检边界 | 必须证明 |
+| 帧 | 所选月份 | 月份状态 | 完整体检组件（`full-physical-exam`） | 必须证明 |
 |---|---|---|---:|---|
 | F0 未选月份 | 空 | readiness 与固定池均未检查 | DOM 0 | 不替用户隐式选月 |
 | F1 M1 已就绪 | `2026-10`（交互示例） | exact M1 readiness 通过；M1 固定池已认账 | DOM 1 | 判断月份与完整体检月份一致 |
@@ -41,19 +41,19 @@ Scenario: 首次进入时不替用户选择月份
   When 用户尚未选择月份
   Then 月份输入保持为空
   And readiness 与固定成本池均显示尚未检查
-  And 完整体检边界不进入 DOM
+  And 完整体检组件不进入 DOM
 
-Scenario: exact M1 就绪后只展示 M1 完整边界
+Scenario: exact M1 就绪后只展示 M1 完整组件
   Given 示例月份 M1 的 readiness 与固定成本池证据均满足
   When 原型进入 F1
   Then 页面同屏说明就绪判断月份和完整体检月份都是 M1
-  And 完整体检边界恰好进入 DOM 一次
+  And 完整体检组件恰好进入 DOM 一次
   And M1 示例证据标识 DEMO-M1-READY 可见
 
 Scenario: 切月先清旧值
-  Given F1 正在展示 M1 的完整边界
+  Given F1 正在展示 M1 的完整组件
   When 原型进入从 M1 切换到 M2 的 F2
-  Then 完整体检边界立即从 DOM 移除
+  Then 完整体检组件立即从 DOM 移除
   And 月份上下文标记为忙碌
   And DEMO-M1-READY 与 M1 证据在渲染区域完全消失
 
@@ -61,7 +61,7 @@ Scenario: M2 未就绪时保持校准
   Given 示例月份 M2 的固定成本池尚未认账
   When 原型进入 F3
   Then 页面显示 M2 的未就绪原因
-  And 完整体检边界保持不在 DOM
+  And 完整体检组件保持不在 DOM
   And 页面不存在 M1 示例证据
 ```
 
@@ -71,7 +71,7 @@ Scenario: M2 未就绪时保持校准
 - 演示按钮使用 `aria-pressed`；状态更新使用 `role="status" aria-live="polite"`；F2 使用 `aria-busy="true"`。
 - 所有交互可键盘聚焦并同时具备 outline 与 focus ring；强制颜色模式使用系统 `Highlight` outline；主要触控目标至少 44px。
 - 状态同时用文字与色彩表达；不依赖颜色传意。
-- 12px 月份规则说明与 11px 灰色状态徽章均以浏览器 computed color 自动验证 WCAG AA 对比度不低于 4.5:1。
+- 12px 月份规则说明与 11px 灰色状态徽章均以浏览器 computed color 自动验证 WCAG AA 文字对比度不低于 4.5:1；演示按钮与月份输入边界不低于 3:1。
 - 尊重 `prefers-reduced-motion`；375、768、1280 像素宽度不产生页面级横向滚动。
 
 ## PM 只需判断

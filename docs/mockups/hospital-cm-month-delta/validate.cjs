@@ -123,9 +123,7 @@ async function selectFrame(page, frame) {
 }
 
 async function assertInitialState(page) {
-  assert.equal(await page.locator('#state-root').getAttribute('data-current-frame'), 'F0', '首次渲染必须直接进入 F0。')
-  assert.equal(await page.locator('#month-select').inputValue(), '', '首次渲染月份输入必须为空。')
-  assert.equal(await page.locator('[data-testid="full-physical-exam"]').count(), 0, '首次渲染完整体检 DOM 必须为 0。')
+  await assertFrame(page, 'F0')
 }
 
 async function assertTextContrast(page, selector, label) {
@@ -135,6 +133,77 @@ async function assertTextContrast(page, selector, label) {
   })
   const ratio = contrastRatio(colors.foreground, colors.background)
   assert.ok(ratio >= 4.5, `${label} 对比度 ${ratio.toFixed(2)}:1，低于 WCAG AA 4.5:1。`)
+}
+
+async function assertControlBoundaryContrast(page, selector, label) {
+  const colors = await page.locator(selector).first().evaluate((element) => {
+    let ancestor = element.parentElement
+    let adjacent = 'rgb(255, 255, 255)'
+    while (ancestor) {
+      const candidate = getComputedStyle(ancestor).backgroundColor
+      if (!/^rgba\(0, 0, 0, 0\)$|^transparent$/i.test(candidate)) {
+        adjacent = candidate
+        break
+      }
+      ancestor = ancestor.parentElement
+    }
+    return {
+      boundary: getComputedStyle(element).borderTopColor,
+      adjacent,
+    }
+  })
+  const ratio = contrastRatio(colors.boundary, colors.adjacent)
+  assert.ok(ratio >= 3, `${label} 边界对比度 ${ratio.toFixed(2)}:1，低于 WCAG 2.2 AA 3:1。`)
+}
+
+async function assertControlBoundaryContrasts(page) {
+  await page.waitForTimeout(20)
+  await assertControlBoundaryContrast(page, '.scenario-button[aria-pressed="false"]', '未按下演示按钮')
+  await assertControlBoundaryContrast(page, '.scenario-button[aria-pressed="true"]', '当前帧演示按钮')
+  await assertControlBoundaryContrast(page, '#month-select', '月份输入')
+}
+
+async function captureM1NodeHandles(page) {
+  const handles = {}
+  try {
+    handles.fullExam = await page.locator('[data-testid="full-physical-exam"]').elementHandle()
+    handles.evidence = await page.locator('[data-evidence-month="M1"]').elementHandle()
+    handles.readiness = await page.locator('[data-testid="readiness-status"]').elementHandle()
+    handles.pool = await page.locator('[data-testid="fixed-pool-status"]').elementHandle()
+    for (const [label, handle] of Object.entries(handles)) {
+      assert.ok(handle, `F1 缺少待跟踪的旧 M1 ${label} 节点。`)
+    }
+    return handles
+  } catch (error) {
+    await disposeNodeHandles(handles)
+    throw error
+  }
+}
+
+async function disposeNodeHandles(handles) {
+  await Promise.allSettled(Object.values(handles).filter(Boolean).map((handle) => handle.dispose()))
+}
+
+async function assertM1NodeHandlesDisconnected(handles, transitionLabel) {
+  for (const [label, handle] of Object.entries(handles)) {
+    assert.equal(
+      await handle.evaluate((node) => node.isConnected),
+      false,
+      `${transitionLabel} 后旧 M1 ${label} 节点仍连接在 DOM。`,
+    )
+  }
+}
+
+async function assertDemoSwitchDisconnectsM1(page) {
+  await selectFrame(page, 'F1')
+  const oldM1Nodes = await captureM1NodeHandles(page)
+  try {
+    await page.locator('[data-frame-target="F2"]').click()
+    await assertFrame(page, 'F2')
+    await assertM1NodeHandlesDisconnected(oldM1Nodes, 'F1→F2')
+  } finally {
+    await disposeNodeHandles(oldM1Nodes)
+  }
 }
 
 async function assertFrame(page, frame) {
@@ -180,9 +249,11 @@ async function assertFrame(page, frame) {
   const m1EvidenceCount = await page.locator('[data-evidence-month="M1"]').count()
   if (frame === 'F1') {
     assert.match(bodyText, /DEMO-M1-READY/, 'F1 缺少 M1 示例证据标识。')
+    assert.match(bodyText, /DEMO-M1-POOL-V3/, 'F1 缺少 M1 固定成本池示例证据标识。')
     assert.ok(m1EvidenceCount > 0, 'F1 缺少结构化 M1 示例证据。')
   } else {
     assert.doesNotMatch(bodyText, /DEMO-M1-READY/, `${frame} 仍显示 DEMO-M1-READY。`)
+    assert.doesNotMatch(bodyText, /DEMO-M1-POOL-V3/, `${frame} 仍显示 DEMO-M1-POOL-V3。`)
     assert.equal(m1EvidenceCount, 0, `${frame} 仍保留 M1 证据节点。`)
   }
 
@@ -204,7 +275,28 @@ async function assertKeyboardAndAria(page) {
   assert.equal(await page.locator('#state-announcement').getAttribute('aria-live'), 'polite', '状态播报缺少 aria-live=polite。')
   assert.ok(await page.locator('nav[aria-label="月份 delta 演示控制"]').count(), '演示控制缺少可访问名称。')
 
+  const assertVisibleFocus = async (control, label) => {
+    const focusStyle = await control.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth, boxShadow: style.boxShadow }
+    })
+    assert.notEqual(focusStyle.outlineStyle, 'none', `${label} 缺少 outline。`)
+    assert.ok(Number.parseFloat(focusStyle.outlineWidth) >= 2, `${label} outline 宽度不足 2px。`)
+    assert.notEqual(focusStyle.boxShadow, 'none', `${label} 缺少 focus ring。`)
+  }
+
   await page.locator('body').click({ position: { x: 2, y: 2 } })
+  const scenarioButtons = page.locator('.scenario-button')
+  for (let i = 0; i < await scenarioButtons.count(); i += 1) {
+    await page.keyboard.press('Tab')
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.getAttribute('data-frame-target')),
+      `F${i}`,
+      `Tab 顺序未到达 F${i} 演示按钮。`,
+    )
+    await assertVisibleFocus(scenarioButtons.nth(i), `F${i} 演示按钮`)
+  }
+
   let reachedMonthInput = false
   for (let i = 0; i < 8; i += 1) {
     await page.keyboard.press('Tab')
@@ -214,14 +306,25 @@ async function assertKeyboardAndAria(page) {
     }
   }
   assert.ok(reachedMonthInput, '键盘 Tab 无法到达月份输入。')
-  const focusShadow = await page.locator('#month-select').evaluate((element) => getComputedStyle(element).boxShadow)
-  assert.notEqual(focusShadow, 'none', '月份输入缺少可见 focus ring。')
-  const focusOutline = await page.locator('#month-select').evaluate((element) => {
-    const style = getComputedStyle(element)
-    return { style: style.outlineStyle, width: style.outlineWidth }
-  })
-  assert.notEqual(focusOutline.style, 'none', '月份输入焦点不得只依赖 box-shadow。')
-  assert.ok(Number.parseFloat(focusOutline.width) >= 2, '月份输入焦点 outline 宽度不足 2px。')
+  await assertVisibleFocus(page.locator('#month-select'), '月份输入')
+
+  let reachedBaselineLink = false
+  for (let i = 0; i < 8; i += 1) {
+    await page.keyboard.press('Tab')
+    if (await page.evaluate(() => document.activeElement?.classList.contains('baseline-link'))) {
+      reachedBaselineLink = true
+      break
+    }
+  }
+  assert.ok(reachedBaselineLink, '键盘 Tab 无法离开月份输入并到达基线链接。')
+  await assertVisibleFocus(page.locator('.baseline-link'), '基线链接')
+
+  await page.locator('[data-frame-target="F1"]').focus()
+  await page.keyboard.press('Enter')
+  await assertFrame(page, 'F1')
+  await page.locator('[data-frame-target="F2"]').focus()
+  await page.keyboard.press('Space')
+  await assertFrame(page, 'F2')
 
   const touchTargets = page.locator('.scenario-button, #month-select')
   for (let i = 0; i < await touchTargets.count(); i += 1) {
@@ -232,9 +335,15 @@ async function assertKeyboardAndAria(page) {
   await page.locator('#month-select').fill('2026-10')
   await page.locator('#month-select').dispatchEvent('change')
   await assertFrame(page, 'F1')
-  await page.locator('#month-select').fill('2026-11')
-  await page.locator('#month-select').dispatchEvent('change')
-  await assertFrame(page, 'F3')
+  const oldM1Nodes = await captureM1NodeHandles(page)
+  try {
+    await page.locator('#month-select').fill('2026-11')
+    await page.locator('#month-select').dispatchEvent('change')
+    await assertFrame(page, 'F3')
+    await assertM1NodeHandlesDisconnected(oldM1Nodes, '原生月份输入 F1→F3')
+  } finally {
+    await disposeNodeHandles(oldM1Nodes)
+  }
   await page.locator('#month-select').fill('')
   await page.locator('#month-select').dispatchEvent('change')
   await assertFrame(page, 'F0')
@@ -248,28 +357,47 @@ async function assertForcedColorsFocus(browser) {
   const diagnostics = attachDiagnostics(page)
   await page.goto(fileUrl, { waitUntil: 'load' })
   await assertInitialState(page)
-  await page.locator('#month-select').focus()
-  const outline = await page.locator('#month-select').evaluate((element) => {
-    const style = getComputedStyle(element)
-    return {
-      color: style.outlineColor,
-      style: style.outlineStyle,
-      width: style.outlineWidth,
-    }
-  })
-  assert.notEqual(outline.style, 'none', 'forced-colors 下月份输入缺少系统 outline。')
-  assert.ok(Number.parseFloat(outline.width) >= 2, 'forced-colors 下系统 outline 宽度不足 2px。')
-  assert.doesNotMatch(outline.color, /rgba\(0, 0, 0, 0\)|transparent/i, 'forced-colors 下系统 outline 不可见。')
+  const controls = page.locator('.scenario-button, #month-select, .baseline-link')
+  for (let i = 0; i < await controls.count(); i += 1) {
+    const control = controls.nth(i)
+    await control.focus()
+    const outline = await control.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return {
+        color: style.outlineColor,
+        style: style.outlineStyle,
+        width: style.outlineWidth,
+      }
+    })
+    assert.notEqual(outline.style, 'none', `forced-colors 下第 ${i + 1} 个交互控件缺少系统 outline。`)
+    assert.ok(Number.parseFloat(outline.width) >= 2, `forced-colors 下第 ${i + 1} 个交互控件 outline 宽度不足 2px。`)
+    assert.doesNotMatch(outline.color, /rgba\(0, 0, 0, 0\)|transparent/i, `forced-colors 下第 ${i + 1} 个交互控件 outline 不可见。`)
+  }
   assertDiagnostics(diagnostics, 'forced-colors')
   await page.close()
 }
 
-async function assertNoHorizontalOverflow(page, width) {
+async function assertNoHorizontalOverflow(page, label) {
   const sizes = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
+    bodyScrollWidth: document.body.scrollWidth,
+    outside: Array.from(document.body.querySelectorAll('*'))
+      .filter((element) => {
+        const style = getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      })
+      .filter((element) => {
+        const rect = element.getBoundingClientRect()
+        return rect.left < -0.5 || rect.right > document.documentElement.clientWidth + 0.5
+      })
+      .slice(0, 5)
+      .map((element) => ({ tag: element.tagName, id: element.id, className: element.className })),
   }))
-  assert.ok(sizes.scrollWidth <= sizes.clientWidth, `${width}px 出现页面级横向滚动：${JSON.stringify(sizes)}`)
+  assert.ok(sizes.scrollWidth <= sizes.clientWidth, `${label} 出现页面级横向滚动：${JSON.stringify(sizes)}`)
+  assert.ok(sizes.bodyScrollWidth <= sizes.clientWidth, `${label} body 出现横向滚动：${JSON.stringify(sizes)}`)
+  assert.deepEqual(sizes.outside, [], `${label} 存在被 overflow-x 隐藏的越界元素：${JSON.stringify(sizes.outside)}`)
 }
 
 function assertDiagnostics(diagnostics, label) {
@@ -316,9 +444,13 @@ async function main() {
       await assertInitialState(page)
       await assertTextContrast(page, '.month-rule', '月份规则说明')
       await assertTextContrast(page, '.badge.gray', '灰色状态徽章')
-      for (const frame of Object.keys(expectedFullCounts)) await selectFrame(page, frame)
+      await assertControlBoundaryContrasts(page)
+      for (const frame of Object.keys(expectedFullCounts)) {
+        await selectFrame(page, frame)
+        await assertNoHorizontalOverflow(page, `${viewport.width}px ${frame}`)
+      }
+      await assertDemoSwitchDisconnectsM1(page)
       if (viewport.width === 1280) await assertKeyboardAndAria(page)
-      await assertNoHorizontalOverflow(page, viewport.width)
       assertDiagnostics(diagnostics, `${viewport.width}px`)
       await page.close()
     }
