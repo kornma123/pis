@@ -620,6 +620,16 @@ describe('hospital-cm D2 B0 · 真实应用初始化与双层防误解锁', () =
       SELECT source_key AS sourceKey, revision, updated_at AS updatedAt
       FROM hospital_cm_readiness_source_revisions ORDER BY source_key
     `).all()
+    const periodEvidenceBefore = {
+      scopes: runtimeDb.prepare(`
+        SELECT event_number, id, version_no, status, scope_hash
+        FROM hospital_cm_month_scope_snapshots WHERE service_month = '2026-07' ORDER BY event_number
+      `).all(),
+      runs: runtimeDb.prepare(`
+        SELECT run_number, id, scope_hash, overall_status
+        FROM hospital_cm_period_validation_runs WHERE service_month = '2026-07' ORDER BY run_number
+      `).all(),
+    }
 
     const candidate = createHospitalCmAccountRosterCandidate(runtimeDb, candidateInput({
       idempotencyKey: 'hcm-roster-p0-negative-0001',
@@ -633,6 +643,16 @@ describe('hospital-cm D2 B0 · 真实应用初始化与双层防误解锁', () =
     `).all()
     expect(revisionsAfter).toEqual(revisionsBefore)
     expect(revisionsAfter.some((row: any) => String(row.sourceKey).includes('account_roster'))).toBe(false)
+    expect({
+      scopes: runtimeDb.prepare(`
+        SELECT event_number, id, version_no, status, scope_hash
+        FROM hospital_cm_month_scope_snapshots WHERE service_month = '2026-07' ORDER BY event_number
+      `).all(),
+      runs: runtimeDb.prepare(`
+        SELECT run_number, id, scope_hash, overall_status
+        FROM hospital_cm_period_validation_runs WHERE service_month = '2026-07' ORDER BY run_number
+      `).all(),
+    }).toEqual(periodEvidenceBefore)
 
     const readinessAfter = await request(app).get('/api/v1/hospital-pnl/readiness').set(auth())
     expect(readinessAfter.status).toBe(200)

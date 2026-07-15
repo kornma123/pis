@@ -17,6 +17,7 @@ import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
 import { ANTIBODY_SYNONYM_SEED, ANTIBODY_MISSING_PRICE_SEED } from '../utils/antibody-name-map.js'
 import { ensureHospitalCmAccountRosterSchema } from '../utils/hospital-cm-account-roster.js'
 import { ensureHospitalCmReadinessSchema } from '../utils/hospital-cm-readiness-runtime.js'
+import { ensureHospitalCmPeriodEvidenceSchema } from '../utils/hospital-cm-period-evidence.js'
 import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -1682,6 +1683,11 @@ export function initializeDatabase(): void {
   ensureColumn('outbound_abc_details', 'case_no', 'TEXT')
   ensureColumn('outbound_abc_details', 'charge_group_id', 'TEXT')
   ensureColumn('outbound_abc_details', 'calculation_version', "TEXT NOT NULL DEFAULT 'v1'")
+  // C1 batch manifest 以 import_batch 建版本化证据与复合索引；历史库可能早于该列，
+  // 必须先补列再执行 case_revenue/lis_cases 重建和周期证据索引初始化。
+  ensureColumn('case_revenue', 'import_batch', 'TEXT')
+  ensureColumn('lis_cases', 'import_batch', 'TEXT')
+  ensureColumn('lis_case_markers', 'import_batch', 'TEXT')
   // 配置驱动导入器 P0：每期导入记下所用逐院配置版本 → 改规则后判影响面 + 追溯重算锚。
   ensureColumn('case_revenue', 'config_version', 'INTEGER')
   // P5 收入侧：配置驱动导入(/commit)落库时写【实验室收入=Σ(IN结算)】+移出额+来源。
@@ -1981,8 +1987,14 @@ export function initializeDatabase(): void {
   ensureHospitalCmReadinessSchema(database)
 
   // hospital-cm #182 D2 B0：只建空的候选来源名册控制面。
-  // 不 seed 账户、不认定来源权威、不接 readiness/FULL/PARTIAL/NONE。
+  // 不 seed 账户、不认定来源权威、不接 readiness/FULL/PARTIAL/NONE，也不自动生成 C1 scope。
   ensureHospitalCmAccountRosterSchema(database)
+
+  // C1 周期证据底座（#183 增量 C）：batch manifest / 月度范围快照 / close-reopen revision 镜像 /
+  // 周期验证 run-check 存储与读侧失效判定。只建 append-only 存储与触发器,不 seed 任何 manifest、
+  // 周期通过或首期验证;legacy 已关账行保持无事件 = 永远只是待验证 candidate(状态机归 C3）。
+  // 依赖 reconcile_hospital_months 已在上文建表（close 镜像触发器挂其上）。
+  ensureHospitalCmPeriodEvidenceSchema(database)
 
   // ===========================================================================
   // D2 统一检测项目目录（project_catalog / code_mappings）—— 地基线 D

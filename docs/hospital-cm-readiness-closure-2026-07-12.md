@@ -98,12 +98,18 @@ A 使用五张机器表：
 
 | 信号 | 当前真实来源 / D 新增来源 | 回填判据 | 自动失效 | 页面与三期计数 |
 |---|---|---|---|---|
-| 三件套导入血缘 | 现有 `case_revenue.import_batch/config_version`、`lis_cases.import_batch`、`lis_case_markers.import_batch`；D 新增不可变 batch manifest（源文件哈希、类型、导入时间） | 三表 batch 非空且能解析到 manifest；收入配置版本必须能解析到该院 `partner_configs.version` | 任一 batch、文件哈希、配置版本或三件套 source revision 变化 | 缺 manifest 的旧月不得 `PERIOD_QUALITY_VERIFIED`；可恢复冲突进 `REVIEW_REQUIRED`，不可恢复进 `UNVERIFIABLE` |
+| 三件套导入血缘 | 现有 `case_revenue.import_batch/config_version`、`lis_cases.import_batch`、`lis_case_markers.import_batch`；C1 提供 append-only batch manifest 存储（`hospital_cm_source_batch_manifests`）：`rows_sha256` 由服务器对该 batch 已落库行现算为权威内容指纹，外部源文件哈希为可选操作者成对声明（机器未核验、按版本链更正、旧行不可改），是否作为 `PERIOD_QUALITY_VERIFIED` 必要条件由 C3 门显式裁决 | 三表 batch 非空且能解析到 manifest；收入配置版本必须能解析到该院 `partner_configs.version` | 任一 batch、行内容指纹、配置版本或三件套 source revision 变化 | 缺 manifest 的旧月不得 `PERIOD_QUALITY_VERIFIED`；可恢复冲突进 `REVIEW_REQUIRED`，不可恢复进 `UNVERIFIABLE` |
 | 人工旁路 | `override_log.gate_type/module/target_id/created_at`；D 补 hospital-month / batch 的强关联 | 该月或其导入批次有旁路即待人工复核；无法确定旁路影响月则扩大到关联批次，不静默忽略 | 新增旁路或复核结论撤销 | `REVIEW_REQUIRED`，趋势点留空且不计 3 期 |
-| 关账与反关账 | `reconcile_hospital_months.status/closed_at/closed_by/reopened_at/reopen_reason`；C 新增单调 close/reopen revision 事件 | 只有当前 close revision 已关账且三件套质量通过才是候选；仅当 reopen revision/时间晚于旧验证时撤销旧证据；修复后产生新的 close revision，可重新跑全门并重新验证 | 新的 reopen/close revision 或关账元数据变化 | 反关账后旧数值进 `REVIEW_REQUIRED`；新的关账版本通过全门后允许恢复，不因历史 `reopened_at` 永久卡死 |
+| 关账与反关账 | `reconcile_hospital_months.status/closed_at/closed_by/reopened_at/reopen_reason`；C1 提供单调 close/reopen revision 事件存储（`hospital_cm_close_revision_events`，append-only）：UPDATE/INSERT/DELETE 状态迁移由数据库触发器自动镜像（不快照 reopen 自由文本原文，防 PII 永久化），`INSERT OR REPLACE` 等残余向量由读侧现算行内容哈希 fail-closed 兜底——消费方不得假设事件序完备，也不得对事件表加"close 必须先行"的序守卫（legacy 已关账行首事件可以是 reopen） | 只有当前 close revision 已关账且三件套质量通过才是候选；触发器上线前的 legacy 已关账行没有事件，读侧对"已关账却无镜像事件"必须 fail-closed（`CLOSE_REVISION_MISSING`），经镜像制度下完整 reopen→close 后获得 revision 属预期毕业路径；修复后产生新的 close revision，可重新跑全门并重新验证 | 新的 reopen/close/delete revision，或关账行任何业务列（含关账元数据与定版数值）变化——行内容哈希编入 close 组合指纹 | 反关账后旧数值进 `REVIEW_REQUIRED`；新的关账版本通过全门后允许恢复，不因历史 `reopened_at` 永久卡死 |
 | 配置混用 | `case_revenue.config_version` + `partner_configs` | 同院月只能绑定可解析的获准版本集合；混用必须有显式重述/调整依据 | 配置回滚、新版本重算或版本行缺失 | 可解释但待确认进 `REVIEW_REQUIRED`；版本丢失进 `UNVERIFIABLE` |
 | 跨月身份冲突 | `case_revenue` 按 `(partner_id, case_no)` 聚合 `service_month`，再与 `lis_cases/lis_case_markers` 对齐 | 同一身份出现在多个收入月即阻断，不尝试猜月份 | 新增/删除/改月或三件套错配 | 数值 `null`、趋势断线、`REVIEW_REQUIRED`，不计 3 期 |
-| 成本与公式版本 | 当前只有成本主数据表与 A 的 source revision、`HOSPITAL_CM_FORMULA_VERSION`/公式行为签名；C 新增周期冻结快照（成本行哈希、公式/拆分版本、医院范围） | 能精确恢复原冻结快照才可过周期质量门；只有当前成本/公式可用时只能按当前口径重述 | 成本行、公式行为、公式版本、拆分口径、医院范围或固定池证据变化 | 原版可复现才可 `PERIOD_QUALITY_VERIFIED`；当前口径重述为 `RESTATED_CURRENT_BASIS`，不计 3 期 |
+| 成本与公式版本 | 当前只有成本主数据表与 A 的 source revision、`HOSPITAL_CM_FORMULA_VERSION`/公式行为签名；C1 提供周期验证 run/check 存储（`hospital_cm_period_validation_runs/_checks`，append-only）：每次验证冻结五维指纹（范围快照版本、close revision 组合、CM 相关 7 表 source 子集、成本/公式/拆分/固定池 profile、manifest 集合）并带 profile 配方版本列；结论只能由 C3 检查器在服务器内产生，C1 不导出写函数。`checks.summary_json` 限长且只装聚合计数/码/指纹——与 A 表同一红线：不保存医院名、病例号、患者字段或原始业务行（C3 写入纪律）。source 子集为表级全局跨月（后继月新增收入即撤销旧周期证据，属有意 fail-closed，C3 须配自动重验策略），但**不含库存三表**——materials/inventory/batches 不是 CM 计算输入，其绿灯由数据地基门单独把守 | 能精确恢复原冻结指纹才可过周期质量门（失效判定为读侧现算比对，证据永不删除；配方升级 `PROFILE_RECIPE_UPGRADED` 与口径真变化 `PROFILE_CHANGED` 分开报告）；只有当前成本/公式可用时只能按当前口径重述 | 成本行、公式行为、公式版本、拆分口径内容（不含认账状态位翻转——同一内容 UNRATIFIED→RATIFIED 不撤销周期证据，认账状态是 readiness 硬门而非周期失效维度）、医院范围或固定池证据变化 | 原版可复现才可 `PERIOD_QUALITY_VERIFIED`；当前口径重述为 `RESTATED_CURRENT_BASIS`，不计 3 期 |
+
+C1 的 `evaluatePeriodValidationRun(...).current` 只回答“该 run 冻结的五维指纹目前是否仍新鲜”，不证明 run 的来源可信，也不验证 `overall_status=passed` 或固定检查集是否完整。C3 必须通过服务器受控写入器产生持久化 run，消费前同时校验总结果和完整检查集；调用方自己拼出的 run 即使指纹相同，也不能升级为 `PERIOD_QUALITY_VERIFIED`。五维现算在同一 SQLite 快照内完成；顶层评估期间若其他连接提交，返回暂态 `EVIDENCE_CHANGED_DURING_EVALUATION` 并重试，嵌套在外层事务时则严格沿用调用方既有事务快照。
+
+#186 / D2 B0 的账户名册表只保存 `UNCONFIRMED_SINGLE_SOURCE_SNAPSHOT_NOT_AUTHORITATIVE_UNION` 候选快照。它不会自动生成 C1 `scope`、不会改变 readiness，候选 `contentHash` 也不能直接冒充 C1 的 `roster_source_hash`；只有 D2 权威多源归并及其完整性判定完成后，才可由受控桥接流程发布新的 C1 范围快照。
+
+C1 的证据时间全部由服务器时钟生成，调用方不能回填时间；证据引用只接受无查询、无片段、无本地路径的脱敏不透明引用（例如 `sanitized://...`、`roster://...`、`manifest://...`），不得把患者名、真实文件路径或带令牌 URL 写入不可变证据表。
 
 回填按固定优先级执行，避免人工挑状态：
 
@@ -118,7 +124,7 @@ A 使用五张机器表：
 
 ### 纯代送/会诊院
 
-账户全集必须来自财务合同/结算月度名册，不得从“已经进系统的数据”反推全集。D 应新增版本化月度账户名册（来源文件哈希、期间、医院、合作形态、是否有活动、金额完整度），并采集：
+账户全集必须来自财务合同/结算月度名册，不得从“已经进系统的数据”反推全集。范围快照的**存储/哈希/失效机制归 C1**（`hospital_cm_month_scope_snapshots`：`accounts` 元素钉死为 `partners.id` 稳定标识、`status ∈ complete/incomplete/withdrawn` 三态、读侧对非 complete 与缺失一律 fail-closed、任何新版本使旧周期证据失效）；**权威名册来源与数据链归 D2（#182）**，双方不得各建范围模型。合同关键语义：`roster_source_hash` 是版本化**名册内容** hash（账户标识＋合作形态＋当月活跃＋金额完整度＋证据状态的规范化序列）——上述任一内容变化 D2 必须发布新版本快照，否则旧周期证据不失效即为 D2 违约；财务侧账户编码到 partner 主数据的映射归 D2 名册数据链并随内容进 hash；D2 权威名册落地前的快照只是调用者未核验声明，C3 消费必须显式携带该限定。D 应新增版本化月度账户名册（来源文件哈希、期间、医院、合作形态、是否有活动、金额完整度），并采集：
 
 1. 有效期化的合作形态：全流程、代送加做、纯代阅片、纯外送、远程会诊。
 2. 无病例号收入的规范行、来源文件哈希、结算月和业务线。
