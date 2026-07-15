@@ -47,7 +47,8 @@ Thumbs.db
 
 # Claude Code / AI tools
 .codegraph/
-.claude/skills/
+.claude/settings.local.json
+CLAUDE.local.md
 .claude/skills-runtime/
 .claude/rules/skills-auto-trigger.md
 

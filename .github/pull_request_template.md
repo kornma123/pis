@@ -7,6 +7,7 @@
 ## Issue / 会话交接
 <!--
 完整交付：Issue 填 Closes #N；部分交付/仅关联：填 Refs #N。
+若主 Issue 还需要“合并后真跑 / PM 验收”，本实现 PR 默认填 Refs #N，验收通过后再手工关闭 Issue。
 未完成 follow-up 只能填“无”或“#N — 一句话说明”，不能只写“以后处理”；请直接替换下划线。
 规则与示例：docs/github-issue-pr-management-loop.md#4-pr-与多会话交接合同
 -->
