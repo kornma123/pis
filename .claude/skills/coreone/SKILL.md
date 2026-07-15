@@ -1,231 +1,150 @@
 ---
 name: coreone-conventions
-description: COREONE 项目开发约定与技术规范。React + Express + SQLite 全栈应用。
+description: COREONE 仓库的本地工作路由。处理任何 PRD、功能、Bug、GitHub Issue/PR、代码修改、测试、复核或交接时使用；尤其在用户给出 PRD、要求“按 PRD 开发”、继续另一设备/会话的工作、创建或更新 PR 时自动触发。把仓库权威链、实时 GitHub 状态、ownership、preflight、质量 Loop、验收映射和 PR handoff 串成一条执行链。
 ---
 
-# COREONE 开发约定
+# COREONE 本地工作路由
 
-> 生成自 COREONE 代码库分析，指导 Claude Code 在本项目中的编码行为。
+把本 Skill 当作 Claude Code 在本仓库的启动控制器，不把它当业务规格。技术选型、业务口径和实时状态仍从权威文件、活代码、Git/GitHub 现场读取。
 
-## 技术栈
+采用**顺序主链 + 闸点评估**：上游产物未满足退出条件时，停在当前阶段；不得用下游实现替上游补决定。
 
-- **前端**: React 18.3 + TypeScript 5.8 + Vite 5.4 + Tailwind CSS 3.4
-- **后端**: Node.js 22 + Express 4.22 + TypeScript 5.9
-- **数据库**: SQLite via `node:sqlite` DatabaseSync
-- **测试**: Playwright 1.59 (E2E) + Vitest (单元)
+## 1. 每次任务先路由
 
-## 何时激活
+1. 完整读取 `CLAUDE.md` 和 `docs/agent-operating-contract.md`，再按权威链读取相关工作模型、guardrails、golden、ADR/spec。
+2. 现场读取 `git status`、当前分支、`origin/master`、相关 Issue/PR/checks；不使用聊天记忆或仓库快照冒充实时状态。
+3. 判定入口：
 
-在以下场景中使用此技能：
-- 开发新功能或修改现有功能
-- 编写前后端代码
-- 进行代码审查
-- 创建提交消息
-- 编写 E2E 测试
+| 输入 / 目标 | 入口 |
+|---|---|
+| 想法、痛点、未定需求 | `/coreone-prd` + PRD 质量 Loop |
+| 已定稿并合并的 PRD，要拆单或实现 | 本 Skill 的“PRD 到交付”主链；可显式运行 `/coreone-deliver-prd` |
+| 改页面结构或关键交互 | 先过 Mockup 质量 Loop，再进入写码 |
+| Bug | 工程 Issue + 可复现路径，进入写码 Loop；不伪造 PRD |
+| 独立复核 | review preflight + GitHub 复核评论合同；默认不代写 |
+| DB / E2E 专项 | 先完成本 Skill 的任务认领，再调用专项命令 |
 
-## 提交规范
+`/feature-development` 只是兼容入口，不能绕过本 Skill 直接写码。
 
-使用 Conventional Commits：
+## 2. 第一次修改前交付本地任务合同
 
-### 前缀
+先在会话中给出以下短块；有 GitHub 写权限时，把动态字段同步到主 Issue / PR：
 
-- `feat` — 新功能
-- `fix` — Bug 修复
-- `docs` — 文档更新
-- `test` — 测试相关
-- `refactor` — 重构
-- `chore` — 构建/依赖
-- `ci` — CI/CD 配置
-
-### 消息格式
-
-```
-feat(inventory): 添加库存预警阈值设置
-fix(auth): 修复 token 过期跳转逻辑
-test(e2e): 补充入库流程 E2E 用例
-docs: 更新 API 接口文档
+```text
+LOCAL TASK CONTRACT
+source: <PRD 路径@merged SHA / bug 复现 / 其他权威入口>
+stage: <PRD / mockup / implementation / review / acceptance>
+primary Issue / PR: <#N / 无，并说明原因>
+current owner: <Issue body coreone-owner 块>
+goal / non-goal / unacceptable: <大白话>
+PRD requirements / AC in scope: <RQ/AC IDs；不适用则写 N/A>
+risk: <R0/R1/R2/R3 + 升档原因>
+base / owned / excluded: <现场值>
+verification: <会失败的证据 + 最终证据>
+next gate: <谁在什么证据出现后允许进入下一阶段>
 ```
 
-- 首行简洁，约 50-70 字符
-- 使用祈使语气（"添加" 而非 "添加了"）
+下列任一条件不满足时不得开始 PRD 驱动的功能实现：
 
-## 架构
+- PRD 不是已合并版本，或没有可链接的 PM 定稿证据；
+- 涉及界面/主流程却没有定稿 mockup；纯后端任务只能在说明 `mockup=NOT_APPLICABLE` 及理由后继续；
+- 没有经 PM 确认的工程 Issue，或 Issue 没有独立可验收范围；
+- Issue body 的 `coreone-owner` 受控块未认领当前 owner；评论不能替代当前 owner 主源；
+- 未从最新 `origin/master` 建独立 worktree，或 develop preflight 未通过；
+- 方向级开放问题、口径冲突、敏感数据授权或 ownership 冲突仍未解决。
 
-### 项目结构
+PM “定稿”只结束 PRD 内容闸，不自动满足以上实现条件。
 
-```
-前端代码/
-  src/
-    api/          API 调用 (axios 封装)
-    components/   React 组件
-    pages/        页面组件
-    hooks/        自定义 hooks
-    lib/          工具函数
-    types/        TS 类型定义
-    styles/       全局样式
-  e2e/            Playwright E2E 测试
+## 3. PRD 到交付主链
 
-后端代码/server/
-  src/
-    app.ts              Express 入口
-    database/
-      DatabaseManager.ts   SQLite 管理 (node:sqlite)
-    middleware/
-      auth.ts             JWT 认证 + 角色校验
-      errorHandler.ts     全局错误处理
-    routes/             API 路由 (v1.1 后缀为当前版本)
-    utils/
-      response.ts         统一响应格式
-  data/               SQLite 数据库文件
-```
+### A. 固定需求基线
 
-### 命名约定
+1. 读取合并后的 PRD，记录固定 commit 链接或 `path@SHA`；不要只引用会移动的 `master`。
+2. 提取目标、范围、非范围、不可接受结果、依赖、风险、每个 Requirement / AC 和 PM 决策证据。
+3. 若 PRD 缺少可追踪 ID，先提出 PRD 修订；临时 ID 只用于草稿，不得借机新增需求。
+4. 对 UI、金额/口径、权限、数据和 golden 逐项路由到对应权威入口与升档规则。
 
-| 元素 | 约定 | 示例 |
-|------|------|------|
-| 文件 | camelCase | `inventoryList.ts` |
-| 组件 | PascalCase | `InventoryList.tsx` |
-| 函数 | camelCase | `getInventoryList()` |
-| 类型 | PascalCase | `InventoryItem` |
-| 常量 | SCREAMING_SNAKE_CASE | `MAX_STOCK` |
-| 路由 | kebab-case + version | `inventory-v1.1.ts` |
+### B. 把 PRD 拆成工程 Issue 候选
 
-### 导入风格
+按**用户可验证的纵向切片**拆，不默认按“前端 / 后端 / 测试”横切。只有 owner、风险、依赖或交付物确实不同才拆票。
 
-前端相对导入：
-```typescript
-import { Button } from '@/components/ui/button'
-import { useAuth } from '@/hooks/useAuth'
-```
+每个候选 Issue 必须包含：
 
-后端相对导入（ESM 需带 .js 扩展名）：
-```typescript
-import { getDatabase } from '../database/DatabaseManager.js'
-import { errorHandler } from './middleware/errorHandler.js'
+- `PRD path@merged SHA` 与 PM 定稿证据；
+- 本切片覆盖的 Requirement / AC IDs；
+- 业务结果、范围、非范围、不可接受结果；
+- 依赖、风险档位、建议 owner、触发条件；
+- BDD / 失败路径 / 真跑验收证据；
+- 与已有 Issue/PR 的去重结论。
+
+按 `docs/github-issue-pr-management-loop.md` 直接用 `gh` 现场核对开放/关闭 Issues、开放 PR 和近期合并 PR，再起草候选；PM 确认后才创建新 Issues。已有 Issue 已完整覆盖时只链接，不重开。`.claude/workflows/surface-to-issues.js` 只供支持该 DSL 的 workflow harness 使用，不是 Claude Code 本地可自动调用入口。
+
+### C. 认领一个工程 Issue
+
+1. 一次只认领一个可独立验收的工程 Issue。
+2. 先更新 Issue body 的 `coreone-owner` 块，再发认领事件评论；无 body 写权限时保持未认领。
+3. fetch、建立独立 worktree/branch，声明 owned/excluded files；运行 `node scripts/claude-task.cjs start ...` 建立 worktree 私有任务状态并通过 develop preflight。
+4. 重新核对 PRD 固定版本、依赖 PR、活代码与现状；功能已经存在或前提已变化时停下并报告证据。
+
+实现阶段使用以下形态；PRD / Mockup 阶段省略不适用的 `--prd/--approval/--mockup`：
+
+```text
+node scripts/claude-task.cjs start \
+  --issue=N --stage=implementation --owner="Claude Code (Fable 5)" --risk=R1 \
+  --prd=docs/prd/PRD-N-name.md@<merged-SHA> \
+  --approval=https://github.com/.../issues/N#issuecomment-... \
+  --mockup=path/to/mockup.md@<merged-SHA> \
+  --owned='path/**' --excluded='other-owner/**'
 ```
 
-## 代码风格
+纯后端任务用 `--mockup='NOT_APPLICABLE:具体理由'`，不能只写 `N/A`。
 
-### 前端
+### D. 建立验收追踪矩阵
 
-- 函数组件优先，不使用 class 组件
-- TypeScript 严格模式，props 和返回值必须带类型
-- Tailwind CSS 处理样式，避免内联 `style={{}}`
-- React Query 管理服务端状态，不在 useEffect 中直接 fetch
-- Zod 校验表单和 API 响应
-- 组件文件不超过 400 行
+在主 Issue 评论或 PR body 中维护当前任务矩阵，不另建第二份实时状态文档：
 
-### 后端
-
-- 路由按功能模块拆分
-- `node:sqlite` 是唯一数据库接口，禁止混用 sqlite3
-- 所有路由必须有 `authenticateToken`（除 auth 和健康检查）
-- 权限在路由注册时声明：`requireRole('admin', 'warehouse_manager')`
-- express-validator 在路由处理前校验输入
-- SQL 使用参数化查询，禁止字符串拼接
-- 统一响应格式：`{ success: true, data: ... }` 或 `{ success: false, error: {...} }`
-
-## 错误处理
-
-### 后端模式
-
-```typescript
-try {
-  const result = riskyOperation()
-  res.json({ success: true, data: result })
-} catch (error) {
-  next(error) // 交给 errorHandler
-}
+```text
+PRD AC | 本 Issue 切片 | 实现位置 | 先失败的证据 | 最终自动证据 | 真跑证据 | 状态
+AC-01  | ...          | ...      | ...          | ...          | ...      | pending
 ```
 
-### 前端模式
+每个范围内 AC 必须有实现位置与证据；范围外 AC 明确指向其他 Issue。不能映射的 AC 是上游缺口，不得静默跳过。
 
-```typescript
-try {
-  const data = await api.getInventory()
-  setInventory(data)
-} catch (error) {
-  toast.error(error.message || '获取库存失败')
-}
-```
+### E. 小步实现与偏离控制
 
-## 测试
+1. 按写码质量 Loop 先写会失败的 BDD/TDD 证据，再做最小实现，再重构。
+2. 一轮只完成矩阵中的一个可运行目标；测试、构建或 golden 红时如实停在红态。
+3. 只从活代码与 `.claude/rules/coreone-guardrails.md` 选择技术模式；不得套用旧命令中的固定库或过时范式。
+4. 新事实与 PRD 冲突时写入偏离清单并回上游拍板；不得在代码里悄悄重写需求。
+5. 涉及共享事实链、钱、权限、PII、DB 或生产时执行对应 R2/R3 加固与独立复核。
 
-### E2E 测试
+### F. 验证、PR 与复核
 
-```bash
-# 运行全部
-cd 前端代码 && npx playwright test
+1. 逐行更新验收追踪矩阵；保留失败证据、最终测试、构建、golden、真数据/手核和未覆盖边界。
+2. 运行任务相关检查、`node scripts/build-discipline/run-all.cjs`、preflight/drift check 和 `git diff --check`；复原被跑脏的 tracked dev DB。
+3. 使用仓库 PR 模板；主关系用 `Closes #N` 或 `Refs #N`，并运行 `scripts/issue-handoff/check-pr-body.cjs` 校验实际 PR body。
+4. PR body 记录实时 handoff；Issue body 记录整项工作剩余项；评论只记录状态变化、决定、阻塞与复核事件。
+5. 独立 reviewer 在目标 PR 留普通评论，锚定 head SHA，写 Verdict、findings、证据、未覆盖边界和下一动作。默认不 APPROVE、REQUEST CHANGES 或 MERGE。
 
-# 单个 spec
-cd 前端代码 && npx playwright test e2e/inbound.spec.ts
+### G. 合并后真跑验收
 
-# 特定用例
-cd 前端代码 && npx playwright test e2e/auth.spec.ts --grep "AUTH-LOGIN-01"
+1. PR 合并不等于功能完成。以同一 PRD 固定版本和验收追踪矩阵进入真跑验收 Loop。
+2. 真起系统，逐条执行范围内 AC，覆盖相关角色、错误态、边界和代表性数据；每条留下可判断证据。
+3. 将发现分为实现 Bug、PRD/设计问题、新想法，分别回对应 Loop；本次不夹带扩范围。
+4. PM 明确“验收通过”后才能把消费者被服务标为完成；发布/上线继续单独取证。
 
-# UI 调试
-cd 前端代码 && npx playwright test e2e/xxx.spec.ts --debug
-```
+## 4. GitHub 同步检查点
 
-### 单元测试
+在以下时点重新读 GitHub/Git，而不是沿用会话开头快照：
 
-```bash
-# 前端
-cd 前端代码 && npm run test
+1. 开工和认领前；
+2. 范围、owner、依赖或 PRD 基线变化后；
+3. 提交 / push / 开 PR 前；
+4. reviewer 评论或 head SHA 变化后；
+5. 请求 PM 合并、验收或跨设备接手前。
 
-# 后端
-cd 后端代码/server && npm run test
-```
+跨设备接手只依赖 GitHub Issue、PR body/checks、合并 PRD 和固定 commit；不得依赖另一台设备的聊天历史、个人 memory、未推送分支或本地 session-log。停止前运行 `node scripts/claude-task.cjs handoff --status=<...> --evidence=<GitHub URL>`；共享 Stop hook 会在缺少 GitHub handoff 时阻止把活动任务宣称为结束。
 
-## 常见工作流
+## 5. 收尾输出
 
-### 功能开发
-
-1. 理解需求 → 如需复杂规划，调用 planner 代理
-2. 编写 E2E 测试（如适用）
-3. 实现前端页面/组件
-4. 实现后端 API
-5. 本地验证：`npm run dev`（前后端）
-6. 运行 E2E：`npx playwright test`
-7. 提交：`git commit -m "feat(xxx): ..."`
-
-### 数据库变更
-
-1. 修改 `DatabaseManager.ts` 中的 `initializeDatabase()`
-2. 新增 `CREATE TABLE IF NOT EXISTS` 语句
-3. 如需迁移旧数据，添加兼容逻辑（检查列存在性）
-4. 重启后端验证
-5. **无需独立 migration 文件**（本项目采用启动时自动初始化模式）
-
-### Bug 修复
-
-1. 复现问题
-2. 编写失败的测试（如适用）
-3. 定位根因并修复
-4. 运行相关测试验证
-5. 提交：`git commit -m "fix(xxx): ..."`
-
-## 安全要点
-
-- 禁止硬编码密钥、密码、token（使用 `.env`）
-- SQL 必须参数化
-- 错误消息不暴露内部实现
-- 所有 API 返回统一响应格式，不在客户端判断 HTTP status
-
-## 最佳实践
-
-### Do
-- 使用 Conventional Commits
-- 组件文件不超过 400 行
-- 所有异步操作有错误处理
-- 使用 React Query 缓存服务端数据
-
-### Don't
-- 不写模糊提交消息
-- 不在 useEffect 中直接 fetch
-- 不混用 sqlite3 和 node:sqlite
-- 不在日志中输出密码/token
-
----
-
-*本技能随代码库演进更新，最新版本以仓库内文件为准。*
+按 PM 语言交付：业务结果、PRD/AC 覆盖、已验证、未验证、风险、需要 PM 决定、下一 owner / 触发条件。严格区分已实现、已验证、已评审、PM 验收、已合并和已发布。
