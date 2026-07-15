@@ -27,18 +27,6 @@ export function getUserRole(): string | null {
   return null
 }
 
-// ABC 移植：读取当前用户权限码列表（ABC 页面/hook 按权限显隐操作）
-export function getUserPermissions(): string[] {
-  try {
-    const userStr = localStorage.getItem('user')
-    if (!userStr) return []
-    const user = JSON.parse(userStr)
-    return Array.isArray(user.permissions) ? user.permissions : []
-  } catch {
-    return []
-  }
-}
-
 // ============================================================================
 // 数据驱动多角色 RBAC（能力并集）—— 登录响应 user.capabilities/roles/canSeeCost
 // 为单一来源；nav/守卫/仪表盘统一读它。capabilities 缺失时退回旧 ROLE_MENU_MAP。

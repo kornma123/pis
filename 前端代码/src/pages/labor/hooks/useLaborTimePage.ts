@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { laborTimeApi } from '@/api/master'
 import { usePagination } from '@/hooks/usePagination'
-import { getUserPermissions, getUserRole } from '@/lib/permissions'
+import { canAccess } from '@/lib/permissions'
 import type { StandardLaborTime } from '@/types'
 
 export interface LaborTimeForm {
@@ -62,15 +62,15 @@ export const PROJECT_TYPE_OPTIONS = [
   { value: 'cyto', label: '细胞病理' },
 ]
 
+// 标准工时写操作（新增/编辑/归档）的前端显隐判据，与后端 requirePermission('labor_times','W')
+// （labor-time-v1.1.ts:13 → POST/PUT/DELETE）对齐。读能力矩阵（登录响应下发的 user.capabilities，单一来源），
+// 而非早前退化为「role∈{admin,finance,technician}」、且依赖后端从不下发的 user.permissions 数组的旧判据。
+// ⚠️ 本页漂移方向与设备资产/设备类型相反：旧名单比后端**宽**——technician 只持 labor_times:'R'
+//   （rbac-matrix.ts:61），却能看到增改删按钮、点击必吃 403（前端放行·后端拒）。故本次迁移是**行为收紧**
+//   （PM 2026-07-15 拍板：按后端为准藏按钮），不是死码清理。
+// capabilities 缺失时 canAccess 放行，真实边界仍由后端守卫兜底。
 function canManageLaborTimeRecords() {
-  const role = getUserRole()
-  if (['admin', 'finance', 'technician'].includes(role || '')) {
-    return true
-  }
-  const permissions = getUserPermissions()
-  return permissions.includes('*')
-    || permissions.includes('labor_times')
-    || permissions.some(permission => ['labor_times:add', 'labor_times:edit', 'labor_times:delete'].includes(permission))
+  return canAccess('labor_times', 'W')
 }
 
 export function useLaborTimePage() {

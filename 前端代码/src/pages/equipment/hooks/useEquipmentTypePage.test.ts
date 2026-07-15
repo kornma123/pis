@@ -42,22 +42,34 @@ describe('useEquipmentTypePage', () => {
     vi.clearAllMocks()
     window.history.replaceState(null, '', '/')
     localStorage.clear()
-    localStorage.setItem('user', JSON.stringify({ role: 'admin' }))
+    localStorage.setItem('user', JSON.stringify({ role: 'admin', capabilities: { equipment: 'W' } }))
     vi.mocked(equipmentApi.getTypes).mockResolvedValue({ list: [equipmentType], pagination: { total: 1 } } as any)
     vi.mocked(equipmentApi.getTypeStats).mockResolvedValue({ total: 1, active: 1, equipmentCount: 0 } as any)
     vi.mocked(equipmentApi.updateType).mockResolvedValue({ id: 'type-1' } as any)
   })
 
-  it('allows technician users with equipment module access to manage equipment types', () => {
-    localStorage.setItem('user', JSON.stringify({ role: 'technician' }))
+  // 判据读能力矩阵（后端登录下发），与后端 requirePermission('equipment','W') 对齐——
+  // 不再硬编码 role∈{admin,technician}，故 technician/finance/lab_director 等任何持 equipment:W 者一致放行。
+  it('allows users holding equipment:W capability to manage equipment types', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'technician', capabilities: { equipment: 'W' } }))
 
     const { result } = renderHook(() => useEquipmentTypePage())
 
     expect(result.current.canManageEquipmentTypes).toBe(true)
   })
 
-  it('keeps pathologist users read-only for equipment types', () => {
-    localStorage.setItem('user', JSON.stringify({ role: 'pathologist', permissions: ['equipment:view'] }))
+  it('keeps equipment:R-only users read-only for equipment types', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'pathologist', capabilities: { equipment: 'R' } }))
+
+    const { result } = renderHook(() => useEquipmentTypePage())
+
+    expect(result.current.canManageEquipmentTypes).toBe(false)
+  })
+
+  // 能力矩阵存在但无 equipment 键（种子矩阵下 pathologist 的真实形状）→ 藏。
+  // 与上一例走不同分支：上一例测「R 不蕴含 W」，本例测「模块缺失即拒」。
+  it('keeps users without any equipment capability read-only for equipment types', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'pathologist', capabilities: {} }))
 
     const { result } = renderHook(() => useEquipmentTypePage())
 

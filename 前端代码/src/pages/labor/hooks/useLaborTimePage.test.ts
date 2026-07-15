@@ -41,30 +41,39 @@ describe('useLaborTimePage', () => {
     vi.clearAllMocks()
     window.history.replaceState(null, '', '/')
     localStorage.clear()
-    localStorage.setItem('user', JSON.stringify({ role: 'admin' }))
+    localStorage.setItem('user', JSON.stringify({ role: 'admin', capabilities: { labor_times: 'W' } }))
     vi.mocked(laborTimeApi.getList).mockResolvedValue({ list: [laborTime], pagination: { total: 1 } } as any)
     vi.mocked(laborTimeApi.getStats).mockResolvedValue({ total: 1, totalMinutes: 30, avgRate: 2, equipmentSteps: 0 } as any)
     vi.mocked(laborTimeApi.update).mockResolvedValue({ id: 'labor-1' } as any)
   })
 
-  it('allows finance users to manage labor time cost parameters', () => {
-    localStorage.setItem('user', JSON.stringify({ role: 'finance' }))
+  // 判据读能力矩阵（后端登录下发），与后端 requirePermission('labor_times','W') 对齐——
+  // 用例按能力而非角色命名：#135 落地后 labor_times 的持有人群会变（PM 2026-07-15 拍板 finance 不再持
+  // labor_times），届时只需改矩阵，本组用例无需重写。
+  it('allows users holding labor_times:W capability to manage standard labor times', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'finance', capabilities: { labor_times: 'W' } }))
 
     const { result } = renderHook(() => useLaborTimePage())
 
     expect(result.current.canManageLaborTimes).toBe(true)
   })
 
-  it('allows technician users to manage standard labor time steps', () => {
-    localStorage.setItem('user', JSON.stringify({ role: 'technician' }))
+  // ⚠️ 行为收紧（PM 2026-07-15 拍板：按后端为准藏按钮）。此用例此前断言 true——那是旧硬编码名单
+  //   ['admin','finance','technician'] 越授的产物：technician 在种子矩阵里只持 labor_times:'R'
+  //   （rbac-matrix.ts:61），后端 labor-time-v1.1.ts:13 requirePermission('labor_times','W') 必拒。
+  //   即那三个按钮从来就点不动，藏起来不减少任何实际能力。
+  it('keeps labor_times:R-only users read-only for standard labor times', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'technician', capabilities: { labor_times: 'R' } }))
 
     const { result } = renderHook(() => useLaborTimePage())
 
-    expect(result.current.canManageLaborTimes).toBe(true)
+    expect(result.current.canManageLaborTimes).toBe(false)
   })
 
-  it('keeps pathologist users read-only for standard labor times', () => {
-    localStorage.setItem('user', JSON.stringify({ role: 'pathologist', permissions: ['labor_times:view'] }))
+  // 能力矩阵存在但无 labor_times 键（种子矩阵下 pathologist 的真实形状）→ 藏。
+  // 与上一例走不同分支：上一例测「R 不蕴含 W」，本例测「模块缺失即拒」。
+  it('keeps users without any labor_times capability read-only', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'pathologist', capabilities: {} }))
 
     const { result } = renderHook(() => useLaborTimePage())
 
