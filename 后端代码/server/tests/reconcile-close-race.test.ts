@@ -24,6 +24,8 @@ import { DatabaseSync } from 'node:sqlite'
 
 const TMP_DIR = mkdtempSync(join(tmpdir(), 'coreone-reconcile-race-'))
 const DB_FILE = join(TMP_DIR, 'race.db')
+const ORIGINAL_DATABASE_PATH = process.env.DATABASE_PATH
+const ORIGINAL_JWT_SECRET = process.env.JWT_SECRET
 process.env.DATABASE_PATH = DB_FILE
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-race'
 
@@ -85,13 +87,17 @@ beforeAll(async () => {
   resetDatabase = dm.resetDatabase
   runReconcile = (await import('../src/utils/reconcile-compute.js')).runReconcile
   rival = new DatabaseSync(DB_FILE)
-})
+}, 60_000)
 
 afterAll(() => {
   try { rival?.close() } catch { /* already closed */ }
   try { resetDatabase?.() } catch { /* already closed */ }
   rmSync(TMP_DIR, { recursive: true, force: true })
-})
+  if (ORIGINAL_DATABASE_PATH === undefined) delete process.env.DATABASE_PATH
+  else process.env.DATABASE_PATH = ORIGINAL_DATABASE_PATH
+  if (ORIGINAL_JWT_SECRET === undefined) delete process.env.JWT_SECRET
+  else process.env.JWT_SECRET = ORIGINAL_JWT_SECRET
+}, 60_000)
 
 describe('runReconcile 关账窗口竞态（预检通过 → 另一连接关账 → 拿锁）', () => {
   let hmId = ''

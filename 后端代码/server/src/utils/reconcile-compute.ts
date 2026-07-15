@@ -246,60 +246,60 @@ export function runReconcile(db: any, partnerId: string, serviceMonth: string, o
   // 一个事务原子写入：院·月 + diffs + 清待补收 + 细粒度线索——任一步失败整体回滚，不留半截快照。
   db.exec('BEGIN IMMEDIATE')
   try {
-  // 拿锁后复核（对齐 readiness probe run 姿势）：预检到拿锁之间，另一连接可能已关账（/close 为自提交
-  // UPDATE）或已建行——沿用事务外快照会覆写已关账定版的 match_rate/diffs/待补收，或 INSERT 撞 UNIQUE。
-  // BEGIN IMMEDIATE 持写锁 → 此处读到的行在本事务结束前不会被他人改写，以它为权威。
-  const existing = readHospitalMonth()
-  assertNotClosed(existing)
-  hmId = existing?.id ?? uuidv4()
-  if (existing) {
-    db.prepare(
-      `UPDATE reconcile_hospital_months
-       SET partner_name = ?, name_aligned = 1, match_rate = ?, match_status = ?, statement_ready = ?, lis_ready = ?,
-           diff_count = ?, pending_count = ?, unmatched_count = ?, computed_at = ${nowExpr}, updated_at = ${nowExpr},
-           status = CASE WHEN status = '复核完成' THEN '待复核' ELSE status END
-       WHERE id = ?`,
-    ).run(partner?.name ?? existing.partner_name ?? null, result.matchRate, result.matchStatus,
-      statementReady ? 1 : 0, lisReady ? 1 : 0, result.diffs.length, result.diffs.length, result.unmatched.length, hmId)
-  } else {
-    db.prepare(
-      `INSERT INTO reconcile_hospital_months
-        (id, partner_id, partner_name, service_month, status, name_aligned, match_rate, match_status,
-         statement_ready, lis_ready, diff_count, pending_count, unmatched_count, computed_at)
-       VALUES (?, ?, ?, ?, '待复核', 1, ?, ?, ?, ?, ?, ?, ?, ${nowExpr})`,
-    ).run(hmId, partnerId, partner?.name ?? null, serviceMonth, result.matchRate, result.matchStatus,
-      statementReady ? 1 : 0, lisReady ? 1 : 0, result.diffs.length, result.diffs.length, result.unmatched.length)
-  }
-
-  db.prepare('DELETE FROM reconcile_diffs WHERE hospital_month_id = ?').run(hmId)
-  // 重算清旧 diffs（含其认定）→ 同步清本院月「待补收」单（认定重置，避免 source_diff_id 悬空孤儿；已补收/已放弃保留）。
-  db.prepare("DELETE FROM supplement_orders WHERE partner_id = ? AND service_month = ? AND status = '待补收'").run(partnerId, serviceMonth)
-  const insertDiff = db.prepare(
-    `INSERT INTO reconcile_diffs
-      (id, hospital_month_id, partner_id, service_month, case_no, line_type, bill_count, lis_count, delta, amount_impact, system_hint, low_confidence)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-  for (const d of result.diffs) {
-    // 差异 low_confidence = 院级匹配偏低(computeReconcile) ∨ 账单件数解析不可靠(该 case+线聚合行 floor-to-1)。
-    const lc = billCountLowConf.get(d.caseNo)
-    const countUnreliable = d.lineType === '免疫组化' ? !!lc?.ihc : !!lc?.ss
-    insertDiff.run(uuidv4(), hmId, partnerId, serviceMonth, d.caseNo, d.lineType, d.billCount, d.lisCount, d.delta,
-      d.amountImpact, d.systemHint, d.lowConfidence || countUnreliable ? 1 : 0)
-  }
-
-  // ③ 逐抗体细粒度初判（返工/多病灶）：读逐抗体明细 → 每 case 分组 → 落 reconcile_case_hints（与 diffs 同事务清建）。
-  //   附加线索、正交于计数级差异：某院月无 marker 明细 → 无线索、差异照常。
-  db.prepare('DELETE FROM reconcile_case_hints WHERE hospital_month_id = ?').run(hmId)
-  const insertHint = db.prepare(
-    `INSERT INTO reconcile_case_hints (id, hospital_month_id, partner_id, service_month, case_no, hint_type, marker_name, wax_no, occurrences)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  )
-  for (const [caseNo, markers] of buildCaseMarkers(db, partnerId, serviceMonth)) {
-    for (const h of classifyCaseHints(markers)) {
-      insertHint.run(uuidv4(), hmId, partnerId, serviceMonth, caseNo, h.hintType, h.markerName,
-        h.waxNo ?? (h.waxNos ? h.waxNos.join('、') : null), h.occurrences)
+    // 拿锁后复核（对齐 readiness probe run 姿势）：预检到拿锁之间，另一连接可能已关账（/close 为自提交
+    // UPDATE）或已建行——沿用事务外快照会覆写已关账定版的 match_rate/diffs/待补收，或 INSERT 撞 UNIQUE。
+    // BEGIN IMMEDIATE 持写锁 → 此处读到的行在本事务结束前不会被他人改写，以它为权威。
+    const existing = readHospitalMonth()
+    assertNotClosed(existing)
+    hmId = existing?.id ?? uuidv4()
+    if (existing) {
+      db.prepare(
+        `UPDATE reconcile_hospital_months
+         SET partner_name = ?, name_aligned = 1, match_rate = ?, match_status = ?, statement_ready = ?, lis_ready = ?,
+             diff_count = ?, pending_count = ?, unmatched_count = ?, computed_at = ${nowExpr}, updated_at = ${nowExpr},
+             status = CASE WHEN status = '复核完成' THEN '待复核' ELSE status END
+         WHERE id = ?`,
+      ).run(partner?.name ?? existing.partner_name ?? null, result.matchRate, result.matchStatus,
+        statementReady ? 1 : 0, lisReady ? 1 : 0, result.diffs.length, result.diffs.length, result.unmatched.length, hmId)
+    } else {
+      db.prepare(
+        `INSERT INTO reconcile_hospital_months
+          (id, partner_id, partner_name, service_month, status, name_aligned, match_rate, match_status,
+           statement_ready, lis_ready, diff_count, pending_count, unmatched_count, computed_at)
+         VALUES (?, ?, ?, ?, '待复核', 1, ?, ?, ?, ?, ?, ?, ?, ${nowExpr})`,
+      ).run(hmId, partnerId, partner?.name ?? null, serviceMonth, result.matchRate, result.matchStatus,
+        statementReady ? 1 : 0, lisReady ? 1 : 0, result.diffs.length, result.diffs.length, result.unmatched.length)
     }
-  }
+
+    db.prepare('DELETE FROM reconcile_diffs WHERE hospital_month_id = ?').run(hmId)
+    // 重算清旧 diffs（含其认定）→ 同步清本院月「待补收」单（认定重置，避免 source_diff_id 悬空孤儿；已补收/已放弃保留）。
+    db.prepare("DELETE FROM supplement_orders WHERE partner_id = ? AND service_month = ? AND status = '待补收'").run(partnerId, serviceMonth)
+    const insertDiff = db.prepare(
+      `INSERT INTO reconcile_diffs
+        (id, hospital_month_id, partner_id, service_month, case_no, line_type, bill_count, lis_count, delta, amount_impact, system_hint, low_confidence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    for (const d of result.diffs) {
+      // 差异 low_confidence = 院级匹配偏低(computeReconcile) ∨ 账单件数解析不可靠(该 case+线聚合行 floor-to-1)。
+      const lc = billCountLowConf.get(d.caseNo)
+      const countUnreliable = d.lineType === '免疫组化' ? !!lc?.ihc : !!lc?.ss
+      insertDiff.run(uuidv4(), hmId, partnerId, serviceMonth, d.caseNo, d.lineType, d.billCount, d.lisCount, d.delta,
+        d.amountImpact, d.systemHint, d.lowConfidence || countUnreliable ? 1 : 0)
+    }
+
+    // ③ 逐抗体细粒度初判（返工/多病灶）：读逐抗体明细 → 每 case 分组 → 落 reconcile_case_hints（与 diffs 同事务清建）。
+    //   附加线索、正交于计数级差异：某院月无 marker 明细 → 无线索、差异照常。
+    db.prepare('DELETE FROM reconcile_case_hints WHERE hospital_month_id = ?').run(hmId)
+    const insertHint = db.prepare(
+      `INSERT INTO reconcile_case_hints (id, hospital_month_id, partner_id, service_month, case_no, hint_type, marker_name, wax_no, occurrences)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    for (const [caseNo, markers] of buildCaseMarkers(db, partnerId, serviceMonth)) {
+      for (const h of classifyCaseHints(markers)) {
+        insertHint.run(uuidv4(), hmId, partnerId, serviceMonth, caseNo, h.hintType, h.markerName,
+          h.waxNo ?? (h.waxNos ? h.waxNos.join('、') : null), h.occurrences)
+      }
+    }
     db.exec('COMMIT')
   } catch (e) {
     db.exec('ROLLBACK')
