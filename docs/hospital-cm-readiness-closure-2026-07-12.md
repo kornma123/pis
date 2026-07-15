@@ -105,6 +105,12 @@ A 使用五张机器表：
 | 跨月身份冲突 | `case_revenue` 按 `(partner_id, case_no)` 聚合 `service_month`，再与 `lis_cases/lis_case_markers` 对齐 | 同一身份出现在多个收入月即阻断，不尝试猜月份 | 新增/删除/改月或三件套错配 | 数值 `null`、趋势断线、`REVIEW_REQUIRED`，不计 3 期 |
 | 成本与公式版本 | 当前只有成本主数据表与 A 的 source revision、`HOSPITAL_CM_FORMULA_VERSION`/公式行为签名；C1 提供周期验证 run/check 存储（`hospital_cm_period_validation_runs/_checks`，append-only）：每次验证冻结五维指纹（范围快照版本、close revision 组合、CM 相关 7 表 source 子集、成本/公式/拆分/固定池 profile、manifest 集合）并带 profile 配方版本列；结论只能由 C3 检查器在服务器内产生，C1 不导出写函数。`checks.summary_json` 限长且只装聚合计数/码/指纹——与 A 表同一红线：不保存医院名、病例号、患者字段或原始业务行（C3 写入纪律）。source 子集为表级全局跨月（后继月新增收入即撤销旧周期证据，属有意 fail-closed，C3 须配自动重验策略），但**不含库存三表**——materials/inventory/batches 不是 CM 计算输入，其绿灯由数据地基门单独把守 | 能精确恢复原冻结指纹才可过周期质量门（失效判定为读侧现算比对，证据永不删除；配方升级 `PROFILE_RECIPE_UPGRADED` 与口径真变化 `PROFILE_CHANGED` 分开报告）；只有当前成本/公式可用时只能按当前口径重述 | 成本行、公式行为、公式版本、拆分口径内容（不含认账状态位翻转——同一内容 UNRATIFIED→RATIFIED 不撤销周期证据，认账状态是 readiness 硬门而非周期失效维度）、医院范围或固定池证据变化 | 原版可复现才可 `PERIOD_QUALITY_VERIFIED`；当前口径重述为 `RESTATED_CURRENT_BASIS`，不计 3 期 |
 
+C1 的 `evaluatePeriodValidationRun(...).current` 只回答“该 run 冻结的五维指纹目前是否仍新鲜”，不证明 run 的来源可信，也不验证 `overall_status=passed` 或固定检查集是否完整。C3 必须通过服务器受控写入器产生持久化 run，消费前同时校验总结果和完整检查集；调用方自己拼出的 run 即使指纹相同，也不能升级为 `PERIOD_QUALITY_VERIFIED`。五维现算在同一 SQLite 快照内完成；顶层评估期间若其他连接提交，返回暂态 `EVIDENCE_CHANGED_DURING_EVALUATION` 并重试，嵌套在外层事务时则严格沿用调用方既有事务快照。
+
+#186 / D2 B0 的账户名册表只保存 `UNCONFIRMED_SINGLE_SOURCE_SNAPSHOT_NOT_AUTHORITATIVE_UNION` 候选快照。它不会自动生成 C1 `scope`、不会改变 readiness，候选 `contentHash` 也不能直接冒充 C1 的 `roster_source_hash`；只有 D2 权威多源归并及其完整性判定完成后，才可由受控桥接流程发布新的 C1 范围快照。
+
+C1 的证据时间全部由服务器时钟生成，调用方不能回填时间；证据引用只接受无查询、无片段、无本地路径的脱敏不透明引用（例如 `sanitized://...`、`roster://...`、`manifest://...`），不得把患者名、真实文件路径或带令牌 URL 写入不可变证据表。
+
 回填按固定优先级执行，避免人工挑状态：
 
 1. 先从财务月度账户名册枚举院月，不从已入系统的病例反推全集。

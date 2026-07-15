@@ -65,7 +65,10 @@ export type PeriodEvidenceSourceKind = (typeof PERIOD_EVIDENCE_SOURCE_KINDS)[num
  *  allowlist 外任何列变化仍被 A 的 source revision 触发器抓住(SOURCE_STATE_CHANGED 兜底)。 */
 const SOURCE_ROW_COLUMNS: Record<PeriodEvidenceSourceKind, readonly string[]> = {
   case_revenue: ['id', 'case_no', 'partner_id', 'partner_name', 'doc_no', 'gross_amount', 'net_amount', 'discount_rate', 'service_month', 'line_count', 'import_batch', 'config_version'],
-  lis_cases: ['id', 'case_no', 'partner_id', 'project_id', 'project_name', 'operator', 'operate_time', 'status', 'import_batch'],
+  lis_cases: [
+    'id', 'case_no', 'partner_id', 'project_id', 'project_name', 'operator', 'operate_time', 'status', 'import_batch',
+    'he_slide_count', 'block_count', 'ihc_count', 'special_stain_count', 'eber_count', 'pdl1_count',
+  ],
   lis_case_markers: ['id', 'case_no', 'partner_id', 'marker_name', 'advice_type', 'wax_no', 'section_no', 'import_batch'],
 }
 
@@ -155,11 +158,39 @@ function requireText(value: unknown, code: string, fieldLabel: string, maxLength
   return trimmed
 }
 
+/** 只允许不含路径转义、查询或片段的脱敏不透明引用；不可逆证据表不得落本地路径/原始文件名。 */
+function requireOpaqueReference(
+  value: unknown,
+  allowedSchemes: readonly string[],
+  code: string,
+  fieldLabel: string,
+  maxLength = 200,
+): string {
+  const ref = requireText(value, code, fieldLabel, maxLength)
+  const prefix = allowedSchemes.find((scheme) => ref.startsWith(`${scheme}://`))
+  if (prefix == null || /[?#\\]/.test(ref) || !/^[\x20-\x7e]+$/.test(ref)) {
+    throw new HospitalCmPeriodEvidenceError(code, 400, `${fieldLabel} 必须是批准 scheme 的脱敏不透明引用`)
+  }
+  const tail = ref.slice(prefix.length + 3)
+  const segments = tail.split('/')
+  if (!tail || segments.some((segment) => !segment || segment === '.' || segment === '..')
+    || !segments.every((segment) => /^[A-Za-z0-9][A-Za-z0-9._~-]*$/.test(segment))) {
+    throw new HospitalCmPeriodEvidenceError(code, 400, `${fieldLabel} 含不安全路径片段`)
+  }
+  return ref
+}
+
 function normalizeActor(actor: unknown): PeriodEvidenceActor {
   const candidate = (actor ?? {}) as Partial<PeriodEvidenceActor>
-  const userId = typeof candidate.userId === 'string' ? candidate.userId.trim() : ''
-  const username = typeof candidate.username === 'string' ? candidate.username.trim() : ''
-  if (!userId || !username || userId.toLowerCase() === 'unknown' || username.toLowerCase() === 'unknown') {
+  let userId: string
+  let username: string
+  try {
+    userId = requireText(candidate.userId, 'PERIOD_EVIDENCE_ACTOR_REQUIRED', 'actor.userId', 128)
+    username = requireText(candidate.username, 'PERIOD_EVIDENCE_ACTOR_REQUIRED', 'actor.username', 128)
+  } catch {
+    throw new HospitalCmPeriodEvidenceError('PERIOD_EVIDENCE_ACTOR_REQUIRED', 400, '证据写入必须绑定合法的已认证操作者')
+  }
+  if (userId.toLowerCase() === 'unknown' || username.toLowerCase() === 'unknown') {
     throw new HospitalCmPeriodEvidenceError('PERIOD_EVIDENCE_ACTOR_REQUIRED', 400, '证据写入必须绑定已认证操作者(拒绝空值与 unknown 占位)')
   }
   return { userId, username }
@@ -184,13 +215,7 @@ function rejectUnsupportedKeys(input: Record<string, unknown>, allowed: readonly
   }
 }
 
-function nowIso(explicit?: string): string {
-  if (explicit != null) {
-    if (typeof explicit !== 'string' || Number.isNaN(Date.parse(explicit))) {
-      throw new HospitalCmPeriodEvidenceError('PERIOD_EVIDENCE_TIMESTAMP_INVALID', 400, 'now 必须是可解析的 ISO 时间串')
-    }
-    return explicit
-  }
+function nowIso(): string {
   return new Date().toISOString()
 }
 
@@ -202,9 +227,17 @@ function rollbackQuietly(db: HospitalCmPeriodEvidenceDb): void {
   }
 }
 
-/** 行值规范化:BigInt 显式转字符串(node:sqlite 大整数防线),其余原样(依赖 ECMA-262 Number→String 确定性)。 */
+/** 行值规范化:BigInt 带类型编码；NaN/±Infinity 不能交给 JSON(null 碰撞)，一律稳定 fail-closed。 */
 function normalizeCell(value: unknown): unknown {
-  return typeof value === 'bigint' ? value.toString() : value
+  if (typeof value === 'bigint') return { type: 'bigint', value: value.toString() }
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throw new HospitalCmPeriodEvidenceError(
+      'PERIOD_EVIDENCE_NON_FINITE_NUMBER',
+      409,
+      '证据源包含 NaN 或无穷数，无法生成无歧义指纹',
+    )
+  }
+  return value
 }
 
 // ---------------------------------------------------------------------------
@@ -315,13 +348,21 @@ export function ensureHospitalCmPeriodEvidenceSchema(db: HospitalCmPeriodEvidenc
       ON hospital_cm_source_batch_manifests(source_kind, batch_ref, version_no DESC);
     CREATE INDEX IF NOT EXISTS idx_hcm_scope_snapshots_month
       ON hospital_cm_month_scope_snapshots(service_month, version_no DESC);
-    CREATE INDEX IF NOT EXISTS idx_hcm_close_events_key
-      ON hospital_cm_close_revision_events(partner_id, service_month, revision DESC);
-    CREATE INDEX IF NOT EXISTS idx_hcm_close_events_month
-      ON hospital_cm_close_revision_events(service_month);
+    CREATE INDEX IF NOT EXISTS idx_hcm_close_events_month_partner_revision
+      ON hospital_cm_close_revision_events(service_month, partner_id, revision DESC);
     CREATE INDEX IF NOT EXISTS idx_hcm_validation_runs_month
       ON hospital_cm_period_validation_runs(service_month, run_number DESC);
+    CREATE INDEX IF NOT EXISTS idx_hcm_case_revenue_import_batch_id
+      ON case_revenue(import_batch, id);
+    CREATE INDEX IF NOT EXISTS idx_hcm_lis_cases_import_batch_id
+      ON lis_cases(import_batch, id);
+    CREATE INDEX IF NOT EXISTS idx_hcm_lis_markers_import_batch_id
+      ON lis_case_markers(import_batch, id);
+    CREATE INDEX IF NOT EXISTS idx_hcm_reconcile_month_partner
+      ON reconcile_hospital_months(service_month, partner_id);
   `)
+  // 新组合索引已创建后移除旧的单列冗余索引，避免升级库长期承受重复写放大。
+  db.exec('DROP INDEX IF EXISTS idx_hcm_close_events_month; DROP INDEX IF EXISTS idx_hcm_close_events_key')
 
   // append-only:UPDATE/DELETE 全拒
   const appendOnlyTables: Array<[string, string]> = [
@@ -400,6 +441,7 @@ export function ensureHospitalCmPeriodEvidenceSchema(db: HospitalCmPeriodEvidenc
   db.exec(`
     DROP TRIGGER IF EXISTS trg_hcm_manifests_sequence_guard;
     DROP TRIGGER IF EXISTS trg_hcm_scope_snapshots_sequence_guard;
+    DROP TRIGGER IF EXISTS trg_hcm_close_events_sequence_guard;
     CREATE TRIGGER trg_hcm_manifests_sequence_guard
       BEFORE INSERT ON hospital_cm_source_batch_manifests
       WHEN NEW.version_no <> COALESCE((
@@ -424,6 +466,14 @@ export function ensureHospitalCmPeriodEvidenceSchema(db: HospitalCmPeriodEvidenc
              WHERE service_month = NEW.service_month
            ), 1)
       BEGIN SELECT RAISE(ABORT, 'PERIOD_EVIDENCE_SCOPE_SEQUENCE_INVALID'); END;
+    CREATE TRIGGER trg_hcm_close_events_sequence_guard
+      BEFORE INSERT ON hospital_cm_close_revision_events
+      WHEN NEW.revision <> COALESCE((
+             SELECT MAX(revision) + 1
+             FROM hospital_cm_close_revision_events
+             WHERE partner_id = NEW.partner_id AND service_month = NEW.service_month
+           ), 1)
+      BEGIN SELECT RAISE(ABORT, 'PERIOD_EVIDENCE_CLOSE_SEQUENCE_INVALID'); END;
   `)
 
   // 行内容哈希列集漂移:未来给 reconcile_hospital_months 加列而不同步 RECONCILE_ROW_HASH_COLUMNS,
@@ -532,13 +582,17 @@ export function computeSourceBatchFacts(db: HospitalCmPeriodEvidenceDb, sourceKi
   `).all(batchRef) as Array<Record<string, unknown>>
   const serviceMonths = new Set<string>()
   const partnerIds = new Set<string>()
+  let hasUnattributedRow = false
   const normalizedRows = rows.map((row) => {
+    requireText(row.id, 'MANIFEST_SOURCE_ROW_ID_INVALID', '源行 id', 200)
     const month = row.service_month
-    // 月归属采集只做无歧义补零归一('2026-5'→'2026-05',#168 同精神);
-    // 归不进合法 YYYY-MM 的脏值原样保留——它进不了任何合法月的集合,行为等同无归属。
-    if (typeof month === 'string' && month) {
-      const padded = month.slice(0, 7).replace(/^(\d{4})-(\d)$/, '$1-0$2')
-      serviceMonths.add(SERVICE_MONTH_RE.test(padded) ? padded : month.slice(0, 7))
+    // 任一行无法无歧义归月时，整批按「无月归属」处理并全局失效；否则混合脏行会在所有合法月隐形。
+    if (typeof month === 'string' && /^\d{4}-\d{1,2}$/.test(month.trim())) {
+      const padded = month.trim().replace(/^(\d{4})-(\d)$/, '$1-0$2')
+      if (SERVICE_MONTH_RE.test(padded)) serviceMonths.add(padded)
+      else hasUnattributedRow = true
+    } else {
+      hasUnattributedRow = true
     }
     const partner = row.partner_id
     if (typeof partner === 'string' && partner) partnerIds.add(partner)
@@ -547,12 +601,12 @@ export function computeSourceBatchFacts(db: HospitalCmPeriodEvidenceDb, sourceKi
   return {
     rowsSha256: sha256({ sourceKind, batchRef, columns, rows: normalizedRows }),
     rowCount: rows.length,
-    serviceMonths: [...serviceMonths].sort(),
+    serviceMonths: hasUnattributedRow ? [] : [...serviceMonths].sort(),
     partnerIds: [...partnerIds].sort(),
   }
 }
 
-const MANIFEST_INPUT_KEYS = ['sourceKind', 'batchRef', 'actor', 'reason', 'externalSourceRef', 'externalSourceHash', 'now'] as const
+const MANIFEST_INPUT_KEYS = ['sourceKind', 'batchRef', 'actor', 'reason', 'externalSourceRef', 'externalSourceHash'] as const
 
 export function registerSourceBatchManifest(
   db: HospitalCmPeriodEvidenceDb,
@@ -563,7 +617,6 @@ export function registerSourceBatchManifest(
     reason: string
     externalSourceRef?: string | null
     externalSourceHash?: string | null
-    now?: string
   },
 ): SourceBatchManifest {
   rejectUnsupportedKeys(input as Record<string, unknown>, MANIFEST_INPUT_KEYS)
@@ -580,7 +633,7 @@ export function registerSourceBatchManifest(
     throw new HospitalCmPeriodEvidenceError('MANIFEST_EXTERNAL_EVIDENCE_UNPAIRED', 400, 'externalSourceRef 与 externalSourceHash 必须成对出现(操作者声明,机器未核验)')
   }
   const externalSourceRef = hasRef
-    ? requireText(input.externalSourceRef, 'MANIFEST_EXTERNAL_REF_INVALID', 'externalSourceRef(使用脱敏引用,不落原始文件名/路径)', 200)
+    ? requireOpaqueReference(input.externalSourceRef, ['sanitized'], 'MANIFEST_EXTERNAL_REF_INVALID', 'externalSourceRef', 200)
     : null
   const externalSourceHash = hasHash
     ? (() => {
@@ -589,7 +642,7 @@ export function registerSourceBatchManifest(
         return value.toLowerCase()
       })()
     : null
-  const recordedAt = nowIso(input.now)
+  const recordedAt = nowIso()
 
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -701,7 +754,7 @@ export function readCurrentSourceBatchManifest(
 // month scope snapshot(#182 共用合同)
 // ---------------------------------------------------------------------------
 
-const SCOPE_INPUT_KEYS = ['serviceMonth', 'accounts', 'rosterSourceRef', 'rosterSourceHash', 'status', 'actor', 'reason', 'now'] as const
+const SCOPE_INPUT_KEYS = ['serviceMonth', 'accounts', 'rosterSourceRef', 'rosterSourceHash', 'status', 'actor', 'reason'] as const
 
 /**
  * 登记月度账户范围快照。合同(与 #182 D2 共用,双方不得各建范围模型):
@@ -720,7 +773,6 @@ export function saveMonthScopeSnapshot(
     status: Exclude<MonthScopeStatus, 'withdrawn'>
     actor: PeriodEvidenceActor
     reason: string
-    now?: string
   },
 ): MonthScopeSnapshot {
   rejectUnsupportedKeys(input as Record<string, unknown>, SCOPE_INPUT_KEYS)
@@ -735,39 +787,54 @@ export function saveMonthScopeSnapshot(
   if (accounts.length === 0) {
     throw new HospitalCmPeriodEvidenceError('SCOPE_ACCOUNTS_REQUIRED', 400, 'accounts 不能为空(无名册月份不登记,读侧按缺失 fail-closed)')
   }
-  const rosterSourceRef = requireText(input.rosterSourceRef, 'SCOPE_ROSTER_REF_INVALID', 'rosterSourceRef', 200)
+  const rosterSourceRef = requireOpaqueReference(input.rosterSourceRef, ['roster', 'manifest'], 'SCOPE_ROSTER_REF_INVALID', 'rosterSourceRef', 200)
   const rosterSourceHash = String(input.rosterSourceHash ?? '').trim().toLowerCase()
   if (!SHA256_RE.test(rosterSourceHash)) {
     throw new HospitalCmPeriodEvidenceError('SCOPE_ROSTER_HASH_INVALID', 400, 'rosterSourceHash 必须是 64 位十六进制(版本化名册内容 hash)')
   }
   const actor = normalizeActor(input.actor)
   const reason = requireText(input.reason, 'SCOPE_REASON_INVALID', 'reason', 300)
-  return insertScopeVersion(db, { serviceMonth, accounts, rosterSourceRef, rosterSourceHash, status: input.status, actor, reason, recordedAt: nowIso(input.now) })
+  return insertScopeVersion(db, { serviceMonth, accounts, rosterSourceRef, rosterSourceHash, status: input.status, actor, reason, recordedAt: nowIso() })
 }
 
 /** 撤回月度范围(名册源作废等):落一个 status=withdrawn 的新版本(accounts 复制当前视图留证),读侧一律 fail-closed。 */
 export function withdrawMonthScopeSnapshot(
   db: HospitalCmPeriodEvidenceDb,
-  input: { serviceMonth: string; actor: PeriodEvidenceActor; reason: string; now?: string },
+  input: { serviceMonth: string; expectedEventNumber: number; actor: PeriodEvidenceActor; reason: string },
 ): MonthScopeSnapshot {
-  rejectUnsupportedKeys(input as Record<string, unknown>, ['serviceMonth', 'actor', 'reason', 'now'])
+  rejectUnsupportedKeys(input as Record<string, unknown>, ['serviceMonth', 'expectedEventNumber', 'actor', 'reason'])
   const serviceMonth = normalizeServiceMonth(input.serviceMonth)
+  if (typeof input.expectedEventNumber !== 'number' || !Number.isSafeInteger(input.expectedEventNumber) || input.expectedEventNumber < 1) {
+    throw new HospitalCmPeriodEvidenceError('SCOPE_EXPECTED_EVENT_INVALID', 400, 'expectedEventNumber 必须是正整数')
+  }
+  const expectedEventNumber = input.expectedEventNumber
   const actor = normalizeActor(input.actor)
   const reason = requireText(input.reason, 'SCOPE_REASON_INVALID', 'reason', 300)
-  const current = readCurrentMonthScope(db, serviceMonth)
-  if (current == null) {
-    throw new HospitalCmPeriodEvidenceError('SCOPE_SNAPSHOT_MISSING', 404, '该月尚无范围快照,无需撤回(缺失本身就是 fail-closed)')
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const current = readCurrentMonthScope(db, serviceMonth)
+    if (current == null) {
+      throw new HospitalCmPeriodEvidenceError('SCOPE_SNAPSHOT_MISSING', 404, '该月尚无范围快照,无需撤回(缺失本身就是 fail-closed)')
+    }
+    if (current.eventNumber !== expectedEventNumber) {
+      throw new HospitalCmPeriodEvidenceError('SCOPE_SNAPSHOT_CONFLICT', 409, '范围快照已更新，本次撤回未落库；请刷新后重试')
+    }
+    const saved = insertScopeVersionLocked(db, {
+      serviceMonth,
+      accounts: current.accounts,
+      rosterSourceRef: current.rosterSourceRef,
+      rosterSourceHash: current.rosterSourceHash,
+      status: 'withdrawn',
+      actor,
+      reason,
+      recordedAt: nowIso(),
+    })
+    db.exec('COMMIT')
+    return saved
+  } catch (cause) {
+    rollbackQuietly(db)
+    throw cause
   }
-  return insertScopeVersion(db, {
-    serviceMonth,
-    accounts: current.accounts,
-    rosterSourceRef: current.rosterSourceRef,
-    rosterSourceHash: current.rosterSourceHash,
-    status: 'withdrawn',
-    actor,
-    reason,
-    recordedAt: nowIso(input.now),
-  })
 }
 
 function insertScopeVersion(
@@ -785,50 +852,60 @@ function insertScopeVersion(
 ): MonthScopeSnapshot {
   db.exec('BEGIN IMMEDIATE')
   try {
-    const current = db.prepare(`
-      SELECT version_no AS versionNo FROM hospital_cm_month_scope_snapshots
-      WHERE service_month = ?
-      ORDER BY version_no DESC
-      LIMIT 1
-    `).get(input.serviceMonth) as { versionNo: number } | undefined
-    const versionNo = (current?.versionNo ?? 0) + 1
-    const id = randomUUID()
-    const scopeHash = sha256({ serviceMonth: input.serviceMonth, accounts: input.accounts, rosterSourceHash: input.rosterSourceHash })
-    db.prepare(`
-      INSERT INTO hospital_cm_month_scope_snapshots
-        (id, service_month, version_no, status, roster_source_ref, roster_source_hash, accounts_json, scope_hash,
-         recorded_by_user_id, recorded_by_username, reason, recorded_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id, input.serviceMonth, versionNo, input.status, input.rosterSourceRef, input.rosterSourceHash,
-      JSON.stringify(input.accounts), scopeHash, input.actor.userId, input.actor.username, input.reason, input.recordedAt,
-    )
-    writeAuditLog(db, 'hospital_cm_period_evidence', 'scope_snapshot_save', id, {
-      serviceMonth: input.serviceMonth,
-      versionNo,
-      status: input.status,
-      accountCount: input.accounts.length,
-      scopeHash,
-    }, input.actor.username)
+    const saved = insertScopeVersionLocked(db, input)
     db.exec('COMMIT')
+    return saved
   } catch (cause) {
     rollbackQuietly(db)
     throw cause
   }
-  const saved = readCurrentMonthScope(db, input.serviceMonth)
+}
+
+/** 调用方必须已持 BEGIN IMMEDIATE；按本次新 id 在提交前读回，禁止并发后继版本冒充本次返回值。 */
+function insertScopeVersionLocked(
+  db: HospitalCmPeriodEvidenceDb,
+  input: {
+    serviceMonth: string
+    accounts: string[]
+    rosterSourceRef: string
+    rosterSourceHash: string
+    status: MonthScopeStatus
+    actor: PeriodEvidenceActor
+    reason: string
+    recordedAt: string
+  },
+): MonthScopeSnapshot {
+  const current = db.prepare(`
+    SELECT version_no AS versionNo FROM hospital_cm_month_scope_snapshots
+    WHERE service_month = ?
+    ORDER BY version_no DESC
+    LIMIT 1
+  `).get(input.serviceMonth) as { versionNo: number } | undefined
+  const versionNo = (current?.versionNo ?? 0) + 1
+  const id = randomUUID()
+  const scopeHash = sha256({ serviceMonth: input.serviceMonth, accounts: input.accounts, rosterSourceHash: input.rosterSourceHash })
+  db.prepare(`
+    INSERT INTO hospital_cm_month_scope_snapshots
+      (id, service_month, version_no, status, roster_source_ref, roster_source_hash, accounts_json, scope_hash,
+       recorded_by_user_id, recorded_by_username, reason, recorded_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id, input.serviceMonth, versionNo, input.status, input.rosterSourceRef, input.rosterSourceHash,
+    JSON.stringify(input.accounts), scopeHash, input.actor.userId, input.actor.username, input.reason, input.recordedAt,
+  )
+  writeAuditLog(db, 'hospital_cm_period_evidence', 'scope_snapshot_save', id, {
+    serviceMonth: input.serviceMonth,
+    versionNo,
+    status: input.status,
+    accountCount: input.accounts.length,
+    scopeHash,
+  }, input.actor.username)
+  const saved = readMonthScopeById(db, id)
   if (saved == null) throw new HospitalCmPeriodEvidenceError('SCOPE_READBACK_FAILED', 500, '范围快照落库后读回失败')
   return saved
 }
 
-export function readCurrentMonthScope(db: HospitalCmPeriodEvidenceDb, serviceMonth: string): MonthScopeSnapshot | null {
-  const month = normalizeServiceMonth(serviceMonth)
-  const row = db.prepare(`
-    SELECT * FROM hospital_cm_month_scope_snapshots
-    WHERE service_month = ?
-    ORDER BY version_no DESC
-    LIMIT 1
-  `).get(month) as Record<string, unknown> | undefined
-  if (row == null) return null
+function monthScopeFromRow(row: Record<string, unknown>): MonthScopeSnapshot {
   return {
     id: String(row.id),
     eventNumber: Number(row.event_number),
@@ -844,6 +921,23 @@ export function readCurrentMonthScope(db: HospitalCmPeriodEvidenceDb, serviceMon
     reason: String(row.reason),
     recordedAt: String(row.recorded_at),
   }
+}
+
+function readMonthScopeById(db: HospitalCmPeriodEvidenceDb, id: string): MonthScopeSnapshot | null {
+  const row = db.prepare('SELECT * FROM hospital_cm_month_scope_snapshots WHERE id = ?').get(id) as Record<string, unknown> | undefined
+  return row == null ? null : monthScopeFromRow(row)
+}
+
+export function readCurrentMonthScope(db: HospitalCmPeriodEvidenceDb, serviceMonth: string): MonthScopeSnapshot | null {
+  const month = normalizeServiceMonth(serviceMonth)
+  const row = db.prepare(`
+    SELECT * FROM hospital_cm_month_scope_snapshots
+    WHERE service_month = ?
+    ORDER BY version_no DESC
+    LIMIT 1
+  `).get(month) as Record<string, unknown> | undefined
+  if (row == null) return null
+  return monthScopeFromRow(row)
 }
 
 // ---------------------------------------------------------------------------
@@ -1047,44 +1141,105 @@ export interface PeriodValidationVerdict {
   invalidationCodes: string[]
 }
 
+const EVALUATION_SAVEPOINT = 'hcm_period_evidence_evaluate'
+
+function readDataVersion(db: HospitalCmPeriodEvidenceDb): number {
+  const row = db.prepare('PRAGMA data_version').get() as { data_version?: unknown } | undefined
+  const value = Number(row?.data_version)
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error('EVIDENCE_DATA_VERSION_UNAVAILABLE')
+  return value
+}
+
+/** ROLLBACK TO 不弹出 savepoint；必须随后 RELEASE。这里绝不 whole ROLLBACK，避免杀掉调用方外层事务。 */
+function rollbackEvaluationSavepointQuietly(db: HospitalCmPeriodEvidenceDb): void {
+  try { db.exec(`ROLLBACK TO SAVEPOINT ${EVALUATION_SAVEPOINT}`) } catch { /* savepoint may already be gone */ }
+  try { db.exec(`RELEASE SAVEPOINT ${EVALUATION_SAVEPOINT}`) } catch { /* savepoint may already be gone */ }
+}
+
 /**
  * 读侧失效判定:证据永不删除,逐维现算比对。任一维度失配 → run 失效(fail-closed)。
+ * `current=true` 只证明调用方传入 run 所冻结的五维指纹仍与同一数据库快照一致；它不证明
+ * run 来自受信写入链，也不校验 overall_status / 固定完整 check 集。C3 必须只从服务器受控写入器
+ * 产生并读取持久化 run，并在消费 `current` 前独立校验 passed 与检查集完整性。
  * 固定查询数,与院数/月数无关(查询预算测试锁定)。
  */
 export function evaluatePeriodValidationRun(db: HospitalCmPeriodEvidenceDb, run: PeriodValidationRunRow): PeriodValidationVerdict {
   const codes: string[] = []
-  const scope = readCurrentMonthScope(db, run.serviceMonth)
-  if (scope == null) {
-    codes.push('SCOPE_SNAPSHOT_MISSING')
-  } else {
-    if (scope.status !== 'complete') codes.push('SCOPE_SNAPSHOT_NOT_COMPLETE')
-    if (scope.eventNumber !== run.scopeSnapshotEventNumber || scope.scopeHash !== run.scopeHash) {
-      // 严格失效:绑具体版本(event_number),内容相同的重发同样使旧证据失效(宁严勿宽)
-      codes.push('SCOPE_SNAPSHOT_CHANGED')
-    }
-  }
-  const evaluationAccounts = scope?.accounts ?? []
-  const close = currentCloseRevisionState(db, run.serviceMonth, evaluationAccounts)
-  if (close.schemaDrift) codes.push('RECONCILE_SCHEMA_DRIFT')
-  if (close.missingCloseEventPartnerIds.length > 0) codes.push('CLOSE_REVISION_MISSING')
-  if (close.fingerprint !== run.closeRevisionFingerprint) codes.push('CLOSE_REVISION_CHANGED')
+  let dataVersionBefore: number
   try {
-    if (cmSourceSubsetFingerprint(db) !== run.sourceStateFingerprint) codes.push('SOURCE_STATE_CHANGED')
+    // 顶层调用:前后 data_version 检出评估期间其他连接提交；嵌套在外层事务时遵循调用方既有快照语义。
+    dataVersionBefore = readDataVersion(db)
+    db.exec(`SAVEPOINT ${EVALUATION_SAVEPOINT}`)
   } catch {
-    codes.push('SOURCE_STATE_UNAVAILABLE')
+    return { current: false, invalidationCodes: ['EVIDENCE_SNAPSHOT_UNAVAILABLE'] }
   }
-  if (run.profileRecipeVersion !== HOSPITAL_CM_PROFILE_RECIPE_VERSION) {
-    // 配方升级与"口径真变了"分开报告,不叠报 PROFILE_CHANGED(两种失效语义不可混淆)
-    codes.push('PROFILE_RECIPE_UPGRADED')
-  } else {
+
+  try {
+    let scope: MonthScopeSnapshot | null = null
     try {
-      if (computePeriodProfileFingerprint(db, run.serviceMonth) !== run.profileFingerprint) codes.push('PROFILE_CHANGED')
+      scope = readCurrentMonthScope(db, run.serviceMonth)
+      if (scope == null) {
+        codes.push('SCOPE_SNAPSHOT_MISSING')
+      } else {
+        if (scope.status !== 'complete') codes.push('SCOPE_SNAPSHOT_NOT_COMPLETE')
+        if (scope.eventNumber !== run.scopeSnapshotEventNumber || scope.scopeHash !== run.scopeHash) {
+          // 严格失效:绑具体版本(event_number),内容相同的重发同样使旧证据失效(宁严勿宽)
+          codes.push('SCOPE_SNAPSHOT_CHANGED')
+        }
+      }
     } catch {
-      codes.push('PROFILE_UNAVAILABLE')
+      codes.push('SCOPE_STATE_UNAVAILABLE')
     }
+
+    const evaluationAccounts = scope?.accounts ?? []
+    try {
+      const close = currentCloseRevisionState(db, run.serviceMonth, evaluationAccounts)
+      if (close.schemaDrift) codes.push('RECONCILE_SCHEMA_DRIFT')
+      if (close.missingCloseEventPartnerIds.length > 0) codes.push('CLOSE_REVISION_MISSING')
+      if (close.fingerprint !== run.closeRevisionFingerprint) codes.push('CLOSE_REVISION_CHANGED')
+    } catch {
+      codes.push('CLOSE_STATE_UNAVAILABLE')
+    }
+    try {
+      if (cmSourceSubsetFingerprint(db) !== run.sourceStateFingerprint) codes.push('SOURCE_STATE_CHANGED')
+    } catch {
+      codes.push('SOURCE_STATE_UNAVAILABLE')
+    }
+    if (run.profileRecipeVersion !== HOSPITAL_CM_PROFILE_RECIPE_VERSION) {
+      // 配方升级与"口径真变了"分开报告,不叠报 PROFILE_CHANGED(两种失效语义不可混淆)
+      codes.push('PROFILE_RECIPE_UPGRADED')
+    } else {
+      try {
+        if (computePeriodProfileFingerprint(db, run.serviceMonth) !== run.profileFingerprint) codes.push('PROFILE_CHANGED')
+      } catch {
+        codes.push('PROFILE_UNAVAILABLE')
+      }
+    }
+    try {
+      if (manifestSetFingerprint(db, run.serviceMonth) !== run.manifestSetFingerprint) codes.push('MANIFEST_SET_CHANGED')
+    } catch {
+      codes.push('MANIFEST_SET_UNAVAILABLE')
+    }
+  } catch {
+    codes.push('EVIDENCE_EVALUATION_UNAVAILABLE')
+    rollbackEvaluationSavepointQuietly(db)
+    return { current: false, invalidationCodes: [...new Set(codes)] }
   }
-  if (manifestSetFingerprint(db, run.serviceMonth) !== run.manifestSetFingerprint) codes.push('MANIFEST_SET_CHANGED')
-  return { current: codes.length === 0, invalidationCodes: codes }
+
+  try {
+    db.exec(`RELEASE SAVEPOINT ${EVALUATION_SAVEPOINT}`)
+  } catch {
+    rollbackEvaluationSavepointQuietly(db)
+    codes.push('EVIDENCE_SNAPSHOT_UNAVAILABLE')
+    return { current: false, invalidationCodes: [...new Set(codes)] }
+  }
+  try {
+    if (readDataVersion(db) !== dataVersionBefore) codes.push('EVIDENCE_CHANGED_DURING_EVALUATION')
+  } catch {
+    codes.push('EVIDENCE_SNAPSHOT_UNAVAILABLE')
+  }
+  const invalidationCodes = [...new Set(codes)]
+  return { current: invalidationCodes.length === 0, invalidationCodes }
 }
 
 export interface PeriodCandidate {

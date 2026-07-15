@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   HOSPITAL_CM_PROFILE_RECIPE_VERSION,
   HospitalCmPeriodEvidenceError,
@@ -26,8 +29,8 @@ const ACTOR = { userId: 'U-EVIDENCE', username: 'evidence-owner' }
 const HEX64 = 'a'.repeat(64)
 
 /** C1 隔离库:10 张 A 源表(A 的 revision 触发器要求在场)+ reconcile_hospital_months + abc_audit_logs。 */
-function createDb(): DatabaseSync {
-  const db = new DatabaseSync(':memory:')
+function createDb(path = ':memory:'): DatabaseSync {
+  const db = new DatabaseSync(path)
   db.exec(`
     CREATE TABLE materials (
       id TEXT PRIMARY KEY, code TEXT NOT NULL, name TEXT NOT NULL, unit TEXT NOT NULL,
@@ -52,6 +55,9 @@ function createDb(): DatabaseSync {
     CREATE TABLE lis_cases (
       id TEXT PRIMARY KEY, case_no TEXT NOT NULL, partner_id TEXT, project_id TEXT, project_name TEXT,
       operator TEXT, operate_time TEXT, status TEXT NOT NULL DEFAULT 'normal', import_batch TEXT,
+      he_slide_count INTEGER NOT NULL DEFAULT 0, block_count INTEGER NOT NULL DEFAULT 0,
+      ihc_count INTEGER NOT NULL DEFAULT 0, special_stain_count INTEGER NOT NULL DEFAULT 0,
+      eber_count INTEGER NOT NULL DEFAULT 0, pdl1_count INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE lis_case_markers (
@@ -97,6 +103,15 @@ function createDb(): DatabaseSync {
   ensureHospitalCmReadinessSchema(db)
   ensureHospitalCmPeriodEvidenceSchema(db)
   return db
+}
+
+function seedLisBatch(db: DatabaseSync, batchRef: string, id = `${batchRef}-ROW-1`) {
+  db.prepare(`
+    INSERT INTO lis_cases
+      (id, case_no, partner_id, project_id, project_name, operator, operate_time, status, import_batch,
+       he_slide_count, block_count, ihc_count, special_stain_count, eber_count, pdl1_count)
+    VALUES (?, 'LIS-CASE-1', 'P-1', 'PRJ-1', '病理项目', 'tester', '2026-05-09', 'normal', ?, 1, 2, 3, 4, 5, 6)
+  `).run(id, batchRef)
 }
 
 function seedRevenueBatch(db: DatabaseSync, batchRef: string, opts: { month?: string; partnerId?: string; rows?: number } = {}) {
@@ -153,7 +168,6 @@ function saveScope(db: DatabaseSync, month = '2026-05', accounts: string[] = ['P
     status,
     actor: ACTOR,
     reason: '测试登记',
-    now: NOW,
   })
 }
 
@@ -209,7 +223,7 @@ describe('C1 · append-only 硬化(每表 × 每 UNIQUE 键 REPLACE 探针)', ()
   it('五张证据表 UPDATE/DELETE 全拒', () => {
     const db = createDb()
     seedRevenueBatch(db, 'STMT-1')
-    registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '登记', now: NOW })
+    registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '登记' })
     saveScope(db)
     insertReconcileRow(db, 'RHM-1', 'P-1', '2026-05')
     closeMonth(db, 'RHM-1')
@@ -239,7 +253,7 @@ describe('C1 · append-only 硬化(每表 × 每 UNIQUE 键 REPLACE 探针)', ()
   it('INSERT OR REPLACE 经每一个 UNIQUE 键都被 duplicate guard 拒绝(漏键=静默改写)', () => {
     const db = createDb()
     seedRevenueBatch(db, 'STMT-1')
-    const manifest = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '登记', now: NOW })
+    const manifest = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '登记' })
     const scope = saveScope(db)
     insertReconcileRow(db, 'RHM-1', 'P-1', '2026-05')
     closeMonth(db, 'RHM-1')
@@ -263,9 +277,6 @@ describe('C1 · append-only 硬化(每表 × 每 UNIQUE 键 REPLACE 探针)', ()
       ['scope.natural', `INSERT OR REPLACE INTO hospital_cm_month_scope_snapshots
         (id, service_month, version_no, status, roster_source_ref, roster_source_hash, accounts_json, scope_hash, recorded_by_user_id, recorded_by_username, reason, recorded_at)
         VALUES ('S-NEW', '2026-05', 1, 'complete', 'r', ?, '["P-9"]', ?, 'u', 'n', 'r', ?)`, [HEX64, HEX64, NOW]],
-      ['close_events.natural', `INSERT OR REPLACE INTO hospital_cm_close_revision_events
-        (partner_id, service_month, action, revision, row_id, status_snapshot, closed_at, closed_by, occurred_at)
-        VALUES ('P-1', '2026-05', 'close', 1, 'RHM-1', '已关账', NULL, 'attacker', ?)`, [NOW]],
       ['runs.id', `INSERT OR REPLACE INTO hospital_cm_period_validation_runs
         (id, service_month, scope_hash, scope_snapshot_event_number, close_revision_fingerprint, source_state_fingerprint, profile_fingerprint, manifest_set_fingerprint, profile_recipe_version, overall_status, started_at, completed_at, triggered_by_user_id, triggered_by_username, trigger_reason_code)
         VALUES (?, '2026-05', ?, 1, ?, ?, ?, ?, 'v', 'passed', ?, ?, 'u', 'n', 'PERIOD_REVIEW')`, [run.id, HEX64, HEX64, HEX64, HEX64, HEX64, NOW, NOW]],
@@ -280,15 +291,26 @@ describe('C1 · append-only 硬化(每表 × 每 UNIQUE 键 REPLACE 探针)', ()
       ['scope.event_number', `INSERT OR REPLACE INTO hospital_cm_month_scope_snapshots
         (event_number, id, service_month, version_no, status, roster_source_ref, roster_source_hash, accounts_json, scope_hash, recorded_by_user_id, recorded_by_username, reason, recorded_at)
         VALUES (?, 'S-EVIL', '2026-09', 1, 'complete', 'r', ?, '["P-9"]', ?, 'u', 'n', 'r', ?)`, [scope.eventNumber, HEX64, HEX64, NOW]],
-      ['close_events.event_number', `INSERT OR REPLACE INTO hospital_cm_close_revision_events
-        (event_number, partner_id, service_month, action, revision, row_id, status_snapshot, closed_at, closed_by, occurred_at)
-        VALUES ((SELECT MIN(event_number) FROM hospital_cm_close_revision_events), 'P-EVIL', '2026-09', 'close', 7, 'X', '已关账', NULL, 'attacker', ?)`, [NOW]],
       ['runs.run_number', `INSERT OR REPLACE INTO hospital_cm_period_validation_runs
         (run_number, id, service_month, scope_hash, scope_snapshot_event_number, close_revision_fingerprint, source_state_fingerprint, profile_fingerprint, manifest_set_fingerprint, profile_recipe_version, overall_status, started_at, completed_at, triggered_by_user_id, triggered_by_username, trigger_reason_code)
         VALUES ((SELECT MIN(run_number) FROM hospital_cm_period_validation_runs), 'RUN-EVIL', '2026-09', ?, 1, ?, ?, ?, ?, 'v', 'passed', ?, ?, 'u', 'n', 'PERIOD_REVIEW')`, [HEX64, HEX64, HEX64, HEX64, HEX64, NOW, NOW]],
     ]
     for (const [label, sql, params] of replaceProbes) {
       expect(() => db.prepare(sql).run(...(params as never[])), label).toThrow(/APPEND_ONLY|EVIDENCE|SEQUENCE/)
+    }
+    // 单独移除 revision 链序守卫，证明 close 的两个 UNIQUE 键确实由 duplicate guard 拦截，
+    // 避免测试仅因 sequence trigger 先报错而掩盖 duplicate guard 漏键。
+    db.exec('DROP TRIGGER trg_hcm_close_events_sequence_guard')
+    const closeReplaceProbes: Array<[string, string, unknown[]]> = [
+      ['close_events.natural', `INSERT OR REPLACE INTO hospital_cm_close_revision_events
+        (partner_id, service_month, action, revision, row_id, status_snapshot, closed_at, closed_by, occurred_at)
+        VALUES ('P-1', '2026-05', 'close', 1, 'RHM-1', '已关账', NULL, 'attacker', ?)`, [NOW]],
+      ['close_events.event_number', `INSERT OR REPLACE INTO hospital_cm_close_revision_events
+        (event_number, partner_id, service_month, action, revision, row_id, status_snapshot, closed_at, closed_by, occurred_at)
+        VALUES ((SELECT MIN(event_number) FROM hospital_cm_close_revision_events), 'P-EVIL', '2026-09', 'close', 1, 'X', '已关账', NULL, 'attacker', ?)`, [NOW]],
+    ]
+    for (const [label, sql, params] of closeReplaceProbes) {
+      expect(() => db.prepare(sql).run(...(params as never[])), label).toThrow(/PERIOD_EVIDENCE_CLOSE_EVENT_APPEND_ONLY/)
     }
     // checks 表是 WITHOUT ROWID:隐藏 rowid 不存在,面板实证过的 rowid-REPLACE 改写向量结构性消失
     expect(() => db.prepare(`INSERT OR REPLACE INTO hospital_cm_period_validation_checks
@@ -301,7 +323,7 @@ describe('C1 · append-only 硬化(每表 × 每 UNIQUE 键 REPLACE 探针)', ()
   it('版本链序守卫:裸 INSERT 越号 / v1 带 supersedes / 伪 supersedes 一律 DB 级拒绝', () => {
     const db = createDb()
     seedRevenueBatch(db, 'STMT-1')
-    const v1 = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '首登', now: NOW })
+    const v1 = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '首登' })
     saveScope(db)
     // manifests:越号
     expect(() => db.prepare(`INSERT INTO hospital_cm_source_batch_manifests
@@ -326,7 +348,7 @@ describe('C1 · manifest:服务器现算、版本链、外部声明', () => {
   it('rows_sha256/统计由服务器对已落库行现算;结论/哈希没有入参位', () => {
     const db = createDb()
     seedRevenueBatch(db, 'STMT-1', { rows: 3, month: '2026-05', partnerId: 'P-1' })
-    const manifest = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '导入后登记', now: NOW })
+    const manifest = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '导入后登记' })
     const facts = computeSourceBatchFacts(db, 'case_revenue', 'STMT-1')
     expect(manifest.rowsSha256).toBe(facts.rowsSha256)
     expect(manifest.rowCount).toBe(3)
@@ -336,27 +358,57 @@ describe('C1 · manifest:服务器现算、版本链、外部声明', () => {
     // 伪造字段直接拒绝(合同:调用者不得提交结论字段)
     expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: 'x', rowsSha256: HEX64 } as never), 'PERIOD_EVIDENCE_UNSUPPORTED_FIELD')
     expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: 'x', passed: true } as never), 'PERIOD_EVIDENCE_UNSUPPORTED_FIELD')
+    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: 'x', now: NOW } as never), 'PERIOD_EVIDENCE_UNSUPPORTED_FIELD')
   })
 
   it('0 行 batch 拒;非法 sourceKind 拒;external ref/hash 必须成对且 64hex;actor 拒 unknown;CSV 公式前缀拒', () => {
     const db = createDb()
-    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'NOPE', actor: ACTOR, reason: 'x', now: NOW }), 'MANIFEST_BATCH_NOT_FOUND')
-    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'materials' as never, batchRef: 'B', actor: ACTOR, reason: 'x', now: NOW }), 'MANIFEST_SOURCE_KIND_INVALID')
+    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'NOPE', actor: ACTOR, reason: 'x' }), 'MANIFEST_BATCH_NOT_FOUND')
+    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'materials' as never, batchRef: 'B', actor: ACTOR, reason: 'x' }), 'MANIFEST_SOURCE_KIND_INVALID')
     seedRevenueBatch(db, 'STMT-1')
-    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: 'x', externalSourceRef: 'file://x', now: NOW }), 'MANIFEST_EXTERNAL_EVIDENCE_UNPAIRED')
-    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: 'x', externalSourceRef: 'file://x', externalSourceHash: 'zz', now: NOW }), 'MANIFEST_EXTERNAL_HASH_INVALID')
-    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: { userId: 'unknown', username: 'unknown' }, reason: 'x', now: NOW }), 'PERIOD_EVIDENCE_ACTOR_REQUIRED')
+    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: 'x', externalSourceRef: 'file://x' }), 'MANIFEST_EXTERNAL_EVIDENCE_UNPAIRED')
+    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: 'x', externalSourceRef: 'sanitized://test/ref', externalSourceHash: 'zz' }), 'MANIFEST_EXTERNAL_HASH_INVALID')
+    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: { userId: 'unknown', username: 'unknown' }, reason: 'x' }), 'PERIOD_EVIDENCE_ACTOR_REQUIRED')
     // 公式前缀与其余文本拒因走同一字段稳定码(guardrails:稳定错误码契约)
-    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '=cmd()', now: NOW }), 'MANIFEST_REASON_INVALID')
+    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '=cmd()' }), 'MANIFEST_REASON_INVALID')
+  })
+
+  it('不可逆证据引用拒绝本地路径、反斜杠、查询和片段，避免文件名或敏感路径落库', () => {
+    const db = createDb()
+    seedRevenueBatch(db, 'STMT-REF')
+    for (const externalSourceRef of ['/tmp/患者名单.csv', 'C:\\patient\\list.csv', 'https://example.test/file?token=secret', 'sanitized://safe/ref#fragment']) {
+      expectCode(() => registerSourceBatchManifest(db, {
+        sourceKind: 'case_revenue', batchRef: 'STMT-REF', actor: ACTOR, reason: '引用校验',
+        externalSourceRef, externalSourceHash: HEX64,
+      }), 'MANIFEST_EXTERNAL_REF_INVALID')
+    }
+    expect(Number((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_source_batch_manifests').get() as { n: number }).n)).toBe(0)
+  })
+
+  it('actor 的长度、控制字符和公式前缀都按稳定码拒绝，且不产生 manifest/audit 半写', () => {
+    const db = createDb()
+    seedRevenueBatch(db, 'STMT-ACTOR')
+    const badActors = [
+      { userId: 'u'.repeat(129), username: 'valid-user' },
+      { userId: 'valid-id', username: 'bad\nuser' },
+      { userId: '=cmd()', username: 'valid-user' },
+    ]
+    for (const actor of badActors) {
+      expectCode(() => registerSourceBatchManifest(db, {
+        sourceKind: 'case_revenue', batchRef: 'STMT-ACTOR', actor, reason: 'actor guard',
+      }), 'PERIOD_EVIDENCE_ACTOR_REQUIRED')
+    }
+    expect(Number((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_source_batch_manifests').get() as { n: number }).n)).toBe(0)
+    expect(Number((db.prepare(`SELECT COUNT(*) AS n FROM abc_audit_logs WHERE module = 'hospital_cm_period_evidence'`).get() as { n: number }).n)).toBe(0)
   })
 
   it('同 batch 重复登记 → 版本链 supersede(旧行不可改,外部声明可在新版本更正)', () => {
     const db = createDb()
     seedRevenueBatch(db, 'STMT-1')
-    const v1 = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '首登', now: NOW })
+    const v1 = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '首登' })
     const v2 = registerSourceBatchManifest(db, {
       sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '更正外部声明',
-      externalSourceRef: 'sanitized://statement/2026-05', externalSourceHash: 'b'.repeat(64), now: NOW,
+      externalSourceRef: 'sanitized://statement/2026-05', externalSourceHash: 'b'.repeat(64),
     })
     expect(v2.versionNo).toBe(2)
     expect(v2.supersedesManifestId).toBe(v1.id)
@@ -369,12 +421,68 @@ describe('C1 · manifest:服务器现算、版本链、外部声明', () => {
   it('底层行变化后:manifest 現算比对失配(computeSourceBatchFacts),VACUUM/REINDEX 不改变 hash(确定性)', () => {
     const db = createDb()
     seedRevenueBatch(db, 'STMT-1', { rows: 2 })
-    const manifest = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '登记', now: NOW })
+    const manifest = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '登记' })
     db.exec('VACUUM')
     db.exec('REINDEX')
     expect(computeSourceBatchFacts(db, 'case_revenue', 'STMT-1').rowsSha256).toBe(manifest.rowsSha256)
     db.prepare(`UPDATE case_revenue SET net_amount = 999 WHERE import_batch = 'STMT-1' AND id LIKE '%ROW-0'`).run()
     expect(computeSourceBatchFacts(db, 'case_revenue', 'STMT-1').rowsSha256).not.toBe(manifest.rowsSha256)
+  })
+
+  it('LIS 六个原始数量字段逐列进入 rows_sha256；非有限数稳定拒绝而不是与 null 碰撞', () => {
+    const db = createDb()
+    seedLisBatch(db, 'LIS-COUNTS')
+    const quantityColumns = ['he_slide_count', 'block_count', 'ihc_count', 'special_stain_count', 'eber_count', 'pdl1_count'] as const
+    let previous = computeSourceBatchFacts(db, 'lis_cases', 'LIS-COUNTS').rowsSha256
+    for (const column of quantityColumns) {
+      db.prepare(`UPDATE lis_cases SET ${column} = ${column} + 10 WHERE import_batch = 'LIS-COUNTS'`).run()
+      const current = computeSourceBatchFacts(db, 'lis_cases', 'LIS-COUNTS').rowsSha256
+      expect(current, `${column} 变化必须翻行指纹`).not.toBe(previous)
+      previous = current
+    }
+    db.prepare(`UPDATE lis_cases SET block_count = ? WHERE import_batch = 'LIS-COUNTS'`).run(Number.POSITIVE_INFINITY)
+    expectCode(() => computeSourceBatchFacts(db, 'lis_cases', 'LIS-COUNTS'), 'PERIOD_EVIDENCE_NON_FINITE_NUMBER')
+    expectCode(() => registerSourceBatchManifest(db, {
+      sourceKind: 'lis_cases', batchRef: 'LIS-COUNTS', actor: ACTOR, reason: '不得写入非有限数',
+    }), 'PERIOD_EVIDENCE_NON_FINITE_NUMBER')
+    expect(Number((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_source_batch_manifests').get() as { n: number }).n)).toBe(0)
+    expect(Number((db.prepare(`SELECT COUNT(*) AS n FROM abc_audit_logs WHERE module = 'hospital_cm_period_evidence'`).get() as { n: number }).n)).toBe(0)
+
+    const row = { id: 'ROW-TYPED', case_no: 'C-TYPED', partner_id: 'P-1', import_batch: 'B-TYPED' }
+    const hashFor = (lineCount: unknown) => computeSourceBatchFacts({
+      prepare: () => ({ all: () => [{ ...row, line_count: lineCount }] }),
+    } as never, 'case_revenue', 'B-TYPED').rowsSha256
+    expect(hashFor(1n)).not.toBe(hashFor('1'))
+  })
+
+  it('源行 id 为 null/空值时稳定 fail-closed，ORDER BY id 不接受非全序证据', () => {
+    const db = createDb()
+    db.prepare(`INSERT INTO lis_cases (id, case_no, partner_id, import_batch) VALUES (NULL, 'LIS-NULL-ID', 'P-1', 'LIS-BAD-ID')`).run()
+    expectCode(() => computeSourceBatchFacts(db, 'lis_cases', 'LIS-BAD-ID'), 'MANIFEST_SOURCE_ROW_ID_INVALID')
+    db.prepare(`INSERT INTO lis_cases (id, case_no, partner_id, import_batch) VALUES ('   ', 'LIS-BLANK-ID', 'P-1', 'LIS-BLANK-ID-BATCH')`).run()
+    expectCode(() => computeSourceBatchFacts(db, 'lis_cases', 'LIS-BLANK-ID-BATCH'), 'MANIFEST_SOURCE_ROW_ID_INVALID')
+  })
+
+  it('任一行月份缺失或非法时整批转为全局相关；合法多月仍精确归属', () => {
+    const db = createDb()
+    const insert = db.prepare(`
+      INSERT INTO case_revenue (id, case_no, partner_id, service_month, import_batch)
+      VALUES (?, ?, 'P-1', ?, ?)
+    `)
+    insert.run('MIX-1', 'C-MIX-1', '2026-05', 'B-MIX')
+    insert.run('MIX-2', 'C-MIX-2', '2026-99', 'B-MIX')
+    expect(computeSourceBatchFacts(db, 'case_revenue', 'B-MIX').serviceMonths).toEqual([])
+
+    insert.run('MIX-NULL-1', 'C-MIX-NULL-1', '2026-05', 'B-MIX-NULL')
+    insert.run('MIX-NULL-2', 'C-MIX-NULL-2', null, 'B-MIX-NULL')
+    expect(computeSourceBatchFacts(db, 'case_revenue', 'B-MIX-NULL').serviceMonths).toEqual([])
+
+    insert.run('NULL-1', 'C-NULL-1', null, 'B-NULL')
+    expect(computeSourceBatchFacts(db, 'case_revenue', 'B-NULL').serviceMonths).toEqual([])
+
+    insert.run('LEGAL-1', 'C-LEGAL-1', '2026-05', 'B-LEGAL')
+    insert.run('LEGAL-2', 'C-LEGAL-2', '2026-06', 'B-LEGAL')
+    expect(computeSourceBatchFacts(db, 'case_revenue', 'B-LEGAL').serviceMonths).toEqual(['2026-05', '2026-06'])
   })
 
   it('脏 service_month(2026-5)补零归一进月归属;事务失败(NOPE)后同一连接可继续成功写', () => {
@@ -386,8 +494,8 @@ describe('C1 · manifest:服务器现算、版本链、外部声明', () => {
     const facts = computeSourceBatchFacts(db, 'case_revenue', 'STMT-DIRTY')
     expect(facts.serviceMonths).toEqual(['2026-05'])
     // 事务恢复:失败登记(0 行 batch)回滚后,同连接的后续登记必须成功
-    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'NOPE', actor: ACTOR, reason: 'x', now: NOW }), 'MANIFEST_BATCH_NOT_FOUND')
-    const manifest = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-DIRTY', actor: ACTOR, reason: '登记', now: NOW })
+    expectCode(() => registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'NOPE', actor: ACTOR, reason: 'x' }), 'MANIFEST_BATCH_NOT_FOUND')
+    const manifest = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-DIRTY', actor: ACTOR, reason: '登记' })
     expect(manifest.versionNo).toBe(1)
   })
 })
@@ -400,9 +508,9 @@ describe('C1 · 月度范围快照:三态、版本单调、fail-closed', () => {
     const scope = readCurrentMonthScope(db, '2026-05')
     expect(scope?.status).toBe('complete')
     expect(scope?.accounts).toEqual(['P-1', 'P-2'])
-    saveScope(db, '2026-06', ['P-1'], 'incomplete')
+    const incomplete = saveScope(db, '2026-06', ['P-1'], 'incomplete')
     expect(readCurrentMonthScope(db, '2026-06')?.status).toBe('incomplete')
-    const withdrawn = withdrawMonthScopeSnapshot(db, { serviceMonth: '2026-06', actor: ACTOR, reason: '名册源作废', now: NOW })
+    const withdrawn = withdrawMonthScopeSnapshot(db, { serviceMonth: '2026-06', expectedEventNumber: incomplete.eventNumber, actor: ACTOR, reason: '名册源作废' })
     expect(withdrawn.versionNo).toBe(2)
     expect(readCurrentMonthScope(db, '2026-06')?.status).toBe('withdrawn')
   })
@@ -412,12 +520,73 @@ describe('C1 · 月度范围快照:三态、版本单调、fail-closed', () => {
     expectCode(() => saveScope(db, '2026-05', []), 'SCOPE_ACCOUNTS_REQUIRED')
     expectCode(() => saveScope(db, '2026-99'), 'PERIOD_EVIDENCE_SERVICE_MONTH_INVALID')
     expectCode(() => saveScope(db, '2026-5' as never), 'PERIOD_EVIDENCE_SERVICE_MONTH_INVALID')
-    expectCode(() => saveMonthScopeSnapshot(db, { serviceMonth: '2026-05', accounts: ['P-1'], rosterSourceRef: 'r', rosterSourceHash: 'nothex', status: 'complete', actor: ACTOR, reason: 'x', now: NOW }), 'SCOPE_ROSTER_HASH_INVALID')
-    expectCode(() => saveMonthScopeSnapshot(db, { serviceMonth: '2026-05', accounts: ['P-1'], rosterSourceRef: 'r', rosterSourceHash: HEX64, status: 'complete', actor: ACTOR, reason: 'x', scopeHash: HEX64, now: NOW } as never), 'PERIOD_EVIDENCE_UNSUPPORTED_FIELD')
-    const scope = saveMonthScopeSnapshot(db, { serviceMonth: '2026-05', accounts: ['P-2', 'P-1', 'P-2'], rosterSourceRef: 'r', rosterSourceHash: HEX64, status: 'complete', actor: ACTOR, reason: 'x', now: NOW })
+    expectCode(() => saveMonthScopeSnapshot(db, { serviceMonth: '2026-05', accounts: ['P-1'], rosterSourceRef: 'roster://test/v1', rosterSourceHash: 'nothex', status: 'complete', actor: ACTOR, reason: 'x' }), 'SCOPE_ROSTER_HASH_INVALID')
+    expectCode(() => saveMonthScopeSnapshot(db, { serviceMonth: '2026-05', accounts: ['P-1'], rosterSourceRef: 'roster://test/v1', rosterSourceHash: HEX64, status: 'complete', actor: ACTOR, reason: 'x', scopeHash: HEX64 } as never), 'PERIOD_EVIDENCE_UNSUPPORTED_FIELD')
+    expectCode(() => saveMonthScopeSnapshot(db, { serviceMonth: '2026-05', accounts: ['P-1'], rosterSourceRef: 'roster://test/v1', rosterSourceHash: HEX64, status: 'complete', actor: ACTOR, reason: 'x', now: NOW } as never), 'PERIOD_EVIDENCE_UNSUPPORTED_FIELD')
+    expectCode(() => saveMonthScopeSnapshot(db, { serviceMonth: '2026-05', accounts: ['P-1'], rosterSourceRef: 'C:\\患者\\名册.xlsx', rosterSourceHash: HEX64, status: 'complete', actor: ACTOR, reason: 'x' }), 'SCOPE_ROSTER_REF_INVALID')
+    const scope = saveMonthScopeSnapshot(db, { serviceMonth: '2026-05', accounts: ['P-2', 'P-1', 'P-2'], rosterSourceRef: 'roster://test/v1', rosterSourceHash: HEX64, status: 'complete', actor: ACTOR, reason: 'x' })
     expect(scope.accounts).toEqual(['P-1', 'P-2'])
     expect(scope.versionNo).toBe(1)
     expect(saveScope(db, '2026-05').versionNo).toBe(2)
+  })
+
+  it('撤回必须携带当前 event_number；过期快照 CAS 失败且不产生新版本', () => {
+    const db = createDb()
+    const v1 = saveScope(db)
+    const v2 = saveScope(db)
+    expectCode(() => withdrawMonthScopeSnapshot(db, {
+      serviceMonth: '2026-05', actor: ACTOR, reason: '缺少并发令牌',
+    } as never), 'SCOPE_EXPECTED_EVENT_INVALID')
+    for (const invalidEventNumber of ['2', true]) {
+      expectCode(() => withdrawMonthScopeSnapshot(db, {
+        serviceMonth: '2026-05', expectedEventNumber: invalidEventNumber as never, actor: ACTOR, reason: '伪造并发令牌',
+      }), 'SCOPE_EXPECTED_EVENT_INVALID')
+    }
+    expectCode(() => withdrawMonthScopeSnapshot(db, {
+      serviceMonth: '2026-05', expectedEventNumber: v1.eventNumber, actor: ACTOR, reason: '过期撤回',
+    }), 'SCOPE_SNAPSHOT_CONFLICT')
+    expect(readCurrentMonthScope(db, '2026-05')?.eventNumber).toBe(v2.eventNumber)
+    const withdrawn = withdrawMonthScopeSnapshot(db, {
+      serviceMonth: '2026-05', expectedEventNumber: v2.eventNumber, actor: ACTOR, reason: '当前版本撤回',
+    })
+    expect(withdrawn.versionNo).toBe(3)
+    expect(withdrawn.status).toBe('withdrawn')
+  })
+
+  it('scope 保存按新 id 在提交前读回；提交后并发新版本不得冒充本次返回值', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-scope-readback-'))
+    const file = join(dir, 'scope.db')
+    let db: DatabaseSync | null = null
+    let rival: DatabaseSync | null = null
+    try {
+      db = createDb(file)
+      db.exec('PRAGMA journal_mode = WAL')
+      rival = new DatabaseSync(file)
+      let injected = false
+      const racedDb = {
+        prepare: (sql: string) => db!.prepare(sql),
+        exec: (sql: string) => {
+          const result = db!.exec(sql)
+          if (sql === 'COMMIT' && !injected) {
+            injected = true
+            saveScope(rival!, '2026-05', ['P-1', 'P-2'])
+          }
+          return result
+        },
+      }
+      const saved = saveMonthScopeSnapshot(racedDb as never, {
+        serviceMonth: '2026-05', accounts: ['P-1'], rosterSourceRef: 'roster://v1', rosterSourceHash: HEX64,
+        status: 'complete', actor: ACTOR, reason: '本次保存',
+      })
+      expect(injected).toBe(true)
+      expect(saved.versionNo).toBe(1)
+      expect(saved.accounts).toEqual(['P-1'])
+      expect(readCurrentMonthScope(rival, '2026-05')?.versionNo).toBe(2)
+    } finally {
+      try { rival?.close() } catch { /* already closed */ }
+      try { db?.close() } catch { /* already closed */ }
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 
@@ -458,6 +627,19 @@ describe('C1 · close/reopen revision 触发器矩阵', () => {
       ['close', 1],
       ['delete', 2],
     ])
+  })
+
+  it('close revision 裸写只能连续递增；首事件 reopen@1 仍合法', () => {
+    const db = createDb()
+    const insert = db.prepare(`
+      INSERT INTO hospital_cm_close_revision_events
+        (partner_id, service_month, action, revision, occurred_at)
+      VALUES ('P-SEQ', '2026-05', ?, ?, ?)
+    `)
+    expect(() => insert.run('close', 99, NOW)).toThrow(/PERIOD_EVIDENCE_CLOSE_SEQUENCE_INVALID/)
+    expect(() => insert.run('reopen', 1, NOW)).not.toThrow()
+    expect(() => insert.run('close', 3, NOW)).toThrow(/PERIOD_EVIDENCE_CLOSE_SEQUENCE_INVALID/)
+    expect(() => insert.run('close', 2, NOW)).not.toThrow()
   })
 
   it('legacy 已关账行(触发器前存在,零事件)→ 经 reopen(rev1)→close(rev2) 毕业属预期路径', () => {
@@ -505,7 +687,7 @@ describe('C1 · 指纹与读侧失效判定', () => {
   function preparedScene() {
     const db = createDb()
     seedRevenueBatch(db, 'STMT-1', { month: '2026-05', partnerId: 'P-1' })
-    registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '登记', now: NOW })
+    registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '登记' })
     saveScope(db, '2026-05', ['P-1'])
     insertReconcileRow(db, 'RHM-1', 'P-1', '2026-05')
     closeMonth(db, 'RHM-1')
@@ -519,6 +701,77 @@ describe('C1 · 指纹与读侧失效判定', () => {
     expect(run.id).toBeTruthy()
     expect(verdict.invalidationCodes).toEqual([])
     expect(verdict.current).toBe(true)
+  })
+
+  it('关账金额出现 Infinity 时 close 维度稳定 fail-closed，不得与原 null 哈希碰撞', () => {
+    const db = preparedScene()
+    insertRun(db)
+    db.prepare(`UPDATE reconcile_hospital_months SET confirmed_lab_revenue = ? WHERE id = 'RHM-1'`).run(Number.POSITIVE_INFINITY)
+    const verdict = evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0])
+    expect(verdict.current).toBe(false)
+    expect(verdict.invalidationCodes).toContain('CLOSE_STATE_UNAVAILABLE')
+  })
+
+  it('evaluate 使用同一读快照；读取中另一连接提交新 scope 时返回稳定失效码', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-period-evidence-snapshot-'))
+    const file = join(dir, 'snapshot.db')
+    let db: DatabaseSync | null = null
+    let rival: DatabaseSync | null = null
+    try {
+      db = createDb(file)
+      db.exec('PRAGMA journal_mode = WAL')
+      seedRevenueBatch(db, 'STMT-1', { month: '2026-05', partnerId: 'P-1' })
+      registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '登记' })
+      saveScope(db, '2026-05', ['P-1'])
+      insertReconcileRow(db, 'RHM-1', 'P-1', '2026-05')
+      closeMonth(db, 'RHM-1')
+      insertRun(db)
+      const run = listPeriodValidationRuns(db, '2026-05')[0]
+      rival = new DatabaseSync(file)
+      rival.exec('PRAGMA busy_timeout = 5000')
+
+      let fired = false
+      const racingDb = {
+        prepare(sql: string) {
+          const statement = db!.prepare(sql)
+          if (!sql.includes('FROM hospital_cm_month_scope_snapshots')) return statement
+          return {
+            get: (...args: unknown[]) => {
+              const row = statement.get(...args)
+              if (!fired) {
+                fired = true
+                saveScope(rival!, '2026-05', ['P-1', 'P-2'])
+              }
+              return row
+            },
+            all: (...args: unknown[]) => statement.all(...args),
+            run: (...args: unknown[]) => statement.run(...args),
+          }
+        },
+        exec(sql: string) { return db!.exec(sql) },
+      }
+      const verdict = evaluatePeriodValidationRun(racingDb as never, run)
+      expect(fired).toBe(true)
+      expect(readCurrentMonthScope(db, '2026-05')?.versionNo).toBe(2)
+      expect(verdict.current).toBe(false)
+      expect(verdict.invalidationCodes).toContain('EVIDENCE_CHANGED_DURING_EVALUATION')
+    } finally {
+      try { rival?.close() } catch { /* already closed */ }
+      try { db?.close() } catch { /* already closed */ }
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('evaluate 可嵌套在调用方事务中，结束后不提交也不回滚外层事务', () => {
+    const db = preparedScene()
+    insertRun(db)
+    const run = listPeriodValidationRuns(db, '2026-05')[0]
+    db.exec('BEGIN')
+    const verdict = evaluatePeriodValidationRun(db, run)
+    expect(verdict.current).toBe(true)
+    expect(db.isTransaction).toBe(true)
+    db.exec('ROLLBACK')
+    expect(db.isTransaction).toBe(false)
   })
 
   it('CM 七表子集:改 case_revenue → SOURCE_STATE_CHANGED;改 inventory/batches(库存)→ 不失效', () => {
@@ -543,7 +796,10 @@ describe('C1 · 指纹与读侧失效判定', () => {
     saveScope(db, '2026-05', ['P-1']) // 同内容重发新版本 → 严格失效(宁严勿宽)
     let verdict = evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0])
     expect(verdict.invalidationCodes).toContain('SCOPE_SNAPSHOT_CHANGED')
-    withdrawMonthScopeSnapshot(db, { serviceMonth: '2026-05', actor: ACTOR, reason: '作废', now: NOW })
+    withdrawMonthScopeSnapshot(db, {
+      serviceMonth: '2026-05', expectedEventNumber: readCurrentMonthScope(db, '2026-05')!.eventNumber,
+      actor: ACTOR, reason: '作废',
+    })
     verdict = evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0])
     expect(verdict.invalidationCodes).toContain('SCOPE_SNAPSHOT_NOT_COMPLETE')
     const orphan = { ...listPeriodValidationRuns(db, '2026-05')[0], serviceMonth: '2026-07' }
@@ -613,7 +869,7 @@ describe('C1 · 指纹与读侧失效判定', () => {
     `)
     ensureHospitalCmReadinessSchema(legacy)
     ensureHospitalCmPeriodEvidenceSchema(legacy)
-    saveMonthScopeSnapshot(legacy, { serviceMonth: '2026-05', accounts: ['P-LEG'], rosterSourceRef: 'r', rosterSourceHash: HEX64, status: 'complete', actor: ACTOR, reason: 'x', now: NOW })
+    saveMonthScopeSnapshot(legacy, { serviceMonth: '2026-05', accounts: ['P-LEG'], rosterSourceRef: 'roster://legacy/v1', rosterSourceHash: HEX64, status: 'complete', actor: ACTOR, reason: 'x' })
     const close = currentCloseRevisionState(legacy, '2026-05', ['P-LEG'])
     expect(close.missingCloseEventPartnerIds).toEqual(['P-LEG'])
     insertRun(legacy)
@@ -627,7 +883,7 @@ describe('C1 · 指纹与读侧失效判定', () => {
   it('manifest 集变化 → MANIFEST_SET_CHANGED;recipe 版本不同 → PROFILE_RECIPE_UPGRADED(不再叠报 PROFILE_CHANGED)', () => {
     const db = preparedScene()
     insertRun(db)
-    registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '新版本', now: NOW })
+    registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-1', actor: ACTOR, reason: '新版本' })
     let verdict = evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0])
     expect(verdict.invalidationCodes).toContain('MANIFEST_SET_CHANGED')
 
@@ -638,18 +894,33 @@ describe('C1 · 指纹与读侧失效判定', () => {
     expect(verdict.invalidationCodes).not.toContain('PROFILE_CHANGED')
   })
 
+  it('非法月份 batch 更正到其他合法月时，旧月也因全局相关语义收到 MANIFEST_SET_CHANGED', () => {
+    const db = preparedScene()
+    db.prepare(`
+      INSERT INTO case_revenue (id, case_no, partner_id, service_month, import_batch)
+      VALUES ('BAD-MONTH-1', 'C-BAD-MONTH', 'P-1', '2026-99', 'STMT-BAD-MONTH')
+    `).run()
+    const v1 = registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-BAD-MONTH', actor: ACTOR, reason: '脏月登记' })
+    expect(v1.serviceMonths).toEqual([])
+    insertRun(db)
+    db.prepare(`UPDATE case_revenue SET service_month = '2026-06' WHERE id = 'BAD-MONTH-1'`).run()
+    registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-BAD-MONTH', actor: ACTOR, reason: '月份更正' })
+    const verdict = evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0])
+    expect(verdict.invalidationCodes).toContain('MANIFEST_SET_CHANGED')
+  })
+
   it('lis 类 manifest 无月归属 → 全局并入每月集合:登记/更正 lis manifest 必翻 MANIFEST_SET_CHANGED', () => {
     const db = preparedScene()
     db.prepare(`
       INSERT INTO lis_cases (id, case_no, partner_id, operate_time, status, import_batch)
       VALUES ('LIS-1', 'C-L1', 'P-1', '2026-05-09', 'normal', 'LIS-B1')
     `).run()
-    const lisManifest = registerSourceBatchManifest(db, { sourceKind: 'lis_cases', batchRef: 'LIS-B1', actor: ACTOR, reason: '登记', now: NOW })
+    const lisManifest = registerSourceBatchManifest(db, { sourceKind: 'lis_cases', batchRef: 'LIS-B1', actor: ACTOR, reason: '登记' })
     expect(lisManifest.serviceMonths).toEqual([]) // 生产 lis 表无 service_month 列,月键派生归 #163/#168,C1 不另造
     insertRun(db)
     expect(evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0]).invalidationCodes).toEqual([])
     // lis manifest 更正(新版本)→ 无月归属全局并入 → 该月指纹必变(fail-closed,待 C3 按同源月键收窄)
-    registerSourceBatchManifest(db, { sourceKind: 'lis_cases', batchRef: 'LIS-B1', actor: ACTOR, reason: '更正声明', externalSourceRef: 'sanitized://lis/b1', externalSourceHash: 'c'.repeat(64), now: NOW })
+    registerSourceBatchManifest(db, { sourceKind: 'lis_cases', batchRef: 'LIS-B1', actor: ACTOR, reason: '更正声明', externalSourceRef: 'sanitized://lis/b1', externalSourceHash: 'c'.repeat(64) })
     const verdict = evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0])
     expect(verdict.invalidationCodes).toContain('MANIFEST_SET_CHANGED')
   })
@@ -781,6 +1052,35 @@ describe('C1 · candidate、查询预算与行为面不变', () => {
     expect(candidates[0].revision).toBe(1)
   })
 
+  it('证据热路径命中复合索引，不允许退化为全表扫描或临时排序', () => {
+    const db = createDb()
+    const sourcePlans = [
+      ['case_revenue', 'idx_hcm_case_revenue_import_batch_id'],
+      ['lis_cases', 'idx_hcm_lis_cases_import_batch_id'],
+      ['lis_case_markers', 'idx_hcm_lis_markers_import_batch_id'],
+    ] as const
+    for (const [table, index] of sourcePlans) {
+      const plan = (db.prepare(`EXPLAIN QUERY PLAN SELECT * FROM ${table} WHERE import_batch = ? ORDER BY id`).all('B') as Array<{ detail: string }>)
+        .map((row) => row.detail).join(' | ')
+      expect(plan).toContain(`USING INDEX ${index}`)
+      expect(plan).not.toMatch(/\bSCAN\b|USE TEMP B-TREE/)
+    }
+    const reconcilePlan = (db.prepare(`
+      EXPLAIN QUERY PLAN SELECT * FROM reconcile_hospital_months
+      WHERE service_month = ? ORDER BY partner_id
+    `).all('2026-05') as Array<{ detail: string }>).map((row) => row.detail).join(' | ')
+    expect(reconcilePlan).toContain('USING INDEX idx_hcm_reconcile_month_partner')
+    expect(reconcilePlan).not.toMatch(/\bSCAN\b|USE TEMP B-TREE/)
+
+    const closePlan = (db.prepare(`
+      EXPLAIN QUERY PLAN SELECT partner_id, MAX(revision)
+      FROM hospital_cm_close_revision_events WHERE service_month = ? GROUP BY partner_id
+    `).all('2026-05') as Array<{ detail: string }>).map((row) => row.detail).join(' | ')
+    expect(closePlan).toMatch(/\bSEARCH\b/)
+    expect(closePlan).toContain('idx_hcm_close_events_month_partner_revision')
+    expect(closePlan).not.toMatch(/\bSCAN\b|USE TEMP B-TREE/)
+  })
+
   it('查询预算:多院多月(8 院 × 3 月)下 evaluate/指纹函数 prepare 次数与院数无关(禁 N+1)', () => {
     const db = createDb()
     const months = ['2026-03', '2026-04', '2026-05']
@@ -793,7 +1093,7 @@ describe('C1 · candidate、查询预算与行为面不变', () => {
     }
     saveScope(db, '2026-05', partners)
     seedRevenueBatch(db, 'STMT-BIG', { month: '2026-05', partnerId: 'P-1', rows: 4 })
-    registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-BIG', actor: ACTOR, reason: '登记', now: NOW })
+    registerSourceBatchManifest(db, { sourceKind: 'case_revenue', batchRef: 'STMT-BIG', actor: ACTOR, reason: '登记' })
     insertRun(db)
 
     // 计 prepare 与 statement 执行(get/all/run)两个维度:防"语句提升 + 循环执行"型 N+1 逃过 prepare 计数
