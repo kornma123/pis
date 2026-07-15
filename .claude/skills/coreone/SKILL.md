@@ -28,7 +28,7 @@ description: COREONE 仓库的本地工作路由。处理任何 PRD、功能、B
 
 ## 2. 受治理交付任务第一次修改前交付本地任务合同
 
-PRD、功能、Bug、Issue/PR、测试、复核、验收和跨设备交付先在会话中给出以下短块；有 GitHub 写权限时，把动态字段同步到主 Issue / PR。R0 错字、小样式等琐碎可逆修改按权威工作模型直接做、目标检查和简短收尾，不为此硬建 Issue。若相关 prompt 最终只需解释/只读检查或用户取消、且尚未建立 task state，运行 `node scripts/claude-task.cjs disarm --reason=<具体原因>` 解除本会话的交付写入门。
+PRD、功能、Bug、Issue/PR、测试、复核、验收和跨设备交付先在会话中给出以下短块；有 GitHub 写权限时，把动态字段同步到主 Issue / PR。R0 错字、小样式等琐碎可逆修改不为此硬建 Issue，但第一次写入前运行 `node scripts/claude-task.cjs start-r0 --reason=<为何是R0> --owned=<path>`；目标检查后运行 `finish-r0 --evidence=<实际检查>`。只读解释不需要 state。
 
 ```text
 LOCAL TASK CONTRACT
@@ -46,7 +46,7 @@ next gate: <谁在什么证据出现后允许进入下一阶段>
 
 下列任一条件不满足时不得开始 PRD 驱动的功能实现：
 
-- PRD 不是已合并版本，或没有可链接的 PM 定稿证据；
+- PRD 不是 `origin/master` first-parent 上的已合并版本，或 PM 普通评论没有精确标记 `[PM-APPROVAL] decision=approved artifact=<PRD path@approved-head>`；
 - 涉及界面/主流程却没有定稿 mockup；纯后端任务只能在说明 `mockup=NOT_APPLICABLE` 及理由后继续；
 - 没有经 PM 确认的工程 Issue，或 Issue 没有独立可验收范围；
 - Issue body 的 `coreone-owner` 受控块未认领当前 owner；评论不能替代当前 owner 主源；
@@ -82,15 +82,15 @@ PM “定稿”只结束 PRD 内容闸，不自动满足以上实现条件。
 ### C. 认领一个工程 Issue
 
 1. 一次只认领一个可独立验收的工程 Issue。
-2. 先更新 Issue body 的 `coreone-owner` 块，再发认领事件评论；无 body 写权限时保持未认领。
-3. fetch、建立独立 worktree/branch，声明 owned/excluded files；运行 `node scripts/claude-task.cjs start ...` 建立 worktree 私有任务状态并通过 develop preflight。
+2. 新建 Issue 保持 owner=`unassigned`；用 `claude-task.cjs start --claim=true ...` 在 preflight 通过后原子更新 `coreone-owner` 块并发认领评论。若已有其他 owner 或无 body 写权限，保持未认领。
+3. fetch、建立独立 worktree/branch，声明 owned/excluded files；运行同一 `start` 建立 worktree 私有任务状态。
 4. 重新核对 PRD 固定版本、依赖 PR、活代码与现状；功能已经存在或前提已变化时停下并报告证据。
 
 实现阶段使用以下形态；PRD / Mockup 阶段省略不适用的 `--prd/--approval/--mockup/--mockup-approval`：
 
 ```text
 node scripts/claude-task.cjs start \
-  --issue=N --stage=implementation --owner="Claude Code (Fable 5)" --risk=R1 \
+  --issue=N --stage=implementation --owner="Claude Code (Fable 5)" --claim=true --risk=R1 \
   --prd=docs/prd/PRD-N-name.md@<merged-SHA> \
   --approval=https://github.com/.../issues/N#issuecomment-... \
   --mockup=path/to/mockup.md@<merged-SHA> \
@@ -98,7 +98,7 @@ node scripts/claude-task.cjs start \
   --owned='path/**' --excluded='other-owner/**'
 ```
 
-纯后端任务用 `--mockup='NOT_APPLICABLE:具体理由'`，不能只写 `N/A`；仍须用 `--mockup-approval=<PM普通评论URL>` 证明 PM 同意“不适用”。
+纯后端任务用 `--mockup='NOT_APPLICABLE:具体理由'`，不能只写 `N/A`；仍须用 `--mockup-approval=<PM普通评论URL>` 证明 PM 同意“不适用”，且评论精确包含 `[PM-APPROVAL] decision=approved artifact=MOCKUP_NOT_APPLICABLE`。批准评论必须由仓库 owner 发布，不能用“未通过/不批准”等自然语言子串冒充。
 
 ### D. 建立验收追踪矩阵
 
@@ -144,7 +144,16 @@ AC-01  | ...          | ...      | ...          | ...          | ...      | pend
 4. reviewer 评论或 head SHA 变化后；
 5. 请求 PM 合并、验收或跨设备接手前。
 
-跨设备接手只依赖 GitHub Issue、PR body/checks、合并 PRD 和固定 commit；不得依赖另一台设备的聊天历史、个人 memory、未推送分支或本地 session-log。停止前先在活动 Issue 留普通评论，正文包含 `[HANDOFF] status=<状态>`、结果、证据、风险和下一 owner，再运行 `node scripts/claude-task.cjs handoff --status=<同一状态> --evidence=<本轮新评论URL>`。共享 Stop hook 首次提醒未交接，task state 在证据校验成功前不会清除。
+跨设备接手只依赖 GitHub Issue、PR body/checks、合并 PRD 和固定 commit；不得依赖另一台设备的聊天历史、个人 memory、未推送分支或本地 session-log。停止前由当前 GitHub 操作者在活动 Issue 留本轮新普通评论，使用以下非占位字段，再运行 `node scripts/claude-task.cjs handoff --status=<同一状态> --evidence=<本轮新评论URL>`。共享 Stop hook 首次提醒未交接，task state 在证据校验成功前不会清除。
+
+```text
+[HANDOFF] status=<in-progress|blocked|ready-for-review|waiting-pm|waiting-acceptance|accepted>
+result: <本轮业务/交付结果>
+evidence: <commit / PR / checks / 真跑证据>
+risk: <残余风险，确无也要说明原因>
+next-owner: <下一角色或具名负责人>
+trigger: <下一步启动条件>
+```
 
 ## 5. 收尾输出
 

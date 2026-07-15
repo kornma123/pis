@@ -9,7 +9,7 @@
             "type": "command",
             "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "context"],
-            "timeout": 20
+            "timeout": 90
           }
         ]
       }
@@ -21,7 +21,7 @@
             "type": "command",
             "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "prompt"],
-            "timeout": 20
+            "timeout": 90
           }
         ]
       }
@@ -34,31 +34,42 @@
             "type": "command",
             "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "guard"],
-            "timeout": 20
+            "timeout": 90
           }
         ]
       },
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
             "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "shell-guard"],
-            "timeout": 20
+            "timeout": 90
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "mcp-guard"],
+            "timeout": 90
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|mcp__.*",
+        "matcher": "Bash|PowerShell|mcp__.*",
         "hooks": [
           {
             "type": "command",
             "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "audit"],
-            "timeout": 20
+            "timeout": 90
           }
         ]
       }
@@ -70,7 +81,7 @@
             "type": "command",
             "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "stop"],
-            "timeout": 20
+            "timeout": 90
           }
         ]
       }

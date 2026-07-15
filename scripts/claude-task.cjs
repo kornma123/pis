@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
 const MODIFY_STAGES = new Set(['prd', 'mockup', 'implementation', 'acceptance']);
@@ -44,14 +45,6 @@ function repoRoot(cwd = process.cwd()) {
 function stateFile(root) {
   const value = git(
     ['rev-parse', '--path-format=absolute', '--git-path', 'coreone/claude-task-state.json'],
-    root,
-  ).stdout;
-  return path.resolve(value);
-}
-
-function intentFile(root) {
-  const value = git(
-    ['rev-parse', '--path-format=absolute', '--git-path', 'coreone/claude-task-intent.json'],
     root,
   ).stdout;
   return path.resolve(value);
@@ -148,18 +141,6 @@ function isRelevantPrompt(prompt) {
   );
 }
 
-function requiresContractPrompt(prompt) {
-  const text = String(prompt || '');
-  const trivial = /(?:错字|标点|拼写|typo|spelling|纯格式|formatting|小样式)/i.test(text);
-  const highSignal = /(?:PRD|需求|功能|Bug|缺陷|Issue|Pull Request|\bPR\b|#\d+|验收|交接|GitHub|worktree|preflight)/i.test(
-    text,
-  );
-  const action = /(?:生成|创建|编写|修改|实现|开发|修复|处理|继续|拆分|落地|提交|推送|合并|验收|交接|认领|create|write|edit|modify|implement|develop|fix|build|deliver|accept|merge|commit|push|review)/i.test(
-    text,
-  );
-  return highSignal && action && !trivial;
-}
-
 function parseGitHubArtifactUrl(value) {
   try {
     const url = new URL(String(value || '').trim());
@@ -186,7 +167,7 @@ function parseGitHubArtifactUrl(value) {
 
 function repoIdentity(root) {
   const data = JSON.parse(
-    run('gh', ['repo', 'view', '--json', 'nameWithOwner,url'], { cwd: root, timeout: 30_000 }).stdout,
+    run('gh', ['repo', 'view', '--json', 'nameWithOwner,url'], { cwd: root, timeout: 10_000 }).stdout,
   );
   return data;
 }
@@ -215,6 +196,7 @@ function verifyGitHubEvidence(root, value, options = {}) {
   const repo = identity.nameWithOwner;
   let body = '';
   let timestamp = null;
+  let author = null;
 
   if (parsed.commentType === 'review') {
     throw new Error(`${options.label || 'GitHub 证据'}请使用 Issue/PR 普通评论，不使用行级 review comment。`);
@@ -224,7 +206,7 @@ function verifyGitHubEvidence(root, value, options = {}) {
     const comment = JSON.parse(
       run('gh', ['api', `repos/${repo}/issues/comments/${parsed.commentId}`], {
         cwd: root,
-        timeout: 30_000,
+        timeout: 10_000,
       }).stdout,
     );
     const expectedSuffix = `/issues/${parsed.number}`;
@@ -233,6 +215,7 @@ function verifyGitHubEvidence(root, value, options = {}) {
     }
     body = String(comment.body || '');
     timestamp = comment.created_at || comment.updated_at;
+    author = comment.user?.login || null;
   } else if (options.requireComment) {
     throw new Error(`${options.label || 'GitHub 证据'}必须指向一条普通 GitHub 评论。`);
   }
@@ -241,7 +224,7 @@ function verifyGitHubEvidence(root, value, options = {}) {
     const issue = JSON.parse(
       run('gh', ['issue', 'view', String(parsed.number), '--json', 'number,state,url,updatedAt'], {
         cwd: root,
-        timeout: 30_000,
+        timeout: 10_000,
       }).stdout,
     );
     if (options.activeIssue && parsed.number !== options.activeIssue) {
@@ -252,7 +235,7 @@ function verifyGitHubEvidence(root, value, options = {}) {
     const pr = JSON.parse(
       run('gh', ['pr', 'view', String(parsed.number), '--json', 'number,state,url,body,createdAt,updatedAt'], {
         cwd: root,
-        timeout: 30_000,
+        timeout: 10_000,
       }).stdout,
     );
     if (options.activeIssue) {
@@ -268,8 +251,8 @@ function verifyGitHubEvidence(root, value, options = {}) {
   if (options.expectedStatus) {
     const escaped = options.expectedStatus.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const contract = new RegExp(
-      `\\[(?:HANDOFF|STATUS)\\][\\s\\S]*?status\\s*[:=：]\\s*${escaped}(?:\\s|$)`,
-      'i',
+      `^\\[HANDOFF\\]\\s+status=${escaped}\\s*$`,
+      'im',
     );
     if (!contract.test(body)) {
       throw new Error(
@@ -282,7 +265,107 @@ function verifyGitHubEvidence(root, value, options = {}) {
       throw new Error(`${options.label || 'GitHub 证据'}缺少${requirement.label}。`);
     }
   }
-  return parsed;
+  if (options.requireHandoffFields) {
+    const missing = handoffFieldErrors(body);
+    if (missing.length > 0) throw new Error(`handoff 评论缺少非占位字段：${missing.join(', ')}。`);
+  }
+  if (options.requireCurrentActor) {
+    const login = run('gh', ['api', 'user', '--jq', '.login'], { cwd: root, timeout: 10_000 }).stdout;
+    if (author?.toLowerCase() !== login.toLowerCase()) {
+      throw new Error(`handoff 评论作者 ${author || '未知'} 与当前 GitHub 操作者 ${login} 不一致。`);
+    }
+  }
+  return { parsed, body, timestamp, author, repoOwner: identity.nameWithOwner.split('/')[0] };
+}
+
+function issueFormField(body, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = String(body || '').match(new RegExp(`^### ${escaped}\\s*\\r?\\n([\\s\\S]*?)(?=^### |(?![\\s\\S]))`, 'im'));
+  return match ? match[1].trim() : '';
+}
+
+function isPmApprovedStatus(status) {
+  return /^PM_APPROVED(?:\s|$|[（(])/i.test(String(status || '').trim());
+}
+
+function parsePmApprovalMarker(body) {
+  const marker = String(body || '').match(
+    /^\[PM-APPROVAL\]\s+decision=approved\s+artifact=(\S+)\s*$/im,
+  );
+  return marker ? marker[1] : null;
+}
+
+function handoffFieldErrors(body) {
+  const errors = [];
+  for (const field of ['result', 'evidence', 'risk', 'next-owner', 'trigger']) {
+    const match = String(body || '').match(new RegExp(`^${field}\\s*[:=：]\\s*(.+)$`, 'im'));
+    const value = match?.[1]?.trim() || '';
+    const minLength = field === 'next-owner' ? 2 : 4;
+    if (value.length < minLength || /^(?:todo|tbd|n\/?a|none|无|待补|\.\.\.)$/i.test(value)) errors.push(field);
+  }
+  return errors;
+}
+
+function parseRequirementAcceptanceMap(value) {
+  const mappings = [];
+  const lines = String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/^[-*]\s+/, '').replace(/`/g, ''))
+    .filter(Boolean);
+  for (const line of lines) {
+    const match = line.match(/^(RQ-\d+)\s*(?:->|→|:)\s*(.+)$/i);
+    const acceptance = match?.[2]?.match(/AC-\d+/gi) || [];
+    const remainder = match?.[2]?.replace(/AC-\d+/gi, '').replace(/[\s,，、;；]+/g, '') || '';
+    if (!match || acceptance.length === 0 || remainder) {
+      throw new Error(`RQ → AC 映射格式无效：${line}；使用 RQ-01 -> AC-01, AC-02。`);
+    }
+    for (const ac of acceptance) {
+      mappings.push({ requirement: match[1].toUpperCase(), acceptance: ac.toUpperCase() });
+    }
+  }
+  if (mappings.length === 0) {
+    throw new Error('PRD 驱动 Issue 必须填写至少一条 RQ → AC 映射。');
+  }
+  return mappings;
+}
+
+function assertIssueDeliveryContract(root, body, prd, mockupRaw, mockupApprovalUrl) {
+  const prdField = issueFormField(body, 'PRD 固定基线').replace(/`/g, '').trim();
+  const issuePrd = parsePrdRef(prdField);
+  if (!issuePrd || issuePrd.file !== prd.file) {
+    throw new Error(`Issue 的“PRD 固定基线”必须精确引用 ${prd.file}@<merged SHA>。`);
+  }
+  const issuePrdCommit = git(['rev-parse', `${issuePrd.ref}^{commit}`], root).stdout;
+  if (issuePrdCommit !== prd.commit) throw new Error('Issue 的 PRD merge SHA 与 --prd 不一致。');
+
+  const mappings = parseRequirementAcceptanceMap(issueFormField(body, 'RQ → AC 映射'));
+  const requirements = [...new Set(mappings.map((item) => item.requirement))];
+  const acceptance = [...new Set(mappings.map((item) => item.acceptance))];
+  const prdText = git(['show', `${prd.commit}:${prd.file}`], root).stdout;
+  for (const id of [...requirements, ...acceptance]) {
+    const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (!new RegExp(`(?:^|[^A-Z0-9-])${escaped}(?:$|[^A-Z0-9-])`, 'i').test(prdText)) {
+      throw new Error(`Issue 引用的 ${id} 不存在于固定 PRD。`);
+    }
+  }
+  const prdRows = prdText.split(/\r?\n/).filter((line) => /^\s*\|/.test(line));
+  for (const mapping of mappings) {
+    const mapped = prdRows.some((row) => {
+      const ids = row.match(/(?:RQ|AC)-\d+/gi)?.map((id) => id.toUpperCase()) || [];
+      return ids.includes(mapping.requirement) && ids.includes(mapping.acceptance);
+    });
+    if (!mapped) {
+      throw new Error(
+        `Issue 的 ${mapping.requirement} → ${mapping.acceptance} 在固定 PRD 的同一验收表行中不存在。`,
+      );
+    }
+  }
+  const mockupGate = issueFormField(body, 'Mockup 闸点');
+  const mockupLines = mockupGate.split(/\r?\n/).map((line) => line.trim().replace(/`/g, '')).filter(Boolean);
+  if (!mockupLines.includes(String(mockupRaw || '')) || !mockupLines.includes(String(mockupApprovalUrl || ''))) {
+    throw new Error('Issue 的“Mockup 闸点”必须同时包含 --mockup 值和对应 PM 批准评论 URL。');
+  }
+  return { requirements, acceptance, mappings };
 }
 
 function readHookInput() {
@@ -301,13 +384,6 @@ function loadState(root) {
   return { file, state };
 }
 
-function loadIntent(root) {
-  const file = intentFile(root);
-  const intent = loadJsonFile(file);
-  if (!intent) return null;
-  return { file, intent };
-}
-
 function commandContext() {
   const root = repoRoot();
   const branch = git(['branch', '--show-current'], root).stdout || 'DETACHED';
@@ -315,12 +391,11 @@ function commandContext() {
   const base = git(['rev-parse', '--short=12', 'origin/master'], root, { allowFailure: true });
   const dirty = git(['status', '--short'], root).stdout;
   const active = loadState(root)?.state;
-  const intent = loadIntent(root)?.intent;
   const stateSummary = active
-    ? `active task: #${active.issue} / ${active.stage} / owner=${active.owner}`
-    : intent
-      ? 'delivery gate: armed by a PRD/feature/Issue prompt; Edit/Write or mutating Bash requires LOCAL TASK CONTRACT + claude-task start'
-      : 'delivery gate: idle; R0 trivial reversible work follows the lightweight authority path';
+    ? active.mode === 'r0'
+      ? `active task: local R0 / reason=${active.reason}`
+      : `active task: #${active.issue} / ${active.stage} / owner=${active.owner}`
+    : 'active task: none; writes require start-r0 (no Issue) or governed task start';
 
   process.stdout.write([
     '[COREONE SESSION ROUTER]',
@@ -334,14 +409,6 @@ function commandContext() {
 function commandPrompt() {
   const input = readHookInput();
   if (!isRelevantPrompt(input.prompt)) return;
-  const root = repoRoot(input.cwd || process.cwd());
-  if (requiresContractPrompt(input.prompt)) {
-    writePrivateJson(intentFile(root), {
-      version: 1,
-      armedAt: new Date().toISOString(),
-      sessionId: input.session_id || null,
-    });
-  }
   process.stdout.write([
     '[COREONE PROMPT ROUTER]',
     'This prompt may affect PRD, implementation, review, acceptance, or GitHub state.',
@@ -349,11 +416,52 @@ function commandPrompt() {
   ].join('\n'));
 }
 
+function assertMainlineMerge(root, commit, label) {
+  const firstParent = new Set(git(['rev-list', '--first-parent', 'origin/master'], root).stdout.split(/\r?\n/));
+  if (!firstParent.has(commit)) {
+    throw new Error(`${label} 的 SHA 必须是 origin/master first-parent 上的合并后基线。`);
+  }
+}
+
+function assertPmApproval(root, evidenceUrl, options) {
+  const evidence = verifyGitHubEvidence(root, evidenceUrl, {
+    label: options.label,
+    requireComment: true,
+    activeIssue: options.activeIssue || null,
+  });
+  if (evidence.author?.toLowerCase() !== evidence.repoOwner.toLowerCase()) {
+    throw new Error(`${options.label}必须由仓库 PM owner ${evidence.repoOwner} 发布（当前：${evidence.author || '未知'}）。`);
+  }
+  const artifact = parsePmApprovalMarker(evidence.body);
+  if (!artifact) {
+    throw new Error(`${options.label}必须包含精确标记：[PM-APPROVAL] decision=approved artifact=<path@approved-head|MOCKUP_NOT_APPLICABLE>。`);
+  }
+  if (options.notApplicable) {
+    if (artifact !== 'MOCKUP_NOT_APPLICABLE') {
+      throw new Error(`${options.label}的 artifact 必须精确为 MOCKUP_NOT_APPLICABLE。`);
+    }
+    return { url: evidenceUrl, author: evidence.author, artifact };
+  }
+
+  const approved = parsePrdRef(artifact);
+  if (!approved || approved.file !== options.baseline.file) {
+    throw new Error(`${options.label}的 artifact 必须绑定 ${options.baseline.file}@<approved head SHA>。`);
+  }
+  const approvedCommit = git(['rev-parse', `${approved.ref}^{commit}`], root).stdout;
+  const approvedBlob = git(['rev-parse', `${approvedCommit}:${approved.file}`], root).stdout;
+  const mergedBlob = git(['rev-parse', `${options.baseline.commit}:${options.baseline.file}`], root).stdout;
+  if (approvedBlob !== mergedBlob) {
+    throw new Error(`${options.label}批准后的内容与合并基线内容不一致。`);
+  }
+  return { url: evidenceUrl, author: evidence.author, artifact, approvedCommit };
+}
+
 function assertPrdBaseline(root, prdValue) {
   const parsed = parsePrdRef(prdValue);
   if (!parsed) throw new Error('实现/验收阶段的 --prd 必须是 repo-relative/path.md@<merged commit SHA>。');
   const commit = git(['rev-parse', `${parsed.ref}^{commit}`], root).stdout;
   git(['merge-base', '--is-ancestor', commit, 'origin/master'], root);
+  assertMainlineMerge(root, commit, 'PRD');
   git(['cat-file', '-e', `${commit}:${parsed.file}`], root);
   const header = git(['show', `${commit}:${parsed.file}`], root)
     .stdout
@@ -361,7 +469,7 @@ function assertPrdBaseline(root, prdValue) {
     .slice(0, 40)
     .join('\n');
   const status = header.match(/^\s*>?\s*\*\*状态\*\*\s*[:：]\s*(.+)$/im)?.[1] || '';
-  if (!/PM_APPROVED/i.test(status)) {
+  if (!isPmApprovedStatus(status)) {
     throw new Error(
       `PRD ${parsed.file}@${parsed.ref} 的头部状态不是 PM_APPROVED（当前：${status || '缺失'}）。`,
     );
@@ -381,6 +489,7 @@ function assertMockupBaseline(root, value) {
   }
   const commit = git(['rev-parse', `${parsed.ref}^{commit}`], root).stdout;
   git(['merge-base', '--is-ancestor', commit, 'origin/master'], root);
+  assertMainlineMerge(root, commit, 'Mockup');
   git(['cat-file', '-e', `${commit}:${parsed.file}`], root);
   return { mode: 'APPROVED', ...parsed, commit };
 }
@@ -398,6 +507,12 @@ function commandStart(argv) {
   if (!owner || /^unassigned$/i.test(owner)) throw new Error('--owner 必须与 Issue body 当前 owner 一致。');
   if (!/^R[0-3]$/.test(risk)) throw new Error('--risk 必须是 R0 / R1 / R2 / R3。');
   if (flags.owned.length === 0) throw new Error('至少提供一个 --owned=<path/glob>。');
+  if (loadState(root)) {
+    throw new Error('已有活动 task state；先完成 finish-r0 或 GitHub handoff，不能用新的 start 覆盖。');
+  }
+  if (git(['status', '--short'], root).stdout) {
+    throw new Error('task start 前工作树必须 clean，避免把合同建立前的改动并入本任务。');
+  }
 
   git(['fetch', 'origin', '--prune'], root, { timeout: 120_000 });
 
@@ -410,13 +525,15 @@ function commandStart(argv) {
   const issueResult = run(
     'gh',
     ['issue', 'view', String(issue), '--json', 'state,body,url,title'],
-    { cwd: root, timeout: 30_000 },
+    { cwd: root, timeout: 10_000 },
   );
   const issueData = JSON.parse(issueResult.stdout);
   if (issueData.state !== 'OPEN') throw new Error(`Issue #${issue} 不是 OPEN。`);
   const issueOwner = parseOwnerBlock(issueData.body);
   if (!issueOwner) throw new Error(`Issue #${issue} 缺少 coreone-owner 受控块。`);
-  if (issueOwner.localeCompare(owner, undefined, { sensitivity: 'accent' }) !== 0) {
+  const wantsClaim = String(flags.claim || '').toLowerCase() === 'true';
+  const canClaim = wantsClaim && /^(?:unassigned|待认领)$/i.test(issueOwner);
+  if (!canClaim && issueOwner.localeCompare(owner, undefined, { sensitivity: 'accent' }) !== 0) {
     throw new Error(`Issue #${issue} 当前 owner=${issueOwner}，与 --owner=${owner} 不一致。`);
   }
 
@@ -424,23 +541,27 @@ function commandStart(argv) {
   let mockup = null;
   let approval = null;
   let mockupApproval = null;
+  let deliveryContract = null;
   if (stage === 'implementation' || stage === 'acceptance') {
     prd = assertPrdBaseline(root, flags.prd);
-    approval = verifyGitHubEvidence(root, flags.approval, {
+    approval = assertPmApproval(root, flags.approval, {
       label: 'PRD PM 定稿证据',
-      requireComment: true,
-      bodyPatterns: [
-        { label: 'PM_APPROVED 或 PM 定稿结论', pattern: /PM_APPROVED|PM[^\n]{0,20}(?:定稿|批准|通过)/i },
-      ],
+      baseline: prd,
     });
     mockup = assertMockupBaseline(root, flags.mockup);
-    mockupApproval = verifyGitHubEvidence(root, flags['mockup-approval'], {
+    mockupApproval = assertPmApproval(root, flags['mockup-approval'], {
       label: mockup.mode === 'NOT_APPLICABLE' ? 'Mockup 不适用的 PM 证据' : 'Mockup PM 定稿证据',
-      requireComment: true,
-      bodyPatterns: mockup.mode === 'NOT_APPLICABLE'
-        ? [{ label: 'Mockup 不适用结论', pattern: /(?:mockup|原型|设计稿)[^\n]{0,30}(?:不适用|NOT_APPLICABLE)/i }]
-        : [{ label: 'Mockup 定稿结论', pattern: /(?:mockup|原型|设计稿)[^\n]{0,30}(?:定稿|批准|通过|APPROVED)/i }],
+      baseline: mockup.mode === 'APPROVED' ? mockup : null,
+      notApplicable: mockup.mode === 'NOT_APPLICABLE',
+      activeIssue: mockup.mode === 'NOT_APPLICABLE' ? issue : null,
     });
+    deliveryContract = assertIssueDeliveryContract(
+      root,
+      issueData.body,
+      prd,
+      flags.mockup,
+      flags['mockup-approval'],
+    );
   }
 
   const preflightArgs = [
@@ -453,11 +574,31 @@ function commandStart(argv) {
   ];
   const preflight = run(process.execPath, preflightArgs, { cwd: root, timeout: 240_000 });
 
+  if (canClaim && !flags.dryRun) {
+    const claimedBody = issueData.body.replace(
+      /(-\s*\*\*current owner\*\*\s*[:：]\s*)(.+)/i,
+      `$1${owner}`,
+    );
+    run('gh', ['issue', 'edit', String(issue), '--body', claimedBody], { cwd: root, timeout: 15_000 });
+    const claimedIssue = JSON.parse(
+      run('gh', ['issue', 'view', String(issue), '--json', 'state,body,url,title'], {
+        cwd: root,
+        timeout: 10_000,
+      }).stdout,
+    );
+    if (claimedIssue.state !== 'OPEN' || parseOwnerBlock(claimedIssue.body) !== owner) {
+      throw new Error(`Issue #${issue} 认领后复核失败；停止建立本地 task state。`);
+    }
+    Object.assign(issueData, claimedIssue);
+  }
+
   const state = {
     version: 1,
+    mode: 'governed',
     issue,
     issueUrl: issueData.url,
     issueTitle: issueData.title,
+    issueBodyHash: sha256(issueData.body),
     stage,
     owner,
     risk,
@@ -472,12 +613,19 @@ function commandStart(argv) {
     mockup,
     approval,
     mockupApproval,
+    deliveryContract,
   };
 
   if (!flags.dryRun) {
     const file = stateFile(root);
     writePrivateJson(file, state);
-    removePrivateFile(intentFile(root));
+    if (canClaim) {
+      run(
+        'gh',
+        ['issue', 'comment', String(issue), '--body', `[CLAIM] owner=${owner}\nstage=${stage}\nbranch=${branch}`],
+        { cwd: root, timeout: 15_000 },
+      );
+    }
   }
 
   process.stdout.write([
@@ -489,19 +637,63 @@ function commandStart(argv) {
   ].filter(Boolean).join('\n'));
 }
 
-function resolveHookPath(input) {
-  return input.tool_input?.file_path || input.tool_input?.notebook_path || null;
+function sha256(value) {
+  return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
 }
 
-function intentRequiresContract(root) {
-  const active = loadIntent(root);
-  if (!active) return false;
-  const age = Date.now() - Date.parse(active.intent.armedAt);
-  if (!Number.isFinite(age) || age > STATE_MAX_AGE_MS) {
-    removePrivateFile(active.file);
-    return false;
+function commandStartR0(argv) {
+  const flags = parseFlags(argv);
+  const root = repoRoot();
+  const reason = String(flags.reason || '').trim();
+  if (reason.length < 6) throw new Error('--reason 必须说明本项为何属于 R0 琐碎、可逆修改。');
+  if (flags.owned.length === 0) throw new Error('R0 也至少提供一个 --owned=<path/glob>。');
+  if (loadState(root)) {
+    throw new Error('已有活动 task state；先完成 finish-r0 或 GitHub handoff，不能用 R0 覆盖。');
   }
-  return true;
+  const branch = git(['branch', '--show-current'], root).stdout;
+  if (!branch || /^(master|main)$/i.test(branch)) {
+    throw new Error(`R0 修改也必须在任务分支；当前为 ${branch || 'DETACHED'}。`);
+  }
+  if (git(['status', '--short'], root).stdout) {
+    throw new Error('start-r0 前工作树必须 clean，避免把既有改动误算进本任务。');
+  }
+  const state = {
+    version: 1,
+    mode: 'r0',
+    stage: 'r0',
+    risk: 'R0',
+    reason,
+    branch,
+    baseSha: git(['rev-parse', 'origin/master'], root).stdout,
+    startedHead: git(['rev-parse', 'HEAD'], root).stdout,
+    startedAt: new Date().toISOString(),
+    verifiedAt: new Date().toISOString(),
+    owned: flags.owned.map(toPosix),
+    excluded: flags.excluded.map(toPosix),
+  };
+  writePrivateJson(stateFile(root), state);
+  process.stdout.write(
+    `COREONE R0 task start: PASS\nreason=${reason}\nowned=${state.owned.join(', ')}`,
+  );
+}
+
+function commandFinishR0(argv) {
+  const flags = parseFlags(argv);
+  const root = repoRoot();
+  const active = loadState(root);
+  if (!active || active.state.mode !== 'r0') throw new Error('没有活动 R0 task state。');
+  const evidence = String(flags.evidence || '').trim();
+  if (evidence.length < 8 || /^(?:pass|done|完成|通过)$/i.test(evidence)) {
+    throw new Error('--evidence 必须写明实际目标检查，不能只写 done/pass。');
+  }
+  assertActiveState(root, active, { force: true });
+  assertOwnedChanges(root, active.state);
+  removePrivateFile(active.file);
+  process.stdout.write(`COREONE R0 task finished: ${evidence}`);
+}
+
+function resolveHookPath(input) {
+  return input.tool_input?.file_path || input.tool_input?.notebook_path || null;
 }
 
 function assertActiveState(root, active, options = {}) {
@@ -514,6 +706,10 @@ function assertActiveState(root, active, options = {}) {
   if (branch !== state.branch) {
     throw new Error(`branch 已变化（${state.branch} -> ${branch}）；重新运行 task start。`);
   }
+  git(['merge-base', '--is-ancestor', state.startedHead, 'HEAD'], root);
+
+  if (state.mode === 'r0') return;
+  git(['merge-base', '--is-ancestor', state.baseSha, 'HEAD'], root);
 
   const sinceVerify = Date.now() - Date.parse(state.verifiedAt || state.startedAt);
   if (!options.force && Number.isFinite(sinceVerify) && sinceVerify < LIVE_RECHECK_MS) return;
@@ -525,13 +721,27 @@ function assertActiveState(root, active, options = {}) {
   const issue = JSON.parse(
     run('gh', ['issue', 'view', String(state.issue), '--json', 'state,body,url'], {
       cwd: root,
-      timeout: 30_000,
+      timeout: 10_000,
     }).stdout,
   );
   if (issue.state !== 'OPEN') throw new Error(`活动 Issue #${state.issue} 已不是 OPEN。`);
+  if (sha256(issue.body) !== state.issueBodyHash) {
+    throw new Error(`Issue #${state.issue} body 已变化；重新读取范围/RQ/AC 并运行 task start。`);
+  }
   const liveOwner = parseOwnerBlock(issue.body);
   if (liveOwner?.localeCompare(state.owner, undefined, { sensitivity: 'accent' }) !== 0) {
     throw new Error(`Issue #${state.issue} owner 已变化（${state.owner} -> ${liveOwner || '缺失'}）。`);
+  }
+  if (state.approval) {
+    assertPmApproval(root, state.approval.url, { label: 'PRD PM 定稿证据', baseline: state.prd });
+  }
+  if (state.mockupApproval) {
+    assertPmApproval(root, state.mockupApproval.url, {
+      label: state.mockup?.mode === 'NOT_APPLICABLE' ? 'Mockup 不适用的 PM 证据' : 'Mockup PM 定稿证据',
+      baseline: state.mockup?.mode === 'APPROVED' ? state.mockup : null,
+      notApplicable: state.mockup?.mode === 'NOT_APPLICABLE',
+      activeIssue: state.mockup?.mode === 'NOT_APPLICABLE' ? state.issue : null,
+    });
   }
   state.verifiedAt = new Date().toISOString();
   writePrivateJson(active.file, state);
@@ -539,9 +749,9 @@ function assertActiveState(root, active, options = {}) {
 
 function listChangedPaths(root, state) {
   const commands = [
-    ['diff', '--name-only', '-z', `${state.startedHead}..HEAD`],
-    ['diff', '--name-only', '-z'],
-    ['diff', '--cached', '--name-only', '-z'],
+    ['diff', '--no-renames', '--name-only', '-z', `${state.startedHead}..HEAD`],
+    ['diff', '--no-renames', '--name-only', '-z'],
+    ['diff', '--cached', '--no-renames', '--name-only', '-z'],
     ['ls-files', '--others', '--exclude-standard', '-z'],
   ];
   const paths = new Set();
@@ -563,15 +773,239 @@ function assertOwnedChanges(root, state) {
   }
 }
 
+function hasShellControl(command) {
+  return /[;&|<>\r\n`]/.test(command) || /\$\(|\$\{/.test(command);
+}
+
+function shellTokens(command) {
+  return (String(command).match(/"(?:[^"\\]|\\.)*"|'[^']*'|\S+/g) || []).map((token) => {
+    if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+      return token.slice(1, -1);
+    }
+    return token;
+  });
+}
+
+function gitSubcommand(tokens) {
+  let index = 1;
+  const globals = [];
+  while (index < tokens.length && tokens[index].startsWith('-')) {
+    const current = tokens[index];
+    globals.push(current);
+    if (['-C', '-c', '--git-dir', '--work-tree', '--namespace'].includes(current)) {
+      globals.push(tokens[index + 1] || '');
+      index += 2;
+    } else {
+      index += 1;
+    }
+  }
+  return { globals, command: String(tokens[index] || '').toLowerCase(), args: tokens.slice(index + 1) };
+}
+
+function assertSafeGitGlobals(globals) {
+  if (globals.some((value) => value !== '--no-pager')) {
+    throw new Error(`git 全局参数不允许：${globals.join(' ')}`);
+  }
+}
+
+function assertNoExecutableGitFlags(args) {
+  const forbidden = /^(?:--output(?:=|$)|--ext-diff$|--textconv$|--exec(?:=|$)|-x$|--upload-pack(?:=|$)|--receive-pack(?:=|$))/i;
+  const hit = args.find((arg) => forbidden.test(arg));
+  if (hit) throw new Error(`git 参数 ${hit} 可能写文件或执行外部命令，已拒绝。`);
+}
+
+function assertSafeGitRead(command, args, options = {}) {
+  const reads = new Set(['status', 'diff', 'log', 'show', 'rev-parse', 'merge-base', 'ls-files', 'ls-remote']);
+  assertNoExecutableGitFlags(args);
+  if (reads.has(command)) return;
+  if (command === 'branch') {
+    const shape = args.join(' ');
+    if (!['', '--show-current', '--list', '-a', '--all'].includes(shape)) {
+      throw new Error('git branch 在合同中只允许查看当前分支或列表。');
+    }
+    return;
+  }
+  if (command === 'worktree') {
+    if (String(args[0] || '').toLowerCase() !== 'list' || args.slice(1).some((arg) => !['--porcelain', '-z', '-v'].includes(arg))) {
+      throw new Error('合同建立前只允许 git worktree list。');
+    }
+    return;
+  }
+  if (command === 'remote') {
+    if (String(args[0] || '').toLowerCase() !== 'get-url') {
+      throw new Error('只允许 git remote get-url。');
+    }
+    return;
+  }
+  if (options.allowFetch && command === 'fetch') {
+    const allowedOptions = new Set(['--prune', '--no-tags', '--tags']);
+    const positional = args.filter((arg) => !arg.startsWith('-'));
+    if (positional.length !== 1 || positional[0] !== 'origin' || args.some((arg) => arg.startsWith('-') && !allowedOptions.has(arg))) {
+      throw new Error('git fetch 只允许显式读取 origin，并使用 --prune/--no-tags/--tags。');
+    }
+    return;
+  }
+  throw new Error(`git ${command || '<missing>'} 不是允许的只读命令。`);
+}
+
+function assertSafeGitCommand(tokens, state) {
+  const { globals, command, args } = gitSubcommand(tokens);
+  assertSafeGitGlobals(globals);
+  try {
+    assertSafeGitRead(command, args, { allowFetch: true });
+    return;
+  } catch (error) {
+    if (!['add', 'commit', 'push'].includes(command)) throw error;
+  }
+  assertNoExecutableGitFlags(args);
+  if (command === 'commit') {
+    if (args.some((arg) => /^(?:--amend|--no-verify|-n|--fixup(?:=|$)|--squash(?:=|$))$/i.test(arg))) {
+      throw new Error('禁止 amend、跳过 hooks、fixup 或 squash commit。');
+    }
+    if (!args.some((arg) => arg === '-m' || /^--message=/.test(arg) || /^-[a-zA-Z]*m[a-zA-Z]*$/.test(arg))) {
+      throw new Error('git commit 必须显式使用 -m/--message，禁止启动外部编辑器。');
+    }
+  }
+  if (command === 'push') {
+    const allowedOptions = new Set(['-u', '--set-upstream', '--porcelain', '--dry-run']);
+    const positional = args.filter((arg) => !arg.startsWith('-'));
+    if (
+      args.some((arg) => arg.startsWith('-') && !allowedOptions.has(arg)) ||
+      positional.length !== 2 ||
+      positional[0] !== 'origin' ||
+      positional[1] !== state.branch ||
+      positional.some((arg) => arg.includes(':'))
+    ) {
+      throw new Error(`push 必须显式使用 git push [-u] origin ${state.branch}，且不得使用 refspec/force/delete/all/tags。`);
+    }
+  }
+  if (['commit', 'push'].includes(command)) state.forceLiveCheck = true;
+}
+
+function assertNoRepoOverride(tokens) {
+  if (tokens.some((value) => /^(?:-R|--repo)(?:=|$)/i.test(value))) {
+    throw new Error('GitHub 命令不得用 --repo/-R 改写当前仓库。');
+  }
+}
+
+function assertGhApiReadOnly(values) {
+  if (values.some((value) =>
+    /^-X/i.test(value) ||
+    /^-[fF](?:=|$|.)/.test(value) ||
+    /^(?:--method|--field|--raw-field|--input)(?:=|$)/i.test(value))) {
+    throw new Error('gh api 只允许无字段、无自定义 method 的 GET。');
+  }
+}
+
+function isSafeGhRead(tokens) {
+  const area = String(tokens[1] || '').toLowerCase();
+  const action = String(tokens[2] || '').toLowerCase();
+  if (area === 'auth' && action === 'status') return true;
+  if (area === 'repo' && action === 'view') return true;
+  if (area === 'issue' && ['view', 'list', 'status'].includes(action)) return true;
+  if (area === 'pr' && ['view', 'list', 'checks', 'status', 'diff'].includes(action)) return true;
+  if (area === 'run' && ['view', 'list', 'watch'].includes(action)) return true;
+  if (area === 'workflow' && ['view', 'list'].includes(action)) return true;
+  if (area === 'api') {
+    assertGhApiReadOnly(tokens.slice(2));
+    return true;
+  }
+  return false;
+}
+
+function assertSafeGhCommand(tokens, state) {
+  const area = String(tokens[1] || '').toLowerCase();
+  const action = String(tokens[2] || '').toLowerCase();
+  const rest = tokens.slice(3);
+  if (isSafeGhRead(tokens)) return;
+  assertNoRepoOverride(tokens);
+  if (area === 'issue') {
+    if (state.mode !== 'governed' || action !== 'comment') {
+      throw new Error(`gh issue ${action || '<missing>'} 不允许。`);
+    }
+    if (Number(rest[0]) !== state.issue) {
+      throw new Error(`GitHub 写操作只能指向活动 Issue #${state.issue}。`);
+    }
+    if (rest.some((value) => /^(?:--delete-last|--edit-last|--web)$/i.test(value))) {
+      throw new Error('活动任务只允许新增 Issue 评论，不允许编辑/删除既有评论。');
+    }
+    state.forceLiveCheck = true;
+    return;
+  }
+  if (area === 'pr') {
+    if (['view', 'list', 'checks', 'status', 'diff'].includes(action)) return;
+    if (state.mode === 'governed' && action === 'create') {
+      const headIndex = rest.findIndex((value) => value === '--head' || value.startsWith('--head='));
+      const head = headIndex < 0 ? null : rest[headIndex].includes('=') ? rest[headIndex].split('=').slice(1).join('=') : rest[headIndex + 1];
+      const baseIndex = rest.findIndex((value) => value === '--base' || value.startsWith('--base='));
+      const base = baseIndex < 0 ? null : rest[baseIndex].includes('=') ? rest[baseIndex].split('=').slice(1).join('=') : rest[baseIndex + 1];
+      if (head && head !== state.branch) throw new Error(`PR --head 必须是活动分支 ${state.branch}。`);
+      if (base && !/^(?:master|main)$/.test(base)) throw new Error('PR --base 必须是 master/main。');
+      state.forceLiveCheck = true;
+      return;
+    }
+    throw new Error(`gh pr ${action || '<missing>'} 不允许；PR 状态变更须走独立授权。`);
+  }
+  if (area === 'api') {
+    assertGhApiReadOnly(rest.concat(action));
+    return;
+  }
+  throw new Error(`gh ${area || '<missing>'} ${action || ''} 不在任务允许列表。`);
+}
+
+function assertSafeNodeCommand(tokens) {
+  const args = tokens.slice(1);
+  const forbidden = /^(?:-e|--eval|-p|--print|-r|--require|--import|--loader|--experimental-loader)(?:=|$)/i;
+  const hit = args.find((arg) => forbidden.test(arg));
+  if (hit) throw new Error(`node 参数 ${hit} 可加载内联/外部代码，已拒绝。`);
+  if (args.length === 0 || args.includes('-')) throw new Error('node 必须显式执行仓库脚本或检查，不能进入 REPL/stdin。');
+}
+
+function assertSafeNpmCommand(tokens) {
+  const action = String(tokens[1] || '').toLowerCase();
+  if (!['run', 'run-script', 'test', 'ci', 'install', '--version', '-v', 'help'].includes(action)) {
+    throw new Error(`npm ${action || '<missing>'} 不在任务允许列表；项目检查请走 package scripts。`);
+  }
+}
+
+function isReadOnlyShellCommand(tokens) {
+  const executable = path.basename(String(tokens[0] || '')).toLowerCase();
+  const allowed = new Set([
+    'pwd', 'ls', 'dir', 'cat', 'head', 'tail', 'wc', 'which', 'where', 'where.exe',
+    'get-location', 'get-childitem', 'get-content', 'select-string', 'test-path', 'resolve-path',
+    'get-command', 'rg', 'rg.exe',
+  ]);
+  if (!allowed.has(executable)) return false;
+  if (['rg', 'rg.exe'].includes(executable) && tokens.slice(1).some((arg) => /^--pre(?:=|$|-glob)/i.test(arg))) {
+    throw new Error('rg --pre/--pre-glob 可执行外部命令，已拒绝。');
+  }
+  return true;
+}
+
 function isSafeBeforeStartShell(command) {
-  const safeBeforeStart = [
-    /^(?:pwd|ls|dir|Get-ChildItem|Get-Content|Select-String|rg)(?:\s|$)/i,
-    /^git\s+(?:status|diff|log|show|branch|rev-parse|merge-base|fetch|remote|ls-files|worktree\s+(?:list|add))(?:\s|$)/i,
-    /^gh\s+(?:auth\s+status|repo\s+view|issue\s+(?:view|list)|pr\s+(?:view|list|checks))(?:\s|$)/i,
-    /^node(?:\.exe)?\s+['"]?[^'"\r\n]*scripts[\\/]claude-task\.cjs['"]?\s+(?:context|start|disarm)(?:\s|$)/i,
-    /^node(?:\.exe)?\s+['"]?[^'"\r\n]*scripts[\\/]agent-preflight\.cjs['"]?(?:\s|$)/i,
-  ];
-  return !/[;&|<>\r\n]/.test(command) && safeBeforeStart.some((pattern) => pattern.test(command));
+  if (hasShellControl(command)) return false;
+  const tokens = shellTokens(command);
+  const executable = path.basename(String(tokens[0] || '')).toLowerCase();
+  try {
+    if (['git', 'git.exe'].includes(executable)) {
+      const { globals, command: subcommand, args } = gitSubcommand(tokens);
+      assertSafeGitGlobals(globals);
+      assertSafeGitRead(subcommand, args, { allowFetch: true });
+      return true;
+    }
+    if (['gh', 'gh.exe'].includes(executable)) return isSafeGhRead(tokens);
+    if (isReadOnlyShellCommand(tokens)) return true;
+    if (['node', 'node.exe'].includes(executable)) {
+      if (tokens.length === 2 && ['--version', '-v'].includes(tokens[1])) return true;
+      return /^.*scripts[\\/]claude-task\.cjs$/i.test(String(tokens[1] || '')) &&
+        ['context', 'start', 'start-r0'].includes(String(tokens[2] || '').toLowerCase()) ||
+        /^.*scripts[\\/]agent-preflight\.cjs$/i.test(String(tokens[1] || ''));
+    }
+    if (['npm', 'npm.cmd', 'npm.exe'].includes(executable) && ['--version', '-v'].includes(tokens[1])) return true;
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 function commandShellGuard() {
@@ -581,7 +1015,6 @@ function commandShellGuard() {
   const active = loadState(root);
 
   if (!active) {
-    if (!intentRequiresContract(root)) return;
     if (isSafeBeforeStartShell(command)) return;
     process.stderr.write(
       'COREONE shell blocked: this governed prompt has no active task contract. Only live-state reads, worktree setup, preflight, and claude-task start are allowed.',
@@ -591,20 +1024,42 @@ function commandShellGuard() {
   }
 
   try {
-    assertActiveState(root, active);
-    if (/[;&|<>\r\n]/.test(command)) {
+    if (hasShellControl(command)) {
       throw new Error('受治理任务禁止在一个 Bash 调用中串联、管道或重定向；请拆成单一命令，便于逐步审计。');
     }
-    if (/\bgit\s+(?:reset\s+--hard|clean\b|checkout\s+--|restore\b|push\b[^\r\n]*--force)/i.test(command)) {
-      throw new Error('受治理任务禁止 destructive/force Git 命令。');
+    const tokens = shellTokens(command);
+    const executable = path.basename(String(tokens[0] || '')).toLowerCase();
+    const check = { ...active.state, forceLiveCheck: false };
+    if (['git', 'git.exe'].includes(executable)) {
+      assertSafeGitCommand(tokens, check);
+    } else if (['gh', 'gh.exe'].includes(executable)) {
+      assertSafeGhCommand(tokens, check);
+    } else if (['node', 'node.exe'].includes(executable)) {
+      assertSafeNodeCommand(tokens);
+    } else if (['npm', 'npm.cmd', 'npm.exe'].includes(executable)) {
+      assertSafeNpmCommand(tokens);
+    } else if (!isReadOnlyShellCommand(tokens)) {
+      throw new Error(`${executable || '<missing>'} 不在任务 shell 允许列表；文件修改使用 Edit/Write，项目检查使用 node/npm scripts。`);
     }
-    if (/\bgit\s+push\b[^\r\n]*(?:\s|:)(?:master|main)(?:\s|$)/i.test(command)) {
-      throw new Error('禁止直接 push master/main；只推当前任务分支。');
-    }
+    assertActiveState(root, active, { force: check.forceLiveCheck });
+    if (check.forceLiveCheck) assertOwnedChanges(root, active.state);
   } catch (error) {
     process.stderr.write(`COREONE shell blocked: ${error.message}`);
     process.exitCode = 2;
   }
+}
+
+function commandMcpGuard() {
+  const input = readHookInput();
+  const tool = String(input.tool_name || '');
+  const operation = tool.split('__').pop() || '';
+  const readOnlyName = /^(?:get|list|read|search|find|query|view|explore|status|fetch)(?:_|$)/i;
+  const writeSignal = /(?:^|_)(?:write|create|update|delete|remove|add|set|post|put|patch|merge|close|comment)(?:_|$)/i;
+  if (readOnlyName.test(operation) && !writeSignal.test(operation)) return;
+  process.stderr.write(
+    `COREONE MCP blocked: ${tool || 'unknown tool'} is not provably read-only. Use repository-native Edit/Write or audited gh commands for writes.`,
+  );
+  process.exitCode = 2;
 }
 
 function commandAudit() {
@@ -626,9 +1081,8 @@ function commandGuard() {
   const root = repoRoot(input.cwd || process.cwd());
   const active = loadState(root);
   if (!active) {
-    if (!intentRequiresContract(root)) return;
     process.stderr.write(
-      'COREONE write blocked: this PRD/feature/Issue prompt has no active task contract. Output LOCAL TASK CONTRACT, claim the Issue owner block, then run node scripts/claude-task.cjs start ...',
+      'COREONE write blocked: no local task state. R0 uses start-r0 without an Issue; PRD/feature work uses governed task start.',
     );
     process.exitCode = 2;
     return;
@@ -677,7 +1131,7 @@ function commandStop() {
   const active = loadState(root);
   if (!active) return;
   try {
-    assertActiveState(root, active);
+    assertActiveState(root, active, { force: true });
     assertOwnedChanges(root, active.state);
   } catch (error) {
     process.stderr.write(`COREONE stop audit failed: ${error.message}`);
@@ -686,9 +1140,16 @@ function commandStop() {
   }
   if (!shouldBlockStop(input)) {
     process.stderr.write(
-      `COREONE task state remains active for Issue #${active.state.issue}. ` +
-        'The first Stop reminder was not resolved; this turn may end, but the next session will still require a verified GitHub handoff.',
+      `COREONE task state remains active for ${active.state.mode === 'r0' ? 'local R0 task' : `Issue #${active.state.issue}`}. ` +
+        `The first Stop reminder was not resolved; this turn may end, but the next session will still require ${active.state.mode === 'r0' ? 'finish-r0 evidence' : 'a verified GitHub handoff'}.`,
     );
+    return;
+  }
+  if (active.state.mode === 'r0') {
+    process.stderr.write(
+      'COREONE stop blocked: active R0 task has no target-check evidence. Run finish-r0 --evidence=<actual check> first.',
+    );
+    process.exitCode = 2;
     return;
   }
   process.stderr.write(
@@ -703,6 +1164,7 @@ function commandHandoff(argv) {
   const root = repoRoot();
   const active = loadState(root);
   if (!active) throw new Error('没有活动 task state。');
+  if (active.state.mode === 'r0') throw new Error('R0 使用 finish-r0，不使用 GitHub handoff。');
   const status = String(flags.status || '').toLowerCase();
   const evidence = String(flags.evidence || '').trim();
   if (!HANDOFF_STATUSES.has(status)) {
@@ -710,29 +1172,23 @@ function commandHandoff(argv) {
   }
   assertActiveState(root, active, { force: true });
   assertOwnedChanges(root, active.state);
-  verifyGitHubEvidence(root, evidence, {
+  const handoff = verifyGitHubEvidence(root, evidence, {
     label: 'GitHub handoff 证据',
     requireComment: true,
     activeIssue: active.state.issue,
     since: active.state.startedAt,
     expectedStatus: status,
+    requireHandoffFields: true,
+    requireCurrentActor: true,
   });
+  if (handoff.parsed.kind !== 'issue') {
+    throw new Error(`handoff 必须是活动 Issue #${active.state.issue} 的普通评论，不使用 PR 评论。`);
+  }
   removePrivateFile(active.file);
-  removePrivateFile(intentFile(root));
   process.stdout.write(
     `COREONE handoff recorded: Issue #${active.state.issue} / ${status} / ${evidence}\n` +
       'Local task state cleared; the next device/session must reclaim from GitHub.',
   );
-}
-
-function commandDisarm(argv) {
-  const flags = parseFlags(argv);
-  const root = repoRoot();
-  if (loadState(root)) throw new Error('已有活动 task state，必须使用 handoff，不能 disarm。');
-  const reason = String(flags.reason || '').trim();
-  if (reason.length < 6) throw new Error('--reason 必须说明为何该 prompt 不再需要受治理修改。');
-  removePrivateFile(intentFile(root));
-  process.stdout.write(`COREONE delivery gate disarmed: ${reason}`);
 }
 
 function usage() {
@@ -742,10 +1198,12 @@ function usage() {
     '  node scripts/claude-task.cjs prompt                    # hook stdin JSON',
     '  node scripts/claude-task.cjs guard                     # hook stdin JSON',
     '  node scripts/claude-task.cjs stop                      # hook stdin JSON',
-    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME --risk=R1 --prd=path@SHA --approval=PM_COMMENT_URL --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--dry-run]',
-    '  node scripts/claude-task.cjs shell-guard              # Bash PreToolUse hook stdin JSON',
-    '  node scripts/claude-task.cjs audit                    # Bash PostToolUse hook stdin JSON',
-    '  node scripts/claude-task.cjs disarm --reason=<no governed edit / user cancelled>',
+    '  node scripts/claude-task.cjs start-r0 --reason=<trivial reversible> --owned=path [--excluded=path]',
+    '  node scripts/claude-task.cjs finish-r0 --evidence=<actual target check>',
+    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=path@SHA --approval=PM_COMMENT_URL --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--dry-run]',
+    '  node scripts/claude-task.cjs shell-guard              # Bash/PowerShell PreToolUse hook stdin JSON',
+    '  node scripts/claude-task.cjs mcp-guard                # MCP PreToolUse hook stdin JSON',
+    '  node scripts/claude-task.cjs audit                    # shell/MCP PostToolUse hook stdin JSON',
     '  node scripts/claude-task.cjs handoff --status=waiting-pm --evidence=<fresh [HANDOFF] comment URL>',
   ].join('\n');
 }
@@ -760,33 +1218,42 @@ function main() {
     if (command === 'context') commandContext();
     else if (command === 'prompt') commandPrompt();
     else if (command === 'start') commandStart(argv);
+    else if (command === 'start-r0') commandStartR0(argv);
+    else if (command === 'finish-r0') commandFinishR0(argv);
     else if (command === 'guard') commandGuard();
     else if (command === 'shell-guard') commandShellGuard();
+    else if (command === 'mcp-guard') commandMcpGuard();
     else if (command === 'audit') commandAudit();
     else if (command === 'stop') commandStop();
     else if (command === 'handoff') commandHandoff(argv);
-    else if (command === 'disarm') commandDisarm(argv);
     else throw new Error(`未知命令：${command}\n${usage()}`);
   } catch (error) {
     process.stderr.write(`COREONE Claude task guard: ${error.message}\n`);
     const command = process.argv[2];
-    process.exitCode = ['guard', 'shell-guard', 'audit', 'stop'].includes(command) ? 2 : 1;
+    process.exitCode = ['guard', 'shell-guard', 'mcp-guard', 'audit', 'stop'].includes(command) ? 2 : 1;
   }
 }
 
 if (require.main === module) main();
 
 module.exports = {
+  assertSafeGhCommand,
+  assertSafeGitCommand,
   findScopeViolations,
   globToRegExp,
+  handoffFieldErrors,
   isRelevantPrompt,
+  isPmApprovedStatus,
   isSafeBeforeStartShell,
+  issueFormField,
   matchesAny,
   parseGitHubArtifactUrl,
   parseFlags,
+  parsePmApprovalMarker,
   parseOwnerBlock,
   parsePrdRef,
-  requiresContractPrompt,
+  parseRequirementAcceptanceMap,
   shouldBlockStop,
+  shellTokens,
   toPosix,
 };

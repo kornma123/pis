@@ -15,4 +15,4 @@ argument-hint: "<PRD 路径/URL 或 #工程Issue> [issues|implement|accept]"
 
 默认关闭语义：PRD 驱动的实现 PR 使用 `Refs #N`，因为合并后仍需真跑和 PM 验收；只有主 Issue 的全部验收确实已在合并前满足时才使用 `Closes #N`。
 
-跨设备交接只依赖已推送的分支、GitHub Issue/PR、合并 PRD 与固定 commit。不要依赖本机聊天历史、个人 memory 或未推送文件。结束前在活动 Issue 留一条本轮新普通评论，正文包含 `[HANDOFF] status=<状态>`、证据、风险和下一 owner，并把该评论 URL 交给 `claude-task.cjs handoff` 校验。
+跨设备交接只依赖已推送的分支、GitHub Issue/PR、合并 PRD 与固定 commit。不要依赖本机聊天历史、个人 memory 或未推送文件。结束前由当前 GitHub 操作者在活动 Issue 留一条本轮新普通评论，正文包含 `[HANDOFF] status=<状态>` 以及非占位的 `result:`、`evidence:`、`risk:`、`next-owner:`、`trigger:`，并把该评论 URL 交给 `claude-task.cjs handoff` 校验。

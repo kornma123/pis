@@ -142,6 +142,21 @@ body:
       label: 依赖、owner 与触发条件
       description: 包含数据、外部角色、上游 PRD/Issue、截止时间；没有则填“无”。
 
+  - type: textarea
+    id: ownership_contract
+    attributes:
+      label: Ownership 受控块
+      description: 创建时保持 unassigned；PRD owner 开工时由 claude-task start --claim=true 原子认领。
+      value: |
+        <!-- coreone-owner:start -->
+        - **current owner**: unassigned
+        - **stage / model / surface**: PRD intake / unassigned / GitHub
+        - **owned artifact / files**: 待认领
+        - **claimed at / next trigger**: 未认领 / PRD owner 开工
+        <!-- coreone-owner:end -->
+    validations:
+      required: true
+
   - type: input
     id: suggested_artifact
     attributes:

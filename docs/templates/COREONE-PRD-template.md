@@ -116,11 +116,13 @@
 PM 可在主 Issue / PR 评论中回复：
 
 ```text
-定稿 / 要改 / 新讨论
+[PM-APPROVAL] decision=approved artifact=docs/prd/<本文件>.md@<PM实际审阅的PR head SHA>
 选择：A / B / C
 条件：...
 重审触发：...
 ```
+
+“要改 / 未通过 / 新讨论”不得使用上述 `decision=approved` 标记。Mockup 定稿沿用同一标记并绑定 Mockup 文件；确认纯后端等无需 Mockup 时，使用 `artifact=MOCKUP_NOT_APPLICABLE`，且评论必须发在对应工程 Issue。
 
 ## 10. 定稿与下游交接
 
