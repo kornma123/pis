@@ -329,18 +329,82 @@ function parseRequirementAcceptanceMap(value) {
   return mappings;
 }
 
-function assertIssueDeliveryContract(root, body, prd, mockupRaw, mockupApprovalUrl) {
+function isExactNotApplicable(value) {
+  return /^N\/A$/i.test(String(value || '').replace(/`/g, '').trim());
+}
+
+function assertNonPrdIssueContract(body) {
+  const classification = issueFormField(body, '单一分类').replace(/`/g, '').trim();
+  if (!classification) {
+    throw new Error('非 PRD 工作项必须填写“单一分类”。');
+  }
+  if (/^父级\s*tracking(?:\s|[（(]|$)/i.test(classification)) {
+    throw new Error('父级 tracking 只聚合权威链接，不能进入实现或验收阶段。');
+  }
+
+  for (const field of ['现状证据', '范围', '非范围', '验收标准']) {
+    const value = issueFormField(body, field)
+      .replace(/`/g, '')
+      .replace(/^\s*[-*]\s*(?:\[[ xX]\]\s*)?/gm, '')
+      .trim();
+    if (value.length < 4 || /^(?:todo|tbd|n\/?a|none|无|待补|\.\.\.)$/i.test(value)) {
+      throw new Error(`非 PRD 工作项必须在“${field}”填写可实施、可验收的实质合同。`);
+    }
+  }
+}
+
+function classifyIssueDeliveryContract(body) {
   const prdField = issueFormField(body, 'PRD 固定基线').replace(/`/g, '').trim();
-  const issuePrd = parsePrdRef(prdField);
-  if (!issuePrd || issuePrd.file !== prd.file) {
+  const mappingField = issueFormField(body, 'RQ → AC 映射').replace(/`/g, '').trim();
+  if (!prdField || !mappingField) {
+    throw new Error('实现/验收 Issue 必须同时填写“PRD 固定基线”和“RQ → AC 映射”。');
+  }
+
+  const prdNotApplicable = isExactNotApplicable(prdField);
+  const mappingNotApplicable = isExactNotApplicable(mappingField);
+  if (prdNotApplicable !== mappingNotApplicable) {
+    throw new Error('非 PRD 工作项必须把“PRD 固定基线”和“RQ → AC 映射”同时精确填写为 N/A。');
+  }
+  if (prdNotApplicable) {
+    assertNonPrdIssueContract(body);
+    return { mode: 'NON_PRD', requirements: [], acceptance: [], mappings: [] };
+  }
+
+  const prd = parsePrdRef(prdField);
+  if (!prd) {
+    throw new Error('PRD 驱动 Issue 的“PRD 固定基线”必须是 repo-relative/path.md@<merged commit SHA>。');
+  }
+  const mappings = parseRequirementAcceptanceMap(mappingField);
+  return {
+    mode: 'PRD',
+    prd,
+    requirements: [...new Set(mappings.map((item) => item.requirement))],
+    acceptance: [...new Set(mappings.map((item) => item.acceptance))],
+    mappings,
+  };
+}
+
+function assertIssueMockupContract(body, mockupRaw, mockupApprovalUrl) {
+  const mockupGate = issueFormField(body, 'Mockup 闸点');
+  const mockupLines = mockupGate
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/`/g, ''))
+    .filter(Boolean);
+  if (!mockupLines.includes(String(mockupRaw || '')) || !mockupLines.includes(String(mockupApprovalUrl || ''))) {
+    throw new Error('Issue 的“Mockup 闸点”必须同时包含 --mockup 值和对应 PM 批准评论 URL。');
+  }
+}
+
+function assertIssueDeliveryContract(root, body, prd, mockupRaw, mockupApprovalUrl) {
+  const contract = classifyIssueDeliveryContract(body);
+  if (contract.mode !== 'PRD' || contract.prd.file !== prd.file) {
     throw new Error(`Issue 的“PRD 固定基线”必须精确引用 ${prd.file}@<merged SHA>。`);
   }
+  const issuePrd = contract.prd;
   const issuePrdCommit = git(['rev-parse', `${issuePrd.ref}^{commit}`], root).stdout;
   if (issuePrdCommit !== prd.commit) throw new Error('Issue 的 PRD merge SHA 与 --prd 不一致。');
 
-  const mappings = parseRequirementAcceptanceMap(issueFormField(body, 'RQ → AC 映射'));
-  const requirements = [...new Set(mappings.map((item) => item.requirement))];
-  const acceptance = [...new Set(mappings.map((item) => item.acceptance))];
+  const { mappings, requirements, acceptance } = contract;
   const prdText = git(['show', `${prd.commit}:${prd.file}`], root).stdout;
   for (const id of [...requirements, ...acceptance]) {
     const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -360,12 +424,8 @@ function assertIssueDeliveryContract(root, body, prd, mockupRaw, mockupApprovalU
       );
     }
   }
-  const mockupGate = issueFormField(body, 'Mockup 闸点');
-  const mockupLines = mockupGate.split(/\r?\n/).map((line) => line.trim().replace(/`/g, '')).filter(Boolean);
-  if (!mockupLines.includes(String(mockupRaw || '')) || !mockupLines.includes(String(mockupApprovalUrl || ''))) {
-    throw new Error('Issue 的“Mockup 闸点”必须同时包含 --mockup 值和对应 PM 批准评论 URL。');
-  }
-  return { requirements, acceptance, mappings };
+  assertIssueMockupContract(body, mockupRaw, mockupApprovalUrl);
+  return { mode: 'PRD', requirements, acceptance, mappings };
 }
 
 function readHookInput() {
@@ -542,12 +602,24 @@ function commandStart(argv) {
   let approval = null;
   let mockupApproval = null;
   let deliveryContract = null;
+  let sourceMode = null;
   if (stage === 'implementation' || stage === 'acceptance') {
-    prd = assertPrdBaseline(root, flags.prd);
-    approval = assertPmApproval(root, flags.approval, {
-      label: 'PRD PM 定稿证据',
-      baseline: prd,
-    });
+    const sourceContract = classifyIssueDeliveryContract(issueData.body);
+    sourceMode = sourceContract.mode;
+    if (sourceMode === 'PRD') {
+      prd = assertPrdBaseline(root, flags.prd);
+      approval = assertPmApproval(root, flags.approval, {
+        label: 'PRD PM 定稿证据',
+        baseline: prd,
+      });
+    } else {
+      if (flags.prd && !isExactNotApplicable(flags.prd)) {
+        throw new Error('非 PRD 工作项的 --prd 只能省略或精确填写 N/A。');
+      }
+      if (flags.approval) {
+        throw new Error('非 PRD 工作项不得提供 PRD --approval；权威源是 Issue 的复现/范围/验收合同。');
+      }
+    }
     mockup = assertMockupBaseline(root, flags.mockup);
     mockupApproval = assertPmApproval(root, flags['mockup-approval'], {
       label: mockup.mode === 'NOT_APPLICABLE' ? 'Mockup 不适用的 PM 证据' : 'Mockup PM 定稿证据',
@@ -555,13 +627,18 @@ function commandStart(argv) {
       notApplicable: mockup.mode === 'NOT_APPLICABLE',
       activeIssue: mockup.mode === 'NOT_APPLICABLE' ? issue : null,
     });
-    deliveryContract = assertIssueDeliveryContract(
-      root,
-      issueData.body,
-      prd,
-      flags.mockup,
-      flags['mockup-approval'],
-    );
+    if (sourceMode === 'PRD') {
+      deliveryContract = assertIssueDeliveryContract(
+        root,
+        issueData.body,
+        prd,
+        flags.mockup,
+        flags['mockup-approval'],
+      );
+    } else {
+      assertIssueMockupContract(issueData.body, flags.mockup, flags['mockup-approval']);
+      deliveryContract = sourceContract;
+    }
   }
 
   const preflightArgs = [
@@ -614,6 +691,7 @@ function commandStart(argv) {
     approval,
     mockupApproval,
     deliveryContract,
+    sourceMode,
   };
 
   if (!flags.dryRun) {
@@ -631,6 +709,7 @@ function commandStart(argv) {
   process.stdout.write([
     `COREONE task start: ${flags.dryRun ? 'DRY-RUN PASS' : 'PASS'}`,
     `Issue #${issue} / stage=${stage} / owner=${owner}`,
+    sourceMode ? `source=${sourceMode}` : null,
     `branch=${branch} / base=${state.baseSha.slice(0, 12)}`,
     `owned=${state.owned.join(', ')}`,
     preflight.stdout,
@@ -953,12 +1032,118 @@ function assertSafeGhCommand(tokens, state) {
   throw new Error(`gh ${area || '<missing>'} ${action || ''} 不在任务允许列表。`);
 }
 
-function assertSafeNodeCommand(tokens) {
+function isPathInside(parent, candidate, options = {}) {
+  const relative = path.relative(parent, candidate);
+  if (!relative) return options.allowSame === true;
+  return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+function canonicalRepoNodeEntry(root, cwd, value) {
+  const literalEntry = String(value || '');
+  if (literalEntry.startsWith('~') || /[$%]/.test(literalEntry) || /![^!]+!/.test(literalEntry)) {
+    throw new Error(`node 入口 ${value || '<missing>'} 必须是字面路径，不能依赖 shell 变量或 home 展开。`);
+  }
+  let canonicalRoot;
+  let canonicalCwd;
+  try {
+    canonicalRoot = fs.realpathSync.native(path.resolve(root));
+    canonicalCwd = fs.realpathSync.native(path.resolve(cwd || root));
+  } catch (error) {
+    throw new Error(`node 工作目录无法验证：${error.message}`);
+  }
+  if (!isPathInside(canonicalRoot, canonicalCwd, { allowSame: true })) {
+    throw new Error('node 工作目录必须位于当前仓库 worktree 内。');
+  }
+
+  const candidate = path.resolve(canonicalCwd, String(value || ''));
+  if (!isPathInside(canonicalRoot, candidate)) {
+    throw new Error(`node 入口 ${value || '<missing>'} 必须位于当前仓库 worktree 内。`);
+  }
+  if (!fs.existsSync(candidate)) {
+    throw new Error(`node 入口 ${value} 不存在。`);
+  }
+
+  let canonicalEntry;
+  try {
+    canonicalEntry = fs.realpathSync.native(candidate);
+  } catch (error) {
+    throw new Error(`node 入口 ${value} 无法验证：${error.message}`);
+  }
+  if (!isPathInside(canonicalRoot, canonicalEntry) || !fs.statSync(canonicalEntry).isFile()) {
+    throw new Error(`node 入口 ${value} 必须是当前仓库 worktree 内的真实文件，不能经符号链接越界。`);
+  }
+  return toPosix(path.relative(canonicalRoot, canonicalEntry));
+}
+
+function assertSafeNodeRuntimeFlag(flag) {
+  const allowed = new Set([
+    '--check', '-c', '--test', '--test-only', '--experimental-sqlite',
+    '--enable-source-maps', '--no-warnings', '--trace-warnings', '--trace-deprecation',
+    '--throw-deprecation', '--use-strict',
+  ]);
+  const withValue = /^(?:--conditions|--unhandled-rejections|--test-concurrency|--test-name-pattern|--test-shard|--test-timeout)=\S+$/;
+  if (!allowed.has(flag) && !withValue.test(flag)) {
+    throw new Error(`node 运行参数 ${flag} 不在仓库脚本/检查允许列表。`);
+  }
+}
+
+function assertSafeNodeCommand(tokens, root = process.cwd(), cwd = root) {
+  if (!['node', 'node.exe'].includes(String(tokens[0] || '').toLowerCase())) {
+    throw new Error('node 命令必须使用 PATH 中的裸 node/node.exe，不能改用外部同名可执行文件。');
+  }
   const args = tokens.slice(1);
   const forbidden = /^(?:-e|--eval|-p|--print|-r|--require|--import|--loader|--experimental-loader)(?:=|$)/i;
   const hit = args.find((arg) => forbidden.test(arg));
   if (hit) throw new Error(`node 参数 ${hit} 可加载内联/外部代码，已拒绝。`);
   if (args.length === 0 || args.includes('-')) throw new Error('node 必须显式执行仓库脚本或检查，不能进入 REPL/stdin。');
+  if (args.length === 1 && ['--version', '-v', '--help', '-h'].includes(args[0])) {
+    return { kind: 'metadata', entries: [] };
+  }
+
+  let testMode = false;
+  let entryIndex = -1;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--') {
+      entryIndex = index + 1;
+      break;
+    }
+    if (!arg.startsWith('-')) {
+      entryIndex = index;
+      break;
+    }
+    assertSafeNodeRuntimeFlag(arg);
+    if (arg === '--test') testMode = true;
+  }
+
+  if (entryIndex < 0 || entryIndex >= args.length) {
+    if (testMode) return { kind: 'test', entries: [] };
+    throw new Error('node 必须显式执行仓库内入口文件，或使用 node --test 运行仓库测试发现。');
+  }
+
+  const entries = [{
+    argIndex: entryIndex,
+    relativePath: canonicalRepoNodeEntry(root, cwd, args[entryIndex]),
+  }];
+  if (testMode) {
+    let positionalOnly = false;
+    for (let index = entryIndex + 1; index < args.length; index += 1) {
+      const arg = args[index];
+      if (arg === '--') {
+        positionalOnly = true;
+        continue;
+      }
+      if (!positionalOnly && arg.startsWith('-')) {
+        assertSafeNodeRuntimeFlag(arg);
+        continue;
+      }
+      entries.push({
+        argIndex: index,
+        relativePath: canonicalRepoNodeEntry(root, cwd, arg),
+      });
+    }
+  }
+  return { kind: testMode ? 'test' : 'script', entries };
 }
 
 function assertSafeNpmCommand(tokens) {
@@ -982,7 +1167,7 @@ function isReadOnlyShellCommand(tokens) {
   return true;
 }
 
-function isSafeBeforeStartShell(command) {
+function isSafeBeforeStartShell(command, root = process.cwd(), cwd = root) {
   if (hasShellControl(command)) return false;
   const tokens = shellTokens(command);
   const executable = path.basename(String(tokens[0] || '')).toLowerCase();
@@ -996,10 +1181,17 @@ function isSafeBeforeStartShell(command) {
     if (['gh', 'gh.exe'].includes(executable)) return isSafeGhRead(tokens);
     if (isReadOnlyShellCommand(tokens)) return true;
     if (['node', 'node.exe'].includes(executable)) {
-      if (tokens.length === 2 && ['--version', '-v'].includes(tokens[1])) return true;
-      return /^.*scripts[\\/]claude-task\.cjs$/i.test(String(tokens[1] || '')) &&
-        ['context', 'start', 'start-r0'].includes(String(tokens[2] || '').toLowerCase()) ||
-        /^.*scripts[\\/]agent-preflight\.cjs$/i.test(String(tokens[1] || ''));
+      const node = assertSafeNodeCommand(tokens, root, cwd);
+      if (node.kind === 'metadata') return true;
+      if (node.entries.length !== 1) return false;
+      const entry = node.entries[0];
+      const relativePath = process.platform === 'win32'
+        ? entry.relativePath.toLowerCase()
+        : entry.relativePath;
+      if (relativePath === 'scripts/agent-preflight.cjs') return true;
+      const action = String(tokens[entry.argIndex + 2] || '').toLowerCase();
+      return relativePath === 'scripts/claude-task.cjs' &&
+        ['context', 'start', 'start-r0'].includes(action);
     }
     if (['npm', 'npm.cmd', 'npm.exe'].includes(executable) && ['--version', '-v'].includes(tokens[1])) return true;
     return false;
@@ -1015,7 +1207,7 @@ function commandShellGuard() {
   const active = loadState(root);
 
   if (!active) {
-    if (isSafeBeforeStartShell(command)) return;
+    if (isSafeBeforeStartShell(command, root, input.cwd || root)) return;
     process.stderr.write(
       'COREONE shell blocked: this governed prompt has no active task contract. Only live-state reads, worktree setup, preflight, and claude-task start are allowed.',
     );
@@ -1035,7 +1227,7 @@ function commandShellGuard() {
     } else if (['gh', 'gh.exe'].includes(executable)) {
       assertSafeGhCommand(tokens, check);
     } else if (['node', 'node.exe'].includes(executable)) {
-      assertSafeNodeCommand(tokens);
+      assertSafeNodeCommand(tokens, root, input.cwd || root);
     } else if (['npm', 'npm.cmd', 'npm.exe'].includes(executable)) {
       assertSafeNpmCommand(tokens);
     } else if (!isReadOnlyShellCommand(tokens)) {
@@ -1201,6 +1393,7 @@ function usage() {
     '  node scripts/claude-task.cjs start-r0 --reason=<trivial reversible> --owned=path [--excluded=path]',
     '  node scripts/claude-task.cjs finish-r0 --evidence=<actual target check>',
     '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=path@SHA --approval=PM_COMMENT_URL --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--dry-run]',
+    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=N/A --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--dry-run]  # non-PRD Issue fields must both be N/A',
     '  node scripts/claude-task.cjs shell-guard              # Bash/PowerShell PreToolUse hook stdin JSON',
     '  node scripts/claude-task.cjs mcp-guard                # MCP PreToolUse hook stdin JSON',
     '  node scripts/claude-task.cjs audit                    # shell/MCP PostToolUse hook stdin JSON',
@@ -1239,6 +1432,8 @@ if (require.main === module) main();
 module.exports = {
   assertSafeGhCommand,
   assertSafeGitCommand,
+  assertSafeNodeCommand,
+  classifyIssueDeliveryContract,
   findScopeViolations,
   globToRegExp,
   handoffFieldErrors,

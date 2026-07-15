@@ -90,10 +90,21 @@ PM “定稿”只结束 PRD 内容闸，不自动满足以上实现条件。
 
 ```text
 node scripts/claude-task.cjs start \
-  --issue=N --stage=implementation --owner="Claude Code (Fable 5)" --claim=true --risk=R1 \
+  --issue=N --stage=implementation --owner="<与 Issue body current owner 精确一致>" --claim=true --risk=R1 \
   --prd=docs/prd/PRD-N-name.md@<merged-SHA> \
   --approval=https://github.com/.../issues/N#issuecomment-... \
   --mockup=path/to/mockup.md@<merged-SHA> \
+  --mockup-approval=https://github.com/.../issues/N#issuecomment-... \
+  --owned='path/**' --excluded='other-owner/**'
+```
+
+非 PRD 的 Bug、治理或测试工作项必须在 Issue body 中把 `PRD 固定基线` 与 `RQ → AC 映射` **同时精确填为 `N/A`**；一边为 `N/A`、另一边仍有映射时 fail-closed。此类任务不伪造 PRD 或 PRD 批准证据，启动时用 `--prd=N/A` 并省略 `--approval`；Mockup 闸点仍按工作项表单执行：
+
+```text
+node scripts/claude-task.cjs start \
+  --issue=N --stage=implementation --owner="<与 Issue body current owner 精确一致>" --claim=true --risk=R1 \
+  --prd=N/A \
+  --mockup='NOT_APPLICABLE:不改变界面或主流程' \
   --mockup-approval=https://github.com/.../issues/N#issuecomment-... \
   --owned='path/**' --excluded='other-owner/**'
 ```

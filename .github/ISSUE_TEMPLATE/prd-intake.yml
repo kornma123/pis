@@ -8,8 +8,8 @@ body:
     attributes:
       value: |
         本 Issue 是一份 PRD 的唯一工作单。先搜索已有 Issues、PR 和已合并 PR，避免重复。
-        Claude Code（Fable 5）产出默认是 DRAFT；PM 明确回复“定稿”前，不进入 mockup 或写码。
-        规则入口：`docs/Fable5-PRD-GitHub协作范式.md`。
+        Claude Code 产出默认是 DRAFT；PM 明确回复“定稿”前，不进入 mockup 或写码。
+        规则入口：`docs/Claude-Code-PRD-GitHub协作范式.md`。
 
   - type: dropdown
     id: purpose
@@ -119,7 +119,7 @@ body:
   - type: dropdown
     id: data_boundary
     attributes:
-      label: 提供给 Claude Code（Fable 5）的数据边界
+      label: 提供给 Claude Code 的数据边界
       options:
         - 只含公开仓库内容和已脱敏信息
         - 受控证据只提供 manifest / hash / 脱敏结论
@@ -184,5 +184,5 @@ body:
       options:
         - label: 本 Issue 和附件不含 PII、密钥、生产数据或未公开的精确商业参数。
           required: true
-        - label: 理解 Claude Code（Fable 5）生成内容默认是 DRAFT；只有 PM 的明确可链接评论才能把 PRD 标为定稿。
+        - label: 理解 Claude Code 生成内容默认是 DRAFT；只有 PM 的明确可链接评论才能把 PRD 标为定稿。
           required: true

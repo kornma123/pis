@@ -203,7 +203,7 @@ Claude Code 在 PRD 阶段交付时同时提供：
 
 ### 7.4 通用状态与 PR 复核评论
 
-实现进度、阻塞和 PR 复核不使用 Fable 专属模板；统一使用 [`docs/github-issue-pr-management-loop.md` §9](github-issue-pr-management-loop.md#9-agent-与-github-的评论合同) 的稳定合同。这样 Claude Code 换模型后仍使用同一套字段，也不会让本页这个试运行适配层变成全局规则源。
+实现进度、阻塞和 PR 复核不使用模型专属模板；统一使用 [`docs/github-issue-pr-management-loop.md` §9](github-issue-pr-management-loop.md#9-agent-与-github-的评论合同) 的稳定合同。这样 Claude Code 换模型后仍使用同一套字段，也不会让本页这个试运行适配层变成全局规则源。
 
 ## 8. 失败与偏差处理
 

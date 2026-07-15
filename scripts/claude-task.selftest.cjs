@@ -2,10 +2,13 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const {
   assertSafeGhCommand,
   assertSafeGitCommand,
+  assertSafeNodeCommand,
+  classifyIssueDeliveryContract,
   findScopeViolations,
   handoffFieldErrors,
   isRelevantPrompt,
@@ -23,6 +26,8 @@ const {
   shellTokens,
   toPosix,
 } = require('./claude-task.cjs');
+
+const repositoryRoot = path.resolve(__dirname, '..');
 
 assert.deepEqual(parseFlags(['--issue=12', '--owned=src/**', '--owned=test/**', '--dry-run']), {
   owned: ['src/**', 'test/**'],
@@ -48,8 +53,71 @@ assert.equal(parseOwnerBlock(ownerBody), 'Claude Code');
 assert.equal(parseOwnerBlock('no block'), null);
 
 const issueFormBody = `### PRD 固定基线\n\ndocs/prd/a.md@abcdef1\n\n### RQ → AC 映射\n\nRQ-01 -> AC-01, AC-02`;
+const nonPrdIssueFormBody = `### 单一分类
+
+明确可实施的工程任务
+
+### 现状证据
+
+2026-07-15 在固定分支复现守卫误判。
+
+### PRD 固定基线
+
+N/A
+
+### RQ → AC 映射
+
+N/A
+
+### 范围
+
+- 修复任务入口守卫。
+
+### 非范围
+
+- 不修改业务代码。
+
+### 验收标准
+
+- 自测覆盖允许与拒绝路径。`;
 assert.equal(issueFormField(issueFormBody, 'PRD 固定基线'), 'docs/prd/a.md@abcdef1');
 assert.equal(issueFormField(issueFormBody, 'RQ → AC 映射'), 'RQ-01 -> AC-01, AC-02');
+assert.deepEqual(
+  classifyIssueDeliveryContract(nonPrdIssueFormBody),
+  { mode: 'NON_PRD', requirements: [], acceptance: [], mappings: [] },
+);
+assert.deepEqual(classifyIssueDeliveryContract(issueFormBody), {
+  mode: 'PRD',
+  prd: { file: 'docs/prd/a.md', ref: 'abcdef1' },
+  requirements: ['RQ-01'],
+  acceptance: ['AC-01', 'AC-02'],
+  mappings: [
+    { requirement: 'RQ-01', acceptance: 'AC-01' },
+    { requirement: 'RQ-01', acceptance: 'AC-02' },
+  ],
+});
+assert.throws(() =>
+  classifyIssueDeliveryContract('### PRD 固定基线\n\nN/A\n\n### RQ → AC 映射\n\nRQ-01 -> AC-01'),
+);
+assert.throws(() =>
+  classifyIssueDeliveryContract('### PRD 固定基线\n\ndocs/prd/a.md@abcdef1\n\n### RQ → AC 映射\n\nN/A'),
+);
+assert.throws(() =>
+  classifyIssueDeliveryContract('### PRD 固定基线\n\nN / A\n\n### RQ → AC 映射\n\nN / A'),
+);
+assert.throws(() =>
+  classifyIssueDeliveryContract('### PRD 固定基线\n\nN/A'),
+);
+assert.throws(() =>
+  classifyIssueDeliveryContract(nonPrdIssueFormBody.replace('明确可实施的工程任务', '父级 tracking（只聚合权威链接，不承接实现）')),
+);
+for (const field of ['现状证据', '范围', '非范围', '验收标准']) {
+  const emptyFieldBody = nonPrdIssueFormBody.replace(
+    new RegExp(`(### ${field}\\n\\n)[\\s\\S]*?(?=\\n\\n### |$)`),
+    `$1N/A`,
+  );
+  assert.throws(() => classifyIssueDeliveryContract(emptyFieldBody), `${field} must be substantive`);
+}
 assert.deepEqual(parseRequirementAcceptanceMap('RQ-01 -> AC-01, AC-02\nRQ-02 → AC-03'), [
   { requirement: 'RQ-01', acceptance: 'AC-01' },
   { requirement: 'RQ-01', acceptance: 'AC-02' },
@@ -113,8 +181,15 @@ assert.equal(isSafeBeforeStartShell('git status `touch hacked.txt`'), false);
 assert.equal(isSafeBeforeStartShell('git diff --output=hacked.txt'), false);
 assert.equal(isSafeBeforeStartShell('git -c diff.external=evil diff --ext-diff'), false);
 assert.equal(isSafeBeforeStartShell('gh api repos/acme/core -XPOST'), false);
-assert.equal(isSafeBeforeStartShell('node scripts/claude-task.cjs start --issue=12'), true);
-assert.equal(isSafeBeforeStartShell('node scripts/claude-task.cjs start-r0 --reason=typo-only --owned=README.md'), true);
+assert.equal(isSafeBeforeStartShell('node scripts/claude-task.cjs start --issue=12', repositoryRoot), true);
+assert.equal(isSafeBeforeStartShell('node scripts/claude-task.cjs start-r0 --reason=typo-only --owned=README.md', repositoryRoot), true);
+assert.equal(
+  isSafeBeforeStartShell(
+    `node "${path.resolve(repositoryRoot, '..', 'outside', 'scripts', 'agent-preflight.cjs')}"`,
+    repositoryRoot,
+  ),
+  false,
+);
 assert.doesNotThrow(() => assertSafeGitCommand(shellTokens('git status --short'), { mode: 'governed' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git.exe reset --hard'), { mode: 'governed' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git -C . reset --hard'), { mode: 'governed' }));
@@ -130,6 +205,91 @@ assert.throws(() => assertSafeGhCommand(shellTokens('gh issue close 12'), { mode
 assert.throws(() => assertSafeGhCommand(shellTokens('gh issue edit 12 --body changed'), { mode: 'governed', issue: 12 }));
 assert.throws(() => assertSafeGhCommand(shellTokens('gh issue comment 12 --repo other/repo --body ok'), { mode: 'governed', issue: 12 }));
 assert.throws(() => assertSafeGhCommand(shellTokens('gh issue comment 99 --body ok'), { mode: 'governed', issue: 12 }));
+
+assert.doesNotThrow(() =>
+  assertSafeNodeCommand(shellTokens('node scripts/claude-task.selftest.cjs'), repositoryRoot),
+);
+assert.doesNotThrow(() =>
+  assertSafeNodeCommand(shellTokens('node --check scripts/claude-task.cjs'), repositoryRoot),
+);
+assert.doesNotThrow(() =>
+  assertSafeNodeCommand(shellTokens('node --test'), repositoryRoot),
+);
+assert.throws(() =>
+  assertSafeNodeCommand(shellTokens('node -rC:/tmp/evil.cjs scripts/claude-task.cjs'), repositoryRoot),
+);
+assert.throws(() =>
+  assertSafeNodeCommand(shellTokens('node -pe 1+1'), repositoryRoot),
+);
+assert.throws(() =>
+  assertSafeNodeCommand(shellTokens('node ../outside/mutate.cjs'), repositoryRoot),
+);
+assert.throws(() =>
+  assertSafeNodeCommand(shellTokens(`node "${process.execPath}"`), repositoryRoot),
+);
+assert.throws(() =>
+  assertSafeNodeCommand(
+    shellTokens(`node --test scripts/claude-task.selftest.cjs -- "${process.execPath}"`),
+    repositoryRoot,
+  ),
+);
+assert.throws(() =>
+  assertSafeNodeCommand(
+    shellTokens('C:/outside/node.exe scripts/claude-task.cjs'),
+    repositoryRoot,
+  ),
+);
+assert.doesNotThrow(() =>
+  assertSafeNodeCommand(
+    shellTokens('node scripts/start-production.mjs'),
+    repositoryRoot,
+    path.join(repositoryRoot, '后端代码', 'server'),
+  ),
+);
+
+const expandableNodeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-node-expansion-'));
+try {
+  for (const directory of ['$ENTRY', '%ENTRY%', '~']) {
+    const targetDirectory = path.join(expandableNodeRoot, directory);
+    fs.mkdirSync(targetDirectory);
+    fs.writeFileSync(path.join(targetDirectory, 'task.cjs'), 'process.exitCode = 0;\n');
+  }
+  for (const entry of ['$ENTRY/task.cjs', '%ENTRY%/task.cjs', '~/task.cjs']) {
+    assert.throws(
+      () => assertSafeNodeCommand(shellTokens(`node ${entry}`), expandableNodeRoot),
+      `${entry} must not pass before shell expansion`,
+    );
+  }
+} finally {
+  fs.rmSync(expandableNodeRoot, { recursive: true, force: true });
+}
+
+const guidePath = ['docs', 'Claude-Code-PRD-GitHub协作范式.md'].join('/');
+assert.equal(fs.existsSync(path.join(repositoryRoot, ...guidePath.split('/'))), true);
+const retiredGuidePath = ['docs/', 'Fa', 'ble', '5-PRD-GitHub协作范式.md'].join('');
+const retiredModelPattern = new RegExp(['Fa', 'ble'].join(''), 'i');
+const entryTextByPath = new Map();
+for (const relativePath of [
+  '.claude/commands/coreone-prd.md',
+  '.claude/skills/coreone/SKILL.md',
+  '.github/ISSUE_TEMPLATE/config.yml',
+  '.github/ISSUE_TEMPLATE/prd-intake.yml',
+  guidePath,
+]) {
+  const text = fs.readFileSync(path.join(repositoryRoot, ...relativePath.split('/')), 'utf8');
+  entryTextByPath.set(relativePath, text);
+  assert.equal(text.includes(retiredGuidePath), false, `${relativePath} must not reference the retired guide`);
+  assert.equal(retiredModelPattern.test(text), false, `${relativePath} must not pin a retired model name`);
+}
+assert.equal(entryTextByPath.get('.claude/commands/coreone-prd.md').includes(guidePath), true);
+assert.equal(entryTextByPath.get('.github/ISSUE_TEMPLATE/prd-intake.yml').includes(guidePath), true);
+assert.equal(
+  [...entryTextByPath.get('.github/ISSUE_TEMPLATE/config.yml').matchAll(/^\s+url:\s+(\S+)/gm)]
+    .map((match) => decodeURIComponent(new URL(match[1]).pathname))
+    .some((pathname) => pathname.endsWith(`/${guidePath}`)),
+  true,
+  'Issue config must link to the committed guide',
+);
 assert.equal(shouldBlockStop({ stop_hook_active: false }), true);
 assert.equal(shouldBlockStop({ stop_hook_active: true }), false);
 
