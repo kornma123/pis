@@ -49,6 +49,9 @@ jobs:
         run: node scripts/agent-preflight.selftest.cjs
       - name: Agent contract drift check
         run: node scripts/agent-preflight.cjs --mode=review --target-ref=HEAD --rules-only --no-worktree-report
+      # Claude Code 跨设备任务守卫：确保任务合同、owned/excluded files 与交接状态机持续可执行。
+      - name: Claude task guard selftest
+        run: node scripts/claude-task.selftest.cjs
       # 自测：守护闸工具自身没被静默改坏（解析器漂了/口径变哑）。失败即红。
       - name: Selftest（工具不变量）
         run: node scripts/build-discipline/selftest.cjs

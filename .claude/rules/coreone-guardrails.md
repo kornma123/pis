@@ -54,7 +54,7 @@
 - **Express 路由** 按功能模块拆分，一个模块一个文件
 - **node:sqlite DatabaseSync** 是唯一数据库接口，不要用 sqlite3
 - **所有路由** 必须有认证中间件 (除 `/api/v1/auth` 和 `/api/health`)
-- **权限检查** 以 `requirePermission(module, level)` 的数据驱动 RBAC 为生产主线；角色、管理员与职责分离等例外条件使用 `authz-combinators.ts` 的具名组合子。`requireRole()` 仅是遗留测试兼容层，不作为新生产路由规范
+- **权限检查**：能力矩阵路由使用 `permissions.ts` 的 `requirePermission(module, level)`；角色范围路由可使用同文件的 `requireAnyRole(...)`；管理员、职责分离与口径变更等附加条件使用 `authz-combinators.ts` 的具名守卫。所有操作者身份判定必须落在该完整注册表中，禁止在 handler 内联 `req.user` 角色逻辑。`requireRole()` 仅是遗留测试兼容层，不作为新生产路由规范
 - **输入验证** 遵循相邻活路由的显式契约：类型转换、必填、范围、枚举/白名单与稳定错误码都要有可执行测试。`express-validator` 虽是依赖，但活代码没有把它作为全路由统一入口；新代码不得仅因纸面规则强制换库
 - **SQL 查询** 使用参数化/占位符，禁止字符串拼接
 - **响应格式** 统一使用 `success: true/false` + `data` / `error` 结构
@@ -131,13 +131,17 @@ test(e2e): 补充入库流程 E2E 用例
 
 > 背景：一次多镜头自审曾把"`auth.ts` admin 分支只 `next()`、无审计写入"报为审计缺口。核实后为**误报**——审计不落在守卫层。此处固化真实口径，防复发。
 
-- **鉴权守卫 ≠ 审计落点**：`requireRole` / `requirePermission`（`middleware/`）是访问控制，对 GET 读也触发、且在业务操作成功前就跑。**不要在守卫的 admin 放行分支补 `writeAuditLog`**（会记录读操作、并在操作成功前误记）。`requireRole` 已是遗留兼容 shim（生产路由全走 `requirePermission`，仅测试脚手架仍引用）。
+- **鉴权守卫 ≠ 审计落点**：`requireRole` / `requirePermission` / `requireAnyRole` 及其他具名守卫（`middleware/`）是访问控制，对 GET 读也可能触发、且在业务操作成功前就跑。**不要在守卫的 admin 放行分支补 `writeAuditLog`**（会记录读操作、并在操作成功前误记）。`requireRole` 已是遗留兼容 shim；生产路由按自身合同使用 `requirePermission`、`requireAnyRole` 与已注册具名守卫。
 - **敏感写在操作层留痕**：碰钱/口径的写（关账、成本核算、成本调整/补收、对账修正与审批、预算、质量成本）经 `writeAuditLog` 落 `abc_audit_logs`，字段含 `operator`（=用户名），**对 admin 一视同仁**；对账另有 SoD 自审拦截（`reconciliation-v1.1.ts`：不能审核自己提交的提案）。回归门禁见 `tests/bv-admin-audit-trail.test.ts`。
 - **全站写操作统一审计（成功 2026-07-02·被拒 SEC-3/P-3 补 2026-07-08）**：`middleware/audit-log.ts` 的 `auditWrite`（`app.ts` 全局挂载，路由之前）对**登录后的写操作（POST/PUT/PATCH/DELETE）成功与被拒都记** `operation_logs`；用**可空 `outcome` 列**区分四态（`NULL`=成功 / `denied` / `denied_agg` / `security_alert`），`finish` 回调是**三互斥终态早返回**：
   - **成功(2xx)**（`outcome=NULL`）：记 `operator`/模块/路径/**脱敏后**请求体/ip/ua。**全站双轨**（成本/对账域与其专属审计并存，`operation_logs` = 「谁在何时改了什么」统一账本）；**强制脱敏**（password/token/secret 不落库）。
   - **被拒(4xx·P-3)**：记 `operator`/方法/**剥掉 query 的路径**/`{status, 标量拒因码}`——**绝不落 `req.body`**（防日志投毒 + 防敏感数据入库·**安全红线**·物理分支隔离，与成功路径同处一个 `finish` 回调故靠早返回硬隔离）。拒因码只读标量 `error.code`（绝不深入 `error.message/details`——dev 会回显输入/PII）。同主体每类每分钟超阈自动聚合成 `denied_agg` 计数行（防失败请求刷爆）；同主体短时对多个 distinct 写端点被拒(403)→`security_alert` 行 + `console.warn`（越权探测签名）。
   - **不记**：读(GET)/公开接口(/auth 登录)/未登录(401 无 `req.user`)/**5xx**（服务器故障非访问拒绝，归 errorHandler/错误监控）**天然不记**。
   - 回归门禁：`tests/bv-write-audit-middleware.test.ts`（HTTP 集成）+ `tests/denial-tracker.test.ts`（纯逻辑·注入时钟）。**勿再在守卫层补审计**（口径见上一条），新增写路由无需手动写通用日志——中间件已自动覆盖（成功 + 被拒）；仅当需要 before/after 明细时才在路由内额外手写（如成本域 `writeAuditLog`）。
+
+## 跨设备/跨模型工作机制补充
+
+仅存于单机 AI 私有记忆的稳定工作机制已收编入 `docs/COREONE-跨设备跨模型一致性-本地私有机制入仓-2026-07-14.md`（对抗面板执行纪律、Git/Shell 操作纪律、worktree 测试姿势、前端写权限判据、并行分派增量，及一张「已有权威承载只指路」表）。跨设备 / 跨模型会话开工时随本文件一并读取；新教训按其 §1 元规则当场入仓，不再只写单机记忆。
 
 ---
 
