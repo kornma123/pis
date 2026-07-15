@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>院级贡献毛利 · 月份窄 delta mockup（DRAFT）</title>
+  <title>院级贡献毛利 · 月份窄 delta mockup（E0 APPROVED）</title>
   <style>
     :root {
       --ink: #0a2540;
@@ -55,7 +55,7 @@
       padding: 24px 0 56px;
     }
 
-    .draft-banner {
+    .approval-banner {
       display: flex;
       gap: 10px;
       align-items: flex-start;
@@ -67,7 +67,7 @@
       background: var(--amber-soft);
     }
 
-    .draft-banner strong { white-space: nowrap; }
+    .approval-banner strong { white-space: nowrap; }
 
     .eyebrow {
       margin-bottom: 6px;
@@ -294,8 +294,8 @@
 
     @media (max-width: 420px) {
       .scenario-buttons { grid-template-columns: 1fr; }
-      .draft-banner { display: block; }
-      .draft-banner strong { display: block; margin-bottom: 4px; }
+      .approval-banner { display: block; }
+      .approval-banner strong { display: block; margin-bottom: 4px; }
       .card { padding: 15px; }
     }
 
@@ -323,9 +323,9 @@
 </head>
 <body>
   <main class="page">
-    <aside class="draft-banner" data-testid="draft-banner" role="note">
-      <strong>DRAFT · 待 PM 明确批准</strong>
-      <span>本页只演示月份 delta；所有月份、版本和状态均为虚构样例，不是 readiness、golden、业务验收或生产解锁证据。</span>
+    <aside class="approval-banner" data-testid="approval-banner" role="note">
+      <strong>E0 APPROVED · PM 已批准四项交互合同</strong>
+      <span>本页只演示月份 delta；所有月份、版本和状态均为虚构样例。本批准不是 readiness、golden、业务验收或生产解锁证据，也不授权启动 E1。</span>
     </aside>
 
     <div class="eyebrow">COREONE / hospital-cm / Issue #185 E0</div>
@@ -363,7 +363,7 @@
     </section>
 
     <section class="card">
-      <h2>请 PM 只判断四件事</h2>
+      <h2>PM 已批准的四项 E0 交互合同</h2>
       <ol class="decision-list">
         <li>未选月份时不自动代选，并保持校准。</li>
         <li>就绪判断月份与完整体检月份必须完全一致。</li>

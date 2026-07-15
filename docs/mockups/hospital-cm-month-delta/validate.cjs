@@ -9,6 +9,7 @@ const mockupDir = __dirname
 const repoRoot = path.resolve(mockupDir, '..', '..', '..')
 const frontendDir = path.join(repoRoot, '前端代码')
 const indexPath = path.join(mockupDir, 'index.html')
+const readmePath = path.join(mockupDir, 'README.md')
 const baselinePath = path.join(repoRoot, 'docs', 'mockups', 'hospital-cm-readiness-closure', 'index.html')
 
 assert.ok(
@@ -18,8 +19,20 @@ assert.ok(
 assert.ok(fs.existsSync(baselinePath), '已批准 hospital-cm mockup 基线不存在。')
 
 const html = fs.readFileSync(indexPath, 'utf8')
+const readme = fs.readFileSync(readmePath, 'utf8')
 assert.match(html, /id=["']month-select["'][^>]*type=["']month["']|type=["']month["'][^>]*id=["']month-select["']/, '[RED] 缺少原生月份选择器 #month-select[type=month]。')
-assert.match(html, /data-testid=["']draft-banner["']/, '缺少全页 DRAFT 声明。')
+assert.match(html, /data-testid=["']approval-banner["']/, '缺少全页 E0 APPROVED 声明。')
+const approvalArtifacts = [
+  ['页面', html, /本批准不是 readiness、golden、业务验收或生产解锁证据/],
+  ['README', readme, /本批准只冻结四项月份 delta 交互合同[\s\S]*不替代 readiness、golden、业务验收或生产解锁证据/],
+]
+for (const [artifact, content, boundaryPattern] of approvalArtifacts) {
+  assert.match(content, /E0 APPROVED/, `${artifact} 未明确标记 E0 APPROVED。`)
+  assert.match(content, /PM 已批准的四项 E0 交互合同/, `${artifact} 未列明 PM 已批准的四项 E0 交互合同。`)
+  assert.match(content, /不授权启动 E1/, `${artifact} 未声明 E0 批准不授权启动 E1。`)
+  assert.match(content, boundaryPattern, `${artifact} 未以明确否定语义声明批准边界。`)
+  assert.doesNotMatch(content, /DRAFT|请 PM|PM 只需判断/, `${artifact} 仍残留待决状态文案。`)
+}
 assert.match(html, /data-frame-target=["']F0["']/, '缺少 F0 演示控制。')
 assert.match(html, /data-frame-target=["']F1["']/, '缺少 F1 演示控制。')
 assert.match(html, /data-frame-target=["']F2["']/, '缺少 F2 演示控制。')
