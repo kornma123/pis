@@ -9,7 +9,7 @@ Claude Code 会话开始任何工作前必须完整读取唯一共用契约：
 ## 本地自动路由
 
 - 项目级 Skill `.claude/skills/coreone/SKILL.md` 是 Claude Code 的本地工作路由。遇到 PRD、功能、Bug、Issue/PR、代码、测试、复核或跨设备接手时自动调用；不要等用户重复粘贴 GitHub 规则。
-- 第一次修改前必须先输出 Skill 定义的 `LOCAL TASK CONTRACT`。缺 PRD/Issue、owner、阶段闸点、owned/excluded files 或 preflight 时，停在补合同阶段，不直接写码。
+- PRD、功能、Bug、Issue/PR、测试、复核、验收或跨设备交付任务，第一次修改前必须先输出 Skill 定义的 `LOCAL TASK CONTRACT`。缺 PRD/Issue、owner、阶段闸点、owned/excluded files 或 preflight 时，停在补合同阶段，不直接写码。R0 琐碎可逆修改沿用权威工作模型的轻量路径，不强制新建 Issue。
 - 新想法 / 未定需求 → `/coreone-prd`；已定稿 PRD / “按 PRD 继续” → `/coreone-deliver-prd`；`/feature-development` 只是兼容入口，必须回到同一 Skill，不能另走旧脚手架。
 - PRD 驱动任务以 `PRD path@merged SHA + AC IDs + 工程 Issue` 为最小下游输入；当前实施矩阵写回 Issue/PR，不只留在 Claude 对话中。
 - 跨设备工作只承认已进入 GitHub/Git 的状态。另一台设备先拉取含本入口与 Skill 的提交，再从仓库根目录或其子目录启动 Claude Code；未推送分支、个人 memory、聊天历史和本地 session-log 不构成交接。

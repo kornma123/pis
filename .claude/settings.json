@@ -7,7 +7,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/claude-task.cjs\" context",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "context"],
             "timeout": 20
           }
         ]
@@ -18,7 +19,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/claude-task.cjs\" prompt",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "prompt"],
             "timeout": 20
           }
         ]
@@ -30,7 +32,32 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/claude-task.cjs\" guard",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "guard"],
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "shell-guard"],
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "audit"],
             "timeout": 20
           }
         ]
@@ -41,7 +68,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/claude-task.cjs\" stop",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/scripts/claude-task.cjs", "stop"],
             "timeout": 20
           }
         ]

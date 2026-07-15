@@ -26,9 +26,9 @@ description: COREONE 仓库的本地工作路由。处理任何 PRD、功能、B
 
 `/feature-development` 只是兼容入口，不能绕过本 Skill 直接写码。
 
-## 2. 第一次修改前交付本地任务合同
+## 2. 受治理交付任务第一次修改前交付本地任务合同
 
-先在会话中给出以下短块；有 GitHub 写权限时，把动态字段同步到主 Issue / PR：
+PRD、功能、Bug、Issue/PR、测试、复核、验收和跨设备交付先在会话中给出以下短块；有 GitHub 写权限时，把动态字段同步到主 Issue / PR。R0 错字、小样式等琐碎可逆修改按权威工作模型直接做、目标检查和简短收尾，不为此硬建 Issue。若相关 prompt 最终只需解释/只读检查或用户取消、且尚未建立 task state，运行 `node scripts/claude-task.cjs disarm --reason=<具体原因>` 解除本会话的交付写入门。
 
 ```text
 LOCAL TASK CONTRACT
@@ -86,7 +86,7 @@ PM “定稿”只结束 PRD 内容闸，不自动满足以上实现条件。
 3. fetch、建立独立 worktree/branch，声明 owned/excluded files；运行 `node scripts/claude-task.cjs start ...` 建立 worktree 私有任务状态并通过 develop preflight。
 4. 重新核对 PRD 固定版本、依赖 PR、活代码与现状；功能已经存在或前提已变化时停下并报告证据。
 
-实现阶段使用以下形态；PRD / Mockup 阶段省略不适用的 `--prd/--approval/--mockup`：
+实现阶段使用以下形态；PRD / Mockup 阶段省略不适用的 `--prd/--approval/--mockup/--mockup-approval`：
 
 ```text
 node scripts/claude-task.cjs start \
@@ -94,10 +94,11 @@ node scripts/claude-task.cjs start \
   --prd=docs/prd/PRD-N-name.md@<merged-SHA> \
   --approval=https://github.com/.../issues/N#issuecomment-... \
   --mockup=path/to/mockup.md@<merged-SHA> \
+  --mockup-approval=https://github.com/.../issues/N#issuecomment-... \
   --owned='path/**' --excluded='other-owner/**'
 ```
 
-纯后端任务用 `--mockup='NOT_APPLICABLE:具体理由'`，不能只写 `N/A`。
+纯后端任务用 `--mockup='NOT_APPLICABLE:具体理由'`，不能只写 `N/A`；仍须用 `--mockup-approval=<PM普通评论URL>` 证明 PM 同意“不适用”。
 
 ### D. 建立验收追踪矩阵
 
@@ -143,7 +144,7 @@ AC-01  | ...          | ...      | ...          | ...          | ...      | pend
 4. reviewer 评论或 head SHA 变化后；
 5. 请求 PM 合并、验收或跨设备接手前。
 
-跨设备接手只依赖 GitHub Issue、PR body/checks、合并 PRD 和固定 commit；不得依赖另一台设备的聊天历史、个人 memory、未推送分支或本地 session-log。停止前运行 `node scripts/claude-task.cjs handoff --status=<...> --evidence=<GitHub URL>`；共享 Stop hook 会在缺少 GitHub handoff 时阻止把活动任务宣称为结束。
+跨设备接手只依赖 GitHub Issue、PR body/checks、合并 PRD 和固定 commit；不得依赖另一台设备的聊天历史、个人 memory、未推送分支或本地 session-log。停止前先在活动 Issue 留普通评论，正文包含 `[HANDOFF] status=<状态>`、结果、证据、风险和下一 owner，再运行 `node scripts/claude-task.cjs handoff --status=<同一状态> --evidence=<本轮新评论URL>`。共享 Stop hook 首次提醒未交接，task state 在证据校验成功前不会清除。
 
 ## 5. 收尾输出
 
