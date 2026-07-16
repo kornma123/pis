@@ -20,9 +20,22 @@ describe('canAccess（能力并集）', () => {
     expect(canAccess('abc_dashboard', 'W')).toBe(true)
     expect(canAccess('outbound', 'R')).toBe(false)
   })
-  it('capabilities 缺失 → 放行（退回旧逻辑兜底）', () => {
+  it('capabilities 缺失 → R 放行（判据不明时不硬挡页面，可达性另由 getAccessiblePaths 裁决）', () => {
     setUser({ role: 'finance' })
     expect(canAccess('whatever', 'R')).toBe(true)
+  })
+  // 陈旧会话（capabilities 上线前铸造的 localStorage.user）曾使写门 fail-open，
+  // 露出点了必吃 403 的按钮——PR #202 收敛为 fail-closed（PM #135：写按钮必须跟随 capability）。
+  it('capabilities 缺失 → W 拒绝（fail-closed，不露出必吃 403 的按钮）', () => {
+    setUser({ role: 'lab_director' })
+    expect(canAccess('labor_times', 'W')).toBe(false)
+    expect(canAccess('whatever', 'W')).toBe(false)
+  })
+  // 零权限用户：后端 getEffectivePermissions 返回 {}，非 null → 不走 caps 缺失分支。
+  it('capabilities 为空对象 → R/W 均拒绝（{} 是真值，走模块缺失分支）', () => {
+    setUser({ role: 'pathologist', capabilities: {} })
+    expect(canAccess('labor_times', 'R')).toBe(false)
+    expect(canAccess('labor_times', 'W')).toBe(false)
   })
 })
 

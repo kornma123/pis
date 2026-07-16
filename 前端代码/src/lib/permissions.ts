@@ -27,18 +27,6 @@ export function getUserRole(): string | null {
   return null
 }
 
-// ABC 移植：读取当前用户权限码列表（ABC 页面/hook 按权限显隐操作）
-export function getUserPermissions(): string[] {
-  try {
-    const userStr = localStorage.getItem('user')
-    if (!userStr) return []
-    const user = JSON.parse(userStr)
-    return Array.isArray(user.permissions) ? user.permissions : []
-  } catch {
-    return []
-  }
-}
-
 // ============================================================================
 // 数据驱动多角色 RBAC（能力并集）—— 登录响应 user.capabilities/roles/canSeeCost
 // 为单一来源；nav/守卫/仪表盘统一读它。capabilities 缺失时退回旧 ROLE_MENU_MAP。
@@ -69,10 +57,25 @@ export function getRoles(): string[] {
   }
 }
 
-/** 当前用户对 module 是否具备 level 权限（W 蕴含 R）。capabilities 缺失→放行（退回旧逻辑，由 getAccessiblePaths 兜底 nav）。 */
+/**
+ * 当前用户对 module 是否具备 level 权限（W 蕴含 R）。
+ *
+ * capabilities 整键缺失时**按级别分叉**：
+ *   - R（读/展示）→ 放行。判据不明时不硬挡页面，可达性另由 getAccessiblePaths 独立裁决。
+ *   - W（写按钮显隐）→ **拒绝（fail-closed）**。露出一个点了必吃 403 的按钮，比暂时藏起来更糟；
+ *     且 PM 已拍板「前端写按钮必须跟随 capability，不能只等后端返回 403」（#135, 2026-07-15）。
+ *
+ * 注：caps 缺失只在陈旧会话下发生（capabilities 随 de3ac083 上线；此前铸造的 localStorage.user 无该键）。
+ *   `localStorage.user` 只有两个写入点——Login.tsx（重新登录）与 request.ts（401 触发 refresh 成功后重写），
+ *   两者的后端载荷都恒含 capabilities。**但前端没有定时器、没有启动期 hydration，`/auth/me/capabilities` 亦零消费者**，
+ *   故陈旧 blob 不会自动过期：它只在「重新登录」或「下一次请求吃到 401 并 refresh 成功」时才被覆盖；
+ *   一直不发请求的闲置会话可以留存更久（refresh token 7d 是有效期上界，不是强制登出的时刻）。
+ *   ⇒ 本分支在生产常态罕见但**不保证不可达**，故此处按级别分叉是真实加固，不只是形式主义。
+ *   ⚠️ `capabilities: {}`（零权限）不走本分支——空对象为真值，落下方模块缺失分支，本就返回 false。
+ */
 export function canAccess(module: string, level: CapLevel = 'R'): boolean {
   const caps = getCapabilities()
-  if (!caps) return true
+  if (!caps) return level === 'R'
   const got = caps[module]
   if (!got) return false
   return level === 'R' ? true : got === 'W'
