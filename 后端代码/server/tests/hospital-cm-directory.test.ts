@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
+  HOSPITAL_CM_DIRECTORY_LINEAGE_RECIPE_VERSION,
   HOSPITAL_CM_DIRECTORY_ROSTER_RECIPE_VERSION,
   HospitalCmDirectoryError,
   ensureHospitalCmDirectorySchema,
@@ -11,6 +12,7 @@ import {
   listHospitalCmDirectoryRevisions,
   projectHospitalCmDirectoryForMonth,
   resolveHospitalCmDirectoryPartner,
+  resolveHospitalCmDirectoryPartners,
   saveHospitalCmDirectoryRevision,
 } from '../src/utils/hospital-cm-directory.js'
 
@@ -111,6 +113,28 @@ function expectedRosterSourceHash(serviceMonth: string, accounts: string[]): str
   })
 }
 
+function expectedRevisionLineageHash(input: {
+  id: string
+  eventNumber: number
+  revision: number
+  knownCompleteFromMonth: string
+  entryCount: number
+  aliasCount: number
+  contentHash: string
+  supersedesVersionId: string | null
+  parentRevisionLineageHash: string | null
+  reasonCode: string
+  recordedByUserId: string
+  recordedByUsername: string
+  recordedAt: string
+}): string {
+  return stableHash({
+    recipeVersion: HOSPITAL_CM_DIRECTORY_LINEAGE_RECIPE_VERSION,
+    contractVersion: HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
+    ...input,
+  })
+}
+
 function insertForgedSingleEntryRevision(
   db: DatabaseSync,
   previous: ReturnType<typeof saveHospitalCmDirectoryRevision>,
@@ -122,21 +146,38 @@ function insertForgedSingleEntryRevision(
     knownCompleteFromMonth: previous.knownCompleteFromMonth,
     rowHashes: [retained.rowHash],
   })
+  const recordedAt = new Date().toISOString()
+  const revisionLineageHash = expectedRevisionLineageHash({
+    id,
+    eventNumber: 2,
+    revision: 2,
+    knownCompleteFromMonth: previous.knownCompleteFromMonth,
+    entryCount: 1,
+    aliasCount: retained.aliases.length,
+    contentHash,
+    supersedesVersionId: previous.id,
+    parentRevisionLineageHash: previous.revisionLineageHash,
+    reasonCode: 'FORGED_MEMBER_OMISSION',
+    recordedByUserId: 'FORGER',
+    recordedByUsername: 'forger',
+    recordedAt,
+  })
   db.prepare(`
     INSERT INTO hospital_cm_directory_versions (
-      id, revision, contract_version, known_complete_from_month,
-      entry_count, alias_count, content_hash,
+      event_number, id, revision, contract_version, known_complete_from_month,
+      entry_count, alias_count, content_hash, revision_lineage_hash,
       supersedes_version_id, reason_code, recorded_by_user_id,
       recorded_by_username, recorded_at
-    ) VALUES (?, 2, ?, ?, 1, ?, ?, ?, 'FORGED_MEMBER_OMISSION', 'FORGER', 'forger', ?)
+    ) VALUES (2, ?, 2, ?, ?, 1, ?, ?, ?, ?, 'FORGED_MEMBER_OMISSION', 'FORGER', 'forger', ?)
   `).run(
     id,
     HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
     previous.knownCompleteFromMonth,
     retained.aliases.length,
     contentHash,
+    revisionLineageHash,
     previous.id,
-    new Date().toISOString(),
+    recordedAt,
   )
   db.prepare(`
     INSERT INTO hospital_cm_directory_entries (
@@ -166,6 +207,87 @@ function insertForgedSingleEntryRevision(
       alias,
       alias.normalize('NFKC').trim().toLowerCase(),
     )
+  }
+}
+
+function insertForgedMovedStartRevision(
+  db: DatabaseSync,
+  previous: ReturnType<typeof saveHospitalCmDirectoryRevision>,
+  id: string,
+): void {
+  const prior = previous.entries[0]!
+  const moved = {
+    stablePartnerId: prior.stablePartnerId,
+    accountCode: prior.accountCode,
+    canonicalDisplayName: prior.canonicalDisplayName,
+    aliases: prior.aliases,
+    hospitalCmIncluded: true,
+    effectiveFromMonth: '2026-07',
+    effectiveToMonth: prior.effectiveToMonth,
+  }
+  const rowHash = stableHash(moved)
+  const contentHash = stableHash({
+    contractVersion: HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
+    knownCompleteFromMonth: previous.knownCompleteFromMonth,
+    rowHashes: [rowHash],
+  })
+  const recordedAt = '2026-07-16T00:02:00.000Z'
+  const revisionLineageHash = expectedRevisionLineageHash({
+    id,
+    eventNumber: 2,
+    revision: 2,
+    knownCompleteFromMonth: previous.knownCompleteFromMonth,
+    entryCount: 1,
+    aliasCount: prior.aliases.length,
+    contentHash,
+    supersedesVersionId: previous.id,
+    parentRevisionLineageHash: previous.revisionLineageHash,
+    reasonCode: 'FORGED_MOVE_START_FORWARD',
+    recordedByUserId: 'FORGER',
+    recordedByUsername: 'forger',
+    recordedAt,
+  })
+  db.prepare(`
+    INSERT INTO hospital_cm_directory_versions (
+      event_number, id, revision, contract_version, known_complete_from_month,
+      entry_count, alias_count, content_hash, revision_lineage_hash,
+      supersedes_version_id, reason_code, recorded_by_user_id,
+      recorded_by_username, recorded_at
+    ) VALUES (2, ?, 2, ?, ?, 1, ?, ?, ?, ?, 'FORGED_MOVE_START_FORWARD',
+      'FORGER', 'forger', ?)
+  `).run(
+    id,
+    HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
+    previous.knownCompleteFromMonth,
+    prior.aliases.length,
+    contentHash,
+    revisionLineageHash,
+    previous.id,
+    recordedAt,
+  )
+  db.prepare(`
+    INSERT INTO hospital_cm_directory_entries (
+      directory_version_id, stable_partner_id, account_code, account_code_key,
+      canonical_display_name, hospital_cm_included, effective_from_month,
+      effective_to_month, row_hash
+    ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+  `).run(
+    id,
+    moved.stablePartnerId,
+    moved.accountCode,
+    moved.accountCode.normalize('NFKC').trim().toLowerCase(),
+    moved.canonicalDisplayName,
+    moved.effectiveFromMonth,
+    moved.effectiveToMonth,
+    rowHash,
+  )
+  const insertAlias = db.prepare(`
+    INSERT INTO hospital_cm_directory_aliases (
+      directory_version_id, stable_partner_id, alias, alias_key
+    ) VALUES (?, ?, ?, ?)
+  `)
+  for (const alias of moved.aliases) {
+    insertAlias.run(id, moved.stablePartnerId, alias, alias.normalize('NFKC').trim().toLowerCase())
   }
 }
 
@@ -321,6 +443,7 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
     })
     expect(created.id).toMatch(/^[0-9a-f-]{36}$/)
     expect(created.contentHash).toMatch(/^[0-9a-f]{64}$/)
+    expect(created.revisionLineageHash).toMatch(/^[0-9a-f]{64}$/)
     expect(created.entries.map(item => item.stablePartnerId)).toEqual(['PARTNER-001', 'PARTNER-002'])
     expect(created.entries.every(item => /^[0-9a-f]{64}$/.test(item.rowHash))).toBe(true)
 
@@ -338,6 +461,7 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
       reasonCode: 'REPEATED_IDENTICAL_CONTENT',
     })
     expect(repeated.id).not.toBe(created.id)
+    expect(repeated.revisionLineageHash).not.toBe(created.revisionLineageHash)
     expect(rowCount(db, 'hospital_cm_directory_versions')).toBe(2)
     expect(rowCount(db, 'hospital_cm_directory_idempotency')).toBe(2)
     expect(rowCount(db, 'abc_audit_logs')).toBe(2)
@@ -644,6 +768,38 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
     expectDirectoryCode(() => projectHospitalCmDirectoryForMonth(db, '2026-07'), 'DIRECTORY_CORRUPT')
   })
 
+  it('never lets an ordinary revision move an included start month forward and erase history', () => {
+    const first = saveHospitalCmDirectoryRevision(db, revisionInput({
+      knownCompleteFromMonth: '2026-01',
+      entries: [entry('PARTNER-001', { effectiveFromMonth: '2026-01' })],
+    }))
+    expect(projectHospitalCmDirectoryForMonth(db, '2026-01')?.accounts).toEqual(['PARTNER-001'])
+
+    expectDirectoryCode(
+      () => saveHospitalCmDirectoryRevision(db, revisionInput({
+        knownCompleteFromMonth: '2026-01',
+        entries: [entry('PARTNER-001', { effectiveFromMonth: '2026-07' })],
+        reasonCode: 'MOVE_START_FORWARD',
+      })),
+      'DIRECTORY_INCLUDED_MEMBER_REMOVAL_INVALID',
+    )
+    expect(getCurrentHospitalCmDirectory(db)?.id).toBe(first.id)
+    expect(projectHospitalCmDirectoryForMonth(db, '2026-01')?.accounts).toEqual(['PARTNER-001'])
+
+    const forgedId = '00000000-0000-4000-8000-000000000020'
+    db.exec('BEGIN IMMEDIATE')
+    expect(() => insertForgedMovedStartRevision(db, first, forgedId))
+      .toThrow(/DIRECTORY_INCLUDED_MEMBER_REMOVAL_INVALID/)
+    db.exec('ROLLBACK')
+    expect(getCurrentHospitalCmDirectory(db)?.id).toBe(first.id)
+
+    db.exec('DROP TRIGGER trg_hcm_directory_entries_preserve_included_members')
+    insertForgedMovedStartRevision(db, first, forgedId)
+    expectDirectoryCode(() => getCurrentHospitalCmDirectory(db), 'DIRECTORY_CORRUPT')
+    expectDirectoryCode(() => projectHospitalCmDirectoryForMonth(db, '2026-01'), 'DIRECTORY_CORRUPT')
+    expectDirectoryCode(() => listHospitalCmDirectoryRevisions(db), 'DIRECTORY_CORRUPT')
+  })
+
   it('does not let a new header chain through an incomplete intermediate revision', () => {
     const first = saveHospitalCmDirectoryRevision(db, revisionInput())
     const retained = first.entries.find(item => item.stablePartnerId === 'PARTNER-001')!
@@ -654,20 +810,54 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
       knownCompleteFromMonth: first.knownCompleteFromMonth,
       rowHashes: [retained.rowHash],
     })
+    const incompleteRecordedAt = '2026-07-16T00:00:00.000Z'
+    const incompleteLineageHash = expectedRevisionLineageHash({
+      id: incompleteId,
+      eventNumber: 2,
+      revision: 2,
+      knownCompleteFromMonth: first.knownCompleteFromMonth,
+      entryCount: 2,
+      aliasCount: 1,
+      contentHash: first.contentHash,
+      supersedesVersionId: first.id,
+      parentRevisionLineageHash: first.revisionLineageHash,
+      reasonCode: 'INCOMPLETE_INTERMEDIATE',
+      recordedByUserId: 'FORGER',
+      recordedByUsername: 'forger',
+      recordedAt: incompleteRecordedAt,
+    })
+    const nextRecordedAt = '2026-07-16T00:01:00.000Z'
+    const nextLineageHash = expectedRevisionLineageHash({
+      id: nextId,
+      eventNumber: 3,
+      revision: 3,
+      knownCompleteFromMonth: first.knownCompleteFromMonth,
+      entryCount: 1,
+      aliasCount: 1,
+      contentHash: retainedOnlyHash,
+      supersedesVersionId: incompleteId,
+      parentRevisionLineageHash: incompleteLineageHash,
+      reasonCode: 'CHAIN_THROUGH_INCOMPLETE',
+      recordedByUserId: 'FORGER',
+      recordedByUsername: 'forger',
+      recordedAt: nextRecordedAt,
+    })
     db.exec('PRAGMA foreign_keys = OFF; PRAGMA recursive_triggers = OFF; BEGIN IMMEDIATE;')
     db.prepare(`
       INSERT INTO hospital_cm_directory_versions (
-        id, revision, contract_version, known_complete_from_month,
-        entry_count, alias_count, content_hash, supersedes_version_id,
+        event_number, id, revision, contract_version, known_complete_from_month,
+        entry_count, alias_count, content_hash, revision_lineage_hash, supersedes_version_id,
         reason_code, recorded_by_user_id, recorded_by_username, recorded_at
-      ) VALUES (?, 2, ?, ?, 2, 1, ?, ?, 'INCOMPLETE_INTERMEDIATE',
-        'FORGER', 'forger', '2026-07-16T00:00:00.000Z')
+      ) VALUES (2, ?, 2, ?, ?, 2, 1, ?, ?, ?, 'INCOMPLETE_INTERMEDIATE',
+        'FORGER', 'forger', ?)
     `).run(
       incompleteId,
       HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
       first.knownCompleteFromMonth,
       first.contentHash,
+      incompleteLineageHash,
       first.id,
+      incompleteRecordedAt,
     )
     db.prepare(`
       INSERT INTO hospital_cm_directory_entries (
@@ -698,17 +888,19 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
 
     expect(() => db.prepare(`
       INSERT INTO hospital_cm_directory_versions (
-        id, revision, contract_version, known_complete_from_month,
-        entry_count, alias_count, content_hash, supersedes_version_id,
+        event_number, id, revision, contract_version, known_complete_from_month,
+        entry_count, alias_count, content_hash, revision_lineage_hash, supersedes_version_id,
         reason_code, recorded_by_user_id, recorded_by_username, recorded_at
-      ) VALUES (?, 3, ?, ?, 1, 1, ?, ?, 'CHAIN_THROUGH_INCOMPLETE',
-        'FORGER', 'forger', '2026-07-16T00:01:00.000Z')
+      ) VALUES (3, ?, 3, ?, ?, 1, 1, ?, ?, ?, 'CHAIN_THROUGH_INCOMPLETE',
+        'FORGER', 'forger', ?)
     `).run(
       nextId,
       HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
       first.knownCompleteFromMonth,
       retainedOnlyHash,
+      nextLineageHash,
       incompleteId,
+      nextRecordedAt,
     )).toThrow(/DIRECTORY_PREVIOUS_VERSION_INCOMPLETE/)
     db.exec('ROLLBACK')
     expect(getCurrentHospitalCmDirectory(db)?.id).toBe(first.id)
@@ -904,6 +1096,49 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
     expectDirectoryCode(() => projectHospitalCmDirectoryForMonth(db, '2026-07'), 'DIRECTORY_CORRUPT')
   })
 
+  it('fails closed when any ancestor content or immutable audit header is tampered', () => {
+    const ancestorDb = createDb()
+    const ancestor = saveHospitalCmDirectoryRevision(ancestorDb, revisionInput())
+    saveHospitalCmDirectoryRevision(ancestorDb, revisionInput({
+      reasonCode: 'SECOND_AUDITED_REVISION',
+    }))
+    ancestorDb.exec('DROP TRIGGER trg_hcm_directory_entries_no_update')
+    ancestorDb.prepare(`
+      UPDATE hospital_cm_directory_entries
+      SET canonical_display_name = 'tampered ancestor'
+      WHERE directory_version_id = ? AND stable_partner_id = 'PARTNER-001'
+    `).run(ancestor.id)
+
+    expectDirectoryCode(() => getCurrentHospitalCmDirectory(ancestorDb), 'DIRECTORY_CORRUPT')
+    expectDirectoryCode(
+      () => projectHospitalCmDirectoryForMonth(ancestorDb, '2026-07'),
+      'DIRECTORY_CORRUPT',
+    )
+    expectDirectoryCode(() => listHospitalCmDirectoryRevisions(ancestorDb), 'DIRECTORY_CORRUPT')
+
+    const headerDb = createDb()
+    saveHospitalCmDirectoryRevision(headerDb, revisionInput())
+    saveHospitalCmDirectoryRevision(headerDb, revisionInput({
+      reasonCode: 'SECOND_AUDITED_REVISION',
+    }))
+    headerDb.exec('DROP TRIGGER trg_hcm_directory_versions_no_update')
+    headerDb.prepare(`
+      UPDATE hospital_cm_directory_versions
+      SET reason_code = 'FORGED_REASON',
+          recorded_by_user_id = 'FORGED-ACTOR',
+          recorded_by_username = 'forged.actor',
+          recorded_at = '2026-07-16T00:00:00.000Z'
+      WHERE revision = 2
+    `).run()
+
+    expectDirectoryCode(() => getCurrentHospitalCmDirectory(headerDb), 'DIRECTORY_CORRUPT')
+    expectDirectoryCode(
+      () => projectHospitalCmDirectoryForMonth(headerDb, '2026-07'),
+      'DIRECTORY_CORRUPT',
+    )
+    expectDirectoryCode(() => listHospitalCmDirectoryRevisions(headerDb), 'DIRECTORY_CORRUPT')
+  })
+
   it('reads and projects a large directory with constant query count rather than one query per partner', () => {
     const largeDb = createDb()
     const insert = largeDb.prepare('INSERT INTO partners (id, code, name, is_deleted) VALUES (?, ?, ?, 0)')
@@ -925,6 +1160,55 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
     const projected = projectHospitalCmDirectoryForMonth(countedDb, '2026-07')
     expect(projected?.accounts).toHaveLength(300)
     expect(prepares).toBeLessThanOrEqual(4)
+  })
+
+  it('loads one immutable resolver snapshot and maps a large batch without per-row SQL or scans', () => {
+    const largeDb = createDb()
+    const insert = largeDb.prepare('INSERT INTO partners (id, code, name, is_deleted) VALUES (?, ?, ?, 0)')
+    const entries = Array.from({ length: 300 }, (_, index) => {
+      const suffix = String(index).padStart(4, '0')
+      const id = `PARTNER-BATCH-${suffix}`
+      insert.run(id, `LEGACY-BATCH-${suffix}`, `批量映射医院-${suffix}`)
+      return entry(id, {
+        accountCode: `BATCH-CODE-${suffix}`,
+        aliases: [`BATCH-ALIAS-${suffix}`],
+      })
+    })
+    saveHospitalCmDirectoryRevision(largeDb, revisionInput({ entries }))
+
+    const countQueries = () => {
+      let prepares = 0
+      return {
+        db: {
+          exec: (sql: string) => largeDb.exec(sql),
+          prepare: (sql: string) => {
+            prepares += 1
+            return largeDb.prepare(sql)
+          },
+        },
+        prepares: () => prepares,
+      }
+    }
+    const rawInputs = entries.flatMap(item => [
+      { stablePartnerId: item.stablePartnerId },
+      { mappingKey: item.accountCode.toLowerCase() },
+      { mappingKey: item.aliases[0]!.toLowerCase() },
+    ])
+
+    const batchCounter = countQueries()
+    const resolved = resolveHospitalCmDirectoryPartners(batchCounter.db, rawInputs)
+    expect(resolved).toHaveLength(900)
+    expect(resolved.every(item => item !== null)).toBe(true)
+    expect(batchCounter.prepares()).toBeLessThanOrEqual(4)
+
+    const noQueryCounter = countQueries()
+    expect(resolveHospitalCmDirectoryPartners(noQueryCounter.db, [])).toEqual([])
+    expect(noQueryCounter.prepares()).toBe(0)
+    expectDirectoryCode(
+      () => resolveHospitalCmDirectoryPartners(noQueryCounter.db, [{ stablePartnerId: null }]),
+      'DIRECTORY_RESOLUTION_INPUT_INVALID',
+    )
+    expect(noQueryCounter.prepares()).toBe(0)
   })
 
   it('DatabaseManager initializes only an empty directory and does not publish B0/C1 facts', async () => {

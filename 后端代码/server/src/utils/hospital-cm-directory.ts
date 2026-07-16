@@ -9,6 +9,8 @@ import { createHash, randomUUID } from 'node:crypto'
 export const HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION = 'hospital-cm.directory.v1'
 export const HOSPITAL_CM_DIRECTORY_ROSTER_RECIPE_VERSION =
   'hospital-cm.directory.membership-projection.v1'
+export const HOSPITAL_CM_DIRECTORY_LINEAGE_RECIPE_VERSION =
+  'hospital-cm.directory.revision-lineage.v1'
 
 const SERVICE_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/
@@ -64,6 +66,7 @@ export interface HospitalCmDirectoryRevisionMetadata {
   entryCount: number
   aliasCount: number
   contentHash: string
+  revisionLineageHash: string
   supersedesVersionId: string | null
   reasonCode: string
   recordedByUserId: string
@@ -122,6 +125,7 @@ interface VersionRow {
   entryCount: number
   aliasCount: number
   contentHash: string
+  revisionLineageHash: string
   supersedesVersionId: string | null
   reasonCode: string
   recordedByUserId: string
@@ -145,6 +149,35 @@ interface AliasRow {
   stablePartnerId: string
   alias: string
   aliasKey: string
+}
+
+interface LineageBundleRow {
+  rowKind: 'VERSION' | 'ENTRY' | 'ALIAS'
+  versionId: string
+  eventNumber: number | null
+  revision: number | null
+  contractVersion: string | null
+  knownCompleteFromMonth: string | null
+  entryCount: number | null
+  aliasCount: number | null
+  contentHash: string | null
+  revisionLineageHash: string | null
+  supersedesVersionId: string | null
+  reasonCode: string | null
+  recordedByUserId: string | null
+  recordedByUsername: string | null
+  recordedAt: string | null
+  stablePartnerId: string | null
+  accountCode: string | null
+  accountCodeKey: string | null
+  canonicalDisplayName: string | null
+  hospitalCmIncluded: number | null
+  effectiveFromMonth: string | null
+  effectiveToMonth: string | null
+  rowHash: string | null
+  alias: string | null
+  aliasKey: string | null
+  partnerExists: number | null
 }
 
 interface IdempotencyRow {
@@ -275,6 +308,28 @@ function directoryContentHash(
     contractVersion: HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
     knownCompleteFromMonth,
     rowHashes: entries.map(entry => entry.rowHash),
+  })
+}
+
+function directoryRevisionLineageHash(input: {
+  id: string
+  eventNumber: number
+  revision: number
+  contractVersion: typeof HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION
+  knownCompleteFromMonth: string
+  entryCount: number
+  aliasCount: number
+  contentHash: string
+  supersedesVersionId: string | null
+  parentRevisionLineageHash: string | null
+  reasonCode: string
+  recordedByUserId: string
+  recordedByUsername: string
+  recordedAt: string
+}): string {
+  return sha256({
+    recipeVersion: HOSPITAL_CM_DIRECTORY_LINEAGE_RECIPE_VERSION,
+    ...input,
   })
 }
 
@@ -510,6 +565,10 @@ export function ensureHospitalCmDirectorySchema(db: HospitalCmDirectoryDb): void
       content_hash TEXT NOT NULL CHECK (
         length(content_hash) = 64 AND content_hash NOT GLOB '*[^0-9a-f]*'
       ),
+      revision_lineage_hash TEXT NOT NULL CHECK (
+        length(revision_lineage_hash) = 64
+        AND revision_lineage_hash NOT GLOB '*[^0-9a-f]*'
+      ),
       supersedes_version_id TEXT,
       reason_code TEXT NOT NULL,
       recorded_by_user_id TEXT NOT NULL,
@@ -693,7 +752,8 @@ export function ensureHospitalCmDirectorySchema(db: HospitalCmDirectoryDb): void
         WHERE current_version.id = NEW.directory_version_id
           AND previous_entry.hospital_cm_included = 1
           AND (current_entry.stable_partner_id IS NULL
-            OR current_entry.hospital_cm_included <> 1)
+            OR current_entry.hospital_cm_included <> 1
+            OR current_entry.effective_from_month > previous_entry.effective_from_month)
       )
     BEGIN
       SELECT RAISE(ABORT, 'DIRECTORY_INCLUDED_MEMBER_REMOVAL_INVALID');
@@ -790,6 +850,7 @@ const VERSION_SELECT = `
     entry_count AS entryCount,
     alias_count AS aliasCount,
     content_hash AS contentHash,
+    revision_lineage_hash AS revisionLineageHash,
     supersedes_version_id AS supersedesVersionId,
     reason_code AS reasonCode,
     recorded_by_user_id AS recordedByUserId,
@@ -808,6 +869,7 @@ function metadataFromRow(row: VersionRow): HospitalCmDirectoryRevisionMetadata {
     entryCount: Number(row.entryCount),
     aliasCount: Number(row.aliasCount),
     contentHash: row.contentHash,
+    revisionLineageHash: row.revisionLineageHash,
     supersedesVersionId: row.supersedesVersionId,
     reasonCode: row.reasonCode,
     recordedByUserId: row.recordedByUserId,
@@ -820,22 +882,74 @@ function corrupt(message: string): never {
   throw new HospitalCmDirectoryError('DIRECTORY_CORRUPT', 500, message)
 }
 
-function validateDirectoryIntegrity(
-  db: HospitalCmDirectoryDb,
+function buildDirectoryRevision(
+  row: VersionRow,
+  storedEntries: EntryRow[],
+  storedAliases: AliasRow[],
+): HospitalCmDirectoryRevision {
+  const aliasesByPartner = new Map<string, string[]>()
+  for (const alias of storedAliases) {
+    const aliases = aliasesByPartner.get(alias.stablePartnerId) ?? []
+    aliases.push(alias.alias)
+    aliasesByPartner.set(alias.stablePartnerId, aliases)
+  }
+  for (const aliases of aliasesByPartner.values()) {
+    aliases.sort((left, right) => compareText(normalizeMappingKey(left), normalizeMappingKey(right))
+      || compareText(left, right))
+  }
+  const entries = storedEntries.map(entry => ({
+    stablePartnerId: entry.stablePartnerId,
+    accountCode: entry.accountCode,
+    canonicalDisplayName: entry.canonicalDisplayName,
+    aliases: aliasesByPartner.get(entry.stablePartnerId) ?? [],
+    hospitalCmIncluded: Number(entry.hospitalCmIncluded) === 1,
+    effectiveFromMonth: entry.effectiveFromMonth,
+    effectiveToMonth: entry.effectiveToMonth,
+    rowHash: entry.rowHash,
+  }))
+  return { ...metadataFromRow(row), entries }
+}
+
+function isCanonicalStoredText(value: string, max: number): boolean {
+  return value.length > 0
+    && value.length <= max
+    && value === value.normalize('NFKC').trim()
+    && !hasControlCharacter(value)
+}
+
+function isCanonicalIsoTimestamp(value: string): boolean {
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value
+}
+
+function validateDirectoryRevisionIntegrity(
   directory: HospitalCmDirectoryRevision,
   storedEntries: EntryRow[],
   storedAliases: AliasRow[],
+  parentRevisionLineageHash: string | null,
 ): void {
   if (directory.contractVersion !== HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION
+    || !Number.isInteger(directory.eventNumber) || directory.eventNumber < 1
+    || !Number.isInteger(directory.revision) || directory.revision < 1
     || !SERVICE_MONTH_RE.test(directory.knownCompleteFromMonth)
     || directory.entryCount !== directory.entries.length
-    || directory.aliasCount !== storedAliases.length) {
+    || directory.aliasCount !== storedAliases.length
+    || !/^[0-9a-f]{64}$/.test(directory.contentHash)
+    || !/^[0-9a-f]{64}$/.test(directory.revisionLineageHash)
+    || !REASON_CODE_RE.test(directory.reasonCode)
+    || !isCanonicalStoredText(directory.recordedByUserId, 128)
+    || !isCanonicalStoredText(directory.recordedByUsername, 128)
+    || !isCanonicalIsoTimestamp(directory.recordedAt)) {
     corrupt('医院目录版本头完整性校验失败')
   }
 
+  const entryIds = new Set(directory.entries.map(entry => entry.stablePartnerId))
   const aliasKeys = new Map<string, string>()
   for (const alias of storedAliases) {
-    if (normalizeMappingKey(alias.alias) !== alias.aliasKey) corrupt('医院目录别名规范化校验失败')
+    if (!entryIds.has(alias.stablePartnerId)
+      || normalizeMappingKey(alias.alias) !== alias.aliasKey) {
+      corrupt('医院目录别名规范化校验失败')
+    }
     const owner = aliasKeys.get(alias.aliasKey)
     if (owner !== undefined && owner !== alias.stablePartnerId) corrupt('医院目录别名映射歧义')
     aliasKeys.set(alias.aliasKey, alias.stablePartnerId)
@@ -849,6 +963,14 @@ function validateDirectoryIntegrity(
       || entry.stablePartnerId !== stored.stablePartnerId
       || normalizeMappingKey(entry.accountCode) !== stored.accountCodeKey) {
       corrupt('医院目录账户映射完整性校验失败')
+    }
+    if ((stored.hospitalCmIncluded !== 0 && stored.hospitalCmIncluded !== 1)
+      || (entry.effectiveFromMonth !== null && !SERVICE_MONTH_RE.test(entry.effectiveFromMonth))
+      || (entry.effectiveToMonth !== null && !SERVICE_MONTH_RE.test(entry.effectiveToMonth))
+      || (entry.hospitalCmIncluded && entry.effectiveFromMonth === null)
+      || (entry.effectiveToMonth !== null && (entry.effectiveFromMonth === null
+        || entry.effectiveToMonth < entry.effectiveFromMonth))) {
+      corrupt('医院目录生效区间完整性校验失败')
     }
     const accountOwner = accountKeys.get(stored.accountCodeKey)
     if (accountOwner !== undefined && accountOwner !== entry.stablePartnerId) {
@@ -877,108 +999,204 @@ function validateDirectoryIntegrity(
   )) {
     corrupt('医院目录内容完整性校验失败')
   }
-  const lineageViolation = db.prepare(`
-    WITH RECURSIVE lineage (
-      id, revision, supersedes_version_id, entry_count, alias_count
-    ) AS (
-      SELECT id, revision, supersedes_version_id, entry_count, alias_count
+  const expectedLineageHash = directoryRevisionLineageHash({
+    id: directory.id,
+    eventNumber: directory.eventNumber,
+    revision: directory.revision,
+    contractVersion: directory.contractVersion,
+    knownCompleteFromMonth: directory.knownCompleteFromMonth,
+    entryCount: directory.entryCount,
+    aliasCount: directory.aliasCount,
+    contentHash: directory.contentHash,
+    supersedesVersionId: directory.supersedesVersionId,
+    parentRevisionLineageHash,
+    reasonCode: directory.reasonCode,
+    recordedByUserId: directory.recordedByUserId,
+    recordedByUsername: directory.recordedByUsername,
+    recordedAt: directory.recordedAt,
+  })
+  if (directory.revisionLineageHash !== expectedLineageHash) {
+    corrupt('医院目录审计链完整性校验失败')
+  }
+}
+
+function loadValidatedDirectoryLineage(
+  db: HospitalCmDirectoryDb,
+  targetRow: VersionRow,
+): { target: HospitalCmDirectoryRevision; byId: Map<string, HospitalCmDirectoryRevision> } {
+  const rows = db.prepare(`
+    WITH RECURSIVE lineage (id, supersedes_version_id) AS (
+      SELECT id, supersedes_version_id
       FROM hospital_cm_directory_versions
       WHERE id = ?
       UNION
-      SELECT parent.id, parent.revision, parent.supersedes_version_id,
-        parent.entry_count, parent.alias_count
+      SELECT parent.id, parent.supersedes_version_id
       FROM hospital_cm_directory_versions parent
       JOIN lineage child ON parent.id = child.supersedes_version_id
-    ), violations AS (
-      SELECT 'INCOMPLETE_VERSION' AS violation
-      FROM lineage version
-      WHERE (SELECT COUNT(*) FROM hospital_cm_directory_entries
-             WHERE directory_version_id = version.id) <> version.entry_count
-        OR (SELECT COUNT(*) FROM hospital_cm_directory_aliases
-            WHERE directory_version_id = version.id) <> version.alias_count
-      UNION ALL
-      SELECT 'BROKEN_SEQUENCE' AS violation
-      FROM lineage child
-      LEFT JOIN hospital_cm_directory_versions parent
-        ON parent.id = child.supersedes_version_id
-      WHERE (child.revision = 1 AND child.supersedes_version_id IS NOT NULL)
-        OR (child.revision > 1 AND (
-          parent.id IS NULL OR parent.revision <> child.revision - 1
-        ))
-      UNION ALL
-      SELECT 'IMPLICIT_INCLUDED_MEMBER_REMOVAL' AS violation
-      FROM lineage child
-      JOIN hospital_cm_directory_entries previous_entry
-        ON previous_entry.directory_version_id = child.supersedes_version_id
-      LEFT JOIN hospital_cm_directory_entries current_entry
-        ON current_entry.directory_version_id = child.id
-        AND current_entry.stable_partner_id = previous_entry.stable_partner_id
-      WHERE previous_entry.hospital_cm_included = 1
-        AND (current_entry.stable_partner_id IS NULL
-          OR current_entry.hospital_cm_included <> 1)
-      UNION ALL
-      SELECT 'MISSING_PARTNER' AS violation
-      FROM lineage version
-      JOIN hospital_cm_directory_entries entry
-        ON entry.directory_version_id = version.id
-      LEFT JOIN partners partner ON partner.id = entry.stable_partner_id
-      WHERE partner.id IS NULL
-      UNION ALL
-      SELECT 'CHAIN_LENGTH_MISMATCH' AS violation
-      WHERE (SELECT COUNT(*) FROM lineage) <> ?
     )
-    SELECT violation FROM violations LIMIT 1
-  `).get(directory.id, directory.revision) as { violation: string } | undefined
-  if (lineageViolation) corrupt('医院目录版本链完整性校验失败')
+    SELECT 'VERSION' AS rowKind, version.id AS versionId,
+      version.event_number AS eventNumber, version.revision,
+      version.contract_version AS contractVersion,
+      version.known_complete_from_month AS knownCompleteFromMonth,
+      version.entry_count AS entryCount, version.alias_count AS aliasCount,
+      version.content_hash AS contentHash,
+      version.revision_lineage_hash AS revisionLineageHash,
+      version.supersedes_version_id AS supersedesVersionId,
+      version.reason_code AS reasonCode,
+      version.recorded_by_user_id AS recordedByUserId,
+      version.recorded_by_username AS recordedByUsername,
+      version.recorded_at AS recordedAt,
+      NULL AS stablePartnerId, NULL AS accountCode, NULL AS accountCodeKey,
+      NULL AS canonicalDisplayName, NULL AS hospitalCmIncluded,
+      NULL AS effectiveFromMonth, NULL AS effectiveToMonth, NULL AS rowHash,
+      NULL AS alias, NULL AS aliasKey, NULL AS partnerExists
+    FROM lineage
+    JOIN hospital_cm_directory_versions version ON version.id = lineage.id
+    UNION ALL
+    SELECT 'ENTRY', entry.directory_version_id,
+      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+      entry.stable_partner_id, entry.account_code, entry.account_code_key,
+      entry.canonical_display_name, entry.hospital_cm_included,
+      entry.effective_from_month, entry.effective_to_month, entry.row_hash,
+      NULL, NULL,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM partners WHERE id = entry.stable_partner_id
+      ) THEN 1 ELSE 0 END
+    FROM lineage
+    JOIN hospital_cm_directory_entries entry ON entry.directory_version_id = lineage.id
+    UNION ALL
+    SELECT 'ALIAS', alias_row.directory_version_id,
+      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+      alias_row.stable_partner_id, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+      alias_row.alias, alias_row.alias_key, NULL
+    FROM lineage
+    JOIN hospital_cm_directory_aliases alias_row
+      ON alias_row.directory_version_id = lineage.id
+  `).all(targetRow.id) as LineageBundleRow[]
+
+  const versionRows = new Map<string, VersionRow>()
+  const entriesByVersion = new Map<string, EntryRow[]>()
+  const aliasesByVersion = new Map<string, AliasRow[]>()
+  for (const row of rows) {
+    if (row.rowKind === 'VERSION') {
+      if (row.eventNumber === null || row.revision === null || row.contractVersion === null
+        || row.knownCompleteFromMonth === null || row.entryCount === null
+        || row.aliasCount === null || row.contentHash === null
+        || row.revisionLineageHash === null || row.reasonCode === null
+        || row.recordedByUserId === null || row.recordedByUsername === null
+        || row.recordedAt === null || versionRows.has(row.versionId)) {
+        corrupt('医院目录版本链结构无效')
+      }
+      versionRows.set(row.versionId, {
+        id: row.versionId,
+        eventNumber: Number(row.eventNumber),
+        revision: Number(row.revision),
+        contractVersion: row.contractVersion,
+        knownCompleteFromMonth: row.knownCompleteFromMonth,
+        entryCount: Number(row.entryCount),
+        aliasCount: Number(row.aliasCount),
+        contentHash: row.contentHash,
+        revisionLineageHash: row.revisionLineageHash,
+        supersedesVersionId: row.supersedesVersionId,
+        reasonCode: row.reasonCode,
+        recordedByUserId: row.recordedByUserId,
+        recordedByUsername: row.recordedByUsername,
+        recordedAt: row.recordedAt,
+      })
+      continue
+    }
+    if (row.rowKind === 'ENTRY') {
+      if (row.stablePartnerId === null || row.accountCode === null
+        || row.accountCodeKey === null || row.canonicalDisplayName === null
+        || row.hospitalCmIncluded === null || row.rowHash === null
+        || Number(row.partnerExists) !== 1) {
+        corrupt('医院目录版本链账户无效')
+      }
+      const entries = entriesByVersion.get(row.versionId) ?? []
+      entries.push({
+        stablePartnerId: row.stablePartnerId,
+        accountCode: row.accountCode,
+        accountCodeKey: row.accountCodeKey,
+        canonicalDisplayName: row.canonicalDisplayName,
+        hospitalCmIncluded: Number(row.hospitalCmIncluded),
+        effectiveFromMonth: row.effectiveFromMonth,
+        effectiveToMonth: row.effectiveToMonth,
+        rowHash: row.rowHash,
+      })
+      entriesByVersion.set(row.versionId, entries)
+      continue
+    }
+    if (row.stablePartnerId === null || row.alias === null || row.aliasKey === null) {
+      corrupt('医院目录版本链别名无效')
+    }
+    const aliases = aliasesByVersion.get(row.versionId) ?? []
+    aliases.push({
+      stablePartnerId: row.stablePartnerId,
+      alias: row.alias,
+      aliasKey: row.aliasKey,
+    })
+    aliasesByVersion.set(row.versionId, aliases)
+  }
+
+  const orderedRows = [...versionRows.values()].sort((left, right) => left.revision - right.revision)
+  if (orderedRows.length !== Number(targetRow.revision)
+    || orderedRows[orderedRows.length - 1]?.id !== targetRow.id) {
+    corrupt('医院目录版本链长度无效')
+  }
+
+  const byId = new Map<string, HospitalCmDirectoryRevision>()
+  let previous: HospitalCmDirectoryRevision | null = null
+  for (let index = 0; index < orderedRows.length; index += 1) {
+    const versionRow = orderedRows[index]
+    if (!versionRow || versionRow.revision !== index + 1
+      || (index === 0 && versionRow.supersedesVersionId !== null)
+      || (index > 0 && versionRow.supersedesVersionId !== previous?.id)
+      || (previous !== null && versionRow.eventNumber <= previous.eventNumber)) {
+      corrupt('医院目录版本链顺序无效')
+    }
+    const storedEntries = (entriesByVersion.get(versionRow.id) ?? [])
+      .sort((left, right) => compareText(left.stablePartnerId, right.stablePartnerId))
+    const storedAliases = (aliasesByVersion.get(versionRow.id) ?? [])
+      .sort((left, right) => compareText(left.stablePartnerId, right.stablePartnerId)
+        || compareText(left.aliasKey, right.aliasKey)
+        || compareText(left.alias, right.alias))
+    const directory = buildDirectoryRevision(versionRow, storedEntries, storedAliases)
+    validateDirectoryRevisionIntegrity(
+      directory,
+      storedEntries,
+      storedAliases,
+      previous?.revisionLineageHash ?? null,
+    )
+    if (previous) {
+      const nextByPartnerId = new Map(directory.entries.map(entry => [entry.stablePartnerId, entry]))
+      if (previous.entries.some(entry => {
+        if (!entry.hospitalCmIncluded) return false
+        const next = nextByPartnerId.get(entry.stablePartnerId)
+        return next?.hospitalCmIncluded !== true
+          || (entry.effectiveFromMonth !== null
+            && next.effectiveFromMonth !== null
+            && next.effectiveFromMonth > entry.effectiveFromMonth)
+      })) {
+        corrupt('医院目录版本链隐式移除了已纳入医院')
+      }
+    }
+    byId.set(directory.id, directory)
+    previous = directory
+  }
+
+  const target = byId.get(targetRow.id)
+  if (!target
+    || stableStringify(metadataFromRow(targetRow)) !== stableStringify(metadataFromRow(versionRows.get(targetRow.id)!))) {
+    corrupt('医院目录目标版本在读取期间发生变化')
+  }
+  return { target, byId }
 }
 
 function loadDirectoryFromRow(
   db: HospitalCmDirectoryDb,
   row: VersionRow,
 ): HospitalCmDirectoryRevision {
-  const storedEntries = db.prepare(`
-    SELECT
-      stable_partner_id AS stablePartnerId,
-      account_code AS accountCode,
-      account_code_key AS accountCodeKey,
-      canonical_display_name AS canonicalDisplayName,
-      hospital_cm_included AS hospitalCmIncluded,
-      effective_from_month AS effectiveFromMonth,
-      effective_to_month AS effectiveToMonth,
-      row_hash AS rowHash
-    FROM hospital_cm_directory_entries
-    WHERE directory_version_id = ?
-    ORDER BY stable_partner_id ASC
-  `).all(row.id) as EntryRow[]
-  const storedAliases = db.prepare(`
-    SELECT stable_partner_id AS stablePartnerId, alias, alias_key AS aliasKey
-    FROM hospital_cm_directory_aliases
-    WHERE directory_version_id = ?
-    ORDER BY stable_partner_id ASC, alias_key ASC, alias ASC
-  `).all(row.id) as AliasRow[]
-  const aliasesByPartner = new Map<string, string[]>()
-  for (const alias of storedAliases) {
-    const aliases = aliasesByPartner.get(alias.stablePartnerId) ?? []
-    aliases.push(alias.alias)
-    aliasesByPartner.set(alias.stablePartnerId, aliases)
-  }
-  for (const aliases of aliasesByPartner.values()) {
-    aliases.sort((left, right) => compareText(normalizeMappingKey(left), normalizeMappingKey(right))
-      || compareText(left, right))
-  }
-  const entries = storedEntries.map(entry => ({
-    stablePartnerId: entry.stablePartnerId,
-    accountCode: entry.accountCode,
-    canonicalDisplayName: entry.canonicalDisplayName,
-    aliases: aliasesByPartner.get(entry.stablePartnerId) ?? [],
-    hospitalCmIncluded: Number(entry.hospitalCmIncluded) === 1,
-    effectiveFromMonth: entry.effectiveFromMonth,
-    effectiveToMonth: entry.effectiveToMonth,
-    rowHash: entry.rowHash,
-  }))
-  const directory = { ...metadataFromRow(row), entries }
-  validateDirectoryIntegrity(db, directory, storedEntries, storedAliases)
-  return directory
+  return loadValidatedDirectoryLineage(db, row).target
 }
 
 export function getHospitalCmDirectoryRevision(
@@ -1016,13 +1234,19 @@ function requireIncludedMembersRetained(
 ): void {
   if (!previous) return
   const nextByPartnerId = new Map(entries.map(entry => [entry.stablePartnerId, entry]))
-  const removed = previous.entries.find(entry => entry.hospitalCmIncluded
-    && nextByPartnerId.get(entry.stablePartnerId)?.hospitalCmIncluded !== true)
+  const removed = previous.entries.find(entry => {
+    if (!entry.hospitalCmIncluded) return false
+    const next = nextByPartnerId.get(entry.stablePartnerId)
+    return next?.hospitalCmIncluded !== true
+      || (entry.effectiveFromMonth !== null
+        && next.effectiveFromMonth !== null
+        && next.effectiveFromMonth > entry.effectiveFromMonth)
+  })
   if (removed) {
     throw new HospitalCmDirectoryError(
       'DIRECTORY_INCLUDED_MEMBER_REMOVAL_INVALID',
       409,
-      '已纳入的医院必须保留目录行；退出请设置明确的 effectiveToMonth',
+      '已纳入的医院必须保留原起始月；退出请设置明确的 effectiveToMonth',
     )
   }
 }
@@ -1054,25 +1278,39 @@ export function saveHospitalCmDirectoryRevision(
     }
 
     requireExistingPartners(db, input.entries)
-    const previous = db.prepare(`
-      SELECT id, revision FROM hospital_cm_directory_versions ORDER BY revision DESC LIMIT 1
-    `).get() as { id: string; revision: number } | undefined
-    const previousDirectory = previous ? getHospitalCmDirectoryRevision(db, previous.id) : null
-    if (previous && !previousDirectory) corrupt('医院目录前序版本缺失')
+    const previousDirectory = getCurrentHospitalCmDirectory(db)
     requireIncludedMembersRetained(previousDirectory, input.entries)
-    const revision = previous ? Number(previous.revision) + 1 : 1
+    const revision = previousDirectory ? previousDirectory.revision + 1 : 1
+    const eventNumber = previousDirectory ? previousDirectory.eventNumber + 1 : 1
     const id = randomUUID()
     const recordedAt = new Date().toISOString()
     const aliasCount = input.entries.reduce((total, entry) => total + entry.aliasRecords.length, 0)
+    const revisionLineageHash = directoryRevisionLineageHash({
+      id,
+      eventNumber,
+      revision,
+      contractVersion: HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
+      knownCompleteFromMonth: input.knownCompleteFromMonth,
+      entryCount: input.entries.length,
+      aliasCount,
+      contentHash: input.contentHash,
+      supersedesVersionId: previousDirectory?.id ?? null,
+      parentRevisionLineageHash: previousDirectory?.revisionLineageHash ?? null,
+      reasonCode: input.reasonCode,
+      recordedByUserId: input.actor.userId,
+      recordedByUsername: input.actor.username,
+      recordedAt,
+    })
 
     db.prepare(`
       INSERT INTO hospital_cm_directory_versions (
-        id, revision, contract_version, known_complete_from_month,
-        entry_count, alias_count, content_hash,
+        event_number, id, revision, contract_version, known_complete_from_month,
+        entry_count, alias_count, content_hash, revision_lineage_hash,
         supersedes_version_id, reason_code, recorded_by_user_id,
         recorded_by_username, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
+      eventNumber,
       id,
       revision,
       HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
@@ -1080,7 +1318,8 @@ export function saveHospitalCmDirectoryRevision(
       input.entries.length,
       aliasCount,
       input.contentHash,
-      previous?.id ?? null,
+      revisionLineageHash,
+      previousDirectory?.id ?? null,
       input.reasonCode,
       input.actor.userId,
       input.actor.username,
@@ -1187,6 +1426,7 @@ export function listHospitalCmDirectoryRevisions(
       known_complete_from_month AS knownCompleteFromMonth,
       entry_count AS entryCount,
       alias_count AS aliasCount, content_hash AS contentHash,
+      revision_lineage_hash AS revisionLineageHash,
       supersedes_version_id AS supersedesVersionId, reason_code AS reasonCode,
       recorded_by_user_id AS recordedByUserId,
       recorded_by_username AS recordedByUsername, recorded_at AS recordedAt
@@ -1197,6 +1437,7 @@ export function listHospitalCmDirectoryRevisions(
       known_complete_from_month AS knownCompleteFromMonth,
       entry_count AS entryCount,
       alias_count AS aliasCount, content_hash AS contentHash,
+      revision_lineage_hash AS revisionLineageHash,
       supersedes_version_id AS supersedesVersionId, reason_code AS reasonCode,
       recorded_by_user_id AS recordedByUserId,
       recorded_by_username AS recordedByUsername, recorded_at AS recordedAt
@@ -1204,9 +1445,15 @@ export function listHospitalCmDirectoryRevisions(
   `).all(beforeEvent, beforeEvent, limit + 1) as VersionRow[]
   const currentRow = rows.find(row => row.rowKind === 'CURRENT')
   const pageRows = rows.filter(row => row.rowKind === 'PAGE')
+  const validated = currentRow ? loadValidatedDirectoryLineage(db, currentRow) : null
   for (const row of rows) {
-    if (row.contractVersion !== HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION) {
-      corrupt('医院目录版本头契约不匹配')
+    const validatedRow = validated?.byId.get(row.id)
+    const validatedMetadata = validatedRow
+      ? (({ entries: _entries, ...metadata }) => metadata)(validatedRow)
+      : null
+    if (!validatedRow
+      || stableStringify(metadataFromRow(row)) !== stableStringify(validatedMetadata)) {
+      corrupt('医院目录版本列表完整性校验失败')
     }
   }
   const visibleRows = pageRows.slice(0, limit)
@@ -1253,10 +1500,18 @@ export function projectHospitalCmDirectoryForMonth(
   }
 }
 
-export function resolveHospitalCmDirectoryPartner(
-  db: HospitalCmDirectoryDb,
-  rawInput: unknown,
-): HospitalCmDirectoryResolution | null {
+type NormalizedDirectoryResolutionInput =
+  | { stablePartnerId: string; mappingKey: null }
+  | { stablePartnerId: null; mappingKey: string }
+
+interface InternalDirectoryResolverSnapshot {
+  directoryVersionId: string
+  directoryRevision: number
+  stablePartnerIds: Set<string>
+  mappings: Map<string, { stablePartnerId: string; matchedBy: 'ACCOUNT_CODE' | 'ALIAS' }>
+}
+
+function normalizeDirectoryResolutionInput(rawInput: unknown): NormalizedDirectoryResolutionInput {
   const input = requireExactFields(
     rawInput,
     ['stablePartnerId', 'mappingKey'],
@@ -1295,34 +1550,101 @@ export function resolveHospitalCmDirectoryPartner(
       256,
     ))
     : null
-  const directory = getCurrentHospitalCmDirectory(db)
-  if (!directory) return null
-  if (stablePartnerId !== null) {
-    const entry = directory.entries.find(candidate => candidate.stablePartnerId === stablePartnerId)
-    return entry ? {
-      stablePartnerId: entry.stablePartnerId,
-      matchedBy: 'STABLE_PARTNER_ID',
-      directoryVersionId: directory.id,
-      directoryRevision: directory.revision,
-    } : null
-  }
+  return stablePartnerId !== null
+    ? { stablePartnerId, mappingKey: null }
+    : { stablePartnerId: null, mappingKey: mappingKey! }
+}
 
-  if (mappingKey === null) return null
-  const codeMatch = directory.entries.find(entry => normalizeMappingKey(entry.accountCode) === mappingKey)
-  if (codeMatch) {
-    return {
-      stablePartnerId: codeMatch.stablePartnerId,
+function buildInternalDirectoryResolverSnapshot(
+  directory: HospitalCmDirectoryRevision,
+): InternalDirectoryResolverSnapshot {
+  const stablePartnerIds = new Set<string>()
+  const mappings = new Map<string, {
+    stablePartnerId: string
+    matchedBy: 'ACCOUNT_CODE' | 'ALIAS'
+  }>()
+  for (const entry of directory.entries) {
+    stablePartnerIds.add(entry.stablePartnerId)
+    const accountCodeKey = normalizeMappingKey(entry.accountCode)
+    const existing = mappings.get(accountCodeKey)
+    if (existing && existing.stablePartnerId !== entry.stablePartnerId) {
+      corrupt('医院目录 resolver 账户映射歧义')
+    }
+    mappings.set(accountCodeKey, {
+      stablePartnerId: entry.stablePartnerId,
       matchedBy: 'ACCOUNT_CODE',
-      directoryVersionId: directory.id,
-      directoryRevision: directory.revision,
+    })
+  }
+  for (const entry of directory.entries) {
+    for (const alias of entry.aliases) {
+      const aliasKey = normalizeMappingKey(alias)
+      const existing = mappings.get(aliasKey)
+      if (existing && existing.stablePartnerId !== entry.stablePartnerId) {
+        corrupt('医院目录 resolver 别名映射歧义')
+      }
+      if (!existing) {
+        mappings.set(aliasKey, {
+          stablePartnerId: entry.stablePartnerId,
+          matchedBy: 'ALIAS',
+        })
+      }
     }
   }
-  const aliasMatch = directory.entries.find(entry => entry.aliases
-    .some(alias => normalizeMappingKey(alias) === mappingKey))
-  return aliasMatch ? {
-    stablePartnerId: aliasMatch.stablePartnerId,
-    matchedBy: 'ALIAS',
+  return {
     directoryVersionId: directory.id,
     directoryRevision: directory.revision,
+    stablePartnerIds,
+    mappings,
+  }
+}
+
+function resolveWithInternalDirectorySnapshot(
+  snapshot: InternalDirectoryResolverSnapshot,
+  input: NormalizedDirectoryResolutionInput,
+): HospitalCmDirectoryResolution | null {
+  if (input.stablePartnerId !== null) {
+    return snapshot.stablePartnerIds.has(input.stablePartnerId) ? {
+      stablePartnerId: input.stablePartnerId,
+      matchedBy: 'STABLE_PARTNER_ID',
+      directoryVersionId: snapshot.directoryVersionId,
+      directoryRevision: snapshot.directoryRevision,
+    } : null
+  }
+  const matched = snapshot.mappings.get(input.mappingKey)
+  return matched ? {
+    ...matched,
+    directoryVersionId: snapshot.directoryVersionId,
+    directoryRevision: snapshot.directoryRevision,
   } : null
+}
+
+/**
+ * Batch source mapping is the supported ingestion path: validate one immutable
+ * directory revision, build indexes once, and resolve every row against it.
+ */
+export function resolveHospitalCmDirectoryPartners(
+  db: HospitalCmDirectoryDb,
+  rawInputs: readonly unknown[],
+): Array<HospitalCmDirectoryResolution | null> {
+  if (!Array.isArray(rawInputs)) {
+    throw new HospitalCmDirectoryError(
+      'DIRECTORY_RESOLUTION_INPUT_INVALID',
+      400,
+      '医院目录批量映射请求必须是数组',
+    )
+  }
+  const inputs = rawInputs.map(normalizeDirectoryResolutionInput)
+  if (inputs.length === 0) return []
+  const directory = getCurrentHospitalCmDirectory(db)
+  if (!directory) return inputs.map(() => null)
+  const snapshot = buildInternalDirectoryResolverSnapshot(directory)
+  return inputs.map(input => resolveWithInternalDirectorySnapshot(snapshot, input))
+}
+
+/** Single-record convenience API; ingestion callers should use the batch API. */
+export function resolveHospitalCmDirectoryPartner(
+  db: HospitalCmDirectoryDb,
+  rawInput: unknown,
+): HospitalCmDirectoryResolution | null {
+  return resolveHospitalCmDirectoryPartners(db, [rawInput])[0] ?? null
 }
