@@ -15,7 +15,8 @@ export const HOSPITAL_CM_DIRECTORY_LINEAGE_RECIPE_VERSION =
 const SERVICE_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/
 const REASON_CODE_RE = /^[A-Z0-9][A-Z0-9._:-]{0,127}$/
-const STABLE_PARTNER_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
+const MAX_STABLE_PARTNER_ID_LENGTH = 80
+const STABLE_PARTNER_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
 const MAX_ENTRIES = 5_000
 const MAX_ALIASES_PER_ENTRY = 100
 
@@ -390,7 +391,7 @@ function normalizeDirectoryEntry(value: unknown): NormalizedDirectoryEntry {
     raw.stablePartnerId,
     'DIRECTORY_PARTNER_ID_INVALID',
     'stablePartnerId',
-    128,
+    MAX_STABLE_PARTNER_ID_LENGTH,
   )
   if (!STABLE_PARTNER_ID_RE.test(stablePartnerId)) {
     throw new HospitalCmDirectoryError(
@@ -1532,7 +1533,7 @@ function normalizeDirectoryResolutionInput(rawInput: unknown): NormalizedDirecto
       input.stablePartnerId,
       'DIRECTORY_RESOLUTION_INPUT_INVALID',
       'stablePartnerId',
-      128,
+      MAX_STABLE_PARTNER_ID_LENGTH,
     )
     : null
   if (stablePartnerId !== null && !STABLE_PARTNER_ID_RE.test(stablePartnerId)) {

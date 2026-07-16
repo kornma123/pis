@@ -315,6 +315,10 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
     for (const table of tables) expect(rowCount(db, table)).toBe(0)
     expect(getCurrentHospitalCmDirectory(db)).toBeNull()
     expect(projectHospitalCmDirectoryForMonth(db, '2026-07')).toBeNull()
+    expect(resolveHospitalCmDirectoryPartners(db, [
+      { stablePartnerId: 'PARTNER-001' },
+      { mappingKey: 'HCM-PARTNER001' },
+    ])).toEqual([null, null])
     expect(rowCount(db, 'partners')).toBe(4)
     expect(
       (
@@ -427,6 +431,30 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
     expectDirectoryCode(() => projectHospitalCmDirectoryForMonth(db, '2026-13'), 'DIRECTORY_MONTH_INVALID')
   })
 
+  it('keeps stable partner identifiers compatible with the existing C1 account boundary', () => {
+    const maxLengthId = `P${'A'.repeat(79)}`
+    db.prepare('INSERT INTO partners (id, code, name, is_deleted) VALUES (?, ?, ?, 0)')
+      .run(maxLengthId, 'LEGACY-MAX-ID', 'Maximum stable id fixture')
+
+    const created = saveHospitalCmDirectoryRevision(db, revisionInput({
+      entries: [entry(maxLengthId, { accountCode: 'HCM-MAX-ID', aliases: ['MAX-ID'] })],
+    }))
+    expect(created.entries.map(item => item.stablePartnerId)).toEqual([maxLengthId])
+    expect(projectHospitalCmDirectoryForMonth(db, '2026-07')?.accounts).toEqual([maxLengthId])
+    expect(resolveHospitalCmDirectoryPartner(db, { stablePartnerId: maxLengthId })?.stablePartnerId)
+      .toBe(maxLengthId)
+
+    const tooLongId = `P${'A'.repeat(80)}`
+    expectDirectoryCode(
+      () => saveHospitalCmDirectoryRevision(db, revisionInput({ entries: [entry(tooLongId)] })),
+      'DIRECTORY_PARTNER_ID_INVALID',
+    )
+    expectDirectoryCode(
+      () => resolveHospitalCmDirectoryPartners(db, [{ stablePartnerId: tooLongId }]),
+      'DIRECTORY_RESOLUTION_INPUT_INVALID',
+    )
+  })
+
   it('derives deterministic content hashes while every real save keeps its own audit revision', () => {
     const input = revisionInput({
       entries: [entry('PARTNER-002'), entry('PARTNER-001')],
@@ -443,7 +471,21 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
     })
     expect(created.id).toMatch(/^[0-9a-f-]{36}$/)
     expect(created.contentHash).toMatch(/^[0-9a-f]{64}$/)
-    expect(created.revisionLineageHash).toMatch(/^[0-9a-f]{64}$/)
+    expect(created.revisionLineageHash).toBe(expectedRevisionLineageHash({
+      id: created.id,
+      eventNumber: created.eventNumber,
+      revision: created.revision,
+      knownCompleteFromMonth: created.knownCompleteFromMonth,
+      entryCount: created.entryCount,
+      aliasCount: created.aliasCount,
+      contentHash: created.contentHash,
+      supersedesVersionId: null,
+      parentRevisionLineageHash: null,
+      reasonCode: created.reasonCode,
+      recordedByUserId: created.recordedByUserId,
+      recordedByUsername: created.recordedByUsername,
+      recordedAt: created.recordedAt,
+    }))
     expect(created.entries.map(item => item.stablePartnerId)).toEqual(['PARTNER-001', 'PARTNER-002'])
     expect(created.entries.every(item => /^[0-9a-f]{64}$/.test(item.rowHash))).toBe(true)
 
@@ -461,7 +503,21 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
       reasonCode: 'REPEATED_IDENTICAL_CONTENT',
     })
     expect(repeated.id).not.toBe(created.id)
-    expect(repeated.revisionLineageHash).not.toBe(created.revisionLineageHash)
+    expect(repeated.revisionLineageHash).toBe(expectedRevisionLineageHash({
+      id: repeated.id,
+      eventNumber: repeated.eventNumber,
+      revision: repeated.revision,
+      knownCompleteFromMonth: repeated.knownCompleteFromMonth,
+      entryCount: repeated.entryCount,
+      aliasCount: repeated.aliasCount,
+      contentHash: repeated.contentHash,
+      supersedesVersionId: created.id,
+      parentRevisionLineageHash: created.revisionLineageHash,
+      reasonCode: repeated.reasonCode,
+      recordedByUserId: repeated.recordedByUserId,
+      recordedByUsername: repeated.recordedByUsername,
+      recordedAt: repeated.recordedAt,
+    }))
     expect(rowCount(db, 'hospital_cm_directory_versions')).toBe(2)
     expect(rowCount(db, 'hospital_cm_directory_idempotency')).toBe(2)
     expect(rowCount(db, 'abc_audit_logs')).toBe(2)
@@ -472,6 +528,14 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
     expect(rowCount(db, 'hospital_cm_directory_versions')).toBe(3)
     expect(rowCount(db, 'hospital_cm_directory_idempotency')).toBe(3)
 
+    const later = saveHospitalCmDirectoryRevision(db, revisionInput({
+      reasonCode: 'LATER_REVISION_AFTER_REPLAY_RESULT',
+    }))
+    expect(saveHospitalCmDirectoryRevision(db, replayInput)).toEqual(replayed)
+    expect(getCurrentHospitalCmDirectory(db)?.id).toBe(later.id)
+    expect(rowCount(db, 'hospital_cm_directory_versions')).toBe(4)
+    expect(rowCount(db, 'hospital_cm_directory_idempotency')).toBe(4)
+
     expectDirectoryCode(() => saveHospitalCmDirectoryRevision(db, {
       ...replayInput,
       actor: { userId: 'USER-OTHER', username: 'other.admin' },
@@ -480,6 +544,36 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
       ...replayInput,
       entries: [entry('PARTNER-001')],
     }), 'DIRECTORY_IDEMPOTENCY_CONFLICT')
+  })
+
+  it('paginates immutable revisions with an exclusive stable event cursor', () => {
+    for (let revision = 1; revision <= 4; revision += 1) {
+      saveHospitalCmDirectoryRevision(db, revisionInput({
+        reasonCode: `PAGINATION_REVISION_${revision}`,
+      }))
+    }
+
+    const firstPage = listHospitalCmDirectoryRevisions(db, { limit: 2 })
+    expect(firstPage.current?.revision).toBe(4)
+    expect(firstPage.versions.map(version => version.revision)).toEqual([4, 3])
+    expect(firstPage.pagination.nextCursor).toBe(firstPage.versions[1]?.eventNumber)
+
+    const secondPage = listHospitalCmDirectoryRevisions(db, {
+      limit: 2,
+      beforeEvent: firstPage.pagination.nextCursor!,
+    })
+    expect(secondPage.current?.revision).toBe(4)
+    expect(secondPage.versions.map(version => version.revision)).toEqual([2, 1])
+    expect(secondPage.pagination.nextCursor).toBeNull()
+
+    expectDirectoryCode(
+      () => listHospitalCmDirectoryRevisions(db, { limit: 0 }),
+      'DIRECTORY_PAGE_INVALID',
+    )
+    expectDirectoryCode(
+      () => listHospitalCmDirectoryRevisions(db, { beforeEvent: 0 }),
+      'DIRECTORY_PAGE_INVALID',
+    )
   })
 
   it('records display and alias revisions without changing the monthly membership hash', () => {
@@ -798,6 +892,22 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
     expectDirectoryCode(() => getCurrentHospitalCmDirectory(db), 'DIRECTORY_CORRUPT')
     expectDirectoryCode(() => projectHospitalCmDirectoryForMonth(db, '2026-01'), 'DIRECTORY_CORRUPT')
     expectDirectoryCode(() => listHospitalCmDirectoryRevisions(db), 'DIRECTORY_CORRUPT')
+  })
+
+  it('allows an audited revision to move an included start month earlier', () => {
+    saveHospitalCmDirectoryRevision(db, revisionInput({
+      knownCompleteFromMonth: '2026-01',
+      entries: [entry('PARTNER-001', { effectiveFromMonth: '2026-07' })],
+    }))
+    expect(projectHospitalCmDirectoryForMonth(db, '2026-01')?.accounts).toEqual([])
+
+    const corrected = saveHospitalCmDirectoryRevision(db, revisionInput({
+      knownCompleteFromMonth: '2026-01',
+      entries: [entry('PARTNER-001', { effectiveFromMonth: '2026-01' })],
+      reasonCode: 'CORRECT_START_EARLIER',
+    }))
+    expect(corrected.revision).toBe(2)
+    expect(projectHospitalCmDirectoryForMonth(db, '2026-01')?.accounts).toEqual(['PARTNER-001'])
   })
 
   it('does not let a new header chain through an incomplete intermediate revision', () => {
