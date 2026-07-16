@@ -1,7 +1,7 @@
 # COREONE 整体产品 PRD — 病理实验室进销存 · 成本 · 结算 · 院级贡献毛利
 
-> **状态**:v1.3 **文档定稿 · 决策台账零待 PM 选择**(2026-07-15)。PM 已先明确说「定稿」([决定记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4978904201)),再批准 §10 剩余推荐、指定 O-2 四个角色统一称「管理员」并授权满足新头门禁后普通合并 PR #190([批量决策与合并授权](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4979266101))。这里的「文档定稿/决策清零」只确认本文可作为后续需求输入与范围导航;不等于「口径定稿」或实施完成,不升级 B/C、RATIFIED 或 Locked Golden,不代表部署/上线、真实业务验收或对外承诺。
-> **修订说明**:v1.0(2026-07-14)首版;v1.1(2026-07-15)逐项处理 PR #190 的[既有复核 P1/P2](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4976504018)与动态事实,并落实[首批 PM 拍板记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4977403367);v1.2 记录文档定稿决定及其权限边界;v1.3 将 §10 全部剩余推荐转为 PM 已决策项、记录 O-2「管理员」与独立性边界,并吸收 E0 mockup 已合入 master 的动态事实。首轮 4 镜头只留下汇总、逐项记录未进入仓库或 GitHub,故本版不把「17/17」当可独立复核证据,边界与本轮可访问处置见 §13。本次取证基线 = 云端 `origin/master@fb9b8ecc` + GitHub 现场事实(2026-07-15);SHA 只是取证时点,实时状态一律现场查 GitHub/Git。
+> **状态**:v1.4 **文档定稿 · 决策台账零待 PM 选择**(2026-07-16)。PM 已先明确说「定稿」([决定记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4978904201)),再批准 §10 剩余推荐、指定 O-2 四个角色统一称「管理员」并授权满足新头门禁后普通合并 PR #190([批量决策与合并授权](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4979266101));2026-07-16 又将 O-1 更新为管理员维护的版本化医院目录配置([#182 权威 ASCII 决策记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/182#issuecomment-4987580797))。这里的「文档定稿/决策清零」只确认本文可作为后续需求输入与范围导航;不等于「口径定稿」或实施完成,不升级 B/C、RATIFIED 或 Locked Golden,不代表部署/上线、真实业务验收或对外承诺。
+> **修订说明**:v1.0(2026-07-14)首版;v1.1(2026-07-15)逐项处理 PR #190 的[既有复核 P1/P2](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4976504018)与动态事实,并落实[首批 PM 拍板记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4977403367);v1.2 记录文档定稿决定及其权限边界;v1.3 将 §10 全部剩余推荐转为 PM 已决策项、记录 O-2「管理员」与独立性边界,并吸收 E0 mockup 已合入 master 的动态事实;v1.4 只同步 O-1 新决定:完整医院名单不再二次确认,由版本化医院目录配置决定范围,金额/finality 证据门保持不变。首轮 4 镜头只留下汇总、逐项记录未进入仓库或 GitHub,故本版不把「17/17」当可独立复核证据,边界与本轮可访问处置见 §13。本次取证基线 = 云端 `origin/master@388c3cd9` + GitHub 现场事实(2026-07-16);SHA 只是取证时点,实时状态一律现场查 GitHub/Git。
 > **定位**:本文是**项目级总 PRD**——定产品边界、口径底线、验收基线、路线图与决策/实施边界,是后续所有开发工作的**总入口和范围基准**。它不替代单功能 PRD:新功能/大改动仍按 [PRD 质量 Loop](COREONE-PRD质量Loop-2026-07-12.md) 走自己的薄 PRD 与 mockup→写码→验收链,只是以本文为上游。各模块深规格住在 [FRS 套件](FRS/README.md) 与各域权威文档,本文对各域只做点名+最小现状摘要、绝不复制规则;摘要与域权威或活代码冲突时,以后者为准并回来修本文(附录 A 使用规则④;防镜像漂移要求见[质量 Loop 契约](COREONE-质量Loop契约-2026-07-12.md))。
 > **风险档**:R2(收入、成本、库存事实、权限、经营判断)。
 > **碰钱边界(B-5,2026-07-13 已拍)**:本文所有碰钱数字按**内部探索版**口径双轴标注(`evidence_strength` A/B/C + `authority_status`);**对外/对医院可信版**三硬门(≥2 家不同商业模式医院真实三件套 golden、成本结构经完整真数据定向、具名隐私/合规 owner 完成正式判断)未达成前,任何数字不得对外输出。PM 于 2026-07-15 接受的 grade C 只限内部探索观察:恒带「未经业务确认」提示,禁止对医院/第三方输出,不得作为最终盈利判断或真实解锁证据,并进入后续校准队列。(源:[PM 决策索引 B-5](PM待拍板.md))
@@ -120,8 +120,8 @@ RBAC 设计原则:诊断线与技术线分离、最小必要、职责分离(SoD)
 | A 数据地基真实探针 | 库存守恒/期间键/常量冻结三门+append-only 证据,未具名 owner 自动红灯 | ✅ 已实现并合入 master(PR#151) |
 | B 固定成本池认账 | 不可变值版本+RATIFIED,值变即失效 | ✅ 控制面已实现并合入 master(PR#172);📋 真实金额+管理员签字/认账证据(2026-08-31) |
 | C 周期质量验证 [#183](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/183) | M-2/M-1/M 三期 verified+首个脱敏真实周期独立验证+拆分认账硬门;须真实机器可读「最终结清」信号 | ✅ C1 底座已由 PR#187 合入 master;📋 C2–C4 |
-| D1 历史失真月 [#184](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/184) | 历史月四态(VERIFIED/RESTATED/REVIEW_REQUIRED/UNVERIFIABLE),缺证即 null+断线 | 📋 依赖 C1 |
-| D2 账户全集与无病例号收入 [#182](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/182) | 版本化月度名册(权威源=合同有效账户台账∪财务月度结算名册,**O-1 已拍**)+无病例号收入/成本台账+UNMEASURED 返 null 披露覆盖 | ✅ B0 候选快照已由 PR#186 合入 master(无端点无消费者);📋 管理员所持角色的可审计履职、受控真实来源、守恒与消费者接线 |
+| D1 历史失真月 [#184](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/184) | 历史月四态(VERIFIED/RESTATED/REVIEW_REQUIRED/UNVERIFIABLE),缺证即 null+断线 | 📋 依赖目录配置运行时/C1 scope、真实来源/finality、C2–C4 与适用时 #163 阶段 2 |
+| D2 账户全集与无病例号收入 [#182](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/182) | 版本化医院目录配置决定“谁应出现”(**O-1 已更新**)+无病例号收入/成本证据+UNMEASURED 返 null 披露覆盖 | ✅ 方向已批准但未接线;✅ B0 候选快照已由 PR#186 合入 master(无端点无消费者且不自动升级);📋 目录控制面、C1 桥接、nullable 消费者与真实金额证据 |
 | E 前端解锁体验 [#185](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/185) | 校准/就绪/失效三态,完整组件进出 DOM,值变立即收回 | ✅ E0 月份 delta mockup 已批准并随 PR #194 合入 master;📋 生产 E1 仍待上游门与单独认领 |
 | #163 阶段 2 跨月分摊 | 见 §4.3 | 📋 可开工 |
 | 证据双轴机器化 | 碰钱展示面携带 evidence_strength/authority_status 字段 | 📋 当前只在文档层;首版以水印+导出声明列承载(⚠️ 细节级假设) |
@@ -190,7 +190,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 | hospital-cm 门锁 | ready=false 时 `/full-health` 恒 403、载荷零数值、完整组件不进 DOM、URL 不能强开 | 后端+DOM 双层,yes/no |
 | hospital-cm 解锁(C) | 目标月 M:M-2/M-1/M 三期 verified 才 3/3;任一期反关账即失效;首周期=source manifest+独立手核+成本 golden+具名 reviewer 四件缺一不过;fixture 不算证据 | 证据记录,yes/no |
 | 跨月分摊(阶段 2) | 真实台账同号跨两结算月病例:成本按两月收入占比分摊且两月之和=原总额(守恒),不再整例扣留;晚月覆盖仍被硬拒(#168 回归) | 守恒+回归,yes/no |
-| 诚实不可测(D2) | 名册未批/不完整:未测占比显示「不可计算」(null),只列已识别账户数/已知金额/缺失原因;**任何页面无「未知折 0」路径** | API+页面,yes/no |
+| 诚实不可测(D2) | 配置 scope 未接通/不完整或金额证据不足:未测占比显示「不可计算」(null),只列已识别账户数/已知金额/缺失原因;**任何页面无「未知折 0」路径** | API+页面,yes/no |
 | 三态前端(E) | 校准/就绪/失效切换,完整体检组件 DOM 计数 0→1→0,控制台零错误 | Playwright,yes/no |
 | 水印 | 拆分口径认账前,四条路由响应与 CSV 恒带「口径未经业务认账」 | 响应字段,yes/no |
 | E2E 纪律 | 改关键业务流的 PR,本地真跑对应 spec 并在 PR 留证(CI 仅 3-spec 极小子集,以现场为准) | PR 证据,yes/no |
@@ -198,7 +198,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 ## 7. 成功度量
 
 - **主线(hospital-cm)主指标:真实解锁的院月数**(四门真证据齐全)。现状 0;第一目标=条件成立时 2026-10-31 出现第 1 个。
-- **主线次级**:verified 周期数 0→3;结算锚权威 A 条数 0→61(随 #181);grade-C 决策数字的校准队列消化数;名册批准后覆盖披露(FULL/PARTIAL/NONE)可计算的院月占比。
+- **主线次级**:verified 周期数 0→3;结算锚权威 A 条数 0→61(随 #181);grade-C 决策数字的校准队列消化数;目录配置接线后覆盖披露(FULL/PARTIAL/NONE)可计算的院月占比。
 - **基础面**:构建纪律棘轮 baseline 只降不升;headless 路由按死线归位(2026-10-07);FRS 债务台账逐项关闭数。baseline/路由计数以目标 SHA 的 gate 输出为准,不在 PRD 固定。
 - **护栏(不得恶化,今天已成立)**:黄金锚 CI 恒绿;未就绪 `/full-health` 恒 403;水印认账前不消失;影子矩阵 BLOCK==0;审计被拒行永不含请求体。
 - **目标护栏(D2 交付判据,交付后才转入上行)**:「未知折 0」路径清零——**今天校准接口仍会把未接入的未测收入显示为 0**(`portfolio-health` 折 0 缺陷,见 §4.7 D2 行),这正是 D2 要消灭的,当前不得声称已有此保障。
@@ -218,7 +218,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 
 ## 9. 依赖与风险
 
-**外部依赖(不受工程控制,是主线最大风险)**:①O-1 已确认两类名册存在、可导出且有统一稳定账户编号,但受控 source manifest、版本/hash、服务月映射与账户数/金额守恒仍未交付;②固定成本池真实金额;③CK广/CYCD-1 发票;④O-2 的固定池签字人、数据保管人、首周期独立 reviewer、纯代送业务 owner 均已具名为「管理员」,PM 接受职责集中风险,但某次首周期验证的 reviewer 仍须独立于实际实施者——若管理员亲自实施,在另一独立复核人留证前机器红灯不解除;⑤QA/E2E 与隐私合规的执行 owner 在对应实施/扩围时另行认领,不是本 PRD 尚待选择的产品方向,且当前不允许患者明文回查。
+**主线依赖(含工程外部依赖)**:①完整医院名单已由 PM 提供,但版本化医院目录配置、真实配置月与 C1 scope 尚未实现;名单不再等待外部确认。财务、LIS、成本、finality 的受控 source manifest、版本/hash、服务月映射与金额守恒仍未交付;②固定成本池真实金额;③CK广/CYCD-1 发票;④O-2 的固定池签字人、数据保管人、首周期独立 reviewer、纯代送业务 owner 均已具名为「管理员」,PM 接受职责集中风险,但某次首周期验证的 reviewer 仍须独立于实际实施者——若管理员亲自实施,在另一独立复核人留证前机器红灯不解除;⑤QA/E2E 与隐私合规的执行 owner 在对应实施/扩围时另行认领,不是本 PRD 尚待选择的产品方向,且当前不允许患者明文回查。
 
 | 风险 | 后果 | 止损 |
 |---|---|---|
@@ -226,7 +226,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 | Candidate 被文案升权威 | 未受控数进经营判断 | 双轴分开标注;#181 唯一升级闸;完成前一律写「权威 A=0」 |
 | 未知折 0/强给百分比 | 高估覆盖误导去留 | D2 nullable 合同;下限公式前置条件缺一返 null |
 | 结算月静默当服务月 | 收入成本错期 | 双月字段+映射依据;无批准映射最多 PARTIAL |
-| 把某批文件当全部账户 | 包外医院被判不存在 | 名册=合同∪结算并集+账户数守恒 |
+| 绕过配置把病例或某批文件当全部账户 | 未进入文件的医院被判不存在 | 只由版本化医院目录配置枚举;文件只作金额/活动证据 |
 | 可疑 seed 价进 CM | 发票证错则错误已具进入路径 | 影子模式维持到就绪;改价走 L1+golden;暴露标 UNMEASURED |
 | 三个可回溯周期不存在 | 10-31 节点落空 | O-5:事件后移到「第三个合格周期成立后再做独立验收」,不编固定等待月数或 10 个工作日 |
 | CI e2e 不是回归网 | 关键流回归漏网 | 本地真跑相关 spec;策略票 #130 |
@@ -244,7 +244,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 
 | 组 | ID | PM 最终决定 | 仍须在原 Issue/实施阶段证明的门 |
 |---|---|---|---|
-| 主线 | O-1 | 月度账户全集方向=`合同有效账户台账 ∪ 财务月度结算名册` | 可导出、稳定账户键、owner、version/hash、服务月映射、账户数/金额守恒缺一仍 UNMEASURED |
+| 主线 | O-1 | 月度账户全集=管理员维护的版本化医院目录配置;完整名单已提供,不再做外部名单确认或独立 roster RATIFIED | 仍须实现 stablePartnerId=partners.id、code、展示名、aliases、included、必填 effectiveFromMonth、可空 effectiveToMonth、审计与 C1 scope 桥接;未知历史起点不倒灌,配置只决定范围,金额/finality 缺证仍 UNMEASURED/null |
 | 主线 | O-2 | 固定池签字人/数据保管人/首周期独立 reviewer/纯代送业务 owner 均称「管理员」;接受职责集中 | reviewer 必须独立于该次实际实施者;若管理员实施,须另一独立复核人留证后才可解锁 |
 | 主线 | O-3 | 四问全同意:空数据诚实显示、未测占比可「不可计算」、门证据同屏、值变立即收回;E0 mockup 已随 PR #194 合入 master | 只完成 E0 合同,不等于生产 E1、真实异步/数据/readiness 或解锁完成 |
 | 主线 | O-4 | 2026-10-31 定义为「可测组合真实解锁+完整披露不可测覆盖」 | 不承诺全部医院可计算盈利;仍受真实来源与验收门约束 |
@@ -272,13 +272,13 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 1. PR#189 关账竞态修复与 PR#187 C1 证据底座均已合入 master,不再列为在途;后续分别回到 #188/#183 的剩余验收边界。
 2. 现有 #140 按 #139 已拍 A 模型推进 dev seed、跨批 FEFO 写路径与约束,作为任何真实数据进入前的硬前置;不新开第二张业务票,不执行生产迁移。
 3. **#163 阶段 2 开工**(读侧分摊+guard 收窄;前提 #168 已合并)。
-4. 决策已清算:O-2 四类角色统一为「管理员」并保留实际复核独立性门;O-3 四问已批准且 E0 mockup 已合入 master;O-1 转 #182 做真实脱敏来源与守恒。这里不自动启动 B/C/D2/E。
+4. 决策已清算:O-2 四类角色统一为「管理员」并保留实际复核独立性门;O-3 四问已批准且 E0 mockup 已合入 master;O-1 转 #182 实现版本化医院目录控制面与 C1 scope 桥接,金额证据仍独立守恒。这里不自动启动 B/C/D1/D2/E。
 5. 治理焊接小票:#157/#158/#159;执法 bug #147/#148;小修 #145/#146。
 
 **Next(2026-08~09)**
 5. B:固定池真实值+RATIFIED(节点 08-31)。
 6. C2–C4(#183):真实结清信号、三期验证、拆分认账硬门;随后 D1(#184)。
-7. D2 接线(O-1 已批准):具名 owner+真实脱敏 manifest/并集/守恒/UNMEASURED nullable;来源盘点节点 09-30。
+7. D2 分步接线(O-1 已更新):先做医院目录控制面与 C1 scope,再做真实脱敏金额 manifest/映射/守恒和 UNMEASURED nullable;不得用目录配置冒充金额齐全,来源盘点节点 09-30。
 8. 数据地基门全绿(09-30;依赖阶段 2 清理跨月扣留)。
 9. seed 改价(#174/#165,发票齐后 L1+golden);#175、#180、#181 逐票消化。
 10. 既有票消化:#149 按已拍方向尽快执行;#150 在首次外部试用/上线前完成;其余 #129/#130/#135 精确权限矩阵实施/#160 按原票推进。#139 决策已完成,工程范围由 Now 的 #140 承接。
@@ -292,7 +292,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 
 ## 12. 假设台账(按契约 §3 两级)
 
-**方向级(定义见契约 §3;已全部决策,零带标前进)**:①本文范围解读(§0 三问,PM 已于 2026-07-15 随文档定稿确认);②O-5 已批准事件兜底:三个连续合格周期不存在就等第三个合格周期成立后再验收,不编固定等待窗;③O-1 已确认来源方向与稳定账户编号,但真实脱敏 manifest、版本/hash、服务月映射与守恒未齐,缺一仍阻断 RATIFIED/readiness;④O-2 四类角色均称「管理员」,同时保留该次 reviewer 独立于实施者的硬门。
+**方向级(定义见契约 §3;已全部决策,零带标前进)**:①本文范围解读(§0 三问,PM 已于 2026-07-15 随文档定稿确认);②O-5 已批准事件兜底:三个连续合格周期不存在就等第三个合格周期成立后再验收,不编固定等待窗;③O-1 已更新为版本化医院目录配置,名单不再待确认,但目录运行时/C1 scope 及真实金额、LIS、成本、finality 的 manifest/hash/owner/守恒未齐,仍阻断 D1-1/readiness;④O-2 四类角色均称「管理员」,同时保留该次 reviewer 独立于实施者的硬门。
 
 **细节级(定义见契约 §3;以 ⚠️ 留痕前进,不构成当前 PM 决策门)**:①本文件名与存放位置(docs/ 根、日期命名);②证据双轴首版以水印+导出声明列承载,机器化字段另立票;③§11 路线图依赖关系是硬的,月份归属为可按新证据重排的编排建议;④验收例所选真实月以届时已关账月为准。
 
@@ -320,7 +320,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 | P2 K-3/K-8/质疑记录/定稿门 | §5、本节、PM 大白话 | K-3 补 A+记名源;K-8 删除来源不匹配的 median,按 A 算术/B 筛选/Candidate 记录;历史面板降级并列出本轮 findings;定稿门恢复为质量 Loop 全部退出条件+PM 明确说「定稿」 |
 | 动态事实 #187/#189 | §4.4、§4.7、§11 | 现场确认两 PR 均已合入 master,不再写在途 |
 
-本 PRD 已于 2026-07-15 完成**文档定稿**,并在 v1.3 将 §10 收口为**零待 PM 选择**:PM 在 v1.1 固定头 `72245c29` 的检查与复核后明确说「定稿」,随后逐项批准剩余推荐、指定 O-2 四个角色统一为「管理员」并授权满足门禁后普通合并 PR #190。决策清零不等于表中实现/证据门已完成,不升级 B/C、RATIFIED 或 Locked Golden,不代表部署/上线、真实业务验收或对外承诺。v1.3 新头仍须通过 CI、正式 AI review 与固定 SHA 独立复核;只有同一 head 的 required gates、scope、mergeability 均满足才可使用该合并授权,不得 admin bypass、force、auto-merge、改变 formal review state 或 resolve thread。
+本 PRD 已于 2026-07-15 完成**文档定稿**,并在 v1.3 将 §10 收口为**零待 PM 选择**:PM 在 v1.1 固定头 `72245c29` 的检查与复核后明确说「定稿」,随后逐项批准剩余推荐、指定 O-2 四个角色统一为「管理员」并授权满足门禁后普通合并 PR #190。决策清零不等于表中实现/证据门已完成,不升级 B/C、RATIFIED 或 Locked Golden,不代表部署/上线、真实业务验收或对外承诺。PR #190 的合并授权只属于该历史 PR;v1.4 是根据 #182 新决定做的独立同步,仍须通过自己固定 SHA 的 required gates、scope、mergeability 与独立复核,且没有继承自动合并、admin bypass、force、formal review 或 resolve thread 权限。
 
 ## 附录 A · 文档地图(开工导航,按域点名唯一权威)
 
@@ -344,4 +344,4 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 
 ## PM 大白话
 
-这份「整个项目的总需求书」现在已经**文档定稿,且当前没有待 PM 选择的 PRD 决策**。它把系统分成十个部分,写清楚:**仓库真实做到了哪**(代码/文档已实现或已合入,不冒充生产上线)、**已经选了什么方向**(§10 每项都有最终选择)、**还要拿什么证据/做什么实现才能变绿**(固定池真实金额、受控脱敏名册、真实周期、独立验收等仍未完成)。O-2 的四个角色统一叫「管理员」;职责集中已接受,但实施者不能给自己做“独立复核”。E0 mockup 已批准并合入,不等于生产 E1 已做。PM 已授权在 v1.3 新头 checks、正式 AI review、独立 fixed-SHA 复核、scope 与 mergeability 全部通过后普通合并 PR #190;本 PR 不自动拆业务实现任务,也不会把“决定已拍”写成“业务已完成”。
+这份「整个项目的总需求书」现在已经**文档定稿,且当前没有待 PM 选择的 PRD 决策**。它把系统分成十个部分,写清楚:**仓库真实做到了哪**(代码/文档已实现或已合入,不冒充生产上线)、**已经选了什么方向**(§10 每项都有最终选择)、**还要拿什么证据/做什么实现才能变绿**。完整医院名单已经有了,O-1 改为做系统内版本化医院目录配置,不再重复确认名单;但配置控制面/C1 scope、真实金额/LIS/成本/finality、真实周期和独立验收都仍未完成,缺失金额继续 UNMEASURED/null。O-2 的四个角色统一叫「管理员」;职责集中已接受,但实施者不能给自己做“独立复核”。E0 mockup 已批准并合入,不等于生产 E1 已做。本次 v1.4 只是同步新合同,不自动启动 D1-1、业务实现或部署,也不会把“决定已拍”写成“业务已完成”。
