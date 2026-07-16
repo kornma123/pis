@@ -16,6 +16,7 @@ import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } f
 import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
 import { ANTIBODY_SYNONYM_SEED, ANTIBODY_MISSING_PRICE_SEED } from '../utils/antibody-name-map.js'
 import { ensureHospitalCmAccountRosterSchema } from '../utils/hospital-cm-account-roster.js'
+import { ensureHospitalCmDirectorySchema } from '../utils/hospital-cm-directory.js'
 import { ensureHospitalCmReadinessSchema } from '../utils/hospital-cm-readiness-runtime.js'
 import { ensureHospitalCmPeriodEvidenceSchema } from '../utils/hospital-cm-period-evidence.js'
 import fs from 'fs'
@@ -1989,6 +1990,10 @@ export function initializeDatabase(): void {
   // hospital-cm #182 D2 B0：只建空的候选来源名册控制面。
   // 不 seed 账户、不认定来源权威、不接 readiness/FULL/PARTIAL/NONE，也不自动生成 C1 scope。
   ensureHospitalCmAccountRosterSchema(database)
+
+  // hospital-cm #182：只建空的、版本化且追加式的医院目录配置面。
+  // 不 seed/回填 legacy partner，不发布 C1 scope，也不把目录配置写成金额证据或 readiness。
+  ensureHospitalCmDirectorySchema(database)
 
   // C1 周期证据底座（#183 增量 C）：batch manifest / 月度范围快照 / close-reopen revision 镜像 /
   // 周期验证 run-check 存储与读侧失效判定。只建 append-only 存储与触发器,不 seed 任何 manifest、
