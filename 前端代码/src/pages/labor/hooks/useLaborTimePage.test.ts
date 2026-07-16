@@ -58,6 +58,18 @@ describe('useLaborTimePage', () => {
     expect(result.current.canManageLaborTimes).toBe(true)
   })
 
+  // 上一例的 finance 在旧白名单 ['admin','finance','technician'] 内，故对「能力 vs 角色名单」无分辨力；
+  // 而种子矩阵下 labor_times:'W' 恰好只有 {admin, finance}，两者都在旧名单里 → 没有任何内建角色能做分辨性 W 正例。
+  // 故此处用自定义角色：roles-v1.1.ts:39-48 允许管理员建任意 role code 并配权限，是真实场景。
+  // 旧判据对未知 role 返回 false，新判据按能力返回 true → 本例对退回旧名单有分辨力。
+  it('allows any custom role holding labor_times:W (判据看能力不看角色名)', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'cost_auditor', capabilities: { labor_times: 'W' } }))
+
+    const { result } = renderHook(() => useLaborTimePage())
+
+    expect(result.current.canManageLaborTimes).toBe(true)
+  })
+
   // ⚠️ 行为收紧（PM 2026-07-15 拍板：按后端为准藏按钮）。此用例此前断言 true——那是旧硬编码名单
   //   ['admin','finance','technician'] 越授的产物：technician 在种子矩阵里只持 labor_times:'R'
   //   （rbac-matrix.ts:61），后端 labor-time-v1.1.ts:13 requirePermission('labor_times','W') 必拒。
