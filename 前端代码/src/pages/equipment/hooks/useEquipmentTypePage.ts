@@ -35,7 +35,7 @@ const defaultForm: EquipmentTypeForm = {
 // （equipment-types-v1.1.ts:11 → POST/PUT/DELETE）对齐。读能力矩阵（登录响应下发的 user.capabilities，
 // 单一来源），而非早前退化为「role∈{admin,technician}」、且依赖后端从不下发的 user.permissions 数组的旧判据
 // ——那会把同样持 equipment:W 的角色（如 finance/lab_director）在前端误藏，而后端却放行（前端藏了·后端放行）。
-// capabilities 缺失时 canAccess 放行，真实边界仍由后端守卫兜底。
+// capabilities 缺失（陈旧会话）时 canAccess 对 W 级 fail-closed（藏），真实边界仍由后端守卫独立兜底。
 // 注：本页 /equipment/types 当前对所有角色不可达（未登记进 NAV_PATH_MODULE，被 AppLayout 可达性守卫重定向），
 //   故本判据现网无可观察效果；可达性归位见 #131，届时权限判断自动即为正确值。
 function canManageEquipmentTypeRecords() {

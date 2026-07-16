@@ -68,7 +68,7 @@ export const PROJECT_TYPE_OPTIONS = [
 // ⚠️ 本页漂移方向与设备资产/设备类型相反：旧名单比后端**宽**——technician 只持 labor_times:'R'
 //   （rbac-matrix.ts:61），却能看到增改删按钮、点击必吃 403（前端放行·后端拒）。故本次迁移是**行为收紧**
 //   （PM 2026-07-15 拍板：按后端为准藏按钮），不是死码清理。
-// capabilities 缺失时 canAccess 放行，真实边界仍由后端守卫兜底。
+// capabilities 缺失（陈旧会话）时 canAccess 对 W 级 fail-closed（藏），真实边界仍由后端守卫独立兜底。
 function canManageLaborTimeRecords() {
   return canAccess('labor_times', 'W')
 }

@@ -57,10 +57,22 @@ export function getRoles(): string[] {
   }
 }
 
-/** 当前用户对 module 是否具备 level 权限（W 蕴含 R）。capabilities 缺失→放行（退回旧逻辑，由 getAccessiblePaths 兜底 nav）。 */
+/**
+ * 当前用户对 module 是否具备 level 权限（W 蕴含 R）。
+ *
+ * capabilities 整键缺失时**按级别分叉**：
+ *   - R（读/展示）→ 放行。判据不明时不硬挡页面，可达性另由 getAccessiblePaths 独立裁决。
+ *   - W（写按钮显隐）→ **拒绝（fail-closed）**。露出一个点了必吃 403 的按钮，比暂时藏起来更糟；
+ *     且 PM 已拍板「前端写按钮必须跟随 capability，不能只等后端返回 403」（#135, 2026-07-15）。
+ *
+ * 注：caps 缺失只在陈旧会话下发生（capabilities 随 de3ac083 上线；此前铸造的 localStorage.user 无该键）。
+ *   登录/刷新响应恒含 capabilities（auth.ts），且 access token 8h、refresh token 7d 且不轮转
+ *   → 任何会话最迟 login+7d 自愈或登出。故本分支在生产常态不可达，此处分叉是**加固而非行为变更**。
+ *   ⚠️ `capabilities: {}`（零权限）不走本分支——空对象为真值，落 :78 的模块缺失分支，本就返回 false。
+ */
 export function canAccess(module: string, level: CapLevel = 'R'): boolean {
   const caps = getCapabilities()
-  if (!caps) return true
+  if (!caps) return level === 'R'
   const got = caps[module]
   if (!got) return false
   return level === 'R' ? true : got === 'W'
