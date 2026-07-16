@@ -545,7 +545,11 @@ function normalizeDirectoryInput(value: unknown): NormalizedDirectoryInput {
 }
 
 export function ensureHospitalCmDirectorySchema(db: HospitalCmDirectoryDb): void {
-  // Deliberately no PRAGMA and no seed/backfill: imported/legacy partners remain excluded.
+  // Deliberately no PRAGMA: schema helpers must not mutate caller connection semantics.
+  // Every declared directory reference is mirrored by a named BEFORE INSERT trigger
+  // (version, partner, entry, or result), and recursive reads revalidate the chain;
+  // integrity therefore remains fail-closed even when SQLite FK enforcement is off.
+  // No seed/backfill: imported/legacy partners remain excluded.
   db.exec(`
     CREATE TABLE IF NOT EXISTS hospital_cm_directory_versions (
       event_number INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -581,7 +585,9 @@ export function ensureHospitalCmDirectorySchema(db: HospitalCmDirectoryDb): void
     CREATE TABLE IF NOT EXISTS hospital_cm_directory_entries (
       event_number INTEGER PRIMARY KEY AUTOINCREMENT,
       directory_version_id TEXT NOT NULL,
-      stable_partner_id TEXT NOT NULL,
+      stable_partner_id TEXT NOT NULL CHECK (
+        length(stable_partner_id) BETWEEN 1 AND ${MAX_STABLE_PARTNER_ID_LENGTH}
+      ),
       account_code TEXT NOT NULL,
       account_code_key TEXT NOT NULL,
       canonical_display_name TEXT NOT NULL,
@@ -1252,6 +1258,12 @@ function requireIncludedMembersRetained(
   }
 }
 
+/**
+ * Trusted internal persistence primitive, not an HTTP authorization boundary.
+ * This PR exposes no route or external caller. A future entry point must run the
+ * repository's authentication/permission middleware and derive actor only from
+ * the authenticated req.user; request-body actor attribution must never be forwarded.
+ */
 export function saveHospitalCmDirectoryRevision(
   db: HospitalCmDirectoryDb,
   rawInput: unknown,

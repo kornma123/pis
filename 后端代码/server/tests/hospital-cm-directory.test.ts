@@ -129,8 +129,8 @@ function expectedRevisionLineageHash(input: {
   recordedAt: string
 }): string {
   return stableHash({
-    recipeVersion: HOSPITAL_CM_DIRECTORY_LINEAGE_RECIPE_VERSION,
-    contractVersion: HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
+    recipeVersion: 'hospital-cm.directory.revision-lineage.v1',
+    contractVersion: 'hospital-cm.directory.v1',
     ...input,
   })
 }
@@ -299,6 +299,12 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
     db = createDb()
   })
 
+  it('pins the directory contract and lineage recipe versions independently from the implementation', () => {
+    expect(HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION).toBe('hospital-cm.directory.v1')
+    expect(HOSPITAL_CM_DIRECTORY_LINEAGE_RECIPE_VERSION)
+      .toBe('hospital-cm.directory.revision-lineage.v1')
+  })
+
   it('initializes an empty additive control plane without seeding or mutating partners', () => {
     ensureHospitalCmDirectorySchema(db)
     const tables = (db.prepare(`
@@ -453,6 +459,98 @@ describe('hospital-cm #182 · versioned hospital directory runtime', () => {
       () => resolveHospitalCmDirectoryPartners(db, [{ stablePartnerId: tooLongId }]),
       'DIRECTORY_RESOLUTION_INPUT_INVALID',
     )
+  })
+
+  it('enforces the 1-to-80 stable partner id boundary in SQLite even for direct SQL with FKs off', () => {
+    const isolated = createDb({ foreignKeys: false })
+    const versionId = '00000000-0000-4000-8000-000000000080'
+    const validId = 'V'.repeat(80)
+    const tooLongId = 'X'.repeat(81)
+    const insertPartner = isolated.prepare(
+      'INSERT INTO partners (id, code, name, is_deleted) VALUES (?, ?, ?, 0)',
+    )
+    insertPartner.run(validId, 'RAW-VALID-80', 'Raw valid 80')
+    insertPartner.run('', 'RAW-EMPTY', 'Raw empty id')
+    insertPartner.run(tooLongId, 'RAW-TOO-LONG', 'Raw too long id')
+    isolated.prepare(`
+      INSERT INTO hospital_cm_directory_versions (
+        id, revision, contract_version, known_complete_from_month,
+        entry_count, alias_count, content_hash, revision_lineage_hash,
+        supersedes_version_id, reason_code, recorded_by_user_id,
+        recorded_by_username, recorded_at
+      ) VALUES (?, 1, ?, '2026-07', 3, 0, ?, ?, NULL,
+        'RAW_DB_BOUNDARY', 'RAW', 'raw', '2026-07-16T00:00:00.000Z')
+    `).run(
+      versionId,
+      HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
+      'a'.repeat(64),
+      'b'.repeat(64),
+    )
+    const insertEntry = isolated.prepare(`
+      INSERT INTO hospital_cm_directory_entries (
+        directory_version_id, stable_partner_id, account_code, account_code_key,
+        canonical_display_name, hospital_cm_included, effective_from_month,
+        effective_to_month, row_hash
+      ) VALUES (?, ?, ?, ?, ?, 1, '2026-07', NULL, ?)
+    `)
+    insertEntry.run(versionId, validId, 'RAW-VALID-80', 'raw-valid-80', 'Raw valid 80', 'c'.repeat(64))
+
+    for (const [invalidId, suffix] of [['', 'empty'], [tooLongId, 'too-long']] as const) {
+      expect(() => insertEntry.run(
+        versionId,
+        invalidId,
+        `RAW-${suffix}`,
+        `raw-${suffix}`,
+        `Raw ${suffix}`,
+        'd'.repeat(64),
+      )).toThrow(/CHECK constraint failed/)
+    }
+    expect(rowCount(isolated, 'hospital_cm_directory_entries')).toBe(1)
+  })
+
+  it('mirrors critical reference checks with triggers when SQLite FK enforcement is off', () => {
+    const isolated = createDb({ foreignKeys: false })
+    expect(isolated.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 0 })
+    const insertEntry = isolated.prepare(`
+      INSERT INTO hospital_cm_directory_entries (
+        directory_version_id, stable_partner_id, account_code, account_code_key,
+        canonical_display_name, hospital_cm_included, effective_from_month,
+        effective_to_month, row_hash
+      ) VALUES (?, ?, ?, ?, ?, 1, '2026-07', NULL, ?)
+    `)
+    expect(() => insertEntry.run(
+      '00000000-0000-4000-8000-000000000090',
+      'PARTNER-001',
+      'RAW-MISSING-VERSION',
+      'raw-missing-version',
+      'Raw missing version',
+      'e'.repeat(64),
+    )).toThrow(/DIRECTORY_VERSION_MISSING/)
+
+    const versionId = '00000000-0000-4000-8000-000000000091'
+    isolated.prepare(`
+      INSERT INTO hospital_cm_directory_versions (
+        id, revision, contract_version, known_complete_from_month,
+        entry_count, alias_count, content_hash, revision_lineage_hash,
+        supersedes_version_id, reason_code, recorded_by_user_id,
+        recorded_by_username, recorded_at
+      ) VALUES (?, 1, ?, '2026-07', 1, 0, ?, ?, NULL,
+        'RAW_REFERENCE_BOUNDARY', 'RAW', 'raw', '2026-07-16T00:00:00.000Z')
+    `).run(
+      versionId,
+      HOSPITAL_CM_DIRECTORY_CONTRACT_VERSION,
+      'f'.repeat(64),
+      '0'.repeat(64),
+    )
+    expect(() => insertEntry.run(
+      versionId,
+      'PARTNER-MISSING',
+      'RAW-MISSING-PARTNER',
+      'raw-missing-partner',
+      'Raw missing partner',
+      '1'.repeat(64),
+    )).toThrow(/DIRECTORY_PARTNER_MISSING/)
+    expect(isolated.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 0 })
   })
 
   it('derives deterministic content hashes while every real save keeps its own audit revision', () => {
