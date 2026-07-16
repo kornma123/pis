@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { writeAuditLog } from './cost-runs.js'
 import {
+  currentHospitalCmConstantManifest,
   readHospitalCmReadinessSourceState,
   sha256,
   type FoundationProbeDb,
 } from './hospital-cm-foundation-probes.js'
-import { readHospitalCmFixedPoolControlFingerprint } from './hospital-cm-fixed-pool.js'
 import { HOSPITAL_CM_FORMULA_VERSION } from './hospital-cm.js'
 import { SPLIT_FORMULA_VERSION } from './statement-revenue.js'
 import { splitCaliberRatification } from './caliber-ratification.js'
@@ -40,9 +40,10 @@ export class HospitalCmPeriodEvidenceError extends Error {
   }
 }
 
-/** profile 指纹配方版本:C2 把拆分口径占位槽换成版本化内容/行为 hash 时必须 bump,
- *  使 evaluate 报 PROFILE_RECIPE_UPGRADED(机制升级)而非 PROFILE_CHANGED(口径真变了)。 */
-export const HOSPITAL_CM_PROFILE_RECIPE_VERSION = 'C1.profile-recipe.v1'
+/** CM-value profile 指纹配方版本。v2 把 ADR-008 固定池分母从院级 CM 周期失效域拆出；
+ * C2 把拆分口径占位槽换成版本化内容/行为 hash 时必须再次 bump，使 evaluate 报
+ * PROFILE_RECIPE_UPGRADED(机制升级)而非 PROFILE_CHANGED(口径真变了)。 */
+export const HOSPITAL_CM_PROFILE_RECIPE_VERSION = 'C1.cm-value-profile-recipe.v2'
 
 /** 周期证据绑定的 CM 相关源表子集:hospital-cm 计算只消费这 7 张(hospital-cm-service 输入面);
  *  库存三表(materials/inventory/batches)不是 CM 输入,编进指纹会让每次出入库灭掉全部周期证据、
@@ -1045,28 +1046,78 @@ export function cmSourceSubsetFingerprint(db: HospitalCmPeriodEvidenceDb): strin
   })
 }
 
+export interface HospitalCmValueProfileManifest {
+  recipeVersion: string
+  serviceMonth: string
+  hospitalCmFormulaVersion: string
+  splitFormulaVersion: string
+  splitCaliberBasisVersion: string
+  cmValueConstants: {
+    revenueSplit: unknown
+    hospitalCm: {
+      formulaVersion: unknown
+      formulaBehaviorArtifact: unknown
+      antibodyAdviceTypes: unknown
+      secondaryPerSlideDefault: unknown
+      tissueProcessingMaterialPerBlock: unknown
+      thresholds: unknown
+      cmTarget: unknown
+      cmMarginForVariableLabor: unknown
+    }
+    costDefaults: unknown
+  }
+}
+
 /**
- * 周期 profile 指纹:成本/公式/拆分/固定池口径的组合签名。
- * - 常量/行为签名取 **live** 值(state.constantFingerprint = sha256(currentHospitalCmConstantManifest());
- *   公式代码漂移即使不 bump 版本也会翻 manifest)。
- * - 拆分口径槽只绑内容版本代理(SPLIT_FORMULA_VERSION + basisVersion),**不绑认账 state**——
- *   issue C2 明文"绑内容/行为 hash 而非认账状态位";认账状态由 C2 做 readiness 硬门,不是周期失效维度。
- *   C2 把本槽换成版本化内容/行为 hash 时必须 bump HOSPITAL_CM_PROFILE_RECIPE_VERSION。
- * - 已知盲窗(C2 职责):拆分公式函数体变更且不 bump 版本、不改常量时本指纹不动。
- * - fixed-pool 月度指纹内嵌 denominator owner 轴:owner 改派/停用翻全月 profile,属有意 fail-closed。
+ * 院级 CM-value profile 的可审计清单。只选复算账户贡献毛利所需的收入拆分、CM 公式与成本默认值；
+ * 明确排除 readiness 控制参数和 ADR-008 固定池。固定池金额/版本/认账/owner 的 currentness 继续由
+ * hospital-cm-fixed-pool 的独立 control fingerprint 把守，只能撤销 coverage/组合 readiness。
  */
-export function computePeriodProfileFingerprint(db: HospitalCmPeriodEvidenceDb, serviceMonth: string): string {
+export function currentHospitalCmValueProfileManifest(serviceMonth: string): HospitalCmValueProfileManifest {
   const month = normalizeServiceMonth(serviceMonth)
-  const state = readHospitalCmReadinessSourceState(db)
+  const constants = currentHospitalCmConstantManifest()
+  const hospitalCm = constants.hospitalCm as Record<string, unknown>
   const caliber = splitCaliberRatification()
-  return sha256({
+  return {
     recipeVersion: HOSPITAL_CM_PROFILE_RECIPE_VERSION,
+    serviceMonth: month,
     hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION,
-    constantManifestFingerprint: state.constantFingerprint,
     splitFormulaVersion: SPLIT_FORMULA_VERSION,
     splitCaliberBasisVersion: caliber.basisVersion,
-    fixedPoolControlFingerprint: readHospitalCmFixedPoolControlFingerprint(db, month),
-  })
+    cmValueConstants: {
+      revenueSplit: constants.revenueSplit,
+      hospitalCm: {
+        formulaVersion: hospitalCm.formulaVersion,
+        formulaBehaviorArtifact: hospitalCm.formulaBehaviorArtifact,
+        antibodyAdviceTypes: hospitalCm.antibodyAdviceTypes,
+        secondaryPerSlideDefault: hospitalCm.secondaryPerSlideDefault,
+        tissueProcessingMaterialPerBlock: hospitalCm.tissueProcessingMaterialPerBlock,
+        thresholds: hospitalCm.thresholds,
+        cmTarget: hospitalCm.cmTarget,
+        cmMarginForVariableLabor: hospitalCm.cmMarginForVariableLabor,
+      },
+      costDefaults: constants.costDefaults,
+    },
+  }
+}
+
+/**
+ * 周期 CM-value profile 指纹：成本/公式/拆分口径的组合签名，不含固定池或固定池认账状态。
+ * - live 公式行为仍在 currentHospitalCmConstantManifest().hospitalCm 内；代码漂移会翻本指纹。
+ * - 拆分口径槽只绑内容版本代理(SPLIT_FORMULA_VERSION + basisVersion)，不绑认账 state；
+ *   C2 将其换成版本化内容/行为 hash 时必须再次 bump recipe。
+ * - 成本表内容变化由独立 sourceStateFingerprint 把守，不在这里重复耦合数据库控制面。
+ */
+export function computeCmValueProfileFingerprint(
+  _db: HospitalCmPeriodEvidenceDb,
+  serviceMonth: string,
+): string {
+  return sha256(currentHospitalCmValueProfileManifest(serviceMonth))
+}
+
+/** 兼容 C1 既有调用名；profile_fingerprint 列自 v2 起语义为 CM-value-only。 */
+export function computePeriodProfileFingerprint(db: HospitalCmPeriodEvidenceDb, serviceMonth: string): string {
+  return computeCmValueProfileFingerprint(db, serviceMonth)
 }
 
 /**
@@ -1210,7 +1261,7 @@ export function evaluatePeriodValidationRun(db: HospitalCmPeriodEvidenceDb, run:
       codes.push('PROFILE_RECIPE_UPGRADED')
     } else {
       try {
-        if (computePeriodProfileFingerprint(db, run.serviceMonth) !== run.profileFingerprint) codes.push('PROFILE_CHANGED')
+        if (computeCmValueProfileFingerprint(db, run.serviceMonth) !== run.profileFingerprint) codes.push('PROFILE_CHANGED')
       } catch {
         codes.push('PROFILE_UNAVAILABLE')
       }

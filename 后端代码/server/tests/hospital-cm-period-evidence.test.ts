@@ -7,10 +7,12 @@ import {
   HOSPITAL_CM_PROFILE_RECIPE_VERSION,
   HospitalCmPeriodEvidenceError,
   RECONCILE_ROW_HASH_COLUMNS,
+  computeCmValueProfileFingerprint,
   computePeriodProfileFingerprint,
   computeSourceBatchFacts,
   cmSourceSubsetFingerprint,
   currentCloseRevisionState,
+  currentHospitalCmValueProfileManifest,
   ensureHospitalCmPeriodEvidenceSchema,
   evaluatePeriodValidationRun,
   listPeriodCandidates,
@@ -23,6 +25,11 @@ import {
   withdrawMonthScopeSnapshot,
 } from '../src/utils/hospital-cm-period-evidence.js'
 import { ensureHospitalCmReadinessSchema } from '../src/utils/hospital-cm-readiness-runtime.js'
+import {
+  FIXED_POOL_SCOPE_ATTESTATION,
+  createHospitalCmFixedPoolVersion,
+  readHospitalCmFixedPoolControlFingerprint,
+} from '../src/utils/hospital-cm-fixed-pool.js'
 
 const NOW = '2026-07-14T08:00:00.000Z'
 const ACTOR = { userId: 'U-EVIDENCE', username: 'evidence-owner' }
@@ -183,7 +190,7 @@ function insertRun(db: DatabaseSync, month = '2026-05', overrides: Record<string
     scope_snapshot_event_number: scope.eventNumber,
     close_revision_fingerprint: close.fingerprint,
     source_state_fingerprint: cmSourceSubsetFingerprint(db),
-    profile_fingerprint: computePeriodProfileFingerprint(db, month),
+    profile_fingerprint: computeCmValueProfileFingerprint(db, month),
     manifest_set_fingerprint: manifestSetFingerprint(db, month),
     profile_recipe_version: HOSPITAL_CM_PROFILE_RECIPE_VERSION,
     overall_status: 'passed',
@@ -694,6 +701,31 @@ describe('C1 · 指纹与读侧失效判定', () => {
     return db
   }
 
+  it('CM-value profile 清单只含收入拆分/CM/成本常量，显式排除 readiness 与 fixed pool', () => {
+    const db = preparedScene()
+    const manifest = currentHospitalCmValueProfileManifest('2026-05')
+
+    expect(manifest.serviceMonth).toBe('2026-05')
+    expect(Object.keys(manifest.cmValueConstants).sort()).toEqual(['costDefaults', 'hospitalCm', 'revenueSplit'])
+    expect(manifest).not.toHaveProperty('readiness')
+    expect(manifest).not.toHaveProperty('fixedPool')
+    expect(manifest.cmValueConstants).not.toHaveProperty('readiness')
+    expect(manifest.cmValueConstants).not.toHaveProperty('fixedPool')
+    expect(Object.keys(manifest.cmValueConstants.hospitalCm as Record<string, unknown>).sort()).toEqual([
+      'antibodyAdviceTypes',
+      'cmMarginForVariableLabor',
+      'cmTarget',
+      'formulaBehaviorArtifact',
+      'formulaVersion',
+      'secondaryPerSlideDefault',
+      'thresholds',
+      'tissueProcessingMaterialPerBlock',
+    ])
+    expect(manifest.cmValueConstants.hospitalCm).not.toHaveProperty('revivalAccountCap')
+    expect(manifest.cmValueConstants.hospitalCm).not.toHaveProperty('revivalUnmeasuredShare')
+    expect(computePeriodProfileFingerprint(db, '2026-05')).toBe(computeCmValueProfileFingerprint(db, '2026-05'))
+  })
+
   it('基线:全指纹一致 → current=true,零失效码', () => {
     const db = preparedScene()
     const run = insertRun(db)
@@ -888,10 +920,19 @@ describe('C1 · 指纹与读侧失效判定', () => {
     expect(verdict.invalidationCodes).toContain('MANIFEST_SET_CHANGED')
 
     const db2 = preparedScene()
-    insertRun(db2, '2026-05', { profile_recipe_version: 'C0.legacy-recipe.v0' })
+    insertRun(db2, '2026-05', { profile_recipe_version: 'C1.profile-recipe.v1' })
     verdict = evaluatePeriodValidationRun(db2, listPeriodValidationRuns(db2, '2026-05')[0])
     expect(verdict.invalidationCodes).toContain('PROFILE_RECIPE_UPGRADED')
     expect(verdict.invalidationCodes).not.toContain('PROFILE_CHANGED')
+  })
+
+  it('CM-value profile 真失配仍返回 PROFILE_CHANGED 并 fail-closed', () => {
+    const db = preparedScene()
+    insertRun(db, '2026-05', { profile_fingerprint: 'f'.repeat(64) })
+
+    const verdict = evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0])
+    expect(verdict.invalidationCodes).toContain('PROFILE_CHANGED')
+    expect(verdict.current).toBe(false)
   })
 
   it('非法月份 batch 更正到其他合法月时，旧月也因全局相关语义收到 MANIFEST_SET_CHANGED', () => {
@@ -925,20 +966,55 @@ describe('C1 · 指纹与读侧失效判定', () => {
     expect(verdict.invalidationCodes).toContain('MANIFEST_SET_CHANGED')
   })
 
-  it('PROFILE_CHANGED 正向:denominator owner 合规改派(fixed-pool owner 轴)翻 profile 指纹', () => {
+  it('固定池版本变化只翻 portfolio denominator 指纹，不撤销院级 CM 周期证据', () => {
     const db = preparedScene()
+    createHospitalCmFixedPoolVersion(db, {
+      serviceMonth: '2026-05',
+      amountMinor: 1_000_000,
+      currency: 'CNY',
+      scopeAttestation: FIXED_POOL_SCOPE_ATTESTATION,
+      sourceEvidenceRef: 'finance-manifest://fixed-pool/2026-05/v1',
+      sourceEvidenceHash: 'b'.repeat(64),
+      changeReason: '测试固定池初版',
+      actor: ACTOR,
+      idempotencyKey: 'hcm-period-isolation-v1',
+    })
+    const cmValueProfileBefore = computeCmValueProfileFingerprint(db, '2026-05')
+    const portfolioDenominatorBefore = readHospitalCmFixedPoolControlFingerprint(db, '2026-05')
     insertRun(db)
+    createHospitalCmFixedPoolVersion(db, {
+      serviceMonth: '2026-05',
+      amountMinor: 1_200_000,
+      currency: 'CNY',
+      scopeAttestation: FIXED_POOL_SCOPE_ATTESTATION,
+      sourceEvidenceRef: 'finance-manifest://fixed-pool/2026-05/v2',
+      sourceEvidenceHash: 'c'.repeat(64),
+      changeReason: '测试固定池金额修订',
+      actor: ACTOR,
+      idempotencyKey: 'hcm-period-isolation-v2',
+    })
+
+    expect(readHospitalCmFixedPoolControlFingerprint(db, '2026-05')).not.toBe(portfolioDenominatorBefore)
+    expect(computeCmValueProfileFingerprint(db, '2026-05')).toBe(cmValueProfileBefore)
+    const versionVerdict = evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0])
+    expect(versionVerdict.invalidationCodes).not.toContain('PROFILE_CHANGED')
+    expect(versionVerdict.current).toBe(true)
+
+    const portfolioDenominatorAfterVersion = readHospitalCmFixedPoolControlFingerprint(db, '2026-05')
     db.prepare(`
       UPDATE hospital_cm_readiness_milestones
       SET revision = revision + 1, previous_due_date = due_date, previous_projected_date = projected_date,
-          owner_user_id = 'U-NEW-OWNER', owner_name = '新财务owner',
+          owner_user_id = 'U-NEW-OWNER', owner_name = '具名 denominator owner',
           owner_assignment_revision = owner_assignment_revision + 1,
-          change_reason = '测试改派', updated_by = 'tester'
+          change_reason = '测试 denominator owner 变更', updated_by = 'tester'
       WHERE condition_key = 'denominator'
     `).run()
-    const verdict = evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0])
-    expect(verdict.invalidationCodes).toContain('PROFILE_CHANGED')
-    expect(verdict.current).toBe(false)
+
+    expect(readHospitalCmFixedPoolControlFingerprint(db, '2026-05')).not.toBe(portfolioDenominatorAfterVersion)
+    expect(computeCmValueProfileFingerprint(db, '2026-05')).toBe(cmValueProfileBefore)
+    const ownerVerdict = evaluatePeriodValidationRun(db, listPeriodValidationRuns(db, '2026-05')[0])
+    expect(ownerVerdict.invalidationCodes).not.toContain('PROFILE_CHANGED')
+    expect(ownerVerdict.current).toBe(true)
   })
 
   it('SOURCE_STATE_UNAVAILABLE:source revision 控制面缺行时 fail-closed 而非误判干净', () => {
