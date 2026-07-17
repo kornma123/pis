@@ -15,6 +15,7 @@ import OutboundStats from './components/OutboundStats'
 import OutboundQuickFilters from './components/OutboundQuickFilters'
 import OutboundFilterBar from './components/OutboundFilterBar'
 import OutboundTable, { type OutboundSortField, type OutboundSortOrder } from './components/OutboundTable'
+import { printOutboundRecord } from './Outbound.print'
 
 type QuickFilter = 'all' | 'today' | 'week' | 'month'
 type StatusFilter = '' | 'completed' | 'pending' | 'cancelled'
@@ -330,30 +331,7 @@ export default function Outbound() {
   }
 
   const handlePrintRecord = (record: OutboundRecord) => {
-    const w = window.open('', '_blank')
-    if (!w) return
-    const items = record.items?.map(i => `<tr><td>${i.materialName}</td><td>${i.batchNo || '-'}</td><td>${i.quantity} ${i.unit || ''}</td><td>${i.unitCost || 0}</td><td>${i.totalCost || 0}</td></tr>`).join('') || ''
-    w.document.write(`
-      <html><head><title>出库单 ${record.outboundNo}</title><style>
-        body { font-family: sans-serif; padding: 40px; }
-        h2 { text-align: center; margin-bottom: 8px; }
-        .meta { text-align: center; color: #666; font-size: 12px; margin-bottom: 24px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background: #f5f5f5; }
-        .footer { margin-top: 24px; font-size: 12px; color: #999; text-align: center; }
-      </style></head><body>
-        <h2>出库单</h2>
-        <div class="meta">单号：${record.outboundNo} | 项目：${record.projectName || '-'} | 时间：${new Date(record.createdAt).toLocaleString()}</div>
-        <table><thead><tr><th>物料</th><th>批号</th><th>数量</th><th>单价</th><th>金额</th></tr></thead>
-        <tbody>${items}</tbody>
-        </table>
-        <div class="footer">操作人：${record.operator || '-'} | 备注：${record.remark || '无'}</div>
-        <div class="footer">本单据由 COREONE 系统自动生成</div>
-      </body></html>
-    `)
-    w.document.close()
-    w.print()
+    printOutboundRecord(record)
   }
 
   const batchPrint = () => {
