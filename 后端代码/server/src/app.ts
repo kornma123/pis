@@ -6,7 +6,7 @@ import { errorHandler } from './middleware/errorHandler.js'
 import { authenticateToken } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
 import { auditWrite } from './middleware/audit-log.js'
-import { isFixtureEnv } from './config/security.js'
+import { corsOriginAllowed, isFixtureEnv, resolveCorsPolicy } from './config/security.js'
 
 // 路由导入
 import authRoutes from './routes/auth.js'
@@ -54,9 +54,14 @@ import statementImportRoutes from './routes/statement-import-v1.1.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
+const corsPolicy = resolveCorsPolicy()
 
 // 中间件
-app.use(cors())
+app.use(cors({
+  origin(origin, callback) {
+    callback(null, corsOriginAllowed(origin, corsPolicy))
+  },
+}))
 // 显式声明请求体大小上限（express 默认即 100kb，这里写明以锁定意图、防止日后被无意放大）。
 // LIS 病例导入走 JSON 体，行数上限在路由层（MAX_LIS_IMPORT_ROWS）兜底，此处再加一层体积约束。
 app.use(express.json({ limit: '100kb' }))

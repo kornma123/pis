@@ -5,6 +5,7 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, error } from '../utils/response.js'
 import { JWT_SECRET, authenticateToken } from '../middleware/auth.js'
 import { isFixtureEnv } from '../config/security.js'
+import { loginRateLimit, recordLoginFailure, recordLoginSuccess } from '../middleware/login-rate-limit.js'
 import { getEffectivePermissions, getUserRoleCodes, canSeeCost, getCostVisibilityRoles, requireAnyRole } from '../middleware/permissions.js'
 
 const router = Router()
@@ -22,7 +23,7 @@ function buildCapabilityPayload(db: any, userId: string, ...preferredRoles: Arra
   }
 }
 
-router.post('/login', (req, res) => {
+router.post('/login', loginRateLimit, (req, res) => {
   try {
     const { username, password } = req.body
     if (!username || !password) {
@@ -48,6 +49,7 @@ router.post('/login', (req, res) => {
 
     const validPassword = user && bcrypt.compareSync(password, user.password)
     if (!validPassword) {
+      recordLoginFailure(res)
       error(res, '用户名或密码错误', 'UNAUTHORIZED', 401)
       return
     }
@@ -65,6 +67,7 @@ router.post('/login', (req, res) => {
       { expiresIn: '7d', algorithm: 'HS256' }
     )
 
+    recordLoginSuccess(res)
     success(res, {
       token,
       refreshToken,

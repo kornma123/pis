@@ -31,6 +31,70 @@ export function allowDefaultFixtureUsers(
   return isFixtureEnv(nodeEnv)
 }
 
+export interface CorsPolicy {
+  allowAnyOrigin: boolean
+  allowedOrigins: ReadonlySet<string>
+}
+
+function normalizeHttpOrigin(origin: string): string {
+  let parsed: URL
+  try {
+    parsed = new URL(origin)
+  } catch {
+    throw new Error(`CORS_ALLOWED_ORIGINS 包含无效 origin：${origin}`)
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error(`CORS_ALLOWED_ORIGINS 只允许 http/https origin：${origin}`)
+  }
+  if (parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash) {
+    throw new Error(`CORS_ALLOWED_ORIGINS 只能填写 origin，不得包含凭据、路径、查询或片段：${origin}`)
+  }
+  return parsed.origin
+}
+
+/**
+ * 解析浏览器跨域白名单。生产级环境未配置时默认拒绝所有跨域请求；通配符只允许在显式
+ * test/development 夹具环境使用，避免漏配 NODE_ENV 或错误部署时重新变成全开放 CORS。
+ */
+export function resolveCorsPolicy(
+  rawAllowedOrigins: string | undefined = process.env.CORS_ALLOWED_ORIGINS,
+  nodeEnv: string | undefined = process.env.NODE_ENV
+): CorsPolicy {
+  const entries = (rawAllowedOrigins ?? '')
+    .split(',')
+    .map(entry => entry.trim())
+    .filter(Boolean)
+
+  if (entries.length === 0) {
+    return { allowAnyOrigin: isFixtureEnv(nodeEnv), allowedOrigins: new Set() }
+  }
+  if (entries.includes('*')) {
+    if (!isFixtureEnv(nodeEnv)) {
+      throw new Error('生产级环境禁止 CORS_ALLOWED_ORIGINS=*；必须使用精确 http/https origin 白名单')
+    }
+    if (entries.length !== 1) {
+      throw new Error('CORS_ALLOWED_ORIGINS 的通配符不能与精确 origin 混用')
+    }
+    return { allowAnyOrigin: true, allowedOrigins: new Set() }
+  }
+
+  return {
+    allowAnyOrigin: false,
+    allowedOrigins: new Set(entries.map(normalizeHttpOrigin)),
+  }
+}
+
+/** 无 Origin 的同源/服务间请求不受 CORS 影响；带 Origin 的浏览器请求必须精确命中。 */
+export function corsOriginAllowed(origin: string | undefined, policy: CorsPolicy): boolean {
+  if (!origin) return true
+  if (policy.allowAnyOrigin) return true
+  try {
+    return policy.allowedOrigins.has(normalizeHttpOrigin(origin))
+  } catch {
+    return false
+  }
+}
+
 export function sha256(input: string): string {
   return createHash('sha256').update(input, 'utf8').digest('hex')
 }
