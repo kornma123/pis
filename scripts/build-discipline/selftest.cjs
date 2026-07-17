@@ -66,6 +66,32 @@ check('axios.METHOD(`${BASE_URL}/...`) 被识别（/auth/refresh POST）', () =>
   assert.ok(calls.some((c) => c.kind === 'axios' && c.method === 'POST' && c.relPath === '/auth/refresh'),
     'axios /auth/refresh 未被解析')
 })
+check('fetch(变量) 回溯在 CRLF 源文件中仍确定解析（CI/Windows 换行一致）', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bd-fetch-var-crlf-'))
+  try {
+    const f = path.join(dir, 'known.ts')
+    fs.writeFileSync(f, [
+      'async function load() {',
+      "  const url = `/api/v1/abc/cost-drivers${params.toString() ? '?' + params.toString() : ''}`",
+      '  await fetch(url)',
+      '}',
+      '',
+    ].join('\r\n'))
+    const fixtureCalls = R.parseFrontendCalls({ files: [f] }).calls
+    assert.ok(fixtureCalls.some((c) => c.fromVar && c.resolvable && c.relPath === '/abc/cost-drivers'),
+      'CRLF fixture 的 fetch(url) 未回溯解析出 /abc/cost-drivers')
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+check('fetch(未知变量) 仍显式标 unverifiable（按合同 warn，不伪装已核）', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bd-fetch-var-unknown-'))
+  try {
+    const f = path.join(dir, 'unknown.ts')
+    fs.writeFileSync(f, 'async function load() {\r\n  await fetch(runtimeUrl)\r\n}\r\n')
+    const fixtureCalls = R.parseFrontendCalls({ files: [f] }).calls
+    assert.ok(fixtureCalls.some((c) => c.fromVar && !c.resolvable && c.rawPath === 'fetch(runtimeUrl)'),
+      '未知 fetch(runtimeUrl) 应保留为 unverifiable')
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
 check('fetch(变量) 回溯赋值解析（const url = `/api/v1/abc/cost-drivers`）', () => {
   assert.ok(calls.some((c) => c.fromVar && c.resolvable && c.relPath === '/abc/cost-drivers'),
     'fetch(url) 未回溯解析出 /abc/cost-drivers')
