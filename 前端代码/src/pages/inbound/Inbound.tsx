@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { QrCode, Plus, Upload, Printer } from 'lucide-react'
 import ImportInboundModal from './components/ImportInboundModal'
 import InboundFormModal from './components/InboundFormModal'
@@ -13,14 +13,17 @@ import InboundQuickFilters from './components/InboundQuickFilters'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useInboundPage } from './hooks/useInboundPage'
+import { PURCHASE_INBOUND_UNAVAILABLE_REASON } from './hooks/useInboundPage'
+import { canAccess } from '@/lib/permissions'
 
 export default function Inbound() {
   const navigate = useNavigate()
   const page = useInboundPage()
+  const canWrite = canAccess('inbound', 'W')
 
   const handleFilterStatus = (status: string) => {
     if (status === 'pending') {
-      navigate('/purchase-orders')
+      navigate('/purchase-orders?status=pending')
       return
     }
     page.setFilterStatus(status)
@@ -29,36 +32,65 @@ export default function Inbound() {
   return (
     <div className="space-y-5">
       {/* 页面头部 */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-[28px] font-semibold text-gray-900 leading-tight">入库记录</h1>
-          <p className="text-sm text-gray-500 mt-1">管理物料入库记录，跟踪采购入库流程</p>
+          <p className="text-sm text-gray-500 mt-1">管理已落库记录与现有直接入库能力</p>
         </div>
       </div>
 
+      {page.purchaseContext.purchaseOrderId && (
+        <section aria-labelledby="purchase-context-title" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 id="purchase-context-title" className="font-semibold">采购单入库上下文</h2>
+              <p className="mt-1 text-sm">
+                {page.purchaseContext.state === 'loading' && '正在核实采购单…'}
+                {page.purchaseContext.state === 'ready' && `采购单 ${page.purchaseContext.order?.orderNo || page.purchaseContext.order?.order_no || page.purchaseContext.purchaseOrderId}`}
+                {page.purchaseContext.state === 'error' && `采购单未能核实：${page.purchaseContext.error}`}
+              </p>
+              <p className="mt-2 text-sm font-medium">{PURCHASE_INBOUND_UNAVAILABLE_REASON}</p>
+              <p className="mt-1 text-xs text-amber-800">当前列表只按来源类型与物料显示候选记录；后端不支持 purchaseOrderId 筛选，因此不能把它称为该采购单的完整关联记录。</p>
+            </div>
+            <Link to={page.purchaseContext.returnTo} className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-md border border-amber-400 bg-white px-4 text-sm font-medium hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-600">返回采购订单</Link>
+          </div>
+        </section>
+      )}
+
+      {!canWrite && (
+        <div role="note" className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">当前账号只有入库读取权限。新增、扫码、导入、编辑、删除和恢复操作已隐藏。</div>
+      )}
+      {page.refsError && (
+        <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">引用数据未能加载：{page.refsError}</div>
+      )}
+
       {/* 快捷操作栏 */}
       <div className="flex flex-wrap gap-3">
+        {canWrite && <>
         <button
           onClick={page.openCreate}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 transition-colors shadow-sm"
+          disabled={page.refsLoading}
+          className="inline-flex min-h-11 items-center gap-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
         >
           <Plus className="w-[18px] h-[18px]" /> 新增入库
         </button>
         <button
           onClick={() => page.setModalType('scan')}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <QrCode /> 扫码入库
         </button>
         <button
-          onClick={() => page.setModalType('import')}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+          onClick={page.openImport}
+          disabled={page.refsLoading}
+          className="inline-flex min-h-11 items-center gap-2 rounded-md border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
         >
           <Upload /> 批量导入
         </button>
+        </>}
         <button
           onClick={() => page.setModalType('print')}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-200 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <Printer /> 打印记录
         </button>
@@ -66,15 +98,16 @@ export default function Inbound() {
 
       {/* 统计卡片 */}
       <InboundStats
-        total={page.stats.total}
-        amount={page.stats.amount}
-        pendingOrders={page.stats.pendingOrders}
-        supplierCount={page.stats.supplierCount}
+        total={page.stats?.total ?? null}
+        amount={page.stats?.amount ?? null}
+        pendingOrders={page.stats?.pendingOrders ?? null}
+        supplierCount={page.stats?.supplierCount ?? null}
+        error={page.statsError}
         onFilterStatus={handleFilterStatus}
       />
 
       {/* 快速筛选 */}
-      <InboundQuickFilters
+      {!page.listError && <InboundQuickFilters
         items={[
           { key: 'all', label: '全部', count: page.quickFilterCounts.all },
           { key: 'today', label: '今日', count: page.quickFilterCounts.today },
@@ -83,7 +116,7 @@ export default function Inbound() {
         ]}
         activeKey={page.activeQuickFilter}
         onChange={page.setActiveQuickFilter}
-      />
+      />}
 
       {/* 主卡片 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -107,6 +140,9 @@ export default function Inbound() {
         <InboundTable
           data={page.data}
           loading={page.loading}
+          error={page.listError}
+          onRetry={page.refresh}
+          canWrite={canWrite}
           selectedIds={page.selectedIds}
           onToggleSelectAll={page.toggleSelectAll}
           onToggleSelectOne={page.toggleSelectOne}
@@ -137,12 +173,9 @@ export default function Inbound() {
         materials={page.materials}
         locations={page.locations}
         suppliers={page.suppliers}
-        purchaseOrders={page.purchaseOrders}
-        selectedOrderId={page.selectedOrderId}
-        setSelectedOrderId={page.setSelectedOrderId}
         selectedRecord={page.selectedRecord}
         submitting={page.submitting}
-        onClose={page.closeModal}
+        onClose={() => { if (!page.submitting) page.closeModal() }}
         onSubmit={page.handleSubmit}
       />
 
@@ -179,6 +212,7 @@ export default function Inbound() {
             onSuccess={() => { page.closeModal(); page.refresh() }}
             materials={page.materials}
             locations={page.locations}
+            suppliers={page.suppliers}
           />
         </Modal>
       )}

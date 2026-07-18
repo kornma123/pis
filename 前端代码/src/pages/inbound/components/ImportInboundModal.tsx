@@ -1,14 +1,56 @@
-import { useState, useRef } from 'react'
-import { Upload, Download } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, CheckCircle2, Download, Upload } from 'lucide-react'
 import { inboundApi } from '@/api/inventory'
-import type { Material, Location } from '@/types'
+import { genIdempotencyKey } from '@/api/request'
+import type { Location, Material, Supplier } from '@/types'
 import { toast } from 'sonner'
+import {
+  executeInboundImport,
+  INBOUND_IMPORT_HEADERS,
+  parseInboundCsv,
+  summarizeInboundImport,
+  validateInboundImportRows,
+} from '../importInboundModel'
+import type { InboundImportRow } from '../importInboundModel'
 
 interface ImportInboundModalProps {
   onClose: () => void
   onSuccess: () => void
   materials: Material[]
   locations: Location[]
+  suppliers?: Supplier[]
+}
+
+type ImportPhase = 'idle' | 'validation' | 'confirm' | 'importing' | 'result'
+
+const statusLabel: Record<InboundImportRow['status'], string> = {
+  ready: '校验通过',
+  validation_error: '校验失败',
+  succeeded: '已入库',
+  failed: '提交失败',
+}
+
+function csvCell(value: string | number): string {
+  const text = String(value)
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+function downloadCsvTemplate() {
+  const sampleRows = [
+    ['M001', 10, 'L001', 'B20260701', 0, '', '2026-07-01', '2027-07-01', '直接入库示例'],
+  ]
+  const content = `\uFEFF${[
+    INBOUND_IMPORT_HEADERS.map(csvCell).join(','),
+    ...sampleRows.map(row => row.map(csvCell).join(',')),
+  ].join('\r\n')}`
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }))
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = '直接入库导入模板.csv'
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 
 export default function ImportInboundModal({
@@ -16,215 +58,314 @@ export default function ImportInboundModal({
   onSuccess,
   materials,
   locations,
+  suppliers = [],
 }: ImportInboundModalProps) {
-  const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<any[]>([])
-  const [importing, setImporting] = useState(false)
+  const [phase, setPhase] = useState<ImportPhase>('idle')
+  const [fileName, setFileName] = useState('')
+  const [rows, setRows] = useState<InboundImportRow[]>([])
+  const [fileError, setFileError] = useState<string | null>(null)
+  const [parsing, setParsing] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const summaryRef = useRef<HTMLDivElement>(null)
+  const selectionVersionRef = useRef(0)
+  const operationLockRef = useRef(false)
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (!f) return
-    setFile(f)
+  const validationErrorCount = useMemo(
+    () => rows.filter(row => row.status === 'validation_error').length,
+    [rows],
+  )
+  const readyCount = useMemo(
+    () => rows.filter(row => row.status === 'ready').length,
+    [rows],
+  )
+  const resultSummary = useMemo(() => summarizeInboundImport(rows), [rows])
+  const canProceedToConfirm = rows.length > 0
+    && validationErrorCount === 0
+    && readyCount === rows.length
+    && !fileError
+    && !parsing
+
+  useEffect(() => {
+    if (phase === 'idle') return
+    const frame = window.requestAnimationFrame(() => summaryRef.current?.focus())
+    return () => window.cancelAnimationFrame(frame)
+  }, [phase, fileError])
+
+  const selectFile = async (file: File) => {
+    if (operationLockRef.current) return
+    const selectionVersion = ++selectionVersionRef.current
+    setFileName(file.name)
+    setRows([])
+    setFileError(null)
+    setConfirmed(false)
+    setPhase('validation')
+    setParsing(true)
+
+    if (!file.name.toLocaleLowerCase('en-US').endsWith('.csv')) {
+      setFileError('仅支持 CSV 文件；Excel 工作簿不是此导入器的真实对象')
+      setParsing(false)
+      return
+    }
+
     try {
-      const XLSX = await import('xlsx')
-      const data = await f.arrayBuffer()
-      const wb = XLSX.read(data, { type: 'array' })
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][]
-      if (rows.length < 2) {
-        toast.error('文件为空或格式不正确')
+      const parsed = parseInboundCsv(await file.text())
+      if (selectionVersionRef.current !== selectionVersion) return
+      if (parsed.fileError) {
+        setFileError(parsed.fileError)
         return
       }
-      const headers = rows[0].map((h: any) => String(h).trim())
-      const records = rows.slice(1).map((row: any[], i: number) => {
-        const obj: Record<string, any> = { _row: i + 2 }
-        headers.forEach((h, idx) => { obj[h] = row[idx] })
-        return obj
-      }).filter(r => Object.values(r).some(v => v !== undefined && v !== ''))
-      setPreview(records.slice(0, 20))
-      if (records.length > 20) {
-        toast.info(`文件共 ${records.length} 条，显示前 20 条预览`)
-      }
+      const validation = validateInboundImportRows(
+        parsed.headers,
+        parsed.rows,
+        { materials, locations, suppliers },
+        genIdempotencyKey,
+      )
+      setRows(validation.rows)
+      setFileError(validation.fileError)
     } catch {
-      toast.error('解析文件失败')
-    }
-  }
-
-  const handleImport = async () => {
-    if (!file || preview.length === 0) return
-    setImporting(true)
-    try {
-      const XLSX = await import('xlsx')
-      const data = await file.arrayBuffer()
-      const wb = XLSX.read(data, { type: 'array' })
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][]
-      const headers = rows[0].map((h: any) => String(h).trim())
-      const records = rows.slice(1).map((row: any[]) => {
-        const obj: Record<string, any> = {}
-        headers.forEach((h, idx) => { obj[h] = row[idx] })
-        return obj
-      }).filter(r => Object.values(r).some(v => v !== undefined && v !== ''))
-
-      let successCount = 0
-      let failCount = 0
-      for (const record of records) {
-        const materialName = record['耗材名称'] || record['物料名称'] || ''
-        const materialCode = record['耗材编码'] || record['物料编码'] || ''
-        const quantity = Number(record['入库数量'] || record['数量'] || 0)
-        const batchNo = record['批号'] || ''
-        const locationName = record['库位'] || ''
-        const productionDate = record['生产日期'] || ''
-        const expiryDate = record['有效期'] || record['有效期至'] || ''
-        const remark = record['备注'] || ''
-
-        let materialId = ''
-        if (materialCode) {
-          const matched = materials.find(m => m.code === materialCode)
-          if (matched) materialId = matched.id
-        }
-        if (!materialId && materialName) {
-          const matched = materials.find(m => m.name === materialName)
-          if (matched) materialId = matched.id
-        }
-
-        let locationId = locations[0]?.id || ''
-        if (locationName) {
-          const matched = locations.find(l => l.name === locationName)
-          if (matched) locationId = matched.id
-        }
-
-        if (!materialId || !quantity) {
-          failCount++
-          continue
-        }
-
-        try {
-          await inboundApi.create({
-            type: 'direct',
-            materialId,
-            quantity,
-            batchNo,
-            locationId,
-            productionDate: productionDate ? new Date(productionDate).toISOString().split('T')[0] : undefined,
-            expiryDate: expiryDate ? new Date(expiryDate).toISOString().split('T')[0] : undefined,
-            remark,
-          } as any)
-          successCount++
-        } catch {
-          failCount++
-        }
+      if (selectionVersionRef.current === selectionVersion) {
+        setFileError('CSV 读取失败，请重新选择文件')
       }
-
-      if (failCount === 0) {
-        toast.success('导入成功', { description: `成功导入 ${successCount} 条记录` })
-      } else {
-        toast.success(`导入完成：成功 ${successCount} 条，失败 ${failCount} 条`)
-      }
-      onSuccess()
-    } catch {
-      toast.error('导入失败')
     } finally {
-      setImporting(false)
+      if (selectionVersionRef.current === selectionVersion) setParsing(false)
     }
   }
 
-  const downloadTemplate = async () => {
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = event.target.files?.[0]
+    event.target.value = ''
+    if (selected) void selectFile(selected)
+  }
+
+  const handleDrop = (event: React.DragEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    setDragActive(false)
+    const selected = event.dataTransfer.files?.[0]
+    if (selected) void selectFile(selected)
+  }
+
+  const runImport = async (retryFailedOnly = false) => {
+    if (operationLockRef.current) return
+    const runnable = rows.some(row => retryFailedOnly ? row.status === 'failed' : row.status === 'ready')
+    if (!runnable) return
+
+    operationLockRef.current = true
+    setPhase('importing')
     try {
-      const XLSX = await import('xlsx')
-      const rows = [
-        ['耗材编码', '耗材名称', '批号', '入库数量', '生产日期', '有效期至', '库位', '备注'],
-        ['M001', 'DNA提取试剂盒', 'B20240501', 10, '2024-05-01', '2025-05-01', 'A1-01', '首次入库'],
-        ['M002', 'PCR引物', 'B20240601', 5, '2024-06-01', '2025-06-01', 'A1-02', ''],
-      ]
-      const ws = XLSX.utils.aoa_to_sheet(rows)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, '入库导入模板')
-      XLSX.writeFile(wb, '入库导入模板.xlsx')
-    } catch {
-      toast.error('模板下载失败，请重试')
+      const nextRows = await executeInboundImport(
+        rows,
+        (payload, idempotencyKey) => inboundApi.create(payload, idempotencyKey),
+        { retryFailedOnly },
+      )
+      setRows(nextRows)
+      setPhase('result')
+      const summary = summarizeInboundImport(nextRows)
+      if (summary.failed === 0) {
+        toast.success('直接入库提交完成', { description: `成功 ${summary.succeeded} 行` })
+      } else if (summary.succeeded === 0) {
+        toast.error(`全部 ${summary.failed} 行提交失败，错误行可在下方重试`)
+      } else {
+        toast.warning(`部分完成：成功 ${summary.succeeded} 行，失败 ${summary.failed} 行`)
+      }
+    } finally {
+      operationLockRef.current = false
     }
+  }
+
+  const handleClose = () => {
+    if (operationLockRef.current) return
+    onClose()
+  }
+
+  const handleFinish = () => {
+    if (operationLockRef.current) return
+    onSuccess()
   }
 
   return (
-    <div>
-      <input
-        type="file"
-        ref={fileInputRef}
-        accept=".xlsx,.xls,.csv"
-        className="hidden"
-        onChange={handleFileChange}
-      />
+    <div className="min-w-0" aria-busy={phase === 'importing'}>
       <div
-        className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
-        onClick={() => fileInputRef.current?.click()}
+        id="direct-inbound-import-scope"
+        className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900"
       >
-        <Upload className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-        <div className="text-base font-medium text-gray-900 mb-2">{file ? file.name : '点击或拖拽文件到此处'}</div>
-        <div className="text-sm text-gray-500">支持 Excel (.xlsx, .xls) 和 CSV 格式</div>
+        <strong>导入对象：直接入库记录。</strong>
+        每行会独立调用一次真实入库接口并立即影响库存；这不是采购订单收货，也不承诺整批原子成功。
+        部分失败时，已成功行不会回滚，失败行会保留原幂等键供安全重试。
       </div>
 
-      {preview.length > 0 && (
-        <div className="mt-4">
-          <div className="text-sm font-medium text-gray-700 mb-2">数据预览（前 {preview.length} 条）</div>
-          <div className="border border-gray-200 rounded-lg overflow-auto max-h-60">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 sticky top-0">
-                <tr>
-                  {Object.keys(preview[0]).filter(k => !k.startsWith('_')).map(h => (
-                    <th key={h} className="px-2 py-1.5 text-left font-medium text-gray-500 border-b">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {preview.map((row, i) => (
-                  <tr key={i}>
-                    {Object.keys(preview[0]).filter(k => !k.startsWith('_')).map(h => (
-                      <td key={h} className="px-2 py-1.5 text-gray-700">{row[h] ?? '-'}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <input
+        id="direct-inbound-csv-file"
+        type="file"
+        ref={fileInputRef}
+        accept=".csv,text/csv"
+        className="sr-only"
+        onChange={handleInputChange}
+        disabled={phase === 'importing'}
+      />
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        onDragEnter={event => { event.preventDefault(); setDragActive(true) }}
+        onDragOver={event => event.preventDefault()}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={handleDrop}
+        disabled={phase === 'importing'}
+        aria-describedby="direct-inbound-import-scope direct-inbound-file-help"
+        className={`w-full rounded-xl border-2 border-dashed p-5 text-center transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500/20 sm:p-8 ${
+          dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50'
+        } disabled:cursor-not-allowed disabled:opacity-60`}
+      >
+        <Upload className="mx-auto mb-3 h-10 w-10 text-gray-400 sm:h-12 sm:w-12" aria-hidden="true" />
+        <span className="block break-all text-base font-medium text-gray-900">
+          {fileName || '选择或拖放 CSV 文件'}
+        </span>
+        <span id="direct-inbound-file-help" className="mt-1 block text-sm text-gray-500">
+          仅支持模板 CSV，最多 1000 个非空数据行
+        </span>
+      </button>
+
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <span className="text-sm text-gray-600">模板包含稳定的物料、库位和可选供应商编码列。</span>
+        <button
+          type="button"
+          onClick={downloadCsvTemplate}
+          disabled={phase === 'importing'}
+          className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500/20 disabled:opacity-50 sm:w-auto"
+        >
+          <Download className="h-4 w-4" aria-hidden="true" /> 下载直接入库 CSV 模板
+        </button>
+      </div>
+
+      {phase !== 'idle' && (
+        <div
+          ref={summaryRef}
+          tabIndex={-1}
+          aria-live="polite"
+          className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4 focus:outline-none"
+        >
+          {parsing ? (
+            <p className="text-sm text-gray-700">正在本地解析并校验 CSV，不会在此阶段写入数据…</p>
+          ) : fileError ? (
+            <div role="alert" className="flex items-start gap-2 text-sm text-red-700">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{fileError}</span>
+            </div>
+          ) : phase === 'validation' ? (
+            <div className="flex items-start gap-2 text-sm text-gray-700">
+              {validationErrorCount === 0 ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" aria-hidden="true" />
+              ) : (
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+              )}
+              <span>
+                本地校验完成：共 {rows.length} 行，{readyCount} 行可提交，{validationErrorCount} 行需修正。
+                {validationErrorCount > 0 && ' 修正 CSV 后请重新选择文件。'}
+              </span>
+            </div>
+          ) : phase === 'confirm' ? (
+            <div className="text-sm text-gray-700">
+              即将逐行提交 {readyCount} 条直接入库；提交开始后可能出现部分成功。
+            </div>
+          ) : phase === 'importing' ? (
+            <div className="text-sm text-blue-700">正在逐行提交，请勿重复点击或重新选择文件…</div>
+          ) : (
+            <div className="text-sm text-gray-700">
+              提交结果：共 {resultSummary.total} 行，成功 {resultSummary.succeeded} 行，失败 {resultSummary.failed} 行。
+              {resultSummary.failed > 0 && ' 已成功行不会再次提交；重试只处理失败行。'}
+            </div>
+          )}
         </div>
       )}
 
-      <div className="mt-4">
-        <div className="text-sm text-gray-600 mb-2">模板下载：</div>
-        <button
-          onClick={downloadTemplate}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
-        >
-          <Download className="w-3.5 h-3.5" /> 入库导入模板.xlsx
-        </button>
-      </div>
+      {rows.length > 0 && (
+        <div className="mt-4 max-h-72 overflow-auto rounded-lg border border-gray-200">
+          <table className="min-w-[760px] w-full text-left text-xs">
+            <caption className="sr-only">直接入库 CSV 本地校验与提交结果</caption>
+            <thead className="sticky top-0 bg-gray-50 text-gray-600">
+              <tr>
+                <th scope="col" className="px-3 py-2">行</th>
+                <th scope="col" className="px-3 py-2">物料编码</th>
+                <th scope="col" className="px-3 py-2">数量</th>
+                <th scope="col" className="px-3 py-2">库位编码</th>
+                <th scope="col" className="px-3 py-2">单价</th>
+                <th scope="col" className="px-3 py-2">状态 / 原因</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 bg-white text-gray-700">
+              {rows.map(row => (
+                <tr key={`${row.rowNumber}-${row.idempotencyKey}`}>
+                  <td className="px-3 py-2 tabular-nums">{row.rowNumber}</td>
+                  <td className="px-3 py-2 font-mono">{row.raw['物料编码'] || '空'}</td>
+                  <td className="px-3 py-2 tabular-nums">{row.raw['入库数量'] || '空'}</td>
+                  <td className="px-3 py-2 font-mono">{row.raw['库位编码'] || '空'}</td>
+                  <td className="px-3 py-2 tabular-nums">{row.raw['单价'] === '' ? '空' : row.raw['单价']}</td>
+                  <td className="max-w-sm px-3 py-2">
+                    <span className={row.status === 'succeeded' ? 'font-medium text-green-700' : row.status === 'failed' || row.status === 'validation_error' ? 'font-medium text-red-700' : 'font-medium text-blue-700'}>
+                      {statusLabel[row.status]}
+                    </span>
+                    {row.resultInboundNo && <span className="ml-1 font-mono">{row.resultInboundNo}</span>}
+                    {row.issues.length > 0 && <span className="ml-1">— {row.issues.join('；')}</span>}
+                    {row.errorMessage && <span className="ml-1">— {row.errorMessage}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-        <div className="text-sm text-gray-600 mb-2">导入说明：</div>
-        <ul className="text-xs text-gray-500 list-disc list-inside space-y-1">
-          <li>请使用提供的模板格式填写数据</li>
-          <li>必填字段：耗材编码/名称、入库数量</li>
-          <li>日期格式：YYYY-MM-DD</li>
-          <li>单次导入最多支持 1000 条记录</li>
-        </ul>
-      </div>
+      {phase === 'confirm' && (
+        <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={event => setConfirmed(event.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span>我已确认这些行是“直接入库”，并理解逐行提交可能部分成功、不会整批自动回滚。</span>
+        </label>
+      )}
 
-      <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
+      <div className="mt-6 flex flex-col-reverse gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:items-center sm:justify-end">
         <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          type="button"
+          onClick={phase === 'result' ? handleFinish : handleClose}
+          disabled={phase === 'importing'}
+          className="h-10 w-full rounded-md border border-gray-300 bg-white px-4 text-sm text-gray-600 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500/20 disabled:opacity-50 sm:w-auto"
         >
-          取消
+          {phase === 'result' ? '完成并刷新列表' : '取消'}
         </button>
-        <button
-          onClick={handleImport}
-          disabled={importing || preview.length === 0}
-          className="px-4 py-2 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
-        >
-          {importing ? '导入中...' : '开始导入'}
-        </button>
+        {phase === 'validation' && (
+          <button
+            type="button"
+            onClick={() => { setConfirmed(false); setPhase('confirm') }}
+            disabled={!canProceedToConfirm}
+            className="h-10 w-full rounded-md bg-blue-500 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-600 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
+            核对并确认
+          </button>
+        )}
+        {phase === 'confirm' && (
+          <button
+            type="button"
+            onClick={() => void runImport(false)}
+            disabled={!confirmed}
+            className="h-10 w-full rounded-md bg-blue-500 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-600 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
+            确认并开始逐行入库
+          </button>
+        )}
+        {phase === 'result' && resultSummary.failed > 0 && (
+          <button
+            type="button"
+            onClick={() => void runImport(true)}
+            className="h-10 w-full rounded-md bg-blue-500 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-600 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500/20 sm:w-auto"
+          >
+            仅重试 {resultSummary.failed} 个失败行
+          </button>
+        )}
       </div>
     </div>
   )

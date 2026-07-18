@@ -14,11 +14,13 @@ interface InboundQuickFiltersProps {
 
 export default function InboundQuickFilters({ items, activeKey, onChange }: InboundQuickFiltersProps) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-center gap-2" aria-label="快捷日期筛选；数量为当前页记录数">
+      <span className="text-xs text-gray-500">快捷日期（当前页计数）</span>
       {items.map(item => (
         <button
           key={item.key}
           onClick={() => onChange(item.key)}
+          aria-label={`${item.label}，当前页 ${item.count} 条`}
           className={cn(
             'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
             activeKey === item.key

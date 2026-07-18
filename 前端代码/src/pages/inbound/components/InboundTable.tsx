@@ -58,6 +58,9 @@ function getRecordStatus(row: InboundRecord) {
 interface InboundTableProps {
   data: InboundRecord[]
   loading: boolean
+  error: string | null
+  onRetry: () => void
+  canWrite: boolean
   selectedIds: Set<string>
   onToggleSelectAll: () => void
   onToggleSelectOne: (id: string) => void
@@ -81,6 +84,9 @@ interface InboundTableProps {
 export default function InboundTable({
   data,
   loading,
+  error,
+  onRetry,
+  canWrite,
   selectedIds,
   onToggleSelectAll,
   onToggleSelectOne,
@@ -132,8 +138,8 @@ export default function InboundTable({
       )}
 
       {/* 表格 */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="max-w-full overflow-x-auto" aria-busy={loading}>
+        <table className="w-full min-w-[980px] text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-4 py-3 w-10 text-center">
@@ -142,6 +148,7 @@ export default function InboundTable({
                   checked={isAllSelected}
                   ref={el => { if (el) el.indeterminate = isIndeterminate }}
                   onChange={onToggleSelectAll}
+                  aria-label="选择当前页全部入库记录"
                   className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
               </th>
@@ -167,6 +174,16 @@ export default function InboundTable({
                   </div>
                 </td>
               </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={11} className="px-4 py-10 text-center">
+                  <div role="alert" className="mx-auto max-w-lg rounded-md border border-red-200 bg-red-50 p-4 text-red-800">
+                    <p className="font-medium">入库记录未能加载</p>
+                    <p className="mt-1 text-sm">{error}</p>
+                    <button type="button" onClick={onRetry} className="mt-3 min-h-10 rounded-md border border-red-300 bg-white px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-red-500">重试</button>
+                  </div>
+                </td>
+              </tr>
             ) : data.length === 0 ? (
               <tr>
                 <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
@@ -189,6 +206,7 @@ export default function InboundTable({
                         type="checkbox"
                         checked={selectedIds.has(row.id)}
                         onChange={() => onToggleSelectOne(row.id)}
+                        aria-label={`选择入库记录 ${row.inboundNo}`}
                         className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
                     </td>
@@ -201,12 +219,13 @@ export default function InboundTable({
                       <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs border', getSourceBadgeColor(row.type))}>
                         {getTypeLabel(row.type)}
                       </span>
+                      {row.purchaseOrderNo && <div className="mt-1 text-xs text-gray-500">采购单 {row.purchaseOrderNo}</div>}
                     </td>
                     <td className="px-4 py-3 text-gray-700">
                       {row.quantity} {row.unit}
                     </td>
                     <td className="px-4 py-3 text-gray-700 font-medium">
-                      {formatCurrency(row.amount || row.price * row.quantity)}
+                      {formatCurrency(row.amount ?? row.price * row.quantity)}
                     </td>
                     <td className="px-4 py-3 text-gray-500">{row.supplierName || '-'}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{formatDateTime(row.createdAt)}</td>
@@ -219,36 +238,31 @@ export default function InboundTable({
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => onDetail(row)}
-                          className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                          className="min-h-9 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                           详情
                         </button>
-                        <button
-                          onClick={() => onEdit(row)}
-                          className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-                        >
-                          编辑
-                        </button>
-                        <button
-                          onClick={() => onDelete(row)}
-                          className="px-2 py-1 text-xs text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
-                        >
-                          删除
-                        </button>
-                        {status === 'cancelled' ? (
+                        {canWrite && !row.purchaseOrderId && (
                           <button
-                            onClick={() => onRestore(row)}
-                            className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                            onClick={() => onEdit(row)}
+                            className="min-h-9 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
-                            恢复
+                            编辑
                           </button>
-                        ) : (
+                        )}
+                        {canWrite && (
                           <button
-                            onClick={() => onPrint(row)}
-                            className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                            onClick={() => onDelete(row)}
+                            className="min-h-9 px-2 py-1 text-xs text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
                           >
-                            打印
+                            删除
                           </button>
+                        )}
+                        {canWrite && status === 'cancelled' && (
+                          <button onClick={() => onRestore(row)} className="min-h-9 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">恢复</button>
+                        )}
+                        {status !== 'cancelled' && (
+                          <button onClick={() => onPrint(row)} className="min-h-9 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">打印</button>
                         )}
                       </div>
                     </td>
@@ -261,13 +275,13 @@ export default function InboundTable({
       </div>
 
       {/* 分页 */}
-      <Pagination
+      {!error && <Pagination
         page={page}
         pageSize={pageSize}
         total={total}
         onChange={onPageChange}
         onPageSizeChange={onPageSizeChange}
-      />
+      />}
     </>
   )
 }

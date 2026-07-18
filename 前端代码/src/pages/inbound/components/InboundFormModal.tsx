@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import type { Dispatch, SetStateAction } from 'react'
+import { useEffect, useRef } from 'react'
+import type { Dispatch, KeyboardEvent, SetStateAction } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import type { InboundRecord, Material, Supplier, Location } from '@/types'
 
@@ -27,32 +27,16 @@ interface InboundFormModalProps {
   materials: Material[]
   locations: Location[]
   suppliers: Supplier[]
-  purchaseOrders: any[]
-  selectedOrderId: string
-  setSelectedOrderId: (id: string) => void
   selectedRecord: InboundRecord | null
   submitting: boolean
   onClose: () => void
   onSubmit: () => void
 }
 
-function getLocationTypeLabel(type?: string): string {
-  const map: Record<string, string> = {
-    shelf: '货架',
-    fridge: '冰箱',
-    cabinet: '柜',
-    counter: '操作台',
-    other: '其他',
-  }
-  return map[type || ''] || type || '其他'
-}
+const fieldClass = 'w-full min-h-11 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500'
 
-function getLocationDisplay(loc: Location): string {
-  const parts: string[] = [loc.name]
-  if (loc.zone) parts.push(`库区${loc.zone}`)
-  if (loc.shelf) parts.push(`货架${loc.shelf}`)
-  if (loc.position) parts.push(`库位${loc.position}`)
-  return parts.join('-')
+function getLocationDisplay(location: Location) {
+  return [location.code, location.name, location.zone, location.shelf, location.position].filter(Boolean).join(' · ')
 }
 
 export default function InboundFormModal({
@@ -63,262 +47,173 @@ export default function InboundFormModal({
   materials,
   locations,
   suppliers,
-  purchaseOrders,
-  selectedOrderId,
-  setSelectedOrderId,
+  selectedRecord,
   submitting,
   onClose,
   onSubmit,
 }: InboundFormModalProps) {
+  const firstFieldRef = useRef<HTMLSelectElement>(null)
+  const contentRef = useRef<HTMLFormElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const timer = window.setTimeout(() => firstFieldRef.current?.focus(), 0)
+    return () => {
+      window.clearTimeout(timer)
+      previouslyFocused?.focus()
+    }
+  }, [open])
+
   if (!open) return null
 
-  const selectedOrder = useMemo(() =>
-    purchaseOrders.find(o => o.id === selectedOrderId),
-    [purchaseOrders, selectedOrderId]
-  )
+  const editing = modalType === 'edit'
+  const trapFocus = (event: KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== 'Tab') return
+    const focusable = Array.from(contentRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+    ) || [])
+    if (focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
 
   return (
-    <Modal onClose={onClose} title={modalType === 'create' ? '新增入库' : '编辑入库'} size="xl">
-      <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-4">
+    <Modal onClose={onClose} title={editing ? '编辑入库记录' : '新增直接入库'} size="xl">
+      <form
+        ref={contentRef}
+        className="space-y-5"
+        onKeyDown={trapFocus}
+        onSubmit={(event) => { event.preventDefault(); onSubmit() }}
+        aria-busy={submitting}
+      >
+        {editing && (
+          <div role="note" className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            为避免库存金额和数量漂移，编辑仅开放批号、供应商、日期与备注；来源、物料、数量、单价和库位保持原记录。
+            {selectedRecord?.purchaseOrderId ? ' 关联采购单的记录不可在此编辑。' : ''}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              入库来源 <span className="text-red-500">*</span>
-            </label>
+            <label htmlFor="inbound-type" className="mb-1.5 block text-sm font-medium text-gray-700">入库来源 <span aria-hidden="true" className="text-red-500">*</span></label>
             <select
+              id="inbound-type"
+              ref={firstFieldRef}
               value={form.type}
-              onChange={e => setForm({ ...form, type: e.target.value as any })}
-              className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={editing}
+              required
+              onChange={(event) => setForm(current => ({
+                ...current,
+                type: event.target.value as FormData['type'],
+                purchaseOrderId: '',
+                fromLocationId: event.target.value === 'transfer' ? current.fromLocationId : '',
+                fromLocationName: event.target.value === 'transfer' ? current.fromLocationName : '',
+              }))}
+              className={fieldClass}
             >
-              <option value="">请选择来源</option>
-              <option value="purchase">采购入库</option>
-              <option value="return">退库入库</option>
               <option value="direct">直接入库</option>
+              <option value="return">退库入库</option>
               <option value="transfer">库位调拨</option>
+              {form.type === 'purchase' && <option value="purchase" disabled>采购入库（当前不可执行）</option>}
             </select>
           </div>
-          {form.type === 'purchase' && purchaseOrders.length > 0 && (
+
+          {form.type === 'transfer' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                采购订单 <span className="text-gray-400 text-xs font-normal">(可选，选择后自动填充)</span>
-              </label>
+              <label htmlFor="inbound-from-location" className="mb-1.5 block text-sm font-medium text-gray-700">来源库位 <span aria-hidden="true" className="text-red-500">*</span></label>
               <select
-                value={selectedOrderId}
-                onChange={e => {
-                  const orderId = e.target.value
-                  setSelectedOrderId(orderId)
-                  if (orderId) {
-                    const order = purchaseOrders.find(o => o.id === orderId)
-                    if (order) {
-                      setForm(prev => ({
-                        ...prev,
-                        purchaseOrderId: orderId,
-                        supplierId: order.supplier_id || '',
-                        materialId: order.material_id || prev.materialId,
-                        price: order.unit_price || prev.price,
-                        quantity: order.remainingQty || prev.quantity,
-                      }))
-                    }
-                  } else {
-                    setForm(prev => ({ ...prev, purchaseOrderId: '' }))
-                  }
-                }}
-                className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                id="inbound-from-location"
+                value={form.fromLocationId}
+                required
+                disabled={editing}
+                onChange={(event) => setForm(current => ({ ...current, fromLocationId: event.target.value, fromLocationName: '' }))}
+                className={fieldClass}
               >
-                <option value="">不关联采购订单</option>
-                {purchaseOrders.map(o => (
-                  <option key={o.id} value={o.id}>{o.order_no} · {o.material_name || o.material_id} · 待入:{o.remainingQty}{o.unit}</option>
-                ))}
+                <option value="">请选择来源库位</option>
+                {locations.map(location => <option key={location.id} value={location.id}>{getLocationDisplay(location)}</option>)}
               </select>
             </div>
           )}
-          {form.type === 'transfer' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                来源库位 <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  list="source-location-list"
-                  value={form.fromLocationName || locations.find(l => l.id === form.fromLocationId)?.name || ''}
-                  onChange={e => {
-                    const val = e.target.value
-                    const matched = locations.find(l => l.name === val)
-                    setForm({ ...form, fromLocationId: matched ? matched.id : '', fromLocationName: matched ? '' : val })
-                  }}
-                  placeholder="请选择或输入来源库位"
-                  className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-                />
-                <datalist id="source-location-list">
-                  {locations.map(l => (
-                    <option key={l.id} value={l.name}>{getLocationDisplay(l)} · {getLocationTypeLabel(l.type)}</option>
-                  ))}
-                </datalist>
-                <select
-                  value={form.fromLocationId}
-                  onChange={e => {
-                    const id = e.target.value
-                    const loc = locations.find(l => l.id === id)
-                    setForm({ ...form, fromLocationId: id, fromLocationName: loc ? loc.name : '' })
-                  }}
-                  className="absolute right-0 top-0 h-10 w-8 border-l border-gray-300 bg-transparent text-transparent cursor-pointer focus:outline-none"
-                  title="选择来源库位"
-                >
-                  <option value=""></option>
-                  {locations.map(l => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                </select>
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            耗材名称 <span className="text-red-500">*</span>
-          </label>
+          <label htmlFor="inbound-material" className="mb-1.5 block text-sm font-medium text-gray-700">耗材 <span aria-hidden="true" className="text-red-500">*</span></label>
           <select
+            id="inbound-material"
             value={form.materialId}
-            onChange={e => setForm({ ...form, materialId: e.target.value })}
-            className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required
+            disabled={editing}
+            onChange={(event) => setForm(current => ({ ...current, materialId: event.target.value }))}
+            className={fieldClass}
           >
             <option value="">请选择耗材</option>
-            {materials.map(m => (
-              <option key={m.id} value={m.id}>{m.name} ({m.code}) {m.spec ? `· 规格:${m.spec}` : ''} {m.unit ? `· 单位:${m.unit}` : ''}</option>
+            {materials.map(material => (
+              <option key={material.id} value={material.id}>{material.code} · {material.name}{material.spec ? ` · ${material.spec}` : ''}</option>
             ))}
           </select>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">批号</label>
-            <input
-              value={form.batchNo}
-              onChange={e => setForm({ ...form, batchNo: e.target.value })}
-              className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="请输入批号"
-            />
+            <label htmlFor="inbound-batch" className="mb-1.5 block text-sm font-medium text-gray-700">批号</label>
+            <input id="inbound-batch" value={form.batchNo} onChange={(event) => setForm(current => ({ ...current, batchNo: event.target.value }))} className={fieldClass} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              数量 <span className="text-red-500">*</span>
-              {form.materialId && materials.find(m => m.id === form.materialId)?.unit && (
-                <span className="text-xs text-gray-400 ml-2">
-                  ({materials.find(m => m.id === form.materialId)?.unit})
-                </span>
-              )}
-              {selectedOrderId && selectedOrder && selectedOrder.remainingQty > 0 && (
-                <span className="text-xs text-amber-600 ml-2">
-                  待入库: {selectedOrder.remainingQty}
-                </span>
-              )}
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min={0.01}
-              max={selectedOrderId && selectedOrder ? selectedOrder.remainingQty : undefined}
-              value={form.quantity}
-              onChange={e => setForm({ ...form, quantity: Number(e.target.value) })}
-              className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">规格单价 (¥) <span className="text-gray-400 text-xs font-normal">按包装规格计价</span></label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.price}
-              onChange={e => setForm({ ...form, price: Number(e.target.value) })}
-              className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="0.00"
-            />
+            <label htmlFor="inbound-quantity" className="mb-1.5 block text-sm font-medium text-gray-700">数量 <span aria-hidden="true" className="text-red-500">*</span></label>
+            <input id="inbound-quantity" type="number" min="0.01" step="0.01" required disabled={editing} value={form.quantity} onChange={(event) => setForm(current => ({ ...current, quantity: Number(event.target.value) }))} className={fieldClass} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              {form.type === 'transfer' ? '目标库位' : '库位'} <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={form.locationId}
-              onChange={e => setForm({ ...form, locationId: e.target.value })}
-              className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">{form.type === 'transfer' ? '请选择目标库位' : '请选择库位'}</option>
-              {locations.map(l => (
-                <option key={l.id} value={l.id}>{getLocationDisplay(l)} · {getLocationTypeLabel(l.type)}</option>
-              ))}
+            <label htmlFor="inbound-price" className="mb-1.5 block text-sm font-medium text-gray-700">规格单价（元） <span className="text-xs font-normal text-gray-500">明确填写 0 表示零价</span></label>
+            <input id="inbound-price" type="number" min="0" step="0.01" disabled={editing} value={form.price} onChange={(event) => setForm(current => ({ ...current, price: Number(event.target.value) }))} className={fieldClass} />
+          </div>
+          <div>
+            <label htmlFor="inbound-location" className="mb-1.5 block text-sm font-medium text-gray-700">{form.type === 'transfer' ? '目标库位' : '库位'} <span aria-hidden="true" className="text-red-500">*</span></label>
+            <select id="inbound-location" value={form.locationId} required disabled={editing} onChange={(event) => setForm(current => ({ ...current, locationId: event.target.value }))} className={fieldClass}>
+              <option value="">请选择库位</option>
+              {locations.map(location => <option key={location.id} value={location.id}>{getLocationDisplay(location)}</option>)}
             </select>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">生产日期</label>
-            <input
-              type="date"
-              value={form.productionDate}
-              onChange={e => setForm({ ...form, productionDate: e.target.value })}
-              className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <label htmlFor="inbound-production-date" className="mb-1.5 block text-sm font-medium text-gray-700">生产日期</label>
+            <input id="inbound-production-date" type="date" value={form.productionDate} onChange={(event) => setForm(current => ({ ...current, productionDate: event.target.value }))} className={fieldClass} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">有效期至</label>
-            <input
-              type="date"
-              value={form.expiryDate}
-              onChange={e => setForm({ ...form, expiryDate: e.target.value })}
-              className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <label htmlFor="inbound-expiry-date" className="mb-1.5 block text-sm font-medium text-gray-700">有效期至</label>
+            <input id="inbound-expiry-date" type="date" value={form.expiryDate} onChange={(event) => setForm(current => ({ ...current, expiryDate: event.target.value }))} className={fieldClass} />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">供应商</label>
-          <select
-            value={form.supplierId}
-            onChange={e => setForm({ ...form, supplierId: e.target.value })}
-            className="w-full px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">请选择供应商</option>
-            {suppliers.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
+          <label htmlFor="inbound-supplier" className="mb-1.5 block text-sm font-medium text-gray-700">供应商</label>
+          <select id="inbound-supplier" value={form.supplierId} onChange={(event) => setForm(current => ({ ...current, supplierId: event.target.value }))} className={fieldClass}>
+            <option value="">不指定供应商</option>
+            {suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.code} · {supplier.name}</option>)}
           </select>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">备注</label>
-          <textarea
-            value={form.remark}
-            onChange={e => setForm({ ...form, remark: e.target.value })}
-            rows={2}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="请输入备注信息（可选）"
-          />
+          <label htmlFor="inbound-remark" className="mb-1.5 block text-sm font-medium text-gray-700">备注</label>
+          <textarea id="inbound-remark" rows={3} value={form.remark} onChange={(event) => setForm(current => ({ ...current, remark: event.target.value }))} className={fieldClass} />
         </div>
-      </div>
-      <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-        >
-          取消
-        </button>
-        <button
-          onClick={onSubmit}
-          disabled={submitting}
-          className="px-4 py-2 text-sm text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {submitting ? '提交中...' : '确认入库'}
-        </button>
-      </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} disabled={submitting} className="min-h-11 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">取消</button>
+          <button type="submit" disabled={submitting} className="min-h-11 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+            {submitting ? '提交中…' : editing ? '保存安全字段' : '确认入库'}
+          </button>
+        </div>
+      </form>
     </Modal>
   )
 }

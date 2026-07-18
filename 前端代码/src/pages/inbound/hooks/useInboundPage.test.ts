@@ -58,16 +58,17 @@ describe('useInboundPage', () => {
     vi.mocked(supplierApi.getList).mockResolvedValue({ list: mockSuppliers, pagination: { total: 1 } } as any)
     vi.mocked(locationApi.getList).mockResolvedValue({ list: mockLocations, pagination: { total: 1 } } as any)
     vi.mocked(purchaseOrderApi.getList).mockResolvedValue({ list: [] } as any)
+    vi.mocked(purchaseOrderApi.getById).mockResolvedValue({ id: 'po-1', order_no: 'PO-001', status: 'pending' } as any)
     vi.mocked(purchaseOrderApi.receive).mockResolvedValue({} as any)
   })
 
-  it('should fetch purchase orders and stats on mount', async () => {
+  it('should fetch stats without loading executable purchase-order choices', async () => {
     renderHook(() => useInboundPage())
 
     await waitFor(() => {
-      expect(purchaseOrderApi.getList).toHaveBeenCalled()
       expect(inboundApi.getStats).toHaveBeenCalled()
     })
+    expect(purchaseOrderApi.getList).not.toHaveBeenCalled()
   })
 
   it('should fetch inbound list on mount', async () => {
@@ -137,7 +138,7 @@ describe('useInboundPage', () => {
 
     act(() => {
       result.current.setForm({
-        type: 'purchase', materialId: '', batchNo: '', quantity: 0, price: 0,
+        type: 'direct', materialId: '', batchNo: '', quantity: 0, price: 0,
         supplierId: '', locationId: '', fromLocationId: '', fromLocationName: '',
         productionDate: '', expiryDate: '', remark: '', purchaseOrderId: '',
       })
@@ -156,7 +157,7 @@ describe('useInboundPage', () => {
 
     act(() => {
       result.current.setForm({
-        type: 'purchase', materialId: 'mat-1', batchNo: '', quantity: 0, price: 50,
+        type: 'direct', materialId: 'mat-1', batchNo: '', quantity: 0, price: 50,
         supplierId: '', locationId: 'loc-1', fromLocationId: '', fromLocationName: '',
         productionDate: '', expiryDate: '', remark: '', purchaseOrderId: '',
       })
@@ -175,7 +176,7 @@ describe('useInboundPage', () => {
 
     act(() => {
       result.current.setForm({
-        type: 'purchase', materialId: 'mat-1', batchNo: 'B001', quantity: 10, price: 50,
+        type: 'direct', materialId: 'mat-1', batchNo: 'B001', quantity: 10, price: 50,
         supplierId: 'sup-1', locationId: 'loc-1', fromLocationId: '', fromLocationName: '',
         productionDate: '', expiryDate: '', remark: '', purchaseOrderId: '',
       })
@@ -188,6 +189,70 @@ describe('useInboundPage', () => {
     await waitFor(() => {
       expect(inboundApi.create).toHaveBeenCalled()
     })
+    expect(purchaseOrderApi.receive).not.toHaveBeenCalled()
+  })
+
+  it('keeps list failure distinct from a successful empty response', async () => {
+    vi.mocked(inboundApi.getList).mockRejectedValueOnce(new Error('network unavailable'))
+    const { result } = renderHook(() => useInboundPage())
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.listError).toBe('network unavailable')
+    expect(result.current.data).toEqual([])
+  })
+
+  it('keeps stats unknown after a failed request instead of inventing zeroes', async () => {
+    vi.mocked(inboundApi.getStats).mockRejectedValueOnce(new Error('stats offline'))
+    const { result } = renderHook(() => useInboundPage())
+
+    await waitFor(() => expect(result.current.statsError).toBe('stats offline'))
+
+    expect(result.current.stats).toBeNull()
+  })
+
+  it('restores a purchase context from the URL without opening an unsafe form', async () => {
+    window.history.replaceState(null, '', '/inbound?purchaseOrderId=po-1&materialId=mat-1&type=purchase&returnTo=%2Fpurchase-orders%3Fstatus%3Dpending')
+    const { result } = renderHook(() => useInboundPage())
+
+    await waitFor(() => expect(purchaseOrderApi.getById).toHaveBeenCalledWith('po-1'))
+
+    expect(result.current.purchaseContext).toMatchObject({
+      purchaseOrderId: 'po-1',
+      returnTo: '/purchase-orders?status=pending',
+      state: 'ready',
+    })
+    expect(result.current.modalType).toBeNull()
+    expect(purchaseOrderApi.receive).not.toHaveBeenCalled()
+  })
+
+  it('blocks all purchase-linked creation while backend authority checks are absent', async () => {
+    const { result } = renderHook(() => useInboundPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.setForm({
+        type: 'purchase', materialId: 'mat-1', batchNo: 'B001', quantity: 1, price: 0,
+        supplierId: 'sup-1', locationId: 'loc-1', fromLocationId: '', fromLocationName: '',
+        productionDate: '', expiryDate: '', remark: '', purchaseOrderId: 'po-1',
+      })
+    })
+    await act(async () => { await result.current.handleSubmit() })
+
+    expect(inboundApi.create).not.toHaveBeenCalled()
+    expect(purchaseOrderApi.receive).not.toHaveBeenCalled()
+  })
+
+  it('loads references before showing import so validation cannot mistake missing refs for bad rows', async () => {
+    const { result } = renderHook(() => useInboundPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => { await result.current.openImport() })
+
+    expect(result.current.modalType).toBe('import')
+    expect(result.current.materials).toEqual(mockMaterials)
+    expect(result.current.locations).toEqual(mockLocations)
+    expect(result.current.refsError).toBeNull()
   })
 
   it('should restore cancelled inbound', async () => {
