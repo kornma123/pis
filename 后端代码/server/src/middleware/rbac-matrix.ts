@@ -25,6 +25,9 @@ export const NON_ADMIN_ROLES = [
   'lab_director', 'warehouse_manager', 'technician', 'pathologist', 'procurement', 'finance',
 ] as const
 
+/** 初始化时由系统维护的角色码；数据驱动权限不等于可由非 admin 改写这些身份定义。 */
+export const SYSTEM_ROLE_CODES = ['admin', ...NON_ADMIN_ROLES] as const
+
 /** 初始种子矩阵（admin 单独处理为全 W；未列模块=无权限）。RBAC 文档 §8.2，用户逐行确认。 */
 export const SEED_MATRIX: Record<string, PermMap> = {
   // lab_director（实验室主任）= 高权限管理角色（已持 users/roles/reconciliation 审批 + transfers/scraps 写）。
@@ -140,6 +143,20 @@ export function parsePermissions(raw: any): PermMap {
     }
   }
   return out
+}
+
+/** 角色码是否属于系统初始化角色（精确匹配，保持既有 code 大小写语义）。 */
+export function isSystemRoleCode(code: unknown): boolean {
+  return typeof code === 'string' && (SYSTEM_ROLE_CODES as readonly string[]).includes(code)
+}
+
+/**
+ * 候选权限是否与 admin 的“全部模块 W”能力等价。
+ * 统一经 parsePermissions 识别对象矩阵、旧数组与 ['*']，避免只堵一种序列化形态。
+ */
+export function isAdminEquivalentPermissions(raw: unknown): boolean {
+  const parsed = parsePermissions(raw)
+  return MODULES.every((module) => parsed[module] === 'W')
 }
 
 /** 并集合并（W 优先） */

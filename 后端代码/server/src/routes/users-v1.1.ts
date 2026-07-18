@@ -3,7 +3,16 @@ import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
-import { detectSoDConflicts, requirePermission } from '../middleware/permissions.js'
+import {
+  detectSoDConflicts,
+  rejectInvalidRoleCodeFields,
+  rejectUntrustedAuditActorFields,
+  requestActorHasCurrentPermission,
+  requirePermission,
+  requireUserRoleMutationCeiling,
+  userRoleMutationExceedsSecurityCeiling,
+  wouldRemoveLastEffectiveAdmin,
+} from '../middleware/permissions.js'
 import { accountPasswordProblem, hashMatchesKnownLeakedDefaultPassword } from '../config/security.js'
 
 const router = Router()
@@ -59,43 +68,68 @@ router.get('/', (req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-router.post('/', requireUsersWrite, (req, res) => {
+router.post('/', requireUsersWrite, rejectUntrustedAuditActorFields, rejectInvalidRoleCodeFields, requireUserRoleMutationCeiling, (req, res) => {
   try {
     const { username, password, realName, role, roles, primaryRole, department, phone } = req.body
     if (!username || !password || !realName) { error(res, 'Username, password and realName required', 'INVALID_PARAMETER', 400); return }
     const passwordProblem = passwordWriteProblem(password)
     if (passwordProblem) { error(res, `Password ${passwordProblem}`, 'INVALID_PARAMETER', 400); return }
-    const db = getDatabase()
     const id = uuidv4()
     const hashedPassword = bcrypt.hashSync(password, 12)
     // 多角色：roles[] 优先，回退单 role；primary 决定 users.role
     const roleList: string[] = Array.isArray(roles) && roles.length ? roles : [role || 'operator']
     const primary = primaryRole && roleList.includes(primaryRole) ? primaryRole : roleList[0]
+    const db = getDatabase()
+    db.exec('BEGIN IMMEDIATE')
+    if (
+      !requestActorHasCurrentPermission(db, req, 'users', 'W')
+      || userRoleMutationExceedsSecurityCeiling(db, req)
+    ) {
+      db.exec('ROLLBACK')
+      error(res, 'Forbidden: security administration requires admin', 'FORBIDDEN', 403); return
+    }
     db.prepare('INSERT INTO users (id, username, password, real_name, role, primary_role, department, phone, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)')
       .run(id, username, hashedPassword, realName, primary, primary, department || null, phone || null)
     syncUserRoles(db, id, roleList, primary)
     const sodWarning = detectSoDConflicts(roleList)
+    db.exec('COMMIT')
     success(res, { id, roles: roleList, primaryRole: primary, sodWarning }, 'Created', 201)
   } catch (err: any) {
+    try { getDatabase().exec('ROLLBACK') } catch { /* no active transaction */ }
     if (err.message.includes('UNIQUE')) { error(res, 'Username exists', 'RESOURCE_CONFLICT', 409); return }
     error(res, err.message)
   }
 })
 
-router.put('/:id', requireUsersWrite, (req, res) => {
+router.put('/:id', requireUsersWrite, rejectUntrustedAuditActorFields, rejectInvalidRoleCodeFields, requireUserRoleMutationCeiling, (req, res) => {
   try {
     const { id } = req.params
     const data = req.body
     const db = getDatabase()
+    db.exec('BEGIN IMMEDIATE')
+    if (
+      !requestActorHasCurrentPermission(db, req, 'users', 'W')
+      || userRoleMutationExceedsSecurityCeiling(db, req)
+    ) {
+      db.exec('ROLLBACK')
+      error(res, 'Forbidden: security administration requires admin', 'FORBIDDEN', 403); return
+    }
     const existing = db.prepare('SELECT * FROM users WHERE id = ? AND is_deleted = 0').get(id) as any
-    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (!existing) {
+      db.exec('ROLLBACK')
+      error(res, 'Not found', 'NOT_FOUND', 404); return
+    }
     // 禁止停用 admin 账户
     if ((existing.username === 'admin' || existing.id === 'USER-001') && data.status !== undefined && data.status !== 'active') {
+      db.exec('ROLLBACK')
       error(res, 'Cannot disable admin account', 'BUSINESS_CONFLICT', 409); return
     }
     if (Object.prototype.hasOwnProperty.call(data, 'password')) {
       const passwordProblem = passwordWriteProblem(data.password)
-      if (passwordProblem) { error(res, `Password ${passwordProblem}`, 'INVALID_PARAMETER', 400); return }
+      if (passwordProblem) {
+        db.exec('ROLLBACK')
+        error(res, `Password ${passwordProblem}`, 'INVALID_PARAMETER', 400); return
+      }
     }
     const isReactivating = data.status === 'active' && existing.status !== 1
     if (
@@ -103,7 +137,15 @@ router.put('/:id', requireUsersWrite, (req, res) => {
       && hashMatchesKnownLeakedDefaultPassword(existing.password)
       && !Object.prototype.hasOwnProperty.call(data, 'password')
     ) {
+      db.exec('ROLLBACK')
       error(res, 'Password must be replaced before reactivating this account', 'INVALID_PARAMETER', 400); return
+    }
+    const replacementRoles: string[] | undefined = Array.isArray(data.roles) && data.roles.length
+      ? data.roles
+      : data.role !== undefined ? [data.role] : undefined
+    if (wouldRemoveLastEffectiveAdmin(db, id, { status: data.status, roles: replacementRoles })) {
+      db.exec('ROLLBACK')
+      error(res, 'Cannot remove the last effective admin', 'BUSINESS_CONFLICT', 409); return
     }
     const fields: string[] = []; const params: any[] = []
     if (data.realName !== undefined) { fields.push('real_name = ?'); params.push(data.realName) }
@@ -122,23 +164,48 @@ router.put('/:id', requireUsersWrite, (req, res) => {
     } else if (data.role !== undefined) {
       syncUserRoles(db, id, [data.role], data.role) // 单角色编辑也同步到 user_roles
     }
-    success(res, { id, roles: getUserRoles(db, id), sodWarning }, 'Updated')
-  } catch (err: any) { error(res, err.message) }
+    const effectiveRoles = getUserRoles(db, id)
+    db.exec('COMMIT')
+    success(res, { id, roles: effectiveRoles, sodWarning }, 'Updated')
+  } catch (err: any) {
+    try { getDatabase().exec('ROLLBACK') } catch { /* no active transaction */ }
+    error(res, err.message)
+  }
 })
 
-router.delete('/:id', requireUsersWrite, (req, res) => {
+router.delete('/:id', requireUsersWrite, rejectUntrustedAuditActorFields, requireUserRoleMutationCeiling, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
+    db.exec('BEGIN IMMEDIATE')
+    if (
+      !requestActorHasCurrentPermission(db, req, 'users', 'W')
+      || userRoleMutationExceedsSecurityCeiling(db, req)
+    ) {
+      db.exec('ROLLBACK')
+      error(res, 'Forbidden: security administration requires admin', 'FORBIDDEN', 403); return
+    }
     const existing = db.prepare('SELECT * FROM users WHERE id = ? AND is_deleted = 0').get(id) as any
-    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (!existing) {
+      db.exec('ROLLBACK')
+      error(res, 'Not found', 'NOT_FOUND', 404); return
+    }
     // 禁止删除 admin 账户
     if (existing.username === 'admin' || existing.id === 'USER-001') {
+      db.exec('ROLLBACK')
       error(res, 'Cannot delete admin account', 'BUSINESS_CONFLICT', 409); return
     }
+    if (wouldRemoveLastEffectiveAdmin(db, id, { deleting: true })) {
+      db.exec('ROLLBACK')
+      error(res, 'Cannot remove the last effective admin', 'BUSINESS_CONFLICT', 409); return
+    }
     db.prepare('UPDATE users SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+    db.exec('COMMIT')
     success(res, null, 'Deleted')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    try { getDatabase().exec('ROLLBACK') } catch { /* no active transaction */ }
+    error(res, err.message)
+  }
 })
 
 export default router
