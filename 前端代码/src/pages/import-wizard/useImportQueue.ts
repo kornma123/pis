@@ -22,6 +22,16 @@ export interface QueueItem {
   status: QStatus
 }
 
+export interface CommitConfirmation {
+  kind: 'confirm'
+  itemId: string
+  partnerId: string
+  serviceMonth: string
+  message: string
+}
+
+export type CommitOutcome = 'ok' | 'err' | CommitConfirmation
+
 let seq = 0
 const nextId = () => `q${++seq}`
 
@@ -61,23 +71,46 @@ export function useImportQueue(hospitals: PartnerListItem[]) {
   const [busy, setBusy] = useState(false)
   // 队列最新态引用（防陈旧闭包）：setPartner/setMonth 读它拿到最新 item，而非 useCallback 捕获的旧 queue。
   const queueRef = useRef<QueueItem[]>([])
+  const linesGeneration = useRef(new Map<string, number>())
+  const previewGeneration = useRef(new Map<string, number>())
   queueRef.current = queue
 
   const patch = useCallback((id: string, p: Partial<QueueItem>) => {
-    setQueue((q) => q.map((it) => (it.id === id ? { ...it, ...p } : it)))
+    const next = queueRef.current.map((it) => (it.id === id ? { ...it, ...p } : it))
+    queueRef.current = next
+    setQueue(next)
   }, [])
 
   const loadLines = useCallback(async (id: string, partnerId: string) => {
-    if (!partnerId) { patch(id, { lines: [] }); return }
-    try { const env = await partnerConfigApi.get(partnerId); patch(id, { lines: env.config.lines }) } catch { /* 忽略 */ }
+    const generation = (linesGeneration.current.get(id) || 0) + 1
+    linesGeneration.current.set(id, generation)
+    const isCurrent = () => {
+      const item = queueRef.current.find((current) => current.id === id)
+      return linesGeneration.current.get(id) === generation && !!item && item.partnerId === partnerId
+    }
+    patch(id, { lines: [] })
+    if (!partnerId) return isCurrent()
+    try {
+      const env = await partnerConfigApi.get(partnerId)
+      if (!isCurrent()) return false
+      patch(id, { lines: env.config.lines })
+      return true
+    } catch {
+      return isCurrent()
+    }
   }, [patch])
 
   const runPreview = useCallback(async (item: QueueItem) => {
     const partnerId = item.partnerId, month = item.month
     if (!partnerId || !month) return
+    const generation = (previewGeneration.current.get(item.id) || 0) + 1
+    previewGeneration.current.set(item.id, generation)
     // 请求守卫：若响应返回时该 item 的院/账期已变（用户又改了），丢弃本次结果，避免陈旧请求覆盖最新预览。
-    const stale = () => { const c = queueRef.current.find((x) => x.id === item.id); return !c || c.partnerId !== partnerId || c.month !== month }
-    patch(item.id, { error: '' })
+    const stale = () => {
+      const current = queueRef.current.find((candidate) => candidate.id === item.id)
+      return previewGeneration.current.get(item.id) !== generation || !current || current.partnerId !== partnerId || current.month !== month
+    }
+    patch(item.id, { error: '', preview: null, committed: null, status: 'pending' })
     try {
       const r = await statementImportApi.preview({ partnerId, grid: item.grid, serviceMonth: month })
       if (stale()) return
@@ -112,8 +145,9 @@ export function useImportQueue(hospitals: PartnerListItem[]) {
       // 自动认到院的，并发预载业务线 + 预览（各家按 id 函数式合并、runPreview 有守卫，互不覆盖；串行会拖慢批量）。
       await Promise.allSettled(created.filter((it) => it.partnerId).map(async (it) => {
         if (!queueRef.current.find((x) => x.id === it.id)) return // 循环期间被删 → 跳过，不发无谓请求
-        await loadLines(it.id, it.partnerId)
-        if (it.month) await runPreview(it)
+        const linesReady = await loadLines(it.id, it.partnerId)
+        const current = queueRef.current.find((candidate) => candidate.id === it.id)
+        if (linesReady && current?.partnerId === it.partnerId && current.month) await runPreview(current)
       }))
       const unmatched = created.filter((c) => !c.partnerId).length
       if (unmatched) toast.info(`${created.length} 家已入队，其中 ${unmatched} 家没自动认出医院，请手选`)
@@ -125,20 +159,23 @@ export function useImportQueue(hospitals: PartnerListItem[]) {
   const addFile = useCallback((f: File) => addFiles([f]), [addFiles])
 
   const setPartner = useCallback(async (id: string, partnerId: string) => {
-    patch(id, { partnerId, preview: null, committed: null })
-    await loadLines(id, partnerId)
+    patch(id, { partnerId, preview: null, committed: null, error: '', status: 'pending' })
+    const linesReady = await loadLines(id, partnerId)
+    if (!linesReady) return
     const it = queueRef.current.find((x) => x.id === id)
-    if (it) await runPreview({ ...it, partnerId })
+    if (it?.partnerId === partnerId) await runPreview(it)
   }, [patch, loadLines, runPreview])
 
   const setMonth = useCallback(async (id: string, month: string) => {
-    patch(id, { month, preview: null, committed: null })
+    patch(id, { month, preview: null, committed: null, error: '', status: 'pending' })
     const it = queueRef.current.find((x) => x.id === id)
     if (it) await runPreview({ ...it, month })
   }, [patch, runPreview])
 
   const classify = useCallback(async (item: QueueItem, lineKey: string, ruleType: 'keyword' | 'prefix' | 'remark', value: string) => {
     if (!item.partnerId || !lineKey || !value.trim()) return
+    const latest = queueRef.current.find((x) => x.id === item.id)
+    if (!latest || latest.partnerId !== item.partnerId || !['attention', 'ready'].includes(latest.status)) return
     try {
       await statementImportApi.classifyRule({ partnerId: item.partnerId, lineKey, ruleType, value, expectedVersion: item.configVersion })
       const env = await partnerConfigApi.get(item.partnerId)
@@ -153,23 +190,50 @@ export function useImportQueue(hospitals: PartnerListItem[]) {
     }
   }, [patch, runPreview])
 
-  const commit = useCallback(async (item: QueueItem, confirm: boolean): Promise<'ok' | 'confirm' | 'err'> => {
+  const commit = useCallback(async (item: QueueItem, confirm: boolean, overrideReason?: string): Promise<CommitOutcome> => {
     if (!item.partnerId || !item.month) { toast.error('先选医院和账期'); return 'err' }
+    const latest = queueRef.current.find((x) => x.id === item.id)
+    if (!latest || latest.partnerId !== item.partnerId || latest.month !== item.month || !['attention', 'ready'].includes(latest.status)) {
+      toast.error('当前预览已失效，请重新预览后再入库')
+      return 'err'
+    }
+    const reason = overrideReason?.trim() || ''
+    if (confirm && !reason) { toast.error('请填写确认理由'); return 'err' }
+    const stale = () => {
+      const current = queueRef.current.find((x) => x.id === item.id)
+      return !current || current.partnerId !== item.partnerId || current.month !== item.month
+    }
     setBusy(true)
     try {
-      const r = await statementImportApi.commit({ partnerId: item.partnerId, grid: item.grid, serviceMonth: item.month, confirm })
+      const base = { partnerId: item.partnerId, grid: item.grid, serviceMonth: item.month }
+      const r = confirm
+        ? await statementImportApi.commit({ ...base, confirm: true, overrideReason: reason })
+        : await statementImportApi.commit({ ...base, confirm: false })
+      if (stale()) return 'err'
       patch(item.id, { committed: r, error: '', status: 'committed' })
       toast.success(`${item.fileName}：已入库 ${r.caseCount} 例`)
       return 'ok'
     } catch (e: any) {
+      if (stale()) return 'err'
       const be = e?.response?.data?.error
-      if (be?.code === 'NEEDS_CONFIRM' || e?.response?.status === 409) return 'confirm'
-      patch(item.id, { error: be?.message || e?.message || '入库失败' }); return 'err'
+      if (e?.response?.status === 409 && be?.code === 'NEEDS_CONFIRM') {
+        return {
+          kind: 'confirm',
+          itemId: item.id,
+          partnerId: item.partnerId,
+          serviceMonth: item.month,
+          message: be?.message || '本次对账单未通过自动入库门禁，请核对后填写旁路理由',
+        }
+      }
+      patch(item.id, { error: be?.message || e?.message || '入库失败', committed: null, status: 'error' }); return 'err'
     } finally { setBusy(false) }
   }, [patch])
 
   const removeItem = useCallback((id: string) => {
     const remaining = queueRef.current.filter((it) => it.id !== id)
+    linesGeneration.current.delete(id)
+    previewGeneration.current.delete(id)
+    queueRef.current = remaining
     setQueue(remaining)
     setActiveId((cur) => (cur === id ? (remaining[0]?.id || '') : cur)) // 删掉 active → 回落到剩余项，别留空占位
   }, [])

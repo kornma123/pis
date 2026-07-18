@@ -3,14 +3,28 @@ import type { PreviewResult, CommitResult } from '@/types/statement-import'
 
 export type Grid = (string | number | null)[][]
 
+interface StatementCommitBase {
+  partnerId: string
+  grid: Grid
+  serviceMonth: string
+  template?: string
+  docNo?: string
+}
+
+/** confirm 旁路必须和非空理由同请求出现；普通提交不能夹带理由。 */
+export type StatementCommitRequest = StatementCommitBase & (
+  | { confirm: true; overrideReason: string }
+  | { confirm?: false; overrideReason?: never }
+)
+
 // request 拦截器已解包 → 直接返回 data 层
 export const statementImportApi = {
   /** POST /statement-import/preview —— 干跑（解析+分类+评分，不落库） */
   preview: (body: { partnerId: string; grid: Grid; serviceMonth?: string; template?: string; goldenExpected?: number }) =>
     request.post('/statement-import/preview', body) as unknown as Promise<PreviewResult>,
 
-  /** POST /statement-import/commit —— 落库（未匹配/不平需 confirm:true） */
-  commit: (body: { partnerId: string; grid: Grid; serviceMonth: string; template?: string; docNo?: string; confirm?: boolean }) =>
+  /** POST /statement-import/commit —— 仅 NEEDS_CONFIRM 可用 confirm:true + overrideReason 旁路 */
+  commit: (body: StatementCommitRequest) =>
     request.post('/statement-import/commit', body) as unknown as Promise<CommitResult>,
 
   /** POST /statement-import/classify-rule —— 把某行归类写回该院配置（立即生效；expectedVersion 乐观锁防并发覆盖） */

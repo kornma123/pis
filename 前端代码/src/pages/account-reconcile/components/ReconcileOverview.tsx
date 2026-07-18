@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { useAccountReconcile } from '../hooks/useAccountReconcile'
 import type { HospitalMonth } from '@/types/account-reconcile'
 import { HmPill, matchStatusMeta, wan, cnMonth, btnCls, btnGhost, cardCls, selectCls } from '../ui'
+import { CloseMonthConfirm, type CloseMonthSnapshot } from './CloseMonthConfirm'
 
 type Ctx = ReturnType<typeof useAccountReconcile>
 
@@ -54,7 +55,7 @@ function Row({ h, ctx }: { h: HospitalMonth; ctx: Ctx }) {
             {h.status === '待复核' ? '去核对 →' : '看明细'}
           </button>
         ) : (
-          ctx.canWrite && <button className={btnGhost} disabled={ctx.busy} onClick={() => ctx.computePartner(h.partnerId)}>重算</button>
+          ctx.canWrite && <button className={btnGhost} disabled={!ctx.writeReady} onClick={() => ctx.computePartner(h.partnerId)}>重算</button>
         )}
       </td>
     </tr>
@@ -65,11 +66,32 @@ const TH = 'px-4 py-3 text-left text-xs font-medium text-gray-500 whitespace-now
 
 export function ReconcileOverview({ ctx }: { ctx: Ctx }) {
   const [pick, setPick] = useState('')
+  const [closeSnapshot, setCloseSnapshot] = useState<CloseMonthSnapshot | null>(null)
   const todo = useMemo(() => ctx.list.filter((h) => h.status === '待复核'), [ctx.list])
   const done = useMemo(() => ctx.list.filter((h) => h.status !== '待复核'), [ctx.list])
-  const closable = useMemo(() => ctx.list.filter((h) => h.status === '复核完成'), [ctx.list])
+  const closable = useMemo(
+    () => ctx.list.filter((h) => h.serviceMonth === ctx.loadedMonth && h.status === '复核完成'),
+    [ctx.list, ctx.loadedMonth],
+  )
   const closableRevenue = closable.reduce((s, h) => s + (Number(h.confirmedLabRevenue) || 0), 0)
   const notReady = ctx.list.some((h) => !h.statementReady || !h.lisReady)
+
+  useEffect(() => {
+    if (closeSnapshot && (!ctx.writeReady
+      || closeSnapshot.request.serviceMonth !== ctx.loadedMonth
+      || closeSnapshot.request.serviceMonth !== ctx.month)) {
+      setCloseSnapshot(null)
+    }
+  }, [closeSnapshot, ctx.loadedMonth, ctx.month, ctx.writeReady])
+
+  const openCloseConfirm = () => {
+    if (!ctx.writeReady || !ctx.loadedMonth || !closable.length) return
+    setCloseSnapshot({
+      request: { serviceMonth: ctx.loadedMonth, partnerIds: closable.map((h) => h.partnerId) },
+      hospitalNames: closable.map((h) => h.partnerName || h.partnerId),
+      confirmedRevenue: closableRevenue,
+    })
+  }
 
   return (
     <div>
@@ -82,17 +104,28 @@ export function ReconcileOverview({ ctx }: { ctx: Ctx }) {
         </label>
         {ctx.canWrite && (
           <>
-            <button className={btnCls} disabled={ctx.busy} onClick={ctx.recomputeAll}>重算本月</button>
+            <button className={btnCls} disabled={!ctx.writeReady} onClick={ctx.recomputeAll}>重算本月</button>
             <div className="inline-flex items-center gap-2">
-              <select className={selectCls} value={pick} onFocusCapture={ctx.loadPartners} onChange={(e) => setPick(e.target.value)}>
+              <select className={selectCls} value={pick} disabled={!ctx.writeReady} onFocusCapture={ctx.loadPartners} onChange={(e) => setPick(e.target.value)}>
                 <option value="">＋ 计算某院核对…</option>
                 {ctx.partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <button className={btnCls} disabled={!pick || ctx.busy} onClick={() => { ctx.computePartner(pick); setPick('') }}>计算</button>
+              <button className={btnCls} disabled={!pick || !ctx.writeReady} onClick={() => { ctx.computePartner(pick); setPick('') }}>计算</button>
             </div>
           </>
         )}
       </div>
+
+      {ctx.loadError && (
+        <div role="alert" className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+          <span>数据没能加载，当前月份的计算、重算和关账均已关闭。</span>
+          <button type="button" className="font-medium underline underline-offset-2 disabled:opacity-50" disabled={ctx.loading || ctx.busy} onClick={() => void ctx.loadOverview()}>重试</button>
+        </div>
+      )}
+
+      {ctx.loading && <div className="mt-8 text-center text-sm text-gray-400">加载中…</div>}
+
+      {!ctx.loading && !ctx.loadError && <>
 
       {notReady && (
         <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
@@ -123,17 +156,15 @@ export function ReconcileOverview({ ctx }: { ctx: Ctx }) {
         </div>
         <button
           className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-3.5 text-[13px] font-semibold text-slate-900 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!ctx.canWrite || ctx.busy || !closable.length}
-          onClick={() => ctx.closeMonth(closable.map((h) => h.partnerId))}
+          disabled={!ctx.writeReady || !closable.length}
+          onClick={openCloseConfirm}
         >
           关账本月（{closable.length}家）
         </button>
       </div>
 
       {/* lists */}
-      {ctx.loading ? (
-        <div className="mt-8 text-center text-sm text-gray-400">加载中…</div>
-      ) : !ctx.list.length ? (
+      {!ctx.list.length ? (
         <div className="mt-8 rounded-lg border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
           {cnMonth(ctx.month)} 还没有核对记录。导入对账单 + LIS 后，用上方「计算某院核对」开始。
         </div>
@@ -143,6 +174,13 @@ export function ReconcileOverview({ ctx }: { ctx: Ctx }) {
           <Group title="已了结" hint="复核完成 / 已关账" rows={done} ctx={ctx} />
         </>
       )}
+      </>}
+      <CloseMonthConfirm
+        snapshot={closeSnapshot}
+        disabled={!ctx.writeReady || closeSnapshot?.request.serviceMonth !== ctx.loadedMonth || closeSnapshot?.request.serviceMonth !== ctx.month}
+        onClose={() => setCloseSnapshot(null)}
+        onConfirm={(request) => { setCloseSnapshot(null); void ctx.closeMonth(request) }}
+      />
     </div>
   )
 }
