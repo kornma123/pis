@@ -19,6 +19,9 @@ const MAX_ENTRY_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 const MAX_TOTAL_UNCOMPRESSED_BYTES = 768 * 1024 * 1024
 const MAX_ARCHIVE_ENTRIES = 20000
 const COMMAND_TIMEOUT_MS = 2 * 60 * 1000
+const LOCAL_RELEASE_NODE_MAJOR = 22
+const MINIMUM_LOCAL_RELEASE_NODE_VERSION = '22.23.1'
+const ISOLATED_NPM_PROOF_PREFIX = 'coreone-offline-npm-ci-'
 const REQUIRED_READINESS_IDS = Object.freeze([
   'playwright-override',
   'node22',
@@ -178,6 +181,29 @@ function validateNativeExecutable(candidate, label, options = {}) {
   return regular
 }
 
+function parseExactNodeVersion(value) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(value || ''))
+  return match ? match.slice(1).map(Number) : null
+}
+
+function compareNodeVersions(left, right) {
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] < right[index] ? -1 : 1
+  }
+  return 0
+}
+
+function isSupportedLocalReleaseNodeVersion(value) {
+  const candidate = parseExactNodeVersion(value)
+  const minimum = parseExactNodeVersion(MINIMUM_LOCAL_RELEASE_NODE_VERSION)
+  return Boolean(
+    candidate
+    && minimum
+    && candidate[0] === LOCAL_RELEASE_NODE_MAJOR
+    && compareNodeVersions(candidate, minimum) >= 0,
+  )
+}
+
 function classifyNodeProbe(result, candidate, platform = process.platform) {
   if (result?.error || result?.status !== 0) {
     const reason = result?.error?.code || `exit ${result?.status}`
@@ -189,8 +215,11 @@ function classifyNodeProbe(result, candidate, platform = process.platform) {
   } catch {
     return { status: 'BLOCKED', detail: 'Node candidate did not return the required runtime identity JSON' }
   }
-  if (!/^v22\.\d+\.\d+$/.test(payload?.version || '')) {
-    return { status: 'BLOCKED', detail: `requires Node 22.x; candidate reported ${payload?.version || 'an invalid version'}` }
+  if (!isSupportedLocalReleaseNodeVersion(payload?.version)) {
+    return {
+      status: 'BLOCKED',
+      detail: `local release mode requires Node >=${MINIMUM_LOCAL_RELEASE_NODE_VERSION} <23.0.0; candidate reported ${payload?.version || 'an invalid version'}`,
+    }
   }
   if (!payload.execPath || !samePath(payload.execPath, candidate, platform)) {
     return { status: 'BLOCKED', detail: 'Node candidate reported a different process.execPath' }
@@ -454,7 +483,7 @@ function probeInstalledDependencies(projectRoot, required) {
     : { status: 'PASS', detail: `${required.length} required installed package(s) match package-lock.json` }
 }
 
-function classifyNpmDryRun(result) {
+function classifyNpmCi(result) {
   if (result?.error) {
     return { status: ['ENOENT', 'EACCES', 'EINVAL'].includes(result.error.code) ? 'BLOCKED' : 'FAIL', detail: result.error.code || result.error.message }
   }
@@ -466,7 +495,7 @@ function classifyNpmDryRun(result) {
   if (/\b(?:EUSAGE|EJSONPARSE|ERESOLVE|ELOCKVERIFY)\b|package(?:\.json)? and package-lock\.json .*not in sync/i.test(diagnostics)) {
     return { status: 'FAIL', detail: 'package and lockfile dependency contract is inconsistent' }
   }
-  return { status: 'BLOCKED', detail: `offline npm ci dry-run exited ${result?.status}` }
+  return { status: 'BLOCKED', detail: `offline npm ci exited ${result?.status}` }
 }
 
 function resolveNpmCli(nodeExecutable, platform = process.platform) {
@@ -519,24 +548,74 @@ function canonicalRuntimeTreeDigest(directory) {
   return digest.digest('hex')
 }
 
-function runOfflineNpmDryRun(projectRoot, nodeExecutable, options = {}) {
-  const npmCli = resolveNpmCli(nodeExecutable, options.platform || process.platform)
-  if (!npmCli) return { status: 'BLOCKED', detail: 'npm-cli.js is not installed beside the selected diagnostic runtime' }
-  const contractFiles = ['package.json', 'package-lock.json'].map((name) => path.join(projectRoot, name))
-  let before
-  try {
-    before = contractFiles.map(sha256File)
-  } catch {
-    return { status: 'FAIL', detail: 'package.json or package-lock.json is missing or unreadable' }
+function copyLocalTarballDependencies(projectRoot, proofRoot, lock) {
+  const copied = new Set()
+  for (const metadata of Object.values(lock?.packages || {})) {
+    if (typeof metadata?.resolved !== 'string' || !metadata.resolved.startsWith('file:')) continue
+    let relative
+    try {
+      relative = decodeURIComponent(metadata.resolved.slice('file:'.length)).replace(/^\.\//, '')
+    } catch {
+      throw new Error(`invalid local npm dependency URL: ${metadata.resolved}`)
+    }
+    if (copied.has(relative)) continue
+    const source = resolveInside(projectRoot, relative)
+    const destination = resolveInside(proofRoot, relative)
+    const stat = fs.statSync(source)
+    if (!stat.isFile()) throw new Error(`local npm dependency is not a regular file: ${relative}`)
+    fs.mkdirSync(path.dirname(destination), { recursive: true })
+    fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL)
+    copied.add(relative)
   }
-  const spawn = options.spawn || spawnSync
-  const environment = createSafeEnvironment()
+}
+
+function copyNpmInstallContract(projectRoot, proofRoot) {
+  let lock
+  try {
+    lock = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package-lock.json'), 'utf8'))
+    for (const name of ['package.json', 'package-lock.json']) {
+      fs.copyFileSync(path.join(projectRoot, name), path.join(proofRoot, name), fs.constants.COPYFILE_EXCL)
+    }
+    copyLocalTarballDependencies(projectRoot, proofRoot, lock)
+  } catch (error) {
+    throw new Error(`package install contract cannot be isolated: ${error.code || error.message}`)
+  }
+  return lock
+}
+
+function countPackageManifests(nodeModulesRoot) {
+  if (!fs.existsSync(nodeModulesRoot)) return 0
+  let count = 0
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === '.bin') continue
+      const absolute = path.join(directory, entry.name)
+      const stat = fs.lstatSync(absolute)
+      if (stat.isSymbolicLink()) throw new Error(`installed dependency tree contains a link: ${absolute}`)
+      if (stat.isDirectory()) walk(absolute)
+      else if (stat.isFile() && entry.name === 'package.json') count += 1
+    }
+  }
+  walk(nodeModulesRoot)
+  return count
+}
+
+function runOfflineNpmCiInPlace(projectRoot, nodeExecutable, options = {}) {
+  const platform = options.platform || process.platform
+  const npmCli = resolveNpmCli(nodeExecutable, platform)
+  if (!npmCli) return { status: 'BLOCKED', detail: 'npm-cli.js is not installed beside the selected diagnostic runtime' }
+  const environmentOverrides = options.cacheDirectory
+    ? { NPM_CONFIG_CACHE: path.resolve(options.cacheDirectory) }
+    : {}
+  const environment = createSafeEnvironment(options.environment || process.env, environmentOverrides)
   const pathKey = Object.keys(environment).find((key) => key.toUpperCase() === 'PATH') || 'PATH'
-  environment[pathKey] = [path.dirname(nodeExecutable), environment[pathKey]].filter(Boolean).join(process.platform === 'win32' ? ';' : ':')
+  environment[pathKey] = [path.dirname(nodeExecutable), environment[pathKey]]
+    .filter(Boolean)
+    .join(platform === 'win32' ? ';' : ':')
+  const spawn = options.spawn || spawnSync
   const result = spawn(nodeExecutable, [
     npmCli,
     'ci',
-    '--dry-run',
     '--offline',
     '--ignore-scripts',
     '--no-audit',
@@ -548,33 +627,99 @@ function runOfflineNpmDryRun(projectRoot, nodeExecutable, options = {}) {
     maxBuffer: 16 * 1024 * 1024,
     shell: false,
     windowsHide: true,
-    timeout: COMMAND_TIMEOUT_MS,
+    timeout: options.timeoutMs || COMMAND_TIMEOUT_MS,
   })
-  const outcome = classifyNpmDryRun(result)
+  const outcome = classifyNpmCi(result)
+  if (outcome.status !== 'PASS') return outcome
+
+  const required = options.required || []
+  if (required.length) {
+    const installed = probeInstalledDependencies(projectRoot, required)
+    if (installed.status !== 'PASS') {
+      return { status: 'FAIL', detail: `npm ci exited 0 without the required installed tree: ${installed.detail}` }
+    }
+  }
+  let installedPackageManifests
+  let expectedPackages
+  try {
+    const lock = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package-lock.json'), 'utf8'))
+    expectedPackages = Object.keys(lock?.packages || {}).filter((key) => key.startsWith('node_modules/')).length
+    installedPackageManifests = countPackageManifests(path.join(projectRoot, 'node_modules'))
+  } catch (error) {
+    return { status: 'FAIL', detail: `installed dependency proof cannot be inspected: ${error.code || error.message}` }
+  }
+  if (expectedPackages > 0 && installedPackageManifests === 0) {
+    return { status: 'FAIL', detail: 'npm ci exited 0 without installing any package manifests' }
+  }
+  return {
+    status: 'PASS',
+    detail: `isolated offline npm ci installed ${installedPackageManifests} package manifest(s)`,
+    installedPackageManifests,
+  }
+}
+
+function removeIsolatedNpmProof(proofRoot) {
+  const resolved = path.resolve(proofRoot)
+  if (
+    path.dirname(resolved) !== path.resolve(os.tmpdir())
+    || !path.basename(resolved).startsWith(ISOLATED_NPM_PROOF_PREFIX)
+  ) {
+    throw new Error(`refusing to remove unexpected npm proof path: ${resolved}`)
+  }
+  fs.rmSync(resolved, { recursive: true, force: true })
+}
+
+function runIsolatedOfflineNpmCi(projectRoot, nodeExecutable, options = {}) {
+  const contractFiles = ['package.json', 'package-lock.json'].map((name) => path.join(projectRoot, name))
+  let before
+  try {
+    before = contractFiles.map(sha256File)
+  } catch {
+    return { status: 'FAIL', detail: 'package.json or package-lock.json is missing or unreadable' }
+  }
+
+  let proofRoot
+  let outcome
+  try {
+    proofRoot = fs.mkdtempSync(path.join(os.tmpdir(), ISOLATED_NPM_PROOF_PREFIX))
+    copyNpmInstallContract(projectRoot, proofRoot)
+    outcome = runOfflineNpmCiInPlace(proofRoot, nodeExecutable, options)
+  } catch (error) {
+    outcome = { status: 'FAIL', detail: `isolated offline npm ci proof failed: ${error.code || error.message}` }
+  }
+
   try {
     const after = contractFiles.map(sha256File)
     if (before.some((hash, index) => hash !== after[index])) {
-      return { status: 'FAIL', detail: 'offline npm ci dry-run changed package or lock files' }
+      outcome = { status: 'FAIL', detail: 'isolated offline npm ci changed source package or lock files' }
     }
   } catch {
-    return { status: 'FAIL', detail: 'package or lock files disappeared during the offline dry-run' }
+    outcome = { status: 'FAIL', detail: 'source package or lock files disappeared during isolated offline npm ci' }
+  }
+
+  if (proofRoot) {
+    try {
+      removeIsolatedNpmProof(proofRoot)
+    } catch (error) {
+      outcome = { status: 'FAIL', detail: `isolated npm proof cleanup failed: ${error.code || error.message}` }
+    }
   }
   return outcome
 }
 
 function probeProjectDependencies(project, nodeExecutable, diagnosticOnly) {
   const installed = probeInstalledDependencies(project.root, project.required)
-  const cache = runOfflineNpmDryRun(project.root, nodeExecutable)
+  const cache = runIsolatedOfflineNpmCi(project.root, nodeExecutable, { required: project.required })
   const statuses = [installed, cache]
   if (statuses.some((item) => item.status === 'FAIL')) {
     const failure = statuses.find((item) => item.status === 'FAIL')
     return { id: project.id, status: 'FAIL', detail: failure.detail }
   }
   const details = statuses.filter((item) => item.status !== 'PASS').map((item) => item.detail)
-  if (diagnosticOnly && cache.status === 'PASS') details.push('offline cache was only probed under a non-Node-22 diagnostic runtime')
+  if (diagnosticOnly && cache.status === 'PASS') details.push('offline cache was only proven under a non-Node-22 diagnostic runtime')
   return details.length
     ? { id: project.id, status: 'BLOCKED', detail: details.join('; ') }
-    : { id: project.id, status: 'PASS', detail: 'installed tree and offline npm ci dry-run are ready' }
+    : { id: project.id, status: 'PASS', detail: `installed tree is ready; ${cache.detail}` }
 }
 
 function overallReadinessExitCode(results) {
@@ -607,7 +752,14 @@ function validateOperatorFile(candidate, label) {
 function nodeArchiveIdentity(archivePath) {
   const filename = path.basename(archivePath)
   const match = /^node-v22\.(\d+)\.(\d+)-win-(x64|arm64)\.zip$/.exec(filename)
-  return match ? { filename, distributionName: filename.slice(0, -4), architecture: match[3] } : null
+  return match
+    ? {
+        filename,
+        distributionName: filename.slice(0, -4),
+        architecture: match[3],
+        version: `22.${match[1]}.${match[2]}`,
+      }
+    : null
 }
 
 function verifyArchiveChecksum(archivePath, manifestPath) {
@@ -617,6 +769,9 @@ function verifyArchiveChecksum(archivePath, manifestPath) {
   if (manifest.status !== 'PASS') return manifest
   const identity = nodeArchiveIdentity(archive.path)
   if (!identity) return { status: 'BLOCKED', detail: 'archive filename must match node-v22.<minor>.<patch>-win-(x64|arm64).zip' }
+  if (!isSupportedLocalReleaseNodeVersion(identity.version)) {
+    return { status: 'BLOCKED', detail: `Node archive must be >=${MINIMUM_LOCAL_RELEASE_NODE_VERSION} and remain on major 22` }
+  }
   if (path.basename(manifest.path) !== 'SHASUMS256.txt') {
     return { status: 'BLOCKED', detail: 'checksum manifest must be named SHASUMS256.txt' }
   }
@@ -963,8 +1118,10 @@ module.exports = {
   CONTROLLED_RUNTIME_RELATIVE,
   GATE,
   GATE_CHILD,
+  LOCAL_RELEASE_NODE_MAJOR,
   MAX_ARCHIVE_BYTES,
   MAX_TOTAL_UNCOMPRESSED_BYTES,
+  MINIMUM_LOCAL_RELEASE_NODE_VERSION,
   PLAYWRIGHT_CONFIG,
   PROJECTS,
   REQUIRED_READINESS_IDS,
@@ -973,19 +1130,21 @@ module.exports = {
   canonicalRuntimeTreeDigest,
   classifyBrowserProbe,
   classifyNodeProbe,
-  classifyNpmDryRun,
+  classifyNpmCi,
   createSafeEnvironment,
   extractZipArchive,
   inspectZipArchive,
   installVerifiedNodeArchive,
+  isSupportedLocalReleaseNodeVersion,
   normalizeNewlines,
   overallReadinessExitCode,
   probeInstalledDependencies,
   probeRuntimeReadiness,
   resolveBrowserExecutable,
+  resolveNpmCli,
   resolveNode22Executable,
   runChildPassthrough,
-  runOfflineNpmDryRun,
+  runIsolatedOfflineNpmCi,
   runPinnedGate,
   validateBrowserExecutable,
   validateNode22Executable,

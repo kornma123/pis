@@ -13,19 +13,22 @@ const {
   CONTROLLED_RUNTIME_RELATIVE,
   MAX_ARCHIVE_BYTES,
   MAX_TOTAL_UNCOMPRESSED_BYTES,
+  MINIMUM_LOCAL_RELEASE_NODE_VERSION,
   REQUIRED_READINESS_IDS,
   ROOT,
   buildGateArguments,
   canonicalRuntimeTreeDigest,
   classifyBrowserProbe,
   classifyNodeProbe,
-  classifyNpmDryRun,
+  classifyNpmCi,
   createSafeEnvironment,
   extractZipArchive,
   inspectZipArchive,
   overallReadinessExitCode,
   probeInstalledDependencies,
+  resolveNpmCli,
   runChildPassthrough,
+  runIsolatedOfflineNpmCi,
   validateBrowserExecutable,
   validateNode22Executable,
   verifyArchiveChecksum,
@@ -101,35 +104,71 @@ function createStoredZip(archivePath, entries) {
   fs.writeFileSync(archivePath, Buffer.concat([...localParts, centralDirectory, end]))
 }
 
-test('repository contract remains Node 22 and controlled extraction stays under an ignored workspace directory', () => {
+test('repository contract requires supported Node 22 and controlled extraction stays under an ignored workspace directory', () => {
   assert.equal(CONTROLLED_RUNTIME_RELATIVE, '.agents/local-release-runtime/node22')
+  assert.equal(MINIMUM_LOCAL_RELEASE_NODE_VERSION, '22.23.1')
   assert(MAX_ARCHIVE_BYTES >= 32 * 1024 * 1024)
   assert(MAX_TOTAL_UNCOMPRESSED_BYTES > MAX_ARCHIVE_BYTES)
 })
 
-test('Node 24 is rejected while an exact Node 22 probe is accepted', () => {
+test('local release rejects old Node 22 and Node 24 while accepting the supported Node 22 boundary', () => {
   const node24 = classifyNodeProbe({
     status: 0,
     stdout: JSON.stringify({ version: 'v24.15.0', execPath: 'C:\\runtime\\node.exe' }),
     stderr: '',
   }, 'C:\\runtime\\node.exe', 'win32')
   assert.equal(node24.status, 'BLOCKED')
-  assert.match(node24.detail, /Node 22\.x/)
+  assert.match(node24.detail, /22\.23\.1/)
 
-  const node22 = classifyNodeProbe({
+  const oldNode22 = classifyNodeProbe({
     status: 0,
     stdout: JSON.stringify({ version: 'v22.21.1', execPath: 'C:\\runtime\\node.exe' }),
     stderr: '',
   }, 'C:\\runtime\\node.exe', 'win32')
-  assert.equal(node22.status, 'PASS')
-  assert.equal(node22.version, 'v22.21.1')
+  assert.equal(oldNode22.status, 'BLOCKED')
+  assert.match(oldNode22.detail, /22\.23\.1/)
+
+  const boundaryNode22 = classifyNodeProbe({
+    status: 0,
+    stdout: JSON.stringify({ version: 'v22.23.1', execPath: 'C:\\runtime\\node.exe' }),
+    stderr: '',
+  }, 'C:\\runtime\\node.exe', 'win32')
+  assert.equal(boundaryNode22.status, 'PASS')
+  assert.equal(boundaryNode22.version, 'v22.23.1')
+
+  const newerNode22 = classifyNodeProbe({
+    status: 0,
+    stdout: JSON.stringify({ version: 'v22.24.0', execPath: 'C:\\runtime\\node.exe' }),
+    stderr: '',
+  }, 'C:\\runtime\\node.exe', 'win32')
+  assert.equal(newerNode22.status, 'PASS')
+})
+
+test('runbook locks the engine, real offline install, and Docker aggregation boundaries', () => {
+  const backendPackage = JSON.parse(fs.readFileSync(path.join(ROOT, '后端代码', 'server', 'package.json'), 'utf8'))
+  const runbook = fs.readFileSync(path.join(ROOT, 'docs', 'runbooks', 'local-release-runtime.md'), 'utf8')
+  assert.equal(backendPackage.engines?.node, '^22.23.1 || ^24.0.0')
+  assert.equal(backendPackage.devEngines?.runtime?.version, '^22.23.1 || ^24.0.0')
+  for (const dockerfile of [
+    path.join(ROOT, '前端代码', 'Dockerfile'),
+    path.join(ROOT, '后端代码', 'server', 'Dockerfile'),
+  ]) {
+    assert.match(fs.readFileSync(dockerfile, 'utf8'), /FROM node:22\.23\.1-/)
+  }
+  assert.match(runbook, /\^22\.23\.1 \|\| \^24\.0\.0/)
+  assert.match(runbook, /Node 22\.23\.1/)
+  assert.match(runbook, /系统临时目录/)
+  assert.match(runbook, /npm ci --offline --ignore-scripts --no-audit --fund=false/)
+  assert.doesNotMatch(runbook, /npm ci --dry-run/)
+  assert.match(runbook, /`probe`[^\n]*不检查 Docker/)
+  assert.match(runbook, /`scripts\/local-release-gate\.cjs`[^\n]*Docker daemon/)
 })
 
 test('a script pretending to be Node is rejected before its claimed version is trusted', () => {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-fake-node-'))
   const fakeNode = path.join(temporaryRoot, process.platform === 'win32' ? 'node.exe' : 'node')
   try {
-    fs.writeFileSync(fakeNode, '#!/bin/sh\nprintf v22.21.1\n')
+    fs.writeFileSync(fakeNode, '#!/bin/sh\nprintf v22.23.1\n')
     if (process.platform !== 'win32') fs.chmodSync(fakeNode, 0o755)
     const outcome = validateNode22Executable(fakeNode)
     assert.equal(outcome.status, 'BLOCKED')
@@ -188,7 +227,7 @@ test('browser readiness is mandatory and cannot be skipped by aggregate status',
   assert.equal(overallReadinessExitCode([]), 1)
 })
 
-test('missing installed packages and offline cache misses are stable BLOCKED outcomes', () => {
+test('missing installed packages and real offline npm cache misses are stable BLOCKED outcomes', () => {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-missing-deps-'))
   try {
     const installed = probeInstalledDependencies(temporaryRoot, [
@@ -197,9 +236,101 @@ test('missing installed packages and offline cache misses are stable BLOCKED out
     ])
     assert.equal(installed.status, 'BLOCKED')
     assert.match(installed.detail, /@playwright\/test/)
-    assert.equal(classifyNpmDryRun({ status: 1, stderr: 'npm error code ENOTCACHED' }).status, 'BLOCKED')
-    assert.equal(classifyNpmDryRun({ status: 1, stderr: 'package.json and package-lock.json are not in sync' }).status, 'FAIL')
-    assert.equal(classifyNpmDryRun({ status: 0, stdout: '', stderr: '' }).status, 'PASS')
+    assert.equal(classifyNpmCi({ status: 1, stderr: 'npm error code ENOTCACHED' }).status, 'BLOCKED')
+    assert.equal(classifyNpmCi({ status: 1, stderr: 'package.json and package-lock.json are not in sync' }).status, 'FAIL')
+    assert.equal(classifyNpmCi({ status: 0, stdout: '', stderr: '' }).status, 'PASS')
+  } finally {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true })
+  }
+})
+
+test('isolated offline npm ci performs a real install without writing source node_modules', () => {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-real-offline-ci-'))
+  const fixtureSource = path.join(temporaryRoot, 'fixture-source')
+  const consumer = path.join(temporaryRoot, 'consumer')
+  const cache = path.join(temporaryRoot, 'cache')
+  try {
+    fs.mkdirSync(fixtureSource)
+    fs.mkdirSync(consumer)
+    fs.mkdirSync(cache)
+    fs.writeFileSync(path.join(fixtureSource, 'package.json'), JSON.stringify({
+      name: 'coreone-offline-fixture',
+      version: '1.0.0',
+      files: ['index.js'],
+    }))
+    fs.writeFileSync(path.join(fixtureSource, 'index.js'), 'module.exports = "offline-fixture"\n')
+
+    const npmCli = resolveNpmCli(process.execPath)
+    assert.ok(npmCli, 'npm-cli.js must exist beside the selftest Node runtime')
+    const npmEnvironment = createSafeEnvironment(process.env, { NPM_CONFIG_CACHE: cache })
+    const pack = spawnSync(process.execPath, [
+      npmCli,
+      'pack',
+      '--json',
+      '--ignore-scripts',
+      '--no-audit',
+      '--fund=false',
+      `--pack-destination=${consumer}`,
+    ], {
+      cwd: fixtureSource,
+      env: npmEnvironment,
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+    })
+    assert.equal(pack.status, 0, pack.stderr)
+    const tarball = JSON.parse(pack.stdout)[0].filename
+    fs.writeFileSync(path.join(consumer, 'package.json'), JSON.stringify({
+      name: 'coreone-offline-consumer',
+      version: '1.0.0',
+      private: true,
+      dependencies: { 'coreone-offline-fixture': `file:${tarball}` },
+    }))
+    const lock = spawnSync(process.execPath, [
+      npmCli,
+      'install',
+      '--package-lock-only',
+      '--offline',
+      '--ignore-scripts',
+      '--no-audit',
+      '--fund=false',
+    ], {
+      cwd: consumer,
+      env: npmEnvironment,
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+    })
+    assert.equal(lock.status, 0, lock.stderr)
+    fs.rmSync(path.join(consumer, 'node_modules'), { recursive: true, force: true })
+    assert.equal(fs.existsSync(path.join(consumer, 'node_modules')), false)
+
+    const outcome = runIsolatedOfflineNpmCi(consumer, process.execPath, {
+      cacheDirectory: cache,
+      required: ['node_modules/coreone-offline-fixture/package.json'],
+    })
+    assert.equal(outcome.status, 'PASS', outcome.detail)
+    assert(outcome.installedPackageManifests >= 1)
+    assert.equal(fs.existsSync(path.join(consumer, 'node_modules')), false)
+  } finally {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true })
+  }
+})
+
+test('a completely empty npm cache makes the real repository lock proof BLOCKED', () => {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-empty-offline-cache-'))
+  try {
+    const outcome = runIsolatedOfflineNpmCi(path.join(ROOT, '前端代码'), process.execPath, {
+      cacheDirectory: path.join(temporaryRoot, 'empty-cache'),
+      required: [
+        'node_modules/vite/package.json',
+        'node_modules/vitest/package.json',
+        'node_modules/typescript/package.json',
+        'node_modules/@playwright/test/package.json',
+      ],
+    })
+    assert.equal(outcome.status, 'BLOCKED')
+    assert.match(outcome.detail, /ENOTCACHED|offline cache/i)
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true })
   }
@@ -225,7 +356,7 @@ test('installed dependency versions must exactly match package-lock.json', () =>
 
 test('checksum mismatch and absent operator files are rejected without extraction', () => {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-node-archive-hash-'))
-  const archive = path.join(temporaryRoot, 'node-v22.21.1-win-x64.zip')
+  const archive = path.join(temporaryRoot, 'node-v22.23.1-win-x64.zip')
   const manifest = path.join(temporaryRoot, 'SHASUMS256.txt')
   try {
     fs.writeFileSync(archive, 'not-a-real-archive')
@@ -239,10 +370,10 @@ test('checksum mismatch and absent operator files are rejected without extractio
 
 test('zip traversal is rejected before files are written', () => {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-node-archive-traversal-'))
-  const archive = path.join(temporaryRoot, 'node-v22.21.1-win-x64.zip')
+  const archive = path.join(temporaryRoot, 'node-v22.23.1-win-x64.zip')
   try {
     createStoredZip(archive, [
-      { name: 'node-v22.21.1-win-x64/../../escape.txt', content: 'escape' },
+      { name: 'node-v22.23.1-win-x64/../../escape.txt', content: 'escape' },
     ])
     assert.throws(() => inspectZipArchive(archive), /traversal|unsafe/i)
     assert.equal(fs.existsSync(path.join(temporaryRoot, 'escape.txt')), false)
@@ -253,20 +384,20 @@ test('zip traversal is rejected before files are written', () => {
 
 test('a bounded same-root archive is inspected and extracted without path escape', () => {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-node-archive-pass-'))
-  const archive = path.join(temporaryRoot, 'node-v22.21.1-win-x64.zip')
+  const archive = path.join(temporaryRoot, 'node-v22.23.1-win-x64.zip')
   const destination = path.join(temporaryRoot, 'destination')
   try {
     createStoredZip(archive, [
-      { name: 'node-v22.21.1-win-x64/node.exe', content: 'MZ-test-fixture' },
-      { name: 'node-v22.21.1-win-x64/README.md', content: 'fixture' },
+      { name: 'node-v22.23.1-win-x64/node.exe', content: 'MZ-test-fixture' },
+      { name: 'node-v22.23.1-win-x64/README.md', content: 'fixture' },
     ])
     const inspection = inspectZipArchive(archive)
-    assert.equal(inspection.distributionName, 'node-v22.21.1-win-x64')
+    assert.equal(inspection.distributionName, 'node-v22.23.1-win-x64')
     assert.equal(inspection.entries.length, 2)
     const extracted = extractZipArchive(archive, inspection, destination)
     assert.equal(extracted.status, 'PASS')
     assert.equal(
-      fs.readFileSync(path.join(destination, 'node-v22.21.1-win-x64', 'README.md'), 'utf8'),
+      fs.readFileSync(path.join(destination, 'node-v22.23.1-win-x64', 'README.md'), 'utf8'),
       'fixture',
     )
     assert.equal(fs.existsSync(path.join(temporaryRoot, 'escape.txt')), false)
@@ -296,7 +427,7 @@ test('gate arguments require full pinned base/head and preserve exact repeated s
 
 test('CLI preserves the complete SHA manifest path instead of truncating it', () => {
   const manifest = 'C:\\operator-input\\SHASUMS256.txt'
-  const options = parseFlags([`--sha256-manifest=${manifest}`, '--zip=C:\\operator-input\\node-v22.21.1-win-x64.zip'])
+  const options = parseFlags([`--sha256-manifest=${manifest}`, '--zip=C:\\operator-input\\node-v22.23.1-win-x64.zip'])
   assert.equal(options.sha256Manifest, manifest)
 })
 
@@ -363,7 +494,7 @@ test('scoped Git verification resolves fixed refs while ambient repository redir
 
 test('matching official manifest entry verifies by filename and SHA-256', () => {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-node-archive-match-'))
-  const archive = path.join(temporaryRoot, 'node-v22.21.1-win-x64.zip')
+  const archive = path.join(temporaryRoot, 'node-v22.23.1-win-x64.zip')
   const manifest = path.join(temporaryRoot, 'SHASUMS256.txt')
   try {
     fs.writeFileSync(archive, 'fixture archive bytes')

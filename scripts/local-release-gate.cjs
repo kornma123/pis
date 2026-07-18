@@ -9,9 +9,16 @@ const crypto = require('node:crypto')
 const { spawnSync } = require('node:child_process')
 const { createRequire } = require('node:module')
 const { AUTHORITY_FILES, matchesAny } = require('./agent-preflight.cjs')
+const {
+  LOCAL_RELEASE_NODE_MAJOR,
+  MINIMUM_LOCAL_RELEASE_NODE_VERSION,
+  isSupportedLocalReleaseNodeVersion,
+  runIsolatedOfflineNpmCi,
+} = require('./local-release-runtime/runtime-readiness.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
-const REQUIRED_NODE_MAJOR = 22
+const REQUIRED_NODE_MAJOR = LOCAL_RELEASE_NODE_MAJOR
+const DOCKER_VERSION_ARGS = Object.freeze(['version', '--format', '{{json .}}'])
 const REQUIRED_PREFLIGHT_CHECKS = Object.freeze([
   'git.fetch-age',
   'git.branch',
@@ -167,6 +174,41 @@ function classifyDependencyCheck(result, mode) {
   return { status: 'BLOCKED' }
 }
 
+function classifyDockerVersionResult(result) {
+  if (result?.error) {
+    return { status: 'BLOCKED', detail: `Docker CLI could not run: ${result.error.code || result.error.message}` }
+  }
+  if (result?.status !== 0) {
+    const diagnostics = normalizeNewlines(`${result?.stderr || ''}\n${result?.stdout || ''}`).trim()
+    return {
+      status: 'BLOCKED',
+      detail: diagnostics
+        ? `Docker daemon is unavailable: ${diagnostics.split('\n').at(-1)}`
+        : `Docker daemon probe exited ${result?.status}`,
+    }
+  }
+
+  let payload
+  try {
+    payload = JSON.parse(normalizeNewlines(result.stdout).trim())
+  } catch {
+    return { status: 'FAIL', detail: 'Docker version probe did not return the required JSON contract' }
+  }
+  const clientVersion = String(payload?.Client?.Version || '').trim()
+  const serverVersion = String(payload?.Server?.Version || '').trim()
+  if (!clientVersion) return { status: 'BLOCKED', detail: 'Docker client identity is unavailable' }
+  if (!serverVersion) return { status: 'BLOCKED', detail: `Docker client ${clientVersion} is present but the daemon/server is unavailable` }
+  return { status: 'PASS', detail: `Docker client ${clientVersion}; server ${serverVersion}` }
+}
+
+function runDockerDaemonCheck(step) {
+  const result = spawnCaptured(step.command, step.args || DOCKER_VERSION_ARGS, {
+    cwd: step.cwd,
+    timeoutMs: step.timeoutMs,
+  })
+  return classifyDockerVersionResult(result)
+}
+
 function canonicalAuthorityDigest(entries) {
   const digest = crypto.createHash('sha256')
   const ordered = [...entries.entries()].sort(([left], [right]) => left.localeCompare(right, 'en'))
@@ -307,6 +349,7 @@ function buildPlan({
   platform = process.platform,
   nodeExecutable = process.execPath,
   npmCli = resolveNpmCli({ execPath: nodeExecutable, platform }),
+  dockerCommand = 'docker',
   offlineBase,
   owned,
   excluded,
@@ -316,6 +359,17 @@ function buildPlan({
 
   const frontend = path.join(root, '前端代码')
   const backend = path.join(root, '后端代码', 'server')
+  const frontendRequiredPackages = [
+    'node_modules/vite/package.json',
+    'node_modules/vitest/package.json',
+    'node_modules/typescript/package.json',
+    'node_modules/@playwright/test/package.json',
+  ]
+  const backendRequiredPackages = [
+    'node_modules/typescript/package.json',
+    'node_modules/vitest/package.json',
+    'node_modules/tsx/package.json',
+  ]
   const runtimePathApi = platform === 'win32' ? path.win32 : path.posix
   if (!runtimePathApi.isAbsolute(nodeExecutable)) throw new Error('the selected Node executable must be an absolute path')
   const runtimeDirectory = runtimePathApi.dirname(nodeExecutable)
@@ -352,7 +406,7 @@ function buildPlan({
     cwd,
     { usesNpm: true, env: releaseEnvironment, ...extra },
   )
-  const npmDependencyIntegrityStep = (id, label, cwd, requires) => ({
+  const npmDependencyIntegrityStep = (id, label, cwd, requires, requiredPackages) => ({
     id,
     label,
     kind: 'npm-dependency-integrity',
@@ -362,9 +416,10 @@ function buildPlan({
     env: releaseEnvironment,
     timeoutMs: 5 * 60 * 1000,
     requires,
+    requiredPackages,
+    isolatedInstallProof: true,
     checks: [
       { mode: 'tree', args: ['ls', '--all', '--json'] },
-      { mode: 'lock', args: ['ci', '--dry-run', '--offline', '--ignore-scripts', '--no-audit', '--fund=false'] },
     ],
   })
   const preflightArgs = [
@@ -475,6 +530,16 @@ function buildPlan({
       npmCli,
       npmLauncher,
     },
+    {
+      id: 'runtime:docker-daemon',
+      label: 'Docker CLI and daemon/server contract',
+      kind: 'docker-daemon',
+      command: dockerCommand,
+      args: [...DOCKER_VERSION_ARGS],
+      cwd: root,
+      timeoutMs: 15 * 1000,
+      hardStop: true,
+    },
   )
 
   for (const selftest of walkSelftests(path.join(root, 'scripts'))) {
@@ -504,17 +569,15 @@ function buildPlan({
       kind: 'paths',
       root,
       paths: [
-        path.join(frontend, 'node_modules', 'vite'),
-        path.join(frontend, 'node_modules', 'vitest'),
-        path.join(frontend, 'node_modules', 'typescript'),
-        path.join(frontend, 'node_modules', '@playwright', 'test'),
+        ...frontendRequiredPackages.map((relative) => path.join(frontend, ...relative.split('/').slice(0, -1))),
       ],
     },
     npmDependencyIntegrityStep(
       'frontend:dependencies:integrity',
-      'frontend installed tree and offline lock dry-run',
+      'frontend installed tree and real isolated offline install proof',
       frontend,
       ['runtime:node', 'runtime:npm', 'frontend:dependencies'],
+      frontendRequiredPackages,
     ),
     npmStep('frontend:typecheck', 'frontend application TypeScript', ['exec', '--offline', '--', 'tsc', '--noEmit', '--project', 'tsconfig.app.json'], frontend, {
       requires: ['runtime:node', 'runtime:npm', 'frontend:dependencies', 'frontend:dependencies:integrity'],
@@ -534,16 +597,15 @@ function buildPlan({
       kind: 'paths',
       root,
       paths: [
-        path.join(backend, 'node_modules', 'typescript'),
-        path.join(backend, 'node_modules', 'vitest'),
-        path.join(backend, 'node_modules', 'tsx'),
+        ...backendRequiredPackages.map((relative) => path.join(backend, ...relative.split('/').slice(0, -1))),
       ],
     },
     npmDependencyIntegrityStep(
       'backend:dependencies:integrity',
-      'backend installed tree and offline lock dry-run',
+      'backend installed tree and real isolated offline install proof',
       backend,
       ['runtime:node', 'runtime:npm', 'backend:dependencies'],
+      backendRequiredPackages,
     ),
     npmStep('backend:build', 'backend build', ['run', 'build'], backend, {
       requires: ['runtime:node', 'runtime:npm', 'backend:dependencies', 'backend:dependencies:integrity'],
@@ -906,10 +968,12 @@ function runNodeRuntimeCheck(step) {
   if (configuredMajor !== REQUIRED_NODE_MAJOR) {
     return { status: 'FAIL', detail: `.nvmrc must pin Node ${REQUIRED_NODE_MAJOR}.x` }
   }
-  const currentMajor = Number(process.versions.node.split('.')[0])
-  return currentMajor === REQUIRED_NODE_MAJOR
-    ? { status: 'PASS' }
-    : { status: 'BLOCKED', detail: `requires Node ${REQUIRED_NODE_MAJOR}.x; current runtime is ${process.versions.node}` }
+  return isSupportedLocalReleaseNodeVersion(process.versions.node)
+    ? { status: 'PASS', detail: `Node ${process.versions.node} satisfies local release >=${MINIMUM_LOCAL_RELEASE_NODE_VERSION} <23.0.0` }
+    : {
+        status: 'BLOCKED',
+        detail: `local release requires Node >=${MINIMUM_LOCAL_RELEASE_NODE_VERSION} <23.0.0; current runtime is ${process.versions.node}`,
+      }
 }
 
 function runNpmRuntimeCheck(step) {
@@ -941,7 +1005,17 @@ function runNpmDependencyIntegrity(step) {
       }
     }
   }
-  return { status: 'PASS' }
+  const isolated = runIsolatedOfflineNpmCi(step.cwd, step.command, {
+    environment: step.env,
+    required: step.requiredPackages,
+    timeoutMs: step.timeoutMs,
+  })
+  return isolated.status === 'PASS'
+    ? isolated
+    : {
+        status: isolated.status,
+        detail: isolated.detail || 'package lock cannot be reproduced by a real isolated offline install',
+      }
 }
 
 function spawnCommand(step) {
@@ -1066,6 +1140,7 @@ function executeStep(step) {
   if (step.kind === 'git-clean') return runGitCleanCheck(step)
   if (step.kind === 'node-runtime') return runNodeRuntimeCheck(step)
   if (step.kind === 'npm-runtime') return runNpmRuntimeCheck(step)
+  if (step.kind === 'docker-daemon') return runDockerDaemonCheck(step)
   if (step.kind === 'npm-dependency-integrity') return runNpmDependencyIntegrity(step)
   if (step.kind === 'paths') return runPathCheck(step)
   if (step.kind === 'e2e-spec-contract') return runE2eSpecContract(step)
@@ -1142,7 +1217,7 @@ function printUsage(stream = process.stdout) {
     'Usage:',
     '  node scripts/local-release-gate.cjs [--offline-base=<full-sha>] --owned=<path/glob> [...] --excluded=<path/glob> [...]',
     '',
-    'The gate is offline and fail-closed. Missing dependencies or Chromium are BLOCKED (exit 2).',
+    'The gate is offline and fail-closed. Missing dependencies, Chromium, or Docker daemon are BLOCKED (exit 2).',
     'Test/build failures are FAIL (exit 1). All PASS returns exit 0.',
     '',
   ].join('\n'))
@@ -1196,10 +1271,12 @@ if (require.main === module) process.exitCode = main()
 module.exports = {
   default: LocalReleasePlaywrightReporter,
   DEFAULT_E2E_SPECS,
+  MINIMUM_LOCAL_RELEASE_NODE_VERSION,
   REQUIRED_PREFLIGHT_CHECKS,
   REQUIRED_NODE_MAJOR,
   buildPlan,
   canonicalAuthorityDigest,
+  classifyDockerVersionResult,
   classifyPreflightReport,
   classifyDependencyCheck,
   classifySpawnResult,
@@ -1215,6 +1292,7 @@ module.exports = {
   parseArgs,
   resolveNpmCli,
   runCommittedScope,
+  runDockerDaemonCheck,
   runE2eSpecContract,
   validateBrowserExecutable,
   validateBrowsersPath,

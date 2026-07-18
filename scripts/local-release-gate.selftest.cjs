@@ -12,10 +12,12 @@ const GATE = path.join(__dirname, 'local-release-gate.cjs')
 // RED first: the gate module does not exist until the implementation step.
 const {
   DEFAULT_E2E_SPECS,
+  MINIMUM_LOCAL_RELEASE_NODE_VERSION,
   REQUIRED_PREFLIGHT_CHECKS,
   REQUIRED_NODE_MAJOR,
   buildPlan,
   canonicalAuthorityDigest,
+  classifyDockerVersionResult,
   classifyDependencyCheck,
   classifyPreflightReport,
   classifySpawnResult,
@@ -29,6 +31,7 @@ const {
   overallExitCode,
   resolveNpmCli,
   runCommittedScope,
+  runDockerDaemonCheck,
   runE2eSpecContract,
   validateBrowserExecutable,
   validateBrowsersPath,
@@ -240,6 +243,27 @@ test('browser override contract requires absolute executable paths', () => {
   assert.equal(validateBrowsersPath(' /var/cache/playwright ', 'linux').status, 'BLOCKED')
 })
 
+test('Docker aggregate readiness rejects a client-only mock CLI and accepts client plus server', () => {
+  const mock = (payload, exitCode = 0) => runDockerDaemonCheck({
+    command: process.execPath,
+    args: ['-e', `process.stdout.write(${JSON.stringify(JSON.stringify(payload))});process.exit(${exitCode})`],
+    cwd: ROOT,
+    timeoutMs: 5000,
+  })
+  const clientOnly = mock({ Client: { Version: '29.5.2' }, Server: null })
+  assert.equal(clientOnly.status, 'BLOCKED')
+  assert.match(clientOnly.detail, /daemon|server/i)
+
+  const complete = mock({
+    Client: { Version: '29.5.2' },
+    Server: { Version: '29.5.2', ApiVersion: '1.54' },
+  })
+  assert.equal(complete.status, 'PASS')
+  assert.match(complete.detail, /client 29\.5\.2; server 29\.5\.2/)
+
+  assert.equal(classifyDockerVersionResult({ status: 1, stderr: 'daemon unavailable' }).status, 'BLOCKED')
+})
+
 test('release Playwright reporter rejects zero, skipped, flaky, and expected-failure tests', () => {
   const passing = (spec) => ({
     outcome: 'expected',
@@ -364,6 +388,7 @@ test('the plan contains the complete ordered local release contract', () => {
     'secret-scan',
     'runtime:node',
     'runtime:npm',
+    'runtime:docker-daemon',
     'selftest:agent-preflight',
     'selftest:local-release-gate',
     'build-discipline',
@@ -402,6 +427,10 @@ test('the plan contains the complete ordered local release contract', () => {
   }))
   const npmRuntime = plan.find((step) => step.id === 'runtime:npm')
   assert.equal(npmRuntime.npmLauncher, 'C:\\runtime\\npm.cmd')
+  const dockerRuntime = plan.find((step) => step.id === 'runtime:docker-daemon')
+  assert.equal(dockerRuntime.kind, 'docker-daemon')
+  assert.equal(dockerRuntime.command, 'docker')
+  assert.equal(dockerRuntime.hardStop, true)
   for (const step of plan.filter((candidate) => candidate.id.startsWith('selftest:'))) {
     assert.equal(step.env.GIT_CONFIG_GLOBAL, 'NUL')
     assert.equal(step.env.GIT_CONFIG_NOSYSTEM, '1')
@@ -419,9 +448,9 @@ test('the plan contains the complete ordered local release contract', () => {
   for (const id of ['frontend:dependencies:integrity', 'backend:dependencies:integrity']) {
     const dependencyIntegrity = plan.find((step) => step.id === id)
     assert.equal(dependencyIntegrity.kind, 'npm-dependency-integrity')
-    assert.deepEqual(dependencyIntegrity.checks.map((check) => check.mode), ['tree', 'lock'])
-    assert(dependencyIntegrity.checks.find((check) => check.mode === 'lock').args.includes('--offline'))
-    assert(dependencyIntegrity.checks.find((check) => check.mode === 'lock').args.includes('--dry-run'))
+    assert.deepEqual(dependencyIntegrity.checks.map((check) => check.mode), ['tree'])
+    assert.equal(dependencyIntegrity.isolatedInstallProof, true)
+    assert.equal(dependencyIntegrity.checks.some((check) => check.args.includes('--dry-run')), false)
   }
   for (const id of ['frontend:typecheck', 'frontend:typecheck:config', 'frontend:build', 'frontend:unit', 'e2e:browser', 'e2e:critical']) {
     assert(plan.find((step) => step.id === id).requires.includes('frontend:dependencies:integrity'))
@@ -509,7 +538,10 @@ test('the plan contains the complete ordered local release contract', () => {
 
 test('Node runtime contract matches the repository release runtime', () => {
   assert.equal(REQUIRED_NODE_MAJOR, 22)
+  assert.equal(MINIMUM_LOCAL_RELEASE_NODE_VERSION, '22.23.1')
   assert.equal(fs.readFileSync(path.join(ROOT, '.nvmrc'), 'utf8').trim(), '22')
+  const backendPackage = JSON.parse(fs.readFileSync(path.join(ROOT, '后端代码', 'server', 'package.json'), 'utf8'))
+  assert.equal(backendPackage.engines.node, '^22.23.1 || ^24.0.0')
 })
 
 test('Playwright startup is local, explicit, and free of personal browser paths', () => {

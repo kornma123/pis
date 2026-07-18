@@ -44,7 +44,7 @@ function printUsage(stream = process.stdout) {
     '  node scripts/local-release-runtime/index.cjs run-gate --base=<full-sha> --head=<full-sha> --owned=<path/glob> [...] --excluded=<path/glob> [...]',
     '',
     'Runtime inputs:',
-    '  COREONE_NODE22_EXE       explicit absolute Node 22 executable (otherwise use the verified controlled runtime)',
+    '  COREONE_NODE22_EXE       explicit absolute Node >=22.23.1 <23 executable (otherwise use the verified controlled runtime)',
     '  COREONE_BROWSER_EXE      explicit absolute Chrome/Chromium/Edge executable (otherwise probe known system paths)',
     '',
     'Exit codes: PASS=0, FAIL=1, BLOCKED=2. A final gate child exit outside 0/1/2 is relayed unchanged.',
