@@ -83,9 +83,380 @@ const E2E_SOURCE_RULES = Object.freeze([
   },
 ])
 const COMMAND_TIMEOUT_MS = 20 * 60 * 1000
+const RECEIPT_SCHEMA_VERSION = 'coreone.local-release-gate.receipt/v1'
+const RECEIPT_STATUSES = Object.freeze(['PASS', 'FAIL', 'BLOCKED', 'UNVERIFIED'])
+const RECEIPT_CAPABILITY_ITEMS = Object.freeze({
+  node: 'runtime:node',
+  npm: 'runtime:npm',
+  browser: 'e2e:browser',
+  docker: 'runtime:docker-daemon',
+})
+const SHA40_PATTERN = /^[0-9a-f]{40}$/
+const SHA256_PATTERN = /^[0-9a-f]{64}$/
+const DELIVERY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 function normalizeNewlines(value) {
   return String(value ?? '').replace(/\r\n?/g, '\n')
+}
+
+function sha256Hex(value) {
+  return crypto.createHash('sha256').update(value).digest('hex')
+}
+
+const EMPTY_SHA256 = sha256Hex('')
+
+function canonicalJson(value) {
+  const encode = (current, location) => {
+    if (current === null || typeof current === 'boolean' || typeof current === 'string') {
+      return JSON.stringify(current)
+    }
+    if (typeof current === 'number') {
+      if (!Number.isFinite(current)) throw new Error(`canonical JSON rejects non-finite number at ${location}`)
+      return JSON.stringify(Object.is(current, -0) ? 0 : current)
+    }
+    if (Array.isArray(current)) {
+      return `[${current.map((entry, index) => encode(entry, `${location}[${index}]`)).join(',')}]`
+    }
+    if (current && typeof current === 'object') {
+      const prototype = Object.getPrototypeOf(current)
+      if (prototype !== Object.prototype && prototype !== null) {
+        throw new Error(`canonical JSON requires a plain object at ${location}`)
+      }
+      return `{${Object.keys(current).sort().map((key) => {
+        if (current[key] === undefined) throw new Error(`canonical JSON rejects undefined at ${location}.${key}`)
+        return `${JSON.stringify(key)}:${encode(current[key], `${location}.${key}`)}`
+      }).join(',')}}`
+    }
+    throw new Error(`canonical JSON rejects ${typeof current} at ${location}`)
+  }
+  return encode(value, '$')
+}
+
+function assertPlainObject(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`)
+}
+
+function assertExactKeys(value, expected, label) {
+  assertPlainObject(value, label)
+  const actual = Object.keys(value).sort()
+  const wanted = [...expected].sort()
+  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
+    throw new Error(`${label} schema fields must be exactly: ${wanted.join(', ')}`)
+  }
+}
+
+function assertHex(value, pattern, label) {
+  if (typeof value !== 'string' || !pattern.test(value)) throw new Error(`${label} has an invalid digest or SHA`)
+}
+
+function assertReceiptHasNoRawSensitiveData(value, location = '$') {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => assertReceiptHasNoRawSensitiveData(entry, `${location}[${index}]`))
+    return
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value)) {
+      const lowered = key.toLowerCase()
+      if (
+        ['argv', 'args', 'command', 'cwd', 'env', 'environment', 'stdout', 'stderr'].includes(lowered)
+        || /(?:secret|password|authorization|cookie|rawtoken|accesstoken|refreshtoken)/i.test(key)
+      ) {
+        throw new Error(`receipt schema forbids raw sensitive field ${location}.${key}`)
+      }
+      assertReceiptHasNoRawSensitiveData(entry, `${location}.${key}`)
+    }
+    return
+  }
+  if (typeof value === 'string' && /-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+\S+|\b(?:password|token|secret)\s*=/i.test(value)) {
+    throw new Error(`receipt secret filter rejected raw sensitive content at ${location}`)
+  }
+}
+
+function aggregateReceiptVerdict(items) {
+  if (items.some((item) => item.status === 'FAIL')) return 'FAIL'
+  if (items.some((item) => item.status === 'BLOCKED')) return 'BLOCKED'
+  if (items.some((item) => item.status === 'UNVERIFIED')) return 'UNVERIFIED'
+  return 'PASS'
+}
+
+function exitCodeForReceiptVerdict(verdict) {
+  if (verdict === 'PASS') return 0
+  if (verdict === 'BLOCKED') return 2
+  return 1
+}
+
+function normalizeReceiptItem(result) {
+  assertPlainObject(result, 'receipt item input')
+  if (typeof result.id !== 'string' || !/^[A-Za-z0-9:_-]+$/.test(result.id)) {
+    throw new Error('receipt item id is invalid')
+  }
+  if (!RECEIPT_STATUSES.includes(result.status)) throw new Error(`receipt item status is invalid for ${result.id}`)
+  if (result.exitCode !== null && (!Number.isInteger(result.exitCode) || result.exitCode < 0 || result.exitCode > 255)) {
+    throw new Error(`receipt item exit code is invalid for ${result.id}`)
+  }
+  if (!Number.isInteger(result.durationMs) || result.durationMs < 0) {
+    throw new Error(`receipt item duration is invalid for ${result.id}`)
+  }
+  assertHex(result.stdoutSha256, SHA256_PATTERN, `receipt item stdout digest for ${result.id}`)
+  assertHex(result.stderrSha256, SHA256_PATTERN, `receipt item stderr digest for ${result.id}`)
+  return {
+    id: result.id,
+    status: result.status,
+    exitCode: result.exitCode,
+    durationMs: result.durationMs,
+    stdoutSha256: result.stdoutSha256,
+    stderrSha256: result.stderrSha256,
+  }
+}
+
+function normalizeReceiptCapabilities(capabilities, items) {
+  assertExactKeys(capabilities, ['node', 'npm', 'browser', 'docker'], 'receipt capabilities')
+  const normalized = {
+    node: { ...capabilities.node },
+    npm: { ...capabilities.npm },
+    browser: { ...capabilities.browser },
+    docker: { ...capabilities.docker },
+  }
+  assertExactKeys(normalized.node, ['status', 'version'], 'receipt Node capability')
+  assertExactKeys(normalized.npm, ['status', 'version'], 'receipt npm capability')
+  assertExactKeys(normalized.browser, ['status', 'executableVerified'], 'receipt browser capability')
+  assertExactKeys(normalized.docker, ['status', 'clientVersion', 'serverVersion'], 'receipt Docker capability')
+
+  for (const [name, itemId] of Object.entries(RECEIPT_CAPABILITY_ITEMS)) {
+    const item = items.find((candidate) => candidate.id === itemId)
+    if (!item) throw new Error(`receipt item set is missing capability item ${itemId}`)
+    if (!RECEIPT_STATUSES.includes(normalized[name].status)) throw new Error(`receipt ${name} capability status is invalid`)
+    if (normalized[name].status !== item.status) throw new Error(`receipt ${name} capability status does not match ${itemId}`)
+  }
+  for (const [label, version] of [
+    ['Node', normalized.node.version],
+    ['npm', normalized.npm.version],
+    ['Docker client', normalized.docker.clientVersion],
+    ['Docker server', normalized.docker.serverVersion],
+  ]) {
+    if (version !== null && (typeof version !== 'string' || !/^[0-9A-Za-z.+_-]{1,64}$/.test(version))) {
+      throw new Error(`receipt ${label} version is invalid`)
+    }
+  }
+  if (typeof normalized.browser.executableVerified !== 'boolean') {
+    throw new Error('receipt browser executableVerified must be boolean')
+  }
+  if (normalized.browser.status !== 'PASS' && normalized.browser.executableVerified) {
+    throw new Error('receipt browser cannot be verified when its status is not PASS')
+  }
+  return normalized
+}
+
+function validateReceiptRepository(repository) {
+  assertExactKeys(repository, ['baseSha', 'headSha', 'headTreeSha', 'commits'], 'receipt repository')
+  assertHex(repository.baseSha, SHA40_PATTERN, 'receipt base SHA')
+  assertHex(repository.headSha, SHA40_PATTERN, 'receipt head SHA')
+  assertHex(repository.headTreeSha, SHA40_PATTERN, 'receipt head tree SHA')
+  if (!Array.isArray(repository.commits)) throw new Error('receipt commit list must be an array')
+  repository.commits.forEach((commit, index) => assertHex(commit, SHA40_PATTERN, `receipt commit ${index}`))
+  if (new Set(repository.commits).size !== repository.commits.length) throw new Error('receipt commit list contains duplicates')
+  if (repository.baseSha === repository.headSha && repository.commits.length !== 0) {
+    throw new Error('receipt commit list must be empty when base equals head')
+  }
+  if (repository.baseSha !== repository.headSha && repository.commits.at(-1) !== repository.headSha) {
+    throw new Error('receipt commit list must terminate at exact head SHA')
+  }
+}
+
+function buildCanonicalGateReceipt(input) {
+  assertExactKeys(input, [
+    'repository',
+    'gateToolSha256',
+    'allowlistConfigSha256',
+    'deliveryId',
+    'nonce',
+    'gateExitCode',
+    'planItemIds',
+    'results',
+    'capabilities',
+  ], 'receipt input')
+  validateReceiptRepository(input.repository)
+  assertHex(input.gateToolSha256, SHA256_PATTERN, 'gate tool SHA-256')
+  assertHex(input.allowlistConfigSha256, SHA256_PATTERN, 'allowlist config SHA-256')
+  if (typeof input.deliveryId !== 'string' || !DELIVERY_ID_PATTERN.test(input.deliveryId)) {
+    throw new Error('receipt deliveryId must be a UUID v4')
+  }
+  assertHex(input.nonce, SHA256_PATTERN, 'receipt nonce')
+  if (!Array.isArray(input.planItemIds) || !Array.isArray(input.results)) {
+    throw new Error('receipt plan and result items must be arrays')
+  }
+  if (new Set(input.planItemIds).size !== input.planItemIds.length) throw new Error('receipt plan item ids must be unique')
+  const items = input.results.map(normalizeReceiptItem)
+  const resultIds = items.map((item) => item.id)
+  if (
+    resultIds.length !== input.planItemIds.length
+    || resultIds.some((id, index) => id !== input.planItemIds[index])
+  ) {
+    throw new Error('receipt result items must exactly match the ordered gate plan')
+  }
+  const capabilities = normalizeReceiptCapabilities(input.capabilities, items)
+  const aggregateVerdict = aggregateReceiptVerdict(items)
+  if (input.gateExitCode !== exitCodeForReceiptVerdict(aggregateVerdict)) {
+    throw new Error('receipt gate exit code does not match aggregate verdict')
+  }
+  const receipt = {
+    schemaVersion: RECEIPT_SCHEMA_VERSION,
+    deliveryId: input.deliveryId,
+    nonce: input.nonce,
+    repository: structuredClone(input.repository),
+    gate: {
+      toolSha256: input.gateToolSha256,
+      allowlistConfigSha256: input.allowlistConfigSha256,
+    },
+    capabilities,
+    items,
+    gateExitCode: input.gateExitCode,
+    aggregateVerdict,
+    admissible: aggregateVerdict === 'PASS' && items.every((item) => item.status === 'PASS'),
+  }
+  assertReceiptHasNoRawSensitiveData(receipt)
+  receipt.receiptRootSha256 = sha256Hex(canonicalJson(receipt))
+  verifyCanonicalGateReceipt(receipt, {
+    baseSha: input.repository.baseSha,
+    headSha: input.repository.headSha,
+    headTreeSha: input.repository.headTreeSha,
+    commits: input.repository.commits,
+    gateToolSha256: input.gateToolSha256,
+    allowlistConfigSha256: input.allowlistConfigSha256,
+    itemIds: input.planItemIds,
+  })
+  return receipt
+}
+
+function verifyCanonicalGateReceipt(receipt, expected = {}) {
+  assertPlainObject(receipt, 'receipt')
+  assertHex(receipt.receiptRootSha256, SHA256_PATTERN, 'receipt root digest')
+  const unsigned = { ...receipt }
+  delete unsigned.receiptRootSha256
+  const computedRoot = sha256Hex(canonicalJson(unsigned))
+  if (computedRoot !== receipt.receiptRootSha256) throw new Error('receipt root digest mismatch')
+  assertReceiptHasNoRawSensitiveData(receipt)
+  assertExactKeys(receipt, [
+    'schemaVersion',
+    'deliveryId',
+    'nonce',
+    'repository',
+    'gate',
+    'capabilities',
+    'items',
+    'gateExitCode',
+    'aggregateVerdict',
+    'admissible',
+    'receiptRootSha256',
+  ], 'receipt')
+  if (receipt.schemaVersion !== RECEIPT_SCHEMA_VERSION) throw new Error('receipt schemaVersion is unsupported')
+  if (typeof receipt.deliveryId !== 'string' || !DELIVERY_ID_PATTERN.test(receipt.deliveryId)) {
+    throw new Error('receipt deliveryId is invalid')
+  }
+  assertHex(receipt.nonce, SHA256_PATTERN, 'receipt nonce')
+  validateReceiptRepository(receipt.repository)
+  assertExactKeys(receipt.gate, ['toolSha256', 'allowlistConfigSha256'], 'receipt gate')
+  assertHex(receipt.gate.toolSha256, SHA256_PATTERN, 'receipt gate tool SHA-256')
+  assertHex(receipt.gate.allowlistConfigSha256, SHA256_PATTERN, 'receipt allowlist digest')
+  if (!Array.isArray(receipt.items)) throw new Error('receipt items must be an array')
+  const items = receipt.items.map(normalizeReceiptItem)
+  if (new Set(items.map((item) => item.id)).size !== items.length) throw new Error('receipt item ids must be unique')
+  normalizeReceiptCapabilities(receipt.capabilities, items)
+  const aggregateVerdict = aggregateReceiptVerdict(items)
+  if (receipt.aggregateVerdict !== aggregateVerdict) throw new Error('receipt aggregate verdict is inconsistent')
+  if (!Number.isInteger(receipt.gateExitCode) || receipt.gateExitCode !== exitCodeForReceiptVerdict(aggregateVerdict)) {
+    throw new Error('receipt gate exit code is inconsistent')
+  }
+  const admissible = aggregateVerdict === 'PASS' && items.every((item) => item.status === 'PASS')
+  if (receipt.admissible !== admissible) throw new Error('receipt admissible flag is inconsistent')
+
+  const exact = (actual, wanted, label) => {
+    if (wanted !== undefined && actual !== wanted) throw new Error(`receipt ${label} does not match expected ${label}`)
+  }
+  exact(receipt.repository.baseSha, expected.baseSha, 'base SHA')
+  exact(receipt.repository.headSha, expected.headSha, 'head SHA')
+  exact(receipt.repository.headTreeSha, expected.headTreeSha, 'head tree SHA')
+  exact(receipt.gate.toolSha256, expected.gateToolSha256, 'gate tool SHA-256')
+  exact(receipt.gate.allowlistConfigSha256, expected.allowlistConfigSha256, 'allowlist config SHA-256')
+  if (expected.commits !== undefined && canonicalJson(receipt.repository.commits) !== canonicalJson(expected.commits)) {
+    throw new Error('receipt commit list does not match expected commit list')
+  }
+  if (expected.itemIds !== undefined) {
+    const actualIds = items.map((item) => item.id)
+    if (canonicalJson(actualIds) !== canonicalJson(expected.itemIds)) {
+      const missing = expected.itemIds.filter((id) => !actualIds.includes(id))
+      const unknown = actualIds.filter((id) => !expected.itemIds.includes(id))
+      throw new Error(`receipt item set mismatch; missing=${missing.join('|') || 'none'} unknown=${unknown.join('|') || 'none'}`)
+    }
+  }
+  return { status: 'PASS', receiptRootSha256: receipt.receiptRootSha256 }
+}
+
+function pathIsInside(parent, candidate) {
+  const relative = path.relative(parent, candidate)
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+function validateReceiptTarget(target, { repositoryRoot = ROOT } = {}) {
+  if (typeof target !== 'string' || !path.isAbsolute(target)) {
+    throw new Error('receipt target must be an explicit absolute path outside the repository')
+  }
+  const resolvedTarget = path.resolve(target)
+  const resolvedRepository = fs.realpathSync(repositoryRoot)
+  const parent = path.dirname(resolvedTarget)
+  let parentStat
+  try {
+    parentStat = fs.statSync(parent)
+  } catch {
+    throw new Error('receipt target parent directory must already exist')
+  }
+  if (!parentStat.isDirectory()) throw new Error('receipt target parent must be a directory')
+  const realParent = fs.realpathSync(parent)
+  const realTarget = path.join(realParent, path.basename(resolvedTarget))
+  if (pathIsInside(resolvedRepository, resolvedTarget) || pathIsInside(resolvedRepository, realTarget)) {
+    throw new Error('receipt target must stay outside the repository')
+  }
+  try {
+    fs.lstatSync(resolvedTarget)
+    throw new Error('receipt target already exists; overwrite is forbidden')
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  return resolvedTarget
+}
+
+function writeCanonicalReceiptAtomic(target, receipt, {
+  repositoryRoot = ROOT,
+  beforePublish,
+} = {}) {
+  verifyCanonicalGateReceipt(receipt)
+  const resolvedTarget = validateReceiptTarget(target, { repositoryRoot })
+  const partial = path.join(
+    path.dirname(resolvedTarget),
+    `.${path.basename(resolvedTarget)}.partial-${process.pid}-${crypto.randomBytes(12).toString('hex')}`,
+  )
+  const bytes = Buffer.from(canonicalJson(receipt), 'utf8')
+  let descriptor
+  try {
+    descriptor = fs.openSync(partial, 'wx', 0o600)
+    let offset = 0
+    while (offset < bytes.length) offset += fs.writeSync(descriptor, bytes, offset, bytes.length - offset)
+    fs.fsyncSync(descriptor)
+    fs.closeSync(descriptor)
+    descriptor = undefined
+    if (beforePublish) beforePublish()
+    fs.linkSync(partial, resolvedTarget)
+    fs.unlinkSync(partial)
+    return resolvedTarget
+  } catch (error) {
+    if (descriptor !== undefined) {
+      try { fs.closeSync(descriptor) } catch {}
+    }
+    try { fs.unlinkSync(partial) } catch (cleanupError) {
+      if (cleanupError.code !== 'ENOENT') throw cleanupError
+    }
+    throw error
+  }
 }
 
 function createReleaseEnvironment(source = process.env, overrides = {}) {
@@ -174,9 +545,21 @@ function classifyDependencyCheck(result, mode) {
   return { status: 'BLOCKED' }
 }
 
+function spawnEvidence(result) {
+  return {
+    exitCode: Number.isInteger(result?.status) ? result.status : null,
+    stdoutSha256: sha256Hex(result?.stdout == null ? '' : result.stdout),
+    stderrSha256: sha256Hex(result?.stderr == null ? '' : result.stderr),
+  }
+}
+
 function classifyDockerVersionResult(result) {
   if (result?.error) {
-    return { status: 'BLOCKED', detail: `Docker CLI could not run: ${result.error.code || result.error.message}` }
+    return {
+      status: 'BLOCKED',
+      detail: `Docker CLI could not run: ${result.error.code || result.error.message}`,
+      capability: { clientVersion: null, serverVersion: null },
+    }
   }
   if (result?.status !== 0) {
     const diagnostics = normalizeNewlines(`${result?.stderr || ''}\n${result?.stdout || ''}`).trim()
@@ -185,6 +568,7 @@ function classifyDockerVersionResult(result) {
       detail: diagnostics
         ? `Docker daemon is unavailable: ${diagnostics.split('\n').at(-1)}`
         : `Docker daemon probe exited ${result?.status}`,
+      capability: { clientVersion: null, serverVersion: null },
     }
   }
 
@@ -192,13 +576,33 @@ function classifyDockerVersionResult(result) {
   try {
     payload = JSON.parse(normalizeNewlines(result.stdout).trim())
   } catch {
-    return { status: 'FAIL', detail: 'Docker version probe did not return the required JSON contract' }
+    return {
+      status: 'FAIL',
+      detail: 'Docker version probe did not return the required JSON contract',
+      capability: { clientVersion: null, serverVersion: null },
+    }
   }
   const clientVersion = String(payload?.Client?.Version || '').trim()
   const serverVersion = String(payload?.Server?.Version || '').trim()
-  if (!clientVersion) return { status: 'BLOCKED', detail: 'Docker client identity is unavailable' }
-  if (!serverVersion) return { status: 'BLOCKED', detail: `Docker client ${clientVersion} is present but the daemon/server is unavailable` }
-  return { status: 'PASS', detail: `Docker client ${clientVersion}; server ${serverVersion}` }
+  if (!clientVersion) {
+    return {
+      status: 'BLOCKED',
+      detail: 'Docker client identity is unavailable',
+      capability: { clientVersion: null, serverVersion: null },
+    }
+  }
+  if (!serverVersion) {
+    return {
+      status: 'BLOCKED',
+      detail: `Docker client ${clientVersion} is present but the daemon/server is unavailable`,
+      capability: { clientVersion, serverVersion: null },
+    }
+  }
+  return {
+    status: 'PASS',
+    detail: `Docker client ${clientVersion}; server ${serverVersion}`,
+    capability: { clientVersion, serverVersion },
+  }
 }
 
 function runDockerDaemonCheck(step) {
@@ -206,7 +610,7 @@ function runDockerDaemonCheck(step) {
     cwd: step.cwd,
     timeoutMs: step.timeoutMs,
   })
-  return classifyDockerVersionResult(result)
+  return { ...classifyDockerVersionResult(result), ...spawnEvidence(result) }
 }
 
 function canonicalAuthorityDigest(entries) {
@@ -771,15 +1175,25 @@ function validateBrowsersPath(value, platform = process.platform) {
 
 function runBrowserCheck(step) {
   const browsersPathContract = validateBrowsersPath(process.env.PLAYWRIGHT_BROWSERS_PATH)
-  if (browsersPathContract.status !== 'PASS') return browsersPathContract
+  if (browsersPathContract.status !== 'PASS') {
+    return { ...browsersPathContract, capability: { executableVerified: false } }
+  }
   const explicitPath = process.env.PLAYWRIGHT_CHROMIUM_PATH?.trim()
-  if (explicitPath) return validateBrowserExecutable(explicitPath)
+  if (explicitPath) {
+    const outcome = validateBrowserExecutable(explicitPath)
+    return { ...outcome, capability: { executableVerified: outcome.status === 'PASS' } }
+  }
   try {
     const requireFromFrontend = createRequire(path.join(step.frontend, 'package.json'))
     const { chromium } = requireFromFrontend('playwright')
-    return validateBrowserExecutable(chromium.executablePath())
+    const outcome = validateBrowserExecutable(chromium.executablePath())
+    return { ...outcome, capability: { executableVerified: outcome.status === 'PASS' } }
   } catch {
-    return { status: 'BLOCKED', detail: 'Playwright-managed Chromium is not installed or accessible' }
+    return {
+      status: 'BLOCKED',
+      detail: 'Playwright-managed Chromium is not installed or accessible',
+      capability: { executableVerified: false },
+    }
   }
 }
 
@@ -800,6 +1214,7 @@ function runPreflight(step) {
     cwd: step.cwd,
     timeoutMs: step.timeoutMs,
   })
+  const evidence = spawnEvidence(result)
   const processStatus = classifySpawnResult(result)
   if (processStatus !== 'PASS') {
     return {
@@ -807,13 +1222,14 @@ function runPreflight(step) {
       detail: result.error
         ? normalizeNewlines(result.error.message).trim()
         : `preflight process exited ${result.status}`,
+      ...evidence,
     }
   }
   try {
     const report = JSON.parse(normalizeNewlines(result.stdout))
-    return classifyPreflightReport(report, step.offlineBase)
+    return { ...classifyPreflightReport(report, step.offlineBase), ...evidence }
   } catch {
-    return { status: 'FAIL', detail: 'preflight did not return valid JSON' }
+    return { status: 'FAIL', detail: 'preflight did not return valid JSON', ...evidence }
   }
 }
 
@@ -963,28 +1379,51 @@ function runNodeRuntimeCheck(step) {
     const match = /^v?(\d+)(?:\.\d+(?:\.\d+)?)?$/.exec(configured)
     configuredMajor = match ? Number(match[1]) : NaN
   } catch {
-    return { status: 'FAIL', detail: 'missing root .nvmrc runtime contract' }
+    return {
+      status: 'FAIL',
+      detail: 'missing root .nvmrc runtime contract',
+      capability: { version: process.versions.node },
+    }
   }
   if (configuredMajor !== REQUIRED_NODE_MAJOR) {
-    return { status: 'FAIL', detail: `.nvmrc must pin Node ${REQUIRED_NODE_MAJOR}.x` }
+    return {
+      status: 'FAIL',
+      detail: `.nvmrc must pin Node ${REQUIRED_NODE_MAJOR}.x`,
+      capability: { version: process.versions.node },
+    }
   }
   return isSupportedLocalReleaseNodeVersion(process.versions.node)
-    ? { status: 'PASS', detail: `Node ${process.versions.node} satisfies local release >=${MINIMUM_LOCAL_RELEASE_NODE_VERSION} <23.0.0` }
+    ? {
+        status: 'PASS',
+        detail: `Node ${process.versions.node} satisfies local release >=${MINIMUM_LOCAL_RELEASE_NODE_VERSION} <23.0.0`,
+        capability: { version: process.versions.node },
+      }
     : {
         status: 'BLOCKED',
         detail: `local release requires Node >=${MINIMUM_LOCAL_RELEASE_NODE_VERSION} <23.0.0; current runtime is ${process.versions.node}`,
+        capability: { version: process.versions.node },
       }
 }
 
 function runNpmRuntimeCheck(step) {
   if (!step.npmCli || !fs.existsSync(step.npmCli) || !fs.existsSync(step.npmLauncher)) {
-    return { status: 'BLOCKED', detail: 'npm-cli.js is not installed beside the selected Node runtime' }
+    return {
+      status: 'BLOCKED',
+      detail: 'npm-cli.js is not installed beside the selected Node runtime',
+      capability: { version: null },
+    }
   }
   const result = spawnCaptured(step.nodeExecutable, [step.npmCli, '--version'])
   const status = classifySpawnResult(result)
+  const version = status === 'PASS' ? normalizeNewlines(result.stdout).trim() : null
   return status === 'PASS'
-    ? { status: 'PASS' }
-    : { status, detail: result.error ? normalizeNewlines(result.error.message).trim() : `npm CLI exited ${result.status}` }
+    ? { status: 'PASS', capability: { version }, ...spawnEvidence(result) }
+    : {
+        status,
+        detail: result.error ? normalizeNewlines(result.error.message).trim() : `npm CLI exited ${result.status}`,
+        capability: { version },
+        ...spawnEvidence(result),
+      }
 }
 
 function runNpmDependencyIntegrity(step) {
@@ -1018,22 +1457,38 @@ function runNpmDependencyIntegrity(step) {
       }
 }
 
-function spawnCommand(step) {
+function spawnCommand(step, { returnCapturedText = false } = {}) {
   const started = Date.now()
   const result = spawnSync(step.command, step.args, {
     cwd: step.cwd,
     env: step.env || createReleaseEnvironment(),
-    stdio: 'inherit',
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: 'pipe',
     shell: false,
     windowsHide: true,
     timeout: step.timeoutMs,
   })
+  const stdout = result.stdout == null ? '' : String(result.stdout)
+  const stderr = result.stderr == null ? '' : String(result.stderr)
+  if (stdout) process.stdout.write(stdout)
+  if (stderr) process.stderr.write(stderr)
   const status = classifySpawnResult(result)
   let detail
   if (result.error) detail = normalizeNewlines(result.error.message).trim()
   else if (result.signal) detail = `terminated by ${result.signal}`
   else if (status !== 'PASS') detail = `exit ${result.status}`
-  return { status, detail, durationMs: Date.now() - started }
+  const outcome = {
+    status,
+    detail,
+    durationMs: Date.now() - started,
+    ...spawnEvidence(result),
+  }
+  if (returnCapturedText) {
+    outcome.capturedStdout = stdout
+    outcome.capturedStderr = stderr
+  }
+  return outcome
 }
 
 function runGitDiffCheck(step, initial) {
@@ -1048,15 +1503,90 @@ function runGitDiffCheck(step, initial) {
     args,
     cwd: step.cwd,
     timeoutMs: COMMAND_TIMEOUT_MS,
-  }))
+  }, { returnCapturedText: true }))
   const status = overallExitCode(outcomes) === 0
     ? 'PASS'
     : outcomes.some((outcome) => outcome.status === 'FAIL') ? 'FAIL' : 'BLOCKED'
+  const firstNonPass = outcomes.find((outcome) => outcome.status !== 'PASS')
   return {
     status,
-    detail: outcomes.find((outcome) => outcome.status !== 'PASS')?.detail,
+    detail: firstNonPass?.detail,
     durationMs: outcomes.reduce((total, outcome) => total + (outcome.durationMs || 0), 0),
+    exitCode: firstNonPass?.exitCode ?? 0,
+    stdoutSha256: sha256Hex(outcomes.map((outcome) => outcome.capturedStdout).join('')),
+    stderrSha256: sha256Hex(outcomes.map((outcome) => outcome.capturedStderr).join('')),
   }
+}
+
+function readReceiptRepositorySnapshot(cwd) {
+  const state = readGitState(cwd)
+  if (state.status !== 'PASS') throw new Error(state.detail || 'cannot read repository state for receipt')
+  const read = (args, label) => {
+    const result = spawnCaptured('git', args, { cwd, maxBuffer: 32 * 1024 * 1024 })
+    if (classifySpawnResult(result) !== 'PASS') throw new Error(`cannot read ${label} for receipt`)
+    return normalizeNewlines(result.stdout).trim()
+  }
+  const headTreeSha = read(['show', '-s', '--format=%T', state.head], 'HEAD tree').toLowerCase()
+  const commitsText = read(['rev-list', '--reverse', '--topo-order', `${state.base}..${state.head}`], 'commit list')
+  const commits = commitsText ? commitsText.split('\n').map((commit) => commit.toLowerCase()) : []
+  const repository = {
+    baseSha: state.base,
+    headSha: state.head,
+    headTreeSha,
+    commits,
+  }
+  validateReceiptRepository(repository)
+  return repository
+}
+
+function receiptResultItems(results) {
+  return results.map((result) => ({
+    id: result.id,
+    status: RECEIPT_STATUSES.includes(result.status) ? result.status : 'UNVERIFIED',
+    exitCode: Number.isInteger(result.exitCode) ? result.exitCode : null,
+    durationMs: Number.isInteger(result.durationMs) && result.durationMs >= 0 ? result.durationMs : 0,
+    stdoutSha256: SHA256_PATTERN.test(result.stdoutSha256 || '') ? result.stdoutSha256 : EMPTY_SHA256,
+    stderrSha256: SHA256_PATTERN.test(result.stderrSha256 || '') ? result.stderrSha256 : EMPTY_SHA256,
+  }))
+}
+
+function safeCapabilityVersion(value) {
+  return typeof value === 'string' && /^[0-9A-Za-z.+_-]{1,64}$/.test(value) ? value : null
+}
+
+function buildReceiptCapabilities(results) {
+  const byId = new Map(results.map((result) => [result.id, result]))
+  const read = (id) => byId.get(id) || { status: 'UNVERIFIED' }
+  const node = read(RECEIPT_CAPABILITY_ITEMS.node)
+  const npm = read(RECEIPT_CAPABILITY_ITEMS.npm)
+  const browser = read(RECEIPT_CAPABILITY_ITEMS.browser)
+  const docker = read(RECEIPT_CAPABILITY_ITEMS.docker)
+  return {
+    node: {
+      status: node.status,
+      version: safeCapabilityVersion(node.capability?.version || process.versions.node),
+    },
+    npm: {
+      status: npm.status,
+      version: safeCapabilityVersion(npm.capability?.version),
+    },
+    browser: {
+      status: browser.status,
+      executableVerified: browser.status === 'PASS' && browser.capability?.executableVerified === true,
+    },
+    docker: {
+      status: docker.status,
+      clientVersion: safeCapabilityVersion(docker.capability?.clientVersion),
+      serverVersion: safeCapabilityVersion(docker.capability?.serverVersion),
+    },
+  }
+}
+
+function allowlistConfigDigest(owned, excluded) {
+  return sha256Hex(canonicalJson({
+    owned: [...owned].sort((left, right) => left.localeCompare(right, 'en')),
+    excluded: [...excluded].sort((left, right) => left.localeCompare(right, 'en')),
+  }))
 }
 
 function runSecretScan(step, initial) {
@@ -1066,17 +1596,23 @@ function runSecretScan(step, initial) {
   const result = spawnSync(step.command, [step.scanner, '--range', `${initial.base}..${initial.head}`], {
     cwd: step.cwd,
     env: step.env || createReleaseEnvironment(),
-    stdio: 'inherit',
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: 'pipe',
     shell: false,
     windowsHide: true,
     timeout: step.timeoutMs,
   })
+  const stdout = result.stdout == null ? '' : String(result.stdout)
+  const stderr = result.stderr == null ? '' : String(result.stderr)
+  if (stdout) process.stdout.write(stdout)
+  if (stderr) process.stderr.write(stderr)
   const status = classifySecretScanResult(result)
   let detail
   if (result.error) detail = normalizeNewlines(result.error.message).trim()
   else if (result.signal) detail = `terminated by ${result.signal}`
   else if (status !== 'PASS') detail = `secret scanner exit ${result.status}`
-  return { status, detail, durationMs: Date.now() - started }
+  return { status, detail, durationMs: Date.now() - started, ...spawnEvidence(result) }
 }
 
 function evaluateCriticalTests(tests, requiredSpecs = DEFAULT_E2E_SPECS) {
@@ -1156,6 +1692,7 @@ function executePlan(plan) {
 
   for (const step of plan) {
     process.stdout.write(`\n==> ${step.id}: ${step.label}\n`)
+    const started = Date.now()
     const unmet = (step.requires || []).filter((id) => byId.get(id)?.status !== 'PASS')
     let outcome
     if (hardStop) {
@@ -1176,7 +1713,15 @@ function executePlan(plan) {
       outcome = executeStep(step)
     }
 
-    const result = { id: step.id, label: step.label, ...outcome }
+    const result = {
+      id: step.id,
+      label: step.label,
+      ...outcome,
+      durationMs: outcome.durationMs ?? (Date.now() - started),
+      exitCode: outcome.exitCode ?? null,
+      stdoutSha256: outcome.stdoutSha256 || EMPTY_SHA256,
+      stderrSha256: outcome.stderrSha256 || EMPTY_SHA256,
+    }
     results.push(result)
     byId.set(step.id, result)
     process.stdout.write(`[${result.status}] ${step.id}${result.detail ? ` - ${result.detail}` : ''}\n`)
@@ -1197,7 +1742,11 @@ function assertOfflineBase(value) {
 }
 
 function parseArgs(argv) {
-  const options = { owned: [], excluded: [], offlineBase: null, help: false }
+  const options = { owned: [], excluded: [], offlineBase: null, receiptTarget: null, help: false }
+  const setReceiptTarget = (value) => {
+    if (options.receiptTarget !== null) throw new Error('--receipt may be provided only once')
+    options.receiptTarget = assertSafeScopeValue('--receipt', value)
+  }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--help' || arg === '-h') options.help = true
@@ -1207,6 +1756,8 @@ function parseArgs(argv) {
     else if (arg === '--excluded') options.excluded.push(assertSafeScopeValue('--excluded', argv[++index]))
     else if (arg.startsWith('--offline-base=')) options.offlineBase = assertOfflineBase(arg.slice(15))
     else if (arg === '--offline-base') options.offlineBase = assertOfflineBase(argv[++index])
+    else if (arg.startsWith('--receipt=')) setReceiptTarget(arg.slice(10))
+    else if (arg === '--receipt') setReceiptTarget(argv[++index])
     else throw new Error(`unknown argument: ${arg}`)
   }
   return options
@@ -1215,10 +1766,11 @@ function parseArgs(argv) {
 function printUsage(stream = process.stdout) {
   stream.write([
     'Usage:',
-    '  node scripts/local-release-gate.cjs [--offline-base=<full-sha>] --owned=<path/glob> [...] --excluded=<path/glob> [...]',
+    '  node scripts/local-release-gate.cjs [--offline-base=<full-sha>] [--receipt=<absolute-outside-repo-path>] --owned=<path/glob> [...] --excluded=<path/glob> [...]',
     '',
     'The gate is offline and fail-closed. Missing dependencies, Chromium, or Docker daemon are BLOCKED (exit 2).',
     'Test/build failures are FAIL (exit 1). All PASS returns exit 0.',
+    'When --receipt is provided, one canonical JSON receipt is atomically created without overwrite.',
     '',
   ].join('\n'))
 }
@@ -1240,6 +1792,8 @@ function printSummary(results) {
 
 function main(argv = process.argv.slice(2)) {
   let options
+  let plan
+  let receiptContext
   try {
     options = parseArgs(argv)
     if (options.help) {
@@ -1249,21 +1803,63 @@ function main(argv = process.argv.slice(2)) {
     if (!options.owned.length || !options.excluded.length) {
       throw new Error('both --owned and --excluded are required by the local ownership contract')
     }
+    plan = buildPlan({
+      root: ROOT,
+      offlineBase: options.offlineBase,
+      owned: options.owned,
+      excluded: options.excluded,
+    })
+    if (options.receiptTarget) {
+      receiptContext = {
+        target: validateReceiptTarget(options.receiptTarget, { repositoryRoot: ROOT }),
+        repository: readReceiptRepositorySnapshot(ROOT),
+        gateToolSha256: sha256Hex(fs.readFileSync(__filename)),
+        allowlistConfigSha256: allowlistConfigDigest(options.owned, options.excluded),
+        deliveryId: crypto.randomUUID(),
+        nonce: crypto.randomBytes(32).toString('hex'),
+      }
+    }
   } catch (error) {
     process.stderr.write(`local-release-gate: ${normalizeNewlines(error.message).trim()}\n`)
     printUsage(process.stderr)
     return 2
   }
 
-  const plan = buildPlan({
-    root: ROOT,
-    offlineBase: options.offlineBase,
-    owned: options.owned,
-    excluded: options.excluded,
-  })
   const results = executePlan(plan)
   printSummary(results)
-  return overallExitCode(results)
+  const gateExitCode = overallExitCode(results)
+  if (receiptContext) {
+    try {
+      const finalRepository = readReceiptRepositorySnapshot(ROOT)
+      if (canonicalJson(finalRepository) !== canonicalJson(receiptContext.repository)) {
+        throw new Error('repository base/head/tree/commit list changed before receipt publication')
+      }
+      const finalToolSha256 = sha256Hex(fs.readFileSync(__filename))
+      if (finalToolSha256 !== receiptContext.gateToolSha256) {
+        throw new Error('gate tool SHA-256 changed before receipt publication')
+      }
+      const items = receiptResultItems(results)
+      const receipt = buildCanonicalGateReceipt({
+        repository: receiptContext.repository,
+        gateToolSha256: receiptContext.gateToolSha256,
+        allowlistConfigSha256: receiptContext.allowlistConfigSha256,
+        deliveryId: receiptContext.deliveryId,
+        nonce: receiptContext.nonce,
+        gateExitCode,
+        planItemIds: plan.map((step) => step.id),
+        results: items,
+        capabilities: buildReceiptCapabilities(results),
+      })
+      writeCanonicalReceiptAtomic(receiptContext.target, receipt, { repositoryRoot: ROOT })
+      process.stdout.write(
+        `  RECEIPT deliveryId=${receipt.deliveryId} rootSha256=${receipt.receiptRootSha256} admissible=${receipt.admissible}\n`,
+      )
+    } catch (error) {
+      process.stderr.write(`local-release-gate receipt: ${normalizeNewlines(error.message).trim()}\n`)
+      return 1
+    }
+  }
+  return gateExitCode
 }
 
 if (require.main === module) process.exitCode = main()
@@ -1272,9 +1868,12 @@ module.exports = {
   default: LocalReleasePlaywrightReporter,
   DEFAULT_E2E_SPECS,
   MINIMUM_LOCAL_RELEASE_NODE_VERSION,
+  RECEIPT_SCHEMA_VERSION,
   REQUIRED_PREFLIGHT_CHECKS,
   REQUIRED_NODE_MAJOR,
+  buildCanonicalGateReceipt,
   buildPlan,
+  canonicalJson,
   canonicalAuthorityDigest,
   classifyDockerVersionResult,
   classifyPreflightReport,
@@ -1294,6 +1893,9 @@ module.exports = {
   runCommittedScope,
   runDockerDaemonCheck,
   runE2eSpecContract,
+  validateReceiptTarget,
   validateBrowserExecutable,
   validateBrowsersPath,
+  verifyCanonicalGateReceipt,
+  writeCanonicalReceiptAtomic,
 }

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -13,9 +14,12 @@ const GATE = path.join(__dirname, 'local-release-gate.cjs')
 const {
   DEFAULT_E2E_SPECS,
   MINIMUM_LOCAL_RELEASE_NODE_VERSION,
+  RECEIPT_SCHEMA_VERSION,
   REQUIRED_PREFLIGHT_CHECKS,
   REQUIRED_NODE_MAJOR,
+  buildCanonicalGateReceipt,
   buildPlan,
+  canonicalJson,
   canonicalAuthorityDigest,
   classifyDockerVersionResult,
   classifyDependencyCheck,
@@ -33,8 +37,11 @@ const {
   runCommittedScope,
   runDockerDaemonCheck,
   runE2eSpecContract,
+  validateReceiptTarget,
   validateBrowserExecutable,
   validateBrowsersPath,
+  verifyCanonicalGateReceipt,
+  writeCanonicalReceiptAtomic,
 } = require(GATE)
 
 function test(name, fn) {
@@ -46,6 +53,230 @@ function test(name, fn) {
     process.exitCode = 1
   }
 }
+
+const EMPTY_SHA256 = crypto.createHash('sha256').update('').digest('hex')
+const RECEIPT_BASE_SHA = '1'.repeat(40)
+const RECEIPT_HEAD_SHA = '2'.repeat(40)
+const RECEIPT_TREE_SHA = '3'.repeat(40)
+const RECEIPT_TOOL_SHA256 = '4'.repeat(64)
+const RECEIPT_ALLOWLIST_SHA256 = '5'.repeat(64)
+const RECEIPT_NONCE = '6'.repeat(64)
+const RECEIPT_ITEM_IDS = Object.freeze([
+  'runtime:node',
+  'runtime:npm',
+  'e2e:browser',
+  'runtime:docker-daemon',
+])
+
+function receiptInput(overrides = {}) {
+  const input = {
+    repository: {
+      baseSha: RECEIPT_BASE_SHA,
+      headSha: RECEIPT_HEAD_SHA,
+      headTreeSha: RECEIPT_TREE_SHA,
+      commits: [RECEIPT_HEAD_SHA],
+    },
+    gateToolSha256: RECEIPT_TOOL_SHA256,
+    allowlistConfigSha256: RECEIPT_ALLOWLIST_SHA256,
+    deliveryId: '11111111-1111-4111-8111-111111111111',
+    nonce: RECEIPT_NONCE,
+    gateExitCode: 0,
+    planItemIds: [...RECEIPT_ITEM_IDS],
+    results: [
+      {
+        id: 'runtime:node',
+        status: 'PASS',
+        exitCode: 0,
+        durationMs: 11,
+        stdoutSha256: EMPTY_SHA256,
+        stderrSha256: EMPTY_SHA256,
+      },
+      {
+        id: 'runtime:npm',
+        status: 'PASS',
+        exitCode: 0,
+        durationMs: 12,
+        stdoutSha256: EMPTY_SHA256,
+        stderrSha256: EMPTY_SHA256,
+      },
+      {
+        id: 'e2e:browser',
+        status: 'PASS',
+        exitCode: null,
+        durationMs: 13,
+        stdoutSha256: EMPTY_SHA256,
+        stderrSha256: EMPTY_SHA256,
+      },
+      {
+        id: 'runtime:docker-daemon',
+        status: 'PASS',
+        exitCode: 0,
+        durationMs: 14,
+        stdoutSha256: EMPTY_SHA256,
+        stderrSha256: EMPTY_SHA256,
+      },
+    ],
+    capabilities: {
+      node: { status: 'PASS', version: '22.23.1' },
+      npm: { status: 'PASS', version: '10.9.2' },
+      browser: { status: 'PASS', executableVerified: true },
+      docker: { status: 'PASS', clientVersion: '29.5.2', serverVersion: '29.5.2' },
+    },
+  }
+  return { ...input, ...overrides }
+}
+
+function receiptExpectations(overrides = {}) {
+  return {
+    baseSha: RECEIPT_BASE_SHA,
+    headSha: RECEIPT_HEAD_SHA,
+    headTreeSha: RECEIPT_TREE_SHA,
+    commits: [RECEIPT_HEAD_SHA],
+    gateToolSha256: RECEIPT_TOOL_SHA256,
+    allowlistConfigSha256: RECEIPT_ALLOWLIST_SHA256,
+    itemIds: [...RECEIPT_ITEM_IDS],
+    ...overrides,
+  }
+}
+
+function resealReceipt(receipt) {
+  const copy = structuredClone(receipt)
+  delete copy.receiptRootSha256
+  copy.receiptRootSha256 = crypto.createHash('sha256').update(canonicalJson(copy)).digest('hex')
+  return copy
+}
+
+test('canonical gate receipt binds repository, tool, capabilities, item evidence, and admissibility', () => {
+  assert.equal(typeof buildCanonicalGateReceipt, 'function')
+  assert.equal(typeof verifyCanonicalGateReceipt, 'function')
+  const receipt = buildCanonicalGateReceipt(receiptInput())
+
+  assert.equal(receipt.schemaVersion, RECEIPT_SCHEMA_VERSION)
+  assert.deepEqual(receipt.repository, {
+    baseSha: RECEIPT_BASE_SHA,
+    headSha: RECEIPT_HEAD_SHA,
+    headTreeSha: RECEIPT_TREE_SHA,
+    commits: [RECEIPT_HEAD_SHA],
+  })
+  assert.equal(receipt.gate.toolSha256, RECEIPT_TOOL_SHA256)
+  assert.equal(receipt.gate.allowlistConfigSha256, RECEIPT_ALLOWLIST_SHA256)
+  assert.deepEqual(Object.keys(receipt.capabilities).sort(), ['browser', 'docker', 'node', 'npm'])
+  assert.equal(receipt.items.length, RECEIPT_ITEM_IDS.length)
+  assert(receipt.items.every((item) => Number.isInteger(item.durationMs) && item.durationMs >= 0))
+  assert(receipt.items.every((item) => /^[0-9a-f]{64}$/.test(item.stdoutSha256)))
+  assert(receipt.items.every((item) => /^[0-9a-f]{64}$/.test(item.stderrSha256)))
+  assert.equal(receipt.aggregateVerdict, 'PASS')
+  assert.equal(receipt.admissible, true)
+  assert.match(receipt.receiptRootSha256, /^[0-9a-f]{64}$/)
+  assert.doesNotThrow(() => verifyCanonicalGateReceipt(receipt, receiptExpectations()))
+  assert.equal(canonicalJson(receipt), canonicalJson(JSON.parse(canonicalJson(receipt))))
+})
+
+test('receipt verification rejects wrong repository SHA and gate-tool drift', () => {
+  const receipt = buildCanonicalGateReceipt(receiptInput())
+  assert.throws(
+    () => verifyCanonicalGateReceipt(receipt, receiptExpectations({ headSha: '7'.repeat(40) })),
+    /head/i,
+  )
+  assert.throws(
+    () => verifyCanonicalGateReceipt(receipt, receiptExpectations({ gateToolSha256: '8'.repeat(64) })),
+    /tool/i,
+  )
+})
+
+test('receipt verification rejects BLOCKED-as-PASS plus unknown, missing, and extra items', () => {
+  const blockedInput = receiptInput({
+    gateExitCode: 2,
+    results: receiptInput().results.map((result) => (
+      result.id === 'e2e:browser' ? { ...result, status: 'BLOCKED' } : result
+    )),
+    capabilities: {
+      ...receiptInput().capabilities,
+      browser: { status: 'BLOCKED', executableVerified: false },
+    },
+  })
+  const blocked = buildCanonicalGateReceipt(blockedInput)
+  assert.equal(blocked.aggregateVerdict, 'BLOCKED')
+  assert.equal(blocked.admissible, false)
+
+  const falsePass = resealReceipt({ ...blocked, aggregateVerdict: 'PASS', admissible: true })
+  assert.throws(() => verifyCanonicalGateReceipt(falsePass, receiptExpectations()), /admissible|aggregate/i)
+
+  const unknown = structuredClone(blocked)
+  unknown.items[2].status = 'UNKNOWN'
+  assert.throws(() => verifyCanonicalGateReceipt(resealReceipt(unknown), receiptExpectations()), /status/i)
+
+  const missing = structuredClone(blocked)
+  missing.items.pop()
+  assert.throws(() => verifyCanonicalGateReceipt(resealReceipt(missing), receiptExpectations()), /missing|item/i)
+
+  const extra = structuredClone(blocked)
+  extra.items.push({ ...extra.items[0], id: 'unexpected:item' })
+  assert.throws(() => verifyCanonicalGateReceipt(resealReceipt(extra), receiptExpectations()), /unknown|item/i)
+})
+
+test('receipt root digest detects stdout evidence tampering', () => {
+  const receipt = buildCanonicalGateReceipt(receiptInput())
+  receipt.items[0].stdoutSha256 = '9'.repeat(64)
+  assert.throws(() => verifyCanonicalGateReceipt(receipt, receiptExpectations()), /root|digest/i)
+})
+
+test('receipt serialization rejects raw secret, environment, argv, stdout, and stderr fields', () => {
+  const receipt = buildCanonicalGateReceipt(receiptInput())
+  for (const [key, value] of [
+    ['environment', { JWT_SECRET: 'must-not-persist' }],
+    ['argv', ['--token=must-not-persist']],
+    ['stdout', 'Bearer must-not-persist'],
+    ['stderr', 'password=must-not-persist'],
+  ]) {
+    const contaminated = structuredClone(receipt)
+    contaminated[key] = value
+    assert.throws(() => verifyCanonicalGateReceipt(resealReceipt(contaminated), receiptExpectations()), /forbidden|schema|secret/i)
+  }
+})
+
+test('receipt target is external, atomic, no-overwrite, and leaves no partial file on interruption', () => {
+  assert.equal(typeof validateReceiptTarget, 'function')
+  assert.equal(typeof writeCanonicalReceiptAtomic, 'function')
+  const repositoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-receipt-repo-'))
+  const externalRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-receipt-external-'))
+  try {
+    const receipt = buildCanonicalGateReceipt(receiptInput())
+    assert.throws(
+      () => validateReceiptTarget(path.join(repositoryRoot, 'receipt.json'), { repositoryRoot }),
+      /outside|repository/i,
+    )
+    assert.throws(
+      () => validateReceiptTarget('relative-receipt.json', { repositoryRoot }),
+      /absolute/i,
+    )
+
+    const target = path.join(externalRoot, 'receipt.json')
+    writeCanonicalReceiptAtomic(target, receipt, { repositoryRoot })
+    assert.equal(fs.readFileSync(target, 'utf8'), canonicalJson(receipt))
+    assert.throws(
+      () => writeCanonicalReceiptAtomic(target, receipt, { repositoryRoot }),
+      /exist|overwrite/i,
+    )
+
+    const interruptedTarget = path.join(externalRoot, 'interrupted.json')
+    assert.throws(
+      () => writeCanonicalReceiptAtomic(interruptedTarget, receipt, {
+        repositoryRoot,
+        beforePublish: () => { throw new Error('synthetic interruption') },
+      }),
+      /synthetic interruption/,
+    )
+    assert.equal(fs.existsSync(interruptedTarget), false)
+    assert.deepEqual(
+      fs.readdirSync(externalRoot).filter((name) => name.includes('interrupted') || name.includes('.partial-')),
+      [],
+    )
+  } finally {
+    fs.rmSync(repositoryRoot, { recursive: true, force: true })
+    fs.rmSync(externalRoot, { recursive: true, force: true })
+  }
+})
 
 test('LF and CRLF diagnostics normalize identically', () => {
   assert.equal(normalizeNewlines('alpha\r\nbeta\rgamma\n'), 'alpha\nbeta\ngamma\n')
