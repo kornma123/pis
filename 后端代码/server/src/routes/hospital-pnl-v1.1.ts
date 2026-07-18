@@ -100,11 +100,11 @@ router.get('/health', authenticateToken, requireCostRead, (req, res) => {
   try {
     const { serviceMonth } = req.query as any
     const fixedPoolRaw = Number((req.query as any).fixedPool)
-    const fixedPool = Number.isFinite(fixedPoolRaw) && fixedPoolRaw > 0 ? fixedPoolRaw : 0
+    const fixedPool = Number.isFinite(fixedPoolRaw) && fixedPoolRaw > 0 ? fixedPoolRaw : null
     const hospitals = buildHospitalCmByPartner(getDatabase(), { serviceMonth })
     const summaries = hospitals.map((h) => toAccountSummary(h))
     const health = buildPortfolioHealth(summaries, { fixedPool })
-    success(res, { ...health, serviceMonth: serviceMonth ?? null, shadowNote: shadowNoteFor(false), fixedPoolProvided: fixedPool > 0, hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION, caliberRatification: splitCaliberRatification() }, '组合体检（第 1 层·只看趋势）')
+    success(res, { ...health, serviceMonth: serviceMonth ?? null, shadowNote: shadowNoteFor(false), fixedPoolProvided: fixedPool != null, hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION, caliberRatification: splitCaliberRatification() }, '组合体检（第 1 层·只看趋势）')
   } catch (e: any) {
     error(res, e.message)
   }

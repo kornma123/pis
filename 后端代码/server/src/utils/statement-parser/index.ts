@@ -69,7 +69,7 @@ export interface ParseResult {
 // —— 工具 ——
 
 const norm = (s: unknown): string =>
-  (s == null ? '' : String(s)).normalize('NFKC').replace(/[\s　]+/g, '').trim()
+  (s == null ? '' : String(s)).normalize('NFKC').replace(/[\s\u3000]+/g, '').trim()
 
 const cellStr = (v: unknown): string => (v == null ? '' : String(v)).trim()
 

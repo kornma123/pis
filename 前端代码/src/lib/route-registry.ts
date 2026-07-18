@@ -48,11 +48,12 @@ import {
 //   （scripts/build-discipline/check-route-nav.cjs）强制「每条路由必须声明且分组，
 //   否则须 headless 带死线，否则红」——孤儿化在构造上不可能。
 //
-// ⚠️ Phase 1 边界（零行为变更）：
-//   - 本表**只登记状态 + 派生菜单**。permModule 是**声明**（供闸/后续影子断言），
-//     Phase 1 **不接管**访问判定——侧栏可见性仍由 permissions.ts 的
-//     getAccessiblePaths() 决定（与迁移前逐字节一致，快照测试锁死）。
-//   - 权限派生翻转（permissions.ts 改读本表）是 Phase 2、本次不做。
+// ⚠️ 当前边界：
+//   - active 菜单可见性仍由 permissions.ts 的 getAccessiblePaths() 决定；本表不直接
+//     读取 capabilities，也不扩大角色矩阵。
+//   - AppLayout 仅通过 isRoutePathAccessible() 让「已登记的 headless 子路由」继承
+//     同 permModule 且已获准的 active 父路由。未登记路径、不同模块和普通 active
+//     路由都不能靠路径前缀继承权限。
 //   - 孤儿的真正删页/退役/补入口是后续独立小 PR；本次只登记 headless/deprecated。
 //
 // 声明承重（防橡皮图章）：navGroup 决定页面出现在哪个菜单区、填错开发者自己第一个
@@ -113,6 +114,8 @@ export type RouteStatus =
 export interface RouteEntry {
   /** 路由路径（须与 App.tsx 的 <Route path> 一一对应）。 */
   path: string
+  /** 路由发布状态，决定是否进入菜单以及 headless/deprecated 的约束。 */
+  status: RouteStatus
   /** 侧栏文案（active 必填；headless/deprecated 无导航、可省）。 */
   label?: string
   /** 侧栏图标（active 必填）。 */
@@ -249,4 +252,34 @@ export function deriveSidebarMenu(allowedPaths: string[]): { main: MenuItem[]; s
 /** 所有 active 路由的路径（未登录时侧栏显示全部 active 项，与迁移前一致）。 */
 export function allActivePaths(): string[] {
   return ROUTE_REGISTRY.filter((e) => e.status === 'active').map((e) => e.path)
+}
+
+function normalizeRoutePath(path: string): string {
+  const withoutTrailingSlash = path.replace(/\/+$/, '')
+  return withoutTrailingSlash || '/'
+}
+
+/**
+ * 判断已登录用户能否进入当前应用路由。
+ *
+ * allowedPaths 仍是权限矩阵的唯一结果；注册表只补足有意 headless 的子路由：目标必须
+ * 精确登记，且只能继承路径祖先中「同一 permModule、已获准」的 active 父页。
+ * 这样 /equipment/types 可继承 /equipment，同时不会让 /equipment/private 或其他模块
+ * 因 startsWith 误获权限。
+ */
+export function isRoutePathAccessible(pathname: string, allowedPaths: readonly string[]): boolean {
+  const targetPath = normalizeRoutePath(pathname)
+  const allowed = new Set(allowedPaths.map(normalizeRoutePath))
+  if (allowed.has(targetPath)) return true
+
+  const target = ROUTE_REGISTRY.find((entry) => normalizeRoutePath(entry.path) === targetPath)
+  if (!target || target.status !== 'headless' || !target.permModule) return false
+
+  return ROUTE_REGISTRY.some((entry) => {
+    if (entry.status !== 'active' || entry.permModule !== target.permModule) return false
+    const parentPath = normalizeRoutePath(entry.path)
+    return parentPath !== '/'
+      && allowed.has(parentPath)
+      && targetPath.startsWith(`${parentPath}/`)
+  })
 }

@@ -76,25 +76,31 @@ router.post('/', requireRolesWrite, rejectUntrustedAuditActorFields, rejectInval
 })
 
 router.put('/:id', requireRolesWrite, rejectUntrustedAuditActorFields, rejectInvalidRoleCodeFields, requireRoleUpdateCeiling, (req, res) => {
+  let database: ReturnType<typeof getDatabase> | undefined
+  let transactionStarted = false
   try {
-    const database = getDatabase()
+    database = getDatabase()
     const { id } = req.params
     const { code, name, description, permissions, status } = req.body
     database.exec('BEGIN IMMEDIATE')
+    transactionStarted = true
     if (
       !requestActorHasCurrentPermission(database, req, 'roles', 'W')
       || roleMutationExceedsSecurityCeiling(database, req, 'update')
     ) {
       database.exec('ROLLBACK')
+      transactionStarted = false
       error(res, 'Forbidden: security administration requires admin', 'FORBIDDEN', 403); return
     }
     const role = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!role) {
       database.exec('ROLLBACK')
+      transactionStarted = false
       error(res, 'Role not found', 'NOT_FOUND', 404); return
     }
     if (role.code === 'admin') {
       database.exec('ROLLBACK')
+      transactionStarted = false
       error(res, 'Cannot modify system admin role', 'FORBIDDEN', 403); return
     }
     const fields: string[] = []; const params: any[] = []
@@ -103,6 +109,7 @@ router.put('/:id', requireRolesWrite, rejectUntrustedAuditActorFields, rejectInv
         const codeExists = database.prepare('SELECT 1 FROM roles WHERE code = ? AND id != ? AND is_deleted = 0').get(code, id)
         if (codeExists) {
           database.exec('ROLLBACK')
+          transactionStarted = false
           error(res, 'Role code already exists', 'RESOURCE_CONFLICT', 409); return
         }
       }
@@ -117,9 +124,10 @@ router.put('/:id', requireRolesWrite, rejectUntrustedAuditActorFields, rejectInv
       database.prepare(`UPDATE roles SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params)
     }
     database.exec('COMMIT')
+    transactionStarted = false
     success(res, { id }, 'Updated')
   } catch (err: any) {
-    try { getDatabase().exec('ROLLBACK') } catch { /* no active transaction */ }
+    if (database && transactionStarted) database.exec('ROLLBACK')
     error(res, err.message)
   }
 })

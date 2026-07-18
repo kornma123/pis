@@ -87,9 +87,9 @@ export function exportComparisonCsv(
   for (const r of rows) {
     const cells = [
       r.partnerName || r.partnerId,
-      r.cm,
-      r.cmRate,
-      r.fixedCoverageShare,
+      r.measurable ? r.cm : null,
+      r.measurable ? r.cmRate : null,
+      r.measurable ? r.fixedCoverageShare : null,
       r.detail?.caliber ?? '',
       r.detail?.state ?? '',
       r.measurable ? '可测量' : 'UNMEASURED（代送/会诊/外送·未测量）',

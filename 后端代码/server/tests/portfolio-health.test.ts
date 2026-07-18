@@ -24,9 +24,9 @@ import {
 } from '../src/utils/portfolio-health.js'
 
 // —— 三账户（真数据数量级）：ACC-D 顶梁柱（大额薄利·率最低），ACC-A 高率小额，ACC-C 最小 ——
-const ACC_D: AccountCmSummary = { partnerId: 'ACC-D', partnerName: '东安县医院', inScopeRevenue: 53848, avoidableCost: 16854, cm: 36994, cmRate: 0.687, measurable: true, sharedOccupancy: 500 }
-const ACC_A: AccountCmSummary = { partnerId: 'ACC-A', partnerName: '和睦家系', inScopeRevenue: 25986, avoidableCost: 3638, cm: 22348, cmRate: 0.86, measurable: true, sharedOccupancy: 300 }
-const ACC_C: AccountCmSummary = { partnerId: 'ACC-C', partnerName: '新城', inScopeRevenue: 5946, avoidableCost: 967, cm: 4979, cmRate: 0.8373, measurable: true, sharedOccupancy: 100 }
+const ACC_D: AccountCmSummary = { partnerId: 'ACC-D', partnerName: '东安县医院', inScopeRevenue: 53848, avoidableCost: 16854, cm: 36994, cmRate: 0.687, measurable: true, unmeasuredRevenue: 0, sharedOccupancy: 500 }
+const ACC_A: AccountCmSummary = { partnerId: 'ACC-A', partnerName: '和睦家系', inScopeRevenue: 25986, avoidableCost: 3638, cm: 22348, cmRate: 0.86, measurable: true, unmeasuredRevenue: 0, sharedOccupancy: 300 }
+const ACC_C: AccountCmSummary = { partnerId: 'ACC-C', partnerName: '新城', inScopeRevenue: 5946, avoidableCost: 967, cm: 4979, cmRate: 0.8373, measurable: true, unmeasuredRevenue: 0, sharedOccupancy: 100 }
 const ACCOUNTS = [ACC_D, ACC_A, ACC_C]
 
 // 产能上下文：固定池 40000 / 计划共享产能 1000 单位 → 回收费率 40/单位
@@ -103,11 +103,31 @@ describe('第 2 层 人看对照表：默认按绝对贡献降序·不按率', (
     expect(rows[0].trend).toEqual([30000, 33000, 36994])
     expect(rows[1].trend).toBeNull()
   })
+
+  it('D2：UNMEASURED 行的贡献、率、覆盖份额保持 unknown/null，并排在可测行之后', () => {
+    const unmeasured: AccountCmSummary = {
+      partnerId: 'ACC-U',
+      partnerName: '零病例医院',
+      inScopeRevenue: 0,
+      avoidableCost: 0,
+      cm: 0,
+      cmRate: 0,
+      measurable: false,
+    }
+    const rows = buildComparisonTable([unmeasured, ...ACCOUNTS])
+    expect(rows.at(-1)).toMatchObject({
+      partnerId: 'ACC-U',
+      measurable: false,
+      cm: null,
+      cmRate: null,
+      fixedCoverageShare: null,
+    })
+  })
 })
 
 describe('第 1 层 组合体检：覆盖倍数只看趋势 + 影子模式 + 复活双触发', () => {
   it('覆盖倍数 = ∑CM / 固定池·标 trendOnly·影子模式', () => {
-    const h = buildPortfolioHealth(ACCOUNTS, { fixedPool: 40000 })
+    const h = buildPortfolioHealth(ACCOUNTS, { fixedPool: 40000, unmeasuredRevenueScopeAndDenominatorVerified: true })
     expect(h.totalCm).toBe(64321) // 36994+22348+4979
     expect(h.coverageMultiple).toBe(1.608) // 64321/40000
     expect(h.coverageMultipleTrendOnly).toBe(true)
@@ -127,10 +147,134 @@ describe('第 1 层 组合体检：覆盖倍数只看趋势 + 影子模式 + 复
   it('复活双触发②：UNMEASURED 收入占比越线 → 重开自动化问题（表没变大但看不见的钱变多了）', () => {
     // 加一个 UNMEASURED 账户（代送/会诊/外送·measurable=false·不进表行数但占收入）
     const unmeasured: AccountCmSummary = { partnerId: 'ACC-U', inScopeRevenue: 0, avoidableCost: 0, cm: 0, cmRate: 0, measurable: false, unmeasuredRevenue: 200000 }
-    const h = buildPortfolioHealth([...ACCOUNTS, unmeasured], { fixedPool: 40000 })
+    const h = buildPortfolioHealth([...ACCOUNTS, unmeasured], { fixedPool: 40000, unmeasuredRevenueScopeAndDenominatorVerified: true })
     expect(h.measurableAccountCount).toBe(3) // UNMEASURED 不增表行数
     expect(h.unmeasuredRevenueShare).toBeGreaterThan(0.3)
     expect(h.reopenAutomationQuestion).toBe(true) // UNMEASURED 占比越线触发
+  })
+
+  it('D2：缺固定池时固定池与覆盖倍数都保持 unknown/null，不伪造 0', () => {
+    const h = buildPortfolioHealth(ACCOUNTS, {})
+    expect(h.fixedPool).toBeNull()
+    expect(h.coverageMultiple).toBeNull()
+  })
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'D2：无效固定池 %s 不可作为分母，固定池与覆盖倍数均为 null',
+    (fixedPool) => {
+      const h = buildPortfolioHealth(ACCOUNTS, { fixedPool })
+      expect(h.fixedPool).toBeNull()
+      expect(h.coverageMultiple).toBeNull()
+    },
+  )
+
+  it.each([Number.MIN_VALUE, 1e-308])(
+    'D2：极小正固定池 %s 使覆盖倍数溢出时，保留池值但倍数为 null',
+    (fixedPool) => {
+      const h = buildPortfolioHealth(ACCOUNTS, { fixedPool })
+      expect(h.fixedPool).toBe(fixedPool)
+      expect(h.coverageMultiple).toBeNull()
+    },
+  )
+
+  it('D2：未证明全量医院范围与收入分母时，未测占比及其复活判断保持 unknown/null', () => {
+    const unmeasured: AccountCmSummary = {
+      partnerId: 'ACC-U',
+      inScopeRevenue: 0,
+      avoidableCost: 0,
+      cm: 0,
+      cmRate: 0,
+      measurable: false,
+      unmeasuredRevenue: 200000,
+    }
+    const h = buildPortfolioHealth([...ACCOUNTS, unmeasured], { fixedPool: 40000 })
+    expect(h.unmeasuredRevenueShare).toBeNull()
+    expect(h.reopenAutomationQuestion).toBeNull()
+  })
+
+  it('D2：占比未知不会抹掉已知的账户数越线触发（三值 OR）', () => {
+    const overCap = Array.from({ length: 31 }, (_, index): AccountCmSummary => ({
+      ...ACC_D,
+      partnerId: `ACC-${index + 1}`,
+    }))
+    const h = buildPortfolioHealth(overCap, { fixedPool: 40000 })
+    expect(h.unmeasuredRevenueShare).toBeNull()
+    expect(h.reopenAutomationQuestion).toBe(true)
+  })
+
+  it('D2：分母经显式验证后沿用原公式/阈值；真实零仍是可展示的 0', () => {
+    const knownZero = buildPortfolioHealth(ACCOUNTS, {
+      fixedPool: 40000,
+      unmeasuredRevenueScopeAndDenominatorVerified: true,
+    })
+    expect(knownZero.unmeasuredRevenueShare).toBe(0)
+    expect(knownZero.reopenAutomationQuestion).toBe(false)
+
+    const unmeasured: AccountCmSummary = {
+      partnerId: 'ACC-U',
+      inScopeRevenue: 0,
+      avoidableCost: 0,
+      cm: 0,
+      cmRate: 0,
+      measurable: false,
+      unmeasuredRevenue: 200000,
+    }
+    const knownHigh = buildPortfolioHealth([...ACCOUNTS, unmeasured], {
+      fixedPool: 40000,
+      unmeasuredRevenueScopeAndDenominatorVerified: true,
+    })
+    expect(knownHigh.unmeasuredRevenueShare).toBe(0.6998)
+    expect(knownHigh.reopenAutomationQuestion).toBe(true)
+  })
+
+  it('D2：PARTIAL 账户的显式未测金额仍进入原公式，不因 measurable=true 被漏掉', () => {
+    const partial = { ...ACC_D, unmeasuredRevenue: 50000 }
+    const h = buildPortfolioHealth([partial, ACC_A, ACC_C], {
+      fixedPool: 40000,
+      unmeasuredRevenueScopeAndDenominatorVerified: true,
+    })
+    expect(h.unmeasuredRevenueShare).toBe(0.3682)
+    expect(h.reopenAutomationQuestion).toBe(true)
+  })
+
+  it('D2：即便调用方声称分母已验证，缺金额或负金额仍 fail-closed 为 unknown/null', () => {
+    const incomplete: AccountCmSummary = {
+      partnerId: 'ACC-U', inScopeRevenue: 0, avoidableCost: 0, cm: 0, cmRate: 0, measurable: false,
+    }
+    const negative: AccountCmSummary = { ...incomplete, unmeasuredRevenue: -1 }
+    expect(buildPortfolioHealth([...ACCOUNTS, incomplete], {
+      fixedPool: 40000,
+      unmeasuredRevenueScopeAndDenominatorVerified: true,
+    }).unmeasuredRevenueShare).toBeNull()
+    expect(buildPortfolioHealth([...ACCOUNTS, negative], {
+      fixedPool: 40000,
+      unmeasuredRevenueScopeAndDenominatorVerified: true,
+    }).unmeasuredRevenueShare).toBeNull()
+  })
+
+  it('D2：已验证范围但分母为 0 或金额非有限数时，占比仍不可算', () => {
+    const zero: AccountCmSummary = {
+      partnerId: 'ACC-Z', inScopeRevenue: 0, avoidableCost: 0, cm: 0, cmRate: 0, measurable: true, unmeasuredRevenue: 0,
+    }
+    const infinite: AccountCmSummary = { ...zero, partnerId: 'ACC-INF', unmeasuredRevenue: Number.POSITIVE_INFINITY }
+    expect(buildPortfolioHealth([zero], {
+      fixedPool: 40000,
+      unmeasuredRevenueScopeAndDenominatorVerified: true,
+    }).unmeasuredRevenueShare).toBeNull()
+    expect(buildPortfolioHealth([infinite], {
+      fixedPool: 40000,
+      unmeasuredRevenueScopeAndDenominatorVerified: true,
+    }).unmeasuredRevenueShare).toBeNull()
+  })
+
+  it('D2：已测收入为负数或非有限数时，即使已声明完整也不可算占比', () => {
+    for (const inScopeRevenue of [-1, Number.POSITIVE_INFINITY]) {
+      const invalid = { ...ACC_D, inScopeRevenue }
+      expect(buildPortfolioHealth([invalid, ACC_A, ACC_C], {
+        fixedPool: 40000,
+        unmeasuredRevenueScopeAndDenominatorVerified: true,
+      }).unmeasuredRevenueShare).toBeNull()
+    }
   })
 
   it('产能利用率：未实测 → null（第 3 层门控·不臆造）', () => {
@@ -141,12 +285,16 @@ describe('第 1 层 组合体检：覆盖倍数只看趋势 + 影子模式 + 复
 
 describe('toAccountSummary：从 HospitalCm 派生（avoidableCost = 桶A+桶B）', () => {
   it('派生摘要', () => {
-    const s = toAccountSummary(
-      { partnerId: 'ACC-A', partnerName: '和睦家系', hospitalCm: 116.64, labRevenueInRate: 200, cmRate: 0.5832, bucketA: 45, bucketB: 38.36, revenueCaseCount: 1 } as any,
-    )
+    const hospital = { partnerId: 'ACC-A', partnerName: '和睦家系', hospitalCm: 116.64, labRevenueInRate: 200, cmRate: 0.5832, bucketA: 45, bucketB: 38.36, revenueCaseCount: 1, nonIhcRevenue: 12 } as any
+    const s = toAccountSummary(hospital)
     expect(s.cm).toBe(116.64)
     expect(s.avoidableCost).toBe(83.36) // 45+38.36
     expect(s.measurable).toBe(true)
+    expect(s.unmeasuredRevenue).toBeUndefined() // 非 IHC 收入不在本层擅自晋升为未测分子
+    expect(toAccountSummary(hospital, {
+      measurable: false,
+      unmeasuredRevenue: 12,
+    }).unmeasuredRevenue).toBe(12)
   })
 })
 

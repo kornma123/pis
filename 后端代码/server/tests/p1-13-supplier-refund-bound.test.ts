@@ -37,7 +37,7 @@ beforeAll(async () => {
     VALUES ('MAT-SR13', 'C-SR13', '退货试剂', '瓶', 'CAT', 10, 1, 0)`).run()
   db.prepare(`INSERT INTO inventory (id, material_id, stock) VALUES ('INV-SR13', 'MAT-SR13', 100)`).run()
   db.prepare(`INSERT INTO batches (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, status)
-    VALUES ('B-SR13', 'MAT-SR13', 'BN-SR13', 50, 50, 'IN-SR13', 10, 1)`).run()
+    VALUES ('B-SR13', 'MAT-SR13', 'BN-SR13', 100, 100, 'IN-SR13', 10, 1)`).run()
 })
 
 describe('P1-13 退款上界勾稽', () => {

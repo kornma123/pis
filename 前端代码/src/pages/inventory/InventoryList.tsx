@@ -20,7 +20,8 @@ export default function InventoryList() {
         </div>
         <button
           onClick={() => page.setOutboundModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-all duration-150 ease text-sm font-medium shadow-sm"
+          disabled={page.loading || Boolean(page.error)}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-150 ease text-sm font-medium shadow-sm"
         >
           <Upload className="w-4 h-4" />
           出库登记
@@ -30,6 +31,7 @@ export default function InventoryList() {
       <InventoryTable
         data={page.data}
         loading={page.loading}
+        error={page.error}
         total={page.total}
         page={page.page}
         pageSize={page.pageSize}
@@ -60,6 +62,7 @@ export default function InventoryList() {
         onPageSizeChange={page.setPageSize}
         onBatchOutbound={page.openBatchOutbound}
         onBatchScrap={() => page.setBatchScrapModalOpen(true)}
+        onRetry={page.refresh}
       />
 
       <OutboundModal

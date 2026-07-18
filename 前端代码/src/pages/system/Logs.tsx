@@ -1,5 +1,5 @@
 import { Download } from 'lucide-react'
-import { useLogsPage, LOG_TYPES, MODULES, USERS } from './hooks/useLogsPage'
+import { useLogsPage, LOG_TYPES, MODULES } from './hooks/useLogsPage'
 import { LogsTable } from './components/LogsTable'
 import { LogDetailModal } from './components/LogDetailModal'
 import { LogExportModal } from './components/LogExportModal'
@@ -15,7 +15,7 @@ export default function Logs() {
           <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight leading-tight">操作日志</h1>
           <p className="text-sm text-gray-500 mt-1">查看系统操作记录，追踪用户行为</p>
         </div>
-        <button onClick={() => page.setShowExport(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm font-medium shadow-sm transition-all">
+        <button onClick={() => page.setShowExport(true)} className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white border border-blue-600 rounded-md hover:bg-blue-700 text-sm font-medium shadow-sm transition-all">
           <Download className="w-4 h-4" /> 导出日志
         </button>
       </div>
@@ -23,20 +23,20 @@ export default function Logs() {
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-2xl font-semibold text-gray-900">{page.stats.todayOps}</div>
-          <div className="text-sm text-gray-500 mt-1">今日操作</div>
+          <div className="text-2xl font-semibold text-gray-900">{page.error ? '—' : page.stats.pageOps}</div>
+          <div className="text-sm text-gray-500 mt-1">本页操作</div>
         </div>
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-2xl font-semibold text-blue-500">{page.stats.loginCount}</div>
-          <div className="text-sm text-gray-500 mt-1">登录次数</div>
+          <div className="text-2xl font-semibold text-blue-500">{page.error ? '—' : page.stats.loginCount}</div>
+          <div className="text-sm text-gray-500 mt-1">本页登录</div>
         </div>
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-2xl font-semibold text-yellow-600">{page.stats.dataChanges}</div>
-          <div className="text-sm text-gray-500 mt-1">数据变更</div>
+          <div className="text-2xl font-semibold text-yellow-600">{page.error ? '—' : page.stats.dataChanges}</div>
+          <div className="text-sm text-gray-500 mt-1">本页数据变更</div>
         </div>
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-2xl font-semibold text-green-500">{page.stats.activeUsers}</div>
-          <div className="text-sm text-gray-500 mt-1">活跃用户</div>
+          <div className="text-2xl font-semibold text-green-500">{page.error ? '—' : page.stats.activeUsers}</div>
+          <div className="text-sm text-gray-500 mt-1">本页活跃用户</div>
         </div>
       </div>
 
@@ -44,6 +44,7 @@ export default function Logs() {
       <LogsTable
         data={page.data}
         loading={page.loading}
+        error={page.error}
         total={page.total}
         page={page.page}
         pageSize={page.pageSize}
@@ -54,7 +55,6 @@ export default function Logs() {
         endDate={page.endDate}
         logTypes={LOG_TYPES}
         modules={MODULES}
-        users={USERS}
         getLogType={page.getLogType}
         getAvatarChar={page.getAvatarChar}
         getModuleLabel={page.getModuleLabel}
@@ -67,6 +67,7 @@ export default function Logs() {
         onReset={page.handleReset}
         onPageChange={page.setPage}
         onPageSizeChange={page.setPageSize}
+        onRetry={page.refresh}
         onOpenDetail={page.openDetail}
       />
 
@@ -83,9 +84,11 @@ export default function Logs() {
       <LogExportModal
         open={page.showExport}
         form={page.exportForm}
-        onClose={() => page.setShowExport(false)}
+        exporting={page.exporting}
+        error={page.exportError}
         onChange={page.setExportForm}
         onExport={page.handleExport}
+        onClose={() => page.setShowExport(false)}
       />
     </div>
   )

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error, buildSuccessEnvelope } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { requireTrustedRequestActor, withoutUntrustedActorFields } from '../security/trusted-request-actor.js'
 import {
   readIdempotencyKey,
   fingerprintRequest,
@@ -19,6 +20,12 @@ import {
   parseFiniteNumber,
   parseFinitePositiveNumber,
 } from '../utils/numeric-input.js'
+import {
+  addBatchStock,
+  assertInventoryMatchesBatches,
+  inventoryTransactionError,
+  syncInventoryFromBatches,
+} from '../services/inventory-transactions.js'
 
 const router = Router()
 
@@ -138,6 +145,13 @@ type InboundUpdateNumericPlan = {
 }
 
 const INBOUND_INVENTORY_NOT_FOUND = Symbol('INBOUND_INVENTORY_NOT_FOUND')
+
+function hasInboundBatchFact(db: any, record: any): boolean {
+  if (!record?.batch_no) return false
+  return Boolean(db.prepare(`
+    SELECT 1 FROM batches WHERE material_id = ? AND batch_no = ? LIMIT 1
+  `).get(record.material_id, record.batch_no))
+}
 
 function checkInboundCancellationRules(db: any, record: any, id: string): InboundCancelCheck {
   const rawOutboundTotal = (db.prepare(`
@@ -281,7 +295,7 @@ function buildInboundUpdateNumericPlan(
           batchNo: oldBatch,
           quantityAfter,
           remainingAfter,
-          statusAfter: Number(row.status),
+          statusAfter: remainingAfter <= 0 ? 0 : 1,
         }
       }
     }
@@ -463,6 +477,8 @@ router.get('/:id/check-deletable', (req, res) => {
 })
 
 router.post('/', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { type, materialId, batchNo, quantity, price, supplierId, locationId, purchaseOrderId, productionDate, expiryDate, remark } = req.body
     if (!type || !materialId || quantity === undefined || !locationId) {
@@ -484,12 +500,12 @@ router.post('/', requireWriteAccess, (req, res) => {
     const db = getDatabase()
     const idemKey = readIdempotencyKey(req)
     const idemScope = 'inbound:create'
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
     if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
 
     const inboundNo = generateInboundNo()
     const id = uuidv4()
-    const operator = req.body.operator || 'system'
+    const operator = actor.username
 
     const material = db.prepare('SELECT unit FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, 'Material not found', 'NOT_FOUND', 404); return }
@@ -514,23 +530,23 @@ router.post('/', requireWriteAccess, (req, res) => {
       }
       purchaseOrderNo = transactionPlan.purchaseOrder?.order_no || null
       if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
-      db.prepare(`
-        INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_no, quantity, unit, price, amount, supplier_id, location_id, production_date, expiry_date, operator, status, remark, purchase_order_id, purchase_order_no)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)
-      `).run(id, inboundNo, type, materialId, batchNo || null, normalizedQuantity, unit, normalizedPrice, amount, supplierId || null, locationId, productionDate || null, expiryDate || null, operator, remark || null, purchaseOrderId || null, purchaseOrderNo)
+      const batchResult = addBatchStock(db, {
+        materialId,
+        quantity: normalizedQuantity,
+        sourceType: 'inbound',
+        sourceId: id,
+        batchNo: batchNo || null,
+        productionDate: productionDate || null,
+        expiryDate: expiryDate || null,
+        inboundPrice: normalizedPrice,
+        supplierId: supplierId || null,
+        inventory: { locationId, lastInboundId: id },
+      })
 
-      if (batchNo) {
-        if (transactionPlan.existingBatch) {
-          db.prepare('UPDATE batches SET quantity = ?, remaining = ? WHERE id = ?')
-            .run(transactionPlan.batchQuantityAfter, transactionPlan.batchRemainingAfter, transactionPlan.existingBatch.id)
-        } else {
-          const batchId = uuidv4()
-          db.prepare(`
-            INSERT INTO batches (id, material_id, batch_no, quantity, remaining, production_date, expiry_date, inbound_id, inbound_price, supplier_id, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-          `).run(batchId, materialId, batchNo, normalizedQuantity, normalizedQuantity, productionDate || null, expiryDate || null, id, normalizedPrice, supplierId || null)
-        }
-      }
+      db.prepare(`
+        INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_id, batch_no, quantity, unit, price, amount, supplier_id, location_id, production_date, expiry_date, operator, status, remark, purchase_order_id, purchase_order_no)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)
+      `).run(id, inboundNo, type, materialId, batchResult.batchId, batchResult.batchNo, normalizedQuantity, unit, normalizedPrice, amount, supplierId || null, locationId, productionDate || null, expiryDate || null, operator, remark || null, purchaseOrderId || null, purchaseOrderNo)
 
       // 更新采购订单收货数量
       if (purchaseOrderId && transactionPlan.purchaseOrder) {
@@ -538,21 +554,11 @@ router.post('/', requireWriteAccess, (req, res) => {
           .run(transactionPlan.purchaseOrderReceivedAfter, transactionPlan.purchaseOrderStatus, purchaseOrderId)
       }
 
-      if (transactionPlan.inventory) {
-        db.prepare("UPDATE inventory SET stock = ?, location_id = ?, last_inbound_id = ?, last_inbound_date = date('now','localtime'), update_time = CURRENT_TIMESTAMP WHERE material_id = ?")
-          .run(transactionPlan.inventoryAfter, locationId, id, materialId)
-      } else {
-        db.prepare(`
-          INSERT INTO inventory (id, material_id, stock, locked_stock, location_id, last_inbound_id, last_inbound_date, update_time)
-          VALUES (?, ?, ?, 0, ?, ?, date('now','localtime'), CURRENT_TIMESTAMP)
-        `).run(uuidv4(), materialId, normalizedQuantity, locationId, id)
-      }
-
       const logId = uuidv4()
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
         VALUES (?, 'inbound', ?, ?, ?, ?, ?, 'inbound', ?)
-      `).run(logId, materialId, normalizedQuantity, transactionPlan.inventoryBefore, transactionPlan.inventoryAfter, id, operator)
+      `).run(logId, materialId, normalizedQuantity, batchResult.inventory.before, batchResult.inventory.after, id, operator)
 
       responseEnvelope = buildSuccessEnvelope({ id, inboundNo, type, materialId, quantity: normalizedQuantity, status: 'completed', purchaseOrderId, purchaseOrderNo }, 'Inbound created')
       if (idemKey) finalizeIdempotency(db, idemKey, 201, responseEnvelope)
@@ -564,13 +570,25 @@ router.post('/', requireWriteAccess, (req, res) => {
     }
 
     res.status(201).json(responseEnvelope)
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 router.put('/:id', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const { batchNo, quantity, price, supplierId, locationId, productionDate, expiryDate, remark, status } = req.body
+    if (batchNo !== undefined && (typeof batchNo !== 'string' || batchNo.trim().length === 0)) {
+      error(res, 'Batch number cannot be cleared from an inbound fact', 'INVALID_PARAMETER', 400); return
+    }
+    if (status !== undefined && !['completed', 'cancelled'].includes(status)) {
+      error(res, 'Inbound status must be completed or cancelled', 'INVALID_PARAMETER', 400); return
+    }
 
     let normalizedQuantity: number | undefined
     if (quantity !== undefined) {
@@ -593,6 +611,19 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!record) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (!hasInboundBatchFact(db, record)) {
+      error(res, 'Inbound record has no auditable batch fact', 'LEDGER_DRIFT', 409); return
+    }
+    const statusTransition = status !== undefined && status !== record.status
+    if (statusTransition && !(
+      (record.status === 'completed' && status === 'cancelled')
+      || (record.status === 'cancelled' && status === 'completed')
+    )) {
+      error(res, `Cannot transition inbound from ${record.status} to ${status}`, 'INVALID_PARAMETER', 400); return
+    }
+    if ((quantity !== undefined || batchNo !== undefined) && (statusTransition || record.status !== 'completed')) {
+      error(res, 'Quantity or batch cannot be edited during an inbound status transition', 'INVALID_PARAMETER', 400); return
+    }
 
     const fields: string[] = []; const params: any[] = []
     if (batchNo !== undefined) { fields.push('batch_no = ?'); params.push(batchNo || null) }
@@ -632,6 +663,11 @@ router.put('/:id', requireWriteAccess, (req, res) => {
       if (!transactionRecord) {
         db.exec('ROLLBACK')
         error(res, 'Not found', 'NOT_FOUND', 404)
+        return
+      }
+      if (!hasInboundBatchFact(db, transactionRecord)) {
+        db.exec('ROLLBACK')
+        error(res, 'Inbound record has no auditable batch fact', 'LEDGER_DRIFT', 409)
         return
       }
       const transactionNewStatus = status !== undefined ? status : transactionRecord.status
@@ -677,6 +713,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         error(res, 'Inbound record changed during update; please retry', 'CONCURRENT_MODIFICATION', 409)
         return
       }
+      assertInventoryMatchesBatches(db, transactionRecord.material_id)
       // ===== 1. 取消操作（completed → cancelled）=====
       if (oldStatus === 'completed' && newStatus === 'cancelled') {
         const outboundTotal = (db.prepare(`
@@ -791,9 +828,14 @@ router.put('/:id', requireWriteAccess, (req, res) => {
           }
         } else if (qtyDiff !== 0) {
           db.prepare('UPDATE inventory SET stock = stock + ? WHERE material_id = ?').run(qtyDiff, record.material_id)
-          if (oldBatch) {
-            db.prepare('UPDATE batches SET quantity = quantity + ?, remaining = remaining + ? WHERE material_id = ? AND batch_no = ?')
-              .run(qtyDiff, qtyDiff, record.material_id, oldBatch)
+          if (oldBatch && transactionPlan.oldBatchMutation?.row) {
+            db.prepare('UPDATE batches SET quantity = ?, remaining = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+              .run(
+                transactionPlan.oldBatchMutation.quantityAfter,
+                transactionPlan.oldBatchMutation.remainingAfter,
+                transactionPlan.oldBatchMutation.statusAfter,
+                transactionPlan.oldBatchMutation.row.id,
+              )
           }
         }
       }
@@ -803,6 +845,31 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         params.push(id)
         db.prepare(`UPDATE inbound_records SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params)
       }
+      const canonicalBatch = db.prepare('SELECT id FROM batches WHERE material_id = ? AND batch_no = ?')
+        .get(transactionRecord.material_id, transactionPlan.newBatch) as any
+      if (!canonicalBatch) {
+        db.exec('ROLLBACK')
+        error(res, 'Inbound record has no canonical batch fact after mutation', 'LEDGER_DRIFT', 409)
+        return
+      }
+      db.prepare('UPDATE inbound_records SET batch_id = ? WHERE id = ?').run(canonicalBatch.id, id)
+      const batchFields: string[] = []
+      const batchParams: any[] = []
+      if (productionDate !== undefined) { batchFields.push('production_date = ?'); batchParams.push(productionDate || null) }
+      if (expiryDate !== undefined) { batchFields.push('expiry_date = ?'); batchParams.push(expiryDate || null) }
+      if (normalizedPrice !== undefined) { batchFields.push('inbound_price = ?'); batchParams.push(normalizedPrice) }
+      if (supplierId !== undefined) { batchFields.push('supplier_id = ?'); batchParams.push(supplierId || null) }
+      if (batchFields.length > 0) {
+        batchParams.push(canonicalBatch.id)
+        db.prepare(`UPDATE batches SET ${batchFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...batchParams)
+      }
+
+      // 批次是事实源；兼容旧路径的手工增减后，事务内重新派生库存缓存。
+      const conservedInventory = transactionPlan.oldBatch || transactionPlan.newBatch
+        ? syncInventoryFromBatches(db, transactionRecord.material_id, {
+          locationId: locationId !== undefined ? locationId : null,
+        })
+        : null
 
       // 5. 记录日志
       const logId = uuidv4()
@@ -815,9 +882,9 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         transactionRecord.material_id,
         transactionPlan.log.quantity,
         transactionPlan.log.beforeStock,
-        transactionPlan.log.afterStock,
+        conservedInventory?.after ?? transactionPlan.log.afterStock,
         id,
-        req.body.operator || 'system',
+        actor.username,
         transactionPlan.log.remark,
       )
 
@@ -831,19 +898,36 @@ router.put('/:id', requireWriteAccess, (req, res) => {
       db.exec('ROLLBACK')
       throw err
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 router.delete('/:id', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const db = getDatabase()
-    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    let record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    if (record && !hasInboundBatchFact(db, record)) {
+      error(res, 'Inbound record has no auditable batch fact', 'LEDGER_DRIFT', 409); return
+    }
     if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
 
     // 事务保护：删除涉及 records + batches + purchase_orders + stock_logs 多表操作
     db.exec('BEGIN IMMEDIATE')
     try {
+      const lockedRecord = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+      if (!lockedRecord || !hasInboundBatchFact(db, lockedRecord)) {
+        db.exec('ROLLBACK')
+        error(res, 'Inbound record changed while waiting for the write lock', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
+      record = lockedRecord
+      assertInventoryMatchesBatches(db, record.material_id)
       if (record.status === 'completed') {
         // 1. 检查是否有出库记录
         const outboundExists = db.prepare(`
@@ -905,11 +989,20 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
             db.prepare('UPDATE batches SET status = 0 WHERE material_id = ? AND batch_no = ?')
               .run(record.material_id, record.batch_no)
           }
+          syncInventoryFromBatches(db, record.material_id)
         }
       }
 
       // 6. 软删除入库记录
-      db.prepare('UPDATE inbound_records SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+      const deleted = db.prepare(`
+        UPDATE inbound_records SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND is_deleted = 0
+      `).run(id)
+      if (Number(deleted.changes) !== 1) {
+        db.exec('ROLLBACK')
+        error(res, 'Inbound record changed while waiting for deletion', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
 
       // 7. 记录操作日志
       const totalInboundAfter = (db.prepare(
@@ -919,7 +1012,7 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'delete', ?, ?, ?, ?, ?, 'inbound_delete', ?, '删除入库记录')
-      `).run(logId, record.material_id, record.quantity, totalInboundAfter + record.quantity, totalInboundAfter, id, req.body.operator || 'system')
+      `).run(logId, record.material_id, record.quantity, totalInboundAfter + record.quantity, totalInboundAfter, id, actor.username)
 
       db.exec('COMMIT')
     } catch (err) {
@@ -928,15 +1021,24 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
     }
 
     success(res, null, '删除成功，库存已同步扣减')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 router.post('/:id/cancel', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const { reason } = req.body
     const db = getDatabase()
-    const record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    let record = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    if (record && !hasInboundBatchFact(db, record)) {
+      error(res, 'Inbound record has no auditable batch fact', 'LEDGER_DRIFT', 409); return
+    }
     if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
     if (record.status !== 'completed') {
       error(res, '只有已完成的入库记录可以取消', 'BUSINESS_RULE', 400)
@@ -945,6 +1047,14 @@ router.post('/:id/cancel', requireWriteAccess, (req, res) => {
 
     db.exec('BEGIN IMMEDIATE')
     try {
+      const lockedRecord = db.prepare('SELECT * FROM inbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+      if (!lockedRecord || lockedRecord.status !== 'completed' || !hasInboundBatchFact(db, lockedRecord)) {
+        db.exec('ROLLBACK')
+        error(res, 'Inbound record changed while waiting for the write lock', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
+      record = lockedRecord
+      assertInventoryMatchesBatches(db, record.material_id)
       // 检查出库记录
       const outboundTotal = (db.prepare(`
         SELECT COALESCE(SUM(oi.quantity),0) as total FROM outbound_items oi
@@ -998,17 +1108,25 @@ router.post('/:id/cancel', requireWriteAccess, (req, res) => {
           db.prepare('UPDATE batches SET status = 0 WHERE material_id = ? AND batch_no = ?')
             .run(record.material_id, record.batch_no)
         }
+        syncInventoryFromBatches(db, record.material_id)
       }
 
-      db.prepare('UPDATE inbound_records SET status = "cancelled", cancel_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0')
-        .run(reason || '', id)
+      const cancelled = db.prepare(`
+        UPDATE inbound_records SET status = 'cancelled', cancel_reason = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND is_deleted = 0 AND status = 'completed'
+      `).run(reason || '', id)
+      if (Number(cancelled.changes) !== 1) {
+        db.exec('ROLLBACK')
+        error(res, 'Inbound record changed while waiting for cancellation', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
 
       const currentStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any)?.stock || 0
       const logId = uuidv4()
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'inbound_cancel', ?, '取消入库记录')
-      `).run(logId, record.material_id, -record.quantity, currentStock + record.quantity, currentStock, id, req.body.operator || 'system')
+      `).run(logId, record.material_id, -record.quantity, currentStock + record.quantity, currentStock, id, actor.username)
 
       db.exec('COMMIT')
       success(res, null, '取消成功，库存已同步扣减')
@@ -1016,7 +1134,11 @@ router.post('/:id/cancel', requireWriteAccess, (req, res) => {
       db.exec('ROLLBACK')
       throw err
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 export default router

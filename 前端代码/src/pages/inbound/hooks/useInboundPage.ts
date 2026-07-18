@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { inboundApi, purchaseOrderApi } from '@/api/inventory'
+import { genIdempotencyKey } from '@/api/request'
 import { materialApi, supplierApi, locationApi } from '@/api/master'
 import type { InboundRecord, Material, Supplier, Location } from '@/types'
 import { usePagination } from '@/hooks/usePagination'
@@ -9,6 +10,22 @@ import { formatDateTime } from '@/lib/utils'
 import type { FormData } from '../components/InboundFormModal'
 
 type ModalType = 'create' | 'edit' | 'detail' | 'restore' | 'scan' | 'import' | 'print' | null
+
+export const PURCHASE_INBOUND_UNAVAILABLE_REASON = '关联采购入库暂不可执行：现有接口不会在提交时权威校验订单状态、物料一致性和剩余数量。'
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (typeof error === 'object' && error !== null) {
+    const candidate = error as { message?: unknown; response?: { data?: { error?: { message?: unknown } } } }
+    const apiMessage = candidate.response?.data?.error?.message
+    if (typeof apiMessage === 'string' && apiMessage.trim()) return apiMessage
+    if (typeof candidate.message === 'string' && candidate.message.trim()) return candidate.message
+  }
+  return fallback
+}
+
+function getSafeReturnTo(value: string) {
+  return value.startsWith('/') && !value.startsWith('//') ? value : '/purchase-orders'
+}
 
 function getTypeLabel(type: string): string {
   const map: Record<string, string> = {
@@ -30,10 +47,22 @@ export function useInboundPage() {
     ? url.getNumber('pageSize', 20)
     : 20
 
+  const purchaseOrderId = url.get('purchaseOrderId', '')
+  const returnTo = getSafeReturnTo(url.get('returnTo', '/purchase-orders'))
+
   // 引用数据
   const [materials, setMaterials] = useState<Material[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [locations, setLocations] = useState<Location[]>([])
+  const [refsLoading, setRefsLoading] = useState(false)
+  const [refsError, setRefsError] = useState<string | null>(null)
+  const [purchaseContext, setPurchaseContext] = useState<{
+    purchaseOrderId: string
+    returnTo: string
+    state: 'idle' | 'loading' | 'ready' | 'error'
+    order: any | null
+    error: string | null
+  }>({ purchaseOrderId, returnTo, state: purchaseOrderId ? 'loading' : 'idle', order: null, error: null })
 
   // 筛选状态
   const [searchKeyword, setSearchKeywordRaw] = useState(url.get('keyword', ''))
@@ -60,12 +89,12 @@ export function useInboundPage() {
   }>({ open: false, title: '', message: '', onConfirm: null })
 
   // 表单状态
-  const [purchaseOrders, setPurchaseOrders] = useState<any[]>([])
-  const [selectedOrderId, setSelectedOrderId] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
+  const submitLockRef = useRef(false)
+  const createKeyRef = useRef(genIdempotencyKey())
 
   const [form, setForm] = useState<FormData>({
-    type: 'purchase', materialId: '', batchNo: '', quantity: 0, price: 0,
+    type: 'direct', materialId: '', batchNo: '', quantity: 0, price: 0,
     supplierId: '', locationId: '', fromLocationId: '', fromLocationName: '',
     productionDate: '', expiryDate: '', remark: '', purchaseOrderId: ''
   })
@@ -103,8 +132,11 @@ export function useInboundPage() {
         startDate: effectiveStartDate,
         endDate: effectiveEndDate,
       })
+      if (!Array.isArray(res?.list)) {
+        throw new Error('入库记录响应格式异常，未按空列表处理')
+      }
       return {
-        list: res?.list || [],
+        list: res.list,
         pagination: res?.pagination,
       }
     },
@@ -121,6 +153,7 @@ export function useInboundPage() {
   const {
     data,
     loading,
+    error: listError,
     page,
     pageSize,
     total,
@@ -166,15 +199,25 @@ export function useInboundPage() {
   }, [page, pageSize, searchKeyword, filterMaterial, filterStatus, filterType, filterStartDate, filterEndDate, activeQuickFilter])
 
   // 统计数据（从后端获取，非当前页计算）
-  const [stats, setStats] = useState({
-    total: 0, completed: 0, cancelled: 0, amount: 0, supplierCount: 0, pendingOrders: 0,
-  })
+  const [stats, setStats] = useState<{
+    total: number; completed: number; cancelled: number; amount: number; supplierCount: number; pendingOrders: number
+  } | null>(null)
+  const [statsError, setStatsError] = useState<string | null>(null)
 
   const fetchStats = async () => {
     try {
       const res: any = await inboundApi.getStats()
-      setStats(res.data || res)
-    } catch (e) { console.error(e) }
+      const value = res?.data || res
+      const fields = ['total', 'completed', 'cancelled', 'amount', 'supplierCount', 'pendingOrders'] as const
+      if (!value || fields.some(field => !Number.isFinite(value[field]))) {
+        throw new Error('入库统计响应格式异常，不能按 0 处理')
+      }
+      setStats(Object.fromEntries(fields.map(field => [field, value[field]])) as NonNullable<typeof stats>)
+      setStatsError(null)
+    } catch (e) {
+      setStats(null)
+      setStatsError(getErrorMessage(e, '统计数据加载失败'))
+    }
   }
 
   useEffect(() => {
@@ -196,33 +239,54 @@ export function useInboundPage() {
     }
   }, [data])
 
-  const fetchRefs = async () => {
+  const fetchRefs = useCallback(async () => {
+    setRefsLoading(true)
     try {
       const [mRes, sRes, lRes]: any = await Promise.all([
         materialApi.getList({ page: 1, pageSize: 999, status: 'active' }),
         supplierApi.getList({ page: 1, pageSize: 999, status: 'active' }),
         locationApi.getList({ page: 1, pageSize: 999, status: 'active' }),
       ])
-      setMaterials(mRes?.list || [])
-      setSuppliers(sRes?.list || [])
-      setLocations(lRes?.list || [])
+      if (!Array.isArray(mRes?.list) || !Array.isArray(sRes?.list) || !Array.isArray(lRes?.list)) {
+        throw new Error('物料、供应商或库位响应格式异常，不能按空数据处理')
+      }
+      setMaterials(mRes.list)
+      setSuppliers(sRes.list)
+      setLocations(lRes.list)
+      setRefsError(null)
+      return true
     } catch (e) {
-      console.error(e)
+      setRefsError(getErrorMessage(e, '物料、供应商或库位加载失败'))
+      return false
+    } finally {
+      setRefsLoading(false)
     }
-  }
-
-  const fetchPurchaseOrders = async () => {
-    try {
-      const res = await purchaseOrderApi.getList({ status: 'pending,partial', pageSize: 100 })
-      setPurchaseOrders(res?.list || [])
-    } catch (e) {
-      setPurchaseOrders([])
-    }
-  }
+  }, [])
 
   useEffect(() => {
-    fetchPurchaseOrders()
-  }, [])
+    void fetchRefs()
+  }, [fetchRefs])
+
+  useEffect(() => {
+    let active = true
+    if (!purchaseOrderId) {
+      setPurchaseContext({ purchaseOrderId: '', returnTo, state: 'idle', order: null, error: null })
+      return () => { active = false }
+    }
+    setPurchaseContext({ purchaseOrderId, returnTo, state: 'loading', order: null, error: null })
+    purchaseOrderApi.getById(purchaseOrderId).then((order) => {
+      if (active) setPurchaseContext({ purchaseOrderId, returnTo, state: 'ready', order, error: null })
+    }).catch((error) => {
+      if (active) setPurchaseContext({
+        purchaseOrderId,
+        returnTo,
+        state: 'error',
+        order: null,
+        error: getErrorMessage(error, '采购单状态未能核实'),
+      })
+    })
+    return () => { active = false }
+  }, [purchaseOrderId, returnTo])
 
   // 选择操作
   const toggleSelectAll = () => {
@@ -258,14 +322,20 @@ export function useInboundPage() {
   }
 
   // 弹窗操作
-  const openCreate = () => {
+  const openCreate = async () => {
+    createKeyRef.current = genIdempotencyKey()
     setForm({
-      type: 'purchase', materialId: materials[0]?.id || '', batchNo: '', quantity: 0,
-      price: 0, supplierId: '', locationId: locations[0]?.id || '', fromLocationId: '', fromLocationName: '',
+      type: 'direct', materialId: '', batchNo: '', quantity: 0,
+      price: 0, supplierId: '', locationId: '', fromLocationId: '', fromLocationName: '',
       productionDate: '', expiryDate: '', remark: '', purchaseOrderId: ''
     })
-    fetchRefs()
+    await fetchRefs()
     setModalType('create')
+  }
+
+  const openImport = async () => {
+    const ready = await fetchRefs()
+    if (ready) setModalType('import')
   }
 
   const openDetail = (record: InboundRecord) => {
@@ -274,13 +344,17 @@ export function useInboundPage() {
   }
 
   const openEdit = (record: InboundRecord) => {
+    if (record.purchaseOrderId) {
+      toast.error(PURCHASE_INBOUND_UNAVAILABLE_REASON)
+      return
+    }
     setSelectedRecord(record)
     setForm({
-      type: record.type || 'purchase',
+      type: record.type || 'direct',
       materialId: record.materialId || '',
       batchNo: record.batchNo || '',
-      quantity: record.quantity || 0,
-      price: record.price || 0,
+      quantity: record.quantity ?? 0,
+      price: record.price ?? 0,
       supplierId: record.supplierId || '',
       locationId: record.locationId || '',
       fromLocationId: '', fromLocationName: '',
@@ -289,7 +363,7 @@ export function useInboundPage() {
       remark: record.remark || '',
       purchaseOrderId: '',
     })
-    fetchRefs()
+    void fetchRefs()
     setModalType('edit')
   }
 
@@ -327,37 +401,35 @@ export function useInboundPage() {
   const closeModal = () => {
     setModalType(null)
     setSelectedRecord(null)
-    setSelectedOrderId('')
+    submitLockRef.current = false
+    createKeyRef.current = genIdempotencyKey()
   }
 
-  const selectedOrder = useMemo(() =>
-    purchaseOrders.find(o => o.id === selectedOrderId),
-    [purchaseOrders, selectedOrderId]
-  )
-
   const handleSubmit = async () => {
-    if (submitting) return
-    if (!form.materialId || form.quantity <= 0) {
-      toast.error('请选择耗材并输入数量')
+    if (submitLockRef.current) return
+    if (form.type === 'purchase' || form.purchaseOrderId) {
+      toast.error(PURCHASE_INBOUND_UNAVAILABLE_REASON)
       return
     }
-    if (selectedOrderId && selectedOrder && form.quantity > selectedOrder.remainingQty) {
-      toast.error(`入库数量不能超过待入库数量 ${selectedOrder.remainingQty}`)
+    if (!form.materialId || !Number.isFinite(form.quantity) || form.quantity <= 0 || !form.locationId) {
+      toast.error('请选择耗材和库位，并输入大于 0 的数量')
+      return
+    }
+    if (!Number.isFinite(form.price) || form.price < 0) {
+      toast.error('单价必须是大于或等于 0 的有限数值')
       return
     }
     if (form.type === 'transfer' && !form.fromLocationId && !form.fromLocationName) {
       toast.error('请选择或输入来源库位')
       return
     }
+    submitLockRef.current = true
     setSubmitting(true)
     try {
       if (selectedRecord && modalType === 'edit') {
         await inboundApi.update(selectedRecord.id, {
           batchNo: form.batchNo,
-          quantity: form.quantity,
-          price: form.price,
           supplierId: form.supplierId,
-          locationId: form.locationId,
           productionDate: form.productionDate,
           expiryDate: form.expiryDate,
           remark: form.remark,
@@ -376,23 +448,16 @@ export function useInboundPage() {
         } as any)
         toast.success('入库成功')
       } else {
-        await inboundApi.create(form as any)
-        if (selectedOrderId) {
-          try {
-            await purchaseOrderApi.receive(selectedOrderId, { quantity: form.quantity })
-            toast.success('入库成功，已更新采购订单收货数量')
-          } catch (e) {
-            toast.success('入库成功，但更新采购订单失败')
-          }
-        } else {
-          toast.success('入库成功')
-        }
+        const { purchaseOrderId: _blockedPurchaseOrderId, ...directPayload } = form
+        await inboundApi.create(directPayload as any, createKeyRef.current)
+        toast.success('入库成功')
       }
       closeModal()
       refresh()
     } catch {
       /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
     } finally {
+      submitLockRef.current = false
       setSubmitting(false)
     }
   }
@@ -427,7 +492,7 @@ export function useInboundPage() {
         数量: row.quantity,
         单位: row.unit,
         单价: row.price,
-        金额: row.amount || row.price * row.quantity,
+        金额: row.amount ?? row.price * row.quantity,
         供应商: row.supplierName || '-',
         入库时间: formatDateTime(row.createdAt),
         状态: row.status === 'completed' ? '已完成' : '已取消',
@@ -482,15 +547,15 @@ export function useInboundPage() {
     modalType, setModalType, selectedRecord, setSelectedRecord,
     confirmModal, openConfirmModal, closeConfirmModal,
     // 表单
-    purchaseOrders, selectedOrderId, setSelectedOrderId,
     form, setForm, submitting, handleSubmit,
     // 数据
-    data, loading, page, pageSize, total, setPage, setPageSize,
+    data, loading, listError, page, pageSize, total, setPage, setPageSize,
     refresh: () => { refresh(); fetchStats() },
     // 统计
-    stats, quickFilterCounts,
+    stats, statsError, quickFilterCounts,
+    refsLoading, refsError, purchaseContext,
     // 操作
-    openCreate, openDetail, openEdit, handleDelete, openRestore, closeModal,
+    openCreate, openImport, openDetail, openEdit, handleDelete, openRestore, closeModal,
     handleRestoreInbound, handleBatchExport, handleBatchPrint, handlePrintRecord,
     handleResetFilters,
   }

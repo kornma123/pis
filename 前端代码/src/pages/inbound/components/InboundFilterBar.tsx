@@ -48,12 +48,14 @@ export default function InboundFilterBar({
             placeholder="搜索入库单号/耗材名称/批号..."
             value={searchKeyword}
             onChange={e => onSearchChange(e.target.value)}
+            aria-label="搜索入库记录"
             className="pl-9 pr-3 py-2 h-10 text-sm border border-gray-300 rounded-md w-64 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
         <select
           value={filterMaterial}
           onChange={e => onMaterialChange(e.target.value)}
+          aria-label="按耗材筛选入库记录"
           className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">全部耗材</option>
@@ -64,6 +66,7 @@ export default function InboundFilterBar({
         <select
           value={filterStatus}
           onChange={e => onStatusChange(e.target.value)}
+          aria-label="按状态筛选入库记录"
           className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">全部状态</option>
@@ -73,6 +76,7 @@ export default function InboundFilterBar({
         <select
           value={filterType}
           onChange={e => onTypeChange(e.target.value)}
+          aria-label="按来源筛选入库记录"
           className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">全部来源</option>
@@ -85,6 +89,7 @@ export default function InboundFilterBar({
           type="date"
           value={filterStartDate}
           onChange={e => onStartDateChange(e.target.value)}
+          aria-label="入库开始日期"
           className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <span className="text-gray-400 text-sm">至</span>
@@ -92,6 +97,7 @@ export default function InboundFilterBar({
           type="date"
           value={filterEndDate}
           onChange={e => onEndDateChange(e.target.value)}
+          aria-label="入库结束日期"
           className="px-3 py-2 h-10 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button

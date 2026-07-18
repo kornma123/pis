@@ -155,6 +155,16 @@ describe('通用解析单元（合成网格）', () => {
     const r = parseLineItems(grid)
     expect(r.rows[0].settle).toBe(120)
   })
+  it('中文表头含全角空格 U+3000 时仍能识别并保持结算口径', () => {
+    const grid: Grid = [
+      ['病\u3000理\u3000号', '项目\u3000名称', '收费\u3000金额', '结算\u3000扣率', '结算\u3000金额'],
+      ['S26-003', '活检', '100', '90%', '90'],
+    ]
+    const cm = detectColMap(grid[0])
+    expect(cm).toMatchObject({ caseNo: 0, item: 1, bill: 2, rate: 3, settle: 4 })
+    const r = parseLineItems(grid)
+    expect(r.rows[0]).toMatchObject({ no: 'S26-003', item: '活检', bill: 100, rate: 0.9, settle: 90 })
+  })
   it('小计行不计入明细、不当作 declaredTotal（仅 grand 合计）', () => {
     const grid: Grid = [
       ['编号', '服务项目', '医院收费', '分配率', '结算金额'],

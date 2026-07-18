@@ -1,9 +1,23 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
-import { success, successList, error } from '../utils/response.js'
+import { buildSuccessEnvelope, success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { checkedMultiply, checkedSubtract, parseFiniteNonNegativeNumber, parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import { requireTrustedRequestActor, withoutUntrustedActorFields } from '../security/trusted-request-actor.js'
+import { checkedMultiply, parseFiniteNonNegativeNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import {
+  claimIdempotency,
+  finalizeIdempotency,
+  fingerprintRequest,
+  isIdempotencyConflict,
+  readIdempotencyKey,
+  tryReplayIdempotency,
+} from '../utils/idempotency.js'
+import {
+  consumeBatchStock,
+  inventoryTransactionError,
+  restoreBatchStock,
+} from '../services/inventory-transactions.js'
 
 const router = Router()
 
@@ -165,8 +179,10 @@ router.get('/:id', (req, res) => {
 
 // 创建退货记录
 router.post('/', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
-    const { materialId, quantity, supplierId, purchaseOrderId, inboundRecordId, reason, refundAmount, trackingNo, operator, remark } = req.body
+    const { materialId, batchId, batchNo, quantity, supplierId, purchaseOrderId, inboundRecordId, reason, refundAmount, trackingNo, remark } = req.body
     const normalizedQuantity = parseFinitePositiveNumber(quantity)
     if (!materialId || normalizedQuantity === null || !reason) {
       error(res, '物料、数量和退货原因必填', 'INVALID_PARAMETER', 400); return
@@ -175,11 +191,18 @@ router.post('/', requireWriteAccess, (req, res) => {
     if (refund === null) {
       error(res, '退款金额必须为有限非负数', 'INVALID_PARAMETER', 400); return
     }
+    const requestedBatchId = typeof batchId === 'string' && batchId.trim() ? batchId.trim() : null
+    const requestedBatchNo = typeof batchNo === 'string' && batchNo.trim() ? batchNo.trim() : null
+    if ((batchId !== undefined && !requestedBatchId) || (batchNo !== undefined && !requestedBatchNo)) {
+      error(res, '批次参数无效', 'INVALID_PARAMETER', 400); return
+    }
     const db = getDatabase()
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = 'supplier-return:create'
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
-    const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-    if (!inv || inv.stock < normalizedQuantity) { error(res, '库存不足', 'STOCK_INSUFFICIENT', 422); return }
 
     // P1-13: 退款金额与来源成本勾稽，refundAmount 不得超过 来源单价 × 数量。
     if (refund > 0) {
@@ -193,22 +216,18 @@ router.post('/', requireWriteAccess, (req, res) => {
       }
     }
 
+    const id = uuidv4()
+    const returnNo = generateNo()
+    const op = actor.username
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
     db.exec('BEGIN IMMEDIATE')
     try {
-      const lockedInv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-      if (!lockedInv) {
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, op)
+      const lockedMaterial = db.prepare('SELECT 1 FROM materials WHERE id = ? AND is_deleted = 0').get(materialId)
+      if (!lockedMaterial) {
         db.exec('ROLLBACK')
-        error(res, '库存不足', 'STOCK_INSUFFICIENT', 422); return
-      }
-      const beforeStock = parseFiniteNumber(lockedInv.stock)
-      const afterStock = beforeStock === null ? null : checkedSubtract(beforeStock, normalizedQuantity)
-      if (beforeStock === null || afterStock === null) {
-        db.exec('ROLLBACK')
-        error(res, '库存计算超出支持的数值范围', 'INVALID_PARAMETER', 400); return
-      }
-      if (afterStock < 0) {
-        db.exec('ROLLBACK')
-        error(res, '库存不足', 'STOCK_INSUFFICIENT', 422); return
+        error(res, '物料不存在或已删除', 'NOT_FOUND', 404)
+        return
       }
       if (refund > 0) {
         const lockedRefundCap = resolveRefundCap(db, materialId, normalizedQuantity, inboundRecordId)
@@ -222,42 +241,77 @@ router.post('/', requireWriteAccess, (req, res) => {
         }
       }
 
-      const id = uuidv4()
-      const returnNo = generateNo()
+      let selectedBatchId = requestedBatchId
+      let selectedBatchNo = requestedBatchNo
+      if (!selectedBatchId && !selectedBatchNo && inboundRecordId) {
+        const sourceInbound = db.prepare(`
+          SELECT material_id, batch_id, batch_no
+          FROM inbound_records
+          WHERE id = ? AND is_deleted = 0
+        `).get(inboundRecordId) as any
+        if (!sourceInbound) {
+          db.exec('ROLLBACK')
+          error(res, '关联入库记录不存在', 'NOT_FOUND', 404)
+          return
+        }
+        if (sourceInbound.material_id !== materialId) {
+          db.exec('ROLLBACK')
+          error(res, '关联入库记录与退货物料不一致', 'INVALID_PARAMETER', 400)
+          return
+        }
+        selectedBatchId = sourceInbound.batch_id || null
+        selectedBatchNo = sourceInbound.batch_no || null
+      }
+      if (selectedBatchId && selectedBatchNo) {
+        const selectedBatch = db.prepare('SELECT batch_no FROM batches WHERE id = ? AND material_id = ?')
+          .get(selectedBatchId, materialId) as any
+        if (!selectedBatch || selectedBatch.batch_no !== selectedBatchNo) {
+          db.exec('ROLLBACK')
+          error(res, '批次编号与批次标识不一致', 'INVALID_PARAMETER', 400)
+          return
+        }
+      }
+
+      const stockMutation = consumeBatchStock(
+        db,
+        materialId,
+        normalizedQuantity,
+        { batchId: selectedBatchId, batchNo: selectedBatchNo },
+      )
+      const persistedBatch = stockMutation.allocations.length === 1 ? stockMutation.allocations[0] : null
       db.prepare(`
         INSERT INTO supplier_returns (id, return_no, material_id, batch_id, batch_no, quantity, supplier_id, purchase_order_id, inbound_record_id, reason, refund_amount, tracking_no, status, operator, remark)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-      `).run(id, returnNo, materialId, null, null, normalizedQuantity, supplierId || null, purchaseOrderId || null, inboundRecordId || null, reason, refund, trackingNo || null, operator || 'system', remark || null)
-
-      // 扣减库存
-      db.prepare('UPDATE inventory SET stock = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(afterStock, materialId)
-
-      // 负库存兜底
-      const afterCheck = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock
-      if (afterCheck < 0) {
-        db.exec('ROLLBACK')
-        error(res, '库存不能为负数', 'STOCK_NEGATIVE', 422)
-        return
-      }
+      `).run(id, returnNo, materialId, persistedBatch?.batchId || null, persistedBatch?.batchNo || null, normalizedQuantity, supplierId || null, purchaseOrderId || null, inboundRecordId || null, reason, refund, trackingNo || null, op, remark || null)
 
       // 写库存流水
       const logId = uuidv4()
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'supplier_return', ?, ?, ?, ?, ?, 'supplier_return', ?, ?)
-      `).run(logId, materialId, -normalizedQuantity, beforeStock, afterStock, id, operator || 'system', '退货给供应商')
+      `).run(logId, materialId, -normalizedQuantity, stockMutation.inventory.before, stockMutation.inventory.after, id, op, '退货给供应商')
 
+      responseEnvelope = buildSuccessEnvelope({ id, returnNo }, '退货记录创建成功')
+      if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
       db.exec('COMMIT')
-      success(res, { id, returnNo }, '退货记录创建成功')
-    } catch (e: any) {
+    } catch (e) {
       db.exec('ROLLBACK')
+      if (idemKey && isIdempotencyConflict(e) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+
+    res.status(200).json(responseEnvelope)
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 // 更新状态
 router.put('/:id/status', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { status } = req.body
     const validStatuses = ['pending', 'shipped', 'received', 'refunded', 'cancelled']
@@ -265,7 +319,7 @@ router.put('/:id/status', requireWriteAccess, (req, res) => {
       error(res, '无效的状态', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
-    const record = db.prepare('SELECT * FROM supplier_returns WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
+    let record = db.prepare('SELECT * FROM supplier_returns WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
 
     // 状态流转校验
@@ -280,9 +334,70 @@ router.put('/:id/status', requireWriteAccess, (req, res) => {
       error(res, `不能从 ${record.status} 变更为 ${status}`, 'INVALID_PARAMETER', 400); return
     }
 
-    db.prepare('UPDATE supplier_returns SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, req.params.id)
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const lockedRecord = db.prepare('SELECT * FROM supplier_returns WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
+      if (!lockedRecord) {
+        db.exec('ROLLBACK')
+        error(res, '记录不存在', 'NOT_FOUND', 404)
+        return
+      }
+      if (!flow[lockedRecord.status]?.includes(status)) {
+        db.exec('ROLLBACK')
+        error(res, `不能从 ${lockedRecord.status} 变更为 ${status}`, 'INVALID_PARAMETER', 400)
+        return
+      }
+
+      if (status === 'cancelled') {
+        const normalizedQuantity = parseFinitePositiveNumber(lockedRecord.quantity)
+        if (normalizedQuantity === null) {
+          db.exec('ROLLBACK')
+          error(res, '退货数量超出支持的数值范围', 'INVALID_PARAMETER', 400)
+          return
+        }
+        const batchFromNo = !lockedRecord.batch_id && lockedRecord.batch_no
+          ? db.prepare('SELECT id FROM batches WHERE material_id = ? AND batch_no = ?')
+            .get(lockedRecord.material_id, lockedRecord.batch_no) as any
+          : null
+        const exactBatchId = lockedRecord.batch_id || batchFromNo?.id || null
+        if (!exactBatchId) {
+          db.exec('ROLLBACK')
+          error(res, '原退货批次分配不可精确还原，禁止取消', 'LEDGER_DRIFT', 409)
+          return
+        }
+        const inventorySnapshot = restoreBatchStock(
+          db,
+          lockedRecord.material_id,
+          [{ batchId: exactBatchId, quantity: normalizedQuantity }],
+        )
+        db.prepare(`
+          INSERT INTO stock_logs
+            (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
+          VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'supplier_return_cancel', ?, ?)
+        `).run(
+          uuidv4(),
+          lockedRecord.material_id,
+          normalizedQuantity,
+          inventorySnapshot.before,
+          inventorySnapshot.after,
+          req.params.id,
+          actor.username,
+          '取消退货给供应商',
+        )
+      }
+
+      db.prepare('UPDATE supplier_returns SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, req.params.id)
+      db.exec('COMMIT')
+    } catch (e) {
+      db.exec('ROLLBACK')
+      throw e
+    }
     success(res, { id: req.params.id, status }, '状态更新成功')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 // P1-14: 修正退款额。
@@ -291,6 +406,8 @@ router.put('/:id/status', requireWriteAccess, (req, res) => {
 // - 修正写一条 operation_logs 审计留痕（旧值→新值）。
 // 注：refunded 应付贷项过账因 master 无应付/财务台账表而 deferred（见交付 modelNote）。
 router.put('/:id/refund-amount', requireWriteAccess, (req: any, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { refundAmount } = req.body
     const refund = parseFiniteNonNegativeNumber(refundAmount)
@@ -354,8 +471,8 @@ router.put('/:id/refund-amount', requireWriteAccess, (req: any, res) => {
         VALUES (?, ?, ?, 'supplier_return_refund_amount', ?, ?)
       `).run(
         uuidv4(),
-        req.user?.userId || null,
-        req.user?.username || 'system',
+        actor.userId,
+        actor.username,
         `修正退货单 ${lockedRecord.return_no} 退款额：${oldRefund} → ${refund}`,
         JSON.stringify({ returnId: req.params.id, oldRefund, newRefund: refund })
       )
@@ -371,9 +488,11 @@ router.put('/:id/refund-amount', requireWriteAccess, (req: any, res) => {
 
 // 删除（仅 pending 状态可删除，恢复库存）
 router.delete('/:id', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const db = getDatabase()
-    const record = db.prepare('SELECT * FROM supplier_returns WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
+    let record = db.prepare('SELECT * FROM supplier_returns WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
     if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
     if (record.status !== 'pending') {
       error(res, '仅待发货状态的退货记录可删除', 'INVALID_PARAMETER', 400); return
@@ -381,20 +500,51 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
 
     db.exec('BEGIN IMMEDIATE')
     try {
-      db.prepare('UPDATE supplier_returns SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id)
+      const lockedRecord = db.prepare('SELECT * FROM supplier_returns WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
+      if (!lockedRecord || lockedRecord.status !== 'pending') {
+        db.exec('ROLLBACK')
+        error(res, 'Supplier return changed while waiting for the write lock', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
+      record = lockedRecord
+      const claimed = db.prepare(`
+        UPDATE supplier_returns SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND is_deleted = 0 AND status = 'pending'
+      `).run(req.params.id)
+      if (Number(claimed.changes) !== 1) {
+        db.exec('ROLLBACK')
+        error(res, 'Supplier return changed while waiting for reversal', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
 
       // 恢复库存
-      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any
-      const beforeStock = Number(inv?.stock || 0)
-      const afterStock = beforeStock + Number(record.quantity)
-      db.prepare('UPDATE inventory SET stock = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(afterStock, record.material_id)
+      const normalizedQuantity = parseFinitePositiveNumber(record.quantity)
+      if (normalizedQuantity === null) {
+        db.exec('ROLLBACK')
+        error(res, '退货数量超出支持的数值范围', 'INVALID_PARAMETER', 400)
+        return
+      }
+      const batchFromNo = !record.batch_id && record.batch_no
+        ? db.prepare('SELECT id FROM batches WHERE material_id = ? AND batch_no = ?').get(record.material_id, record.batch_no) as any
+        : null
+      const exactBatchId = record.batch_id || batchFromNo?.id || null
+      if (!exactBatchId) {
+        db.exec('ROLLBACK')
+        error(res, '原退货批次分配不可精确还原，禁止撤销', 'LEDGER_DRIFT', 409)
+        return
+      }
+      const inventorySnapshot = restoreBatchStock(
+        db,
+        record.material_id,
+        [{ batchId: exactBatchId, quantity: normalizedQuantity }],
+      )
 
       // 写库存流水
       const logId = uuidv4()
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'supplier_return_cancel', ?, ?)
-      `).run(logId, record.material_id, record.quantity, beforeStock, afterStock, req.params.id, req.body.operator || 'system', '撤销退货给供应商')
+      `).run(logId, record.material_id, normalizedQuantity, inventorySnapshot.before, inventorySnapshot.after, req.params.id, actor.username, '撤销退货给供应商')
 
       db.exec('COMMIT')
       success(res, null, '退货记录已删除')
@@ -402,7 +552,11 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
       db.exec('ROLLBACK')
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 export default router

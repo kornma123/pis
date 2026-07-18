@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { Bell, User, LogOut, Search, ChevronRight, Settings, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { useLocation } from 'react-router-dom'
-import { cn } from '@/lib/utils'
 import { clearAuth } from '@/api/request'
 
 const breadcrumbMap: Record<string, string> = {
@@ -34,6 +33,8 @@ export default function TopBar() {
   const [notificationOpen, setNotificationOpen] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
   const notificationRef = useRef<HTMLDivElement>(null)
+  const notificationButtonRef = useRef<HTMLButtonElement>(null)
+  const notificationPanelRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
 
   function decodeBase64Url(str: string): string {
@@ -93,6 +94,12 @@ export default function TopBar() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    if (notificationOpen) {
+      notificationPanelRef.current?.focus()
+    }
+  }, [notificationOpen])
+
   const handleLogout = () => {
     clearAuth()
     toast.success('已退出登录')
@@ -131,15 +138,6 @@ export default function TopBar() {
 
   const breadcrumbs = generateBreadcrumbs()
 
-  // Mock notifications
-  const notifications = [
-    { id: 1, title: '库存预警', message: 'PCR试剂盒库存不足，请及时采购', time: '5分钟前', unread: true },
-    { id: 2, title: '入库提醒', message: '新批次试剂已入库，请确认验收', time: '1小时前', unread: true },
-    { id: 3, title: '系统通知', message: '系统将于今晚进行例行维护', time: '2小时前', unread: false },
-  ]
-
-  const unreadCount = notifications.filter(n => n.unread).length
-
   return (
     <header className="h-16 bg-white border-b border-[#e5e7eb] flex items-center justify-between px-6 flex-shrink-0">
       {/* Breadcrumb */}
@@ -176,56 +174,49 @@ export default function TopBar() {
         {/* Notifications */}
         <div className="relative" ref={notificationRef}>
           <button
-            onClick={() => setNotificationOpen(!notificationOpen)}
-            className="relative p-2 text-[#6b7280] hover:text-[#374151] hover:bg-gray-50 rounded-md transition-all duration-150"
+            ref={notificationButtonRef}
+            type="button"
+            aria-label="通知消息，数据源未接入"
+            aria-haspopup="dialog"
+            aria-expanded={notificationOpen}
+            aria-controls="topbar-notification-panel"
+            onClick={() => setNotificationOpen(open => !open)}
+            className="relative p-2 text-[#6b7280] hover:text-[#374151] hover:bg-gray-50 rounded-md transition-all duration-150 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500/10"
           >
-            <Bell className="w-5 h-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[11px] font-medium rounded-full flex items-center justify-center">
-                {unreadCount}
-              </span>
-            )}
+            <Bell className="w-5 h-5" aria-hidden="true" />
           </button>
 
           {notificationOpen && (
-            <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-[#e5e7eb] py-2 z-50">
-              <div className="px-4 py-2 border-b border-[#e5e7eb] flex items-center justify-between">
+            <div
+              ref={notificationPanelRef}
+              id="topbar-notification-panel"
+              role="dialog"
+              aria-label="通知消息"
+              tabIndex={-1}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.stopPropagation()
+                  setNotificationOpen(false)
+                  notificationButtonRef.current?.focus()
+                }
+              }}
+              className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-[#e5e7eb] py-2 z-50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500/10"
+            >
+              <div className="px-4 py-2 border-b border-[#e5e7eb]">
                 <span className="text-sm font-medium text-[#111827]">通知消息</span>
-                {unreadCount > 0 && (
-                  <span className="text-xs text-[#3b82f6] cursor-pointer hover:underline">
-                    标记全部已读
-                  </span>
-                )}
               </div>
-              <div className="max-h-72 overflow-y-auto">
-                {notifications.map(notification => (
-                  <div
-                    key={notification.id}
-                    className={cn(
-                      'px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors duration-150',
-                      notification.unread && 'bg-blue-50/50'
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={cn(
-                        'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',
-                        notification.unread ? 'bg-[#3b82f6]' : 'bg-gray-300'
-                      )} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[#111827]">{notification.title}</p>
-                        <p className="text-xs text-[#6b7280] mt-0.5 truncate">{notification.message}</p>
-                        <p className="text-xs text-gray-400 mt-1">{notification.time}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="px-4 py-6 text-center" aria-live="polite">
+                <Bell className="w-6 h-6 mx-auto text-gray-400" aria-hidden="true" />
+                <p className="mt-2 text-sm font-medium text-[#111827]">通知数据源未接入</p>
+                <p className="mt-1 text-xs text-[#6b7280]">当前没有可用于通知角标的已验证数据。</p>
               </div>
               <div className="px-4 py-2 border-t border-[#e5e7eb]">
                 <a
                   href="/alerts"
+                  onClick={() => setNotificationOpen(false)}
                   className="text-xs text-[#3b82f6] hover:underline flex items-center justify-center"
                 >
-                  查看全部通知
+                  前往预警中心
                 </a>
               </div>
             </div>

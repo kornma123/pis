@@ -1,43 +1,48 @@
 import { formatCurrency } from '@/lib/utils'
 
 interface InboundStatsProps {
-  total: number
-  amount: number
-  pendingOrders: number
-  supplierCount: number
+  total: number | null
+  amount: number | null
+  pendingOrders: number | null
+  supplierCount: number | null
+  error: string | null
   onFilterStatus: (status: string) => void
 }
 
-export default function InboundStats({ total, amount, pendingOrders, supplierCount, onFilterStatus }: InboundStatsProps) {
+function StatValue({ value, error, currency = false }: { value: number | null; error: string | null; currency?: boolean }) {
+  if (error) return <span className="text-base font-medium text-red-700">未能核实</span>
+  if (value === null) return <span className="text-base font-medium text-gray-500">核实中…</span>
+  return <>{currency ? formatCurrency(value) : value}</>
+}
+
+export default function InboundStats({ total, amount, pendingOrders, supplierCount, error, onFilterStatus }: InboundStatsProps) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <div
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="入库统计">
+      <button
+        type="button"
         onClick={() => onFilterStatus('')}
-        className="bg-white rounded-lg p-5 shadow-sm border border-gray-200 border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow"
+        className="min-h-24 rounded-lg border border-gray-200 border-l-4 border-l-blue-500 bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <div className="text-2xl font-semibold text-gray-900">{total}</div>
-        <div className="text-sm text-gray-500 mt-1">本月入库</div>
-      </div>
-      <div
-        onClick={() => onFilterStatus('completed')}
-        className="bg-white rounded-lg p-5 shadow-sm border border-gray-200 border-l-4 border-l-green-500 cursor-pointer hover:shadow-md transition-shadow"
+        <div className="text-2xl font-semibold text-gray-900"><StatValue value={total} error={error} /></div>
+        <div className="mt-1 text-sm text-gray-500">全部入库记录</div>
+      </button>
+      <div className="min-h-24 rounded-lg border border-gray-200 border-l-4 border-l-green-500 bg-white p-5 shadow-sm"
+        title={error || undefined}
       >
-        <div className="text-2xl font-semibold text-gray-900">{formatCurrency(amount)}</div>
-        <div className="text-sm text-gray-500 mt-1">入库金额</div>
+        <div className="text-2xl font-semibold text-gray-900"><StatValue value={amount} error={error} currency /></div>
+        <div className="mt-1 text-sm text-gray-500">全部入库金额</div>
       </div>
-      <div
+      <button
+        type="button"
         onClick={() => onFilterStatus('pending')}
-        className="bg-white rounded-lg p-5 shadow-sm border border-gray-200 border-l-4 border-l-amber-500 cursor-pointer hover:shadow-md transition-shadow"
+        className="min-h-24 rounded-lg border border-gray-200 border-l-4 border-l-amber-500 bg-white p-5 text-left shadow-sm transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <div className="text-2xl font-semibold text-gray-900">{pendingOrders}</div>
-        <div className="text-sm text-gray-500 mt-1">待入库</div>
-      </div>
-      <div
-        onClick={() => { }}
-        className="bg-white rounded-lg p-5 shadow-sm border border-gray-200 border-l-4 border-l-gray-500 cursor-pointer hover:shadow-md transition-shadow"
-      >
-        <div className="text-2xl font-semibold text-gray-900">{supplierCount}</div>
-        <div className="text-sm text-gray-500 mt-1">供应商数</div>
+        <div className="text-2xl font-semibold text-gray-900"><StatValue value={pendingOrders} error={error} /></div>
+        <div className="mt-1 text-sm text-gray-500">待入库采购单</div>
+      </button>
+      <div className="min-h-24 rounded-lg border border-gray-200 border-l-4 border-l-gray-500 bg-white p-5 shadow-sm" title={error || undefined}>
+        <div className="text-2xl font-semibold text-gray-900"><StatValue value={supplierCount} error={error} /></div>
+        <div className="mt-1 text-sm text-gray-500">涉及供应商</div>
       </div>
     </div>
   )

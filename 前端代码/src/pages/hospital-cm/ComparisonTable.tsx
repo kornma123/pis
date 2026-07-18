@@ -95,9 +95,16 @@ export default function ComparisonTable({
   const sorted = useMemo(() => {
     const arr = rows.slice()
     arr.sort((a, b) => {
-      let d = 0
-      if (sort.key === 'partnerName') d = (a.partnerName || a.partnerId).localeCompare(b.partnerName || b.partnerId, 'zh')
-      else d = (a[sort.key] as number) - (b[sort.key] as number)
+      if (sort.key !== 'partnerName' && a.measurable !== b.measurable) return a.measurable ? -1 : 1
+      if (sort.key === 'partnerName') {
+        const d = (a.partnerName || a.partnerId).localeCompare(b.partnerName || b.partnerId, 'zh')
+        return sort.dir === 'desc' ? -d : d
+      }
+      const av = a[sort.key] as number | null
+      const bv = b[sort.key] as number | null
+      if (av == null) return bv == null ? 0 : 1
+      if (bv == null) return -1
+      const d = av - bv
       return sort.dir === 'desc' ? -d : d
     })
     return arr
@@ -176,10 +183,14 @@ export default function ComparisonTable({
                 <tr key={r.partnerId} className="border-b border-gray-100 text-right">
                   <td className="px-3 py-3 text-left font-medium text-gray-900">{r.partnerName || r.partnerId}</td>
                   <td className="px-3 py-3 font-semibold text-[#0a2540]">
-                    {observing ? <span className="font-normal text-gray-400" data-testid="observing-badge">观察中·暂不出判定</span> : yuan(r.cm)}
+                    {observing ? (
+                      <span className="font-normal text-gray-400" data-testid="observing-badge">观察中·暂不出判定</span>
+                    ) : r.cm == null ? (
+                      <span className="font-normal text-gray-400">不可计算</span>
+                    ) : yuan(r.cm)}
                   </td>
                   <td className="px-3 py-3 text-gray-700">
-                    {observing ? '—' : (
+                    {observing || r.cmRate == null ? '—' : (
                       <>
                         {pct(r.cmRate)}
                         {/* 率覆盖技术收入占比：<全院时警示（率不代表全院） */}
@@ -192,7 +203,9 @@ export default function ComparisonTable({
                     )}
                   </td>
                   {/* ② 占全组固定成本覆盖份额（率旁并列）。⑩ 观察中行不露份额——它由被隐藏的 cm 派生，露出=泄漏未过门数字。 */}
-                  <td className="px-3 py-3 text-gray-600">{observing ? '—' : pct(r.fixedCoverageShare)}</td>
+                  <td className="px-3 py-3 text-gray-600">
+                    {observing || r.fixedCoverageShare == null ? '—' : pct(r.fixedCoverageShare)}
+                  </td>
                   <td className="px-3 py-3">
                     <span className="inline-block rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10.5px] text-gray-600">
                       {r.detail?.caliber ?? '仅染色'}

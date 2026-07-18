@@ -57,7 +57,7 @@ export default function InboundPrintModal({ open, data, selectedRecord, onClose 
                 <td className="border border-gray-200 px-2 py-2 font-mono">{row.batchNo || '-'}</td>
                 <td className="border border-gray-200 px-2 py-2">{row.quantity}</td>
                 <td className="border border-gray-200 px-2 py-2">{formatCurrency(row.price)}</td>
-                <td className="border border-gray-200 px-2 py-2">{formatCurrency(row.amount || row.price * row.quantity)}</td>
+                <td className="border border-gray-200 px-2 py-2">{formatCurrency(row.amount ?? row.price * row.quantity)}</td>
                 <td className="border border-gray-200 px-2 py-2">{row.supplierName || '-'}</td>
                 <td className="border border-gray-200 px-2 py-2">{formatDateTime(row.createdAt)}</td>
                 <td className="border border-gray-200 px-2 py-2">{getStatusLabel(getRecordStatus(row))}</td>

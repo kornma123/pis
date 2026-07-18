@@ -239,8 +239,8 @@ function buildBackendRegistry() {
  * 仍不可解析（fetch(fn())、无本地赋值）→ resolvable:false，另计 unresolvable（可见、不当违规）。
  * 返回 { calls, unresolvable }。call = {file,line,method,rawPath,relPath,segs,resolvable,kind,fromVar}
  */
-function parseFrontendCalls() {
-  const files = walk(FRONTEND_SRC, ['.ts', '.tsx'])
+function parseFrontendCalls(opts = {}) {
+  const files = opts.files || walk(FRONTEND_SRC, ['.ts', '.tsx'])
   const calls = []
   const reReqAxios = /\b(request|axios)\.(get|post|put|delete|patch)\s*(?:<[^(]*>)?\s*\(\s*(['"`])([^'"`]*)\3/
   const reFetchLiteral = /\bfetch\s*\(\s*(['"`])([^'"`]*)\1/
@@ -249,7 +249,7 @@ function parseFrontendCalls() {
   for (const file of files) {
     const raw = fs.readFileSync(file, 'utf8')
     const src = stripBlockComments(raw)
-    const lines = src.split('\n')
+    const lines = src.split(/\r?\n/)
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
       if (isCommentLine(line)) continue

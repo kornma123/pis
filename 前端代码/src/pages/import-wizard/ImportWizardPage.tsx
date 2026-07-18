@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Lock, Loader2, AlertCircle, CheckCircle2, Database, ArrowRight, Upload, Info, X, Circle } from 'lucide-react'
 import { statementImportApi } from '@/api/statement-import'
 import { useHospitals, ScoreCard, ByLineTable, AttentionItem, btnCls, btnPri, inputCls, yuan } from '@/pages/import-shared/ImportShared'
-import { useImportQueue, type QueueItem, type QStatus } from './useImportQueue'
+import { useImportQueue, type CommitConfirmation, type QueueItem, type QStatus } from './useImportQueue'
 
 const STATUS_META: Record<QStatus, { t: string; c: string }> = {
   pending: { t: '待核对', c: 'text-gray-500 bg-gray-100' },
@@ -18,12 +18,20 @@ export default function ImportWizardPage() {
   const { hospitals } = useHospitals()
   const q = useImportQueue(hospitals)
   const active = q.active
-  const [needConfirm, setNeedConfirm] = useState<string | null>(null)
+  const [needConfirm, setNeedConfirm] = useState<CommitConfirmation | null>(null)
+  const [overrideReason, setOverrideReason] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
 
   // active 项预览刷新（含 classify 后重预览把未识别清空）或切换家 → 清确认横幅，避免页级 needConfirm 赖着不走。
-  useEffect(() => { setNeedConfirm(null) }, [active?.id, active?.preview])
+  useEffect(() => { setNeedConfirm(null); setOverrideReason('') }, [active?.id, active?.preview])
+
+  const activeConfirmation = needConfirm && active
+    && needConfirm.itemId === active.id
+    && needConfirm.partnerId === active.partnerId
+    && needConfirm.serviceMonth === active.month
+    ? needConfirm
+    : null
 
   const takeFiles = (all: File[]) => {
     if (q.busy) { toast.info('正在解析，请稍候'); return }
@@ -35,10 +43,20 @@ export default function ImportWizardPage() {
     e.preventDefault(); setDragOver(false)
     takeFiles(Array.from(e.dataTransfer.files || []))
   }
-  const doCommit = async (confirm: boolean) => {
+  const doCommit = async (confirm: boolean, reason?: string) => {
     if (!active) return
-    const r = await q.commit(active, confirm)
-    setNeedConfirm(r === 'confirm' ? '对账单有未识别行或未对平，确认后照常入库（未识别金额不计入实验室收入）。' : null)
+    if (confirm && (!needConfirm
+      || needConfirm.itemId !== active.id
+      || needConfirm.partnerId !== active.partnerId
+      || needConfirm.serviceMonth !== active.month)) {
+      setNeedConfirm(null)
+      setOverrideReason('')
+      toast.error('确认对象已变化，请按当前医院和账期重新提交核对')
+      return
+    }
+    const r = await q.commit(active, confirm, reason)
+    setNeedConfirm(typeof r === 'object' ? r : null)
+    if (typeof r !== 'object') setOverrideReason('')
   }
 
   return (
@@ -88,19 +106,24 @@ export default function ImportWizardPage() {
         </div>
       )}
 
-      {active ? <ActiveDetail item={active} hospitals={hospitals} q={q} needConfirm={needConfirm} onCommit={doCommit} /> : (
+      {active ? <ActiveDetail item={active} hospitals={hospitals} q={q} needConfirm={activeConfirmation}
+        overrideReason={overrideReason} onOverrideReasonChange={setOverrideReason} onCommit={doCommit} /> : (
         <div className="rounded-lg border border-dashed border-gray-200 py-12 text-center text-[13px] text-gray-400">拖对账单进来后，在上方选一家开始核对。</div>
       )}
     </div>
   )
 }
 
-function ActiveDetail({ item, hospitals, q, needConfirm, onCommit }: {
+function ActiveDetail({ item, hospitals, q, needConfirm, overrideReason, onOverrideReasonChange, onCommit }: {
   item: QueueItem; hospitals: { id: string; name: string }[]; q: ReturnType<typeof useImportQueue>
-  needConfirm: string | null; onCommit: (confirm: boolean) => void
+  needConfirm: CommitConfirmation | null
+  overrideReason: string
+  onOverrideReasonChange: (reason: string) => void
+  onCommit: (confirm: boolean, reason?: string) => void
 }) {
   const p = item.preview
   const partnerName = hospitals.find((h) => h.id === item.partnerId)?.name || '该院'
+  const canSubmit = !q.busy && (item.status === 'attention' || item.status === 'ready')
   // LIS 预检（顺序引导：该院无 LIS → 拆分只能按账单数量估、偏下限）。不阻断入库。
   const [lisCov, setLisCov] = useState<{ total: number } | null>(null)
   useEffect(() => {
@@ -129,11 +152,11 @@ function ActiveDetail({ item, hospitals, q, needConfirm, onCommit }: {
       {/* 院 / 账期（自动认、可改） */}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
         <label className="flex flex-col gap-1"><span className="text-[12px] font-medium text-gray-500">合作医院{item.suggestedName && !item.partnerId && <span className="ml-1 text-amber-600">（原文「{item.suggestedName}」没认出，请手选）</span>}{item.suggestedName && item.partnerId && <span className="ml-1 text-emerald-600">（自动认自「{item.suggestedName}」）</span>}</span>
-          <select className={inputCls + ' w-64'} value={item.partnerId} onChange={(e) => q.setPartner(item.id, e.target.value)} aria-label="合作医院">
+          <select className={inputCls + ' w-64'} value={item.partnerId} disabled={q.busy} onChange={(e) => q.setPartner(item.id, e.target.value)} aria-label="合作医院">
             <option value="">选择医院…</option>{hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
           </select></label>
         <label className="flex flex-col gap-1"><span className="text-[12px] font-medium text-gray-500">账期</span>
-          <input type="month" className={inputCls + ' tabular-nums'} value={item.month} onChange={(e) => q.setMonth(item.id, e.target.value)} aria-label="账期" /></label>
+          <input type="month" className={inputCls + ' tabular-nums'} value={item.month} disabled={q.busy} onChange={(e) => q.setMonth(item.id, e.target.value)} aria-label="账期" /></label>
         <span className="inline-flex items-center gap-1 pb-2 text-[12px] text-gray-400"><Circle className="h-2.5 w-2.5 fill-current" />{item.fileName}</span>
       </div>
 
@@ -144,11 +167,16 @@ function ActiveDetail({ item, hospitals, q, needConfirm, onCommit }: {
         </div>
       )}
 
-      {item.error && <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{item.error}</div>}
+      {item.error && <div className="flex items-start justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">
+        <span className="flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{item.error}</span>
+        <button type="button" className="shrink-0 font-medium text-red-700 underline underline-offset-2 disabled:opacity-50" disabled={q.busy} onClick={() => q.runPreview(item)}>重新预览</button>
+      </div>}
       {!item.partnerId ? (
         <div className="rounded-lg border border-dashed border-gray-200 py-10 text-center text-[13px] text-gray-400">先认到医院（上方手选），再出预览。</div>
       ) : !item.month ? (
         <div className="rounded-lg border border-dashed border-gray-200 py-10 text-center text-[13px] text-gray-400">补上账期，再出预览。</div>
+      ) : item.status === 'error' && !p ? (
+        <div className="rounded-lg border border-dashed border-red-200 bg-red-50 py-10 text-center text-[13px] text-red-700">本次预览或入库未完成，修正问题后点「重新预览」。</div>
       ) : !p ? (
         <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-gray-400"><Loader2 className="h-4 w-4 animate-spin" />解析预览中…</div>
       ) : p.note ? (
@@ -164,17 +192,26 @@ function ActiveDetail({ item, hospitals, q, needConfirm, onCommit }: {
             <div className="rounded-lg border border-amber-200 bg-white p-4 shadow-sm">
               <h3 className="mb-1 text-[13px] font-semibold text-gray-900">待归类 <span className="text-[11.5px] font-normal text-gray-400">（{p.needsAttention.length} 行 · {yuan(p.revenue.unmatchedSettle + p.revenue.ambiguousSettle)}）</span></h3>
               <p className="mb-3 flex items-start gap-1.5 text-[12px] text-amber-700"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>当场归类会写回 <b>{partnerName}</b> 的识别规则、<b>以后每月自动照此识别</b>（不只这一张）。不想改规则就直接「入库」，未识别金额不计入实验室收入。</span></p>
-              <div className="space-y-2">{p.needsAttention.map((row, i) => <AttentionItem key={i} item={row.item} no={row.no} settle={row.settle} status={row.status} lines={item.lines} onClassify={(lk, rt, v) => q.classify(item, lk, rt, v)} />)}</div>
+              <fieldset disabled={!canSubmit} className="space-y-2 disabled:opacity-60">{p.needsAttention.map((row, i) => <AttentionItem key={i} item={row.item} no={row.no} settle={row.settle} status={row.status} lines={item.lines} onClassify={(lk, rt, v) => q.classify(item, lk, rt, v)} />)}</fieldset>
             </div>
           )}
           {needConfirm && (
             <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12.5px] text-amber-900">
-              <div className="mb-2">{needConfirm}</div>
-              <button className={btnPri} onClick={() => onCommit(true)} disabled={q.busy}>{q.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}确认入库（含未识别）</button>
+              <div className="mb-2">{needConfirm.message}</div>
+              <label htmlFor={`override-reason-${item.id}`} className="mb-1 block text-[12px] font-medium text-amber-900">确认理由</label>
+              <textarea
+                id={`override-reason-${item.id}`}
+                value={overrideReason}
+                onChange={(e) => onOverrideReasonChange(e.target.value)}
+                rows={2}
+                placeholder="写清楚核对方式和仍需旁路的原因，便于审计追溯"
+                className="mb-2 w-full rounded-md border border-amber-300 bg-white px-3 py-2 text-[13px] text-gray-900 outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10"
+              />
+              <button className={btnPri} onClick={() => onCommit(true, overrideReason)} disabled={!canSubmit || !overrideReason.trim()}>{q.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}确认入库（含未识别）</button>
             </div>
           )}
           {!needConfirm && (
-            <div className="flex justify-end"><button className={btnPri} onClick={() => onCommit(false)} disabled={q.busy}>{q.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}入库这一家</button></div>
+            <div className="flex justify-end"><button className={btnPri} onClick={() => onCommit(false)} disabled={!canSubmit}>{q.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}入库这一家</button></div>
           )}
         </>
       )}

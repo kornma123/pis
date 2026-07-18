@@ -14,6 +14,13 @@ import { recordCostException } from '../utils/cost-exceptions.js'
 import { resolveOutboundUnitCost } from '../utils/outbound-cost.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { recordOverride } from '../utils/override-log.js'
+import { requireTrustedRequestActor, withoutUntrustedActorFields } from '../security/trusted-request-actor.js'
+import {
+  consumeBatchStock,
+  inventoryTransactionError,
+  InventoryTransactionError,
+  restoreBatchStock,
+} from '../services/inventory-transactions.js'
 import {
   checkedAdd,
   checkedMultiply,
@@ -60,124 +67,202 @@ function recordLedgerDrift(db: any, outboundId: string, oi: any, operator: strin
   })
 }
 
-type StockOperation = 'add' | 'subtract'
-
-type StockMutationStep = {
+type OutboundRequestItem = {
   materialId: string
-  batchId?: string | null
   quantity: number
-  operation: StockOperation
-}
-
-type StockMutationPlan = {
-  materialId: string
   batchId?: string | null
-  inventoryBefore: number
-  inventoryAfter: number
-  batchBefore?: number
-  batchAfter?: number
+  batchNo?: string | null
+  usage?: string
+  receiver?: string | null
 }
 
-function buildStockMutationPlan(db: any, steps: StockMutationStep[]): StockMutationPlan[] | null {
-  const inventoryBalances = new Map<string, number>()
-  const batchBalances = new Map<string, number>()
-  const plan: StockMutationPlan[] = []
+type RestoreAllocation = {
+  materialId: string
+  batchId: string
+  quantity: number
+}
 
-  for (const step of steps) {
-    let inventoryBefore = inventoryBalances.get(step.materialId)
-    if (inventoryBefore === undefined) {
-      const inventory = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(step.materialId) as any
-      const parsedStock = inventory ? parseFiniteNumber(inventory.stock) : null
-      if (parsedStock === null) return null
-      inventoryBefore = parsedStock
-    }
-    const inventoryAfter = step.operation === 'add'
-      ? checkedAdd(inventoryBefore, step.quantity)
-      : checkedSubtract(inventoryBefore, step.quantity)
-    if (inventoryAfter === null) return null
-    inventoryBalances.set(step.materialId, inventoryAfter)
+type PreviewBatch = {
+  id: string
+  material_id: string
+  batch_no: string
+  quantity: number
+  remaining: number
+  status: number
+  expiry_date?: string | null
+  created_at?: string | null
+  inbound_price?: number | null
+  [key: string]: unknown
+}
 
-    let batchBefore: number | undefined
-    let batchAfter: number | undefined
-    if (step.batchId) {
-      batchBefore = batchBalances.get(step.batchId)
-      if (batchBefore === undefined) {
-        const batch = db.prepare('SELECT material_id, remaining, status FROM batches WHERE id = ?').get(step.batchId) as any
-        if (batch) {
-          if (batch.material_id !== step.materialId) return null
-          // A selected batch that became inactive while this request waited for the
-          // write lock is no longer a valid subtraction source. Keep it undefined so
-          // the locked batch sufficiency check rejects the whole transaction.
-          if (step.operation === 'subtract' && Number(batch.status) !== 1) {
-            batchBefore = undefined
-          } else {
-            const parsedRemaining = parseFiniteNumber(batch.remaining)
-            if (parsedRemaining === null) return null
-            batchBefore = parsedRemaining
-          }
-        } else if (step.operation === 'add') {
-          // PUT must not restore an old item into aggregate inventory when its batch
-          // ledger has disappeared.
-          return null
+/**
+ * 无副作用地预演 helper 将执行的“精确恢复 + 钉批优先 + FEFO 跨批分配”。
+ * 用于在写锁前拒绝确定失败的请求；锁内仍会由 inventory-transactions helper
+ * 重新读取并执行，预演结果绝不作为写入依据。
+ */
+function previewOutboundAllocations(
+  db: any,
+  requestItems: OutboundRequestItem[],
+  restorations: RestoreAllocation[] = [],
+): { items: any[]; totalCost: number } {
+  const materialIds = [...new Set([
+    ...requestItems.map((item) => item.materialId),
+    ...restorations.map((item) => item.materialId),
+  ])]
+  const materialActive = new Map<string, boolean>()
+  const batchesByMaterial = new Map<string, PreviewBatch[]>()
+
+  for (const materialId of materialIds) {
+    const material = db.prepare('SELECT is_deleted FROM materials WHERE id = ?').get(materialId) as any
+    materialActive.set(materialId, Boolean(material) && Number(material.is_deleted) === 0)
+    const batches = (db.prepare('SELECT * FROM batches WHERE material_id = ?').all(materialId) as any[])
+      .map((batch): PreviewBatch => {
+        const quantity = parseFiniteNumber(batch.quantity)
+        const remaining = parseFiniteNumber(batch.remaining)
+        if (quantity === null || remaining === null || quantity < 0 || remaining < 0) {
+          throw new InventoryTransactionError('Batch stock exceeds the supported numeric range', 'INVALID_PARAMETER')
         }
+        return { ...batch, quantity, remaining, status: Number(batch.status) }
+      })
+    batchesByMaterial.set(materialId, batches)
+  }
+
+  for (const restoration of restorations) {
+    const batch = batchesByMaterial.get(restoration.materialId)?.find((candidate) => candidate.id === restoration.batchId)
+    if (!batch) throw new InventoryTransactionError('Original batch is unavailable for reversal')
+    const remainingAfter = checkedAdd(batch.remaining, restoration.quantity)
+    if (remainingAfter === null) {
+      throw new InventoryTransactionError('Batch reversal exceeds the supported numeric range', 'INVALID_PARAMETER')
+    }
+    if (remainingAfter > batch.quantity) {
+      throw new InventoryTransactionError('Batch reversal would exceed its received quantity')
+    }
+    batch.remaining = remainingAfter
+    batch.status = 1
+  }
+
+  const transactionItems = [
+    ...requestItems.filter((item) => item.batchId || item.batchNo),
+    ...requestItems.filter((item) => !item.batchId && !item.batchNo),
+  ]
+  const plannedItems: any[] = []
+  let totalCost = 0
+
+  for (const item of transactionItems) {
+    if (!materialActive.get(item.materialId)) {
+      throw new InventoryTransactionError('Insufficient batch stock', 'STOCK_INSUFFICIENT')
+    }
+    const materialBatches = batchesByMaterial.get(item.materialId) ?? []
+    let candidates: PreviewBatch[]
+    if (item.batchId || item.batchNo) {
+      const selected = item.batchId
+        ? materialBatches.find((batch) => batch.id === item.batchId)
+        : materialBatches.find((batch) => batch.batch_no === item.batchNo)
+      if (!selected || (item.batchNo && selected.batch_no !== item.batchNo)
+        || selected.status !== 1 || selected.remaining <= 0) {
+        throw new InventoryTransactionError('Specified batch is unavailable', 'STOCK_INSUFFICIENT')
       }
-      if (batchBefore !== undefined) {
-        const nextBatch = step.operation === 'add'
-          ? checkedAdd(batchBefore, step.quantity)
-          : checkedSubtract(batchBefore, step.quantity)
-        if (nextBatch === null) return null
-        batchAfter = nextBatch
-        batchBalances.set(step.batchId, nextBatch)
-      }
+      candidates = [selected]
+    } else {
+      candidates = materialBatches
+        .filter((batch) => batch.status === 1 && batch.remaining > 0)
+        .sort((left, right) => {
+          const leftExpiry = typeof left.expiry_date === 'string' && left.expiry_date.trim() ? left.expiry_date : null
+          const rightExpiry = typeof right.expiry_date === 'string' && right.expiry_date.trim() ? right.expiry_date : null
+          if (leftExpiry === null && rightExpiry !== null) return 1
+          if (leftExpiry !== null && rightExpiry === null) return -1
+          if (leftExpiry !== rightExpiry) return String(leftExpiry).localeCompare(String(rightExpiry))
+          const createdOrder = String(left.created_at ?? '').localeCompare(String(right.created_at ?? ''))
+          return createdOrder || left.id.localeCompare(right.id)
+        })
     }
 
-    plan.push({
-      materialId: step.materialId,
-      batchId: step.batchId,
-      inventoryBefore,
-      inventoryAfter,
-      batchBefore,
-      batchAfter,
-    })
+    let needed = item.quantity
+    for (const batch of candidates) {
+      if (needed <= 0) break
+      const quantity = Math.min(batch.remaining, needed)
+      if (quantity <= 0) continue
+      const costResult = resolveOutboundUnitCost(db, item.materialId, batch)
+      const itemCost = checkedMultiply(costResult.unitCost, quantity)
+      const nextTotalCost = itemCost === null ? null : checkedAdd(totalCost, itemCost)
+      if (itemCost === null || nextTotalCost === null) {
+        throw new InventoryTransactionError('Outbound cost exceeds the supported numeric range', 'INVALID_PARAMETER')
+      }
+      totalCost = nextTotalCost
+      plannedItems.push({
+        materialId: item.materialId,
+        batchId: batch.id,
+        batchNo: batch.batch_no,
+        quantity,
+        unitCost: costResult.unitCost,
+        itemCost,
+        usage: item.usage || 'self',
+        receiver: item.receiver || null,
+        drift: costResult.drift,
+        costSource: costResult.source,
+        costNote: costResult.note,
+      })
+      const remainingAfter = checkedSubtract(batch.remaining, quantity)
+      const neededAfter = checkedSubtract(needed, quantity)
+      if (remainingAfter === null || neededAfter === null) {
+        throw new InventoryTransactionError('Batch allocation exceeds the supported numeric range', 'INVALID_PARAMETER')
+      }
+      batch.remaining = remainingAfter
+      needed = neededAfter
+      if (batch.remaining === 0) batch.status = 0
+    }
+    if (needed > 0) {
+      const message = item.batchId || item.batchNo ? 'Insufficient specified batch stock' : 'Insufficient batch stock'
+      throw new InventoryTransactionError(message, 'STOCK_INSUFFICIENT')
+    }
   }
-  return plan
+
+  return { items: plannedItems, totalCost }
 }
 
-function hasInsufficientInventory(plan: StockMutationPlan[], steps: StockMutationStep[]): boolean {
-  return plan.some((mutation, index) => steps[index].operation === 'subtract' && mutation.inventoryAfter < 0)
-}
-
-function hasInsufficientBatch(plan: StockMutationPlan[], steps: StockMutationStep[]): boolean {
-  return plan.some((mutation, index) => {
-    const step = steps[index]
-    return step.operation === 'subtract'
-      && Boolean(step.batchId)
-      && (mutation.batchAfter === undefined || mutation.batchAfter < 0)
-  })
-}
-
-function recheckOutboundCosts(db: any, items: any[]): { items: any[]; totalCost: number } | null {
-  let totalCost = 0
-  const recheckedItems: any[] = []
+function restoreAllocationsFromOutboundItems(items: any[]): RestoreAllocation[] {
+  const grouped = new Map<string, RestoreAllocation>()
   for (const item of items) {
-    const batch = item.batchId
-      ? db.prepare('SELECT * FROM batches WHERE id = ?').get(item.batchId) as any
-      : null
-    const costResult = resolveOutboundUnitCost(db, item.materialId, batch)
-    const itemCost = checkedMultiply(costResult.unitCost, item.quantity)
-    const nextTotalCost = itemCost === null ? null : checkedAdd(totalCost, itemCost)
-    if (itemCost === null || nextTotalCost === null) return null
-    totalCost = nextTotalCost
-    recheckedItems.push({
-      ...item,
-      unitCost: costResult.unitCost,
-      itemCost,
-      drift: costResult.drift,
-      costSource: costResult.source,
-      costNote: costResult.note,
-    })
+    const materialId = typeof item.material_id === 'string' ? item.material_id : ''
+    const batchId = typeof item.batch_id === 'string' && item.batch_id.trim() ? item.batch_id : ''
+    const quantity = parseFinitePositiveNumber(item.quantity)
+    if (!materialId || !batchId) {
+      throw new InventoryTransactionError('Original batch allocation is unavailable for reversal')
+    }
+    if (quantity === null) {
+      throw new InventoryTransactionError('Original outbound quantity exceeds the supported numeric range', 'INVALID_PARAMETER')
+    }
+    const key = `${materialId}\u0000${batchId}`
+    const previous = grouped.get(key)
+    const groupedQuantity = checkedAdd(previous?.quantity ?? 0, quantity)
+    if (groupedQuantity === null) {
+      throw new InventoryTransactionError('Batch reversal exceeds the supported numeric range', 'INVALID_PARAMETER')
+    }
+    grouped.set(key, { materialId, batchId, quantity: groupedQuantity })
   }
-  return { items: recheckedItems, totalCost }
+  return [...grouped.values()]
+}
+
+function groupRestorationsByMaterial(restorations: RestoreAllocation[]): Map<string, RestoreAllocation[]> {
+  const grouped = new Map<string, RestoreAllocation[]>()
+  for (const restoration of restorations) {
+    const materialItems = grouped.get(restoration.materialId) ?? []
+    materialItems.push(restoration)
+    grouped.set(restoration.materialId, materialItems)
+  }
+  return grouped
+}
+
+function sumRestorationQuantity(restorations: RestoreAllocation[]): number {
+  let total = 0
+  for (const restoration of restorations) {
+    const next = checkedAdd(total, restoration.quantity)
+    if (next === null) {
+      throw new InventoryTransactionError('Batch reversal exceeds the supported numeric range', 'INVALID_PARAMETER')
+    }
+    total = next
+  }
+  return total
 }
 
 // 排序白名单：key = 前端/API 允许的排序字段名，value = 受控的 SQL 表达式（绝不拼接用户输入，防注入）。
@@ -292,6 +377,8 @@ router.get('/stats', (req, res) => {
 })
 
 router.post('/', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { type, projectId, items, remark } = req.body
     if (!isLiveOutboundType(type) || !Array.isArray(items) || items.length === 0) {
@@ -304,64 +391,41 @@ router.post('/', requireWriteAccess, (req, res) => {
       if (!item?.materialId || normalizedQuantity === null) {
         error(res, 'Invalid quantity', 'INVALID_PARAMETER', 400); return
       }
-      normalizedItems.push({ ...item, quantity: normalizedQuantity })
+      const batchId = item.batchId == null || item.batchId === ''
+        ? null
+        : typeof item.batchId === 'string' && item.batchId.trim()
+          ? item.batchId.trim()
+          : undefined
+      const batchNo = item.batchNo == null || item.batchNo === ''
+        ? null
+        : typeof item.batchNo === 'string' && item.batchNo.trim()
+          ? item.batchNo.trim()
+          : undefined
+      if (batchId === undefined || batchNo === undefined) {
+        error(res, 'Invalid batch selector', 'INVALID_PARAMETER', 400); return
+      }
+      normalizedItems.push({ ...item, quantity: normalizedQuantity, batchId, batchNo })
     }
 
     const db = getDatabase()
     const idemKey = readIdempotencyKey(req)
     const idemScope = 'outbound:create'
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
     if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
 
     const outboundNo = generateOutboundNo()
     const id = uuidv4()
-    const operator = req.body.operator || 'system'
+    const operator = actor.username
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
 
-    let totalCost = 0
-    const outboundItems: any[] = []
-
-    for (const item of normalizedItems) {
-      const { materialId, quantity } = item
-      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-      if (!inv) {
-        error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
-      }
-      if (parseFiniteNumber(inv.stock) === null) {
-        error(res, 'Outbound stock exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
-      }
-
-      const batch = db.prepare(`
-        SELECT b.* FROM batches b
-        JOIN materials m ON b.material_id = m.id
-        WHERE b.material_id = ? AND b.remaining > 0 AND b.status = 1 AND m.is_deleted = 0
-        ORDER BY b.expiry_date ASC
-      `).get(materialId) as any
-      // 库存双账本守恒守卫（项A）：缺批次绝不静默回退 0（会喂低 CM 分母），走物料均价兜底 + 落漂移告警
-      const costRes = resolveOutboundUnitCost(db, materialId, batch)
-      const unitCost = costRes.unitCost
-      const itemCost = checkedMultiply(unitCost, quantity)
-      const nextTotalCost = itemCost === null ? null : checkedAdd(totalCost, itemCost)
-      if (itemCost === null || nextTotalCost === null) {
-        error(res, 'Outbound cost exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
-      }
-      totalCost = nextTotalCost
-
-      outboundItems.push({ materialId, batchId: batch?.id || null, batchNo: batch?.batch_no || null, quantity, unitCost, itemCost, usage: item.usage || 'self', receiver: item.receiver || null, drift: costRes.drift, costSource: costRes.source, costNote: costRes.note })
-    }
-
-    const stockSteps: StockMutationStep[] = outboundItems.map((item) => ({
-      materialId: item.materialId,
-      batchId: item.batchId,
-      quantity: item.quantity,
-      operation: 'subtract' as const,
-    }))
-    const preflightStockPlan = buildStockMutationPlan(db, stockSteps)
-    if (!preflightStockPlan) {
-      error(res, 'Outbound stock arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
-    }
-    if (hasInsufficientInventory(preflightStockPlan, stockSteps)) {
-      error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
+    // 锁前预演用于零副作用快速拒绝；锁内仍重新预演并由 helper 执行真实分配。
+    try {
+      previewOutboundAllocations(db, normalizedItems)
+    } catch (err) {
+      const inventoryError = inventoryTransactionError(err)
+      if (!inventoryError) throw err
+      error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode)
+      return
     }
 
     const materialUnits = db.prepare('SELECT id, unit FROM materials WHERE id IN (' + normalizedItems.map(() => '?').join(',') + ')').all(...normalizedItems.map((i: any) => i.materialId)) as any[]
@@ -371,43 +435,64 @@ router.post('/', requireWriteAccess, (req, res) => {
     db.exec('BEGIN IMMEDIATE')
     try {
       if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
-      // 事务内重新校验库存，防止并发窗口
-      for (const item of normalizedItems) {
-        const { materialId, quantity } = item
-        const invCheck = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-        if (!invCheck || invCheck.stock < quantity) {
-          db.exec('ROLLBACK')
-          error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422)
-          return
+      previewOutboundAllocations(db, normalizedItems)
+      let totalCost = 0
+      const outboundItems: any[] = []
+      const stockMutations: Array<{ materialId: string; quantity: number; before: number; after: number }> = []
+
+      // 先兑现显式钉批，再让未指定项在剩余批次上跑 FEFO，避免请求顺序让 FEFO 抢走钉批库存。
+      const transactionItems = [
+        ...normalizedItems.filter((item) => item.batchId || item.batchNo),
+        ...normalizedItems.filter((item) => !item.batchId && !item.batchNo),
+      ]
+      for (const item of transactionItems) {
+        const consumed = consumeBatchStock(
+          db,
+          item.materialId,
+          item.quantity,
+          { batchId: item.batchId, batchNo: item.batchNo },
+          { lastOutboundId: id },
+        )
+        stockMutations.push({
+          materialId: item.materialId,
+          quantity: item.quantity,
+          before: consumed.inventory.before,
+          after: consumed.inventory.after,
+        })
+
+        for (const allocation of consumed.allocations) {
+          const batch = db.prepare('SELECT * FROM batches WHERE id = ? AND material_id = ?')
+            .get(allocation.batchId, item.materialId) as any
+          if (!batch) throw new InventoryTransactionError('Allocated batch disappeared before cost snapshot')
+          const costResult = resolveOutboundUnitCost(db, item.materialId, batch)
+          const itemCost = checkedMultiply(costResult.unitCost, allocation.quantity)
+          const nextTotalCost = itemCost === null ? null : checkedAdd(totalCost, itemCost)
+          if (itemCost === null || nextTotalCost === null) {
+            throw new InventoryTransactionError('Outbound cost exceeds the supported numeric range', 'INVALID_PARAMETER')
+          }
+          totalCost = nextTotalCost
+          outboundItems.push({
+            materialId: item.materialId,
+            batchId: allocation.batchId,
+            batchNo: allocation.batchNo,
+            quantity: allocation.quantity,
+            unitCost: costResult.unitCost,
+            itemCost,
+            usage: item.usage || 'self',
+            receiver: item.receiver || null,
+            drift: costResult.drift,
+            costSource: costResult.source,
+            costNote: costResult.note,
+          })
         }
       }
-      const transactionStockPlan = buildStockMutationPlan(db, stockSteps)
-      const recheckedCosts = recheckOutboundCosts(db, outboundItems)
-      if (!transactionStockPlan || !recheckedCosts) {
-        db.exec('ROLLBACK')
-        error(res, 'Outbound arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
-        return
-      }
-      if (hasInsufficientInventory(transactionStockPlan, stockSteps)) {
-        db.exec('ROLLBACK')
-        error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422)
-        return
-      }
-      if (hasInsufficientBatch(transactionStockPlan, stockSteps)) {
-        db.exec('ROLLBACK')
-        error(res, 'Insufficient batch stock', 'STOCK_INSUFFICIENT', 422)
-        return
-      }
-      totalCost = recheckedCosts.totalCost
 
       db.prepare(`
         INSERT INTO outbound_records (id, outbound_no, type, project_id, total_cost, operator, status, remark)
         VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)
       `).run(id, outboundNo, type, projectId || null, totalCost, operator, remark || null)
 
-      for (let index = 0; index < recheckedCosts.items.length; index++) {
-        const oi = recheckedCosts.items[index]
-        const mutation = transactionStockPlan[index]
+      for (const oi of outboundItems) {
         const itemId = uuidv4()
         db.prepare(`
           INSERT INTO outbound_items (id, outbound_id, material_id, batch_id, batch_no, quantity, unit, unit_cost, total_cost, usage, receiver)
@@ -416,17 +501,10 @@ router.post('/', requireWriteAccess, (req, res) => {
 
         if (oi.drift) recordLedgerDrift(db, id, oi, operator)
 
-        db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(mutation.inventoryAfter, oi.materialId)
-
-        if (oi.batchId && mutation.batchAfter !== undefined) {
-          db.prepare('UPDATE batches SET remaining = ?, status = ? WHERE id = ?')
-            .run(mutation.batchAfter, mutation.batchAfter <= 0 ? 0 : 1, oi.batchId)
-        }
-
         // 自用物料创建使用中跟踪记录
         if ((oi.usage || 'self') === 'self' && oi.batchId) {
           const mat = db.prepare('SELECT name, spec FROM materials WHERE id = ? AND is_deleted = 0').get(oi.materialId) as any
-          const trkId = `TRK-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+          const trkId = `TRK-${uuidv4()}`
           const today = new Date().toISOString().split('T')[0]
           db.prepare(`
             INSERT INTO batch_usage_tracking
@@ -435,11 +513,14 @@ router.post('/', requireWriteAccess, (req, res) => {
           `).run(trkId, oi.materialId, mat?.name || '', oi.batchNo || '', mat?.spec || '', oi.quantity, oi.quantity, unitMap.get(oi.materialId) || 'pcs', today, 30, 'self', null)
         }
 
+      }
+
+      for (const mutation of stockMutations) {
         const logId = uuidv4()
         db.prepare(`
           INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
           VALUES (?, 'outbound', ?, ?, ?, ?, ?, 'outbound', ?)
-        `).run(logId, oi.materialId, -oi.quantity, mutation.inventoryBefore, mutation.inventoryAfter, id, operator)
+        `).run(logId, mutation.materialId, -mutation.quantity, mutation.before, mutation.after, id, operator)
       }
 
       responseEnvelope = buildSuccessEnvelope({ id, outboundNo, type, projectId, totalCost, status: 'completed', createdAt: new Date().toISOString() }, 'Outbound created')
@@ -448,6 +529,11 @@ router.post('/', requireWriteAccess, (req, res) => {
     } catch (err) {
       db.exec('ROLLBACK')
       if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+      const inventoryError = inventoryTransactionError(err)
+      if (inventoryError) {
+        error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode)
+        return
+      }
       throw err
     }
 
@@ -459,6 +545,8 @@ router.post('/', requireWriteAccess, (req, res) => {
 })
 
 router.put('/:id', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const { type, projectId, items: newItems, remark } = req.body
@@ -472,7 +560,20 @@ router.put('/:id', requireWriteAccess, (req, res) => {
       if (!item?.materialId || normalizedQuantity === null) {
         error(res, 'Invalid quantity', 'INVALID_PARAMETER', 400); return
       }
-      normalizedNewItems.push({ ...item, quantity: normalizedQuantity })
+      const batchId = item.batchId == null || item.batchId === ''
+        ? null
+        : typeof item.batchId === 'string' && item.batchId.trim()
+          ? item.batchId.trim()
+          : undefined
+      const batchNo = item.batchNo == null || item.batchNo === ''
+        ? null
+        : typeof item.batchNo === 'string' && item.batchNo.trim()
+          ? item.batchNo.trim()
+          : undefined
+      if (batchId === undefined || batchNo === undefined) {
+        error(res, 'Invalid batch selector', 'INVALID_PARAMETER', 400); return
+      }
+      normalizedNewItems.push({ ...item, quantity: normalizedQuantity, batchId, batchNo })
     }
 
     const db = getDatabase()
@@ -483,60 +584,20 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     }
 
     const oldItems = db.prepare('SELECT * FROM outbound_items WHERE outbound_id = ?').all(id) as any[]
-
     let newTotalCost = 0
-    const processedItems: any[] = []
-    for (const item of normalizedNewItems) {
-      const { materialId, quantity } = item
-      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-      if (!inv) {
-        error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
-      }
-      if (parseFiniteNumber(inv.stock) === null) {
-        error(res, 'Outbound stock exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
-      }
-      const batch = db.prepare(`
-        SELECT b.* FROM batches b
-        JOIN materials m ON b.material_id = m.id
-        WHERE b.material_id = ? AND b.remaining > 0 AND b.status = 1 AND m.is_deleted = 0
-        ORDER BY b.expiry_date ASC
-      `).get(materialId) as any
-      // 库存双账本守恒守卫（项A）：缺批次绝不静默回退 0
-      const costRes = resolveOutboundUnitCost(db, materialId, batch)
-      const unitCost = costRes.unitCost
-      const itemCost = checkedMultiply(unitCost, quantity)
-      const nextTotalCost = itemCost === null ? null : checkedAdd(newTotalCost, itemCost)
-      if (itemCost === null || nextTotalCost === null) {
-        error(res, 'Outbound cost exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
-      }
-      newTotalCost = nextTotalCost
-      processedItems.push({ materialId, batchId: batch?.id || null, batchNo: batch?.batch_no || null, quantity, unitCost, itemCost, usage: item.usage || 'self', receiver: item.receiver || null, drift: costRes.drift, costSource: costRes.source, costNote: costRes.note })
-    }
-
-    const preflightUpdateSteps: StockMutationStep[] = [
-      ...oldItems.map((item) => ({
-        materialId: item.material_id,
-        batchId: item.batch_id,
-        quantity: item.quantity,
-        operation: 'add' as const,
-      })),
-      ...processedItems.map((item) => ({
-        materialId: item.materialId,
-        batchId: item.batchId,
-        quantity: item.quantity,
-        operation: 'subtract' as const,
-      })),
-    ]
-    const preflightUpdatePlan = buildStockMutationPlan(db, preflightUpdateSteps)
-    if (!preflightUpdatePlan) {
-      error(res, 'Outbound update arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
-    }
-    if (hasInsufficientInventory(preflightUpdatePlan, preflightUpdateSteps)) {
-      error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
+    try {
+      const restorations = restoreAllocationsFromOutboundItems(oldItems)
+      newTotalCost = previewOutboundAllocations(db, normalizedNewItems, restorations).totalCost
+    } catch (err) {
+      const inventoryError = inventoryTransactionError(err)
+      if (!inventoryError) throw err
+      error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode)
+      return
     }
 
     const materialUnits = db.prepare('SELECT id, unit FROM materials WHERE id IN (' + normalizedNewItems.map(() => '?').join(',') + ')').all(...normalizedNewItems.map((i: any) => i.materialId)) as any[]
     const unitMap = new Map(materialUnits.map((m: any) => [m.id, m.unit]))
+    const operator = actor.username
 
     db.exec('BEGIN IMMEDIATE')
     try {
@@ -546,87 +607,102 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         error(res, 'Outbound record changed before update', 'CONCURRENT_MODIFICATION', 409)
         return
       }
+      if (transactionRecord.type === 'bom') {
+        db.exec('ROLLBACK')
+        error(res, 'Historical BOM outbound records are read-only', 'OUTBOUND_TYPE_RETIRED', 409)
+        return
+      }
       const transactionOldItems = db.prepare('SELECT * FROM outbound_items WHERE outbound_id = ?').all(id) as any[]
-      const transactionSteps: StockMutationStep[] = [
-        ...transactionOldItems.map((item) => ({
-          materialId: item.material_id,
-          batchId: item.batch_id,
-          quantity: item.quantity,
-          operation: 'add' as const,
-        })),
-        ...processedItems.map((item) => ({
-          materialId: item.materialId,
-          batchId: item.batchId,
-          quantity: item.quantity,
-          operation: 'subtract' as const,
-        })),
-      ]
-      const transactionPlan = buildStockMutationPlan(db, transactionSteps)
-      const recheckedCosts = recheckOutboundCosts(db, processedItems)
-      if (!transactionPlan || !recheckedCosts) {
-        db.exec('ROLLBACK')
-        error(res, 'Outbound update arithmetic exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
-        return
-      }
-      if (hasInsufficientInventory(transactionPlan, transactionSteps)) {
-        db.exec('ROLLBACK')
-        error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422)
-        return
-      }
-      if (hasInsufficientBatch(transactionPlan, transactionSteps)) {
-        db.exec('ROLLBACK')
-        error(res, 'Insufficient batch stock', 'STOCK_INSUFFICIENT', 422)
-        return
-      }
-      const oldPlan = transactionPlan.slice(0, transactionOldItems.length)
-      const newPlan = transactionPlan.slice(transactionOldItems.length)
-      newTotalCost = recheckedCosts.totalCost
+      const restorations = restoreAllocationsFromOutboundItems(transactionOldItems)
+      previewOutboundAllocations(db, normalizedNewItems, restorations)
 
-      // 1. 回退旧 items 库存
-      for (let index = 0; index < transactionOldItems.length; index++) {
-        const item = transactionOldItems[index]
-        const mutation = oldPlan[index]
-        db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(mutation.inventoryAfter, item.material_id)
-        if (item.batch_id && mutation.batchAfter !== undefined) {
-          db.prepare('UPDATE batches SET remaining = ?, status = 1 WHERE id = ?').run(mutation.batchAfter, item.batch_id)
-        }
+      const restorationLogs: Array<{ materialId: string; quantity: number; before: number; after: number }> = []
+      for (const [materialId, allocations] of groupRestorationsByMaterial(restorations)) {
+        const snapshot = restoreBatchStock(
+          db,
+          materialId,
+          allocations.map(({ batchId, quantity }) => ({ batchId, quantity })),
+        )
+        const quantity = sumRestorationQuantity(allocations)
+        restorationLogs.push({ materialId, quantity, before: snapshot.before, after: snapshot.after })
+      }
+
+      // 现有 tracking 表没有 outbound_id；只能沿用“物料 + 批号 + in-use”的最窄可用清理条件。
+      for (const item of transactionOldItems) {
         if (item.batch_no) {
-          db.prepare("DELETE FROM batch_usage_tracking WHERE material_id = ? AND batch = ? AND status = 'in-use'").run(item.material_id, item.batch_no)
+          db.prepare("DELETE FROM batch_usage_tracking WHERE material_id = ? AND batch = ? AND status = 'in-use'")
+            .run(item.material_id, item.batch_no)
         }
-        db.prepare(`
-          INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
-          VALUES (?, 'return', ?, ?, ?, ?, ?, 'outbound_update', ?, '出库修改：回退原明细')
-        `).run(uuidv4(), item.material_id, item.quantity, mutation.inventoryBefore, mutation.inventoryAfter, id, req.body.operator || 'system')
       }
-
-      // 2. 删除旧 items
       db.prepare('DELETE FROM outbound_items WHERE outbound_id = ?').run(id)
 
-      // 4. 更新记录
-      db.prepare('UPDATE outbound_records SET type = ?, project_id = ?, total_cost = ?, remark = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(type || 'project', projectId || null, newTotalCost, remark || null, id)
+      const processedItems: any[] = []
+      const stockMutations: Array<{ materialId: string; quantity: number; before: number; after: number }> = []
+      let transactionTotalCost = 0
+      const transactionItems = [
+        ...normalizedNewItems.filter((item) => item.batchId || item.batchNo),
+        ...normalizedNewItems.filter((item) => !item.batchId && !item.batchNo),
+      ]
+      for (const item of transactionItems) {
+        const consumed = consumeBatchStock(
+          db,
+          item.materialId,
+          item.quantity,
+          { batchId: item.batchId, batchNo: item.batchNo },
+          { lastOutboundId: id },
+        )
+        stockMutations.push({
+          materialId: item.materialId,
+          quantity: item.quantity,
+          before: consumed.inventory.before,
+          after: consumed.inventory.after,
+        })
+        for (const allocation of consumed.allocations) {
+          const batch = db.prepare('SELECT * FROM batches WHERE id = ? AND material_id = ?')
+            .get(allocation.batchId, item.materialId) as any
+          if (!batch) throw new InventoryTransactionError('Allocated batch disappeared before cost snapshot')
+          const costResult = resolveOutboundUnitCost(db, item.materialId, batch)
+          const itemCost = checkedMultiply(costResult.unitCost, allocation.quantity)
+          const nextTotalCost = itemCost === null ? null : checkedAdd(transactionTotalCost, itemCost)
+          if (itemCost === null || nextTotalCost === null) {
+            throw new InventoryTransactionError('Outbound cost exceeds the supported numeric range', 'INVALID_PARAMETER')
+          }
+          transactionTotalCost = nextTotalCost
+          processedItems.push({
+            materialId: item.materialId,
+            batchId: allocation.batchId,
+            batchNo: allocation.batchNo,
+            quantity: allocation.quantity,
+            unitCost: costResult.unitCost,
+            itemCost,
+            usage: item.usage || 'self',
+            receiver: item.receiver || null,
+            drift: costResult.drift,
+            costSource: costResult.source,
+            costNote: costResult.note,
+          })
+        }
+      }
+      newTotalCost = transactionTotalCost
 
-      // 5. 创建新 items 并扣减库存
-      for (let index = 0; index < recheckedCosts.items.length; index++) {
-        const pi = recheckedCosts.items[index]
-        const mutation = newPlan[index]
+      const updatedType = type ?? transactionRecord.type
+      const updatedProjectId = projectId !== undefined ? projectId || null : transactionRecord.project_id
+      const updatedRemark = remark !== undefined ? remark || null : transactionRecord.remark
+      db.prepare('UPDATE outbound_records SET type = ?, project_id = ?, total_cost = ?, remark = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(updatedType, updatedProjectId, newTotalCost, updatedRemark, id)
+
+      for (const pi of processedItems) {
         const itemId = uuidv4()
         db.prepare(`
           INSERT INTO outbound_items (id, outbound_id, material_id, batch_id, batch_no, quantity, unit, unit_cost, total_cost, usage, receiver)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(itemId, id, pi.materialId, pi.batchId, pi.batchNo, pi.quantity, unitMap.get(pi.materialId) || 'pcs', pi.unitCost, pi.itemCost, pi.usage || 'self', pi.receiver || null)
 
-        if (pi.drift) recordLedgerDrift(db, id, pi, req.body.operator || 'system')
-
-        db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(mutation.inventoryAfter, pi.materialId)
-        if (pi.batchId && mutation.batchAfter !== undefined) {
-          db.prepare('UPDATE batches SET remaining = ?, status = ? WHERE id = ?')
-            .run(mutation.batchAfter, mutation.batchAfter <= 0 ? 0 : 1, pi.batchId)
-        }
+        if (pi.drift) recordLedgerDrift(db, id, pi, operator)
 
         if ((pi.usage || 'self') === 'self' && pi.batchId) {
           const mat = db.prepare('SELECT name, spec FROM materials WHERE id = ? AND is_deleted = 0').get(pi.materialId) as any
-          const trkId = `TRK-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+          const trkId = `TRK-${uuidv4()}`
           const today = new Date().toISOString().split('T')[0]
           db.prepare(`
             INSERT INTO batch_usage_tracking
@@ -634,70 +710,137 @@ router.put('/:id', requireWriteAccess, (req, res) => {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, 'in-use', datetime('now'), datetime('now'))
           `).run(trkId, pi.materialId, mat?.name || '', pi.batchNo || '', mat?.spec || '', pi.quantity, pi.quantity, unitMap.get(pi.materialId) || 'pcs', today, 30, 'self', null)
         }
+      }
 
-        const logId = uuidv4()
+      for (const restoration of restorationLogs) {
+        db.prepare(`
+          INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
+          VALUES (?, 'return', ?, ?, ?, ?, ?, 'outbound_update', ?, '出库修改：回退原明细')
+        `).run(uuidv4(), restoration.materialId, restoration.quantity, restoration.before, restoration.after, id, operator)
+      }
+      for (const mutation of stockMutations) {
         db.prepare(`
           INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
           VALUES (?, 'outbound', ?, ?, ?, ?, ?, 'outbound', ?)
-        `).run(logId, pi.materialId, -pi.quantity, mutation.inventoryBefore, mutation.inventoryAfter, id, req.body.operator || 'system')
+        `).run(uuidv4(), mutation.materialId, -mutation.quantity, mutation.before, mutation.after, id, operator)
       }
 
       db.exec('COMMIT')
     } catch (err) {
       db.exec('ROLLBACK')
+      const inventoryError = inventoryTransactionError(err)
+      if (inventoryError) {
+        error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode)
+        return
+      }
       throw err
     }
 
     success(res, { id, totalCost: newTotalCost }, 'Outbound updated')
   } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }
     error(res, err.message)
   }
 })
 
 router.delete('/:id', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
-    if (!record) { error(res, '记录不存在', 'NOT_FOUND', 404); return }
+    if (!record) { error(res, 'Record not found', 'NOT_FOUND', 404); return }
     if (record.type === 'bom') {
       error(res, 'Historical BOM outbound records are read-only', 'OUTBOUND_TYPE_RETIRED', 409); return
     }
 
     const items = db.prepare('SELECT * FROM outbound_items WHERE outbound_id = ?').all(id) as any[]
+    try {
+      const restorations = restoreAllocationsFromOutboundItems(items)
+      previewOutboundAllocations(db, [], restorations)
+    } catch (err) {
+      const inventoryError = inventoryTransactionError(err)
+      if (!inventoryError) throw err
+      error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode)
+      return
+    }
 
     db.exec('BEGIN IMMEDIATE')
     try {
-      for (const item of items) {
-        db.prepare('UPDATE inventory SET stock = stock + ? WHERE material_id = ?').run(item.quantity, item.material_id)
-        if (item.batch_id) {
-          db.prepare('UPDATE batches SET remaining = remaining + ?, status = 1 WHERE id = ?').run(item.quantity, item.batch_id)
-        }
+      const transactionRecord = db.prepare('SELECT * FROM outbound_records WHERE id = ? AND is_deleted = 0').get(id) as any
+      if (!transactionRecord) {
+        db.exec('ROLLBACK')
+        error(res, 'Outbound record changed before delete', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
+      if (transactionRecord.type === 'bom') {
+        db.exec('ROLLBACK')
+        error(res, 'Historical BOM outbound records are read-only', 'OUTBOUND_TYPE_RETIRED', 409)
+        return
+      }
+      const transactionItems = db.prepare('SELECT * FROM outbound_items WHERE outbound_id = ?').all(id) as any[]
+      const restorations = restoreAllocationsFromOutboundItems(transactionItems)
+      previewOutboundAllocations(db, [], restorations)
+
+      const restorationLogs: Array<{ materialId: string; quantity: number; before: number; after: number }> = []
+      for (const [materialId, allocations] of groupRestorationsByMaterial(restorations)) {
+        const snapshot = restoreBatchStock(
+          db,
+          materialId,
+          allocations.map(({ batchId, quantity }) => ({ batchId, quantity })),
+        )
+        const quantity = sumRestorationQuantity(allocations)
+        restorationLogs.push({ materialId, quantity, before: snapshot.before, after: snapshot.after })
+      }
+
+      // tracking 表没有 outbound_id，无法精确识别来源；沿用现有最窄条件清理。
+      for (const item of transactionItems) {
         if (item.batch_no) {
-          db.prepare("DELETE FROM batch_usage_tracking WHERE material_id = ? AND batch = ? AND status = 'in-use'").run(item.material_id, item.batch_no)
+          db.prepare("DELETE FROM batch_usage_tracking WHERE material_id = ? AND batch = ? AND status = 'in-use'")
+            .run(item.material_id, item.batch_no)
         }
       }
 
-      db.prepare('UPDATE outbound_records SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+      const deleted = db.prepare(`
+        UPDATE outbound_records SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND is_deleted = 0
+      `).run(id)
+      if (Number(deleted.changes) !== 1) {
+        throw new InventoryTransactionError('Outbound record changed during delete')
+      }
 
-      for (const item of items) {
-        const before = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(item.material_id) as any)?.stock || 0
-        const after = before + item.quantity
-        const logId = uuidv4()
+      for (const restoration of restorationLogs) {
         db.prepare(`
           INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
           VALUES (?, 'delete', ?, ?, ?, ?, ?, 'outbound_delete', ?, '删除出库记录')
-        `).run(logId, item.material_id, item.quantity, before, after, id, req.body.operator || 'system')
+        `).run(
+          uuidv4(),
+          restoration.materialId,
+          restoration.quantity,
+          restoration.before,
+          restoration.after,
+          id,
+          actor.username,
+        )
       }
 
       db.exec('COMMIT')
       success(res, null, '删除成功，库存已同步回退')
     } catch (err) {
       db.exec('ROLLBACK')
+      const inventoryError = inventoryTransactionError(err)
+      if (inventoryError) {
+        error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode)
+        return
+      }
       throw err
     }
   } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }
     error(res, err.message)
   }

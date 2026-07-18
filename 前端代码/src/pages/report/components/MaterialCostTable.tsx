@@ -4,6 +4,13 @@ import { formatCurrency } from '@/lib/utils'
 import { Pagination } from '@/components/ui/Pagination'
 import { ChangeBadge } from './ChangeBadge'
 
+function formatPercentage(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '不可计算'
+  const number = Number(value)
+  if (!Number.isFinite(number) || number < 0 || number > 100) return '不可计算'
+  return `${number.toFixed(1)}%`
+}
+
 interface Props {
   loading: boolean
   data: MaterialCostReport['materials']
@@ -72,15 +79,21 @@ export function MaterialCostTable({
                 </tr>
               ) : (
                 data.map(m => {
-                  const changeValue = m.changeRate ?? Math.round(Math.random() * 30 - 15)
+                  const changeValue = typeof m.changeRate === 'number' && Number.isFinite(m.changeRate)
+                    ? m.changeRate
+                    : null
                   return (
                     <tr key={m.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-semibold text-gray-900">{m.name}</td>
                       <td className="px-4 py-3 text-gray-600">{m.spec}</td>
                       <td className="px-4 py-3 text-right text-gray-600">{m.consumption.toLocaleString()} {m.consumptionUnit}</td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(m.totalCost)}</td>
-                      <td className="px-4 py-3 text-right text-gray-600">{(m.ratio * 100).toFixed(1)}%</td>
-                      <td className="px-4 py-3 text-right"><ChangeBadge value={changeValue} /></td>
+                      <td className="px-4 py-3 text-right text-gray-600">{formatPercentage(m.ratio)}</td>
+                      <td className="px-4 py-3 text-right">
+                        {changeValue === null
+                          ? <span className="text-xs text-gray-400">不可计算</span>
+                          : <ChangeBadge value={changeValue} />}
+                      </td>
                     </tr>
                   )
                 })

@@ -1,4 +1,4 @@
-import { Plus, Upload, Download, Layers, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
+import { Plus, Layers, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
 import { useBOMPage } from './hooks/useBOMPage'
 import { StatCard } from './components/StatCard'
 import { BOMTable } from './components/BOMTable'
@@ -7,8 +7,6 @@ import { BOMDetailModal } from './components/BOMDetailModal'
 import { BOMCopyModal } from './components/BOMCopyModal'
 import { BOMDeleteModal } from './components/BOMDeleteModal'
 import { BOMBatchDeleteModal } from './components/BOMBatchDeleteModal'
-import { BOMImportModal } from './components/BOMImportModal'
-import { BOMExportModal } from './components/BOMExportModal'
 
 export default function BOMPage() {
   const page = useBOMPage()
@@ -26,20 +24,6 @@ export default function BOMPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => page.setModalType('import')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors h-10"
-          >
-            <Upload className="w-4 h-4" />
-            导入
-          </button>
-          <button
-            onClick={() => page.setModalType('export')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors h-10"
-          >
-            <Download className="w-4 h-4" />
-            导出
-          </button>
           <button
             onClick={page.openCreate}
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors h-10 shadow-sm"
@@ -137,17 +121,6 @@ export default function BOMPage() {
         onConfirm={page.handleBatchDelete}
       />
 
-      <BOMImportModal
-        open={page.modalType === 'import'}
-        onClose={() => page.setModalType(null)}
-        onConfirm={page.handleImport}
-      />
-
-      <BOMExportModal
-        open={page.modalType === 'export'}
-        onClose={() => page.setModalType(null)}
-        onConfirm={page.handleExport}
-      />
     </div>
   )
 }

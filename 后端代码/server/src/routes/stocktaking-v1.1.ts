@@ -1,9 +1,19 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
-import { success, successList, error } from '../utils/response.js'
+import { buildSuccessEnvelope, success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { requireTrustedRequestActor, withoutUntrustedActorFields } from '../security/trusted-request-actor.js'
 import { checkedSubtract, parseFiniteNonNegativeNumber, parseFiniteNumber } from '../utils/numeric-input.js'
+import {
+  claimIdempotency,
+  finalizeIdempotency,
+  fingerprintRequest,
+  isIdempotencyConflict,
+  readIdempotencyKey,
+  tryReplayIdempotency,
+} from '../utils/idempotency.js'
+import { assertInventoryMatchesBatches, inventoryTransactionError, setMaterialStock } from '../services/inventory-transactions.js'
 
 const router = Router()
 
@@ -47,31 +57,75 @@ router.get('/', (req, res) => {
 })
 
 router.post('/', requireStocktakingWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
-    const { materialId, actualStock, operator, remark } = req.body
+    const { materialId, actualStock, remark } = req.body
     if (!materialId || actualStock === undefined) { error(res, 'Missing fields', 'INVALID_PARAMETER', 400); return }
     const normalizedActualStock = parseFiniteNonNegativeNumber(actualStock)
     if (normalizedActualStock === null) { error(res, 'Invalid actual stock', 'INVALID_PARAMETER', 400); return }
     const db = getDatabase()
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = 'stocktaking:create'
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     const material = db.prepare('SELECT 1 FROM materials WHERE id = ? AND is_deleted = 0').get(materialId)
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
 
     // 两阶段·第一阶段「登记」：只记录盘点结果，不入账（不改 inventory、不写 stock_logs）。
     // 差异=0 → completed（账实相符，无需入账）；差异≠0 → pending（待「处理差异」入账）。
     // 真正的库存调整改由 POST /:id/adjust 完成，把「清点」与「审批入账」拆成两步（内控分离）。
-    const rawSystemStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock ?? 0
-    const systemStock = parseFiniteNumber(rawSystemStock)
-    const difference = systemStock === null ? null : checkedSubtract(normalizedActualStock, systemStock)
-    if (systemStock === null || difference === null) {
-      error(res, 'Stocktaking difference exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
+    // 锁前只读预检保持非法数值请求零事务副作用；锁内仍会重读并重算，避免预检与提交之间的竞态。
+    const preflightRawSystemStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock ?? 0
+    const preflightSystemStock = parseFiniteNumber(preflightRawSystemStock)
+    const preflightDifference = preflightSystemStock === null
+      ? null
+      : checkedSubtract(normalizedActualStock, preflightSystemStock)
+    if (preflightSystemStock === null || preflightDifference === null) {
+      error(res, 'Stocktaking difference exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
+      return
     }
-    const status = difference === 0 ? 'completed' : 'pending'
-    const id = uuidv4()
-    db.prepare('INSERT INTO stocktaking_records (id, stocktaking_no, material_id, system_stock, actual_stock, difference, operator, status, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, generateNo(), materialId, systemStock, normalizedActualStock, difference, operator || 'system', status, remark || null)
+    try {
+      assertInventoryMatchesBatches(db, materialId)
+    } catch (err) {
+      const inventoryError = inventoryTransactionError(err)
+      if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+      throw err
+    }
 
-    success(res, { id, status }, '盘点记录已创建')
-  } catch (err: any) { error(res, err.message) }
+    const id = uuidv4()
+    const op = actor.username
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      assertInventoryMatchesBatches(db, materialId)
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, op)
+      const rawSystemStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock ?? 0
+      const systemStock = parseFiniteNumber(rawSystemStock)
+      const difference = systemStock === null ? null : checkedSubtract(normalizedActualStock, systemStock)
+      if (systemStock === null || difference === null) {
+        db.exec('ROLLBACK')
+        error(res, 'Stocktaking difference exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
+        return
+      }
+      const status = difference === 0 ? 'completed' : 'pending'
+      db.prepare('INSERT INTO stocktaking_records (id, stocktaking_no, material_id, system_stock, actual_stock, difference, operator, status, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(id, generateNo(), materialId, systemStock, normalizedActualStock, difference, op, status, remark || null)
+      responseEnvelope = buildSuccessEnvelope({ id, status }, '盘点记录已创建')
+      if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
+      db.exec('COMMIT')
+    } catch (err) {
+      db.exec('ROLLBACK')
+      if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+      throw err
+    }
+
+    res.status(200).json(responseEnvelope)
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 // 差异原因白名单（受控口径，与前端弹窗 select 一致；非白名单一律拒绝，防手写脏原因）
@@ -92,10 +146,12 @@ const ADJUST_REASONS: Record<string, string> = {
  * - 操作人以登录用户(req.user)为准，忽略 body 伪造；成功写操作由全局 auditWrite 统一留痕 operation_logs。
  */
 router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const { reason, remark } = req.body
-    const operator = (req as any).user?.username || 'system'
+    const operator = actor.username
     // 用 own-property 校验做白名单，避免 constructor/toString 等原型链键绕过 `if (!label)`（原型污染式脏原因）。
     // 用 Object.prototype.hasOwnProperty.call（而非 Object.hasOwn）以免依赖 ES2022 运行时/lib。
     const hasReason = Object.prototype.hasOwnProperty.call(ADJUST_REASONS, reason)
@@ -103,12 +159,25 @@ router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
     if (!label) { error(res, '差异原因无效', 'INVALID_PARAMETER', 400); return }
 
     const db = getDatabase()
-    const record = db.prepare('SELECT * FROM stocktaking_records WHERE id = ? AND is_deleted = 0').get(id) as any
-    if (!record) { error(res, '记录不存在或已删除', 'NOT_FOUND', 404); return }
-    if (record.status !== 'pending') { error(res, '该盘点差异已处理，不可重复调整', 'ALREADY_ADJUSTED', 400); return }
-
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = `stocktaking:adjust:${id}`
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
     db.exec('BEGIN IMMEDIATE')
     try {
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator)
+      const record = db.prepare('SELECT * FROM stocktaking_records WHERE id = ? AND is_deleted = 0').get(id) as any
+      if (!record) {
+        db.exec('ROLLBACK')
+        error(res, '记录不存在或已删除', 'NOT_FOUND', 404)
+        return
+      }
+      if (record.status !== 'pending') {
+        db.exec('ROLLBACK')
+        error(res, '该盘点差异已处理，不可重复调整', 'ALREADY_ADJUSTED', 400)
+        return
+      }
       const systemStock = record.system_stock
       const currentStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any)?.stock ?? 0
       // 防过期：账面已变（期间发生了出入库）→ 拒绝用旧盘点结果覆盖当前库存
@@ -120,14 +189,7 @@ router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
       const actualStock = record.actual_stock
       const difference = record.difference
 
-      db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(actualStock, record.material_id)
-      // 负库存兜底
-      const afterStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any)?.stock
-      if (Number(afterStock) < 0) {
-        db.exec('ROLLBACK')
-        error(res, '库存不能为负数', 'STOCK_NEGATIVE', 422)
-        return
-      }
+      setMaterialStock(db, record.material_id, actualStock, id)
 
       const noteText = String(remark || '').trim()
       const reasonNote = noteText ? `差异原因：${label}；处理说明：${noteText}` : `差异原因：${label}`
@@ -138,13 +200,21 @@ router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
       const mergedRemark = record.remark ? `${record.remark} ｜ ${reasonNote}` : reasonNote
       db.prepare("UPDATE stocktaking_records SET status = 'confirmed', remark = ? WHERE id = ?").run(mergedRemark, id)
 
+      responseEnvelope = buildSuccessEnvelope({ id, status: 'confirmed' }, '盘点差异已处理，库存已更新')
+      if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
       db.exec('COMMIT')
-      success(res, { id, status: 'confirmed' }, '盘点差异已处理，库存已更新')
-    } catch (e: any) {
+    } catch (e) {
       db.exec('ROLLBACK')
+      if (idemKey && isIdempotencyConflict(e) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+
+    res.status(200).json(responseEnvelope)
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 /**
@@ -153,8 +223,10 @@ router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
  * body: { items: [{ materialId, actualStock, remark? }], operator?, remark? }
  */
 router.post('/batch', requireStocktakingWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
-    const { items, operator, remark } = req.body
+    const { items, remark } = req.body
     if (!Array.isArray(items) || items.length === 0) {
       error(res, '盘点明细不能为空', 'INVALID_PARAMETER', 400); return
     }
@@ -180,6 +252,10 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
     }
 
     const db = getDatabase()
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = 'stocktaking:batch'
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     for (let i = 0; i < normalizedItems.length; i++) {
       const { materialId } = normalizedItems[i]
       const rowLabel = `第 ${i + 1} 行`
@@ -206,9 +282,11 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
 
     // ── 全行合法，单事务内创建（all-or-nothing）──
     const sheetNo = generateSheetNo()
-    const op = operator || 'system'
+    const op = actor.username
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
     db.exec('BEGIN IMMEDIATE')
     try {
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, op)
       const transactionPlan = buildBatchPlan()
       if (!transactionPlan) {
         db.exec('ROLLBACK')
@@ -223,54 +301,50 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
         db.prepare('INSERT INTO stocktaking_records (id, stocktaking_no, sheet_no, material_id, system_stock, actual_stock, difference, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .run(id, generateNo(), sheetNo, materialId, systemStock, actualStock, difference, op, rowRemark || remark || null)
 
+        setMaterialStock(db, materialId, actualStock, id)
         if (difference !== 0) {
-          db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(actualStock, materialId)
-          const afterStock = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock
-          if (afterStock < 0) {
-            db.exec('ROLLBACK')
-            error(res, '库存不能为负数', 'STOCK_NEGATIVE', 422)
-            return
-          }
           const logId = uuidv4()
           db.prepare('INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
             .run(logId, 'adjust', materialId, difference, systemStock, actualStock, id, 'stocktaking', op)
         }
       }
 
+      responseEnvelope = buildSuccessEnvelope({ sheetNo, count: ids.length, ids }, '批量盘点完成')
+      if (idemKey) finalizeIdempotency(db, idemKey, 201, responseEnvelope)
       db.exec('COMMIT')
-      success(res, { sheetNo, count: ids.length, ids }, '批量盘点完成', 201)
-    } catch (e: any) {
+    } catch (e) {
       db.exec('ROLLBACK')
+      if (idemKey && isIdempotencyConflict(e) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+
+    res.status(201).json(responseEnvelope)
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 router.delete('/:id', requireStocktakingWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const db = getDatabase()
     const record = db.prepare('SELECT * FROM stocktaking_records WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!record) { error(res, '记录不存在或已删除', 'NOT_FOUND', 404); return }
+    const difference = parseFiniteNumber(record.difference)
+    if (difference === null) {
+      error(res, '盘点差异超出支持的数值范围', 'INVALID_PARAMETER', 400); return
+    }
+    if (difference !== 0 && record.status !== 'pending') {
+      error(res, '盘点批次分配未持久化，禁止不可审计的库存回滚', 'LEDGER_DRIFT', 409); return
+    }
 
     db.exec('BEGIN IMMEDIATE')
     try {
       db.prepare('UPDATE stocktaking_records SET is_deleted = 1 WHERE id = ?').run(id)
-
-      // 仅回滚**已入账**的差异：pending 从未动过库存（两阶段第一步只登记）→ 只软删不回滚；
-      // confirmed（单条已处理）/ completed（批量或旧数据，创建即入账）+ 差异≠0 → 回滚到账面。
-      if (record.difference !== 0 && record.status !== 'pending') {
-        const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any
-        const beforeStock = inv?.stock || 0
-        const afterStock = record.system_stock
-        db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(afterStock, record.material_id)
-
-        const logId = uuidv4()
-        db.prepare(`
-          INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
-          VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'stocktaking_cancel', ?, '撤销盘点记录')
-        `).run(logId, record.material_id, record.system_stock - beforeStock, beforeStock, afterStock, id, req.body.operator || 'system')
-      }
 
       db.exec('COMMIT')
       success(res, null, '盘点记录已撤销')
@@ -278,7 +352,11 @@ router.delete('/:id', requireStocktakingWrite, (req, res) => {
       db.exec('ROLLBACK')
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 export default router

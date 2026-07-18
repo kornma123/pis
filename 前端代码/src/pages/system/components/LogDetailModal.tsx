@@ -1,16 +1,17 @@
 import { X } from 'lucide-react'
-import type { OperationLog } from '@/types'
+import type { LogActionType, LogRecord } from '../hooks/useLogsPage'
 
 interface Props {
   open: boolean
-  log: OperationLog | null
-  getLogType: (op: string) => { value: string; label: string; className: string }
+  log: LogRecord | null
+  getLogType: (op: string, actionType?: LogActionType) => { value: string; label: string; className: string }
   getModuleLabel: (moduleVal: string) => string
   onClose: () => void
 }
 
 export function LogDetailModal({ open, log, getLogType, getModuleLabel, onClose }: Props) {
   if (!open || !log) return null
+  const logType = getLogType(log.operation, log.actionType)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -27,12 +28,12 @@ export function LogDetailModal({ open, log, getLogType, getModuleLabel, onClose 
           <div className="grid grid-cols-2 gap-5 mb-6">
             <Info label="操作时间" value={new Date(log.createdAt).toLocaleString()} mono />
             <Info label="操作类型" value={
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getLogType(log.operation).className}`}>
-                {getLogType(log.operation).label}
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${logType.className}`}>
+                {logType.label}
               </span>
             } />
             <Info label="操作用户" value={log.username} />
-            <Info label="操作模块" value={getModuleLabel(log.requestData?.module as string || '')} />
+            <Info label="操作模块" value={getModuleLabel(log.module || log.requestData?.module as string || '')} />
             <Info label="IP地址" value={log.ip} mono />
             <Info label="浏览器" value={log.userAgent || '-'} />
           </div>

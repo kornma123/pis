@@ -13,7 +13,24 @@ function Metric({ children }: { children: React.ReactNode }) {
 }
 
 export default function PortfolioHero({ health }: { health: PortfolioHealth }) {
-  const poolConfigured = health.fixedPoolProvided === true && health.fixedPool > 0
+  const fixedPoolConfigured =
+    health.fixedPoolProvided === true
+    && typeof health.fixedPool === 'number'
+    && Number.isFinite(health.fixedPool)
+    && health.fixedPool > 0
+  const coverageMultiple =
+    fixedPoolConfigured
+    && typeof health.coverageMultiple === 'number'
+    && Number.isFinite(health.coverageMultiple)
+      ? health.coverageMultiple
+      : null
+  const unmeasuredRevenueShare =
+    typeof health.unmeasuredRevenueShare === 'number'
+    && Number.isFinite(health.unmeasuredRevenueShare)
+    && health.unmeasuredRevenueShare >= 0
+    && health.unmeasuredRevenueShare <= 1
+      ? health.unmeasuredRevenueShare
+      : null
 
   return (
     <div data-testid="portfolio-hero" className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -45,11 +62,18 @@ export default function PortfolioHero({ health }: { health: PortfolioHealth }) {
               只看趋势·校准前
             </span>
           </div>
-          {poolConfigured ? (
+          {coverageMultiple != null ? (
             <>
-              <div className="mt-1.5 text-[20px] font-semibold text-[#0a2540] tabular-nums">{health.coverageMultiple.toFixed(2)}×</div>
+              <div className="mt-1.5 text-[20px] font-semibold text-[#0a2540] tabular-nums">{coverageMultiple.toFixed(2)}×</div>
               <div className="mt-1 text-[11px] leading-relaxed text-gray-500">
                 = 贡献毛利合计 ÷ 固定开销池。绝对值待校准，当前只看方向。
+              </div>
+            </>
+          ) : fixedPoolConfigured ? (
+            <>
+              <div data-testid="coverage-unavailable" className="mt-1.5 text-[16px] font-medium text-gray-400">不可计算</div>
+              <div className="mt-1 text-[11px] leading-relaxed text-gray-500">
+                固定成本池已提供，但当前数值无法形成有限覆盖倍数；本次不显示 0。
               </div>
             </>
           ) : (
@@ -85,11 +109,24 @@ export default function PortfolioHero({ health }: { health: PortfolioHealth }) {
             <span className="text-[12px] font-normal text-gray-400"> / 上限 ~{health.revivalCap} 家</span>
           </div>
           <div className="mt-1 text-[11px] leading-relaxed text-gray-500">
-            看不清的钱占{' '}
-            <b className={cn(health.unmeasuredRevenueShare > health.revivalUnmeasuredShareLine ? 'text-amber-700' : 'text-gray-600')}>
-              {(health.unmeasuredRevenueShare * 100).toFixed(0)}%
-            </b>
-            。两个数任一越线才重新考虑要不要自动排队。
+            {unmeasuredRevenueShare == null ? (
+              <>
+                看不清的钱占比{' '}
+                <b data-testid="unmeasured-share-unknown" className="text-gray-500">不可计算</b>
+                。医院范围或收入分母尚未闭合，不能当作 0%。
+              </>
+            ) : (
+              <>
+                看不清的钱占{' '}
+                <b
+                  data-testid="unmeasured-share-known"
+                  className={cn(unmeasuredRevenueShare > health.revivalUnmeasuredShareLine ? 'text-amber-700' : 'text-gray-600')}
+                >
+                  {(unmeasuredRevenueShare * 100).toFixed(0)}%
+                </b>
+                。两个数任一越线才重新考虑要不要自动排队。
+              </>
+            )}
           </div>
         </Metric>
       </div>

@@ -15,7 +15,7 @@ import {
 // 顺序/文案/图标/分区均由注册表声明顺序决定，与迁移前 ALL_MAIN_MENU + ALL_SYSTEM_MENU
 // 逐字节一致（route-registry.test.ts 快照锁死·零行为变更）。
 
-function getRoleLabel(role: string | null): string {
+export function getRoleLabel(role: string | null): string {
   const labels: Record<string, string> = {
     admin: '系统管理员',
     warehouse_manager: '仓库管理员',
@@ -24,7 +24,8 @@ function getRoleLabel(role: string | null): string {
     finance: '财务人员',
     pathologist: '病理医生',
   }
-  return labels[role || ''] || '用户'
+  const roleKey = role || ''
+  return Object.prototype.hasOwnProperty.call(labels, roleKey) ? labels[roleKey] : '用户'
 }
 
 export default function AppSidebar() {

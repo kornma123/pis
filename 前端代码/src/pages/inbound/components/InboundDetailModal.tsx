@@ -76,7 +76,7 @@ export default function InboundDetailModal({ open, record, materials, onClose, o
         </div>
         <div className="text-sm text-gray-500 mb-5">入库时间: {formatDateTime(record.createdAt)}</div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="bg-gray-50 rounded-lg p-3">
             <div className="text-xs text-gray-500 mb-1">物料名称</div>
             <div className="text-sm font-medium text-gray-900">{record.materialName}</div>
@@ -107,7 +107,7 @@ export default function InboundDetailModal({ open, record, materials, onClose, o
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
             <div className="text-xs text-gray-500 mb-1">入库金额</div>
-            <div className="text-sm font-medium text-gray-900">{formatCurrency(record.amount || record.price * record.quantity)}</div>
+            <div className="text-sm font-medium text-gray-900">{formatCurrency(record.amount ?? record.price * record.quantity)}</div>
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
             <div className="text-xs text-gray-500 mb-1">供应商</div>
@@ -121,6 +121,12 @@ export default function InboundDetailModal({ open, record, materials, onClose, o
             <div className="text-xs text-gray-500 mb-1">有效期至</div>
             <div className="text-sm text-gray-900">{record.expiryDate || '-'}</div>
           </div>
+          {record.purchaseOrderId && (
+            <div className="bg-amber-50 rounded-lg border border-amber-200 p-3 sm:col-span-2">
+              <div className="text-xs text-amber-700 mb-1">关联采购单（记录快照）</div>
+              <div className="text-sm font-medium text-amber-950">{record.purchaseOrderNo || record.purchaseOrderId}</div>
+            </div>
+          )}
         </div>
 
         {record.remark && (
