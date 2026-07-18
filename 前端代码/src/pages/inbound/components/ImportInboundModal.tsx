@@ -12,6 +12,11 @@ import {
   validateInboundImportRows,
 } from '../importInboundModel'
 import type { InboundImportRow } from '../importInboundModel'
+import {
+  clearImportWorkflowJournal,
+  readImportWorkflowJournal,
+  writeImportWorkflowJournal,
+} from '../../import-shared/importWorkflowJournal'
 
 interface ImportInboundModalProps {
   onClose: () => void
@@ -67,6 +72,7 @@ export default function ImportInboundModal({
   const [parsing, setParsing] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [dragActive, setDragActive] = useState(false)
+  const [recovery, setRecovery] = useState(() => readImportWorkflowJournal('direct-inbound'))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const summaryRef = useRef<HTMLDivElement>(null)
   const selectionVersionRef = useRef(0)
@@ -82,8 +88,7 @@ export default function ImportInboundModal({
   )
   const resultSummary = useMemo(() => summarizeInboundImport(rows), [rows])
   const canProceedToConfirm = rows.length > 0
-    && validationErrorCount === 0
-    && readyCount === rows.length
+    && readyCount > 0
     && !fileError
     && !parsing
 
@@ -153,6 +158,22 @@ export default function ImportInboundModal({
 
     operationLockRef.current = true
     setPhase('importing')
+    const beforeSummary = summarizeInboundImport(rows)
+    const submittingJournal = {
+      version: 1 as const,
+      kind: 'direct-inbound' as const,
+      phase: 'submitting' as const,
+      updatedAt: new Date().toISOString(),
+      fileName,
+      summary: {
+        total: beforeSummary.total,
+        succeeded: beforeSummary.succeeded,
+        failed: beforeSummary.failed,
+        validationRejected: beforeSummary.validationRejected,
+      },
+    }
+    writeImportWorkflowJournal(submittingJournal)
+    setRecovery(submittingJournal)
     try {
       const nextRows = await executeInboundImport(
         rows,
@@ -162,12 +183,30 @@ export default function ImportInboundModal({
       setRows(nextRows)
       setPhase('result')
       const summary = summarizeInboundImport(nextRows)
-      if (summary.failed === 0) {
+      const settledJournal = {
+        version: 1 as const,
+        kind: 'direct-inbound' as const,
+        phase: 'settled' as const,
+        updatedAt: new Date().toISOString(),
+        fileName,
+        summary: {
+          total: summary.total,
+          succeeded: summary.succeeded,
+          failed: summary.failed,
+          validationRejected: summary.validationRejected,
+        },
+        receiptIds: nextRows
+          .filter(row => row.status === 'succeeded' && row.resultInboundNo)
+          .map(row => row.resultInboundNo as string),
+      }
+      writeImportWorkflowJournal(settledJournal)
+      setRecovery(settledJournal)
+      if (summary.failed === 0 && summary.validationRejected === 0) {
         toast.success('直接入库提交完成', { description: `成功 ${summary.succeeded} 行` })
       } else if (summary.succeeded === 0) {
-        toast.error(`全部 ${summary.failed} 行提交失败，错误行可在下方重试`)
+        toast.error(`没有行入库：服务失败 ${summary.failed} 行，校验拒绝 ${summary.validationRejected} 行`)
       } else {
-        toast.warning(`部分完成：成功 ${summary.succeeded} 行，失败 ${summary.failed} 行`)
+        toast.warning(`部分完成：成功 ${summary.succeeded} 行，服务失败 ${summary.failed} 行，校验拒绝 ${summary.validationRejected} 行`)
       }
     } finally {
       operationLockRef.current = false
@@ -195,12 +234,37 @@ export default function ImportInboundModal({
         部分失败时，已成功行不会回滚，失败行会保留原幂等键供安全重试。
       </div>
 
+      {phase === 'idle' && recovery && (
+        <div role="status" className={`mb-4 rounded-lg border px-4 py-3 text-sm leading-6 ${recovery.phase === 'submitting' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+          <div className="font-medium">
+            {recovery.phase === 'submitting' ? '上次直接入库提交结果未知' : '上次直接入库回执'}
+          </div>
+          {recovery.phase === 'submitting' ? (
+            <p>文件「{recovery.fileName}」离开页面时仍在提交。原始行未保存在浏览器，也不会自动重提；请先到入库记录核对结果。</p>
+          ) : (
+            <p>
+              文件「{recovery.fileName}」：成功 {recovery.summary.succeeded} 行，服务失败 {recovery.summary.failed} 行，校验拒绝 {recovery.summary.validationRejected} 行。
+              {recovery.receiptIds?.length ? ` 入库单：${recovery.receiptIds.join('、')}` : ' 服务端未返回可显示的入库单号。'}
+            </p>
+          )}
+          <button
+            type="button"
+            className="mt-1 font-medium text-blue-700 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500/20"
+            onClick={() => { clearImportWorkflowJournal('direct-inbound'); setRecovery(null) }}
+          >
+            清除上次记录
+          </button>
+        </div>
+      )}
+
       <input
         id="direct-inbound-csv-file"
         type="file"
         ref={fileInputRef}
         accept=".csv,text/csv"
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
         onChange={handleInputChange}
         disabled={phase === 'importing'}
       />
@@ -242,13 +306,14 @@ export default function ImportInboundModal({
         <div
           ref={summaryRef}
           tabIndex={-1}
+          role={fileError ? 'alert' : undefined}
           aria-live="polite"
           className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4 focus:outline-none"
         >
           {parsing ? (
             <p className="text-sm text-gray-700">正在本地解析并校验 CSV，不会在此阶段写入数据…</p>
           ) : fileError ? (
-            <div role="alert" className="flex items-start gap-2 text-sm text-red-700">
+            <div className="flex items-start gap-2 text-sm text-red-700">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{fileError}</span>
             </div>
@@ -266,13 +331,13 @@ export default function ImportInboundModal({
             </div>
           ) : phase === 'confirm' ? (
             <div className="text-sm text-gray-700">
-              即将逐行提交 {readyCount} 条直接入库；提交开始后可能出现部分成功。
+              只提交 {readyCount} 行；另有 {validationErrorCount} 行校验拒绝、不发送到服务端。提交开始后仍可能出现部分成功。
             </div>
           ) : phase === 'importing' ? (
             <div className="text-sm text-blue-700">正在逐行提交，请勿重复点击或重新选择文件…</div>
           ) : (
             <div className="text-sm text-gray-700">
-              提交结果：共 {resultSummary.total} 行，成功 {resultSummary.succeeded} 行，失败 {resultSummary.failed} 行。
+              文件 {resultSummary.total} 行：成功 {resultSummary.succeeded} 行，服务失败 {resultSummary.failed} 行，校验拒绝 {resultSummary.validationRejected} 行。
               {resultSummary.failed > 0 && ' 已成功行不会再次提交；重试只处理失败行。'}
             </div>
           )}
@@ -295,7 +360,10 @@ export default function ImportInboundModal({
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white text-gray-700">
               {rows.map(row => (
-                <tr key={`${row.rowNumber}-${row.idempotencyKey}`}>
+                <tr
+                  key={`${row.rowNumber}-${row.idempotencyKey}`}
+                  style={{ contentVisibility: 'auto', containIntrinsicSize: '0 40px' }}
+                >
                   <td className="px-3 py-2 tabular-nums">{row.rowNumber}</td>
                   <td className="px-3 py-2 font-mono">{row.raw['物料编码'] || '空'}</td>
                   <td className="px-3 py-2 tabular-nums">{row.raw['入库数量'] || '空'}</td>

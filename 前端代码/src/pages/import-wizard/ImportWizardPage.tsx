@@ -5,6 +5,7 @@ import { Lock, Loader2, AlertCircle, CheckCircle2, Database, ArrowRight, Upload,
 import { statementImportApi } from '@/api/statement-import'
 import { useHospitals, ScoreCard, ByLineTable, AttentionItem, btnCls, btnPri, inputCls, yuan } from '@/pages/import-shared/ImportShared'
 import { useImportQueue, type CommitConfirmation, type QueueItem, type QStatus } from './useImportQueue'
+import type { StatementImportWorkflowJournal } from '@/pages/import-shared/importWorkflowJournal'
 
 const STATUS_META: Record<QStatus, { t: string; c: string }> = {
   pending: { t: '待核对', c: 'text-gray-500 bg-gray-100' },
@@ -14,8 +15,33 @@ const STATUS_META: Record<QStatus, { t: string; c: string }> = {
   error: { t: '出错', c: 'text-rose-700 bg-rose-50' },
 }
 
+function RecoveryNotice({ journal, onDismiss }: { journal: StatementImportWorkflowJournal; onDismiss: () => void }) {
+  const title = journal.phase === 'settled'
+    ? '上次财务导入回执'
+    : journal.phase === 'submitting'
+      ? '上次提交结果未知'
+      : journal.phase === 'needs-confirmation'
+        ? '上次提交未落库，仍需人工确认'
+        : '上次提交失败'
+  return (
+    <div role="status" className={`mb-4 rounded-lg border px-4 py-3 text-[12.5px] leading-5 ${journal.phase === 'settled' ? 'border-gray-200 bg-gray-50 text-gray-700' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+      <div className="font-medium">{title}</div>
+      {journal.phase === 'settled' && journal.receipt ? (
+        <p>文件「{journal.fileName}」· {journal.serviceMonth} · 批次 {journal.receipt.importBatch} · {journal.receipt.caseCount} 例。原始文件未保存在浏览器。</p>
+      ) : journal.phase === 'submitting' ? (
+        <p>文件「{journal.fileName}」离开页面时仍在提交。原始网格未保留，也不会自动重提；请先核对服务端记录后再操作。</p>
+      ) : (
+        <p>文件「{journal.fileName}」· {journal.serviceMonth}。原始网格与服务错误明细均未保留，请重新选择文件并从预览开始。</p>
+      )}
+      <button type="button" onClick={onDismiss} className="mt-1 font-medium text-blue-700 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-blue-500/20">
+        清除上次记录
+      </button>
+    </div>
+  )
+}
+
 export default function ImportWizardPage() {
-  const { hospitals } = useHospitals()
+  const { hospitals, loading: hospitalsLoading, error: hospitalsError, reload: reloadHospitals } = useHospitals()
   const q = useImportQueue(hospitals)
   const active = q.active
   const [needConfirm, setNeedConfirm] = useState<CommitConfirmation | null>(null)
@@ -34,6 +60,8 @@ export default function ImportWizardPage() {
     : null
 
   const takeFiles = (all: File[]) => {
+    if (hospitalsError) { toast.error(`当前不能导入：${hospitalsError}`); return }
+    if (hospitalsLoading) { toast.info('医院列表仍在加载，请稍候'); return }
     if (q.busy) { toast.info('正在解析，请稍候'); return }
     const files = all.filter((f) => /\.(xlsx|xls|csv)$/i.test(f.name))
     if (!files.length) { if (all.length) toast.error('只支持 .xlsx / .xls / .csv 对账单'); return }
@@ -55,6 +83,7 @@ export default function ImportWizardPage() {
       return
     }
     const r = await q.commit(active, confirm, reason)
+    if (r === 'busy') return
     setNeedConfirm(typeof r === 'object' ? r : null)
     if (typeof r !== 'object') setOverrideReason('')
   }
@@ -66,7 +95,15 @@ export default function ImportWizardPage() {
         <h1 className="text-[18px] font-semibold text-gray-900">财务月度导入</h1>
         <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500"><Lock className="h-3 w-3" />仅财务 / 管理员</span>
       </div>
-      <p className="mb-4 text-[13px] text-gray-500">一次拖一到多家医院的对账单进来，系统自动认院、逐家核对入库。入库后院级盈亏看板即刷新。</p>
+      <p className="mb-4 text-[13px] text-gray-500">一次拖一到多家医院的对账单进来，系统自动认院、逐家核对入库。成功回执可用于后续院级分析；看板是否已有数据以其自身状态为准。</p>
+
+      {hospitalsError && (
+        <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[12.5px] text-red-700">
+          <span className="inline-flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />财务导入当前不可用：{hospitalsError}</span>
+          <button type="button" onClick={reloadHospitals} className="font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-red-500/20">重试医院列表</button>
+        </div>
+      )}
+      {q.lastJournal && <RecoveryNotice journal={q.lastJournal} onDismiss={q.dismissJournal} />}
 
       {/* 拖拽 / 上传区（多文件） */}
       <div
@@ -75,10 +112,10 @@ export default function ImportWizardPage() {
       >
         <Upload className="h-6 w-6 text-gray-300" />
         <div className="text-[13px] text-gray-600">{dragOver ? '松开即导入' : '把一到多家医院的对账单拖到这里'}</div>
-        <button type="button" className={btnPri + ' mt-1'} disabled={q.busy} onClick={() => fileRef.current?.click()}>
+        <button type="button" className={btnPri + ' mt-1'} disabled={q.busy || hospitalsLoading || !!hospitalsError} onClick={() => fileRef.current?.click()}>
           {q.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}选择对账单（.xlsx）
         </button>
-        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" multiple className="hidden" tabIndex={-1} aria-hidden="true"
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" multiple className="hidden" tabIndex={-1} aria-hidden="true" disabled={q.busy || hospitalsLoading || !!hospitalsError}
           onChange={(e) => { takeFiles(Array.from(e.target.files || [])); e.target.value = '' }} />
       </div>
 
@@ -141,7 +178,7 @@ function ActiveDetail({ item, hospitals, q, needConfirm, overrideReason, onOverr
         <div className="text-[15px] font-semibold text-gray-900">{partnerName} · 已入库 {c.caseCount} 例</div>
         <div className="mt-1 text-[13px] text-gray-500">实验室收入 <b className="tabular-nums text-gray-900">{yuan(c.labRevenue)}</b> · 诊断与报告 {yuan(c.diagnosisSettle)} · 外送转出 {yuan(c.outSettle)}{c.unmatchedSettle > 0 && <> · 未识别 {yuan(c.unmatchedSettle)}（未计入）</>}</div>
         <div className="mt-4 flex items-center justify-center gap-2">
-          <Link to="/hospital-cm" className={btnPri}>去看院级贡献毛利看板<ArrowRight className="h-4 w-4" /></Link>
+          <Link to="/hospital-cm" className={btnPri}>查看院级贡献毛利看板<ArrowRight className="h-4 w-4" /></Link>
           <button className={btnCls} onClick={() => q.removeItem(item.id)}>从队列移除</button>
         </div>
       </div>

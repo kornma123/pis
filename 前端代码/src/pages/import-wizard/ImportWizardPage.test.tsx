@@ -7,6 +7,7 @@ import ImportWizardPage from './ImportWizardPage'
 
 const mocks = vi.hoisted(() => ({
   useImportQueue: vi.fn(),
+  useHospitals: vi.fn(),
   lisCoverage: vi.fn(),
 }))
 
@@ -15,7 +16,7 @@ vi.mock('@/api/statement-import', () => ({
   statementImportApi: { lisCoverage: mocks.lisCoverage },
 }))
 vi.mock('@/pages/import-shared/ImportShared', () => ({
-  useHospitals: () => ({ hospitals: [{ id: 'P-1', name: '测试医院' }] }),
+  useHospitals: mocks.useHospitals,
   ScoreCard: () => <div>评分卡</div>,
   ByLineTable: () => <div>业务线</div>,
   AttentionItem: ({ onClassify }: { onClassify: (lineKey: string, ruleType: 'keyword', value: string) => void }) => (
@@ -100,10 +101,48 @@ function deferred<T>() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.useHospitals.mockReturnValue({
+    hospitals: [{ id: 'P-1', name: '测试医院' }],
+    loading: false,
+    error: '',
+    reload: vi.fn(),
+  })
   mocks.lisCoverage.mockResolvedValue({ total: 1, withBlocks: 1, inPeriod: 1 })
 })
 
 describe('ImportWizardPage — 明确旁路理由与失败态', () => {
+  it('医院权限或列表加载失败时显示不可用状态并阻断文件选择', () => {
+    const reload = vi.fn()
+    mocks.useHospitals.mockReturnValue({ hospitals: [], loading: false, error: '没有财务导入权限', reload })
+    mocks.useImportQueue.mockReturnValue(queue(item()))
+    renderPage()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('没有财务导入权限')
+    expect(screen.getByRole('button', { name: /选择对账单/ })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '重试医院列表' }))
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('返回页面时把未完成提交显示为结果未知且不恢复原始文件', () => {
+    mocks.useImportQueue.mockReturnValue({
+      ...queue(item()),
+      lastJournal: {
+        version: 1,
+        kind: 'statement-import',
+        phase: 'submitting',
+        updatedAt: '2026-07-18T08:00:00.000Z',
+        fileName: '离开前.xlsx',
+        partnerId: 'P-1',
+        serviceMonth: '2026-05',
+      },
+      dismissJournal: vi.fn(),
+    })
+    renderPage()
+
+    expect(screen.getByRole('status')).toHaveTextContent('结果未知')
+    expect(screen.getByRole('status')).toHaveTextContent('不会自动重提')
+  })
+
   it('NEEDS_CONFIRM 后必须填写理由，确认请求携带同一条理由', async () => {
     const active = item()
     const confirmation = {

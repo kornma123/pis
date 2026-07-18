@@ -78,7 +78,7 @@ describe('importInboundModel', () => {
       .mockRejectedValueOnce(Object.assign(new Error('network down'), { code: 'ERR_NETWORK' }))
 
     const firstRun = await executeInboundImport(validated.rows, create)
-    expect(summarizeInboundImport(firstRun)).toEqual({ total: 2, succeeded: 1, failed: 1, pending: 0 })
+    expect(summarizeInboundImport(firstRun)).toEqual({ total: 2, succeeded: 1, failed: 1, validationRejected: 0, pending: 0 })
     expect(firstRun[1]).toMatchObject({ status: 'failed', idempotencyKey: 'idem-2' })
 
     create.mockResolvedValueOnce({ inboundNo: 'IB-2' })
@@ -86,9 +86,40 @@ describe('importInboundModel', () => {
 
     expect(create).toHaveBeenCalledTimes(3)
     expect(create.mock.calls[2][1]).toBe('idem-2')
-    expect(summarizeInboundImport(retry)).toEqual({ total: 2, succeeded: 2, failed: 0, pending: 0 })
+    expect(summarizeInboundImport(retry)).toEqual({ total: 2, succeeded: 2, failed: 0, validationRejected: 0, pending: 0 })
 
     await executeInboundImport(retry, create)
     expect(create).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps validation rejects separate from runnable and service-failed rows', async () => {
+    const validated = validateInboundImportRows(headers, [
+      ['M001', '1', 'L001', 'B-1', '1', '', '', '', ''],
+      ['UNKNOWN', '1', 'L001', 'B-2', '1', '', '', '', ''],
+      ['M001', '1', 'L001', 'B-3', '1', '', '', '', ''],
+    ], { materials, locations, suppliers }, (() => {
+      let n = 0
+      return () => `idem-mixed-${++n}`
+    })())
+
+    expect(summarizeInboundImport(validated.rows)).toEqual({
+      total: 3,
+      succeeded: 0,
+      failed: 0,
+      validationRejected: 1,
+      pending: 2,
+    })
+
+    const submitted = await executeInboundImport(
+      validated.rows,
+      vi.fn().mockResolvedValueOnce({ inboundNo: 'IB-1' }).mockRejectedValueOnce(new Error('服务不可用')),
+    )
+    expect(summarizeInboundImport(submitted)).toEqual({
+      total: 3,
+      succeeded: 1,
+      failed: 1,
+      validationRejected: 1,
+      pending: 0,
+    })
   })
 })

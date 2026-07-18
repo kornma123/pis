@@ -5,6 +5,12 @@ import { partnerConfigApi, type PartnerListItem } from '@/api/partner-config'
 import type { PreviewResult, CommitResult } from '@/types/statement-import'
 import type { PartnerConfigLine } from '@/types/partner-config'
 import { readGrid } from '@/pages/import-shared/ImportShared'
+import {
+  clearImportWorkflowJournal,
+  readImportWorkflowJournal,
+  writeImportWorkflowJournal,
+} from '@/pages/import-shared/importWorkflowJournal'
+import type { StatementImportWorkflowJournal } from '@/pages/import-shared/importWorkflowJournal'
 
 export type QStatus = 'pending' | 'attention' | 'ready' | 'committed' | 'error'
 export interface QueueItem {
@@ -30,7 +36,7 @@ export interface CommitConfirmation {
   message: string
 }
 
-export type CommitOutcome = 'ok' | 'err' | CommitConfirmation
+export type CommitOutcome = 'ok' | 'err' | 'busy' | CommitConfirmation
 
 let seq = 0
 const nextId = () => `q${++seq}`
@@ -68,12 +74,25 @@ function parseMonth(fileName: string): string {
 export function useImportQueue(hospitals: PartnerListItem[]) {
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [activeId, setActiveId] = useState<string>('')
-  const [busy, setBusy] = useState(false)
+  const [busyCount, setBusyCount] = useState(0)
+  const [lastJournal, setLastJournal] = useState(() => readImportWorkflowJournal('statement-import'))
   // 队列最新态引用（防陈旧闭包）：setPartner/setMonth 读它拿到最新 item，而非 useCallback 捕获的旧 queue。
   const queueRef = useRef<QueueItem[]>([])
   const linesGeneration = useRef(new Map<string, number>())
   const previewGeneration = useRef(new Map<string, number>())
+  const commitLocks = useRef(new Set<string>())
   queueRef.current = queue
+  const busy = busyCount > 0
+
+  const beginBusy = useCallback(() => setBusyCount(count => count + 1), [])
+  const endBusy = useCallback(() => setBusyCount(count => Math.max(0, count - 1)), [])
+  const recordJournal = useCallback((journal: StatementImportWorkflowJournal) => {
+    writeImportWorkflowJournal(journal)
+  }, [])
+  const dismissJournal = useCallback(() => {
+    clearImportWorkflowJournal('statement-import')
+    setLastJournal(null)
+  }, [])
 
   const patch = useCallback((id: string, p: Partial<QueueItem>) => {
     const next = queueRef.current.map((it) => (it.id === id ? { ...it, ...p } : it))
@@ -124,37 +143,40 @@ export function useImportQueue(hospitals: PartnerListItem[]) {
 
   // 拖入/选中多个文件 → 逐个建队列项（自动猜院/账期）
   const addFiles = useCallback(async (files: File[]) => {
-    setBusy(true)
-    const created: QueueItem[] = []
-    for (const f of files) {
-      try {
-        const grid = await readGrid(f)
-        const name = parseCustomerName(grid)
-        const partnerId = matchHospital(name, hospitals)
-        const month = parseMonth(f.name)
-        const item: QueueItem = { id: nextId(), fileName: f.name, grid, partnerId, suggestedName: name, month, preview: null, committed: null, error: '', configVersion: 0, lines: [], status: 'pending' }
-        created.push(item)
-      } catch {
-        toast.error(`读取失败：${f.name}`)
+    beginBusy()
+    try {
+      const created: QueueItem[] = []
+      for (const f of files) {
+        try {
+          const grid = await readGrid(f)
+          const name = parseCustomerName(grid)
+          const partnerId = matchHospital(name, hospitals)
+          const month = parseMonth(f.name)
+          const item: QueueItem = { id: nextId(), fileName: f.name, grid, partnerId, suggestedName: name, month, preview: null, committed: null, error: '', configVersion: 0, lines: [], status: 'pending' }
+          created.push(item)
+        } catch {
+          toast.error(`读取失败：${f.name}`)
+        }
       }
+      if (created.length) {
+        setQueue((q) => [...q, ...created])
+        queueRef.current = [...queueRef.current, ...created] // 立即同步 ref：本轮预览守卫要能看到刚建的项（setQueue 异步、ref 下次 render 才更新）
+        setActiveId((cur) => cur || created[0].id)
+        // 自动认到院的，并发预载业务线 + 预览（各家按 id 函数式合并、runPreview 有守卫，互不覆盖；串行会拖慢批量）。
+        await Promise.allSettled(created.filter((it) => it.partnerId).map(async (it) => {
+          if (!queueRef.current.find((x) => x.id === it.id)) return // 循环期间被删 → 跳过，不发无谓请求
+          const linesReady = await loadLines(it.id, it.partnerId)
+          const current = queueRef.current.find((candidate) => candidate.id === it.id)
+          if (linesReady && current?.partnerId === it.partnerId && current.month) await runPreview(current)
+        }))
+        const unmatched = created.filter((c) => !c.partnerId).length
+        if (unmatched) toast.info(`${created.length} 家已入队，其中 ${unmatched} 家没自动认出医院，请手选`)
+        else toast.success(`${created.length} 家已入队`)
+      }
+    } finally {
+      endBusy()
     }
-    if (created.length) {
-      setQueue((q) => [...q, ...created])
-      queueRef.current = [...queueRef.current, ...created] // 立即同步 ref：本轮预览守卫要能看到刚建的项（setQueue 异步、ref 下次 render 才更新）
-      setActiveId((cur) => cur || created[0].id)
-      // 自动认到院的，并发预载业务线 + 预览（各家按 id 函数式合并、runPreview 有守卫，互不覆盖；串行会拖慢批量）。
-      await Promise.allSettled(created.filter((it) => it.partnerId).map(async (it) => {
-        if (!queueRef.current.find((x) => x.id === it.id)) return // 循环期间被删 → 跳过，不发无谓请求
-        const linesReady = await loadLines(it.id, it.partnerId)
-        const current = queueRef.current.find((candidate) => candidate.id === it.id)
-        if (linesReady && current?.partnerId === it.partnerId && current.month) await runPreview(current)
-      }))
-      const unmatched = created.filter((c) => !c.partnerId).length
-      if (unmatched) toast.info(`${created.length} 家已入队，其中 ${unmatched} 家没自动认出医院，请手选`)
-      else toast.success(`${created.length} 家已入队`)
-    }
-    setBusy(false)
-  }, [hospitals, loadLines, runPreview])
+  }, [beginBusy, endBusy, hospitals, loadLines, runPreview])
 
   const addFile = useCallback((f: File) => addFiles([f]), [addFiles])
 
@@ -199,24 +221,54 @@ export function useImportQueue(hospitals: PartnerListItem[]) {
     }
     const reason = overrideReason?.trim() || ''
     if (confirm && !reason) { toast.error('请填写确认理由'); return 'err' }
+    if (commitLocks.current.has(item.id)) return 'busy'
+    commitLocks.current.add(item.id)
     const stale = () => {
       const current = queueRef.current.find((x) => x.id === item.id)
       return !current || current.partnerId !== item.partnerId || current.month !== item.month
     }
-    setBusy(true)
+    beginBusy()
+    recordJournal({
+      version: 1,
+      kind: 'statement-import',
+      phase: 'submitting',
+      updatedAt: new Date().toISOString(),
+      fileName: item.fileName,
+      partnerId: item.partnerId,
+      serviceMonth: item.month,
+    })
     try {
       const base = { partnerId: item.partnerId, grid: item.grid, serviceMonth: item.month }
       const r = confirm
         ? await statementImportApi.commit({ ...base, confirm: true, overrideReason: reason })
         : await statementImportApi.commit({ ...base, confirm: false })
+      recordJournal({
+        version: 1,
+        kind: 'statement-import',
+        phase: 'settled',
+        updatedAt: new Date().toISOString(),
+        fileName: item.fileName,
+        partnerId: item.partnerId,
+        serviceMonth: item.month,
+        receipt: { importBatch: r.importBatch, caseCount: r.caseCount },
+      })
       if (stale()) return 'err'
       patch(item.id, { committed: r, error: '', status: 'committed' })
       toast.success(`${item.fileName}：已入库 ${r.caseCount} 例`)
       return 'ok'
     } catch (e: any) {
-      if (stale()) return 'err'
       const be = e?.response?.data?.error
       if (e?.response?.status === 409 && be?.code === 'NEEDS_CONFIRM') {
+        recordJournal({
+          version: 1,
+          kind: 'statement-import',
+          phase: 'needs-confirmation',
+          updatedAt: new Date().toISOString(),
+          fileName: item.fileName,
+          partnerId: item.partnerId,
+          serviceMonth: item.month,
+        })
+        if (stale()) return 'err'
         return {
           kind: 'confirm',
           itemId: item.id,
@@ -225,9 +277,23 @@ export function useImportQueue(hospitals: PartnerListItem[]) {
           message: be?.message || '本次对账单未通过自动入库门禁，请核对后填写旁路理由',
         }
       }
-      patch(item.id, { error: be?.message || e?.message || '入库失败', committed: null, status: 'error' }); return 'err'
-    } finally { setBusy(false) }
-  }, [patch])
+      const message = be?.message || e?.message || '入库失败'
+      recordJournal({
+        version: 1,
+        kind: 'statement-import',
+        phase: 'failed',
+        updatedAt: new Date().toISOString(),
+        fileName: item.fileName,
+        partnerId: item.partnerId,
+        serviceMonth: item.month,
+      })
+      if (stale()) return 'err'
+      patch(item.id, { error: message, committed: null, status: 'error' }); return 'err'
+    } finally {
+      commitLocks.current.delete(item.id)
+      endBusy()
+    }
+  }, [beginBusy, endBusy, patch, recordJournal])
 
   const removeItem = useCallback((id: string) => {
     const remaining = queueRef.current.filter((it) => it.id !== id)
@@ -239,5 +305,8 @@ export function useImportQueue(hospitals: PartnerListItem[]) {
   }, [])
 
   const active = queue.find((it) => it.id === activeId) || null
-  return { queue, active, activeId, setActiveId, busy, addFile, addFiles, setPartner, setMonth, classify, commit, removeItem, runPreview }
+  return {
+    queue, active, activeId, setActiveId, busy, lastJournal, dismissJournal,
+    addFile, addFiles, setPartner, setMonth, classify, commit, removeItem, runPreview,
+  }
 }
