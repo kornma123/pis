@@ -29,6 +29,11 @@ const FIXTURES: Fixture[] = [
   { id: 'delete-outbound', username: 'admin', operation: 'DELETE outbound', description: '删除出库单', requestData: '{"module":"outbound"}', createdAt: '2026-07-15 09:00:00' },
   { id: 'logout', username: 'admin', operation: 'LOGOUT', description: '退出系统', createdAt: '2026-07-18 11:00:00' },
   { id: 'create-users', username: 'admin', operation: 'POST users', description: '新增用户', requestData: '{"module":"users"}', createdAt: '2026-07-18 12:00:00' },
+  { id: 'canonical-path', username: 'canonical', operation: 'GET /api/v1/inventory/items', description: '路径模块', createdAt: '2026-07-14 09:00:00' },
+  { id: 'canonical-request', username: 'canonical', operation: 'POST ignored', description: '请求模块', requestData: '{"module":" inventory "}', createdAt: '2026-07-14 10:00:00' },
+  { id: 'canonical-underscore', username: 'canonical', operation: 'POST lab_a', description: '下划线模块', createdAt: '2026-07-14 11:00:00' },
+  { id: 'canonical-neighbor', username: 'canonical', operation: 'POST labxa', description: '相邻模块', createdAt: '2026-07-14 12:00:00' },
+  { id: 'query-description', username: 'query-user', operation: 'POST inventory', description: 'query-user POST /api/v1/inventory/items?token=synthetic-value', requestData: '{"module":"inventory"}', createdAt: '2026-07-14 13:00:00' },
 ]
 
 let app: Express
@@ -88,13 +93,30 @@ function ids(response: request.Response) {
   return new Set(response.body.data.list.map((row: { id: string }) => row.id))
 }
 
+function insertBulkLogs(username: string, count: number) {
+  db.prepare(`
+    WITH RECURSIVE sequence(value) AS (
+      SELECT 1
+      UNION ALL
+      SELECT value + 1 FROM sequence WHERE value < ?
+    )
+    INSERT INTO operation_logs (id, username, operation, description, created_at)
+    SELECT ? || value, ?, 'LOGIN', 'bulk export fixture', '2026-07-18 13:00:00'
+    FROM sequence
+  `).run(count, `${username}-`, username)
+}
+
+function deleteBulkLogs(username: string) {
+  db.prepare('DELETE FROM operation_logs WHERE username = ?').run(username)
+}
+
 describe('logs route evidence contract', () => {
   it.each([
-    ['?type=create', ['create-inventory', 'create-users']],
+    ['?type=create', ['create-inventory', 'create-users', 'canonical-request', 'canonical-underscore', 'canonical-neighbor', 'query-description']],
     ['?type=login', ['login']],
     ['?type=denied', ['denied-inventory']],
-    ['?type=unknown', ['unknown-inventory']],
-    ['?module=inventory', ['create-inventory', 'denied-inventory', 'unknown-inventory']],
+    ['?type=unknown', ['unknown-inventory', 'canonical-path']],
+    ['?module=inventory', ['create-inventory', 'denied-inventory', 'unknown-inventory', 'canonical-path', 'canonical-request', 'query-description']],
     ['?username=alice', ['denied-inventory', 'unknown-inventory']],
     ['?startDate=2026-07-18&endDate=2026-07-18', ['login', 'create-inventory', 'denied-inventory', 'logout', 'create-users']],
   ])('visible filter %s changes the server result set', async (query, expectedIds) => {
@@ -108,7 +130,7 @@ describe('logs route evidence contract', () => {
     const response = await list('?type=create&page=1&pageSize=1')
     expect(response.status).toBe(200)
     expect(response.body.data.list).toHaveLength(1)
-    expect(response.body.data.pagination).toMatchObject({ page: 1, pageSize: 1, total: 2, totalPages: 2 })
+    expect(response.body.data.pagination).toMatchObject({ page: 1, pageSize: 1, total: 6, totalPages: 6 })
   })
 
   it('returns safe derived evidence used by the module label and action display', async () => {
@@ -122,6 +144,31 @@ describe('logs route evidence contract', () => {
       outcome: null,
     })
     expect(response.body.data.list[0]).not.toHaveProperty('requestData')
+  })
+
+  it('uses one canonical module classification for SQL filtering and displayed evidence', async () => {
+    const response = await list('?username=canonical&module=inventory')
+    expect(response.status).toBe(200)
+    expect(ids(response)).toEqual(new Set(['canonical-path', 'canonical-request']))
+    expect(response.body.data.list.map((row: { module: string }) => row.module)).toEqual(['inventory', 'inventory'])
+  })
+
+  it('treats an underscore in a module filter as evidence, not a SQL wildcard', async () => {
+    const response = await list('?username=canonical&module=lab_a')
+    expect(response.status).toBe(200)
+    expect(ids(response)).toEqual(new Set(['canonical-underscore']))
+    expect(response.body.data.list[0].module).toBe('lab_a')
+  })
+
+  it('removes query values from the safe description projection used by list and export', async () => {
+    const listResponse = await list('?username=query-user')
+    const exportResponse = await request(app).get('/api/v1/logs/export?username=query-user')
+
+    expect(listResponse.status).toBe(200)
+    expect(exportResponse.status).toBe(200)
+    expect(listResponse.body.data.list[0].description).toBe('query-user POST /api/v1/inventory/items')
+    expect(exportResponse.body.data.rows[0].description).toBe('query-user POST /api/v1/inventory/items')
+    expect(JSON.stringify(exportResponse.body.data.rows)).not.toContain('synthetic-value')
   })
 
   it('preserves denied and unknown evidence without mapping either action to login', async () => {
@@ -142,8 +189,8 @@ describe('logs route evidence contract', () => {
   })
 
   it.each([
-    ['?type=create', ['create-inventory', 'create-users']],
-    ['?module=inventory', ['create-inventory', 'denied-inventory', 'unknown-inventory']],
+    ['?type=create', ['create-inventory', 'create-users', 'canonical-request', 'canonical-underscore', 'canonical-neighbor', 'query-description']],
+    ['?module=inventory', ['create-inventory', 'denied-inventory', 'unknown-inventory', 'canonical-path', 'canonical-request', 'query-description']],
     ['?username=alice', ['denied-inventory', 'unknown-inventory']],
     ['?startDate=2026-07-18&endDate=2026-07-18', ['login', 'create-inventory', 'denied-inventory', 'logout', 'create-users']],
   ])('export applies the visible filter %s on the server', async (query, expectedIds) => {
@@ -171,23 +218,28 @@ describe('logs route evidence contract', () => {
   })
 
   it('refuses to silently truncate an export above the evidence limit', async () => {
-    db.exec(`
-      WITH RECURSIVE sequence(value) AS (
-        SELECT 1
-        UNION ALL
-        SELECT value + 1 FROM sequence WHERE value < 10001
-      )
-      INSERT INTO operation_logs (id, username, operation, description, created_at)
-      SELECT 'bulk-' || value, 'bulk-user', 'LOGIN', 'bulk export fixture', '2026-07-18 13:00:00'
-      FROM sequence
-    `)
+    insertBulkLogs('bulk-over-limit', 10001)
 
     try {
-      const response = await request(app).get('/api/v1/logs/export?username=bulk-user')
+      const response = await request(app).get('/api/v1/logs/export?username=bulk-over-limit')
       expect(response.status).toBe(413)
       expect(response.body.error.code).toBe('EXPORT_LIMIT_EXCEEDED')
+      expect(response.body.error.message).toContain('10000')
     } finally {
-      db.exec("DELETE FROM operation_logs WHERE username = 'bulk-user'")
+      deleteBulkLogs('bulk-over-limit')
+    }
+  })
+
+  it('exports exactly 10000 evidence rows without rejecting or truncating the boundary', async () => {
+    insertBulkLogs('bulk-at-limit', 10000)
+
+    try {
+      const response = await request(app).get('/api/v1/logs/export?username=bulk-at-limit')
+      expect(response.status).toBe(200)
+      expect(response.body.data).toMatchObject({ total: 10000, maxRows: 10000 })
+      expect(response.body.data.rows).toHaveLength(10000)
+    } finally {
+      deleteBulkLogs('bulk-at-limit')
     }
   })
 

@@ -28,7 +28,7 @@ export function LogExportModal({ open, form, exporting, error, onChange, onExpor
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">导出日志</h3>
-            <p className="mt-1 text-sm text-gray-500">沿用当前页面的操作类型、模块和用户筛选</p>
+            <p className="mt-1 text-sm text-gray-500">沿用当前页面已加载的操作类型、模块、用户和日期筛选</p>
           </div>
           <button
             type="button"
@@ -42,29 +42,6 @@ export function LogExportModal({ open, form, exporting, error, onChange, onExpor
         </div>
 
         <div className="p-6 space-y-5 overflow-y-auto">
-          <div className="grid grid-cols-2 gap-4">
-            <label className="text-sm text-gray-700">
-              <span className="mb-1.5 block font-medium">开始日期</span>
-              <input
-                type="date"
-                value={form.startDate}
-                disabled={exporting}
-                onChange={event => update('startDate', event.target.value)}
-                className="h-10 w-full rounded-md border border-gray-300 px-3 text-sm disabled:bg-gray-100"
-              />
-            </label>
-            <label className="text-sm text-gray-700">
-              <span className="mb-1.5 block font-medium">结束日期</span>
-              <input
-                type="date"
-                value={form.endDate}
-                disabled={exporting}
-                onChange={event => update('endDate', event.target.value)}
-                className="h-10 w-full rounded-md border border-gray-300 px-3 text-sm disabled:bg-gray-100"
-              />
-            </label>
-          </div>
-
           <fieldset disabled={exporting}>
             <legend className="mb-2 text-sm font-medium text-gray-700">文件格式</legend>
             <div className="flex gap-5 text-sm text-gray-700">

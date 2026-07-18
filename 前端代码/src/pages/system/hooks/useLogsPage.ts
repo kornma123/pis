@@ -15,8 +15,6 @@ export interface LogRecord extends OperationLog {
 }
 
 export interface LogExportForm {
-  startDate: string
-  endDate: string
   format: 'xlsx' | 'csv'
   includeBasic: boolean
   includeDetail: boolean
@@ -31,8 +29,6 @@ type LogsExportResponse = {
 }
 
 const DEFAULT_EXPORT_FORM: LogExportForm = {
-  startDate: '',
-  endDate: '',
   format: 'xlsx',
   includeBasic: true,
   includeDetail: true,
@@ -51,6 +47,11 @@ function getExportErrorMessage(error: unknown) {
     if (typeof candidate.message === 'string' && candidate.message.trim()) return candidate.message
   }
   return '导出失败，请稍后重试'
+}
+
+function safeSpreadsheetText(value: string | null | undefined) {
+  const text = value || ''
+  return /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text
 }
 
 export const LOG_TYPES = [
@@ -95,11 +96,11 @@ export function resolveLogType(op: string, actionType?: LogActionType) {
 export function useLogsPage() {
   const { getNumber, setMultiple } = useUrlParams()
 
-  const [typeFilter, setTypeFilter] = useState('')
-  const [moduleFilter, setModuleFilter] = useState('')
-  const [userFilter, setUserFilter] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  const [typeFilter, setTypeFilterState] = useState('')
+  const [moduleFilter, setModuleFilterState] = useState('')
+  const [userFilter, setUserFilterState] = useState('')
+  const [startDate, setStartDateState] = useState('')
+  const [endDate, setEndDateState] = useState('')
 
   const urlPage = Math.max(1, getNumber('page', 1))
   const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 20))
@@ -124,6 +125,12 @@ export function useLogsPage() {
     initialPageSize: urlPageSize,
     deps: [typeFilter, moduleFilter, userFilter, startDate, endDate],
   })
+
+  const setTypeFilter = (value: string) => { setTypeFilterState(value); setPage(1) }
+  const setModuleFilter = (value: string) => { setModuleFilterState(value); setPage(1) }
+  const setUserFilter = (value: string) => { setUserFilterState(value); setPage(1) }
+  const setStartDate = (value: string) => { setStartDateState(value); setPage(1) }
+  const setEndDate = (value: string) => { setEndDateState(value); setPage(1) }
 
   useEffect(() => {
     setMultiple({
@@ -159,8 +166,8 @@ export function useLogsPage() {
 
   const handleSearch = () => { setPage(1) }
   const handleReset = () => {
-    setTypeFilter(''); setModuleFilter(''); setUserFilter('');
-    setStartDate(''); setEndDate(''); setPage(1)
+    setTypeFilterState(''); setModuleFilterState(''); setUserFilterState('');
+    setStartDateState(''); setEndDateState(''); setPage(1)
   }
 
   const openDetail = (row: LogRecord) => {
@@ -178,8 +185,8 @@ export function useLogsPage() {
     if (exporting) return
 
     setExportError(null)
-    const exportStartDate = exportForm.startDate || startDate
-    const exportEndDate = exportForm.endDate || endDate
+    const exportStartDate = startDate
+    const exportEndDate = endDate
     if (exportStartDate && exportEndDate && exportStartDate > exportEndDate) {
       const message = '开始日期不能晚于结束日期'
       setExportError(message)
@@ -214,19 +221,19 @@ export function useLogsPage() {
       const exportRows = response.rows.map((log) => {
         const row: Record<string, string> = {}
         if (exportForm.includeBasic) {
-          row['操作时间'] = log.createdAt
-          row['操作用户'] = log.username || ''
-          row['操作类型'] = resolveLogType(log.operation, log.actionType).label
-          row['操作模块'] = getModuleLabel(log.module || '')
+          row['操作时间'] = safeSpreadsheetText(log.createdAt)
+          row['操作用户'] = safeSpreadsheetText(log.username)
+          row['操作类型'] = safeSpreadsheetText(resolveLogType(log.operation, log.actionType).label)
+          row['操作模块'] = safeSpreadsheetText(getModuleLabel(log.module || ''))
         }
         if (exportForm.includeDetail) {
-          row['操作内容'] = log.description || ''
-          row['原始动作'] = log.operation || ''
-          row['执行结果'] = log.outcome || (log.actionType === 'denied' ? 'denied' : '未记录')
+          row['操作内容'] = safeSpreadsheetText(log.description)
+          row['原始动作'] = safeSpreadsheetText(log.operation)
+          row['执行结果'] = safeSpreadsheetText(log.outcome || (log.actionType === 'denied' ? 'denied' : '未记录'))
         }
         if (exportForm.includeIP) {
-          row['IP地址'] = log.ip || ''
-          row['设备信息'] = log.userAgent || ''
+          row['IP地址'] = safeSpreadsheetText(log.ip)
+          row['设备信息'] = safeSpreadsheetText(log.userAgent)
         }
         return row
       })

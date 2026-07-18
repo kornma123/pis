@@ -26,7 +26,7 @@ function pageState(overrides: Record<string, unknown> = {}) {
     showDetail: false, detailLog: null, setShowDetail: vi.fn(),
     showExport: false, setShowExport: vi.fn(),
     exporting: false, exportError: null,
-    exportForm: { startDate: '', endDate: '', format: 'xlsx', includeBasic: true, includeDetail: true, includeIP: false, includeDiff: false },
+    exportForm: { format: 'xlsx', includeBasic: true, includeDetail: true, includeIP: false, includeDiff: false },
     setExportForm: vi.fn(), handleExport: vi.fn(),
     ...overrides,
   }
@@ -58,7 +58,9 @@ describe('Logs page truth labels and states', () => {
     mocks.useLogsPage.mockReturnValue(pageState({ showExport: true }))
     render(<Logs />)
     expect(screen.getByRole('button', { name: '导出日志' })).toBeInTheDocument()
-    expect(screen.getByText('沿用当前页面的操作类型、模块和用户筛选')).toBeInTheDocument()
+    expect(screen.getByText('沿用当前页面已加载的操作类型、模块、用户和日期筛选')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('开始日期')).toHaveLength(1)
+    expect(screen.getAllByLabelText('结束日期')).toHaveLength(1)
     expect(screen.getByRole('checkbox', { name: /请求响应原文/ })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: '导出' }))
     expect(mocks.useLogsPage.mock.results.at(-1)?.value.handleExport).toHaveBeenCalledTimes(1)

@@ -32,6 +32,7 @@ type OperationLogRow = {
   created_at: string
   outcome: string | null
   action_type: LogActionType
+  canonical_module: string
 }
 
 type CountRow = { total?: number }
@@ -63,6 +64,93 @@ const ACTION_TYPE_SQL = `
     WHEN lower(trim(operation)) LIKE 'export%' THEN 'export'
     WHEN lower(trim(operation)) LIKE 'import%' THEN 'import'
     ELSE 'unknown'
+  END
+`
+
+const NORMALIZED_OPERATION_SQL = `lower(trim(coalesce(operation, '')))`
+const REQUEST_MODULE_SQL = `
+  lower(trim(coalesce(
+    CASE WHEN json_valid(request_data) THEN
+      CASE WHEN json_type(request_data, '$.module') = 'text'
+        THEN CAST(json_extract(request_data, '$.module') AS TEXT)
+      END
+    END,
+    ''
+  )))
+`
+const API_VERSION_AND_PATH_SQL = `
+  substr(
+    ${NORMALIZED_OPERATION_SQL},
+    instr(${NORMALIZED_OPERATION_SQL}, '/api/v') + length('/api/v')
+  )
+`
+const API_VERSION_SQL = `
+  CASE WHEN instr(${API_VERSION_AND_PATH_SQL}, '/') > 0
+    THEN substr(${API_VERSION_AND_PATH_SQL}, 1, instr(${API_VERSION_AND_PATH_SQL}, '/') - 1)
+    ELSE ''
+  END
+`
+const API_PATH_SQL = `
+  CASE WHEN instr(${API_VERSION_AND_PATH_SQL}, '/') > 0
+    THEN substr(${API_VERSION_AND_PATH_SQL}, instr(${API_VERSION_AND_PATH_SQL}, '/') + 1)
+    ELSE ''
+  END
+`
+
+function firstPathSegmentSql(candidate: string) {
+  return `
+    CASE WHEN instr(${candidate}, '/') > 0
+      THEN substr(${candidate}, 1, instr(${candidate}, '/') - 1)
+      ELSE ${candidate}
+    END
+  `
+}
+
+function validModuleSql(candidate: string) {
+  return `
+    (${candidate}) <> ''
+    AND length(${candidate}) <= 64
+    AND substr(${candidate}, 1, 1) GLOB '[a-z0-9]'
+    AND (${candidate}) NOT GLOB '*[^a-z0-9_-]*'
+  `
+}
+
+const API_MODULE_SQL = firstPathSegmentSql(API_PATH_SQL)
+const OPERATION_AFTER_EVIDENCE_PREFIX_SQL = `
+  CASE
+    WHEN ${NORMALIZED_OPERATION_SQL} LIKE 'denied %'
+      THEN substr(${NORMALIZED_OPERATION_SQL}, length('denied ') + 1)
+    WHEN ${NORMALIZED_OPERATION_SQL} LIKE 'denied_agg %'
+      THEN substr(${NORMALIZED_OPERATION_SQL}, length('denied_agg ') + 1)
+    WHEN ${NORMALIZED_OPERATION_SQL} LIKE 'security_alert %'
+      THEN substr(${NORMALIZED_OPERATION_SQL}, length('security_alert ') + 1)
+    ELSE ${NORMALIZED_OPERATION_SQL}
+  END
+`
+const OPERATION_TARGET_SQL = `
+  trim(
+    CASE WHEN instr(${OPERATION_AFTER_EVIDENCE_PREFIX_SQL}, ' ') > 0
+      THEN substr(
+        ${OPERATION_AFTER_EVIDENCE_PREFIX_SQL},
+        instr(${OPERATION_AFTER_EVIDENCE_PREFIX_SQL}, ' ') + 1
+      )
+      ELSE ''
+    END,
+    ' /'
+  )
+`
+const OPERATION_MODULE_SQL = firstPathSegmentSql(OPERATION_TARGET_SQL)
+const CANONICAL_MODULE_SQL = `
+  CASE
+    WHEN ${validModuleSql(REQUEST_MODULE_SQL)} THEN ${REQUEST_MODULE_SQL}
+    WHEN instr(${NORMALIZED_OPERATION_SQL}, '/api/v') > 0
+      AND (${API_VERSION_SQL}) <> ''
+      AND (${API_VERSION_SQL}) NOT GLOB '*[^0-9]*'
+      AND ${validModuleSql(API_MODULE_SQL)}
+      THEN ${API_MODULE_SQL}
+    WHEN (${ACTION_TYPE_SQL}) IN ('login', 'logout') THEN 'system'
+    WHEN ${validModuleSql(OPERATION_MODULE_SQL)} THEN ${OPERATION_MODULE_SQL}
+    ELSE ''
   END
 `
 
@@ -141,22 +229,8 @@ function buildWhere(filters: LogFilters) {
   if (filters.type) { clauses.push(`(${ACTION_TYPE_SQL}) = ?`); params.push(filters.type) }
 
   if (filters.module) {
-    const moduleClauses = [
-      `lower(coalesce(CASE WHEN json_valid(request_data) THEN CAST(json_extract(request_data, '$.module') AS TEXT) END, '')) = ?`,
-      'lower(trim(operation)) LIKE ?',
-      'lower(trim(operation)) LIKE ?',
-      'lower(trim(operation)) LIKE ?',
-      'lower(trim(operation)) LIKE ?',
-    ]
-    params.push(
-      filters.module,
-      `% ${filters.module}`,
-      `% /${filters.module}`,
-      `% /${filters.module}/%`,
-      `% ${filters.module}/%`,
-    )
-    if (filters.module === 'system') moduleClauses.push(`(${ACTION_TYPE_SQL}) IN ('login', 'logout')`)
-    clauses.push(`(${moduleClauses.join(' OR ')})`)
+    clauses.push(`(${CANONICAL_MODULE_SQL}) = ?`)
+    params.push(filters.module)
   }
 
   return {
@@ -165,28 +239,8 @@ function buildWhere(filters: LogFilters) {
   }
 }
 
-function safeModule(row: OperationLogRow) {
-  if (typeof row.request_data === 'string') {
-    try {
-      const parsed: unknown = JSON.parse(row.request_data)
-      const module = typeof parsed === 'object' && parsed !== null && 'module' in parsed && typeof parsed.module === 'string'
-        ? parsed.module.trim().toLowerCase()
-        : ''
-      if (/^[a-z0-9][a-z0-9_-]{0,63}$/.test(module)) return module
-    } catch { /* Malformed historical request data is not evidence for a module label. */ }
-  }
-
-  const operation = String(row.operation || '').trim().toLowerCase()
-  const pathModule = operation.match(/\/api\/v\d+\/([a-z0-9_-]+)/)?.[1]
-  if (pathModule) return pathModule
-  if ((row.action_type === 'login' || row.action_type === 'logout')) return 'system'
-
-  const tokens = operation.split(/\s+/)
-  if (tokens.length > 1) {
-    const candidate = tokens.at(-1)?.replace(/^\/+|\/+$/g, '').split('/')[0] || ''
-    if (/^[a-z0-9][a-z0-9_-]{0,63}$/.test(candidate)) return candidate
-  }
-  return ''
+function safeDescription(description: string) {
+  return description.replace(/((?:https?:\/\/|\/)[^\s?)]*)\?[^\s)]*/gi, '$1')
 }
 
 function mapLog(row: OperationLogRow) {
@@ -195,12 +249,12 @@ function mapLog(row: OperationLogRow) {
     userId: row.user_id,
     username: row.username || '',
     operation: row.operation,
-    description: row.description,
+    description: safeDescription(row.description),
     ip: row.ip || '',
     userAgent: row.user_agent,
     createdAt: row.created_at,
     actionType: row.action_type as LogActionType,
-    module: safeModule(row),
+    module: row.canonical_module || '',
     outcome: row.outcome ?? null,
   }
 }
@@ -225,7 +279,7 @@ function getOperationLogs(req: Request, res: Response) {
     const count = (db.prepare(`SELECT COUNT(*) as total FROM operation_logs ${where}`).get(...params) as CountRow | undefined)?.total || 0
     const offset = (filters.page - 1) * filters.pageSize
     const list = db.prepare(`
-      SELECT *, (${ACTION_TYPE_SQL}) AS action_type
+      SELECT *, (${ACTION_TYPE_SQL}) AS action_type, (${CANONICAL_MODULE_SQL}) AS canonical_module
       FROM operation_logs
       ${where}
       ORDER BY created_at DESC, id DESC
@@ -256,7 +310,7 @@ function exportOperationLogs(req: Request, res: Response) {
     }
 
     const rows = db.prepare(`
-      SELECT *, (${ACTION_TYPE_SQL}) AS action_type
+      SELECT *, (${ACTION_TYPE_SQL}) AS action_type, (${CANONICAL_MODULE_SQL}) AS canonical_module
       FROM operation_logs
       ${where}
       ORDER BY created_at DESC, id DESC
