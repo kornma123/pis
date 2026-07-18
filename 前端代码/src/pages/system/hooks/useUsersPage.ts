@@ -4,6 +4,7 @@ import type { User } from '@/types'
 import { toast } from 'sonner'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
+import { canAccess } from '@/lib/permissions'
 
 export interface FormData {
   username: string
@@ -69,19 +70,15 @@ export interface RoleItem {
   id: string
   name: string
   code: string
-  userCount: number
   description: string
-  permissions: string[]
-  isSystem?: boolean
+  permissions: string[] | Record<string, 'R' | 'W'>
 }
 
 export function useUsersPage() {
   const { getNumber, setMultiple } = useUrlParams()
+  const canWrite = canAccess('users', 'W')
 
   const [keyword, setKeyword] = useState('')
-  const [roleFilter, setRoleFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [selectedRoleId, setSelectedRoleId] = useState('')
 
   const urlPage = Math.max(1, getNumber('page', 1))
   const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 20))
@@ -89,21 +86,18 @@ export function useUsersPage() {
     : 20
 
   const {
-    data, loading, page, pageSize, total,
+    data, loading, error, page, pageSize, total,
     setPage, setPageSize, refresh,
   } = usePagination<User>({
     fetchFn: async ({ page, pageSize }) => {
       const params: any = { page, pageSize }
       if (keyword) params.keyword = keyword
-      if (roleFilter) params.role = roleFilter
-      if (statusFilter) params.status = statusFilter
-      if (selectedRoleId) params.roleId = selectedRoleId
       const res: any = await request.get('/users', { params })
       return { list: res?.list || [], pagination: res?.pagination }
     },
     initialPage: urlPage,
     initialPageSize: urlPageSize,
-    deps: [keyword, roleFilter, statusFilter, selectedRoleId],
+    deps: [keyword],
   })
 
   useEffect(() => {
@@ -111,18 +105,16 @@ export function useUsersPage() {
       page: page > 1 ? page : null,
       pageSize: pageSize !== 20 ? pageSize : null,
       keyword: keyword || null,
-      role: roleFilter || null,
-      status: statusFilter || null,
-      roleId: selectedRoleId || null,
     })
-  }, [page, pageSize, keyword, roleFilter, statusFilter, selectedRoleId, setMultiple])
+  }, [page, pageSize, keyword, setMultiple])
 
   const [modalType, setModalType] = useState<'create' | 'edit' | 'detail' | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
   const [form, setForm] = useState<FormData>({
-    username: '', password: '', realName: '', role: 'operator', roles: [], primaryRole: '', department: '', phone: '', email: '', status: 'active'
+    username: '', password: '', realName: '', role: '', roles: [], primaryRole: '', department: '', phone: '', email: '', status: 'active'
   })
+  const [formError, setFormError] = useState('')
 
   const [roles, setRoles] = useState<RoleItem[]>([])
 
@@ -151,30 +143,35 @@ export function useUsersPage() {
       const res: any = await request.get('/roles', { params: { page: 1, pageSize: 100 } })
       const list = res?.list || []
       setRoles(list.map((r: any) => ({
-        id: r.id, name: r.name, code: r.code, userCount: 0,
+        id: r.id, name: r.name, code: r.code,
         description: r.description || '', permissions: r.permissions || [],
-        isSystem: r.code === 'admin'
       })))
     } catch (e) { console.error(e) }
   }
 
-  useEffect(() => { fetchRoles() }, [])
+  useEffect(() => {
+    if (canWrite) fetchRoles()
+  }, [canWrite])
 
   const stats = useMemo(() => {
     const totalUsers = total
     const activeUsers = data.filter(u => u.status === 'active').length
     const inactiveUsers = data.filter(u => u.status === 'inactive').length
-    const adminUsers = data.filter(u => u.role === 'admin').length
-    return { totalUsers, activeUsers, inactiveUsers, adminUsers }
+    const pageUsers = data.length
+    return { totalUsers, activeUsers, inactiveUsers, pageUsers }
   }, [data, total])
 
   const openCreate = () => {
+    if (!canWrite) return
+    setFormError('')
     setEditingId(null)
-    setForm({ username: '', password: generateStrongInitialPassword(), realName: '', role: 'operator', roles: [], primaryRole: '', department: '', phone: '', email: '', status: 'active' })
+    setForm({ username: '', password: generateStrongInitialPassword(), realName: '', role: '', roles: [], primaryRole: '', department: '', phone: '', email: '', status: 'active' })
     setModalType('create')
   }
 
   const openEdit = (row: User) => {
+    if (!canWrite) return
+    setFormError('')
     setEditingId(row.id)
     const rowRoles = Array.isArray((row as any).roles) && (row as any).roles.length ? (row as any).roles : [row.role]
     setForm({
@@ -192,16 +189,17 @@ export function useUsersPage() {
   }
 
   const handleSubmit = async () => {
+    if (!canWrite) return
     if (!form.username.trim() || !form.realName.trim()) {
-      toast.error('请填写必填字段')
+      setFormError('请填写用户名和姓名。')
       return
     }
     if (!form.roles || form.roles.length === 0) {
-      toast.error('请至少分配一个角色')
+      setFormError('请从后端返回的角色列表中至少分配一个角色。')
       return
     }
     if (!editingId && !form.password) {
-      toast.error('请生成或填写初始密码')
+      setFormError('请生成或填写初始密码。')
       return
     }
     const primary = form.primaryRole && form.roles.includes(form.primaryRole) ? form.primaryRole : form.roles[0]
@@ -222,14 +220,16 @@ export function useUsersPage() {
       } else {
         toast.success(editingId ? '保存成功' : '创建成功')
       }
+      setFormError('')
       setModalType(null)
       refresh()
     } catch {
-      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
+      setFormError('保存未完成，请检查输入或稍后重试。')
     }
   }
 
   const handleDelete = async (id: string) => {
+    if (!canWrite) return
     openConfirm({
       title: '确认删除',
       description: '确认删除该用户？删除后不可恢复。',
@@ -246,6 +246,7 @@ export function useUsersPage() {
   }
 
   const handleToggleStatus = async (row: User) => {
+    if (!canWrite) return
     const newStatus = row.status === 'active' ? 'inactive' : 'active'
     try {
       await request.put(`/users/${row.id}`, { status: newStatus })
@@ -256,19 +257,19 @@ export function useUsersPage() {
 
   const handleSearch = () => { setPage(1) }
   const handleReset = () => {
-    setKeyword(''); setRoleFilter(''); setStatusFilter(''); setSelectedRoleId(''); setPage(1)
+    setKeyword(''); setPage(1)
   }
 
   const getAvatarChar = (name: string) => name ? name.charAt(0) : '?'
 
   return {
-    data, loading, page, pageSize, total, setPage, setPageSize, refresh,
-    keyword, setKeyword, roleFilter, setRoleFilter, statusFilter, setStatusFilter,
-    selectedRoleId, setSelectedRoleId,
+    data, loading, error: error ? '用户服务暂时不可用，请重新加载。' : null, page, pageSize, total, setPage, setPageSize, refresh,
+    keyword, setKeyword, canWrite,
     modalType, setModalType,
     editingId, setEditingId,
     detailUser, setDetailUser,
     form, setForm,
+    formError, setFormError,
     roles, setRoles,
     confirmOpen, setConfirmOpen, confirmProps, setConfirmProps,
     stats,

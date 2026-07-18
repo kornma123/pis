@@ -11,33 +11,35 @@ export default function Users() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight leading-tight">用户管理</h1>
           <p className="text-sm text-gray-500 mt-1">管理系统用户、角色和权限分配</p>
         </div>
-        <button onClick={page.openCreate} className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm font-medium shadow-sm transition-all">
-          <Plus className="w-4 h-4" /> 新建用户
-        </button>
+        {page.canWrite && (
+          <button onClick={page.openCreate} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium shadow-sm transition-all">
+            <Plus className="w-4 h-4" /> 新建用户
+          </button>
+        )}
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-2xl font-semibold text-gray-900">{page.stats.totalUsers}</div>
+          <div className="text-2xl font-semibold text-gray-900">{page.error ? '—' : page.stats.totalUsers}</div>
           <div className="text-sm text-gray-500 mt-1">用户总数</div>
         </div>
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-2xl font-semibold text-green-500">{page.stats.activeUsers}</div>
-          <div className="text-sm text-gray-500 mt-1">启用用户</div>
+          <div className="text-2xl font-semibold text-green-600">{page.error ? '—' : page.stats.activeUsers}</div>
+          <div className="text-sm text-gray-500 mt-1">本页启用</div>
         </div>
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-2xl font-semibold text-gray-600">{page.stats.inactiveUsers}</div>
-          <div className="text-sm text-gray-500 mt-1">停用用户</div>
+          <div className="text-2xl font-semibold text-gray-600">{page.error ? '—' : page.stats.inactiveUsers}</div>
+          <div className="text-sm text-gray-500 mt-1">本页停用</div>
         </div>
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-2xl font-semibold text-blue-500">{page.stats.adminUsers}</div>
-          <div className="text-sm text-gray-500 mt-1">管理员</div>
+          <div className="text-2xl font-semibold text-blue-600">{page.error ? '—' : page.stats.pageUsers}</div>
+          <div className="text-sm text-gray-500 mt-1">本页已加载</div>
         </div>
       </div>
 
@@ -45,20 +47,17 @@ export default function Users() {
       <UsersTable
         data={page.data}
         loading={page.loading}
+        error={page.error}
         total={page.total}
         page={page.page}
         pageSize={page.pageSize}
         keyword={page.keyword}
-        roleFilter={page.roleFilter}
-        statusFilter={page.statusFilter}
-        selectedRoleId={page.selectedRoleId}
         roles={page.roles}
+        canWrite={page.canWrite}
         onKeywordChange={page.setKeyword}
-        onRoleFilterChange={page.setRoleFilter}
-        onStatusFilterChange={page.setStatusFilter}
-        onSelectedRoleIdChange={page.setSelectedRoleId}
         onSearch={page.handleSearch}
         onReset={page.handleReset}
+        onRetry={page.refresh}
         onPageChange={page.setPage}
         onPageSizeChange={page.setPageSize}
         onOpenDetail={page.openDetail}
@@ -72,8 +71,10 @@ export default function Users() {
         open={page.modalType === 'create' || page.modalType === 'edit'}
         type={page.modalType === 'edit' ? 'edit' : 'create'}
         form={page.form}
+        roles={page.roles}
+        error={page.formError}
         onClose={() => page.setModalType(null)}
-        onChange={page.setForm}
+        onChange={form => { page.setForm(form); page.setFormError('') }}
         onSubmit={page.handleSubmit}
       />
 
@@ -81,6 +82,7 @@ export default function Users() {
       <UserDetailModal
         open={page.modalType === 'detail'}
         user={page.detailUser}
+        canWrite={page.canWrite}
         onClose={() => page.setModalType(null)}
         onEdit={page.openEdit}
       />

@@ -4,6 +4,7 @@ import { useUrlParams } from '@/hooks/useUrlParams'
 import request from '@/api/request'
 import type { Role } from '@/types'
 import { toast } from 'sonner'
+import { canAccess } from '@/lib/permissions'
 
 export type PermLevel = 'R' | 'W'
 
@@ -13,7 +14,6 @@ export interface FormData {
   description: string
   permissions: Record<string, PermLevel> // 数据驱动 RBAC：模块 → R/W（缺省=无权限）
   status: 'active' | 'inactive'
-  dataScope?: 'all' | 'dept' | 'self'
 }
 
 export interface PermissionModule {
@@ -71,17 +71,11 @@ export function normalizeRolePerms(raw: any): Record<string, PermLevel> {
   return {}
 }
 
-export const DATA_SCOPE_OPTIONS = [
-  { value: 'all' as const, label: '全部数据', desc: '可查看所有部门数据' },
-  { value: 'dept' as const, label: '本部门数据', desc: '仅查看所属部门数据' },
-  { value: 'self' as const, label: '仅本人数据', desc: '仅查看自己操作的数据' },
-]
-
 export function useRolesPage() {
   const { getNumber, setMultiple } = useUrlParams()
+  const canWrite = canAccess('roles', 'W')
 
   const [keyword, setKeyword] = useState('')
-  const [tabType, setTabType] = useState<'all' | 'system' | 'custom'>('all')
 
   const urlPage = Math.max(1, getNumber('page', 1))
   const urlPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 20))
@@ -91,6 +85,7 @@ export function useRolesPage() {
   const {
     data,
     loading,
+    error,
     page,
     pageSize,
     total,
@@ -112,9 +107,8 @@ export function useRolesPage() {
       page: page > 1 ? page : null,
       pageSize: pageSize !== 20 ? pageSize : null,
       keyword: keyword || null,
-      tab: tabType !== 'all' ? tabType : null,
     })
-  }, [page, pageSize, keyword, tabType, setMultiple])
+  }, [page, pageSize, keyword, setMultiple])
 
   const [modalType, setModalType] = useState<'create' | 'edit' | 'detail' | 'delete' | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -122,35 +116,38 @@ export function useRolesPage() {
   const [deleteRole, setDeleteRole] = useState<Role | null>(null)
 
   const [form, setForm] = useState<FormData>({
-    code: '', name: '', description: '', permissions: {}, status: 'active', dataScope: 'dept'
+    code: '', name: '', description: '', permissions: {}, status: 'active'
   })
+  const [formError, setFormError] = useState('')
 
   const stats = useMemo(() => {
-    const totalRoles = data.length
-    const systemRoles = data.filter(r => r.code === 'admin').length
-    const customRoles = totalRoles - systemRoles
-    const assignedUsers = data.reduce((sum, r) => sum + (r as any).userCount || 0, 0)
-    return { totalRoles, systemRoles, customRoles, assignedUsers }
-  }, [data])
+    const totalRoles = total
+    const pageRoles = data.length
+    const activeRoles = data.filter(role => role.status === 'active').length
+    const inactiveRoles = data.filter(role => role.status === 'inactive').length
+    return { totalRoles, pageRoles, activeRoles, inactiveRoles }
+  }, [data, total])
 
   const filteredData = useMemo(() => {
     let list = [...data]
-    if (tabType === 'system') list = list.filter(r => r.code === 'admin')
-    if (tabType === 'custom') list = list.filter(r => r.code !== 'admin')
     if (keyword.trim()) {
       const kw = keyword.toLowerCase()
       list = list.filter(r => r.name.toLowerCase().includes(kw) || r.code.toLowerCase().includes(kw))
     }
     return list
-  }, [data, tabType, keyword])
+  }, [data, keyword])
 
   const openCreate = () => {
+    if (!canWrite) return
+    setFormError('')
     setEditingId(null)
-    setForm({ code: `ROLE-${Date.now()}`, name: '', description: '', permissions: {}, status: 'active', dataScope: 'dept' })
+    setForm({ code: '', name: '', description: '', permissions: {}, status: 'active' })
     setModalType('create')
   }
 
   const openEdit = (row: Role) => {
+    if (!canWrite) return
+    setFormError('')
     setEditingId(row.id)
     setForm({
       code: row.code,
@@ -158,7 +155,6 @@ export function useRolesPage() {
       description: row.description || '',
       permissions: normalizeRolePerms((row as any).permissions),
       status: row.status,
-      dataScope: 'dept'
     })
     setModalType('edit')
   }
@@ -169,6 +165,7 @@ export function useRolesPage() {
   }
 
   const openDelete = (row: Role) => {
+    if (!canWrite) return
     setDeleteRole(row)
     setModalType('delete')
   }
@@ -184,8 +181,9 @@ export function useRolesPage() {
   }
 
   const handleSubmit = async () => {
+    if (!canWrite) return
     if (!form.code.trim() || !form.name.trim()) {
-      toast.error('请填写必填字段')
+      setFormError('请填写角色名称和唯一角色标识。')
       return
     }
     try {
@@ -194,16 +192,17 @@ export function useRolesPage() {
       } else {
         await request.post('/roles', form)
       }
+      setFormError('')
       toast.success(editingId ? '保存成功' : '创建成功')
       setModalType(null)
       refresh()
     } catch {
-      /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
+      setFormError('保存未完成，请检查输入或稍后重试。')
     }
   }
 
   const handleDelete = async () => {
-    if (!deleteRole) return
+    if (!canWrite || !deleteRole) return
     try {
       await request.delete(`/roles/${deleteRole.id}`)
       toast.success('删除成功')
@@ -214,14 +213,10 @@ export function useRolesPage() {
     }
   }
 
-  const getDataScopeLabel = (role: Role) => {
-    if (role.code === 'admin') return '全部数据'
-    return '本部门数据'
-  }
-
   return {
     data,
     loading,
+    error: error ? '角色服务暂时不可用，请重新加载。' : null,
     page,
     pageSize,
     total,
@@ -230,8 +225,7 @@ export function useRolesPage() {
     refresh,
     keyword,
     setKeyword,
-    tabType,
-    setTabType,
+    canWrite,
     modalType,
     setModalType,
     editingId,
@@ -242,6 +236,8 @@ export function useRolesPage() {
     setDeleteRole,
     form,
     setForm,
+    formError,
+    setFormError,
     stats,
     filteredData,
     openCreate,
@@ -251,6 +247,5 @@ export function useRolesPage() {
     setPermLevel,
     handleSubmit,
     handleDelete,
-    getDataScopeLabel,
   }
 }

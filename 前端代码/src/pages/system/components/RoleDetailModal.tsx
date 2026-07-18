@@ -1,6 +1,6 @@
-import { X, Shield } from 'lucide-react'
+import { Modal } from '@/components/ui/Modal'
 import type { Role } from '@/types'
-import { PERMISSION_MODULES } from '../hooks/useRolesPage'
+import { PERMISSION_MODULES, normalizeRolePerms } from '../hooks/useRolesPage'
 
 interface Props {
   open: boolean
@@ -8,97 +8,62 @@ interface Props {
   onClose: () => void
 }
 
-function getRoleBadge(role: Role) {
-  if (role.code === 'admin') {
-    return <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-500 font-medium">系统角色</span>
-  }
-  return <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-medium">自定义</span>
-}
-
-function getPermissionChips(role: Role) {
-  if (role.code === 'admin') return [<span key="all" className="text-xs px-2.5 py-1 rounded-full bg-green-50 text-green-500 font-medium">全部权限</span>]
-  const perms = Array.isArray(role.permissions) ? role.permissions : Object.keys(role.permissions ?? {})
-  const chips: string[] = []
-  const uniqueModules = new Set<string>()
-  perms.forEach(p => {
-    const mod = p.split(':')[0]
-    if (mod) uniqueModules.add(mod)
-  })
-  uniqueModules.forEach(mod => {
-    const found = PERMISSION_MODULES.find(m => m.key === mod)
-    if (found) chips.push(found.label)
-  })
-  return chips.slice(0, 4).map((c, i) => (
-    <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 font-medium">{c}</span>
-  ))
-}
-
-function getDataScopeLabel(role: Role) {
-  if (role.code === 'admin') return '全部数据'
-  return '本部门数据'
-}
-
 export function RoleDetailModal({ open, role, onClose }: Props) {
   if (!open || !role) return null
 
+  const permissions = Object.entries(normalizeRolePerms(role.permissions)).map(([moduleKey, level]) => ({
+    key: moduleKey,
+    label: moduleKey === '*'
+      ? '全部模块'
+      : PERMISSION_MODULES.find(module => module.key === moduleKey)?.label || moduleKey,
+    level,
+  }))
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">角色详情</h3>
-          <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-gray-900 rounded-md transition-all">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="p-6 overflow-y-auto">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-semibold text-gray-900">{role.name}</span>
-              {getRoleBadge(role)}
+    <Modal title="角色详情" onClose={onClose} size="lg">
+        <div>
+          <div className="mb-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <h4 className="text-lg font-semibold text-gray-900">{role.name}</h4>
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${role.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                {role.status === 'active' ? '启用' : '停用'}
+              </span>
             </div>
-          </div>
-          <div className="grid grid-cols-3 gap-5 mb-6">
-            <div>
-              <div className="text-xs text-gray-500 mb-1">用户数量</div>
-              <div className="text-base font-semibold text-gray-900">{(role as any).userCount || 0} 人</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">数据权限</div>
-              <div className="text-base font-semibold text-gray-900">{getDataScopeLabel(role)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">创建时间</div>
-              <div className="text-base font-semibold text-gray-900">{role.createdAt ? new Date(role.createdAt).toLocaleDateString() : '-'}</div>
-            </div>
+            <p className="mt-1 font-mono text-xs text-gray-500 break-all">{role.code}</p>
+            <p className="mt-3 text-sm text-gray-600">{role.description || '未填写说明'}</p>
           </div>
 
-          <div className="mb-6">
-            <h4 className="text-sm font-semibold text-gray-900 mb-3">权限配置</h4>
-            {role.code === 'admin' ? (
-              <div className="bg-green-50 text-green-500 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
-                <Shield className="w-4 h-4" />
-                拥有系统全部权限
-              </div>
-            ) : (
+          <dl className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-6">
+            <Info label="关联用户数量" value="接口未提供" />
+            <Info label="数据范围" value="接口未提供" />
+            <Info label="创建时间" value={role.createdAt ? new Date(role.createdAt).toLocaleDateString('zh-CN') : '接口未提供'} />
+          </dl>
+
+          <section className="mb-6" aria-labelledby="role-permissions-title">
+            <h4 id="role-permissions-title" className="text-sm font-semibold text-gray-900 mb-3">后端返回的模块权限</h4>
+            {permissions.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {getPermissionChips(role)}
+                {permissions.map(permission => (
+                  <span key={permission.key} className="text-xs px-2.5 py-1 rounded-full bg-green-50 text-green-700 font-medium">
+                    {permission.label} · {permission.level}
+                  </span>
+                ))}
               </div>
-            )}
-          </div>
+            ) : <p className="text-sm text-gray-500">未配置模块权限</p>}
+          </section>
 
-          <div>
-            <h4 className="text-sm font-semibold text-gray-900 mb-3">关联用户</h4>
-            <div className="border border-gray-200 rounded-lg divide-y divide-gray-200">
-              <div className="px-4 py-3 text-sm text-gray-500">暂无关联用户数据</div>
-            </div>
-          </div>
+          <section aria-labelledby="role-users-title">
+            <h4 id="role-users-title" className="text-sm font-semibold text-gray-900 mb-3">关联用户</h4>
+            <div className="border border-amber-200 bg-amber-50 rounded-lg px-4 py-3 text-sm text-amber-800">接口未提供</div>
+          </section>
         </div>
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-end mt-6 pt-4 border-t border-gray-200">
           <button onClick={onClose} className="h-10 px-4 text-sm text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm transition-all">关闭</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return <div><dt className="text-xs text-gray-500 mb-1">{label}</dt><dd className="text-base font-semibold text-gray-900">{value}</dd></div>
 }
