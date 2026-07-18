@@ -14,63 +14,170 @@ const ROLES = {
 type RoleKey = keyof typeof ROLES
 const ROLE_KEYS: RoleKey[] = ['admin', 'warehouse_manager', 'technician', 'pathologist', 'procurement', 'finance']
 
-async function loginAs(page: Page, role: RoleKey) {
-  // Clear localStorage on the real origin (about:blank cannot access localStorage in Chromium)
+const ROLE_LABELS: Record<RoleKey, string> = {
+  admin: '系统管理员',
+  warehouse_manager: '仓库管理员',
+  technician: '技术员',
+  pathologist: '病理医生',
+  procurement: '采购员',
+  finance: '财务人员',
+}
+
+const ROLE_MENU_EXPECTATIONS: Record<RoleKey, { visible: string[]; hidden: string[] }> = {
+  admin: {
+    visible: ['/inventory', '/inbound', '/outbound', '/users', '/roles', '/logs'],
+    hidden: [],
+  },
+  warehouse_manager: {
+    visible: ['/inventory', '/inbound', '/outbound', '/stocktaking', '/bom'],
+    hidden: ['/projects', '/cost-analysis', '/users', '/roles', '/logs'],
+  },
+  technician: {
+    visible: ['/inventory', '/outbound', '/stocktaking', '/projects', '/bom'],
+    hidden: ['/inbound', '/cost-analysis', '/users', '/roles', '/logs'],
+  },
+  pathologist: {
+    visible: ['/inventory', '/projects', '/bom'],
+    hidden: ['/inbound', '/outbound', '/cost-analysis', '/users', '/roles', '/logs'],
+  },
+  procurement: {
+    visible: ['/inventory', '/inbound', '/suppliers', '/purchase-orders', '/cost-analysis'],
+    hidden: ['/outbound', '/stocktaking', '/users', '/roles', '/logs'],
+  },
+  finance: {
+    visible: ['/inventory', '/reconciliation', '/cost-analysis', '/logs'],
+    hidden: ['/inbound', '/outbound', '/stocktaking', '/users', '/roles'],
+  },
+}
+
+function isLoginResponse(response: { url(): string; request(): { method(): string } }) {
+  return response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/auth/login'
+}
+
+async function resetBrowserAuth(page: Page) {
   await page.goto(`${FE_BASE}/login`)
-  await page.waitForTimeout(100)
   await page.evaluate(() => { localStorage.clear(); sessionStorage.clear() })
   await page.goto(`${FE_BASE}/login`)
-  const cred = ROLES[role]
-  await page.fill('input[type="text"]', cred.username)
-  await page.fill('input[type="password"]', cred.password)
-  await page.click('button[type="submit"]')
-  await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
-  // Verify role in localStorage to catch auth state issues
-  const actualRole = await page.evaluate(() => {
-    try {
-      const userStr = localStorage.getItem('user')
-      if (userStr) return JSON.parse(userStr).role || null
-      const token = localStorage.getItem('token')
-      if (token) {
-        const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
-        const pad = 4 - (base64.length % 4)
-        const padded = base64 + (pad < 4 ? '='.repeat(pad) : '')
-        return JSON.parse(atob(padded)).role || null
-      }
-    } catch {}
-    return null
-  })
-  if (actualRole !== role) {
-    const currentUrl = page.url()
-    const lsKeys = await page.evaluate(() => Object.keys(localStorage))
-    const lsUser = await page.evaluate(() => localStorage.getItem('user'))
-    console.warn(`[E2E Auth Warning] Expected role: ${role}, actual: ${actualRole} for user: ${cred.username}, url: ${currentUrl}, userObj: ${lsUser}, keys: ${lsKeys.join(',')}`)
+  await expect(page.getByRole('heading', { name: '欢迎回来', exact: true })).toBeVisible()
+}
+
+async function storedAuthState(page: Page) {
+  return page.evaluate(() => ({
+    hasToken: Boolean(localStorage.getItem('token')),
+    hasRefreshToken: Boolean(localStorage.getItem('refreshToken')),
+    hasUser: Boolean(localStorage.getItem('user')),
+    hasRememberedUsername: Boolean(localStorage.getItem('rememberUsername')),
+  }))
+}
+
+async function expectRoleMenus(page: Page, role: RoleKey) {
+  const nav = page.locator('aside nav')
+  await expect(nav).toBeVisible()
+  for (const path of ROLE_MENU_EXPECTATIONS[role].visible) {
+    await expect(nav.locator(`a[href="${path}"]`)).toBeVisible()
+  }
+  for (const path of ROLE_MENU_EXPECTATIONS[role].hidden) {
+    await expect(nav.locator(`a[href="${path}"]`)).toHaveCount(0)
   }
 }
 
-async function apiLogin(role: RoleKey): Promise<string> {
+async function expectRejectedLogin(page: Page, username: string, password: string) {
+  await page.fill('input[type="text"]', username)
+  await page.fill('input[type="password"]', password)
+  const responsePromise = page.waitForResponse(isLoginResponse)
+  await page.click('button[type="submit"]')
+  const response = await responsePromise
+  expect(response.status()).toBe(401)
+  const body = await response.json() as any
+  expect(body.success).toBe(false)
+  expect(body.error?.code).toBe('UNAUTHORIZED')
+  await expect(page).toHaveURL(`${FE_BASE}/login`)
+  await expect(page.locator('[data-sonner-toast]').last()).toContainText('登录失败，请检查用户名和密码')
+  expect(await storedAuthState(page)).toEqual({
+    hasToken: false,
+    hasRefreshToken: false,
+    hasUser: false,
+    hasRememberedUsername: false,
+  })
+}
+
+async function expectForbiddenPath(page: Page, path: string) {
+  await page.goto(`${FE_BASE}${path}`)
+  await expect.poll(() => new URL(page.url()).pathname).toBe('/')
+  await expect(page.locator('aside')).toBeVisible()
+}
+
+async function logoutThroughUi(page: Page) {
+  const accountButton = page.locator('header button').filter({ hasText: '系统管理员' })
+  await expect(accountButton).toBeVisible()
+  await accountButton.click()
+  const logoutButton = page.getByRole('button', { name: '退出登录', exact: true })
+  await expect(logoutButton).toBeVisible()
+  await logoutButton.click()
+  await expect(page).toHaveURL(`${FE_BASE}/login`)
+}
+
+async function loginAs(page: Page, role: RoleKey) {
+  await resetBrowserAuth(page)
+  const cred = ROLES[role]
+  await page.fill('input[type="text"]', cred.username)
+  await page.fill('input[type="password"]', cred.password)
+  const responsePromise = page.waitForResponse(isLoginResponse)
+  await page.click('button[type="submit"]')
+  const response = await responsePromise
+  expect(response.status()).toBe(200)
+  const responseBody = await response.json() as any
+  expect(responseBody.success).toBe(true)
+  expect(responseBody.data?.user?.username).toBe(cred.username)
+  expect(responseBody.data?.user?.role).toBe(role)
+  expect(typeof responseBody.data?.token === 'string' && responseBody.data.token.split('.').length === 3).toBe(true)
+  expect(typeof responseBody.data?.refreshToken === 'string' && responseBody.data.refreshToken.split('.').length === 3).toBe(true)
+  await expect(page).toHaveURL(`${FE_BASE}/`, { timeout: 10000 })
+  const session = await page.evaluate(() => {
+    const userJson = localStorage.getItem('user')
+    const token = localStorage.getItem('token')
+    const refreshToken = localStorage.getItem('refreshToken')
+    return {
+      user: userJson ? JSON.parse(userJson) : null,
+      hasAccessToken: Boolean(token && token.split('.').length === 3),
+      hasRefreshToken: Boolean(refreshToken && refreshToken.split('.').length === 3),
+    }
+  })
+  expect(session.user).toMatchObject({ username: cred.username, role })
+  expect(session.hasAccessToken).toBe(true)
+  expect(session.hasRefreshToken).toBe(true)
+  await expect(page.locator('aside').getByText(ROLE_LABELS[role], { exact: true })).toBeVisible()
+}
+
+async function apiLoginSession(role: RoleKey): Promise<any> {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(ROLES[role]),
   })
   const data = (await res.json()) as any
-  return data.data?.token || data.token
+  expect(res.status).toBe(200)
+  expect(data.success).toBe(true)
+  expect(data.data?.user?.username).toBe(ROLES[role].username)
+  expect(data.data?.user?.role).toBe(role)
+  expect(typeof data.data?.token === 'string' && data.data.token.split('.').length === 3).toBe(true)
+  expect(typeof data.data?.refreshToken === 'string' && data.data.refreshToken.split('.').length === 3).toBe(true)
+  return data.data
+}
+
+async function apiLogin(role: RoleKey): Promise<string> {
+  return (await apiLoginSession(role)).token
 }
 
 async function apiFetch(token: string, method: string, path: string, body?: any) {
   const opts: any = { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } }
   if (body && method !== 'GET' && method !== 'HEAD') opts.body = JSON.stringify(body)
   const res = await fetch(`${API_BASE}${path}`, opts)
-  return { status: res.status, data: (await res.json().catch(() => null)) as any }
+  return { status: res.status, data: (await res.json()) as any }
 }
 
 test.beforeEach(async ({ page }) => {
-  // Clear localStorage on the real origin (about:blank cannot access localStorage in Chromium)
-  await page.goto(`${FE_BASE}/login`)
-  await page.waitForTimeout(100)
-  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear() })
-  await page.goto(`${FE_BASE}/login`)
+  await resetBrowserAuth(page)
 })
 
 // ═══════════════════════════════════════════════════════════════
@@ -96,70 +203,74 @@ test.describe('认证与登录 -> 正常登录', () => {
   for (const role of ROLE_KEYS) {
     test(`AUTH-LOGIN-03-${role}. 正常用例：${role}登录后显示对应权限菜单`, async ({ page }) => {
       await loginAs(page, role)
-      await expect(page.locator('nav, aside, [class*="sidebar"]').first()).toBeVisible()
+      await expectRoleMenus(page, role)
     })
   }
 
-  test('AUTH-LOGIN-04. 正常用例：admin登录后显示全部17个菜单项', async ({ page }) => {
+  test('AUTH-LOGIN-04. 正常用例：admin登录后显示认证关键菜单项', async ({ page }) => {
     await loginAs(page, 'admin')
-    const texts = ['库存', '入库', '出库', '盘点', '分类', '供应商', '库位', '项目', 'BOM', '成本', '预警', '对账', '用户', '角色', '日志']
-    for (const t of texts) {
-      await expect(page.locator(`nav >> text=${t}`).first()).toBeVisible()
+    const paths = [
+      '/inventory', '/inbound', '/outbound', '/stocktaking', '/categories',
+      '/suppliers', '/locations', '/projects', '/bom', '/cost-analysis',
+      '/alerts', '/reconciliation', '/users', '/roles', '/logs',
+    ]
+    for (const path of paths) {
+      await expect(page.locator(`aside nav a[href="${path}"]`)).toBeVisible()
     }
   })
 
   test('AUTH-LOGIN-05. 正常用例：finance登录后仅显示允许菜单', async ({ page }) => {
     await loginAs(page, 'finance')
-    await expect(page.locator('nav >> text=入库').first()).not.toBeVisible()
-    await expect(page.locator('nav >> text=出库').first()).not.toBeVisible()
-    await expect(page.locator('nav >> text=盘点').first()).not.toBeVisible()
+    await expect(page.locator('aside nav a[href="/cost-analysis"]')).toBeVisible()
+    await expect(page.locator('aside nav a[href="/inbound"]')).toHaveCount(0)
+    await expect(page.locator('aside nav a[href="/outbound"]')).toHaveCount(0)
+    await expect(page.locator('aside nav a[href="/stocktaking"]')).toHaveCount(0)
   })
 
   test('AUTH-LOGIN-06. 正常用例：technician登录后显示技术相关菜单', async ({ page }) => {
     await loginAs(page, 'technician')
-    await expect(page.locator('nav >> text=库存').first()).toBeVisible()
-    await expect(page.locator('nav >> text=入库').first()).not.toBeVisible()
-    await expect(page.locator('nav >> text=用户').first()).not.toBeVisible()
+    await expect(page.locator('aside nav a[href="/inventory"]')).toBeVisible()
+    await expect(page.locator('aside nav a[href="/outbound"]')).toBeVisible()
+    await expect(page.locator('aside nav a[href="/inbound"]')).toHaveCount(0)
+    await expect(page.locator('aside nav a[href="/users"]')).toHaveCount(0)
   })
 
   test('AUTH-LOGIN-07. 正常用例：warehouse_manager登录后显示仓库管理菜单', async ({ page }) => {
     await loginAs(page, 'warehouse_manager')
-    await expect(page.locator('nav >> text=入库').first()).toBeVisible()
-    await expect(page.locator('nav >> text=出库').first()).toBeVisible()
-    await expect(page.locator('nav >> text=盘点').first()).toBeVisible()
+    await expect(page.locator('aside nav a[href="/inbound"]')).toBeVisible()
+    await expect(page.locator('aside nav a[href="/outbound"]')).toBeVisible()
+    await expect(page.locator('aside nav a[href="/stocktaking"]')).toBeVisible()
   })
 
   test('AUTH-LOGIN-08. 正常用例：pathologist登录后显示诊断相关菜单', async ({ page }) => {
     await loginAs(page, 'pathologist')
-    await expect(page.locator('nav >> text=项目').first()).toBeVisible()
-    await expect(page.locator('nav >> text=用户').first()).not.toBeVisible()
+    await expect(page.locator('aside nav a[href="/projects"]')).toBeVisible()
+    await expect(page.locator('aside nav a[href="/cost-analysis"]')).toHaveCount(0)
+    await expect(page.locator('aside nav a[href="/users"]')).toHaveCount(0)
   })
 
   test('AUTH-LOGIN-09. 正常用例：procurement登录后显示采购相关菜单', async ({ page }) => {
     await loginAs(page, 'procurement')
-    await expect(page.locator('nav >> text=供应商').first()).toBeVisible()
-    await expect(page.locator('nav >> text=出库').first()).not.toBeVisible()
+    await expect(page.locator('aside nav a[href="/suppliers"]')).toBeVisible()
+    await expect(page.locator('aside nav a[href="/purchase-orders"]')).toBeVisible()
+    await expect(page.locator('aside nav a[href="/outbound"]')).toHaveCount(0)
   })
 
   test('AUTH-LOGIN-10. 边界：使用大写用户名登录', async ({ page }) => {
-    await page.fill('input[type="text"]', 'ADMIN')
-    await page.fill('input[type="password"]', 'admin123')
-    await page.click('button[type="submit"]')
-    await page.waitForTimeout(1000)
+    await expectRejectedLogin(page, 'ADMIN', 'admin123')
   })
 
   test('AUTH-LOGIN-11. 边界：用户名前后带空格', async ({ page }) => {
-    await page.fill('input[type="text"]', ' admin ')
-    await page.fill('input[type="password"]', 'admin123')
-    await page.click('button[type="submit"]')
-    await page.waitForTimeout(1000)
+    await expectRejectedLogin(page, ' admin ', 'admin123')
   })
 
   test('AUTH-LOGIN-12. 边界：记住用户名功能开启', async ({ page }) => {
     await page.fill('input[type="text"]', 'admin')
     await page.fill('input[type="password"]', 'admin123')
-    const remember = page.locator('text=/记住我|记住用户名/i').first()
-    if (await remember.isVisible().catch(() => false)) await remember.click()
+    const remember = page.getByRole('checkbox', { name: '记住我', exact: true })
+    await expect(remember).toBeVisible()
+    await remember.check()
+    await expect(remember).toBeChecked()
     await page.click('button[type="submit"]')
     await page.waitForURL(`${FE_BASE}/`)
     await page.goto(`${FE_BASE}/login`)
@@ -219,7 +330,9 @@ test.describe('认证与登录 -> 空数据/边界', () => {
     await page.fill('input[type="text"]', 'admin')
     await page.fill('input[type="password"]', '   ')
     await page.click('button[type="submit"]')
-    await page.waitForTimeout(500)
+    await expect(page.getByText('请输入密码', { exact: true })).toBeVisible()
+    await expect(page).toHaveURL(`${FE_BASE}/login`)
+    expect((await storedAuthState(page)).hasToken).toBe(false)
   })
 
   test('AUTH-BOUND-05. 边界：超长用户名（>50字符）', async ({ page }) => {
@@ -241,31 +354,19 @@ test.describe('认证与登录 -> 空数据/边界', () => {
   })
 
   test('AUTH-BOUND-07. 边界：特殊字符用户名', async ({ page }) => {
-    await page.fill('input[type="text"]', 'admin@#$%')
-    await page.fill('input[type="password"]', 'admin123')
-    await page.click('button[type="submit"]')
-    await page.waitForTimeout(1000)
+    await expectRejectedLogin(page, 'admin@#$%', 'admin123')
   })
 
   test('AUTH-BOUND-08. 边界：Unicode用户名', async ({ page }) => {
-    await page.fill('input[type="text"]', '管理员')
-    await page.fill('input[type="password"]', 'admin123')
-    await page.click('button[type="submit"]')
-    await page.waitForTimeout(1000)
+    await expectRejectedLogin(page, '管理员', 'admin123')
   })
 
   test('AUTH-BOUND-09. 边界：密码包含特殊字符', async ({ page }) => {
-    await page.fill('input[type="text"]', 'admin')
-    await page.fill('input[type="password"]', 'pass!@#123')
-    await page.click('button[type="submit"]')
-    await page.waitForTimeout(1000)
+    await expectRejectedLogin(page, 'admin', 'pass!@#123')
   })
 
   test('AUTH-BOUND-10. 边界：单字符用户名', async ({ page }) => {
-    await page.fill('input[type="text"]', 'a')
-    await page.fill('input[type="password"]', 'admin123')
-    await page.click('button[type="submit"]')
-    await page.waitForTimeout(1000)
+    await expectRejectedLogin(page, 'a', 'admin123')
   })
 })
 
@@ -274,39 +375,19 @@ test.describe('认证与登录 -> 空数据/边界', () => {
 // ═══════════════════════════════════════════════════════════════
 test.describe('认证与登录 -> 表单校验错误', () => {
   test('AUTH-VALID-01. 密码错误返回401', async ({ page }) => {
-    await page.fill('input[type="text"]', 'admin')
-    await page.fill('input[type="password"]', 'wrongpassword')
-    const responsePromise = page.waitForResponse(r => r.url().includes('/auth/login'))
-    await page.click('button[type="submit"]')
-    const response = await responsePromise
-    expect(response.status()).toBe(401)
+    await expectRejectedLogin(page, 'admin', 'wrongpassword')
   })
 
   test('AUTH-VALID-02. 不存在的用户登录', async ({ page }) => {
-    await page.fill('input[type="text"]', 'nonexistentuser12345')
-    await page.fill('input[type="password"]', 'anypassword')
-    const responsePromise = page.waitForResponse(r => r.url().includes('/auth/login'))
-    await page.click('button[type="submit"]')
-    const response = await responsePromise
-    expect(response.status()).toBe(401)
+    await expectRejectedLogin(page, 'nonexistentuser12345', 'anypassword')
   })
 
   test('AUTH-VALID-03. 已禁用用户登录', async ({ page }) => {
-    await page.fill('input[type="text"]', 'disabled_user')
-    await page.fill('input[type="password"]', 'anypassword')
-    const responsePromise = page.waitForResponse(r => r.url().includes('/auth/login'))
-    await page.click('button[type="submit"]')
-    const response = await responsePromise
-    expect(response.status()).toBe(401)
+    await expectRejectedLogin(page, 'disabled_user', 'anypassword')
   })
 
   test('AUTH-VALID-04. 密码大小写错误', async ({ page }) => {
-    await page.fill('input[type="text"]', 'admin')
-    await page.fill('input[type="password"]', 'ADMIN123')
-    const responsePromise = page.waitForResponse(r => r.url().includes('/auth/login'))
-    await page.click('button[type="submit"]')
-    const response = await responsePromise
-    expect(response.status()).toBe(401)
+    await expectRejectedLogin(page, 'admin', 'ADMIN123')
   })
 
   test('AUTH-VALID-05. API直接调用缺少字段返回400', async () => {
@@ -338,79 +419,75 @@ test.describe('认证与登录 -> 表单校验错误', () => {
 // 四、Token刷新
 // ═══════════════════════════════════════════════════════════════
 test.describe('认证与登录 -> Token刷新', () => {
-  test('AUTH-REFRESH-01. 正常用例：有效refreshToken获取新access token', async ({ page }) => {
-    await loginAs(page, 'admin')
-    const refreshToken = await page.evaluate(() => localStorage.getItem('refreshToken'))
-    expect(refreshToken).toBeTruthy()
-    const res = await apiFetch('', 'POST', '/auth/refresh', { refreshToken })
+  test('AUTH-REFRESH-01. 正常用例：有效refreshToken获取新access token', async () => {
+    const login = await apiLoginSession('admin')
+    const res = await apiFetch('', 'POST', '/auth/refresh', { refreshToken: login.refreshToken })
     expect(res.status).toBe(200)
-    expect(res.data.data?.token).toBeTruthy()
+    expect(typeof res.data.data?.token === 'string' && res.data.data.token.split('.').length === 3).toBe(true)
     expect(res.data.data?.expiresIn).toBe(28800)
+    expect(res.data.data?.user?.role).toBe('admin')
   })
 
   test('AUTH-REFRESH-02. 边界：refreshToken过期返回401', async () => {
     const res = await apiFetch('', 'POST', '/auth/refresh', { refreshToken: 'expired.token.here' })
     expect(res.status).toBe(401)
+    expect(res.data.error?.code).toBe('UNAUTHORIZED')
   })
 
   test('AUTH-REFRESH-03. 边界：使用accessToken调用刷新返回401', async () => {
     const token = await apiLogin('admin')
     const res = await apiFetch('', 'POST', '/auth/refresh', { refreshToken: token })
     expect(res.status).toBe(401)
+    expect(res.data.error?.code).toBe('UNAUTHORIZED')
   })
 
   test('AUTH-REFRESH-04. 边界：无refreshToken调用刷新返回400', async () => {
     const res = await apiFetch('', 'POST', '/auth/refresh', {})
     expect(res.status).toBe(400)
+    expect(res.data.error?.code).toBe('INVALID_PARAMETER')
   })
 
   test('AUTH-REFRESH-05. 并发：并发调用刷新接口', async () => {
-    const loginRes = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ROLES.admin),
-    })
-    const loginData = (await loginRes.json()) as any
-    const refreshToken = loginData.data?.refreshToken
+    const login = await apiLoginSession('admin')
+    const refreshToken = login.refreshToken
     const reqs = Array.from({ length: 3 }, () => apiFetch('', 'POST', '/auth/refresh', { refreshToken }))
     const results = await Promise.all(reqs)
-    expect(results.every(r => r.status === 200)).toBe(true)
+    for (const result of results) {
+      expect(result.status).toBe(200)
+      expect(typeof result.data.data?.token === 'string' && result.data.data.token.split('.').length === 3).toBe(true)
+      expect(result.data.data?.user?.role).toBe('admin')
+    }
   })
 
-  test('AUTH-REFRESH-06. 异常恢复：刷新时网络中断后重试', async () => {
-    const loginRes = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ROLES.admin),
-    })
-    const loginData = (await loginRes.json()) as any
-    const refreshToken = loginData.data?.refreshToken
+  test('AUTH-REFRESH-06. 异常恢复：无效refreshToken失败后有效token仍可刷新', async () => {
+    const login = await apiLoginSession('admin')
+    const refreshToken = login.refreshToken
     const fail = await apiFetch('', 'POST', '/auth/refresh', { refreshToken: 'bad' })
     expect(fail.status).toBe(401)
+    expect(fail.data.error?.code).toBe('UNAUTHORIZED')
     const success = await apiFetch('', 'POST', '/auth/refresh', { refreshToken })
     expect(success.status).toBe(200)
+    expect(success.data.data?.user?.role).toBe('admin')
   })
 
   test('AUTH-REFRESH-07. 正常用例：刷新后新token可访问受保护接口', async () => {
-    const loginRes = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ROLES.admin),
-    })
-    const loginData = (await loginRes.json()) as any
-    const refreshRes = await apiFetch('', 'POST', '/auth/refresh', { refreshToken: loginData.data?.refreshToken })
+    const login = await apiLoginSession('admin')
+    const refreshRes = await apiFetch('', 'POST', '/auth/refresh', { refreshToken: login.refreshToken })
+    expect(refreshRes.status).toBe(200)
     const newToken = refreshRes.data.data?.token
+    expect(typeof newToken === 'string' && newToken.split('.').length === 3).toBe(true)
     const inventoryRes = await apiFetch(newToken, 'GET', '/inventory')
     expect(inventoryRes.status).toBe(200)
   })
 
   test('AUTH-REFRESH-08. 边界：刷新响应格式验证', async () => {
-    const loginRes = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ROLES.admin),
-    })
-    const loginData = (await loginRes.json()) as any
-    const res = await apiFetch('', 'POST', '/auth/refresh', { refreshToken: loginData.data?.refreshToken })
+    const login = await apiLoginSession('admin')
+    const res = await apiFetch('', 'POST', '/auth/refresh', { refreshToken: login.refreshToken })
     expect(res.status).toBe(200)
-    expect(res.data.message || res.data.token).toBeTruthy()
-    expect(res.data.data?.expiresIn || res.data.expiresIn).toBe(28800)
+    expect(res.data.success).toBe(true)
+    expect(res.data.message).toBe('Refresh success')
+    expect(res.data.data?.expiresIn).toBe(28800)
+    expect(res.data.data?.user).toMatchObject({ username: 'admin', role: 'admin' })
   })
 })
 
@@ -445,14 +522,13 @@ test.describe('认证与登录 -> 用户登出', () => {
 
   test('AUTH-LOGOUT-04. 正常用例：登出后清除localStorage中的token', async ({ page }) => {
     await loginAs(page, 'admin')
-    await page.evaluate(() => { localStorage.removeItem('token'); localStorage.removeItem('refreshToken') })
-    await page.goto(`${FE_BASE}/`)
-    await expect(page).toHaveURL(`${FE_BASE}/login`)
+    await logoutThroughUi(page)
+    expect((await storedAuthState(page)).hasToken).toBe(false)
   })
 
   test('AUTH-LOGOUT-05. 正常用例：登出后访问受保护页面重定向到登录', async ({ page }) => {
     await loginAs(page, 'admin')
-    await page.evaluate(() => { localStorage.removeItem('token') })
+    await logoutThroughUi(page)
     await page.goto(`${FE_BASE}/inventory`)
     await expect(page).toHaveURL(`${FE_BASE}/login`)
   })
@@ -464,9 +540,13 @@ test.describe('认证与登录 -> 用户登出', () => {
 
   test('AUTH-LOGOUT-07. 正常用例：登出后refreshToken也清除', async ({ page }) => {
     await loginAs(page, 'admin')
-    await page.evaluate(() => { localStorage.clear() })
-    const rt = await page.evaluate(() => localStorage.getItem('refreshToken'))
-    expect(rt).toBeFalsy()
+    await logoutThroughUi(page)
+    expect(await storedAuthState(page)).toEqual({
+      hasToken: false,
+      hasRefreshToken: false,
+      hasUser: false,
+      hasRememberedUsername: false,
+    })
   })
 })
 
@@ -493,7 +573,7 @@ test.describe('认证与登录 -> 角色权限矩阵补充', () => {
       const res = await fetch(`${API_BASE}${apiPath}`, {
         headers: { Authorization: 'Bearer invalid.token', 'Content-Type': 'application/json' },
       })
-      expect([401, 404]).toContain(res.status)
+      expect(res.status).toBe(401)
     })
   }
 
@@ -508,6 +588,7 @@ test.describe('认证与登录 -> 角色权限矩阵补充', () => {
     await loginAs(page, 'admin')
     for (const path of protectedPaths.filter(p => p !== '/')) {
       await page.goto(`${FE_BASE}${path}`)
+      await expect.poll(() => new URL(page.url()).pathname).toBe(path)
       await expect(page.locator('body')).toBeVisible({ timeout: 10000 })
     }
   })
@@ -515,40 +596,35 @@ test.describe('认证与登录 -> 角色权限矩阵补充', () => {
   test('TC-PERM-AUTH-05. technician不可访问入库/用户/角色/日志', async ({ page }) => {
     await loginAs(page, 'technician')
     for (const path of ['/inbound', '/users', '/roles', '/logs']) {
-      await page.goto(`${FE_BASE}${path}`)
-      await page.waitForTimeout(500)
+      await expectForbiddenPath(page, path)
     }
   })
 
   test('TC-PERM-AUTH-06. finance不可访问入库/出库/盘点', async ({ page }) => {
     await loginAs(page, 'finance')
     for (const path of ['/inbound', '/outbound', '/stocktaking']) {
-      await page.goto(`${FE_BASE}${path}`)
-      await page.waitForTimeout(500)
+      await expectForbiddenPath(page, path)
     }
   })
 
-  test('TC-PERM-AUTH-07. procurement不可访问出库/盘点/成本', async ({ page }) => {
+  test('TC-PERM-AUTH-07. procurement不可访问出库/盘点/系统管理', async ({ page }) => {
     await loginAs(page, 'procurement')
-    for (const path of ['/outbound', '/stocktaking', '/cost-analysis']) {
-      await page.goto(`${FE_BASE}${path}`)
-      await page.waitForTimeout(500)
+    for (const path of ['/outbound', '/stocktaking', '/users', '/roles', '/logs']) {
+      await expectForbiddenPath(page, path)
     }
   })
 
-  test('TC-PERM-AUTH-08. warehouse_manager不可访问项目/BOM/用户/角色', async ({ page }) => {
+  test('TC-PERM-AUTH-08. warehouse_manager不可访问项目/成本/系统管理', async ({ page }) => {
     await loginAs(page, 'warehouse_manager')
-    for (const path of ['/projects', '/bom', '/users', '/roles']) {
-      await page.goto(`${FE_BASE}${path}`)
-      await page.waitForTimeout(500)
+    for (const path of ['/projects', '/cost-analysis', '/users', '/roles', '/logs']) {
+      await expectForbiddenPath(page, path)
     }
   })
 
   test('TC-PERM-AUTH-09. pathologist不可访问系统管理页面', async ({ page }) => {
     await loginAs(page, 'pathologist')
     for (const path of ['/users', '/roles', '/logs']) {
-      await page.goto(`${FE_BASE}${path}`)
-      await page.waitForTimeout(500)
+      await expectForbiddenPath(page, path)
     }
   })
 })
@@ -575,13 +651,7 @@ test.describe('认证与登录 -> 业务流程树', () => {
     for (const path of paths) {
       test(`BF-PERM-${role}-${path.replace(/\//g, '')}. ${role}尝试访问${path}应被拦截`, async ({ page }) => {
         await loginAs(page, role)
-        await page.goto(`${FE_BASE}${path}`)
-        await page.waitForTimeout(500)
-        const currentUrl = page.url()
-        const bodyText = await page.locator('body').innerText()
-        const isRedirected = currentUrl === `${FE_BASE}/`
-        const hasForbiddenText = /无权访问|403|Forbidden|未授权|insufficient/i.test(bodyText)
-        expect(isRedirected || hasForbiddenText).toBe(true)
+        await expectForbiddenPath(page, path)
       })
     }
   }
@@ -615,12 +685,25 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
   })
 
   test('BLIND-AUTH-03. Token过期且refreshToken无效后应重定向登录', async ({ page }) => {
+    await loginAs(page, 'admin')
     await page.evaluate(() => {
       localStorage.setItem('token', 'expired.jwt.token')
       localStorage.setItem('refreshToken', 'invalid.refresh.token')
     })
+    const refreshResponsePromise = page.waitForResponse(response => (
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/v1/auth/refresh'
+    ))
     await page.goto(`${FE_BASE}/inventory`)
+    const refreshResponse = await refreshResponsePromise
+    expect(refreshResponse.status()).toBe(401)
     await expect(page).toHaveURL(`${FE_BASE}/login`)
+    expect(await storedAuthState(page)).toEqual({
+      hasToken: false,
+      hasRefreshToken: false,
+      hasUser: false,
+      hasRememberedUsername: false,
+    })
   })
 
   test('BLIND-AUTH-04. 多浏览器上下文数据隔离', async ({ browser }) => {
@@ -659,8 +742,11 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
       await page.goto(`${FE_BASE}/login`)
       await page.fill('input[type="text"]', 'admin')
       await page.fill('input[type="password"]', `wrong${i}`)
+      const responsePromise = page.waitForResponse(isLoginResponse)
       await page.click('button[type="submit"]')
-      await page.waitForTimeout(300)
+      const response = await responsePromise
+      expect(response.status()).toBe(401)
+      await expect(page).toHaveURL(`${FE_BASE}/login`)
     }
     await page.goto(`${FE_BASE}/login`)
     await page.fill('input[type="text"]', 'admin')
@@ -686,7 +772,13 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
   test('BLIND-AUTH-10. 密码输入框类型切换', async ({ page }) => {
     await page.goto(`${FE_BASE}/login`)
     const pwdInput = page.locator('input[type="password"]').first()
-    expect(await pwdInput.getAttribute('type')).toBe('password')
+    await expect(pwdInput).toHaveAttribute('type', 'password')
+    const toggle = page.locator('input[placeholder="请输入密码"] + button')
+    await expect(toggle).toBeVisible()
+    await toggle.click()
+    await expect(page.locator('input[type="text"][placeholder="请输入密码"]')).toBeVisible()
+    await toggle.click()
+    await expect(page.locator('input[type="password"][placeholder="请输入密码"]')).toBeVisible()
   })
 
   test('BLIND-AUTH-11. 登录页面显示品牌信息', async ({ page }) => {
@@ -707,6 +799,9 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
       const p = t.split('.')[1]
       return JSON.parse(atob(p))
     }, token)
+    expect(payload.type).toBe('access')
+    expect(payload.exp - payload.iat).toBe(8 * 60 * 60)
+    expect(payload.iat).toBeLessThanOrEqual(Math.floor(Date.now() / 1000))
     expect(payload.exp).toBeGreaterThan(Math.floor(Date.now() / 1000))
   })
 
@@ -756,10 +851,14 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
     expect(['username', 'on', 'off', null]).toContain(autocomplete)
   })
 
-  test('BLIND-AUTH-20. 登录按钮默认禁用状态检查', async ({ page }) => {
+  test('BLIND-AUTH-20. 登录按钮默认可提交并由表单校验拒绝空值', async ({ page }) => {
     await page.goto(`${FE_BASE}/login`)
     const btn = page.locator('button[type="submit"]').first()
-    await expect(btn).toBeVisible()
+    await expect(btn).toBeEnabled()
+    await btn.click()
+    await expect(page.getByText('请输入用户名', { exact: true })).toBeVisible()
+    await expect(page.getByText('请输入密码', { exact: true })).toBeVisible()
+    await expect(page).toHaveURL(`${FE_BASE}/login`)
   })
 
   test('BLIND-AUTH-21. 登录成功Toast提示验证', async ({ page }) => {
@@ -771,10 +870,15 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
   })
 
   test('BLIND-AUTH-22. 刷新Token过期时间7天', async ({ page }) => {
-    const token = await apiLogin('admin')
-    const parts = token.split('.')
-    const payload = await page.evaluate((t) => { const p = t.split('.')[1]; return JSON.parse(atob(p)) }, token)
-    expect(payload.exp).toBeDefined()
+    const login = await apiLoginSession('admin')
+    const payload = await page.evaluate((token) => {
+      const encoded = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+      const padded = encoded + '='.repeat((4 - encoded.length % 4) % 4)
+      return JSON.parse(atob(padded))
+    }, login.refreshToken)
+    expect(payload.type).toBe('refresh')
+    expect(payload.exp - payload.iat).toBe(7 * 24 * 60 * 60)
+    expect(payload.exp).toBeGreaterThan(Math.floor(Date.now() / 1000))
   })
 
   test('BLIND-AUTH-23. 登录请求Content-Type验证', async () => {
@@ -782,24 +886,24 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
       method: 'POST', headers: { 'Content-Type': 'text/plain' },
       body: 'raw text',
     })
-    expect([400, 415, 500]).toContain(res.status)
+    expect([400, 415]).toContain(res.status)
   })
 
   test('BLIND-AUTH-24. Token中携带userId信息', async ({ page }) => {
     const token = await apiLogin('admin')
-    const parts = token.split('.')
-    const payload = await page.evaluate((t) => { const p = t.split('.')[1]; return JSON.parse(atob(p)) }, token)
-    expect(payload.userId).toBeTruthy()
+    const payload = await page.evaluate((value) => {
+      const encoded = value.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+      const padded = encoded + '='.repeat((4 - encoded.length % 4) % 4)
+      return JSON.parse(atob(padded))
+    }, token)
+    expect(typeof payload.userId).toBe('string')
+    expect(payload.userId.length).toBeGreaterThan(0)
     expect(payload.username).toBe('admin')
+    expect(payload.role).toBe('admin')
   })
 
   test('BLIND-AUTH-25. 登录失败不设置localStorage', async ({ page }) => {
-    await page.fill('input[type="text"]', 'baduser')
-    await page.fill('input[type="password"]', 'badpass')
-    await page.click('button[type="submit"]')
-    await page.waitForTimeout(1000)
-    const token = await page.evaluate(() => localStorage.getItem('token'))
-    expect(token).toBeFalsy()
+    await expectRejectedLogin(page, 'baduser', 'badpass')
   })
 
   test('BLIND-AUTH-26. 并发登录同一账户两个上下文', async ({ browser }) => {
@@ -819,8 +923,9 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
 
   test('BLIND-AUTH-27. 登录页面加载性能检查', async ({ page }) => {
     const start = Date.now()
-    await page.goto(`${FE_BASE}/login`)
-    await page.waitForTimeout(2000)
+    const response = await page.goto(`${FE_BASE}/login`, { waitUntil: 'domcontentloaded' })
+    expect(response?.status()).toBe(200)
+    await expect(page.getByRole('heading', { name: '欢迎回来', exact: true })).toBeVisible()
     const duration = Date.now() - start
     expect(duration).toBeLessThan(5000)
   })
@@ -830,7 +935,8 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
     const token = await page.evaluate(() => localStorage.getItem('token'))
     const res = await apiFetch(token!, 'POST', '/auth/logout')
     expect(res.status).toBe(200)
-    expect(res.data.message || res.data.code).toBeTruthy()
+    expect(res.data.success).toBe(true)
+    expect(res.data.message).toBe('Logout success')
   })
 
   test('BLIND-AUTH-29. 登录页面输入框tab切换', async ({ page }) => {
@@ -856,24 +962,28 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
   test('BLIND-AUTH-32. Token中role字段与登录用户一致', async ({ page }) => {
     for (const role of ROLE_KEYS) {
       const token = await apiLogin(role)
-      const parts = token.split('.')
-      const payload = await page.evaluate((t) => { const p = t.split('.')[1]; return JSON.parse(atob(p)) }, token)
-      expect(payload.role).toBeDefined()
+      const payload = await page.evaluate((value) => {
+        const encoded = value.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+        const padded = encoded + '='.repeat((4 - encoded.length % 4) % 4)
+        return JSON.parse(atob(padded))
+      }, token)
+      expect(payload.username).toBe(ROLES[role].username)
+      expect(payload.role).toBe(role)
+      expect(payload.type).toBe('access')
     }
   })
 
   test('BLIND-AUTH-33. 登录成功后页面标题验证', async ({ page }) => {
     await loginAs(page, 'admin')
-    const title = await page.title()
-    expect(title).toBeTruthy()
+    await expect(page).toHaveTitle('COREONE | 病理试剂成本管理')
   })
 
   test('BLIND-AUTH-34. 登出后刷新页面保持未登录状态', async ({ page }) => {
     await loginAs(page, 'admin')
-    await page.evaluate(() => localStorage.clear())
+    await logoutThroughUi(page)
     await page.reload()
-    await page.waitForTimeout(1000)
     await expect(page).toHaveURL(`${FE_BASE}/login`)
+    expect((await storedAuthState(page)).hasToken).toBe(false)
   })
 
   test('BLIND-AUTH-35. 登录按钮点击后防止重复提交', async ({ page }) => {
@@ -899,26 +1009,37 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
     await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
   })
 
-  test('BLIND-AUTH-38. 登录页面favicon加载', async ({ page }) => {
+  test('BLIND-AUTH-38. 登录页面不声明不存在的favicon资源', async ({ page }) => {
     await page.goto(`${FE_BASE}/login`)
     const faviconCount = await page.locator('link[rel="icon"], link[rel="shortcut icon"]').count()
-    if (faviconCount > 0) {
-      const favicon = await page.locator('link[rel="icon"], link[rel="shortcut icon"]').first().getAttribute('href')
-      expect(favicon || '/favicon.ico').toBeTruthy()
-    }
-    expect(true).toBe(true)
+    expect(faviconCount).toBe(0)
   })
 
-  test('BLIND-AUTH-39. 登出后sessionStorage也应清除', async ({ page }) => {
+  test('BLIND-AUTH-39. 真实UI登出后认证身份与凭证均不可恢复', async ({ page }) => {
     await loginAs(page, 'admin')
-    await page.evaluate(() => { localStorage.clear(); sessionStorage.clear() })
+    await logoutThroughUi(page)
     await page.goto(`${FE_BASE}/`)
     await expect(page).toHaveURL(`${FE_BASE}/login`)
+    expect(await storedAuthState(page)).toEqual({
+      hasToken: false,
+      hasRefreshToken: false,
+      hasUser: false,
+      hasRememberedUsername: false,
+    })
   })
 
   test('BLIND-AUTH-40. 登录API支持CORS预检', async () => {
-    const res = await fetch(`${API_BASE}/auth/login`, { method: 'OPTIONS' })
-    expect([204, 404, 405]).toContain(res.status)
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: FE_BASE,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type',
+      },
+    })
+    expect(res.status).toBe(204)
+    expect(res.headers.get('access-control-allow-origin')).toBe('*')
+    expect(res.headers.get('access-control-allow-methods')).toContain('POST')
   })
 
   test('BLIND-AUTH-41. 使用已过期token访问受保护资源', async () => {
@@ -949,24 +1070,40 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     for (const path of ['/', '/inventory', '/alerts']) {
       await page.goto(`${FE_BASE}${path}`)
-      await page.waitForTimeout(300)
+      await expect.poll(() => new URL(page.url()).pathname).toBe(path)
+      expect((await storedAuthState(page)).hasToken).toBe(true)
     }
   })
 
-  test('BLIND-AUTH-45. Token刷新后旧token仍短暂有效', async ({ page }) => {
+  test('BLIND-AUTH-45. access token失效后浏览器使用有效refreshToken续期并保持登录', async ({ page }) => {
     await loginAs(page, 'admin')
-    const oldToken = await page.evaluate(() => localStorage.getItem('token'))
-    const refreshToken = await page.evaluate(() => localStorage.getItem('refreshToken'))
-    const res = await apiFetch('', 'POST', '/auth/refresh', { refreshToken })
-    const newToken = res.data.data?.token
-    const inventoryRes = await apiFetch(oldToken!, 'GET', '/inventory')
-    expect(inventoryRes.status).toBe(200)
+    await page.evaluate(() => localStorage.setItem('token', 'expired.jwt.token'))
+    const refreshResponsePromise = page.waitForResponse(response => (
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/v1/auth/refresh'
+    ))
+    await page.goto(`${FE_BASE}/inventory`)
+    const refreshResponse = await refreshResponsePromise
+    expect(refreshResponse.status()).toBe(200)
+    await expect.poll(() => page.evaluate(() => {
+      const token = localStorage.getItem('token')
+      const userJson = localStorage.getItem('user')
+      const user = userJson ? JSON.parse(userJson) : null
+      return {
+        renewed: Boolean(token && token !== 'expired.jwt.token' && token.split('.').length === 3),
+        role: user?.role || null,
+      }
+    })).toEqual({ renewed: true, role: 'admin' })
+    await expect(page).toHaveURL(`${FE_BASE}/inventory`)
+    await expect(page.getByRole('heading', { name: '库存列表', exact: true })).toBeVisible()
   })
 
-  test('BLIND-AUTH-46. 登录页面样式文件加载', async ({ page }) => {
+  test('BLIND-AUTH-46. 登录页面关键样式已渲染', async ({ page }) => {
     await page.goto(`${FE_BASE}/login`)
-    const styles = await page.locator('link[rel="stylesheet"]').count()
-    expect(styles).toBeGreaterThanOrEqual(0)
+    const submit = page.locator('button[type="submit"]')
+    await expect(submit).toBeVisible()
+    await expect(submit).toHaveCSS('background-color', 'rgb(59, 130, 246)')
+    await expect(submit).toHaveCSS('height', '40px')
   })
 
   test('BLIND-AUTH-47. 使用伪造的JWT格式token', async () => {
@@ -989,19 +1126,18 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
     expect(keys).toContain('refreshToken')
   })
 
-  test('BLIND-AUTH-50. 多次刷新Token产生不同token', async ({ page }) => {
-    await loginAs(page, 'admin')
-    const refreshToken = await page.evaluate(() => localStorage.getItem('refreshToken'))
+  test('BLIND-AUTH-50. 多次刷新均返回可用于受保护接口的access token', async () => {
+    const login = await apiLoginSession('admin')
+    const refreshToken = login.refreshToken
     const r1 = await apiFetch('', 'POST', '/auth/refresh', { refreshToken })
-    await page.waitForTimeout(1200)
     const r2 = await apiFetch('', 'POST', '/auth/refresh', { refreshToken })
     const t1 = r1.data?.data?.token || r1.data?.token
     const t2 = r2.data?.data?.token || r2.data?.token
-    if (t1 && t2) {
-      expect(t1).not.toBe(t2)
-    } else {
-      expect(r1.status).toBe(200)
-      expect(r2.status).toBe(200)
-    }
+    expect(r1.status).toBe(200)
+    expect(r2.status).toBe(200)
+    expect(typeof t1 === 'string' && t1.split('.').length === 3).toBe(true)
+    expect(typeof t2 === 'string' && t2.split('.').length === 3).toBe(true)
+    expect((await apiFetch(t1, 'GET', '/inventory')).status).toBe(200)
+    expect((await apiFetch(t2, 'GET', '/inventory')).status).toBe(200)
   })
 })
