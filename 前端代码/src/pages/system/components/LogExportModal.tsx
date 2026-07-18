@@ -1,93 +1,128 @@
 import { X } from 'lucide-react'
-import type { LogFormData } from '../hooks/useLogsPage'
+import type { LogExportForm } from '../hooks/useLogsPage'
 
 interface Props {
   open: boolean
-  form: LogFormData
+  form: LogExportForm
+  exporting: boolean
+  error: string | null
+  onChange: (form: LogExportForm) => void
+  onExport: () => Promise<void>
   onClose: () => void
-  onChange: (form: LogFormData) => void
-  onExport: () => void
 }
 
-export function LogExportModal({ open, form, onClose, onChange, onExport }: Props) {
+export function LogExportModal({ open, form, exporting, error, onChange, onExport, onClose }: Props) {
   if (!open) return null
 
+  const update = <K extends keyof LogExportForm>(key: K, value: LogExportForm[K]) => {
+    onChange({ ...form, [key]: value })
+  }
+  const noSelectedFields = !form.includeBasic && !form.includeDetail && !form.includeIP
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={event => { if (event.target === event.currentTarget && !exporting) onClose() }}
     >
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">导出日志</h3>
-          <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-gray-900 rounded-md transition-all">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">导出日志</h3>
+            <p className="mt-1 text-sm text-gray-500">沿用当前页面的操作类型、模块和用户筛选</p>
+          </div>
+          <button
+            type="button"
+            aria-label="关闭导出窗口"
+            disabled={exporting}
+            onClick={onClose}
+            className="w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-gray-900 rounded-md transition-all disabled:cursor-not-allowed disabled:opacity-50"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6 overflow-y-auto">
-          <div className="mb-5">
-            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">导出时间范围</label>
-            <div className="flex items-center gap-3">
+
+        <div className="p-6 space-y-5 overflow-y-auto">
+          <div className="grid grid-cols-2 gap-4">
+            <label className="text-sm text-gray-700">
+              <span className="mb-1.5 block font-medium">开始日期</span>
               <input
                 type="date"
                 value={form.startDate}
-                onChange={e => onChange({ ...form, startDate: e.target.value })}
-                className="flex-1 h-10 px-3 text-sm text-gray-900 bg-white border border-gray-300 rounded-md outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10"
+                disabled={exporting}
+                onChange={event => update('startDate', event.target.value)}
+                className="h-10 w-full rounded-md border border-gray-300 px-3 text-sm disabled:bg-gray-100"
               />
-              <span className="text-gray-500">至</span>
+            </label>
+            <label className="text-sm text-gray-700">
+              <span className="mb-1.5 block font-medium">结束日期</span>
               <input
                 type="date"
                 value={form.endDate}
-                onChange={e => onChange({ ...form, endDate: e.target.value })}
-                className="flex-1 h-10 px-3 text-sm text-gray-900 bg-white border border-gray-300 rounded-md outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10"
+                disabled={exporting}
+                onChange={event => update('endDate', event.target.value)}
+                className="h-10 w-full rounded-md border border-gray-300 px-3 text-sm disabled:bg-gray-100"
               />
-            </div>
+            </label>
           </div>
 
-          <div className="mb-5">
-            <label className="block text-[13px] font-medium text-gray-700 mb-2">导出格式</label>
-            <div className="flex gap-3">
-              <label
-                onClick={() => onChange({ ...form, format: 'xlsx' })}
-                className={`flex-1 flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-all ${form.format === 'xlsx' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-              >
-                <input type="radio" checked={form.format === 'xlsx'} readOnly className="text-blue-500" />
-                <span className="text-sm text-gray-900">Excel (.xlsx)</span>
+          <fieldset disabled={exporting}>
+            <legend className="mb-2 text-sm font-medium text-gray-700">文件格式</legend>
+            <div className="flex gap-5 text-sm text-gray-700">
+              <label className="flex items-center gap-2">
+                <input type="radio" name="log-export-format" checked={form.format === 'xlsx'} onChange={() => update('format', 'xlsx')} />
+                Excel (.xlsx)
               </label>
-              <label
-                onClick={() => onChange({ ...form, format: 'csv' })}
-                className={`flex-1 flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-all ${form.format === 'csv' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-              >
-                <input type="radio" checked={form.format === 'csv'} readOnly className="text-blue-500" />
-                <span className="text-sm text-gray-900">CSV (.csv)</span>
+              <label className="flex items-center gap-2">
+                <input type="radio" name="log-export-format" checked={form.format === 'csv'} onChange={() => update('format', 'csv')} />
+                CSV (.csv)
               </label>
             </div>
-          </div>
+          </fieldset>
 
-          <div>
-            <label className="block text-[13px] font-medium text-gray-700 mb-2">导出内容</label>
-            <div className="flex flex-col gap-2">
-              <label className="flex items-center gap-2 text-sm text-gray-900 cursor-pointer">
-                <input type="checkbox" checked={form.includeBasic} onChange={e => onChange({ ...form, includeBasic: e.target.checked })} className="rounded border-gray-300 text-blue-500 focus:ring-blue-500 w-4 h-4" />
-                基本信息（时间、用户、类型、模块）
+          <fieldset disabled={exporting}>
+            <legend className="mb-2 text-sm font-medium text-gray-700">导出字段</legend>
+            <div className="grid grid-cols-2 gap-3 text-sm text-gray-700">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={form.includeBasic} onChange={event => update('includeBasic', event.target.checked)} />
+                基本信息
               </label>
-              <label className="flex items-center gap-2 text-sm text-gray-900 cursor-pointer">
-                <input type="checkbox" checked={form.includeDetail} onChange={e => onChange({ ...form, includeDetail: e.target.checked })} className="rounded border-gray-300 text-blue-500 focus:ring-blue-500 w-4 h-4" />
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={form.includeDetail} onChange={event => update('includeDetail', event.target.checked)} />
                 操作详情
               </label>
-              <label className="flex items-center gap-2 text-sm text-gray-900 cursor-pointer">
-                <input type="checkbox" checked={form.includeIP} onChange={e => onChange({ ...form, includeIP: e.target.checked })} className="rounded border-gray-300 text-blue-500 focus:ring-blue-500 w-4 h-4" />
-                IP地址和设备信息
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={form.includeIP} onChange={event => update('includeIP', event.target.checked)} />
+                IP 与设备
               </label>
-              <label className="flex items-center gap-2 text-sm text-gray-900 cursor-pointer">
-                <input type="checkbox" checked={form.includeDiff} onChange={e => onChange({ ...form, includeDiff: e.target.checked })} className="rounded border-gray-300 text-blue-500 focus:ring-blue-500 w-4 h-4" />
-                变更前后数据对比
+              <label className="flex items-center gap-2 text-gray-400">
+                <input aria-label="请求响应原文（当前不提供）" type="checkbox" checked={false} disabled />
+                请求响应原文（不提供）
               </label>
             </div>
-          </div>
+            <p className="mt-2 text-xs leading-5 text-gray-500">为避免导出敏感请求或响应内容，文件只包含服务端返回的安全日志证据。</p>
+          </fieldset>
+
+          {noSelectedFields && <p role="alert" className="text-sm text-amber-700">请至少选择一组可导出字段。</p>}
+          {error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         </div>
+
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <button onClick={onClose} className="h-10 px-4 text-sm text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm transition-all">取消</button>
-          <button onClick={onExport} className="h-10 px-4 text-sm font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 shadow-sm transition-all">导出</button>
+          <button
+            type="button"
+            disabled={exporting}
+            onClick={onClose}
+            className="h-10 px-4 text-sm text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={exporting || noSelectedFields}
+            onClick={() => void onExport()}
+            className="h-10 px-4 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          >
+            {exporting ? '导出中…' : '导出'}
+          </button>
         </div>
       </div>
     </div>

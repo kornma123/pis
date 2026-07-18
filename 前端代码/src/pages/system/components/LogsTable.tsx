@@ -1,9 +1,10 @@
-import type { OperationLog } from '@/types'
 import { Pagination } from '@/components/ui/Pagination'
+import type { LogActionType, LogRecord } from '../hooks/useLogsPage'
 
 interface Props {
-  data: OperationLog[]
+  data: LogRecord[]
   loading: boolean
+  error: string | null
   total: number
   page: number
   pageSize: number
@@ -14,8 +15,7 @@ interface Props {
   endDate: string
   logTypes: { value: string; label: string }[]
   modules: { value: string; label: string }[]
-  users: { value: string; label: string }[]
-  getLogType: (op: string) => { value: string; label: string; className: string }
+  getLogType: (op: string, actionType?: LogActionType) => { value: string; label: string; className: string }
   getAvatarChar: (name: string) => string
   getModuleLabel: (moduleVal: string) => string
   onTypeFilterChange: (v: string) => void
@@ -27,18 +27,19 @@ interface Props {
   onReset: () => void
   onPageChange: (p: number) => void
   onPageSizeChange: (s: number) => void
-  onOpenDetail: (row: OperationLog) => void
+  onRetry: () => void
+  onOpenDetail: (row: LogRecord) => void
 }
 
 export function LogsTable({
-  data, loading, total, page, pageSize,
+  data, loading, error, total, page, pageSize,
   typeFilter, moduleFilter, userFilter, startDate, endDate,
-  logTypes, modules, users,
+  logTypes, modules,
   getLogType, getAvatarChar, getModuleLabel,
   onTypeFilterChange, onModuleFilterChange, onUserFilterChange,
   onStartDateChange, onEndDateChange,
   onSearch, onReset,
-  onPageChange, onPageSizeChange,
+  onPageChange, onPageSizeChange, onRetry,
   onOpenDetail,
 }: Props) {
   return (
@@ -47,6 +48,7 @@ export function LogsTable({
         <span className="text-base font-semibold text-gray-900">操作记录</span>
         <div className="flex items-center gap-3 flex-wrap">
           <select
+            aria-label="操作类型"
             value={typeFilter}
             onChange={e => onTypeFilterChange(e.target.value)}
             className="h-10 px-3 pr-8 text-sm text-gray-900 bg-white border border-gray-200 rounded-md outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 appearance-none cursor-pointer"
@@ -56,6 +58,7 @@ export function LogsTable({
             {logTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
           <select
+            aria-label="操作模块"
             value={moduleFilter}
             onChange={e => onModuleFilterChange(e.target.value)}
             className="h-10 px-3 pr-8 text-sm text-gray-900 bg-white border border-gray-200 rounded-md outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 appearance-none cursor-pointer"
@@ -63,15 +66,15 @@ export function LogsTable({
           >
             {modules.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
-          <select
+          <input
+            aria-label="操作用户"
+            placeholder="输入用户名"
             value={userFilter}
             onChange={e => onUserFilterChange(e.target.value)}
-            className="h-10 px-3 pr-8 text-sm text-gray-900 bg-white border border-gray-200 rounded-md outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 appearance-none cursor-pointer"
-            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-          >
-            {users.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
-          </select>
+            className="h-10 w-32 px-3 text-sm text-gray-900 bg-white border border-gray-200 rounded-md outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10"
+          />
           <input
+            aria-label="开始日期"
             type="date"
             value={startDate}
             onChange={e => onStartDateChange(e.target.value)}
@@ -79,6 +82,7 @@ export function LogsTable({
           />
           <span className="text-gray-500">至</span>
           <input
+            aria-label="结束日期"
             type="date"
             value={endDate}
             onChange={e => onEndDateChange(e.target.value)}
@@ -101,10 +105,19 @@ export function LogsTable({
           <tbody className="divide-y divide-gray-200">
             {loading ? (
               <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">加载中...</td></tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center">
+                  <div className="text-sm text-red-600">{error}</div>
+                  <button onClick={onRetry} className="mt-3 h-9 px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                    重新加载
+                  </button>
+                </td>
+              </tr>
             ) : data.length === 0 ? (
               <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">暂无日志数据</td></tr>
             ) : data.map(row => {
-              const logType = getLogType(row.operation)
+              const logType = getLogType(row.operation, row.actionType)
               return (
                 <tr key={row.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3.5 font-mono text-[13px] text-gray-700">{new Date(row.createdAt).toLocaleString()}</td>
@@ -124,7 +137,7 @@ export function LogsTable({
                     </span>
                   </td>
                   <td className="px-4 py-3.5">
-                    <span className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 font-medium">{getModuleLabel(row.requestData?.module as string || '')}</span>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 font-medium">{getModuleLabel(row.module || row.requestData?.module as string || '')}</span>
                   </td>
                   <td className="px-4 py-3.5">
                     <div className="text-sm text-gray-900">{row.description}</div>
@@ -144,14 +157,16 @@ export function LogsTable({
       </div>
 
       <div className="flex items-center justify-between px-5 py-4 border-t border-gray-200 bg-gray-50">
-        <span className="text-sm text-gray-500">共 {total} 条记录</span>
-        <Pagination
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onChangePage={onPageChange}
-          onChangePageSize={onPageSizeChange}
-        />
+        <span className="text-sm text-gray-500">{error ? '统计暂不可用' : `共 ${total} 条记录`}</span>
+        {!error && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onChangePage={onPageChange}
+            onChangePageSize={onPageSizeChange}
+          />
+        )}
       </div>
     </div>
   )
