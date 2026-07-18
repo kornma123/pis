@@ -280,11 +280,17 @@ interface CandidateRoleState {
   }
 }
 
+/** 只拦截角色权限从非全 W 跃迁为全 W；既有合法全 W 状态本身不构成新提权。 */
+function permissionsBecomeAdminEquivalent(before: unknown, after: unknown): boolean {
+  return !isAdminEquivalentPermissions(before) && isAdminEquivalentPermissions(after)
+}
+
 /**
- * 模拟角色写入前后的真实多角色解析，堵住拆分权限、预埋孤儿 role_code，以及角色移除后复活 users.role 的绕过。
- * 这里只判断是否制造等价 admin，不引入“不得授予超过操作者自身权限”的新委派模型。
+ * 模拟角色写入前后的真实多角色解析，分别阻断 literal admin 身份与等价全 W 权限的 false→true 跃迁。
+ * 两者不能合并为一个“是否全 W”判据：移除当前等价全 W 角色后，users.role fallback 可能复活 literal admin，
+ * 此时权限前后都全 W，但 actor 已从受天花板约束的自定义角色升级为可绕过天花板的安全管理员身份。
  */
-function candidateRoleWouldGrantAdminEquivalent(db: any, candidate: CandidateRoleState): boolean {
+function candidateRoleWouldEscalateSecurityAdmin(db: any, candidate: CandidateRoleState): boolean {
   const users = db.prepare('SELECT id, role FROM users WHERE is_deleted = 0').all() as
     Array<{ id: string; role?: string }>
   const rawAssignments = db.prepare('SELECT role_code FROM user_roles WHERE user_id = ?')
@@ -310,16 +316,21 @@ function candidateRoleWouldGrantAdminEquivalent(db: any, candidate: CandidateRol
   }
 
   for (const user of users) {
-    const beforeEquivalent = isAdminEquivalentPermissions(getEffectivePermissions(db, user.id))
+    const beforeCodes = getUserRoleCodes(db, user.id)
     const rawCodes = (rawAssignments.all(user.id) as Array<{ role_code: string }>).map((row) => row.role_code)
-    const effectiveCodes = new Set<string>()
+    const afterCodes = new Set<string>()
     for (const code of rawCodes) {
-      if (roleAfterMutation(code)) effectiveCodes.add(code)
+      if (roleAfterMutation(code)) afterCodes.add(code)
     }
-    if (effectiveCodes.size === 0 && user.role) {
-      if (roleAfterMutation(user.role)) effectiveCodes.add(user.role)
+    if (afterCodes.size === 0 && user.role) {
+      if (roleAfterMutation(user.role)) afterCodes.add(user.role)
     }
-    if (!beforeEquivalent && isAdminEquivalentPermissions(permissionsAfterMutation([...effectiveCodes]))) return true
+    const gainsLiteralAdmin = !beforeCodes.includes('admin') && afterCodes.has('admin')
+    const gainsEquivalentPermissions = permissionsBecomeAdminEquivalent(
+      getEffectivePermissionsForRoles(db, beforeCodes),
+      permissionsAfterMutation([...afterCodes]),
+    )
+    if (gainsLiteralAdmin || gainsEquivalentPermissions) return true
   }
   return false
 }
@@ -327,10 +338,10 @@ function candidateRoleWouldGrantAdminEquivalent(db: any, candidate: CandidateRol
 function nonAdminRoleMutationIsPrivileged(db: any, req: AuthRequest, kind: RoleMutationKind): boolean {
   const body = (typeof req.body === 'object' && req.body !== null ? req.body : {}) as Record<string, unknown>
   if (kind === 'create') {
-    if (isSystemRoleCode(body.code) || isAdminEquivalentPermissions(body.permissions)) return true
+    if (isSystemRoleCode(body.code) || permissionsBecomeAdminEquivalent(undefined, body.permissions)) return true
     // 省略 code 仍由路由的 required-field 校验返回 400；显式畸形 code 在 service 闸必须 fail-closed。
     if (!isNonEmptyRoleCode(body.code)) return hasOwn(body, 'code')
-    return candidateRoleWouldGrantAdminEquivalent(db, {
+    return candidateRoleWouldEscalateSecurityAdmin(db, {
       nextRole: {
         code: body.code,
         permissions: body.permissions,
@@ -344,13 +355,13 @@ function nonAdminRoleMutationIsPrivileged(db: any, req: AuthRequest, kind: RoleM
   if (!current) return false
   if (isSystemRoleCode(current.code)) return true
   if (kind === 'delete') {
-    return candidateRoleWouldGrantAdminEquivalent(db, { previousCode: current.code })
+    return candidateRoleWouldEscalateSecurityAdmin(db, { previousCode: current.code })
   }
   const candidateCode = hasOwn(body, 'code') ? body.code : current.code
   const candidatePermissions = hasOwn(body, 'permissions') ? body.permissions : current.permissions
-  if (isSystemRoleCode(candidateCode) || isAdminEquivalentPermissions(candidatePermissions)) return true
+  if (isSystemRoleCode(candidateCode) || permissionsBecomeAdminEquivalent(current.permissions, candidatePermissions)) return true
   if (!isNonEmptyRoleCode(candidateCode)) return true
-  return candidateRoleWouldGrantAdminEquivalent(db, {
+  return candidateRoleWouldEscalateSecurityAdmin(db, {
     previousCode: current.code,
     nextRole: {
       code: candidateCode,

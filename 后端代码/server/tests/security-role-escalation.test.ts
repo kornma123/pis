@@ -18,6 +18,8 @@ import { join } from 'node:path'
 import { getDb } from './p0-harness.js'
 import { MODULES } from '../src/middleware/rbac-matrix.js'
 import {
+  getEffectivePermissions,
+  isEffectiveSecurityAdminUser,
   requestActorHasCurrentPermission,
   roleMutationExceedsSecurityCeiling,
   wouldRemoveLastEffectiveAdmin,
@@ -101,6 +103,29 @@ function seedRole(id: string, code: string, permissions: Record<string, string>,
     INSERT INTO roles (id, code, name, description, permissions, status, is_deleted)
     VALUES (?, ?, ?, '', ?, ?, 0)
   `).run(id, code, code, JSON.stringify(permissions), status)
+}
+
+async function seedEquivalentFallbackActor(suffix: string): Promise<{
+  roleId: string
+  roleCode: string
+  userId: string
+  token: string
+}> {
+  const roleId = `ROLE-SEC-EQUIVALENT-FALLBACK-${suffix}`
+  const roleCode = `sec_equivalent_fallback_${suffix}`
+  const userId = `USER-SEC-EQUIVALENT-FALLBACK-${suffix}`
+  const username = `sec_equivalent_fallback_${suffix}`
+  const password = 'EquivalentFallback-C8v!R5m@N2x#'
+  seedRole(roleId, roleCode, allWritePermissions())
+  seedUser(userId, username, password, roleCode)
+  // 遗留主角色故意指向 admin；活跃 user_roles 仍只含受安全天花板约束的自定义全 W 角色。
+  db.prepare("UPDATE users SET role = 'admin', primary_role = 'admin' WHERE id = ?").run(userId)
+  const token = await login(username, password)
+
+  expect(userSnapshot(userId).roles).toEqual([{ role_code: roleCode }])
+  expect(MODULES.every((module) => getEffectivePermissions(db, userId)[module] === 'W')).toBe(true)
+  expect(isEffectiveSecurityAdminUser(db, userId)).toBe(false)
+  return { roleId, roleCode, userId, token }
 }
 
 async function login(username: string, password: string): Promise<string> {
@@ -426,6 +451,37 @@ describe('事务内 actor DB 真值复核', () => {
       db.prepare('UPDATE users SET status = 1 WHERE id = ?').run(DIRECTOR_ID)
     }
   })
+
+  it('roles 写：middleware 快拒后 fallback 改为 admin → 事务内以陈旧 actor 快照重读并拒绝', () => {
+    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const roleId = `ROLE-SEC-FALLBACK-RACE-${suffix}`
+    const roleCode = `sec_fallback_race_${suffix}`
+    const userId = `USER-SEC-FALLBACK-RACE-${suffix}`
+    seedRole(roleId, roleCode, allWritePermissions())
+    seedUser(userId, `sec_fallback_race_${suffix}`, 'FallbackRace-Q6n!D3w@J8p%', roleCode)
+    db.prepare("UPDATE users SET role = 'finance', primary_role = 'finance' WHERE id = ?").run(userId)
+    const staleRequest = {
+      user: { userId, username: `sec_fallback_race_${suffix}`, role: roleCode, roles: [roleCode] },
+      method: 'DELETE',
+      params: { id: roleId },
+      body: {},
+    } as unknown as express.Request
+
+    expect(requestActorHasCurrentPermission(db, staleRequest, 'roles', 'W')).toBe(true)
+    expect(roleMutationExceedsSecurityCeiling(db, staleRequest, 'delete')).toBe(false)
+    db.prepare("UPDATE users SET role = 'admin', primary_role = 'admin' WHERE id = ?").run(userId)
+
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      expect(requestActorHasCurrentPermission(db, staleRequest, 'roles', 'W')).toBe(true)
+      expect(roleMutationExceedsSecurityCeiling(db, staleRequest, 'delete')).toBe(true)
+      expect(roleSnapshot(roleId)?.is_deleted).toBe(0)
+      db.exec('ROLLBACK')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  })
 })
 
 describe('非 admin 不能制造权限等价 admin，也不能改系统角色', () => {
@@ -579,6 +635,64 @@ describe('非 admin 不能制造权限等价 admin，也不能改系统角色', 
 
     expect(response.status).toBe(403)
     expect(roleSnapshot(roleId)).toEqual(before)
+  })
+
+  it.each([
+    ['删除', 'delete'],
+    ['停用', 'disable'],
+    ['改码', 'code-change'],
+  ] as const)('%s自定义全 W 角色不得让非 literal admin actor 回退获得 literal admin', async (_label, mutation) => {
+    const suffix = `${mutation}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const { roleId, roleCode, userId, token } = await seedEquivalentFallbackActor(suffix)
+    const beforeRole = roleSnapshot(roleId)
+    const beforeActor = userSnapshot(userId)
+
+    const response = mutation === 'delete'
+      ? await request(app).delete(`/api/v1/roles/${roleId}`).set('Authorization', `Bearer ${token}`)
+      : await request(app).put(`/api/v1/roles/${roleId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send(mutation === 'disable'
+          ? { status: 'inactive' }
+          : { code: `${roleCode}_renamed` })
+
+    expect({
+      status: response.status,
+      role: roleSnapshot(roleId),
+      actor: userSnapshot(userId),
+      effectiveLiteralAdmin: isEffectiveSecurityAdminUser(db, userId),
+    }).toEqual({
+      status: 403,
+      role: beforeRole,
+      actor: beforeActor,
+      effectiveLiteralAdmin: false,
+    })
+  })
+
+  it.each([
+    ['删除', 'delete'],
+    ['停用', 'disable'],
+    ['改码', 'code-change'],
+  ] as const)('%s未被用户引用的合法全 W 自定义角色不应被状态式 blanket 拦截', async (_label, mutation) => {
+    const suffix = `legal-${mutation}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const roleId = `ROLE-SEC-LEGAL-FULL-W-${suffix}`
+    const roleCode = `sec_legal_full_w_${suffix}`
+    const renamedCode = `${roleCode}_renamed`
+    seedRole(roleId, roleCode, allWritePermissions())
+    expect(db.prepare('SELECT 1 FROM user_roles WHERE role_code = ?').get(roleCode)).toBeUndefined()
+
+    const response = mutation === 'delete'
+      ? await request(app).delete(`/api/v1/roles/${roleId}`).set('Authorization', `Bearer ${directorToken}`)
+      : await request(app).put(`/api/v1/roles/${roleId}`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send(mutation === 'disable'
+          ? { status: 'inactive' }
+          : { code: renamedCode })
+    const after = roleSnapshot(roleId) as { code: string; status: number; is_deleted: number }
+
+    expect(response.status, JSON.stringify(response.body)).toBe(200)
+    if (mutation === 'delete') expect(after.is_deleted).toBe(1)
+    if (mutation === 'disable') expect(after.status).toBe(0)
+    if (mutation === 'code-change') expect(after.code).toBe(renamedCode)
   })
 
   it('修改系统种子角色 → 403，角色行逐字段不变', async () => {
