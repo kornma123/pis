@@ -347,11 +347,43 @@ describe('trusted inventory actors', () => {
     }
   })
 
+  it('accepts normal Unicode identity without letting forged actor input replace it', async () => {
+    const fixture = seedMaterial('UNICODE-ACTOR')
+    const unicodeUsername = '病理医师-张三😀\u0080'
+    injectedUser = {
+      userId: '用户-001😀',
+      username: unicodeUsername,
+      role: 'admin',
+      roles: ['admin'],
+    }
+
+    const response = await withForgedActor(
+      request(isolatedApp).post('/api/v1/inbound'),
+      FORGED_A,
+      nextId('IDEM-UNICODE-ACTOR'),
+    ).send(forgedBody({
+      type: 'direct',
+      materialId: fixture.materialId,
+      quantity: 1,
+      locationId: fixture.locationId,
+    }, FORGED_A))
+
+    expect(response.status).toBe(201)
+    expect(db.prepare('SELECT operator FROM inbound_records WHERE id = ?').get(response.body.data.id))
+      .toMatchObject({ operator: unicodeUsername })
+  })
+
   it.each([
     ['missing user id', { userId: undefined, username: 'admin', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
     ['empty user id', { userId: '', username: 'admin', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
     ['non-string user id', { userId: 42, username: 'admin', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
     ['control-character user id', { userId: 'bad\nactor', username: 'admin', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
+    ['NUL user id', { userId: 'bad\u0000actor', username: 'admin', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
+    ['unit-separator user id', { userId: 'bad\u001factor', username: 'admin', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
+    ['CRLF username', { userId: 'USER-001', username: 'bad\r\nactor', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
+    ['DEL username', { userId: 'USER-001', username: 'bad\u007factor', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
+    ['line-separator username', { userId: 'USER-001', username: 'bad\u2028actor', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
+    ['paragraph-separator username', { userId: 'USER-001', username: 'bad\u2029actor', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
     ['empty username', { userId: 'USER-001', username: ' ', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
     ['role mismatch', { userId: 'USER-001', username: 'admin', role: 'finance', roles: ['admin'] }, 403, 'ACTOR_PERMISSION_CONTEXT_MISMATCH'],
   ])('fails closed for %s before validation, idempotency, or transaction', async (_label, user, status, code) => {

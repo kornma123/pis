@@ -15,7 +15,10 @@ type RequestIdentity = {
 
 type RequestWithIdentity = Request & { user?: RequestIdentity }
 
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f\u2028\u2029]/u
+const C0_CONTROL_END = 0x1f
+const DELETE_CONTROL = 0x7f
+const LINE_SEPARATOR = 0x2028
+const PARAGRAPH_SEPARATOR = 0x2029
 const MAX_IDENTITY_LENGTH = 128
 
 const UNTRUSTED_ACTOR_KEYS = new Set([
@@ -31,11 +34,24 @@ const UNTRUSTED_ACTOR_KEYS = new Set([
   'username',
 ])
 
+function hasRejectedIdentityCodeUnit(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index)
+    if (
+      codeUnit <= C0_CONTROL_END
+      || codeUnit === DELETE_CONTROL
+      || codeUnit === LINE_SEPARATOR
+      || codeUnit === PARAGRAPH_SEPARATOR
+    ) return true
+  }
+  return false
+}
+
 function stableIdentityPart(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   if (!trimmed || trimmed !== value || trimmed.length > MAX_IDENTITY_LENGTH) return null
-  if (CONTROL_CHARACTERS.test(trimmed)) return null
+  if (hasRejectedIdentityCodeUnit(trimmed)) return null
   return trimmed
 }
 
