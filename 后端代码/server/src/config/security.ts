@@ -13,6 +13,7 @@
  */
 import { createHash } from 'node:crypto'
 import { Buffer } from 'node:buffer'
+import { isIP } from 'node:net'
 import bcrypt from 'bcryptjs'
 
 /** 显式声明的开发/测试环境——**只有**这两个字面值才算"夹具环境"。未声明一律不是。 */
@@ -29,6 +30,79 @@ export function allowDefaultFixtureUsers(
   nodeEnv: string | undefined = process.env.NODE_ENV
 ): boolean {
   return isFixtureEnv(nodeEnv)
+}
+
+export interface TrustedProxyPolicy {
+  hops: 0 | 1
+  trustedCidrs: readonly string[]
+}
+
+const MAX_TRUSTED_PROXY_CIDRS = 16
+const MIN_TRUSTED_PROXY_PREFIX = { 4: 8, 6: 32 } as const
+
+function resolveTrustedProxyHops(env: NodeJS.ProcessEnv): 0 | 1 {
+  const rawHops = env.TRUST_PROXY_HOPS
+  if (rawHops === undefined || rawHops === '') {
+    if (isFixtureEnv(env.NODE_ENV)) return 0
+    throw new Error('生产级环境必须显式设置 TRUST_PROXY_HOPS=1')
+  }
+  if (rawHops !== '0' && rawHops !== '1') {
+    throw new Error('TRUST_PROXY_HOPS 只允许 0（fixture 直连）或 1（精确单跳代理）')
+  }
+  if (rawHops === '0' && !isFixtureEnv(env.NODE_ENV)) {
+    throw new Error('生产级环境禁止 TRUST_PROXY_HOPS=0；唯一公网入口必须是精确单跳代理')
+  }
+  return rawHops === '1' ? 1 : 0
+}
+
+function normalizeTrustedProxyCidr(entry: string): string {
+  const slashAt = entry.lastIndexOf('/')
+  if (slashAt !== entry.indexOf('/')) throw new Error(`TRUST_PROXY_CIDRS 条目无效：${entry}`)
+  const address = slashAt === -1 ? entry : entry.slice(0, slashAt)
+  const rawPrefix = slashAt === -1 ? undefined : entry.slice(slashAt + 1)
+  const version = isIP(address)
+  if (version !== 4 && version !== 6) throw new Error(`TRUST_PROXY_CIDRS 只允许 IP/CIDR：${entry}`)
+  if (address === '0.0.0.0' || address === '::') {
+    throw new Error(`TRUST_PROXY_CIDRS 禁止未指定地址：${entry}`)
+  }
+  if (rawPrefix === undefined) return version === 6 ? address.toLowerCase() : address
+  if (!/^\d+$/u.test(rawPrefix)) throw new Error(`TRUST_PROXY_CIDRS 前缀无效：${entry}`)
+  const prefix = Number(rawPrefix)
+  const maxPrefix = version === 4 ? 32 : 128
+  const minPrefix = MIN_TRUSTED_PROXY_PREFIX[version]
+  if (prefix < minPrefix || prefix > maxPrefix) {
+    throw new Error(`TRUST_PROXY_CIDRS 范围过宽或前缀无效：${entry}`)
+  }
+  const normalizedAddress = version === 6 ? address.toLowerCase() : address
+  return `${normalizedAddress}/${prefix}`
+}
+
+function resolveTrustedProxyCidrs(rawCidrs: string | undefined, hops: 0 | 1): string[] {
+  const trimmed = rawCidrs?.trim() ?? ''
+  if (hops === 0) {
+    if (trimmed) throw new Error('TRUST_PROXY_HOPS=0 时禁止设置 TRUST_PROXY_CIDRS')
+    return []
+  }
+  if (!trimmed) throw new Error('TRUST_PROXY_HOPS=1 时必须设置 TRUST_PROXY_CIDRS')
+  const entries = rawCidrs!.split(',').map(entry => entry.trim())
+  if (entries.some(entry => !entry)) throw new Error('TRUST_PROXY_CIDRS 禁止空条目')
+  if (entries.length > MAX_TRUSTED_PROXY_CIDRS) {
+    throw new Error(`TRUST_PROXY_CIDRS 最多允许 ${MAX_TRUSTED_PROXY_CIDRS} 个条目`)
+  }
+  const normalized = entries.map(normalizeTrustedProxyCidr)
+  if (new Set(normalized).size !== normalized.length) throw new Error('TRUST_PROXY_CIDRS 禁止重复条目')
+  return normalized
+}
+
+/**
+ * 生产级环境只允许一个受 CIDR allowlist 约束的反向代理跳；fixture 默认保持直连。
+ * 非法或缺失生产配置拒绝启动，避免静默退回共享代理 IP 或 trust-all。
+ */
+export function resolveTrustedProxyPolicy(
+  env: NodeJS.ProcessEnv = process.env
+): TrustedProxyPolicy {
+  const hops = resolveTrustedProxyHops(env)
+  return { hops, trustedCidrs: resolveTrustedProxyCidrs(env.TRUST_PROXY_CIDRS, hops) }
 }
 
 export interface CorsPolicy {

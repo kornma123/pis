@@ -1,5 +1,6 @@
+import { isIP } from 'node:net'
 import type { NextFunction, Request, RequestHandler, Response } from 'express'
-import { sha256 } from '../config/security.js'
+import { resolveTrustedProxyPolicy, sha256 } from '../config/security.js'
 import { error } from '../utils/response.js'
 
 export interface LoginRateLimitOptions {
@@ -178,12 +179,57 @@ export class LoginFailureRateLimiter {
   }
 }
 
-function requestKeys(req: Request): LoginRateLimitKeys {
+function normalizeIpAddress(value: string | undefined): string | null {
+  if (!value) return null
+  const address = value.trim()
+  const mappedIpv4 = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/iu)?.[1]
+  if (mappedIpv4 && isIP(mappedIpv4) === 4) return mappedIpv4
+  const version = isIP(address)
+  if (version === 4) return address
+  if (version !== 6) return null
+  try {
+    const hostname = new URL(`http://[${address}]/`).hostname
+    return hostname.slice(1, -1).toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 只消费 Express 在有界 trust-proxy 策略下产出的地址链，不回退到 req.ip。
+ * - fixture 直连：XFF 被 Express 忽略，唯一身份来自 socket；
+ * - 单跳代理：原始 XFF 必须严格为一个合法 IP，并与 Express 解析结果一致。
+ */
+export function resolveLoginClientIp(req: Request, trustedProxyHops: 0 | 1): string | null {
+  if (trustedProxyHops === 0) {
+    if (req.ips.length !== 0) return null
+    return normalizeIpAddress(req.socket.remoteAddress)
+  }
+
+  const rawForwardedFor = req.headers['x-forwarded-for']
+  if (typeof rawForwardedFor !== 'string') return null
+  const forwardedTokens = rawForwardedFor.split(',').map(token => token.trim())
+  if (forwardedTokens.length !== 1 || forwardedTokens[0] === '') return null
+
+  const forwardedAddress = normalizeIpAddress(forwardedTokens[0])
+  const resolvedAddress = req.ips.length === 1
+    ? normalizeIpAddress(req.ips[0])
+    : null
+  const requestAddress = normalizeIpAddress(req.ip)
+  if (!forwardedAddress || resolvedAddress !== forwardedAddress || requestAddress !== forwardedAddress) {
+    return null
+  }
+  return forwardedAddress
+}
+
+function requestKeys(req: Request, trustedProxyHops: 0 | 1): LoginRateLimitKeys | null {
+  const ip = resolveLoginClientIp(req, trustedProxyHops)
+  if (!ip) return null
   const username = typeof req.body?.username === 'string'
     ? req.body.username.normalize('NFKC').trim().toLowerCase()
     : ''
   return {
-    ip: req.ip || req.socket.remoteAddress || 'unknown',
+    ip,
     account: username ? sha256(username) : undefined,
   }
 }
@@ -216,10 +262,16 @@ export function recordLoginSuccess(res: Response): void {
  * 状态有界且只保留账号哈希，不在内存或响应中保存原始用户名/口令。
  */
 export function createLoginRateLimitMiddleware(
-  limiter = new LoginFailureRateLimiter()
+  limiter = new LoginFailureRateLimiter(),
+  trustedProxyHops: 0 | 1 = resolveTrustedProxyPolicy().hops
 ): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const keys = requestKeys(req)
+    const keys = requestKeys(req, trustedProxyHops)
+    if (!keys) {
+      res.setHeader('Cache-Control', 'no-store')
+      error(res, '请求来源无法验证', 'UNVERIFIED_CLIENT_IP', 400)
+      return
+    }
     const decision = limiter.check(keys)
     if (!decision.allowed) {
       res.setHeader('Retry-After', String(decision.retryAfterSeconds ?? 1))

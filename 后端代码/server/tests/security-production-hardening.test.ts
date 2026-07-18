@@ -1,13 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import express from 'express'
 import request from 'supertest'
 import {
   corsOriginAllowed,
   allowDefaultFixtureUsers,
   assertJwtSecretUsable,
   resolveCorsPolicy,
+  resolveTrustedProxyPolicy,
 } from '../src/config/security.js'
 import {
+  createLoginRateLimitMiddleware,
   LoginFailureRateLimiter,
+  recordLoginFailure,
   resolveLoginRateLimitOptions,
 } from '../src/middleware/login-rate-limit.js'
 
@@ -20,12 +24,16 @@ let app: Awaited<typeof import('../src/app.js')>['default']
 beforeAll(async () => {
   process.env.CORS_ALLOWED_ORIGINS = ALLOWED_ORIGIN
   process.env.JWT_SECRET = TEST_ONLY_JWT_SECRET
+  process.env.TRUST_PROXY_HOPS = '1'
+  process.env.TRUST_PROXY_CIDRS = '127.0.0.0/8,::1/128'
   vi.resetModules()
   app = (await import('../src/app.js')).default
 })
 
 afterAll(() => {
   delete process.env.CORS_ALLOWED_ORIGINS
+  delete process.env.TRUST_PROXY_HOPS
+  delete process.env.TRUST_PROXY_CIDRS
   // Vitest may reuse this worker for later suites; leave a known test-only
   // secret in place so this suite cannot make unrelated imports fail closed.
   process.env.JWT_SECRET = TEST_ONLY_JWT_SECRET
@@ -58,6 +66,62 @@ describe('production security hardening', () => {
     expect(missingPolicy.allowedOrigins.size).toBe(0)
     expect(corsOriginAllowed(ALLOWED_ORIGIN, missingPolicy)).toBe(false)
     expect(corsOriginAllowed(undefined, missingPolicy)).toBe(true)
+  })
+
+  it('requires a bounded explicit single-hop proxy policy outside fixture environments', () => {
+    expect(resolveTrustedProxyPolicy({ NODE_ENV: 'test' })).toEqual({
+      hops: 0,
+      trustedCidrs: [],
+    })
+    expect(resolveTrustedProxyPolicy({
+      NODE_ENV: 'test',
+      TRUST_PROXY_HOPS: '1',
+      TRUST_PROXY_CIDRS: '127.0.0.0/8, ::1/128',
+    })).toEqual({
+      hops: 1,
+      trustedCidrs: ['127.0.0.0/8', '::1/128'],
+    })
+
+    const rejected = [
+      { NODE_ENV: 'production' },
+      { NODE_ENV: 'staging', TRUST_PROXY_HOPS: '0' },
+      { TRUST_PROXY_HOPS: '2', TRUST_PROXY_CIDRS: '10.42.0.0/16' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: '1' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: '1', TRUST_PROXY_CIDRS: '   ' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: '1', TRUST_PROXY_CIDRS: '*' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: '1', TRUST_PROXY_CIDRS: 'all' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: '1', TRUST_PROXY_CIDRS: '0.0.0.0/0' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: '1', TRUST_PROXY_CIDRS: '::/0' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: '1', TRUST_PROXY_CIDRS: '10.0.0.0/1' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: ' 1 ', TRUST_PROXY_CIDRS: '10.0.0.0/8' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: '1', TRUST_PROXY_CIDRS: 'not-an-ip' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: '1', TRUST_PROXY_CIDRS: '10.0.0.0/33' },
+      { NODE_ENV: 'production', TRUST_PROXY_HOPS: '1', TRUST_PROXY_CIDRS: '10.0.0.0/8,' },
+      { NODE_ENV: 'test', TRUST_PROXY_HOPS: '0', TRUST_PROXY_CIDRS: '127.0.0.1' },
+      {
+        NODE_ENV: 'production',
+        TRUST_PROXY_HOPS: '1',
+        TRUST_PROXY_CIDRS: Array.from({ length: 17 }, (_, index) => `10.0.0.${index + 1}`).join(','),
+      },
+    ]
+    for (const env of rejected) expect(() => resolveTrustedProxyPolicy(env)).toThrow()
+
+    expect(resolveTrustedProxyPolicy({
+      NODE_ENV: 'production',
+      TRUST_PROXY_HOPS: '1',
+      TRUST_PROXY_CIDRS: '10.42.0.0/16,fd00:1234::/64',
+    })).toEqual({
+      hops: 1,
+      trustedCidrs: ['10.42.0.0/16', 'fd00:1234::/64'],
+    })
+  })
+
+  it('configures Express to trust only an allowlisted direct peer at hop zero', () => {
+    const trustProxy = app.get('trust proxy fn') as (address: string, hop: number) => boolean
+
+    expect(trustProxy('127.0.0.1', 0)).toBe(true)
+    expect(trustProxy('127.0.0.1', 1)).toBe(false)
+    expect(trustProxy('203.0.113.10', 0)).toBe(false)
   })
 
   it('keeps missing or weak JWT and production fixture accounts fail-closed', () => {
@@ -148,6 +212,32 @@ describe('production security hardening', () => {
       .toMatchObject({ allowed: false, reason: 'capacity' })
   })
 
+  it('keeps fixture direct mode on the socket identity regardless of supplied XFF', async () => {
+    const directApp = express()
+    const limiter = new LoginFailureRateLimiter({
+      windowMs: 60_000,
+      blockMs: 120_000,
+      maxFailuresPerIp: 2,
+      maxFailuresPerAccount: 100,
+      maxTrackedKeys: 20,
+    })
+    directApp.set('trust proxy', false)
+    directApp.use(express.json())
+    directApp.post('/login', createLoginRateLimitMiddleware(limiter, 0), (_req, res) => {
+      recordLoginFailure(res)
+      res.status(401).json({ success: false })
+    })
+
+    const fail = (forwardedFor: string) => request(directApp)
+      .post('/login')
+      .set('X-Forwarded-For', forwardedFor)
+      .send({ username: `direct-${forwardedFor}` })
+
+    expect((await fail('198.51.100.1')).status).toBe(401)
+    expect((await fail('198.51.100.2')).status).toBe(401)
+    expect((await fail('198.51.100.3')).status).toBe(429)
+  })
+
   it('rejects rate-limit settings that would silently disable protection', () => {
     expect(() => resolveLoginRateLimitOptions({ AUTH_LOGIN_MAX_FAILURES_PER_ACCOUNT: '0' }))
       .toThrow(/AUTH_LOGIN_MAX_FAILURES_PER_ACCOUNT/)
@@ -159,9 +249,55 @@ describe('production security hardening', () => {
     })).toThrow(/AUTH_LOGIN_RATE_BLOCK_MS.*AUTH_LOGIN_RATE_WINDOW_MS/)
   })
 
+  it('uses independent IP buckets for two clients behind the one trusted proxy', async () => {
+    const clientA = '198.51.100.10'
+    const clientB = '198.51.100.11'
+    const fail = (forwardedFor: string, username: string) => request(app)
+      .post('/api/v1/auth/login')
+      .set('X-Forwarded-For', forwardedFor)
+      .send({ username, password: 'not-a-real-password' })
+
+    // Avoid the account bucket by using a distinct nonexistent account each time;
+    // this isolates the IP-bucket behavior under the production limit of 20.
+    for (let count = 0; count < 20; count += 1) {
+      expect((await fail(clientA, `proxy-client-a-${count}`)).status).toBe(401)
+    }
+    expect((await fail(clientA, 'proxy-client-a-blocked')).status).toBe(429)
+    expect((await fail(clientB, 'proxy-client-b-independent')).status).toBe(401)
+
+    // Production nginx must overwrite XFF with one direct-peer address. A
+    // client-supplied/multi-value chain is rejected before it can select a bucket.
+    const spoofedChain = await fail(`${clientA}, ${clientB}`, 'proxy-client-b-spoofed-prefix')
+    expect(spoofedChain.status).toBe(400)
+    expect(spoofedChain.body.error.code).toBe('UNVERIFIED_CLIENT_IP')
+  })
+
+  it('fails closed when single-hop proxy client identity is missing or invalid', async () => {
+    const attempt = (forwardedFor?: string) => {
+      const pending = request(app)
+        .post('/api/v1/auth/login')
+        .send({ username: 'unverified-client-probe', password: 'not-a-real-password' })
+      return forwardedFor === undefined ? pending : pending.set('X-Forwarded-For', forwardedFor)
+    }
+
+    const missing = await attempt()
+    const invalid = await attempt('not-an-ip')
+    const multiValue = await attempt('198.51.100.20, 198.51.100.21')
+    const validAfterRejectedMetadata = await attempt('198.51.100.20')
+
+    expect(missing.status).toBe(400)
+    expect(missing.body.error.code).toBe('UNVERIFIED_CLIENT_IP')
+    expect(invalid.status).toBe(400)
+    expect(invalid.body.error.code).toBe('UNVERIFIED_CLIENT_IP')
+    expect(multiValue.status).toBe(400)
+    expect(multiValue.body.error.code).toBe('UNVERIFIED_CLIENT_IP')
+    expect(validAfterRejectedMetadata.status).toBe(401)
+  })
+
   it('returns 429 with Retry-After after repeated failed login responses', async () => {
     const attempt = () => request(app)
       .post('/api/v1/auth/login')
+      .set('X-Forwarded-For', '192.0.2.50')
       .send({ username: 'rate-limit-probe-user', password: 'not-a-real-password' })
 
     for (let count = 0; count < 5; count += 1) {

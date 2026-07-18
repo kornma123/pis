@@ -6,7 +6,12 @@ import { errorHandler } from './middleware/errorHandler.js'
 import { authenticateToken } from './middleware/auth.js'
 import { requirePermission } from './middleware/permissions.js'
 import { auditWrite } from './middleware/audit-log.js'
-import { corsOriginAllowed, isFixtureEnv, resolveCorsPolicy } from './config/security.js'
+import {
+  corsOriginAllowed,
+  isFixtureEnv,
+  resolveCorsPolicy,
+  resolveTrustedProxyPolicy,
+} from './config/security.js'
 
 // 路由导入
 import authRoutes from './routes/auth.js'
@@ -55,7 +60,19 @@ import statementImportRoutes from './routes/statement-import-v1.1.js'
 const app = express()
 const PORT = process.env.PORT || 3001
 const corsPolicy = resolveCorsPolicy()
+const trustedProxyPolicy = resolveTrustedProxyPolicy()
 
+if (trustedProxyPolicy.hops === 0) {
+  app.set('trust proxy', false)
+} else {
+  // 先让 Express 自带的 proxy-addr 编译 IP/CIDR allowlist，再叠加精确 hop=0 约束。
+  // 因此只信任直接对端 nginx；登录中间件还会拒绝缺失、多值或非法的 XFF。
+  app.set('trust proxy', trustedProxyPolicy.trustedCidrs)
+  const trustsConfiguredAddress = app.get('trust proxy fn') as (address: string) => boolean
+  app.set('trust proxy', (address: string, hop: number) => (
+    hop === 0 && trustsConfiguredAddress(address)
+  ))
+}
 // 中间件
 app.use(cors({
   origin(origin, callback) {
