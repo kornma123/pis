@@ -15,6 +15,14 @@ type RoleKey = keyof typeof ROLES
 const PROJ_READ_ROLES: RoleKey[] = ['admin', 'technician', 'pathologist']
 const PROJ_FORBIDDEN: RoleKey[] = ['warehouse_manager', 'procurement', 'finance']
 
+async function expectProjectFakeEntriesAbsent(page: Page) {
+  await expect(page.getByRole('heading', { name: '检测服务', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^导入$/ })).toHaveCount(0)
+  await expect(page.getByText('下载导入模板', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('导入功能开发中', { exact: true })).toHaveCount(0)
+  await expect(page.locator('svg.lucide-upload')).toHaveCount(0)
+}
+
 async function loginAs(page: Page, role: RoleKey) {
   await page.goto(`${FE_BASE}/login`)
   await page.waitForTimeout(100)
@@ -79,6 +87,7 @@ test.describe('检测项目 -> 查看项目列表', () => {
       await loginAs(page, role)
       await page.goto(`${FE_BASE}/projects`)
       await expect(page.locator('body')).toBeVisible({ timeout: 30000 })
+      await expectProjectFakeEntriesAbsent(page)
     })
   }
   test('PROJ-LIST-02. 空数据边界：无项目数据', async ({ page }) => {
@@ -122,7 +131,9 @@ test.describe('检测项目 -> 查看项目列表', () => {
     await loginAs(page, 'admin')
     await page.goto(`${FE_BASE}/projects`)
     await page.reload()
+    await expectProjectFakeEntriesAbsent(page)
     await page.reload()
+    await expectProjectFakeEntriesAbsent(page)
   })
 })
 
@@ -742,10 +753,13 @@ test.describe('检测项目 -> 盲点分析补充', () => {
     const res = await apiFetch(token, 'GET', `/projects/${id}`)
     expect([200, 404]).toContain(res.status)
   })
-  test('BLIND-PROJ-05. 项目导出功能', async ({ page }) => {
+  test('BLIND-PROJ-05. 假导入入口消失且新建服务保活', async ({ page }) => {
     await loginAs(page, 'admin')
     await page.goto(`${FE_BASE}/projects`)
-    await page.waitForTimeout(1000)
+    await expectProjectFakeEntriesAbsent(page)
+    await page.getByRole('button', { name: '新建服务' }).click()
+    await expect(page.getByRole('heading', { name: '新建检测服务' })).toBeVisible()
+    await expectProjectFakeEntriesAbsent(page)
   })
   test('BLIND-PROJ-06. 项目打印功能', async ({ page }) => {
     await loginAs(page, 'admin')
@@ -756,7 +770,7 @@ test.describe('检测项目 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     await page.setViewportSize({ width: 375, height: 667 })
     await page.goto(`${FE_BASE}/projects`)
-    await page.waitForTimeout(1000)
+    await expectProjectFakeEntriesAbsent(page)
   })
   test('BLIND-PROJ-08. 项目页面加载性能', async ({ page }) => {
     await loginAs(page, 'admin')

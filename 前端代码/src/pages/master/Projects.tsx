@@ -1,11 +1,10 @@
-import { Upload, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useProjectsPage } from './hooks/useProjectsPage'
 import { ProjectTable } from './components/ProjectTable'
 import { ProjectCreateModal } from './components/ProjectCreateModal'
 import { ProjectEditModal } from './components/ProjectEditModal'
 import { ProjectCopyModal } from './components/ProjectCopyModal'
 import { ProjectDeleteModal } from './components/ProjectDeleteModal'
-import { ProjectImportModal } from './components/ProjectImportModal'
 
 export default function Projects() {
   const page = useProjectsPage()
@@ -23,12 +22,6 @@ export default function Projects() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => page.setModalType('import')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm font-medium shadow-sm transition-colors"
-          >
-            <Upload className="w-4 h-4" />导入
-          </button>
           <button
             onClick={page.openCreate}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm font-medium shadow-sm transition-colors"
@@ -138,10 +131,6 @@ export default function Projects() {
         onConfirm={page.handleDeleteConfirm}
       />
 
-      <ProjectImportModal
-        open={page.modalType === 'import'}
-        onClose={() => page.setModalType(null)}
-      />
     </div>
   )
 }

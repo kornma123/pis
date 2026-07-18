@@ -15,6 +15,16 @@ type RoleKey = keyof typeof ROLES
 const BOM_READ_ROLES: RoleKey[] = ['admin', 'technician', 'pathologist']
 const BOM_FORBIDDEN: RoleKey[] = ['warehouse_manager', 'procurement', 'finance']
 
+async function expectBOMFakeEntriesAbsent(page: Page) {
+  await expect(page.getByRole('heading', { name: 'BOM清单', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^导入$/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^导出$/ })).toHaveCount(0)
+  await expect(page.getByText('下载导入模板', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('导入功能开发中', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('导出功能开发中', { exact: true })).toHaveCount(0)
+  await expect(page.locator('svg.lucide-upload, svg.lucide-download')).toHaveCount(0)
+}
+
 async function loginAs(page: Page, role: RoleKey) {
   await page.goto(`${FE_BASE}/login`)
   await page.waitForTimeout(100)
@@ -77,6 +87,7 @@ test.describe('BOM清单 -> 查看BOM列表', () => {
       await loginAs(page, role)
       await page.goto(`${FE_BASE}/bom`)
       await expect(page.locator('body')).toBeVisible({ timeout: 30000 })
+      await expectBOMFakeEntriesAbsent(page)
     })
   }
   test('BOM-LIST-02. 空数据边界', async ({ page }) => {
@@ -114,7 +125,9 @@ test.describe('BOM清单 -> 查看BOM列表', () => {
     await loginAs(page, 'admin')
     await page.goto(`${FE_BASE}/bom`)
     await page.reload()
+    await expectBOMFakeEntriesAbsent(page)
     await page.reload()
+    await expectBOMFakeEntriesAbsent(page)
   })
 })
 
@@ -675,10 +688,13 @@ test.describe('BOM清单 -> 盲点分析补充', () => {
     const res = await apiFetch(token, 'GET', `/boms/${id}`)
     expect([200, 404]).toContain(res.status)
   })
-  test('BLIND-BOM-04. 导出功能', async ({ page }) => {
+  test('BLIND-BOM-04. 假导入导出入口消失且新建BOM保活', async ({ page }) => {
     await loginAs(page, 'admin')
     await page.goto(`${FE_BASE}/bom`)
-    await page.waitForTimeout(1000)
+    await expectBOMFakeEntriesAbsent(page)
+    await page.getByRole('button', { name: '新建BOM' }).click()
+    await expect(page.getByRole('heading', { name: '新建BOM' })).toBeVisible()
+    await expectBOMFakeEntriesAbsent(page)
   })
   test('BLIND-BOM-05. 打印功能', async ({ page }) => {
     await loginAs(page, 'admin')
@@ -689,7 +705,7 @@ test.describe('BOM清单 -> 盲点分析补充', () => {
     await loginAs(page, 'admin')
     await page.setViewportSize({ width: 375, height: 667 })
     await page.goto(`${FE_BASE}/bom`)
-    await page.waitForTimeout(1000)
+    await expectBOMFakeEntriesAbsent(page)
   })
   test('BLIND-BOM-07. 加载性能', async ({ page }) => {
     await loginAs(page, 'admin')

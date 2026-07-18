@@ -13,8 +13,6 @@ export type ModalType =
   | 'copy'
   | 'delete'
   | 'batchDelete'
-  | 'import'
-  | 'export'
 
 export interface BOMForm {
   code: string
@@ -307,16 +305,6 @@ export function useBOMPage() {
     }
   }
 
-  const handleImport = () => {
-    toast.info('导入功能开发中')
-    setModalType(null)
-  }
-
-  const handleExport = () => {
-    toast.info('导出功能开发中')
-    setModalType(null)
-  }
-
   return {
     keyword,
     setKeyword,
@@ -370,7 +358,5 @@ export function useBOMPage() {
     handleDelete,
     handleBatchDelete,
     handleCopy,
-    handleImport,
-    handleExport,
   }
 }

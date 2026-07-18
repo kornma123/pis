@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
 
-export type ModalType = 'create' | 'edit' | 'copy' | 'delete' | 'import' | null
+export type ModalType = 'create' | 'edit' | 'copy' | 'delete' | null
 
 export interface FormData {
   code: string
