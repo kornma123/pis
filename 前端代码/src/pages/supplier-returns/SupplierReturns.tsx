@@ -1,738 +1,346 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import {
-  CornerUpLeft,
-  X,
-  Search,
-  Package,
-  Truck,
-  RotateCcw,
-  Eye,
-  Trash2,
-  ChevronRight,
-  Clock,
-  CheckCircle2,
-  CircleDollarSign,
-} from 'lucide-react'
-import { usePagination } from '@/hooks/usePagination'
-import { Pagination } from '@/components/ui/Pagination'
+import { AlertCircle, CornerUpLeft, Loader2, Package, Search } from 'lucide-react'
+import { toast } from 'sonner'
 import { supplierReturnApi, purchaseOrderApi, inboundApi } from '@/api/inventory'
 import { materialApi, supplierApi } from '@/api/master'
-import type { SupplierReturnRecord, Material, Supplier, PurchaseOrder, InboundRecord } from '@/types'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Pagination } from '@/components/ui/Pagination'
+import { canAccess } from '@/lib/permissions'
 import { formatDate } from '@/lib/utils'
-import { getUserRole } from '@/lib/permissions'
-import { toast } from 'sonner'
+import type { InboundRecord, Material, PurchaseOrder, Supplier, SupplierReturnRecord } from '@/types'
+import { createRecoverablePost } from '../returns/recoverablePost'
+import {
+  MutationConfirmDialog,
+  StatusBadge,
+  SupplierReturnCreateDialog,
+  SupplierReturnDetailDialog,
+} from './SupplierReturnDialogs'
+import {
+  EMPTY_FORM,
+  REASONS,
+  STATUS,
+  reasonLabel,
+  refundLabel,
+  validateForm,
+  type SupplierReturnFormState,
+  type Transition,
+} from './supplierReturnModel'
 
-// P1-14: finance 对供应商退货【只读】（后端端点级写守卫一致）。读取列表/详情可见，
-// 写操作（新建/状态流转/删除）对 finance 隐藏。
-const WRITE_ROLES = ['admin', 'warehouse_manager', 'procurement']
+const PAGE_SIZE = 20
+const inputClass = 'a11y-focus-ring h-10 min-w-0 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-700 disabled:bg-gray-100 disabled:text-gray-500'
+const buttonClass = 'a11y-focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
 
-const statusMap: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
-  pending: { label: '待发货', color: 'text-amber-700', bg: 'bg-amber-50', icon: Clock },
-  shipped: { label: '已发货', color: 'text-blue-700', bg: 'bg-blue-50', icon: Truck },
-  received: { label: '已收货', color: 'text-purple-700', bg: 'bg-purple-50', icon: CheckCircle2 },
-  refunded: { label: '已退款', color: 'text-green-700', bg: 'bg-green-50', icon: CircleDollarSign },
-  cancelled: { label: '已取消', color: 'text-gray-600', bg: 'bg-gray-100', icon: RotateCcw },
+const createSupplierReturn = createRecoverablePost<SupplierReturnFormState, Record<string, unknown>, { id: string; returnNo: string }>(
+  '/supplier-returns',
+  (form) => ({
+    materialId: form.materialId,
+    quantity: form.quantity,
+    supplierId: form.supplierId || undefined,
+    purchaseOrderId: form.purchaseOrderId || undefined,
+    inboundRecordId: form.inboundRecordId || undefined,
+    reason: form.reason,
+    refundAmount: form.refundAmount === '' ? undefined : Number(form.refundAmount),
+    trackingNo: form.trackingNo || undefined,
+    remark: form.remark || undefined,
+  }),
+  (result) => typeof result?.id === 'string' && result.id.length > 0 && typeof result.returnNo === 'string' && result.returnNo.length > 0,
+)
+
+type PendingMutation =
+  | { kind: 'create'; form: SupplierReturnFormState }
+  | { kind: 'transition'; transition: Transition; recordId: string }
+  | { kind: 'delete'; record: SupplierReturnRecord }
+
+function errorMessage(error: unknown, fallback: string) {
+  const value = error instanceof Error ? error.message.trim() : ''
+  return value && value.length <= 160 && !/[{}\[\]]/.test(value) ? value : fallback
 }
 
-const reasonOptions = [
-  { value: 'quality_issue', label: '质量问题' },
-  { value: 'wrong_item', label: '发错货' },
-  { value: 'quantity_mismatch', label: '数量不符' },
-  { value: 'damaged', label: '破损' },
-  { value: 'other', label: '其他' },
-]
+function hasServerResponse(error: unknown) {
+  return Boolean((error as { response?: unknown } | null)?.response)
+}
 
 export default function SupplierReturns() {
-  const canWrite = WRITE_ROLES.includes(getUserRole() || '')
+  const canView = canAccess('supplier_returns', 'R')
+  const canWrite = canAccess('supplier_returns', 'W')
   const [searchParams, setSearchParams] = useSearchParams()
+  const listRequest = useRef(0)
+  const refsRequest = useRef(0)
+  const detailRequest = useRef(0)
+  const mutationLock = useRef(false)
+
+  const [keywordDraft, setKeywordDraft] = useState(searchParams.get('keyword') || '')
+  const [statusDraft, setStatusDraft] = useState(searchParams.get('status') || '')
+  const [supplierDraft, setSupplierDraft] = useState(searchParams.get('supplierId') || '')
+  const [filters, setFilters] = useState({ keyword: keywordDraft, status: statusDraft, supplierId: supplierDraft })
+  const [page, setPage] = useState(1)
+  const [records, setRecords] = useState<SupplierReturnRecord[]>([])
+  const [total, setTotal] = useState(0)
+  const [listLoading, setListLoading] = useState(true)
+  const [listError, setListError] = useState('')
+
   const [materials, setMaterials] = useState<Material[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([])
   const [inboundRecords, setInboundRecords] = useState<InboundRecord[]>([])
+  const [refsError, setRefsError] = useState('')
 
-  const [keyword, setKeyword] = useState(searchParams.get('keyword') || '')
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
-  const [supplierFilter, setSupplierFilter] = useState(searchParams.get('supplierId') || '')
-
-  const [modalOpen, setModalOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [form, setForm] = useState<SupplierReturnFormState>(EMPTY_FORM)
+  const [validationError, setValidationError] = useState('')
   const [detailOpen, setDetailOpen] = useState(false)
+  const [detailId, setDetailId] = useState('')
   const [detailRecord, setDetailRecord] = useState<SupplierReturnRecord | null>(null)
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const [recordToDelete, setRecordToDelete] = useState<SupplierReturnRecord | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
+  const [mutationUnknown, setMutationUnknown] = useState('')
+  const [pendingMutation, setPendingMutation] = useState<PendingMutation | null>(null)
+  const [mutationBusy, setMutationBusy] = useState(false)
+  const [mutationError, setMutationError] = useState('')
 
-  const [form, setForm] = useState({
-    materialId: '',
-    quantity: 1,
-    supplierId: '',
-    purchaseOrderId: '',
-    inboundRecordId: '',
-    reason: '',
-    refundAmount: '',
-    trackingNo: '',
-    remark: '',
-  })
-
-  const fetchRefs = async () => {
+  const loadList = useCallback(async () => {
+    if (!canView) return
+    const request = ++listRequest.current
+    setListLoading(true)
+    setListError('')
     try {
-      const [mRes, sRes, poRes, inRes] = await Promise.all([
+      const response = await supplierReturnApi.getList({
+        page,
+        pageSize: PAGE_SIZE,
+        keyword: filters.keyword.trim() || undefined,
+        status: filters.status || undefined,
+        supplierId: filters.supplierId || undefined,
+      })
+      if (request !== listRequest.current) return
+      if (!response || !Array.isArray(response.list) || typeof response.pagination?.total !== 'number') {
+        throw new Error('供应商退货响应格式异常')
+      }
+      setRecords(response.list)
+      setTotal(response.pagination.total)
+    } catch (error) {
+      if (request === listRequest.current) {
+        setRecords([])
+        setTotal(0)
+        setListError(errorMessage(error, '供应商退货列表加载失败'))
+      }
+    } finally {
+      if (request === listRequest.current) setListLoading(false)
+    }
+  }, [canView, filters.keyword, filters.status, filters.supplierId, page])
+
+  const loadRefs = useCallback(async () => {
+    if (!canView) return
+    const request = ++refsRequest.current
+    setRefsError('')
+    try {
+      const [materialResponse, supplierResponse, orderResponse, inboundResponse] = await Promise.all([
         materialApi.getList({ page: 1, pageSize: 999, status: 'active' }),
         supplierApi.getList({ page: 1, pageSize: 999, status: 'active' }),
         purchaseOrderApi.getList({ page: 1, pageSize: 999 }),
         inboundApi.getList({ page: 1, pageSize: 999 }),
       ])
-      setMaterials((mRes as any)?.list || [])
-      setSuppliers((sRes as any)?.list || [])
-      setPurchaseOrders((poRes as any)?.list || [])
-      setInboundRecords((inRes as any)?.list || [])
-    } catch (e) {
-      console.error(e)
+      if (request !== refsRequest.current) return
+      if (!Array.isArray((materialResponse as { list?: unknown[] })?.list)
+        || !Array.isArray((supplierResponse as { list?: unknown[] })?.list)
+        || !Array.isArray((orderResponse as { list?: unknown[] })?.list)
+        || !Array.isArray((inboundResponse as { list?: unknown[] })?.list)) {
+        throw new Error('引用数据响应格式异常')
+      }
+      setMaterials((materialResponse as { list: Material[] }).list)
+      setSuppliers((supplierResponse as { list: Supplier[] }).list)
+      setPurchaseOrders((orderResponse as { list: PurchaseOrder[] }).list)
+      setInboundRecords((inboundResponse as { list: InboundRecord[] }).list)
+    } catch (error) {
+      if (request === refsRequest.current) {
+        setMaterials([]); setSuppliers([]); setPurchaseOrders([]); setInboundRecords([])
+        setRefsError(errorMessage(error, '物料、供应商或来源单据加载失败'))
+      }
     }
-  }
+  }, [canView])
 
-  useEffect(() => {
-    fetchRefs()
+  const loadDetail = useCallback(async (id: string) => {
+    if (!id) return
+    const request = ++detailRequest.current
+    setDetailLoading(true)
+    setDetailError('')
+    try {
+      const response = await supplierReturnApi.getById(id) as SupplierReturnRecord
+      if (request !== detailRequest.current) return
+      if (!response || response.id !== id || !STATUS[response.status]) throw new Error('供应商退货详情响应格式异常')
+      setDetailRecord(response)
+      setMutationUnknown('')
+    } catch (error) {
+      if (request === detailRequest.current) {
+        setDetailRecord(null)
+        setDetailError(errorMessage(error, '供应商退货详情加载失败'))
+      }
+    } finally {
+      if (request === detailRequest.current) setDetailLoading(false)
+    }
   }, [])
 
-  const {
-    data,
-    loading,
-    page,
-    pageSize,
-    total,
-    setPage,
-    setPageSize,
-    refresh,
-  } = usePagination<SupplierReturnRecord>({
-    fetchFn: async ({ page, pageSize }) => {
-      const res: any = await supplierReturnApi.getList({
-        page,
-        pageSize,
-        keyword: keyword || undefined,
-        status: statusFilter || undefined,
-        supplierId: supplierFilter || undefined,
-      })
-      return { list: res.list || [], pagination: res.pagination }
-    },
-    deps: [keyword, statusFilter, supplierFilter],
-  })
+  useEffect(() => {
+    loadList()
+  }, [loadList])
 
-  const handleSearch = () => {
+  useEffect(() => {
+    loadRefs()
+    return () => {
+      listRequest.current += 1
+      refsRequest.current += 1
+      detailRequest.current += 1
+    }
+  }, [loadRefs])
+
+  const applyFilters = () => {
+    const next = { keyword: keywordDraft, status: statusDraft, supplierId: supplierDraft }
+    setFilters(next)
+    setPage(1)
     const params: Record<string, string> = {}
-    if (keyword) params.keyword = keyword
-    if (statusFilter) params.status = statusFilter
-    if (supplierFilter) params.supplierId = supplierFilter
+    if (next.keyword) params.keyword = next.keyword
+    if (next.status) params.status = next.status
+    if (next.supplierId) params.supplierId = next.supplierId
     setSearchParams(params)
-    setPage(1)
   }
 
-  const handleReset = () => {
-    setKeyword('')
-    setStatusFilter('')
-    setSupplierFilter('')
-    setSearchParams({})
-    setPage(1)
+  const resetFilters = () => {
+    setKeywordDraft(''); setStatusDraft(''); setSupplierDraft('')
+    setFilters({ keyword: '', status: '', supplierId: '' })
+    setPage(1); setSearchParams({})
   }
 
-  const handleCreate = async () => {
-    if (!form.materialId || form.quantity <= 0 || !form.reason) {
-      toast.error('请填写物料、退货数量和退货原因')
-      return
-    }
-    setIsSubmitting(true)
-    try {
-      await supplierReturnApi.create({
-        materialId: form.materialId,
-        quantity: form.quantity,
-        supplierId: form.supplierId || undefined,
-        purchaseOrderId: form.purchaseOrderId || undefined,
-        inboundRecordId: form.inboundRecordId || undefined,
-        reason: form.reason,
-        refundAmount: form.refundAmount ? Number(form.refundAmount) : undefined,
-        trackingNo: form.trackingNo || undefined,
-        remark: form.remark || undefined,
-      })
-      toast.success('退货记录创建成功')
-      setModalOpen(false)
-      setForm({
-        materialId: '', quantity: 1, supplierId: '', purchaseOrderId: '',
-        inboundRecordId: '', reason: '', refundAmount: '', trackingNo: '', remark: '',
-      })
-      refresh()
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || '创建失败')
-    } finally {
-      setIsSubmitting(false)
+  const openCreate = () => {
+    setForm(EMPTY_FORM); setValidationError(''); setMutationError('')
+    setCreateOpen(true)
+    if (refsError) loadRefs()
+  }
+
+  const requestCreateConfirmation = () => {
+    const selected = materials.find((material) => material.id === form.materialId)
+    const invalid = validateForm(form, selected?.stock)
+    setValidationError(invalid)
+    if (!invalid) {
+      setPendingMutation({ kind: 'create', form: { ...form } })
+      setMutationError('')
     }
   }
 
-  const handleStatusChange = async (id: string, status: string) => {
+  const openDetail = (record: SupplierReturnRecord) => {
+    setDetailId(record.id); setDetailRecord(null); setDetailOpen(true); setMutationUnknown('')
+    loadDetail(record.id)
+  }
+
+  const closeDetail = () => {
+    detailRequest.current += 1
+    setDetailOpen(false); setDetailId(''); setDetailRecord(null); setDetailError(''); setMutationUnknown('')
+  }
+
+  const runMutation = async () => {
+    if (!pendingMutation || mutationLock.current) return
+    mutationLock.current = true
+    setMutationBusy(true)
+    setMutationError('')
     try {
-      await supplierReturnApi.updateStatus(id, status)
-      toast.success('状态更新成功')
-      refresh()
-      if (detailRecord?.id === id) {
-        setDetailRecord({ ...detailRecord, status: status as any })
+      if (pendingMutation.kind === 'create') {
+        const result = await createSupplierReturn(pendingMutation.form)
+        if (!result?.id || !result.returnNo) throw new Error('创建回执格式异常')
+        toast.success(`供应商退货 ${result.returnNo} 已创建并扣减库存`)
+        setCreateOpen(false); setForm(EMPTY_FORM); setValidationError('')
+      } else if (pendingMutation.kind === 'transition') {
+        const result = await supplierReturnApi.updateStatus(pendingMutation.recordId, pendingMutation.transition.next) as { id?: string; status?: string }
+        if (result?.id !== pendingMutation.recordId || result.status !== pendingMutation.transition.next) throw new Error('状态回执格式异常')
+        setDetailRecord((current) => current?.id === result.id ? { ...current, status: pendingMutation.transition.next } : current)
+        toast.success(`状态已记录为“${STATUS[pendingMutation.transition.next].label}”`)
+      } else {
+        await supplierReturnApi.delete(pendingMutation.record.id)
+        toast.success('待发货记录已删除，库存恢复由后端事务回执确认')
+        closeDetail()
       }
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || '状态更新失败')
+      setPendingMutation(null)
+      loadList()
+    } catch (error) {
+      const fallback = pendingMutation.kind === 'create' ? '创建请求失败' : '写操作失败'
+      if (!hasServerResponse(error) && pendingMutation.kind !== 'create') {
+        setMutationUnknown('请求未取得回执，服务端处理结果未知。')
+        setPendingMutation(null)
+      } else if (!hasServerResponse(error) && pendingMutation.kind === 'create') {
+        setMutationError('创建回执丢失；相同内容再次确认会复用同一幂等键，不会另起一笔。请先核对列表，也可安全重试。')
+      } else {
+        setMutationError(errorMessage(error, fallback))
+      }
+    } finally {
+      mutationLock.current = false
+      setMutationBusy(false)
     }
   }
 
-  const openDelete = (row: SupplierReturnRecord) => {
-    setRecordToDelete(row)
-    setDeleteConfirmOpen(true)
+  if (!canView) {
+    return <div role="alert" className="py-20 text-center text-sm text-gray-600">你没有查看供应商退货记录的 capability。</div>
   }
 
-  const handleDelete = async () => {
-    if (!recordToDelete) return
-    try {
-      await supplierReturnApi.delete(recordToDelete.id)
-      toast.success('退货记录已删除')
-      setDeleteConfirmOpen(false)
-      setRecordToDelete(null)
-      refresh()
-    } catch (e: any) {
-      toast.error(e?.response?.data?.message || '删除失败')
-    }
-  }
-
-  const openDetail = (row: SupplierReturnRecord) => {
-    setDetailRecord(row)
-    setDetailOpen(true)
-  }
-
-  const selectedMaterial = materials.find((m) => m.id === form.materialId)
+  const confirm = pendingMutation?.kind === 'create'
+    ? { title: '确认创建供应商退货？', description: '当前物料和数量将在后端事务中扣减库存；若回执丢失，相同内容重试会复用幂等键。', label: '确认创建并扣减库存', danger: false }
+    : pendingMutation?.kind === 'transition'
+      ? { title: pendingMutation.transition.title, description: pendingMutation.transition.description, label: pendingMutation.transition.confirmLabel, danger: pendingMutation.transition.danger }
+      : pendingMutation?.kind === 'delete'
+        ? { title: '确认删除待发货记录？', description: '前置条件：记录仍为待发货且原批次可精确恢复。成功后记录删除并恢复库存；未知时必须先核对。', label: '确认删除并恢复库存', danger: true }
+        : null
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-[28px] font-semibold text-gray-900">退货给供应商</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {canWrite ? '管理物料退回供应商的完整流程' : '查看物料退回供应商的记录（只读）'}
-          </p>
+          <h1 className="text-[28px] font-semibold text-gray-900">供应商退货</h1>
+          <p className="mt-1 text-sm text-gray-500">{canWrite ? '按真实状态前置条件登记退货、物流、收货与退款工作流。' : '只读查看；写操作由 supplier_returns:W capability 控制。'}</p>
         </div>
-        {canWrite && (
-          <button
-            onClick={() => { fetchRefs(); setModalOpen(true) }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors shadow-sm"
-          >
-            <CornerUpLeft className="w-4 h-4" />
-            新建退货
-          </button>
-        )}
+        {canWrite && <button type="button" className="a11y-focus-ring inline-flex min-h-10 items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" onClick={openCreate}><CornerUpLeft aria-hidden="true" className="h-4 w-4" />新建供应商退货</button>}
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col lg:flex-row gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="搜索退货单号/物料/原因..."
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            className="w-full h-10 pl-10 pr-4 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
-          />
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">“退款状态已登记”只代表本工作流字段；当前后端明确没有应付贷项/财务台账过账，页面不会把它显示为已退款、已冲销或到账。</div>
+
+      <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 lg:flex-row">
+        <div className="relative min-w-0 flex-1 lg:max-w-sm">
+          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input type="search" aria-label="搜索供应商退货" className={`${inputClass} w-full pl-10`} placeholder="退货单号 / 物料 / 原因" value={keywordDraft} onChange={(event) => setKeywordDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') applyFilters() }} />
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500"
-          >
+        <div className="flex min-w-0 flex-wrap gap-2">
+          <select aria-label="筛选供应商退货状态" className={`${inputClass} flex-1 sm:flex-none`} value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)}>
             <option value="">全部状态</option>
-            <option value="pending">待发货</option>
-            <option value="shipped">已发货</option>
-            <option value="received">已收货</option>
-            <option value="refunded">已退款</option>
-            <option value="cancelled">已取消</option>
+            {Object.entries(STATUS).map(([value, info]) => <option key={value} value={value}>{info.label}</option>)}
           </select>
-          <select
-            value={supplierFilter}
-            onChange={(e) => setSupplierFilter(e.target.value)}
-            className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 bg-white focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500"
-          >
-            <option value="">全部供应商</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
+          <select aria-label="筛选供应商" className={`${inputClass} flex-1 sm:flex-none`} value={supplierDraft} disabled={Boolean(refsError)} onChange={(event) => setSupplierDraft(event.target.value)}>
+            <option value="">{refsError ? '供应商数据未知' : '全部供应商'}</option>
+            {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
           </select>
-          <button
-            onClick={handleSearch}
-            className="h-10 px-4 bg-white text-gray-700 border border-gray-300 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors"
-          >
-            查询
-          </button>
-          <button
-            onClick={handleReset}
-            className="h-10 px-4 text-gray-500 text-sm font-medium hover:text-gray-700 transition-colors"
-          >
-            重置
-          </button>
+          <button type="button" className={buttonClass} onClick={applyFilters}>查询</button>
+          <button type="button" className={buttonClass} onClick={resetFilters}>重置</button>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">退货单号</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">物料</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">供应商</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">数量</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">退货原因</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">退款金额</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作时间</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
-                    <div className="flex items-center justify-center gap-2">
-                      <Clock className="w-5 h-5 animate-spin" />
-                      加载中...
-                    </div>
-                  </td>
-                </tr>
-              ) : data.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
-                    <div className="flex flex-col items-center gap-2">
-                      <Package className="w-12 h-12 text-gray-300" />
-                      <p className="text-sm">暂无退货记录</p>
-                      <p className="text-xs text-gray-400">点击"新建退货"开始</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                data.map((row) => {
-                  const statusInfo = statusMap[row.status] || statusMap.pending
-                  const StatusIcon = statusInfo.icon
-                  const reasonLabel = reasonOptions.find((r) => r.value === row.reason)?.label || row.reason
-                  return (
-                    <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600">{row.returnNo}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 text-sm">{row.materialName || '-'}</div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">{row.supplierName || '-'}</td>
-                      <td className="px-4 py-3 text-right text-gray-700">{row.quantity}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 rounded text-xs bg-orange-50 text-orange-700">{reasonLabel}</span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {row.refundAmount ? `¥${row.refundAmount}` : '-'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${statusInfo.bg} ${statusInfo.color}`}>
-                          <StatusIcon className="w-3 h-3" />
-                          {statusInfo.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(row.createdAt)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => openDetail(row)}
-                            className="px-2 py-1 text-gray-500 hover:text-blue-600 text-xs font-medium transition-colors"
-                          >
-                            <Eye className="w-3.5 h-3.5 inline mr-0.5" />
-                            详情
-                          </button>
-                          {canWrite && row.status === 'pending' && (
-                            <button
-                              onClick={() => openDelete(row)}
-                              className="px-2 py-1 text-gray-500 hover:text-red-600 text-xs font-medium transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 inline mr-0.5" />
-                              删除
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
-          <span className="text-sm text-gray-500">共 {total} 条记录</span>
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-        </div>
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        {listError ? (
+          <div role="alert" className="flex flex-col items-center gap-3 px-4 py-12 text-center text-sm text-gray-600"><AlertCircle aria-hidden="true" className="h-6 w-6 text-amber-500" /><div><div className="font-medium text-gray-900">供应商退货记录未加载</div><div className="mt-1 text-xs">{listError}。数据未知，不能按空列表处理。</div></div><button type="button" className={buttonClass} onClick={loadList}>重新加载供应商退货</button></div>
+        ) : listLoading ? (
+          <div role="status" aria-label="正在加载供应商退货" className="flex items-center justify-center gap-2 py-12 text-sm text-gray-500"><Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" />加载中…</div>
+        ) : records.length === 0 ? (
+          <EmptyState icon={Package} title="当前条件下没有供应商退货记录" description={canWrite ? '可调整筛选，或创建一笔经过确认的退货。' : '查询已成功；当前账号只有读取权限。'} />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-[900px] w-full text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-500"><tr><th className="px-4 py-3">退货单号</th><th className="px-4 py-3">物料</th><th className="px-4 py-3">供应商</th><th className="px-4 py-3 text-right">数量</th><th className="px-4 py-3">原因</th><th className="px-4 py-3">拟登记退款额</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">创建时间</th><th className="px-4 py-3">操作</th></tr></thead>
+              <tbody className="divide-y divide-gray-100">
+                {records.map((record) => <tr key={record.id} className="hover:bg-gray-50"><td className="px-4 py-3 font-mono text-xs text-gray-700">{record.returnNo}</td><td className="px-4 py-3 font-medium text-gray-900">{record.materialName || '未提供'}</td><td className="px-4 py-3 text-gray-600">{record.supplierName || '未关联'}</td><td className="px-4 py-3 text-right tabular-nums">{Number.isFinite(record.quantity) ? record.quantity : '未提供'}</td><td className="px-4 py-3 text-gray-600">{reasonLabel(record.reason)}</td><td className="px-4 py-3 text-gray-600">{refundLabel(record.refundAmount)}</td><td className="px-4 py-3"><StatusBadge status={record.status} /></td><td className="px-4 py-3 text-xs text-gray-500">{formatDate(record.createdAt)}</td><td className="px-4 py-3"><button type="button" aria-label={`查看 ${record.returnNo}`} className="a11y-focus-ring rounded px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50" onClick={() => openDetail(record)}>查看详情</button></td></tr>)}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!listError && !listLoading && records.length > 0 && <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={setPage} />}
       </div>
 
-      {/* Create Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-              <h3 className="text-lg font-semibold text-gray-900">新建退货给供应商</h3>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
-              >
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4 overflow-y-auto">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  物料 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={form.materialId}
-                  onChange={(e) => setForm({ ...form, materialId: e.target.value })}
-                  className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm bg-white text-gray-700 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
-                >
-                  <option value="">请选择物料</option>
-                  {materials.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.code}) - 库存 {m.stock} {m.unit}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    退货数量 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={selectedMaterial?.stock || undefined}
-                    value={form.quantity}
-                    onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })}
-                    className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
-                  />
-                  {selectedMaterial && (
-                    <p className="text-xs text-gray-400 mt-1">最大可退: {selectedMaterial.stock}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">供应商</label>
-                  <select
-                    value={form.supplierId}
-                    onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
-                    className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm bg-white text-gray-700 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
-                  >
-                    <option value="">请选择</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">关联采购订单</label>
-                  <select
-                    value={form.purchaseOrderId}
-                    onChange={(e) => setForm({ ...form, purchaseOrderId: e.target.value })}
-                    className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm bg-white text-gray-700 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
-                  >
-                    <option value="">请选择</option>
-                    {purchaseOrders
-                      .filter((po) => !form.supplierId || po.supplierId === form.supplierId)
-                      .map((po) => (
-                        <option key={po.id} value={po.id}>
-                          {po.orderNo} ({po.materialName}) — {po.status === 'partial' ? '部分收货' : po.status === 'completed' ? '已完成' : po.status === 'pending' ? '待收货' : '已取消'}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">关联入库记录</label>
-                  <select
-                    value={form.inboundRecordId}
-                    onChange={(e) => setForm({ ...form, inboundRecordId: e.target.value })}
-                    className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm bg-white text-gray-700 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
-                  >
-                    <option value="">请选择</option>
-                    {inboundRecords
-                      .filter((ir) => !form.materialId || ir.materialId === form.materialId)
-                      .map((ir) => (
-                        <option key={ir.id} value={ir.id}>
-                          {ir.inboundNo} ({ir.materialName} × {ir.quantity}{ir.unit})
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  退货原因 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={form.reason}
-                  onChange={(e) => setForm({ ...form, reason: e.target.value })}
-                  className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm bg-white text-gray-700 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
-                >
-                  <option value="">请选择</option>
-                  {reasonOptions.map((r) => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">退款金额</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={form.refundAmount}
-                    onChange={(e) => setForm({ ...form, refundAmount: e.target.value })}
-                    placeholder="0.00"
-                    className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">物流单号</label>
-                  <input
-                    type="text"
-                    value={form.trackingNo}
-                    onChange={(e) => setForm({ ...form, trackingNo: e.target.value })}
-                    placeholder="可选"
-                    className="w-full h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">备注</label>
-                <textarea
-                  value={form.remark}
-                  onChange={(e) => setForm({ ...form, remark: e.target.value })}
-                  rows={2}
-                  placeholder="可选"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500 transition-colors resize-none"
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 flex-shrink-0">
-              <button
-                onClick={() => setModalOpen(false)}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors border border-gray-200"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={isSubmitting}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? '提交中...' : '确认创建'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Detail Modal */}
-      {detailOpen && detailRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-              <h3 className="text-lg font-semibold text-gray-900">退货详情</h3>
-              <button
-                onClick={() => setDetailOpen(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
-              >
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4 overflow-y-auto">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">退货单号</span>
-                <span className="text-sm font-mono text-gray-900">{detailRecord.returnNo}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">物料</span>
-                <span className="text-sm text-gray-900">{detailRecord.materialName || '-'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">退货数量</span>
-                <span className="text-sm text-gray-900">{detailRecord.quantity}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">供应商</span>
-                <span className="text-sm text-gray-900">{detailRecord.supplierName || '-'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">关联采购订单</span>
-                <span className="text-sm text-gray-900">{detailRecord.purchaseOrderNo || '-'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">关联入库记录</span>
-                <span className="text-sm text-gray-900">{detailRecord.inboundNo || '-'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">退货原因</span>
-                <span className="text-sm text-gray-900">
-                  {reasonOptions.find((r) => r.value === detailRecord.reason)?.label || detailRecord.reason}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">退款金额</span>
-                <span className="text-sm text-gray-900">{detailRecord.refundAmount ? `¥${detailRecord.refundAmount}` : '-'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">物流单号</span>
-                <span className="text-sm text-gray-900">{detailRecord.trackingNo || '-'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">操作人</span>
-                <span className="text-sm text-gray-900">{detailRecord.operator}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">备注</span>
-                <span className="text-sm text-gray-900">{detailRecord.remark || '-'}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">当前状态</span>
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${statusMap[detailRecord.status].bg} ${statusMap[detailRecord.status].color}`}>
-                  {(() => {
-                    const Icon = statusMap[detailRecord.status].icon
-                    return <Icon className="w-3 h-3" />
-                  })()}
-                  {statusMap[detailRecord.status].label}
-                </span>
-              </div>
-
-              {/* Status Flow（finance 只读，隐藏流转按钮） */}
-              {canWrite && detailRecord.status !== 'refunded' && detailRecord.status !== 'cancelled' && (
-                <div className="border-t border-gray-200 pt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">状态流转</label>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {detailRecord.status === 'pending' && (
-                      <button
-                        onClick={() => handleStatusChange(detailRecord.id, 'shipped')}
-                        className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors"
-                      >
-                        标记为已发货
-                      </button>
-                    )}
-                    {detailRecord.status === 'shipped' && (
-                      <button
-                        onClick={() => handleStatusChange(detailRecord.id, 'received')}
-                        className="px-3 py-1.5 bg-purple-600 text-white text-xs rounded-md hover:bg-purple-700 transition-colors"
-                      >
-                        供应商已收货
-                      </button>
-                    )}
-                    {detailRecord.status === 'received' && (
-                      <button
-                        onClick={() => handleStatusChange(detailRecord.id, 'refunded')}
-                        className="px-3 py-1.5 bg-green-600 text-white text-xs rounded-md hover:bg-green-700 transition-colors"
-                      >
-                        标记退款完成
-                      </button>
-                    )}
-                    {/* 外层已排除 refunded/cancelled，此处 status 必为 pending|shipped|received，可直接展示取消按钮 */}
-                    <button
-                      onClick={() => handleStatusChange(detailRecord.id, 'cancelled')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs rounded-md hover:bg-gray-200 transition-colors"
-                    >
-                      取消退货
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Timeline */}
-              <div className="border-t border-gray-200 pt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">时间线</label>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm text-gray-900">创建退货记录</p>
-                      <p className="text-xs text-gray-400">{formatDate(detailRecord.createdAt)}</p>
-                    </div>
-                  </div>
-                  {detailRecord.status !== 'pending' && detailRecord.status !== 'cancelled' && (
-                    <div className="flex items-start gap-3">
-                      <ChevronRight className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-sm text-gray-900">状态变更为 {statusMap[detailRecord.status]?.label || detailRecord.status}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 flex-shrink-0">
-              <button
-                onClick={() => setDetailOpen(false)}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors border border-gray-200"
-              >
-                关闭
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirm Modal */}
-      {deleteConfirmOpen && recordToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">确认删除</h3>
-              <button
-                onClick={() => setDeleteConfirmOpen(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
-              >
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6">
-              <p className="text-sm text-gray-600">
-                确定要删除退货记录 <span className="font-mono font-medium">{recordToDelete.returnNo}</span> 吗？
-              </p>
-              <p className="text-sm text-gray-500 mt-2">仅待发货状态可删除，删除后库存将自动恢复。</p>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
-              <button
-                onClick={() => setDeleteConfirmOpen(false)}
-                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-md transition-colors border border-gray-200"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors shadow-sm"
-              >
-                确认删除
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {createOpen && <SupplierReturnCreateDialog form={form} setForm={setForm} materials={materials} suppliers={suppliers} purchaseOrders={purchaseOrders} inboundRecords={inboundRecords} refsError={refsError} validationError={validationError} onClose={() => setCreateOpen(false)} onConfirm={requestCreateConfirmation} />}
+      {detailOpen && <SupplierReturnDetailDialog record={detailRecord} loading={detailLoading} error={detailError} canWrite={canWrite} mutationUnknown={mutationUnknown} onClose={closeDetail} onRetry={() => loadDetail(detailId)} onTransition={(transition) => { if (detailRecord) { setPendingMutation({ kind: 'transition', transition, recordId: detailRecord.id }); setMutationError('') } }} onDelete={() => { if (detailRecord?.status === 'pending') { setPendingMutation({ kind: 'delete', record: detailRecord }); setMutationError('') } }} />}
+      {confirm && <MutationConfirmDialog title={confirm.title} description={confirm.description} confirmLabel={confirm.label} danger={confirm.danger} busy={mutationBusy} error={mutationError} onClose={() => { if (!mutationBusy) { setPendingMutation(null); setMutationError('') } }} onConfirm={runMutation} />}
     </div>
   )
 }

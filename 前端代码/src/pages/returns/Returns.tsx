@@ -1,7 +1,9 @@
 import { returnApi } from '@/api/inventory'
 import { formatDate } from '@/lib/utils'
+import { toast } from 'sonner'
 import LaneCPage from '../_laneC/LaneCPage'
-import type { LaneCConfig } from '../_laneC/types'
+import type { LaneCConfig, LaneCForm } from '../_laneC/types'
+import { createRecoverablePost } from './recoverablePost'
 
 const REASONS = [
   { value: 'excess', label: '领用剩余退回' },
@@ -15,6 +17,25 @@ const REASON_MAP: Record<string, string> = {
   quality_issue: '质量问题', expired: '过期/近效期',
 }
 const reasonLabel = (v?: string) => (v ? REASON_MAP[v] || v : '—')
+
+const postReturn = createRecoverablePost<LaneCForm, { materialId: string; quantity: number; reason: string; remark?: string }, { id?: unknown }>(
+  '/returns',
+  (form) => ({ materialId: form.materialId, quantity: form.quantity, reason: form.reason, remark: form.remark || undefined }),
+  (result) => typeof result?.id === 'string' && result.id.length > 0,
+)
+
+async function createReturn(form: LaneCForm) {
+  try {
+    return await postReturn(form)
+  } catch (error) {
+    const gotFailureResponse = Boolean((error as { response?: unknown } | null)?.response)
+    toast.error(
+      gotFailureResponse ? '退库未创建，服务端已拒绝请求' : '退库结果未知，未取得可验证回执',
+      { description: gotFailureResponse ? '请按服务端提示修正后重新确认。' : '请先核对退库列表；相同内容可安全重试并复用幂等键。' },
+    )
+    throw error
+  }
+}
 
 const config: LaneCConfig = {
   module: 'returns',
@@ -57,7 +78,7 @@ const config: LaneCConfig = {
   api: {
     getList: (params) => returnApi.getList(params),
     getStats: () => returnApi.getStats(),
-    create: (form) => returnApi.create({ materialId: form.materialId, quantity: form.quantity, reason: form.reason, remark: form.remark || undefined }),
+    create: createReturn,
     remove: (id) => returnApi.delete(id),
   },
   validateCreate: (form) => {
