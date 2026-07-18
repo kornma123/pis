@@ -8,7 +8,11 @@
 !src/**
 !scripts/
 !scripts/reset-passwords.ts
+!scripts/approved-account-provisioning.ts
 !scripts/start-production.mjs
+!release/
+!release/lib.mjs
+!release/verify-volume-migration.mjs
 !Dockerfile
 !.dockerignore
 

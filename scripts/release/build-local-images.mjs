@@ -21,12 +21,15 @@ const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '..', '..')
 const backendSourceDirectory = '后端代码/server'
 const backendArchivePaths = [
+  `${backendSourceDirectory}/.dockerignore`,
   `${backendSourceDirectory}/Dockerfile`,
   `${backendSourceDirectory}/package.json`,
   `${backendSourceDirectory}/package-lock.json`,
   `${backendSourceDirectory}/tsconfig.json`,
   `${backendSourceDirectory}/src`,
   `${backendSourceDirectory}/scripts/check-runtime-contract.mjs`,
+  `${backendSourceDirectory}/scripts/reset-passwords.ts`,
+  `${backendSourceDirectory}/scripts/approved-account-provisioning.ts`,
   `${backendSourceDirectory}/scripts/start-production.mjs`,
   'scripts/release/lib.mjs',
   'scripts/release/verify-volume-migration.mjs',
@@ -107,9 +110,9 @@ function removeIsolatedContext(stagingRoot, component) {
 
 function prepareIsolatedBackendContext(release) {
   // The isolated backend build context is materialized from the fixed commit,
-  // not from the working tree and not through the backend .dockerignore. This
-  // makes the dependency runtime guard available without broadening that
-  // repository allowlist or exposing unrelated files to the Docker daemon.
+  // not from the working tree. The archive allowlist and backend .dockerignore
+  // both gate the context, so approved runtime scripts are explicit while
+  // unrelated files remain unavailable to the Docker daemon.
   const stagingRoot = mkdtempSync(join(tmpdir(), 'coreone-backend-build-'))
   const archivePath = join(stagingRoot, 'context.tar')
   const extractionRoot = join(stagingRoot, 'checkout')
@@ -129,7 +132,15 @@ function prepareIsolatedBackendContext(release) {
       resolve(extractionRoot, 'scripts/release/verify-volume-migration.mjs'),
       resolve(releaseDirectory, 'verify-volume-migration.mjs'),
     )
-    for (const required of ['Dockerfile', 'scripts/check-runtime-contract.mjs', 'release/lib.mjs', 'release/verify-volume-migration.mjs']) {
+    for (const required of [
+      '.dockerignore',
+      'Dockerfile',
+      'scripts/check-runtime-contract.mjs',
+      'scripts/reset-passwords.ts',
+      'scripts/approved-account-provisioning.ts',
+      'release/lib.mjs',
+      'release/verify-volume-migration.mjs',
+    ]) {
       if (!existsSync(resolve(contextPath, required))) {
         throw new ReleaseContractError(`isolated backend build context is missing ${required}`, 21)
       }

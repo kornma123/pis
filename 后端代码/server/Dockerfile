@@ -8,7 +8,24 @@ COPY scripts/check-runtime-contract.mjs ./scripts/check-runtime-contract.mjs
 RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
-RUN npm run build
+COPY scripts/reset-passwords.ts scripts/approved-account-provisioning.ts ./scripts/
+RUN npm run build \
+  && ./node_modules/.bin/tsc \
+    --target ES2022 \
+    --module NodeNext \
+    --moduleResolution NodeNext \
+    --lib ES2022 \
+    --rootDir . \
+    --outDir provisioning-dist \
+    --strict \
+    --esModuleInterop \
+    --skipLibCheck \
+    --forceConsistentCasingInFileNames \
+    --resolveJsonModule \
+    --declaration false \
+    --declarationMap false \
+    --sourceMap false \
+    src/types/node-sqlite.d.ts scripts/reset-passwords.ts
 
 FROM node:22.23.1-alpine3.24@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS runtime
 
@@ -21,8 +38,22 @@ COPY package*.json ./
 COPY scripts/check-runtime-contract.mjs ./scripts/check-runtime-contract.mjs
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/provisioning-dist ./provisioning-dist
 COPY --chown=node:node scripts/start-production.mjs ./scripts/start-production.mjs
 COPY --chown=node:node release/lib.mjs release/verify-volume-migration.mjs ./release/
+
+RUN mkdir -p /app/node_modules/.bin \
+  && printf '%s\n' \
+      '#!/bin/sh' \
+      'set -eu' \
+      'if [ "$#" -lt 1 ] || [ "$1" != "scripts/reset-passwords.ts" ]; then' \
+      '  echo "runtime tsx shim accepts only scripts/reset-passwords.ts" >&2' \
+      '  exit 2' \
+      'fi' \
+      'shift' \
+      'exec node --experimental-sqlite /app/provisioning-dist/scripts/reset-passwords.js "$@"' \
+      > /app/node_modules/.bin/tsx \
+  && chmod 0555 /app/node_modules/.bin/tsx
 
 RUN mkdir -p /app/data && chown node:node /app/data
 

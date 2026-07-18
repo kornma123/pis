@@ -222,6 +222,9 @@ await check('First install and legacy-volume migration are isolated operator pro
 
 await check('Backend image is multi-stage, production-only, non-root, and compiled', () => {
   const dockerfile = read('后端代码/server/Dockerfile')
+  const dockerignore = read('后端代码/server/.dockerignore')
+  const imageBuilder = read('scripts/release/build-local-images.mjs')
+  const backendPackage = JSON.parse(read('后端代码/server/package.json'))
   assert.match(dockerfile, /^FROM\s+node:[^\r\n]+@sha256:[0-9a-f]{64}\s+AS\s+builder/mu)
   assert.match(dockerfile, /npm ci --omit=dev/u)
   assert.match(dockerfile, /COPY --from=builder .*\/dist/u)
@@ -232,6 +235,45 @@ await check('Backend image is multi-stage, production-only, non-root, and compil
   assert.match(dockerfile, /HEALTHCHECK[\s\S]*?DatabaseSync/u)
   assert.match(dockerfile, /HEALTHCHECK[\s\S]*?name='users'/u)
   assert.doesNotMatch(dockerfile, /npx\s+tsx|src\/app\.ts/u)
+
+  for (const provisioningPath of [
+    'scripts/reset-passwords.ts',
+    'scripts/approved-account-provisioning.ts',
+  ]) {
+    assert.match(
+      imageBuilder,
+      new RegExp(`\\$\\{backendSourceDirectory\\}/${provisioningPath.replaceAll('/', '\\/')}`),
+      `${provisioningPath} is missing from the fixed backend archive allowlist`,
+    )
+    assert.match(
+      dockerignore,
+      new RegExp(`^!${provisioningPath.replaceAll('/', '\\/')}\\s*$`, 'mu'),
+      `${provisioningPath} is missing from the backend Docker context allowlist`,
+    )
+  }
+  assert.match(imageBuilder, /\$\{backendSourceDirectory\}\/\.dockerignore/u)
+  for (const releasePath of [
+    'release/',
+    'release/lib.mjs',
+    'release/verify-volume-migration.mjs',
+  ]) {
+    assert.match(
+      dockerignore,
+      new RegExp(`^!${releasePath.replaceAll('/', '\\/')}\\s*$`, 'mu'),
+      `${releasePath} is missing from the backend Docker context allowlist`,
+    )
+  }
+  assert.match(dockerfile, /provisioning-dist\/scripts\/reset-passwords\.js/u)
+  assert.equal(
+    backendPackage.scripts['reset-passwords'],
+    'node scripts/check-runtime-contract.mjs && tsx scripts/reset-passwords.ts',
+  )
+  assert.match(dockerfile, /node_modules\/\.bin\/tsx/u)
+  assert.match(dockerfile, /mkdir -p \/app\/node_modules\/\.bin[\s\S]+> \/app\/node_modules\/\.bin\/tsx/u)
+  assert.match(dockerfile, /\$1[^\r\n]+scripts\/reset-passwords\.ts/u)
+  assert.match(dockerfile, /shift[\s\S]+exec node --experimental-sqlite \/app\/provisioning-dist\/scripts\/reset-passwords\.js "\$@"/u)
+  assert.doesNotMatch(dockerfile, /packageJson\.scripts\[['"]reset-passwords['"]\]/u)
+  assert.doesNotMatch(dockerfile, /COPY[^\r\n]+node_modules\/(?:tsx|typescript|esbuild)/u)
 })
 
 await check('Backend runtime guard is present before every npm ci in the fixed isolated build context', () => {
@@ -351,6 +393,18 @@ await check('Deployment guide exposes the local R3 operator gate and canonical r
   assert.match(guide, /TRUST_PROXY_HOPS=1/u)
   assert.match(guide, /TRUST_PROXY_CIDRS/u)
   assert.match(guide, /生产.*operator.*授权门|operator.*授权门.*生产/u)
+  assert.match(guide, /PROVISIONING_MANIFEST_PATH/u)
+  assert.match(guide, /PROVISIONING_MANIFEST_SHA256/u)
+  assert.match(guide, /npm run reset-passwords/u)
+  assert.match(guide, /stdin/u)
+  assert.match(guide, /apply=(?:created\|updated\|unchanged|<created\|updated\|unchanged>)/u)
+  assert.match(guide, /PROVISIONING_CONFLICT/u)
+  assert.match(guide, /PROVISIONING_CONCURRENT_STATE_CONFLICT/u)
+  assert.match(guide, /COMMITTED_EVIDENCE_WRITE_FAILED/u)
+  assert.match(guide, /operator-r3-first-install/u)
+  assert.match(guide, /restore-drill\.mjs/u)
+  assert.match(guide, /不提供[^\r\n]*--dry-run|--dry-run[^\r\n]*不提供/u)
+  assert.doesNotMatch(guide, /八账号|8\s*个历史账号|8\/8|RESET_[A-Z0-9_]+|RESET_PASSWORDS_JSON/u)
 })
 
 const requiredScripts = [
