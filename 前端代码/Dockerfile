@@ -13,9 +13,18 @@ RUN npm run build
 # Runtime stage
 FROM nginx:1.30.3-alpine@sha256:0d3b80406a13a767339fbe2f41406d6c7da727ab89cf8fae399e81f780f814d1
 
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+ARG COREONE_RELEASE_SHA
+RUN printf '%s' "$COREONE_RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
+LABEL org.opencontainers.image.revision=$COREONE_RELEASE_SHA
 
-EXPOSE 80
+COPY --from=builder --chown=101:101 /app/dist /usr/share/nginx/html
+COPY --chown=101:101 nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 8080
+
+USER 101:101
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/health || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

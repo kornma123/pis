@@ -1,53 +1,223 @@
+name: ${COMPOSE_PROJECT_NAME:-coreone}
+
 services:
   backend:
-    build:
-      context: ./后端代码/server
-      dockerfile: Dockerfile
-    image: coreone-backend:${COREONE_IMAGE_TAG:-local}
-    container_name: coreone-backend
+    image: ${COREONE_BACKEND_IMAGE:?COREONE_BACKEND_IMAGE must be the immutable sha256 image ID from the build receipt}
+    pull_policy: never
+    init: true
     restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: ${COREONE_BACKEND_MEMORY_LIMIT:-768m}
+    cpus: ${COREONE_BACKEND_CPUS:-1.0}
     environment:
-      - NODE_ENV=production
-      - PORT=3001
-      # 安全：绝不内置默认密钥。JWT_SECRET 必须由部署环境注入（缺失即拒绝启动）。
-      # 生成示例：openssl rand -base64 48
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required — inject a strong random secret via the deploy environment; the old default was leaked and must not be reused}
-      - JWT_EXPIRES_IN=8h
-      - REFRESH_TOKEN_EXPIRES_IN=7d
-      - DATABASE_PATH=/app/data/coreone.db
-      # 仅全新首装可临时设为 1；旧库升级必须保持 0，避免漏挂 volume 时静默创建空库。
-      - COREONE_ALLOW_DATABASE_CREATE=${COREONE_ALLOW_DATABASE_CREATE:-0}
-      # 可选：受控创建初始 admin（不设=不创建任何默认账号）。口令须 ≥12 位、非默认弱口令。
-      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-}
+      NODE_ENV: production
+      COREONE_RUN_MODE: serve
+      PORT: "3001"
+      COREONE_RELEASE_SHA: ${COREONE_RELEASE_SHA:?COREONE_RELEASE_SHA must be the approved 40-character commit SHA}
+      JWT_SECRET_FILE: /run/secrets/coreone_jwt
+      JWT_EXPIRES_IN: 8h
+      REFRESH_TOKEN_EXPIRES_IN: 7d
+      DATABASE_PATH: /app/data/coreone.db
+      # The steady-state service never creates a database. First install is a
+      # separate operator profile with a one-time admin secret-file mount.
+      COREONE_ALLOW_DATABASE_CREATE: "0"
+    secrets:
+      - source: coreone_jwt
+        target: coreone_jwt
     volumes:
       - coreone-data:/app/data
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     networks:
-      - coreone-network
+      - app-network
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      test:
+        - CMD
+        - node
+        - --experimental-sqlite
+        - -e
+        - const {DatabaseSync}=require('node:sqlite');let db;try{db=new DatabaseSync('/app/data/coreone.db',{readOnly:true});if(!db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='users'").get()?.ok)throw new Error('users schema missing')}catch{process.exit(1)}finally{db?.close()}fetch('http://127.0.0.1:3001/api/health',{signal:AbortSignal.timeout(5000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: ${COREONE_LOG_MAX_SIZE:-10m}
+        max-file: "${COREONE_LOG_MAX_FILES:-5}"
+    labels:
+      org.opencontainers.image.revision: ${COREONE_RELEASE_SHA:?COREONE_RELEASE_SHA must be the approved 40-character commit SHA}
+      com.coreone.component: backend
+
+  frontend:
+    image: ${COREONE_FRONTEND_IMAGE:?COREONE_FRONTEND_IMAGE must be the immutable sha256 image ID from the build receipt}
+    pull_policy: never
+    init: true
+    restart: unless-stopped
+    user: "101:101"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: ${COREONE_FRONTEND_MEMORY_LIMIT:-128m}
+    cpus: ${COREONE_FRONTEND_CPUS:-0.5}
+    ports:
+      - "${COREONE_BIND_ADDRESS:-127.0.0.1}:${COREONE_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    tmpfs:
+      - /var/cache/nginx:size=16m,uid=101,gid=101,mode=0755
+      - /var/run:size=1m,uid=101,gid=101,mode=0755
+      - /tmp:size=8m,uid=101,gid=101,mode=1777
+    networks:
+      - edge-network
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    stop_grace_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: ${COREONE_LOG_MAX_SIZE:-10m}
+        max-file: "${COREONE_LOG_MAX_FILES:-5}"
+    labels:
+      org.opencontainers.image.revision: ${COREONE_RELEASE_SHA:?COREONE_RELEASE_SHA must be the approved 40-character commit SHA}
+      com.coreone.component: frontend
 
-  frontend:
-    build:
-      context: ./前端代码
-      dockerfile: Dockerfile
-    image: coreone-frontend:${COREONE_IMAGE_TAG:-local}
-    container_name: coreone-frontend
-    restart: unless-stopped
-    ports:
-      - "${COREONE_PORT:-8080}:80"
-    depends_on:
-      - backend
-    networks:
-      - coreone-network
+  database-init:
+    profiles: ["operator-r3-first-install"]
+    image: ${COREONE_BACKEND_IMAGE:?COREONE_BACKEND_IMAGE must be the immutable sha256 image ID from the build receipt}
+    pull_policy: never
+    init: true
+    restart: "no"
+    user: "1000:1000"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    environment:
+      NODE_ENV: production
+      COREONE_RUN_MODE: initialize
+      COREONE_RELEASE_SHA: ${COREONE_RELEASE_SHA:?COREONE_RELEASE_SHA must be the approved 40-character commit SHA}
+      ADMIN_INITIAL_PASSWORD_FILE: /run/secrets/coreone_admin_initial
+      DATABASE_PATH: /app/data/coreone.db
+      COREONE_ALLOW_DATABASE_CREATE: "1"
+    secrets:
+      - source: coreone_admin_initial
+        target: coreone_admin_initial
+    volumes:
+      - coreone-data:/app/data
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    network_mode: none
+    logging:
+      driver: json-file
+      options:
+        max-size: ${COREONE_LOG_MAX_SIZE:-10m}
+        max-file: "${COREONE_LOG_MAX_FILES:-5}"
+    labels:
+      org.opencontainers.image.revision: ${COREONE_RELEASE_SHA:?COREONE_RELEASE_SHA must be the approved 40-character commit SHA}
+      com.coreone.component: database-init
+      com.coreone.operator-gate: r3-first-install
+
+  volume-permission-migration:
+    profiles: ["operator-r3-volume-migration"]
+    image: ${COREONE_BACKEND_IMAGE:?COREONE_BACKEND_IMAGE must be the immutable sha256 image ID from the build receipt}
+    pull_policy: never
+    restart: "no"
+    user: "0:0"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    environment:
+      COREONE_RELEASE_SHA: ${COREONE_RELEASE_SHA:?COREONE_RELEASE_SHA must be the approved 40-character commit SHA}
+      COREONE_VOLUME_MIGRATION_ACK: ${COREONE_VOLUME_MIGRATION_ACK:-}
+      COREONE_MIGRATION_BACKUP_SHA: ${COREONE_MIGRATION_BACKUP_SHA:-}
+      COREONE_MIGRATION_BACKUP_NAME: ${COREONE_MIGRATION_BACKUP_NAME:-}
+    entrypoint:
+      - /bin/sh
+      - -euc
+      - |
+        test "$${COREONE_VOLUME_MIGRATION_ACK:-}" = "R3_APPROVED_BACKUP_VERIFIED"
+        printf '%s' "$${COREONE_MIGRATION_BACKUP_SHA:-}" | grep -Eq '^[0-9a-f]{64}$'
+        printf '%s' "$${COREONE_MIGRATION_BACKUP_NAME:-}" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+        test -f /app/data/coreone.db
+        node --experimental-sqlite /app/release/verify-volume-migration.mjs \
+          --backup "/run/coreone-migration/$${COREONE_MIGRATION_BACKUP_NAME}" \
+          --manifest /run/coreone-migration/backup.manifest.json \
+          --database /app/data/coreone.db \
+          --release "$${COREONE_RELEASE_SHA:-}" \
+          --expected-sha "$${COREONE_MIGRATION_BACKUP_SHA:-}" --json
+        chown -R 1000:1000 /app/data
+        test "$$(stat -c '%u:%g' /app/data)" = "1000:1000"
+    volumes:
+      - coreone-data:/app/data
+      - type: bind
+        source: ${COREONE_MIGRATION_BACKUP_FILE:-./.operator-input-required/coreone-backup.db}
+        target: /run/coreone-migration/${COREONE_MIGRATION_BACKUP_NAME:-operator-backup-name-required.db}
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${COREONE_MIGRATION_MANIFEST_FILE:-./.operator-input-required/coreone-backup.manifest.json}
+        target: /run/coreone-migration/backup.manifest.json
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    network_mode: none
+    logging:
+      driver: json-file
+      options:
+        max-size: ${COREONE_LOG_MAX_SIZE:-10m}
+        max-file: "${COREONE_LOG_MAX_FILES:-5}"
+    labels:
+      org.opencontainers.image.revision: ${COREONE_RELEASE_SHA:?COREONE_RELEASE_SHA must be the approved 40-character commit SHA}
+      com.coreone.component: volume-permission-migration
+      com.coreone.operator-gate: r3-volume-migration
 
 networks:
-  coreone-network:
+  edge-network:
     driver: bridge
+  app-network:
+    driver: bridge
+    internal: true
 
 volumes:
   coreone-data:
-    driver: local
+    name: ${COREONE_DATA_VOLUME_NAME:?COREONE_DATA_VOLUME_NAME must identify the operator-approved external volume}
+    external: true
+
+secrets:
+  coreone_jwt:
+    file: ${COREONE_JWT_SECRET_FILE:?COREONE_JWT_SECRET_FILE must reference a readable secret file}
+  coreone_admin_initial:
+    file: ${COREONE_ADMIN_INITIAL_PASSWORD_FILE:-./.operator-input-required/coreone-admin-initial.secret}
