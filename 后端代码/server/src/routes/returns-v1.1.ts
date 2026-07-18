@@ -1,9 +1,23 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
-import { success, successList, error } from '../utils/response.js'
+import { buildSuccessEnvelope, success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { checkedAdd, parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import { checkedAdd, checkedSubtract, parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import {
+  claimIdempotency,
+  finalizeIdempotency,
+  fingerprintRequest,
+  isIdempotencyConflict,
+  readIdempotencyKey,
+  tryReplayIdempotency,
+} from '../utils/idempotency.js'
+import {
+  addBatchStock,
+  consumeBatchStock,
+  InventoryTransactionError,
+  inventoryTransactionError,
+} from '../services/inventory-transactions.js'
 
 const router = Router()
 
@@ -61,7 +75,7 @@ router.get('/', (req, res) => {
 
     successList(res, list.map((r: any) => ({
       id: r.id, returnNo: r.return_no, materialId: r.material_id, materialName: r.material_name,
-      quantity: r.quantity, unit: r.material_unit, reason: r.reason, operator: r.operator,
+      batchId: r.batch_id, quantity: r.quantity, unit: r.material_unit, reason: r.reason, operator: r.operator,
       status: r.status, remark: r.remark, createdAt: r.created_at,
     })), page, pageSize, count)
   } catch (err: any) { error(res, err.message) }
@@ -85,56 +99,73 @@ router.get('/stats', (_req, res) => {
 // 新增退库（物料退回仓库 → 库存 +数量；不设上限、无库存行则新建）
 router.post('/', requireReturnsWrite, (req, res) => {
   try {
-    const { materialId, quantity, reason, operator, remark } = req.body
+    const { materialId, quantity, reason, operator, remark, batchId, batchNo } = req.body
     const qty = parseFinitePositiveNumber(quantity)
     if (!materialId || qty === null || !reason) {
       error(res, 'Missing or invalid fields', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = 'returns:create'
+    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+
     const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
-    const preflightInv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-    const preflightBeforeStock = preflightInv ? parseFiniteNumber(preflightInv.stock) : 0
-    const preflightAfterStock = preflightBeforeStock === null ? null : checkedAdd(preflightBeforeStock, qty)
-    if (preflightBeforeStock === null || preflightAfterStock === null) {
+    // 纯只读预检：事务内 helper 仍是最终事实闸，但有限数溢出不得先开启写事务。
+    const preflightInventory = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
+    const preflightStock = preflightInventory ? parseFiniteNumber(preflightInventory.stock) : 0
+    if (preflightStock === null || checkedAdd(preflightStock, qty) === null) {
       error(res, 'Return quantity exceeds the supported numeric range', 'INVALID_PARAMETER', 400); return
     }
 
+    const id = uuidv4()
+    const normalizedOperator = operator || 'system'
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
+
     db.exec('BEGIN IMMEDIATE')
     try {
-      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-      const beforeStock = inv ? parseFiniteNumber(inv.stock) : 0
-      const afterStock = beforeStock === null ? null : checkedAdd(beforeStock, qty)
-      if (beforeStock === null || afterStock === null) {
-        db.exec('ROLLBACK')
-        error(res, 'Return quantity exceeds the supported numeric range', 'INVALID_PARAMETER', 400)
-        return
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, normalizedOperator)
+      if (batchId && batchNo) {
+        const selectedBatch = db.prepare('SELECT batch_no FROM batches WHERE id = ? AND material_id = ?')
+          .get(batchId, materialId) as any
+        if (!selectedBatch || selectedBatch.batch_no !== batchNo) {
+          throw new InventoryTransactionError('Batch id and batch number do not identify the same batch', 'INVALID_PARAMETER')
+        }
       }
-      const id = uuidv4()
-      db.prepare('INSERT INTO return_records (id, return_no, material_id, quantity, reason, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(id, generateNo(), materialId, qty, reason, operator || 'system', remark || null)
 
-      // 退回仓库 → 库存增加（无库存行则新建，库位取物料默认库位）
-      if (inv) {
-        db.prepare('UPDATE inventory SET stock = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(afterStock, materialId)
-      } else {
-        db.prepare(`
-          INSERT INTO inventory (id, material_id, stock, locked_stock, location_id, update_time)
-          VALUES (?, ?, ?, 0, ?, CURRENT_TIMESTAMP)
-        `).run(uuidv4(), materialId, qty, material.location_id || null)
-      }
+      const batchResult = addBatchStock(db, {
+        materialId,
+        quantity: qty,
+        sourceType: 'return',
+        sourceId: id,
+        batchId: batchId || null,
+        batchNo: batchNo || null,
+        inventory: { locationId: material.location_id || null },
+      })
+      db.prepare('INSERT INTO return_records (id, return_no, material_id, batch_id, quantity, reason, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(id, generateNo(), materialId, batchResult.batchId, qty, reason, normalizedOperator, remark || null)
+
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
         VALUES (?, 'return', ?, ?, ?, ?, ?, 'return', ?)
-      `).run(uuidv4(), materialId, qty, beforeStock, afterStock, id, operator || 'system')
+      `).run(uuidv4(), materialId, qty, batchResult.inventory.before, batchResult.inventory.after, id, normalizedOperator)
 
+      responseEnvelope = buildSuccessEnvelope({ id }, 'Return created')
+      if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
       db.exec('COMMIT')
-      success(res, { id }, 'Return created')
-    } catch (e: any) {
+    } catch (e) {
       db.exec('ROLLBACK')
+      if (idemKey && isIdempotencyConflict(e) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+
+    res.status(200).json(responseEnvelope)
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 // 撤销退库（对称扣回已加的库存；库存不足则拒绝，防负库存）
@@ -142,26 +173,58 @@ router.delete('/:id', requireReturnsWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
-    const record = db.prepare('SELECT * FROM return_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    let record = db.prepare('SELECT * FROM return_records WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!record) { error(res, '记录不存在或已删除', 'NOT_FOUND', 404); return }
+    let qty = parseFinitePositiveNumber(record.quantity)
+    if (qty === null) { error(res, '退库记录数量无效，无法精确撤销', 'LEDGER_DRIFT', 409); return }
+    if (!record.batch_id) {
+      error(res, '该退库记录未保存原批次，无法安全撤销', 'LEDGER_DRIFT', 409); return
+    }
 
     db.exec('BEGIN IMMEDIATE')
     try {
-      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any
-      const beforeStock = inv?.stock ?? 0
-      if (beforeStock < record.quantity) {
+      const lockedRecord = db.prepare('SELECT * FROM return_records WHERE id = ? AND is_deleted = 0').get(id) as any
+      if (!lockedRecord) {
         db.exec('ROLLBACK')
-        error(res, '库存不足，无法撤销退库', 'STOCK_INSUFFICIENT', 422)
+        error(res, 'Return record changed while waiting for the write lock', 'CONCURRENT_MODIFICATION', 409)
         return
       }
-      db.prepare('UPDATE return_records SET is_deleted = 1 WHERE id = ?').run(id)
-      const afterStock = beforeStock - record.quantity
-      db.prepare('UPDATE inventory SET stock = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(afterStock, record.material_id)
+      record = lockedRecord
+      qty = parseFinitePositiveNumber(record.quantity)
+      if (qty === null || !record.batch_id) {
+        db.exec('ROLLBACK')
+        error(res, 'Return record cannot be reversed exactly', 'LEDGER_DRIFT', 409)
+        return
+      }
+      const claimed = db.prepare('UPDATE return_records SET is_deleted = 1 WHERE id = ? AND is_deleted = 0').run(id)
+      if (Number(claimed.changes) !== 1) {
+        db.exec('ROLLBACK')
+        error(res, 'Return record changed while waiting for reversal', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
+      const batch = db.prepare('SELECT quantity, remaining FROM batches WHERE id = ? AND material_id = ?')
+        .get(record.batch_id, record.material_id) as any
+      const batchQuantity = batch ? parseFiniteNumber(batch.quantity) : null
+      const batchRemaining = batch ? parseFiniteNumber(batch.remaining) : null
+      if (batchQuantity === null || batchRemaining === null) {
+        throw new InventoryTransactionError('Original return batch is inconsistent and cannot be reversed')
+      }
+      const batchQuantityAfter = checkedSubtract(batchQuantity, qty)
+      if (batchQuantityAfter === null || batchQuantityAfter < 0 || batchRemaining > batchQuantity) {
+        throw new InventoryTransactionError('Original return batch is inconsistent and cannot be reversed')
+      }
+
+      const batchResult = consumeBatchStock(db, record.material_id, qty, { batchId: record.batch_id })
+      const changedBatch = db.prepare('UPDATE batches SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND material_id = ?')
+        .run(batchQuantityAfter, record.batch_id, record.material_id)
+      if (Number(changedBatch.changes) !== 1) {
+        throw new InventoryTransactionError('Original return batch disappeared during reversal')
+      }
 
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'return_cancel', ?, '撤销退库记录')
-      `).run(uuidv4(), record.material_id, -record.quantity, beforeStock, afterStock, id, req.body?.operator || 'system')
+      `).run(uuidv4(), record.material_id, -qty, batchResult.inventory.before, batchResult.inventory.after, id, req.body?.operator || 'system')
 
       db.exec('COMMIT')
       success(res, null, '退库记录已撤销')
@@ -169,7 +232,11 @@ router.delete('/:id', requireReturnsWrite, (req, res) => {
       db.exec('ROLLBACK')
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 export default router

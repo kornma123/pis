@@ -433,7 +433,7 @@ describe('DATA-2 inbound / purchase-order numeric guards', () => {
   it('inbound quantity edit reuses finite plan values in the stock log', async () => {
     const f = seedFixture('inbound-update-finite-log')
     db.prepare('UPDATE inbound_records SET quantity = ? WHERE id = ?').run(8e307, f.inboundId)
-    db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(Number.MAX_VALUE, f.materialId)
+    db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(8e307, f.materialId)
     db.prepare('UPDATE batches SET quantity = ?, remaining = ? WHERE id = ?').run(8e307, 8e307, f.batchId)
 
     const response = await auth(request(app).put(`/api/v1/inbound/${f.inboundId}`)).send({ quantity: 1 })
@@ -449,7 +449,7 @@ describe('DATA-2 inbound / purchase-order numeric guards', () => {
     expect(Number.isFinite(inventoryStock)).toBe(true)
     expect(Number.isFinite(log.before_stock)).toBe(true)
     expect(Number.isFinite(log.after_stock)).toBe(true)
-    expect(log.before_stock).toBe(Number.MAX_VALUE)
+    expect(log.before_stock).toBe(8e307)
     expect(log.after_stock).toBe(inventoryStock)
   })
 
@@ -568,7 +568,7 @@ describe('DATA-2 outbound numeric guards', () => {
     }), f, before, 422, 'STOCK_INSUFFICIENT')
   })
 
-  it('ordinary outbound rejects duplicate lines that each fit but together exceed the selected first batch', async () => {
+  it('ordinary outbound allocates duplicate lines across all FEFO batches instead of rejecting at the first batch', async () => {
     const f = seedFixture('outbound-first-batch-insufficient', { stock: 10 })
     db.prepare("UPDATE batches SET quantity = 6, remaining = 6, expiry_date = '2026-07-13' WHERE id = ?").run(f.batchId)
     db.prepare(`
@@ -576,7 +576,6 @@ describe('DATA-2 outbound numeric guards', () => {
         (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, supplier_id, expiry_date, status)
       VALUES (?, ?, ?, 4, 4, ?, 10, ?, '2027-07-13', 1)
     `).run(`batch-later-${f.suffix}`, f.materialId, `B-LATER-${f.suffix}`, f.inboundId, f.supplierId)
-    const before = snapshot(f)
     const key = `${f.keyPrefix}first-batch-insufficient`
 
     const response = await auth(request(app).post('/api/v1/outbound'), key).send({
@@ -588,13 +587,16 @@ describe('DATA-2 outbound numeric guards', () => {
       ],
     })
 
-    expect.soft(response.status).toBe(422)
-    expect.soft(response.body?.error?.code).toBe('STOCK_INSUFFICIENT')
+    expect.soft(response.status).toBe(201)
     expect.soft(beginImmediateCalls()).toHaveLength(1)
-    expect.soft(snapshot(f)).toEqual(before)
+    expect.soft((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(f.materialId) as any).stock).toBe(3)
+    expect.soft((db.prepare('SELECT remaining FROM batches WHERE id = ?').get(f.batchId) as any).remaining).toBe(0)
+    expect.soft((db.prepare('SELECT remaining FROM batches WHERE id = ?').get(`batch-later-${f.suffix}`) as any).remaining).toBe(3)
+    expect.soft(rows('SELECT quantity FROM outbound_items WHERE outbound_id = ? ORDER BY rowid', response.body.data.id))
+      .toEqual([{ quantity: 4 }, { quantity: 2 }, { quantity: 1 }])
   })
 
-  it('ordinary outbound rechecks the selected batch after lock acquisition and preserves a concurrent batch drift', async () => {
+  it('ordinary outbound rechecks all FEFO batches after lock acquisition and reallocates around concurrent drift', async () => {
     const f = seedFixture('outbound-first-batch-lock-drift', { stock: 10 })
     db.prepare("UPDATE batches SET quantity = 10, remaining = 10, expiry_date = '2026-07-13' WHERE id = ?").run(f.batchId)
     db.prepare(`
@@ -602,11 +604,6 @@ describe('DATA-2 outbound numeric guards', () => {
         (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, supplier_id, expiry_date, status)
       VALUES (?, ?, ?, 7, 7, ?, 10, ?, '2027-07-13', 1)
     `).run(`batch-later-${f.suffix}`, f.materialId, `B-LATER-${f.suffix}`, f.inboundId, f.supplierId)
-    const before = snapshot(f)
-    const expectedAfterDrift = JSON.parse(JSON.stringify(before)) as Record<string, unknown>
-    const driftedBatch = (expectedAfterDrift.batches as Array<{ id: string; remaining: number }>).find((batch) => batch.id === f.batchId)
-    if (!driftedBatch) throw new Error('seeded batch missing from snapshot')
-    driftedBatch.remaining = 3
     const key = `${f.keyPrefix}first-batch-lock-drift`
     const originalExec = Object.getPrototypeOf(db).exec.bind(db) as (sql: string) => void
     let injected = false
@@ -624,14 +621,20 @@ describe('DATA-2 outbound numeric guards', () => {
         projectId: f.projectId,
         items: [{ materialId: f.materialId, quantity: 7 }],
       })
-      expect.soft(response.status).toBe(422)
-      expect.soft(response.body?.error?.code).toBe('STOCK_INSUFFICIENT')
+      expect.soft(response.status).toBe(201)
+      expect.soft(rows('SELECT batch_id, quantity FROM outbound_items WHERE outbound_id = ? ORDER BY rowid', response.body.data.id))
+        .toEqual([
+          { batch_id: f.batchId, quantity: 3 },
+          { batch_id: `batch-later-${f.suffix}`, quantity: 4 },
+        ])
     } finally {
       execSpy.mockImplementation(originalExec)
       execSpy.mockClear()
     }
 
-    expect(snapshot(f)).toEqual(expectedAfterDrift)
+    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(f.materialId) as any).stock).toBe(3)
+    expect((db.prepare('SELECT remaining FROM batches WHERE id = ?').get(f.batchId) as any).remaining).toBe(0)
+    expect((db.prepare('SELECT remaining FROM batches WHERE id = ?').get(`batch-later-${f.suffix}`) as any).remaining).toBe(3)
   })
 
   it('ordinary outbound rejects a selected batch that became inactive while waiting for the lock', async () => {
@@ -817,7 +820,7 @@ describe('DATA-2 outbound numeric guards', () => {
     }), f, before)
   })
 
-  it('outbound update rejects overflow while restoring an old item before transaction', async () => {
+  it('outbound update rejects an impossible historical restoration before transaction', async () => {
     const f = seedFixture('outbound-update-old-restore-overflow')
     const outboundId = seedOutboundForUpdate(f)
     db.prepare('UPDATE inventory SET stock = ? WHERE material_id = ?').run(1e308, f.materialId)
@@ -827,7 +830,7 @@ describe('DATA-2 outbound numeric guards', () => {
       type: 'project',
       projectId: f.projectId,
       items: [{ materialId: f.materialId, quantity: 1 }],
-    }), f, before)
+    }), f, before, 409, 'LEDGER_DRIFT')
   })
 
   it('outbound update rejects duplicate material whose aggregate exceeds stock after old-item restore', async () => {
@@ -844,18 +847,16 @@ describe('DATA-2 outbound numeric guards', () => {
     }), f, before, 422, 'STOCK_INSUFFICIENT')
   })
 
-  it('outbound update rolls back when the selected first batch remains insufficient after restoring old items', async () => {
+  it('outbound update restores the old allocation then reallocates new lines across FEFO batches', async () => {
     const f = seedFixture('outbound-update-first-batch-insufficient', { stock: 10 })
     const outboundId = seedOutboundForUpdate(f)
-    db.prepare('UPDATE inventory SET stock = 9 WHERE material_id = ?').run(f.materialId)
-    db.prepare("UPDATE batches SET quantity = 3, remaining = 3, expiry_date = '2026-07-13' WHERE id = ?").run(f.batchId)
+    db.prepare('UPDATE inventory SET stock = 10 WHERE material_id = ?').run(f.materialId)
+    db.prepare("UPDATE batches SET quantity = 4, remaining = 3, expiry_date = '2026-07-13' WHERE id = ?").run(f.batchId)
     db.prepare(`
       INSERT INTO batches
         (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, supplier_id, expiry_date, status)
       VALUES (?, ?, ?, 7, 7, ?, 10, ?, '2027-07-13', 1)
     `).run(`batch-later-${f.suffix}`, f.materialId, `B-LATER-${f.suffix}`, f.inboundId, f.supplierId)
-    const before = snapshot(f)
-
     const response = await auth(request(app).put(`/api/v1/outbound/${outboundId}`)).send({
       type: 'project',
       projectId: f.projectId,
@@ -865,10 +866,13 @@ describe('DATA-2 outbound numeric guards', () => {
       ],
     })
 
-    expect.soft(response.status).toBe(422)
-    expect.soft(response.body?.error?.code).toBe('STOCK_INSUFFICIENT')
+    expect.soft(response.status).toBe(200)
     expect.soft(beginImmediateCalls()).toHaveLength(1)
-    expect.soft(snapshot(f)).toEqual(before)
+    expect.soft((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(f.materialId) as any).stock).toBe(4)
+    expect.soft((db.prepare('SELECT remaining FROM batches WHERE id = ?').get(f.batchId) as any).remaining).toBe(0)
+    expect.soft((db.prepare('SELECT remaining FROM batches WHERE id = ?').get(`batch-later-${f.suffix}`) as any).remaining).toBe(4)
+    expect.soft(rows('SELECT quantity FROM outbound_items WHERE outbound_id = ? ORDER BY rowid', outboundId))
+      .toEqual([{ quantity: 4 }, { quantity: 3 }])
   })
 
   it('outbound update applies restore-old then subtract-new plan with accurate stock evidence', async () => {
@@ -997,8 +1001,9 @@ describe('DATA-2 stocktaking / returns / scraps / transfers numeric guards', () 
     }), f, before)
   })
 
-  it('scrap locked plan logs the current stock balance instead of a stale preflight snapshot', async () => {
+  it('scrap locked plan fails closed when the inventory cache drifts before the write lock', async () => {
     const f = seedFixture('scrap-stock-drift', { stock: 10 })
+    const before = snapshot(f)
     const originalExec = Object.getPrototypeOf(db).exec.bind(db) as (sql: string) => void
     execSpy.mockImplementation((sql: string) => {
       if (/^BEGIN\s+IMMEDIATE$/i.test(sql)) {
@@ -1006,24 +1011,24 @@ describe('DATA-2 stocktaking / returns / scraps / transfers numeric guards', () 
       }
       originalExec(sql)
     })
-    let scrapId = ''
-
     try {
       const response = await auth(request(app).post('/api/v1/scraps')).send({
         materialId: f.materialId,
         quantity: 5,
         reason: 'expired',
       })
-      expect(response.status).toBe(200)
-      scrapId = response.body.data.id
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('LEDGER_DRIFT')
     } finally {
       execSpy.mockImplementation(originalExec)
       execSpy.mockClear()
     }
 
-    expect((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(f.materialId) as { stock: number }).stock).toBe(3)
-    expect(rows('SELECT quantity, before_stock, after_stock FROM stock_logs WHERE related_id = ?', scrapId))
-      .toEqual([{ quantity: -5, before_stock: 8, after_stock: 3 }])
+    const after = snapshot(f)
+    expect((after.inventory as Array<{ stock: number }>)[0].stock).toBe(8)
+    expect(after.batches).toEqual(before.batches)
+    expect(after.scraps).toEqual(before.scraps)
+    expect(after.stockLogs).toEqual(before.stockLogs)
   })
 
   it('raw JSON 1e400 transfer quantity is rejected before transfer record/location mutation', async () => {
@@ -1119,7 +1124,7 @@ describe('DATA-2 supplier-return quantity/refund numeric guards', () => {
     `, f.materialId, f.supplierReturnId)).toEqual([{ refund_amount: 5 }])
   })
 
-  it('supplier-return locked recheck preserves a newer stock balance and rolls back when it is insufficient', async () => {
+  it('supplier-return locked recheck fails closed when the inventory cache drifts', async () => {
     const f = seedFixture('supplier-return-stock-drift', { stock: 10 })
     const before = snapshot(f)
     const originalExec = Object.getPrototypeOf(db).exec.bind(db) as (sql: string) => void
@@ -1137,8 +1142,8 @@ describe('DATA-2 supplier-return quantity/refund numeric guards', () => {
         supplierId: f.supplierId,
         reason: 'quality_issue',
       })
-      expect(response.status).toBe(422)
-      expect(response.body?.error?.code).toBe('STOCK_INSUFFICIENT')
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('LEDGER_DRIFT')
     } finally {
       execSpy.mockImplementation(originalExec)
       execSpy.mockClear()
@@ -1146,6 +1151,7 @@ describe('DATA-2 supplier-return quantity/refund numeric guards', () => {
 
     const after = snapshot(f)
     expect((after.inventory as Array<{ stock: number }>)[0].stock).toBe(2)
+    expect(after.batches).toEqual(before.batches)
     expect(after.supplierReturns).toEqual(before.supplierReturns)
     expect(after.stockLogs).toEqual(before.stockLogs)
   })

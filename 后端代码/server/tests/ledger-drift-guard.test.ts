@@ -126,7 +126,7 @@ describe('findLedgerDriftMaterials 对账体检', () => {
   })
 })
 
-describe('出库 HTTP 集成：缺批次绝不静默 0 + 落漂移告警', () => {
+describe('出库 HTTP 集成：全批次事实模型下无 eligible 批次整单拒绝', () => {
   it('LD-I1 正常有批次出库 → unit_cost=批次价，无 ledger_drift 告警', async () => {
     const mat = seed({ stock: 10, batchPrice: 21 })
     const res = await outbound(mat, 4)
@@ -134,20 +134,20 @@ describe('出库 HTTP 集成：缺批次绝不静默 0 + 落漂移告警', () =>
     expect(Number(itemOf(mat).unit_cost)).toBeCloseTo(21, 4)
     expect(driftExceptionCount(mat)).toBe(0)
   })
-  it('LD-I2 漂移出库(有库存无批次·物料基准价8) → unit_cost=8(非0) + 落 1 条 ledger_drift 告警', async () => {
+  it('LD-I2 有库存缓存但无批次事实 → 422，绝不按缓存或价格兜底出库', async () => {
     const mat = seed({ stock: 10, materialPrice: 8, batchPrice: null })
     const res = await outbound(mat, 5)
-    expect(res.body.success).toBe(true)
-    const it = itemOf(mat)
-    expect(Number(it.unit_cost)).toBeCloseTo(8, 4) // 核心不变量：绝不静默 0
-    expect(Number(it.total_cost)).toBeCloseTo(40, 4)
-    expect(it.batch_id).toBeNull()
-    expect(driftExceptionCount(mat)).toBe(1)
+    expect(res.status).toBe(422)
+    expect(res.body.error.code).toBe('STOCK_INSUFFICIENT')
+    expect(itemOf(mat)).toBeUndefined()
+    expect(driftExceptionCount(mat)).toBe(0)
   })
-  it('LD-I3 漂移出库回归旧病：unit_cost 不得为 0（有价格来源时）', async () => {
+  it('LD-I3 物料基准价不构成批次事实，无批次时仍拒绝且零业务副作用', async () => {
     const mat = seed({ stock: 10, materialPrice: 6, batchPrice: null })
-    await outbound(mat, 3)
-    expect(Number(itemOf(mat).unit_cost)).not.toBe(0)
+    const res = await outbound(mat, 3)
+    expect(res.status).toBe(422)
+    expect(itemOf(mat)).toBeUndefined()
+    expect(Number((db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(mat) as any).stock)).toBe(10)
   })
   it('LD-I4 有活跃批次但零价（真赠品）→ unit_cost=0、无 ledger_drift 假告警（对抗复核 D1）', async () => {
     const mat = seed({ stock: 10, batchPrice: 0 }) // 活跃批次 remaining=10、inbound_price=0

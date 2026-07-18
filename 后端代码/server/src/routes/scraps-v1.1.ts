@@ -1,9 +1,23 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
-import { success, successList, error } from '../utils/response.js'
+import { buildSuccessEnvelope, success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { checkedSubtract, parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import { parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import {
+  claimIdempotency,
+  finalizeIdempotency,
+  fingerprintRequest,
+  isIdempotencyConflict,
+  readIdempotencyKey,
+  tryReplayIdempotency,
+} from '../utils/idempotency.js'
+import {
+  consumeBatchStock,
+  InventoryTransactionError,
+  inventoryTransactionError,
+  restoreBatchStock,
+} from '../services/inventory-transactions.js'
 
 const router = Router()
 
@@ -61,7 +75,7 @@ router.get('/', (req, res) => {
 
     successList(res, list.map((r: any) => ({
       id: r.id, scrapNo: r.scrap_no, materialId: r.material_id, materialName: r.material_name,
-      quantity: r.quantity, unit: r.material_unit, reason: r.reason, operator: r.operator,
+      batchId: r.batch_id, quantity: r.quantity, unit: r.material_unit, reason: r.reason, operator: r.operator,
       status: r.status, remark: r.remark, createdAt: r.created_at,
     })), page, pageSize, count)
   } catch (err: any) { error(res, err.message) }
@@ -85,55 +99,61 @@ router.get('/stats', (_req, res) => {
 // 新增报废（物料退出库存 → 库存 −数量；库存不足则拒绝）
 router.post('/', requireScrapsWrite, (req, res) => {
   try {
-    const { materialId, quantity, reason, operator, remark } = req.body
+    const { materialId, quantity, reason, operator, remark, batchId, batchNo } = req.body
     const qty = parseFinitePositiveNumber(quantity)
     if (!materialId || qty === null || !reason) {
       error(res, 'Missing or invalid fields', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = 'scraps:create'
+    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+
     const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
-    const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-    if (!inv || inv.stock < qty) { error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return }
+
+    const id = uuidv4()
+    const normalizedOperator = operator || 'system'
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
 
     db.exec('BEGIN IMMEDIATE')
     try {
-      const lockedInv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-      const beforeStock = lockedInv ? parseFiniteNumber(lockedInv.stock) : null
-      const afterStock = beforeStock === null ? null : checkedSubtract(beforeStock, qty)
-      if (beforeStock === null || afterStock === null) {
-        db.exec('ROLLBACK')
-        error(res, '库存计算超出支持的数值范围', 'INVALID_PARAMETER', 400); return
-      }
-      if (afterStock < 0) {
-        db.exec('ROLLBACK')
-        error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, normalizedOperator)
+      if (batchId && batchNo) {
+        const selectedBatch = db.prepare('SELECT batch_no FROM batches WHERE id = ? AND material_id = ?')
+          .get(batchId, materialId) as any
+        if (!selectedBatch || selectedBatch.batch_no !== batchNo) {
+          throw new InventoryTransactionError('Batch id and batch number do not identify the same batch', 'INVALID_PARAMETER')
+        }
       }
 
-      const id = uuidv4()
-      db.prepare('INSERT INTO scrap_records (id, scrap_no, material_id, quantity, reason, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(id, generateNo(), materialId, qty, reason, operator || 'system', remark || null)
-      db.prepare('UPDATE inventory SET stock = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(afterStock, materialId)
-
-      const afterCheck = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock
-      if (afterCheck < 0) {
-        db.exec('ROLLBACK')
-        error(res, '库存不能为负数', 'STOCK_NEGATIVE', 422)
-        return
-      }
+      const batchResult = consumeBatchStock(db, materialId, qty, { batchId: batchId || null, batchNo: batchNo || null })
+      // 单列 batch_id 只能精确记录单批次；跨批次 FEFO 入账不伪造可逆信息。
+      const reversibleBatchId = batchResult.allocations.length === 1 ? batchResult.allocations[0].batchId : null
+      db.prepare('INSERT INTO scrap_records (id, scrap_no, material_id, batch_id, quantity, reason, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(id, generateNo(), materialId, reversibleBatchId, qty, reason, normalizedOperator, remark || null)
 
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
         VALUES (?, 'scrap', ?, ?, ?, ?, ?, 'scrap', ?)
-      `).run(uuidv4(), materialId, -qty, beforeStock, afterStock, id, operator || 'system')
+      `).run(uuidv4(), materialId, -qty, batchResult.inventory.before, batchResult.inventory.after, id, normalizedOperator)
 
+      responseEnvelope = buildSuccessEnvelope({ id }, 'Scrap created')
+      if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
       db.exec('COMMIT')
-      success(res, { id }, 'Scrap created')
-    } catch (e: any) {
+    } catch (e) {
       db.exec('ROLLBACK')
+      if (idemKey && isIdempotencyConflict(e) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+
+    res.status(200).json(responseEnvelope)
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 // 撤销报废（回滚库存 +数量）
@@ -141,22 +161,41 @@ router.delete('/:id', requireScrapsWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
-    const record = db.prepare('SELECT * FROM scrap_records WHERE id = ? AND is_deleted = 0').get(id) as any
+    let record = db.prepare('SELECT * FROM scrap_records WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!record) { error(res, '记录不存在或已删除', 'NOT_FOUND', 404); return }
+    let qty = parseFinitePositiveNumber(record.quantity)
+    if (qty === null) { error(res, '报废记录数量无效，无法精确撤销', 'LEDGER_DRIFT', 409); return }
+    if (!record.batch_id) {
+      error(res, '该报废记录涉及多个批次或未保存原批次，当前结构无法安全撤销', 'LEDGER_DRIFT', 409); return
+    }
 
     db.exec('BEGIN IMMEDIATE')
     try {
-      db.prepare('UPDATE scrap_records SET is_deleted = 1 WHERE id = ?').run(id)
-
-      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any
-      const beforeStock = inv?.stock || 0
-      const afterStock = beforeStock + record.quantity
-      db.prepare('UPDATE inventory SET stock = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(afterStock, record.material_id)
+      const lockedRecord = db.prepare('SELECT * FROM scrap_records WHERE id = ? AND is_deleted = 0').get(id) as any
+      if (!lockedRecord) {
+        db.exec('ROLLBACK')
+        error(res, 'Scrap record changed while waiting for the write lock', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
+      record = lockedRecord
+      qty = parseFinitePositiveNumber(record.quantity)
+      if (qty === null || !record.batch_id) {
+        db.exec('ROLLBACK')
+        error(res, 'Scrap record cannot be reversed exactly', 'LEDGER_DRIFT', 409)
+        return
+      }
+      const claimed = db.prepare('UPDATE scrap_records SET is_deleted = 1 WHERE id = ? AND is_deleted = 0').run(id)
+      if (Number(claimed.changes) !== 1) {
+        db.exec('ROLLBACK')
+        error(res, 'Scrap record changed while waiting for reversal', 'CONCURRENT_MODIFICATION', 409)
+        return
+      }
+      const inventory = restoreBatchStock(db, record.material_id, [{ batchId: record.batch_id, quantity: qty }])
 
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'scrap_cancel', ?, '撤销报废记录')
-      `).run(uuidv4(), record.material_id, record.quantity, beforeStock, afterStock, id, req.body?.operator || 'system')
+      `).run(uuidv4(), record.material_id, qty, inventory.before, inventory.after, id, req.body?.operator || 'system')
 
       db.exec('COMMIT')
       success(res, null, '报废记录已撤销')
@@ -164,7 +203,11 @@ router.delete('/:id', requireScrapsWrite, (req, res) => {
       db.exec('ROLLBACK')
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const inventoryError = inventoryTransactionError(err)
+    if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 export default router

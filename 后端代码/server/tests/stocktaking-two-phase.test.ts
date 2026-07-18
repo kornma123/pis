@@ -11,7 +11,7 @@
  *   2. 处理差异（POST /:id/adjust）：受控原因(normal/record/physical/other) + 处理说明 → 真正入账
  *      （inventory.stock=实盘 + 写 stock_logs 'adjust'），status→'confirmed'，原因落 remark。
  *      幂等：非 pending 不可重复处理；防过期：入账前账面已变 → 409 不入账。
- *   3. 撤销（DELETE /:id）：仅对**已入账**（status≠'pending' 且差异≠0）回滚库存；pending 从未入账 → 只软删不回滚。
+ *   3. 撤销（DELETE /:id）：pending 从未入账，只软删；已入账差异缺少逐批分配证据，409 fail closed。
  *
  * 批量盘点 POST /batch 本轮**保持一阶段**（创建即入账，见 p1-04-stocktaking-batch.test.ts），不在本次改造范围。
  *
@@ -29,6 +29,12 @@ function seedMaterial(stock: number): string {
   db.prepare(`INSERT INTO materials (id, code, name, unit, category_id, price, status, is_deleted)
     VALUES (?, ?, ?, '瓶', 'CAT', 10, 1, 0)`).run(id, id, id)
   db.prepare(`INSERT INTO inventory (id, material_id, stock) VALUES (?, ?, ?)`).run(`INV-${id}`, id, stock)
+  if (stock > 0) {
+    db.prepare(`
+      INSERT INTO batches (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, status)
+      VALUES (?, ?, ?, ?, ?, ?, 10, 1)
+    `).run(`BATCH-${id}`, id, `BATCH-${id}`, stock, stock, `SOURCE-${id}`)
+  }
   return id
 }
 
@@ -196,7 +202,7 @@ describe('盘点两阶段 · 撤销按是否入账区分', () => {
     expect(recordOf(id).is_deleted).toBe(1)
   })
 
-  it('TP-10: 撤销 confirmed（已入账）→ 回滚库存到账面并写 cancel 流水', async () => {
+  it('TP-10: confirmed 已入账但无批次分配证据 → 409 且零副作用', async () => {
     const mid = seedMaterial(100)
     const { body } = await post('/api/v1/stocktaking', { materialId: mid, actualStock: 90 })
     const id = body.data.id
@@ -204,9 +210,11 @@ describe('盘点两阶段 · 撤销按是否入账区分', () => {
     expect(stockOf(mid)).toBe(90)
 
     const res = await del(`/api/v1/stocktaking/${id}`)
-    expect(res.status).toBe(200)
-    expect(stockOf(mid)).toBe(100) // 回滚到账面
+    expect(res.status).toBe(409)
+    expect(res.body.error.code).toBe('LEDGER_DRIFT')
+    expect(stockOf(mid)).toBe(90)
+    expect(recordOf(id).is_deleted).toBe(0)
     const cancel = db.prepare("SELECT COUNT(*) c FROM stock_logs WHERE related_id = ? AND related_type = 'stocktaking_cancel'").get(id) as any
-    expect(Number(cancel.c)).toBe(1)
+    expect(Number(cancel.c)).toBe(0)
   })
 })
