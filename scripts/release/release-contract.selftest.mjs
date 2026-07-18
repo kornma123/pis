@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict'
 import childProcess, { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { syncBuiltinESMExports } from 'node:module'
 import { isIP } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -157,7 +157,7 @@ if (selftestArgs.length > 0) {
         if (compose.error || compose.status !== 0) {
           throw new Error(compose.error?.message || `docker compose config exited ${compose.status}`)
         }
-        process.stdout.write('release compose config gate: subnet and Compose model passed\n')
+        process.stdout.write('release compose config parse-only: subnet and Compose model parsed; release admission not granted\n')
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
@@ -170,7 +170,7 @@ if (selftestArgs.length > 0) {
 if (selftestArgs.length === 0) {
 process.stdout.write('COREONE local commercial release contract selftest\n')
 
-await check('Compose consumes immutable image IDs and injects secrets by read-only file reference', () => {
+await check('Compose references gate-bound image variables and injects secrets by read-only file reference', () => {
   const compose = read('docker-compose.yml')
   assert.match(compose, /image:\s*\$\{COREONE_BACKEND_IMAGE:\?[^}]+\}/u)
   assert.match(compose, /image:\s*\$\{COREONE_FRONTEND_IMAGE:\?[^}]+\}/u)
@@ -215,8 +215,9 @@ await check('First install and legacy-volume migration are isolated operator pro
   assert.match(compose, /COREONE_MIGRATION_BACKUP_NAME/u)
   assert.match(compose, /target:\s*\/run\/coreone-migration\/\$\{COREONE_MIGRATION_BACKUP_NAME:[^}]+\}[\s\S]*?read_only:\s*true/u)
   assert.match(compose, /target:\s*\/run\/coreone-migration\/backup\.manifest\.json[\s\S]*?read_only:\s*true/u)
-  assert.match(compose, /verify-volume-migration\.mjs/u)
-  assert.match(compose, /chown\s+-R\s+1000:1000\s+\/app\/data/u)
+  assert.match(read('scripts/release/run-volume-migration.mjs'), /verify-volume-migration\.mjs/u)
+  assert.match(compose, /run-volume-migration\.mjs|host-side volume migration runner/u)
+  assert.doesNotMatch(compose, /chown\s+-R\s+1000:1000\s+\/app\/data/u)
   assert.doesNotMatch(compose.match(/backend:[\s\S]*?\n\s{2}frontend:/u)?.[0] || '', /COREONE_ALLOW_DATABASE_CREATE:\s*["']?1/u)
 })
 
@@ -343,7 +344,7 @@ await check('One operator-required subnet binds the internal network to the back
   assert.doesNotMatch(compose, /TRUST_PROXY_CIDRS:\s*(?:0\.0\.0\.0\/0|::\/0)/u)
 })
 
-await check('Compose config gate rejects missing, public, broad, tiny, and host-address subnets', () => {
+await check('Compose parse helper rejects missing, public, broad, tiny, and host-address subnets', () => {
   for (const subnet of ['10.77.0.0/24', '172.20.0.0/16', '192.168.50.0/24']) {
     assert.equal(assertOperatorInternalSubnet(subnet), subnet)
   }
@@ -402,12 +403,20 @@ await check('Deployment guide exposes the local R3 operator gate and canonical r
   assert.match(guide, /PROVISIONING_CONCURRENT_STATE_CONFLICT/u)
   assert.match(guide, /COMMITTED_EVIDENCE_WRITE_FAILED/u)
   assert.match(guide, /operator-r3-first-install/u)
+  assert.match(guide, /compose-release-gate\.mjs/u)
+  assert.match(guide, /run-volume-migration\.mjs/u)
+  assert.match(guide, /裸[^\r\n]*docker compose[^\r\n]*(?:不是|不构成)[^\r\n]*准入|docker compose[^\r\n]*config[^\r\n]*(?:不是|不构成)[^\r\n]*准入/u)
+  assert.match(guide, /PARTIAL_MUTATION_FORWARD_FIX_REQUIRED/u)
   assert.match(guide, /restore-drill\.mjs/u)
   assert.match(guide, /不提供[^\r\n]*--dry-run|--dry-run[^\r\n]*不提供/u)
   assert.doesNotMatch(guide, /八账号|8\s*个历史账号|8\/8|RESET_[A-Z0-9_]+|RESET_PASSWORDS_JSON/u)
 })
 
 const requiredScripts = [
+  'compose-release-gate.mjs',
+  'compose-release-gate.selftest.mjs',
+  'run-volume-migration.mjs',
+  'run-volume-migration.selftest.mjs',
   'build-local-images.mjs',
   'backup-sqlite.mjs',
   'verify-backup.mjs',
@@ -429,6 +438,20 @@ await check('Local image builder binds a clean fixed source to immutable IDs and
   assert.match(builder, /org\.opencontainers\.image\.revision/u)
   assert.match(builder, /sha256:\[0-9a-f\]\{64\}/u)
   assert.match(builder, /build receipt output must stay outside the source repository/u)
+})
+
+await check('Compose admission binds receipt, daemon image identity, labels, and all profiles', () => {
+  const gate = read('scripts/release/compose-release-gate.mjs')
+  const migrationRunner = read('scripts/release/run-volume-migration.mjs')
+  assert.match(gate, /coreone\.local-image-build-receipt\/v1/u)
+  assert.match(gate, /RepoDigests/u)
+  assert.match(gate, /org\.opencontainers\.image\.revision/u)
+  assert.match(gate, /operator-r3-first-install/u)
+  assert.match(gate, /operator-r3-volume-migration/u)
+  assert.match(gate, /sha256:\[0-9a-f\]\{64\}/u)
+  assert.match(migrationRunner, /container[\s\S]*inspect/u)
+  assert.match(migrationRunner, /PARTIAL_MUTATION_FORWARD_FIX_REQUIRED/u)
+  assert.match(migrationRunner, /rollbackAttempted:\s*false/u)
 })
 
 if (requiredScripts.every(name => existsSync(resolve(here, name)))) {
@@ -585,6 +608,7 @@ if (requiredScripts.every(name => existsSync(resolve(here, name)))) {
 
     await check('Volume migration precheck binds the live database to the verified backup release and SHA', () => {
       const verified = parseJson(runScript('verify-volume-migration.mjs', [
+        '--phase', 'pre',
         '--backup', backup.backupPath,
         '--manifest', backup.manifestPath,
         '--database', databasePath,
@@ -593,6 +617,7 @@ if (requiredScripts.every(name => existsSync(resolve(here, name)))) {
         '--json',
       ]), 'volume migration precheck')
       assert.equal(verified.status, 'VOLUME_MIGRATION_PRECHECK_VERIFIED')
+      assert.equal(verified.snapshotOrdinal, 1)
       assert.equal(verified.backupSha256, backup.sha256)
       assert.equal(verified.mutationExecuted, false)
       assert.equal(verified.productionExecutionAuthorized, false)
@@ -601,6 +626,7 @@ if (requiredScripts.every(name => existsSync(resolve(here, name)))) {
       changedLiveDatabase.prepare('INSERT INTO release_probe VALUES (?)').run('changed-after-backup')
       changedLiveDatabase.close()
       const driftedLive = runScript('verify-volume-migration.mjs', [
+        '--phase', 'pre',
         '--backup', backup.backupPath,
         '--manifest', backup.manifestPath,
         '--database', databasePath,
@@ -612,6 +638,7 @@ if (requiredScripts.every(name => existsSync(resolve(here, name)))) {
       assert.match(driftedLive.stderr, /live database snapshot does not match the approved backup/u)
 
       const unbound = runScript('verify-volume-migration.mjs', [
+        '--phase', 'pre',
         '--backup', backup.backupPath,
         '--manifest', backup.manifestPath,
         '--database', databasePath,
@@ -621,6 +648,61 @@ if (requiredScripts.every(name => existsSync(resolve(here, name)))) {
       ])
       assert.notEqual(unbound.status, 0, 'migration precheck accepted an unrelated operator SHA')
       assert.match(unbound.stderr, /operator-approved backup SHA-256 does not match/u)
+
+      const ownership = statSync(backupDir)
+      const post = parseJson(runScript('verify-volume-migration.mjs', [
+        '--phase', 'post',
+        '--backup', backup.backupPath,
+        '--manifest', backup.manifestPath,
+        '--database', backup.backupPath,
+        '--release', releaseA,
+        '--expected-sha', backup.sha256,
+        '--ownership-root', backupDir,
+        '--expected-uid', String(ownership.uid),
+        '--expected-gid', String(ownership.gid),
+        '--json',
+      ]), 'volume migration postcheck')
+      assert.equal(post.status, 'VOLUME_MIGRATION_POSTCHECK_VERIFIED')
+      assert.equal(post.snapshotOrdinal, 2)
+      assert.equal(post.recursiveOwnershipVerified, true)
+
+      const postDriftDirectory = join(sandbox, 'post-precheck-write')
+      mkdirSync(postDriftDirectory)
+      const postDriftDatabase = join(postDriftDirectory, 'live.db')
+      writeFileSync(postDriftDatabase, readFileSync(backup.backupPath))
+      const postDriftWriter = new DatabaseSync(postDriftDatabase)
+      postDriftWriter.prepare('INSERT INTO release_probe VALUES (?)').run('writer-after-precheck')
+      postDriftWriter.close()
+      const postDriftOwnership = statSync(postDriftDirectory)
+      const postDrift = runScript('verify-volume-migration.mjs', [
+        '--phase', 'post',
+        '--backup', backup.backupPath,
+        '--manifest', backup.manifestPath,
+        '--database', postDriftDatabase,
+        '--release', releaseA,
+        '--expected-sha', backup.sha256,
+        '--ownership-root', postDriftDirectory,
+        '--expected-uid', String(postDriftOwnership.uid),
+        '--expected-gid', String(postDriftOwnership.gid),
+        '--json',
+      ])
+      assert.notEqual(postDrift.status, 0, 'postcheck accepted a database write injected after precheck')
+      assert.match(postDrift.stderr, /live database snapshot does not match the approved backup/u)
+
+      const wrongOwnership = runScript('verify-volume-migration.mjs', [
+        '--phase', 'post',
+        '--backup', backup.backupPath,
+        '--manifest', backup.manifestPath,
+        '--database', backup.backupPath,
+        '--release', releaseA,
+        '--expected-sha', backup.sha256,
+        '--ownership-root', backupDir,
+        '--expected-uid', '2147483646',
+        '--expected-gid', '2147483646',
+        '--json',
+      ])
+      assert.notEqual(wrongOwnership.status, 0, 'postcheck accepted recursively wrong ownership')
+      assert.match(wrongOwnership.stderr, /ownership/iu)
     })
 
     await check('Restore drill writes only a new target and preserves data', () => {

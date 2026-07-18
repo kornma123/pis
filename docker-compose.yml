@@ -2,7 +2,7 @@ name: ${COMPOSE_PROJECT_NAME:-coreone}
 
 services:
   backend:
-    image: ${COREONE_BACKEND_IMAGE:?COREONE_BACKEND_IMAGE must be the immutable sha256 image ID from the build receipt}
+    image: ${COREONE_BACKEND_IMAGE:?COREONE_BACKEND_IMAGE must be the receipt-bound sha256 digest admitted by compose-release-gate.mjs}
     pull_policy: never
     init: true
     restart: unless-stopped
@@ -60,7 +60,7 @@ services:
       com.coreone.component: backend
 
   frontend:
-    image: ${COREONE_FRONTEND_IMAGE:?COREONE_FRONTEND_IMAGE must be the immutable sha256 image ID from the build receipt}
+    image: ${COREONE_FRONTEND_IMAGE:?COREONE_FRONTEND_IMAGE must be the receipt-bound sha256 digest admitted by compose-release-gate.mjs}
     pull_policy: never
     init: true
     restart: unless-stopped
@@ -103,7 +103,7 @@ services:
 
   database-init:
     profiles: ["operator-r3-first-install"]
-    image: ${COREONE_BACKEND_IMAGE:?COREONE_BACKEND_IMAGE must be the immutable sha256 image ID from the build receipt}
+    image: ${COREONE_BACKEND_IMAGE:?COREONE_BACKEND_IMAGE must be the receipt-bound sha256 digest admitted by compose-release-gate.mjs}
     pull_policy: never
     init: true
     restart: "no"
@@ -143,7 +143,7 @@ services:
 
   volume-permission-migration:
     profiles: ["operator-r3-volume-migration"]
-    image: ${COREONE_BACKEND_IMAGE:?COREONE_BACKEND_IMAGE must be the immutable sha256 image ID from the build receipt}
+    image: ${COREONE_BACKEND_IMAGE:?COREONE_BACKEND_IMAGE must be the receipt-bound sha256 digest admitted by compose-release-gate.mjs}
     pull_policy: never
     restart: "no"
     user: "0:0"
@@ -167,18 +167,8 @@ services:
       - /bin/sh
       - -euc
       - |
-        test "$${COREONE_VOLUME_MIGRATION_ACK:-}" = "R3_APPROVED_BACKUP_VERIFIED"
-        printf '%s' "$${COREONE_MIGRATION_BACKUP_SHA:-}" | grep -Eq '^[0-9a-f]{64}$'
-        printf '%s' "$${COREONE_MIGRATION_BACKUP_NAME:-}" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
-        test -f /app/data/coreone.db
-        node --experimental-sqlite /app/release/verify-volume-migration.mjs \
-          --backup "/run/coreone-migration/$${COREONE_MIGRATION_BACKUP_NAME}" \
-          --manifest /run/coreone-migration/backup.manifest.json \
-          --database /app/data/coreone.db \
-          --release "$${COREONE_RELEASE_SHA:-}" \
-          --expected-sha "$${COREONE_MIGRATION_BACKUP_SHA:-}" --json
-        chown -R 1000:1000 /app/data
-        test "$$(stat -c '%u:%g' /app/data)" = "1000:1000"
+        printf '%s\n' 'refused: use the host-side volume migration runner scripts/release/run-volume-migration.mjs' >&2
+        exit 64
     volumes:
       - coreone-data:/app/data
       - type: bind
