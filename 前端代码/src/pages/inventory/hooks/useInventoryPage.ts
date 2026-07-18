@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
 import { inventoryApi, outboundApi, scrapApi } from '@/api/inventory'
@@ -21,6 +21,7 @@ type SortDirection = 'asc' | 'desc'
 type QuickFilterType = 'all' | 'low-stock' | 'expiring-soon' | 'expiring-month' | 'expired' | 'out-of-stock'
 
 export function useInventoryPage() {
+  const inventoryRetryPendingRef = useRef(false)
   // ===== URL 参数同步 =====
   const { get, getNumber, setMultiple } = useUrlParams()
 
@@ -112,6 +113,7 @@ export function useInventoryPage() {
   const {
     data,
     loading,
+    error,
     page,
     pageSize,
     total,
@@ -124,6 +126,16 @@ export function useInventoryPage() {
     initialPageSize: urlPageSize,
     deps: [keyword],
   })
+
+  const retryInventory = useCallback(() => {
+    if (inventoryRetryPendingRef.current || loading) return
+    inventoryRetryPendingRef.current = true
+    refresh()
+  }, [loading, refresh])
+
+  useEffect(() => {
+    if (!loading) inventoryRetryPendingRef.current = false
+  }, [loading])
 
   // 同步分页/筛选状态到 URL
   useEffect(() => {
@@ -285,6 +297,12 @@ export function useInventoryPage() {
 
   const clearSelection = () => setSelectedIds(new Set())
 
+  const ensureFreshInventory = () => {
+    if (!error) return true
+    toast.error('库存数据不是最新状态，请刷新成功后再操作')
+    return false
+  }
+
   const handleSearch = () => {
     setPage(1)
   }
@@ -303,6 +321,7 @@ export function useInventoryPage() {
   }
 
   const openOutboundModal = (item: InventoryRow) => {
+    if (!ensureFreshInventory()) return
     const existing = outboundMaterials.find(m => m.materialId === item.materialId)
     if (existing) return
     const newRow = {
@@ -324,6 +343,7 @@ export function useInventoryPage() {
   }
 
   const openBatchOutbound = () => {
+    if (!ensureFreshInventory()) return
     const selectedItems = data.filter(i => selectedIds.has(i.id))
     const newMaterials = selectedItems
       .filter(item => item.stock > 0)
@@ -483,6 +503,7 @@ export function useInventoryPage() {
   }
 
   const confirmOutbound = async () => {
+    if (!ensureFreshInventory()) return
     if (outboundMaterials.length === 0) return
     for (const item of outboundMaterials) {
       if (!item.quantity || item.quantity <= 0) return
@@ -516,6 +537,7 @@ export function useInventoryPage() {
   }
 
   const confirmBatchScrap = async () => {
+    if (!ensureFreshInventory()) return
     const selectedItems = data.filter(i => selectedIds.has(i.id))
     if (selectedItems.length === 0) {
       toast.error('请先选择要报废的物料')
@@ -571,6 +593,7 @@ export function useInventoryPage() {
     // 数据
     data,
     loading,
+    error,
     page,
     pageSize,
     total,
@@ -644,7 +667,7 @@ export function useInventoryPage() {
     setPageSize,
 
     // Actions
-    refresh,
+    refresh: retryInventory,
     handleSort,
     toggleGroup,
     toggleSelectAll,

@@ -1,5 +1,5 @@
 import { Fragment } from 'react'
-import { Search, ArrowUpDown, ArrowUp, ArrowDown, X, Trash2, Upload, ChevronRight } from 'lucide-react'
+import { Search, ArrowUpDown, ArrowUp, ArrowDown, X, Trash2, Upload, ChevronRight, AlertCircle, RefreshCw } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import { StockLevelIndicator } from './StockLevelIndicator'
 import { ExpiryTag } from './ExpiryTag'
@@ -17,6 +17,7 @@ type QuickFilterType = 'all' | 'low-stock' | 'expiring-soon' | 'expiring-month' 
 interface Props {
   data: InventoryRow[]
   loading: boolean
+  error: string | null
   total: number
   page: number
   pageSize: number
@@ -54,6 +55,7 @@ interface Props {
   onPageSizeChange: (s: number) => void
   onBatchOutbound: () => void
   onBatchScrap: () => void
+  onRetry: () => void
 }
 
 function getStatusInfo(item: InventoryRow) {
@@ -79,6 +81,7 @@ function getStatusInfo(item: InventoryRow) {
 export function InventoryTable({
   data,
   loading,
+  error,
   total,
   page,
   pageSize,
@@ -109,6 +112,7 @@ export function InventoryTable({
   onPageSizeChange,
   onBatchOutbound,
   onBatchScrap,
+  onRetry,
 }: Props) {
   const sortedData = [...data]
   if (sortField) {
@@ -234,6 +238,25 @@ export function InventoryTable({
           </div>
         </div>
 
+        {error && sortedData.length > 0 && (
+          <div role="alert" className="flex items-center gap-3 border-b border-amber-200 bg-amber-50 px-5 py-3 text-amber-900">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">当前显示的是上次成功加载的数据</div>
+              <div className="text-xs text-amber-700">库存数据刷新失败，请重试以获取最新数据。</div>
+            </div>
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              重新加载
+            </button>
+          </div>
+        )}
+
         {/* 批量操作栏 */}
         {selectedIds.size > 0 && (
           <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
@@ -243,14 +266,16 @@ export function InventoryTable({
             <div className="flex items-center gap-2">
               <button
                 onClick={onBatchOutbound}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-white hover:shadow-sm rounded-md transition-all duration-150 ease"
+                disabled={Boolean(error)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-white hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 rounded-md transition-all duration-150 ease"
               >
                 <Upload className="w-3.5 h-3.5" />
                 批量出库
               </button>
               <button
                 onClick={onBatchScrap}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-white hover:shadow-sm rounded-md transition-all duration-150 ease"
+                disabled={Boolean(error)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-white hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 rounded-md transition-all duration-150 ease"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 批量报废
@@ -276,6 +301,7 @@ export function InventoryTable({
                     type="checkbox"
                     checked={selectedIds.size === sortedData.length && sortedData.length > 0}
                     onChange={onToggleSelectAll}
+                    disabled={Boolean(error)}
                     className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
                   />
                 </th>
@@ -313,6 +339,24 @@ export function InventoryTable({
                     <div className="flex items-center justify-center gap-2">
                       <div className="w-5 h-5 border-2 border-gray-200 border-t-[#3b82f6] rounded-full animate-spin" />
                       加载中...
+                    </div>
+                  </td>
+                </tr>
+              ) : error && sortedData.length === 0 ? (
+                <tr>
+                  <td colSpan={8}>
+                    <div role="alert" className="flex flex-col items-center justify-center py-16">
+                      <AlertCircle className="mb-4 h-16 w-16 text-red-300" strokeWidth={1.5} />
+                      <div className="mb-1 text-base font-medium text-gray-900">库存数据没能加载</div>
+                      <div className="mb-4 text-sm text-gray-500">请检查网络连接后重试。</div>
+                      <button
+                        type="button"
+                        onClick={onRetry}
+                        className="inline-flex items-center gap-2 rounded-md bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        重试
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -359,6 +403,7 @@ export function InventoryTable({
                             type="checkbox"
                             className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
                             onChange={(e) => e.stopPropagation()}
+                            disabled={Boolean(error)}
                           />
                         </td>
                         <td className="px-4 py-3">
@@ -387,7 +432,7 @@ export function InventoryTable({
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button onClick={(e) => { e.stopPropagation(); onDetail(first!) }} className="text-sm text-gray-600 hover:text-gray-900 transition-colors">详情</button>
-                            <button onClick={(e) => { e.stopPropagation(); onOutbound(first!) }} className="text-sm text-blue-500 hover:text-blue-600 transition-colors">出库</button>
+                            <button disabled={Boolean(error)} onClick={(e) => { e.stopPropagation(); onOutbound(first!) }} className="text-sm text-blue-500 hover:text-blue-600 disabled:cursor-not-allowed disabled:text-gray-300 transition-colors">出库</button>
                           </div>
                         </td>
                       </tr>
@@ -404,6 +449,7 @@ export function InventoryTable({
                                 type="checkbox"
                                 checked={isSelected}
                                 onChange={() => onToggleSelectOne(row.id)}
+                                disabled={Boolean(error)}
                                 className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
                               />
                             </td>
@@ -429,7 +475,7 @@ export function InventoryTable({
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
                                 <button onClick={() => onDetail(row)} className="text-sm text-gray-600 hover:text-gray-900 transition-colors">详情</button>
-                                <button onClick={() => onOutbound(row)} className="text-sm text-blue-500 hover:text-blue-600 transition-colors">出库</button>
+                                <button disabled={Boolean(error)} onClick={() => onOutbound(row)} className="text-sm text-blue-500 hover:text-blue-600 disabled:cursor-not-allowed disabled:text-gray-300 transition-colors">出库</button>
                               </div>
                             </td>
                           </tr>
