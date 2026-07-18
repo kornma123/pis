@@ -11,7 +11,6 @@ declare module 'node:sqlite' {
     close(): void
     exec(sql: string): void
     prepare(sql: string): StatementSync
-    transaction<T extends unknown[]>(fn: (...args: T) => unknown): (...args: T) => unknown
   }
 
   export interface StatementSync {

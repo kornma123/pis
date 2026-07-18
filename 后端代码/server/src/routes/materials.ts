@@ -125,6 +125,33 @@ function generateMaterialCode(db: any, categoryId: string): string {
   return `${prefix}-${String(num).padStart(5, '0')}`
 }
 
+function runImmediateTransaction<T>(db: any, action: () => T): T {
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const result = action()
+    db.exec('COMMIT')
+    return result
+  } catch (err) {
+    try { db.exec('ROLLBACK') } catch { /* preserve the original SQLite error */ }
+    throw err
+  }
+}
+
+function updateMaterialStatusesAtomically(db: any, ids: string[], newStatus: number): number {
+  const stmt = db.prepare('UPDATE materials SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0')
+  return runImmediateTransaction(db, () => {
+    let updatedCount = 0
+    for (const id of ids) {
+      const existing = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(id)
+      if (existing) {
+        stmt.run(newStatus, id)
+        updatedCount++
+      }
+    }
+    return updatedCount
+  })
+}
+
 router.post('/', requireMaterialWrite, (req, res) => {
   try {
     const { name, spec, unit, specQty, specUnit, categoryId, supplierId, price, minStock, maxStock, safetyStock, locationId, remark, code: userCode } = req.body
@@ -149,14 +176,16 @@ router.post('/', requireMaterialWrite, (req, res) => {
       finalCode = generateMaterialCode(db, categoryId)
     }
 
-    db.prepare(`
-      INSERT INTO materials (id, code, name, spec, unit, spec_qty, spec_unit, category_id, supplier_id, price, min_stock, max_stock, safety_stock, location_id, status, remark)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-    `).run(id, finalCode, name, spec || null, unit, specQty || 0, specUnit || null, categoryId, supplierId || null, normalizedPrice, minStock || 0, maxStock || 999999, safetyStock || 0, locationId || null, remark || null)
-
     const invId = uuidv4()
-    db.prepare(`INSERT INTO inventory (id, material_id, stock, locked_stock, location_id) VALUES (?, ?, 0, 0, ?)`)
-      .run(invId, id, locationId || null)
+    runImmediateTransaction(db, () => {
+      db.prepare(`
+        INSERT INTO materials (id, code, name, spec, unit, spec_qty, spec_unit, category_id, supplier_id, price, min_stock, max_stock, safety_stock, location_id, status, remark)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+      `).run(id, finalCode, name, spec || null, unit, specQty || 0, specUnit || null, categoryId, supplierId || null, normalizedPrice, minStock || 0, maxStock || 999999, safetyStock || 0, locationId || null, remark || null)
+
+      db.prepare(`INSERT INTO inventory (id, material_id, stock, locked_stock, location_id) VALUES (?, ?, 0, 0, ?)`)
+        .run(invId, id, locationId || null)
+    })
 
     success(res, { id, code: finalCode, name }, 'Created', 201)
   } catch (err: any) {
@@ -237,19 +266,8 @@ router.patch('/batch-status', requireMaterialWrite, (req, res) => {
     }
 
     const db = getDatabase()
-    const stmt = db.prepare('UPDATE materials SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0')
     const newStatus = status === 'active' ? 1 : 0
-    let updatedCount = 0
-    const transaction = db.transaction((idList: string[]) => {
-      for (const id of idList) {
-        const existing = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(id)
-        if (existing) {
-          stmt.run(newStatus, id)
-          updatedCount++
-        }
-      }
-    })
-    transaction(ids)
+    const updatedCount = updateMaterialStatusesAtomically(db, ids, newStatus)
 
     if (updatedCount === 0) {
       error(res, 'No valid materials found', 'NOT_FOUND', 404); return
