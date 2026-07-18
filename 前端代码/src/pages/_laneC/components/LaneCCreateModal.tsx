@@ -8,6 +8,7 @@ interface Props {
   setForm: (updater: LaneCForm | ((prev: LaneCForm) => LaneCForm)) => void
   materials: Material[]
   locations: Location[]
+  blockedReason: string | null
   submitting: boolean
   onClose: () => void
   onSubmit: () => void
@@ -17,7 +18,7 @@ const label = 'block text-sm font-medium text-gray-700 mb-1'
 const control = 'w-full h-10 px-3 bg-white text-gray-900 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500'
 const req = <span className="text-red-500">*</span>
 
-export default function LaneCCreateModal({ open, config, form, setForm, materials, locations, submitting, onClose, onSubmit }: Props) {
+export default function LaneCCreateModal({ open, config, form, setForm, materials, locations, blockedReason, submitting, onClose, onSubmit }: Props) {
   if (!open) return null
   const set = (patch: Partial<LaneCForm>) => setForm(prev => ({ ...prev, ...patch }))
   const isTransfer = config.createMode === 'transfer'
@@ -29,9 +30,15 @@ export default function LaneCCreateModal({ open, config, form, setForm, material
           <span>{config.note}</span>
         </div>
 
+        {blockedReason && (
+          <div role="alert" aria-label={`${config.noun}登记状态`} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {blockedReason}
+          </div>
+        )}
+
         <div>
           <label className={label}>物料 {req}</label>
-          <select value={form.materialId} onChange={e => set({ materialId: e.target.value })} className={control}>
+          <select value={form.materialId} onChange={e => set({ materialId: e.target.value })} disabled={!!blockedReason} className={`${control} disabled:bg-gray-100 disabled:cursor-not-allowed`}>
             <option value="">请选择</option>
             {materials.map(m => (
               <option key={m.id} value={m.id}>{m.name}（{m.code}）· 库存 {m.stock} {m.unit}</option>
@@ -66,14 +73,14 @@ export default function LaneCCreateModal({ open, config, form, setForm, material
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={label}>来源库位 {req}</label>
-              <select value={form.fromLocationId} onChange={e => set({ fromLocationId: e.target.value })} className={control}>
+              <select value={form.fromLocationId} onChange={e => set({ fromLocationId: e.target.value })} disabled={!!blockedReason} className={`${control} disabled:bg-gray-100 disabled:cursor-not-allowed`}>
                 <option value="">请选择</option>
                 {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
             </div>
             <div>
               <label className={label}>目标库位 {req}</label>
-              <select value={form.toLocationId} onChange={e => set({ toLocationId: e.target.value })} className={control}>
+              <select value={form.toLocationId} onChange={e => set({ toLocationId: e.target.value })} disabled={!!blockedReason} className={`${control} disabled:bg-gray-100 disabled:cursor-not-allowed`}>
                 <option value="">请选择</option>
                 {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
@@ -92,7 +99,7 @@ export default function LaneCCreateModal({ open, config, form, setForm, material
         <button onClick={onClose} className="px-4 h-10 text-sm text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">取消</button>
         <button
           onClick={onSubmit}
-          disabled={submitting}
+          disabled={submitting || !!blockedReason}
           className={`px-4 h-10 text-sm text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${config.createTone === 'red' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}`}
         >
           {submitting ? '提交中...' : `确认${config.noun}`}
