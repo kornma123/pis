@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error, buildSuccessEnvelope } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { requireTrustedRequestActor, withoutUntrustedActorFields } from '../security/trusted-request-actor.js'
 import {
   readIdempotencyKey,
   fingerprintRequest,
@@ -476,6 +477,8 @@ router.get('/:id/check-deletable', (req, res) => {
 })
 
 router.post('/', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { type, materialId, batchNo, quantity, price, supplierId, locationId, purchaseOrderId, productionDate, expiryDate, remark } = req.body
     if (!type || !materialId || quantity === undefined || !locationId) {
@@ -497,12 +500,12 @@ router.post('/', requireWriteAccess, (req, res) => {
     const db = getDatabase()
     const idemKey = readIdempotencyKey(req)
     const idemScope = 'inbound:create'
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
     if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
 
     const inboundNo = generateInboundNo()
     const id = uuidv4()
-    const operator = req.body.operator || 'system'
+    const operator = actor.username
 
     const material = db.prepare('SELECT unit FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, 'Material not found', 'NOT_FOUND', 404); return }
@@ -575,6 +578,8 @@ router.post('/', requireWriteAccess, (req, res) => {
 })
 
 router.put('/:id', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const { batchNo, quantity, price, supplierId, locationId, productionDate, expiryDate, remark, status } = req.body
@@ -879,7 +884,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         transactionPlan.log.beforeStock,
         conservedInventory?.after ?? transactionPlan.log.afterStock,
         id,
-        req.body.operator || 'system',
+        actor.username,
         transactionPlan.log.remark,
       )
 
@@ -901,6 +906,8 @@ router.put('/:id', requireWriteAccess, (req, res) => {
 })
 
 router.delete('/:id', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const db = getDatabase()
@@ -1005,7 +1012,7 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'delete', ?, ?, ?, ?, ?, 'inbound_delete', ?, '删除入库记录')
-      `).run(logId, record.material_id, record.quantity, totalInboundAfter + record.quantity, totalInboundAfter, id, req.body.operator || 'system')
+      `).run(logId, record.material_id, record.quantity, totalInboundAfter + record.quantity, totalInboundAfter, id, actor.username)
 
       db.exec('COMMIT')
     } catch (err) {
@@ -1022,6 +1029,8 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
 })
 
 router.post('/:id/cancel', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const { reason } = req.body
@@ -1117,7 +1126,7 @@ router.post('/:id/cancel', requireWriteAccess, (req, res) => {
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'inbound_cancel', ?, '取消入库记录')
-      `).run(logId, record.material_id, -record.quantity, currentStock + record.quantity, currentStock, id, req.body.operator || 'system')
+      `).run(logId, record.material_id, -record.quantity, currentStock + record.quantity, currentStock, id, actor.username)
 
       db.exec('COMMIT')
       success(res, null, '取消成功，库存已同步扣减')

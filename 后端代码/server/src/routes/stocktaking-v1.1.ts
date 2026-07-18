@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { buildSuccessEnvelope, success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { requireTrustedRequestActor, withoutUntrustedActorFields } from '../security/trusted-request-actor.js'
 import { checkedSubtract, parseFiniteNonNegativeNumber, parseFiniteNumber } from '../utils/numeric-input.js'
 import {
   claimIdempotency,
@@ -56,15 +57,17 @@ router.get('/', (req, res) => {
 })
 
 router.post('/', requireStocktakingWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
-    const { materialId, actualStock, operator, remark } = req.body
+    const { materialId, actualStock, remark } = req.body
     if (!materialId || actualStock === undefined) { error(res, 'Missing fields', 'INVALID_PARAMETER', 400); return }
     const normalizedActualStock = parseFiniteNonNegativeNumber(actualStock)
     if (normalizedActualStock === null) { error(res, 'Invalid actual stock', 'INVALID_PARAMETER', 400); return }
     const db = getDatabase()
     const idemKey = readIdempotencyKey(req)
     const idemScope = 'stocktaking:create'
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
     if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     const material = db.prepare('SELECT 1 FROM materials WHERE id = ? AND is_deleted = 0').get(materialId)
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
@@ -91,7 +94,7 @@ router.post('/', requireStocktakingWrite, (req, res) => {
     }
 
     const id = uuidv4()
-    const op = operator || 'system'
+    const op = actor.username
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
     db.exec('BEGIN IMMEDIATE')
     try {
@@ -143,10 +146,12 @@ const ADJUST_REASONS: Record<string, string> = {
  * - 操作人以登录用户(req.user)为准，忽略 body 伪造；成功写操作由全局 auditWrite 统一留痕 operation_logs。
  */
 router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const { reason, remark } = req.body
-    const operator = (req as any).user?.username || 'system'
+    const operator = actor.username
     // 用 own-property 校验做白名单，避免 constructor/toString 等原型链键绕过 `if (!label)`（原型污染式脏原因）。
     // 用 Object.prototype.hasOwnProperty.call（而非 Object.hasOwn）以免依赖 ES2022 运行时/lib。
     const hasReason = Object.prototype.hasOwnProperty.call(ADJUST_REASONS, reason)
@@ -156,7 +161,7 @@ router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
     const db = getDatabase()
     const idemKey = readIdempotencyKey(req)
     const idemScope = `stocktaking:adjust:${id}`
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
     if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
     db.exec('BEGIN IMMEDIATE')
@@ -218,8 +223,10 @@ router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
  * body: { items: [{ materialId, actualStock, remark? }], operator?, remark? }
  */
 router.post('/batch', requireStocktakingWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
-    const { items, operator, remark } = req.body
+    const { items, remark } = req.body
     if (!Array.isArray(items) || items.length === 0) {
       error(res, '盘点明细不能为空', 'INVALID_PARAMETER', 400); return
     }
@@ -247,7 +254,7 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
     const db = getDatabase()
     const idemKey = readIdempotencyKey(req)
     const idemScope = 'stocktaking:batch'
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
     if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     for (let i = 0; i < normalizedItems.length; i++) {
       const { materialId } = normalizedItems[i]
@@ -275,7 +282,7 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
 
     // ── 全行合法，单事务内创建（all-or-nothing）──
     const sheetNo = generateSheetNo()
-    const op = operator || 'system'
+    const op = actor.username
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
     db.exec('BEGIN IMMEDIATE')
     try {
@@ -320,6 +327,8 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
 })
 
 router.delete('/:id', requireStocktakingWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const db = getDatabase()

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { buildSuccessEnvelope, success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { requireTrustedRequestActor, withoutUntrustedActorFields } from '../security/trusted-request-actor.js'
 import { parseFinitePositiveNumber } from '../utils/numeric-input.js'
 import {
   claimIdempotency,
@@ -98,8 +99,10 @@ router.get('/stats', (_req, res) => {
 
 // 新增报废（物料退出库存 → 库存 −数量；库存不足则拒绝）
 router.post('/', requireScrapsWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
-    const { materialId, quantity, reason, operator, remark, batchId, batchNo } = req.body
+    const { materialId, quantity, reason, remark, batchId, batchNo } = req.body
     const qty = parseFinitePositiveNumber(quantity)
     if (!materialId || qty === null || !reason) {
       error(res, 'Missing or invalid fields', 'INVALID_PARAMETER', 400); return
@@ -107,14 +110,14 @@ router.post('/', requireScrapsWrite, (req, res) => {
     const db = getDatabase()
     const idemKey = readIdempotencyKey(req)
     const idemScope = 'scraps:create'
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
     if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
 
     const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
 
     const id = uuidv4()
-    const normalizedOperator = operator || 'system'
+    const normalizedOperator = actor.username
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
 
     db.exec('BEGIN IMMEDIATE')
@@ -158,6 +161,8 @@ router.post('/', requireScrapsWrite, (req, res) => {
 
 // 撤销报废（回滚库存 +数量）
 router.delete('/:id', requireScrapsWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const db = getDatabase()
@@ -195,7 +200,7 @@ router.delete('/:id', requireScrapsWrite, (req, res) => {
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'scrap_cancel', ?, '撤销报废记录')
-      `).run(uuidv4(), record.material_id, qty, inventory.before, inventory.after, id, req.body?.operator || 'system')
+      `).run(uuidv4(), record.material_id, qty, inventory.before, inventory.after, id, actor.username)
 
       db.exec('COMMIT')
       success(res, null, '报废记录已撤销')

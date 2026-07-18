@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { buildSuccessEnvelope, success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { requireTrustedRequestActor, withoutUntrustedActorFields } from '../security/trusted-request-actor.js'
 import { checkedMultiply, parseFiniteNonNegativeNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
 import {
   claimIdempotency,
@@ -178,8 +179,10 @@ router.get('/:id', (req, res) => {
 
 // 创建退货记录
 router.post('/', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
-    const { materialId, batchId, batchNo, quantity, supplierId, purchaseOrderId, inboundRecordId, reason, refundAmount, trackingNo, operator, remark } = req.body
+    const { materialId, batchId, batchNo, quantity, supplierId, purchaseOrderId, inboundRecordId, reason, refundAmount, trackingNo, remark } = req.body
     const normalizedQuantity = parseFinitePositiveNumber(quantity)
     if (!materialId || normalizedQuantity === null || !reason) {
       error(res, '物料、数量和退货原因必填', 'INVALID_PARAMETER', 400); return
@@ -196,7 +199,7 @@ router.post('/', requireWriteAccess, (req, res) => {
     const db = getDatabase()
     const idemKey = readIdempotencyKey(req)
     const idemScope = 'supplier-return:create'
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
     if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
     const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
     if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
@@ -215,7 +218,7 @@ router.post('/', requireWriteAccess, (req, res) => {
 
     const id = uuidv4()
     const returnNo = generateNo()
-    const op = operator || 'system'
+    const op = actor.username
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
     db.exec('BEGIN IMMEDIATE')
     try {
@@ -307,6 +310,8 @@ router.post('/', requireWriteAccess, (req, res) => {
 
 // 更新状态
 router.put('/:id/status', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { status } = req.body
     const validStatuses = ['pending', 'shipped', 'received', 'refunded', 'cancelled']
@@ -376,7 +381,7 @@ router.put('/:id/status', requireWriteAccess, (req, res) => {
           inventorySnapshot.before,
           inventorySnapshot.after,
           req.params.id,
-          req.body.operator || 'system',
+          actor.username,
           '取消退货给供应商',
         )
       }
@@ -401,6 +406,8 @@ router.put('/:id/status', requireWriteAccess, (req, res) => {
 // - 修正写一条 operation_logs 审计留痕（旧值→新值）。
 // 注：refunded 应付贷项过账因 master 无应付/财务台账表而 deferred（见交付 modelNote）。
 router.put('/:id/refund-amount', requireWriteAccess, (req: any, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { refundAmount } = req.body
     const refund = parseFiniteNonNegativeNumber(refundAmount)
@@ -464,8 +471,8 @@ router.put('/:id/refund-amount', requireWriteAccess, (req: any, res) => {
         VALUES (?, ?, ?, 'supplier_return_refund_amount', ?, ?)
       `).run(
         uuidv4(),
-        req.user?.userId || null,
-        req.user?.username || 'system',
+        actor.userId,
+        actor.username,
         `修正退货单 ${lockedRecord.return_no} 退款额：${oldRefund} → ${refund}`,
         JSON.stringify({ returnId: req.params.id, oldRefund, newRefund: refund })
       )
@@ -481,6 +488,8 @@ router.put('/:id/refund-amount', requireWriteAccess, (req: any, res) => {
 
 // 删除（仅 pending 状态可删除，恢复库存）
 router.delete('/:id', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const db = getDatabase()
     let record = db.prepare('SELECT * FROM supplier_returns WHERE id = ? AND is_deleted = 0').get(req.params.id) as any
@@ -535,7 +544,7 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'supplier_return_cancel', ?, ?)
-      `).run(logId, record.material_id, normalizedQuantity, inventorySnapshot.before, inventorySnapshot.after, req.params.id, req.body.operator || 'system', '撤销退货给供应商')
+      `).run(logId, record.material_id, normalizedQuantity, inventorySnapshot.before, inventorySnapshot.after, req.params.id, actor.username, '撤销退货给供应商')
 
       db.exec('COMMIT')
       success(res, null, '退货记录已删除')

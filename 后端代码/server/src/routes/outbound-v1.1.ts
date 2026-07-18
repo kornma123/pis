@@ -14,6 +14,7 @@ import { recordCostException } from '../utils/cost-exceptions.js'
 import { resolveOutboundUnitCost } from '../utils/outbound-cost.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { recordOverride } from '../utils/override-log.js'
+import { requireTrustedRequestActor, withoutUntrustedActorFields } from '../security/trusted-request-actor.js'
 import {
   consumeBatchStock,
   inventoryTransactionError,
@@ -376,6 +377,8 @@ router.get('/stats', (req, res) => {
 })
 
 router.post('/', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { type, projectId, items, remark } = req.body
     if (!isLiveOutboundType(type) || !Array.isArray(items) || items.length === 0) {
@@ -407,12 +410,12 @@ router.post('/', requireWriteAccess, (req, res) => {
     const db = getDatabase()
     const idemKey = readIdempotencyKey(req)
     const idemScope = 'outbound:create'
-    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    const idemFingerprint = idemKey ? fingerprintRequest(withoutUntrustedActorFields(req.body)) : ''
     if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
 
     const outboundNo = generateOutboundNo()
     const id = uuidv4()
-    const operator = req.body.operator || 'system'
+    const operator = actor.username
     let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
 
     // 锁前预演用于零副作用快速拒绝；锁内仍重新预演并由 helper 执行真实分配。
@@ -542,6 +545,8 @@ router.post('/', requireWriteAccess, (req, res) => {
 })
 
 router.put('/:id', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const { type, projectId, items: newItems, remark } = req.body
@@ -592,7 +597,7 @@ router.put('/:id', requireWriteAccess, (req, res) => {
 
     const materialUnits = db.prepare('SELECT id, unit FROM materials WHERE id IN (' + normalizedNewItems.map(() => '?').join(',') + ')').all(...normalizedNewItems.map((i: any) => i.materialId)) as any[]
     const unitMap = new Map(materialUnits.map((m: any) => [m.id, m.unit]))
-    const operator = req.body.operator || 'system'
+    const operator = actor.username
 
     db.exec('BEGIN IMMEDIATE')
     try {
@@ -741,6 +746,8 @@ router.put('/:id', requireWriteAccess, (req, res) => {
 })
 
 router.delete('/:id', requireWriteAccess, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const db = getDatabase()
@@ -816,7 +823,7 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
           restoration.before,
           restoration.after,
           id,
-          req.body.operator || 'system',
+          actor.username,
         )
       }
 
