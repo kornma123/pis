@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict'
-import { spawn, spawnSync } from 'node:child_process'
+import childProcess, { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
+import { isIP } from 'node:net'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -72,6 +74,100 @@ function parseJson(result, label) {
   return JSON.parse(result.stdout.trim())
 }
 
+function assertOperatorInternalSubnet(value) {
+  if (typeof value !== 'string' || value !== value.trim()) {
+    throw new Error('COREONE_INTERNAL_SUBNET is required without surrounding whitespace')
+  }
+  const match = /^(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})$/u.exec(value)
+  if (!match || isIP(match[1]) !== 4) {
+    throw new Error('COREONE_INTERNAL_SUBNET must be one IPv4 CIDR')
+  }
+
+  const octets = match[1].split('.').map(Number)
+  const prefix = Number(match[2])
+  const privatePrefix = octets[0] === 10
+    ? 8
+    : octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31
+      ? 12
+      : octets[0] === 192 && octets[1] === 168
+        ? 16
+        : null
+  if (privatePrefix === null || prefix < privatePrefix || prefix > 29) {
+    throw new Error('COREONE_INTERNAL_SUBNET must be a bounded RFC1918 network with at least six usable addresses')
+  }
+
+  const numericAddress = octets.reduce(
+    (result, octet) => (result << 8n) | BigInt(octet),
+    0n,
+  )
+  const hostBits = 32 - prefix
+  const hostMask = (1n << BigInt(hostBits)) - 1n
+  if ((numericAddress & hostMask) !== 0n) {
+    throw new Error('COREONE_INTERNAL_SUBNET must use the network address, not a host address')
+  }
+  return value
+}
+
+async function runIntegratedLauncherSmoke() {
+  const originalFetch = globalThis.fetch
+  const originalSpawn = childProcess.spawn
+  childProcess.spawn = (program, args, options = {}) => originalSpawn(program, args, {
+    ...options,
+    env: {
+      ...options.env,
+      TRUST_PROXY_HOPS: '1',
+      TRUST_PROXY_CIDRS: '127.0.0.0/8,::1/128',
+    },
+  })
+  globalThis.fetch = (input, init = {}) => {
+    const target = typeof input === 'string' || input instanceof URL ? String(input) : input.url
+    if (!target.includes('/api/v1/auth/login')) return originalFetch(input, init)
+    const headers = new Headers(init.headers)
+    headers.set('X-Forwarded-For', '127.0.0.1')
+    return originalFetch(input, { ...init, headers })
+  }
+  syncBuiltinESMExports()
+  try {
+    await import(`./launcher-smoke.selftest.mjs?integrated=${Date.now()}`)
+  } finally {
+    childProcess.spawn = originalSpawn
+    globalThis.fetch = originalFetch
+    syncBuiltinESMExports()
+  }
+}
+
+const selftestArgs = process.argv.slice(2)
+if (selftestArgs.length > 0) {
+  if (selftestArgs.length !== 1 || !['--compose-config', '--launcher-smoke'].includes(selftestArgs[0])) {
+    process.stderr.write('release contract selftest accepts only --compose-config or --launcher-smoke\n')
+    process.exitCode = 2
+  } else {
+    try {
+      if (selftestArgs[0] === '--launcher-smoke') {
+        await runIntegratedLauncherSmoke()
+        process.stdout.write('release launcher integration smoke: trusted single-hop login and health passed\n')
+      } else {
+        assertOperatorInternalSubnet(process.env.COREONE_INTERNAL_SUBNET)
+        const compose = spawnSync('docker', ['compose', 'config', '--quiet'], {
+          cwd: root,
+          env: process.env,
+          stdio: 'inherit',
+          windowsHide: true,
+        })
+        if (compose.error || compose.status !== 0) {
+          throw new Error(compose.error?.message || `docker compose config exited ${compose.status}`)
+        }
+        process.stdout.write('release compose config gate: subnet and Compose model passed\n')
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      process.stderr.write(`release integration gate failed: ${detail}\n`)
+      process.exitCode = 2
+    }
+  }
+}
+
+if (selftestArgs.length === 0) {
 process.stdout.write('COREONE local commercial release contract selftest\n')
 
 await check('Compose consumes immutable image IDs and injects secrets by read-only file reference', () => {
@@ -191,6 +287,39 @@ await check('Ingress is exactly one Nginx hop and client forwarding chains are d
   assert.doesNotMatch(nginx, /\$proxy_add_x_forwarded_for|\$http_x_forwarded_for/u)
 })
 
+await check('One operator-required subnet binds the internal network to the backend proxy allowlist', () => {
+  const compose = read('docker-compose.yml')
+  const backend = compose.match(/^  backend:[\s\S]*?(?=^  frontend:)/mu)?.[0] || ''
+  const appNetwork = compose.match(/^  app-network:[\s\S]*?(?=^volumes:)/mu)?.[0] || ''
+  const requiredSubnet = /\$\{COREONE_INTERNAL_SUBNET:\?[^}]+\}/gu
+
+  assert.match(backend, /TRUST_PROXY_HOPS:\s*["']1["']/u)
+  assert.match(backend, /TRUST_PROXY_CIDRS:\s*\$\{COREONE_INTERNAL_SUBNET:\?[^}]+\}/u)
+  assert.match(appNetwork, /internal:\s*true/u)
+  assert.match(appNetwork, /ipam:\s*[\r\n]+\s+config:\s*[\r\n]+\s+-\s+subnet:\s*\$\{COREONE_INTERNAL_SUBNET:\?[^}]+\}/u)
+  assert.equal((compose.match(requiredSubnet) || []).length, 2)
+  assert.doesNotMatch(compose, /TRUST_PROXY_CIDRS:\s*(?:0\.0\.0\.0\/0|::\/0)/u)
+})
+
+await check('Compose config gate rejects missing, public, broad, tiny, and host-address subnets', () => {
+  for (const subnet of ['10.77.0.0/24', '172.20.0.0/16', '192.168.50.0/24']) {
+    assert.equal(assertOperatorInternalSubnet(subnet), subnet)
+  }
+  for (const subnet of [
+    undefined,
+    '',
+    ' 10.77.0.0/24',
+    'not-a-cidr',
+    '0.0.0.0/0',
+    '::/0',
+    '8.8.8.0/24',
+    '10.77.0.1/24',
+    '10.77.0.0/30',
+  ]) {
+    assert.throws(() => assertOperatorInternalSubnet(subnet))
+  }
+})
+
 await check('Production launcher validates release identity and secret-file inputs before import', () => {
   const launcher = read('后端代码/server/scripts/start-production.mjs')
   const releaseIndex = launcher.indexOf('COREONE_RELEASE_SHA')
@@ -218,6 +347,9 @@ await check('Deployment guide exposes the local R3 operator gate and canonical r
   assert.match(guide, /scripts\/release\/backup-sqlite\.mjs/u)
   assert.match(guide, /scripts\/release\/restore-drill\.mjs/u)
   assert.match(guide, /scripts\/release\/plan-forward\.mjs/u)
+  assert.match(guide, /COREONE_INTERNAL_SUBNET/u)
+  assert.match(guide, /TRUST_PROXY_HOPS=1/u)
+  assert.match(guide, /TRUST_PROXY_CIDRS/u)
   assert.match(guide, /生产.*operator.*授权门|operator.*授权门.*生产/u)
 })
 
@@ -522,3 +654,4 @@ if (failures.length > 0) {
 }
 
 process.stdout.write(`release contract selftest: ${assertions} assertions passed\n`)
+}

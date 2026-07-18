@@ -23,6 +23,8 @@ services:
       JWT_SECRET_FILE: /run/secrets/coreone_jwt
       JWT_EXPIRES_IN: 8h
       REFRESH_TOKEN_EXPIRES_IN: 7d
+      TRUST_PROXY_HOPS: "1"
+      TRUST_PROXY_CIDRS: ${COREONE_INTERNAL_SUBNET:?COREONE_INTERNAL_SUBNET must be an operator-approved RFC1918 IPv4 CIDR}
       DATABASE_PATH: /app/data/coreone.db
       # The steady-state service never creates a database. First install is a
       # separate operator profile with a one-time admin secret-file mount.
@@ -210,6 +212,9 @@ networks:
   app-network:
     driver: bridge
     internal: true
+    ipam:
+      config:
+        - subnet: ${COREONE_INTERNAL_SUBNET:?COREONE_INTERNAL_SUBNET must be an operator-approved RFC1918 IPv4 CIDR}
 
 volumes:
   coreone-data:
