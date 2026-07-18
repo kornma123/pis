@@ -36,6 +36,7 @@ export default function CostAnalysis() {
               value={page.timeRange}
               onChange={e => page.handleTimeRangeChange(e.target.value)}
             >
+              <option value="custom">自定义期间</option>
               <option value="2024">2024年全年</option>
               <option value="2024q4">2024年Q4</option>
               <option value="2024q3">2024年Q3</option>
@@ -48,20 +49,27 @@ export default function CostAnalysis() {
                 type="date"
                 className="h-10 px-3 text-sm border border-gray-300 rounded-md bg-white outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 w-[130px]"
                 value={page.startDate}
-                onChange={e => page.setStartDate(e.target.value)}
+                onChange={e => {
+                  page.setStartDate(e.target.value)
+                  page.setTimeRange('custom')
+                }}
               />
               <span className="text-sm text-gray-400">至</span>
               <input
                 type="date"
                 className="h-10 px-3 text-sm border border-gray-300 rounded-md bg-white outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 w-[130px]"
                 value={page.endDate}
-                onChange={e => page.setEndDate(e.target.value)}
+                onChange={e => {
+                  page.setEndDate(e.target.value)
+                  page.setTimeRange('custom')
+                }}
               />
             </div>
           </div>
           <button
             onClick={() => page.setExportModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm h-10"
+            disabled={!page.reportReady}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm h-10 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="w-4 h-4" />
             导出报告
@@ -69,14 +77,31 @@ export default function CostAnalysis() {
         </div>
       </div>
 
+      {page.loadError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
+          <span>{page.loadError}；当前筛选没有可验证结果，未展示旧数据或零值占位。</span>
+          <button
+            onClick={() => void page.fetchData()}
+            className="h-9 rounded-md border border-red-300 bg-white px-3 font-medium hover:bg-red-100"
+          >
+            重试
+          </button>
+        </div>
+      )}
+      {page.loading && !page.loadError && (
+        <div role="status" className="rounded-lg border border-blue-100 bg-blue-50 px-5 py-4 text-sm text-blue-700">
+          成本报表加载中，完成前不展示数值或开放导出。
+        </div>
+      )}
+
       {/* Stats Cards */}
-      <CostStatsCards stats={page.stats} supplierCount={page.realSuppliers.length} />
+      {!page.loadError && !page.loading && <CostStatsCards stats={page.stats} supplierCount={page.realSuppliers.length} />}
 
       {/* Charts */}
-      <CostCharts trendReport={page.trendReport} pieData={page.pieData} />
+      {!page.loadError && !page.loading && <CostCharts trendReport={page.trendReport} pieData={page.pieData} />}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-200">
+      {!page.loadError && !page.loading && <div className="flex items-center gap-1 border-b border-gray-200">
         {TABS.map(tab => (
           <button
             key={tab.key}
@@ -90,10 +115,10 @@ export default function CostAnalysis() {
             {tab.label}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* Tab Content */}
-      {page.activeTab === 'project-cost' && (
+      {!page.loadError && !page.loading && page.activeTab === 'project-cost' && (
         <ProjectCostTable
           loading={page.loading}
           data={page.pagedProjects}
@@ -112,7 +137,7 @@ export default function CostAnalysis() {
         />
       )}
 
-      {page.activeTab === 'material-cost' && (
+      {!page.loadError && !page.loading && page.activeTab === 'material-cost' && (
         <MaterialCostTable
           loading={page.loading}
           data={page.pagedMaterials}
@@ -126,9 +151,9 @@ export default function CostAnalysis() {
         />
       )}
 
-      {page.activeTab === 'public-cost' && <PublicCostPanel />}
+      {!page.loadError && !page.loading && page.activeTab === 'public-cost' && <PublicCostPanel />}
 
-      {page.activeTab === 'supplier-cost' && (
+      {!page.loadError && !page.loading && page.activeTab === 'supplier-cost' && (
         <SupplierCostTable
           data={page.realSuppliers}
           totalAmount={page.totalSupplierAmount}
@@ -140,6 +165,8 @@ export default function CostAnalysis() {
         open={page.exportModalOpen}
         onClose={() => page.setExportModalOpen(false)}
         onExport={page.handleExport}
+        exporting={page.exporting}
+        dataReady={page.reportReady}
       />
 
       {/* Detail Modal */}
