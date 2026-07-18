@@ -20,7 +20,7 @@ describe('canAccess（能力并集）', () => {
     expect(canAccess('abc_dashboard', 'W')).toBe(true)
     expect(canAccess('outbound', 'R')).toBe(false)
   })
-  it('capabilities 缺失 → R 放行（判据不明时不硬挡页面，可达性另由 getAccessiblePaths 裁决）', () => {
+  it('capabilities 缺失且角色已登记 → R 放行（legacy 会话兼容）', () => {
     setUser({ role: 'finance' })
     expect(canAccess('whatever', 'R')).toBe(true)
   })
@@ -31,6 +31,14 @@ describe('canAccess（能力并集）', () => {
     expect(canAccess('labor_times', 'W')).toBe(false)
     expect(canAccess('whatever', 'W')).toBe(false)
   })
+  it.each(['external_auditor', 'constructor'])(
+    '未登记角色 %s 且 capabilities 缺失 → R/W 均拒绝，不继承 legacy 读权限',
+    (role) => {
+      setUser({ role })
+      expect(canAccess('equipment', 'R')).toBe(false)
+      expect(canAccess('equipment', 'W')).toBe(false)
+    }
+  )
   // 零权限用户：后端 getEffectivePermissions 返回 {}，非 null → 不走 caps 缺失分支。
   it('capabilities 为空对象 → R/W 均拒绝（{} 是真值，走模块缺失分支）', () => {
     setUser({ role: 'pathologist', capabilities: {} })
@@ -40,6 +48,11 @@ describe('canAccess（能力并集）', () => {
 })
 
 describe('getAccessiblePaths（能力驱动 nav）', () => {
+  it('equipment 能力只增加 active 父页，不把 headless 或其他模块塞进导航', () => {
+    setUser({ role: 'technician', roles: ['technician'], capabilities: { equipment: 'R' } })
+    expect(getAccessiblePaths()).toEqual(['/', '/equipment'])
+  })
+
   it('财务能力 → 含 cost-analysis/abc 不含 outbound', () => {
     setUser({
       role: 'finance',
@@ -67,6 +80,24 @@ describe('getAccessiblePaths（能力驱动 nav）', () => {
     const paths = getAccessiblePaths()
     expect(paths).toContain('/inventory')
     expect(paths).toContain('/inbound')
+  })
+
+  it.each([
+    { role: 'external_auditor' },
+    { role: 'external_auditor', roles: ['external_auditor'] },
+    { role: 'constructor' },
+  ])('未知角色且 capabilities 缺失 → 仅保留公共首页，不继承 technician：%j', (user) => {
+    setUser(user)
+    expect(getAccessiblePaths()).toEqual(['/'])
+  })
+
+  it('未知角色只有在后端显式下发 equipment capability 时才获得设备父页', () => {
+    setUser({
+      role: 'external_auditor',
+      roles: ['external_auditor'],
+      capabilities: { equipment: 'R' },
+    })
+    expect(getAccessiblePaths()).toEqual(['/', '/equipment'])
   })
 })
 

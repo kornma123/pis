@@ -3,6 +3,8 @@ import { useMemo } from 'react'
 import AppSidebar from './AppSidebar'
 import TopBar from './TopBar'
 import { getUserRole, getAccessiblePaths } from '@/lib/permissions'
+import { isRoutePathAccessible } from '@/lib/route-registry'
+import Forbidden from '@/pages/Forbidden'
 
 export default function AppLayout() {
   const location = useLocation()
@@ -17,14 +19,12 @@ export default function AppLayout() {
     return getAccessiblePaths()
   }, [role, location.pathname])
 
-  // 路由守卫：未登录（无令牌或无角色）重定向到登录页，无权限重定向到首页
+  // 路由守卫：未登录（无令牌或无角色）重定向到登录页；已登录但无权限时保留原地址，
+  // 在应用框架内显示诚实 403。合法 headless 子路由仅按注册表同模块父子关系继承。
   if (!hasToken || !role) {
     return <Navigate to="/login" replace />
   }
-  const hasAccess = allowedPaths.includes(location.pathname)
-  if (!hasAccess) {
-    return <Navigate to="/" replace />
-  }
+  const hasAccess = isRoutePathAccessible(location.pathname, allowedPaths)
 
   return (
     <div className="flex min-h-screen bg-[#f9fafb]">
@@ -38,7 +38,7 @@ export default function AppLayout() {
 
         {/* Page content */}
         <main className="flex-1 overflow-auto p-6">
-          <Outlet />
+          {hasAccess ? <Outlet /> : <Forbidden />}
         </main>
       </div>
     </div>

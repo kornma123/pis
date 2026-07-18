@@ -61,7 +61,7 @@ export function getRoles(): string[] {
  * 当前用户对 module 是否具备 level 权限（W 蕴含 R）。
  *
  * capabilities 整键缺失时**按级别分叉**：
- *   - R（读/展示）→ 放行。判据不明时不硬挡页面，可达性另由 getAccessiblePaths 独立裁决。
+ *   - R（读/展示）→ 仅已登记 legacy 角色放行；未知角色 fail-closed。
  *   - W（写按钮显隐）→ **拒绝（fail-closed）**。露出一个点了必吃 403 的按钮，比暂时藏起来更糟；
  *     且 PM 已拍板「前端写按钮必须跟随 capability，不能只等后端返回 403」（#135, 2026-07-15）。
  *
@@ -75,7 +75,7 @@ export function getRoles(): string[] {
  */
 export function canAccess(module: string, level: CapLevel = 'R'): boolean {
   const caps = getCapabilities()
-  if (!caps) return level === 'R'
+  if (!caps) return level === 'R' && isKnownLegacyRole(getUserRole())
   const got = caps[module]
   if (!got) return false
   return level === 'R' ? true : got === 'W'
@@ -140,8 +140,10 @@ export function getAccessiblePaths(): string[] {
     return paths
   }
   const role = getUserRole()
-  if (role && ROLE_MENU_MAP[role]) return ROLE_MENU_MAP[role]
-  return ROLE_MENU_MAP.technician
+  if (isKnownLegacyRole(role)) return ROLE_MENU_MAP[role]
+  // 未知或已退役的 legacy 角色不得继承 technician 权限；保留公共首页，
+  // 其余受保护路由交由 AppLayout 显示诚实 403。
+  return ['/']
 }
 
 // 角色-菜单权限映射（legacy 兜底；capabilities 缺失时回退使用）
@@ -181,4 +183,8 @@ export const ROLE_MENU_MAP: Record<string, string[]> = {
     // ABC 成本核算（移植，只读看板）
     '/abc/dashboard', '/abc/slide-cost', '/abc/profitability',
   ],
+}
+
+function isKnownLegacyRole(role: string | null): role is string {
+  return typeof role === 'string' && Object.prototype.hasOwnProperty.call(ROLE_MENU_MAP, role)
 }

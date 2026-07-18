@@ -61,8 +61,8 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         {/* 旧「医院盈利看板」从未上线（PM #108）→ 重定向到院级贡献毛利看板。放在 AppLayout 之外（顶层）：
-            AppLayout 的可达性守卫会把不在 accessiblePaths 的路径先重定向到 /，会抢在内层 <Navigate> 之前，
-            故顶层拦截确保 /hospital-pnl → /hospital-cm（而非落到仪表盘）。*/}
+            该兼容路径不应先进入 AppLayout 的权限判定并显示 403；
+            故顶层拦截确保 /hospital-pnl → /hospital-cm。*/}
         <Route path="/hospital-pnl" element={<Navigate to="/hospital-cm" replace />} />
         <Route element={<AppLayout />}>
           <Route path="/" element={<Dashboard />} />
