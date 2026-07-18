@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
+import { serializeSuccessfulAuditRequest } from './audit-log-request-sanitizer.js'
 
 /**
  * 全站写操作统一审计中间件（通用 CRUD 留痕）+ P-3 拒绝写审计（SEC-3·取证脊柱的另一半）。
@@ -38,7 +39,6 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 // 命中即打码的敏感字段名（大小写不敏感、子串匹配）
 const SENSITIVE_KEY = /pass|pwd|token|secret|credential|authorization/i
 const REDACTED = '[REDACTED]'
-const MAX_JSON = 4000
 const MAX_DESC = 512 // 拒绝行 path/description 长度封顶（防日志膨胀/注入）
 const MAX_CODE = 64 // 拒因码长度封顶
 
@@ -65,24 +65,13 @@ export function scrubSensitive(value: unknown, depth = 0): unknown {
   return out
 }
 
-function stringifyCapped(value: unknown): string | null {
-  if (value === undefined || value === null) return null
-  try {
-    const s = JSON.stringify(value)
-    if (s === undefined || s === '{}' || s === 'null') return s === '{}' ? '{}' : (s ?? null)
-    return s.length > MAX_JSON ? s.slice(0, MAX_JSON) + '…' : s
-  } catch {
-    return null
-  }
-}
-
 /** 从挂载路径推导模块名：/api/v1/<module>/... → <module> */
 function moduleLabel(req: Request): string {
-  const base = (req.baseUrl || '').replace('/api/v1', '').replace(/^\//, '')
+  const base = (req.baseUrl || '').replace(/^\/api\/v1/i, '').replace(/^\//, '')
   const seg = base.split('/')[0]
-  if (seg) return seg
-  const p = (req.originalUrl || req.path || '').replace(/^\/api\/v1\/?/, '').replace(/^\//, '')
-  return p.split(/[/?]/)[0] || 'unknown'
+  if (seg) return seg.toLowerCase()
+  const p = (req.originalUrl || req.path || '').replace(/^\/api\/v1\/?/i, '').replace(/^\//, '')
+  return p.split(/[/?]/)[0]?.toLowerCase() || 'unknown'
 }
 
 /**
@@ -319,12 +308,13 @@ export function auditWrite(req: AuthRequest, res: Response, next: NextFunction):
       // ── 终态 (a)：成功 2xx —— 原行为不变（写脱敏 body）──────────────────────
       if (status >= 200 && status < 300) {
         const targetId = req.params?.id || capturedBody?.data?.id || null
+        const path = cleanPath(req)
         insertLog(db, {
           userId: user.userId || null,
           username: user.username || '',
           operation: `${req.method} ${mod}`,
-          description: `${user.username || 'system'} ${req.method} ${req.originalUrl}${targetId ? ` (${targetId})` : ''}`,
-          requestData: stringifyCapped(scrubSensitive(req.body)),
+          description: `${user.username || 'system'} ${req.method} ${path}${targetId ? ` (${targetId})` : ''}`,
+          requestData: serializeSuccessfulAuditRequest(req.body, path),
           ip,
           ua,
           outcome: null,
