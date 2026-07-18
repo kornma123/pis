@@ -3,15 +3,28 @@
   "version": "1.1.0",
   "description": "COREONE 实验室耗材管理系统后端服务",
   "type": "module",
+  "engines": {
+    "node": "^22.23.1 || ^24.0.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^22.23.1 || ^24.0.0",
+      "onFail": "error"
+    }
+  },
   "scripts": {
-    "dev": "tsx watch src/app.ts",
-    "build": "tsc",
-    "start": "node --experimental-sqlite scripts/start-production.mjs",
-    "seed": "tsx scripts/seed-acceptance-data.ts",
-    "reset-passwords": "tsx scripts/reset-passwords.ts",
+    "check:runtime": "node scripts/check-runtime-contract.mjs",
+    "test:contract": "node --test tests/dependency-runtime-contract.test.mjs",
+    "preinstall": "node scripts/check-runtime-contract.mjs",
+    "dev": "node scripts/check-runtime-contract.mjs && tsx watch src/app.ts",
+    "build": "node scripts/check-runtime-contract.mjs && tsc",
+    "start": "node scripts/check-runtime-contract.mjs && node --experimental-sqlite scripts/start-production.mjs",
+    "seed": "node scripts/check-runtime-contract.mjs && tsx scripts/seed-acceptance-data.ts",
+    "reset-passwords": "node scripts/check-runtime-contract.mjs && tsx scripts/reset-passwords.ts",
     "lint": "eslint src/",
-    "test": "vitest run",
-    "test:node": "node --experimental-sqlite node_modules/vitest/vitest.mjs run"
+    "test": "node scripts/check-runtime-contract.mjs && node --test tests/dependency-runtime-contract.test.mjs && vitest run",
+    "test:node": "node scripts/check-runtime-contract.mjs && node --test tests/dependency-runtime-contract.test.mjs && node --experimental-sqlite node_modules/vitest/vitest.mjs run"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -20,7 +33,6 @@
     "express": "^4.22.1",
     "express-validator": "^7.3.2",
     "jsonwebtoken": "^9.0.3",
-    "sqlite3": "^5.1.7",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
