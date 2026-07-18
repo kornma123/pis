@@ -50,12 +50,22 @@ function within(parent, target) {
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 }
 
-function assertOutside(repoRoot, target, label) {
-  if (within(repoRoot, target)) fail(`${label} must be outside the repository`);
+function realpathExisting(value, label) {
+  try {
+    return fs.realpathSync.native(absolute(value, label));
+  } catch {
+    fail(`${label} realpath is unavailable`);
+  }
 }
 
-function readJson(filePath, label) {
-  const resolved = absolute(filePath, label);
+function assertOutside(repoRoot, target, label) {
+  const physical = realpathExisting(target, label);
+  if (within(repoRoot, physical)) fail(`${label} must be outside the repository`);
+  return physical;
+}
+
+function readJson(filePath, label, repoRoot) {
+  const resolved = assertOutside(repoRoot, filePath, label);
   const stat = fs.lstatSync(resolved);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 16 * 1024 * 1024) {
     fail(`${label} must be a bounded regular file`);
@@ -85,9 +95,9 @@ function errorCode(error) {
 }
 
 function commandCreate(options) {
-  const repoRoot = absolute(options['--repo-root'], 'repoRoot');
+  const repoRoot = realpathExisting(options['--repo-root'], 'repoRoot');
   let spec;
-  if (options['--input']) spec = readJson(options['--input'], 'input');
+  if (options['--input']) spec = readJson(options['--input'], 'input', repoRoot);
   else {
     const bytes = fs.readFileSync(0);
     if (bytes.length === 0 || bytes.length > 1024 * 1024) fail('stdin JSON must be bounded and non-empty');
@@ -97,7 +107,7 @@ function commandCreate(options) {
   if (spec.value && Array.isArray(spec.value.artifacts)) {
     for (const artifact of spec.value.artifacts) {
       if (artifact && typeof artifact.path === 'string') {
-        assertOutside(repoRoot, absolute(artifact.path, 'artifact path'), 'artifact path');
+        artifact.path = assertOutside(repoRoot, artifact.path, 'artifact path');
       }
     }
   }
@@ -114,40 +124,39 @@ function commandCreate(options) {
 }
 
 function commandSign(options) {
-  const repoRoot = absolute(options['--repo-root'], 'repoRoot');
-  const receiptFile = readJson(options['--receipt'], 'receipt');
-  assertOutside(repoRoot, receiptFile.resolved, 'receipt');
+  const repoRoot = realpathExisting(options['--repo-root'], 'repoRoot');
+  const receiptFile = readJson(options['--receipt'], 'receipt', repoRoot);
   const privateBytes = fs.readFileSync(0);
-  if (privateBytes.length === 0 || privateBytes.length > 16 * 1024) fail('stdin must contain one bounded private key');
-  let privateKey;
+  let envelope;
   try {
-    privateKey = crypto.createPrivateKey(privateBytes);
-  } catch {
+    if (privateBytes.length === 0 || privateBytes.length > 16 * 1024) fail('stdin must contain one bounded private key');
+    let privateKey;
+    try {
+      privateKey = crypto.createPrivateKey(privateBytes);
+    } catch {
+      fail('stdin private key is invalid');
+    }
+    envelope = signDetached(receiptFile.value, { keyId: options['--key-id'], privateKey });
+    const written = writeHandoffAtomic(absolute(options['--out'], 'output'), envelope, { repoRoot });
+    safeStatus({
+      status: 'PASS',
+      command: 'sign',
+      stage: envelope.stage,
+      keyId: envelope.keyId,
+      receiptRoot: envelope.receiptRoot,
+      outputSha256: written.sha256,
+      outputSizeBytes: written.sizeBytes,
+    });
+  } finally {
     privateBytes.fill(0);
-    fail('stdin private key is invalid');
   }
-  privateBytes.fill(0);
-  const envelope = signDetached(receiptFile.value, { keyId: options['--key-id'], privateKey });
-  const written = writeHandoffAtomic(absolute(options['--out'], 'output'), envelope, { repoRoot });
-  safeStatus({
-    status: 'PASS',
-    command: 'sign',
-    stage: envelope.stage,
-    keyId: envelope.keyId,
-    receiptRoot: envelope.receiptRoot,
-    outputSha256: written.sha256,
-    outputSizeBytes: written.sizeBytes,
-  });
 }
 
 function commandVerify(options) {
-  const repoRoot = absolute(options['--repo-root'], 'repoRoot');
-  const chainFile = readJson(options['--chain'], 'chain');
-  const trustFile = readJson(options['--trust-policy'], 'trust policy');
-  const artifactRoot = absolute(options['--artifact-root'], 'artifactRoot');
-  assertOutside(repoRoot, chainFile.resolved, 'chain');
-  assertOutside(repoRoot, trustFile.resolved, 'trust policy');
-  assertOutside(repoRoot, artifactRoot, 'artifactRoot');
+  const repoRoot = realpathExisting(options['--repo-root'], 'repoRoot');
+  const chainFile = readJson(options['--chain'], 'chain', repoRoot);
+  const trustFile = readJson(options['--trust-policy'], 'trust policy', repoRoot);
+  const artifactRoot = assertOutside(repoRoot, options['--artifact-root'], 'artifactRoot');
   const verdict = verifySignedChain(chainFile.value, {
     trustPolicy: trustFile.value,
     artifactRoot,

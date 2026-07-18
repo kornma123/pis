@@ -456,18 +456,28 @@ function isWithin(parent, target) {
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 }
 
+function realpathExisting(value, label) {
+  try {
+    return fs.realpathSync.native(value);
+  } catch {
+    fail(`${label} realpath is unavailable`);
+  }
+}
+
 function writeHandoffAtomic(targetPath, value, options) {
   assertExactKeys(options, ['repoRoot'], 'write options');
   if (typeof targetPath !== 'string' || !path.isAbsolute(targetPath)) fail('target path must be explicit and absolute');
   if (typeof options.repoRoot !== 'string' || !path.isAbsolute(options.repoRoot)) fail('repoRoot must be absolute');
-  const target = path.resolve(targetPath);
-  const repoRoot = path.resolve(options.repoRoot);
+  const lexicalTarget = path.resolve(targetPath);
+  const repoRoot = realpathExisting(path.resolve(options.repoRoot), 'repoRoot');
+  const lexicalParent = path.dirname(lexicalTarget);
+  const parentStat = fs.lstatSync(lexicalParent);
+  if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) fail('handoff target parent must be a regular directory');
+  const parent = realpathExisting(lexicalParent, 'handoff target parent');
+  const target = path.join(parent, path.basename(lexicalTarget));
   if (isWithin(repoRoot, target)) fail('handoff target must be outside the repository');
   if (fs.existsSync(target)) fail('handoff target already exists; overwrite is forbidden');
 
-  const parent = path.dirname(target);
-  const parentStat = fs.lstatSync(parent);
-  if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) fail('handoff target parent must be a regular directory');
   const payload = `${canonicalJson(value)}\n`;
   const partial = path.join(parent, `.${path.basename(target)}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.partial`);
   let descriptor;

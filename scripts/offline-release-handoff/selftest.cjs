@@ -5,12 +5,13 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 let handoff;
 try {
   handoff = require('./lib.cjs');
 } catch (error) {
-  process.stderr.write(`FAIL 0/8 offline-release-handoff module unavailable: ${error.code || error.message}\n`);
+  process.stderr.write(`FAIL 0/10 offline-release-handoff module unavailable: ${error.code || error.message}\n`);
   process.exit(1);
 }
 
@@ -57,6 +58,21 @@ function clone(value) {
 
 function expectRejected(action, pattern) {
   assert.throws(action, pattern);
+}
+
+function createDirectoryLink(target, link) {
+  let junctionError;
+  try {
+    fs.symlinkSync(target, link, 'junction');
+    return;
+  } catch (error) {
+    junctionError = error;
+  }
+  try {
+    fs.symlinkSync(target, link, 'dir');
+  } catch (error) {
+    throw new Error(`BLOCKED directory link creation: junction=${junctionError.code}; symlink=${error.code}`);
+  }
 }
 
 function keyPair(keyId, allowedStages) {
@@ -347,6 +363,68 @@ const tests = [
     } finally {
       fs.rmSync(f.tempRoot, { recursive: true, force: true });
     }
+  }],
+
+  ['negative: ancestor junction cannot redirect an external target or artifactRoot into the repository', () => {
+    const f = fixture();
+    const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-handoff-realpath-'));
+    try {
+      const repoRoot = path.join(sandbox, 'repo');
+      const internal = path.join(repoRoot, 'internal');
+      const outside = path.join(sandbox, 'outside');
+      fs.mkdirSync(internal, { recursive: true });
+      fs.mkdirSync(outside);
+      const bridge = path.join(outside, 'repo-link');
+      createDirectoryLink(repoRoot, bridge);
+      assert.equal(fs.lstatSync(path.join(bridge, 'internal')).isSymbolicLink(), false);
+
+      const redirectedTarget = path.join(bridge, 'internal', 'redirected.json');
+      expectRejected(
+        () => writeHandoffAtomic(redirectedTarget, { synthetic: true }, { repoRoot }),
+        /outside|repository|physical|realpath/i,
+      );
+      assert.equal(fs.existsSync(path.join(internal, 'redirected.json')), false);
+      assert.deepEqual(fs.readdirSync(internal), []);
+
+      const aliasedRepoTarget = path.join(repoRoot, 'internal', 'repo-alias.json');
+      expectRejected(
+        () => writeHandoffAtomic(aliasedRepoTarget, { synthetic: true }, { repoRoot: bridge }),
+        /outside|repository|physical|realpath/i,
+      );
+      assert.equal(fs.existsSync(aliasedRepoTarget), false);
+      assert.deepEqual(fs.readdirSync(internal), []);
+
+      const physicalArtifacts = path.join(internal, 'artifacts');
+      fs.cpSync(f.artifactRoot, physicalArtifacts, { recursive: true });
+      const chainPath = path.join(outside, 'chain.json');
+      const trustPath = path.join(outside, 'trust.json');
+      fs.writeFileSync(chainPath, JSON.stringify(f.chain));
+      fs.writeFileSync(trustPath, JSON.stringify(f.trustPolicy));
+      const cli = spawnSync(process.execPath, [
+        path.join(__dirname, 'cli.cjs'),
+        'verify-chain',
+        '--chain', chainPath,
+        '--trust-policy', trustPath,
+        '--artifact-root', path.join(bridge, 'internal', 'artifacts'),
+        '--repo-root', repoRoot,
+      ], { encoding: 'utf8' });
+      assert.notEqual(cli.status, 0, 'CLI accepted an artifactRoot physically inside the repository');
+      assert.match(cli.stderr, /OUTSIDE_REPOSITORY_REQUIRED/);
+    } finally {
+      fs.rmSync(f.tempRoot, { recursive: true, force: true });
+      fs.rmSync(sandbox, { recursive: true, force: true });
+    }
+  }],
+
+  ['negative: CLI private key stays stdin-only and its Buffer is cleared by finally', () => {
+    const source = fs.readFileSync(path.join(__dirname, 'cli.cjs'), 'utf8');
+    const signSource = source.slice(source.indexOf('function commandSign'), source.indexOf('function commandVerify'));
+    assert.doesNotMatch(source, /process\.env/);
+    assert.doesNotMatch(source, /sign:\s*\[[^\]]*--private-key/);
+    assert.match(
+      signSource,
+      /const privateBytes = fs\.readFileSync\(0\);\s*let envelope;\s*try \{[\s\S]*\} finally \{\s*privateBytes\.fill\(0\);\s*\}/,
+    );
   }],
 ];
 
