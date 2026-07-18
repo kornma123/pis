@@ -7,17 +7,20 @@ const crypto = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { spawnSync } = require('node:child_process')
 
 const {
   CONTROLLED_RUNTIME_RELATIVE,
   MAX_ARCHIVE_BYTES,
   MAX_TOTAL_UNCOMPRESSED_BYTES,
   REQUIRED_READINESS_IDS,
+  ROOT,
   buildGateArguments,
   canonicalRuntimeTreeDigest,
   classifyBrowserProbe,
   classifyNodeProbe,
   classifyNpmDryRun,
+  createSafeEnvironment,
   extractZipArchive,
   inspectZipArchive,
   overallReadinessExitCode,
@@ -26,6 +29,7 @@ const {
   validateBrowserExecutable,
   validateNode22Executable,
   verifyArchiveChecksum,
+  verifyPinnedGitState,
 } = require('./runtime-readiness.cjs')
 const { parseFlags } = require('./index.cjs')
 const { main: gateChildMain } = require('./gate-child.cjs')
@@ -309,6 +313,52 @@ test('child PASS/FAIL/BLOCKED and unexpected exits are relayed without swallowin
 test('Node22 gate child refuses to run without the expected full pinned Git state', () => {
   const sink = { write: () => {} }
   assert.equal(gateChildMain([], {}, { stdout: sink, stderr: sink }), 2)
+})
+
+test('scoped Git verification resolves fixed refs while ambient repository redirection is stripped', () => {
+  const hostile = createSafeEnvironment({
+    PATH: process.env.PATH || '',
+    GIT_DIR: 'C:\\hostile\\repository.git',
+    GIT_WORK_TREE: 'C:\\hostile\\worktree',
+    GIT_COMMON_DIR: 'C:\\hostile\\common',
+    GIT_INDEX_FILE: 'C:\\hostile\\index',
+    GIT_OBJECT_DIRECTORY: 'C:\\hostile\\objects',
+    GIT_ALTERNATE_OBJECT_DIRECTORIES: 'C:\\hostile\\alternate',
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'safe.directory',
+    GIT_CONFIG_VALUE_0: '*',
+  })
+  for (const key of [
+    'GIT_DIR',
+    'GIT_WORK_TREE',
+    'GIT_COMMON_DIR',
+    'GIT_INDEX_FILE',
+    'GIT_OBJECT_DIRECTORY',
+    'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+    'GIT_CONFIG_COUNT',
+    'GIT_CONFIG_KEY_0',
+    'GIT_CONFIG_VALUE_0',
+  ]) assert.equal(hostile[key], undefined)
+
+  const safeDirectory = path.resolve(ROOT).split(path.sep).join('/')
+  const gitEnvironment = createSafeEnvironment(process.env, {
+    GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_TERMINAL_PROMPT: '0',
+  })
+  const readRef = (ref) => {
+    const result = spawnSync('git', ['-c', `safe.directory=${safeDirectory}`, 'rev-parse', '--verify', `${ref}^{commit}`], {
+      cwd: ROOT,
+      env: gitEnvironment,
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+    })
+    assert.equal(result.status, 0, result.stderr)
+    return result.stdout.trim().toLowerCase()
+  }
+  const outcome = verifyPinnedGitState(ROOT, readRef('origin/master'), readRef('HEAD'))
+  assert.equal(outcome.status, 'PASS')
 })
 
 test('matching official manifest entry verifies by filename and SHA-256', () => {

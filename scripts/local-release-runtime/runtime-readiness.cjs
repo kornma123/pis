@@ -776,7 +776,8 @@ function extractZipArchive(archivePath, inspection, destinationRoot) {
 
 function controlledRuntimeIsIgnored(root, controlledRoot) {
   const probe = path.join(controlledRoot, '.ignore-probe')
-  const result = spawnSync('git', ['check-ignore', '--quiet', '--no-index', '--', probe], {
+  const safeDirectory = path.resolve(root).split(path.sep).join('/')
+  const result = spawnSync('git', ['-c', `safe.directory=${safeDirectory}`, 'check-ignore', '--quiet', '--no-index', '--', probe], {
     cwd: root,
     env: createSafeEnvironment(process.env, {
       GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
@@ -890,7 +891,8 @@ function buildGateArguments({ base, head, owned, excluded }) {
 }
 
 function readGitRef(root, ref) {
-  const result = spawnSync('git', ['rev-parse', '--verify', `${ref}^{commit}`], {
+  const safeDirectory = path.resolve(root).split(path.sep).join('/')
+  const result = spawnSync('git', ['-c', `safe.directory=${safeDirectory}`, 'rev-parse', '--verify', `${ref}^{commit}`], {
     cwd: root,
     env: createSafeEnvironment(process.env, {
       GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
