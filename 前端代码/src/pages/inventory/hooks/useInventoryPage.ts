@@ -3,7 +3,7 @@ import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
 import { inventoryApi, outboundApi, scrapApi } from '@/api/inventory'
 import { bomApi } from '@/api/master'
-import { materialApi, projectApi, userApi } from '@/api/master'
+import { projectApi } from '@/api/master'
 import type { InventoryItem, InventoryStats, Project } from '@/types'
 import { toast } from 'sonner'
 
@@ -22,14 +22,18 @@ type QuickFilterType = 'all' | 'low-stock' | 'expiring-soon' | 'expiring-month' 
 
 export function useInventoryPage() {
   const inventoryRetryPendingRef = useRef(false)
+  const outboundSubmitPendingRef = useRef<Promise<void> | null>(null)
   // ===== URL 参数同步 =====
   const { get, getNumber, setMultiple } = useUrlParams()
 
   // ===== 数据状态 =====
   const [stats, setStats] = useState<InventoryStats | null>(null)
+  const [statsError, setStatsError] = useState<string | null>(null)
 
   // ===== 筛选状态 =====
-  const [keyword, setKeyword] = useState(get('keyword', ''))
+  const initialKeyword = get('keyword', '')
+  const [keyword, setKeyword] = useState(initialKeyword)
+  const [appliedKeyword, setAppliedKeyword] = useState(initialKeyword)
   const [category, setCategory] = useState('全部分类')
   const [location, setLocation] = useState('全部库位')
   const [quickFilter, setQuickFilter] = useState<QuickFilterType>('all')
@@ -51,9 +55,10 @@ export function useInventoryPage() {
   // ===== 分组展开状态 =====
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
-  // ===== 项目和用户列表 =====
+  // ===== 项目列表（仅在打开出库表单时按需加载） =====
   const [projectList, setProjectList] = useState<Project[]>([])
-  const [userList, setUserList] = useState<{ id: string; real_name: string }[]>([])
+  const projectListLoadedRef = useRef(false)
+  const projectListRequestRef = useRef<Promise<void> | null>(null)
 
   // ===== 物料选择弹窗状态 =====
   const [materialSelectorOpen, setMaterialSelectorOpen] = useState(false)
@@ -78,6 +83,8 @@ export function useInventoryPage() {
 
   // ===== 出库登记弹窗状态 =====
   const [outboundRemark, setOutboundRemark] = useState('')
+  const [outboundSubmitting, setOutboundSubmitting] = useState(false)
+  const [outboundSubmitError, setOutboundSubmitError] = useState<string | null>(null)
   const [outboundMaterials, setOutboundMaterials] = useState<Array<{
     rowId: number; materialId: string; name: string; spec: string; batch?: string
     stock: number; quantity: number; unit: string; project: string; user: string
@@ -98,7 +105,14 @@ export function useInventoryPage() {
       const res: any = await inventoryApi.getList({
         page: params.page,
         pageSize: params.pageSize,
-        keyword: keyword || undefined,
+        keyword: appliedKeyword || undefined,
+        status: quickFilter === 'low-stock'
+          ? 'low-stock'
+          : quickFilter === 'expired'
+            ? 'expired'
+            : quickFilter === 'expiring-soon' || quickFilter === 'expiring-month'
+              ? 'expiring-soon'
+              : undefined,
       })
       const list = (res?.list || []).map((item: any) => ({
         ...item,
@@ -107,7 +121,7 @@ export function useInventoryPage() {
       })) as InventoryRow[]
       return { list, pagination: res?.pagination }
     },
-    [keyword]
+    [appliedKeyword, quickFilter]
   )
 
   const {
@@ -124,7 +138,7 @@ export function useInventoryPage() {
     fetchFn,
     initialPage: urlPage,
     initialPageSize: urlPageSize,
-    deps: [keyword],
+    deps: [appliedKeyword, quickFilter],
   })
 
   const retryInventory = useCallback(() => {
@@ -142,38 +156,41 @@ export function useInventoryPage() {
     setMultiple({
       page: page > 1 ? page : null,
       pageSize: pageSize !== 20 ? pageSize : null,
-      keyword: keyword || null,
+      keyword: appliedKeyword || null,
     })
-  }, [page, pageSize, keyword, setMultiple])
+  }, [page, pageSize, appliedKeyword, setMultiple])
 
   const fetchStats = useCallback(async () => {
     try {
       const res: any = await inventoryApi.getStats()
       setStats(res || {})
-    } catch (e) {
-      console.error(e)
+      setStatsError(null)
+    } catch {
+      setStatsError('库存统计没能加载')
     }
   }, [])
 
-  const fetchProjects = useCallback(async () => {
-    try {
-      const res: any = await projectApi.getList({ pageSize: 999 })
-      setProjectList(res?.list || [])
-    } catch (e) {
-      console.error(e)
-    }
-  }, [])
+  const fetchProjects = useCallback(() => {
+    if (projectListLoadedRef.current) return Promise.resolve()
+    if (projectListRequestRef.current) return projectListRequestRef.current
 
-  const fetchUsers = useCallback(async () => {
-    try {
-      const res: any = await userApi.getList({ pageSize: 999 })
-      setUserList((res?.list || []).map((u: any) => ({
-        id: u.id,
-        real_name: u.realName || u.real_name || u.username,
-      })))
-    } catch (e) {
-      console.error(e)
-    }
+    const request = (async () => {
+      try {
+        const res: any = await projectApi.getList({ pageSize: 999 })
+        setProjectList(res?.list || [])
+        projectListLoadedRef.current = true
+      } catch (e) {
+        console.error(e)
+      }
+    })()
+
+    projectListRequestRef.current = request
+    void request.finally(() => {
+      if (projectListRequestRef.current === request) {
+        projectListRequestRef.current = null
+      }
+    })
+    return request
   }, [])
 
   const fetchBomList = useCallback(async () => {
@@ -215,19 +232,17 @@ export function useInventoryPage() {
 
   useEffect(() => {
     fetchStats()
-    fetchProjects()
-    fetchUsers()
-  }, [fetchStats, fetchProjects, fetchUsers])
+  }, [fetchStats])
 
   const computedStats = useMemo(() => {
     if (!stats) {
       return {
-        total: data.length,
-        normal: data.filter(i => i.status === 'normal').length,
-        low: data.filter(i => i.status === 'low-stock').length,
-        warning: data.filter(i => i.status === 'warning').length,
-        expired: data.filter(i => i.status === 'expired').length,
-        outOfStock: data.filter(i => i.stock === 0).length,
+        total: null,
+        normal: null,
+        low: null,
+        warning: null,
+        expired: null,
+        outOfStock: null,
       }
     }
     return {
@@ -236,26 +251,20 @@ export function useInventoryPage() {
       low: stats.lowStockCount ?? 0,
       warning: stats.expiringCount ?? 0,
       expired: stats.expiredCount ?? 0,
-      outOfStock: 0,
+      outOfStock: null,
     }
-  }, [stats, data])
+  }, [stats])
 
   const quickFilterCounts = useMemo(() => {
-    const getDaysLeft = (expiry?: string) => {
-      if (!expiry || expiry === '-') return 999
-      const today = new Date()
-      const exp = new Date(expiry)
-      return Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    }
     return {
-      all: data.length,
-      'low-stock': data.filter(i => i.status === 'low-stock').length,
-      'expiring-soon': data.filter(i => i.status === 'warning' && getDaysLeft(i.expiry) <= 7).length,
-      'expiring-month': data.filter(i => i.status === 'warning' && getDaysLeft(i.expiry) <= 30).length,
-      expired: data.filter(i => i.status === 'expired').length,
-      'out-of-stock': data.filter(i => i.stock === 0).length,
+      all: computedStats.total,
+      'low-stock': computedStats.low,
+      'expiring-soon': computedStats.warning,
+      'expiring-month': computedStats.warning,
+      expired: computedStats.expired,
+      'out-of-stock': null,
     }
-  }, [data])
+  }, [computedStats])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -265,6 +274,12 @@ export function useInventoryPage() {
       setSortDirection('asc')
     }
   }
+
+  const visibleIds = useMemo(() => new Set(data.map(item => item.id)), [data])
+  const visibleSelectedIds = useMemo(
+    () => new Set([...selectedIds].filter(id => visibleIds.has(id))),
+    [selectedIds, visibleIds]
+  )
 
   const toggleGroup = (name: string) => {
     setExpandedGroups(prev => {
@@ -276,7 +291,7 @@ export function useInventoryPage() {
   }
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === data.length && data.length > 0) {
+    if (visibleSelectedIds.size === data.length && data.length > 0) {
       setSelectedIds(new Set())
     } else {
       setSelectedIds(new Set(data.map(r => r.id)))
@@ -297,6 +312,16 @@ export function useInventoryPage() {
 
   const clearSelection = () => setSelectedIds(new Set())
 
+  const changePage = useCallback((nextPage: number) => {
+    setSelectedIds(new Set())
+    setPage(nextPage)
+  }, [setPage])
+
+  const changePageSize = useCallback((nextPageSize: number) => {
+    setSelectedIds(new Set())
+    setPageSize(nextPageSize)
+  }, [setPageSize])
+
   const ensureFreshInventory = () => {
     if (!error) return true
     toast.error('库存数据不是最新状态，请刷新成功后再操作')
@@ -304,11 +329,14 @@ export function useInventoryPage() {
   }
 
   const handleSearch = () => {
+    setAppliedKeyword(keyword.trim())
+    clearSelection()
     setPage(1)
   }
 
   const handleReset = () => {
     setKeyword('')
+    setAppliedKeyword('')
     setCategory('全部分类')
     setLocation('全部库位')
     setQuickFilter('all')
@@ -317,11 +345,21 @@ export function useInventoryPage() {
 
   const handleQuickFilter = (filter: QuickFilterType) => {
     setQuickFilter(filter)
+    clearSelection()
     setPage(1)
+  }
+
+  const openEmptyOutboundModal = () => {
+    if (!ensureFreshInventory()) return Promise.resolve()
+    setOutboundSubmitError(null)
+    setOutboundModalOpen(true)
+    return fetchProjects()
   }
 
   const openOutboundModal = (item: InventoryRow) => {
     if (!ensureFreshInventory()) return
+    setOutboundSubmitError(null)
+    if (projectList.length === 0) void fetchProjects()
     const existing = outboundMaterials.find(m => m.materialId === item.materialId)
     if (existing) return
     const newRow = {
@@ -344,7 +382,9 @@ export function useInventoryPage() {
 
   const openBatchOutbound = () => {
     if (!ensureFreshInventory()) return
-    const selectedItems = data.filter(i => selectedIds.has(i.id))
+    setOutboundSubmitError(null)
+    if (projectList.length === 0) void fetchProjects()
+    const selectedItems = data.filter(i => visibleSelectedIds.has(i.id))
     const newMaterials = selectedItems
       .filter(item => item.stock > 0)
       .filter(item => !outboundMaterials.find(m => m.materialId === item.materialId))
@@ -374,13 +414,13 @@ export function useInventoryPage() {
     setCheckedMaterialIds(new Set())
     setMaterialLoading(true)
     try {
-      const res: any = await materialApi.getList({ page: 1, pageSize: 100 })
+      const res: any = await inventoryApi.getList({ page: 1, pageSize: 200 })
       const list = (res?.list || []).map((item: any) => ({
         id: item.id,
         code: item.code || '-',
         name: item.name,
         spec: item.spec || '-',
-        categoryName: item.categoryName || item.category || '-',
+        categoryName: '-',
         unit: item.unit || '-',
         stock: item.stock || 0,
       }))
@@ -479,9 +519,8 @@ export function useInventoryPage() {
   }
 
   const updateOutboundProject = (rowId: number, value: string) => {
-    setOutboundMaterials(prev => prev.map(m =>
-      m.rowId === rowId ? { ...m, project: value } : m
-    ))
+    void rowId
+    setOutboundMaterials(prev => prev.map(m => ({ ...m, project: value })))
   }
 
   const updateOutboundUser = (rowId: number, value: string) => {
@@ -502,43 +541,77 @@ export function useInventoryPage() {
     ))
   }
 
-  const confirmOutbound = async () => {
-    if (!ensureFreshInventory()) return
-    if (outboundMaterials.length === 0) return
+  const confirmOutbound = () => {
+    if (outboundSubmitPendingRef.current) return outboundSubmitPendingRef.current
+    if (!ensureFreshInventory()) return Promise.resolve()
+    if (outboundMaterials.length === 0) return Promise.resolve()
+    setOutboundSubmitError(null)
     for (const item of outboundMaterials) {
-      if (!item.quantity || item.quantity <= 0) return
-      if (item.quantity > item.stock) return
-      if (!item.user) return
-      if (item.usage === 'external' && (!item.receiver || item.receiver.trim() === '')) return
+      if (!item.quantity || item.quantity <= 0) {
+        setOutboundSubmitError(`请填写“${item.name}”的有效出库数量。`)
+        return Promise.resolve()
+      }
+      if (item.quantity > item.stock) {
+        setOutboundSubmitError(`“${item.name}”的数量超过当前成功加载的正库存缓存，请调整后重试。`)
+        return Promise.resolve()
+      }
+      if (item.usage === 'external' && (!item.receiver || item.receiver.trim() === '')) {
+        setOutboundSubmitError(`请填写“${item.name}”的接收方。`)
+        return Promise.resolve()
+      }
     }
-    try {
-      for (const item of outboundMaterials) {
+    const projects = [...new Set(outboundMaterials.map(item => item.project).filter(Boolean))]
+    if (projects.length > 1) {
+      setOutboundSubmitError('一张出库单只能关联一个项目，请统一后重试。')
+      return Promise.resolve()
+    }
+
+    const submit = (async () => {
+      setOutboundSubmitting(true)
+      try {
         await outboundApi.create({
           type: 'direct',
-          projectId: item.project || undefined,
+          projectId: projects[0] || undefined,
           remark: outboundRemark,
-          operator: item.user,
-          items: [{
+          items: outboundMaterials.map(item => ({
             materialId: item.materialId,
             quantity: item.quantity,
             usage: item.usage,
-            receiver: item.usage === 'external' ? item.receiver : null,
-          }],
+            receiver: item.usage === 'external' ? item.receiver.trim() : null,
+          })),
         } as any)
+        toast.success('出库登记成功')
+        setOutboundMaterials([])
+        setOutboundRemark('')
+        setOutboundModalOpen(false)
+        refresh()
+        void fetchStats()
+      } catch (cause) {
+        const error = cause as {
+          response?: { status?: number; data?: { error?: { message?: string; code?: string } } }
+          message?: string
+        }
+        if (error.response?.status === 422) {
+          setOutboundSubmitError('可用批次库存不足，整单未出库。请调整数量后重试；系统不会静默换成不符合条件的批次。')
+        } else if (error.response?.status === 403) {
+          setOutboundSubmitError('当前账号没有出库写权限，整单未出库。')
+        } else {
+          setOutboundSubmitError(error.response?.data?.error?.message || error.message || '出库没有完成，整单未出库。请稍后重试。')
+        }
+      } finally {
+        setOutboundSubmitting(false)
       }
-      setOutboundMaterials([])
-      setOutboundRemark('')
-      setOutboundModalOpen(false)
-      refresh()
-      fetchStats()
-    } catch (e) {
-      console.error(e)
-    }
+    })()
+    outboundSubmitPendingRef.current = submit
+    void submit.finally(() => {
+      if (outboundSubmitPendingRef.current === submit) outboundSubmitPendingRef.current = null
+    })
+    return submit
   }
 
   const confirmBatchScrap = async () => {
     if (!ensureFreshInventory()) return
-    const selectedItems = data.filter(i => selectedIds.has(i.id))
+    const selectedItems = data.filter(i => visibleSelectedIds.has(i.id))
     if (selectedItems.length === 0) {
       toast.error('请先选择要报废的物料')
       return
@@ -598,10 +671,10 @@ export function useInventoryPage() {
     pageSize,
     total,
     stats,
+    statsError,
     computedStats,
     quickFilterCounts,
     projectList,
-    userList,
 
     // 筛选/排序/选择状态
     keyword,
@@ -610,7 +683,7 @@ export function useInventoryPage() {
     quickFilter,
     sortField,
     sortDirection,
-    selectedIds,
+    selectedIds: visibleSelectedIds,
     expandedGroups,
 
     // 弹窗状态
@@ -632,6 +705,8 @@ export function useInventoryPage() {
     bomLoading,
     outboundRemark,
     outboundMaterials,
+    outboundSubmitting,
+    outboundSubmitError,
     scrapReason,
     scrapRemark,
     filteredMaterialList,
@@ -663,11 +738,12 @@ export function useInventoryPage() {
     setOutboundMaterials,
     setScrapReason,
     setScrapRemark,
-    setPage,
-    setPageSize,
+    setPage: changePage,
+    setPageSize: changePageSize,
 
     // Actions
     refresh: retryInventory,
+    retryStats: fetchStats,
     handleSort,
     toggleGroup,
     toggleSelectAll,
@@ -676,6 +752,7 @@ export function useInventoryPage() {
     handleSearch,
     handleReset,
     handleQuickFilter,
+    openEmptyOutboundModal,
     openOutboundModal,
     openBatchOutbound,
     openMaterialSelector,

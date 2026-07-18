@@ -1,4 +1,5 @@
-import { X, Trash2, Plus } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { AlertCircle, Plus, Trash2, X } from 'lucide-react'
 import type { Project } from '@/types'
 
 interface OutboundMaterial {
@@ -21,16 +22,16 @@ interface Props {
   materials: OutboundMaterial[]
   remark: string
   projectList: Project[]
-  userList: { id: string; real_name: string }[]
+  submitting: boolean
+  submitError: string | null
   onClose: () => void
   onAddMaterial: () => void
   onRemoveItem: (rowId: number) => void
   onUpdateQuantity: (rowId: number, value: string) => void
   onUpdateProject: (rowId: number, value: string) => void
-  onUpdateUser: (rowId: number, value: string) => void
   onUpdateUsage: (rowId: number, value: 'self' | 'external') => void
   onUpdateReceiver: (rowId: number, value: string) => void
-  onChangeRemark: (v: string) => void
+  onChangeRemark: (value: string) => void
   onConfirm: () => void
 }
 
@@ -39,175 +40,240 @@ export function OutboundModal({
   materials,
   remark,
   projectList,
-  userList,
+  submitting,
+  submitError,
   onClose,
   onAddMaterial,
   onRemoveItem,
   onUpdateQuantity,
   onUpdateProject,
-  onUpdateUser,
   onUpdateUsage,
   onUpdateReceiver,
   onChangeRemark,
   onConfirm,
 }: Props) {
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const projectId = materials[0]?.project ?? ''
+
+  useEffect(() => {
+    if (!open) return undefined
+    titleRef.current?.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !submitting) onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [open, onClose, submitting])
+
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/[0.6]">
-      <div className="absolute inset-0" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-lg w-full max-w-[1100px] max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900 tracking-normal">出库登记</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="inventory-outbound-title"
+        aria-describedby="inventory-outbound-contract"
+        className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-lg"
+      >
+        <header className="flex items-center justify-between border-b border-gray-200 px-5 py-4 sm:px-6">
+          <div>
+            <h2
+              id="inventory-outbound-title"
+              ref={titleRef}
+              tabIndex={-1}
+              className="text-lg font-semibold text-gray-900 outline-none"
+            >
+              出库登记
+            </h2>
+            <p id="inventory-outbound-contract" className="mt-1 text-xs text-gray-500">
+              本单一次提交、整单成功或整单拒绝；未指定批次时由后端在全部可用批次中按 FEFO 拆分。
+            </p>
+          </div>
           <button
+            type="button"
+            aria-label="关闭出库登记"
             onClick={onClose}
-            className="w-9 h-9 flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all duration-150 ease"
+            disabled={submitting}
+            className="flex h-9 w-9 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
-        </div>
+        </header>
 
-        <div className="flex-1 overflow-auto p-6">
-          <div className="mb-5">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-base font-semibold text-gray-900">出库明细</h4>
-              <button
-                onClick={onAddMaterial}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 transition-all duration-150 ease shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                添加物料
-              </button>
-            </div>
-
-            {materials.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <svg className="w-12 h-12 mx-auto mb-3 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-                </svg>
-                <div className="text-sm">请选择物料或点击"添加物料"按钮</div>
-              </div>
-            ) : (
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full text-[13px] border-collapse">
-                  <thead>
-                    <tr>
-                      <th className="bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-700 tracking-wide border-b border-gray-200">物料名称</th>
-                      <th className="bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-700 tracking-wide border-b border-gray-200">关联项目</th>
-                      <th className="bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-700 tracking-wide border-b border-gray-200">批次号</th>
-                      <th className="bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-700 tracking-wide border-b border-gray-200">库存</th>
-                      <th className="bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-700 tracking-wide border-b border-gray-200 w-[90px]">出库数量</th>
-                      <th className="bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-700 tracking-wide border-b border-gray-200 w-[120px]">领用人</th>
-                      <th className="bg-gray-50 px-4 py-3 text-left text-xs font-medium text-gray-700 tracking-wide border-b border-gray-200 w-[50px]">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#f3f4f6]">
-                    {materials.map(m => (
-                      <tr key={m.rowId} className="hover:bg-gray-50 transition-colors duration-150 ease">
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900">{m.name}</div>
-                          <div className="text-xs text-gray-500">{m.spec}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <select
-                            value={m.project}
-                            onChange={e => onUpdateProject(m.rowId, e.target.value)}
-                            className="h-8 px-3 border border-gray-300 rounded-md text-xs bg-white focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150 ease"
-                          >
-                            <option value="">公共成本</option>
-                            {projectList.map(p => (
-                              <option key={p.id} value={p.name}>{p.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">{m.batch || '-'}</td>
-                        <td className="px-4 py-3 text-gray-900">{m.stock}</td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="number"
-                            value={m.quantity}
-                            min={1}
-                            max={m.stock}
-                            onChange={e => onUpdateQuantity(m.rowId, e.target.value)}
-                            className="w-[70px] h-8 px-3 border border-gray-300 rounded-md text-xs focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150 ease"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <select
-                            value={m.user}
-                            onChange={e => onUpdateUser(m.rowId, e.target.value)}
-                            className="h-8 px-3 border border-gray-300 rounded-md text-xs bg-white focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150 ease"
-                          >
-                            <option value="">选择领用人</option>
-                            {userList.map(u => (
-                              <option key={u.id} value={u.real_name}>{u.real_name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-4 py-3">
-                          <select
-                            value={m.usage}
-                            onChange={e => onUpdateUsage(m.rowId, e.target.value as 'self' | 'external')}
-                            className="h-8 px-3 border border-gray-300 rounded-md text-xs bg-white focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150 ease"
-                          >
-                            <option value="self">自用</option>
-                            <option value="external">外给</option>
-                          </select>
-                        </td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="text"
-                            value={m.receiver}
-                            onChange={e => onUpdateReceiver(m.rowId, e.target.value)}
-                            placeholder={m.usage === 'external' ? '接收方名称' : '-'}
-                            disabled={m.usage === 'self'}
-                            className="w-[120px] h-8 px-3 border border-gray-300 rounded-md text-xs focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 disabled:bg-gray-100 disabled:text-gray-400 transition-all duration-150 ease"
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => onRemoveItem(m.rowId)}
-                            className="text-red-500 hover:text-red-600 transition-colors duration-150 ease"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+          <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+            页面只显示当前最早 FEFO 候选批次作为取货提示，不会把它钉成指定批次。实际批次分配以成功后的出库详情为准。
           </div>
 
+          {submitError && (
+            <div role="alert" className="mb-5 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{submitError}</span>
+            </div>
+          )}
+
+          <div className="mb-5 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="inventory-outbound-project" className="mb-1.5 block text-sm font-medium text-gray-700">
+                关联项目（整单）
+              </label>
+              <select
+                id="inventory-outbound-project"
+                value={projectId}
+                onChange={event => onUpdateProject(materials[0]?.rowId ?? 0, event.target.value)}
+                disabled={submitting}
+                className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 disabled:bg-gray-100"
+              >
+                <option value="">公共成本</option>
+                {projectList.map(project => (
+                  <option key={project.id} value={project.id}>{project.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-600">
+              <div className="font-medium text-gray-900">操作人</div>
+              <div className="mt-1">由后端按当前登录账号记录，页面不接受代填。</div>
+            </div>
+          </div>
+
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-base font-semibold text-gray-900">出库明细</h3>
+            <button
+              type="button"
+              onClick={onAddMaterial}
+              disabled={submitting}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-blue-500 px-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              添加物料
+            </button>
+          </div>
+
+          {materials.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 py-12 text-center text-sm text-gray-500">
+              还没有出库物料，请先添加物料。
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-[860px] w-full text-sm">
+                <thead className="border-b border-gray-200 bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">物料</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">FEFO 候选</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-600">正库存缓存</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">出库数量</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">用途</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">接收方</th>
+                    <th className="w-14 px-4 py-3 text-center text-xs font-medium text-gray-600">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {materials.map(material => (
+                    <tr key={material.rowId} className="[content-visibility:auto] [contain-intrinsic-size:0_56px]">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{material.name}</div>
+                        <div className="mt-0.5 text-xs text-gray-500">{material.spec || '规格未提供'}</div>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                        {material.batch && material.batch !== '-' ? material.batch : '未取得批次证据'}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-gray-900">{material.stock} {material.unit}</td>
+                      <td className="px-4 py-3">
+                        <label className="sr-only" htmlFor={`inventory-outbound-quantity-${material.rowId}`}>
+                          {material.name} 出库数量
+                        </label>
+                        <input
+                          id={`inventory-outbound-quantity-${material.rowId}`}
+                          type="number"
+                          inputMode="decimal"
+                          min={1}
+                          max={material.stock}
+                          value={material.quantity}
+                          onChange={event => onUpdateQuantity(material.rowId, event.target.value)}
+                          disabled={submitting}
+                          className="h-9 w-24 rounded-md border border-gray-300 px-3 text-sm tabular-nums focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 disabled:bg-gray-100"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <label className="sr-only" htmlFor={`inventory-outbound-usage-${material.rowId}`}>
+                          {material.name} 用途
+                        </label>
+                        <select
+                          id={`inventory-outbound-usage-${material.rowId}`}
+                          value={material.usage}
+                          onChange={event => onUpdateUsage(material.rowId, event.target.value as 'self' | 'external')}
+                          disabled={submitting}
+                          className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 disabled:bg-gray-100"
+                        >
+                          <option value="self">内部领用</option>
+                          <option value="external">外部领用</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-3">
+                        <label className="sr-only" htmlFor={`inventory-outbound-receiver-${material.rowId}`}>
+                          {material.name} 接收方
+                        </label>
+                        <input
+                          id={`inventory-outbound-receiver-${material.rowId}`}
+                          value={material.receiver}
+                          onChange={event => onUpdateReceiver(material.rowId, event.target.value)}
+                          placeholder={material.usage === 'external' ? '填写接收方' : '无需填写'}
+                          disabled={submitting || material.usage === 'self'}
+                          className="h-9 w-32 rounded-md border border-gray-300 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 disabled:bg-gray-100 disabled:text-gray-400"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          aria-label={`移除 ${material.name}`}
+                          onClick={() => onRemoveItem(material.rowId)}
+                          disabled={submitting}
+                          className="rounded-md p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="mt-5">
-            <label className="block text-[13px] font-medium text-gray-700 mb-1.5">备注</label>
+            <label htmlFor="inventory-outbound-remark" className="mb-1.5 block text-sm font-medium text-gray-700">备注</label>
             <textarea
+              id="inventory-outbound-remark"
               value={remark}
-              onChange={e => onChangeRemark(e.target.value)}
+              onChange={event => onChangeRemark(event.target.value)}
               rows={2}
-              placeholder="请输入出库备注信息（可选）"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150 ease resize-none"
+              disabled={submitting}
+              placeholder="选填"
+              className="w-full resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 disabled:bg-gray-100"
             />
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-3 bg-gray-50">
+        <footer className="flex shrink-0 items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-5 py-4 sm:px-6">
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-50 transition-all duration-150 ease shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-400/30"
+            disabled={submitting}
+            className="h-10 rounded-md border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             取消
           </button>
           <button
+            type="button"
             onClick={onConfirm}
-            disabled={materials.length === 0}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 ease shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+            disabled={submitting || materials.length === 0}
+            className="h-10 rounded-md bg-blue-500 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            确认出库
+            {submitting ? '正在提交整单…' : '确认整单出库'}
           </button>
-        </div>
-      </div>
+        </footer>
+      </section>
     </div>
   )
 }

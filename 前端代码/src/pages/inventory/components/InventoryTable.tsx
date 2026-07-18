@@ -1,9 +1,8 @@
-import { Fragment } from 'react'
-import { Search, ArrowUpDown, ArrowUp, ArrowDown, X, Trash2, Upload, ChevronRight, AlertCircle, RefreshCw } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, Search, Trash2, Upload, X } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
-import { StockLevelIndicator } from './StockLevelIndicator'
-import { ExpiryTag } from './ExpiryTag'
 import type { InventoryItem } from '@/types'
+import { ExpiryTag } from './ExpiryTag'
+import { StockLevelIndicator } from './StockLevelIndicator'
 
 interface InventoryRow extends InventoryItem {
   batch?: string
@@ -13,6 +12,7 @@ interface InventoryRow extends InventoryItem {
 type SortField = 'quantity' | 'expiry' | null
 type SortDirection = 'asc' | 'desc'
 type QuickFilterType = 'all' | 'low-stock' | 'expiring-soon' | 'expiring-month' | 'expired' | 'out-of-stock'
+type Count = number | null
 
 interface Props {
   data: InventoryRow[]
@@ -29,19 +29,15 @@ interface Props {
   sortDirection: SortDirection
   selectedIds: Set<string>
   expandedGroups: Set<string>
-  stats: {
-    total: number
-    normal: number
-    low: number
-    warning: number
-    expired: number
-    outOfStock: number
-  }
-  quickFilterCounts: Record<QuickFilterType, number>
-  onKeywordChange: (v: string) => void
-  onCategoryChange: (v: string) => void
-  onLocationChange: (v: string) => void
-  onQuickFilter: (f: QuickFilterType) => void
+  stats: { total: Count; normal: Count; low: Count; warning: Count; expired: Count; outOfStock: Count }
+  quickFilterCounts: Record<QuickFilterType, Count>
+  statsError?: string | null
+  canOutbound?: boolean
+  canScrap?: boolean
+  onKeywordChange: (value: string) => void
+  onCategoryChange: (value: string) => void
+  onLocationChange: (value: string) => void
+  onQuickFilter: (filter: QuickFilterType) => void
   onSort: (field: SortField) => void
   onSearch: () => void
   onReset: () => void
@@ -51,31 +47,44 @@ interface Props {
   onToggleGroup: (name: string) => void
   onDetail: (item: InventoryRow) => void
   onOutbound: (item: InventoryRow) => void
-  onPageChange: (p: number) => void
-  onPageSizeChange: (s: number) => void
+  onPageChange: (page: number) => void
+  onPageSizeChange: (size: number) => void
   onBatchOutbound: () => void
   onBatchScrap: () => void
   onRetry: () => void
+  onRetryStats?: () => void
 }
 
-function getStatusInfo(item: InventoryRow) {
-  const today = new Date()
-  const expiry = item.expiry && item.expiry !== '-' ? new Date(item.expiry) : null
-  const daysLeft = expiry ? Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 999
+const STATUS_COPY: Record<string, { label: string; className: string }> = {
+  normal: { label: '正常', className: 'bg-green-50 text-green-700' },
+  'low-stock': { label: '库存不足', className: 'bg-orange-50 text-orange-700' },
+  warning: { label: '30 天内到期', className: 'bg-amber-50 text-amber-700' },
+  expired: { label: '已过期', className: 'bg-red-50 text-red-700' },
+  'out-of-stock': { label: '无正库存', className: 'bg-gray-100 text-gray-700' },
+}
 
-  if (item.stock === 0) {
-    return { label: '已缺货', badgeClass: 'bg-red-50 text-red-600' }
-  }
-  if (expiry && daysLeft < 0) {
-    return { label: '已过期', badgeClass: 'bg-red-50 text-red-600' }
-  }
-  if (item.stock <= item.minStock) {
-    return { label: '库存不足', badgeClass: 'bg-orange-50 text-orange-600' }
-  }
-  if (expiry && daysLeft <= 30) {
-    return { label: '即将过期', badgeClass: 'bg-yellow-50 text-yellow-700' }
-  }
-  return { label: '正常', badgeClass: 'bg-green-50 text-green-600' }
+function displayCount(value: Count) {
+  return value === null ? '—' : value.toLocaleString('zh-CN')
+}
+
+function displayLocation(item: InventoryRow) {
+  const hasId = typeof item.locationId === 'string' && item.locationId.trim() !== ''
+  const hasName = typeof item.locationName === 'string'
+    && item.locationName.trim() !== ''
+    && item.locationName !== '-'
+  if (!hasId) return { text: '未登记库位', className: 'text-amber-700' }
+  if (!hasName) return { text: '库位引用失效', className: 'text-red-700' }
+  return { text: `${item.locationName}（未按批次验证）`, className: 'text-gray-700' }
+}
+
+function sortRows(data: InventoryRow[], field: SortField, direction: SortDirection) {
+  if (!field) return data
+  return [...data].sort((left, right) => {
+    const leftValue = field === 'quantity' ? left.stock : left.expiry && left.expiry !== '-' ? left.expiry : '9999-12-31'
+    const rightValue = field === 'quantity' ? right.stock : right.expiry && right.expiry !== '-' ? right.expiry : '9999-12-31'
+    const result = leftValue === rightValue ? 0 : leftValue > rightValue ? 1 : -1
+    return direction === 'asc' ? result : -result
+  })
 }
 
 export function InventoryTable({
@@ -86,18 +95,16 @@ export function InventoryTable({
   page,
   pageSize,
   keyword,
-  category,
-  location,
   quickFilter,
   sortField,
   sortDirection,
   selectedIds,
-  expandedGroups,
   stats,
   quickFilterCounts,
+  statsError = null,
+  canOutbound = true,
+  canScrap = true,
   onKeywordChange,
-  onCategoryChange,
-  onLocationChange,
   onQuickFilter,
   onSort,
   onSearch,
@@ -105,7 +112,6 @@ export function InventoryTable({
   onToggleSelectAll,
   onToggleSelectOne,
   onClearSelection,
-  onToggleGroup,
   onDetail,
   onOutbound,
   onPageChange,
@@ -113,394 +119,193 @@ export function InventoryTable({
   onBatchOutbound,
   onBatchScrap,
   onRetry,
+  onRetryStats,
 }: Props) {
-  const sortedData = [...data]
-  if (sortField) {
-    sortedData.sort((a, b) => {
-      let aVal: any, bVal: any
-      if (sortField === 'quantity') {
-        aVal = a.stock || 0
-        bVal = b.stock || 0
-      } else if (sortField === 'expiry') {
-        aVal = a.expiry || '9999-12-31'
-        bVal = b.expiry || '9999-12-31'
-      }
-      if (sortDirection === 'asc') {
-        return aVal > bVal ? 1 : -1
-      }
-      return aVal < bVal ? 1 : -1
-    })
-  }
-
-  const groupedData: Record<string, InventoryRow[]> = {}
-  sortedData.forEach(item => {
-    if (!groupedData[item.name]) groupedData[item.name] = []
-    groupedData[item.name].push(item)
-  })
+  const rows = sortRows(data, sortField, sortDirection)
+  const hasFilters = Boolean(keyword.trim()) || quickFilter !== 'all'
+  const summary = [
+    { label: '正库存物料条目', value: stats.total, border: 'border-l-blue-500' },
+    { label: '正常', value: stats.normal, border: 'border-l-green-500' },
+    { label: '库存不足', value: stats.low, border: 'border-l-orange-500' },
+    { label: '30 天内到期', value: stats.warning, border: 'border-l-amber-500' },
+    { label: '已过期', value: stats.expired, border: 'border-l-red-500' },
+  ]
+  const filters: Array<{ key: QuickFilterType; label: string }> = [
+    { key: 'all', label: '全部正库存' },
+    { key: 'low-stock', label: '库存不足' },
+    { key: 'expiring-month', label: '30 天内到期' },
+    { key: 'expired', label: '已过期' },
+  ]
 
   return (
-    <>
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-5 gap-4">
-        {[
-          { key: 'all', label: '总库存数量', value: stats.total, color: 'border-l-4 border-l-[#3b82f6]' },
-          { key: 'normal', label: '正常', value: stats.normal, color: 'border-l-4 border-l-green-500' },
-          { key: 'low-stock', label: '库存不足', value: stats.low, color: 'border-l-4 border-l-orange-500' },
-          { key: 'warning', label: '即将过期', value: stats.warning, color: 'border-l-4 border-l-yellow-500' },
-          { key: 'expired', label: '已过期', value: stats.expired, color: 'border-l-4 border-l-red-500' },
-        ].map(stat => (
-          <button
-            key={stat.key}
-            onClick={() => onQuickFilter(stat.key as QuickFilterType)}
-            className={`bg-white rounded-lg shadow-sm p-5 text-left transition-all duration-150 ease hover:shadow-md ${stat.color}`}
-          >
-            <div className="text-[28px] font-semibold text-gray-900">{stat.value}</div>
-            <div className="text-sm text-gray-500 mt-1">{stat.label}</div>
-          </button>
+    <div className="space-y-4">
+      <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        每行是物料级正库存缓存，不是逐批持仓。批次/效期只显示当前 FEFO 起始候选；登记库位未按批次验证。
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {summary.map(item => (
+          <div key={item.label} className={`rounded-lg border border-gray-200 border-l-4 ${item.border} bg-white p-4 shadow-sm`}>
+            <div className="text-2xl font-semibold tabular-nums text-gray-900">{displayCount(item.value)}</div>
+            <div className="mt-1 text-sm text-gray-500">{item.label}</div>
+          </div>
         ))}
       </div>
 
-      {/* 快速筛选 */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {[
-          { key: 'all', label: '全部', count: quickFilterCounts.all },
-          { key: 'low-stock', label: '库存不足', count: quickFilterCounts['low-stock'] },
-          { key: 'expiring-soon', label: '本周过期', count: quickFilterCounts['expiring-soon'] },
-          { key: 'expiring-month', label: '本月过期', count: quickFilterCounts['expiring-month'] },
-          { key: 'expired', label: '已过期', count: quickFilterCounts.expired },
-          { key: 'out-of-stock', label: '缺货', count: quickFilterCounts['out-of-stock'] },
-        ].map(filter => (
+      {statsError && (
+        <div role="status" className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span>统计数据未能刷新，破折号表示未知，不代表 0。</span>
+          {onRetryStats && (
+            <button type="button" onClick={onRetryStats} className="rounded-md border border-amber-300 bg-white px-3 py-1.5 font-medium hover:bg-amber-100">
+              重试统计
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2" aria-label="库存状态筛选">
+        {filters.map(filter => (
           <button
             key={filter.key}
-            onClick={() => onQuickFilter(filter.key as QuickFilterType)}
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-150 ease ${
+            type="button"
+            aria-pressed={quickFilter === filter.key}
+            onClick={() => onQuickFilter(filter.key)}
+            className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ${
               quickFilter === filter.key
-                ? 'bg-blue-500 text-white'
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                ? 'border-blue-500 bg-blue-500 text-white'
+                : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
             {filter.label}
-            <span className={`${quickFilter === filter.key ? 'bg-white/20' : 'bg-gray-100'} px-1.5 py-0.5 rounded text-[11px]`}>
-              {filter.count}
+            <span aria-label={`${filter.label}数量`} className="tabular-nums opacity-80">
+              {displayCount(quickFilterCounts[filter.key])}
             </span>
           </button>
         ))}
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        {/* 卡片头部 - 筛选栏 */}
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-4 flex-wrap">
-          <span className="text-base font-semibold text-gray-900">库存明细</span>
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="搜索耗材名称/批号/供应商..."
-                value={keyword}
-                onChange={e => onKeywordChange(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && onSearch()}
-                className="w-[260px] pl-10 pr-4 h-10 border border-gray-300 rounded-md text-sm focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150 ease"
-              />
-            </div>
-            <select
-              value={category}
-              onChange={e => onCategoryChange(e.target.value)}
-              className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150 ease bg-white"
-            >
-              <option>全部分类</option>
-              <option>试剂</option>
-              <option>耗材</option>
-              <option>设备</option>
-            </select>
-            <select
-              value={location}
-              onChange={e => onLocationChange(e.target.value)}
-              className="h-10 px-3 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 transition-all duration-150 ease bg-white"
-            >
-              <option>全部库位</option>
-              <option>A区-试剂冷藏</option>
-              <option>B区-常温耗材</option>
-              <option>C区-设备配件</option>
-            </select>
-            <button
-              onClick={onSearch}
-              className="h-10 px-4 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 transition-all duration-150 ease font-medium"
-            >
-              查询
-            </button>
-            <button
-              onClick={onReset}
-              className="h-10 px-4 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 transition-all duration-150 ease font-medium"
-            >
-              重置
-            </button>
+      <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm" aria-labelledby="inventory-table-title">
+        <div className="flex flex-col gap-3 border-b border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 id="inventory-table-title" className="font-semibold text-gray-900">库存浏览</h2>
+            <p className="mt-0.5 text-xs text-gray-500">搜索支持物料名称与编码；排序只影响当前页。</p>
           </div>
+          <form
+            className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row"
+            onSubmit={event => { event.preventDefault(); onSearch() }}
+          >
+            <label className="relative block sm:w-72">
+              <span className="sr-only">搜索物料名称或编码</span>
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                value={keyword}
+                onChange={event => onKeywordChange(event.target.value)}
+                placeholder="搜索物料名称或编码"
+                className="h-10 w-full rounded-md border border-gray-300 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-[3px] focus:ring-blue-500/10"
+              />
+            </label>
+            <button type="submit" className="h-10 rounded-md bg-blue-500 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-600">查询</button>
+            <button type="button" onClick={onReset} className="h-10 rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">重置</button>
+          </form>
         </div>
 
-        {error && sortedData.length > 0 && (
-          <div role="alert" className="flex items-center gap-3 border-b border-amber-200 bg-amber-50 px-5 py-3 text-amber-900">
+        {error && rows.length > 0 && (
+          <div role="alert" className="flex flex-col gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 sm:flex-row sm:items-center">
             <AlertCircle className="h-5 w-5 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium">当前显示的是上次成功加载的数据</div>
-              <div className="text-xs text-amber-700">库存数据刷新失败，请重试以获取最新数据。</div>
+              <div className="text-xs text-amber-700">刷新失败后数据已标记为陈旧，恢复新鲜状态前禁止库存写操作。</div>
             </div>
             <button
               type="button"
               onClick={onRetry}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 text-sm font-medium hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw className="h-4 w-4" />
               重新加载
             </button>
           </div>
         )}
 
-        {/* 批量操作栏 */}
         {selectedIds.size > 0 && (
-          <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
-            <span className="text-sm text-gray-700">
-              已选择 <strong className="text-blue-500">{selectedIds.size}</strong> 项
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onBatchOutbound}
-                disabled={Boolean(error)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-white hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 rounded-md transition-all duration-150 ease"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                批量出库
-              </button>
-              <button
-                onClick={onBatchScrap}
-                disabled={Boolean(error)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-white hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 rounded-md transition-all duration-150 ease"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                批量报废
-              </button>
-              <button
-                onClick={onClearSelection}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-white hover:shadow-sm rounded-md transition-all duration-150 ease"
-              >
-                <X className="w-3.5 h-3.5" />
-                取消选择
+          <div className="flex flex-col gap-3 border-b border-blue-100 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-sm text-blue-800">已选择 <strong>{selectedIds.size}</strong> 项当前页物料</span>
+            <div className="flex flex-wrap gap-2">
+              {canOutbound && (
+                <button type="button" onClick={onBatchOutbound} disabled={Boolean(error)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-sm font-medium text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
+                  <Upload className="h-4 w-4" />批量加入出库单
+                </button>
+              )}
+              {canScrap && (
+                <button type="button" onClick={onBatchScrap} disabled={Boolean(error)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-sm font-medium text-gray-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
+                  <Trash2 className="h-4 w-4" />批量报废
+                </button>
+              )}
+              <button type="button" onClick={onClearSelection} className="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-gray-700 hover:bg-white">
+                <X className="h-4 w-4" />取消选择
               </button>
             </div>
           </div>
         )}
 
-        {/* 表格 */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
+          <table className="min-w-[980px] w-full text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50">
               <tr>
-                <th className="w-10 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.size === sortedData.length && sortedData.length > 0}
-                    onChange={onToggleSelectAll}
-                    disabled={Boolean(error)}
-                    className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
-                  />
+                <th className="w-12 px-4 py-3">
+                  <label className="sr-only" htmlFor="inventory-select-page">选择当前页全部物料</label>
+                  <input id="inventory-select-page" type="checkbox" checked={rows.length > 0 && selectedIds.size === rows.length} onChange={onToggleSelectAll} disabled={Boolean(error)} className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500" />
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 tracking-wide">耗材名称</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 tracking-wide">批号</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 tracking-wide">库位</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 tracking-wide">
-                  <button onClick={() => onSort('quantity')} className="inline-flex items-center gap-1 hover:text-gray-700 transition-colors">
-                    库存数量
-                    {sortField === 'quantity' ? (
-                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-50" />
-                    )}
-                  </button>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">物料</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">FEFO 起始批次</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">登记库位（未按批次验证）</th>
+                <th aria-sort={sortField === 'quantity' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="px-4 py-3 text-right text-xs font-medium text-gray-600">
+                  <button type="button" onClick={() => onSort('quantity')} className="inline-flex items-center gap-1 hover:text-gray-900">正库存缓存{sortField === 'quantity' ? sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}</button>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 tracking-wide">
-                  <button onClick={() => onSort('expiry')} className="inline-flex items-center gap-1 hover:text-gray-700 transition-colors">
-                    有效期
-                    {sortField === 'expiry' ? (
-                      sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 opacity-50" />
-                    )}
-                  </button>
+                <th aria-sort={sortField === 'expiry' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'} className="px-4 py-3 text-left text-xs font-medium text-gray-600">
+                  <button type="button" onClick={() => onSort('expiry')} className="inline-flex items-center gap-1 hover:text-gray-900">候选批次效期{sortField === 'expiry' ? sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" /> : <ArrowUpDown className="h-3 w-3" />}</button>
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 tracking-wide">状态</th>
-                <th className="w-[140px] px-4 py-3 text-left text-xs font-medium text-gray-500 tracking-wide">操作</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">状态</th>
+                <th className="w-36 px-4 py-3 text-left text-xs font-medium text-gray-600">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="w-5 h-5 border-2 border-gray-200 border-t-[#3b82f6] rounded-full animate-spin" />
-                      加载中...
-                    </div>
-                  </td>
-                </tr>
-              ) : error && sortedData.length === 0 ? (
-                <tr>
-                  <td colSpan={8}>
-                    <div role="alert" className="flex flex-col items-center justify-center py-16">
-                      <AlertCircle className="mb-4 h-16 w-16 text-red-300" strokeWidth={1.5} />
-                      <div className="mb-1 text-base font-medium text-gray-900">库存数据没能加载</div>
-                      <div className="mb-4 text-sm text-gray-500">请检查网络连接后重试。</div>
-                      <button
-                        type="button"
-                        onClick={onRetry}
-                        className="inline-flex items-center gap-2 rounded-md bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                        重试
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : sortedData.length === 0 ? (
-                <tr>
-                  <td colSpan={8}>
-                    <div className="flex flex-col items-center justify-center py-16">
-                      <svg className="w-16 h-16 text-gray-300 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
-                      </svg>
-                      <div className="text-base font-medium text-gray-900 mb-1">暂无库存数据</div>
-                      <div className="text-sm text-gray-500 mb-4">当前筛选条件下没有找到库存记录，请尝试调整筛选条件或添加入库记录</div>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => { window.location.href = '/inbound' }}
-                          className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 transition-all duration-150 ease"
-                        >
-                          添加入库
-                        </button>
-                        <button
-                          onClick={onReset}
-                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-50 transition-all duration-150 ease"
-                        >
-                          清除筛选
-                        </button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                Object.entries(groupedData).map(([groupName, batches]) => {
-                  const isExpanded = expandedGroups.has(groupName)
-                  const first = batches[0]
-                  const totalStock = batches.reduce((sum, b) => sum + (b.stock || 0), 0)
-                  const minStock = first?.minStock || 0
-                  return (
-                    <Fragment key={groupName}>
-                      <tr
-                        className="hover:bg-gray-50 transition-colors duration-150 cursor-pointer bg-gray-50/50"
-                        onClick={() => onToggleGroup(groupName)}
-                      >
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
-                            onChange={(e) => e.stopPropagation()}
-                            disabled={Boolean(error)}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>
-                              <ChevronRight className="w-3 h-3" strokeWidth={3} />
-                            </span>
-                            <div>
-                              <div className="font-semibold text-gray-900">{first?.name}</div>
-                              <div className="text-xs text-gray-500 mt-0.5">{first?.spec || ''}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                            {batches.length} 批次
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 text-sm">{first?.locationName || first?.locationId || '-'}</td>
-                        <td className="px-4 py-3">
-                          <span className="font-semibold text-gray-900">{totalStock}</span>
-                          <span className="text-xs text-green-500 ml-1">{totalStock >= minStock ? '充足' : '不足'}</span>
-                        </td>
-                        <td className="px-4 py-3"></td>
-                        <td className="px-4 py-3"></td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); onDetail(first!) }} className="text-sm text-gray-600 hover:text-gray-900 transition-colors">详情</button>
-                            <button disabled={Boolean(error)} onClick={(e) => { e.stopPropagation(); onOutbound(first!) }} className="text-sm text-blue-500 hover:text-blue-600 disabled:cursor-not-allowed disabled:text-gray-300 transition-colors">出库</button>
-                          </div>
-                        </td>
-                      </tr>
-                      {isExpanded && batches.map(row => {
-                        const statusInfo = getStatusInfo(row)
-                        const isSelected = selectedIds.has(row.id)
-                        return (
-                          <tr
-                            key={row.id}
-                            className="hover:bg-gray-50 transition-colors duration-150"
-                          >
-                            <td className="px-4 py-3 pl-8">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => onToggleSelectOne(row.id)}
-                                disabled={Boolean(error)}
-                                className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
-                              />
-                            </td>
-                            <td className="px-4 py-3 pl-12">
-                              <span className="text-gray-400 text-xs mr-1">└</span>
-                              <span className="font-medium text-gray-900">{row.name}</span>
-                            </td>
-                            <td className="px-4 py-3 font-mono text-gray-600 text-xs">{row.batch || '-'}</td>
-                            <td className="px-4 py-3 text-gray-600 text-sm">{row.locationName || row.locationId || '-'}</td>
-                            <td className="px-4 py-3">
-                              <span className="font-medium text-gray-900">{row.stock}</span>
-                              <StockLevelIndicator stock={row.stock} minStock={row.minStock} />
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="text-gray-600">{row.expiry || '-'}</span>
-                              <ExpiryTag expiry={row.expiry} />
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${statusInfo.badgeClass}`}>
-                                {statusInfo.label}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => onDetail(row)} className="text-sm text-gray-600 hover:text-gray-900 transition-colors">详情</button>
-                                <button disabled={Boolean(error)} onClick={() => onOutbound(row)} className="text-sm text-blue-500 hover:text-blue-600 disabled:cursor-not-allowed disabled:text-gray-300 transition-colors">出库</button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </Fragment>
-                  )
-                })
-              )}
+              {loading && rows.length === 0 ? (
+                Array.from({ length: 4 }, (_, index) => (
+                  <tr key={index} aria-label="正在加载库存" className="animate-pulse">
+                    <td colSpan={8} className="px-4 py-3"><div className="h-8 rounded bg-gray-100" /></td>
+                  </tr>
+                ))
+              ) : error && rows.length === 0 ? (
+                <tr><td colSpan={8}><div role="alert" className="flex flex-col items-center py-14 text-center"><AlertCircle className="mb-3 h-12 w-12 text-red-300" /><div className="font-medium text-gray-900">库存数据没能加载</div><div className="mt-1 text-sm text-gray-500">没有把请求失败当成空库存，请重试。</div><button type="button" onClick={onRetry} className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-blue-500 px-4 text-sm font-medium text-white hover:bg-blue-600"><RefreshCw className="h-4 w-4" />重试</button></div></td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={8}><div className="flex flex-col items-center py-14 text-center"><div className="font-medium text-gray-900">暂无库存数据</div><div className="mt-1 max-w-lg text-sm text-gray-500">{hasFilters ? '当前筛选没有匹配的正库存物料，请调整筛选条件。' : '库存接口成功返回 0 个正库存物料条目；这不等于已核实所有批次库存都为 0。'}</div>{hasFilters && <button type="button" onClick={onReset} className="mt-4 h-10 rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">清除筛选</button>}</div></td></tr>
+              ) : rows.map(row => {
+                const locationEvidence = displayLocation(row)
+                const status = STATUS_COPY[row.status] ?? STATUS_COPY.normal
+                return (
+                  <tr key={row.id} className={`[content-visibility:auto] [contain-intrinsic-size:0_58px] hover:bg-gray-50 ${selectedIds.has(row.id) ? 'bg-blue-50' : ''}`}>
+                    <td className="px-4 py-3"><label className="sr-only" htmlFor={`inventory-select-${row.id}`}>选择 {row.name}</label><input id={`inventory-select-${row.id}`} type="checkbox" checked={selectedIds.has(row.id)} onChange={() => onToggleSelectOne(row.id)} disabled={Boolean(error)} className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500" /></td>
+                    <td className="px-4 py-3"><div className="font-medium text-gray-900">{row.name}</div><div className="mt-0.5 text-xs text-gray-500">{row.code} · {row.spec || '规格未提供'}</div></td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{row.batch && row.batch !== '-' ? row.batch : '未取得可用批次证据'}</td>
+                    <td className={`px-4 py-3 text-sm ${locationEvidence.className}`}>{locationEvidence.text}</td>
+                    <td className="px-4 py-3 text-right"><span className="font-medium tabular-nums text-gray-900">{row.stock} {row.unit}</span><StockLevelIndicator stock={row.stock} minStock={row.minStock} /></td>
+                    <td className="px-4 py-3"><span className="text-gray-700">{row.expiry && row.expiry !== '-' ? row.expiry : '未取得效期证据'}</span><ExpiryTag expiry={row.expiry} /></td>
+                    <td className="px-4 py-3"><span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${status.className}`}>{status.label}</span></td>
+                    <td className="px-4 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => onDetail(row)} className="text-sm text-gray-700 hover:text-gray-900">详情</button>{canOutbound && <button type="button" disabled={Boolean(error)} onClick={() => onOutbound(row)} className="text-sm font-medium text-blue-600 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-gray-300">出库</button>}</div></td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
 
-        {/* 分页 */}
-        <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-between">
-          <span className="text-sm text-gray-500">共 {total} 条记录</span>
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onChangePage={onPageChange}
-            onChangePageSize={onPageSizeChange}
-          />
+        <div className="flex flex-col gap-3 border-t border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm text-gray-500">接口共返回 {total.toLocaleString('zh-CN')} 个正库存物料条目</span>
+          <Pagination page={page} pageSize={pageSize} total={total} onChangePage={onPageChange} onChangePageSize={onPageSizeChange} />
         </div>
-      </div>
-    </>
+      </section>
+    </div>
   )
 }

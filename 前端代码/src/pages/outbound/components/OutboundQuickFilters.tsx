@@ -2,34 +2,30 @@ type QuickFilter = 'all' | 'today' | 'week' | 'month'
 
 interface OutboundQuickFiltersProps {
   quickFilter: QuickFilter
-  counts: Record<QuickFilter, number>
   onChange: (filter: QuickFilter) => void
 }
 
-const filters: { key: QuickFilter; label: string }[] = [
-  { key: 'all', label: '全部' },
+const filters: Array<{ key: QuickFilter; label: string }> = [
+  { key: 'all', label: '全部日期' },
   { key: 'today', label: '今日' },
   { key: 'week', label: '本周' },
   { key: 'month', label: '本月' },
 ]
 
-export default function OutboundQuickFilters({ quickFilter, counts, onChange }: OutboundQuickFiltersProps) {
+export default function OutboundQuickFilters({ quickFilter, onChange }: OutboundQuickFiltersProps) {
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      {filters.map(f => (
+    <div className="flex flex-wrap items-center gap-2" aria-label="出库日期快捷筛选">
+      {filters.map(filter => (
         <button
-          key={f.key}
-          onClick={() => onChange(f.key)}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all duration-150 ${
-            quickFilter === f.key
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          key={filter.key}
+          type="button"
+          aria-pressed={quickFilter === filter.key}
+          onClick={() => onChange(filter.key)}
+          className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
+            quickFilter === filter.key ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
-          {f.label}
-          <span className={`text-xs ${quickFilter === f.key ? 'text-blue-100' : 'text-gray-400'}`}>
-            {counts[f.key]}
-          </span>
+          {filter.label}
         </button>
       ))}
     </div>
