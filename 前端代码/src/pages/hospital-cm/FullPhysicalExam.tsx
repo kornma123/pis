@@ -29,6 +29,11 @@ export default function FullPhysicalExam({ serviceMonth }: { serviceMonth?: stri
     )
   }
 
+  const coverageMultiple =
+    typeof data.coverageMultiple === 'number' && Number.isFinite(data.coverageMultiple)
+      ? data.coverageMultiple
+      : null
+
   return (
     <div data-testid="full-physical-exam" className="rounded-xl border border-emerald-200 bg-white p-5 shadow-sm">
       <div className="mb-1 flex items-center gap-2">
@@ -43,7 +48,11 @@ export default function FullPhysicalExam({ serviceMonth }: { serviceMonth?: stri
         </div>
         <div>
           <div className="text-[12px] text-gray-500">够盖几倍固定开销（绝对值）</div>
-          <div className="text-[28px] font-semibold text-emerald-600 tabular-nums">{data.coverageMultiple.toFixed(2)}×</div>
+          {coverageMultiple == null ? (
+            <div data-testid="full-coverage-unknown" className="text-[18px] font-medium text-gray-400">不可计算</div>
+          ) : (
+            <div className="text-[28px] font-semibold text-emerald-600 tabular-nums">{coverageMultiple.toFixed(2)}×</div>
+          )}
         </div>
       </div>
     </div>

@@ -99,9 +99,9 @@ export interface HospitalCmDetail {
 export interface ComparisonRow {
   partnerId: string
   partnerName?: string | null
-  cm: number // 绝对贡献（默认排序键·降序）
-  cmRate: number // 率（元素②·表里一列·非默认排序）
-  fixedCoverageShare: number // 率旁并列：占全组固定成本覆盖份额（元素②）
+  cm: number | null // 绝对贡献（默认排序键·降序）；UNMEASURED = null
+  cmRate: number | null // 率（元素②·表里一列·非默认排序）；UNMEASURED = null
+  fixedCoverageShare: number | null // 占全组固定成本覆盖份额；UNMEASURED = null
   trend: number[] | null
   measurable: boolean // false = UNMEASURED（元素⑧·灰行）
   detail?: HospitalCmDetail | null
@@ -111,13 +111,13 @@ export interface ComparisonRow {
 /** GET /health 的 data 层（第 1 层体检·趋势-only 校准态）。 */
 export interface PortfolioHealth {
   totalCm: number
-  fixedPool: number
-  coverageMultiple: number
+  fixedPool: number | null
+  coverageMultiple: number | null
   coverageMultipleTrendOnly: true
   capacityUtilization: number | null
   measurableAccountCount: number
-  unmeasuredRevenueShare: number
-  reopenAutomationQuestion: boolean
+  unmeasuredRevenueShare: number | null
+  reopenAutomationQuestion: boolean | null
   revivalCap: number
   revivalUnmeasuredShareLine: number
   shadowMode: boolean

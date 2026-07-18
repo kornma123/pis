@@ -120,6 +120,18 @@ describe('路由 · 两层框架 API', () => {
     expect(h.shadowNote).toBeTruthy()
   })
 
+  it('D2：GET /health 缺固定池与完整分母时以 null 出门，不能折成正常零', async () => {
+    const res = await get('/api/v1/hospital-pnl/health?serviceMonth=2026-03', adminToken)
+    expect(res.status).toBe(200)
+    expect(res.body.data).toMatchObject({
+      fixedPool: null,
+      coverageMultiple: null,
+      fixedPoolProvided: false,
+      unmeasuredRevenueShare: null,
+      reopenAutomationQuestion: null,
+    })
+  })
+
   it('GET /trend：同院月度趋势', async () => {
     const res = await get(`/api/v1/hospital-pnl/trend?partnerId=${A}`, adminToken)
     expect(res.status).toBe(200)

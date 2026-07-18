@@ -63,14 +63,14 @@ export interface AccountCmSummary {
   cmRate: number // 率 = cm / inScopeRevenue（表里一列·非排序默认）
   avoidableCost: number // 可避免成本
   measurable: boolean // 可测（穿过数据 gate·非 UNMEASURED；代送/会诊/外送 = false）
-  unmeasuredRevenue?: number // 该账户范围外/未测量收入（UNMEASURED·代送/会诊/外送）
+  unmeasuredRevenue?: number | null // 该账户范围外/未测量收入；缺金额证据 = null/undefined，禁止折 0
   // —— 产能占用（第 3 层门控用·瓶颈实测前 undefined）——
   sharedOccupancy?: number // 共享瓶颈占用（已扣除专属产能）
   dedicatedFixedCost?: number // 专属产能成本（已入可避免成本的那部分）
 }
 
 /** 从 HospitalCm 派生账户摘要（measurable = 经营线内、非诊断桶为主）。 */
-export function toAccountSummary(h: HospitalCm, opts: { measurable?: boolean; unmeasuredRevenue?: number } = {}): AccountCmSummary {
+export function toAccountSummary(h: HospitalCm, opts: { measurable?: boolean; unmeasuredRevenue?: number | null } = {}): AccountCmSummary {
   return {
     partnerId: h.partnerId,
     partnerName: h.partnerName,
@@ -221,15 +221,15 @@ export function checkTerminationPreFilter(
 
 export interface PortfolioHealth {
   totalCm: number // 全组合总贡献毛利
-  fixedPool: number // 固定成本池
-  coverageMultiple: number // 覆盖倍数 = totalCm / fixedPool
+  fixedPool: number | null // 固定成本池；缺失/无效 = null
+  coverageMultiple: number | null // 覆盖倍数 = totalCm / fixedPool；分母不可用 = null
   /** 覆盖倍数**只看趋势·不信绝对值**（校准前）——做进产品的**显式标注**、非小字。绝对值判断待标准成本校准里程碑后启用。 */
   coverageMultipleTrendOnly: boolean
   capacityUtilization: number | null // 产能利用率（未实测 → null·第 3 层门控）
   // —— 复活双触发（做进体检显示·让触发是被观测到的·不靠谁记备忘录）——
   measurableAccountCount: number // 进表的可测账户数（不是在册数·UNMEASURED 不增行）
-  unmeasuredRevenueShare: number // UNMEASURED 收入占比
-  reopenAutomationQuestion: boolean // 双触发：可测账户数越线 或 UNMEASURED 占比越线
+  unmeasuredRevenueShare: number | null // UNMEASURED 收入占比；范围/金额/分母未闭合 = null
+  reopenAutomationQuestion: boolean | null // 双触发三值逻辑：已知任一越线=true；其余若占比未知=null
   revivalCap: number // = REVIVAL_ACCOUNT_CAP（随显示，便于人看到离线还多远）
   revivalUnmeasuredShareLine: number // = REVIVAL_UNMEASURED_SHARE
   // —— 影子模式（三门 A/B/C 未验收 → 输出不得进经营研判）——
@@ -239,9 +239,11 @@ export interface PortfolioHealth {
 }
 
 export interface PortfolioHealthInput {
-  fixedPool: number
+  fixedPool?: number | null
   plannedSharedCapacity?: number // 给了 + actualSharedUsage → 算利用率
   actualSharedUsage?: number
+  /** 仅上游已证明医院全集、已测/未测金额集合与同期间分母完整时才可置 true；缺省 fail-closed。 */
+  unmeasuredRevenueScopeAndDenominatorVerified?: boolean
   /** 本次请求实时算出的完整 readiness；缺省/false 均 fail-closed，禁止回退读取模块级静态常量。 */
   gatesVerified?: boolean
 }
@@ -253,17 +255,43 @@ export interface PortfolioHealthInput {
 export function buildPortfolioHealth(accounts: AccountCmSummary[], input: PortfolioHealthInput): PortfolioHealth {
   const measurable = accounts.filter((a) => a.measurable)
   const totalCm = r2(measurable.reduce((s, a) => s + a.cm, 0))
-  const fixedPool = Number(input.fixedPool) || 0
-  const coverageMultiple = fixedPool > 0 ? r4(totalCm / fixedPool) : 0
+  const fixedPool =
+    typeof input.fixedPool === 'number' && Number.isFinite(input.fixedPool) && input.fixedPool > 0
+      ? input.fixedPool
+      : null
+  const rawCoverageMultiple = fixedPool == null ? null : totalCm / fixedPool
+  const roundedCoverageMultiple =
+    rawCoverageMultiple != null && Number.isFinite(rawCoverageMultiple) ? r4(rawCoverageMultiple) : null
+  const coverageMultiple =
+    roundedCoverageMultiple != null && Number.isFinite(roundedCoverageMultiple) ? roundedCoverageMultiple : null
 
-  const totalInScope = accounts.reduce((s, a) => s + (Number(a.inScopeRevenue) || 0), 0)
-  const totalUnmeasured = accounts.reduce((s, a) => s + (Number(a.unmeasuredRevenue) || 0), 0)
+  const inScopeRevenueKnown = accounts.every(
+    (a) => Number.isFinite(a.inScopeRevenue) && a.inScopeRevenue >= 0,
+  )
+  const unmeasuredRevenueKnown = accounts.every(
+    (a) => a.unmeasuredRevenue != null && Number.isFinite(a.unmeasuredRevenue) && a.unmeasuredRevenue >= 0,
+  )
+  const totalInScope = accounts.reduce((s, a) => s + a.inScopeRevenue, 0)
+  const totalUnmeasured = unmeasuredRevenueKnown
+    ? accounts.reduce((s, a) => s + (a.unmeasuredRevenue as number), 0)
+    : 0
   const denom = totalInScope + totalUnmeasured
-  const unmeasuredRevenueShare = denom > 0 ? r4(totalUnmeasured / denom) : 0
+  const unmeasuredRevenueShare =
+    input.unmeasuredRevenueScopeAndDenominatorVerified === true
+    && inScopeRevenueKnown
+    && unmeasuredRevenueKnown
+    && Number.isFinite(denom)
+    && denom > 0
+      ? r4(totalUnmeasured / denom)
+      : null
 
   const measurableAccountCount = measurable.length
   const reopenAutomationQuestion =
-    measurableAccountCount > REVIVAL_ACCOUNT_CAP || unmeasuredRevenueShare > REVIVAL_UNMEASURED_SHARE
+    measurableAccountCount > REVIVAL_ACCOUNT_CAP
+      ? true
+      : unmeasuredRevenueShare == null
+        ? null
+        : unmeasuredRevenueShare > REVIVAL_UNMEASURED_SHARE
 
   const capacityUtilization =
     input.plannedSharedCapacity != null && input.actualSharedUsage != null && input.plannedSharedCapacity > 0
@@ -298,9 +326,9 @@ export function buildPortfolioHealth(accounts: AccountCmSummary[], input: Portfo
 export interface ComparisonRow {
   partnerId: string
   partnerName?: string | null
-  cm: number // 绝对贡献（**默认排序键·降序**）
-  cmRate: number // 率（表里**一列**·不提供按率排序的默认视图）
-  fixedCoverageShare: number // 率旁并列：占全组固定成本覆盖的份额 = cm / Σcm
+  cm: number | null // 绝对贡献（**默认排序键·降序**）；UNMEASURED = null
+  cmRate: number | null // 率（表里**一列**·不提供按率排序的默认视图）；UNMEASURED = null
+  fixedCoverageShare: number | null // 率旁并列：占全组固定成本覆盖的份额；UNMEASURED = null
   trend: number[] | null // 趋势用**同账户历史**（非跨账户对比）
   measurable: boolean
 }
@@ -313,18 +341,22 @@ export interface ComparisonRow {
  * **系统不排名不打分不生成清单**——由人结合关系/战略/议价力自己权衡。
  */
 export function buildComparisonTable(accounts: AccountCmSummary[], trends?: Map<string, number[]>): ComparisonRow[] {
-  const totalCm = accounts.reduce((s, a) => s + (Number(a.cm) || 0), 0)
+  const totalCm = accounts.filter((a) => a.measurable).reduce((s, a) => s + (Number(a.cm) || 0), 0)
   return accounts
     .map((a) => ({
       partnerId: a.partnerId,
       partnerName: a.partnerName,
-      cm: r2(a.cm),
-      cmRate: r4(a.cmRate),
-      fixedCoverageShare: totalCm !== 0 ? r4(a.cm / totalCm) : 0,
+      cm: a.measurable ? r2(a.cm) : null,
+      cmRate: a.measurable ? r4(a.cmRate) : null,
+      fixedCoverageShare: a.measurable ? (totalCm !== 0 ? r4(a.cm / totalCm) : 0) : null,
       trend: trends?.get(a.partnerId) ?? null,
       measurable: a.measurable,
     }))
-    .sort((x, y) => y.cm - x.cm) // 默认按绝对贡献降序（顶梁柱在顶·非按率把它讲反）
+    .sort((x, y) => {
+      if (x.cm == null) return y.cm == null ? 0 : 1
+      if (y.cm == null) return -1
+      return y.cm - x.cm
+    }) // 默认按绝对贡献降序；UNMEASURED/null 不进入数值排序并固定置后
 }
 
 // ════════════════════════════════════════════════════════════════════════════
