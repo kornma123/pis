@@ -66,7 +66,7 @@
 |---|---|---|
 | 新生产 JWT | `<JWT_SECRET_REFERENCE>` | JWT secret 值 |
 | 新 JWT 版本 | `<JWT_SECRET_VERSION_ID>` | 可恢复明文的材料 |
-| 八账号口令包 | `<PASSWORD_BUNDLE_REFERENCE>` | 任一口令或散列 |
+| 批准账号凭据包 | `<APPROVED_ACCOUNT_CREDENTIAL_BUNDLE_REFERENCE>` | 任一口令、散列或凭据正文 |
 | 旧 access token | `<OLD_ACCESS_TOKEN_HANDLE>` | token 值 |
 | 旧 refresh token | `<OLD_REFRESH_TOKEN_HANDLE>` | token 值 |
 | 生产数据库访问 | `<DATABASE_CREDENTIAL_REFERENCE>` | 连接串、用户口令 |
@@ -90,20 +90,50 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 
 当前事故报告必须把关闭依据如实记录为负责人确认及订阅不可用，不得改写为厂商 401 技术验证。
 
-## 3. 八账号范围
+## 3. 客户批准账号清单与凭据通道
 
-| 用户名 | 角色 | 新口令引用 | 改密结果 | 默认口令拒绝证据 | 新登录证据 | 旧会话失效证据 |
-|---|---|---|---|---|---|---|
-| `admin` | `admin` | `<ADMIN_PASSWORD_SECRET_REFERENCE>` | `<ADMIN_RESET_RESULT>` | `<ADMIN_DEFAULT_DENIAL_EVIDENCE>` | `<ADMIN_NEW_LOGIN_EVIDENCE>` | `<ADMIN_OLD_SESSION_EVIDENCE>` |
-| `cangguan` | `warehouse_manager` | `<CANGGUAN_PASSWORD_SECRET_REFERENCE>` | `<CANGGUAN_RESET_RESULT>` | `<CANGGUAN_DEFAULT_DENIAL_EVIDENCE>` | `<CANGGUAN_NEW_LOGIN_EVIDENCE>` | `<CANGGUAN_OLD_SESSION_EVIDENCE>` |
-| `jishuyuan1` | `technician` | `<JISHUYUAN1_PASSWORD_SECRET_REFERENCE>` | `<JISHUYUAN1_RESET_RESULT>` | `<JISHUYUAN1_DEFAULT_DENIAL_EVIDENCE>` | `<JISHUYUAN1_NEW_LOGIN_EVIDENCE>` | `<JISHUYUAN1_OLD_SESSION_EVIDENCE>` |
-| `jishuyuan2` | `technician` | `<JISHUYUAN2_PASSWORD_SECRET_REFERENCE>` | `<JISHUYUAN2_RESET_RESULT>` | `<JISHUYUAN2_DEFAULT_DENIAL_EVIDENCE>` | `<JISHUYUAN2_NEW_LOGIN_EVIDENCE>` | `<JISHUYUAN2_OLD_SESSION_EVIDENCE>` |
-| `yishi1` | `pathologist` | `<YISHI1_PASSWORD_SECRET_REFERENCE>` | `<YISHI1_RESET_RESULT>` | `<YISHI1_DEFAULT_DENIAL_EVIDENCE>` | `<YISHI1_NEW_LOGIN_EVIDENCE>` | `<YISHI1_OLD_SESSION_EVIDENCE>` |
-| `yishi2` | `pathologist` | `<YISHI2_PASSWORD_SECRET_REFERENCE>` | `<YISHI2_RESET_RESULT>` | `<YISHI2_DEFAULT_DENIAL_EVIDENCE>` | `<YISHI2_NEW_LOGIN_EVIDENCE>` | `<YISHI2_OLD_SESSION_EVIDENCE>` |
-| `caigou` | `procurement` | `<CAIGOU_PASSWORD_SECRET_REFERENCE>` | `<CAIGOU_RESET_RESULT>` | `<CAIGOU_DEFAULT_DENIAL_EVIDENCE>` | `<CAIGOU_NEW_LOGIN_EVIDENCE>` | `<CAIGOU_OLD_SESSION_EVIDENCE>` |
-| `caiwu` | `finance` | `<CAIWU_PASSWORD_SECRET_REFERENCE>` | `<CAIWU_RESET_RESULT>` | `<CAIWU_DEFAULT_DENIAL_EVIDENCE>` | `<CAIWU_NEW_LOGIN_EVIDENCE>` | `<CAIWU_OLD_SESSION_EVIDENCE>` |
+账号范围以客户对该独立实例批准的非秘密清单 `<APPROVED_ACCOUNT_MANIFEST_REFERENCE>` 为唯一输入，不得沿用历史夹具账号或固定数量。清单必须记录审批引用、用户名、姓名、角色集合、主角色和可选部门；不得包含口令、散列、token、secret 或 credential 字段。操作者在执行前记录清单 SHA-256 `<APPROVED_ACCOUNT_MANIFEST_SHA256>` 和清单账号数 `<APPROVED_ACCOUNT_COUNT>`。
 
-要求：八个口令必须互异、由密码管理器生成、通过受控环境变量或 secret injection 提供；应用与操作日志只允许记录用户名和结果。
+凭据包只能以 `<APPROVED_ACCOUNT_CREDENTIAL_BUNDLE_REFERENCE>` 保存在 secret store，并由受控 secret injection 直接写入供应进程 stdin。凭据值不得进入 argv、环境变量、源码、批准清单、shell 历史、应用/操作日志或证据；执行器不得生成或回显凭据。凭据包必须与批准清单账号一一对应、账号间互异并符合统一密码策略。
+
+执行器必须在单个数据库事务中创建或对齐清单内全部账号、角色和凭据；任一账号、角色、凭据或数据库操作失败时整体回滚。以同一清单和凭据包重复执行必须返回 `unchanged` 且不改写散列、账号或角色关系。并发执行必须由数据库写锁串行化：无法取得写锁时返回本次零写的 `PROVISIONING_CONFLICT`，operator 必须重新核验批准引用、清单摘要和凭据包引用后才可显式重试，禁止盲重试；等待期间若另一执行已提交完全相同的账号目标状态，后续执行只能返回 `unchanged`，若已提交状态与本次目标不一致，则返回 `PROVISIONING_CONCURRENT_STATE_CONFLICT`、保留先提交状态并重新履行上述核验。批准清单授权执行器创建或对齐清单内账号，不授权禁用、删除或改写清单外账号；若两个清单的批准引用或原始字节不同但账号目标状态完全相同，执行器按状态幂等处理，清单版本审计由 operator 保存的批准引用与 SHA-256 证据承担。
+
+批准清单必须是 UTF-8 JSON，并严格使用以下非秘密数据合同；示例中的尖括号字段都是占位符，不得替换为凭据：
+
+```json
+{
+  "schemaVersion": 1,
+  "approvalReference": "<CUSTOMER_APPROVAL_REFERENCE>",
+  "accounts": [
+    {
+      "username": "<APPROVED_USERNAME_N>",
+      "realName": "<APPROVED_REAL_NAME_N>",
+      "roles": ["<APPROVED_ROLE_CODE_N>"],
+      "primaryRole": "<APPROVED_PRIMARY_ROLE_N>",
+      "department": null
+    }
+  ]
+}
+```
+
+受控入口为 `npm run reset-passwords`。`PROVISIONING_MANIFEST_PATH` 必须指向上述清单的既有绝对路径，`DATABASE_PATH` 必须指向目标数据库的既有绝对路径；两者都是非秘密配置。`PROVISIONING_MANIFEST_SHA256` 必须填写 operator 对同一清单原始字节核验的 64 位 SHA-256；执行器必须在开库前比对，不一致即拒绝。禁止设置任何历史 `RESET_*`、`ADMIN_INITIAL_PASSWORD` 凭据变量，也禁止在入口命令后附加任何 argv。secret injector 必须在内存中构造并直接写入入口 stdin 的唯一凭据 envelope：
+
+```json
+{
+  "schemaVersion": 1,
+  "credentials": {
+    "<APPROVED_USERNAME_N>": "<SECRET_INJECTED_VALUE_N>"
+  }
+}
+```
+
+上述 envelope 仅描述传输结构，不得落盘、复制到 runbook、作为 argv 传递或被 shell trace/日志捕获。成功输出只能是 `provisioning=committed accounts=<N>`、`manifest-sha256=<ACTUAL_SHA256>`、逐账号 `apply=<created|updated|unchanged> credential=ready default-credential=denied` 和 `evidence=status-only`。事务提交前失败必须非零退出且只输出 `provisioning=failed code=<SANITIZED_CODE>`；若事务已提交但 stdout 证据写入失败，必须以退出码 2 和 `provisioning=committed evidence=write-failed code=COMMITTED_EVIDENCE_WRITE_FAILED` 明确标记，禁止误判为已回滚。这里的 `credential=ready` 与 `default-credential=denied` 是事务内完整数据库状态验证；`default-credential=denied` 只表示批准账号的新凭据已验证且其存储散列不匹配已知泄露默认凭据，不表示账号记录已被禁用或删除，也不授权变更清单外账号的生命周期。该状态不替代第 7.3 节要求的逐账号新登录、HTTP 401 和旧会话失效验收。
+
+| 批准账号 | 批准角色 | 供应状态 | 默认凭据验证状态 | 新登录状态 | 旧会话失效状态 |
+|---|---|---|---|---|---|
+| `<APPROVED_USERNAME_N>` | `<APPROVED_ROLE_SET_N>` | `<ACCOUNT_PROVISION_RESULT_N>` | `<DEFAULT_CREDENTIAL_DENIAL_STATUS_N>` | `<NEW_LOGIN_STATUS_N>` | `<OLD_SESSION_STATUS_N>` |
+
+操作者必须为清单中的每个账号逐行填写状态，且不得出现清单外账号。默认凭据验证只允许记录账号、实例、时间、HTTP 状态或错误代码与证据引用，不得保存请求体或任何凭据值。
 
 ## 4. 上线前门禁
 
@@ -114,13 +144,13 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 | 生产环境身份确认 | `<ENVIRONMENT_IDENTITY_GATE>` | URL、平台、项目、数据库和实例清单相互一致 | `<ENVIRONMENT_IDENTITY_EVIDENCE>` |
 | PR #119 处置审批 | `<PR119_APPROVAL_GATE>` | 已明确批准部署，或有等效安全变更且完成审查 | `<PR119_APPROVAL_EVIDENCE>` |
 | 默认账号策略 | `<DEFAULT_ACCOUNT_GATE>` | 生产不创建、恢复或重建历史夹具凭据 | `<DEFAULT_ACCOUNT_EVIDENCE>` |
-| 八账号强口令 | `<PASSWORD_RESET_GATE>` | 八账号全部存在、原子改密、结果为 8/8 | `<PASSWORD_RESET_EVIDENCE>` |
+| 批准账号供应 | `<PASSWORD_RESET_GATE>` | 清单内全部账号在单事务中供应成功，结果为 `<APPROVED_ACCOUNT_COUNT>/<APPROVED_ACCOUNT_COUNT>`；任一失败整体回滚 | `<PASSWORD_RESET_EVIDENCE>` |
 | JWT secret | `<JWT_SECRET_GATE>` | secret store 中新建强随机版本；应用无 fallback | `<JWT_SECRET_EVIDENCE>` |
 | 全实例一致性 | `<INSTANCE_CONSISTENCY_GATE>` | 所有实例只加载同一新版本，无旧实例存活 | `<INSTANCE_EVIDENCE>` |
 | 旧 access token | `<OLD_ACCESS_TOKEN_GATE>` | 每个实例请求 `/api/v1/auth/me` 均为 401 | `<OLD_ACCESS_EVIDENCE>` |
 | 旧 refresh token | `<OLD_REFRESH_TOKEN_GATE>` | 每个实例请求 `/api/v1/auth/refresh` 均为 401 | `<OLD_REFRESH_EVIDENCE>` |
-| 新登录 | `<NEW_LOGIN_GATE>` | 八账号使用新口令均成功 | `<NEW_LOGIN_EVIDENCE>` |
-| 历史默认口令 | `<DEFAULT_PASSWORD_GATE>` | 八账号的历史默认登录尝试均为 401 | `<DEFAULT_PASSWORD_EVIDENCE>` |
+| 新登录 | `<NEW_LOGIN_GATE>` | 清单内每个批准账号使用注入凭据均成功 | `<NEW_LOGIN_EVIDENCE>` |
+| 历史默认口令 | `<DEFAULT_PASSWORD_GATE>` | 对适用账号的历史默认凭据验证均为 401，证据只含状态 | `<DEFAULT_PASSWORD_EVIDENCE>` |
 | Secret 扫描 | `<SECRET_SCAN_GATE>` | 工作树、构建产物和部署配置无真实秘密 | `<SECRET_SCAN_EVIDENCE>` |
 | 健康与回归 | `<HEALTH_REGRESSION_GATE>` | 健康检查、鉴权和关键业务回归均通过 | `<REGRESSION_EVIDENCE>` |
 
@@ -129,10 +159,10 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 ### 5.1 新建空生产数据库
 
 1. 填写第 2 节的非秘密元数据，确认 `<PRODUCTION_ENVIRONMENT_NAME>` 唯一且明确。
-2. 在 secret store 创建 `<PASSWORD_BUNDLE_REFERENCE>` 和 `<JWT_SECRET_REFERENCE>`；不生成终端可见输出。
+2. 取得客户批准的 `<APPROVED_ACCOUNT_MANIFEST_REFERENCE>`，校验其 SHA-256，并在 secret store 创建 `<APPROVED_ACCOUNT_CREDENTIAL_BUNDLE_REFERENCE>` 和 `<JWT_SECRET_REFERENCE>`；不生成终端可见凭据输出。
 3. 取得对 PR #119 或等效修复的单独部署批准。
 4. 部署不种固定账号、不使用 JWT fallback 的后端版本。
-5. 使用受控初始化流程创建八账号并写入八个互异强口令。
+5. 仅在需要时使用受控首管完成实例引导；随后把批准清单路径作为非秘密配置、把凭据包直接注入 stdin，在单事务中供应清单内全部账号。禁止创建历史夹具账号。
 6. 一次性启动全部后端实例，确认它们加载 `<JWT_SECRET_VERSION_ID>`。
 7. 完成第 7 节验收后才接入生产流量。
 
@@ -140,10 +170,10 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 
 1. 阻断外部流量并停止全部后端实例；禁止新旧 JWT 版本混跑。
 2. 验证数据库身份为 `<DATABASE_IDENTITY_REFERENCE>`，创建加密快照 `<PRECHANGE_DATABASE_SNAPSHOT_ID>`。
-3. 在单个数据库事务中确认八账号全部存在，并完成 8/8 改密；任一缺失或失败必须整体回滚。
-4. 提交后不得恢复历史口令；失败恢复采用全新口令包前滚。
+3. 校验 `<APPROVED_ACCOUNT_MANIFEST_REFERENCE>` 的批准状态与 SHA-256，在单个数据库事务中供应或对齐清单内全部账号；任一账号、角色、凭据或数据库操作失败必须整体回滚。
+4. 提交后不得恢复历史口令；失败恢复采用同一未暴露凭据包或全新批准凭据包前滚，并在恢复流量前验证幂等复跑为 `unchanged`。
 5. 写入 `<JWT_SECRET_VERSION_ID>`，一次性替换全部实例。
-6. 仅在八账号改密成功后部署带生产启动门禁的 #119 或等效版本，避免门禁拒绝启动。
+6. 仅在批准清单事务成功后部署带生产启动门禁的 #119 或等效版本，避免门禁拒绝启动。
 7. 完成第 7 节验收后才接入生产流量。
 
 ## 6. 执行记录模板
@@ -209,11 +239,11 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 
 | 验证项 | 预期 | 实际 | 证据 |
 |---|---|---|---|
-| 八账号新口令登录 | 8/8 成功 | `<NEW_PASSWORD_LOGIN_RESULT>` | `<NEW_LOGIN_EVIDENCE>` |
-| 八账号历史默认登录 | 全部 HTTP 401 | `<DEFAULT_PASSWORD_LOGIN_RESULT>` | `<DEFAULT_PASSWORD_EVIDENCE>` |
+| 批准账号新凭据登录 | `<APPROVED_ACCOUNT_COUNT>/<APPROVED_ACCOUNT_COUNT>` 成功 | `<NEW_PASSWORD_LOGIN_RESULT>` | `<NEW_LOGIN_EVIDENCE>` |
+| 适用账号历史默认凭据验证 | 全部 HTTP 401，且只记录状态 | `<DEFAULT_PASSWORD_LOGIN_RESULT>` | `<DEFAULT_PASSWORD_EVIDENCE>` |
 | 重启后账号状态 | 不被恢复为历史夹具状态 | `<POST_RESTART_ACCOUNT_RESULT>` | `<POST_RESTART_ACCOUNT_EVIDENCE>` |
 
-验证客户端只输出用户名、实例 ID、时间、HTTP 状态和错误代码，不输出口令、token 或请求体。
+操作者必须逐一验证批准清单中的每个账号，且验证结果不得包含清单外账号。验证客户端只输出用户名、实例 ID、时间、HTTP 状态和错误代码，不输出口令、token 或请求体。
 
 ## 8. 健康检查与观察窗口
 
@@ -224,8 +254,9 @@ JWT 非秘密元数据必须记录：签名算法 `<JWT_SIGNING_ALGORITHM>`、ac
 
 ## 9. 失败处理：只允许前滚
 
-- 八账号事务提交前失败：数据库事务回滚；修正原因后用同一未暴露口令包或全新口令包重试。
-- 八账号事务提交后失败：禁止恢复历史口令；生成全新口令包继续前滚。
+- 批准账号事务提交前失败：数据库事务整体回滚；修正原因后用同一未暴露凭据包或全新批准凭据包重试。
+- 批准账号事务提交后失败：禁止恢复历史口令；生成全新批准凭据包继续前滚，并重新完成逐账号状态验收。
+- 收到 `COMMITTED_EVIDENCE_WRITE_FAILED`：数据库事务已经提交；禁止按“未执行”直接重跑，先以同一 manifest SHA 核对数据库状态，再通过无日志验收探针补采状态证据。
 - JWT 发布失败：禁止恢复已泄露或历史 JWT；修正配置后用新的 secret 版本完成全实例替换。
 - 实例版本不一致：保持流量关闭，清除旧实例并重新验证全部实例。
 - #119 启动门禁拒绝启动：保持服务离线，先完成数据库账号修复；未经批准不得绕过门禁。

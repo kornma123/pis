@@ -1,164 +1,132 @@
 /**
- * reset-passwords — 受控重置账号口令（安全止血用）。
+ * reset-passwords — 客户批准账号清单的受控供应入口。
  *
- * 背景：默认口令 admin123 / CoreOne2026! 曾随公开仓库泄露。轮换签名密钥后仍需重置账号口令。
- * 系统没有口令重置流程，故提供本一次性脚本，由运维在**生产数据库**上手动运行。
+ * `npm run reset-passwords` 这个历史命令名为兼容运维入口而保留；行为已经收敛为：
+ *  1. `PROVISIONING_MANIFEST_PATH` 指向 operator 批准的非秘密 JSON 清单；
+ *  2. 凭据包只由 secret injection 写入 stdin，不接受 argv、环境变量值或 manifest 字段；
+ *  3. 清单内账号在一个 SQLite 事务中创建/对齐，任一失败整体回滚；
+ *  4. 重复执行同一清单与凭据不写库；输出只含账号和状态。
  *
- * 运行（在 后端代码/server 下）：
- *   RESET_ADMIN_PASSWORD='<强口令>' \
- *   RESET_CANGGUAN_PASSWORD='<强口令>' \
- *   RESET_JISHUYUAN1_PASSWORD='<强口令>' \
- *   RESET_JISHUYUAN2_PASSWORD='<强口令>' \
- *   RESET_YISHI1_PASSWORD='<强口令>' \
- *   RESET_YISHI2_PASSWORD='<强口令>' \
- *   RESET_CAIGOU_PASSWORD='<强口令>' \
- *   RESET_CAIWU_PASSWORD='<强口令>' \
- *   DATABASE_PATH=/app/data/coreone.db \
- *   npm run reset-passwords
- *
- * 说明：
- *  - 上述八个独立变量用于历史标准账号；RESET_PASSWORDS_JSON 仍可扩展其他账号。
- *  - 同一账号不得同时出现在独立变量与 JSON 中；重复目标会在写库前整体拒绝。
- *  - 多个目标必须使用彼此不同的口令；复用会在开启事务前整体拒绝，且错误不打印口令。
- *  - 口令只经环境变量传入（不要写进命令行明文历史/进程列表可见处时请谨慎）。脚本绝不打印口令。
- *  - 只更新已存在账号的口令；不改 is_deleted/status（不擅自重新启用被禁用账号）。
- *  - 拒绝弱口令（Unicode 字符 <12、UTF-8 >72 字节、低熵/常见/顺序模式）与已知泄露默认值。
- *  - DATABASE_PATH 必填；缺失时直接退出，避免误改本地库后却以为生产已重置。
+ * 本脚本不生成凭据、不连接网络、不启动服务，也不打印数据库路径、口令、散列或 token。
  */
-import bcrypt from 'bcryptjs'
-import { existsSync, realpathSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { HISTORICAL_DEFAULT_ACCOUNTS } from '../src/config/historical-default-accounts.js'
-import { accountPasswordProblem } from '../src/config/security.js'
+import { DatabaseSync } from 'node:sqlite'
+import {
+  parseApprovedAccountManifest,
+  parseCredentialEnvelope,
+  provisionApprovedAccounts,
+  ProvisioningError,
+  type ProvisioningStatus,
+} from './approved-account-provisioning.js'
 
-function collectTargets(): Array<{ username: string; password: string }> {
-  const out: Array<{ username: string; password: string }> = []
-  for (const target of HISTORICAL_DEFAULT_ACCOUNTS) {
-    const password = process.env[target.resetEnv]
-    if (password !== undefined) out.push({ username: target.username, password })
-  }
-
-  const json = process.env.RESET_PASSWORDS_JSON
-  if (json) {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(json)
-    } catch {
-      console.error('❌ RESET_PASSWORDS_JSON 不是合法 JSON 对象。')
-      process.exit(1)
-    }
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      console.error('❌ RESET_PASSWORDS_JSON 必须是 JSON 对象。')
-      process.exit(1)
-    }
-    for (const [username, pw] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof pw !== 'string') {
-        console.error(`❌ RESET_PASSWORDS_JSON["${username}"] 必须是字符串。`)
-        process.exit(1)
-      }
-      out.push({ username, password: pw })
-    }
-  }
-  return out
+function requireExistingFile(pathValue: string | undefined, code: string): string {
+  if (!pathValue || !isAbsolute(pathValue)) throw new ProvisioningError(code)
+  if (!existsSync(pathValue) || !statSync(pathValue).isFile()) throw new ProvisioningError(code)
+  return realpathSync(pathValue)
 }
 
-function validate(username: string, password: string): string | null {
-  if (!username.trim()) return '对应空用户名'
-  return accountPasswordProblem(password)
+function readCredentialStdin(): string {
+  if (process.stdin.isTTY) throw new ProvisioningError('CREDENTIAL_STDIN_REQUIRED')
+  const input = readFileSync(0, 'utf8')
+  if (!input.trim()) throw new ProvisioningError('CREDENTIAL_STDIN_REQUIRED')
+  return input
 }
 
-async function main(): Promise<void> {
-  const targets = collectTargets()
-  if (targets.length === 0) {
-    console.error(
-      '用法：设置至少一个 RESET_*_PASSWORD 或 RESET_PASSWORDS_JSON 环境变量后再运行。\n' +
-        "例：RESET_ADMIN_PASSWORD='...' RESET_CAIWU_PASSWORD='...' npm run reset-passwords"
-    )
-    process.exit(1)
+function requireExpectedManifestDigest(value: string | undefined): string {
+  if (!value || !/^[a-f0-9]{64}$/iu.test(value)) {
+    throw new ProvisioningError('PROVISIONING_MANIFEST_SHA256_REQUIRED')
   }
+  return value.toLowerCase()
+}
 
-  const seen = new Set<string>()
-  for (const target of targets) {
-    if (seen.has(target.username)) {
-      console.error(`❌ 账号「${target.username}」被重复指定——已中止，未做任何更改。`)
-      process.exit(1)
-    }
-    seen.add(target.username)
+function sha256(content: Buffer): string {
+  return createHash('sha256').update(content).digest('hex')
+}
+
+function assertCredentialTransportBoundary(): void {
+  if (process.argv.length !== 2) throw new ProvisioningError('CREDENTIAL_ARGV_FORBIDDEN')
+  const legacyCredentialEnvironmentPresent = Object.keys(process.env).some(key => {
+    const normalizedKey = key.toUpperCase()
+    return normalizedKey === 'ADMIN_INITIAL_PASSWORD' || normalizedKey.startsWith('RESET_')
+  })
+  if (legacyCredentialEnvironmentPresent) {
+    throw new ProvisioningError('LEGACY_CREDENTIAL_ENV_FORBIDDEN')
   }
+}
 
-  // 先整体校验，任何一个不合格就整体拒绝（不做半量更新）。
-  for (const t of targets) {
-    const bad = validate(t.username, t.password)
-    if (bad) {
-      console.error(`❌ 账号「${t.username}」口令${bad}——已中止，未做任何更改。`)
-      process.exit(1)
-    }
-  }
+function safeFailureCode(error: unknown): string {
+  return error instanceof ProvisioningError ? error.code : 'PROVISIONING_FAILED'
+}
 
-  const passwordOwners = new Map<string, string>()
-  for (const target of targets) {
-    const canonicalPassword = target.password.normalize('NFKC')
-    const existingOwner = passwordOwners.get(canonicalPassword)
-    if (existingOwner) {
-      console.error(`❌ 账号「${existingOwner}」与「${target.username}」不得复用相同口令——已中止，未做任何更改。`)
-      process.exit(1)
-    }
-    passwordOwners.set(canonicalPassword, target.username)
-  }
-
-  const configuredDatabasePath = process.env.DATABASE_PATH
-  if (!configuredDatabasePath || !isAbsolute(configuredDatabasePath)) {
-    console.error('❌ 必须显式设置绝对路径 DATABASE_PATH；未做任何更改。')
-    process.exit(1)
-  }
-  if (!existsSync(configuredDatabasePath) || !statSync(configuredDatabasePath).isFile()) {
-    console.error('❌ DATABASE_PATH 必须指向已存在的生产数据库文件；未创建文件、未做任何更改。')
-    process.exit(1)
-  }
-  const databasePath = realpathSync(configuredDatabasePath)
-  process.env.DATABASE_PATH = databasePath
-  console.log(`目标数据库（已解析）：${databasePath}`)
-
-  const { getDatabase } = await import('../src/database/DatabaseManager.js')
-  const db = getDatabase()
-  const find = db.prepare('SELECT id FROM users WHERE username = ?')
-  const update = db.prepare('UPDATE users SET password = ? WHERE username = ?')
-
-  const updatedUsernames: string[] = []
-  const notFound: string[] = []
-  // 事务：所有目标账号都存在才提交；任一不存在 → 整体回滚 + 非零退出（脚本只重置、绝不创建，
-  // 也不留半量更新——避免事故处理中把"更新 0 个"误当成"已改密成功"）。
-  db.exec('BEGIN IMMEDIATE')
+function closeQuietly(database: DatabaseSync | undefined): void {
   try {
-    for (const t of targets) {
-      const row = find.get(t.username) as { id: string } | undefined
-      if (!row) {
-        notFound.push(t.username)
-        continue
-      }
-      const hashed = bcrypt.hashSync(t.password, 12)
-      update.run(hashed, t.username)
-      updatedUsernames.push(t.username)
-    }
-    if (notFound.length) {
-      db.exec('ROLLBACK')
-      console.error(
-        `❌ 未找到账号：${notFound.join(', ')}。脚本只能重置已存在账号、不能创建；已整体回滚，未做任何更改。`
-      )
-      process.exit(1)
-    }
-    db.exec('COMMIT')
-  } catch (e) {
-    db.exec('ROLLBACK')
-    throw e
+    database?.close()
+  } catch {
+    // Preserve the already-sanitized provisioning outcome.
   }
-
-  for (const username of updatedUsernames) console.log(`✅ 已重置口令：${username}`)
-  console.log(`\n完成：更新 ${updatedUsernames.length} 个账号口令。`)
-  console.log('提醒：口令未被打印；请通过你自己保存的强口令登录并考虑首登后再次改密。')
 }
 
-main().catch(error => {
-  console.error(`❌ 重置失败：${error instanceof Error ? error.message : '未知错误'}；未确认成功前不得启动服务。`)
-  process.exit(1)
-})
+function renderCommittedEvidence(
+  statuses: readonly ProvisioningStatus[],
+  manifestDigest: string
+): string {
+  const lines = [
+    `provisioning=committed accounts=${statuses.length}`,
+    `manifest-sha256=${manifestDigest}`,
+    ...statuses.map(status => (
+      `account=${status.username} apply=${status.apply} `
+      + `credential=${status.credential} default-credential=${status.defaultCredential}`
+    )),
+    'evidence=status-only',
+  ]
+  return `${lines.join('\n')}\n`
+}
+
+function writeFailureEvidence(transactionCommitted: boolean, error: unknown): void {
+  const message = transactionCommitted
+    ? 'provisioning=committed evidence=write-failed code=COMMITTED_EVIDENCE_WRITE_FAILED\n'
+    : `provisioning=failed code=${safeFailureCode(error)}\n`
+  try {
+    writeFileSync(2, message, 'utf8')
+  } catch {
+    // No further output channel is safe or reliable.
+  }
+}
+
+function main(): void {
+  let database: DatabaseSync | undefined
+  let transactionCommitted = false
+  try {
+    assertCredentialTransportBoundary()
+    const manifestPath = requireExistingFile(
+      process.env.PROVISIONING_MANIFEST_PATH,
+      'PROVISIONING_MANIFEST_PATH_REQUIRED'
+    )
+    const databasePath = requireExistingFile(process.env.DATABASE_PATH, 'DATABASE_PATH_REQUIRED')
+    const expectedManifestDigest = requireExpectedManifestDigest(
+      process.env.PROVISIONING_MANIFEST_SHA256
+    )
+    const manifestBytes = readFileSync(manifestPath)
+    const manifestDigest = sha256(manifestBytes)
+    if (manifestDigest !== expectedManifestDigest) {
+      throw new ProvisioningError('PROVISIONING_MANIFEST_SHA256_MISMATCH')
+    }
+    const manifest = parseApprovedAccountManifest(manifestBytes.toString('utf8'))
+    const credentials = parseCredentialEnvelope(readCredentialStdin(), manifest)
+    database = new DatabaseSync(databasePath)
+    database.exec('PRAGMA busy_timeout = 5000')
+    const statuses = provisionApprovedAccounts(database, manifest, credentials)
+    transactionCommitted = true
+    closeQuietly(database)
+    database = undefined
+    writeFileSync(1, renderCommittedEvidence(statuses, manifestDigest), 'utf8')
+  } catch (error) {
+    closeQuietly(database)
+    writeFailureEvidence(transactionCommitted, error)
+    process.exitCode = transactionCommitted ? 2 : 1
+  }
+}
+
+main()
