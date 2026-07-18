@@ -85,6 +85,78 @@ describe('CostDashboard adjustment refresh', () => {
 	    vi.mocked(abcApi.getClosingReadiness).mockResolvedValue(readyClosingReadiness)
 	  })
 
+  it('starts the summary and workbench requests together instead of waiting for the summary', async () => {
+    let resolveDashboard!: (value: typeof dashboardResponse) => void
+    const dashboardPending = new Promise<typeof dashboardResponse>((resolve) => {
+      resolveDashboard = resolve
+    })
+    vi.mocked(abcApi.getDashboard).mockReturnValue(dashboardPending as any)
+    vi.mocked(abcApi.getPeriods).mockResolvedValue(periodResponse)
+    vi.mocked(abcApi.getCostRuns).mockResolvedValue(emptyListResponse)
+    vi.mocked(abcApi.getAdjustments).mockResolvedValue(emptyListResponse)
+
+    render(
+      <MemoryRouter>
+        <CostDashboard />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => expect(abcApi.getDashboard).toHaveBeenCalledWith('2026-06'))
+    const workbenchStartedBeforeSummary =
+      vi.mocked(abcApi.getPeriods).mock.calls.length === 1 &&
+      vi.mocked(abcApi.getCostRuns).mock.calls.length === 1 &&
+      vi.mocked(abcApi.getAdjustments).mock.calls.length === 1 &&
+      vi.mocked(abcApi.getClosingReadiness).mock.calls.length === 1
+
+    resolveDashboard(dashboardResponse)
+    expect(await screen.findByText('成本看板')).toBeInTheDocument()
+    expect(workbenchStartedBeforeSummary).toBe(true)
+  })
+
+  it('keeps a failed summary unavailable instead of rendering zero-valued business metrics', async () => {
+    vi.mocked(abcApi.getDashboard).mockRejectedValue(new Error('dashboard unavailable'))
+    vi.mocked(abcApi.getPeriods).mockResolvedValue(periodResponse)
+    vi.mocked(abcApi.getCostRuns).mockResolvedValue(emptyListResponse)
+    vi.mocked(abcApi.getAdjustments).mockResolvedValue(emptyListResponse)
+
+    render(
+      <MemoryRouter>
+        <CostDashboard />
+      </MemoryRouter>
+    )
+
+    const unavailable = await screen.findByRole('region', { name: '成本汇总数据不可用' })
+    expect(unavailable).toHaveTextContent('没有把失败响应解释成 0')
+    expect(unavailable).toHaveTextContent('重试成本汇总')
+    expect(screen.queryByTestId('cost-summary-zero-fallback')).not.toBeInTheDocument()
+  })
+
+  it('ignores a late response from an older month after the filter changes', async () => {
+    let resolveJune!: (value: typeof dashboardResponse) => void
+    let resolveMay!: (value: typeof dashboardResponse) => void
+    const junePending = new Promise<typeof dashboardResponse>((resolve) => { resolveJune = resolve })
+    const mayPending = new Promise<typeof dashboardResponse>((resolve) => { resolveMay = resolve })
+    vi.mocked(abcApi.getDashboard).mockImplementation((requestedMonth: string) =>
+      (requestedMonth === '2026-05' ? mayPending : junePending) as any
+    )
+    vi.mocked(abcApi.getPeriods).mockResolvedValue(periodResponse)
+    vi.mocked(abcApi.getCostRuns).mockResolvedValue(emptyListResponse)
+    vi.mocked(abcApi.getAdjustments).mockResolvedValue(emptyListResponse)
+
+    render(<MemoryRouter><CostDashboard /></MemoryRouter>)
+    await waitFor(() => expect(abcApi.getDashboard).toHaveBeenCalledWith('2026-06'))
+
+    fireEvent.change(screen.getByLabelText('成本月份'), { target: { value: '2026-05' } })
+    await waitFor(() => expect(abcApi.getDashboard).toHaveBeenCalledWith('2026-05'))
+
+    resolveMay({ ...dashboardResponse, summary: { ...dashboardResponse.summary, outboundCount: 505 } })
+    expect(await screen.findByText('505 单')).toBeInTheDocument()
+
+    resolveJune({ ...dashboardResponse, summary: { ...dashboardResponse.summary, outboundCount: 606 } })
+    await waitFor(() => expect(screen.getByText('505 单')).toBeInTheDocument())
+    expect(screen.queryByText('606 单')).not.toBeInTheDocument()
+  })
+
   it('marks an approved adjustment as handled even if the follow-up dashboard refresh fails', async () => {
     vi.mocked(abcApi.getDashboard)
       .mockResolvedValueOnce(dashboardResponse)

@@ -55,8 +55,6 @@ export default function HospitalCmDashboard() {
     comparison?.caliberRatification ?? readiness?.caliberRatification ?? health?.caliberRatification ?? null
   const showWatermark = caliber?.ratified !== true
 
-  const loading = readinessQuery.isLoading || comparisonQuery.isLoading || healthQuery.isLoading
-  const errored = readinessQuery.isError || comparisonQuery.isError
   const refetchAll = () => {
     readinessQuery.refetch(); comparisonQuery.refetch(); healthQuery.refetch()
   }
@@ -74,11 +72,13 @@ export default function HospitalCmDashboard() {
         <div className="flex items-center gap-2">
           <input
             type="month"
+            aria-label="服务月份"
             value={serviceMonth}
             onChange={(e) => setServiceMonth(e.target.value)}
             className="h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 tabular-nums"
           />
           <button
+            type="button"
             onClick={refetchAll}
             className="inline-flex h-10 items-center gap-1.5 rounded-md border border-gray-200 px-3 text-sm text-gray-600 transition-colors hover:bg-gray-50"
           >
@@ -110,36 +110,48 @@ export default function HospitalCmDashboard() {
         </div>
       )}
 
-      {loading ? (
-        <div className="grid animate-pulse grid-cols-1 gap-3">
-          <div className="h-28 rounded-xl bg-gray-100" />
-          <div className="h-40 rounded-xl bg-gray-100" />
-        </div>
-      ) : errored ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center shadow-sm">
-          <EmptyState icon={AlertTriangle} title="加载失败" description="加载院级贡献毛利失败，请重试" />
-          <button
-            onClick={refetchAll}
-            className="mt-4 inline-flex h-10 items-center gap-1.5 rounded-md bg-blue-500 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-600"
-          >
-            <RefreshCw className="h-4 w-4" /> 重试
+      {/* 第 1 层：完整体检态（就绪时·DOM 红线·仅 ready 才挂载）/ 校准态（现实·趋势-only + 就绪清单） */}
+      {readinessQuery.isLoading ? (
+        <div className="h-32 animate-pulse rounded-xl bg-gray-100 motion-reduce:animate-none" role="status" aria-label="正在加载校准就绪状态" />
+      ) : readinessQuery.isError ? (
+        <section aria-label="校准就绪状态不可用" className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          <h2 className="font-semibold">校准就绪状态不可用</h2>
+          <p className="mt-1">无法判断完整体检是否已解锁；医院对照明细仍按自身状态展示。</p>
+          <button type="button" onClick={() => void readinessQuery.refetch()} className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
+            <RefreshCw className="h-4 w-4" /> 重试校准状态
           </button>
-        </div>
+        </section>
+      ) : readiness?.ready ? (
+        <FullPhysicalExam serviceMonth={serviceMonth} />
       ) : (
         <>
-          {/* 第 1 层：完整体检态（就绪时·DOM 红线·仅 ready 才挂载）/ 校准态（现实·趋势-only + 就绪清单） */}
-          {readiness?.ready ? (
-            <FullPhysicalExam serviceMonth={serviceMonth} />
-          ) : (
-            <>
-              {health && <PortfolioHero health={health} />}
-              {readiness && <CalibrationView readiness={readiness} />}
-            </>
-          )}
-
-          {/* 第 2 层：对照表（始终可用·影子/校准） */}
-          <ComparisonTable rows={rows} caliber={caliber} periodRange={serviceMonth || '全部账期'} />
+          {healthQuery.isLoading ? (
+            <div className="h-28 animate-pulse rounded-xl bg-gray-100 motion-reduce:animate-none" role="status" aria-label="正在加载组合体检" />
+          ) : healthQuery.isError ? (
+            <section aria-label="组合体检数据不可用" className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+              <h2 className="font-semibold">组合体检数据不可用</h2>
+              <p className="mt-1">覆盖与未测量占比暂不可用；医院对照明细仍可查看。</p>
+              <button type="button" onClick={() => void healthQuery.refetch()} className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
+                <RefreshCw className="h-4 w-4" /> 重试组合体检
+              </button>
+            </section>
+          ) : health ? <PortfolioHero health={health} /> : null}
+          {readiness && <CalibrationView readiness={readiness} />}
         </>
+      )}
+
+      {/* 第 2 层：对照表（独立加载·影子/校准） */}
+      {comparisonQuery.isLoading ? (
+        <div className="h-40 animate-pulse rounded-xl bg-gray-100 motion-reduce:animate-none" role="status" aria-label="正在加载医院对照明细" />
+      ) : comparisonQuery.isError ? (
+        <section aria-label="医院对照明细不可用" className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+          <EmptyState icon={AlertTriangle} title="医院对照明细加载失败" description="没有把失败解释成空列表，请重试该数据层" />
+          <button type="button" onClick={() => void comparisonQuery.refetch()} className="mt-4 inline-flex h-10 items-center gap-1.5 rounded-md bg-blue-500 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
+            <RefreshCw className="h-4 w-4" /> 重试医院明细
+          </button>
+        </section>
+      ) : (
+        <ComparisonTable rows={rows} caliber={caliber} periodRange={serviceMonth || '全部账期'} />
       )}
     </div>
   )

@@ -128,7 +128,13 @@ describe('缺省排序 + 不点名（DEC-2·不把误伤从算法搬进人脑）
     renderPage()
     await screen.findByTestId('comparison-table')
     expect(screen.getByTestId('sort-not-verdict')).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('按率排序'))
+    expect(screen.getByRole('columnheader', { name: /贡献毛利/ })).toHaveAttribute('aria-sort', 'descending')
+    const rateSort = screen.getByLabelText('按率排序')
+    rateSort.focus()
+    expect(rateSort).toHaveFocus()
+    fireEvent.click(rateSort)
+    expect(screen.getByRole('columnheader', { name: /率/ })).toHaveAttribute('aria-sort', 'descending')
+    expect(screen.getByRole('columnheader', { name: /贡献毛利/ })).toHaveAttribute('aria-sort', 'none')
     await waitFor(() => expect(screen.getByTestId('sort-not-verdict')).toHaveTextContent(/别据此当「最差」压价/))
   })
 })
@@ -276,5 +282,21 @@ describe('导出（⑪·带口径声明列）', () => {
     renderPage()
     await screen.findByTestId('comparison-table')
     expect(screen.getByText(/导出（带口径声明）/)).toBeInTheDocument()
+  })
+})
+
+describe('分层失败状态', () => {
+  it('组合体检失败时保留医院明细，并提供只重试该层的明确错误状态', async () => {
+    mockAll()
+    vi.mocked(hospitalCmApi.health).mockRejectedValueOnce(new Error('health unavailable'))
+
+    renderPage()
+
+    expect(await screen.findByTestId('comparison-table')).toBeInTheDocument()
+    const healthError = screen.getByRole('region', { name: '组合体检数据不可用' })
+    expect(healthError).toHaveTextContent('医院对照明细仍可查看')
+    fireEvent.click(within(healthError).getByRole('button', { name: '重试组合体检' }))
+    await waitFor(() => expect(hospitalCmApi.health).toHaveBeenCalledTimes(2))
+    expect(hospitalCmApi.comparison).toHaveBeenCalledTimes(1)
   })
 })

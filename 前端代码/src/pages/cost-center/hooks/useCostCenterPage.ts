@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePagination } from '@/hooks/usePagination'
 import { indirectCostApi } from '@/api/master'
 import type { IndirectCostCenter, IndirectCostAllocation } from '@/types'
@@ -12,6 +12,22 @@ export interface CostCenterForm {
   allocationBase: string
   description: string
   status: 'active' | 'inactive'
+}
+
+interface CostCenterStats {
+  total: number | null
+  active: number | null
+  totalMonthly: number | null
+  allocationCount: number | null
+}
+
+type LoadStatus = 'loading' | 'success' | 'error'
+type AllocationLoadStatus = 'idle' | 'loading' | 'success' | 'error' | 'stale'
+
+function nullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : null
 }
 
 export interface AllocationForm {
@@ -65,7 +81,8 @@ function buildRecordedAllocation(
   costCenterId: string,
   form: AllocationForm
 ): IndirectCostAllocation {
-  const allocationRate = Number(res?.allocationRate ?? res?.rate ?? 0)
+  const responseRate = nullableNumber(res?.allocationRate ?? res?.rate)
+  const allocationRate = responseRate ?? (form.totalAmount / form.allocationBaseValue)
   return {
     id: String(res?.id || `${costCenterId}-${form.yearMonth}`),
     costCenterId: String(res?.costCenterId || costCenterId),
@@ -82,7 +99,11 @@ export function useCostCenterPage() {
   const [keyword, setKeyword] = useState(initialKeyword)
   const [searchInput, setSearchInput] = useState(initialKeyword)
   const [filterStatus, setFilterStatus] = useState('')
-  const [stats, setStats] = useState({ total: 0, active: 0, totalMonthly: 0, allocationCount: 0 })
+  const [stats, setStats] = useState<CostCenterStats | null>(null)
+  const [statsStatus, setStatsStatus] = useState<LoadStatus>('loading')
+  const statsRequestGenerationRef = useRef(0)
+  const listRequestGenerationRef = useRef(0)
+  const latestListRequestRef = useRef<Promise<{ list: IndirectCostCenter[]; pagination?: { total: number; page: number; pageSize: number } }> | null>(null)
 
   const [modalType, setModalType] = useState<null | 'create' | 'edit' | 'delete' | 'allocation'>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -107,20 +128,56 @@ export function useCostCenterPage() {
   })
 
   const [allocations, setAllocations] = useState<IndirectCostAllocation[]>([])
+  const [allocationStatus, setAllocationStatus] = useState<AllocationLoadStatus>('idle')
+  const allocationRequestGenerationRef = useRef(0)
+
+  const loadAllocations = useCallback(async (costCenterId: string) => {
+    const requestGeneration = ++allocationRequestGenerationRef.current
+    setAllocationStatus('loading')
+    try {
+      const res: any = await indirectCostApi.getAllocations(costCenterId, { page: 1, pageSize: 12 })
+      if (requestGeneration !== allocationRequestGenerationRef.current) return
+      setAllocations(Array.isArray(res?.list) ? res.list : [])
+      setAllocationStatus('success')
+    } catch {
+      if (requestGeneration !== allocationRequestGenerationRef.current) return
+      setAllocations([])
+      setAllocationStatus('error')
+    }
+  }, [])
 
   const fetchFn = useCallback(
     async (params: { page: number; pageSize: number }) => {
-      const res: any = await indirectCostApi.getList({
+      const requestGeneration = ++listRequestGenerationRef.current
+      const request = indirectCostApi.getList({
         ...params,
         keyword: keyword || undefined,
         status: filterStatus && filterStatus !== 'all' ? filterStatus : undefined,
-      })
-      return { list: res?.list || [], pagination: res?.pagination }
+      }).then((res: any) => ({
+        list: Array.isArray(res?.list) ? res.list : [],
+        pagination: res?.pagination,
+      }))
+      latestListRequestRef.current = request
+
+      try {
+        const response = await request
+        const latestRequest = latestListRequestRef.current
+        if (requestGeneration !== listRequestGenerationRef.current && latestRequest && latestRequest !== request) {
+          return await latestRequest
+        }
+        return response
+      } catch (error) {
+        const latestRequest = latestListRequestRef.current
+        if (requestGeneration !== listRequestGenerationRef.current && latestRequest && latestRequest !== request) {
+          return await latestRequest
+        }
+        throw error
+      }
     },
     [keyword, filterStatus]
   )
 
-  const { data, loading, page, pageSize, total, setPage, setPageSize, refresh } =
+  const { data, loading, error: listError, page, pageSize, total, setPage, setPageSize, refresh } =
     usePagination<IndirectCostCenter>({ fetchFn, initialPage: 1, initialPageSize: 20, deps: [keyword, filterStatus] })
 
   const displayedPage = useMemo(() => {
@@ -145,24 +202,31 @@ export function useCostCenterPage() {
   }, [createdCostCenterFallback, data, deletedCostCenterIds, filterStatus, keyword, page, total])
 
   const loadStats = useCallback(async () => {
+    const requestGeneration = ++statsRequestGenerationRef.current
+    setStats(null)
+    setStatsStatus('loading')
     try {
       const res: any = await indirectCostApi.getStats({
         keyword: keyword || undefined,
         status: filterStatus && filterStatus !== 'all' ? filterStatus : undefined,
       })
+      if (requestGeneration !== statsRequestGenerationRef.current) return
       setStats({
-        total: Number(res?.total || 0),
-        active: Number(res?.active || 0),
-        totalMonthly: Number(res?.totalMonthly || 0),
-        allocationCount: Number(res?.allocationCount || 0),
+        total: nullableNumber(res?.total),
+        active: nullableNumber(res?.active),
+        totalMonthly: nullableNumber(res?.totalMonthly),
+        allocationCount: nullableNumber(res?.allocationCount),
       })
+      setStatsStatus('success')
     } catch {
-      setStats({ total, active: 0, totalMonthly: 0, allocationCount: 0 })
+      if (requestGeneration !== statsRequestGenerationRef.current) return
+      setStats(null)
+      setStatsStatus('error')
     }
-  }, [keyword, filterStatus, total])
+  }, [keyword, filterStatus])
 
   useEffect(() => {
-    loadStats()
+    void loadStats()
   }, [loadStats])
 
   const refreshPage = async () => {
@@ -237,13 +301,8 @@ export function useCostCenterPage() {
       totalAmount: row.monthlyAmount || 0,
       allocationBaseValue: 1,
     })
-    try {
-      const res: any = await indirectCostApi.getAllocations(row.id, { page: 1, pageSize: 12 })
-      setAllocations(res?.list || [])
-    } catch {
-      setAllocations([])
-    }
     setModalType('allocation')
+    await loadAllocations(row.id)
   }
 
   const handleSubmit = async () => {
@@ -257,17 +316,19 @@ export function useCostCenterPage() {
     }
     try {
       const payload = { ...form }
+      let createdNew = false
       if (editingId) {
         await indirectCostApi.update(editingId, payload)
         toast.success('成本中心更新成功')
       } else {
         const created: any = await indirectCostApi.create(payload)
+        createdNew = true
         setCreatedCostCenterFallback(buildCreatedCostCenter(created, form))
         focusCostCenterList(String(created?.code || form.code || form.name || ''))
         toast.success('成本中心创建成功')
       }
       setModalType(null)
-      await refreshPage()
+      if (!createdNew) await refreshPage()
     } catch {
       toast.error('操作失败')
     }
@@ -323,24 +384,35 @@ export function useCostCenterPage() {
         recordedAllocation,
         ...prev.filter(item => item.id !== recordedAllocation.id),
       ])
+      setAllocationStatus('success')
       toast.success(`分摊录入成功，单位分摊率：¥${recordedAllocation.allocationRate.toFixed(4)}`)
-      try {
-        const listRes: any = await indirectCostApi.getAllocations(editingId, { page: 1, pageSize: 12 })
+      refresh()
+      const allocationRefresh = indirectCostApi.getAllocations(editingId, { page: 1, pageSize: 12 })
+      const statsRefresh = loadStats()
+      const [allocationResult] = await Promise.allSettled([allocationRefresh, statsRefresh])
+      if (allocationResult.status === 'fulfilled') {
+        const listRes: any = allocationResult.value
         const refreshedAllocations = Array.isArray(listRes?.list) && listRes.list.length > 0
           ? listRes.list
           : [recordedAllocation]
         setAllocations(refreshedAllocations)
-      } catch {
+        setAllocationStatus(Array.isArray(listRes?.list) && listRes.list.length > 0 ? 'success' : 'stale')
+      } else {
         setAllocations(prev => [
           recordedAllocation,
           ...prev.filter(item => item.id !== recordedAllocation.id),
         ])
+        setAllocationStatus('stale')
       }
-      await loadStats()
     } catch {
       toast.error('分摊录入失败')
     }
   }
+
+  const retryAllocations = useCallback(
+    () => detailRow ? loadAllocations(detailRow.id) : Promise.resolve(),
+    [detailRow?.id, loadAllocations]
+  )
 
   return {
     data: displayedPage.data,
@@ -348,10 +420,13 @@ export function useCostCenterPage() {
     page,
     pageSize,
     total: displayedPage.total,
+    listError,
     setPage,
     setPageSize,
     refresh,
     stats,
+    statsStatus,
+    retryStats: loadStats,
     keyword,
     searchInput,
     setSearchInput,
@@ -367,6 +442,8 @@ export function useCostCenterPage() {
     allocationForm,
     setAllocationForm,
     allocations,
+    allocationStatus,
+    retryAllocations,
     handleSearch,
     handleReset,
     openCreate,

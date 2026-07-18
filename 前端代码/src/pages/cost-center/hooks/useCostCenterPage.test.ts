@@ -41,6 +41,12 @@ const inactiveCenter = {
   status: 'inactive',
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise })
+  return { promise, resolve }
+}
+
 describe('useCostCenterPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -256,6 +262,38 @@ describe('useCostCenterPage', () => {
       totalMonthly: 2000,
       allocationCount: 0,
     })
+  })
+
+  it('keeps failed aggregate statistics unavailable instead of replacing them with zeroes', async () => {
+    vi.mocked(indirectCostApi.getStats).mockRejectedValueOnce(new Error('stats unavailable'))
+
+    const { result } = renderHook(() => useCostCenterPage())
+
+    await waitFor(() => expect(result.current.statsStatus).toBe('error'))
+    expect(result.current.stats).toBeNull()
+  })
+
+  it('keeps the newest filtered list when an older request resolves last', async () => {
+    const first = deferred<any>()
+    const second = deferred<any>()
+    vi.mocked(indirectCostApi.getList)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+
+    const { result } = renderHook(() => useCostCenterPage())
+    await waitFor(() => expect(indirectCostApi.getList).toHaveBeenCalledTimes(1))
+
+    act(() => result.current.setSearchInput('IDC-NEW'))
+    act(() => result.current.handleSearch())
+    await waitFor(() => expect(indirectCostApi.getList).toHaveBeenCalledTimes(2))
+
+    const newestCenter = { ...mockCenter, id: 'cc-new', code: 'IDC-NEW', name: '最新筛选结果' }
+    second.resolve({ list: [newestCenter], pagination: { page: 1, pageSize: 20, total: 1 } })
+    await waitFor(() => expect(result.current.data[0]?.id).toBe('cc-new'))
+
+    first.resolve({ list: [mockCenter], pagination: { page: 1, pageSize: 20, total: 1 } })
+    await waitFor(() => expect(result.current.data[0]?.id).toBe('cc-new'))
+    expect(result.current.data[0]?.id).not.toBe('cc-1')
   })
 
   it('does not send all as a real status filter', async () => {

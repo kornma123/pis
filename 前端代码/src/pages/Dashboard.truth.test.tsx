@@ -304,6 +304,9 @@ describe('Dashboard 数据诚实边界', () => {
     renderDashboard()
 
     const costCard = await screen.findByRole('region', { name: '本月成本' })
+    const coverage = screen.getByRole('region', { name: '数据覆盖与口径' })
+    expect(coverage).toHaveTextContent('成本口径不可用于经营判断')
+    expect(coverage).toHaveTextContent('仍有 2 单未补算或成本异常')
     expect(within(costCard).getByText('不可用')).toBeInTheDocument()
     expect(within(costCard).getByText('仍有 2 单未补算或成本异常')).toBeInTheDocument()
     expect(within(costCard).queryByText('¥90')).not.toBeInTheDocument()

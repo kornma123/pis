@@ -32,7 +32,10 @@ function renderPage(pageOverrides = {}) {
     setPage: vi.fn(),
     setPageSize: vi.fn(),
     refresh: vi.fn(),
+    listError: null,
     stats: { total: 1, active: 1, totalMonthly: 1200, allocationCount: 0 },
+    statsStatus: 'success',
+    retryStats: vi.fn(),
     keyword: '',
     searchInput: '',
     setSearchInput: vi.fn(),
@@ -60,6 +63,8 @@ function renderPage(pageOverrides = {}) {
     },
     setAllocationForm: vi.fn(),
     allocations: [],
+    allocationStatus: 'idle',
+    retryAllocations: vi.fn(),
     handleSearch: vi.fn(),
     handleReset: vi.fn(),
     openCreate: vi.fn(),
@@ -86,5 +91,16 @@ describe('IndirectCostCenterList', () => {
 
     expect(screen.getByRole('heading', { name: '确认删除' })).toBeInTheDocument()
     expect(screen.getByText('确定要删除成本中心「房租成本」吗？删除后不会再用于新月度分摊、项目成本归集、成本结账和审计筛选；已有分摊记录的成本中心后端会阻止删除，历史分摊、项目成本和审计记录仍保留可回看。')).toBeInTheDocument()
+  })
+
+  it('shows unavailable aggregate statistics instead of zeroes when the stats request fails', () => {
+    const retryStats = vi.fn()
+    renderPage({ stats: null, statsStatus: 'error', retryStats })
+
+    const coverage = screen.getByRole('region', { name: '数据覆盖与口径' })
+    expect(coverage).toHaveTextContent('统计值不折算为 0')
+    expect(screen.getAllByText('—')).toHaveLength(4)
+    screen.getByRole('button', { name: '重试汇总统计' }).click()
+    expect(retryStats).toHaveBeenCalledTimes(1)
   })
 })

@@ -62,6 +62,31 @@ describe('AllocationModal', () => {
     )
 
     expect(screen.getByText('请填写大于 0 的分摊基础值，系统才能把间接成本分摊到项目成本。')).toBeInTheDocument()
+    expect(screen.getByText('分摊基础值 不可用')).toBeInTheDocument()
+    expect(screen.getByText('单位分摊率 不可计算')).toBeInTheDocument()
+    expect(screen.queryByText('单位分摊率 ¥0.0000')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '录入分摊' })).toBeDisabled()
+  })
+
+  it('does not present a failed history request as an empty allocation history', () => {
+    const retry = vi.fn()
+    render(
+      <AllocationModal
+        open
+        row={row as any}
+        allocationForm={{ yearMonth: '2026-06', totalAmount: 1200, allocationBaseValue: 300 }}
+        allocations={[]}
+        allocationStatus="error"
+        onRetryAllocations={retry}
+        onClose={vi.fn()}
+        onChangeForm={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('没有把加载失败解释成空历史')
+    expect(screen.queryByText('当前没有历史分摊记录。')).not.toBeInTheDocument()
+    screen.getByRole('button', { name: '重试历史记录' }).click()
+    expect(retry).toHaveBeenCalledTimes(1)
   })
 })

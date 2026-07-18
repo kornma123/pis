@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Download,
   TrendingUp,
@@ -289,11 +289,23 @@ export function getClosePeriodBlockReason(
 }
 
 export function getCostRunProcessedCount(summary?: CostRun['summary']) {
-  return summary?.total ?? summary?.processed ?? 0
+  return summary?.total ?? summary?.processed ?? null
 }
 
 export function getCostRunSucceededCount(summary?: CostRun['summary']) {
-  return summary?.success ?? summary?.succeeded ?? 0
+  return summary?.success ?? summary?.succeeded ?? null
+}
+
+function formatKnownCount(value: number | null | undefined, unit: string) {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value} ${unit}` : '不可用'
+}
+
+function formatKnownNumber(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : '不可用'
+}
+
+function formatKnownCurrency(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? formatCurrency(value) : '不可用'
 }
 
 function getFirstCostRunFailure(summary?: CostRun['summary']) {
@@ -316,6 +328,8 @@ export default function CostDashboard() {
   const [dashboardKeyword, setDashboardKeyword] = useState(initialFilters.keyword)
   const [role] = useState(() => getUserRole())
   const [loading, setLoading] = useState(true)
+  const [summaryFailed, setSummaryFailed] = useState(false)
+  const [workbenchFailed, setWorkbenchFailed] = useState(false)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [profitByProject, setProfitByProject] = useState<ProjectProfit[]>([])
   const [costByActivity, setCostByActivity] = useState<CostByActivity[]>([])
@@ -331,47 +345,81 @@ export default function CostDashboard() {
   const [adjustmentAmount, setAdjustmentAmount] = useState('')
   const [adjustmentReason, setAdjustmentReason] = useState('')
   const [adjustmentSubmitting, setAdjustmentSubmitting] = useState(false)
+  const requestGenerationRef = useRef(0)
 
-  useEffect(() => {
-    loadDashboard()
-  }, [month, dashboardKeyword])
+  const loadDashboard = useCallback(async (preserveOptimisticState = false) => {
+    const requestGeneration = ++requestGenerationRef.current
+    setLoading(true)
+    setSummaryFailed(false)
+    setWorkbenchFailed(false)
+    setClosingReadinessFailed(false)
+    if (!preserveOptimisticState) {
+      setSummary(null)
+      setProfitByProject([])
+      setCostByActivity([])
+      setAlerts([])
+      setCurrentPeriod(null)
+      setCostRuns([])
+      setAdjustments([])
+      setClosingReadiness(null)
+    }
 
-  const loadDashboard = async () => {
-    try {
-      setLoading(true)
-      const data = await abcApi.getDashboard(month)
+    const dashboardRequest = abcApi.getDashboard(month)
+    const periodRequest = abcApi.getPeriods({ yearMonth: month, pageSize: 1 })
+    const costRunsRequest = abcApi.getCostRuns({
+      yearMonth: month,
+      pageSize: dashboardKeyword ? 20 : 5,
+      keyword: dashboardKeyword || undefined,
+    })
+    const adjustmentsRequest = abcApi.getAdjustments({
+      yearMonth: month,
+      pageSize: dashboardKeyword ? 20 : 5,
+      keyword: dashboardKeyword || undefined,
+    })
+    const closingReadinessRequest = abcApi.getClosingReadiness(month)
+
+    const [dashboardResult, periodResult, costRunsResult, adjustmentsResult, readinessResult] =
+      await Promise.allSettled([
+        dashboardRequest,
+        periodRequest,
+        costRunsRequest,
+        adjustmentsRequest,
+        closingReadinessRequest,
+      ])
+
+    if (requestGeneration !== requestGenerationRef.current) return
+
+    if (dashboardResult.status === 'fulfilled') {
+      const data = dashboardResult.value
       setSummary(data.summary)
       setProfitByProject(data.profitByProject || [])
       setCostByActivity(data.costByActivity || [])
       setAlerts(data.alerts || [])
-      const closingReadinessRequest = abcApi.getClosingReadiness(month)
-        .then(data => ({ data, failed: false }))
-        .catch(() => ({ data: null, failed: true }))
-      const [periodData, runData, adjustmentData, closingReadinessData] = await Promise.all([
-        abcApi.getPeriods({ yearMonth: month, pageSize: 1 }),
-        abcApi.getCostRuns({
-          yearMonth: month,
-          pageSize: dashboardKeyword ? 20 : 5,
-          keyword: dashboardKeyword || undefined,
-        }),
-        abcApi.getAdjustments({
-          yearMonth: month,
-          pageSize: dashboardKeyword ? 20 : 5,
-          keyword: dashboardKeyword || undefined,
-        }),
-        closingReadinessRequest,
-      ])
-      setCurrentPeriod(listPayload<CostPeriod>(periodData)[0] || null)
-      setCostRuns(listPayload<CostRun>(runData))
-      setAdjustments(listPayload<CostAdjustment>(adjustmentData))
-      setClosingReadiness(closingReadinessData.data)
-      setClosingReadinessFailed(closingReadinessData.failed)
-    } catch {
-      toast.error('加载看板数据失败')
-    } finally {
-      setLoading(false)
+    } else {
+      setSummaryFailed(true)
+      toast.error('成本汇总数据加载失败')
+      if (preserveOptimisticState) {
+        setLoading(false)
+        return
+      }
     }
-  }
+
+    const hasWorkbenchFailure =
+      periodResult.status === 'rejected' ||
+      costRunsResult.status === 'rejected' ||
+      adjustmentsResult.status === 'rejected'
+    setWorkbenchFailed(hasWorkbenchFailure)
+    setCurrentPeriod(periodResult.status === 'fulfilled' ? listPayload<CostPeriod>(periodResult.value)[0] || null : null)
+    setCostRuns(costRunsResult.status === 'fulfilled' ? listPayload<CostRun>(costRunsResult.value) : [])
+    setAdjustments(adjustmentsResult.status === 'fulfilled' ? listPayload<CostAdjustment>(adjustmentsResult.value) : [])
+    setClosingReadiness(readinessResult.status === 'fulfilled' ? readinessResult.value : null)
+    setClosingReadinessFailed(readinessResult.status === 'rejected')
+    setLoading(false)
+  }, [dashboardKeyword, month])
+
+  useEffect(() => {
+    void loadDashboard()
+  }, [loadDashboard])
 
   const pieData = useMemo(() =>
     costByActivity.map(a => ({
@@ -420,7 +468,7 @@ export default function CostDashboard() {
         await abcApi.closePeriod(period.id)
         toast.success('成本期间已关账')
       }
-      await loadDashboard()
+      await loadDashboard(true)
     } catch {
       // 统一错误提示已在请求拦截器处理
     } finally {
@@ -465,7 +513,7 @@ export default function CostDashboard() {
       setAdjustmentModalOpen(false)
       setAdjustmentAmount('')
       setAdjustmentReason('')
-      await loadDashboard()
+      await loadDashboard(true)
     } catch {
       // 统一错误提示已在请求拦截器处理
     } finally {
@@ -487,7 +535,7 @@ export default function CostDashboard() {
       const previousAdjustment = adjustments.find(item => item.id === reviewedAdjustment.id)
       setAdjustments(prev => mergeReviewedAdjustment(prev, reviewedAdjustment))
       setSummary(prev => applyReviewedAdjustmentToSummary(prev, previousAdjustment, reviewedAdjustment))
-      await loadDashboard()
+      await loadDashboard(true)
     } catch {
       // 统一错误提示已在请求拦截器处理
     } finally {
@@ -497,12 +545,12 @@ export default function CostDashboard() {
 
   const periodStatus = currentPeriod ? PERIOD_STATUS[currentPeriod.status] || PERIOD_STATUS.open : null
   const canManageCostPeriod = role === 'admin' || role === 'finance'
-  const openAlertCount = getDashboardOpenExceptionCount(summary?.openExceptionCount, alerts.length)
-  const closeBlockReason = getClosePeriodBlockReason(
-    currentPeriod?.status,
-    openAlertCount,
-    summary?.pendingCostCount ?? 0,
-  )
+  const openAlertCount = summary
+    ? getDashboardOpenExceptionCount(summary.openExceptionCount, alerts.length)
+    : null
+  const closeBlockReason = summary && openAlertCount !== null && typeof summary.pendingCostCount === 'number'
+    ? getClosePeriodBlockReason(currentPeriod?.status, openAlertCount, summary.pendingCostCount)
+    : '成本汇总或未补算口径不可用，暂不能判断是否可关账'
   const adjustmentAmountValue = Number(adjustmentAmount)
   const adjustmentValidationMessage = adjustmentModalOpen
     ? !Number.isFinite(adjustmentAmountValue) || adjustmentAmountValue === 0
@@ -521,21 +569,8 @@ export default function CostDashboard() {
   ].slice(0, 5)
   const visibleClosingReadinessActions = (closingReadiness?.nextActions || []).slice(0, 4)
 
-  if (loading && !summary) {
-    return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">成本看板</h1>
-            <p className="text-sm text-gray-500 mt-1">加载中...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" aria-busy={loading}>
       {/* 页面头部 */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
@@ -545,6 +580,7 @@ export default function CostDashboard() {
         <div className="flex items-center gap-3">
           <input
             type="month"
+            aria-label="成本月份"
             value={month}
             onChange={e => {
               setMonth(e.target.value)
@@ -562,6 +598,41 @@ export default function CostDashboard() {
           </button>
         </div>
       </div>
+
+      {loading && !summary && (
+        <section role="status" aria-label="正在加载成本工作流" className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          正在加载当前筛选条件的成本汇总、期间、任务、调整单与结账健康状态…
+        </section>
+      )}
+
+      {summaryFailed && !summary && (
+        <section
+          aria-label="成本汇总数据不可用"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <h2 className="font-semibold">成本汇总数据不可用</h2>
+          <p className="mt-1 leading-6">本次请求失败；页面没有把失败响应解释成 0，核算工作台会继续展示独立请求的真实结果。</p>
+          <button
+            type="button"
+            onClick={() => void loadDashboard()}
+            className="mt-2 inline-flex h-9 items-center gap-1.5 rounded-md border border-amber-300 bg-white px-3 font-medium text-amber-800 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+          >
+            <RefreshCw className="h-4 w-4" /> 重试成本汇总
+          </button>
+        </section>
+      )}
+
+      {summaryFailed && summary && (
+        <section aria-label="成本汇总刷新失败" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          成本汇总刷新失败；当前保留的是本筛选条件下最近一次成功结果，请重试后再作判断。
+        </section>
+      )}
+
+      {workbenchFailed && (
+        <section aria-label="核算工作台数据不完整" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          核算期间、任务或调整单中至少一层加载失败；失败层保持不可用，不据此执行关账。
+        </section>
+      )}
 
       {/* 核算工作台 */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -586,13 +657,13 @@ export default function CostDashboard() {
             <div className="min-h-[72px] rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
               <div className="text-xs text-gray-500">出库数</div>
               <div className="mt-1 text-sm font-semibold text-gray-900">
-                {summary?.outboundCount ?? 0} 单
+                {formatKnownCount(summary?.outboundCount, '单')}
               </div>
             </div>
             <div className="min-h-[72px] rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
               <div className="text-xs text-gray-500">成本快照</div>
               <div className="mt-1 text-sm font-semibold text-gray-900">
-                {summary?.abcSnapshotCount ?? 0} 条
+                {formatKnownCount(summary?.abcSnapshotCount, '条')}
               </div>
             </div>
             <div className="min-h-[72px] rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
@@ -601,7 +672,7 @@ export default function CostDashboard() {
                 开放异常
               </div>
               <div className="mt-1 text-sm font-semibold text-gray-900">
-                {summary?.openExceptionCount ?? alerts.length} 条
+                {summary ? formatKnownCount(summary.openExceptionCount ?? alerts.length, '条') : '不可用'}
               </div>
             </div>
             <div className="min-h-[72px] rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
@@ -610,19 +681,21 @@ export default function CostDashboard() {
                 未补算
               </div>
               <div className="mt-1 text-sm font-semibold text-gray-900">
-                {summary?.pendingCostCount ?? 0} 单
+                {formatKnownCount(summary?.pendingCostCount, '单')}
               </div>
             </div>
             <div className="min-h-[72px] rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
               <div className="text-xs text-gray-500">调整额 / 待审</div>
               <div className="mt-1 text-sm font-semibold text-gray-900">
-                {formatCurrency(summary?.adjustmentAmount ?? 0)} / {summary?.pendingAdjustmentCount ?? 0}
+                {summary
+                  ? `${formatKnownCurrency(summary.adjustmentAmount)} / ${formatKnownNumber(summary.pendingAdjustmentCount)}`
+                  : '不可用'}
               </div>
             </div>
             <div className="min-h-[72px] rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
               <div className="text-xs text-gray-500">调整后利润</div>
               <div className="mt-1 text-sm font-semibold text-gray-900">
-                {formatCurrency(summary?.adjustedTotalProfit ?? summary?.totalProfit ?? 0)}
+                {formatKnownCurrency(summary?.adjustedTotalProfit ?? summary?.totalProfit)}
               </div>
             </div>
           </div>
@@ -632,7 +705,7 @@ export default function CostDashboard() {
               <button
                 type="button"
                 onClick={() => setAdjustmentModalOpen(true)}
-                disabled={workbenchLoading || currentPeriod?.status !== 'closed'}
+                disabled={workbenchLoading || workbenchFailed || currentPeriod?.status !== 'closed'}
                 className="h-9 px-3 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 <FilePlus className="h-4 w-4" />
@@ -641,7 +714,7 @@ export default function CostDashboard() {
               <button
                 type="button"
                 onClick={() => runWorkbenchAction('start')}
-                disabled={workbenchLoading || currentPeriod?.status === 'closed'}
+                disabled={workbenchLoading || workbenchFailed || currentPeriod?.status === 'closed'}
                 className="h-9 px-3 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 <Play className="h-4 w-4" />
@@ -650,7 +723,7 @@ export default function CostDashboard() {
               <button
                 type="button"
                 onClick={() => runWorkbenchAction('collect')}
-                disabled={workbenchLoading || currentPeriod?.status === 'closed'}
+                disabled={workbenchLoading || workbenchFailed || currentPeriod?.status === 'closed'}
                 className="h-9 px-3 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 <Database className="h-4 w-4" />
@@ -659,7 +732,7 @@ export default function CostDashboard() {
               <button
                 type="button"
                 onClick={() => runWorkbenchAction('recalculate')}
-                disabled={workbenchLoading || currentPeriod?.status === 'closed'}
+                disabled={workbenchLoading || workbenchFailed || currentPeriod?.status === 'closed'}
                 className="h-9 px-3 text-sm bg-[#3b82f6] text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 <RefreshCw className={`h-4 w-4 ${workbenchLoading ? 'animate-spin' : ''}`} />
@@ -668,7 +741,7 @@ export default function CostDashboard() {
               <button
                 type="button"
                 onClick={() => runWorkbenchAction('close')}
-                disabled={workbenchLoading || Boolean(closeBlockReason)}
+                disabled={workbenchLoading || workbenchFailed || Boolean(closeBlockReason)}
                 title={closeBlockReason || undefined}
                 className="h-9 px-3 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
@@ -712,10 +785,10 @@ export default function CostDashboard() {
                           {runStatus.label}
                         </span>
                       </td>
-                      <td className="py-2 text-gray-600">{getCostRunProcessedCount(run.summary)}</td>
-                      <td className="py-2 text-emerald-600">{getCostRunSucceededCount(run.summary)}</td>
+                      <td className="py-2 text-gray-600">{getCostRunProcessedCount(run.summary) ?? '—'}</td>
+                      <td className="py-2 text-emerald-600">{getCostRunSucceededCount(run.summary) ?? '—'}</td>
                       <td className="py-2 text-red-600">
-                        <div>{run.summary?.failed ?? 0}</div>
+                        <div>{run.summary?.failed ?? '—'}</div>
                         {firstFailure && (
                           <div className="mt-1 max-w-[320px] space-y-1 text-xs leading-5 text-red-700">
                             <div>
@@ -874,41 +947,54 @@ export default function CostDashboard() {
         )}
       </div>
 
+      {summary && (
+      <>
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-500">总成本</div>
-          <div className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.totalCost)}</div>
+          <div className="text-2xl font-bold text-gray-900 mt-1">{formatKnownCurrency(summary.totalCost)}</div>
           <div className="flex items-center gap-1 mt-1">
-            {getChangeIcon(summary?.costChange || 0)}
-            <span className="text-xs text-gray-400">环比 {getChangeText(summary?.costChange || 0)}</span>
+            {typeof summary.costChange === 'number' && Number.isFinite(summary.costChange) ? (
+              <>{getChangeIcon(summary.costChange)}<span className="text-xs text-gray-400">环比 {getChangeText(summary.costChange)}</span></>
+            ) : <span className="text-xs text-gray-400">环比不可用</span>}
           </div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-500">总收入</div>
-          <div className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(summary?.totalFee)}</div>
+          <div className="text-2xl font-bold text-gray-900 mt-1">{formatKnownCurrency(summary.totalFee)}</div>
           <div className="flex items-center gap-1 mt-1">
-            {getChangeIcon(summary?.feeChange || 0)}
-            <span className="text-xs text-gray-400">环比 {getChangeText(summary?.feeChange || 0)}</span>
+            {typeof summary.feeChange === 'number' && Number.isFinite(summary.feeChange) ? (
+              <>{getChangeIcon(summary.feeChange)}<span className="text-xs text-gray-400">环比 {getChangeText(summary.feeChange)}</span></>
+            ) : <span className="text-xs text-gray-400">环比不可用</span>}
           </div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-500">总利润</div>
-          <div className={`text-2xl font-bold mt-1 ${(summary?.totalProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {formatCurrency(summary?.totalProfit)}
+          <div className={`text-2xl font-bold mt-1 ${typeof summary.totalProfit === 'number' ? (summary.totalProfit >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-500'}`}>
+            {formatKnownCurrency(summary.totalProfit)}
           </div>
           <div className="flex items-center gap-1 mt-1">
-            {getChangeIcon(summary?.profitChange || 0)}
-            <span className="text-xs text-gray-400">环比 {getChangeText(summary?.profitChange || 0)}</span>
+            {typeof summary.profitChange === 'number' && Number.isFinite(summary.profitChange) ? (
+              <>{getChangeIcon(summary.profitChange)}<span className="text-xs text-gray-400">环比 {getChangeText(summary.profitChange)}</span></>
+            ) : <span className="text-xs text-gray-400">环比不可用</span>}
           </div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-500">平均利润率</div>
           <div className="mt-1">
-            <ProfitBadge rate={summary?.profitRate || 0} showPercent />
+            {typeof summary.profitRate === 'number' && Number.isFinite(summary.profitRate)
+              ? <ProfitBadge rate={summary.profitRate} showPercent />
+              : <span className="text-sm font-semibold text-gray-500">不可用</span>}
           </div>
           <div className="text-xs text-gray-400 mt-1">
-            {summary?.caseCount || 0} 例 / {summary?.sampleCount || 0} 片
+            {typeof summary.caseCount === 'number' && Number.isFinite(summary.caseCount)
+              ? `${summary.caseCount} 例`
+              : '病例数不可用'}
+            {' / '}
+            {typeof summary.sampleCount === 'number' && Number.isFinite(summary.sampleCount)
+              ? `${summary.sampleCount} 片`
+              : '样本数不可用'}
           </div>
         </div>
       </div>
@@ -1034,6 +1120,8 @@ export default function CostDashboard() {
             </div>
           )}
         </div>
+      )}
+      </>
       )}
 
       {adjustmentModalOpen && (

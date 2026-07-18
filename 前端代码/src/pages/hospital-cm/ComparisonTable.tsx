@@ -14,8 +14,9 @@ import { cn } from '@/lib/utils'
 import type { ComparisonRow, CaliberRatification, TrendPoint } from '@/types/hospital-cm'
 import { exportComparisonCsv } from './exportComparison'
 
-const yuan = (n: number) => '¥' + (Number(n) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-const pct = (r: number) => (r * 100).toFixed(1) + '%'
+const isKnownNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+const yuan = (n: number) => isKnownNumber(n) ? `¥${n.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '不可计算'
+const pct = (r: number) => isKnownNumber(r) ? `${(r * 100).toFixed(1)}%` : '—'
 
 type SortKey = 'cm' | 'cmRate' | 'fixedCoverageShare' | 'partnerName'
 const MIN_TREND_POINTS = 3 // 与就绪 N=3 一致：分辨趋势方向 vs 噪声至少 3 点
@@ -54,9 +55,13 @@ function Th({ label, sortKey, sort, onSort, className }: {
 }) {
   const active = sortKey && sort.key === sortKey
   return (
-    <th className={cn('px-3 py-2.5 text-[11.5px] font-medium text-gray-500', className)}>
+    <th
+      aria-sort={sortKey ? (active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
+      className={cn('px-3 py-2.5 text-[11.5px] font-medium text-gray-500', className)}
+    >
       {sortKey ? (
         <button
+          type="button"
           onClick={() => onSort(sortKey)}
           className={cn('inline-flex items-center gap-1 hover:text-gray-700', active && 'text-gray-800 font-semibold')}
           aria-label={`按${label}排序`}
@@ -102,8 +107,8 @@ export default function ComparisonTable({
       }
       const av = a[sort.key] as number | null
       const bv = b[sort.key] as number | null
-      if (av == null) return bv == null ? 0 : 1
-      if (bv == null) return -1
+      if (!isKnownNumber(av)) return !isKnownNumber(bv) ? 0 : 1
+      if (!isKnownNumber(bv)) return -1
       const d = av - bv
       return sort.dir === 'desc' ? -d : d
     })
@@ -125,7 +130,7 @@ export default function ComparisonTable({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm" data-testid="comparison-table">
+    <section aria-label="医院贡献毛利明细" className="rounded-xl border border-gray-200 bg-white shadow-sm" data-testid="comparison-table">
       <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3">
         <h2 className="text-[15px] font-semibold text-[#0a2540]">各医院对照表</h2>
         <button
@@ -153,6 +158,7 @@ export default function ComparisonTable({
 
       <div className="mt-3 overflow-x-auto">
         <table className="w-full text-[13px] tabular-nums">
+          <caption className="sr-only">各医院贡献毛利、覆盖份额、口径与同院趋势明细</caption>
           <thead>
             <tr className="border-b border-gray-200 text-right">
               <Th label="医院" sortKey="partnerName" sort={sort} onSort={onSort} className="text-left" />
@@ -169,7 +175,7 @@ export default function ComparisonTable({
               if (!r.measurable) {
                 // ⑧ UNMEASURED：灰行 + 原因（缺席=被读成不存在·盲区消失）
                 return (
-                  <tr key={r.partnerId} data-testid="unmeasured-row" className="border-b border-gray-100 bg-gray-50/60 text-right text-gray-400">
+                  <tr key={r.partnerId} data-testid="unmeasured-row" className="border-b border-gray-100 bg-gray-50/60 text-right text-gray-400 [content-visibility:auto] [contain-intrinsic-size:auto_48px]">
                     <td className="px-3 py-3 text-left font-medium">{r.partnerName || r.partnerId}</td>
                     <td className="px-3 py-3" colSpan={5}>
                       <span className="inline-flex items-center gap-1 text-[12px]">
@@ -180,7 +186,7 @@ export default function ComparisonTable({
                 )
               }
               return (
-                <tr key={r.partnerId} className="border-b border-gray-100 text-right">
+                <tr key={r.partnerId} className="border-b border-gray-100 text-right [content-visibility:auto] [contain-intrinsic-size:auto_48px]">
                   <td className="px-3 py-3 text-left font-medium text-gray-900">{r.partnerName || r.partnerId}</td>
                   <td className="px-3 py-3 font-semibold text-[#0a2540]">
                     {observing ? (
@@ -238,6 +244,6 @@ export default function ComparisonTable({
         <b>覆盖边界</b>：本表只含<b>有对账单流水</b>的院（上方灰行=有账单但无染色病例）；<b>从不走账单管道的纯代送/会诊院不在此列</b>——是当前数据面边界、非「已消除盲区」。<br />
         后视镜口径（导入天然滞后 1–3 月，不反映当下）；缺价暴露、约定价估值占比随行显示供判断可信度。
       </p>
-    </div>
+    </section>
   )
 }

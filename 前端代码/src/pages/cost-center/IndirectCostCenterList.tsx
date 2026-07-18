@@ -1,5 +1,5 @@
 import React from 'react'
-import { Plus, Search, Coins } from 'lucide-react'
+import { AlertTriangle, Plus, RefreshCw, Search, Coins } from 'lucide-react'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { useCostCenterPage } from './hooks/useCostCenterPage'
 import { CostCenterFormModal } from './components/CostCenterFormModal'
@@ -30,13 +30,30 @@ export default function IndirectCostCenterList() {
         </button>
       </div>
 
+      <section aria-label="数据覆盖与口径" className="rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-900">数据覆盖与口径</h2>
+        {page.statsStatus === 'loading' ? (
+          <p className="mt-1 text-sm text-gray-500" role="status">正在加载当前筛选条件的汇总统计…</p>
+        ) : page.statsStatus === 'error' ? (
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-amber-800">
+            <AlertTriangle className="h-4 w-4" />
+            <span>汇总统计不可用；下方列表按自身请求状态展示，统计值不折算为 0。</span>
+            <button type="button" onClick={() => void page.retryStats()} className="inline-flex h-8 items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2.5 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
+              <RefreshCw className="h-3.5 w-3.5" /> 重试汇总统计
+            </button>
+          </div>
+        ) : (
+          <p className="mt-1 text-sm text-gray-500">统计与列表均按当前关键词和状态筛选；缺失字段以“—”表示。</p>
+        )}
+      </section>
+
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { value: page.stats.total, label: '成本中心数' },
-          { value: page.stats.active, label: '已启用', color: 'text-green-600' },
-          { value: `¥${page.stats.totalMonthly.toFixed(2)}`, label: '月度费用合计', color: 'text-blue-600' },
-          { value: page.stats.allocationCount, label: '分摊记录数', color: 'text-purple-600' },
+          { value: page.stats?.total ?? '—', label: '成本中心数' },
+          { value: page.stats?.active ?? '—', label: '已启用', color: 'text-green-600' },
+          { value: page.stats?.totalMonthly == null ? '—' : `¥${page.stats.totalMonthly.toFixed(2)}`, label: '月度费用合计', color: 'text-blue-600' },
+          { value: page.stats?.allocationCount ?? '—', label: '分摊记录数', color: 'text-purple-600' },
         ].map((stat, i) => (
           <div key={i} className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
             <div className={`text-2xl font-semibold ${stat.color || 'text-gray-900'}`}>
@@ -49,12 +66,22 @@ export default function IndirectCostCenterList() {
 
       {/* 表格区域 */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        {page.listError && (
+          <div role="alert" className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-800">
+            <AlertTriangle className="h-4 w-4" />
+            <span>{page.data.length > 0 ? '列表刷新失败，当前保留上次成功结果。' : '列表数据不可用，没有把请求失败解释成空列表。'}</span>
+            <button type="button" onClick={page.refresh} className="ml-auto inline-flex h-8 items-center gap-1 rounded-md border border-amber-300 px-2.5 font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
+              <RefreshCw className="h-3.5 w-3.5" /> 重试列表
+            </button>
+          </div>
+        )}
         {/* 筛选栏 */}
         <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-200">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
+              aria-label="搜索成本中心"
               placeholder="搜索成本中心"
               value={page.searchInput}
               onChange={(e) => page.setSearchInput(e.target.value)}
@@ -106,17 +133,25 @@ export default function IndirectCostCenterList() {
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-gray-400">加载中...</td>
                 </tr>
+              ) : page.listError && page.data.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-amber-700">列表数据不可用</td>
+                </tr>
               ) : page.data.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-gray-400">暂无成本中心</td>
                 </tr>
               ) : (
                 page.data.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={row.id} className="hover:bg-gray-50 transition-colors [content-visibility:auto] [contain-intrinsic-size:auto_48px]">
                     <td className="px-4 py-3 font-mono text-gray-900">{row.code}</td>
                     <td className="px-4 py-3 font-medium text-gray-900">{row.name}</td>
                     <td className="px-4 py-3 text-gray-500">{row.costTypeLabel || row.costType}</td>
-                    <td className="px-4 py-3 text-gray-700">¥{row.monthlyAmount?.toFixed(2) || '0.00'}</td>
+                    <td className="px-4 py-3 text-gray-700">
+                      {typeof row.monthlyAmount === 'number' && Number.isFinite(row.monthlyAmount)
+                        ? `¥${row.monthlyAmount.toFixed(2)}`
+                        : '—'}
+                    </td>
                     <td className="px-4 py-3 text-gray-400">
                       {/* HON-4：逐中心分摊口径从不被引擎读取；不再按中心展示「样本数/收入…」的空转选项，
                           统一显示真实分摊方式（按每月统一规则），避免误导。 */}
@@ -204,6 +239,8 @@ export default function IndirectCostCenterList() {
         row={page.detailRow}
         allocationForm={page.allocationForm}
         allocations={page.allocations}
+        allocationStatus={page.allocationStatus}
+        onRetryAllocations={() => void page.retryAllocations()}
         onClose={() => page.setModalType(null)}
         onChangeForm={page.setAllocationForm}
         onSubmit={page.handleAllocationSubmit}
