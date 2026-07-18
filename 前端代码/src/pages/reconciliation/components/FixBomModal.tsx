@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { MaterialDiff } from '../hooks/useReconciliationPage'
 
 interface Props {
@@ -26,15 +27,22 @@ export function FixBomModal({
   onClose,
   onConfirm,
 }: Props) {
+  useEffect(() => {
+    if (!open) return
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [open, onClose])
+
   if (!open || !fixTarget) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={event => { if (event.target === event.currentTarget) onClose() }}>
+      <div className="absolute inset-0 bg-black/40" aria-hidden="true" />
+      <div role="dialog" aria-modal="true" aria-labelledby="fix-bom-title" className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">修正BOM用量</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+          <h3 id="fix-bom-title" className="text-lg font-semibold text-gray-900">提交 BOM 用量修正</h3>
+          <button type="button" aria-label="关闭 BOM 修正对话框" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
         </div>
         <div className="p-6 space-y-4">
           <div className="bg-gray-50 p-3 rounded-md">
@@ -42,14 +50,10 @@ export function FixBomModal({
             <div className="font-semibold text-sm">{fixTarget.materialName}</div>
             <div className="text-xs text-gray-400">{fixTarget.spec}</div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">原用量/例</label>
               <input type="text" value={`${fixTarget.bomUsagePerSample} ${fixTarget.bomUnit}`} disabled className="w-full px-3 py-2 text-sm border rounded-md bg-gray-100" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">建议用量/例</label>
-              <input type="text" value={`${(fixTarget.bomUsagePerSample * 1.2).toFixed(2)} ${fixTarget.bomUnit}`} disabled className="w-full px-3 py-2 text-sm border rounded-md bg-gray-100 text-amber-700" />
             </div>
           </div>
           <div>
@@ -70,8 +74,8 @@ export function FixBomModal({
           </div>
         </div>
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
-          <button onClick={onConfirm} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">提交修正（待审核）</button>
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+          <button type="button" disabled={!fixReason.trim() || !Number.isFinite(fixNewUsage) || fixNewUsage < 0} onClick={onConfirm} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">提交修正（待审核）</button>
         </div>
       </div>
     </div>

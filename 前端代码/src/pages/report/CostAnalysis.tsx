@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from 'react'
 import { Download } from 'lucide-react'
 import { useCostAnalysisPage } from './hooks/useCostAnalysisPage'
 import { CostStatsCards } from './components/CostStatsCards'
@@ -16,6 +17,16 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'public-cost', label: '公共成本' },
   { key: 'supplier-cost', label: '供应商分析' },
 ]
+
+function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]') || [])
+  if (!tabs.length) return
+  event.preventDefault()
+  const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+  tabs[nextIndex]?.focus()
+  tabs[nextIndex]?.click()
+}
 
 export default function CostAnalysis() {
   const page = useCostAnalysisPage()
@@ -101,10 +112,17 @@ export default function CostAnalysis() {
       {!page.loadError && !page.loading && <CostCharts trendReport={page.trendReport} pieData={page.pieData} />}
 
       {/* Tabs */}
-      {!page.loadError && !page.loading && <div className="flex items-center gap-1 border-b border-gray-200">
-        {TABS.map(tab => (
+      {!page.loadError && !page.loading && <div className="flex items-center gap-1 overflow-x-auto border-b border-gray-200" role="tablist" aria-label="成本报表视图">
+        {TABS.map((tab, index) => (
           <button
             key={tab.key}
+            id={`cost-tab-${tab.key}`}
+            type="button"
+            role="tab"
+            aria-selected={page.activeTab === tab.key}
+            aria-controls={`cost-panel-${tab.key}`}
+            tabIndex={page.activeTab === tab.key ? 0 : -1}
+            onKeyDown={event => handleTabKeyDown(event, index)}
             onClick={() => page.setActiveTab(tab.key)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               page.activeTab === tab.key
@@ -119,7 +137,7 @@ export default function CostAnalysis() {
 
       {/* Tab Content */}
       {!page.loadError && !page.loading && page.activeTab === 'project-cost' && (
-        <ProjectCostTable
+        <div id="cost-panel-project-cost" role="tabpanel" aria-labelledby="cost-tab-project-cost"><ProjectCostTable
           loading={page.loading}
           data={page.pagedProjects}
           total={page.filteredProjects.length}
@@ -134,11 +152,11 @@ export default function CostAnalysis() {
           onPageChange={page.setPage}
           onPageSizeChange={page.setPageSize}
           onOpenDetail={page.openDetailModal}
-        />
+        /></div>
       )}
 
       {!page.loadError && !page.loading && page.activeTab === 'material-cost' && (
-        <MaterialCostTable
+        <div id="cost-panel-material-cost" role="tabpanel" aria-labelledby="cost-tab-material-cost"><MaterialCostTable
           loading={page.loading}
           data={page.pagedMaterials}
           total={page.filteredMaterials.length}
@@ -148,16 +166,16 @@ export default function CostAnalysis() {
           onSearchTextChange={page.setSearchText}
           onPageChange={page.setPage}
           onPageSizeChange={page.setPageSize}
-        />
+        /></div>
       )}
 
-      {!page.loadError && !page.loading && page.activeTab === 'public-cost' && <PublicCostPanel />}
+      {!page.loadError && !page.loading && page.activeTab === 'public-cost' && <div id="cost-panel-public-cost" role="tabpanel" aria-labelledby="cost-tab-public-cost"><PublicCostPanel /></div>}
 
       {!page.loadError && !page.loading && page.activeTab === 'supplier-cost' && (
-        <SupplierCostTable
+        <div id="cost-panel-supplier-cost" role="tabpanel" aria-labelledby="cost-tab-supplier-cost"><SupplierCostTable
           data={page.realSuppliers}
           totalAmount={page.totalSupplierAmount}
-        />
+        /></div>
       )}
 
       {/* Export Modal */}

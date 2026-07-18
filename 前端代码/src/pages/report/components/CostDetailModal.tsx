@@ -1,4 +1,5 @@
-import { X, Search } from 'lucide-react'
+import { useEffect } from 'react'
+import { X } from 'lucide-react'
 import type { ProjectCostReport } from '@/types'
 import { formatCurrency } from '@/lib/utils'
 
@@ -8,105 +9,58 @@ interface Props {
   onClose: () => void
 }
 
+type ProjectWithSource = ProjectCostReport['projects'][number] & {
+  sampleCountSource?: 'lis' | 'manual' | 'unavailable'
+}
+
+const SOURCE_LABELS: Record<NonNullable<ProjectWithSource['sampleCountSource']>, string> = {
+  lis: 'LIS 已映射病例',
+  manual: '手工样本数',
+  unavailable: '样本数来源不可用',
+}
+
 export function CostDetailModal({ open, project, onClose }: Props) {
+  useEffect(() => {
+    if (!open) return
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [open, onClose])
+
   if (!open || !project) return null
+  const source = (project as ProjectWithSource).sampleCountSource || 'unavailable'
+  const sampleAvailable = source !== 'unavailable'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center"
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="absolute inset-0 bg-black/40" />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">检测项目成本明细 - {project.name}</h3>
-          <button
-            onClick={onClose}
-            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={event => { if (event.target === event.currentTarget) onClose() }}>
+      <div className="absolute inset-0 bg-black/40" aria-hidden="true" />
+      <section role="dialog" aria-modal="true" aria-labelledby="project-cost-summary-title" className="relative mx-4 w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+          <h3 id="project-cost-summary-title" className="text-lg font-semibold text-gray-900">项目成本摘要 · {project.name}</h3>
+          <button type="button" aria-label="关闭项目成本摘要" onClick={onClose} className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"><X className="h-5 w-5" aria-hidden="true" /></button>
         </div>
-
-        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-center">
-            <div>
-              <div className="text-xl font-semibold text-gray-900">{formatCurrency(project.totalCost)}</div>
-              <div className="text-xs text-gray-500 mt-0.5">总成本</div>
-            </div>
-            <div>
-              <div className="text-xl font-semibold text-gray-900">{project.sampleCount.toLocaleString()}</div>
-              <div className="text-xs text-gray-500 mt-0.5">病例数</div>
-            </div>
-            <div>
-              <div className="text-xl font-semibold text-gray-900">{formatCurrency(project.unitCost)}</div>
-              <div className="text-xs text-gray-500 mt-0.5">单病例均成本</div>
-            </div>
-            <div>
-              <div className="text-xl font-semibold text-gray-900">-</div>
-              <div className="text-xs text-gray-500 mt-0.5">平均检测周期</div>
-            </div>
-            <div>
-              <div className="text-xl font-semibold text-green-600">-</div>
-              <div className="text-xs text-gray-500 mt-0.5">数据完整度</div>
-            </div>
+        <dl className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
+          <div className="rounded-lg bg-gray-50 p-4">
+            <dt className="text-xs text-gray-500">总成本</dt>
+            <dd className="mt-1 text-xl font-semibold text-gray-900">{formatCurrency(project.totalCost)}</dd>
           </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">数据来源：</span>
-              <span className="text-green-600 font-medium">LIS系统同步</span>
-              <span className="text-gray-400">| 最后同步：2024-01-15 08:00</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="搜索病理号、患者姓名..."
-                  className="h-9 pl-9 pr-4 text-sm border border-gray-300 rounded-md bg-white outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 w-56"
-                />
-              </div>
-              <button className="h-9 px-3 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
-                导出明细
-              </button>
-            </div>
+          <div className="rounded-lg bg-gray-50 p-4">
+            <dt className="text-xs text-gray-500">样本数实际口径</dt>
+            <dd className="mt-1 text-sm font-semibold text-gray-900">{SOURCE_LABELS[source]}</dd>
           </div>
-
-          <div className="overflow-x-auto border border-gray-200 rounded-lg">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">病理号</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">患者信息</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">检测项目</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">消耗物料</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">成本</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">检测日期</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
-                    病例明细功能开发中，当前仅展示项目汇总数据
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="rounded-lg bg-gray-50 p-4">
+            <dt className="text-xs text-gray-500">样本数</dt>
+            <dd className="mt-1 text-xl font-semibold text-gray-900">{sampleAvailable ? project.sampleCount.toLocaleString() : '不可计算'}</dd>
           </div>
+          <div className="rounded-lg bg-gray-50 p-4">
+            <dt className="text-xs text-gray-500">单样本成本</dt>
+            <dd className="mt-1 text-xl font-semibold text-gray-900">{sampleAvailable ? formatCurrency(project.unitCost) : '不可计算'}</dd>
+          </div>
+        </dl>
+        <div className="flex justify-end border-t border-gray-200 bg-gray-50 px-6 py-4">
+          <button type="button" onClick={onClose} className="h-10 rounded-md border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">关闭</button>
         </div>
-
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <button
-            onClick={onClose}
-            className="h-10 px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-          >
-            关闭
-          </button>
-        </div>
-      </div>
+      </section>
     </div>
   )
 }

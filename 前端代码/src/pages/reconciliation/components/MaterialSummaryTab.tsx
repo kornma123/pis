@@ -1,4 +1,3 @@
-import { toast } from 'sonner'
 import type { MaterialSummary } from '../hooks/useReconciliationPage'
 
 interface Props {
@@ -8,66 +7,42 @@ interface Props {
 }
 
 export function MaterialSummaryTab({ loading, materials, getDiffClass }: Props) {
-  if (loading) {
-    return <div className="text-center py-12 text-gray-400">加载中...</div>
-  }
+  if (loading) return null
 
   if (materials.length === 0) {
-    return <div className="text-center py-12 text-gray-400">暂无数据</div>
+    return <div className="py-12 text-center text-gray-400">当前期间没有物料汇总事实</div>
   }
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-xs text-gray-500 uppercase border-b border-gray-200">
-                <th className="px-4 py-3 text-left">物料名称</th>
-                <th className="px-4 py-3 text-left">规格</th>
-                <th className="px-4 py-3 text-center">涉及项目</th>
-                <th className="px-4 py-3 text-center">BOM理论</th>
-                <th className="px-4 py-3 text-center">实际出库</th>
-                <th className="px-4 py-3 text-center">差异量</th>
-                <th className="px-4 py-3 text-center">差异率</th>
-                <th className="px-4 py-3 text-center">操作</th>
+    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <caption className="sr-only">当前期间的物料理论消耗、实际出库与差异汇总</caption>
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500">
+              <th scope="col" className="px-4 py-3 text-left">物料名称</th>
+              <th scope="col" className="px-4 py-3 text-left">规格</th>
+              <th scope="col" className="px-4 py-3 text-center">涉及项目</th>
+              <th scope="col" className="px-4 py-3 text-center">BOM 理论</th>
+              <th scope="col" className="px-4 py-3 text-center">实际出库</th>
+              <th scope="col" className="px-4 py-3 text-center">差异量</th>
+              <th scope="col" className="px-4 py-3 text-center">差异率</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {materials.map(material => (
+              <tr key={material.materialId} className="hover:bg-gray-50" style={{ contentVisibility: 'auto' }}>
+                <th scope="row" className="px-4 py-3 text-left font-medium text-gray-900">{material.materialName}</th>
+                <td className="px-4 py-3 text-gray-500">{material.spec}</td>
+                <td className="px-4 py-3 text-center">{material.projectCount}</td>
+                <td className="px-4 py-3 text-center">{material.theoryTotal.toFixed(1)} {material.unit}</td>
+                <td className="px-4 py-3 text-center">{material.actualTotal.toFixed(1)} {material.unit}</td>
+                <td className="px-4 py-3 text-center"><span className={`inline-block rounded px-2 py-1 text-xs font-semibold ${getDiffClass(material.status)}`}>{material.diff > 0 ? '+' : ''}{material.diff.toFixed(1)}</span></td>
+                <td className="px-4 py-3 text-center"><span className={`inline-block rounded px-2 py-1 text-xs ${getDiffClass(material.status)}`}>{parseFloat(material.diffRate) > 0 ? '+' : ''}{material.diffRate}%</span></td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {materials.map((mat, idx) => (
-                <tr key={idx} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{mat.materialName}</td>
-                  <td className="px-4 py-3 text-gray-500">{mat.spec}</td>
-                  <td className="px-4 py-3 text-center">{mat.projectCount}</td>
-                  <td className="px-4 py-3 text-center">{mat.theoryTotal.toFixed(1)} {mat.unit}</td>
-                  <td className="px-4 py-3 text-center">{mat.actualTotal.toFixed(1)} {mat.unit}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`inline-block px-2 py-1 rounded font-semibold text-xs ${getDiffClass(mat.status)}`}>
-                      {mat.diff > 0 ? '+' : ''}{mat.diff.toFixed(1)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`inline-block px-2 py-1 rounded text-xs ${getDiffClass(mat.status)}`}>
-                      {parseFloat(mat.diffRate) > 0 ? '+' : ''}{mat.diffRate}%
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {mat.status !== 'match' ? (
-                      <button
-                        onClick={() => { toast.info('请到"按项目对账"页进行BOM修正') }}
-                        className="px-3 py-1 text-xs font-medium text-gray-400 bg-gray-50 border border-gray-200 rounded-md cursor-not-allowed"
-                      >
-                        调整BOM
-                      </button>
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )

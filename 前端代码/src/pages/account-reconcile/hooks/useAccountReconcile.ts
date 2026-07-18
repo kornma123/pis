@@ -9,7 +9,8 @@ export type ReconTab = 'overview' | 'workbench' | 'supplement'
 export interface CloseMonthRequest { serviceMonth: string; partnerIds: string[] }
 
 function currentMonth(): string {
-  return new Date().toISOString().slice(0, 7)
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 /** 账实核对页顶层状态：月份 + 页签 + 总览数据 + 计算/关账 + 进工作台。 */
@@ -107,7 +108,10 @@ export function useAccountReconcile() {
       try {
         const r = await accountReconcileApi.compute(partnerId, snapshotMonth)
         if (snapshotMonth !== monthRef.current) return
-        toast.success(`已计算：匹配${Math.round((r.matchRate || 0) * 100)}%（${r.matchStatus}）· ${r.diffCount} 条差异`)
+        const matchRate = typeof r.matchRate === 'number' && Number.isFinite(r.matchRate)
+          ? `${Math.round(r.matchRate * 100)}%`
+          : '不可计算'
+        toast.success(`已计算：匹配${matchRate}（${r.matchStatus}）· ${r.diffCount} 条差异`)
         await loadOverview(snapshotMonth)
       } catch {
         /* toast handled */

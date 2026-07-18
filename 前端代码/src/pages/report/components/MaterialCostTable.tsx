@@ -1,4 +1,4 @@
-import { Search, PieChart, LineChart } from 'lucide-react'
+import { Search } from 'lucide-react'
 import type { MaterialCostReport } from '@/types'
 import { formatCurrency } from '@/lib/utils'
 import { Pagination } from '@/components/ui/Pagination'
@@ -58,14 +58,15 @@ export function MaterialCostTable({
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
+            <caption className="sr-only">当前期间物料消耗数量、金额、占比和同比变化</caption>
             <thead>
               <tr className="bg-gray-50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">物料名称</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">规格型号</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">消耗数量</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">消耗金额</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">占比</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">同比变化</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">物料名称</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">规格型号</th>
+                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">消耗数量</th>
+                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">消耗金额</th>
+                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">占比</th>
+                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">同比变化</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -83,8 +84,8 @@ export function MaterialCostTable({
                     ? m.changeRate
                     : null
                   return (
-                    <tr key={m.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-gray-900">{m.name}</td>
+                    <tr key={m.id} className="hover:bg-gray-50 transition-colors" style={{ contentVisibility: 'auto' }}>
+                      <th scope="row" className="px-4 py-3 text-left font-semibold text-gray-900">{m.name}</th>
                       <td className="px-4 py-3 text-gray-600">{m.spec}</td>
                       <td className="px-4 py-3 text-right text-gray-600">{m.consumption.toLocaleString()} {m.consumptionUnit}</td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(m.totalCost)}</td>
@@ -115,16 +116,6 @@ export function MaterialCostTable({
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm flex flex-col items-center justify-center text-gray-400 min-h-[200px]">
-          <PieChart className="w-12 h-12 mb-2 opacity-40" />
-          <p className="text-sm">分类消耗饼图</p>
-        </div>
-        <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm flex flex-col items-center justify-center text-gray-400 min-h-[200px]">
-          <LineChart className="w-12 h-12 mb-2 opacity-40" />
-          <p className="text-sm">价格趋势折线图</p>
-        </div>
-      </div>
     </div>
   )
 }

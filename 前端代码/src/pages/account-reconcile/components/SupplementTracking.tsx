@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { accountReconcileApi } from '@/api/account-reconcile'
 import type { SupplementOrder, SupplementBoard } from '@/types/account-reconcile'
@@ -23,18 +23,26 @@ export function SupplementTracking({ month, canWrite }: { month: string; canWrit
   const [board, setBoard] = useState<SupplementBoard | null>(null)
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const loadVersion = useRef(0)
   const me = currentUsername()
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current
     setLoading(true)
+    setLoadError(null)
+    setList([])
+    setBoard(null)
     try {
       const res = await accountReconcileApi.supplements(month, status)
+      if (version !== loadVersion.current) return
       setList(res.list || [])
       setBoard(res.board || null)
     } catch {
-      /* toast handled */
+      if (version !== loadVersion.current) return
+      setLoadError('补收数据没能加载，请重试')
     } finally {
-      setLoading(false)
+      if (version === loadVersion.current) setLoading(false)
     }
   }, [month, status])
 
@@ -89,13 +97,13 @@ export function SupplementTracking({ month, canWrite }: { month: string; canWrit
     <div>
       <p className="text-[13px] text-gray-500">把认定为「漏收，需补收」的差异汇总成补收单；每单需由他人独立「签发」后方可收款，标记已补收后自动计入本月实收。</p>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {!loading && !loadError && board && <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className={`${cardCls} border-red-100 bg-red-50/60 p-4`}>
           <div className="text-xs text-gray-500">待补收</div>
           <div className="mt-1.5 text-2xl font-bold tabular-nums text-red-600">{wan(board?.待补收金额)}</div>
           <div className="mt-0.5 text-xs text-gray-400">
-            {board?.待补收数 ?? 0} 单待催收
-            {(board?.待签发数 ?? 0) > 0 && <span className="ml-1 text-amber-600">· {board?.待签发数} 单待签发</span>}
+            {board.待补收数 == null ? '不可计算' : `${board.待补收数} 单待催收`}
+            {board.待签发数 != null && board.待签发数 > 0 && <span className="ml-1 text-amber-600">· {board.待签发数} 单待签发</span>}
           </div>
         </div>
         <div className={`${cardCls} border-blue-100 bg-gradient-to-b from-blue-50/60 to-white p-4`}>
@@ -112,7 +120,14 @@ export function SupplementTracking({ month, canWrite }: { month: string; canWrit
           <div className="text-xs text-gray-500">已放弃</div>
           <div className="mt-1.5 text-2xl font-bold tabular-nums text-gray-900">{wan(board?.已放弃金额)}</div>
         </div>
-      </div>
+      </div>}
+
+      {loadError && (
+        <div role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>{loadError}。本次失败不代表本月没有补收单。</span>
+          <button type="button" className="font-medium underline underline-offset-2" onClick={() => void load()}>重试</button>
+        </div>
+      )}
 
       <div className="mt-5 mb-3 flex items-center gap-3">
         <h3 className="text-[13px] font-bold text-gray-900">补收单 · {cnMonth(month)}</h3>
@@ -125,18 +140,19 @@ export function SupplementTracking({ month, canWrite }: { month: string; canWrit
       </div>
 
       {loading ? (
-        <div className="mt-8 text-center text-sm text-gray-400">加载中…</div>
-      ) : !list.length ? (
+        <div role="status" className="mt-8 text-center text-sm text-gray-400">补收数据加载中…</div>
+      ) : loadError ? null : !list.length ? (
         <div className="rounded-lg border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
           本月暂无补收单。工作台里认定为「漏收，需补收」的差异会自动汇总到这里。
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className={`w-full text-[13px] ${cardCls} overflow-hidden`}>
+            <caption className="sr-only">{cnMonth(month)} 补收单及签发、收款状态</caption>
             <thead className="bg-gray-50">
               <tr>
-                <th className={TH}>医院 · 月份</th><th className={TH}>来源</th>
-                <th className={`${TH} text-right`}>例数</th><th className={`${TH} text-right`}>金额</th><th className={TH}>状态</th><th className={`${TH} text-right`}>操作</th>
+                <th scope="col" className={TH}>医院 · 月份</th><th scope="col" className={TH}>来源</th>
+                <th scope="col" className={`${TH} text-right`}>例数</th><th scope="col" className={`${TH} text-right`}>金额</th><th scope="col" className={TH}>状态</th><th scope="col" className={`${TH} text-right`}>操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -146,8 +162,8 @@ export function SupplementTracking({ month, canWrite }: { month: string; canWrit
                 // 缺认定人（迁移遗留的空 submitted_by）→ 后端 fail-closed 必拒签发，按钮禁用不空点。
                 const noSubmitter = !so.submittedBy
                 return (
-                <tr key={so.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{so.partnerId} · {cnMonth(so.serviceMonth)}</td>
+                <tr key={so.id} className="hover:bg-gray-50" style={{ contentVisibility: 'auto' }}>
+                  <th scope="row" className="px-4 py-3 text-left font-medium text-gray-900">{so.partnerId} · {cnMonth(so.serviceMonth)}</th>
                   <td className="px-4 py-3 text-gray-600">{so.caseNo ? `病理号 ${so.caseNo} 漏收` : '漏收'}{so.collectedMonth && <span className="ml-2 text-xs text-blue-600">计入 {cnMonth(so.collectedMonth)}</span>}{so.collectedRevenue != null && <span className="ml-2 text-xs text-gray-500">折实收 {yuan(so.collectedRevenue)}</span>}{so.giveUpReason && <span className="ml-2 text-xs text-gray-400">{so.giveUpReason}</span>}{pendingReview && so.submittedBy && <span className="ml-2 text-xs text-gray-400">由 {so.submittedBy} 认定提交</span>}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{so.caseCount}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-gray-900">{yuan(so.amount)}</td>

@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProjectCostTable } from './components/ProjectCostTable'
 import { MaterialCostTable } from './components/MaterialCostTable'
 import { CostExportModal } from './components/CostExportModal'
+import { CostDetailModal } from './components/CostDetailModal'
+import { CostStatsCards } from './components/CostStatsCards'
+import { PublicCostPanel } from './components/PublicCostPanel'
+import { SupplierCostTable } from './components/SupplierCostTable'
 import { useCostAnalysisPage } from './hooks/useCostAnalysisPage'
 
 const mocks = vi.hoisted(() => ({
@@ -180,6 +184,7 @@ describe('cost report truth boundaries', () => {
       <CostExportModal open onClose={vi.fn()} onExport={onExport} exporting={false} dataReady />,
     )
 
+    expect(screen.getByRole('dialog', { name: '导出成本分析报告' })).toBeInTheDocument()
     expect(screen.getByText('CSV 文件')).toBeInTheDocument()
     expect(screen.queryByText(/PDF|Excel|Word/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '生成并下载 CSV' }))
@@ -356,5 +361,48 @@ describe('cost report truth boundaries', () => {
     expect(mocks.toastError).toHaveBeenCalledWith('文件生成失败，请重试')
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
     expect(result.current.exportModalOpen).toBe(true)
+  })
+
+  it('marks public cost as unconnected instead of presenting the backend placeholder as a verified zero', () => {
+    render(
+      <CostStatsCards
+        stats={{ totalCost: 50, projectCost: 50, publicCost: null, totalSamples: 2, avgCost: 25 }}
+        supplierCount={0}
+      />,
+    )
+    const publicCostCard = screen.getByText('公共成本').closest('div.bg-white')
+    expect(publicCostCard).toHaveTextContent('未连接')
+    expect(publicCostCard).not.toHaveTextContent('¥0.0万')
+
+    cleanup()
+    render(<PublicCostPanel />)
+    expect(screen.getByText(/接口尚未提供公共成本事实/)).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('keeps the project detail dialog to fields the active report API actually returns', () => {
+    render(<CostDetailModal open project={projectRows[0] as any} onClose={vi.fn()} />)
+
+    expect(screen.getByRole('dialog', { name: /项目成本摘要/ })).toBeInTheDocument()
+    expect(screen.getByText('LIS 已映射病例')).toBeInTheDocument()
+    expect(screen.queryByText('LIS系统同步')).not.toBeInTheDocument()
+    expect(screen.queryByText('2024-01-15 08:00')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/患者姓名/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '导出明细' })).not.toBeInTheDocument()
+  })
+
+  it('does not invent supplier relationship status or material charts without a data source', () => {
+    render(
+      <SupplierCostTable
+        data={[{ id: 's-1', name: '供应商一', amount: 50, orderCount: 1, status: 'long-term' }]}
+        totalAmount={50}
+      />,
+    )
+    expect(screen.queryByText('长期合作')).not.toBeInTheDocument()
+
+    cleanup()
+    render(<MaterialCostTable {...materialProps} />)
+    expect(screen.queryByText('分类消耗饼图')).not.toBeInTheDocument()
+    expect(screen.queryByText('价格趋势折线图')).not.toBeInTheDocument()
   })
 })

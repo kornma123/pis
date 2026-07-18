@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { accountReconcileApi } from '@/api/account-reconcile'
 import { VERDICT_REASONS, type ReconcileDiff, type UnmatchedCase, type HospitalMonth, type VerdictReason, type CaseHint } from '@/types/account-reconcile'
-import { HmPill, matchStatusMeta, wan, yuan, cnMonth, btnCls, btnPri, btnGhost, cardCls, selectCls } from '../ui'
+import { HmPill, matchStatusMeta, pct, wan, yuan, cnMonth, btnCls, btnPri, btnGhost, cardCls, selectCls } from '../ui'
 import { ReasonModal } from './ReasonModal'
 
 interface Props {
@@ -19,21 +19,31 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
   const [unmatched, setUnmatched] = useState<UnmatchedCase[]>([])
   const [caseHints, setCaseHints] = useState<Record<string, CaseHint[]>>({})
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const loadVersion = useRef(0)
   const [showUnmatched, setShowUnmatched] = useState(false)
   const [savingId, setSavingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current
     setLoading(true)
+    setLoadError(null)
+    setHm(null)
+    setDiffs([])
+    setUnmatched([])
+    setCaseHints({})
     try {
       const res = await accountReconcileApi.workbench(partnerId, month)
+      if (version !== loadVersion.current) return
       setHm(res.hospitalMonth)
       setDiffs(res.diffs || [])
       setUnmatched(res.unmatched || [])
       setCaseHints(res.caseHints || {})
     } catch {
-      /* toast handled */
+      if (version !== loadVersion.current) return
+      setLoadError('工作台数据没能加载，请重试')
     } finally {
-      setLoading(false)
+      if (version === loadVersion.current) setLoading(false)
     }
   }, [partnerId, month])
 
@@ -97,14 +107,19 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
       </div>
 
       {loading ? (
-        <div className="mt-8 text-center text-sm text-gray-400">加载中…</div>
+        <div role="status" className="mt-8 text-center text-sm text-gray-400">工作台数据加载中…</div>
+      ) : loadError ? (
+        <div role="alert" className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>{loadError}。本次失败不代表该院该月没有记录。</span>
+          <button type="button" className="font-medium underline underline-offset-2" onClick={() => void load()}>重试</button>
+        </div>
       ) : !hm ? (
         <div className="mt-8 rounded-lg border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">该院该月还没有核对记录，请先在总览计算。</div>
       ) : (
         <>
           {/* source header */}
           <div className={`mt-4 flex flex-wrap gap-x-8 gap-y-3 ${cardCls} px-4 py-3.5`}>
-            <Meta label="病理号匹配率" value={<span className={mm.color}>{Math.round((hm.matchRate || 0) * 100)}%（{mm.tag}）</span>} />
+            <Meta label="病理号匹配率" value={<span className={mm.color}>{pct(hm.matchRate)}（{mm.tag}）</span>} />
             <Meta label="可核差异 / 未匹配" value={`${hm.diffCount} 条 / ${hm.unmatchedCount} 例（算不了·单列）`} />
             <Meta label="本院实验室实收" value={<>{hm.confirmedLabRevenue != null ? wan(hm.confirmedLabRevenue) : '待复核完成'} <span className="font-normal text-gray-500">（收费×扣率）</span></>} />
           </div>

@@ -49,11 +49,13 @@ export function CostStatsCards({ stats, supplierCount }: Props) {
           <span className="text-xs text-gray-500 font-medium">公共成本</span>
         </div>
         <div className="text-2xl font-bold text-gray-900">
-          ¥{(stats.publicCost / 10000).toFixed(1)}万
+          {stats.publicCost === null ? '未连接' : `¥${(stats.publicCost / 10000).toFixed(1)}万`}
         </div>
         <div className="flex items-center gap-2 mt-2 text-xs">
           <span className="text-gray-400">
-            占比 {stats.totalCost > 0 ? ((stats.publicCost / stats.totalCost) * 100).toFixed(1) : '0.0'}%
+            {stats.publicCost === null
+              ? '接口未提供公共成本事实'
+              : `占比 ${stats.totalCost > 0 ? ((stats.publicCost / stats.totalCost) * 100).toFixed(1) : '0.0'}%`}
           </span>
         </div>
       </div>

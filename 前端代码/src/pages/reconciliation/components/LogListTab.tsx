@@ -6,6 +6,7 @@ interface Props {
   logPagination: UsePaginationReturn<ReconcileLog>
   currentUsername: string
   canApprove: boolean
+  mutationBusy: boolean
   onApprove: (id: string, scope: 'future_only' | 'retroactive') => void
   onReject: (id: string) => void
 }
@@ -16,7 +17,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   rejected: { label: '已驳回', cls: 'bg-gray-100 text-gray-500' },
 }
 
-export function LogListTab({ logPagination, currentUsername, canApprove, onApprove, onReject }: Props) {
+export function LogListTab({ logPagination, currentUsername, canApprove, mutationBusy, onApprove, onReject }: Props) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-200">
@@ -24,7 +25,14 @@ export function LogListTab({ logPagination, currentUsername, canApprove, onAppro
         <p className="text-xs text-gray-500 mt-0.5">修正须经独立审核人通过后才生效（提交人不可审核自己的提案）</p>
       </div>
       <div className="p-5">
-        {logPagination.data.length === 0 && !logPagination.loading ? (
+        {logPagination.error && (
+          <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>修正日志没能加载。{logPagination.data.length ? '当前显示上次成功结果，审核操作已关闭。' : '本次失败不代表没有记录。'}</span>
+            <button type="button" className="font-medium underline underline-offset-2" onClick={logPagination.refresh}>重试</button>
+          </div>
+        )}
+        {logPagination.loading && <div role="status" className="mb-4 text-sm text-gray-500">修正日志加载中…</div>}
+        {logPagination.data.length === 0 && !logPagination.loading && !logPagination.error ? (
           <div className="text-center py-8 text-gray-400">暂无修正记录</div>
         ) : (
           <div className="space-y-4">
@@ -36,7 +44,7 @@ export function LogListTab({ logPagination, currentUsername, canApprove, onAppro
               const isOwn = log.operator === currentUsername
               const newVal = log.proposed_usage ?? log.new_value
               return (
-                <div key={log.id} className="flex gap-3 pb-4 border-b border-gray-100 last:border-0">
+                <div key={log.id} className="flex gap-3 pb-4 border-b border-gray-100 last:border-0" style={{ contentVisibility: 'auto' }}>
                   <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${isProposal ? 'bg-blue-500' : 'bg-green-500'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-gray-800 flex items-center gap-2 flex-wrap">
@@ -62,6 +70,7 @@ export function LogListTab({ logPagination, currentUsername, canApprove, onAppro
                           <>
                             <button
                               onClick={() => onApprove(log.id, 'future_only')}
+                              disabled={mutationBusy || !!logPagination.error}
                               className="px-3 h-8 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                             >
                               通过（自下次生效）
@@ -70,12 +79,14 @@ export function LogListTab({ logPagination, currentUsername, canApprove, onAppro
                               onClick={() => {
                                 if (window.confirm('追溯重算会重算受影响的未关账月成本，确认通过？')) onApprove(log.id, 'retroactive')
                               }}
+                              disabled={mutationBusy || !!logPagination.error}
                               className="px-3 h-8 text-xs border border-blue-600 text-blue-600 rounded-md hover:bg-blue-50 transition-colors"
                             >
                               通过并追溯重算
                             </button>
                             <button
                               onClick={() => onReject(log.id)}
+                              disabled={mutationBusy || !!logPagination.error}
                               className="px-3 h-8 text-xs border border-gray-300 text-gray-600 rounded-md hover:bg-gray-50 transition-colors"
                             >
                               驳回

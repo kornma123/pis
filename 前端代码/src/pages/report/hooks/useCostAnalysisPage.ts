@@ -38,7 +38,7 @@ type ProjectRowWithSource = ProjectCostReport['projects'][number] & {
 export interface CostAnalysisStats {
   totalCost: number
   projectCost: number
-  publicCost: number
+  publicCost: number | null
   totalSamples: number
   avgCost: number
 }
@@ -160,7 +160,8 @@ export function useCostAnalysisPage() {
     ? sourceParam
     : 'all'
 
-  const [activeTab, setActiveTab] = useState<TabKey>((get('tab') as TabKey) || 'project-cost')
+  const tabParam = get('tab') as TabKey
+  const [activeTab, setActiveTab] = useState<TabKey>(['project-cost', 'material-cost', 'public-cost', 'supplier-cost'].includes(tabParam) ? tabParam : 'project-cost')
   const [searchText, setSearchText] = useState(get('search') || '')
   const [projectFilter, setProjectFilter] = useState(get('projectType') || '')
   const [startDate, setStartDate] = useState(initialStartDate)
@@ -261,7 +262,8 @@ export function useCostAnalysisPage() {
   const stats = useMemo<CostAnalysisStats>(() => {
     const totalCost = projectReport?.summary?.totalCost || 0
     const projectCost = projectReport?.summary?.projectCost || 0
-    const publicCost = projectReport?.summary?.publicCost || 0
+    // 当前报表 API 的 publicCost 是固定占位值，不能当作已核验的真实零。
+    const publicCost = null
     const totalSamples = projectReport?.summary?.totalSamples || 0
     const avgCost = totalSamples > 0 ? Math.round(totalCost / totalSamples) : 0
     return { totalCost, projectCost, publicCost, totalSamples, avgCost }
