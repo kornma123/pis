@@ -1,8 +1,9 @@
 /**
  * P0 inventory actor trust boundary.
  *
- * The six inventory write families must persist only the authenticated server
- * identity. Actor-shaped request input is inert, including for idempotency.
+ * Inventory write families, including transfers, must persist only the
+ * authenticated server identity. Actor-shaped request input is inert,
+ * including for idempotency.
  */
 
 import { readFileSync } from 'node:fs'
@@ -63,6 +64,16 @@ function seedMaterial(label: string, quantity = 0) {
   db.prepare('INSERT INTO inventory (id, material_id, stock, location_id) VALUES (?, ?, ?, ?)')
     .run(nextId(`INV-${label}`), materialId, quantity, locationId)
   return { materialId, locationId, batchId }
+}
+
+function seedTransfer(label: string, quantity = 10) {
+  const fixture = seedMaterial(label, quantity)
+  const toLocationId = nextId(`LOC-TO-${label}`)
+  db.prepare(`
+    INSERT INTO locations (id, code, name, type, zone, status)
+    VALUES (?, ?, ?, 'shelf', 'ACTOR-TEST', 1)
+  `).run(toLocationId, toLocationId, toLocationId)
+  return { ...fixture, fromLocationId: fixture.locationId, toLocationId }
 }
 
 function withForgedActor(test: any, forged: string, idempotencyKey?: string) {
@@ -157,13 +168,14 @@ beforeAll(async () => {
   const admin = db.prepare('SELECT id, username FROM users WHERE username = ?').get('admin') as any
   trustedActor = { userId: String(admin.id), username: String(admin.username) }
 
-  const [inbound, outbound, returns, scraps, stocktaking, supplierReturns] = await Promise.all([
+  const [inbound, outbound, returns, scraps, stocktaking, supplierReturns, transfers] = await Promise.all([
     import('../src/routes/inbound-v1.1.js'),
     import('../src/routes/outbound-v1.1.js'),
     import('../src/routes/returns-v1.1.js'),
     import('../src/routes/scraps-v1.1.js'),
     import('../src/routes/stocktaking-v1.1.js'),
     import('../src/routes/supplier-returns-v1.1.js'),
+    import('../src/routes/transfers-v1.1.js'),
   ])
   isolatedApp = await buildTestApp([
     { path: '/api/v1/inbound', router: inbound.default, middleware: [injectRequestUser] },
@@ -172,6 +184,7 @@ beforeAll(async () => {
     { path: '/api/v1/scraps', router: scraps.default, middleware: [injectRequestUser] },
     { path: '/api/v1/stocktaking', router: stocktaking.default, middleware: [injectRequestUser] },
     { path: '/api/v1/supplier-returns', router: supplierReturns.default, middleware: [injectRequestUser] },
+    { path: '/api/v1/transfers', router: transfers.default, middleware: [injectRequestUser] },
   ])
 })
 
@@ -317,6 +330,34 @@ describe('trusted inventory actors', () => {
     expectNewAuditActors(auditStart)
   })
 
+  it('persists the authenticated actor for transfer create and cancel', async () => {
+    const fixture = seedTransfer('TRANSFER')
+    const auditStart = maxAuditRowid()
+    const created = await postAsAdmin('/api/v1/transfers/inbound', nextId('IDEM-TRANSFER'), {
+      materialId: fixture.materialId,
+      quantity: 2,
+      fromLocationId: fixture.fromLocationId,
+      toLocationId: fixture.toLocationId,
+    }, FORGED_A)
+
+    expect(created.status).toBe(200)
+    expectStoredOperator('inbound_records', created.body.data.id)
+    expectStockLogOperators(created.body.data.id)
+
+    const cancelled = await withForgedActor(
+      request(app)
+        .delete(`/api/v1/transfers/${created.body.data.id}`)
+        .set('Authorization', `Bearer ${adminToken}`),
+      FORGED_B,
+    ).send(forgedBody({}, FORGED_B))
+
+    expect(cancelled.status).toBe(200)
+    expectStoredOperator('inbound_records', created.body.data.id)
+    expectStockLogOperators(created.body.data.id)
+    expect(Number((db.prepare('SELECT COUNT(*) AS value FROM stock_logs WHERE related_id = ?').get(created.body.data.id) as any).value)).toBe(2)
+    expectNewAuditActors(auditStart)
+  })
+
   it('rejects spoof-only identity on every write family with zero side effects', async () => {
     const inbound = seedMaterial('NOAUTH-INBOUND')
     const outbound = seedMaterial('NOAUTH-OUTBOUND', 10)
@@ -324,6 +365,7 @@ describe('trusted inventory actors', () => {
     const scrap = seedMaterial('NOAUTH-SCRAP', 10)
     const stocktaking = seedMaterial('NOAUTH-STOCKTAKING', 10)
     const supplierReturn = seedMaterial('NOAUTH-SUPPLIER-RETURN', 10)
+    const transfer = seedTransfer('NOAUTH-TRANSFER')
     const scenarios = [
       { path: '/api/v1/inbound', body: { type: 'direct', materialId: inbound.materialId, quantity: 1, locationId: inbound.locationId } },
       { path: '/api/v1/outbound', body: { type: 'direct', items: [{ materialId: outbound.materialId, quantity: 1 }] } },
@@ -331,6 +373,7 @@ describe('trusted inventory actors', () => {
       { path: '/api/v1/scraps', body: { materialId: scrap.materialId, quantity: 1, reason: 'expired' } },
       { path: '/api/v1/stocktaking', body: { materialId: stocktaking.materialId, actualStock: 9 } },
       { path: '/api/v1/supplier-returns', body: { materialId: supplierReturn.materialId, quantity: 1, reason: 'quality_issue' } },
+      { path: '/api/v1/transfers/inbound', body: { materialId: transfer.materialId, quantity: 1, fromLocationId: transfer.fromLocationId, toLocationId: transfer.toLocationId } },
     ]
 
     for (const scenario of scenarios) {
@@ -406,6 +449,47 @@ describe('trusted inventory actors', () => {
     expect(mutationSnapshot()).toEqual(before)
   })
 
+  it.each([
+    ['missing request user', undefined, 401, 'UNAUTHORIZED'],
+    ['missing user id', { userId: undefined, username: 'admin', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
+    ['non-string user id', { userId: 42, username: 'admin', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
+    ['control-character username', { userId: 'USER-001', username: 'bad\nactor', role: 'admin', roles: ['admin'] }, 401, 'INVALID_AUTHENTICATED_ACTOR'],
+    ['role mismatch', { userId: 'USER-001', username: 'admin', role: 'finance', roles: ['admin'] }, 403, 'ACTOR_PERMISSION_CONTEXT_MISMATCH'],
+  ])('transfer create and cancel fail closed for %s with zero side effects', async (_label, user, status, code) => {
+    const fixture = seedTransfer(`INVALID-TRANSFER-${sequence}`)
+    const created = await postAsAdmin('/api/v1/transfers/inbound', nextId('IDEM-TRANSFER-SETUP'), {
+      materialId: fixture.materialId,
+      quantity: 2,
+      fromLocationId: fixture.fromLocationId,
+      toLocationId: fixture.toLocationId,
+    }, FORGED_A)
+    expect(created.status).toBe(200)
+
+    injectedUser = user as RequestUser | undefined
+    const beforeCreate = mutationSnapshot()
+    const rejectedCreate = await withForgedActor(
+      request(isolatedApp).post('/api/v1/transfers/inbound'),
+      FORGED_B,
+    ).send(forgedBody({
+      materialId: fixture.materialId,
+      quantity: 1,
+      fromLocationId: fixture.fromLocationId,
+      toLocationId: fixture.toLocationId,
+    }, FORGED_B))
+    expect(rejectedCreate.status).toBe(status)
+    expect(rejectedCreate.body.error.code).toBe(code)
+    expect(mutationSnapshot()).toEqual(beforeCreate)
+
+    const beforeCancel = mutationSnapshot()
+    const rejectedCancel = await withForgedActor(
+      request(isolatedApp).delete(`/api/v1/transfers/${created.body.data.id}`),
+      FORGED_B,
+    ).send(forgedBody({}, FORGED_B))
+    expect(rejectedCancel.status).toBe(status)
+    expect(rejectedCancel.body.error.code).toBe(code)
+    expect(mutationSnapshot()).toEqual(beforeCancel)
+  })
+
   it('rolls back the idempotency claim and all business writes on a transaction failure', async () => {
     const fixture = seedMaterial('TX-FAILURE', 1)
     const before = mutationSnapshot()
@@ -430,6 +514,7 @@ describe('actor trust mutation contract', () => {
     ['scraps-v1.1.ts', 2],
     ['stocktaking-v1.1.ts', 4],
     ['supplier-returns-v1.1.ts', 4],
+    ['transfers-v1.1.ts', 2],
   ] as const
 
   it.each(routeSpecs)('%s resolves a trusted actor before each of its %i mutation handlers', (file, expectedMutations) => {
@@ -452,7 +537,7 @@ describe('actor trust mutation contract', () => {
     }
 
     expect(source).not.toMatch(/req\.body\??\.operator/)
-    expect(source).not.toMatch(/\{[^}]*\boperator\b[^}]*\}\s*=\s*req\.body/s)
+    expect(source).not.toMatch(/(?:const|let|var)\s*\{[^}]*\boperator\b[^}]*\}\s*=\s*req\.body/s)
     expect(source).not.toMatch(/req\.(?:get|header)\(\s*['"`][^'"`]*(?:operator|actor|created-by|updated-by|approved-by)/i)
     expect(source).not.toMatch(/(?:operator|actor)[^\n;=]*=([^\n;]*)(?:\|\||\?\?)[^\n;]*['"]system['"]/i)
 

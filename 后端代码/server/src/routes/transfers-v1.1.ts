@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { requireTrustedRequestActor } from '../security/trusted-request-actor.js'
 import { parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
 
 const router = Router()
@@ -82,8 +83,10 @@ router.get('/stats', (_req, res) => {
 
 // 新增调拨（库位间移动、总库存不变：仅记录 + 改 location_id，不动 stock）
 router.post('/inbound', requireTransfersWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
-    const { materialId, batchNo, quantity, fromLocationId, fromLocationName, toLocationId, operator, remark } = req.body
+    const { materialId, batchNo, quantity, fromLocationId, fromLocationName, toLocationId, remark } = req.body
     const qty = parseFinitePositiveNumber(quantity)
     if (!materialId || !toLocationId || qty === null) {
       error(res, '物料、目标库位和数量必填', 'INVALID_PARAMETER', 400)
@@ -126,7 +129,7 @@ router.post('/inbound', requireTransfersWrite, (req, res) => {
       db.prepare(`
         INSERT INTO inbound_records (id, inbound_no, type, material_id, batch_no, quantity, unit, location_id, from_location_id, operator, status, remark)
         VALUES (?, ?, 'transfer', ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
-      `).run(id, inboundNo, materialId, batchNo || null, qty, material.unit || '个', toLocationId, fromLocationId || null, operator || 'system', remark || '')
+      `).run(id, inboundNo, materialId, batchNo || null, qty, material.unit || '个', toLocationId, fromLocationId || null, actor.username, remark || '')
 
       // 库位间移动：总库存不变，只把物料当前库位指到目标（单库位模型：整物料 last-move-wins）
       db.prepare("UPDATE inventory SET location_id = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?").run(toLocationId, materialId)
@@ -135,7 +138,7 @@ router.post('/inbound', requireTransfersWrite, (req, res) => {
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'transfer', ?, 0, ?, ?, ?, 'transfer', ?, ?)
-      `).run(uuidv4(), materialId, lockedStock, lockedStock, id, operator || 'system', `库位调拨 ${qty}（总量不变）`)
+      `).run(uuidv4(), materialId, lockedStock, lockedStock, id, actor.username, `库位调拨 ${qty}（总量不变）`)
 
       db.exec('COMMIT')
       success(res, { id, inboundNo, materialId, quantity: qty, fromLocationId, fromLocationName, toLocationId }, 'Transfer created')
@@ -148,6 +151,8 @@ router.post('/inbound', requireTransfersWrite, (req, res) => {
 
 // 撤销调拨（还原库位到来源；总库存仍不变。来源未知的历史记录保持现状、不乱写）
 router.delete('/:id', requireTransfersWrite, (req, res) => {
+  const actor = requireTrustedRequestActor(req, res)
+  if (!actor) return
   try {
     const { id } = req.params
     const db = getDatabase()
@@ -167,7 +172,7 @@ router.delete('/:id', requireTransfersWrite, (req, res) => {
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'cancel', ?, 0, ?, ?, ?, 'transfer_cancel', ?, '撤销调拨（还原库位·总量不变）')
-      `).run(uuidv4(), record.material_id, beforeStock, beforeStock, id, req.body?.operator || 'system')
+      `).run(uuidv4(), record.material_id, beforeStock, beforeStock, id, actor.username)
 
       db.exec('COMMIT')
       success(res, null, '调拨记录已撤销')
