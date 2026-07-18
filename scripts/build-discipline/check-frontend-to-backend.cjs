@@ -8,11 +8,27 @@
  *  - fetch(变量) 尽量回溯同函数前若干行的 `const 变量 = \`...\`` 赋值解析；动态方法记 'ANY' 匹配任意方法。
  */
 
+const fs = require('fs')
 const R = require('./lib/registry.cjs')
 
+/**
+ * 仅供 selftest 注入一组完全合成的 {calls,endpoints}，让 run-all 的 C1 最后一公里
+ * 不依赖真实仓库里恰好存在一个幽灵端点。坏/缺字段 fixture 直接抛错，保持 fail-closed。
+ */
+function loadSelftestFixture() {
+  const fixturePath = process.env.BD_C1_FIXTURE_PATH
+  if (!fixturePath) return null
+  const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'))
+  if (!fixture || !Array.isArray(fixture.calls) || !Array.isArray(fixture.endpoints)) {
+    throw new Error('BD_C1_FIXTURE_PATH 必须指向含 calls/endpoints 数组的 JSON fixture')
+  }
+  return fixture
+}
+
 function run() {
-  const { endpoints } = R.buildBackendRegistry()
-  const { calls } = R.parseFrontendCalls()
+  const fixture = loadSelftestFixture()
+  const endpoints = fixture ? fixture.endpoints : R.buildBackendRegistry().endpoints
+  const calls = fixture ? fixture.calls : R.parseFrontendCalls().calls
 
   const violations = []
   let matched = 0
