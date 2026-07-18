@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ci": "playwright test --reporter=list",
+    "test:e2e:critical": "playwright test e2e/auth.spec.ts e2e/supplier-returns.spec.ts e2e/users.spec.ts --fail-on-flaky-tests --reporter=list,../scripts/local-release-gate.cjs --workers=1",
     "watch:build": "powershell -ExecutionPolicy Bypass -File ./watch-and-build.ps1",
     "watch:dev": "powershell -ExecutionPolicy Bypass -File ./watch-and-build.ps1 -BuildCommand npm run build:dev"
   },
