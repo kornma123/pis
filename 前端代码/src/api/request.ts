@@ -6,7 +6,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api
 
 const STABLE_ERROR_CODE = /^[A-Z][A-Z0-9_:-]{0,63}$/
 const VALIDATION_CODE = /^[A-Za-z][A-Za-z0-9_:-]{0,63}$/
-const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_.\[\]-]{0,127}$/
+const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_.[\]-]{0,127}$/
 const FIELD_SEGMENT = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/
 
 export interface SafeValidationIssue {
