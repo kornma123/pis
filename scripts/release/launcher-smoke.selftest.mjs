@@ -17,6 +17,30 @@ const launcher = resolve(backend, 'scripts', 'start-production.mjs')
 const compiledApp = resolve(backend, 'dist', 'src', 'app.js')
 const release = 'c'.repeat(40)
 const launchedChildren = new Set()
+const childDiagnosticState = new WeakMap()
+const maxChildStderrBytes = 16 * 1024
+const allowedChildEvents = new Set([
+  'coreone.uncaught_exception',
+  'coreone.unhandled_rejection',
+])
+const allowedErrorTypes = new Set([
+  'AggregateError',
+  'Error',
+  'EvalError',
+  'RangeError',
+  'ReferenceError',
+  'SyntaxError',
+  'TypeError',
+  'URIError',
+  'bigint',
+  'boolean',
+  'function',
+  'number',
+  'object',
+  'string',
+  'symbol',
+  'undefined',
+])
 
 assert.ok(existsSync(compiledApp), 'compiled backend is missing; run the backend build first')
 
@@ -45,6 +69,69 @@ function delay(milliseconds) {
   return new Promise(resolveDelay => setTimeout(resolveDelay, milliseconds))
 }
 
+function collectChildStderr(child) {
+  let resolveClosed
+  const state = {
+    bytes: 0,
+    chunks: [],
+    closed: false,
+    closedPromise: new Promise(resolveClosedPromise => { resolveClosed = resolveClosedPromise }),
+    spawnErrorType: undefined,
+  }
+  childDiagnosticState.set(child, state)
+  child.stderr.on('data', chunk => {
+    if (state.bytes >= maxChildStderrBytes) return
+    const source = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))
+    const bounded = Buffer.from(source.subarray(0, maxChildStderrBytes - state.bytes))
+    state.chunks.push(bounded)
+    state.bytes += bounded.length
+  })
+  child.on('error', error => {
+    if (allowedErrorTypes.has(error?.name)) state.spawnErrorType = error.name
+  })
+  child.once('close', () => {
+    state.closed = true
+    resolveClosed()
+  })
+}
+
+async function waitForChildDiagnosticClose(child) {
+  const state = childDiagnosticState.get(child)
+  if (state && !state.closed) await state.closedPromise
+}
+
+function structuredChildDiagnostic(child) {
+  const state = childDiagnosticState.get(child)
+  if (!state) return {}
+  const stderr = Buffer.concat(state.chunks, state.bytes).toString('utf8')
+  for (const line of stderr.split(/\r?\n/u)) {
+    try {
+      const record = JSON.parse(line)
+      if (!record || typeof record !== 'object' || Array.isArray(record)) continue
+      if (!allowedChildEvents.has(record.event)) continue
+      return {
+        event: record.event,
+        errorType: allowedErrorTypes.has(record.errorType) ? record.errorType : undefined,
+      }
+    } catch {
+      // Raw, partial, and non-allowlisted stderr is intentionally ignored.
+    }
+  }
+  return { errorType: state.spawnErrorType }
+}
+
+function childFailureClassification(child) {
+  const diagnostic = structuredChildDiagnostic(child)
+  const exit = Number.isInteger(child.exitCode) ? child.exitCode : 'none'
+  const signal = typeof child.signalCode === 'string' && /^SIG[A-Z0-9]+$/u.test(child.signalCode)
+    ? child.signalCode
+    : 'none'
+  const fields = [`exit=${exit}`, `signal=${signal}`]
+  if (diagnostic.event) fields.push(`event=${diagnostic.event}`)
+  if (diagnostic.errorType) fields.push(`errorType=${diagnostic.errorType}`)
+  return fields.join(' ')
+}
+
 function launch(extraEnvironment, expectedEvents) {
   const child = spawn(process.execPath, ['--experimental-sqlite', launcher], {
     cwd: backend,
@@ -64,31 +151,32 @@ function launch(extraEnvironment, expectedEvents) {
     }
     stdoutCarry = text.slice(-160)
   })
-  child.stderr.resume()
+  collectChildStderr(child)
   return { child, events }
 }
 
 function waitForExit(child, timeoutMilliseconds) {
-  if (child.exitCode !== null) return Promise.resolve(child.exitCode)
+  const diagnosticState = childDiagnosticState.get(child)
+  if (child.exitCode !== null && diagnosticState?.closed) return Promise.resolve(child.exitCode)
   return new Promise((resolveExit, reject) => {
     const timer = setTimeout(() => {
       cleanup()
-      reject(new Error('launcher exit timed out'))
+      reject(new Error(`launcher exit timed out (${childFailureClassification(child)})`))
     }, timeoutMilliseconds)
-    const onExit = code => {
+    const onClose = code => {
       cleanup()
       resolveExit(code)
     }
-    const onError = error => {
+    const onError = () => {
       cleanup()
-      reject(error)
+      reject(new Error(`launcher child process error (${childFailureClassification(child)})`))
     }
     function cleanup() {
       clearTimeout(timer)
-      child.off('exit', onExit)
+      child.off('close', onClose)
       child.off('error', onError)
     }
-    child.once('exit', onExit)
+    child.once('close', onClose)
     child.once('error', onError)
   })
 }
@@ -97,7 +185,10 @@ async function waitForHealth(child, port, timeoutMilliseconds) {
   const deadline = Date.now() + timeoutMilliseconds
   let lastStatus = 'not reachable'
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`launcher exited before health check (code ${child.exitCode})`)
+    if (child.exitCode !== null) {
+      await waitForChildDiagnosticClose(child)
+      throw new Error(`launcher exited before health check (${childFailureClassification(child)})`)
+    }
     try {
       const response = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) })
       lastStatus = `HTTP ${response.status}`
@@ -175,7 +266,11 @@ try {
     DATABASE_PATH: databasePath,
     COREONE_ALLOW_DATABASE_CREATE: '1',
   }, ['coreone.database_initializing', 'coreone.database_initialized'])
-  assert.equal(await waitForExit(initializer.child, 45000), 0, 'database initializer failed')
+  assert.equal(
+    await waitForExit(initializer.child, 45000),
+    0,
+    `database initializer failed (${childFailureClassification(initializer.child)})`,
+  )
   assert.ok(initializer.events.has('coreone.database_initializing'), 'database initializing event is missing')
   assert.ok(initializer.events.has('coreone.database_initialized'), 'database initialized event is missing')
 
