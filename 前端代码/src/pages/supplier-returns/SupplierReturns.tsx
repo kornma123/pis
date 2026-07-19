@@ -54,7 +54,7 @@ type PendingMutation =
 
 function errorMessage(error: unknown, fallback: string) {
   const value = error instanceof Error ? error.message.trim() : ''
-  return value && value.length <= 160 && !/[{}\[\]]/.test(value) ? value : fallback
+  return value && value.length <= 160 && !/[{}[\]]/.test(value) ? value : fallback
 }
 
 function hasServerResponse(error: unknown) {

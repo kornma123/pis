@@ -25,14 +25,9 @@ export function createRecoverablePost<TInput, TBody extends Record<string, unkno
       pending = { fingerprint, key: genIdempotencyKey() }
     }
     const key = pending.key
-    try {
-      const result = await request.post<TResult>(path, body, { headers: { 'Idempotency-Key': key } })
-      if (isVerified && !isVerified(result)) throw new UnverifiedMutationReceiptError()
-      if (pending?.key === key) pending = null
-      return result
-    } catch (error) {
-      // 回执未知时保留 key；相同内容重试由后端回放首次结果。
-      throw error
-    }
+    const result = await request.post<TResult>(path, body, { headers: { 'Idempotency-Key': key } })
+    if (isVerified && !isVerified(result)) throw new UnverifiedMutationReceiptError()
+    if (pending?.key === key) pending = null
+    return result
   }
 }
