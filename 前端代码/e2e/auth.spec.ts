@@ -788,7 +788,7 @@ test.describe('认证与登录 -> 盲点分析补充', () => {
 
   test('BLIND-AUTH-12. 登录页面显示版本号', async ({ page }) => {
     await page.goto(`${FE_BASE}/login`)
-    await expect(page.locator('text=/v2\./i').first()).toBeVisible()
+    await expect(page.locator('text=/v2\\./i').first()).toBeVisible()
   })
 
   test('BLIND-AUTH-13. Token过期时间验证', async ({ page }) => {

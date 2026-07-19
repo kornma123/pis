@@ -536,7 +536,7 @@ test.describe('操作日志 -> 盲点分析补充', () => {
   })
   test('BLIND-LOG-02. 日志时间格式化显示正确', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
-    await expect(page.locator('text=/2024|2025|2026|\//i').first().or(page.locator('body'))).toBeVisible()
+    await expect(page.locator('text=/2024|2025|2026|//i').first().or(page.locator('body'))).toBeVisible()
   })
   test('BLIND-LOG-03. 用户头像显示首字母', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)

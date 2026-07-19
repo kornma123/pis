@@ -678,12 +678,11 @@ test.describe('入库 CSV：预览、校验、确认、结果与恢复', () => {
     await page.addInitScript(() => {
       const originalText = File.prototype.text
       File.prototype.text = function patchedText() {
-        const currentFile = this
-        if (currentFile.name === 'slow-old.csv') {
+        if (this.name === 'slow-old.csv') {
           return new Promise<void>((resolve) => window.setTimeout(resolve, 300))
-            .then(() => originalText.call(currentFile))
+            .then(() => originalText.call(this))
         }
-        return originalText.call(currentFile)
+        return originalText.call(this)
       }
     })
 
