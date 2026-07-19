@@ -12,36 +12,35 @@ export default function Roles() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight leading-tight">角色管理</h1>
           <p className="text-sm text-gray-500 mt-1">管理系统角色和权限配置</p>
         </div>
-        <button
-          onClick={page.openCreate}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm font-medium shadow-sm transition-all h-10"
-        >
-          <Plus className="w-4 h-4" /> 新建角色
-        </button>
+        {page.canWrite && (
+          <button onClick={page.openCreate} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium shadow-sm transition-all h-10">
+            <Plus className="w-4 h-4" /> 新建角色
+          </button>
+        )}
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-[28px] font-semibold text-gray-900 leading-tight tracking-tight">{page.stats.totalRoles}</div>
+          <div className="text-[28px] font-semibold text-gray-900 leading-tight tracking-tight">{page.error ? '—' : page.stats.totalRoles}</div>
           <div className="text-sm text-gray-500 mt-1">角色总数</div>
         </div>
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-[28px] font-semibold text-blue-500 leading-tight tracking-tight">{page.stats.systemRoles}</div>
-          <div className="text-sm text-gray-500 mt-1">系统角色</div>
+          <div className="text-[28px] font-semibold text-blue-600 leading-tight tracking-tight">{page.error ? '—' : page.stats.pageRoles}</div>
+          <div className="text-sm text-gray-500 mt-1">本页已加载</div>
         </div>
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-[28px] font-semibold text-gray-500 leading-tight tracking-tight">{page.stats.customRoles}</div>
-          <div className="text-sm text-gray-500 mt-1">自定义角色</div>
+          <div className="text-[28px] font-semibold text-green-600 leading-tight tracking-tight">{page.error ? '—' : page.stats.activeRoles}</div>
+          <div className="text-sm text-gray-500 mt-1">本页启用</div>
         </div>
         <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
-          <div className="text-[28px] font-semibold text-green-500 leading-tight tracking-tight">{page.stats.assignedUsers}</div>
-          <div className="text-sm text-gray-500 mt-1">已分配用户</div>
+          <div className="text-[28px] font-semibold text-gray-600 leading-tight tracking-tight">{page.error ? '—' : page.stats.inactiveRoles}</div>
+          <div className="text-sm text-gray-500 mt-1">本页停用</div>
         </div>
       </div>
 
@@ -52,8 +51,9 @@ export default function Roles() {
           <div className="relative w-[280px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
+              aria-label="搜索角色"
               type="text"
-              placeholder="搜索角色名称..."
+              placeholder="筛选当前页角色名称或标识..."
               value={page.keyword}
               onChange={e => page.setKeyword(e.target.value)}
               className="w-full h-10 pl-10 pr-4 text-sm text-gray-900 bg-white border border-gray-200 rounded-md outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10"
@@ -61,33 +61,18 @@ export default function Roles() {
           </div>
         </div>
         <div className="p-5">
-          {/* Tabs */}
-          <div className="flex gap-1 border-b border-gray-200 mb-5">
-            {[
-              { key: 'all' as const, label: '全部角色' },
-              { key: 'system' as const, label: '系统角色' },
-              { key: 'custom' as const, label: '自定义角色' },
-            ].map(t => (
-              <button
-                key={t.key}
-                onClick={() => page.setTabType(t.key)}
-                className={`px-5 py-3 text-sm font-medium border-b-2 transition-all ${page.tabType === t.key ? 'text-blue-500 border-blue-500' : 'text-gray-500 border-transparent hover:text-gray-900 hover:bg-gray-50'}`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
           <RolesGrid
             data={page.filteredData}
             loading={page.loading}
+            error={page.error}
+            canWrite={page.canWrite}
+            onRetry={page.refresh}
             onDetail={page.openDetail}
             onEdit={page.openEdit}
             onDelete={page.openDelete}
-            getDataScopeLabel={page.getDataScopeLabel}
           />
         </div>
-        <div className="flex items-center justify-between px-5 py-4 border-t border-gray-200 bg-gray-50">
+        {!page.error && <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50">
           <span className="text-sm text-gray-500">共 {page.total} 条记录</span>
           <Pagination
             page={page.page}
@@ -96,7 +81,7 @@ export default function Roles() {
             onChangePage={page.setPage}
             onChangePageSize={page.setPageSize}
           />
-        </div>
+        </div>}
       </div>
 
       {/* Create / Edit Modal */}
@@ -104,8 +89,9 @@ export default function Roles() {
         open={page.modalType === 'create' || page.modalType === 'edit'}
         type={page.modalType === 'edit' ? 'edit' : 'create'}
         form={page.form}
+        error={page.formError}
         onClose={() => page.setModalType(null)}
-        onChange={page.setForm}
+        onChange={form => { page.setForm(form); page.setFormError('') }}
         onSubmit={page.handleSubmit}
         onSetPermLevel={page.setPermLevel}
       />

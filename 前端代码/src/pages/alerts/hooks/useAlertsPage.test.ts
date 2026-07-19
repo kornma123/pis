@@ -7,7 +7,7 @@
  *  - 处理弹窗 opinion/result 从未透传 → remark 永远为空。现由 submitHandle 组装 remark 并透传。
  *  - opinion 必填：留空不提交、弹窗不关闭。
  *  - 「忽略预警」结果 → action='ignored'。
- *  - handleGenerate 触发 /alerts/generate；列表空且无筛选时自动生成一次。
+ *  - handleGenerate 只由用户主动触发；空列表不得自动生成或伪造已连接状态。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
@@ -35,7 +35,7 @@ function makeAlert(overrides: Partial<AlertItem> = {}): AlertItem {
   } as AlertItem
 }
 
-/** 让挂载时的列表拉取返回“有数据”，避免自动生成副作用干扰 mutation 断言 */
+/** 让挂载时的列表拉取返回“有数据”。 */
 function withData() {
   mockGet.mockResolvedValue({ list: [makeAlert()], pagination: { total: 1, page: 1, pageSize: 10 } })
 }
@@ -74,6 +74,7 @@ describe('useAlertsPage — /handle 契约与表单透传', () => {
     expect(mockPost).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalled()
     expect(result.current.modal.type).toBe('handle') // 未关闭
+    expect(result.current.handleError).toContain('请填写处理意见')
   })
 
   it('处理结果=忽略预警 → action=ignored', async () => {
@@ -112,15 +113,13 @@ describe('useAlertsPage — /handle 契约与表单透传', () => {
     expect(mockPost).toHaveBeenCalledWith('/alerts/generate', expect.anything())
   })
 
-  it('列表空且无筛选 → 自动生成一次', async () => {
+  it('列表空且无筛选 → 不自动生成，等待用户明确操作', async () => {
     mockGet.mockResolvedValue({ list: [], pagination: { total: 0, page: 1, pageSize: 10 } })
-    renderHook(() => useAlertsPage())
-    await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith('/alerts/generate', expect.anything())
-    })
-    // 只自动生成一次，不循环
+    const { result } = renderHook(() => useAlertsPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
     const genCalls = mockPost.mock.calls.filter((c) => c[0] === '/alerts/generate')
-    expect(genCalls.length).toBe(1)
+    expect(genCalls.length).toBe(0)
+    expect(result.current.generationEvidence).toBeNull()
   })
 
   it('初次拉取失败(total=0 但有 error) → 不误触发自动生成', async () => {
@@ -131,5 +130,31 @@ describe('useAlertsPage — /handle 契约与表单透传', () => {
     await new Promise((r) => setTimeout(r, 50))
     const genCalls = mockPost.mock.calls.filter((c) => c[0] === '/alerts/generate')
     expect(genCalls.length).toBe(0)
+  })
+
+  it('仅在后端返回有效 generatedCount 时记录生成结果证据', async () => {
+    withData()
+    mockPost.mockResolvedValue({ generatedCount: 0 })
+    const { result } = renderHook(() => useAlertsPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => { await result.current.handleGenerate() })
+
+    expect(result.current.generationEvidence).toMatchObject({ status: 'connected', generatedCount: 0 })
+    expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('新增 0 条'))
+    expect(toast.success).not.toHaveBeenCalledWith('暂无新预警')
+  })
+
+  it('生成响应缺少条数时保持 unknown，不把缺失值折成 0', async () => {
+    withData()
+    mockPost.mockResolvedValue({})
+    const { result } = renderHook(() => useAlertsPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => { await result.current.handleGenerate() })
+
+    expect(result.current.generationEvidence).toMatchObject({ status: 'unknown' })
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('未返回生成条数'))
   })
 })

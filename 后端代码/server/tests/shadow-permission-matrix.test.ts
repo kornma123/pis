@@ -342,6 +342,40 @@ describe('shadow permission matrix · 解析器（守卫抽取正确性）', () 
     expect(g.find((x) => x.relPath === '/import')).toMatchObject({ module: null, conditions: ['anyRole:admin+finance'] })
   })
 
+  it('路由文件：仅识别拒绝分支后直接 tail-call 已知守卫的窄 wrapper，普通 wrapper 不得被推断为 W', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'shadow-wrapper-'))
+    try {
+      fs.writeFileSync(path.join(tmp, 'x.ts'), `
+        const requireWrite = requirePermission('reconciliation', 'W')
+        const requireCaseImportWrite: RequestHandler = (req, res, next) => {
+          const items = (req.body as { items?: unknown } | undefined)?.items
+          if (Array.isArray(items) && items.length > 1000) {
+            error(res, 'too many rows', 'INVALID_PARAMETER', 400)
+            return
+          }
+          requireWrite(req, res, next)
+        }
+        const ordinaryWrapper: RequestHandler = (_req, _res, next) => { next() }
+        router.post('/cases/import', requireCaseImportWrite, (_req, _res) => {})
+        router.post('/ordinary', ordinaryWrapper, (_req, _res) => {})
+      `)
+      const build = buildActualGuards({
+        root: '', routesDir: tmp, imports: { reconciliationRoutes: 'x' },
+        mounts: [{ prefix: '/api/v1/reconciliation', module: 'reconciliation', level: 'R', authed: true, routerVar: 'reconciliationRoutes' }],
+        registry: [], activeRoutes: [],
+        permsVis: { navPathModule: {}, financeAdminPaths: [], alwaysPaths: [] },
+      })
+      expect(build.guards['POST /api/v1/reconciliation/ordinary']).toEqual({
+        module: 'reconciliation', level: 'R', conditions: [],
+      })
+      expect(build.guards['POST /api/v1/reconciliation/cases/import']).toEqual({
+        module: 'reconciliation', level: 'W', conditions: [],
+      })
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true })
+    }
+  })
+
   it('路由文件：handler 内 SoD / 口径门 抽成条件', () => {
     const g = parseRouteFileGuards(`
       router.post('/approve', requirePermission('account_reconcile','W'), (req,res)=>{

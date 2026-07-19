@@ -26,7 +26,9 @@ export function CostCharts({ trendReport, pieData }: Props) {
       <div className="lg:col-span-2 bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
         <h3 className="text-base font-semibold text-gray-900 mb-4">成本趋势</h3>
         <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
+          {!trendReport?.trend?.length ? (
+            <div className="flex h-full items-center justify-center text-sm text-gray-400">当前期间没有成本趋势事实</div>
+          ) : <ResponsiveContainer width="100%" height="100%">
             <ReLineChart data={trendReport?.trend || []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={{ stroke: '#e5e7eb' }} />
@@ -48,14 +50,16 @@ export function CostCharts({ trendReport, pieData }: Props) {
                 activeDot={{ r: 5 }}
               />
             </ReLineChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer>}
         </div>
       </div>
 
       <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
         <h3 className="text-base font-semibold text-gray-900 mb-4">成本构成</h3>
         <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
+          {!pieData.length ? (
+            <div className="flex h-full items-center justify-center text-sm text-gray-400">当前期间没有可计算的项目成本构成</div>
+          ) : <ResponsiveContainer width="100%" height="100%">
             <RePieChart>
               <Pie
                 data={pieData}
@@ -73,7 +77,7 @@ export function CostCharts({ trendReport, pieData }: Props) {
               <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 12 }} />
               <Tooltip formatter={(value: number) => `${value}%`} contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }} />
             </RePieChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer>}
         </div>
       </div>
     </div>

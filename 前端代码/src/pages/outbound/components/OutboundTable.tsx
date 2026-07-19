@@ -1,26 +1,45 @@
-import { X, Download, Printer, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Printer, X } from 'lucide-react'
 import { Pagination } from '@/components/ui/Pagination'
 import type { OutboundRecord } from '@/types'
 import { formatDate } from '@/lib/utils'
 
-// 与后端排序白名单一致：金额/数量/时间（防注入的受控列名）
 export type OutboundSortField = 'createdAt' | 'totalCost' | 'quantity'
 export type OutboundSortOrder = 'asc' | 'desc'
 
-const statusConfig: Record<string, { label: string; bg: string; text: string }> = {
-  completed: { label: '已完成', bg: 'bg-green-50', text: 'text-green-600' },
-  pending: { label: '待出库', bg: 'bg-yellow-50', text: 'text-yellow-600' },
-  cancelled: { label: '已取消', bg: 'bg-red-50', text: 'text-red-600' },
+const statusConfig: Record<string, { label: string; className: string }> = {
+  completed: { label: '已完成', className: 'bg-green-50 text-green-700' },
+  pending: { label: '待出库', className: 'bg-amber-50 text-amber-700' },
+  cancelled: { label: '已取消', className: 'bg-red-50 text-red-700' },
 }
 
 const typeConfig: Record<string, string> = {
+  direct: '常规出库',
   project: '项目出库',
   transfer: '调拨出库',
   scrap: '报废出库',
 }
 
+interface SortButtonProps {
+  field: OutboundSortField
+  label: string
+  activeField: OutboundSortField
+  order: OutboundSortOrder
+  onSort: (field: OutboundSortField) => void
+}
+
+function SortButton({ field, label, activeField, order, onSort }: SortButtonProps) {
+  return (
+    <button type="button" onClick={() => onSort(field)} className="inline-flex items-center gap-1 hover:text-gray-900">
+      {label}
+      {activeField !== field ? <ArrowUpDown className="h-3 w-3 opacity-50" /> : order === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+    </button>
+  )
+}
+
 interface OutboundTableProps {
   loading: boolean
+  stale?: boolean
+  canWrite?: boolean
   data: OutboundRecord[]
   selectedIds: Set<string>
   selectAll: boolean
@@ -38,7 +57,6 @@ interface OutboundTableProps {
   onOpenDetail: (record: OutboundRecord) => void
   onOpenEdit: (record: OutboundRecord) => void
   onOpenDelete: (record: OutboundRecord) => void
-  onOpenCancel: (record: OutboundRecord) => void
   onPrintRecord: (record: OutboundRecord) => void
   onBatchExport: () => void
   onBatchPrint: () => void
@@ -46,6 +64,8 @@ interface OutboundTableProps {
 
 export default function OutboundTable({
   loading,
+  stale = false,
+  canWrite = false,
   data,
   selectedIds,
   selectAll,
@@ -63,203 +83,77 @@ export default function OutboundTable({
   onOpenDetail,
   onOpenEdit,
   onOpenDelete,
-  onOpenCancel,
   onPrintRecord,
   onBatchExport,
   onBatchPrint,
 }: OutboundTableProps) {
-  const SortHeader = ({ field, label }: { field: OutboundSortField; label: string }) => (
-    <button
-      type="button"
-      onClick={() => onSort(field)}
-      className="inline-flex items-center gap-1 hover:text-gray-700 transition-colors"
-    >
-      {label}
-      {sortField === field ? (
-        sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-      ) : (
-        <ArrowUpDown className="w-3 h-3 opacity-50" />
-      )}
-    </button>
-  )
-
   return (
     <>
-      {/* Batch Actions Bar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center justify-between px-4 py-3 bg-blue-50 border-b border-blue-100">
-          <div className="text-sm text-blue-700">
-            已选择 <strong>{selectedIds.size}</strong> 项
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onBatchExport}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white rounded-md transition-colors duration-150"
-            >
-              <Download className="w-3.5 h-3.5" />
-              导出
-            </button>
-            <button
-              onClick={onBatchPrint}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white rounded-md transition-colors duration-150"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              打印
-            </button>
-            <button
-              onClick={onClearSelection}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-white rounded-md transition-colors duration-150"
-            >
-              <X className="w-3.5 h-3.5" />
-              取消选择
-            </button>
+        <div className="flex flex-col gap-3 border-b border-blue-100 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm text-blue-800">已选择 <strong>{selectedIds.size}</strong> 条当前页记录</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={onBatchExport} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-sm text-gray-700 shadow-sm hover:text-blue-700"><Download className="h-4 w-4" />导出</button>
+            <button type="button" onClick={onBatchPrint} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-sm text-gray-700 shadow-sm hover:text-blue-700"><Printer className="h-4 w-4" />打印</button>
+            <button type="button" aria-label="清除已选出库记录" onClick={onClearSelection} className="rounded-md p-2 text-gray-500 hover:bg-white"><X className="h-4 w-4" /></button>
           </div>
         </div>
       )}
 
-      {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+        <table className="min-w-[1120px] w-full text-sm">
+          <thead className="border-b border-gray-200 bg-gray-50">
             <tr>
-              <th className="px-4 py-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={selectAll}
-                  onChange={onToggleSelectAll}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
+              <th className="w-12 px-4 py-3">
+                <label htmlFor="outbound-select-page" className="sr-only">选择当前页全部出库记录</label>
+                <input id="outbound-select-page" type="checkbox" checked={selectAll} onChange={onToggleSelectAll} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">出库单号</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">耗材名称</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">批号</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">出库类型</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <SortHeader field="quantity" label="数量" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <SortHeader field="totalCost" label="总金额" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">领用项目</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">领用人</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <SortHeader field="createdAt" label="出库时间" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[140px]">操作</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">出库单号</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">物料</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">FEFO 批次分配</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">类型</th>
+              <th aria-sort={sortField === 'quantity' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} className="px-4 py-3 text-left text-xs font-medium text-gray-600"><SortButton field="quantity" label="出库数量" activeField={sortField} order={sortOrder} onSort={onSort} /></th>
+              <th aria-sort={sortField === 'totalCost' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} className="px-4 py-3 text-left text-xs font-medium text-gray-600"><SortButton field="totalCost" label="总金额" activeField={sortField} order={sortOrder} onSort={onSort} /></th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">关联项目</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">后端记录操作人</th>
+              <th aria-sort={sortField === 'createdAt' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'} className="px-4 py-3 text-left text-xs font-medium text-gray-600"><SortButton field="createdAt" label="出库时间" activeField={sortField} order={sortOrder} onSort={onSort} /></th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">状态</th>
+              <th className="w-40 px-4 py-3 text-left text-xs font-medium text-gray-600">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {loading ? (
-              <tr>
-                <td colSpan={12} className="px-4 py-8 text-center text-gray-400">加载中...</td>
-              </tr>
+            {loading && data.length === 0 ? (
+              Array.from({ length: 4 }, (_, index) => <tr key={index} aria-label="正在加载出库记录" className="animate-pulse"><td colSpan={12} className="px-4 py-3"><div className="h-8 rounded bg-gray-100" /></td></tr>)
             ) : data.length === 0 ? (
-              <tr>
-                <td colSpan={12} className="px-4 py-8 text-center text-gray-400">暂无数据</td>
-              </tr>
-            ) : (
-              data.map(row => {
-                const firstItem = row.items?.[0]
-                const cfg = statusConfig[row.status] || statusConfig.completed
-                return (
-                  <tr
-                    key={row.id}
-                    className={`hover:bg-gray-50 transition-colors duration-150 ${
-                      selectedIds.has(row.id) ? 'bg-blue-50' : ''
-                    }`}
-                  >
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(row.id)}
-                        onChange={() => onToggleSelectRow(row.id)}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="px-4 py-3 font-mono text-gray-600">{row.outboundNo}</td>
-                    <td className="px-4 py-3">
-                      <strong className="text-gray-900">{firstItem?.materialName || '-'}</strong>
-                      {(row.items?.length || 0) > 1 && (
-                        <span className="text-xs text-gray-400 ml-1">等{row.items?.length}项</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-gray-500">{firstItem?.batchNo || '-'}</td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded text-xs bg-purple-50 text-purple-700">
-                        {typeConfig[row.type] || row.type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.items?.reduce((sum, i) => sum + i.quantity, 0) || 0} {firstItem?.unit || '件'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">¥{(row.totalCost || 0).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-gray-700">{row.projectName || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700">{row.operator}</td>
-                    <td className="px-4 py-3 text-gray-500">{formatDate(row.createdAt)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
-                        {cfg.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => onOpenDetail(row)}
-                          className="px-2 py-1 text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-150"
-                        >
-                          详情
-                        </button>
-                        <button
-                          onClick={() => onPrintRecord(row)}
-                          className="px-2 py-1 text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-150"
-                        >
-                          打印
-                        </button>
-                        {row.status === 'completed' && (
-                          <>
-                            <button
-                              onClick={() => onOpenEdit(row)}
-                              className="px-2 py-1 text-xs text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors duration-150"
-                            >
-                              编辑
-                            </button>
-                            <button
-                              onClick={() => onOpenDelete(row)}
-                              className="px-2 py-1 text-xs text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-150"
-                            >
-                              删除
-                            </button>
-                          </>
-                        )}
-                        {row.status === 'pending' && (
-                          <button
-                            onClick={() => onOpenCancel(row)}
-                            className="px-2 py-1 text-xs text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-150"
-                          >
-                            取消出库
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })
-            )}
+              <tr><td colSpan={12} className="px-4 py-14 text-center"><div className="font-medium text-gray-900">暂无出库记录</div><div className="mt-1 text-sm text-gray-500">当前筛选由接口成功返回 0 条记录。</div></td></tr>
+            ) : data.map(record => {
+              const firstItem = record.items?.[0]
+              const allocations = record.items?.length ?? 0
+              const status = statusConfig[record.status] ?? { label: record.status || '未知', className: 'bg-gray-100 text-gray-700' }
+              return (
+                <tr key={record.id} className={`[content-visibility:auto] [contain-intrinsic-size:0_58px] hover:bg-gray-50 ${selectedIds.has(record.id) ? 'bg-blue-50' : ''}`}>
+                  <td className="px-4 py-3"><label htmlFor={`outbound-select-${record.id}`} className="sr-only">选择出库单 {record.outboundNo}</label><input id={`outbound-select-${record.id}`} type="checkbox" checked={selectedIds.has(record.id)} onChange={() => onToggleSelectRow(record.id)} className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" /></td>
+                  <td className="px-4 py-3 font-mono text-gray-700">{record.outboundNo}</td>
+                  <td className="px-4 py-3"><span className="font-medium text-gray-900">{firstItem?.materialName || '物料名称未提供'}</span>{allocations > 1 && <span className="ml-1 text-xs text-gray-500">共 {allocations} 条物料/批次分配</span>}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{firstItem?.batchNo || '未取得批次证据'}{allocations > 1 && <span className="ml-1 font-sans text-gray-500">（详情见全部）</span>}</td>
+                  <td className="px-4 py-3"><span className="rounded bg-purple-50 px-2 py-1 text-xs text-purple-700">{typeConfig[record.type] || record.type}</span></td>
+                  <td className="px-4 py-3 tabular-nums">{record.items?.reduce((sum, item) => sum + item.quantity, 0) ?? '—'} {firstItem?.unit || ''}</td>
+                  <td className="px-4 py-3 tabular-nums text-gray-700">{typeof record.totalCost === 'number' ? `¥${record.totalCost.toFixed(2)}` : '—'}</td>
+                  <td className="px-4 py-3 text-gray-700">{record.projectName || '公共成本'}</td>
+                  <td className="px-4 py-3 text-gray-700">{record.operator || '未提供'}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatDate(record.createdAt)}</td>
+                  <td className="px-4 py-3"><span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${status.className}`}>{status.label}</span></td>
+                  <td className="px-4 py-3"><div className="flex items-center gap-1"><button type="button" onClick={() => onOpenDetail(record)} className="rounded px-2 py-1 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700">详情</button><button type="button" onClick={() => onPrintRecord(record)} className="rounded px-2 py-1 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700">打印</button>{canWrite && !stale && record.status === 'completed' && <><button type="button" onClick={() => onOpenEdit(record)} className="rounded px-2 py-1 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700">编辑</button><button type="button" onClick={() => onOpenDelete(record)} className="rounded px-2 py-1 text-xs text-gray-700 hover:bg-red-50 hover:text-red-700">删除</button></>}</div></td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
-        <span className="text-sm text-gray-500">共 {total} 条记录</span>
-        <Pagination
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onChangePage={onPageChange}
-          onChangePageSize={onPageSizeChange}
-        />
+      <div className="flex flex-col gap-3 border-t border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <span className="text-sm text-gray-500">接口共返回 {total.toLocaleString('zh-CN')} 条记录</span>
+        <Pagination page={page} pageSize={pageSize} total={total} onChangePage={onPageChange} onChangePageSize={onPageSizeChange} />
       </div>
     </>
   )

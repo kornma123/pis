@@ -5,6 +5,7 @@ import { partnerConfigApi } from '@/api/partner-config'
 import { readGrid } from '@/pages/import-shared/ImportShared'
 import type { CommitResult, PreviewResult } from '@/types/statement-import'
 import { useImportQueue, type CommitOutcome } from './useImportQueue'
+import { readImportWorkflowJournal } from '@/pages/import-shared/importWorkflowJournal'
 
 vi.mock('@/api/statement-import', () => ({
   statementImportApi: {
@@ -107,6 +108,7 @@ async function runCommit(action: () => Promise<CommitOutcome>) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.sessionStorage.clear()
   mockReadGrid.mockResolvedValue(grid)
   mockPartnerConfig.mockResolvedValue({ config: { lines: [] }, version: 1 } as never)
   mockPreview.mockResolvedValue(preview)
@@ -162,6 +164,33 @@ describe('useImportQueue — NEEDS_CONFIRM 旁路合同', () => {
       confirm: true,
       overrideReason: '无独立合计行，财务已逐行复核',
     })
+    expect(readImportWorkflowJournal('statement-import')).toMatchObject({
+      kind: 'statement-import',
+      phase: 'settled',
+      fileName: item.fileName,
+      partnerId: 'P-1',
+      serviceMonth: '2026-05',
+      receipt: { importBatch: 'STMT-1', caseCount: 1 },
+    })
+  })
+
+  it('locks duplicate commits for the same queue item before React can rerender', async () => {
+    const result = await setupQueue()
+    const item = result.current.active!
+    const pending = deferred<CommitResult>()
+    mockCommit.mockReturnValue(pending.promise)
+
+    let first!: Promise<CommitOutcome>
+    let second!: Promise<CommitOutcome>
+    await act(async () => {
+      first = result.current.commit(item, false)
+      second = result.current.commit(item, false)
+      await Promise.resolve()
+    })
+
+    expect(mockCommit).toHaveBeenCalledTimes(1)
+    await expect(second).resolves.toBe('busy')
+    await act(async () => { pending.resolve(committed); await first })
   })
 
   it('旧月份的延迟成功响应不得把已入库状态贴到新月份', async () => {

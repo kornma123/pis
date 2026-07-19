@@ -507,6 +507,8 @@ describe('trusted inventory actors', () => {
 })
 
 describe('actor trust mutation contract', () => {
+  const untrustedOperatorDestructuring = /\{[^}]*\boperator\b[^}]*\}\s*=\s*req\.body/s
+
   const routeSpecs = [
     ['inbound-v1.1.ts', 4],
     ['outbound-v1.1.ts', 3],
@@ -516,6 +518,11 @@ describe('actor trust mutation contract', () => {
     ['supplier-returns-v1.1.ts', 4],
     ['transfers-v1.1.ts', 2],
   ] as const
+
+  it('detects declaration and assignment-style operator destructuring from req.body', () => {
+    expect('const { operator } = req.body').toMatch(untrustedOperatorDestructuring)
+    expect('let operator; ({ operator } = req.body)').toMatch(untrustedOperatorDestructuring)
+  })
 
   it.each(routeSpecs)('%s resolves a trusted actor before each of its %i mutation handlers', (file, expectedMutations) => {
     const source = readFileSync(fileURLToPath(new URL(`../src/routes/${file}`, import.meta.url)), 'utf8')
@@ -537,7 +544,7 @@ describe('actor trust mutation contract', () => {
     }
 
     expect(source).not.toMatch(/req\.body\??\.operator/)
-    expect(source).not.toMatch(/(?:const|let|var)\s*\{[^}]*\boperator\b[^}]*\}\s*=\s*req\.body/s)
+    expect(source).not.toMatch(untrustedOperatorDestructuring)
     expect(source).not.toMatch(/req\.(?:get|header)\(\s*['"`][^'"`]*(?:operator|actor|created-by|updated-by|approved-by)/i)
     expect(source).not.toMatch(/(?:operator|actor)[^\n;=]*=([^\n;]*)(?:\|\||\?\?)[^\n;]*['"]system['"]/i)
 

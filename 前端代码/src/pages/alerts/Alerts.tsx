@@ -1,10 +1,8 @@
-import { Clock, RefreshCw } from 'lucide-react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useAlertsPage } from './hooks/useAlertsPage'
 import { AlertTable } from './components/AlertTable'
 import { AlertHandleModal } from './components/AlertHandleModal'
-import { AlertConsumptionHandleModal } from './components/AlertConsumptionHandleModal'
 import { AlertDetailModal } from './components/AlertDetailModal'
-import { AlertConsumptionDetailModal } from './components/AlertConsumptionDetailModal'
 
 export default function Alerts() {
   const page = useAlertsPage()
@@ -18,42 +16,52 @@ export default function Alerts() {
             预警中心
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            查看和处理所有库存预警信息
+            查看已记录预警，并按需明确发起一次实时生成
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-150 h-10">
-            <Clock className="w-4 h-4" />
-            查看历史
-          </button>
           <button
             onClick={page.handleGenerate}
-            disabled={page.loading}
+            disabled={page.generating}
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors duration-150 h-10 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
           >
-            <RefreshCw className={`w-4 h-4 ${page.loading ? 'animate-spin' : ''}`} />
-            刷新预警
+            <RefreshCw className={`w-4 h-4 ${page.generating ? 'animate-spin' : ''}`} />
+            {page.generating ? '生成中...' : '手动生成预警'}
           </button>
+        </div>
+      </div>
+
+      <div role="status" className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <AlertTriangle aria-hidden="true" className="w-5 h-5 shrink-0 mt-0.5" />
+        <div>
+          <p className="font-medium">自动生成与消息推送未连接</p>
+          <p className="mt-1 text-amber-800">本页只显示后端已记录的预警；如需刷新风险记录，请使用“手动生成预警”。</p>
+          {page.generationEvidence?.status === 'connected' && (
+            <p className="mt-2 font-medium">上次手动生成证据：新增 {page.generationEvidence.generatedCount} 条；{new Date(page.generationEvidence.generatedAt).toLocaleString('zh-CN')}</p>
+          )}
+          {page.generationEvidence?.status === 'unknown' && (
+            <p className="mt-2 font-medium">上次手动生成请求已完成，但服务未返回生成条数。</p>
+          )}
         </div>
       </div>
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow-sm p-5 border-l-4 border-red-500">
-          <div className="text-2xl font-bold text-red-600">{page.stats.pending}</div>
-          <div className="mt-1 text-sm text-gray-500">待处理</div>
+          <div className="text-2xl font-bold text-red-600">{page.error ? '—' : page.stats.pending}</div>
+          <div className="mt-1 text-sm text-gray-500">本页待处理</div>
         </div>
         <div className="bg-white rounded-lg shadow-sm p-5 border-l-4 border-green-500">
-          <div className="text-2xl font-bold text-green-600">{page.stats.processed}</div>
-          <div className="mt-1 text-sm text-gray-500">已处理</div>
+          <div className="text-2xl font-bold text-green-600">{page.error ? '—' : page.stats.processed}</div>
+          <div className="mt-1 text-sm text-gray-500">本页已处理</div>
         </div>
         <div className="bg-white rounded-lg shadow-sm p-5 border-l-4 border-yellow-500">
-          <div className="text-2xl font-bold text-yellow-600">{page.stats.today}</div>
-          <div className="mt-1 text-sm text-gray-500">今日预警</div>
+          <div className="text-2xl font-bold text-yellow-600">{page.error ? '—' : page.stats.today}</div>
+          <div className="mt-1 text-sm text-gray-500">本页今日新增</div>
         </div>
         <div className="bg-white rounded-lg shadow-sm p-5 border-l-4 border-blue-500">
-          <div className="text-2xl font-bold text-blue-600">{page.stats.total}</div>
-          <div className="mt-1 text-sm text-gray-500">本月预警</div>
+          <div className="text-2xl font-bold text-blue-600">{page.error ? '—' : page.stats.total}</div>
+          <div className="mt-1 text-sm text-gray-500">符合条件记录</div>
         </div>
       </div>
 
@@ -61,6 +69,8 @@ export default function Alerts() {
       <AlertTable
         data={page.data}
         loading={page.loading}
+        error={page.error}
+        generating={page.generating}
         total={page.total}
         page={page.page}
         pageSize={page.pageSize}
@@ -78,10 +88,10 @@ export default function Alerts() {
         onOpenModal={page.openModal}
         onIgnore={page.handleIgnore}
         onGenerate={page.handleGenerate}
+        onRetry={page.refresh}
         hasActiveFilters={page.hasActiveFilters}
         getAlertTypeInfo={page.getAlertTypeInfo}
         getStatusInfo={page.getStatusInfo}
-        isConsumption={page.isConsumption}
         formatDate={page.formatDate}
       />
 
@@ -90,17 +100,9 @@ export default function Alerts() {
         open={page.modal.type === 'handle'}
         alert={page.modal.alert}
         form={page.handleForm}
+        error={page.handleError}
         onClose={page.closeModal}
-        onChange={page.setHandleForm}
-        onConfirm={page.submitHandle}
-      />
-
-      <AlertConsumptionHandleModal
-        open={page.modal.type === 'consumption-handle'}
-        alert={page.modal.alert}
-        form={page.handleForm}
-        onClose={page.closeModal}
-        onChange={page.setHandleForm}
+        onChange={form => { page.setHandleForm(form); page.setHandleError('') }}
         onConfirm={page.submitHandle}
       />
 
@@ -114,14 +116,6 @@ export default function Alerts() {
         formatDate={page.formatDate}
       />
 
-      <AlertConsumptionDetailModal
-        open={page.modal.type === 'consumption-detail'}
-        alert={page.modal.alert}
-        onClose={page.closeModal}
-        onHandle={() => {
-          if (page.modal.alert) page.openModal('consumption-handle', page.modal.alert)
-        }}
-      />
     </div>
   )
 }

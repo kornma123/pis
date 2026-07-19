@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type RequestHandler } from 'express'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import {
@@ -8,16 +8,27 @@ import {
   buildBomChangeImpact,
 } from '../utils/bom-version.js'
 import { runCostRecalculation } from '../utils/cost-runs.js'
-import { requireAnyRole } from '../middleware/permissions.js'
+import { requireAnyRole, requirePermission } from '../middleware/permissions.js'
 import { assertNotSelfReview } from '../middleware/authz-combinators.js'
 import { parseFiniteNonNegativeNumber } from '../utils/numeric-input.js'
 import { canonicalCaseNo } from '../utils/classifier.js' // 病理号落库归一，与 lis-cases /import 及 case_revenue 同一 canonical（防全角号匹配漏）
 
 const router = Router()
+const requireWrite = requirePermission('reconciliation', 'W')
 // 审批/驳回 BOM 修正提案限成本核准角色（admin/finance/lab_director）；propose 由挂载层 reconciliation R + 技术员 W 放行
 const requireReconcileApprove = requireAnyRole('admin', 'finance', 'lab_director')
 // 单次病例导入行数上限（防同步逐行 INSERT 阻塞事件循环的 DoS）。与 lis-cases /import 一致。
 const MAX_LIS_IMPORT_ROWS = 1000
+// 保留既有超限请求 400 合同；合法写及其他 payload 随后仍必须通过 reconciliation W。
+// 生产 app 挂载层已先认证，此顺序只避免裸挂 router 的行数上限单测被 401 遮蔽。
+const requireCaseImportWrite: RequestHandler = (req, res, next) => {
+  const items = (req.body as { items?: unknown } | undefined)?.items
+  if (Array.isArray(items) && items.length > MAX_LIS_IMPORT_ROWS) {
+    error(res, `单次导入最多支持 ${MAX_LIS_IMPORT_ROWS} 条，请分批导入`, 'INVALID_PARAMETER', 400)
+    return
+  }
+  requireWrite(req, res, next)
+}
 
 /**
  * GET /api/v1/reconciliation/summary
@@ -338,7 +349,7 @@ router.get('/cases', (req, res) => {
  * POST /api/v1/reconciliation/cases/import
  * 批量导入LIS病例数据
  */
-router.post('/cases/import', (req, res) => {
+router.post('/cases/import', requireCaseImportWrite, (req, res) => {
   try {
     const db = getDatabase()
     const { items } = req.body as { items: any[] }
@@ -387,7 +398,7 @@ router.post('/cases/import', (req, res) => {
  * PUT /api/v1/reconciliation/cases/:id
  * 修改病例信息（关联项目等）
  */
-router.put('/cases/:id', (req, res) => {
+router.put('/cases/:id', requireWrite, (req, res) => {
   try {
     const db = getDatabase()
     const { id } = req.params

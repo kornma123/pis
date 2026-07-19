@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { AlertHandleModal } from './AlertHandleModal'
@@ -27,13 +27,14 @@ function makeAlert(overrides: Partial<AlertItem> = {}): AlertItem {
 }
 
 function renderModal(alert: AlertItem) {
-  return render(
+  const onClose = vi.fn()
+  const view = render(
     <MemoryRouter initialEntries={['/alerts']}>
       <AlertHandleModal
         open
         alert={alert}
         form={{ opinion: '', result: 'purchased' }}
-        onClose={vi.fn()}
+        onClose={onClose}
         onChange={vi.fn()}
         onConfirm={vi.fn()}
       />
@@ -42,9 +43,14 @@ function renderModal(alert: AlertItem) {
       </Routes>
     </MemoryRouter>
   )
+  return { ...view, onClose }
 }
 
 describe('AlertHandleModal — P1-02 过期预警→报废深链', () => {
+  beforeEach(() => {
+    localStorage.setItem('user', JSON.stringify({ capabilities: { scraps: 'W' } }))
+  })
+
   it('过期预警显示「去报废」按钮', () => {
     renderModal(makeAlert())
     expect(screen.getByRole('button', { name: /去报废/ })).toBeInTheDocument()
@@ -66,6 +72,12 @@ describe('AlertHandleModal — P1-02 过期预警→报废深链', () => {
     expect(screen.queryByRole('button', { name: /去报废/ })).toBeNull()
   })
 
+  it('只有 scraps:W 才显示报废入口', () => {
+    localStorage.setItem('user', JSON.stringify({ capabilities: { scraps: 'R' } }))
+    renderModal(makeAlert())
+    expect(screen.queryByRole('button', { name: /去报废/ })).toBeNull()
+  })
+
   it('无批次号时仍带 materialId 与 reason，但不带 batchId', () => {
     renderModal(makeAlert({ batchNo: undefined }))
     fireEvent.click(screen.getByRole('button', { name: /去报废/ }))
@@ -74,5 +86,13 @@ describe('AlertHandleModal — P1-02 过期预警→报废深链', () => {
     expect(params.get('materialId')).toBe('mat-1')
     expect(params.get('reason')).toBe('expired')
     expect(params.has('batchId')).toBe(false)
+  })
+
+  it('提供命名对话框、初始焦点与 Escape 关闭键盘路径', () => {
+    const { onClose } = renderModal(makeAlert())
+    expect(screen.getByRole('dialog', { name: '处理或忽略预警' })).toBeInTheDocument()
+    expect(screen.getByLabelText('处理意见 *')).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

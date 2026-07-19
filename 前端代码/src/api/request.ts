@@ -4,6 +4,174 @@ import { toast } from 'sonner'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 
+const STABLE_ERROR_CODE = /^[A-Z][A-Z0-9_:-]{0,63}$/
+const VALIDATION_CODE = /^[A-Za-z][A-Za-z0-9_:-]{0,63}$/
+const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_.\[\]-]{0,127}$/
+const FIELD_SEGMENT = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/
+
+export interface SafeValidationIssue {
+  field?: string
+  code?: string
+  path?: Array<string | number>
+}
+
+interface SafeErrorBody {
+  code?: string
+  message: string
+  validation?: SafeValidationIssue[]
+}
+
+interface SafeErrorResponse {
+  status: number
+  data: {
+    success: false
+    error: SafeErrorBody
+  }
+}
+
+export class ApiRequestError extends Error {
+  readonly status?: number
+  readonly code?: string
+  readonly validation?: SafeValidationIssue[]
+  readonly response?: SafeErrorResponse
+
+  constructor(message: string, status?: number, code?: string, validation?: SafeValidationIssue[]) {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.status = status
+    this.code = code
+    this.validation = validation
+
+    if (status !== undefined) {
+      const error: SafeErrorBody = { message }
+      if (code) error.code = code
+      if (validation) error.validation = validation
+      this.response = { status, data: { success: false, error } }
+    }
+
+    // Do not carry a raw server stack or a local absolute path into downstream logs.
+    this.stack = undefined
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readHttpStatus(value: unknown): number | undefined {
+  return Number.isInteger(value) && Number(value) >= 100 && Number(value) <= 599
+    ? Number(value)
+    : undefined
+}
+
+function readStableCode(value: unknown): string | undefined {
+  return typeof value === 'string' && STABLE_ERROR_CODE.test(value) ? value : undefined
+}
+
+function readValidationCode(value: unknown): string | undefined {
+  return typeof value === 'string' && VALIDATION_CODE.test(value) ? value : undefined
+}
+
+function readFieldName(value: unknown): string | undefined {
+  return typeof value === 'string' && FIELD_NAME.test(value) ? value : undefined
+}
+
+function readFieldPath(value: unknown): Array<string | number> | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 16) return undefined
+  const path: Array<string | number> = []
+  for (const segment of value) {
+    if (Number.isInteger(segment) && Number(segment) >= 0) {
+      path.push(Number(segment))
+    } else if (typeof segment === 'string' && FIELD_SEGMENT.test(segment)) {
+      path.push(segment)
+    } else {
+      return undefined
+    }
+  }
+  return path
+}
+
+function sanitizeValidationIssue(value: unknown, fallbackField?: string): SafeValidationIssue | undefined {
+  if (typeof value === 'string') {
+    const code = readValidationCode(value)
+    return code ? { ...(fallbackField ? { field: fallbackField } : {}), code } : undefined
+  }
+  if (!isRecord(value)) return undefined
+
+  const field = readFieldName(value.field) || fallbackField
+  const code = readValidationCode(value.code)
+  const path = readFieldPath(value.path)
+  if (!field && !code && !path) return undefined
+  return {
+    ...(field ? { field } : {}),
+    ...(code ? { code } : {}),
+    ...(path ? { path } : {}),
+  }
+}
+
+function sanitizeValidationSource(value: unknown): SafeValidationIssue[] {
+  if (Array.isArray(value)) {
+    return value.slice(0, 50).flatMap((issue) => {
+      const safeIssue = sanitizeValidationIssue(issue)
+      return safeIssue ? [safeIssue] : []
+    })
+  }
+  if (!isRecord(value)) return []
+
+  return Object.entries(value).slice(0, 50).flatMap(([field, issue]) => {
+    const safeField = readFieldName(field)
+    if (!safeField) return []
+    const values = Array.isArray(issue) ? issue.slice(0, 10) : [issue]
+    return values.flatMap((item) => {
+      const safeIssue = sanitizeValidationIssue(item, safeField)
+      return safeIssue ? [safeIssue] : []
+    })
+  })
+}
+
+function readValidation(error: Record<string, unknown> | undefined): SafeValidationIssue[] | undefined {
+  if (!error) return undefined
+  const issues = [error.validation, error.fieldErrors, error.errors]
+    .flatMap(sanitizeValidationSource)
+    .slice(0, 50)
+  return issues.length > 0 ? issues : undefined
+}
+
+function safeUserMessage(status: number | undefined, code: string | undefined): string {
+  if (code === 'ACCOUNT_DISABLED') return '账号已停用，请联系管理员'
+  if (code === 'AUTH_STATE_UNAVAILABLE') return '登录状态暂时无法确认，请稍后重试'
+  if (code === 'NEEDS_CONFIRM') return '本次操作需要确认，请核对后继续'
+  if (status === undefined) return '网络连接失败，请检查网络后重试'
+  if (status === 401) return '登录状态已失效，请重新登录'
+  if (status === 403) return '没有权限执行此操作，如需帮助请联系管理员'
+  if (status === 404) return '请求的内容不存在或已不可用'
+  if (status === 409) return '数据状态已变化，请刷新后重试'
+  if (status === 429) return '请求过于频繁，请稍后再试'
+  if (status === 400 || status === 422) return '提交内容未通过校验，请检查后重试'
+  if (status >= 500) return '服务暂时不可用，请稍后重试'
+  return '操作未完成，请稍后重试'
+}
+
+function apiErrorFromEnvelope(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined
+  return isRecord(value.error) ? value.error : undefined
+}
+
+function createSafeError(status: number | undefined, rawApiError?: Record<string, unknown>): ApiRequestError {
+  const code = readStableCode(rawApiError?.code) || (status === undefined ? 'NETWORK_ERROR' : undefined)
+  return new ApiRequestError(safeUserMessage(status, code), status, code, readValidation(rawApiError))
+}
+
+function sanitizeAxiosError(error: AxiosError): ApiRequestError {
+  const status = readHttpStatus(error.response?.status)
+  return createSafeError(status, apiErrorFromEnvelope(error.response?.data))
+}
+
+function rejectWithToast(error: ApiRequestError): Promise<never> {
+  toast.error(error.message)
+  return Promise.reject(error)
+}
+
 /**
  * 响应拦截器（见下方）会在成功时返回 `response.data.data`，即**已解包**的业务负载。
  * 因此每个请求方法的运行时返回值是 `T` 本身，而不是 axios 默认的 `AxiosResponse<T>`。
@@ -98,11 +266,12 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response) => {
     const { data } = response
-    if (!data.success) {
-      toast.error(data.error?.message || '操作失败')
-      return Promise.reject(data.error)
+    if (!isRecord(data) || data.success !== true) {
+      return rejectWithToast(
+        createSafeError(readHttpStatus(response.status), apiErrorFromEnvelope(data))
+      )
     }
-    return data.data
+    return data.data as any
   },
   async (error: AxiosError) => {
     const status = error.response?.status
@@ -116,8 +285,10 @@ request.interceptors.response.use(
       const hasRefreshToken = !!localStorage.getItem('refreshToken')
 
       if (isRefreshCall || !hasRefreshToken) {
+        const safeError = sanitizeAxiosError(error)
+        toast.error(safeError.message)
         logoutAndRedirect()
-        return Promise.reject(error)
+        return Promise.reject(safeError)
       }
 
       originalConfig._retried = true
@@ -127,7 +298,7 @@ request.interceptors.response.use(
         return new Promise((resolve, reject) => {
           pendingQueue.push((token) => {
             if (!token) {
-              reject(error)
+              reject(sanitizeAxiosError(error))
               return
             }
             originalConfig.headers = {
@@ -144,8 +315,10 @@ request.interceptors.response.use(
         const newToken = await refreshAccessToken()
         if (!newToken) {
           flushQueue(null)
+          const safeError = sanitizeAxiosError(error)
+          toast.error(safeError.message)
           logoutAndRedirect()
-          return Promise.reject(error)
+          return Promise.reject(safeError)
         }
         flushQueue(newToken)
         originalConfig.headers = {
@@ -158,11 +331,7 @@ request.interceptors.response.use(
       }
     }
 
-    const msg = error.response?.data
-      ? (error.response.data as any)?.error?.message
-      : undefined
-    toast.error(msg || error.message || '网络错误')
-    return Promise.reject(error)
+    return rejectWithToast(sanitizeAxiosError(error))
   }
 )
 

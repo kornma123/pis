@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { usePagination } from '@/hooks/usePagination'
 import { useUrlParams } from '@/hooks/useUrlParams'
 import request from '@/api/request'
@@ -12,7 +12,7 @@ export interface AlertItem extends Alert {
   projectName?: string
 }
 
-export type AlertTypeFilter = 'all' | 'low-stock' | 'expiry' | 'stagnant'
+export type AlertTypeFilter = 'all' | 'low-stock' | 'expiry'
 export type AlertStatusFilter = 'all' | 'pending' | 'processed' | 'ignored'
 
 export interface FilterState {
@@ -23,14 +23,17 @@ export interface FilterState {
 }
 
 export interface ModalState {
-  type: 'handle' | 'consumption-handle' | 'consumption-detail' | 'detail' | null
+  type: 'handle' | 'detail' | null
   alert: AlertItem | null
 }
+
+export type GenerationEvidence =
+  | { status: 'connected'; generatedCount: number; generatedAt: string }
+  | { status: 'unknown'; generatedAt: string }
 
 export const ALERT_TYPE_MAP: Record<string, { label: string; bg: string; text: string }> = {
   'low-stock': { label: '库存不足', bg: 'bg-red-50', text: 'text-red-600' },
   'expiry': { label: '即将过期', bg: 'bg-yellow-50', text: 'text-yellow-600' },
-  'stagnant': { label: '消耗异常', bg: 'bg-green-50', text: 'text-green-600' },
 }
 
 export const STATUS_MAP: Record<string, { label: string; bg: string; text: string }> = {
@@ -52,28 +55,41 @@ export const RESULT_LABEL_MAP: Record<string, string> = {
 }
 
 export function useAlertsPage() {
-  const url = useUrlParams()
+  const { get, getNumber, setMultiple } = useUrlParams()
 
-  const initialPage = Math.max(1, url.getNumber('page', 1))
-  const initialPageSize = [10, 20, 50, 100].includes(url.getNumber('pageSize', 10))
-    ? url.getNumber('pageSize', 10)
+  const initialPage = Math.max(1, getNumber('page', 1))
+  const initialPageSize = [10, 20, 50, 100].includes(getNumber('pageSize', 10))
+    ? getNumber('pageSize', 10)
     : 10
+  const typeParam = get('type', 'all')
+  const initialType: AlertTypeFilter = ['all', 'low-stock', 'expiry'].includes(typeParam)
+    ? typeParam as AlertTypeFilter
+    : 'all'
+  const statusParam = get('status', 'all')
+  const initialStatus: AlertStatusFilter = ['all', 'pending', 'processed', 'ignored'].includes(statusParam)
+    ? statusParam as AlertStatusFilter
+    : 'all'
+  const quickFilterParam = get('quickFilter', 'all')
+  const initialQuickFilter: AlertStatusFilter = ['all', 'pending', 'processed', 'ignored'].includes(quickFilterParam)
+    ? quickFilterParam as AlertStatusFilter
+    : 'all'
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [modal, setModal] = useState<ModalState>({ type: null, alert: null })
   const [filter, setFilter] = useState<FilterState>({
-    keyword: url.get('keyword', ''),
-    type: (url.get('type', 'all') as AlertTypeFilter) || 'all',
-    status: (url.get('status', 'all') as AlertStatusFilter) || 'all',
-    dateRange: [url.get('startDate', ''), url.get('endDate', '')] as [string, string],
+    keyword: get('keyword', ''),
+    type: initialType,
+    status: initialStatus,
+    dateRange: [get('startDate', ''), get('endDate', '')] as [string, string],
   })
-  const [quickFilter, setQuickFilter] = useState<AlertStatusFilter>(
-    (url.get('quickFilter', 'all') as AlertStatusFilter) || 'all'
-  )
+  const [quickFilter, setQuickFilter] = useState<AlertStatusFilter>(initialQuickFilter)
+  const [generating, setGenerating] = useState(false)
+  const [generationEvidence, setGenerationEvidence] = useState<GenerationEvidence | null>(null)
   const [handleForm, setHandleForm] = useState({
     opinion: '',
     result: 'purchased',
   })
+  const [handleError, setHandleError] = useState('')
 
   const effectiveStatus = quickFilter !== 'all'
     ? quickFilter
@@ -123,7 +139,7 @@ export function useAlertsPage() {
 
   // URL 同步
   useEffect(() => {
-    url.setMultiple({
+    setMultiple({
       page: page > 1 ? page : null,
       pageSize: pageSize !== 10 ? pageSize : null,
       keyword: filter.keyword || null,
@@ -133,7 +149,7 @@ export function useAlertsPage() {
       startDate: filter.dateRange[0] || null,
       endDate: filter.dateRange[1] || null,
     })
-  }, [page, pageSize, filter.keyword, filter.type, filter.status, filter.dateRange, quickFilter])
+  }, [page, pageSize, filter.keyword, filter.type, filter.status, filter.dateRange[0], filter.dateRange[1], quickFilter, setMultiple])
 
   // 统计数据
   const stats = useMemo(() => {
@@ -151,13 +167,15 @@ export function useAlertsPage() {
   // 清空选择当筛选/分页变化时
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [page, pageSize, filter.keyword, filter.type, filter.status, filter.dateRange, quickFilter])
+  }, [page, pageSize, filter.keyword, filter.type, filter.status, filter.dateRange[0], filter.dateRange[1], quickFilter])
 
   const handleSelect = (id: string) => {
-    const next = new Set(selectedIds)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    setSelectedIds(next)
+    setSelectedIds(current => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   const handleSelectAll = () => {
@@ -182,8 +200,11 @@ export function useAlertsPage() {
       toast.success(action === 'ignored' ? '已忽略' : '处理成功')
       refresh()
       setModal({ type: null, alert: null })
+      setHandleError('')
+      return true
     } catch {
       /* 错误由全局响应拦截器统一提示后端真因，不再重复弹通用文案 */
+      return false
     }
   }
 
@@ -192,13 +213,15 @@ export function useAlertsPage() {
     const alert = modal.alert
     if (!alert) return
     if (!handleForm.opinion.trim()) {
+      setHandleError('请填写处理意见后再确认。')
       toast.error('请填写处理意见')
       return
     }
     const action = handleForm.result === 'ignored' ? 'ignored' : 'processed'
     const resultLabel = RESULT_LABEL_MAP[handleForm.result] || handleForm.result
     const remark = `${resultLabel}：${handleForm.opinion.trim()}`
-    await handleProcess(alert.id, { action, remark })
+    const completed = await handleProcess(alert.id, { action, remark })
+    if (!completed) setHandleError('处理未完成，请核对预警状态后重试。')
   }
 
   const handleIgnore = async (id: string) => {
@@ -213,20 +236,31 @@ export function useAlertsPage() {
 
   // 生成/刷新预警：调运行时 /generate（按库存与效期规则实时计算），回填生成条数并刷新列表。
   const handleGenerate = async () => {
+    if (generating) return
+    setGenerating(true)
     try {
       const res = (await request.post('/alerts/generate', {})) as { generatedCount?: number } | null
-      const n = res?.generatedCount ?? 0
-      toast.success(n > 0 ? `本次生成 ${n} 条预警` : '暂无新预警')
+      const generatedAt = new Date().toISOString()
+      const generatedCount = res?.generatedCount
+      if (typeof generatedCount === 'number' && Number.isInteger(generatedCount) && generatedCount >= 0) {
+        setGenerationEvidence({ status: 'connected', generatedCount, generatedAt })
+        toast.success(`生成完成：新增 ${generatedCount} 条记录`)
+      } else {
+        setGenerationEvidence({ status: 'unknown', generatedAt })
+        toast.error('生成请求已完成，但服务未返回生成条数')
+      }
       refresh()
     } catch {
       /* 错误由全局响应拦截器统一提示后端真因 */
+    } finally {
+      setGenerating(false)
     }
   }
 
   const getAlertTypeInfo = (type: string) => {
     return (
       ALERT_TYPE_MAP[type] || {
-        label: type,
+        label: '未识别类型',
         bg: 'bg-gray-50',
         text: 'text-gray-600',
       }
@@ -236,7 +270,7 @@ export function useAlertsPage() {
   const getStatusInfo = (status: string) => {
     return (
       STATUS_MAP[status] || {
-        label: status,
+        label: '未识别状态',
         bg: 'bg-gray-50',
         text: 'text-gray-600',
       }
@@ -246,11 +280,10 @@ export function useAlertsPage() {
   const openModal = (type: ModalState['type'], alert: AlertItem) => {
     setModal({ type, alert })
     setHandleForm({ opinion: '', result: 'purchased' })
+    setHandleError('')
   }
 
   const closeModal = () => setModal({ type: null, alert: null })
-
-  const isConsumption = (type: string) => type === 'stagnant'
 
   const formatDate = (dateStr: string) => {
     try {
@@ -268,15 +301,17 @@ export function useAlertsPage() {
 
   const handleBatchProcess = async () => {
     const ids = Array.from(selectedIds)
-    for (const id of ids) {
-      await handleProcess(id, { action: 'processed', remark: '批量处理' })
+    if (ids.length === 0) return
+    try {
+      await Promise.all(ids.map(id => request.post(`/alerts/${id}/handle`, { action: 'processed', remark: '批量处理' })))
+      toast.success(`已处理 ${ids.length} 条预警`)
+      clearSelection()
+      refresh()
+    } catch {
+      /* 任一请求失败时不宣称批量成功，保留选择供用户核对后重试。 */
     }
-    clearSelection()
   }
 
-  // 空态自动生成：首次拉取**成功**完成后，若无筛选且列表为空，自动跑一次 /generate（仅一次，防循环）。
-  // 有筛选返回空 = 正常「无匹配」，不触发生成。
-  // !error 守卫：拉取失败(500/断网)时 usePagination 也会把 total 置 0，不能误当空态去生成（否则在报错页多发一次请求 + 矛盾提示）。
   const hasActiveFilters = !!(
     filter.keyword ||
     filter.type !== 'all' ||
@@ -285,19 +320,6 @@ export function useAlertsPage() {
     filter.dateRange[0] ||
     filter.dateRange[1]
   )
-  const autoGenTriedRef = useRef(false)
-  const prevLoadingRef = useRef(loading)
-  useEffect(() => {
-    const justFinished = prevLoadingRef.current && !loading
-    prevLoadingRef.current = loading
-    if (justFinished && !autoGenTriedRef.current && !hasActiveFilters && total === 0 && !error) {
-      autoGenTriedRef.current = true
-      handleGenerate()
-    }
-    // handleGenerate 每次渲染重建但由 ref 保证只触发一次，故不入依赖数组（与本文件其它 effect 一致风格）
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, total, hasActiveFilters, error])
-
   return {
     filter,
     setFilter,
@@ -309,8 +331,13 @@ export function useAlertsPage() {
     setModal,
     handleForm,
     setHandleForm,
+    handleError,
+    setHandleError,
     data,
     loading,
+    error: error ? '预警服务暂时不可用，请重新加载。' : null,
+    generating,
+    generationEvidence,
     page,
     pageSize,
     total,
@@ -330,7 +357,6 @@ export function useAlertsPage() {
     getStatusInfo,
     openModal,
     closeModal,
-    isConsumption,
     formatDate,
     handleBatchProcess,
   }

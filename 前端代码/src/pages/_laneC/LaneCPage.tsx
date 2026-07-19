@@ -50,12 +50,25 @@ export default function LaneCPage({ config }: { config: LaneCConfig }) {
         {s.canWrite && (
           <button
             onClick={s.openCreate}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 text-white rounded-md text-sm font-medium transition-colors shadow-sm ${config.createTone === 'red' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}`}
+            disabled={!s.canCreate}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-white rounded-md text-sm font-medium transition-colors shadow-sm disabled:cursor-not-allowed disabled:bg-gray-400 ${config.createTone === 'red' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}`}
           >
             <Plus className="w-[18px] h-[18px]" /> {config.createLabel}
           </button>
         )}
       </div>
+
+      {s.canWrite && s.createBlockedReason && (
+        <div role="alert" aria-label={`${config.noun}登记状态`} className="flex flex-wrap items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          <span className="flex-1">{s.createBlockedReason}</span>
+          {(s.materialsState.status === 'error' || s.materialsState.status === 'stale') && (
+            <button onClick={s.retryMaterials} className="rounded border border-amber-300 bg-white px-2.5 py-1 text-xs hover:bg-amber-100">重试物料选项</button>
+          )}
+          {config.needsLocations && (s.locationsState.status === 'error' || s.locationsState.status === 'stale') && (
+            <button onClick={s.retryLocations} className="rounded border border-amber-300 bg-white px-2.5 py-1 text-xs hover:bg-amber-100">重试库位选项</button>
+          )}
+        </div>
+      )}
 
       {/* 据实语义说明条 */}
       <div className={`flex items-start gap-2 rounded-lg px-4 py-2.5 text-xs leading-relaxed ${noteTone[config.effect.tone]}`}>
@@ -64,7 +77,7 @@ export default function LaneCPage({ config }: { config: LaneCConfig }) {
       </div>
 
       {/* 统计卡 */}
-      <LaneCStats noun={config.noun} stats={s.stats} />
+      <LaneCStats noun={config.noun} state={s.statsState} onRetry={s.retryStats} />
 
       {/* 快速筛选 */}
       <LaneCQuickFilters activeKey={s.activeQuickFilter} onChange={s.setActiveQuickFilter} />
@@ -73,7 +86,8 @@ export default function LaneCPage({ config }: { config: LaneCConfig }) {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <LaneCFilterBar
           config={config}
-          locations={s.locations}
+          locationsState={s.locationsState}
+          onRetryLocations={s.retryLocations}
           searchKeyword={s.searchKeyword}
           onSearchChange={s.setSearchKeyword}
           filterReason={s.filterReason}
@@ -90,11 +104,9 @@ export default function LaneCPage({ config }: { config: LaneCConfig }) {
         />
         <LaneCTable
           config={config}
-          data={s.data}
-          loading={s.loading}
-          error={s.error}
+          state={s.listState}
           materials={s.materials}
-          canWrite={s.canWrite}
+          canWrite={s.canMutateList}
           isFilterActive={s.isFilterActive}
           selectedIds={s.selectedIds}
           isAllSelected={s.isAllSelected}
@@ -112,7 +124,6 @@ export default function LaneCPage({ config }: { config: LaneCConfig }) {
           onResetFilters={s.handleResetFilters}
           page={s.page}
           pageSize={s.pageSize}
-          total={s.total}
           onPageChange={s.setPage}
           onPageSizeChange={s.setPageSize}
         />
@@ -126,6 +137,7 @@ export default function LaneCPage({ config }: { config: LaneCConfig }) {
         setForm={s.setForm}
         materials={s.materials}
         locations={s.locations}
+        blockedReason={s.createBlockedReason}
         submitting={s.submitting}
         onClose={s.closeModal}
         onSubmit={s.handleCreate}

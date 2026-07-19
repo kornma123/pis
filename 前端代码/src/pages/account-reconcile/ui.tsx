@@ -3,19 +3,23 @@ import type { HmStatus, MatchStatus, SupplementStatus } from '@/types/account-re
 
 /** 大额/看板用万元（¥82.4万元）。 */
 export function wan(n: number | null | undefined): string {
-  const v = Number(n) || 0
+  const v = Number(n)
+  if (n === null || n === undefined || !Number.isFinite(v)) return '不可计算'
   return `${(v / 10000).toFixed(2)}万元`
 }
 
 /** 逐单/逐差异小额用元（¥1,020）。 */
 export function yuan(n: number | null | undefined): string {
-  const v = Number(n) || 0
+  const v = Number(n)
+  if (n === null || n === undefined || !Number.isFinite(v)) return '不可计算'
   return `¥${v.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`
 }
 
 /** 匹配率百分比（96%）。 */
 export function pct(n: number | null | undefined): string {
-  return `${Math.round((Number(n) || 0) * 100)}%`
+  const v = Number(n)
+  if (n === null || n === undefined || !Number.isFinite(v)) return '不可计算'
+  return `${Math.round(v * 100)}%`
 }
 
 /** ISO / 'YYYY-MM-DD ...' → 中文日期「6月28日」。 */

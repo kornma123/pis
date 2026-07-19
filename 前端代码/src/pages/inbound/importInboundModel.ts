@@ -46,6 +46,7 @@ export interface InboundImportSummary {
   total: number
   succeeded: number
   failed: number
+  validationRejected: number
   pending: number
 }
 
@@ -330,10 +331,13 @@ export async function executeInboundImport(
 export function summarizeInboundImport(rows: InboundImportRow[]): InboundImportSummary {
   const succeeded = rows.filter(row => row.status === 'succeeded').length
   const failed = rows.filter(row => row.status === 'failed').length
+  const validationRejected = rows.filter(row => row.status === 'validation_error').length
+  const pending = rows.filter(row => row.status === 'ready').length
   return {
     total: rows.length,
     succeeded,
     failed,
-    pending: rows.length - succeeded - failed,
+    validationRejected,
+    pending,
   }
 }

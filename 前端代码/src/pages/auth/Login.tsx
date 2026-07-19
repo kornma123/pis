@@ -1,8 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LogIn, Lock, User, Eye, EyeOff } from 'lucide-react'
 import request from '@/api/request'
 import { toast } from 'sonner'
+
+function getSafeLoginError(error: unknown): string {
+  const status = typeof error === 'object' && error !== null
+    ? (error as { response?: { status?: number } }).response?.status
+    : undefined
+
+  if (status === 400) return '请检查用户名和密码。'
+  if (status === 401) return '用户名或密码错误，请重新输入。'
+  if (status === 429) return '登录尝试次数过多，请稍后重试。'
+  if (typeof status === 'number' && status >= 500) return '登录服务暂时不可用，请稍后重试。'
+  if (status === undefined) return '暂时无法连接登录服务，请稍后重试。'
+  return '登录失败，请稍后重试。'
+}
 
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -11,6 +24,9 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{ username?: string; password?: string }>({})
+  const [formError, setFormError] = useState('')
+  const [failedOnce, setFailedOnce] = useState(false)
+  const errorSummaryRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
 
   // 已登录用户自动重定向到首页
@@ -21,6 +37,10 @@ export default function Login() {
     }
   }, [navigate])
 
+  useEffect(() => {
+    if (formError) errorSummaryRef.current?.focus()
+  }, [formError])
+
   const validate = () => {
     const newErrors: { username?: string; password?: string } = {}
     if (!username.trim()) {
@@ -30,7 +50,9 @@ export default function Login() {
       newErrors.password = '请输入密码'
     }
     setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    const valid = Object.keys(newErrors).length === 0
+    setFormError(valid ? '' : '请修正以下问题后重新登录。')
+    return valid
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,6 +60,7 @@ export default function Login() {
     if (!validate()) return
 
     setLoading(true)
+    setFormError('')
     try {
       const res: any = await request.post('/auth/login', { username, password })
       if (res.token) {
@@ -54,8 +77,10 @@ export default function Login() {
         toast.success('登录成功')
         navigate('/')
       }
-    } catch (e) {
-      toast.error('登录失败，请检查用户名和密码')
+    } catch (error) {
+      setPassword('')
+      setFailedOnce(true)
+      setFormError(getSafeLoginError(error))
     } finally {
       setLoading(false)
     }
@@ -89,9 +114,9 @@ export default function Login() {
           <div className="flex items-center gap-6 text-white/60 text-sm">
             <span>v2.2</span>
             <span className="w-1 h-1 rounded-full bg-white/40" />
-            <span>Medical Grade</span>
+            <span>仅限授权用户</span>
             <span className="w-1 h-1 rounded-full bg-white/40" />
-            <span>ISO 15189</span>
+            <span>内部管理系统</span>
           </div>
         </div>
 
@@ -124,20 +149,36 @@ export default function Login() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              {formError && (
+                <div
+                  ref={errorSummaryRef}
+                  role="alert"
+                  tabIndex={-1}
+                  className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 outline-none focus:ring-2 focus:ring-red-500/30"
+                >
+                  <span className="font-medium">登录未完成：</span>{formError}
+                </div>
+              )}
+
               {/* 用户名 */}
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                <label htmlFor="login-username" className="block text-sm font-medium text-[#374151] mb-1.5">
                   用户名
                 </label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#9ca3af]" />
                   <input
+                    id="login-username"
                     type="text"
                     value={username}
                     onChange={e => {
                       setUsername(e.target.value)
                       if (errors.username) setErrors(prev => ({ ...prev, username: undefined }))
+                      if (formError) setFormError('')
                     }}
+                    autoComplete="username"
+                    aria-invalid={Boolean(errors.username)}
+                    aria-describedby={errors.username ? 'login-username-error' : undefined}
                     placeholder="请输入用户名"
                     className={`w-full h-10 pl-10 pr-4 text-sm rounded-md border transition-all duration-150 ease outline-none
                       ${errors.username
@@ -150,24 +191,29 @@ export default function Login() {
                   />
                 </div>
                 {errors.username && (
-                  <p className="mt-1.5 text-xs text-[#ef4444]">{errors.username}</p>
+                  <p id="login-username-error" className="mt-1.5 text-xs text-[#ef4444]">{errors.username}</p>
                 )}
               </div>
 
               {/* 密码 */}
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                <label htmlFor="login-password" className="block text-sm font-medium text-[#374151] mb-1.5">
                   密码
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-[#9ca3af]" />
                   <input
+                    id="login-password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={e => {
                       setPassword(e.target.value)
                       if (errors.password) setErrors(prev => ({ ...prev, password: undefined }))
+                      if (formError) setFormError('')
                     }}
+                    autoComplete="current-password"
+                    aria-invalid={Boolean(errors.password)}
+                    aria-describedby={errors.password ? 'login-password-error' : undefined}
                     placeholder="请输入密码"
                     className={`w-full h-10 pl-10 pr-10 text-sm rounded-md border transition-all duration-150 ease outline-none
                       ${errors.password
@@ -181,6 +227,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? '隐藏密码' : '显示密码'}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#6b7280] transition-colors duration-150"
                   >
                     {showPassword ? (
@@ -191,11 +238,11 @@ export default function Login() {
                   </button>
                 </div>
                 {errors.password && (
-                  <p className="mt-1.5 text-xs text-[#ef4444]">{errors.password}</p>
+                  <p id="login-password-error" className="mt-1.5 text-xs text-[#ef4444]">{errors.password}</p>
                 )}
               </div>
 
-              {/* 记住密码 */}
+              {/* 记住用户名 */}
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -204,7 +251,7 @@ export default function Login() {
                     onChange={e => setRememberMe(e.target.checked)}
                     className="w-4 h-4 rounded border-[#d1d5db] text-[#3b82f6] focus:ring-[#3b82f6] focus:ring-offset-0 cursor-pointer"
                   />
-                  <span className="text-sm text-[#374151]">记住我</span>
+                  <span className="text-sm text-[#374151]">记住用户名</span>
                 </label>
               </div>
 
@@ -235,17 +282,15 @@ export default function Login() {
                 ) : (
                   <>
                     <LogIn className="w-4 h-4" />
-                    登录
+                    {failedOnce ? '重新登录' : '登录'}
                   </>
                 )}
               </button>
             </form>
 
-            <div className="mt-6 pt-5 border-t border-[#e5e7eb]">
-              <p className="text-xs text-center text-[#9ca3af]">
-                登录即表示您同意系统的使用条款和隐私政策
-              </p>
-            </div>
+            <p className="mt-6 pt-5 border-t border-[#e5e7eb] text-xs text-center text-[#9ca3af]">
+              仅限已授权账户访问
+            </p>
           </div>
         </div>
       </div>

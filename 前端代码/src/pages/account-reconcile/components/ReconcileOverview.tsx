@@ -16,10 +16,11 @@ function DataState({ h }: { h: HospitalMonth }) {
 
 function MatchRate({ h }: { h: HospitalMonth }) {
   if (!h.matchStatus || h.matchStatus === '待对齐') return <span className="text-gray-400">—</span>
+  if (typeof h.matchRate !== 'number' || !Number.isFinite(h.matchRate)) return <span className="text-gray-400">不可计算</span>
   const m = matchStatusMeta(h.matchStatus)
   return (
     <span className={`inline-flex items-baseline gap-1.5 font-semibold tabular-nums ${m.color}`}>
-      {Math.round((h.matchRate || 0) * 100)}%<span className="text-[11px] font-normal text-gray-500">{m.tag}</span>
+      {Math.round(h.matchRate * 100)}%<span className="text-[11px] font-normal text-gray-500">{m.tag}</span>
     </span>
   )
 }
@@ -73,7 +74,9 @@ export function ReconcileOverview({ ctx }: { ctx: Ctx }) {
     () => ctx.list.filter((h) => h.serviceMonth === ctx.loadedMonth && h.status === '复核完成'),
     [ctx.list, ctx.loadedMonth],
   )
-  const closableRevenue = closable.reduce((s, h) => s + (Number(h.confirmedLabRevenue) || 0), 0)
+  const closableRevenue = closable.every((hospital) => typeof hospital.confirmedLabRevenue === 'number' && Number.isFinite(hospital.confirmedLabRevenue))
+    ? closable.reduce((sum, hospital) => sum + Number(hospital.confirmedLabRevenue), 0)
+    : null
   const notReady = ctx.list.some((h) => !h.statementReady || !h.lisReady)
 
   useEffect(() => {
@@ -85,7 +88,7 @@ export function ReconcileOverview({ ctx }: { ctx: Ctx }) {
   }, [closeSnapshot, ctx.loadedMonth, ctx.month, ctx.writeReady])
 
   const openCloseConfirm = () => {
-    if (!ctx.writeReady || !ctx.loadedMonth || !closable.length) return
+    if (!ctx.writeReady || !ctx.loadedMonth || !closable.length || closableRevenue === null) return
     setCloseSnapshot({
       request: { serviceMonth: ctx.loadedMonth, partnerIds: closable.map((h) => h.partnerId) },
       hospitalNames: closable.map((h) => h.partnerName || h.partnerId),
@@ -144,7 +147,7 @@ export function ReconcileOverview({ ctx }: { ctx: Ctx }) {
         {([['待复核', ctx.board?.待复核], ['复核完成', ctx.board?.复核完成], ['已关账', ctx.board?.已关账]] as const).map(([k, v]) => (
           <div key={k} className={`${cardCls} p-4`}>
             <div className="text-xs text-gray-500">{k}</div>
-            <div className="mt-1.5 text-2xl font-bold tabular-nums text-gray-900">{v ?? 0}<span className="ml-1 text-[13px] font-semibold text-gray-500">家</span></div>
+            <div className="mt-1.5 text-2xl font-bold tabular-nums text-gray-900">{v ?? '不可计算'}{v != null && <span className="ml-1 text-[13px] font-semibold text-gray-500">家</span>}</div>
           </div>
         ))}
       </div>
@@ -156,7 +159,7 @@ export function ReconcileOverview({ ctx }: { ctx: Ctx }) {
         </div>
         <button
           className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-3.5 text-[13px] font-semibold text-slate-900 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!ctx.writeReady || !closable.length}
+          disabled={!ctx.writeReady || !closable.length || closableRevenue === null}
           onClick={openCloseConfirm}
         >
           关账本月（{closable.length}家）

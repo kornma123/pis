@@ -1,9 +1,11 @@
 import { Search, Download, RotateCcw } from 'lucide-react'
 import type { LaneCConfig, Location } from '../types'
+import { requestFailureMessage, type RequestTruth } from '../requestTruth'
 
 interface Props {
   config: LaneCConfig
-  locations: Location[]
+  locationsState: RequestTruth<Location[]>
+  onRetryLocations: () => void
   searchKeyword: string
   onSearchChange: (v: string) => void
   filterReason: string
@@ -22,6 +24,11 @@ interface Props {
 const inputCls = 'h-10 px-3 bg-white text-gray-900 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-[3px] focus:ring-blue-500/10 focus:border-blue-500'
 
 export default function LaneCFilterBar(p: Props) {
+  const locations = p.locationsState.status === 'ready' || p.locationsState.status === 'stale'
+    ? p.locationsState.data
+    : []
+  const locationsVerified = p.locationsState.status === 'ready'
+
   return (
     <div className="px-5 py-4 border-b border-gray-200 flex flex-wrap items-center gap-3">
       <div className="relative flex-1 min-w-[200px]">
@@ -43,12 +50,27 @@ export default function LaneCFilterBar(p: Props) {
           ))}
         </select>
       ) : (
-        <select value={p.filterLocation} onChange={e => p.onLocationChange(e.target.value)} className={inputCls}>
-          <option value="">全部目标库位</option>
-          {p.locations.map(l => (
-            <option key={l.id} value={l.id}>{l.name}</option>
-          ))}
-        </select>
+        <div className="flex flex-col gap-1">
+          <select value={p.filterLocation} onChange={e => p.onLocationChange(e.target.value)} disabled={!locationsVerified} className={`${inputCls} disabled:bg-gray-100 disabled:cursor-not-allowed`}>
+            <option value="">
+              {p.locationsState.status === 'loading'
+                ? '库位选项加载中'
+                : p.locationsState.status === 'error' ? '库位选项不可用' : '全部目标库位'}
+            </option>
+            {locations.map(location => (
+              <option key={location.id} value={location.id}>{location.name}</option>
+            ))}
+          </select>
+          {(p.locationsState.status === 'error' || p.locationsState.status === 'stale') && (
+            <div role="alert" aria-label={`${p.config.noun}库位选项状态`} className="flex items-center gap-2 text-xs text-amber-700">
+              <span>
+                {p.locationsState.status === 'stale' && '当前显示上次成功选项。'}
+                {requestFailureMessage(p.locationsState.failure, '库位选项')}
+              </span>
+              <button onClick={p.onRetryLocations} className="underline hover:no-underline">重试</button>
+            </div>
+          )}
+        </div>
       )}
 
       <input type="date" value={p.filterStartDate} onChange={e => p.onStartDateChange(e.target.value)} className={inputCls} />

@@ -1,7 +1,9 @@
 import { scrapApi } from '@/api/inventory'
 import { formatDate } from '@/lib/utils'
+import { toast } from 'sonner'
 import LaneCPage from '../_laneC/LaneCPage'
-import type { LaneCConfig } from '../_laneC/types'
+import type { LaneCConfig, LaneCForm } from '../_laneC/types'
+import { createRecoverablePost } from '../returns/recoverablePost'
 
 const REASONS = [
   { value: 'expired', label: '过期报废' },
@@ -12,6 +14,25 @@ const REASONS = [
 ]
 const REASON_MAP: Record<string, string> = Object.fromEntries(REASONS.map(r => [r.value, r.label]))
 const reasonLabel = (v?: string) => (v ? REASON_MAP[v] || v : '—')
+
+const postScrap = createRecoverablePost<LaneCForm, { materialId: string; quantity: number; reason: string; remark?: string }, { id?: unknown }>(
+  '/scraps',
+  (form) => ({ materialId: form.materialId, quantity: form.quantity, reason: form.reason, remark: form.remark || undefined }),
+  (result) => typeof result?.id === 'string' && result.id.length > 0,
+)
+
+async function createScrap(form: LaneCForm) {
+  try {
+    return await postScrap(form)
+  } catch (error) {
+    const gotFailureResponse = Boolean((error as { response?: unknown } | null)?.response)
+    toast.error(
+      gotFailureResponse ? '报损未创建，服务端已拒绝请求' : '报损结果未知，未取得可验证回执',
+      { description: gotFailureResponse ? '请按服务端提示修正后重新确认。' : '请先核对报损列表；相同内容可安全重试并复用幂等键。' },
+    )
+    throw error
+  }
+}
 
 const config: LaneCConfig = {
   module: 'scraps',
@@ -54,7 +75,7 @@ const config: LaneCConfig = {
   api: {
     getList: (params) => scrapApi.getList(params),
     getStats: () => scrapApi.getStats(),
-    create: (form) => scrapApi.create({ materialId: form.materialId, quantity: form.quantity, reason: form.reason, remark: form.remark || undefined }),
+    create: createScrap,
     remove: (id) => scrapApi.delete(id),
   },
   validateCreate: (form) => {

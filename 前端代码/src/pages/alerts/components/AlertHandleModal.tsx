@@ -1,5 +1,8 @@
-import { X, AlertTriangle, Trash2 } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { AlertTriangle, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { Modal } from '@/components/ui/Modal'
+import { canAccess } from '@/lib/permissions'
 import type { AlertItem } from '../hooks/useAlertsPage'
 import { ALERT_TYPE_MAP } from '../hooks/useAlertsPage'
 
@@ -7,18 +10,26 @@ interface Props {
   open: boolean
   alert: AlertItem | null
   form: { opinion: string; result: string }
+  error?: string
   onClose: () => void
   onChange: (form: { opinion: string; result: string }) => void
   onConfirm: () => void
 }
 
-export function AlertHandleModal({ open, alert, form, onClose, onChange, onConfirm }: Props) {
+export function AlertHandleModal({ open, alert, form, error = '', onClose, onChange, onConfirm }: Props) {
+  const opinionRef = useRef<HTMLTextAreaElement>(null)
+  const errorSummaryRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
+  const canScrap = canAccess('scraps', 'W')
+
+  useEffect(() => {
+    if (open && error) errorSummaryRef.current?.focus()
+    else if (open) opinionRef.current?.focus()
+  }, [open, error])
+
   if (!open || !alert) return null
 
   const typeInfo = ALERT_TYPE_MAP[alert.type] || { label: alert.type, bg: 'bg-gray-50', text: 'text-gray-600' }
-  const isExpiry = alert.type === 'expiry'
-
   const goToScrap = () => {
     const params = new URLSearchParams()
     if (alert.materialId) params.set('materialId', alert.materialId)
@@ -29,33 +40,29 @@ export function AlertHandleModal({ open, alert, form, onClose, onChange, onConfi
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">处理预警</h3>
-          <button onClick={onClose} className="p-1 rounded-md hover:bg-gray-100 transition-colors">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-        <div className="p-6">
+    <Modal title="处理或忽略预警" description="提交后预警进入终态，请填写处理意见并确认结果。" onClose={onClose} size="lg">
+        <div>
+          {error && <div ref={errorSummaryRef} role="alert" tabIndex={-1} className="mb-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 outline-none focus:ring-2 focus:ring-red-500/30">{error}</div>}
           <div className="bg-red-50 border border-red-100 rounded-lg p-4 mb-5">
             <div className="flex items-center gap-3 mb-3">
               <AlertTriangle className="w-6 h-6 text-red-600" />
               <span className="font-semibold text-red-600">{typeInfo.label}预警</span>
             </div>
             <div className="text-sm text-gray-600 space-y-2">
-              <div><strong>物料：</strong>{alert.materialName || '-'}</div>
-              <div><strong>当前库存：</strong>{alert.currentStock ?? '-'}</div>
-              <div><strong>预警阈值：</strong>{alert.threshold ?? '-'}</div>
+              <div><strong>物料：</strong>{alert.materialName || '未提供'}</div>
+              <div><strong>当前库存：</strong>{alert.currentStock ?? '未提供'}</div>
+              <div><strong>预警阈值：</strong>{alert.threshold ?? '未提供'}</div>
             </div>
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              <label htmlFor="alert-handle-opinion" className="block text-sm font-medium text-gray-700 mb-1.5">
                 处理意见 <span className="text-red-500">*</span>
               </label>
               <textarea
+                ref={opinionRef}
+                id="alert-handle-opinion"
+                required
                 value={form.opinion}
                 onChange={(e) => onChange({ ...form, opinion: e.target.value })}
                 placeholder="请输入处理意见..."
@@ -87,13 +94,10 @@ export function AlertHandleModal({ open, alert, form, onClose, onChange, onConfi
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-6 pt-4 border-t border-gray-200">
           <div>
-            {isExpiry && (
-              <button
-                onClick={goToScrap}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-600 text-sm font-medium rounded-md hover:bg-red-50 transition-colors"
-              >
+            {alert.type === 'expiry' && canScrap && (
+              <button onClick={goToScrap} className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-red-300 text-red-600 text-sm font-medium rounded-md hover:bg-red-50 transition-colors">
                 <Trash2 className="w-4 h-4" />
                 去报废
               </button>
@@ -104,11 +108,10 @@ export function AlertHandleModal({ open, alert, form, onClose, onChange, onConfi
               取消
             </button>
             <button onClick={onConfirm} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors shadow-sm">
-              确认处理
+              {form.result === 'ignored' ? '确认忽略' : '确认处理'}
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

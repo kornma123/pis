@@ -311,6 +311,22 @@ function collectGuardAliases(code: string): Record<string, { kind: string; args:
     const blk = open >= 0 ? extractBalanced(code, open, '(', ')') : null
     aliases[name] = { kind, args: blk ? blk.text.slice(1, -1) : '' }
   }
+  // 只承认这一种局部包装：显式 RequestHandler、前段有拒绝分支并 return、最后一条语句把
+  // 原样 req/res/next 直接交给已识别的「守卫工厂直接别名」。不递归跟 wrapper、不猜任意 next 函数。
+  const directAliases = new Set(Object.keys(aliases))
+  const wrapperRe = /\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*:\s*RequestHandler\s*=\s*\(\s*req\s*,\s*res\s*,\s*next\s*\)\s*=>\s*\{/g
+  while ((m = wrapperRe.exec(code))) {
+    const name = m[1]
+    const open = code.indexOf('{', m.index + m[0].length - 1)
+    const blk = open >= 0 ? extractBalanced(code, open, '{', '}') : null
+    if (!blk) continue
+    const body = blk.text.slice(1, -1).trim()
+    const tail = /\b([A-Za-z_$][\w$]*)\s*\(\s*req\s*,\s*res\s*,\s*next\s*\)\s*;?\s*$/.exec(body)
+    if (!tail || !directAliases.has(tail[1])) continue
+    const rejectPrefix = body.slice(0, tail.index)
+    if (!/\bif\s*\(/.test(rejectPrefix) || !/\breturn\b/.test(rejectPrefix) || !/}\s*$/.test(rejectPrefix)) continue
+    aliases[name] = aliases[tail[1]]
+  }
   return aliases
 }
 

@@ -1,4 +1,5 @@
 import { Upload } from 'lucide-react'
+import { useCallback } from 'react'
 import { useInventoryPage } from './hooks/useInventoryPage'
 import { InventoryTable } from './components/InventoryTable'
 import { OutboundModal } from './components/OutboundModal'
@@ -6,26 +7,36 @@ import { MaterialSelectorModal } from './components/MaterialSelectorModal'
 import { InventoryDetailModal } from './components/InventoryDetailModal'
 import { BatchOutboundModal } from './components/BatchOutboundModal'
 import { BatchScrapModal } from './components/BatchScrapModal'
+import { canAccess } from '@/lib/permissions'
 
 export default function InventoryList() {
   const page = useInventoryPage()
+  const canWriteOutbound = canAccess('outbound', 'W')
+  const canWriteScrap = canAccess('scraps', 'W')
+  const closeOutboundModal = useCallback(() => page.setOutboundModalOpen(false), [page.setOutboundModalOpen])
+  const closeDetailModal = useCallback(() => page.setDetailModalOpen(false), [page.setDetailModalOpen])
 
   return (
     <div className="space-y-6">
       {/* 页面头部 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-[28px] font-semibold text-gray-900 tracking-tight">库存列表</h1>
-          <p className="text-sm text-gray-500 mt-1">管理实验室耗材库存，实时监控库存状态和有效期</p>
+          <p className="text-sm text-gray-500 mt-1">浏览正库存物料缓存、FEFO 起始候选与登记库位证据</p>
         </div>
-        <button
-          onClick={() => page.setOutboundModalOpen(true)}
-          disabled={page.loading || Boolean(page.error)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-150 ease text-sm font-medium shadow-sm"
-        >
-          <Upload className="w-4 h-4" />
-          出库登记
-        </button>
+        {canWriteOutbound ? (
+          <button
+            type="button"
+            onClick={page.openEmptyOutboundModal}
+            disabled={page.loading || Boolean(page.error)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-150 ease text-sm font-medium shadow-sm"
+          >
+            <Upload className="w-4 h-4" />
+            出库登记
+          </button>
+        ) : (
+          <p className="text-sm text-gray-500">当前账号仅可查看库存证据，没有出库写权限。</p>
+        )}
       </div>
 
       <InventoryTable
@@ -45,6 +56,9 @@ export default function InventoryList() {
         expandedGroups={page.expandedGroups}
         stats={page.computedStats}
         quickFilterCounts={page.quickFilterCounts}
+        statsError={page.statsError}
+        canOutbound={canWriteOutbound}
+        canScrap={canWriteScrap}
         onKeywordChange={page.setKeyword}
         onCategoryChange={page.setCategory}
         onLocationChange={page.setLocation}
@@ -63,6 +77,7 @@ export default function InventoryList() {
         onBatchOutbound={page.openBatchOutbound}
         onBatchScrap={() => page.setBatchScrapModalOpen(true)}
         onRetry={page.refresh}
+        onRetryStats={page.retryStats}
       />
 
       <OutboundModal
@@ -70,13 +85,13 @@ export default function InventoryList() {
         materials={page.outboundMaterials}
         remark={page.outboundRemark}
         projectList={page.projectList}
-        userList={page.userList}
-        onClose={() => page.setOutboundModalOpen(false)}
+        submitting={page.outboundSubmitting}
+        submitError={page.outboundSubmitError}
+        onClose={closeOutboundModal}
         onAddMaterial={page.openMaterialSelector}
         onRemoveItem={page.removeOutboundItem}
         onUpdateQuantity={page.updateOutboundQuantity}
         onUpdateProject={page.updateOutboundProject}
-        onUpdateUser={page.updateOutboundUser}
         onUpdateUsage={page.updateOutboundUsage}
         onUpdateReceiver={page.updateOutboundReceiver}
         onChangeRemark={page.setOutboundRemark}
@@ -116,7 +131,8 @@ export default function InventoryList() {
       <InventoryDetailModal
         open={page.detailModalOpen}
         item={page.selectedItem}
-        onClose={() => page.setDetailModalOpen(false)}
+        canOutbound={canWriteOutbound && !page.error}
+        onClose={closeDetailModal}
         onOutbound={() => page.selectedItem && page.openOutboundModal(page.selectedItem)}
       />
 

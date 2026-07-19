@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { X } from 'lucide-react'
 
 interface Props {
@@ -9,16 +10,23 @@ interface Props {
 }
 
 export function CostExportModal({ open, onClose, onExport, exporting, dataReady }: Props) {
+  useEffect(() => {
+    if (!open || exporting) return
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [exporting, onClose, open])
+
   if (!open) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center"
       onClick={e => { if (!exporting && e.target === e.currentTarget) onClose() }}
     >
-      <div className="absolute inset-0 bg-black/40" />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden flex flex-col">
+      <div className="absolute inset-0 bg-black/40" aria-hidden="true" />
+      <div role="dialog" aria-modal="true" aria-labelledby="cost-export-title" className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">导出成本分析报告</h3>
+          <h3 id="cost-export-title" className="text-lg font-semibold text-gray-900">导出成本分析报告</h3>
           <button
             onClick={onClose}
             disabled={exporting}

@@ -26,6 +26,18 @@ export interface LaneCRecord {
   toLocationName?: string
 }
 
+export interface LaneCPagination {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
+export interface LaneCListPayload {
+  list: LaneCRecord[]
+  pagination: LaneCPagination
+}
+
 export type SortField = 'createdAt' | 'quantity'
 export type SortOrder = 'asc' | 'desc'
 

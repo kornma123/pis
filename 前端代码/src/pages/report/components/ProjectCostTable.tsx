@@ -86,8 +86,10 @@ export function ProjectCostTable({
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
       <div className="flex flex-wrap items-center gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200">
         <span className="text-sm text-gray-500">样本数来源</span>
-        <div className="flex items-center gap-1 bg-white rounded-md border border-gray-200 p-0.5">
+        <div className="flex items-center gap-1 bg-white rounded-md border border-gray-200 p-0.5" role="group" aria-label="样本数来源">
           <button
+            type="button"
+            aria-pressed={dataSource === 'all'}
             onClick={() => onDataSourceChange('all')}
             className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
               dataSource === 'all' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-50'
@@ -96,6 +98,8 @@ export function ProjectCostTable({
             LIS优先，无数据时手工
           </button>
           <button
+            type="button"
+            aria-pressed={dataSource === 'lis'}
             onClick={() => onDataSourceChange('lis')}
             className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
               dataSource === 'lis' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-50'
@@ -104,6 +108,8 @@ export function ProjectCostTable({
             仅LIS已映射病例
           </button>
           <button
+            type="button"
+            aria-pressed={dataSource === 'manual'}
             onClick={() => onDataSourceChange('manual')}
             className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
               dataSource === 'manual' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-50'
@@ -119,7 +125,8 @@ export function ProjectCostTable({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
-            type="text"
+            type="search"
+            aria-label="搜索项目名称"
             placeholder="搜索项目名称..."
             className="h-10 pl-9 pr-4 text-sm border border-gray-300 rounded-md bg-white outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 w-64"
             value={searchText}
@@ -127,6 +134,7 @@ export function ProjectCostTable({
           />
         </div>
         <select
+          aria-label="项目分类"
           className="h-10 px-3 text-sm border border-gray-300 rounded-md bg-white outline-none transition-all focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/10 cursor-pointer"
           value={projectFilter}
           onChange={e => onProjectFilterChange(e.target.value)}
@@ -148,17 +156,18 @@ export function ProjectCostTable({
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
+          <caption className="sr-only">当前期间项目成本、样本数来源、占比和同比变化</caption>
           <thead>
             <tr className="bg-gray-50">
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[60px]">排名</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">检测项目</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">分类</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">成本金额</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">占比</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">样本数</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">单样本成本</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">同比变化</th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-[90px]">操作</th>
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[60px]">排名</th>
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">检测项目</th>
+              <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">分类</th>
+              <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">成本金额</th>
+              <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">占比</th>
+              <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">样本数</th>
+              <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">单样本成本</th>
+              <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">同比变化</th>
+              <th scope="col" className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-[90px]">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -183,15 +192,15 @@ export function ProjectCostTable({
                 }
                 const sampleSource = row.sampleCountSource || 'unavailable'
                 return (
-                  <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={p.id} className="hover:bg-gray-50 transition-colors" style={{ contentVisibility: 'auto' }}>
                     <td className="px-4 py-3"><RankBadge rank={rank} /></td>
-                    <td className="px-4 py-3 font-semibold text-gray-900">{p.name}</td>
+                    <th scope="row" className="px-4 py-3 text-left font-semibold text-gray-900">{p.name}</th>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${category.className}`}>
                         {category.label}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(p.totalCost)}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCost(p.totalCost)}</td>
                     <td className="px-4 py-3 text-right text-gray-600">{formatPercentage(p.ratio)}</td>
                     <td className="px-4 py-3 text-right text-gray-600">
                       <div>{sampleSource === 'unavailable' ? '不可计算' : formatNumber(p.sampleCount)}</div>

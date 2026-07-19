@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { LisCase, ProjectReconcile } from '../hooks/useReconciliationPage'
 
 interface Props {
@@ -23,15 +24,22 @@ export function EditCaseModal({
   onClose,
   onConfirm,
 }: Props) {
+  useEffect(() => {
+    if (!open) return
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [open, onClose])
+
   if (!open || !editCaseTarget) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={event => { if (event.target === event.currentTarget) onClose() }}>
+      <div className="absolute inset-0 bg-black/40" aria-hidden="true" />
+      <div role="dialog" aria-modal="true" aria-labelledby="edit-case-title" className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">修改病例信息 - {editCaseTarget.case_no}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+          <h3 id="edit-case-title" className="text-lg font-semibold text-gray-900">修改病例信息 - {editCaseTarget.case_no}</h3>
+          <button type="button" aria-label="关闭病例修改对话框" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
         </div>
         <div className="p-6 space-y-4">
           <div>
@@ -64,8 +72,8 @@ export function EditCaseModal({
           </div>
         </div>
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
-          <button onClick={onConfirm} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">保存修改</button>
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+          <button type="button" onClick={onConfirm} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">保存修改</button>
         </div>
       </div>
     </div>

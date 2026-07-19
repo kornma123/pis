@@ -239,6 +239,38 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <section
+        aria-label="数据覆盖与口径"
+        className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">数据覆盖与口径</h2>
+            <p className="mt-1 text-xs leading-5 text-gray-500">
+              指标只展示已接通且通过当前口径校验的数据；请求失败、缺字段与未定版都保持不可用。
+            </p>
+          </div>
+          {(showInventory || showConsumeTrend) && (
+            <p className="shrink-0 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              趋势口径：未接入月度数据源
+            </p>
+          )}
+        </div>
+        {showCost && (
+          <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm">
+            <span className="font-medium text-gray-700">成本口径：</span>
+            {page.loadState.cost === 'success' && page.costSummary?.quality === 'final' ? (
+              <span className="text-emerald-700">已定版，可查看当前成本指标</span>
+            ) : (
+              <span className="text-amber-700">
+                成本口径不可用于经营判断
+                {page.costSummary?.qualityMessage ? `：${page.costSummary.qualityMessage}` : ''}
+              </span>
+            )}
+          </div>
+        )}
+      </section>
+
       {/* KPI Cards */}
       {kpiCards.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

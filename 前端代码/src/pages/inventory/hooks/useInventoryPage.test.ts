@@ -272,6 +272,107 @@ describe('useInventoryPage', () => {
     })
   })
 
+  it('loads project options once when opening an empty outbound order repeatedly', async () => {
+    const { result } = renderHook(() => useInventoryPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => result.current.openEmptyOutboundModal())
+    act(() => result.current.setOutboundModalOpen(false))
+    await act(async () => result.current.openEmptyOutboundModal())
+
+    expect(projectApi.getList).toHaveBeenCalledTimes(1)
+    expect(result.current.outboundModalOpen).toBe(true)
+  })
+
+  it('submits every material in one atomic outbound request', async () => {
+    const { result } = renderHook(() => useInventoryPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.setOutboundMaterials([
+        {
+          rowId: 1, materialId: 'mat-1', name: '耗材A', spec: '10ml',
+          stock: 100, quantity: 5, unit: '盒', project: 'proj-1', user: 'admin',
+          usage: 'self' as const, receiver: '',
+        },
+        {
+          rowId: 2, materialId: 'mat-2', name: '耗材B', spec: '20ml',
+          stock: 50, quantity: 3, unit: '瓶', project: 'proj-1', user: 'admin',
+          usage: 'external' as const, receiver: '病理组',
+        },
+      ])
+    })
+
+    await act(async () => result.current.confirmOutbound())
+
+    expect(outboundApi.create).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(outboundApi.create).mock.calls[0][0]).toEqual(expect.objectContaining({
+      type: 'direct',
+      projectId: 'proj-1',
+      items: [
+        expect.objectContaining({ materialId: 'mat-1', quantity: 5, usage: 'self' }),
+        expect.objectContaining({ materialId: 'mat-2', quantity: 3, usage: 'external', receiver: '病理组' }),
+      ],
+    }))
+  })
+
+  it('keeps the form recoverable and exposes an honest 422 failure', async () => {
+    vi.mocked(outboundApi.create).mockRejectedValueOnce({
+      response: {
+        status: 422,
+        data: { error: { code: 'STOCK_INSUFFICIENT', message: 'Insufficient batch stock' } },
+      },
+    })
+    const { result } = renderHook(() => useInventoryPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.setOutboundModalOpen(true)
+      result.current.setOutboundMaterials([{
+        rowId: 1, materialId: 'mat-1', name: '耗材A', spec: '10ml',
+        stock: 100, quantity: 5, unit: '盒', project: 'proj-1', user: 'admin',
+        usage: 'self' as const, receiver: '',
+      }])
+    })
+
+    await act(async () => result.current.confirmOutbound())
+
+    expect(result.current.outboundModalOpen).toBe(true)
+    expect(result.current.outboundMaterials).toHaveLength(1)
+    expect((result.current as any).outboundSubmitError).toContain('整单未出库')
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('coalesces duplicate outbound confirmation while the request is pending', async () => {
+    let resolveCreate!: (value: unknown) => void
+    vi.mocked(outboundApi.create).mockImplementationOnce(() => new Promise(resolve => {
+      resolveCreate = resolve
+    }) as any)
+    const { result } = renderHook(() => useInventoryPage())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.setOutboundMaterials([{
+        rowId: 1, materialId: 'mat-1', name: '耗材A', spec: '10ml',
+        stock: 100, quantity: 5, unit: '盒', project: 'proj-1', user: 'admin',
+        usage: 'self' as const, receiver: '',
+      }])
+    })
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.confirmOutbound()
+      second = result.current.confirmOutbound()
+    })
+    expect(outboundApi.create).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveCreate({})
+      await Promise.all([first, second])
+    })
+  })
+
   it('keeps BOM-selected materials on the ordinary direct outbound contract', async () => {
     vi.mocked(bomApi.getDetail).mockResolvedValue({
       materials: [{
@@ -316,7 +417,6 @@ describe('useInventoryPage', () => {
       type: 'direct',
       projectId: undefined,
       remark: '',
-      operator: 'admin',
       items: [{
         materialId: 'mat-from-bom',
         quantity: 1,
@@ -434,5 +534,29 @@ describe('InventoryTable request states', () => {
 
     expect(screen.getByText('暂无库存数据')).toBeInTheDocument()
     expect(screen.queryByText('库存数据没能加载')).not.toBeInTheDocument()
+  })
+
+  it('labels the API row as a material cache with an FEFO starting batch', () => {
+    render(createElement(InventoryTable, inventoryTableProps({
+      data: [{ ...mockInventoryItem, batch: 'B-001', expiry: '2026-12-31' }],
+      total: 1,
+    })))
+
+    expect(screen.getByRole('columnheader', { name: /FEFO 起始批次/ })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /登记库位/ })).toBeInTheDocument()
+    expect(screen.queryByText('1 批次')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    [{ locationId: undefined, locationName: undefined }, '未登记库位'],
+    [{ locationId: 'loc-stale', locationName: '-' }, '库位引用失效'],
+    [{ locationId: 'loc-1', locationName: 'A1-01' }, 'A1-01（未按批次验证）'],
+  ])('renders truthful location evidence for %o', (locationEvidence, expected) => {
+    render(createElement(InventoryTable, inventoryTableProps({
+      data: [{ ...mockInventoryItem, ...locationEvidence }],
+      total: 1,
+    })))
+
+    expect(screen.getByText(expected)).toBeInTheDocument()
   })
 })

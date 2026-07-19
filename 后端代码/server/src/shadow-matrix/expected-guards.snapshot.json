@@ -1098,14 +1098,14 @@
     },
     "POST /api/v1/lis-cases/import": {
       "module": "reconciliation",
-      "level": "R",
+      "level": "W",
       "conditions": [
         "anyRole:admin+finance"
       ]
     },
     "POST /api/v1/lis-cases/import-markers": {
       "module": "reconciliation",
-      "level": "R",
+      "level": "W",
       "conditions": [
         "anyRole:admin+finance"
       ]
@@ -1183,7 +1183,7 @@
     },
     "POST /api/v1/reconciliation/cases/import": {
       "module": "reconciliation",
-      "level": "R",
+      "level": "W",
       "conditions": []
     },
     "POST /api/v1/reconciliation/logs": {
@@ -1417,7 +1417,7 @@
     },
     "PUT /api/v1/reconciliation/cases/:id": {
       "module": "reconciliation",
-      "level": "R",
+      "level": "W",
       "conditions": []
     },
     "PUT /api/v1/roles/:id": {
