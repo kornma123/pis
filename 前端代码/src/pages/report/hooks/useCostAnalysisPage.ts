@@ -57,9 +57,18 @@ export interface PieDataItem {
   value: number
 }
 
+function startsWithSpreadsheetFormula(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? Number.POSITIVE_INFINITY
+    if (codePoint <= 0x1f || /\s/u.test(character)) continue
+    return '=+-@'.includes(character)
+  }
+  return false
+}
+
 function csvCell(value: unknown): string {
   let text = value === null || value === undefined ? '' : String(value)
-  if (/^[\s\u0000-\u001f]*[=+\-@]/u.test(text)) text = `'${text}`
+  if (startsWithSpreadsheetFormula(text)) text = `'${text}`
   return `"${text.replace(/"/g, '""')}"`
 }
 
