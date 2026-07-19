@@ -58,9 +58,24 @@ describe('roles v1.1 lint repair contract', () => {
     const database = {
       exec,
       prepare: vi.fn((sql: string) => {
-        if (sql.includes('FROM roles WHERE code = ?')) {
+        const normalizedSql = sql.replace(/\s+/g, ' ').trim()
+        if (normalizedSql === 'SELECT permissions, status, is_deleted FROM roles WHERE code = ?') {
           return {
             get: vi.fn(() => ({ permissions: '["*"]', status: 1, is_deleted: 0 })),
+          }
+        }
+        if (normalizedSql === 'SELECT status, is_deleted FROM users WHERE id = ?') {
+          return {
+            get: vi.fn(() => ({ status: 1, is_deleted: 0 })),
+          }
+        }
+        if (
+          normalizedSql ===
+          'SELECT ur.role_code FROM user_roles ur INNER JOIN roles r ON r.code = ur.role_code '
+            + 'WHERE ur.user_id = ? AND r.status = 1 AND r.is_deleted = 0'
+        ) {
+          return {
+            all: vi.fn(() => [{ role_code: 'admin' }]),
           }
         }
         throw new Error(`Unexpected SQL in narrow role test: ${sql}`)
@@ -68,10 +83,10 @@ describe('roles v1.1 lint repair contract', () => {
     }
     getDatabaseMock
       .mockReturnValueOnce(database)
+      .mockReturnValueOnce(database)
       .mockImplementationOnce(() => {
         throw new Error('database unavailable before role transaction')
       })
-      .mockReturnValue(database)
 
     const app = express()
     app.use(express.json())
@@ -88,5 +103,6 @@ describe('roles v1.1 lint repair contract', () => {
 
     expect(response.status).toBe(500)
     expect(exec).not.toHaveBeenCalled()
+    expect(getDatabaseMock).toHaveBeenCalledTimes(3)
   })
 })
