@@ -19,6 +19,7 @@ import { ensureHospitalCmAccountRosterSchema } from '../utils/hospital-cm-accoun
 import { ensureHospitalCmDirectorySchema } from '../utils/hospital-cm-directory.js'
 import { ensureHospitalCmReadinessSchema } from '../utils/hospital-cm-readiness-runtime.js'
 import { ensureHospitalCmPeriodEvidenceSchema } from '../utils/hospital-cm-period-evidence.js'
+import { enforceForeignKeys, runDatabaseMigrations } from './migrations/runner.js'
 import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -102,6 +103,7 @@ const USERS_TABLE_SQL = `
 export function getDatabase(): DatabaseSync {
   if (!db) {
     db = new DatabaseSync(DB_PATH)
+    enforceForeignKeys(db)
   }
   return db
 }
@@ -372,12 +374,32 @@ function seedDefaultUsersAfterCredentialCheck(
   }
 }
 
-export function initializeDatabase(): void {
-  const database = getDatabase()
-  const allowFixtures = allowDefaultFixtureUsers()
-  const adminInitialPassword = normalizeInitialAdminPassword(process.env.ADMIN_INITIAL_PASSWORD)
+function runInitializationSavepoint(
+  database: DatabaseSync,
+  name: string,
+  operation: () => void,
+): void {
+  if (!/^[a-z0-9_]+$/i.test(name)) throw new Error('INVALID_SAVEPOINT_NAME')
+  database.exec(`SAVEPOINT ${name}`)
+  try {
+    operation()
+    database.exec(`RELEASE SAVEPOINT ${name}`)
+  } catch (error) {
+    try {
+      database.exec(`ROLLBACK TO SAVEPOINT ${name}`)
+    } finally {
+      database.exec(`RELEASE SAVEPOINT ${name}`)
+    }
+    throw error
+  }
+}
+
+function initializeUnversionedDatabase(
+  database: DatabaseSync,
+  allowFixtures: boolean,
+  adminInitialPassword: string | undefined,
+): void {
   // 显式提供的弱初始口令必须在任何 DDL/迁移写入前拒绝，避免失败启动留下半升级数据库。
-  if (!allowFixtures) assertInitialAdminPasswordUsable(adminInitialPassword)
   const hadUsersTable = usersTableExists(database)
 
   // 旧库必须在任何 DDL/迁移写之前核验；新库只先创建 canonical users 表，再核验空表。
@@ -820,15 +842,13 @@ export function initializeDatabase(): void {
   // codex F3 + verify-H3：建唯一索引前先归一历史脏数据（旧库若已有同院多 current/baseline 会让建索引失败）。
   // current = 该院最高版本那行；baseline 仅保留最高版本的一条。幂等（干净库为 no-op）。
   // codex LOW-1：归一 + 两个唯一索引放进一个事务，失败整体回滚——否则可能留下「已改 is_current/is_baseline 但唯一索引未建」的半状态。
-  database.exec('BEGIN IMMEDIATE')
-  try {
+  runInitializationSavepoint(database, 'partner_config_constraints', () => {
     database.exec(`UPDATE partner_configs SET is_current = 0 WHERE is_current = 1 AND version <> (SELECT MAX(version) FROM partner_configs p2 WHERE p2.partner_id = partner_configs.partner_id)`)
     database.exec(`UPDATE partner_configs SET is_baseline = 0 WHERE is_baseline = 1 AND version <> (SELECT MAX(version) FROM partner_configs p2 WHERE p2.partner_id = partner_configs.partner_id AND p2.is_baseline = 1)`)
     // codex F3：同院最多一行 current / 一行 baseline（部分唯一索引，DB 级兜底非原子写/并发种子导致的多 current）
     database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_configs_one_current ON partner_configs(partner_id) WHERE is_current = 1`)
     database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_configs_one_baseline ON partner_configs(partner_id) WHERE is_baseline = 1`)
-    database.exec('COMMIT')
-  } catch (e) { database.exec('ROLLBACK'); throw e }
+  })
 
   // 成本对账：修正日志
   database.exec(`
@@ -1712,8 +1732,7 @@ export function initializeDatabase(): void {
   {
     const cr = database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='case_revenue'").get() as { sql?: string } | undefined
     if (cr?.sql && /UNIQUE\s*\(\s*case_no\s*,\s*service_month\s*\)/i.test(cr.sql)) {
-      database.exec('BEGIN IMMEDIATE')
-      try {
+      runInitializationSavepoint(database, 'case_revenue_legacy_rebuild', () => {
         database.exec(`
           CREATE TABLE case_revenue__new (
             id TEXT PRIMARY KEY,
@@ -1743,8 +1762,7 @@ export function initializeDatabase(): void {
         database.exec('DROP TABLE case_revenue')
         database.exec('ALTER TABLE case_revenue__new RENAME TO case_revenue')
         database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_partner_month ON case_revenue(partner_id, service_month)`)
-        database.exec('COMMIT')
-      } catch (e) { database.exec('ROLLBACK'); throw e }
+      })
     }
   }
   database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_lines_partner_case_month ON case_revenue_lines(partner_id, case_no, service_month)`)
@@ -1786,14 +1804,12 @@ export function initializeDatabase(): void {
         return def
       }).join(', ')
       const colList = cols.map((c) => `"${c.name}"`).join(', ')
-      database.exec('BEGIN IMMEDIATE')
-      try {
+      runInitializationSavepoint(database, 'lis_cases_legacy_rebuild', () => {
         database.exec(`CREATE TABLE lis_cases__new (${colDefs})`)
         database.exec(`INSERT INTO lis_cases__new (${colList}) SELECT ${colList} FROM lis_cases`)
         database.exec('DROP TABLE lis_cases')
         database.exec('ALTER TABLE lis_cases__new RENAME TO lis_cases')
-        database.exec('COMMIT')
-      } catch (e) { database.exec('ROLLBACK'); throw e }
+      })
     }
   }
   // 复合唯一：同院同号唯一；跨院同号并存。partner_id IS NULL 的历史行在 SQLite UNIQUE 中视为相异 → 不互相冲突、不自动并入任意医院（待人工补院）。
@@ -2008,6 +2024,25 @@ export function initializeDatabase(): void {
   //   ⛔ 不改任何现有分类逻辑（先并存）；守黄金 ¥13,152 / ¥27,870 零回归。
   // ===========================================================================
   seedProjectCatalog(database)
+
+}
+
+export function initializeDatabase(): void {
+  const database = getDatabase()
+  const allowFixtures = allowDefaultFixtureUsers()
+  const adminInitialPassword = normalizeInitialAdminPassword(process.env.ADMIN_INITIAL_PASSWORD)
+  // Reject unsafe startup input before the runner begins any migration transaction.
+  if (!allowFixtures) assertInitialAdminPasswordUsable(adminInitialPassword)
+  if (!allowFixtures && usersTableExists(database)) {
+    assertNoActiveLeakedDefaultPasswords(database)
+  }
+
+  const initialize = () => initializeUnversionedDatabase(
+    database,
+    allowFixtures,
+    adminInitialPassword,
+  )
+  runDatabaseMigrations(database, initialize)
 
   console.log('Database initialized successfully')
 }
