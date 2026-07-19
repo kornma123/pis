@@ -10,7 +10,11 @@ function readBuildIdentity(name: "RELEASE_SHA" | "BUILD_ID"): string {
   const value = process.env[name];
   if (value === undefined) return LOCAL_BUILD_IDENTITY;
 
-  if (!value || value !== value.trim() || value.length > 256 || /[\u0000-\u001f\u007f]/.test(value)) {
+  const hasForbiddenControlCharacter = value.split("").some((character) => {
+    const codeUnit = character.charCodeAt(0);
+    return codeUnit <= 0x1f || codeUnit === 0x7f;
+  });
+  if (!value || value !== value.trim() || value.length > 256 || hasForbiddenControlCharacter) {
     throw new Error(`${name} must be a non-empty printable value of at most 256 characters`);
   }
   return value;
