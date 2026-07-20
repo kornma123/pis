@@ -27,14 +27,25 @@ import {
   DEFAULT_READINESS_OWNER,
 } from '../src/utils/portfolio-health.js'
 import { sha256 } from '../src/utils/hospital-cm-foundation-probes.js'
+import {
+  EXPECTED_HOSPITAL_CM_CONSTANT_MANIFEST_FINGERPRINT,
+  HOSPITAL_CM_FOUNDATION_PROBE_VERSION,
+} from '../src/utils/hospital-cm-foundation-probes.js'
 
 describe('CM 引擎常量（改 = 立法）', () => {
   it('院级贡献毛利业务公式版本钉死；计算/上卷/成本装载语义变化必须 bump', () => {
-    expect(HOSPITAL_CM_FORMULA_VERSION).toBe('2026-07-12.a')
+    expect(HOSPITAL_CM_FORMULA_VERSION).toBe('2026-07-20.a')
+  })
+  it('地基探针版本钉死；探针判定语义变化必须 bump（#163 阶段2：合法跨月不再判 CROSS_MONTH_KEY_COLLISION）', () => {
+    expect(HOSPITAL_CM_FOUNDATION_PROBE_VERSION).toBe('2026-07-20.a')
+  })
+  it('常量 manifest 指纹已随公式版本升级换锚：旧锚不得复活（旧证据必须失效重跑）', () => {
+    expect(EXPECTED_HOSPITAL_CM_CONSTANT_MANIFEST_FINGERPRINT)
+      .not.toBe('ee1698b353070e73323aaf5eac0bdba8b6050d22b296271948fa870290b4fca1')
   })
   it('计算与上卷的规范正反例行为签名钉死；实现变了但忘记 bump 也会先红灯', () => {
     expect(sha256(currentHospitalCmFormulaBehaviorArtifact()))
-      .toBe('a809ea02ebb648cc0b94b37fa47a92d387378cce3b3116caa961ebac938e60a5')
+      .toBe('33d38e435193bc1d260efd01b9d62ed5de5b481d81c6c19f4eae787757c809a5')
   })
   it('真抗体码白名单 = {Y000001, Y000003}（与 reconcile-account 同源）', () => {
     expect([...P0_ANTIBODY_ADVICE_TYPES].sort()).toEqual(['Y000001', 'Y000003'])
