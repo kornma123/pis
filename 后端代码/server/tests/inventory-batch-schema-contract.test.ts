@@ -27,14 +27,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { DatabaseSync } from 'node:sqlite'
 
 let db: DatabaseSync
+let closeDatabase: (() => void) | undefined
 
 beforeAll(async () => {
   const mod = await import('../src/database/DatabaseManager.js')
   mod.initializeDatabase()
   db = mod.getDatabase()
+  closeDatabase = mod.closeDatabase
 })
 
 afterAll(() => {
+  closeDatabase?.()
   rmSync(tempDir, { recursive: true, force: true })
 })
 
