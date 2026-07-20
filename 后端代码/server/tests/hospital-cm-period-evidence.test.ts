@@ -22,6 +22,7 @@ import {
   readCurrentSourceBatchManifest,
   registerSourceBatchManifest,
   saveMonthScopeSnapshot,
+  saveMonthScopeSnapshotLocked,
   withdrawMonthScopeSnapshot,
 } from '../src/utils/hospital-cm-period-evidence.js'
 import { ensureHospitalCmReadinessSchema } from '../src/utils/hospital-cm-readiness-runtime.js'
@@ -1238,5 +1239,103 @@ describe('C1 · candidate、查询预算与行为面不变', () => {
     const row = db.prepare(`SELECT status FROM reconcile_hospital_months WHERE id = 'RHM-1'`).get() as { status: string }
     expect(row.status).toBe('复核完成')
     expect(closeEvents(db, 'P-1', '2026-05')).toEqual([])
+  })
+})
+
+describe('C1 · locked 写原语(#182 目录桥接专用:调用方必须已持 BEGIN IMMEDIATE)', () => {
+  it('未持写锁直调一律 SCOPE_WRITE_REQUIRES_TRANSACTION,零 scope/audit 写', () => {
+    const db = createDb()
+    expect(db.isTransaction).toBe(false)
+    expectCode(() => saveMonthScopeSnapshotLocked(db, {
+      serviceMonth: '2026-05',
+      accounts: ['P-1'],
+      rosterSourceRef: 'roster://test/v1',
+      rosterSourceHash: HEX64,
+      status: 'complete',
+      actor: ACTOR,
+      reason: '未持锁直调',
+    }), 'SCOPE_WRITE_REQUIRES_TRANSACTION')
+    expect(Number((db.prepare('SELECT COUNT(*) AS n FROM hospital_cm_month_scope_snapshots').get() as { n: number }).n)).toBe(0)
+    expect(Number((db.prepare(`SELECT COUNT(*) AS n FROM abc_audit_logs WHERE module = 'hospital_cm_period_evidence'`).get() as { n: number }).n)).toBe(0)
+  })
+
+  it('持锁调用复用原验证/scopeHash/append/audit/readback;同内容重发仍追加新版本(locked 层绝不做 no-op)', () => {
+    const db = createDb()
+    const input = {
+      serviceMonth: '2026-05',
+      accounts: ['P-2', 'P-1', 'P-2'],
+      rosterSourceRef: 'roster://hospital-cm-directory/00000000-0000-4000-8000-0000000000aa',
+      rosterSourceHash: HEX64,
+      status: 'complete' as const,
+      actor: ACTOR,
+      reason: '持锁保存',
+    }
+    db.exec('BEGIN IMMEDIATE')
+    const v1 = saveMonthScopeSnapshotLocked(db, input)
+    db.exec('COMMIT')
+    expect(v1.versionNo).toBe(1)
+    expect(v1.accounts).toEqual(['P-1', 'P-2']) // 原 canonical:去重 + 稳定排序
+    // 与 raw helper 同输入 → scopeHash 逐位一致(复用同一 C1 公式,生产函数交叉核对)
+    const reference = saveMonthScopeSnapshot(db, {
+      serviceMonth: '2026-07',
+      accounts: ['P-2', 'P-1', 'P-2'],
+      rosterSourceRef: input.rosterSourceRef,
+      rosterSourceHash: HEX64,
+      status: 'complete',
+      actor: ACTOR,
+      reason: 'raw 参照',
+    })
+    const referenceLockedInput = { ...input, serviceMonth: '2026-07' }
+    db.exec('BEGIN IMMEDIATE')
+    const referenceLocked = saveMonthScopeSnapshotLocked(db, referenceLockedInput)
+    db.exec('COMMIT')
+    expect(referenceLocked.scopeHash).toBe(reference.scopeHash)
+    // 同内容重发:locked 层仍严格追加(raw 严格失效语义不被本层软化)
+    db.exec('BEGIN IMMEDIATE')
+    const v2 = saveMonthScopeSnapshotLocked(db, input)
+    db.exec('COMMIT')
+    expect(v2.versionNo).toBe(2)
+    expect(v2.scopeHash).toBe(v1.scopeHash)
+    expect(v2.eventNumber).toBeGreaterThan(v1.eventNumber)
+    expect(Number((db.prepare(`SELECT COUNT(*) AS n FROM abc_audit_logs WHERE module = 'hospital_cm_period_evidence'`).get() as { n: number }).n)).toBe(4)
+  })
+
+  it('持锁链可落 withdrawn(桥接单事务撤回路径);验证错误码与 raw 完全一致;故障由调用方回滚', () => {
+    const db = createDb()
+    saveScope(db, '2026-05', ['P-1'])
+    const current = readCurrentMonthScope(db, '2026-05')!
+    db.exec('BEGIN IMMEDIATE')
+    const withdrawn = saveMonthScopeSnapshotLocked(db, {
+      serviceMonth: '2026-05',
+      accounts: current.accounts,
+      rosterSourceRef: current.rosterSourceRef,
+      rosterSourceHash: current.rosterSourceHash,
+      status: 'withdrawn',
+      actor: ACTOR,
+      reason: '持锁撤回',
+    })
+    db.exec('COMMIT')
+    expect(withdrawn.status).toBe('withdrawn')
+    expect(withdrawn.versionNo).toBe(2)
+    // 验证复用:非法 hash/空 accounts/伪造字段在持锁路径同码拒绝
+    db.exec('BEGIN IMMEDIATE')
+    expectCode(() => saveMonthScopeSnapshotLocked(db, {
+      serviceMonth: '2026-05', accounts: ['P-1'], rosterSourceRef: 'roster://test/v1',
+      rosterSourceHash: 'nothex', status: 'complete', actor: ACTOR, reason: 'x',
+    }), 'SCOPE_ROSTER_HASH_INVALID')
+    expectCode(() => saveMonthScopeSnapshotLocked(db, {
+      serviceMonth: '2026-05', accounts: [], rosterSourceRef: 'roster://test/v1',
+      rosterSourceHash: HEX64, status: 'complete', actor: ACTOR, reason: 'x',
+    }), 'SCOPE_ACCOUNTS_REQUIRED')
+    expectCode(() => saveMonthScopeSnapshotLocked(db, {
+      serviceMonth: '2026-05', accounts: ['P-1'], rosterSourceRef: 'roster://test/v1',
+      rosterSourceHash: HEX64, status: 'complete', actor: ACTOR, reason: 'x', scopeHash: HEX64,
+    } as never), 'PERIOD_EVIDENCE_UNSUPPORTED_FIELD')
+    db.exec('ROLLBACK')
+    // raw 外部合同不变:公开 save 仍拒绝 withdrawn
+    expectCode(() => saveMonthScopeSnapshot(db, {
+      serviceMonth: '2026-05', accounts: ['P-1'], rosterSourceRef: 'roster://test/v1',
+      rosterSourceHash: HEX64, status: 'withdrawn' as never, actor: ACTOR, reason: 'x',
+    }), 'SCOPE_STATUS_INVALID')
   })
 })
