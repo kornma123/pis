@@ -293,7 +293,12 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
     const db = await getDb()
     seedBalancedInventory(db)
     db.prepare(`UPDATE inventory SET stock = ? WHERE id = 'INV-HCM-READY'`).run(Number.POSITIVE_INFINITY)
-    db.prepare(`UPDATE batches SET remaining = ? WHERE id = 'BAT-HCM-READY'`).run(Number.POSITIVE_INFINITY)
+    db.exec('PRAGMA ignore_check_constraints = ON')
+    try {
+      db.prepare(`UPDATE batches SET remaining = ? WHERE id = 'BAT-HCM-READY'`).run(Number.POSITIVE_INFINITY)
+    } finally {
+      db.exec('PRAGMA ignore_check_constraints = OFF')
+    }
 
     const run = recordHospitalCmFoundationProbeRun(db, {
       triggeredByUserId: 'USER-001',
@@ -337,7 +342,12 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
     db.prepare(`UPDATE inventory SET stock = 11 WHERE id = 'INV-HCM-READY'`).run()
     db.prepare(`UPDATE batches SET remaining = 11 WHERE id = 'BAT-HCM-READY'`).run()
     db.prepare(`UPDATE inventory SET stock = 13 WHERE id = 'INV-HCM-READY-2'`).run()
-    db.prepare(`UPDATE batches SET remaining = 13 WHERE id = 'BAT-HCM-READY-2'`).run()
+    db.exec('PRAGMA ignore_check_constraints = ON')
+    try {
+      db.prepare(`UPDATE batches SET remaining = 13 WHERE id = 'BAT-HCM-READY-2'`).run()
+    } finally {
+      db.exec('PRAGMA ignore_check_constraints = OFF')
+    }
 
     const after = getHospitalCmReadinessSnapshot(db, '2026-07-12')
     const check = after.foundationEvidence?.checks.find((item) => item.key === 'inventory_conservation')
