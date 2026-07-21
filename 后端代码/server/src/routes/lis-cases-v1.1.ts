@@ -12,7 +12,7 @@
  */
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
+import { getDatabase, invalidateDatabaseConnection } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission, requireAnyRole } from '../middleware/permissions.js'
@@ -29,7 +29,7 @@ function rollbackCorrectionTransaction(db: ReturnType<typeof getDatabase>): bool
     db.exec('ROLLBACK')
     return true
   } catch (rollbackError) {
-    try { closeDatabase() } catch (closeError) { void closeError }
+    invalidateDatabaseConnection()
     void rollbackError
     return false
   }
@@ -105,7 +105,8 @@ function parseStrictDate(dateish: string): { valid: true; canonical: string } | 
     if (zoneHour > 14 || zoneMinute > 59 || (zoneHour === 14 && zoneMinute !== 0)) return { valid: false }
   }
   const hms = `${String(hh).padStart(2, '0')}:${String(mi).padStart(2, '0')}${ss !== undefined ? ':' + String(ss).padStart(2, '0') : ''}`
-  return { valid: true, canonical: `${datePart}${m[4]}${hms}${m[8] || ''}${zone}` } // 保留时间精度/时区，不做可能跨日的隐式换算
+  const separator = m[4] === ' ' ? ' ' : 'T'
+  return { valid: true, canonical: `${datePart}${separator}${hms}${m[8] || ''}${zone}` } // 保留时间精度/时区，不做可能跨日的隐式换算
 }
 
 /**

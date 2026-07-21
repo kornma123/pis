@@ -185,6 +185,11 @@ describe('#178 导入拒收可见', () => {
     ['rejectedTotal 与分类计数矛盾', { rejectedTotal: 2 }],
     ['截断标记与完整条目矛盾', { rejectionsTruncated: true }],
     ['畸形拒收条目', { rejections: [{ code: 'CROSS_MONTH_CONFLICT', caseNo: 'S26-X', partnerName: '医院', existingMonth: '2026-13', incomingMonth: '2026-07' }] }],
+    ['拒收 code 与分类计数矛盾', {
+      skipped: 1,
+      rejectedTotal: 1,
+      rejections: [{ code: 'CROSS_MONTH_CONFLICT', caseNo: 'S26-X', partnerName: '医院', existingMonth: '2026-06', incomingMonth: '2026-07' }],
+    }],
   ])('%s → 处理结果未知，不发布部分成功', async (_label, override) => {
     mocks.readGrid.mockResolvedValue([
       ['病理号', '送检医院', '登记时间', '蜡块数'],
@@ -253,6 +258,39 @@ describe('#178 导入拒收可见', () => {
     fireEvent.click(within(screen.getByRole('dialog', { name: '确认提交 LIS 数据' })).getByRole('button', { name: '开始提交' }))
 
     expect(await screen.findByRole('status', { name: '部分完成' })).toHaveTextContent('抗体清单未提交')
+    expect(lisCasesApi.importMarkers).not.toHaveBeenCalled()
+  })
+
+  it('拒收 code 与分类计数矛盾时网络 parser 拒绝，marker API 不得继续调用', async () => {
+    mocks.readGrid
+      .mockResolvedValueOnce([
+        ['病理号', '送检医院', '登记时间', '蜡块数'],
+        ['S26-001', '测试医院', '2026-07-18', 1],
+      ])
+      .mockResolvedValueOnce([
+        ['病理号', '抗体名'],
+        ['S26-001', 'P53'],
+      ])
+    vi.mocked(lisCasesApi.import).mockImplementation(async () => parseLisImportResult({
+      importBatch: 'LIS-1', imported: 0, inserted: 0, updated: 0, skipped: 1,
+      partnersCreated: 0, partnersMatched: 1,
+      rejectedCrossMonth: 0, rejectedInvalidDate: 0, rejectedTotal: 1,
+      rejectionsTruncated: false,
+      rejections: [{ code: 'CROSS_MONTH_CONFLICT', caseNo: 'S26-001', partnerName: '测试医院', existingMonth: '2026-06', incomingMonth: '2026-07' }],
+    }))
+
+    render(<LisImportView onBack={vi.fn()} onDone={vi.fn()} />)
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('选择 LIS 文件'), {
+        target: { files: [new File(['case'], '病例.xlsx'), new File(['marker'], '抗体.xlsx')] },
+      })
+    })
+    fireEvent.click(await screen.findByRole('button', { name: '运行服务端预检' }))
+    await screen.findByText('服务端预检通过')
+    fireEvent.click(await screen.findByRole('button', { name: '确认提交导入' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: '确认提交 LIS 数据' })).getByRole('button', { name: '开始提交' }))
+
+    expect(await screen.findByRole('status', { name: '处理结果未知' })).toBeInTheDocument()
     expect(lisCasesApi.importMarkers).not.toHaveBeenCalled()
   })
 
