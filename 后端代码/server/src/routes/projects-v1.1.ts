@@ -1,9 +1,9 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { findProjectLiveReferences } from '../utils/delete-reference-guards.js'
+import { findProjectLiveReferences, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -116,12 +116,6 @@ router.delete('/:id', requireProjectWrite, (req, res) => {
   try {
     const { id } = req.params
     db = getDatabase()
-    // 锁前快速发现（顾问性；权威判定在锁内重读）
-    const advisory = db.prepare('SELECT code FROM projects WHERE id = ? AND is_deleted = 0').get(id) as { code: string } | undefined
-    if (advisory && findProjectLiveReferences(db, id, advisory.code).length > 0) {
-      error(res, 'Project has active catalog, case, outbound, or settlement references', 'ENTITY_IN_USE', 409)
-      return
-    }
     db.exec('BEGIN IMMEDIATE')
     transactionOpen = true
     const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND is_deleted = 0').get(id) as { code: string } | undefined
@@ -144,7 +138,10 @@ router.delete('/:id', requireProjectWrite, (req, res) => {
     success(res, null, 'Deleted')
   } catch (err: any) {
     if (transactionOpen && db) {
-      try { db.exec('ROLLBACK') } catch { /* preserve the original request error */ }
+      if (!recoverFailedDeleteTransaction(db, closeDatabase)) {
+        error(res, 'Delete transaction recovery failed', 'INTERNAL_ERROR', 500)
+        return
+      }
     }
     error(res, err.message)
   }

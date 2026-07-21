@@ -17,6 +17,25 @@ export interface LiveReference {
 
 type Db = DatabaseSync
 
+/**
+ * Recover a failed delete transaction without leaving the shared singleton
+ * connection in an unknown transaction state. Closing the singleton is the
+ * fail-closed fallback when SQLite itself refuses the rollback command.
+ */
+export function recoverFailedDeleteTransaction(db: Db, closeConnection: () => void): boolean {
+  try {
+    db.exec('ROLLBACK')
+    return true
+  } catch {
+    try {
+      closeConnection()
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
 /** 供应商活引用：在途采购订单、有效入库记录、未结退货义务 */
 export function findSupplierLiveReferences(db: Db, supplierId: string): LiveReference[] {
   const refs: LiveReference[] = []
@@ -27,7 +46,7 @@ export function findSupplierLiveReferences(db: Db, supplierId: string): LiveRefe
   for (const r of purchaseOrders) refs.push({ kind: 'purchase_order', id: r.id })
   const inbounds = db.prepare(`
     SELECT id FROM inbound_records
-    WHERE supplier_id = ? AND is_deleted = 0 AND COALESCE(status, '') != 'cancelled'
+    WHERE supplier_id = ? AND is_deleted = 0 AND COALESCE(status, '') NOT IN ('completed', 'cancelled')
   `).all(supplierId) as Array<{ id: string }>
   for (const r of inbounds) refs.push({ kind: 'inbound_record', id: r.id })
   const supplierReturns = db.prepare(`
@@ -42,7 +61,7 @@ export function findSupplierLiveReferences(db: Db, supplierId: string): LiveRefe
 export function findRoleLiveAssignments(db: Db, roleCode: string): LiveReference[] {
   const rows = db.prepare(`
     SELECT u.id FROM users u
-    WHERE u.is_deleted = 0 AND (
+    WHERE u.is_deleted = 0 AND u.status = 1 AND (
       u.role = ? OR u.primary_role = ?
       OR EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role_code = ?)
     )

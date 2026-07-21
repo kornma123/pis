@@ -1,10 +1,10 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { findLocationLiveReferences } from '../utils/delete-reference-guards.js'
+import { findLocationLiveReferences, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -109,11 +109,6 @@ router.delete('/:id', authenticateToken, requireLocationWrite, (req, res) => {
   try {
     const { id } = req.params
     db = getDatabase()
-    // 锁前快速发现在途运营引用（物料/设备指派；顾问性，权威判定在锁内重读）
-    if (findLocationLiveReferences(db, id).length > 0) {
-      error(res, 'Location has live material or equipment assignments', 'ENTITY_IN_USE', 409)
-      return
-    }
     db.exec('BEGIN IMMEDIATE')
     transactionOpen = true
 
@@ -161,7 +156,10 @@ router.delete('/:id', authenticateToken, requireLocationWrite, (req, res) => {
     success(res, null, 'Deleted')
   } catch (err: any) {
     if (transactionOpen && db) {
-      try { db.exec('ROLLBACK') } catch { /* preserve the original request error */ }
+      if (!recoverFailedDeleteTransaction(db, closeDatabase)) {
+        error(res, 'Delete transaction recovery failed', 'INTERNAL_ERROR', 500)
+        return
+      }
     }
     error(res, err.message)
   }

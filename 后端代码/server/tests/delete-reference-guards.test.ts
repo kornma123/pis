@@ -35,16 +35,18 @@ const SPOOF_BODY = { operator: 'spoofed-body-operator', probeNote: PROBE_VALUE }
 const PLAIN_BODY = { probeNote: PROBE_VALUE }
 
 let app: express.Express
-let db: any
+let db: DatabaseSync
 let rival: DatabaseSync
 let adminToken: string
-let request: any
+let request: typeof import('supertest')['default']
 let resetDenialTracker: () => void
+let closeDatabaseForTest: () => void
 
 beforeAll(async () => {
   app = (await import('../src/app.js')).default
   const dm = await import('../src/database/DatabaseManager.js')
   db = dm.getDatabase()
+  closeDatabaseForTest = dm.closeDatabase
   request = (await import('supertest')).default
   resetDenialTracker = (await import('../src/middleware/audit-log.js')).__resetDenialTrackerForTest
   const login = await request(app).post('/api/v1/auth/login').send({ username: 'admin', password: 'admin123' })
@@ -58,6 +60,7 @@ beforeEach(() => resetDenialTracker?.())
 
 afterAll(() => {
   try { rival?.close() } catch { /* already closed */ }
+  try { closeDatabaseForTest?.() } catch { /* already closed */ }
   rmSync(TMP_DIR, { recursive: true, force: true })
 }, 120_000)
 
@@ -88,9 +91,9 @@ function seedRole(id: string, code: string) {
     .run(id, code, code, JSON.stringify({ inventory: 'R' }))
 }
 
-function seedUser(id: string, username: string, roleCode: string, opts: { isDeleted?: number } = {}) {
-  db.prepare(`INSERT INTO users (id, username, password, real_name, role, primary_role, status, is_deleted) VALUES (?, ?, ?, ?, ?, ?, 1, ?)`)
-    .run(id, username, 'dg-not-a-login-hash', username, roleCode, roleCode, opts.isDeleted ?? 0)
+function seedUser(id: string, username: string, roleCode: string, opts: { isDeleted?: number; status?: number } = {}) {
+  db.prepare(`INSERT INTO users (id, username, password, real_name, role, primary_role, status, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, username, 'dg-not-a-login-hash', username, roleCode, roleCode, opts.status ?? 1, opts.isDeleted ?? 0)
   db.prepare(`INSERT INTO user_roles (id, user_id, role_code) VALUES (?, ?, ?)`)
     .run(`UR-${id}-${roleCode}`, id, roleCode)
 }
@@ -140,7 +143,7 @@ function seedCostException(id: string, projectId: string, status: string | null)
 function expectSanitizedDenialAudit(module: string, marker: string) {
   const logs = db.prepare(
     `SELECT * FROM operation_logs WHERE outcome = 'denied' AND operation = ? ORDER BY rowid DESC`,
-  ).all(`DENIED DELETE ${module}`) as any[]
+  ).all(`DENIED DELETE ${module}`) as Array<{ description: string; request_data: string }>
   const log = logs.find((entry) => typeof entry.description === 'string' && entry.description.includes(marker))
   expect(log, `missing denial audit row for ${module} ${marker}`).toBeTruthy()
   expect(log.request_data).toBe('{"status":409,"code":"ENTITY_IN_USE"}')
@@ -163,6 +166,20 @@ function installCommittedRace(write: () => void) {
   })
   return {
     fired: () => fired,
+    restore: () => spy.mockRestore(),
+  }
+}
+
+/** 引用拒绝也必须先取得写锁；不能以锁前 advisory 查询提前返回。 */
+function installBeginTrace() {
+  const original = db.exec.bind(db)
+  let beginCount = 0
+  const spy = vi.spyOn(db, 'exec').mockImplementation((sql: string) => {
+    if (sql === 'BEGIN IMMEDIATE') beginCount += 1
+    return original(sql)
+  })
+  return {
+    beginCount: () => beginCount,
     restore: () => spy.mockRestore(),
   }
 }
@@ -199,6 +216,66 @@ async function expectFaultRollback(opts: {
   }
 }
 
+/**
+ * 回滚命令本身故障时，路由必须丢弃 singleton 连接；关闭连接由 SQLite 回滚未提交事务。
+ * 下一次 getDatabase() 必须得到新连接，业务行保持原值且请求可安全重试。
+ */
+async function expectRollbackCommandFault(opts: {
+  table: string
+  id: string
+  path: string
+  triggerName: string
+}) {
+  const before = row(opts.table, opts.id)
+  db.exec(`
+    CREATE TRIGGER ${opts.triggerName}
+    AFTER UPDATE OF is_deleted ON ${opts.table}
+    WHEN OLD.id = '${opts.id}'
+    BEGIN
+      SELECT RAISE(FAIL, 'forced delete failure before rollback fault');
+    END
+  `)
+  const originalDb = db
+  const originalExec = originalDb.exec.bind(originalDb)
+  let rollbackFaultHit = false
+  const spy = vi.spyOn(originalDb, 'exec').mockImplementation((sql: string) => {
+    if (sql === 'ROLLBACK' && !rollbackFaultHit) {
+      rollbackFaultHit = true
+      throw new Error('forced rollback command failure')
+    }
+    return originalExec(sql)
+  })
+
+  let currentDb: DatabaseSync
+  try {
+    const res = await del(opts.path, PLAIN_BODY)
+    expect(rollbackFaultHit).toBe(true)
+    expect(res.status).toBe(500)
+    expect(res.body).toMatchObject({ success: false, error: { code: 'INTERNAL_ERROR' } })
+    expect(res.body.error.message).not.toContain('forced rollback command failure')
+
+    spy.mockRestore()
+    const dm = await import('../src/database/DatabaseManager.js')
+    currentDb = dm.getDatabase()
+    expect(currentDb === originalDb).toBe(false)
+    db = currentDb
+    expect(row(opts.table, opts.id)).toEqual(before)
+
+    db.exec(`DROP TRIGGER ${opts.triggerName}`)
+    const retry = await del(opts.path, PLAIN_BODY)
+    expect(retry.status).toBe(200)
+    expect(row(opts.table, opts.id)).toMatchObject({ id: opts.id, is_deleted: 1 })
+  } finally {
+    spy.mockRestore()
+    if (!currentDb || currentDb === originalDb) {
+      try { originalExec('ROLLBACK') } catch { /* test cleanup after expected RED */ }
+    }
+    const dm = await import('../src/database/DatabaseManager.js')
+    db = dm.getDatabase()
+    db.exec(`DROP TRIGGER IF EXISTS ${opts.triggerName}`)
+  }
+}
+
 // ── supplier ────────────────────────────────────────────────────────────────
 
 describe('DELETE /api/v1/suppliers/:id — 供应商活引用拦截', () => {
@@ -208,8 +285,15 @@ describe('DELETE /api/v1/suppliers/:id — 供应商活引用拦截', () => {
     seedPurchaseOrder('PO-DG-LIVE', id, 'pending')
     const before = { supplier: row('suppliers', id), po: row('purchase_orders', 'PO-DG-LIVE') }
 
-    const res = await del(`/api/v1/suppliers/${id}`, SPOOF_BODY)
+    const trace = installBeginTrace()
+    let res
+    try {
+      res = await del(`/api/v1/suppliers/${id}`, SPOOF_BODY)
+    } finally {
+      trace.restore()
+    }
 
+    expect(trace.beginCount()).toBe(1)
     expect(res.status).toBe(409)
     expect(res.body).toMatchObject({ success: false, error: { code: 'ENTITY_IN_USE' } })
     expect(row('suppliers', id)).toEqual(before.supplier)
@@ -217,10 +301,10 @@ describe('DELETE /api/v1/suppliers/:id — 供应商活引用拦截', () => {
     expectSanitizedDenialAudit('suppliers', id)
   })
 
-  it('有效入库记录（completed inbound）→ 409 ENTITY_IN_USE', async () => {
+  it('在途入库记录（pending inbound）→ 409 ENTITY_IN_USE', async () => {
     const id = 'SUP-DG-INB-LIVE'
     seedSupplier(id)
-    seedInbound('INB-DG-LIVE', id, 'completed')
+    seedInbound('INB-DG-LIVE', id, 'pending')
     const before = { supplier: row('suppliers', id), inbound: row('inbound_records', 'INB-DG-LIVE') }
 
     const res = await del(`/api/v1/suppliers/${id}`, SPOOF_BODY)
@@ -259,17 +343,19 @@ describe('DELETE /api/v1/suppliers/:id — 供应商活引用拦截', () => {
     expect(row('suppliers', id)).toMatchObject({ id, is_deleted: 0 })
   })
 
-  it('仅历史引用（completed PO / cancelled inbound / refunded return / 关联物料 / 软删入库）→ 删除成功且引用行不变', async () => {
+  it('仅历史引用（completed PO / completed-or-cancelled inbound / refunded return / 关联物料 / 软删入库）→ 删除成功且引用行不变', async () => {
     const id = 'SUP-DG-HIST'
     seedSupplier(id)
     seedMaterial('MAT-DG-HIST')
     db.prepare('UPDATE materials SET supplier_id = ? WHERE id = ?').run(id, 'MAT-DG-HIST')
     seedPurchaseOrder('PO-DG-HIST', id, 'completed')
+    seedInbound('INB-DG-HIST-DONE', id, 'completed')
     seedInbound('INB-DG-HIST-CXL', id, 'cancelled')
     seedInbound('INB-DG-HIST-DEL', id, 'completed', { isDeleted: 1 })
     seedSupplierReturn('RET-DG-HIST', id, 'refunded')
     const beforeRefs = {
       po: row('purchase_orders', 'PO-DG-HIST'),
+      inboundDone: row('inbound_records', 'INB-DG-HIST-DONE'),
       inboundCxl: row('inbound_records', 'INB-DG-HIST-CXL'),
       inboundDel: row('inbound_records', 'INB-DG-HIST-DEL'),
       ret: row('supplier_returns', 'RET-DG-HIST'),
@@ -281,6 +367,7 @@ describe('DELETE /api/v1/suppliers/:id — 供应商活引用拦截', () => {
     expect(res.status).toBe(200)
     expect(row('suppliers', id)).toMatchObject({ id, is_deleted: 1 })
     expect(row('purchase_orders', 'PO-DG-HIST')).toEqual(beforeRefs.po)
+    expect(row('inbound_records', 'INB-DG-HIST-DONE')).toEqual(beforeRefs.inboundDone)
     expect(row('inbound_records', 'INB-DG-HIST-CXL')).toEqual(beforeRefs.inboundCxl)
     expect(row('inbound_records', 'INB-DG-HIST-DEL')).toEqual(beforeRefs.inboundDel)
     expect(row('supplier_returns', 'RET-DG-HIST')).toEqual(beforeRefs.ret)
@@ -312,6 +399,12 @@ describe('DELETE /api/v1/suppliers/:id — 供应商活引用拦截', () => {
     const id = 'SUP-DG-FAULT'
     seedSupplier(id)
     await expectFaultRollback({ table: 'suppliers', id, path: `/api/v1/suppliers/${id}`, triggerName: 'dg_supplier_forced_error' })
+  })
+
+  it('ROLLBACK 命令故障：关闭并替换连接，未提交删除回滚且可重试', async () => {
+    const id = 'SUP-DG-ROLLBACK-FAULT'
+    seedSupplier(id)
+    await expectRollbackCommandFault({ table: 'suppliers', id, path: `/api/v1/suppliers/${id}`, triggerName: 'dg_supplier_rollback_fault' })
   })
 
   it('未知 id → 404 NOT_FOUND；重复删除同一 id → 第二次 404', async () => {
@@ -373,6 +466,19 @@ describe('DELETE /api/v1/roles/:id — 角色活跃用户分配拦截', () => {
     expect(row('users', 'USER-DG-ROLE-HIST')).toEqual(beforeUser)
   })
 
+  it('仅停用用户持有角色 → 删除成功，停用用户行不变', async () => {
+    const id = 'ROLE-DG-INACTIVE'
+    seedRole(id, 'dg_role_inactive')
+    seedUser('USER-DG-ROLE-INACTIVE', 'dg_role_inactive_user', 'dg_role_inactive', { status: 0 })
+    const beforeUser = row('users', 'USER-DG-ROLE-INACTIVE')
+
+    const res = await del(`/api/v1/roles/${id}`, PLAIN_BODY)
+
+    expect(res.status).toBe(200)
+    expect(row('roles', id)).toMatchObject({ id, is_deleted: 1 })
+    expect(row('users', 'USER-DG-ROLE-INACTIVE')).toEqual(beforeUser)
+  })
+
   it('committed-race：锁前窗口被第二连接提交用户分配 → 锁内重读拦截，零部分写', async () => {
     const id = 'ROLE-DG-RACE'
     seedRole(id, 'dg_role_race')
@@ -427,8 +533,15 @@ describe('DELETE /api/v1/locations/:id — 库位在途运营引用拦截（ENTI
     seedMaterial('MAT-DG-LOC-LIVE', { locationId: id })
     const before = { location: row('locations', id), material: row('materials', 'MAT-DG-LOC-LIVE') }
 
-    const res = await del(`/api/v1/locations/${id}`, SPOOF_BODY)
+    const trace = installBeginTrace()
+    let res
+    try {
+      res = await del(`/api/v1/locations/${id}`, SPOOF_BODY)
+    } finally {
+      trace.restore()
+    }
 
+    expect(trace.beginCount()).toBe(1)
     expect(res.status).toBe(409)
     expect(res.body).toMatchObject({ success: false, error: { code: 'ENTITY_IN_USE' } })
     expect(row('locations', id)).toEqual(before.location)
@@ -518,6 +631,12 @@ describe('DELETE /api/v1/locations/:id — 库位在途运营引用拦截（ENTI
     const again = await del(`/api/v1/locations/${id}`, PLAIN_BODY)
     expect(again.status).toBe(404)
     expect(again.body).toMatchObject({ success: false, error: { code: 'NOT_FOUND' } })
+  })
+
+  it('ROLLBACK 命令故障：关闭并替换连接，未提交删除回滚且可重试', async () => {
+    const id = 'LOC-DG-ROLLBACK-FAULT'
+    seedLocation(id)
+    await expectRollbackCommandFault({ table: 'locations', id, path: `/api/v1/locations/${id}`, triggerName: 'dg_location_rollback_fault' })
   })
 })
 
@@ -622,8 +741,15 @@ describe('DELETE /api/v1/projects/:id — 项目活跃引用拦截', () => {
     seedCatalogMapping('CM-DG-LIVE', `PRJ-${id}`)
     const before = { project: row('projects', id), mapping: row('code_mappings', 'CM-DG-LIVE') }
 
-    const res = await del(`/api/v1/projects/${id}`, SPOOF_BODY)
+    const trace = installBeginTrace()
+    let res
+    try {
+      res = await del(`/api/v1/projects/${id}`, SPOOF_BODY)
+    } finally {
+      trace.restore()
+    }
 
+    expect(trace.beginCount()).toBe(1)
     expect(res.status).toBe(409)
     expect(res.body).toMatchObject({ success: false, error: { code: 'ENTITY_IN_USE' } })
     expect(row('projects', id)).toEqual(before.project)
@@ -723,6 +849,12 @@ describe('DELETE /api/v1/projects/:id — 项目活跃引用拦截', () => {
     const id = 'PRJ-DG-FAULT'
     seedProject(id)
     await expectFaultRollback({ table: 'projects', id, path: `/api/v1/projects/${id}`, triggerName: 'dg_project_forced_error' })
+  })
+
+  it('ROLLBACK 命令故障：关闭并替换连接，未提交删除回滚且可重试', async () => {
+    const id = 'PRJ-DG-ROLLBACK-FAULT'
+    seedProject(id)
+    await expectRollbackCommandFault({ table: 'projects', id, path: `/api/v1/projects/${id}`, triggerName: 'dg_project_rollback_fault' })
   })
 
   it('未知 id → 404 NOT_FOUND；重复删除同一 id → 第二次 404', async () => {

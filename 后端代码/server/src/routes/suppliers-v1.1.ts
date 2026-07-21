@@ -1,10 +1,10 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { findSupplierLiveReferences } from '../utils/delete-reference-guards.js'
+import { findSupplierLiveReferences, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -92,11 +92,6 @@ router.delete('/:id', authenticateToken, requireSupplierWrite, (req, res) => {
   try {
     const { id } = req.params
     db = getDatabase()
-    // 锁前快速发现（顾问性；权威判定在锁内重读）
-    if (findSupplierLiveReferences(db, id).length > 0) {
-      error(res, 'Supplier has active purchase, inbound, or return references', 'ENTITY_IN_USE', 409)
-      return
-    }
     db.exec('BEGIN IMMEDIATE')
     transactionOpen = true
     const existing = db.prepare('SELECT * FROM suppliers WHERE id = ? AND is_deleted = 0').get(id)
@@ -119,7 +114,10 @@ router.delete('/:id', authenticateToken, requireSupplierWrite, (req, res) => {
     success(res, null, 'Deleted')
   } catch (err: any) {
     if (transactionOpen && db) {
-      try { db.exec('ROLLBACK') } catch { /* preserve the original request error */ }
+      if (!recoverFailedDeleteTransaction(db, closeDatabase)) {
+        error(res, 'Delete transaction recovery failed', 'INTERNAL_ERROR', 500)
+        return
+      }
     }
     error(res, err.message)
   }

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import {
   detectSoDConflicts,
@@ -13,7 +13,7 @@ import {
   userRoleMutationExceedsSecurityCeiling,
   wouldRemoveLastEffectiveAdmin,
 } from '../middleware/permissions.js'
-import { findUserLiveOwnership } from '../utils/delete-reference-guards.js'
+import { findUserLiveOwnership, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
 import { accountPasswordProblem, hashMatchesKnownLeakedDefaultPassword } from '../config/security.js'
 
 const router = Router()
@@ -175,41 +175,53 @@ router.put('/:id', requireUsersWrite, rejectUntrustedAuditActorFields, rejectInv
 })
 
 router.delete('/:id', requireUsersWrite, rejectUntrustedAuditActorFields, requireUserRoleMutationCeiling, (req, res) => {
+  let db: ReturnType<typeof getDatabase> | undefined
+  let transactionOpen = false
   try {
     const { id } = req.params
-    const db = getDatabase()
+    db = getDatabase()
     db.exec('BEGIN IMMEDIATE')
+    transactionOpen = true
     if (
       !requestActorHasCurrentPermission(db, req, 'users', 'W')
       || userRoleMutationExceedsSecurityCeiling(db, req)
     ) {
       db.exec('ROLLBACK')
+      transactionOpen = false
       error(res, 'Forbidden: security administration requires admin', 'FORBIDDEN', 403); return
     }
     const existing = db.prepare('SELECT * FROM users WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!existing) {
       db.exec('ROLLBACK')
+      transactionOpen = false
       error(res, 'Not found', 'NOT_FOUND', 404); return
     }
     // 禁止删除 admin 账户
     if (existing.username === 'admin' || existing.id === 'USER-001') {
       db.exec('ROLLBACK')
+      transactionOpen = false
       error(res, 'Cannot delete admin account', 'BUSINESS_CONFLICT', 409); return
     }
     if (wouldRemoveLastEffectiveAdmin(db, id, { deleting: true })) {
       db.exec('ROLLBACK')
+      transactionOpen = false
       error(res, 'Cannot remove the last effective admin', 'BUSINESS_CONFLICT', 409); return
     }
     // 锁内重读：活持有/在途分配（生效项目负责人、在途出库经办）存在即拒；历史审计持有不拦
     if (findUserLiveOwnership(db, existing.username).length > 0) {
       db.exec('ROLLBACK')
+      transactionOpen = false
       error(res, 'User still owns live assignments', 'ENTITY_IN_USE', 409); return
     }
     db.prepare('UPDATE users SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
     db.exec('COMMIT')
+    transactionOpen = false
     success(res, null, 'Deleted')
   } catch (err: any) {
-    try { getDatabase().exec('ROLLBACK') } catch { /* no active transaction */ }
+    if (db && transactionOpen && !recoverFailedDeleteTransaction(db, closeDatabase)) {
+      error(res, 'Delete transaction recovery failed', 'INTERNAL_ERROR', 500)
+      return
+    }
     error(res, err.message)
   }
 })

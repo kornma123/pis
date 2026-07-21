@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { v4 as uuidv4 } from 'uuid'
 import { parsePermissions } from '../middleware/rbac-matrix.js'
@@ -11,7 +11,7 @@ import {
   requireRoleMutationCeiling,
   roleMutationExceedsSecurityCeiling,
 } from '../middleware/permissions.js'
-import { findRoleLiveAssignments } from '../utils/delete-reference-guards.js'
+import { findRoleLiveAssignments, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -134,36 +134,47 @@ router.put('/:id', requireRolesWrite, rejectUntrustedAuditActorFields, rejectInv
 })
 
 router.delete('/:id', requireRolesWrite, rejectUntrustedAuditActorFields, requireRoleDeleteCeiling, (req, res) => {
+  let database: ReturnType<typeof getDatabase> | undefined
+  let transactionOpen = false
   try {
-    const database = getDatabase()
+    database = getDatabase()
     const { id } = req.params
     database.exec('BEGIN IMMEDIATE')
+    transactionOpen = true
     if (
       !requestActorHasCurrentPermission(database, req, 'roles', 'W')
       || roleMutationExceedsSecurityCeiling(database, req, 'delete')
     ) {
       database.exec('ROLLBACK')
+      transactionOpen = false
       error(res, 'Forbidden: security administration requires admin', 'FORBIDDEN', 403); return
     }
     const existing = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!existing) {
       database.exec('ROLLBACK')
+      transactionOpen = false
       error(res, 'Not found', 'NOT_FOUND', 404); return
     }
     if (existing.code === 'admin') {
       database.exec('ROLLBACK')
+      transactionOpen = false
       error(res, 'Cannot delete system admin role', 'FORBIDDEN', 403); return
     }
     // 锁内重读：活跃用户分配（user_roles / users.role 兜底）存在即拒
     if (findRoleLiveAssignments(database, existing.code).length > 0) {
       database.exec('ROLLBACK')
+      transactionOpen = false
       error(res, 'Role is still assigned to active users', 'ENTITY_IN_USE', 409); return
     }
     database.prepare('UPDATE roles SET is_deleted = 1 WHERE id = ?').run(id)
     database.exec('COMMIT')
+    transactionOpen = false
     success(res, { id }, 'Deleted')
   } catch (err: any) {
-    try { getDatabase().exec('ROLLBACK') } catch { /* no active transaction */ }
+    if (database && transactionOpen && !recoverFailedDeleteTransaction(database, closeDatabase)) {
+      error(res, 'Delete transaction recovery failed', 'INTERNAL_ERROR', 500)
+      return
+    }
     error(res, err.message)
   }
 })
