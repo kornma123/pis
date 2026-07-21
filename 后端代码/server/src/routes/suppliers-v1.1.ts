@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { findSupplierLiveReferences, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -86,14 +87,40 @@ router.put('/:id', authenticateToken, requireSupplierWrite, (req, res) => {
 })
 
 router.delete('/:id', authenticateToken, requireSupplierWrite, (req, res) => {
+  let db: ReturnType<typeof getDatabase> | undefined
+  let transactionOpen = false
   try {
     const { id } = req.params
-    const db = getDatabase()
+    db = getDatabase()
+    db.exec('BEGIN IMMEDIATE')
+    transactionOpen = true
     const existing = db.prepare('SELECT * FROM suppliers WHERE id = ? AND is_deleted = 0').get(id)
-    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (!existing) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Not found', 'NOT_FOUND', 404)
+      return
+    }
+    // 锁内重读：committed-race 防线
+    if (findSupplierLiveReferences(db, id).length > 0) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Supplier has active purchase, inbound, or return references', 'ENTITY_IN_USE', 409)
+      return
+    }
     db.prepare('UPDATE suppliers SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    transactionOpen = false
     success(res, null, 'Deleted')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (transactionOpen && db) {
+      if (!recoverFailedDeleteTransaction(db, closeDatabase)) {
+        error(res, 'Delete transaction recovery failed', 'INTERNAL_ERROR', 500)
+        return
+      }
+    }
+    error(res, err.message)
+  }
 })
 
 export default router
