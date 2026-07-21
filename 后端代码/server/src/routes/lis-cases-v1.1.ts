@@ -12,7 +12,7 @@
  */
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission, requireAnyRole } from '../middleware/permissions.js'
@@ -23,6 +23,17 @@ import { backfillAbcPartnerIds } from '../utils/abc-partner-link.js'
 
 const router = Router()
 const requireWrite = requirePermission('reconciliation', 'W') // 所有落库写；样本类型覆盖仍允许具备 W 的技术员
+
+function rollbackCorrectionTransaction(db: ReturnType<typeof getDatabase>): boolean {
+  try {
+    db.exec('ROLLBACK')
+    return true
+  } catch (rollbackError) {
+    try { closeDatabase() } catch (closeError) { void closeError }
+    void rollbackError
+    return false
+  }
+}
 const requireImport = requireAnyRole('admin', 'finance') // 导入/预览=口径数据源输入，收窄到管理员+财务
 const SPECIMEN_TYPES = ['tissue', 'tissue_complex', 'cytology']
 
@@ -47,7 +58,7 @@ const REJECTION_ITEM_LIMIT = 100 // 单次回执条目上限
 const INVALID_VALUE_DIGEST_LIMIT = 40 // 非法登记时间值的截断安全摘要长度
 
 type RejectionItem =
-  | { code: 'CROSS_MONTH_CONFLICT'; caseNo: string; partnerName: string; existingMonth: string; incomingMonth: string }
+  | { code: 'CROSS_MONTH_CONFLICT'; caseNo: string; partnerName: string; existingMonth: string; incomingMonth: string | null }
   | { code: 'INVALID_OPERATE_TIME'; caseNo: string; partnerName: string; value: string }
   | { code: 'ROW_SHAPE_INVALID'; caseNo: string; partnerName: string }
 
@@ -217,7 +228,7 @@ router.post('/import', authenticateToken, requireImport, requireWrite, (req, res
             if (rejectedCrossMonthSamples.length < CROSS_MONTH_SAMPLE_LIMIT) {
               rejectedCrossMonthSamples.push({ caseNo: c.caseNo, partnerName: c.partnerName, existingMonth, incomingMonth })
             }
-            pushRejection({ code: 'CROSS_MONTH_CONFLICT', caseNo: c.caseNo, partnerName: c.partnerName, existingMonth, incomingMonth })
+            pushRejection({ code: 'CROSS_MONTH_CONFLICT', caseNo: c.caseNo, partnerName: c.partnerName, existingMonth, incomingMonth: incomingMonth || null })
             continue
           }
         }
@@ -394,7 +405,9 @@ router.post('/correction', authenticateToken, requireImport, requireWrite, (req,
       error(res, 'partnerId 与 caseNo 必填', 'INVALID_PARAMETER', 400); return
     }
     const caseNo = canonicalCaseNo(rawCaseNo.trim()) // 与落库同一 canonical（全角/异体横线号不查错行）
-    if (expectedOperateTime != null && typeof expectedOperateTime !== 'string') { error(res, 'expectedOperateTime 非法', 'INVALID_TIME', 400); return }
+    if (!Object.prototype.hasOwnProperty.call(body, 'expectedOperateTime') || typeof expectedOperateTime !== 'string') {
+      error(res, 'expectedOperateTime 必须显式提供字符串；历史空值请显式传空字符串', 'INVALID_TIME', 400); return
+    }
     if (typeof newOperateTime !== 'string') { error(res, 'newOperateTime 非法', 'INVALID_TIME', 400); return }
     const strictNew = parseStrictDate(newOperateTime)
     if (!strictNew.valid) { error(res, 'newOperateTime 不是日历上真实存在的时间', 'INVALID_TIME', 400); return }
@@ -404,17 +417,29 @@ router.post('/correction', authenticateToken, requireImport, requireWrite, (req,
     const actor = (req as any).user?.userId || null // trusted actor：只取认证身份，同 /import operator 口径（userId 非 id）
 
     const db = getDatabase()
+    let transactionOpen = false
     // BEGIN IMMEDIATE 持写锁后锁内重读目标与当前值：CAS 校验→更新→留痕同一事务，任一失败整体回滚。
     db.exec('BEGIN IMMEDIATE')
+    transactionOpen = true
     try {
       const target = db.prepare('SELECT id, operate_time FROM lis_cases WHERE partner_id = ? AND case_no = ?')
         .get(partnerId, caseNo) as { id: string; operate_time: string | null } | undefined
-      if (!target) { db.exec('ROLLBACK'); error(res, '病例不存在', 'NOT_FOUND', 404); return }
+      if (!target) {
+        if (!rollbackCorrectionTransaction(db)) { error(res, '更正事务恢复失败', 'INTERNAL_ERROR', 500); return }
+        transactionOpen = false
+        error(res, '病例不存在', 'NOT_FOUND', 404); return
+      }
       const currentCas = casNormalize(target.operate_time)
       if (casNormalize(expectedOperateTime) !== currentCas) {
-        db.exec('ROLLBACK'); error(res, '登记时间已被他人修改，请按最新值重试', 'STALE_EXPECTED', 409); return
+        if (!rollbackCorrectionTransaction(db)) { error(res, '更正事务恢复失败', 'INTERNAL_ERROR', 500); return }
+        transactionOpen = false
+        error(res, '登记时间已被他人修改，请按最新值重试', 'STALE_EXPECTED', 409); return
       }
-      if (newCanonical === currentCas) { db.exec('ROLLBACK'); error(res, '新登记时间与当前值相同，无需更正', 'SAME_VALUE', 409); return }
+      if (newCanonical === currentCas) {
+        if (!rollbackCorrectionTransaction(db)) { error(res, '更正事务恢复失败', 'INTERNAL_ERROR', 500); return }
+        transactionOpen = false
+        error(res, '新登记时间与当前值相同，无需更正', 'SAME_VALUE', 409); return
+      }
       // 结构性 CAS：WHERE 带当前值（IS 兼容 NULL），0 行命中即并发漂移 → 抛错回滚
       const updated = db.prepare('UPDATE lis_cases SET operate_time = ? WHERE id = ? AND operate_time IS ?')
         .run(newCanonical, target.id, target.operate_time)
@@ -424,6 +449,7 @@ router.post('/correction', authenticateToken, requireImport, requireWrite, (req,
         .run(uuidv4(), target.id, caseNo, target.operate_time || null, newCanonical, reason.trim(), actor)
       const stored = db.prepare('SELECT operate_time FROM lis_cases WHERE id = ?').get(target.id) as { operate_time: string | null }
       db.exec('COMMIT')
+      transactionOpen = false
       // canonical old/new truth：old 取 CAS 归一形（历史脏行不原样回显），new 取同事务锁内回读的落库真值
       success(res, {
         caseNo, partnerId,
@@ -432,7 +458,10 @@ router.post('/correction', authenticateToken, requireImport, requireWrite, (req,
         reason: reason.trim(),
       }, '登记时间已更正并留痕')
     } catch (e) {
-      db.exec('ROLLBACK')
+      if (transactionOpen && !rollbackCorrectionTransaction(db)) {
+        error(res, '更正事务恢复失败', 'INTERNAL_ERROR', 500)
+        return
+      }
       throw e
     }
   } catch (e: any) { error(res, e.message || '更正失败') }

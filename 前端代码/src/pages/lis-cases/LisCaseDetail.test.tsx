@@ -5,11 +5,12 @@
  */
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { lisCasesApi } from '@/api/lis-cases'
+import { lisCasesApi, parseCorrectionResult } from '@/api/lis-cases'
 import { canAccess } from '@/lib/permissions'
 import LisCaseDetail from './LisCaseDetail'
 
-vi.mock('@/api/lis-cases', () => ({
+vi.mock('@/api/lis-cases', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/lis-cases')>()),
   lisCasesApi: {
     list: vi.fn(),
     preview: vi.fn(),
@@ -57,6 +58,13 @@ beforeEach(() => {
 })
 
 describe('#179 登记月带留痕更正', () => {
+  it.each([
+    ['缺 newOperateTime', { caseNo: 'S26-001', partnerId: 'P-1', oldOperateTime: '2026-06-20', reason: '登记月录错' }],
+    ['null newOperateTime', { caseNo: 'S26-001', partnerId: 'P-1', oldOperateTime: '2026-06-20', newOperateTime: null, reason: '登记月录错' }],
+    ['非法日期', { caseNo: 'S26-001', partnerId: 'P-1', oldOperateTime: '2026-06-20', newOperateTime: '2026-02-31', reason: '登记月录错' }],
+  ])('API 更正回执 %s → parser fail-closed', (_label, raw) => {
+    expect(() => parseCorrectionResult(raw)).toThrow()
+  })
   it('happy path：exact payload（expected=当前登记时间 CAS），成功后按服务端 truth 刷新展示', async () => {
     vi.mocked(lisCasesApi.correct).mockResolvedValue({
       caseNo: 'S26-001', partnerId: 'P-1', oldOperateTime: '2026-06-20', newOperateTime: '2026-07-05', reason: '登记月录错',
@@ -92,6 +100,19 @@ describe('#179 登记月带留痕更正', () => {
     vi.mocked(canAccess).mockImplementation((module, level) => module === 'reconciliation' && level === 'R')
     await renderDetail()
     expect(screen.queryByRole('button', { name: '更正登记时间' })).not.toBeInTheDocument()
+  })
+
+  it('打开表单后权限被撤销 → handler 二次门阻止请求', async () => {
+    await renderDetail()
+    fireEvent.click(screen.getByRole('button', { name: '更正登记时间' }))
+    const form = screen.getByRole('region', { name: '登记时间更正' })
+    fireEvent.change(within(form).getByLabelText('新登记时间'), { target: { value: '2026-07-05' } })
+    fireEvent.change(within(form).getByLabelText('更正原因'), { target: { value: '登记月录错' } })
+    fireEvent.click(within(form).getByRole('checkbox'))
+    vi.mocked(canAccess).mockReturnValue(false)
+    fireEvent.click(within(form).getByRole('button', { name: '提交更正' }))
+    expect(lisCasesApi.correct).not.toHaveBeenCalled()
+    expect(screen.queryByRole('region', { name: '登记时间更正' })).not.toBeInTheDocument()
   })
 
   it('reason 为空 → 提交被拦，不发起请求', async () => {
@@ -149,5 +170,39 @@ describe('#179 登记月带留痕更正', () => {
     expect(lisCasesApi.correct).toHaveBeenCalledTimes(1)
     pending.resolve({ caseNo: 'S26-001', partnerId: 'P-1', oldOperateTime: '2026-06-20', newOperateTime: '2026-07-05', reason: '登记月录错' })
     expect(await screen.findByText('2026-07-05')).toBeInTheDocument()
+  })
+
+  it('同一 React batch 内两次 handler 触发仍只取得一个同步动作槽', async () => {
+    const pending = deferred<{ caseNo: string; partnerId: string; oldOperateTime: string; newOperateTime: string; reason: string }>()
+    vi.mocked(lisCasesApi.correct).mockReturnValue(pending.promise)
+    await renderDetail()
+    fireEvent.click(screen.getByRole('button', { name: '更正登记时间' }))
+    const form = screen.getByRole('region', { name: '登记时间更正' })
+    fireEvent.change(within(form).getByLabelText('新登记时间'), { target: { value: '2026-07-05' } })
+    fireEvent.change(within(form).getByLabelText('更正原因'), { target: { value: '登记月录错' } })
+    fireEvent.click(within(form).getByRole('checkbox'))
+    const submit = within(form).getByRole('button', { name: '提交更正' })
+    submit.click()
+    submit.click()
+    expect(lisCasesApi.correct).toHaveBeenCalledTimes(1)
+    pending.resolve({ caseNo: 'S26-001', partnerId: 'P-1', oldOperateTime: '2026-06-20', newOperateTime: '2026-07-05', reason: '登记月录错' })
+    expect(await screen.findByText('2026-07-05')).toBeInTheDocument()
+  })
+
+  it('更正回执的 identity/newOperateTime 畸形 → 不更新展示、不报成功', async () => {
+    vi.mocked(lisCasesApi.correct).mockResolvedValue({
+      caseNo: 'OTHER', partnerId: 'P-1', oldOperateTime: '2026-06-20', newOperateTime: '2026-07-05', reason: '登记月录错',
+    } as never)
+    const { toast } = await import('sonner')
+    await renderDetail()
+    fireEvent.click(screen.getByRole('button', { name: '更正登记时间' }))
+    const form = screen.getByRole('region', { name: '登记时间更正' })
+    fireEvent.change(within(form).getByLabelText('新登记时间'), { target: { value: '2026-07-05' } })
+    fireEvent.change(within(form).getByLabelText('更正原因'), { target: { value: '登记月录错' } })
+    fireEvent.click(within(form).getByRole('checkbox'))
+    fireEvent.click(within(form).getByRole('button', { name: '提交更正' }))
+    expect(await within(form).findByRole('alert')).toHaveTextContent('未成功')
+    expect(screen.getAllByText('2026-06-20').length).toBeGreaterThan(0)
+    expect(vi.mocked(toast.success)).not.toHaveBeenCalled()
   })
 })

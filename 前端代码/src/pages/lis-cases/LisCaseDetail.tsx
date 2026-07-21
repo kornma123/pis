@@ -19,6 +19,7 @@ function message(_error: unknown, fallback: string) {
 export default function LisCaseDetail({ partnerId, caseNo, onBack }: { partnerId: string; caseNo: string; onBack: () => void }) {
   const canWrite = canAccess('reconciliation', 'W')
   const requestId = useRef(0)
+  const correctionActionRef = useRef(false)
   const [record, setRecord] = useState<LisCaseItem | null>(null)
   const [markers, setMarkers] = useState<CaseMarker[]>([])
   const [loading, setLoading] = useState(true)
@@ -82,12 +83,14 @@ export default function LisCaseDetail({ partnerId, caseNo, onBack }: { partnerId
   }, [canWrite, record, saving])
 
   const submitCorrection = useCallback(async () => {
-    if (!record?.partnerId || correcting) return
+    if (!record?.partnerId || correcting || correctionActionRef.current) return
+    if (!canAccess('reconciliation', 'W')) { setCorrectionError('当前账号已无更正权限，请重新登录或联系管理员'); return }
     setCorrectionStale(false)
     if (newTime.trim() === '') { setCorrectionError('请填写新登记时间'); return }
     if (reason.trim() === '') { setCorrectionError('请填写更正原因'); return }
     if (!confirmed) { setCorrectionError('请显式确认本次更正'); return }
     setCorrectionError('')
+    correctionActionRef.current = true
     setCorrecting(true)
     try {
       const result = await lisCasesApi.correct({
@@ -98,6 +101,7 @@ export default function LisCaseDetail({ partnerId, caseNo, onBack }: { partnerId
         reason: reason.trim(),
         confirm: true,
       })
+      if (result.partnerId !== record.partnerId || result.caseNo !== record.caseNo) throw new Error('更正回执身份不匹配')
       // 按服务端返回的 canonical truth 刷新，不沿用本地输入值
       setRecord((current) => current ? { ...current, operateTime: result.newOperateTime } : current)
       setCorrectionOpen(false)
@@ -110,6 +114,7 @@ export default function LisCaseDetail({ partnerId, caseNo, onBack }: { partnerId
       if ((error as { status?: number })?.status === 409) setCorrectionStale(true)
       else setCorrectionError('更正未成功，登记时间未改变，请核对后重试')
     } finally {
+      correctionActionRef.current = false
       setCorrecting(false)
     }
   }, [confirmed, correcting, newTime, reason, record])

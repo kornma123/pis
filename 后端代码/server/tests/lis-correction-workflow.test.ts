@@ -9,7 +9,7 @@
  *   精确契约；trusted actor 只取 req.user；BEGIN IMMEDIATE 锁内重读 + CAS 更新 + reconciliation_logs
  *   留痕同一事务；stale/missing/invalid/same/empty/unauthorized/audit/update/commit fault 全零 partial。
  */
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { buildTestApp, getDb } from './p0-harness.js'
 
 let app: any
@@ -196,6 +196,18 @@ describe('#179 登记月带留痕更正（POST /correction）', () => {
     expect(correctionAudits('CR-NO-SUCH')).toHaveLength(0)
   })
 
+  it.each([
+    ['缺失', {}],
+    ['null', { expectedOperateTime: null }],
+  ])('expectedOperateTime %s → 400 INVALID_TIME，不能把 unknown 当显式空 CAS', async (_label, expectedField) => {
+    const request = await req()
+    const res = await request(app).post('/api/v1/lis-cases/correction').set('Authorization', `Bearer ${adminToken}`)
+      .send({ partnerId: pid, caseNo: 'CR-001', newOperateTime: '2026-07-01', reason: 'CAS 必须显式提供', confirm: true, ...expectedField })
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('INVALID_TIME')
+    expect(operateTimeOf(pid, 'CR-001')).toBe('2026-06-20')
+  })
+
   it('invalid newOperateTime（日历不存在日）→ 400 INVALID_TIME，值不变', async () => {
     const request = await req()
     const res = await request(app).post('/api/v1/lis-cases/correction').set('Authorization', `Bearer ${adminToken}`)
@@ -340,4 +352,32 @@ describe('#179 登记月带留痕更正（POST /correction）', () => {
     expect(cross.body.data.rejections[0].code).toBe('CROSS_MONTH_CONFLICT')
     expect(operateTimeOf(pid, 'CR-001')).toBe('2026-06-26')
   })
+
+  it('ROLLBACK 命令首次失败 → 关闭未知状态共享连接并返回安全 500', async () => {
+    const request = await req()
+    db.exec("CREATE TRIGGER fail_lis_update_for_rollback BEFORE UPDATE ON lis_cases BEGIN SELECT RAISE(ABORT, 'forced update fault'); END")
+    const originalDb = db
+    const originalExec = originalDb.exec.bind(originalDb)
+    let rollbackFaultHit = false
+    const spy = vi.spyOn(originalDb, 'exec').mockImplementation((sql: string) => {
+      if (sql === 'ROLLBACK' && !rollbackFaultHit) {
+        rollbackFaultHit = true
+        throw new Error('forced rollback command failure')
+      }
+      return originalExec(sql)
+    })
+    try {
+      const res = await request(app).post('/api/v1/lis-cases/correction').set('Authorization', `Bearer ${adminToken}`)
+        .send({ partnerId: pid, caseNo: 'CR-001', expectedOperateTime: '2026-06-26', newOperateTime: '2026-07-01', reason: '回滚故障必须隔离连接', confirm: true })
+      expect(rollbackFaultHit).toBe(true)
+      expect(res.status).toBe(500)
+      expect(res.body.error.message).not.toContain('forced rollback command failure')
+      spy.mockRestore()
+      expect(originalDb.isOpen).toBe(false)
+    } finally {
+      spy.mockRestore()
+      try { originalExec('ROLLBACK') } catch { /* connection may have been disposed */ }
+    }
+  })
+
 })
