@@ -5,14 +5,15 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { lisCasesApi } from '@/api/lis-cases'
+import { lisCasesApi, parseLisImportResult } from '@/api/lis-cases'
 import LisImportView from './LisImportView'
 
 const mocks = vi.hoisted(() => ({
   readGrid: vi.fn(),
 }))
 
-vi.mock('@/api/lis-cases', () => ({
+vi.mock('@/api/lis-cases', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/lis-cases')>()),
   lisCasesApi: {
     list: vi.fn(),
     preview: vi.fn(),
@@ -165,7 +166,7 @@ describe('#178 导入拒收可见', () => {
       ['病理号', '送检医院', '登记时间', '蜡块数'],
       ['S26-001', '测试医院', '2026-07-18', 1],
     ])
-    vi.mocked(lisCasesApi.import).mockResolvedValue({} as never)
+    vi.mocked(lisCasesApi.import).mockImplementation(async () => parseLisImportResult({}))
     const { toast } = await import('sonner')
 
     await driveSubmit()
@@ -175,6 +176,52 @@ describe('#178 导入拒收可见', () => {
     expect(vi.mocked(toast.success)).not.toHaveBeenCalled()
     expect(vi.mocked(toast.warning)).not.toHaveBeenCalled()
     expect(vi.mocked(toast.error)).toHaveBeenCalled()
+  })
+
+  it.each([
+    ['负数计数', { skipped: -1, rejectedTotal: -1 }],
+    ['小数计数', { skipped: 0.5, rejectedTotal: 0.5, rejectionsTruncated: true }],
+    ['imported 与 inserted+updated 矛盾', { imported: 2 }],
+    ['rejectedTotal 与分类计数矛盾', { rejectedTotal: 2 }],
+    ['截断标记与完整条目矛盾', { rejectionsTruncated: true }],
+    ['畸形拒收条目', { rejections: [{ code: 'CROSS_MONTH_CONFLICT', caseNo: 'S26-X', partnerName: '医院', existingMonth: '2026-13', incomingMonth: '2026-07' }] }],
+  ])('%s → 处理结果未知，不发布部分成功', async (_label, override) => {
+    mocks.readGrid.mockResolvedValue([
+      ['病理号', '送检医院', '登记时间', '蜡块数'],
+      ['S26-001', '测试医院', '2026-07-18', 1],
+    ])
+    vi.mocked(lisCasesApi.import).mockImplementation(async () => parseLisImportResult({
+      importBatch: 'LIS-1', imported: 1, inserted: 1, updated: 0, skipped: 0,
+      partnersCreated: 0, partnersMatched: 1,
+      rejectedCrossMonth: 0, rejectedInvalidDate: 0, rejectedTotal: 0,
+      rejectionsTruncated: false, rejections: [], ...override,
+    }))
+
+    await driveSubmit()
+
+    expect(await screen.findByRole('status', { name: '处理结果未知' })).toHaveTextContent('成功回执 0 批')
+    expect(screen.queryByRole('status', { name: '全部完成' })).not.toBeInTheDocument()
+  })
+
+  it('服务端拒收条目被截断时明确标成不完整，并禁止导出为完整清单', async () => {
+    mocks.readGrid.mockResolvedValue([
+      ['病理号', '送检医院', '登记时间', '蜡块数'],
+      ['S26-001', '测试医院', '2026-07-18', 1],
+    ])
+    vi.mocked(lisCasesApi.import).mockResolvedValue({
+      importBatch: 'LIS-1', imported: 0, inserted: 0, updated: 0, skipped: 2,
+      partnersCreated: 0, partnersMatched: 1,
+      rejectedCrossMonth: 0, rejectedInvalidDate: 0, rejectedTotal: 2,
+      rejectionsTruncated: true,
+      rejections: [{ code: 'ROW_SHAPE_INVALID', caseNo: '', partnerName: '测试医院' }],
+    } as never)
+
+    await driveSubmit()
+
+    const list = await screen.findByRole('region', { name: '拒收清单' })
+    expect(list).toHaveTextContent('拒收总数 2')
+    expect(list).toHaveTextContent('清单不完整')
+    expect(screen.queryByRole('button', { name: '导出拒收清单' })).not.toBeInTheDocument()
   })
 
   it('拒收时 marker 导入不消耗被拒 caseNo（抗体清单整体停住）', async () => {
@@ -218,7 +265,7 @@ describe('#178 导入拒收可见', () => {
       importBatch: 'LIS-1', imported: 0, inserted: 0, updated: 0, skipped: 0,
       partnersCreated: 0, partnersMatched: 1,
       rejectedCrossMonth: 1, rejectedInvalidDate: 0, rejectedTotal: 1, rejectionsTruncated: false,
-      rejections: [{ code: 'CROSS_MONTH_CONFLICT', caseNo: 'S26-001', partnerName: '测试医院,含逗号', existingMonth: '2026-06', incomingMonth: '2026-07' }],
+      rejections: [{ code: 'CROSS_MONTH_CONFLICT', caseNo: '=2+2', partnerName: '+测试医院,含逗号', existingMonth: '2026-06', incomingMonth: '2026-07' }],
     } as never)
     const createObjectURL = vi.fn((blob: Blob) => {
       void blob
@@ -236,10 +283,11 @@ describe('#178 导入拒收可见', () => {
     expect(createObjectURL).toHaveBeenCalledTimes(1)
     const blob = createObjectURL.mock.calls[0][0]
     const csv = await blobText(blob)
-    expect(csv).toContain('S26-001')
+    expect(csv).toContain("'=2+2")
     expect(csv).toContain('CROSS_MONTH_CONFLICT')
     expect(csv).toContain('2026-06')
-    expect(csv).toContain('"测试医院,含逗号"') // CSV 转义
+    expect(csv).toContain('"\'+测试医院,含逗号"') // 公式中和 + CSV 转义
+    expect(csv).toContain('2026-06') // canonical 月份的 '-' 不应被公式中和
     expect(anchorClick).toHaveBeenCalled()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:rejection-csv')
     anchorClick.mockRestore()
