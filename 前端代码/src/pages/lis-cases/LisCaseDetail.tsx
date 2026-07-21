@@ -19,12 +19,21 @@ function message(_error: unknown, fallback: string) {
 export default function LisCaseDetail({ partnerId, caseNo, onBack }: { partnerId: string; caseNo: string; onBack: () => void }) {
   const canWrite = canAccess('reconciliation', 'W')
   const requestId = useRef(0)
+  const correctionActionRef = useRef(false)
   const [record, setRecord] = useState<LisCaseItem | null>(null)
   const [markers, setMarkers] = useState<CaseMarker[]>([])
   const [loading, setLoading] = useState(true)
   const [caseError, setCaseError] = useState('')
   const [markerError, setMarkerError] = useState('')
   const [saving, setSaving] = useState(false)
+  // #179 登记时间更正：显式人工纠错通道（CAS expected=页面当前展示值；reason/confirm 强制）
+  const [correctionOpen, setCorrectionOpen] = useState(false)
+  const [newTime, setNewTime] = useState('')
+  const [reason, setReason] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
+  const [correcting, setCorrecting] = useState(false)
+  const [correctionError, setCorrectionError] = useState('')
+  const [correctionStale, setCorrectionStale] = useState(false)
 
   const load = useCallback(async () => {
     const currentRequest = ++requestId.current
@@ -72,6 +81,50 @@ export default function LisCaseDetail({ partnerId, caseNo, onBack }: { partnerId
       setSaving(false)
     }
   }, [canWrite, record, saving])
+
+  const submitCorrection = useCallback(async () => {
+    if (!record?.partnerId || correcting || correctionActionRef.current) return
+    if (!canAccess('reconciliation', 'W')) { setCorrectionError('当前账号已无更正权限，请重新登录或联系管理员'); return }
+    setCorrectionStale(false)
+    if (newTime.trim() === '') { setCorrectionError('请填写新登记时间'); return }
+    if (reason.trim() === '') { setCorrectionError('请填写更正原因'); return }
+    if (!confirmed) { setCorrectionError('请显式确认本次更正'); return }
+    setCorrectionError('')
+    correctionActionRef.current = true
+    setCorrecting(true)
+    try {
+      const result = await lisCasesApi.correct({
+        partnerId: record.partnerId,
+        caseNo: record.caseNo,
+        expectedOperateTime: record.operateTime ?? '', // CAS：提交页面当前展示的登记时间
+        newOperateTime: newTime.trim(),
+        reason: reason.trim(),
+        confirm: true,
+      })
+      if (result.partnerId !== record.partnerId || result.caseNo !== record.caseNo) throw new Error('更正回执身份不匹配')
+      // 按服务端返回的 canonical truth 刷新，不沿用本地输入值
+      setRecord((current) => current ? { ...current, operateTime: result.newOperateTime } : current)
+      setCorrectionOpen(false)
+      setNewTime('')
+      setReason('')
+      setConfirmed(false)
+      toast.success('登记时间已更正并留痕')
+    } catch (error) {
+      // 请求层已 toast 真因；stale（409）需给出重载路径，其余错误不乐观写入
+      if ((error as { status?: number })?.status === 409) setCorrectionStale(true)
+      else setCorrectionError('更正未成功，登记时间未改变，请核对后重试')
+    } finally {
+      correctionActionRef.current = false
+      setCorrecting(false)
+    }
+  }, [confirmed, correcting, newTime, reason, record])
+
+  const reloadAfterStale = useCallback(() => {
+    setCorrectionOpen(false)
+    setCorrectionStale(false)
+    setCorrectionError('')
+    load()
+  }, [load])
 
   const antibodies = markers.filter((marker) => marker.kind === 'antibody')
   const whiteCount = markers.filter((marker) => marker.kind === 'white').length
@@ -130,6 +183,57 @@ export default function LisCaseDetail({ partnerId, caseNo, onBack }: { partnerId
                 {record.specimenTypeSource === 'manual' && <div className="mt-1 text-[11px] text-gray-500">人工覆盖记录</div>}
               </div>
             </div>
+            {canWrite && record.partnerId && (
+              <div className="mt-4 border-t border-gray-200 pt-3">
+                {!correctionOpen ? (
+                  <button type="button" className={btnCls} onClick={() => { setCorrectionOpen(true); setCorrectionError(''); setCorrectionStale(false) }}>更正登记时间</button>
+                ) : (
+                  <div role="region" aria-label="登记时间更正" className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-[13px]">
+                    <div className="text-gray-700">当前登记时间：<span className="font-medium tabular-nums text-gray-900">{record.operateTime || '未提供'}</span>（将作为并发校验基准）</div>
+                    <label className="block text-gray-700">
+                      新登记时间
+                      <input
+                        type="text"
+                        value={newTime}
+                        onChange={(event) => setNewTime(event.target.value)}
+                        placeholder="YYYY-MM-DD"
+                        aria-label="新登记时间"
+                        disabled={correcting}
+                        className="a11y-focus-ring mt-1 h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-[13px] text-gray-900 disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="block text-gray-700">
+                      更正原因
+                      <textarea
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                        aria-label="更正原因"
+                        rows={2}
+                        disabled={correcting}
+                        className="a11y-focus-ring mt-1 w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-[13px] text-gray-900 disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="flex items-start gap-2 text-gray-700">
+                      <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={correcting} className="mt-0.5" />
+                      我确认本次登记时间更正已核对无误，并计入留痕
+                    </label>
+                    {correctionError && <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">{correctionError}</div>}
+                    {correctionStale && (
+                      <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                        登记时间已被修改，本次更正未生效。请重新加载病例后再按最新值提交。
+                        <button type="button" className={`${btnCls} ml-2`} onClick={reloadAfterStale}>重新加载</button>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className={btnCls} disabled={correcting} onClick={() => { setCorrectionOpen(false); setCorrectionError(''); setCorrectionStale(false) }}>取消</button>
+                      <button type="button" className={btnCls} disabled={correcting} onClick={submitCorrection}>
+                        {correcting ? <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> : null}提交更正
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           <section aria-labelledby="workload-title" className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
