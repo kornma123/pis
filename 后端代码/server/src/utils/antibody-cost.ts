@@ -151,32 +151,6 @@ export function computeFullSlideCost(
   }
 }
 
-/**
- * 已校准成本 brand（绿档1·弱锚闸）：只有工时/设备两半都已校准（laborEquipmentSource==='已校准'）的 total 才带此标。
- * 毛利/去留计算**只接受** CalibratedCost —— 类型层面挡住「把 G2 估占位当真实成本喂进毛利」。
- */
-export interface CalibratedCost {
-  total: number
-  calibrated: true
-}
-
-/**
- * 弱锚闸（绿档1·把 P0 教训在复发前立法）——单片全成本 total 无条件含工时/设备 G2 估弱锚（computeFullSlideCost:140），
- * 今天安全**仅因它是孤立只读展示层、未进毛利/去留**（antibody-cost-v1.1.ts:208 唯一消费者，不入库不喂毛利）。
- * 此守卫把「未校准的成本合计禁入毛利/去留计算」立为**类型级 + 运行时**硬约束：
- *   - 毛利/去留计算只接受 `CalibratedCost`；
- *   - 未校准（laborEquipmentSource ≠ '已校准'）的 breakdown 传入 → **抛错**，逼「先走校准端点翻牌」而非把弱锚估值当真传播。
- * 这样即便日后有人把该 total 接进毛利，也会在编译期（类型）+ 运行期（抛错）双重被拦，而非静默污染。
- */
-export function forMargin(c: Pick<SlideCostBreakdown, 'total' | 'laborEquipmentSource'>): CalibratedCost {
-  if (c.laborEquipmentSource !== '已校准') {
-    throw new Error(
-      `未校准成本（弱锚占位·laborEquipmentSource=${c.laborEquipmentSource}）禁入毛利/去留计算——先走校准端点翻牌（B4 康湾真实工资/折旧）`,
-    )
-  }
-  return { total: c.total, calibrated: true }
-}
-
 export interface StainKitInput {
   name?: string
   kitPrice: number // 盒价（G2 真实盒价，如 Masson¥318 / 网状¥549 / 抗酸¥195）
