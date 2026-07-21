@@ -5,6 +5,11 @@ import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { findLocationLiveReferences, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
+import {
+  assertLocationCapacityFits,
+  locationCapacityError,
+  parseLocationCapacityInput,
+} from '../utils/location-capacity.js'
 
 const router = Router()
 
@@ -69,11 +74,18 @@ router.post('/', authenticateToken, requireLocationWrite, (req, res) => {
   try {
     const { name, type, parentId, zone, shelf, position, capacity } = req.body
     if (!name || !zone) { error(res, 'Name and zone required', 'INVALID_PARAMETER', 400); return }
+    // 容量是 canonical 有限非负安全整数；0 是合法零容量（不能用 || 默认值吞掉）；缺省 999999（有限硬上限，非无限哨兵）
+    let normalizedCapacity = 999999
+    if (capacity !== undefined && capacity !== null) {
+      const parsed = parseLocationCapacityInput(capacity)
+      if (parsed === null) { error(res, 'Capacity must be a finite non-negative safe integer', 'INVALID_PARAMETER', 400); return }
+      normalizedCapacity = parsed
+    }
     const db = getDatabase()
     const id = uuidv4()
     const finalCode = generateLocationCode(db)
     db.prepare('INSERT INTO locations (id, code, name, type, parent_id, zone, shelf, position, capacity, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)')
-      .run(id, finalCode, name, type || 'shelf', parentId || null, zone, shelf || null, position || null, capacity || 999999)
+      .run(id, finalCode, name, type || 'shelf', parentId || null, zone, shelf || null, position || null, normalizedCapacity)
     success(res, { id, code: finalCode }, 'Created', 201)
   } catch (err: any) {
     if (err.message.includes('UNIQUE')) { error(res, 'Code exists', 'RESOURCE_CONFLICT', 409); return }
@@ -86,6 +98,15 @@ router.put('/:id', authenticateToken, requireLocationWrite, (req, res) => {
     const { id } = req.params
     const data = req.body
     const db = getDatabase()
+    // 容量修改走 fail-closed 容量门：输入须为 canonical 有限非负安全整数（400），
+    // 并在 BEGIN IMMEDIATE 锁内按严格占用判定「不得低于当前占用」（409，零部分态）。
+    let normalizedCapacity: number | undefined
+    if (data.capacity !== undefined) {
+      const parsed = parseLocationCapacityInput(data.capacity)
+      if (parsed === null) { error(res, 'Capacity must be a finite non-negative safe integer', 'INVALID_PARAMETER', 400); return }
+      normalizedCapacity = parsed
+    }
+    const capacityChanged = normalizedCapacity !== undefined
     const existing = db.prepare('SELECT * FROM locations WHERE id = ? AND is_deleted = 0').get(id)
     if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
     const fields: string[] = []; const params: any[] = []
@@ -96,11 +117,42 @@ router.put('/:id', authenticateToken, requireLocationWrite, (req, res) => {
     if (data.zone !== undefined) { fields.push('zone = ?'); params.push(data.zone) }
     if (data.shelf !== undefined) { fields.push('shelf = ?'); params.push(data.shelf) }
     if (data.position !== undefined) { fields.push('position = ?'); params.push(data.position) }
-    if (data.capacity !== undefined) { fields.push('capacity = ?'); params.push(data.capacity) }
+    if (capacityChanged) { fields.push('capacity = ?'); params.push(normalizedCapacity) }
     if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status === 'active' ? 1 : 0) }
+
+    if (capacityChanged) {
+      // 此处 normalizedCapacity 必为 number（capacityChanged 即由其 !== undefined 推出）
+      const newCapacity = normalizedCapacity as number
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const locked = db.prepare('SELECT * FROM locations WHERE id = ? AND is_deleted = 0').get(id)
+        if (!locked) {
+          db.exec('ROLLBACK')
+          error(res, 'Not found', 'NOT_FOUND', 404)
+          return
+        }
+        if (fields.length > 0) {
+          params.push(id)
+          db.prepare(`UPDATE locations SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params)
+        }
+        // 锁内严格占用重读：used > 新容量 → 拒绝并回滚（精确等于放行）
+        assertLocationCapacityFits(db, id, newCapacity)
+        db.exec('COMMIT')
+      } catch (txErr) {
+        db.exec('ROLLBACK')
+        throw txErr
+      }
+      success(res, { id }, 'Updated')
+      return
+    }
+
     if (fields.length > 0) { params.push(id); db.prepare(`UPDATE locations SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0`).run(...params) }
     success(res, { id }, 'Updated')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 router.delete('/:id', authenticateToken, requireLocationWrite, (req, res) => {

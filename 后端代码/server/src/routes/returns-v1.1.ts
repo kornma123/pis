@@ -19,6 +19,7 @@ import {
   InventoryTransactionError,
   inventoryTransactionError,
 } from '../services/inventory-transactions.js'
+import { assertLocationCapacityHeld, locationCapacityError } from '../utils/location-capacity.js'
 
 const router = Router()
 
@@ -154,6 +155,10 @@ router.post('/', requireReturnsWrite, (req, res) => {
         VALUES (?, 'return', ?, ?, ?, ?, ?, 'return', ?)
       `).run(uuidv4(), materialId, qty, batchResult.inventory.before, batchResult.inventory.after, id, normalizedOperator)
 
+      // 库位容量门（LOC-029）：退库入库抬高物料当前库位占用，锁内重读库位与占用事实，超容抛错回滚
+      const returnLocationId = (db.prepare('SELECT location_id FROM inventory WHERE material_id = ?').get(materialId) as any)?.location_id ?? null
+      assertLocationCapacityHeld(db, returnLocationId)
+
       responseEnvelope = buildSuccessEnvelope({ id }, 'Return created')
       if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
       db.exec('COMMIT')
@@ -165,6 +170,8 @@ router.post('/', requireReturnsWrite, (req, res) => {
 
     res.status(200).json(responseEnvelope)
   } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
     const inventoryError = inventoryTransactionError(err)
     if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     error(res, err.message)

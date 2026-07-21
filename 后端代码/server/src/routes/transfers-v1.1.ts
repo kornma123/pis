@@ -5,6 +5,7 @@ import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
 import { requireTrustedRequestActor } from '../security/trusted-request-actor.js'
 import { parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import { assertLocationCapacityHeld, locationCapacityError } from '../utils/location-capacity.js'
 
 const router = Router()
 
@@ -140,13 +141,20 @@ router.post('/inbound', requireTransfersWrite, (req, res) => {
         VALUES (?, 'transfer', ?, 0, ?, ?, ?, 'transfer', ?, ?)
       `).run(uuidv4(), materialId, lockedStock, lockedStock, id, actor.username, `库位调拨 ${qty}（总量不变）`)
 
+      // 库位容量门（LOC-029）：整物料库存迁入目标库位，锁内重读库位与占用事实，超容抛错回滚
+      assertLocationCapacityHeld(db, toLocationId)
+
       db.exec('COMMIT')
       success(res, { id, inboundNo, materialId, quantity: qty, fromLocationId, fromLocationName, toLocationId }, 'Transfer created')
     } catch (e: any) {
       db.exec('ROLLBACK')
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 // 撤销调拨（还原库位到来源；总库存仍不变。来源未知的历史记录保持现状、不乱写）
@@ -167,6 +175,8 @@ router.delete('/:id', requireTransfersWrite, (req, res) => {
       const beforeStock = inv?.stock ?? 0
       if (record.from_location_id) {
         db.prepare('UPDATE inventory SET location_id = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(record.from_location_id, record.material_id)
+        // 库位容量门（LOC-029）：撤销调拨把整物料库存迁回来源库位，锁内重读库位与占用事实，超容抛错回滚
+        assertLocationCapacityHeld(db, record.from_location_id)
       }
 
       db.prepare(`
@@ -180,7 +190,11 @@ router.delete('/:id', requireTransfersWrite, (req, res) => {
       db.exec('ROLLBACK')
       throw e
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
+    error(res, err.message)
+  }
 })
 
 export default router

@@ -19,6 +19,7 @@ import {
   inventoryTransactionError,
   restoreBatchStock,
 } from '../services/inventory-transactions.js'
+import { assertLocationCapacityHeld, locationCapacityError } from '../utils/location-capacity.js'
 
 const router = Router()
 
@@ -197,6 +198,10 @@ router.delete('/:id', requireScrapsWrite, (req, res) => {
       }
       const inventory = restoreBatchStock(db, record.material_id, [{ batchId: record.batch_id, quantity: qty }])
 
+      // 库位容量门（LOC-029）：撤销报废恢复物料当前库位占用，锁内重读库位与占用事实，超容抛错回滚
+      const restoreLocationId = (db.prepare('SELECT location_id FROM inventory WHERE material_id = ?').get(record.material_id) as any)?.location_id ?? null
+      assertLocationCapacityHeld(db, restoreLocationId)
+
       db.prepare(`
         INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
         VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'scrap_cancel', ?, '撤销报废记录')
@@ -209,6 +214,8 @@ router.delete('/:id', requireScrapsWrite, (req, res) => {
       throw e
     }
   } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
     const inventoryError = inventoryTransactionError(err)
     if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     error(res, err.message)

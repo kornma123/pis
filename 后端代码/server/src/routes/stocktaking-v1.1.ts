@@ -14,6 +14,7 @@ import {
   tryReplayIdempotency,
 } from '../utils/idempotency.js'
 import { assertInventoryMatchesBatches, inventoryTransactionError, setMaterialStock } from '../services/inventory-transactions.js'
+import { assertLocationCapacityHeld, locationCapacityError } from '../utils/location-capacity.js'
 
 const router = Router()
 
@@ -189,7 +190,12 @@ router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
       const actualStock = record.actual_stock
       const difference = record.difference
 
-      setMaterialStock(db, record.material_id, actualStock, id)
+      const adjustment = setMaterialStock(db, record.material_id, actualStock, id)
+      // 库位容量门（LOC-029）：盘点上调抬高物料当前库位占用，锁内重读库位与占用事实，超容抛错回滚
+      if (adjustment.after > adjustment.before) {
+        const adjustLocationId = (db.prepare('SELECT location_id FROM inventory WHERE material_id = ?').get(record.material_id) as any)?.location_id ?? null
+        assertLocationCapacityHeld(db, adjustLocationId)
+      }
 
       const noteText = String(remark || '').trim()
       const reasonNote = noteText ? `差异原因：${label}；处理说明：${noteText}` : `差异原因：${label}`
@@ -211,6 +217,8 @@ router.post('/:id/adjust', requireStocktakingWrite, (req, res) => {
 
     res.status(200).json(responseEnvelope)
   } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
     const inventoryError = inventoryTransactionError(err)
     if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     error(res, err.message)
@@ -302,6 +310,11 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
           .run(id, generateNo(), sheetNo, materialId, systemStock, actualStock, difference, op, rowRemark || remark || null)
 
         setMaterialStock(db, materialId, actualStock, id)
+        // 库位容量门（LOC-029）：本行上调抬高物料当前库位占用，锁内重读库位与占用事实，超容抛错整单回滚
+        if (difference > 0) {
+          const itemLocationId = (db.prepare('SELECT location_id FROM inventory WHERE material_id = ?').get(materialId) as any)?.location_id ?? null
+          assertLocationCapacityHeld(db, itemLocationId)
+        }
         if (difference !== 0) {
           const logId = uuidv4()
           db.prepare('INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -320,6 +333,8 @@ router.post('/batch', requireStocktakingWrite, (req, res) => {
 
     res.status(201).json(responseEnvelope)
   } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
     const inventoryError = inventoryTransactionError(err)
     if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     error(res, err.message)
