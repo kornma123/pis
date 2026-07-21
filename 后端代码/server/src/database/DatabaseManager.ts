@@ -110,8 +110,9 @@ export function getDatabase(): DatabaseSync {
 
 export function resetDatabase(): void {
   if (db) {
-    db.close()
+    const current = db
     db = null
+    current.close()
   }
   if (fs.existsSync(DB_PATH)) {
     fs.unlinkSync(DB_PATH)
@@ -2049,7 +2050,20 @@ export function initializeDatabase(): void {
 
 export function closeDatabase(): void {
   if (db) {
-    db.close()
+    const current = db
     db = null
+    current.close()
   }
+}
+
+/**
+ * A failed rollback leaves the connection's transaction state unknowable.
+ * Detach the singleton before best-effort close so a close fault can never
+ * publish the poisoned handle to the next request.
+ */
+export function invalidateDatabaseConnection(): void {
+  const current = db
+  db = null
+  if (!current) return
+  try { current.close() } catch { /* detached handle is intentionally discarded */ }
 }

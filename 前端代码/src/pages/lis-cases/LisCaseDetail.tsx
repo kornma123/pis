@@ -111,7 +111,9 @@ export default function LisCaseDetail({ partnerId, caseNo, onBack }: { partnerId
       toast.success('登记时间已更正并留痕')
     } catch (error) {
       // 请求层已 toast 真因；stale（409）需给出重载路径，其余错误不乐观写入
-      if ((error as { status?: number })?.status === 409) setCorrectionStale(true)
+      const failure = error as { status?: number; code?: string }
+      if (failure?.status === 409 && failure.code === 'STALE_EXPECTED') setCorrectionStale(true)
+      else if (failure?.status === 409 && failure.code === 'SAME_VALUE') setCorrectionError('新登记时间与当前值相同，无需更正')
       else setCorrectionError('更正未成功，登记时间未改变，请核对后重试')
     } finally {
       correctionActionRef.current = false
