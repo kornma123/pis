@@ -11,10 +11,29 @@ export interface LisPreview {
   specimenDistribution: { tissue: number; tissue_complex: number; cytology: number }
   warnings: string[]
 }
+// #178 typed rejection item：机器合同是 code 字段；每项只含安全识别字段，不回显整行/患者信息。
+export type RejectionCode = 'CROSS_MONTH_CONFLICT' | 'INVALID_OPERATE_TIME' | 'ROW_SHAPE_INVALID'
+export interface RejectionItem {
+  code: RejectionCode
+  caseNo: string
+  partnerName: string
+  existingMonth?: string // CROSS_MONTH_CONFLICT：库中月锚
+  incomingMonth?: string // CROSS_MONTH_CONFLICT：导入行月锚
+  value?: string // INVALID_OPERATE_TIME：非法值的截断安全摘要
+}
 export interface LisImportResult {
   importBatch: string
   imported: number; inserted: number; updated: number; skipped: number
   partnersCreated: number; partnersMatched: number
+  rejectedCrossMonth?: number; rejectedInvalidDate?: number
+  rejections?: RejectionItem[]; rejectedTotal?: number; rejectionsTruncated?: boolean
+}
+// #179 登记月带留痕更正：expected=当前值 CAS；confirm 必须显式 true。
+export interface CorrectionPayload {
+  partnerId: string; caseNo: string; expectedOperateTime: string; newOperateTime: string; reason: string; confirm: true
+}
+export interface CorrectionResult {
+  caseNo: string; partnerId: string; oldOperateTime: string | null; newOperateTime: string | null; reason: string
 }
 export interface MarkerImportResult {
   importBatch: string
@@ -41,4 +60,5 @@ export const lisCasesApi = {
   markers: (partnerId: string, caseNo: string) => request.get('/lis-cases/markers', { params: { partnerId, caseNo } }) as unknown as Promise<CaseMarker[]>,
   setSpecimen: (caseNo: string, specimenType: string, partnerId: string) =>
     request.put(`/lis-cases/${encodeURIComponent(caseNo)}/specimen-type`, { specimenType, partnerId }) as unknown as Promise<{ caseNo: string; specimenType: string; source: string }>,
+  correct: (payload: CorrectionPayload) => request.post('/lis-cases/correction', payload) as unknown as Promise<CorrectionResult>,
 }

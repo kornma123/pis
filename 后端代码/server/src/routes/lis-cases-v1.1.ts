@@ -40,6 +40,17 @@ const MAX_LIS_IMPORT_ROWS = 1000
 const CROSS_MONTH_SAMPLE_LIMIT = 50 // 回执样例上限，与 /import-markers 的 unmatchedCases 同款
 const VALID_YM = /^\d{4}-(0[1-9]|1[0-2])$/ // 合法 'YYYY-MM'（月补零 01–12），与下游 service_month 形态一致
 
+// —— #178：typed canonical rejection items。计数（skipped/rejectedCrossMonth/rejectedInvalidDate）保持精确；
+// items 有界截断（rejectionsTruncated 标记），每项只含安全识别字段（caseNo/partnerName/月/截断非法值摘要），
+// 不回显整行输入或患者信息；机器合同是 code 字段，不是 message 字符串。
+const REJECTION_ITEM_LIMIT = 100 // 单次回执条目上限
+const INVALID_VALUE_DIGEST_LIMIT = 40 // 非法登记时间值的截断安全摘要长度
+
+type RejectionItem =
+  | { code: 'CROSS_MONTH_CONFLICT'; caseNo: string; partnerName: string; existingMonth: string; incomingMonth: string }
+  | { code: 'INVALID_OPERATE_TIME'; caseNo: string; partnerName: string; value: string }
+  | { code: 'ROW_SHAPE_INVALID'; caseNo: string; partnerName: string }
+
 /** 结构化提取 {年, 月(1–12), 日?}（**宽松·不锚定结尾**，只喂 existing 侧 monthOf 读历史脏行派生月），失败回 null。 */
 function parseYmd(dateish: unknown): { y: string; mo: number; d?: string } | null {
   if (dateish == null || dateish === '') return null
@@ -156,12 +167,15 @@ router.post('/import', authenticateToken, requireImport, requireWrite, (req, res
     const rejectedCrossMonthSamples: Array<{ caseNo: string; partnerName: string; existingMonth: string; incomingMonth: string }> = []
     let rejectedInvalidDate = 0 // incoming 登记时间畸形（垃圾尾部/日越界/日历不存在日/非法时间）→ 拒收不 upsert（防静默覆盖有效登记日·codex 三/四次复核）
     const rejectedInvalidDateSamples: Array<{ caseNo: string; partnerName: string; value: string }> = []
+    // #178：typed rejection items，跨三类拒收/skipped 统一入列（有界；计数仍精确）
+    const rejections: RejectionItem[] = []
+    const pushRejection = (item: RejectionItem) => { if (rejections.length < REJECTION_ITEM_LIMIT) rejections.push(item) }
     // 整批事务：任一行 SQL 失败则整体回滚，避免半批落库；拒收/跳行是正常分支、不触发回滚（回执分项计数）
     db.exec('BEGIN IMMEDIATE')
     try {
       for (const row of cases) {
         const c = normalizeLisRow(row)
-        if (!isValidLisRow(c)) { skipped++; continue }
+        if (!isValidLisRow(c)) { skipped++; pushRejection({ code: 'ROW_SHAPE_INVALID', caseNo: c.caseNo, partnerName: c.partnerName }); continue }
         // incoming 严格校验（codex 三/四次复核 · existing 宽松/incoming 严格分离）：登记时间非空但畸形
         // （'2026/5/foo' 垃圾尾部 / '2026-05-99' 日越界 / '2026-02-31' 日历不存在 / '99:99:99' 非法时间）→
         // 拒收、不 upsert，进回执。防它被当同月放行、把有效登记日与数量静默覆盖。空登记时间视为「无日期」放行
@@ -176,6 +190,7 @@ router.post('/import', authenticateToken, requireImport, requireWrite, (req, res
             if (rejectedInvalidDateSamples.length < CROSS_MONTH_SAMPLE_LIMIT) {
               rejectedInvalidDateSamples.push({ caseNo: c.caseNo, partnerName: c.partnerName, value: opRaw })
             }
+            pushRejection({ code: 'INVALID_OPERATE_TIME', caseNo: c.caseNo, partnerName: c.partnerName, value: opRaw.slice(0, INVALID_VALUE_DIGEST_LIMIT) })
             continue
           }
           canonicalOp = strict.canonical // 已补零、保留时间尾部
@@ -202,6 +217,7 @@ router.post('/import', authenticateToken, requireImport, requireWrite, (req, res
             if (rejectedCrossMonthSamples.length < CROSS_MONTH_SAMPLE_LIMIT) {
               rejectedCrossMonthSamples.push({ caseNo: c.caseNo, partnerName: c.partnerName, existingMonth, incomingMonth })
             }
+            pushRejection({ code: 'CROSS_MONTH_CONFLICT', caseNo: c.caseNo, partnerName: c.partnerName, existingMonth, incomingMonth })
             continue
           }
         }
@@ -220,6 +236,7 @@ router.post('/import', authenticateToken, requireImport, requireWrite, (req, res
       throw e
     }
 
+    const rejectedTotal = skipped + rejectedCrossMonth + rejectedInvalidDate // #178：精确总数；items 截断不影响计数
     success(res, {
       importBatch,
       imported,
@@ -230,6 +247,9 @@ router.post('/import', authenticateToken, requireImport, requireWrite, (req, res
       rejectedCrossMonthSamples,
       rejectedInvalidDate,
       rejectedInvalidDateSamples,
+      rejections,
+      rejectedTotal,
+      rejectionsTruncated: rejectedTotal > rejections.length,
       partnersCreated,
       partnersMatched: partnerCache.size,
     }, `导入 ${imported} 例（新增 ${inserted}·更新 ${updated}，${partnerCache.size} 家医院，新建 ${partnersCreated} 家）`
@@ -337,6 +357,85 @@ router.put('/:caseNo/specimen-type', authenticateToken, requireWrite, (req, res)
     }
     success(res, { caseNo, partnerId: target.partner_id, specimenType, source: 'manual' }, '已覆盖样本类型')
   } catch (e: any) { error(res, e.message) }
+})
+
+// —— #179：登记月带留痕更正（显式人工纠错通道）——
+// 与样本覆盖同型：trusted actor 只取 req.user；BEGIN IMMEDIATE 锁内重读 + CAS 更新 + reconciliation_logs
+// 留痕同一事务，任一失败整体回滚（零 partial）。普通 /import 的跨月硬拒（#163/#168）不由此放宽。
+const FORGED_AUDIT_FIELDS = ['actor', 'operator', 'role', 'roles', 'userId', 'username', 'user', 'createdBy', 'updatedBy']
+
+/**
+ * CAS 比较归一：严格可解析 → canonical（与 incoming 落库同源 parseStrictDate）；否则回落 existing 侧宽松月锚
+ * 归一 canonicalOperateTime（历史脏行如 '2026/5/9'/'2026-05-99' 也可被更正，expected 如实描述当前值即可匹配）。
+ * 空/NULL 归 ''。只用于比较，不用于落库（落库新值必须 parseStrictDate 通过）。
+ */
+function casNormalize(dateish: unknown): string {
+  if (dateish == null) return ''
+  const raw = String(dateish).trim()
+  if (raw === '') return ''
+  const strict = parseStrictDate(raw)
+  if (strict.valid) return strict.canonical
+  return String(canonicalOperateTime(raw) ?? '')
+}
+
+/**
+ * POST /correction —— 登记月/登记时间带留痕更正。精确契约：partnerId + caseNo +
+ * expectedOperateTime（CAS 当前值）+ newOperateTime + 非空 reason + 显式 confirm=true；
+ * 仅 LIS 导入授权角色（admin/finance + reconciliation W）；拒绝 body 夹带审计伪造字段。
+ */
+router.post('/correction', authenticateToken, requireImport, requireWrite, (req, res) => {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    if (FORGED_AUDIT_FIELDS.some((field) => field in body)) {
+      error(res, '操作者只取登录身份，请求不得夹带 actor/operator/role 等审计字段', 'FORGED_AUDIT_FIELD', 400); return
+    }
+    const { partnerId, caseNo: rawCaseNo, expectedOperateTime, newOperateTime, reason, confirm } = body
+    if (typeof partnerId !== 'string' || partnerId.trim() === '' || typeof rawCaseNo !== 'string' || rawCaseNo.trim() === '') {
+      error(res, 'partnerId 与 caseNo 必填', 'INVALID_PARAMETER', 400); return
+    }
+    const caseNo = canonicalCaseNo(rawCaseNo.trim()) // 与落库同一 canonical（全角/异体横线号不查错行）
+    if (expectedOperateTime != null && typeof expectedOperateTime !== 'string') { error(res, 'expectedOperateTime 非法', 'INVALID_TIME', 400); return }
+    if (typeof newOperateTime !== 'string') { error(res, 'newOperateTime 非法', 'INVALID_TIME', 400); return }
+    const strictNew = parseStrictDate(newOperateTime)
+    if (!strictNew.valid) { error(res, 'newOperateTime 不是日历上真实存在的时间', 'INVALID_TIME', 400); return }
+    const newCanonical = strictNew.canonical
+    if (typeof reason !== 'string' || reason.trim() === '') { error(res, '更正原因必填', 'EMPTY_REASON', 400); return }
+    if (confirm !== true) { error(res, '必须显式确认本次更正', 'CONFIRM_REQUIRED', 400); return }
+    const actor = (req as any).user?.userId || null // trusted actor：只取认证身份，同 /import operator 口径（userId 非 id）
+
+    const db = getDatabase()
+    // BEGIN IMMEDIATE 持写锁后锁内重读目标与当前值：CAS 校验→更新→留痕同一事务，任一失败整体回滚。
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const target = db.prepare('SELECT id, operate_time FROM lis_cases WHERE partner_id = ? AND case_no = ?')
+        .get(partnerId, caseNo) as { id: string; operate_time: string | null } | undefined
+      if (!target) { db.exec('ROLLBACK'); error(res, '病例不存在', 'NOT_FOUND', 404); return }
+      const currentCas = casNormalize(target.operate_time)
+      if (casNormalize(expectedOperateTime) !== currentCas) {
+        db.exec('ROLLBACK'); error(res, '登记时间已被他人修改，请按最新值重试', 'STALE_EXPECTED', 409); return
+      }
+      if (newCanonical === currentCas) { db.exec('ROLLBACK'); error(res, '新登记时间与当前值相同，无需更正', 'SAME_VALUE', 409); return }
+      // 结构性 CAS：WHERE 带当前值（IS 兼容 NULL），0 行命中即并发漂移 → 抛错回滚
+      const updated = db.prepare('UPDATE lis_cases SET operate_time = ? WHERE id = ? AND operate_time IS ?')
+        .run(newCanonical, target.id, target.operate_time)
+      if (Number(updated.changes) !== 1) throw new Error('correction CAS update matched 0 rows')
+      db.prepare(`INSERT INTO reconciliation_logs (id, type, target_id, target_name, field, old_value, new_value, reason, operator)
+                  VALUES (?, 'lis_operate_time_correction', ?, ?, 'operate_time', ?, ?, ?, ?)`)
+        .run(uuidv4(), target.id, caseNo, target.operate_time || null, newCanonical, reason.trim(), actor)
+      const stored = db.prepare('SELECT operate_time FROM lis_cases WHERE id = ?').get(target.id) as { operate_time: string | null }
+      db.exec('COMMIT')
+      // canonical old/new truth：old 取 CAS 归一形（历史脏行不原样回显），new 取同事务锁内回读的落库真值
+      success(res, {
+        caseNo, partnerId,
+        oldOperateTime: currentCas || null,
+        newOperateTime: stored.operate_time ?? null,
+        reason: reason.trim(),
+      }, '登记时间已更正并留痕')
+    } catch (e) {
+      db.exec('ROLLBACK')
+      throw e
+    }
+  } catch (e: any) { error(res, e.message || '更正失败') }
 })
 
 /**

@@ -11,7 +11,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { lisCasesApi, type LisBatch, type LisPreview } from '@/api/lis-cases'
+import { lisCasesApi, type LisBatch, type LisPreview, type RejectionItem } from '@/api/lis-cases'
 import { Modal } from '@/components/ui/Modal'
 import { readGrid, btnCls, btnPri } from '@/pages/import-shared/ImportShared'
 import { LisImportEvidence } from './LisImportEvidence'
@@ -24,11 +24,27 @@ import {
   extract,
   MARKER_COLS,
   publicError,
-  type ExtendedImportResult,
   type ImportEvidence,
   type Outcome,
   type ParsedFile,
 } from './lisImportModel'
+
+// #178：拒收项单行文案（类型化标签；只含安全识别字段）
+function describeRejection(item: RejectionItem): string {
+  if (item.code === 'CROSS_MONTH_CONFLICT') return `${item.caseNo} · ${item.partnerName} · 库中 ${item.existingMonth ?? '?'} ≠ 导入 ${item.incomingMonth ?? '?'}（同号跨月冲突）`
+  if (item.code === 'INVALID_OPERATE_TIME') return `${item.caseNo} · ${item.partnerName} · 登记时间非法：${item.value ?? ''}`
+  return `${item.caseNo || '（无病理号）'} · ${item.partnerName || '（无医院）'} · 缺病理号/医院，格式不完整`
+}
+
+const REJECTION_DISPLAY_LIMIT = 100 // 页面显示上限；完整清单以本地导出为准（服务端每 chunk 已有界）
+
+/** 回执形态校验：计数字段必须是有限数，否则该 chunk 视为「回执不可验证」→ 整体判 unknown，不得累计为成功或合法零。 */
+function assertReceiptCounters(receipt: Record<string, unknown>, fields: string[]): void {
+  for (const field of fields) {
+    const value = receipt[field]
+    if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error('回执格式不可验证')
+  }
+}
 
 export default function LisImportView({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -43,6 +59,7 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
   const [preview, setPreview] = useState<LisPreview | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [evidence, setEvidence] = useState<ImportEvidence | null>(null)
+  const [rejections, setRejections] = useState<RejectionItem[]>([]) // #178：跨 chunk 累计的 typed 拒收项（仅来自已验证 chunk）
   const [batches, setBatches] = useState<LisBatch[]>([])
   const [batchesLoading, setBatchesLoading] = useState(true)
   const [batchesError, setBatchesError] = useState('')
@@ -78,6 +95,7 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
     setPreviewError('')
     setPreview(null)
     setEvidence(null)
+    setRejections([])
     try {
       const parsed: ParsedFile[] = []
       for (const file of Array.from(selected)) {
@@ -105,7 +123,24 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
     setPreview(null)
     setPreviewError('')
     setEvidence(null)
+    setRejections([])
   }, [])
+
+  const exportRejections = useCallback(() => {
+    if (rejections.length === 0) return
+    const escape = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value)
+    const lines = ['code,caseNo,partnerName,existingMonth,incomingMonth,value']
+    for (const item of rejections) {
+      lines.push([item.code, item.caseNo, item.partnerName, item.existingMonth ?? '', item.incomingMonth ?? '', item.value ?? ''].map(escape).join(','))
+    }
+    const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `lis-rejections-${Date.now()}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, [rejections])
 
   const runPreview = useCallback(async () => {
     if (!locallyValid || previewing) return
@@ -141,10 +176,12 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
     setSubmitting(true)
     setPreviewError('')
     const summary = { ...EMPTY_SUMMARY }
+    const collected: RejectionItem[] = [] // 跨 chunk 累计；只收已验证 chunk 的拒收项
     let markerBlocked = false
     try {
       for (const group of chunks(caseRows)) {
-        const response = await lisCasesApi.import(group) as ExtendedImportResult
+        const response = await lisCasesApi.import(group)
+        assertReceiptCounters(response as unknown as Record<string, unknown>, ['imported', 'inserted', 'updated', 'skipped'])
         summary.caseImported += response.imported
         summary.caseInserted += response.inserted
         summary.caseUpdated += response.updated
@@ -152,12 +189,15 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
         summary.rejectedCrossMonth += response.rejectedCrossMonth || 0
         summary.rejectedInvalidDate += response.rejectedInvalidDate || 0
         summary.verifiedCaseChunks += 1
+        if (Array.isArray(response.rejections)) collected.push(...response.rejections)
       }
 
+      // #178/#179 闭环前提：同次 case 导入被拒收的 caseNo 不得被 marker 导入当作已建立的新来源（整体停住待人工）。
       markerBlocked = markerRows.length > 0 && (summary.rejectedCrossMonth > 0 || summary.rejectedInvalidDate > 0)
       if (!markerBlocked) {
         for (const group of chunks(markerRows)) {
           const response = await lisCasesApi.importMarkers(group)
+          assertReceiptCounters(response as unknown as Record<string, unknown>, ['imported', 'skipped', 'casesAffected', 'unmatched'])
           summary.markerImported += response.imported
           summary.markerSkipped += response.skipped
           summary.markerCases += response.casesAffected
@@ -173,6 +213,7 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
         || summary.markerSkipped > 0
         || summary.markerUnmatched > 0
       const outcome: Outcome = partial ? 'partial' : 'complete'
+      setRejections(collected)
       setEvidence({
         outcome,
         summary,
@@ -184,6 +225,7 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
       if (!partial) setFiles([])
       await loadBatches()
     } catch (error) {
+      setRejections(collected) // 已验证 chunk 的拒收项仍是事实，随 unknown 一并展示
       setEvidence({
         outcome: 'unknown',
         summary,
@@ -298,6 +340,20 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
         </div>
 
         {evidence && <LisImportEvidence evidence={evidence} />}
+        {rejections.length > 0 && (
+          <section role="region" aria-label="拒收清单" className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-medium">拒收清单（{rejections.length} 条，需人工核对处理）</h3>
+              <button type="button" className={btnCls} onClick={exportRejections}>导出拒收清单</button>
+            </div>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {rejections.slice(0, REJECTION_DISPLAY_LIMIT).map((item, index) => (
+                <li key={`${item.code}-${item.caseNo}-${index}`} className="break-all">{describeRejection(item)}</li>
+              ))}
+            </ul>
+            {rejections.length > REJECTION_DISPLAY_LIMIT && <p className="mt-2">仅显示前 {REJECTION_DISPLAY_LIMIT} 条；完整清单请导出 CSV 核对。</p>}
+          </section>
+        )}
         {evidence?.outcome === 'complete' && <button type="button" className={`${btnCls} mt-4`} onClick={onDone}>返回病例列表</button>}
       </section>
 
