@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { findProjectLiveReferences } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -110,14 +111,43 @@ router.put('/:id', requireProjectWrite, (req, res) => {
 })
 
 router.delete('/:id', requireProjectWrite, (req, res) => {
+  let db: ReturnType<typeof getDatabase> | undefined
+  let transactionOpen = false
   try {
     const { id } = req.params
-    const db = getDatabase()
-    const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND is_deleted = 0').get(id)
-    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    db = getDatabase()
+    // 锁前快速发现（顾问性；权威判定在锁内重读）
+    const advisory = db.prepare('SELECT code FROM projects WHERE id = ? AND is_deleted = 0').get(id) as { code: string } | undefined
+    if (advisory && findProjectLiveReferences(db, id, advisory.code).length > 0) {
+      error(res, 'Project has active catalog, case, outbound, or settlement references', 'ENTITY_IN_USE', 409)
+      return
+    }
+    db.exec('BEGIN IMMEDIATE')
+    transactionOpen = true
+    const existing = db.prepare('SELECT * FROM projects WHERE id = ? AND is_deleted = 0').get(id) as { code: string } | undefined
+    if (!existing) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Not found', 'NOT_FOUND', 404)
+      return
+    }
+    // 锁内重读：committed-race 防线
+    if (findProjectLiveReferences(db, id, existing.code).length > 0) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Project has active catalog, case, outbound, or settlement references', 'ENTITY_IN_USE', 409)
+      return
+    }
     db.prepare('UPDATE projects SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    transactionOpen = false
     success(res, null, 'Deleted')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (transactionOpen && db) {
+      try { db.exec('ROLLBACK') } catch { /* preserve the original request error */ }
+    }
+    error(res, err.message)
+  }
 })
 
 export default router

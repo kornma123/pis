@@ -13,6 +13,7 @@ import {
   userRoleMutationExceedsSecurityCeiling,
   wouldRemoveLastEffectiveAdmin,
 } from '../middleware/permissions.js'
+import { findUserLiveOwnership } from '../utils/delete-reference-guards.js'
 import { accountPasswordProblem, hashMatchesKnownLeakedDefaultPassword } from '../config/security.js'
 
 const router = Router()
@@ -198,6 +199,11 @@ router.delete('/:id', requireUsersWrite, rejectUntrustedAuditActorFields, requir
     if (wouldRemoveLastEffectiveAdmin(db, id, { deleting: true })) {
       db.exec('ROLLBACK')
       error(res, 'Cannot remove the last effective admin', 'BUSINESS_CONFLICT', 409); return
+    }
+    // 锁内重读：活持有/在途分配（生效项目负责人、在途出库经办）存在即拒；历史审计持有不拦
+    if (findUserLiveOwnership(db, existing.username).length > 0) {
+      db.exec('ROLLBACK')
+      error(res, 'User still owns live assignments', 'ENTITY_IN_USE', 409); return
     }
     db.prepare('UPDATE users SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
     db.exec('COMMIT')

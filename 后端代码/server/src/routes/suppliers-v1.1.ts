@@ -4,6 +4,7 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { findSupplierLiveReferences } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -86,14 +87,42 @@ router.put('/:id', authenticateToken, requireSupplierWrite, (req, res) => {
 })
 
 router.delete('/:id', authenticateToken, requireSupplierWrite, (req, res) => {
+  let db: ReturnType<typeof getDatabase> | undefined
+  let transactionOpen = false
   try {
     const { id } = req.params
-    const db = getDatabase()
+    db = getDatabase()
+    // 锁前快速发现（顾问性；权威判定在锁内重读）
+    if (findSupplierLiveReferences(db, id).length > 0) {
+      error(res, 'Supplier has active purchase, inbound, or return references', 'ENTITY_IN_USE', 409)
+      return
+    }
+    db.exec('BEGIN IMMEDIATE')
+    transactionOpen = true
     const existing = db.prepare('SELECT * FROM suppliers WHERE id = ? AND is_deleted = 0').get(id)
-    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (!existing) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Not found', 'NOT_FOUND', 404)
+      return
+    }
+    // 锁内重读：committed-race 防线
+    if (findSupplierLiveReferences(db, id).length > 0) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Supplier has active purchase, inbound, or return references', 'ENTITY_IN_USE', 409)
+      return
+    }
     db.prepare('UPDATE suppliers SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    transactionOpen = false
     success(res, null, 'Deleted')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (transactionOpen && db) {
+      try { db.exec('ROLLBACK') } catch { /* preserve the original request error */ }
+    }
+    error(res, err.message)
+  }
 })
 
 export default router

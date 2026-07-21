@@ -11,6 +11,7 @@ import {
   requireRoleMutationCeiling,
   roleMutationExceedsSecurityCeiling,
 } from '../middleware/permissions.js'
+import { findRoleLiveAssignments } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -152,6 +153,11 @@ router.delete('/:id', requireRolesWrite, rejectUntrustedAuditActorFields, requir
     if (existing.code === 'admin') {
       database.exec('ROLLBACK')
       error(res, 'Cannot delete system admin role', 'FORBIDDEN', 403); return
+    }
+    // 锁内重读：活跃用户分配（user_roles / users.role 兜底）存在即拒
+    if (findRoleLiveAssignments(database, existing.code).length > 0) {
+      database.exec('ROLLBACK')
+      error(res, 'Role is still assigned to active users', 'ENTITY_IN_USE', 409); return
     }
     database.prepare('UPDATE roles SET is_deleted = 1 WHERE id = ?').run(id)
     database.exec('COMMIT')

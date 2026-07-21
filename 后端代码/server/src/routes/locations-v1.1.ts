@@ -4,6 +4,7 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { findLocationLiveReferences } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -108,6 +109,11 @@ router.delete('/:id', authenticateToken, requireLocationWrite, (req, res) => {
   try {
     const { id } = req.params
     db = getDatabase()
+    // 锁前快速发现在途运营引用（物料/设备指派；顾问性，权威判定在锁内重读）
+    if (findLocationLiveReferences(db, id).length > 0) {
+      error(res, 'Location has live material or equipment assignments', 'ENTITY_IN_USE', 409)
+      return
+    }
     db.exec('BEGIN IMMEDIATE')
     transactionOpen = true
 
@@ -138,6 +144,14 @@ router.delete('/:id', authenticateToken, requireLocationWrite, (req, res) => {
       db.exec('ROLLBACK')
       transactionOpen = false
       error(res, 'Location still has inventory or remaining batches', 'CONFLICT', 409)
+      return
+    }
+
+    // 锁内重读在途运营引用：committed-race 防线
+    if (findLocationLiveReferences(db, id).length > 0) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Location has live material or equipment assignments', 'ENTITY_IN_USE', 409)
       return
     }
 
