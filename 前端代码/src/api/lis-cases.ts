@@ -93,6 +93,21 @@ function canonicalDate(value: unknown, nullable: boolean): string | null {
     if (match[4] && (Number(match[4]) > 23 || Number(match[5]) > 59 || (match[6] !== undefined && Number(match[6]) > 59))) {
       throw new Error('LIS 更正回执时间不可验证')
     }
+    const zone = match[8]
+    if (zone && zone !== 'Z') {
+      const zoneHour = Number(zone.slice(1, 3)), zoneMinute = Number(zone.slice(4, 6))
+      if (zoneHour > 14 || zoneMinute > 59 || (zoneHour === 14 && zoneMinute !== 0)) {
+        throw new Error('LIS 更正回执时间不可验证')
+      }
+    }
+  }
+  return value
+}
+
+function historicalOperateTime(value: unknown): string | null {
+  if (value === null) return null
+  if (typeof value !== 'string' || value.length > 128) {
+    throw new Error('LIS 更正回执旧时间不可验证')
   }
   return value
 }
@@ -132,6 +147,17 @@ export function parseLisImportResult(raw: unknown): VerifiedLisImportResult {
   if (rejections.length > rejectedTotal || value.rejectionsTruncated !== (rejections.length < rejectedTotal)) {
     throw new Error('LIS 拒收截断状态互相矛盾')
   }
+  const observed = rejections.reduce((counts, item) => {
+    if (item.code === 'ROW_SHAPE_INVALID') counts.skipped++
+    else if (item.code === 'CROSS_MONTH_CONFLICT') counts.crossMonth++
+    else counts.invalidDate++
+    return counts
+  }, { skipped: 0, crossMonth: 0, invalidDate: 0 })
+  const declared = { skipped, crossMonth: rejectedCrossMonth, invalidDate: rejectedInvalidDate }
+  const categoryMismatch = value.rejectionsTruncated
+    ? observed.skipped > declared.skipped || observed.crossMonth > declared.crossMonth || observed.invalidDate > declared.invalidDate
+    : observed.skipped !== declared.skipped || observed.crossMonth !== declared.crossMonth || observed.invalidDate !== declared.invalidDate
+  if (categoryMismatch) throw new Error('LIS 拒收类型与分类计数互相矛盾')
   return {
     importBatch: requiredString(value.importBatch), imported, inserted, updated, skipped,
     partnersCreated, partnersMatched, rejectedCrossMonth, rejectedInvalidDate,
@@ -145,7 +171,7 @@ export function parseCorrectionResult(raw: unknown): CorrectionResult {
   return {
     caseNo: requiredString(value.caseNo),
     partnerId: requiredString(value.partnerId),
-    oldOperateTime: canonicalDate(value.oldOperateTime, true),
+    oldOperateTime: historicalOperateTime(value.oldOperateTime),
     newOperateTime: canonicalDate(value.newOperateTime, false) as string,
     reason: requiredString(value.reason),
   }

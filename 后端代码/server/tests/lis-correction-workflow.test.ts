@@ -168,6 +168,31 @@ describe('#179 登记月带留痕更正（POST /correction）', () => {
     expect(audits[0].operator).toBe(adminId) // trusted actor 只来自 req.user
   })
 
+  it('历史脏旧值可显式 CAS，更正后的 lowercase-t 输入统一返回并存储 uppercase T', async () => {
+    const request = await req()
+    await request(app).post('/api/v1/lis-cases/import').set('Authorization', `Bearer ${adminToken}`)
+      .send({ cases: [{ 病理号: 'CR-DIRTY', 送检医院: HOSPITAL, 登记时间: '2026-05-11', 蜡块数: 1 }] })
+    db.prepare('UPDATE lis_cases SET operate_time = ? WHERE partner_id = ? AND case_no = ?')
+      .run('legacy-dirty-time', pid, 'CR-DIRTY')
+
+    const res = await request(app).post('/api/v1/lis-cases/correction').set('Authorization', `Bearer ${adminToken}`)
+      .send({ partnerId: pid, caseNo: 'CR-DIRTY', expectedOperateTime: 'legacy-dirty-time', newOperateTime: '2026-07-05t09:30:00z', reason: '修复历史脏登记时间', confirm: true })
+
+    expect(res.status).toBe(200)
+    expect(res.body.data.oldOperateTime).toBe('legacy-dirty-time')
+    expect(res.body.data.newOperateTime).toBe('2026-07-05T09:30:00Z')
+    expect(operateTimeOf(pid, 'CR-DIRTY')).toBe('2026-07-05T09:30:00Z')
+  })
+
+  it('非法时区偏移 +99:99 → 400 INVALID_TIME，值不变', async () => {
+    const request = await req()
+    const res = await request(app).post('/api/v1/lis-cases/correction').set('Authorization', `Bearer ${adminToken}`)
+      .send({ partnerId: pid, caseNo: 'CR-001', expectedOperateTime: '2026-06-15', newOperateTime: '2026-07-05T09:30:00+99:99', reason: '非法时区必须拒绝', confirm: true })
+    expect(res.status).toBe(400)
+    expect(res.body.error.code).toBe('INVALID_TIME')
+    expect(operateTimeOf(pid, 'CR-001')).toBe('2026-06-15')
+  })
+
   it('stale expected（CAS 不匹配）→ 409 STALE_EXPECTED，值不变、无审计行（零 partial）', async () => {
     const request = await req()
     const res = await request(app).post('/api/v1/lis-cases/correction').set('Authorization', `Bearer ${adminToken}`)
@@ -353,18 +378,21 @@ describe('#179 登记月带留痕更正（POST /correction）', () => {
     expect(operateTimeOf(pid, 'CR-001')).toBe('2026-06-26')
   })
 
-  it('ROLLBACK 命令首次失败 → 关闭未知状态共享连接并返回安全 500', async () => {
+  it('ROLLBACK 与 close 双故障 → 先摘除未知状态共享连接，下一次读取获得新连接', async () => {
     const request = await req()
     db.exec("CREATE TRIGGER fail_lis_update_for_rollback BEFORE UPDATE ON lis_cases BEGIN SELECT RAISE(ABORT, 'forced update fault'); END")
     const originalDb = db
     const originalExec = originalDb.exec.bind(originalDb)
     let rollbackFaultHit = false
-    const spy = vi.spyOn(originalDb, 'exec').mockImplementation((sql: string) => {
+    const execSpy = vi.spyOn(originalDb, 'exec').mockImplementation((sql: string) => {
       if (sql === 'ROLLBACK' && !rollbackFaultHit) {
         rollbackFaultHit = true
         throw new Error('forced rollback command failure')
       }
       return originalExec(sql)
+    })
+    const closeSpy = vi.spyOn(originalDb, 'close').mockImplementation(() => {
+      throw new Error('forced close failure')
     })
     try {
       const res = await request(app).post('/api/v1/lis-cases/correction').set('Authorization', `Bearer ${adminToken}`)
@@ -372,11 +400,19 @@ describe('#179 登记月带留痕更正（POST /correction）', () => {
       expect(rollbackFaultHit).toBe(true)
       expect(res.status).toBe(500)
       expect(res.body.error.message).not.toContain('forced rollback command failure')
-      spy.mockRestore()
-      expect(originalDb.isOpen).toBe(false)
+      expect(res.body.error.message).not.toContain('forced close failure')
+      execSpy.mockRestore()
+      closeSpy.mockRestore()
+      const manager = await import('../src/database/DatabaseManager.js')
+      const replacement = manager.getDatabase()
+      expect(replacement).not.toBe(originalDb)
+      expect(replacement.isOpen).toBe(true)
+      manager.closeDatabase()
     } finally {
-      spy.mockRestore()
+      execSpy.mockRestore()
+      closeSpy.mockRestore()
       try { originalExec('ROLLBACK') } catch { /* connection may have been disposed */ }
+      try { originalDb.close() } catch { /* best-effort cleanup of the poisoned connection */ }
     }
   })
 

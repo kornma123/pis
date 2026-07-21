@@ -65,6 +65,17 @@ describe('#179 登记月带留痕更正', () => {
   ])('API 更正回执 %s → parser fail-closed', (_label, raw) => {
     expect(() => parseCorrectionResult(raw)).toThrow()
   })
+  it('API 更正回执允许有界历史脏 oldOperateTime，但拒绝非法新值时区', () => {
+    expect(parseCorrectionResult({
+      caseNo: 'S26-001', partnerId: 'P-1', oldOperateTime: 'legacy-dirty-time', newOperateTime: '2026-07-05T09:30:00+08:00', reason: '修复历史脏值',
+    }).oldOperateTime).toBe('legacy-dirty-time')
+    expect(parseCorrectionResult({
+      caseNo: 'S26-001', partnerId: 'P-1', oldOperateTime: '', newOperateTime: '2026-07-05', reason: '修复历史空值',
+    }).oldOperateTime).toBe('')
+    expect(() => parseCorrectionResult({
+      caseNo: 'S26-001', partnerId: 'P-1', oldOperateTime: null, newOperateTime: '2026-07-05T09:30:00+99:99', reason: '非法时区',
+    })).toThrow()
+  })
   it('happy path：exact payload（expected=当前登记时间 CAS），成功后按服务端 truth 刷新展示', async () => {
     vi.mocked(lisCasesApi.correct).mockResolvedValue({
       caseNo: 'S26-001', partnerId: 'P-1', oldOperateTime: '2026-06-20', newOperateTime: '2026-07-05', reason: '登记月录错',
@@ -153,6 +164,20 @@ describe('#179 登记月带留痕更正', () => {
     vi.mocked(lisCasesApi.list).mockResolvedValue({ list: [{ ...RECORD, operateTime: '2026-06-30' }], page: 1, pageSize: 20, total: 1 })
     fireEvent.click(within(form).getByRole('button', { name: '重新加载' }))
     expect(await screen.findByText('2026-06-30')).toBeInTheDocument()
+  })
+
+  it('same-value（服务端 409 SAME_VALUE）→ 显示无需更正，不伪装成他人修改', async () => {
+    vi.mocked(lisCasesApi.correct).mockRejectedValue({ status: 409, code: 'SAME_VALUE', message: 'same' })
+    await renderDetail()
+    fireEvent.click(screen.getByRole('button', { name: '更正登记时间' }))
+    const form = screen.getByRole('region', { name: '登记时间更正' })
+    fireEvent.change(within(form).getByLabelText('新登记时间'), { target: { value: '2026-06-20' } })
+    fireEvent.change(within(form).getByLabelText('更正原因'), { target: { value: '重复提交检查' } })
+    fireEvent.click(within(form).getByRole('checkbox'))
+    fireEvent.click(within(form).getByRole('button', { name: '提交更正' }))
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('无需更正')
+    expect(within(form).queryByRole('button', { name: '重新加载' })).not.toBeInTheDocument()
   })
 
   it('双击/重复提交只发一次更正请求', async () => {
