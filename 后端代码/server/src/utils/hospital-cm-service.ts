@@ -39,6 +39,32 @@ interface DbLike {
   prepare: (sql: string) => { get: (...a: unknown[]) => unknown; run: (...a: unknown[]) => { changes?: number }; all: (...a: unknown[]) => unknown[] }
 }
 
+export class HospitalCmSourceDataError extends Error {
+  readonly code = 'HOSPITAL_CM_LAB_REVENUE_INVALID'
+  readonly status = 500
+
+  constructor() {
+    super('院级贡献毛利收入事实不可安全计算')
+    this.name = 'HospitalCmSourceDataError'
+  }
+}
+
+function readStoredLabRevenue(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || !Number.isFinite(value * 100)) {
+    throw new HospitalCmSourceDataError()
+  }
+  return value
+}
+
+function sumLabRevenue(values: readonly number[]): number {
+  let total = 0
+  for (const value of values) {
+    total += value
+    if (!Number.isFinite(total) || !Number.isFinite(total * 100)) throw new HospitalCmSourceDataError()
+  }
+  return total
+}
+
 // —— 台账索引 / 别名映射（与 antibody-cost-v1.1.ts 同款·DB 权威源）——
 function buildDbLedgerIndex(db: DbLike): LedgerIndex {
   const rows = db
@@ -119,7 +145,7 @@ interface RevenueRow {
   case_no: string
   partner_id: string | null
   partner_name: string | null
-  lab_revenue: number | null
+  lab_revenue: unknown
   net_amount: number | null
   gross_amount: number | null
   revenue_source: string | null
@@ -131,11 +157,12 @@ interface RevenueRow {
 
 /**
  * 装载并计算每 case 贡献毛利（§10.A 契约）。
- * 加载 revenue_source∈(statement,corrected) 且 lab_revenue IS NOT NULL 的 case（含 lab_revenue=0 供诊断桶计数）；
+ * 加载 revenue_source∈(statement,corrected) 的全部 case，并在发布任何结果前严格验证 lab_revenue；
+ * NULL/非数值/非有限/负数或不可安全按分计算的事实一律 fail-closed，合法 0 保留供诊断桶计数。
  * 引擎按同源闸/准入闸分桶。marker 先按 (partner_id,case_no) 分组（防标量扇出）。
  */
 export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): P0CaseCm[] {
-  let where = "cr.lab_revenue IS NOT NULL AND cr.revenue_source IN ('statement','corrected')"
+  let where = "cr.revenue_source IN ('statement','corrected')"
   const params: unknown[] = []
   if (opts.partnerId) { where += ' AND cr.partner_id = ?'; params.push(opts.partnerId) }
   if (opts.serviceMonth) { where += ' AND cr.service_month = ?'; params.push(opts.serviceMonth) }
@@ -151,6 +178,8 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
   `).all(...params) as RevenueRow[]
 
   if (revRows.length === 0) return []
+  const labRevenueByRow = new Map<RevenueRow, number>()
+  for (const row of revRows) labRevenueByRow.set(row, readStoredLabRevenue(row.lab_revenue))
 
   // marker 按 (partner_id, case_no) 分组（等价 CTE·防扇出）。markers 无 service_month，按 partner 过滤（给了 partnerId 时）。
   const markerKey = (pid: string | null, caseNo: string): string => `${pid ?? ''}||${caseNo}`
@@ -184,7 +213,7 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
   const stain = loadStainPerSlide(db)
   const params2: CaseCmParams = { secondaryPerSlide, stainPerSlide: stain.perSlide, stainIsPlaceholder: stain.isPlaceholder }
 
-  // §10.E 跨月键事实（#163 阶段2·PM Q2'=A）：case_no 在 case_revenue 跨多 service_month 复用（lis_cases 键无月）。
+  // §10.E 跨月键事实（#163 阶段2·DEC-163-ROUND-001=C）：case_no 在 case_revenue 跨多 service_month 复用（lis_cases 键无月）。
   //   阶段1 对全部跨月键整例扣留；阶段2 收窄为：合法跨月（多月均合法）→ 整例成本按各合格月 lab_revenue 占比分摊；
   //   异常跨月（夹 NULL/非法月份行）→ 仍整例扣留（fail-closed·不发明分摊答案）。
   const xm = loadCrossMonthReuseKeys(db, opts.partnerId)
@@ -196,7 +225,7 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
       partnerId: r.partner_id ?? '',
       partnerName: r.partner_name,
       serviceMonth: r.service_month,
-      labRevenue: Number(r.lab_revenue) || 0,
+      labRevenue: labRevenueByRow.get(r)!,
       revenueSource: r.revenue_source,
       markers,
       specialStainCount: Number(r.special_stain_count) || 0,
@@ -209,17 +238,17 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
     if (!xm.legal.has(key)) return computeCaseCm(input, resolvePrice, params2) // 非跨月：原路径不变
 
     // —— 合法跨月：整例成本只算一次，再按各合格月 lab_revenue 占比分摊（先于输出月过滤取全部分母）——
-    const lab = Number(r.lab_revenue) || 0
+    const lab = labRevenueByRow.get(r)!
     if (lab <= 0) return computeCaseCm(input, resolvePrice, params2) // 该月无染色实收 → 同源闸桶（diagnosis/excluded）·不减成本
     const groupRows = xm.rowsByKey.get(key) ?? []
     const eligible = groupRows.filter((g) => g.labRevenue > 0 && g.serviceMonth != null && VALID_SERVICE_MONTH.test(g.serviceMonth))
     if (eligible.length === 0) return computeCaseCm(input, resolvePrice, params2) // 防御：legal 键必有合格月
-    const totalLab = eligible.reduce((sum, g) => sum + r2(g.labRevenue), 0)
+    const totalLab = sumLabRevenue(eligible.map((g) => g.labRevenue))
     const original = computeCaseCm({ ...input, labRevenue: totalLab }, resolvePrice, params2)
     if (original.bucket !== 'staining') return computeCaseCm(input, resolvePrice, params2) // 无 IHC 信号 → non_ihc 成本恒 0·无需分摊
     const shares = allocateCrossMonthCostByLabRevenue(original, eligible.map((g) => ({
       serviceMonth: g.serviceMonth as string,
-      labRevenue: r2(g.labRevenue), // 权重只读 lab_revenue——绝不用 net_amount/gross_amount（即便矛盾）
+      labRevenue: g.labRevenue, // 权重只读原始已验证 lab_revenue——绝不用 net_amount/gross_amount（即便矛盾）
     })))
     const share = shares.find((s) => s.serviceMonth === r.service_month)
     if (!share) return computeCaseCm(input, resolvePrice, params2) // 防御：合法键的当前行必在合格月中
@@ -256,12 +285,12 @@ interface CrossMonthKeyFacts {
 }
 
 /**
- * §10.E 跨月键事实装载：准入收入行（lab_revenue NOT NULL·revenue_source∈statement/corrected）按
+ * §10.E 跨月键事实装载：准入收入行（revenue_source∈statement/corrected）按
  * `partner_id||case_no`（与 markerKey 同格式）分组，产出合法/异常跨月键集与各键全月收入行。
  * 只读 lab_revenue 作权重来源；net/gross 随行读出仅供未来诊断，绝不进权重。
  */
 function loadCrossMonthReuseKeys(db: DbLike, partnerId?: string): CrossMonthKeyFacts {
-  let where = "lab_revenue IS NOT NULL AND revenue_source IN ('statement','corrected')"
+  let where = "revenue_source IN ('statement','corrected')"
   const params: unknown[] = []
   if (partnerId) { where += ' AND partner_id = ?'; params.push(partnerId) }
   const rows = db.prepare(`
@@ -272,7 +301,7 @@ function loadCrossMonthReuseKeys(db: DbLike, partnerId?: string): CrossMonthKeyF
     partner_id: string | null
     case_no: string
     service_month: string | null
-    lab_revenue: number | null
+    lab_revenue: unknown
     net_amount: number | null
     gross_amount: number | null
   }>
@@ -282,7 +311,7 @@ function loadCrossMonthReuseKeys(db: DbLike, partnerId?: string): CrossMonthKeyF
     const arr = grouped.get(key) ?? []
     arr.push({
       serviceMonth: r.service_month,
-      labRevenue: Number(r.lab_revenue) || 0,
+      labRevenue: readStoredLabRevenue(r.lab_revenue),
       netAmount: Number(r.net_amount) || 0,
       grossAmount: Number(r.gross_amount) || 0,
     })

@@ -356,7 +356,8 @@ function probePeriodKey(db: FoundationProbeDb, sourceState: HospitalCmReadinessS
     let resultCode = 'PASSED'
     if (summary.caseRevenueRows === 0 || summary.lisCaseRows === 0 || summary.lisMarkerRows === 0) resultCode = 'EMPTY_PERIOD_BASELINE'
     else if (summary.invalidKeyRows > 0) resultCode = 'INVALID_PERIOD_KEY'
-    // #163 阶段2（PM Q2'=A）：合法跨月复用不再判失败——CM 成本已按各月 lab_revenue 占比分摊；
+    // #163 阶段2（DEC-163-ROUND-001=C）：合法跨月复用不再判失败——CM 成本按各月 lab_revenue
+    // 占比及最大余数法分摊；
     // crossMonthReuseRows 保留在 summary 作信息项披露。非法键/孤儿仍 fail-closed。
     else if (summary.revenueOrphanRows > 0 || summary.markerOrphanRows > 0) resultCode = 'PERIOD_KEY_ORPHAN'
     const met = resultCode === 'PASSED'
@@ -414,7 +415,7 @@ export function currentHospitalCmConstantManifest(): Record<string, unknown> {
  * 受代码评审与 drift-guard 保护的基线签名。口径常量变化时，必须显式 bump 版本、更新本签名并让差异进入 PR。
  * 它不是数据库开关，也没有运行时“设为通过”的入口。
  */
-export const EXPECTED_HOSPITAL_CM_CONSTANT_MANIFEST_FINGERPRINT = '4d2507309dec9b8d542ceb3cd9ad8906861abddb8a53105f5ac43fa4d01d6832'
+export const EXPECTED_HOSPITAL_CM_CONSTANT_MANIFEST_FINGERPRINT = 'f1f465b4497b2d961e764cb1669d875ed2d74a7a4f2106cd88afb91ce3337054'
 
 function probeConstantFreeze(sourceState: HospitalCmReadinessSourceState): HospitalCmFoundationProbeCheck {
   const key: FoundationGate = 'constant_freeze'

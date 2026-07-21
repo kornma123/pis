@@ -1,5 +1,6 @@
 /**
- * #163 阶段2 · 跨月 case 可避免成本按各月收入占比（lab_revenue 权重）分摊（PM 拍板 Q2'=A）。
+ * #163 阶段2 · 跨月 case 可避免成本按各月收入占比（lab_revenue 权重）分摊；
+ * DEC-163-ROUND-001=C 规定逐 bucket 使用最大余数法处理分厘尾差。
  *
  * 背景：case_revenue 键含月 (partner_id,case_no,service_month) 允许同一身份跨月结算；
  *   lis_cases 键无月 (partner_id,case_no) → 物理成本事实只有一份。阶段1 把跨月复用整例扣留
@@ -17,6 +18,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { getDb } from './p0-harness.js'
 import { buildHospitalCmByPartner, loadHospitalCmCases } from '../src/utils/hospital-cm-service.js'
+import { allocateCrossMonthCostByLabRevenue } from '../src/utils/hospital-cm.js'
 
 let db: any
 const R = 'HCM-R' // 分摊验证院
@@ -67,7 +69,46 @@ beforeAll(async () => {
   db.prepare(`INSERT INTO lis_case_markers (id, case_no, partner_id, marker_name, advice_type) VALUES ('HM-X2','X-002',?,'CK7','Y000001')`).run(X)
 })
 
-describe('跨月分摊（#163 阶段2·PM Q2\'=A）', () => {
+describe('跨月分摊（#163 阶段2·DEC-163-ROUND-001=C）', () => {
+  it('DEC-163=C：逐 bucket 使用最大余数法，多分尾差不回填权重最大月且输入顺序无关', () => {
+    const months = [
+      { serviceMonth: '2026-01', labRevenue: 40 },
+      { serviceMonth: '2026-02', labRevenue: 35 },
+      { serviceMonth: '2026-03', labRevenue: 25 },
+    ]
+    const normalize = (rows: ReturnType<typeof allocateCrossMonthCostByLabRevenue>) =>
+      [...rows].sort((left, right) => left.serviceMonth.localeCompare(right.serviceMonth))
+
+    const expected = [
+      { serviceMonth: '2026-01', bucketA: 0.01, bucketB: 0.01, avoidableCost: 0.02 },
+      { serviceMonth: '2026-02', bucketA: 0.01, bucketB: 0, avoidableCost: 0.01 },
+      { serviceMonth: '2026-03', bucketA: 0, bucketB: 0, avoidableCost: 0 },
+    ]
+    expect(normalize(allocateCrossMonthCostByLabRevenue(
+      { bucketA: 0.02, bucketB: 0.01, avoidableCost: 0.03 },
+      months,
+    ))).toEqual(expected)
+    expect(normalize(allocateCrossMonthCostByLabRevenue(
+      { bucketA: 0.02, bucketB: 0.01, avoidableCost: 0.03 },
+      [...months].reverse(),
+    ))).toEqual(expected)
+  })
+
+  it('DEC-163=C：余数完全并列时由最早 service_month 取得该分', () => {
+    expect(allocateCrossMonthCostByLabRevenue(
+      { bucketA: 0.01, bucketB: 0, avoidableCost: 0.01 },
+      [
+        { serviceMonth: '2026-03', labRevenue: 1 },
+        { serviceMonth: '2026-01', labRevenue: 1 },
+        { serviceMonth: '2026-02', labRevenue: 1 },
+      ],
+    )).toEqual([
+      { serviceMonth: '2026-01', bucketA: 0.01, bucketB: 0, avoidableCost: 0.01 },
+      { serviceMonth: '2026-02', bucketA: 0, bucketB: 0, avoidableCost: 0 },
+      { serviceMonth: '2026-03', bucketA: 0, bucketB: 0, avoidableCost: 0 },
+    ])
+  })
+
   it('R-001 全月视图：成本按 lab 占比 25%/75% 分摊，bucketA/bucketB/avoidableCost 逐桶精确守恒', () => {
     const cases = loadHospitalCmCases(db, { partnerId: R }).filter((c: any) => c.caseNo === 'R-001')
     expect(cases).toHaveLength(2)
@@ -149,6 +190,46 @@ describe('跨月分摊（#163 阶段2·PM Q2\'=A）', () => {
     expect(apr.bucket).toBe('diagnosis') // 同源闸：lab=0 有 marker → 诊断桶·不减成本
     expect(apr.avoidableCost).toBe(0)
     expect(apr.cm).toBe(0)
+  })
+})
+
+describe('lab_revenue 数据事实严格门', () => {
+  const invalidFacts = [
+    ['NULL', 'NULL'],
+    ['TEXT', "'NaN'"],
+    ['BLOB', "x'00'"],
+    ['Infinity', '9e999'],
+    ['negative', '-1'],
+  ] as const
+
+  it.each(invalidFacts)('%s 不得被过滤或折成 0', (_label, labSql) => {
+    const id = `HCR-BAD-${_label}`
+    db.exec(`INSERT INTO case_revenue
+      (id, case_no, partner_id, gross_amount, net_amount, lab_revenue, out_revenue, discount_rate, revenue_source, service_month, line_count)
+      VALUES ('${id}', '${id}', '${R}', 1, 1, ${labSql}, 0, 0, 'statement', '2099-01', 1)`)
+    try {
+      expect(() => loadHospitalCmCases(db, { partnerId: R, serviceMonth: '2099-01' }))
+        .toThrowError(expect.objectContaining({ code: 'HOSPITAL_CM_LAB_REVENUE_INVALID' }))
+    } finally {
+      db.prepare('DELETE FROM case_revenue WHERE id = ?').run(id)
+    }
+  })
+
+  it('跨月有限大数求和溢出时不得发布任何月份', () => {
+    db.exec(`
+      INSERT INTO case_revenue
+        (id, case_no, partner_id, gross_amount, net_amount, lab_revenue, out_revenue, discount_rate, revenue_source, service_month, line_count)
+        VALUES ('HCR-OVERFLOW-1', 'R-OVERFLOW', '${R}', 1, 1, 9e307, 0, 0, 'statement', '2099-01', 1);
+      INSERT INTO case_revenue
+        (id, case_no, partner_id, gross_amount, net_amount, lab_revenue, out_revenue, discount_rate, revenue_source, service_month, line_count)
+        VALUES ('HCR-OVERFLOW-2', 'R-OVERFLOW', '${R}', 1, 1, 9e307, 0, 0, 'statement', '2099-02', 1);
+    `)
+    try {
+      expect(() => loadHospitalCmCases(db, { partnerId: R }))
+        .toThrowError(expect.objectContaining({ code: 'HOSPITAL_CM_LAB_REVENUE_INVALID' }))
+    } finally {
+      db.prepare("DELETE FROM case_revenue WHERE id IN ('HCR-OVERFLOW-1','HCR-OVERFLOW-2')").run()
+    }
   })
 })
 

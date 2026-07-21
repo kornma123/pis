@@ -34,7 +34,7 @@ import {
 
 describe('CM 引擎常量（改 = 立法）', () => {
   it('院级贡献毛利业务公式版本钉死；计算/上卷/成本装载语义变化必须 bump', () => {
-    expect(HOSPITAL_CM_FORMULA_VERSION).toBe('2026-07-20.a')
+    expect(HOSPITAL_CM_FORMULA_VERSION).toBe('2026-07-21.a')
   })
   it('地基探针版本钉死；探针判定语义变化必须 bump（#163 阶段2：合法跨月不再判 CROSS_MONTH_KEY_COLLISION）', () => {
     expect(HOSPITAL_CM_FOUNDATION_PROBE_VERSION).toBe('2026-07-20.a')
@@ -45,7 +45,7 @@ describe('CM 引擎常量（改 = 立法）', () => {
   })
   it('计算与上卷的规范正反例行为签名钉死；实现变了但忘记 bump 也会先红灯', () => {
     expect(sha256(currentHospitalCmFormulaBehaviorArtifact()))
-      .toBe('33d38e435193bc1d260efd01b9d62ed5de5b481d81c6c19f4eae787757c809a5')
+      .toBe('75d6583bde30791e7f9e4d0df2407d703be011ce2b4baab22b761d07a57d819f')
   })
   it('真抗体码白名单 = {Y000001, Y000003}（与 reconcile-account 同源）', () => {
     expect([...P0_ANTIBODY_ADVICE_TYPES].sort()).toEqual(['Y000001', 'Y000003'])

@@ -551,6 +551,83 @@ describe('#182/O-1 · 目录 → C1 scope 桥接:输入边界与可信 actor', (
 })
 
 describe('#182/O-1 · 目录 → C1 scope 桥接:事务原子性与并发读取纪律', () => {
+  it('第一次 ROLLBACK 命令故障后必须重试到事务结束，scope/audit 零 partial', () => {
+    const db = createDb()
+    saveDirectory(db, [dirEntry('PARTNER-001')])
+    db.exec(`
+      CREATE TRIGGER test_bridge_transient_rollback_failure
+      BEFORE INSERT ON hospital_cm_month_scope_snapshots
+      BEGIN SELECT RAISE(ABORT, 'TEST_BRIDGE_TRANSIENT_ROLLBACK_FAILURE'); END;
+    `)
+    let rollbackAttempts = 0
+    const faultDb = {
+      prepare: (sql: string) => db.prepare(sql),
+      exec: (sql: string) => {
+        if (sql === 'ROLLBACK' && rollbackAttempts++ === 0) {
+          throw new Error('TEST_FIRST_ROLLBACK_COMMAND_FAILURE')
+        }
+        return db.exec(sql)
+      },
+      get isTransaction() { return db.isTransaction },
+    }
+    try {
+      expect(() => bridgeHospitalCmDirectoryScopeForMonth(faultDb as never, {
+        serviceMonth: MONTH, actor: ACTOR, reason: '瞬时 rollback fault 演练',
+      })).toThrow(/TEST_BRIDGE_TRANSIENT_ROLLBACK_FAILURE/)
+      expect(rollbackAttempts).toBe(2)
+      expect(db.isTransaction).toBe(false)
+      expect(evidenceCounts(db)).toEqual({ scopes: 0, scopeAudits: 0 })
+    } finally {
+      if (db.isTransaction) db.exec('ROLLBACK')
+    }
+  })
+
+  it('ROLLBACK 持续故障时关闭不可复用连接，返回稳定码且磁盘无 committed partial', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-bridge-rollback-fault-'))
+    const file = join(dir, 'rollback-fault.db')
+    let db: DatabaseSync | null = null
+    let checkDb: DatabaseSync | null = null
+    try {
+      db = createDb(file)
+      saveDirectory(db, [dirEntry('PARTNER-001')])
+      db.exec(`
+        CREATE TRIGGER test_bridge_persistent_rollback_failure
+        BEFORE INSERT ON hospital_cm_month_scope_snapshots
+        BEGIN SELECT RAISE(ABORT, 'TEST_BRIDGE_PERSISTENT_ROLLBACK_FAILURE'); END;
+      `)
+      let closeCalled = false
+      const faultDb = {
+        prepare: (sql: string) => db!.prepare(sql),
+        exec: (sql: string) => {
+          if (sql === 'ROLLBACK') throw new Error('TEST_ROLLBACK_COMMAND_STILL_BROKEN')
+          return db!.exec(sql)
+        },
+        close: () => {
+          closeCalled = true
+          db!.close()
+        },
+        get isTransaction() { return db!.isTransaction },
+      }
+      try {
+        bridgeHospitalCmDirectoryScopeForMonth(faultDb as never, {
+          serviceMonth: MONTH, actor: ACTOR, reason: '持续 rollback fault 演练',
+        })
+        throw new Error('expected rollback failure')
+      } catch (error) {
+        expect(error).toMatchObject({ code: 'BRIDGE_ROLLBACK_FAILED', status: 500 })
+        expect((error as { cause?: Error }).cause?.message).toMatch(/TEST_BRIDGE_PERSISTENT_ROLLBACK_FAILURE/)
+      }
+      expect(closeCalled).toBe(true)
+      db = null
+      checkDb = new DatabaseSync(file)
+      expect(evidenceCounts(checkDb)).toEqual({ scopes: 0, scopeAudits: 0 })
+    } finally {
+      try { checkDb?.close() } catch { /* test cleanup */ }
+      try { db?.close() } catch { /* test cleanup */ }
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('insert fault:整事务回滚,零 partial;故障解除后同连接可成功发布', () => {
     const db = createDb()
     saveDirectory(db, [dirEntry('PARTNER-001')])

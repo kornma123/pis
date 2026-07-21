@@ -45,6 +45,7 @@ export interface HospitalCmDirectoryScopeBridgeDb {
   prepare: (sql: string) => StatementLike
   exec: (sql: string) => unknown
   readonly isTransaction: boolean
+  close?: () => void
 }
 
 export class HospitalCmDirectoryScopeBridgeError extends Error {
@@ -105,12 +106,31 @@ function normalizeBridgeInput(rawInput: unknown): NormalizedBridgeInput {
   return { serviceMonth, actor: { userId: actor.userId, username: actor.username }, reason }
 }
 
-function rollbackQuietly(db: HospitalCmDirectoryScopeBridgeDb): void {
-  try {
-    db.exec('ROLLBACK')
-  } catch {
-    // 事务已被 SQLite 自动回滚时忽略
+function rollbackAndRethrow(db: HospitalCmDirectoryScopeBridgeDb, cause: unknown): never {
+  let rollbackFailure: unknown = null
+  for (let attempt = 0; db.isTransaction && attempt < 2; attempt += 1) {
+    try {
+      db.exec('ROLLBACK')
+    } catch (error) {
+      rollbackFailure = error
+    }
   }
+  if (db.isTransaction) {
+    try {
+      db.close?.()
+    } catch {
+      // 连接仍视为不可复用；只返回稳定错误，不泄漏底层 close/SQL 诊断。
+    }
+    const error = new HospitalCmDirectoryScopeBridgeError(
+      'BRIDGE_ROLLBACK_FAILED',
+      500,
+      '目录范围桥接事务回滚失败，连接不可复用',
+    ) as HospitalCmDirectoryScopeBridgeError & { cause?: unknown; rollbackCause?: unknown }
+    error.cause = cause
+    error.rollbackCause = rollbackFailure
+    throw error
+  }
+  throw cause
 }
 
 function sameSortedAccounts(left: readonly string[], right: readonly string[]): boolean {
@@ -175,7 +195,6 @@ export function bridgeHospitalCmDirectoryScopeForMonth(
     db.exec('COMMIT')
     return { serviceMonth: input.serviceMonth, action: 'UNAVAILABLE', scope: current, directoryVersionId }
   } catch (cause) {
-    rollbackQuietly(db)
-    throw cause
+    rollbackAndRethrow(db, cause)
   }
 }

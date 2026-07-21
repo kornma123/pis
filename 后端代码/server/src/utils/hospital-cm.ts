@@ -26,7 +26,7 @@
  * 这不是 readiness 探针版本：任何会改变 `computeCaseCm`、`rollupHospitalCm`
  * 或成本装载语义的变更，都必须显式 bump 本版本，并让历史周期证据绑定该值。
  */
-export const HOSPITAL_CM_FORMULA_VERSION = '2026-07-20.a' as const
+export const HOSPITAL_CM_FORMULA_VERSION = '2026-07-21.a' as const
 
 /** 真抗体申请类型白名单（§10.B）。一行 = 一片一抗（不去重）；Y000006 HE深切重切 / Y000007 白片 / 其它码不计。
  *  与 `reconcile-account.ts` 的 ANTIBODY_ADVICE 同源（Y000001/Y000003）。 */
@@ -106,7 +106,7 @@ export type PriceResolver = (markerName: string) => { perTestPrice: number | nul
  *  · excluded          = labRevenue<=0 且无 marker（全额冲红/无技术无信号）→ 计"作废/移出" 桶
  *  · cross_month_reuse = 跨月身份异常（#163 阶段2 收窄：仅当跨月身份夹 NULL/非法月份行、无法安全归因）→ **禁输出贡献毛利**、
  *      标"跨月身份异常·需清理"，不进任何成本上卷。合法跨月（多月均合法）不再整例扣留：成本按各月 lab_revenue
- *      占比分摊（PM 拍板 Q2'=A·见 allocateCrossMonthCostByLabRevenue）。
+ *      占比分摊（DEC-163-ROUND-001=C·见 allocateCrossMonthCostByLabRevenue）。
  */
 export type CaseBucket = 'staining' | 'diagnosis' | 'non_ihc' | 'excluded' | 'cross_month_reuse'
 
@@ -279,7 +279,7 @@ export function makeWithheldCase(input: P0CaseInput): P0CaseCm {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// 跨月分摊（#163 阶段2·PM 拍板 Q2'=A：按各月收入占比分摊）
+// 跨月分摊（#163 阶段2；DEC-163-ROUND-001=C：按各月收入占比使用最大余数法分摊）
 // ────────────────────────────────────────────────────────────────────────────
 
 /** 跨月分摊输入月（仅合格月：service_month 合法且 lab_revenue>0·同源闸 ADR-002）。 */
@@ -297,18 +297,16 @@ export interface CrossMonthAllocatedShare {
 }
 
 /**
- * 把整例可避免成本按各合格月 lab_revenue 占比分摊到月（#163 阶段2·PM 拍板 Q2'=A）。
+ * 把整例可避免成本按各合格月 lab_revenue 占比分摊到月（DEC-163-ROUND-001=C）。
  *
  * 铁律：
  *   · 权重 = 该月 labRevenue / Σ合格月 labRevenue（**只读 lab_revenue**，绝不读 net_amount/gross_amount）；
- *   · bucketA / bucketB 分别逐月 r2 后**精确守恒**（Σ 分摊 = 整例原值）；
+ *   · bucketA / bucketB 分别以分为最小单位使用最大余数法，**精确守恒**（Σ 分摊 = 整例原值）；
  *     avoidableCost_m = r2(bucketA_m + bucketB_m)——与单例 `avoidableCost == r2(bucketA + bucketB)` 不变量同源；
  *   · 物理由度（片数/缺价片数）不拆：每月行保留整例值（成本事实只有一份，钱是跨月结算的）。
  *
- * ⚠️ 分厘残差归属（**细节级实现规则·权威链未明钉**）：逐月 r2 产生的尾差，对每个桶独立归入
- *    **权重最大的月**（并列取最早 service_month）。选它是因为确定、与迭代顺序无关、且把亚分误差放在
- *    占比最大的月上（相对误差最小）；**不是**自创均摊/静默归零/随机路由。若 PM/权威链日后指定其它
- *    固定 base 规则，改这里——公式行为制品签名会随之变化，旧证据自动失效。
+ *   · 每个桶先取各月精确份额的整数分，剩余分按小数余数降序逐分分配；余数并列取最早 service_month；
+ *   · avoidableCost 只等于该月 bucketA + bucketB，不建立第三套尾差；输入顺序不得改变结果。
  *
  * 前置（调用方保证，不在此重复判）：eligibleMonths 非空、每月 labRevenue>0、serviceMonth 合法且月内唯一。
  * 全零/负分母、退款/冲销等无业务答案的情形**不在此发明**——service 层的收窄守卫已先行拦截或绕行。
@@ -317,25 +315,59 @@ export function allocateCrossMonthCostByLabRevenue(
   original: Pick<P0CaseCm, 'bucketA' | 'bucketB' | 'avoidableCost'>,
   eligibleMonths: CrossMonthAllocationMonth[],
 ): CrossMonthAllocatedShare[] {
-  const totalLab = eligibleMonths.reduce((sum, m) => sum + m.labRevenue, 0)
-  if (eligibleMonths.length === 0 || totalLab <= 0) return []
-  // 残差固定归属月 = 权重最大月（labRevenue 并列时取最早 service_month，完全确定）
-  const residualMonth = eligibleMonths.reduce((best, m) =>
-    (m.labRevenue > best.labRevenue || (m.labRevenue === best.labRevenue && m.serviceMonth < best.serviceMonth)) ? m : best)
-  const shares = eligibleMonths.map((m) => {
-    const weight = m.labRevenue / totalLab
-    return { serviceMonth: m.serviceMonth, bucketA: r2(original.bucketA * weight), bucketB: r2(original.bucketB * weight), avoidableCost: 0 }
-  })
-  for (const bucket of ['bucketA', 'bucketB'] as const) {
-    const allocated = shares.reduce((sum, s) => sum + s[bucket], 0)
-    const residual = r2(original[bucket] - allocated)
-    if (residual !== 0) {
-      const target = shares.find((s) => s.serviceMonth === residualMonth.serviceMonth)!
-      target[bucket] = r2(target[bucket] + residual)
-    }
+  const fail = (): never => {
+    const error = new Error('跨月成本分摊输入不可安全计算') as Error & { code: string }
+    error.code = 'HOSPITAL_CM_CROSS_MONTH_ALLOCATION_INVALID'
+    throw error
   }
-  for (const s of shares) s.avoidableCost = r2(s.bucketA + s.bucketB)
-  return shares
+  if (eligibleMonths.length === 0) return []
+  const months = [...eligibleMonths].sort((left, right) => left.serviceMonth.localeCompare(right.serviceMonth))
+  const monthKeys = new Set<string>()
+  let totalLab = 0
+  for (const month of months) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month.serviceMonth)
+      || monthKeys.has(month.serviceMonth)
+      || typeof month.labRevenue !== 'number'
+      || !Number.isFinite(month.labRevenue)
+      || month.labRevenue <= 0) fail()
+    monthKeys.add(month.serviceMonth)
+    totalLab += month.labRevenue
+    if (!Number.isFinite(totalLab)) fail()
+  }
+  if (totalLab <= 0) fail()
+
+  const toCents = (value: number): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return fail()
+    const cents = Math.round(value * 100)
+    if (!Number.isSafeInteger(cents) || Math.abs(value - cents / 100) > 1e-9) return fail()
+    return cents
+  }
+  const bucketCents = {
+    bucketA: toCents(original.bucketA),
+    bucketB: toCents(original.bucketB),
+  }
+  if (toCents(original.avoidableCost) !== bucketCents.bucketA + bucketCents.bucketB) fail()
+
+  const allocatedByBucket = (totalCents: number): number[] => {
+    const exact = months.map((month) => totalCents * (month.labRevenue / totalLab))
+    if (exact.some((value) => !Number.isFinite(value) || value < 0)) return fail()
+    const cents = exact.map((value) => Math.floor(value))
+    const remaining = totalCents - cents.reduce((sum, value) => sum + value, 0)
+    if (!Number.isSafeInteger(remaining) || remaining < 0 || remaining > months.length) return fail()
+    const ranked = exact
+      .map((value, index) => ({ index, remainder: value - cents[index], serviceMonth: months[index].serviceMonth }))
+      .sort((left, right) => right.remainder - left.remainder || left.serviceMonth.localeCompare(right.serviceMonth))
+    for (let index = 0; index < remaining; index += 1) cents[ranked[index].index] += 1
+    return cents
+  }
+  const bucketA = allocatedByBucket(bucketCents.bucketA)
+  const bucketB = allocatedByBucket(bucketCents.bucketB)
+  return months.map((month, index) => ({
+    serviceMonth: month.serviceMonth,
+    bucketA: bucketA[index] / 100,
+    bucketB: bucketB[index] / 100,
+    avoidableCost: (bucketA[index] + bucketB[index]) / 100,
+  }))
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -531,12 +563,13 @@ export function currentHospitalCmFormulaBehaviorArtifact(): Record<string, unkno
     serviceMonth: '2000-01',
     settled: true,
   })
-  // #163 阶段2 规范例：整例成本 40（桶A30+桶B10）按 lab 占比 100/300 分摊 → 10 / 30，逐桶守恒
+  // DEC-163=C 规范例：逐 bucket 最大余数法；该例能区分旧“权重最大月回填”实现。
   const crossMonthShares = allocateCrossMonthCostByLabRevenue(
-    { bucketA: 30, bucketB: 10, avoidableCost: 40 },
+    { bucketA: 0.02, bucketB: 0.01, avoidableCost: 0.03 },
     [
-      { serviceMonth: '2000-01', labRevenue: 100 },
-      { serviceMonth: '2000-02', labRevenue: 300 },
+      { serviceMonth: '2000-01', labRevenue: 40 },
+      { serviceMonth: '2000-02', labRevenue: 35 },
+      { serviceMonth: '2000-03', labRevenue: 25 },
     ],
   )
 
@@ -574,7 +607,7 @@ export function currentHospitalCmFormulaBehaviorArtifact(): Record<string, unkno
       businessLineDefined: rollup.businessLineDefined,
     },
     crossMonthAllocation: {
-      original: { bucketA: 30, bucketB: 10, avoidableCost: 40 },
+      original: { bucketA: 0.02, bucketB: 0.01, avoidableCost: 0.03 },
       shares: crossMonthShares,
     },
   }

@@ -22,7 +22,7 @@ A 的验收边界是把地基红灯接上真实传感器并留下不可改写的
 
 | 缺口 | 性质 | 责任角色 / 具名指派状态 | 依赖 | 最大风险 | 最早可验收节点 |
 |---|---|---|---|---|---|
-| 数据地基证据 | 部分已接线 | 技术/数据负责人，具名人待 PM 指定 | A 控制面；真实三件套盘点 | 非法键/非法月份、孤儿或空基线会阻断（合法跨月身份自公式 `2026-07-20.a` 起按收入占比分摊，不再阻断） | 2026-09-30 |
+| 数据地基证据 | 部分已接线 | 技术/数据负责人，具名人待 PM 指定 | A 控制面；真实三件套盘点 | 非法键/非法月份、孤儿或空基线会阻断（合法跨月身份自公式 `2026-07-21.a` 起按收入占比分摊，并按最大余数法处理分厘尾差，不再阻断） | 2026-09-30 |
 | 固定成本池具体值与认账 | 真实业务数据缺失 | 财务业务负责人，签字人待 PM 指定 | B；月度金额依据 | 无值、无版本、无对具体值签字 | 2026-08-31 |
 | 最近三个有效周期 | 数据与验证结构都缺 | PM 推进人 + 数据 owner | A、B、C；医院范围快照与三件套 | “已关账”不等于完整；可能没有三个可回溯周期 | 条件成立时 2026-10-31 |
 | 首个真实周期独立验证 | 真实证据缺失 | 技术/数据 owner 负责制备；独立 reviewer 负责签署，均待指定 | C；脱敏 source manifest、手核与成本 golden | 测试 fixture 被误当真实证据 | 条件成立时 2026-10-31 |
@@ -37,8 +37,8 @@ A 的验收边界是把地基红灯接上真实传感器并留下不可改写的
 | 条件 | 目标真实来源 | A 的机器判定 | 自动失效条件 |
 |---|---|---|---|
 | 库存守恒 | `inventory` 与有效 `batches.remaining` 的批量聚合探针 | 空基线、负库存、孤儿或守恒漂移一律失败 | `materials/inventory/batches` 任一增删改、schema 或探针版本变化 |
-| 期间键 | 已拍板的 `(partner_id, case_no)` 身份 + `case_revenue.service_month`；合法跨月身份（多月均合法）不再判冲突——CM 成本自 `2026-07-20.a` 起按各月 `lab_revenue` 占比分摊（#163 阶段2·PM Q2'=A），跨月行数仍作信息项披露 | 空基线、空/非法月份或三件套孤儿一律失败 | 三件套增删改、schema 或探针版本变化 |
-| 常量冻结 | 受代码审查与 drift-guard 保护的 CM 常量 manifest 与规范正反例公式行为制品签名 | 代码/口径签名不一致一律失败；院级 CM 公式版本为 `2026-07-20.a` | 任一关键常量、门集、拆分公式、计算/上卷行为或院级 CM 公式版本变化 |
+| 期间键 | 已拍板的 `(partner_id, case_no)` 身份 + `case_revenue.service_month`；合法跨月身份（多月均合法）不再判冲突——CM 成本自 `2026-07-21.a` 起按各月 `lab_revenue` 占比分摊，逐 bucket 使用最大余数法且余数并列取最早 `service_month`，跨月行数仍作信息项披露 | 空基线、空/非法月份、不可安全计算的 `lab_revenue` 或三件套孤儿一律失败 | 三件套增删改、schema 或探针版本变化 |
+| 常量冻结 | 受代码审查与 drift-guard 保护的 CM 常量 manifest 与规范正反例公式行为制品签名 | 代码/口径签名不一致一律失败；院级 CM 公式版本为 `2026-07-21.a` | 任一关键常量、门集、拆分公式、计算/上卷行为或院级 CM 公式版本变化 |
 | 固定成本池 | A 中明确 `not_connected` | 未满足 | B 后：值版本变化使旧 RATIFIED 自动失效 |
 | 三个周期 | A 中明确 `not_connected` | 0/3 | C 后：反关账、重导、范围/来源/公式指纹变化 |
 | 首周期验证 | A 中明确 `not_connected` | 未满足 | C 后：独立证据撤销或绑定输入失效 |
@@ -75,7 +75,7 @@ A 使用五张机器表：
 | 条件 | 责任角色 / 具名指派状态 | due | 节点风险 | 完成证据 |
 |---|---|---|---|---|
 | 固定成本池已配置并对具体值版本认账 | 财务业务负责人；具名人待 PM 指定 | 2026-08-31 | 技术可实现，业务值/签字人未到 | B 的值版本 + RATIFIED 记录 |
-| 数据地基门全绿 | 技术/数据负责人；具名人待 PM 指定 | 2026-09-30 | 有风险：真实三件套中的非法键/非法月份/孤儿需先清理（合法跨月身份自公式 `2026-07-20.a` 起按收入占比分摊，不再阻断本门） | A 最新有效 probe run |
+| 数据地基门全绿 | 技术/数据负责人；具名人待 PM 指定 | 2026-09-30 | 有风险：真实三件套中的非法键/非法月份/不可安全计算收入/孤儿需先清理（合法跨月身份自公式 `2026-07-21.a` 起按收入占比分摊，不再阻断本门） | A 最新有效 probe run |
 | 最近三个完整周期 | PM 推进人；具名人待 PM 指定 | 2026-10-31 | 取决于能否回溯三期 | C 的周期范围、三件套、质量与来源指纹 |
 | 首个真实周期独立验证 | 技术/数据 owner + 独立 reviewer；二者均待指定 | 2026-10-31 | 取决于脱敏真实样本与成本 golden | source manifest + 独立手核 + reviewer + CI golden |
 
@@ -103,7 +103,7 @@ A 使用五张机器表：
 | 人工旁路 | `override_log.gate_type/module/target_id/created_at`；D 补 hospital-month / batch 的强关联 | 该月或其导入批次有旁路即待人工复核；无法确定旁路影响月则扩大到关联批次，不静默忽略 | 新增旁路或复核结论撤销 | `REVIEW_REQUIRED`，趋势点留空且不计 3 期 |
 | 关账与反关账 | `reconcile_hospital_months.status/closed_at/closed_by/reopened_at/reopen_reason`；C1 提供单调 close/reopen revision 事件存储（`hospital_cm_close_revision_events`，append-only）：UPDATE/INSERT/DELETE 状态迁移由数据库触发器自动镜像（不快照 reopen 自由文本原文，防 PII 永久化），`INSERT OR REPLACE` 等残余向量由读侧现算行内容哈希 fail-closed 兜底——消费方不得假设事件序完备，也不得对事件表加"close 必须先行"的序守卫（legacy 已关账行首事件可以是 reopen） | 只有当前 close revision 已关账且三件套质量通过才是候选；触发器上线前的 legacy 已关账行没有事件，读侧对"已关账却无镜像事件"必须 fail-closed（`CLOSE_REVISION_MISSING`），经镜像制度下完整 reopen→close 后获得 revision 属预期毕业路径；修复后产生新的 close revision，可重新跑全门并重新验证 | 新的 reopen/close/delete revision，或关账行任何业务列（含关账元数据与定版数值）变化——行内容哈希编入 close 组合指纹 | 反关账后旧数值进 `REVIEW_REQUIRED`；新的关账版本通过全门后允许恢复，不因历史 `reopened_at` 永久卡死 |
 | 配置混用 | `case_revenue.config_version` + `partner_configs` | 同院月只能绑定可解析的获准版本集合；混用必须有显式重述/调整依据 | 配置回滚、新版本重算或版本行缺失 | 可解释但待确认进 `REVIEW_REQUIRED`；版本丢失进 `UNVERIFIABLE` |
-| 跨月身份冲突 | `case_revenue` 按 `(partner_id, case_no)` 聚合 `service_month`，再与 `lis_cases/lis_case_markers` 对齐 | 同一身份出现在多个收入月即阻断，不尝试猜月份 | 新增/删除/改月或三件套错配 | 数值 `null`、趋势断线、`REVIEW_REQUIRED`，不计 3 期 |
+| 跨月身份与分摊 | `case_revenue` 按 `(partner_id, case_no)` 聚合 `service_month`，再与 `lis_cases/lis_case_markers` 对齐 | 多个合法月按已验证 `lab_revenue` 占比和最大余数法分摊；夹 NULL/非法月、非法收入或不可安全计算时整例 fail-closed，不猜月份、不发布部分结果 | 新增/删除/改月、收入事实变化或三件套错配 | 数值 `null`、趋势断线、`REVIEW_REQUIRED`，不计 3 期 |
 | CM value profile 与组合分母 profile | 当前成本主数据表与 A 的 source revision、`HOSPITAL_CM_FORMULA_VERSION`/公式行为签名；C1 提供周期验证 run/check 存储（`hospital_cm_period_validation_runs/_checks`，append-only）：每次验证冻结五维指纹（范围快照版本、close revision 组合、CM 相关 7 表 source 子集、只含成本/公式/拆分的 `cmValueProfile`、manifest 集合）并带 profile 配方版本列；ADR-008 固定池由独立 `portfolioDenominatorProfile` 控制指纹把守，不进入周期 validation run。结论只能由 C3 检查器在服务器内产生，C1 不导出写函数。`checks.summary_json` 限长且只装聚合计数/码/指纹——与 A 表同一红线：不保存医院名、病例号、患者字段或原始业务行（C3 写入纪律）。source 子集为表级全局跨月（后继月新增收入即撤销旧周期证据，属有意 fail-closed，C3 须配自动重验策略），但**不含库存三表**——materials/inventory/batches 不是 CM 计算输入，其绿灯由数据地基门单独把守 | 能精确恢复原冻结 `cmValueProfile` 才可过周期质量门（失效判定为读侧现算比对，证据永不删除；配方升级 `PROFILE_RECIPE_UPGRADED` 与口径真变化 `PROFILE_CHANGED` 分开报告）；只有当前成本/公式可用时只能按当前口径重述。组合覆盖倍数另行要求目标月固定池当前有效并已认账 | 成本行、公式行为、公式版本、拆分口径内容（不含认账状态位翻转——同一内容 UNRATIFIED→RATIFIED 不撤销周期证据，认账状态是 readiness 硬门而非周期失效维度）或医院范围变化会撤销院级周期证据；固定池金额/版本/hash/认账/owner 变化只撤销该月 `portfolioDenominatorProfile`、覆盖倍数与组合 readiness，不反向撤销院级 CM 或 `PERIOD_QUALITY_VERIFIED` | 原版可复现才可 `PERIOD_QUALITY_VERIFIED`；当前口径重述为 `RESTATED_CURRENT_BASIS`，不计 3 期。仅固定池失效时院级周期状态保持，`coverageMultiple` 为空并退回组合校准态 |
 
 C1 的 `evaluatePeriodValidationRun(...).current` 只回答“该 run 冻结的五维指纹目前是否仍新鲜”，不证明 run 的来源可信，也不验证 `overall_status=passed` 或固定检查集是否完整。C3 必须通过服务器受控写入器产生持久化 run，消费前同时校验总结果和完整检查集；调用方自己拼出的 run 即使指纹相同，也不能升级为 `PERIOD_QUALITY_VERIFIED`。五维现算在同一 SQLite 快照内完成；顶层评估期间若其他连接提交，返回暂态 `EVIDENCE_CHANGED_DURING_EVALUATION` 并重试，嵌套在外层事务时则严格沿用调用方既有事务快照。
