@@ -180,7 +180,10 @@ function seedOutboundForUpdate(fixture: Fixture): string {
     VALUES (?, ?, ?, ?, ?, 1, '瓶', 10, 10, 'self')
   `).run(outboundItemId, outboundId, fixture.materialId, fixture.batchId, batchNo)
   db.prepare('UPDATE inventory SET stock = 99 WHERE material_id = ?').run(fixture.materialId)
+  // 历史夹具的过渡态（remaining=99 > quantity）违反 fresh schema CHECK；PRAGMA 仅覆盖这一次夹具写入。
+  db.exec('PRAGMA ignore_check_constraints = ON')
   db.prepare('UPDATE batches SET remaining = 99 WHERE id = ?').run(fixture.batchId)
+  db.exec('PRAGMA ignore_check_constraints = OFF')
   db.prepare(`
     INSERT INTO batch_usage_tracking
       (id, material_id, material_name, batch, spec, total_qty, remaining, unit,
@@ -651,7 +654,11 @@ describe('DATA-2 outbound numeric guards', () => {
     execSpy.mockImplementation((sql: string) => {
       if (!injected && /^BEGIN\s+IMMEDIATE$/i.test(sql)) {
         injected = true
+        // 注入「锁等待期间批次被停用」的遗留脏事实；fresh schema CHECK 会拒绝，
+        // PRAGMA 仅覆盖这一次注入写入，生产路径仍受 CHECK 约束。
+        db.exec('PRAGMA ignore_check_constraints = ON')
         db.prepare('UPDATE batches SET status = 0 WHERE id = ?').run(f.batchId)
+        db.exec('PRAGMA ignore_check_constraints = OFF')
       }
       originalExec(sql)
     })
@@ -946,7 +953,10 @@ describe('DATA-2 outbound numeric guards', () => {
 
 describe('DATA-2 stocktaking / returns / scraps / transfers numeric guards', () => {
   it('finite stocktaking values whose actual-minus-system difference overflows are rejected without a write', async () => {
+    // 夹具需要负库存的极端遗留脏数据；fresh schema CHECK 会拒绝，PRAGMA 仅覆盖夹具写入。
+    db.exec('PRAGMA ignore_check_constraints = ON')
     const f = seedFixture('stocktaking-difference-overflow', { stock: -1e308 })
+    db.exec('PRAGMA ignore_check_constraints = OFF')
     const before = snapshot(f)
     await expectRejectedWithoutBusinessEffects(auth(request(app).post('/api/v1/stocktaking')).send({
       materialId: f.materialId,

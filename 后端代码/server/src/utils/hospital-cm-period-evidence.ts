@@ -758,11 +758,16 @@ export function readCurrentSourceBatchManifest(
 const SCOPE_INPUT_KEYS = ['serviceMonth', 'accounts', 'rosterSourceRef', 'rosterSourceHash', 'status', 'actor', 'reason'] as const
 
 /**
- * 登记月度账户范围快照。合同(与 #182 D2 共用,双方不得各建范围模型):
- * - accounts 元素 = partners.id 稳定标识(禁医院名称);财务侧编码→partner 映射归 D2 名册数据链,映射内容进 roster_source_hash。
- * - roster_source_hash = 版本化**名册内容** hash(账户标识+合作形态+当月活跃+金额完整度+证据状态的规范化序列)——
- *   上述任一内容变化 D2 必须发布新版本快照,否则旧周期证据不失效即为 D2 违约。
- * - #182 落地前本快照是调用者未核验声明;C3 消费必须显式携带该限定。
+ * 登记月度账户范围快照。合同(与 #182 目录桥接共用,双方不得各建范围模型):
+ * - accounts 元素 = partners.id 稳定标识(禁医院名称/编码/别名);编码/别名→partner 的严格映射归目录
+ *   resolver 与独立 mappingEvidenceHash,映射内容不进入 roster_source_hash。
+ * - roster_source_hash = #182 版本化医院目录对该 serviceMonth 的**成员投影** hash:只绑 roster 投影
+ *   recipe version、serviceMonth 与稳定排序 partners.id 成员集合;不含 config revision、目录
+ *   contentHash、display name、accountCode/alias,也不含合作形态、当月活跃、金额完整度或证据状态
+ *   (那些属于金额/覆盖证据链,不进范围指纹)。
+ * - raw helper 保持严格:每次真实保存都追加新版本;即使内容相同,新 eventNumber 仍使旧 validation
+ *   run 以 SCOPE_SNAPSHOT_CHANGED 失效。相同投影的 no-op 归桥接层(hospital-cm-directory-scope-bridge),
+ *   本层绝不做 no-op。
  */
 export function saveMonthScopeSnapshot(
   db: HospitalCmPeriodEvidenceDb,
@@ -776,11 +781,78 @@ export function saveMonthScopeSnapshot(
     reason: string
   },
 ): MonthScopeSnapshot {
-  rejectUnsupportedKeys(input as Record<string, unknown>, SCOPE_INPUT_KEYS)
-  const serviceMonth = normalizeServiceMonth(input.serviceMonth)
+  const serviceMonth = normalizeScopeWriteKeysAndMonth(input)
   if (input.status !== 'complete' && input.status !== 'incomplete') {
     throw new HospitalCmPeriodEvidenceError('SCOPE_STATUS_INVALID', 400, 'status 只能是 complete / incomplete(撤回走 withdrawMonthScopeSnapshot)')
   }
+  const facts = normalizeScopeWriteFacts(input)
+  return insertScopeVersion(db, { serviceMonth, ...facts, status: input.status, recordedAt: nowIso() })
+}
+
+/** 仅供已持写锁的可信调用链:连接必须可自检事务状态;locked 写原语运行时再强制一次 fail-closed。 */
+export interface HospitalCmPeriodEvidenceLockedDb extends HospitalCmPeriodEvidenceDb {
+  readonly isTransaction: boolean
+}
+
+/**
+ * trusted/internal 的 C1 scope 写原语(#182 目录桥接专用)——**不是新的公共/不可信入口**。
+ * - 调用方必须已在同一连接持有 `BEGIN IMMEDIATE`(运行时强制,未持锁一律 SCOPE_WRITE_REQUIRES_TRANSACTION);
+ *   本函数绝不自行 BEGIN/COMMIT/ROLLBACK,事务边界与回滚由调用方负责。
+ * - 复用 raw helper 的全部输入验证、canonical accounts(去重+稳定排序)、scopeHash 公式
+ *   (sha256({serviceMonth, accounts, rosterSourceHash}))、append-only insert、manual audit 与
+ *   按本次新 id 的提交前 readback;错误码与 raw 完全一致。
+ * - 与 raw helper 同样严格:任何真实保存都追加新版本,同内容重发也追加——no-op 只能由桥接层在
+ *   比较 current complete 之后决定,本层绝不做 no-op。
+ * - status 允许 complete / incomplete / withdrawn;withdrawn 仅面向桥接这类在同一写锁内先读 current
+ *   再落撤回的可信单事务流(raw 公开撤回入口 withdrawMonthScopeSnapshot 的 CAS 合同不变)。
+ */
+export function saveMonthScopeSnapshotLocked(
+  db: HospitalCmPeriodEvidenceLockedDb,
+  input: {
+    serviceMonth: string
+    accounts: string[]
+    rosterSourceRef: string
+    rosterSourceHash: string
+    status: MonthScopeStatus
+    actor: PeriodEvidenceActor
+    reason: string
+  },
+): MonthScopeSnapshot {
+  if (db.isTransaction !== true) {
+    throw new HospitalCmPeriodEvidenceError(
+      'SCOPE_WRITE_REQUIRES_TRANSACTION',
+      409,
+      'locked 写原语仅限已持 BEGIN IMMEDIATE 的可信调用链使用',
+    )
+  }
+  const serviceMonth = normalizeScopeWriteKeysAndMonth(input)
+  if (input.status !== 'complete' && input.status !== 'incomplete' && input.status !== 'withdrawn') {
+    throw new HospitalCmPeriodEvidenceError('SCOPE_STATUS_INVALID', 400, 'status 只能是 complete / incomplete / withdrawn')
+  }
+  const facts = normalizeScopeWriteFacts(input)
+  return insertScopeVersionLocked(db, { serviceMonth, ...facts, status: input.status, recordedAt: nowIso() })
+}
+
+interface NormalizedScopeWriteFacts {
+  accounts: string[]
+  rosterSourceRef: string
+  rosterSourceHash: string
+  actor: PeriodEvidenceActor
+  reason: string
+}
+
+function normalizeScopeWriteKeysAndMonth(input: { serviceMonth: string }): string {
+  rejectUnsupportedKeys(input as Record<string, unknown>, SCOPE_INPUT_KEYS)
+  return normalizeServiceMonth(input.serviceMonth)
+}
+
+function normalizeScopeWriteFacts(input: {
+  accounts: string[]
+  rosterSourceRef: string
+  rosterSourceHash: string
+  actor: PeriodEvidenceActor
+  reason: string
+}): NormalizedScopeWriteFacts {
   if (!Array.isArray(input.accounts)) {
     throw new HospitalCmPeriodEvidenceError('SCOPE_ACCOUNTS_REQUIRED', 400, 'accounts 必须是账户稳定标识数组')
   }
@@ -791,11 +863,11 @@ export function saveMonthScopeSnapshot(
   const rosterSourceRef = requireOpaqueReference(input.rosterSourceRef, ['roster', 'manifest'], 'SCOPE_ROSTER_REF_INVALID', 'rosterSourceRef', 200)
   const rosterSourceHash = String(input.rosterSourceHash ?? '').trim().toLowerCase()
   if (!SHA256_RE.test(rosterSourceHash)) {
-    throw new HospitalCmPeriodEvidenceError('SCOPE_ROSTER_HASH_INVALID', 400, 'rosterSourceHash 必须是 64 位十六进制(版本化名册内容 hash)')
+    throw new HospitalCmPeriodEvidenceError('SCOPE_ROSTER_HASH_INVALID', 400, 'rosterSourceHash 必须是 64 位十六进制(版本化目录成员投影 hash)')
   }
   const actor = normalizeActor(input.actor)
   const reason = requireText(input.reason, 'SCOPE_REASON_INVALID', 'reason', 300)
-  return insertScopeVersion(db, { serviceMonth, accounts, rosterSourceRef, rosterSourceHash, status: input.status, actor, reason, recordedAt: nowIso() })
+  return { accounts, rosterSourceRef, rosterSourceHash, actor, reason }
 }
 
 /** 撤回月度范围(名册源作废等):落一个 status=withdrawn 的新版本(accounts 复制当前视图留证),读侧一律 fail-closed。 */

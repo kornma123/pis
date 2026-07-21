@@ -26,7 +26,7 @@
  * 这不是 readiness 探针版本：任何会改变 `computeCaseCm`、`rollupHospitalCm`
  * 或成本装载语义的变更，都必须显式 bump 本版本，并让历史周期证据绑定该值。
  */
-export const HOSPITAL_CM_FORMULA_VERSION = '2026-07-12.a' as const
+export const HOSPITAL_CM_FORMULA_VERSION = '2026-07-20.a' as const
 
 /** 真抗体申请类型白名单（§10.B）。一行 = 一片一抗（不去重）；Y000006 HE深切重切 / Y000007 白片 / 其它码不计。
  *  与 `reconcile-account.ts` 的 ANTIBODY_ADVICE 同源（Y000001/Y000003）。 */
@@ -104,8 +104,9 @@ export type PriceResolver = (markerName: string) => { perTestPrice: number | nul
  *  · diagnosis         = labRevenue<=0 但有 marker（代阅片/纯诊断·医院自己染）→ 移出、不减任何成本、计"诊断桶 case 数"
  *  · non_ihc           = labRevenue>0 但无 IHC 材料信号（细胞/冰冻/宫颈/缺marker）→ 出率外·成本未建模·单列收入
  *  · excluded          = labRevenue<=0 且无 marker（全额冲红/无技术无信号）→ 计"作废/移出" 桶
- *  · cross_month_reuse = case_no 跨月复用（§10.E·HIGH 4）→ **禁输出贡献毛利**（lis_cases 键无月·ON CONFLICT 覆盖
- *      → 同一份 marker/标量会被多月各计一次 = 双计 + 早月数据丢失）→ 标"跨月复用·需实例键"，不进任何成本上卷。
+ *  · cross_month_reuse = 跨月身份异常（#163 阶段2 收窄：仅当跨月身份夹 NULL/非法月份行、无法安全归因）→ **禁输出贡献毛利**、
+ *      标"跨月身份异常·需清理"，不进任何成本上卷。合法跨月（多月均合法）不再整例扣留：成本按各月 lab_revenue
+ *      占比分摊（PM 拍板 Q2'=A·见 allocateCrossMonthCostByLabRevenue）。
  */
 export type CaseBucket = 'staining' | 'diagnosis' | 'non_ihc' | 'excluded' | 'cross_month_reuse'
 
@@ -134,7 +135,7 @@ export interface P0CaseCm {
   hasVoidLine?: boolean // 部分冲红（含冲红调整·无双计·负行已在 lab_revenue 净额里扣过）
 }
 
-const r2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100
+export const r2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100
 const r4 = (n: number): number => Math.round((n + Number.EPSILON) * 10000) / 10000
 
 /** 该 marker 行是否为真抗体计价行（advice_type ∈ 白名单）。 */
@@ -250,8 +251,9 @@ export function computeCaseCm(input: P0CaseInput, resolvePrice: PriceResolver, p
 }
 
 /**
- * §10.E 跨月复用禁输出：case_no 在 case_revenue 跨多月复用（lis_cases 键无月·ON CONFLICT 覆盖）→ 无法安全归成本
+ * §10.E 跨月身份异常禁输出：跨月身份夹 NULL/非法月份行（#163 阶段2 收窄后的兜底）→ 无法安全归因
  *   → **禁输出贡献毛利**、标 `cross_month_reuse`，不进任何成本上卷（诚实挡·非静默错配）。由 service 层检测后调用。
+ *   合法跨月（多月均合法）不走这里——按 allocateCrossMonthCostByLabRevenue 分摊。
  */
 export function makeWithheldCase(input: P0CaseInput): P0CaseCm {
   return {
@@ -274,6 +276,66 @@ export function makeWithheldCase(input: P0CaseInput): P0CaseCm {
     needsTissueScope: false,
     hasVoidLine: input.hasVoidLine,
   }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 跨月分摊（#163 阶段2·PM 拍板 Q2'=A：按各月收入占比分摊）
+// ────────────────────────────────────────────────────────────────────────────
+
+/** 跨月分摊输入月（仅合格月：service_month 合法且 lab_revenue>0·同源闸 ADR-002）。 */
+export interface CrossMonthAllocationMonth {
+  serviceMonth: string
+  labRevenue: number
+}
+
+/** 跨月分摊输出月：整例可避免成本按 lab_revenue 占比拆到该月（分桶守恒）。 */
+export interface CrossMonthAllocatedShare {
+  serviceMonth: string
+  bucketA: number
+  bucketB: number
+  avoidableCost: number
+}
+
+/**
+ * 把整例可避免成本按各合格月 lab_revenue 占比分摊到月（#163 阶段2·PM 拍板 Q2'=A）。
+ *
+ * 铁律：
+ *   · 权重 = 该月 labRevenue / Σ合格月 labRevenue（**只读 lab_revenue**，绝不读 net_amount/gross_amount）；
+ *   · bucketA / bucketB 分别逐月 r2 后**精确守恒**（Σ 分摊 = 整例原值）；
+ *     avoidableCost_m = r2(bucketA_m + bucketB_m)——与单例 `avoidableCost == r2(bucketA + bucketB)` 不变量同源；
+ *   · 物理由度（片数/缺价片数）不拆：每月行保留整例值（成本事实只有一份，钱是跨月结算的）。
+ *
+ * ⚠️ 分厘残差归属（**细节级实现规则·权威链未明钉**）：逐月 r2 产生的尾差，对每个桶独立归入
+ *    **权重最大的月**（并列取最早 service_month）。选它是因为确定、与迭代顺序无关、且把亚分误差放在
+ *    占比最大的月上（相对误差最小）；**不是**自创均摊/静默归零/随机路由。若 PM/权威链日后指定其它
+ *    固定 base 规则，改这里——公式行为制品签名会随之变化，旧证据自动失效。
+ *
+ * 前置（调用方保证，不在此重复判）：eligibleMonths 非空、每月 labRevenue>0、serviceMonth 合法且月内唯一。
+ * 全零/负分母、退款/冲销等无业务答案的情形**不在此发明**——service 层的收窄守卫已先行拦截或绕行。
+ */
+export function allocateCrossMonthCostByLabRevenue(
+  original: Pick<P0CaseCm, 'bucketA' | 'bucketB' | 'avoidableCost'>,
+  eligibleMonths: CrossMonthAllocationMonth[],
+): CrossMonthAllocatedShare[] {
+  const totalLab = eligibleMonths.reduce((sum, m) => sum + m.labRevenue, 0)
+  if (eligibleMonths.length === 0 || totalLab <= 0) return []
+  // 残差固定归属月 = 权重最大月（labRevenue 并列时取最早 service_month，完全确定）
+  const residualMonth = eligibleMonths.reduce((best, m) =>
+    (m.labRevenue > best.labRevenue || (m.labRevenue === best.labRevenue && m.serviceMonth < best.serviceMonth)) ? m : best)
+  const shares = eligibleMonths.map((m) => {
+    const weight = m.labRevenue / totalLab
+    return { serviceMonth: m.serviceMonth, bucketA: r2(original.bucketA * weight), bucketB: r2(original.bucketB * weight), avoidableCost: 0 }
+  })
+  for (const bucket of ['bucketA', 'bucketB'] as const) {
+    const allocated = shares.reduce((sum, s) => sum + s[bucket], 0)
+    const residual = r2(original[bucket] - allocated)
+    if (residual !== 0) {
+      const target = shares.find((s) => s.serviceMonth === residualMonth.serviceMonth)!
+      target[bucket] = r2(target[bucket] + residual)
+    }
+  }
+  for (const s of shares) s.avoidableCost = r2(s.bucketA + s.bucketB)
+  return shares
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -469,6 +531,14 @@ export function currentHospitalCmFormulaBehaviorArtifact(): Record<string, unkno
     serviceMonth: '2000-01',
     settled: true,
   })
+  // #163 阶段2 规范例：整例成本 40（桶A30+桶B10）按 lab 占比 100/300 分摊 → 10 / 30，逐桶守恒
+  const crossMonthShares = allocateCrossMonthCostByLabRevenue(
+    { bucketA: 30, bucketB: 10, avoidableCost: 40 },
+    [
+      { serviceMonth: '2000-01', labRevenue: 100 },
+      { serviceMonth: '2000-02', labRevenue: 300 },
+    ],
+  )
 
   return {
     cases: [staining, diagnosis, nonIhc].map((item) => ({
@@ -502,6 +572,10 @@ export function currentHospitalCmFormulaBehaviorArtifact(): Record<string, unkno
       state: rollup.state,
       confidence: rollup.confidence,
       businessLineDefined: rollup.businessLineDefined,
+    },
+    crossMonthAllocation: {
+      original: { bucketA: 30, bucketB: 10, avoidableCost: 40 },
+      shares: crossMonthShares,
     },
   }
 }

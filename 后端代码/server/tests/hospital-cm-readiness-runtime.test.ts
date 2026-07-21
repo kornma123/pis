@@ -293,7 +293,12 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
     const db = await getDb()
     seedBalancedInventory(db)
     db.prepare(`UPDATE inventory SET stock = ? WHERE id = 'INV-HCM-READY'`).run(Number.POSITIVE_INFINITY)
-    db.prepare(`UPDATE batches SET remaining = ? WHERE id = 'BAT-HCM-READY'`).run(Number.POSITIVE_INFINITY)
+    db.exec('PRAGMA ignore_check_constraints = ON')
+    try {
+      db.prepare(`UPDATE batches SET remaining = ? WHERE id = 'BAT-HCM-READY'`).run(Number.POSITIVE_INFINITY)
+    } finally {
+      db.exec('PRAGMA ignore_check_constraints = OFF')
+    }
 
     const run = recordHospitalCmFoundationProbeRun(db, {
       triggeredByUserId: 'USER-001',
@@ -337,7 +342,12 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
     db.prepare(`UPDATE inventory SET stock = 11 WHERE id = 'INV-HCM-READY'`).run()
     db.prepare(`UPDATE batches SET remaining = 11 WHERE id = 'BAT-HCM-READY'`).run()
     db.prepare(`UPDATE inventory SET stock = 13 WHERE id = 'INV-HCM-READY-2'`).run()
-    db.prepare(`UPDATE batches SET remaining = 13 WHERE id = 'BAT-HCM-READY-2'`).run()
+    db.exec('PRAGMA ignore_check_constraints = ON')
+    try {
+      db.prepare(`UPDATE batches SET remaining = 13 WHERE id = 'BAT-HCM-READY-2'`).run()
+    } finally {
+      db.exec('PRAGMA ignore_check_constraints = OFF')
+    }
 
     const after = getHospitalCmReadinessSnapshot(db, '2026-07-12')
     const check = after.foundationEvidence?.checks.find((item) => item.key === 'inventory_conservation')
@@ -912,6 +922,63 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
       met: false,
       resultCode: 'PERIOD_KEY_ORPHAN',
     })
+  })
+
+  it('期间键探针：合法跨月身份不再判冲突（#163 阶段2·跨月成本已按收入占比分摊），跨月事实仍作信息项披露', async () => {
+    const db = await getDb()
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES ('P-HCM-XM', 'P-HCM-XM', '合法跨月院', 1)`).run()
+    const cr = (id: string, month: string) => db.prepare(`
+      INSERT INTO case_revenue
+        (id, case_no, partner_id, gross_amount, net_amount, lab_revenue,
+         out_revenue, discount_rate, revenue_source, service_month, line_count)
+      VALUES (?, 'CASE-XM', 'P-HCM-XM', 100, 80, 80, 0, 0.8, 'statement', ?, 1)
+    `).run(id, month)
+    cr('CR-HCM-XM-03', '2026-03')
+    cr('CR-HCM-XM-04', '2026-04')
+    db.prepare(`INSERT INTO lis_cases (id, case_no, partner_id) VALUES ('LC-HCM-XM', 'CASE-XM', 'P-HCM-XM')`).run()
+    db.prepare(`
+      INSERT INTO lis_case_markers (id, case_no, partner_id, marker_name, advice_type)
+      VALUES ('LM-HCM-XM', 'CASE-XM', 'P-HCM-XM', 'CK7', 'Y000001')
+    `).run()
+    const run = recordHospitalCmFoundationProbeRun(db, {
+      triggeredByUserId: 'USER-001', triggeredByUsername: 'admin', reasonCode: 'MONTHLY_REVIEW', now: NOW,
+    })
+    const periodKey = run.checks.find((check) => check.key === 'period_key')!
+    expect(periodKey.met).toBe(true)
+    expect(periodKey.resultCode).toBe('PASSED')
+    // 跨月事实本身仍如实披露（信息项），只是不再作为失败条件
+    expect(periodKey.summary.crossMonthReuseRows).toBe(1)
+    expect(getHospitalCmReadinessSnapshot(db, '2026-07-12').foundationGatesGreen.period_key).toBe(true)
+  })
+
+  it('探针版本升级后旧版本持久证据立即失效，必须重跑（版本绑定·防陈旧绿灯）', async () => {
+    const db = await getDb()
+    const sourceRun = recordHospitalCmFoundationProbeRun(db, {
+      triggeredByUserId: 'USER-001', triggeredByUsername: 'admin', reasonCode: 'MONTHLY_REVIEW', now: NOW,
+    })
+    const sourceChecks = db.prepare(`
+      SELECT gate_key AS key, input_fingerprint AS inputFingerprint
+      FROM hospital_cm_readiness_probe_checks
+      WHERE run_id = ?
+      ORDER BY gate_key
+    `).all(sourceRun.id) as Array<{ key: 'inventory_conservation' | 'period_key' | 'constant_freeze'; inputFingerprint: string }>
+    // 手工插入一条「旧探针版本」的 run：checks 与组合指纹完整一致，唯一差异 = probe_version 旧
+    db.prepare(`
+      INSERT INTO hospital_cm_readiness_probe_runs
+        (id, probe_version, overall_status, input_fingerprint, started_at, completed_at,
+         triggered_by_user_id, triggered_by_username, trigger_reason_code)
+      VALUES ('RUN-HCM-OLD-PROBE-VERSION', '2000-01-01.a', ?, ?, ?, ?, 'USER-001', 'admin', 'MONTHLY_REVIEW')
+    `).run(sourceRun.overallStatus, combinedFoundationFingerprint(sourceChecks), NOW, NOW)
+    db.prepare(`
+      INSERT INTO hospital_cm_readiness_probe_checks
+        (run_id, gate_key, status, result_code, summary_json, input_fingerprint, observed_at)
+      SELECT 'RUN-HCM-OLD-PROBE-VERSION', gate_key, status, result_code, summary_json, input_fingerprint, observed_at
+      FROM hospital_cm_readiness_probe_checks
+      WHERE run_id = ?
+    `).run(sourceRun.id)
+    const snapshot = getHospitalCmReadinessSnapshot(db, '2026-07-12')
+    expect(Object.values(snapshot.foundationGatesGreen)).toEqual([false, false, false])
+    expect(snapshot.foundationEvidence?.checks.every((check) => check.currentResultCode === 'PROBE_VERSION_CHANGED')).toBe(true)
   })
 
   it('活库成本主数据变化会使 constant_freeze 旧证据失效', async () => {

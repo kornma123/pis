@@ -24,6 +24,7 @@ import {
   addBatchStock,
   assertInventoryMatchesBatches,
   inventoryTransactionError,
+  subtractBatchStock,
   syncInventoryFromBatches,
 } from '../services/inventory-transactions.js'
 
@@ -755,34 +756,27 @@ router.put('/:id', requireWriteAccess, (req, res) => {
           }
         }
 
-        db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(oldQty, record.material_id)
         if (oldBatch) {
-          db.prepare('UPDATE batches SET quantity = quantity - ?, remaining = remaining - ? WHERE material_id = ? AND batch_no = ?')
-            .run(oldQty, oldQty, record.material_id, oldBatch)
-          const b = db.prepare('SELECT remaining FROM batches WHERE material_id = ? AND batch_no = ?')
-            .get(record.material_id, oldBatch) as any
-          if (b && b.remaining <= 0) {
-            db.prepare('UPDATE batches SET status = 0 WHERE material_id = ? AND batch_no = ?')
-              .run(record.material_id, oldBatch)
-          }
+          // 批次是唯一事实源：取消 = 经服务原子扣减该批次 quantity/remaining 并派生库存缓存。
+          subtractBatchStock(db, { materialId: record.material_id, batchNo: oldBatch, quantity: oldQty })
         }
       }
 
       // ===== 2. 恢复操作（cancelled → completed）=====
       if (oldStatus === 'cancelled' && newStatus === 'completed') {
-        db.prepare('UPDATE inventory SET stock = stock + ? WHERE material_id = ?').run(oldQty, record.material_id)
         if (oldBatch) {
-          const b = db.prepare('SELECT * FROM batches WHERE material_id = ? AND batch_no = ?').get(record.material_id, oldBatch) as any
-          if (b) {
-            db.prepare('UPDATE batches SET quantity = quantity + ?, remaining = remaining + ?, status = 1 WHERE id = ?')
-              .run(oldQty, oldQty, b.id)
-          } else {
-            const bid = uuidv4()
-            db.prepare(`
-              INSERT INTO batches (id, material_id, batch_no, quantity, remaining, production_date, expiry_date, inbound_id, inbound_price, supplier_id, status)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-            `).run(bid, record.material_id, oldBatch, oldQty, oldQty, record.production_date, record.expiry_date, id, record.price || 0, record.supplier_id)
-          }
+          // 恢复 = 经服务把入库量加回批次事实（已有点位累加/缺失则按入库 provenance 重建）并派生库存缓存。
+          addBatchStock(db, {
+            materialId: record.material_id,
+            quantity: oldQty,
+            sourceType: 'inbound',
+            sourceId: id,
+            batchNo: oldBatch,
+            productionDate: record.production_date,
+            expiryDate: record.expiry_date,
+            inboundPrice: record.price || 0,
+            supplierId: record.supplier_id,
+          })
         }
         if (record.purchase_order_id) {
           const order = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(record.purchase_order_id) as any
@@ -800,42 +794,37 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         const batchChanged = newBatch !== oldBatch
 
         if (batchChanged) {
+          // 换批次 = 旧批次原子撤销 + 新批次原子累加/按入库 provenance 重建，全部经服务。
           if (oldBatch) {
-            db.prepare('UPDATE batches SET quantity = quantity - ?, remaining = remaining - ? WHERE material_id = ? AND batch_no = ?')
-              .run(oldQty, oldQty, record.material_id, oldBatch)
-            const b = db.prepare('SELECT remaining FROM batches WHERE material_id = ? AND batch_no = ?')
-              .get(record.material_id, oldBatch) as any
-            if (b && b.remaining <= 0) {
-              db.prepare('UPDATE batches SET status = 0 WHERE material_id = ? AND batch_no = ?')
-                .run(record.material_id, oldBatch)
-            }
+            subtractBatchStock(db, { materialId: record.material_id, batchNo: oldBatch, quantity: oldQty })
           }
           if (newBatch) {
-            const b = db.prepare('SELECT * FROM batches WHERE material_id = ? AND batch_no = ?').get(record.material_id, newBatch) as any
-            if (b) {
-              db.prepare('UPDATE batches SET quantity = quantity + ?, remaining = remaining + ?, status = 1 WHERE id = ?')
-                .run(newQty, newQty, b.id)
-            } else {
-              const bid = uuidv4()
-              db.prepare(`
-                INSERT INTO batches (id, material_id, batch_no, quantity, remaining, production_date, expiry_date, inbound_id, inbound_price, supplier_id, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-              `).run(bid, record.material_id, newBatch, newQty, newQty, productionDate || record.production_date, expiryDate || record.expiry_date, id, normalizedPrice !== undefined ? normalizedPrice : record.price || 0, supplierId !== undefined ? supplierId : record.supplier_id)
-            }
-          }
-          if (qtyDiff !== 0) {
-            db.prepare('UPDATE inventory SET stock = stock + ? WHERE material_id = ?').run(qtyDiff, record.material_id)
+            addBatchStock(db, {
+              materialId: record.material_id,
+              quantity: newQty,
+              sourceType: 'inbound',
+              sourceId: id,
+              batchNo: newBatch,
+              productionDate: productionDate || record.production_date,
+              expiryDate: expiryDate || record.expiry_date,
+              inboundPrice: normalizedPrice !== undefined ? normalizedPrice : record.price || 0,
+              supplierId: supplierId !== undefined ? supplierId : record.supplier_id,
+            })
           }
         } else if (qtyDiff !== 0) {
-          db.prepare('UPDATE inventory SET stock = stock + ? WHERE material_id = ?').run(qtyDiff, record.material_id)
-          if (oldBatch && transactionPlan.oldBatchMutation?.row) {
-            db.prepare('UPDATE batches SET quantity = ?, remaining = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-              .run(
-                transactionPlan.oldBatchMutation.quantityAfter,
-                transactionPlan.oldBatchMutation.remainingAfter,
-                transactionPlan.oldBatchMutation.statusAfter,
-                transactionPlan.oldBatchMutation.row.id,
-              )
+          // 同批次改数量 = 差额经服务增减批次事实并派生库存缓存；不足/矛盾一律 fail-closed。
+          if (oldBatch) {
+            if (qtyDiff > 0) {
+              addBatchStock(db, {
+                materialId: record.material_id,
+                quantity: qtyDiff,
+                sourceType: 'inbound',
+                sourceId: id,
+                batchNo: oldBatch,
+              })
+            } else {
+              subtractBatchStock(db, { materialId: record.material_id, batchNo: oldBatch, quantity: -qtyDiff })
+            }
           }
         }
       }
@@ -979,17 +968,9 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
           }
         }
 
-        // 5. 扣减批次数量
+        // 5. 扣减批次数量（经服务原子撤销并派生库存缓存）
         if (record.batch_no) {
-          db.prepare('UPDATE batches SET quantity = quantity - ?, remaining = remaining - ? WHERE material_id = ? AND batch_no = ?')
-            .run(record.quantity, record.quantity, record.material_id, record.batch_no)
-          const batch = db.prepare('SELECT remaining FROM batches WHERE material_id = ? AND batch_no = ?')
-            .get(record.material_id, record.batch_no) as any
-          if (batch && batch.remaining <= 0) {
-            db.prepare('UPDATE batches SET status = 0 WHERE material_id = ? AND batch_no = ?')
-              .run(record.material_id, record.batch_no)
-          }
-          syncInventoryFromBatches(db, record.material_id)
+          subtractBatchStock(db, { materialId: record.material_id, batchNo: record.batch_no, quantity: record.quantity })
         }
       }
 
@@ -1096,19 +1077,9 @@ router.post('/:id/cancel', requireWriteAccess, (req, res) => {
         }
       }
 
-      // 扣减库存
-      db.prepare('UPDATE inventory SET stock = stock - ? WHERE material_id = ?').run(record.quantity, record.material_id)
-      // 扣减批次
+      // 扣减批次事实并派生库存缓存（经服务原子写）
       if (record.batch_no) {
-        db.prepare('UPDATE batches SET quantity = quantity - ?, remaining = remaining - ? WHERE material_id = ? AND batch_no = ?')
-          .run(record.quantity, record.quantity, record.material_id, record.batch_no)
-        const b = db.prepare('SELECT remaining FROM batches WHERE material_id = ? AND batch_no = ?')
-          .get(record.material_id, record.batch_no) as any
-        if (b && b.remaining <= 0) {
-          db.prepare('UPDATE batches SET status = 0 WHERE material_id = ? AND batch_no = ?')
-            .run(record.material_id, record.batch_no)
-        }
-        syncInventoryFromBatches(db, record.material_id)
+        subtractBatchStock(db, { materialId: record.material_id, batchNo: record.batch_no, quantity: record.quantity })
       }
 
       const cancelled = db.prepare(`

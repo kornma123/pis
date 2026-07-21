@@ -22,8 +22,10 @@ import {
   type LedgerRow,
 } from './antibody-name-map.js'
 import {
+  allocateCrossMonthCostByLabRevenue,
   computeCaseCm,
   makeWithheldCase,
+  r2,
   rollupHospitalCm,
   SECONDARY_PER_SLIDE_DEFAULT,
   type P0CaseInput,
@@ -118,6 +120,8 @@ interface RevenueRow {
   partner_id: string | null
   partner_name: string | null
   lab_revenue: number | null
+  net_amount: number | null
+  gross_amount: number | null
   revenue_source: string | null
   service_month: string | null
   special_stain_count: number | null
@@ -137,7 +141,8 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
   if (opts.serviceMonth) { where += ' AND cr.service_month = ?'; params.push(opts.serviceMonth) }
 
   const revRows = db.prepare(`
-    SELECT cr.case_no, cr.partner_id, p.name AS partner_name, cr.lab_revenue, cr.revenue_source, cr.service_month,
+    SELECT cr.case_no, cr.partner_id, p.name AS partner_name, cr.lab_revenue, cr.net_amount, cr.gross_amount,
+           cr.revenue_source, cr.service_month,
            lc.special_stain_count, lc.block_count, lc.ihc_count
     FROM case_revenue cr
     LEFT JOIN partners p ON p.id = cr.partner_id
@@ -179,9 +184,10 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
   const stain = loadStainPerSlide(db)
   const params2: CaseCmParams = { secondaryPerSlide, stainPerSlide: stain.perSlide, stainIsPlaceholder: stain.isPlaceholder }
 
-  // §10.E 跨月复用检测（HIGH·防双计）：case_no 在 case_revenue 跨多个 service_month 复用（lis_cases 键无月·ON CONFLICT 覆盖）
-  //   → 同一份 marker/标量会被多月各计一次。命中者【禁输出贡献毛利·标 cross_month_reuse】，不进任何成本上卷（诚实挡）。
-  const collisionKeys = loadCrossMonthReuseKeys(db, opts.partnerId)
+  // §10.E 跨月键事实（#163 阶段2·PM Q2'=A）：case_no 在 case_revenue 跨多 service_month 复用（lis_cases 键无月）。
+  //   阶段1 对全部跨月键整例扣留；阶段2 收窄为：合法跨月（多月均合法）→ 整例成本按各合格月 lab_revenue 占比分摊；
+  //   异常跨月（夹 NULL/非法月份行）→ 仍整例扣留（fail-closed·不发明分摊答案）。
+  const xm = loadCrossMonthReuseKeys(db, opts.partnerId)
 
   return revRows.map((r) => {
     const markers = markersByCase.get(markerKey(r.partner_id, r.case_no)) ?? []
@@ -198,28 +204,109 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
       ihcCount: Number(r.ihc_count) || 0,
       tissueProcessing: loadPartnerTissueDefault(db, r.partner_id ?? ''),
     }
-    if (collisionKeys.has(markerKey(r.partner_id, r.case_no))) return makeWithheldCase(input)
-    return computeCaseCm(input, resolvePrice, params2)
+    const key = markerKey(r.partner_id, r.case_no)
+    if (xm.anomaly.has(key)) return makeWithheldCase(input) // 异常跨月身份：扣留兜底
+    if (!xm.legal.has(key)) return computeCaseCm(input, resolvePrice, params2) // 非跨月：原路径不变
+
+    // —— 合法跨月：整例成本只算一次，再按各合格月 lab_revenue 占比分摊（先于输出月过滤取全部分母）——
+    const lab = Number(r.lab_revenue) || 0
+    if (lab <= 0) return computeCaseCm(input, resolvePrice, params2) // 该月无染色实收 → 同源闸桶（diagnosis/excluded）·不减成本
+    const groupRows = xm.rowsByKey.get(key) ?? []
+    const eligible = groupRows.filter((g) => g.labRevenue > 0 && g.serviceMonth != null && VALID_SERVICE_MONTH.test(g.serviceMonth))
+    if (eligible.length === 0) return computeCaseCm(input, resolvePrice, params2) // 防御：legal 键必有合格月
+    const totalLab = eligible.reduce((sum, g) => sum + r2(g.labRevenue), 0)
+    const original = computeCaseCm({ ...input, labRevenue: totalLab }, resolvePrice, params2)
+    if (original.bucket !== 'staining') return computeCaseCm(input, resolvePrice, params2) // 无 IHC 信号 → non_ihc 成本恒 0·无需分摊
+    const shares = allocateCrossMonthCostByLabRevenue(original, eligible.map((g) => ({
+      serviceMonth: g.serviceMonth as string,
+      labRevenue: r2(g.labRevenue), // 权重只读 lab_revenue——绝不用 net_amount/gross_amount（即便矛盾）
+    })))
+    const share = shares.find((s) => s.serviceMonth === r.service_month)
+    if (!share) return computeCaseCm(input, resolvePrice, params2) // 防御：合法键的当前行必在合格月中
+    const shareDenom = share.bucketA + share.bucketB
+    return {
+      ...original,
+      serviceMonth: r.service_month,
+      labRevenue: r2(lab),
+      bucketA: share.bucketA,
+      bucketB: share.bucketB,
+      avoidableCost: share.avoidableCost,
+      cm: r2(r2(lab) - share.avoidableCost),
+      starRatio: shareDenom > 0 ? Math.round((share.bucketB / shareDenom + Number.EPSILON) * 10000) / 10000 : 0,
+    }
   })
 }
 
+const VALID_SERVICE_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/
+
+interface CrossMonthKeyRow {
+  serviceMonth: string | null
+  labRevenue: number
+  netAmount: number
+  grossAmount: number
+}
+
+interface CrossMonthKeyFacts {
+  /** 合法跨月键：>1 个不同合法月且无任何 NULL/非法月份行 → 按 lab_revenue 占比分摊。 */
+  legal: Set<string>
+  /** 异常跨月键：多行收入且存在 NULL/非法月份行 → 整例扣留（fail-closed·不发明分摊答案）。 */
+  anomaly: Set<string>
+  /** 跨月键的全部准入收入行（分摊分母·先于输出月过滤取全月）。 */
+  rowsByKey: Map<string, CrossMonthKeyRow[]>
+}
+
 /**
- * §10.E 跨月复用键集：`GROUP BY partner_id,case_no HAVING COUNT(DISTINCT service_month)>1`。
- * 键 = `partner_id||case_no`（与 markerKey 同格式）。仅统计准入的 case（lab_revenue NOT NULL·revenue_source∈statement/corrected）。
+ * §10.E 跨月键事实装载：准入收入行（lab_revenue NOT NULL·revenue_source∈statement/corrected）按
+ * `partner_id||case_no`（与 markerKey 同格式）分组，产出合法/异常跨月键集与各键全月收入行。
+ * 只读 lab_revenue 作权重来源；net/gross 随行读出仅供未来诊断，绝不进权重。
  */
-function loadCrossMonthReuseKeys(db: DbLike, partnerId?: string): Set<string> {
-  const keys = new Set<string>()
+function loadCrossMonthReuseKeys(db: DbLike, partnerId?: string): CrossMonthKeyFacts {
   let where = "lab_revenue IS NOT NULL AND revenue_source IN ('statement','corrected')"
   const params: unknown[] = []
   if (partnerId) { where += ' AND partner_id = ?'; params.push(partnerId) }
   const rows = db.prepare(`
-    SELECT partner_id, case_no FROM case_revenue
+    SELECT partner_id, case_no, service_month, lab_revenue, net_amount, gross_amount
+    FROM case_revenue
     WHERE ${where}
-    GROUP BY partner_id, case_no
-    HAVING COUNT(DISTINCT service_month) > 1
-  `).all(...params) as Array<{ partner_id: string | null; case_no: string }>
-  for (const r of rows) keys.add(`${r.partner_id ?? ''}||${r.case_no}`)
-  return keys
+  `).all(...params) as Array<{
+    partner_id: string | null
+    case_no: string
+    service_month: string | null
+    lab_revenue: number | null
+    net_amount: number | null
+    gross_amount: number | null
+  }>
+  const grouped = new Map<string, CrossMonthKeyRow[]>()
+  for (const r of rows) {
+    const key = `${r.partner_id ?? ''}||${r.case_no}`
+    const arr = grouped.get(key) ?? []
+    arr.push({
+      serviceMonth: r.service_month,
+      labRevenue: Number(r.lab_revenue) || 0,
+      netAmount: Number(r.net_amount) || 0,
+      grossAmount: Number(r.gross_amount) || 0,
+    })
+    grouped.set(key, arr)
+  }
+  const legal = new Set<string>()
+  const anomaly = new Set<string>()
+  const rowsByKey = new Map<string, CrossMonthKeyRow[]>()
+  for (const [key, keyRows] of grouped) {
+    if (keyRows.length <= 1) continue // 单行身份无跨月问题（非法单行由地基探针 INVALID_PERIOD_KEY 把守）
+    const invalidRows = keyRows.filter((r) => r.serviceMonth == null || !VALID_SERVICE_MONTH.test(r.serviceMonth)).length
+    const validMonths = new Set(
+      keyRows.filter((r) => r.serviceMonth != null && VALID_SERVICE_MONTH.test(r.serviceMonth)).map((r) => r.serviceMonth as string),
+    )
+    if (invalidRows > 0) {
+      anomaly.add(key) // 多行身份夹 NULL/非法月 → 无法安全归因 → 扣留
+      rowsByKey.set(key, keyRows)
+    } else if (validMonths.size > 1) {
+      legal.add(key)
+      rowsByKey.set(key, keyRows)
+    }
+    // 多行同一合法月：UNIQUE(partner_id,case_no,service_month) 下不可能；保持原路径计算
+  }
+  return { legal, anomaly, rowsByKey }
 }
 
 /** 按 partner 上卷院级贡献毛利（每 partner 一行·同月）。 */

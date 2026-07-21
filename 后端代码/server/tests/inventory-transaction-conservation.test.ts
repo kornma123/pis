@@ -334,7 +334,11 @@ describe('库存全批次事实与事务幂等', () => {
 
   it('inactive batch with positive remaining fails closed instead of becoming unreachable stock', async () => {
     const fixture = seedMaterial('INACTIVE-POSITIVE', [{ quantity: 5, expiry: '2027-01-01' }])
+    // 该夹具刻意制造「CHECK 之前的遗留脏事实」；fresh schema 的 CHECK 会拒绝直接写入，
+    // 故用连接级 PRAGMA 仅在夹具写入期间绕过，写完立即恢复，生产路径仍受 CHECK 约束。
+    db.exec('PRAGMA ignore_check_constraints = ON')
     db.prepare('UPDATE batches SET status = 0 WHERE id = ?').run(fixture.batches[0].id)
+    db.exec('PRAGMA ignore_check_constraints = OFF')
 
     const response = await post('/api/v1/scraps', nextId('IDEM-INACTIVE-POSITIVE'), {
       materialId: fixture.materialId,
@@ -351,7 +355,10 @@ describe('库存全批次事实与事务幂等', () => {
 
   it('batch remaining greater than received quantity fails closed before mutation', async () => {
     const fixture = seedMaterial('IMPOSSIBLE-BATCH', [{ quantity: 5, expiry: '2027-01-01' }])
+    // 同上：刻意制造遗留脏事实，PRAGMA 仅覆盖夹具写入。
+    db.exec('PRAGMA ignore_check_constraints = ON')
     db.prepare('UPDATE batches SET quantity = 3 WHERE id = ?').run(fixture.batches[0].id)
+    db.exec('PRAGMA ignore_check_constraints = OFF')
 
     const response = await post('/api/v1/scraps', nextId('IDEM-IMPOSSIBLE-BATCH'), {
       materialId: fixture.materialId,
@@ -706,5 +713,111 @@ describe('库存全批次事实与事务幂等', () => {
       expect(response.body.error.code).toBe('CONCURRENT_MODIFICATION')
       expectConserved(fixture.materialId, 5)
     }
+  })
+})
+
+describe('#140 Phase C 入库写路径唯一量化入口', () => {
+  function seedCompletedInbound(label: string, quantity = 5) {
+    const fixture = seedMaterial(label, [{ quantity, expiry: '2027-01-01' }])
+    const inboundId = nextId(`INBOUND-${label}`)
+    db.prepare(`
+      INSERT INTO inbound_records
+        (id, inbound_no, type, material_id, batch_id, batch_no, quantity, unit, price, amount,
+         location_id, operator, status)
+      VALUES (?, ?, 'direct', ?, ?, ?, ?, 'unit', 10, ?, ?, 'seed', 'completed')
+    `).run(inboundId, nextId(`INBOUND-${label}-NO`), fixture.materialId, fixture.batches[0].id,
+      fixture.batches[0].batchNo, quantity, quantity * 10, fixture.locationId)
+    return { fixture, inboundId }
+  }
+
+  it('取消入库经服务原子撤销批次事实并保持守恒', async () => {
+    const { fixture, inboundId } = seedCompletedInbound('CANCEL-SERVICE')
+
+    const response = await request(app).put(`/api/v1/inbound/${inboundId}`).send({ status: 'cancelled' })
+
+    expect(response.status).toBe(200)
+    expect(db.prepare('SELECT status FROM inbound_records WHERE id = ?').get(inboundId))
+      .toMatchObject({ status: 'cancelled' })
+    expect(db.prepare('SELECT quantity, remaining, status FROM batches WHERE id = ?').get(fixture.batches[0].id))
+      .toMatchObject({ quantity: 0, remaining: 0, status: 0 })
+    expectConserved(fixture.materialId, 0)
+    expect(db.prepare("SELECT type, quantity, before_stock, after_stock FROM stock_logs WHERE related_id = ? AND related_type = 'inbound_update'").get(inboundId))
+      .toMatchObject({ type: 'cancel', quantity: -5, before_stock: 5, after_stock: 0 })
+  })
+
+  it('取消后恢复经服务把入库量加回批次事实并保持守恒', async () => {
+    const { fixture, inboundId } = seedCompletedInbound('RESTORE-SERVICE')
+    const cancelled = await request(app).put(`/api/v1/inbound/${inboundId}`).send({ status: 'cancelled' })
+    expect(cancelled.status).toBe(200)
+    expectConserved(fixture.materialId, 0)
+
+    const restored = await request(app).put(`/api/v1/inbound/${inboundId}`).send({ status: 'completed' })
+
+    expect(restored.status).toBe(200)
+    expect(db.prepare('SELECT status FROM inbound_records WHERE id = ?').get(inboundId))
+      .toMatchObject({ status: 'completed' })
+    expect(db.prepare('SELECT quantity, remaining, status FROM batches WHERE id = ?').get(fixture.batches[0].id))
+      .toMatchObject({ quantity: 5, remaining: 5, status: 1 })
+    expectConserved(fixture.materialId, 5)
+    expect(db.prepare("SELECT type, quantity, before_stock, after_stock FROM stock_logs WHERE related_id = ? AND related_type = 'inbound_update' AND type = 'restore'").get(inboundId))
+      .toMatchObject({ type: 'restore', quantity: 5, before_stock: 0, after_stock: 5 })
+  })
+
+  it('删除入库记录经服务原子撤销批次事实并保持守恒', async () => {
+    const { fixture, inboundId } = seedCompletedInbound('DELETE-SERVICE')
+
+    const response = await request(app).delete(`/api/v1/inbound/${inboundId}`)
+
+    expect(response.status).toBe(200)
+    expect(db.prepare('SELECT is_deleted FROM inbound_records WHERE id = ?').get(inboundId))
+      .toMatchObject({ is_deleted: 1 })
+    expect(db.prepare('SELECT quantity, remaining, status FROM batches WHERE id = ?').get(fixture.batches[0].id))
+      .toMatchObject({ quantity: 0, remaining: 0, status: 0 })
+    expectConserved(fixture.materialId, 0)
+  })
+
+  it('专用取消端点经服务原子撤销批次事实并保持守恒', async () => {
+    const { fixture, inboundId } = seedCompletedInbound('POST-CANCEL-SERVICE')
+
+    const response = await request(app).post(`/api/v1/inbound/${inboundId}/cancel`).send({ reason: '验收取消' })
+
+    expect(response.status).toBe(200)
+    expect(db.prepare('SELECT status, cancel_reason FROM inbound_records WHERE id = ?').get(inboundId))
+      .toMatchObject({ status: 'cancelled', cancel_reason: '验收取消' })
+    expect(db.prepare('SELECT quantity, remaining, status FROM batches WHERE id = ?').get(fixture.batches[0].id))
+      .toMatchObject({ quantity: 0, remaining: 0, status: 0 })
+    expectConserved(fixture.materialId, 0)
+    expect(db.prepare("SELECT type, quantity, before_stock, after_stock FROM stock_logs WHERE related_id = ? AND related_type = 'inbound_cancel'").get(inboundId))
+      .toMatchObject({ type: 'cancel', quantity: -5, before_stock: 5, after_stock: 0 })
+  })
+
+  it('无可用批次时出库返回 422 且零副作用', async () => {
+    const fixture = seedMaterial('NO-ELIGIBLE', [{ quantity: 5, expiry: '2027-01-01' }])
+    const drained = await post('/api/v1/outbound', nextId('IDEM-NO-ELIGIBLE-DRAIN'), {
+      type: 'direct',
+      items: [{ materialId: fixture.materialId, quantity: 5 }],
+    })
+    expect(drained.status).toBe(201)
+    expectConserved(fixture.materialId, 0)
+    const outboundCountBefore = Number((db.prepare(`
+      SELECT COUNT(*) AS count FROM outbound_records o
+      JOIN outbound_items oi ON oi.outbound_id = o.id
+      WHERE oi.material_id = ? AND o.is_deleted = 0
+    `).get(fixture.materialId) as any).count)
+
+    const response = await post('/api/v1/outbound', nextId('IDEM-NO-ELIGIBLE-BLOCKED'), {
+      type: 'direct',
+      items: [{ materialId: fixture.materialId, quantity: 1 }],
+    })
+
+    expect(response.status).toBe(422)
+    expect(response.body.error.code).toBe('STOCK_INSUFFICIENT')
+    expectConserved(fixture.materialId, 0)
+    const outboundCountAfter = Number((db.prepare(`
+      SELECT COUNT(*) AS count FROM outbound_records o
+      JOIN outbound_items oi ON oi.outbound_id = o.id
+      WHERE oi.material_id = ? AND o.is_deleted = 0
+    `).get(fixture.materialId) as any).count)
+    expect(outboundCountAfter).toBe(outboundCountBefore)
   })
 })

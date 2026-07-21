@@ -355,6 +355,58 @@ export function restoreBatchStock(
   return syncInventoryFromBatches(db, materialId, inventoryOptions)
 }
 
+export interface SubtractBatchStockInput {
+  materialId: string
+  quantity: number
+  batchId?: string | null
+  batchNo?: string | null
+  inventory?: InventorySyncOptions
+  allowDriftReconciliation?: boolean
+}
+
+/**
+ * 入库撤销语义：同时扣减指定批次的 quantity 与 remaining（区别于出库只动 remaining）。
+ * quantity/remaining/status 在单条条件 UPDATE 内原子落库，杜绝瞬态矛盾事实；
+ * 结果为负一律 LEDGER_DRIFT fail-closed，绝不静默写负库存。
+ */
+export function subtractBatchStock(db: any, input: SubtractBatchStockInput): { batchId: string; inventory: InventorySnapshot } {
+  const quantity = positive(input.quantity, 'Quantity')
+  if (!input.allowDriftReconciliation) assertInventoryMatchesBatches(db, input.materialId)
+
+  let batch: any | null = null
+  if (input.batchId) {
+    batch = db.prepare('SELECT * FROM batches WHERE id = ?').get(input.batchId) as any
+    if (!batch || batch.material_id !== input.materialId) {
+      throw new InventoryTransactionError('Specified batch does not belong to the material', 'INVALID_PARAMETER')
+    }
+  } else if (input.batchNo) {
+    batch = db.prepare('SELECT * FROM batches WHERE material_id = ? AND batch_no = ?')
+      .get(input.materialId, input.batchNo) as any
+  }
+  if (!batch) throw new InventoryTransactionError('Batch fact is unavailable for reversal')
+
+  const quantityBefore = finite(batch.quantity, 'Batch quantity')
+  const remainingBefore = finite(batch.remaining, 'Batch remaining')
+  const quantityAfter = checkedSubtract(quantityBefore, quantity)
+  const remainingAfter = checkedSubtract(remainingBefore, quantity)
+  if (quantityAfter === null || remainingAfter === null) {
+    throw new InventoryTransactionError('Batch reversal exceeds the supported numeric range', 'INVALID_PARAMETER')
+  }
+  if (quantityAfter < 0 || remainingAfter < 0) {
+    throw new InventoryTransactionError('Batch reversal would exceed its recorded stock')
+  }
+  const statusAfter = remainingAfter === 0 ? 0 : 1
+  const changed = db.prepare(`
+    UPDATE batches
+    SET quantity = ?, remaining = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND material_id = ? AND quantity = ? AND remaining = ?
+  `).run(quantityAfter, remainingAfter, statusAfter, batch.id, input.materialId, quantityBefore, remainingBefore)
+  if (Number(changed.changes) !== 1) throw new InventoryTransactionError('Batch changed during reversal')
+
+  const inventory = syncInventoryFromBatches(db, input.materialId, input.inventory)
+  return { batchId: batch.id, inventory }
+}
+
 export function setMaterialStock(
   db: any,
   materialId: string,
