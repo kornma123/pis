@@ -79,7 +79,8 @@ function assertUsedWithinCapacity(used: number, capacity: number): void {
  * （无库位库存不占任何库位容量）。
  */
 export function assertLocationCapacityHeld(db: any, locationId: string | null | undefined): void {
-  if (locationId === null || locationId === undefined || locationId === '') return
+  // 仅内部 null/undefined 表示「无库位、不占容量」；空串/blank 必须按未知库位拒绝（fail closed）
+  if (locationId === null || locationId === undefined) return
   const row = db.prepare('SELECT capacity, status, is_deleted FROM locations WHERE id = ?').get(locationId) as any
   if (!row) throw new LocationCapacityError('Target location is unknown or unavailable')
   if (row.is_deleted !== 0) throw new LocationCapacityError('Target location is deleted')

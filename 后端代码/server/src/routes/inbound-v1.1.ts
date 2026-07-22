@@ -34,6 +34,17 @@ const router = Router()
 // 写入权限：读 DB 矩阵（inbound W = admin/warehouse_manager/procurement，可在角色权限页改）
 const requireWriteAccess = requirePermission('inbound', 'W')
 
+/**
+ * supplied locationId 形状校验（LOC-029 R2）：必须是 canonical 非空字符串。
+ * number/object/array/null/blank/trim-confused 一律拒绝（稳定 400、零部分态）；
+ * 仅真正未提供（undefined）表示 no-change，不自创 clear-location 语义。
+ */
+function parseSuppliedLocationId(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  if (value.trim() === '' || value.trim() !== value) return null
+  return value
+}
+
 function generateInboundNo(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   const timestamp = Date.now().toString().slice(-6)
@@ -486,6 +497,9 @@ router.post('/', requireWriteAccess, (req, res) => {
     if (!type || !materialId || quantity === undefined || !locationId) {
       error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
     }
+    if (parseSuppliedLocationId(locationId) === null) {
+      error(res, 'Location id must be a canonical non-empty string', 'INVALID_PARAMETER', 400); return
+    }
     const normalizedQuantity = parseFinitePositiveNumber(quantity)
     if (normalizedQuantity === null) {
       error(res, 'Quantity must be a finite positive number', 'INVALID_PARAMETER', 400); return
@@ -592,6 +606,9 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     const { batchNo, quantity, price, supplierId, locationId, productionDate, expiryDate, remark, status } = req.body
     if (batchNo !== undefined && (typeof batchNo !== 'string' || batchNo.trim().length === 0)) {
       error(res, 'Batch number cannot be cleared from an inbound fact', 'INVALID_PARAMETER', 400); return
+    }
+    if (locationId !== undefined && parseSuppliedLocationId(locationId) === null) {
+      error(res, 'Location id must be a canonical non-empty string', 'INVALID_PARAMETER', 400); return
     }
     if (status !== undefined && !['completed', 'cancelled'].includes(status)) {
       error(res, 'Inbound status must be completed or cancelled', 'INVALID_PARAMETER', 400); return

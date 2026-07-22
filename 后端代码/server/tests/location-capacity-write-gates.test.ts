@@ -77,8 +77,8 @@ const post = (path: string, body: object) =>
   request(app).post(path).set('Authorization', `Bearer ${adminToken}`).send(body)
 const put = (path: string, body: object) =>
   request(app).put(path).set('Authorization', `Bearer ${adminToken}`).send(body)
-const del = (path: string) =>
-  request(app).delete(path).set('Authorization', `Bearer ${adminToken}`).send({})
+const del = (path: string, body?: object) =>
+  request(app).delete(path).set('Authorization', `Bearer ${adminToken}`).send(body ?? {})
 const postKey = (path: string, body: object, key: string) =>
   request(app).post(path).set('Authorization', `Bearer ${adminToken}`).set('Idempotency-Key', key).send(body)
 
@@ -133,12 +133,14 @@ function idempotencyRow(key: string) {
 }
 
 /** 最新的容量门拒绝审计：仅 {status,code} 元数据、actor 来自认证上下文、绝无请求体泄漏 */
-function expectCapacityDenialAudit(method: string, moduleMarker: string) {
+function expectCapacityDenialAudit(method: string, moduleMarker: string, pathMarker?: string) {
   const logs = db.prepare(
     `SELECT * FROM operation_logs WHERE outcome = 'denied' AND operation = ? ORDER BY rowid DESC`,
   ).all(`DENIED ${method} ${moduleMarker}`) as Array<{ description: string; request_data: string; username: string }>
-  const log = logs.find((entry) => entry.description.includes('409') && entry.description.includes(CAPACITY_CODE))
-  expect(log, `missing capacity denial audit row for ${method} ${moduleMarker}`).toBeTruthy()
+  const log = logs.find((entry) => entry.description.includes('409')
+    && entry.description.includes(CAPACITY_CODE)
+    && (!pathMarker || entry.description.includes(pathMarker)))
+  expect(log, `missing capacity denial audit row for ${method} ${moduleMarker} ${pathMarker ?? ''}`).toBeTruthy()
   expect(log!.request_data).toBe(`{"status":409,"code":"${CAPACITY_CODE}"}`)
   expect(log!.request_data).not.toContain(PROBE_VALUE)
   expect(log!.description).not.toContain(PROBE_VALUE)
@@ -353,12 +355,13 @@ describe('inbound update（PUT /api/v1/inbound/:id）容量门', () => {
     seedMaterial(`M-${s}`)
     const id = await createInbound(`M-${s}`, `L-${s}`, 5)
     const before = snapshotTables(BUSINESS_TABLES)
-    const over = await put(`/api/v1/inbound/${id}`, { quantity: 11 })
+    const over = await put(`/api/v1/inbound/${id}`, { quantity: 11, probeNote: PROBE_VALUE })
     expect(over.status).toBe(409)
     expect(over.body?.error?.code).toBe(CAPACITY_CODE)
     expectSnapshotUnchanged(before, BUSINESS_TABLES)
     expect(row('inbound_records', id).quantity).toBe(5)
     expect(stockOf(`M-${s}`)).toBe(5)
+    expectCapacityDenialAudit('PUT', 'inbound')
 
     const exact = await put(`/api/v1/inbound/${id}`, { quantity: 10 })
     expect(exact.status).toBe(200)
@@ -437,12 +440,13 @@ describe('transfers 容量门', () => {
     seedLocation(`L3-${s}`, { capacity: 9 })
     const before = snapshotTables(BUSINESS_TABLES)
     const over = await post('/api/v1/transfers/inbound', {
-      materialId, quantity: 10, fromLocationId: `L2-${s}`, toLocationId: `L3-${s}`,
+      materialId, quantity: 10, fromLocationId: `L2-${s}`, toLocationId: `L3-${s}`, probeNote: PROBE_VALUE,
     })
     expect(over.status).toBe(409)
     expect(over.body?.error?.code).toBe(CAPACITY_CODE)
     expectSnapshotUnchanged(before, BUSINESS_TABLES)
     expect(locationOf(materialId)).toBe(`L2-${s}`)
+    expectCapacityDenialAudit('POST', 'transfers', '/transfers/inbound')
   })
 
   it('source=destination 仍然 400（既有契约不变）', async () => {
@@ -491,12 +495,13 @@ describe('transfers 容量门', () => {
     const lower = await put(`/api/v1/locations/L1-${s}`, { capacity: 5 })
     expect(lower.status).toBe(200)
     const before = snapshotTables(BUSINESS_TABLES)
-    const over = await del(`/api/v1/transfers/${transferId}`)
+    const over = await del(`/api/v1/transfers/${transferId}`, { probeNote: PROBE_VALUE })
     expect(over.status).toBe(409)
     expect(over.body?.error?.code).toBe(CAPACITY_CODE)
     expectSnapshotUnchanged(before, BUSINESS_TABLES)
     expect(locationOf(materialId)).toBe(`L2-${s}`)
     expect(row('inbound_records', transferId).is_deleted).toBe(0)
+    expectCapacityDenialAudit('DELETE', 'transfers')
 
     const raise = await put(`/api/v1/locations/L1-${s}`, { capacity: 10 })
     expect(raise.status).toBe(200)
@@ -521,12 +526,13 @@ describe('returns create 容量门', () => {
 
     const key = `idem-ret-${s}`
     const before = snapshotTables(BUSINESS_TABLES)
-    const over = await postKey('/api/v1/returns', { materialId: `M-${s}`, quantity: 1, reason: '客户退回' }, key)
+    const over = await postKey('/api/v1/returns', { materialId: `M-${s}`, quantity: 1, reason: '客户退回', probeNote: PROBE_VALUE }, key)
     expect(over.status).toBe(409)
     expect(over.body?.error?.code).toBe(CAPACITY_CODE)
     expectSnapshotUnchanged(before, BUSINESS_TABLES)
     expect(idempotencyRow(key)).toBeUndefined()
     expect(stockOf(`M-${s}`)).toBe(10)
+    expectCapacityDenialAudit('POST', 'returns')
   })
 })
 
@@ -546,12 +552,13 @@ describe('scraps cancel 容量门', () => {
     const lower = await put(`/api/v1/locations/L-${s}`, { capacity: 8 })
     expect(lower.status).toBe(200)
     const before = snapshotTables(BUSINESS_TABLES)
-    const over = await del(`/api/v1/scraps/${scrapId}`)
+    const over = await del(`/api/v1/scraps/${scrapId}`, { probeNote: PROBE_VALUE })
     expect(over.status).toBe(409)
     expect(over.body?.error?.code).toBe(CAPACITY_CODE)
     expectSnapshotUnchanged(before, BUSINESS_TABLES)
     expect(row('scrap_records', scrapId).is_deleted).toBe(0)
     expect(stockOf(`M-${s}`)).toBe(6)
+    expectCapacityDenialAudit('DELETE', 'scraps')
 
     const raise = await put(`/api/v1/locations/L-${s}`, { capacity: 10 })
     expect(raise.status).toBe(200)
@@ -594,12 +601,13 @@ describe('outbound restore 容量门', () => {
     const lower = await put(`/api/v1/locations/L-${s}`, { capacity: 8 })
     expect(lower.status).toBe(200)
     const before = snapshotTables(BUSINESS_TABLES)
-    const over = await del(`/api/v1/outbound/${outboundId}`)
+    const over = await del(`/api/v1/outbound/${outboundId}`, { probeNote: PROBE_VALUE })
     expect(over.status).toBe(409)
     expect(over.body?.error?.code).toBe(CAPACITY_CODE)
     expectSnapshotUnchanged(before, BUSINESS_TABLES)
     expect(row('outbound_records', outboundId).is_deleted).toBe(0)
     expect(stockOf(`M-${s}`)).toBe(6)
+    expectCapacityDenialAudit('DELETE', 'outbound')
 
     const raise = await put(`/api/v1/locations/L-${s}`, { capacity: 10 })
     expect(raise.status).toBe(200)
@@ -615,7 +623,7 @@ describe('outbound restore 容量门', () => {
     expect(lower.status).toBe(200)
     const before = snapshotTables(BUSINESS_TABLES)
     const over = await put(`/api/v1/outbound/${outboundId}`, {
-      items: [{ materialId: `M-${s}`, quantity: 3 }],
+      items: [{ materialId: `M-${s}`, quantity: 3 }], probeNote: PROBE_VALUE,
     })
     expect(over.status).toBe(409)
     expect(over.body?.error?.code).toBe(CAPACITY_CODE)
@@ -624,6 +632,7 @@ describe('outbound restore 容量门', () => {
     const items = db.prepare('SELECT * FROM outbound_items WHERE outbound_id = ?').all(outboundId) as any[]
     expect(items.length).toBe(1)
     expect(items[0].quantity).toBe(4)
+    expectCapacityDenialAudit('PUT', 'outbound')
 
     const raise = await put(`/api/v1/locations/L-${s}`, { capacity: 10 })
     expect(raise.status).toBe(200)
@@ -648,12 +657,13 @@ describe('stocktaking 容量门', () => {
     expect(created.status).toBe(200)
     expect(created.body.data.status).toBe('pending')
     const before = snapshotTables(BUSINESS_TABLES)
-    const over = await post(`/api/v1/stocktaking/${created.body.data.id}/adjust`, { reason: 'normal' })
+    const over = await post(`/api/v1/stocktaking/${created.body.data.id}/adjust`, { reason: 'normal', probeNote: PROBE_VALUE })
     expect(over.status).toBe(409)
     expect(over.body?.error?.code).toBe(CAPACITY_CODE)
     expectSnapshotUnchanged(before, BUSINESS_TABLES)
     expect(row('stocktaking_records', created.body.data.id).status).toBe('pending')
     expect(stockOf(`M-${s}`)).toBe(5)
+    expectCapacityDenialAudit('POST', 'stocktaking', '/adjust')
 
     const exact = await post('/api/v1/stocktaking', { materialId: `M-${s}`, actualStock: 10 })
     expect(exact.status).toBe(200)
@@ -681,12 +691,14 @@ describe('stocktaking 容量门', () => {
         { materialId: `M2-${s}`, actualStock: 2 },
         { materialId: `M1-${s}`, actualStock: 11 },
       ],
+      probeNote: PROBE_VALUE,
     })
     expect(res.status).toBe(409)
     expect(res.body?.error?.code).toBe(CAPACITY_CODE)
     expectSnapshotUnchanged(before, BUSINESS_TABLES)
     expect(stockOf(`M1-${s}`)).toBe(5)
     expect(stockOf(`M2-${s}`)).toBe(1)
+    expectCapacityDenialAudit('POST', 'stocktaking', '/batch')
   })
 
   it('无库位物料的上调不入任何容量账本 → 放行（容量门只守有主占用）', async () => {
@@ -718,20 +730,22 @@ describe('supplier-returns reversal 容量门', () => {
     expect(lower.status).toBe(200)
 
     const beforeCancel = snapshotTables(BUSINESS_TABLES)
-    const overCancel = await put(`/api/v1/supplier-returns/${returnId}/status`, { status: 'cancelled' })
+    const overCancel = await put(`/api/v1/supplier-returns/${returnId}/status`, { status: 'cancelled', probeNote: PROBE_VALUE })
     expect(overCancel.status).toBe(409)
     expect(overCancel.body?.error?.code).toBe(CAPACITY_CODE)
     expectSnapshotUnchanged(beforeCancel, BUSINESS_TABLES)
     expect(row('supplier_returns', returnId).status).toBe('pending')
     expect(stockOf(`M-${s}`)).toBe(6)
+    expectCapacityDenialAudit('PUT', 'supplier-returns')
 
     const beforeDelete = snapshotTables(BUSINESS_TABLES)
-    const overDelete = await del(`/api/v1/supplier-returns/${returnId}`)
+    const overDelete = await del(`/api/v1/supplier-returns/${returnId}`, { probeNote: PROBE_VALUE })
     expect(overDelete.status).toBe(409)
     expect(overDelete.body?.error?.code).toBe(CAPACITY_CODE)
     expectSnapshotUnchanged(beforeDelete, BUSINESS_TABLES)
     expect(row('supplier_returns', returnId).is_deleted).toBe(0)
     expect(stockOf(`M-${s}`)).toBe(6)
+    expectCapacityDenialAudit('DELETE', 'supplier-returns')
 
     const raise = await put(`/api/v1/locations/L-${s}`, { capacity: 10 })
     expect(raise.status).toBe(200)
@@ -750,7 +764,7 @@ describe('locations 容量修改容量门', () => {
     seedMaterial(`F-${s}`)
     seedStock(`F-${s}`, `L-${s}`, 8)
 
-    const over = await put(`/api/v1/locations/L-${s}`, { capacity: 7 })
+    const over = await put(`/api/v1/locations/L-${s}`, { capacity: 7, probeNote: PROBE_VALUE })
     expect(over.status).toBe(409)
     expect(over.body?.error?.code).toBe(CAPACITY_CODE)
     expect(row('locations', `L-${s}`).capacity).toBe(10)
@@ -835,6 +849,99 @@ describe('locations 容量修改容量门', () => {
     expect(race.fired()).toBe(true)
     expect(res.status).toBe(409)
     expect(res.body?.error?.code).toBe(CAPACITY_CODE)
+    expect(row('locations', `L-${s}`).capacity).toBe(10)
+  })
+})
+
+// ── R2 修复：supplied locationId 形状（K3-LOC-029 R2 finding 1）────────────────
+
+describe('inbound supplied locationId 形状校验（R2 修复）', () => {
+  async function createInbound(materialId: string, locationId: string, quantity: number): Promise<string> {
+    const res = await post('/api/v1/inbound', { type: 'direct', materialId, quantity, locationId, price: 1 })
+    expect(res.status).toBe(201)
+    return res.body.data.id as string
+  }
+
+  it('PUT：数字 locationId 稳定 400 零部分态（reviewer 复现：迁入 capacity=0 的数字 id 库位被错误放行）', async () => {
+    const s = sfx()
+    const numericLocationId = String(100000 + seq)
+    seedLocation(numericLocationId, { capacity: 0 })
+    seedLocation(`L1-${s}`, { capacity: 100 })
+    seedMaterial(`M-${s}`)
+    const id = await createInbound(`M-${s}`, `L1-${s}`, 5)
+    const before = snapshotTables(BUSINESS_TABLES)
+    const res = await put(`/api/v1/inbound/${id}`, { locationId: Number(numericLocationId), probeNote: PROBE_VALUE })
+    expect(res.status).toBe(400)
+    expect(res.body?.error?.code).toBe('INVALID_PARAMETER')
+    expectSnapshotUnchanged(before, BUSINESS_TABLES)
+    expect(locationOf(`M-${s}`)).toBe(`L1-${s}`)
+    expect(row('inbound_records', id).location_id).toBe(`L1-${s}`)
+  })
+
+  it('PUT：空串 / 全空白 / 首尾空白（trim-confused）/ null / object / array → 稳定 400 零部分态', async () => {
+    const s = sfx()
+    seedLocation(`L1-${s}`, { capacity: 100 })
+    seedMaterial(`M-${s}`)
+    const id = await createInbound(`M-${s}`, `L1-${s}`, 5)
+    const badValues: unknown[] = ['', '   ', ` L1-${s} `, null, { id: `L1-${s}` }, [`L1-${s}`]]
+    for (const bad of badValues) {
+      const before = snapshotTables(BUSINESS_TABLES)
+      const res = await put(`/api/v1/inbound/${id}`, { locationId: bad })
+      expect(res.status, `locationId=${JSON.stringify(bad)}`).toBe(400)
+      expect(res.body?.error?.code).toBe('INVALID_PARAMETER')
+      expectSnapshotUnchanged(before, BUSINESS_TABLES)
+      expect(row('inbound_records', id).location_id).toBe(`L1-${s}`)
+    }
+    expect(locationOf(`M-${s}`)).toBe(`L1-${s}`)
+  })
+
+  it('PUT：合法字符串 locationId 仍按既有语义迁移（形状校验不误伤正常迁移）', async () => {
+    const s = sfx()
+    seedLocation(`L1-${s}`, { capacity: 100 })
+    seedLocation(`L2-${s}`, { capacity: 100 })
+    seedMaterial(`M-${s}`)
+    const id = await createInbound(`M-${s}`, `L1-${s}`, 5)
+    const res = await put(`/api/v1/inbound/${id}`, { locationId: `L2-${s}` })
+    expect(res.status).toBe(200)
+    expect(locationOf(`M-${s}`)).toBe(`L2-${s}`)
+  })
+
+  it('POST create：数字或 trim-confused 的 locationId → 400', async () => {
+    const s = sfx()
+    seedLocation(`L1-${s}`, { capacity: 100 })
+    seedMaterial(`M-${s}`)
+    for (const bad of [12345, ` L1-${s} `] as unknown[]) {
+      const before = snapshotTables(BUSINESS_TABLES)
+      const res = await post('/api/v1/inbound', { type: 'direct', materialId: `M-${s}`, quantity: 1, locationId: bad })
+      expect(res.status, `locationId=${JSON.stringify(bad)}`).toBe(400)
+      expect(res.body?.error?.code).toBe('INVALID_PARAMETER')
+      expectSnapshotUnchanged(before, BUSINESS_TABLES)
+    }
+    expect(row('inventory', `INV-M-${s}`)).toBeUndefined()
+  })
+})
+
+// ── R2 修复：显式 capacity:null 不等于字段缺失（K3-LOC-029 R2 finding 2）──────
+
+describe('locations 显式 null 容量（R2 修复）', () => {
+  it('创建库位：显式 capacity:null 与 blank/object/array → 400；仅字段缺失才用默认 999999', async () => {
+    const s = sfx()
+    for (const capacity of [null, ' ', {}, []] as unknown[]) {
+      const before = count('locations')
+      const res = await post('/api/v1/locations', { name: `显式非法-${s}`, zone: 'CAP区', capacity })
+      expect(res.status, `capacity=${JSON.stringify(capacity)}`).toBe(400)
+      expect(count('locations')).toBe(before)
+    }
+    const absent = await post('/api/v1/locations', { name: `缺省-${s}`, zone: 'CAP区' })
+    expect(absent.status).toBe(201)
+    expect(row('locations', absent.body.data.id).capacity).toBe(999999)
+  })
+
+  it('编辑库位：显式 capacity:null → 400 且不写库', async () => {
+    const s = sfx()
+    seedLocation(`L-${s}`, { capacity: 10 })
+    const res = await put(`/api/v1/locations/L-${s}`, { capacity: null })
+    expect(res.status).toBe(400)
     expect(row('locations', `L-${s}`).capacity).toBe(10)
   })
 })

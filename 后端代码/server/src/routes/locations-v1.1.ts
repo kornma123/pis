@@ -74,9 +74,10 @@ router.post('/', authenticateToken, requireLocationWrite, (req, res) => {
   try {
     const { name, type, parentId, zone, shelf, position, capacity } = req.body
     if (!name || !zone) { error(res, 'Name and zone required', 'INVALID_PARAMETER', 400); return }
-    // 容量是 canonical 有限非负安全整数；0 是合法零容量（不能用 || 默认值吞掉）；缺省 999999（有限硬上限，非无限哨兵）
+    // 容量是 canonical 有限非负安全整数；0 是合法零容量（不能用 || 默认值吞掉）；缺省 999999（有限硬上限，非无限哨兵）。
+    // 仅字段真正缺失（undefined）才可使用默认值；显式 null/string/blank/object/array 一律非法。
     let normalizedCapacity = 999999
-    if (capacity !== undefined && capacity !== null) {
+    if (capacity !== undefined) {
       const parsed = parseLocationCapacityInput(capacity)
       if (parsed === null) { error(res, 'Capacity must be a finite non-negative safe integer', 'INVALID_PARAMETER', 400); return }
       normalizedCapacity = parsed
