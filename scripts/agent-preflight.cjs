@@ -15,6 +15,7 @@ const { execFileSync, spawnSync } = require('node:child_process')
 
 const CONTRACT_PATH = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
+const PM_DECISIONS_PATH = 'docs/PM待拍板.md'
 const ENTRYPOINTS = ['AGENTS.md', 'CLAUDE.md']
 const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
@@ -23,6 +24,7 @@ const PM_AI_WORK_MODEL_FILES = [
 const AUTHORITY_FILES = [
   ...ENTRYPOINTS,
   CONTRACT_PATH,
+  PM_DECISIONS_PATH,
   'docs/agent-handoffs/TEMPLATE.md',
   ...PM_AI_WORK_MODEL_FILES,
   'docs/golden-registry.md',
@@ -38,6 +40,15 @@ const LEGACY_GUIDES = [
   'E2E-Test-Generation-Guide.md',
 ]
 const STATUS_ORDER = { INFO: 0, PASS: 0, WARN: 1, FAIL: 2 }
+const FROZEN_PM_DECISIONS = [
+  { id: 'M-1', keywords: ['PR 门', '关键业务流程', '夜间', '全量', '具名 owner', '1 个工作日', '分诊'] },
+  { id: 'M-3', keywords: ['稀疏历史索引', '活跃并行工作期间', '不做物理迁移'] },
+  { id: 'M-4', keywords: ['不降低', '正式文档 PR 门'] },
+  { id: 'M-5', keywords: ['只由 owner 清理自己', '已合并', '干净', '无人使用', '不得代清他人现场'] },
+  { id: 'B-1', keywords: ['wave-2 薄 PRD', '逐页 mockup', '获批前不进入实现'] },
+  { id: 'B-2', keywords: ['BOM 不可变版本', '核准链', 'supportableSamples', '实时派生', '辅料/物料', 'is_alternative'] },
+  { id: 'B-4', keywords: ['移除恒 404 的假导出', '具名消费者', '字段合同', '留存要求', '建设真实导出'] },
+]
 
 function parseArgs(argv) {
   const args = {
@@ -151,6 +162,44 @@ function globRegex(pattern) {
 
 function matchesAny(file, patterns) {
   return patterns.some((pattern) => globRegex(pattern).test(normalizePath(file)))
+}
+
+function parseDecisionRows(markdown) {
+  const rows = new Map()
+  for (const line of markdown.split(/\r?\n/)) {
+    const match = line.match(/^\|\s*([A-Z]+-\d+)\s*\|/)
+    if (!match) continue
+    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim())
+    const entries = rows.get(match[1]) || []
+    entries.push(cells)
+    rows.set(match[1], entries)
+  }
+  return rows
+}
+
+function inspectFrozenPmDecisions(markdown) {
+  const rows = parseDecisionRows(markdown)
+  const findings = []
+  for (const decision of FROZEN_PM_DECISIONS) {
+    const matches = rows.get(decision.id) || []
+    if (matches.length === 0) {
+      findings.push(`${decision.id}: missing`)
+      continue
+    }
+    if (matches.length > 1) {
+      findings.push(`${decision.id}: duplicate`)
+      continue
+    }
+    const statusAndConclusion = matches[0][3] || ''
+    if (!/^\*{0,2}已拍(?:（[^）\r\n]*）)?\*{0,2}\s*[:：]/.test(statusAndConclusion)) {
+      findings.push(`${decision.id}: status-not-decided`)
+      continue
+    }
+    if (decision.keywords.some((keyword) => !statusAndConclusion.includes(keyword))) {
+      findings.push(`${decision.id}: conclusion-drift`)
+    }
+  }
+  return findings
 }
 
 function parseDirty(root) {
@@ -2139,6 +2188,10 @@ function inspectAuthority(root, args, checks) {
   if (dynamicFindings.length) addCheck(checks, 'drift.dynamic-facts', 'FAIL', 'dynamic runtime facts found in stable authority documents', dynamicFindings)
   else addCheck(checks, 'drift.dynamic-facts', 'PASS', 'stable authority documents contain no literal PR/SHA/test-count snapshot')
 
+  const pmDecisionFindings = inspectFrozenPmDecisions(contents[PM_DECISIONS_PATH] || '')
+  if (pmDecisionFindings.length) addCheck(checks, 'drift.pm-decisions', 'FAIL', 'frozen PM decisions changed', pmDecisionFindings)
+  else addCheck(checks, 'drift.pm-decisions', 'PASS', 'frozen PM decisions retain decided status and stable conclusions')
+
   const forcedLogPatterns = [
     /每次执行代码修改后[^\n]{0,100}session-log/i,
     /会话结束[^\n]{0,80}session-log/i,
@@ -2290,5 +2343,6 @@ module.exports = {
   worstVerdict,
   CONTRACT_PATH,
   CONTRACT_ID,
+  PM_DECISIONS_PATH,
   AUTHORITY_FILES,
 }

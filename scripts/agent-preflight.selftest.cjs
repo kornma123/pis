@@ -13,6 +13,16 @@ const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
   'docs/工作模型-COREONE项目版-2026-06-30.md',
 ]
+const PM_DECISIONS = 'docs/PM待拍板.md'
+const FROZEN_PM_DECISION_FIXTURES = [
+  ['M-1', 'PR 门运行少量关键业务流程；夜间运行全量，失败须有具名 owner 并在 1 个工作日内分诊', '夜间运行全量'],
+  ['M-3', '继续作为稀疏历史索引；活跃并行工作期间不做物理迁移', '稀疏历史索引'],
+  ['M-4', '不降低正式文档 PR 门', '不降低正式文档 PR 门'],
+  ['M-5', '只由 owner 清理自己、已合并、干净且无人使用的 worktree；不得代清他人现场', '不得代清他人现场'],
+  ['B-1', '先做 wave-2 薄 PRD 与逐页 mockup；字段和语义逐页获批前不进入实现', '逐页 mockup'],
+  ['B-2', '复用既有 BOM 不可变版本与核准链，不建第二套；`supportableSamples` 实时派生；辅料/物料使用明确角色，禁止借 `is_alternative` 表达', '`supportableSamples` 实时派生'],
+  ['B-4', '先移除恒 404 的假导出；只有具名消费者、字段合同与留存要求明确后才建设真实导出', '移除恒 404 的假导出'],
+]
 
 let failures = 0
 let checksRun = 0
@@ -70,6 +80,16 @@ function installAuthorityFixture(root) {
   write(root, '.claude/rules/pr-governance.md', '# PR governance\n\nRuntime state: `gh pr list`.\n')
   write(root, '.claude/rules/codex-cli-usage.md', '# Codex usage\n')
   write(root, 'docs/COREONE-成本域文档-权威索引-2026-07-06.md', '# 成本域文档权威索引\n')
+  write(root, PM_DECISIONS, [
+    '# PM 待拍板',
+    '',
+    '| ID | 稳定问题 | 决策 owner | 状态 / 具名结论 | 重审触发 | 稳定依据 / 任务指针 |',
+    '|---|---|---|---|---|---|',
+    ...FROZEN_PM_DECISION_FIXTURES.map(([id, conclusion]) => `| ${id} | 冻结问题 ${id} | PM | **已拍（2026-07-15）**：${conclusion} | 稳定重审触发 | 稳定指针 |`),
+    '| P-1 | 合法开放问题 P-1 | PM | **待拍**：仍需 PM 决定 | 取得新证据 | 稳定指针 |',
+    '| P-2 | 合法开放问题 P-2 | PM | **待拍**：仍需 PM 决定 | 取得新证据 | 稳定指针 |',
+    '',
+  ].join('\n'))
   write(root, 'sub/fixture.txt', 'subdirectory fixture\n')
   write(root, 'README.md', `# Project\n\nSee [operating contract](${CONTRACT}).\n`)
   const superseded = `> **SUPERSEDED — DO NOT USE AS OPERATING INSTRUCTIONS.** See \`${CONTRACT}\`.\n\n`
@@ -300,6 +320,86 @@ function checkDoc(name, file, snippet, verdict, exit, checkId = null, checkStatu
     }
   })
 }
+
+function pmDecisionRowPattern(id) {
+  return new RegExp(`^\\|\\s*${id.replace('-', '\\-')}\\s*\\|.*$`, 'm')
+}
+
+function expectPmDecisionDrift(result, expectedDetail) {
+  expectVerdict(result, 'FAIL', 1)
+  const target = result.json.checks.find((item) => item.id === 'drift.pm-decisions')
+  assert.ok(target, 'missing check drift.pm-decisions')
+  assert.equal(target.status, 'FAIL')
+  assert.ok(target.details.includes(expectedDetail), `${expectedDetail} not found in ${JSON.stringify(target.details)}`)
+}
+
+function withPmDecisionMutation(transform, assertion) {
+  const repo = setupDocRepo()
+  const target = path.join(repo.work, PM_DECISIONS)
+  const original = fs.readFileSync(target, 'utf8')
+  try {
+    fs.writeFileSync(target, transform(original))
+    assertion(run(repo.work, ['--mode=develop', '--rules-only']))
+  } finally {
+    fs.writeFileSync(target, original)
+  }
+}
+
+check('GOV-002: every frozen decision rejects 已拍 to 待拍 drift', () => {
+  for (const [id] of FROZEN_PM_DECISION_FIXTURES) {
+    withPmDecisionMutation(
+      (text) => text.replace(pmDecisionRowPattern(id), (row) => row.replace('已拍', '待拍')),
+      (result) => expectPmDecisionDrift(result, `${id}: status-not-decided`),
+    )
+  }
+})
+
+check('GOV-002: every frozen decision rejects a missing row', () => {
+  for (const [id] of FROZEN_PM_DECISION_FIXTURES) {
+    withPmDecisionMutation(
+      (text) => text.replace(pmDecisionRowPattern(id), ''),
+      (result) => expectPmDecisionDrift(result, `${id}: missing`),
+    )
+  }
+})
+
+check('GOV-002: every frozen decision rejects a duplicate ID', () => {
+  for (const [id] of FROZEN_PM_DECISION_FIXTURES) {
+    withPmDecisionMutation(
+      (text) => text.replace(pmDecisionRowPattern(id), (row) => `${row}\n${row}`),
+      (result) => expectPmDecisionDrift(result, `${id}: duplicate`),
+    )
+  }
+})
+
+check('GOV-002: every frozen decision rejects lost conclusion keywords', () => {
+  for (const [id, , keyword] of FROZEN_PM_DECISION_FIXTURES) {
+    withPmDecisionMutation(
+      (text) => text.replace(pmDecisionRowPattern(id), (row) => row.replace(keyword, '结论已漂移')),
+      (result) => expectPmDecisionDrift(result, `${id}: conclusion-drift`),
+    )
+  }
+})
+
+check('GOV-002: archived drift is ignored', () => {
+  const repo = setupDocRepo()
+  const archived = 'docs/archive/PM待拍板.md'
+  try {
+    write(repo.work, archived, '| M-1 | 历史问题 | PM | **待拍**：历史归档不参与 | - | - |\n')
+    expectVerdict(run(repo.work, ['--mode=develop', '--rules-only']), 'PASS', 0)
+  } finally {
+    fs.rmSync(path.join(repo.work, archived), { force: true })
+  }
+})
+
+check('GOV-002: legal pending P-1 and P-2 are allowed', () => {
+  const repo = setupDocRepo()
+  const result = run(repo.work, ['--mode=develop', '--rules-only'])
+  expectVerdict(result, 'PASS', 0)
+  const target = result.json.checks.find((item) => item.id === 'drift.pm-decisions')
+  assert.ok(target, 'missing check drift.pm-decisions')
+  assert.equal(target.status, 'PASS')
+})
 
 // #1 直推 master：按 refspec 目标端语义判定（token 解析，去引号），拦绕过、不误伤安全命令。
 for (const push of [
