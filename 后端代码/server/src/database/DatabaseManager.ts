@@ -2009,7 +2009,19 @@ export function initializeDatabase(): void {
 
 export function closeDatabase(): void {
   if (db) {
-    db.close()
+    const current = db
     db = null
+    current.close()
   }
+}
+
+/**
+ * A failed rollback leaves the singleton connection's transaction state unknown.
+ * Detach it before best-effort close so the next request cannot reuse that handle.
+ */
+export function invalidateDatabaseConnection(): void {
+  const current = db
+  db = null
+  if (!current) return
+  try { current.close() } catch { /* detached handle is intentionally discarded */ }
 }
