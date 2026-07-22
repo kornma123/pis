@@ -1091,16 +1091,23 @@
       "level": "W",
       "conditions": []
     },
+    "POST /api/v1/lis-cases/correction": {
+      "module": "reconciliation",
+      "level": "W",
+      "conditions": [
+        "anyRole:admin+finance"
+      ]
+    },
     "POST /api/v1/lis-cases/import": {
       "module": "reconciliation",
-      "level": "R",
+      "level": "W",
       "conditions": [
         "anyRole:admin+finance"
       ]
     },
     "POST /api/v1/lis-cases/import-markers": {
       "module": "reconciliation",
-      "level": "R",
+      "level": "W",
       "conditions": [
         "anyRole:admin+finance"
       ]

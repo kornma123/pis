@@ -107,8 +107,9 @@ export function getDatabase(): DatabaseSync {
 
 export function resetDatabase(): void {
   if (db) {
-    db.close()
+    const current = db
     db = null
+    current.close()
   }
   if (fs.existsSync(DB_PATH)) {
     fs.unlinkSync(DB_PATH)
