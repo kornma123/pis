@@ -81,7 +81,7 @@
 2. **补 mutation 并交独立复核**：基础 focused/full/build/lint 已由 Windows Node22 重建；#182 的 12 项 mutation 因回收 archive 为空仍未得到 Windows 证据。两个 P1 最小 successor、尾差裁决、12 mutation 与独立 fixed-SHA R2 全部完成前不得晋级。
 3. **候选线闭合后才开新 issue**：2026-07-21 的 Codex/K3 只排期见 [本地计划](COREONE-2026-07-21-Codex-K3-Issue排期.md)；当前不创建 worktree、不发 START-ACK、不执行明日任务。
 4. **先冻结 Phase 1A 直接规格，再交单一对账事实 owner**：先做 LOC-004 的 G0；没有批准的 source/generation 合同前，不继续堆第四套 readiness SQL。
-5. **并行处理不碰业务实现的明确动作**：GOV-001 可修事实转录；GOV-002 等 live 原文；LOC-026 由财务/管理员在 2026-08-31 前交真实金额与认账，不占代码 owner。
+5. **并行处理不碰业务实现的明确动作**：GOV-001 可修事实转录；GOV-002 已由合并对象重建旧 #148 的唯一治理入口；LOC-026 由财务/管理员在 2026-08-31 前交真实金额与认账，不占代码 owner。
 6. **修复并复核现有业务候选**：LOC-005 至 LOC-013；共享文件同一时间只允许一个 owner。
 7. **主线真实解锁**：LOC-014 与 LOC-015 → LOC-016 → LOC-017；真实证据不齐时保持 null/403，不用 fixture 解锁。
 8. **平台/上线门单列**：`PLATFORM-R1` 不属于产品 PRD issue，只有 release owner 明确触发后才进入；不得用工具链工作冒充产品进度。
@@ -260,9 +260,10 @@
 ### GOV-002 — `PM待拍板.md` 已决条目索引同步
 
 - **来源候选**：Mac C2；M-1/M-3/M-4/M-5/B-1/B-2/B-4 共 7 行仍标“待拍”，但其他权威文件已出现已决执行方向。
-- **状态/优先级**：`PENDING_LIVE_DEDUP` / P1 文档治理；不计产品功能进度。
-- **边界**：纯转录、零新决策。执行前必须现场核对 PR #190 评论 `4979266101` 原文以及 live #148 是否已覆盖；GitHub 不可读时保持本状态，不凭二手摘要改成“已拍”。
-- **验收**：每一行回指唯一决定源、决定日期、执行票和重开条件；成本域仍只链接权威收官页，不在索引复制第二套状态；drift gate 能发现“已决源 vs 待拍索引”的再次分叉。
+- **状态/优先级**：`READY_RECONSTRUCTED_FROM_OLD_148` / P1 文档治理；不计产品功能进度。
+- **去重裁决（2026-07-22）**：旧仓对新账号返回 404，但本地完整 Git 对象 `d9336ffd68dd1d52201b94ab6a68a4e1dfa66eeb`（PR #190 merge）保存了最终 PRD，并明确引用评论 `4979266101`、声明这 7 项已决且 `PM待拍板.md` 尚未同步；冻结索引中的旧 #148 正是“drift gate 未覆盖 PM 待拍板”。因此不再等待旧仓 live 读取，也不另造一张与旧 #148 并行的票；GOV-002 是新仓中的唯一重建入口。
+- **仅可转录的最终决定**：M-1=PR 跑小而关键流程、夜间全量且失败须具名 owner 分诊；M-3=session-log 保持稀疏索引、不在活跃期物理迁移；M-4=不降低正式文档 PR 门；M-5=只由 owner 清理自己已合并、干净且无人使用的 worktree；B-1/B-2=先做 wave-2 薄 PRD/逐页 mockup，复用 BOM 不可变版本与核准链，`supportableSamples` 实时派生，物料角色不得误用 `is_alternative`；B-4=先移除恒 404 假导出，具名消费者/字段/留存要求齐备后再建真实导出。
+- **验收**：每一行回指 PR #190 merge object、决定日期、原实施票和重开条件；成本域仍只链接权威收官页，不复制第二套状态；为 PM 索引增加机器漂移检查，能发现“已决源 vs 待拍索引”的再次分叉。
 
 ### PLATFORM-R1 — Migration predecessor ledger 与执行身份兼容
 
@@ -295,7 +296,7 @@
 | LOC-029 | 库位容量写入门 | `K3_REPAIR_READY_SAME_WRITER` | K3 candidate=`5b77a9b86645551138719d7c7fa4167696caded1` 的独立 Node22 R2 判 STATIC/RUNTIME FAIL（P1×2/P2×1）：numeric/blank locationId 绕过容量门、capacity:null 静默默认 999999、denial audit 证据不全。Mac 已在原 task/worktree 安装 R2-FAIL-HANDOFF 与新的 REPAIR-SUCCESSOR，HEAD=`5b77a9b…`、clean；未创建新 task/branch/worktree/writer。用户须在原同一 GUI writer 粘贴 `PROMPTS/REPAIR-SUCCESSOR.md`，只形成一个 direct-child repair successor，补 canonical 输入、null/absent 分离、逐类 denial audit、mutations 与全部 GREEN。Windows 在新 SHA 冻结并再次独立 R2 前不导入、不合并，持续 `NO_GO`；最终仍须对最新 integration=`dc8d0d4b…` 做 combined-base 验证。 |
 | LOC-030 | 成本报表同期变化真值 | `DEFERRED_PRD` | Mac C8 的“前端 Math.random 兜底”在 d144 未复现：后端当前返回 `changeRate:null`，前端显示不可计算；因此不得按旧触发开 bug。先决定同比/环比期间、缺基期语义和 denominator，再实现真实变化率；同步修正 PRD/FRS 中“恒 0”旧描述并加跨期守恒测试 |
 | LOC-031 | 预警主动生成与通知闭环 | `PHASE_A_RESUMED_NODE22_UNBLOCKED` | 唯一 Codex task=`019f84c6-a2ae-71c0-ad43-43847c96d69c`，fixed base=`dc8d0d4b…`。首轮在写码前因任务未定位到 Node22 而 STOP（preflight=0、文件/commit=0）；中央已现场验证并下发官方 `node.exe v22.23.1` 绝对路径，原任务/原 worktree 已继续，未新开 owner。Phase A 仅闭合“无定时任务”：抽取 manual/scheduler 共用的 BEGIN IMMEDIATE 幂等扫描服务，服务器启动后立即扫描并每 15 分钟扫描，支持严格 interval 配置、重入跳过、失败重试、stop 与脱敏日志；owned exact 仅 app、alerts route、两个 allowed-new service 与一个 allowed-new test。外部短信/邮件/企业微信/浏览器推送、多实例 leader election 明确保留为后续，不恢复旧 Alerts K3 大任务，也不得把 Phase A 冒充完整通知闭环。交付上限 `LOCAL_CANDIDATE / AWAITING_INDEPENDENT_R2 / NO_GO`。 |
-| LOC-032 | 登出后 token 失效 | `PENDING_LIVE_DEDUP` | d144 `/auth/logout` 仅返回成功，旧 token 在到期前仍可用。开工前现场核 #201 是否已含 token invalidation，若是则判 DUPLICATE；否则在 token version、黑名单、短寿命+refresh 三方案中先定权威方案。与 #128 均可能改 `auth.ts`，必须串行排期；登出前 token 可用、登出后同 token 所有受保护 API 稳定 401 |
+| LOC-032 | 登出后 token 失效 | `READY_DECIDED_SERIAL_AFTER_LOC022` | 去重已完成：旧 #201 固定 head `82bfead81ae84ee98dfca980c7993ee951e72fe2` 仅修改 FRS-01 文档，不含 token invalidation，故不是重复。权威方案选 **per-user token version**：access/refresh 均携带版本并在每次认证/刷新时与 DB 当前版本精确比较；认证后的 logout 原子递增版本，令该用户全部既有 access/refresh token 立即稳定 401；短寿命+rotation 不能满足立即失效，黑名单不作为首选。若未来需要“仅退出当前设备”，另立 session-id 表方案，不在本票暗改。与 LOC-022（旧 #128/#150）共享 `auth.ts`，必须串行；验收含登录前后基线、logout/refresh 并发、重复 logout、DB/事务失败零部分、旧 token 覆盖所有受保护 API、denial audit 脱敏及 migration/legacy 默认值 |
 | LOC-033 | 供应商 code 删除后复用合同 | `DEFERRED_PRD` | 从原 FRS 大票拆出：先决定软删 code 是否永久保留、可恢复复用还是经审计重分配；创建/恢复/删除在同一 canonical 规则下执行，禁止靠 SQLite unique/trim 偶然行为决定业务语义 |
 
 ### Mac/Claude C1–C10 去重归并结果
@@ -303,7 +304,7 @@
 | Mac 候选 | 本地归并 | 处理结论 |
 |---|---|---|
 | C1 guardrails 两处失真 | `GOV-001` | 新治理候选；固定对象已复现，不混入产品完成度 |
-| C2 PM 待拍索引脱节 | `GOV-002` | 新治理候选；必须先核 PR #190 评论与 live #148 |
+| C2 PM 待拍索引脱节 | `GOV-002` | 已以 PR #190 merge object 完成去重裁决；作为旧 #148 在新仓的唯一重建入口 |
 | C3 证据双轴机器化 | `LOC-027` | 与既有票重复，补入“首批 4 条已有水印路由”范围，不另开 |
 | C4 月结子账本工程入口 | `LOC-004` | 与既有 P0 重复；增强为 004A 规格冻结→004B 工程落地，不另开 |
 | C5 固定成本池真实金额+认账 | `LOC-026` | 与既有外部证据票重复；补 2026-08-31 节点和“非代码票”说明 |
@@ -311,9 +312,9 @@
 | C7 库位容量 | `LOC-029` | 新产品债，独立于 Equipment 容量/折旧域 |
 | C8 changeRate 假值 | `LOC-030` | 改写后保留；d144 已是 null/不可计算，旧“随机兜底”触发不成立，待定义真实跨期合同 |
 | C9 预警无主动触发 | `LOC-031` | 新窄范围产品债；不恢复已剔除的旧 Alerts 大任务 |
-| C10 登出不失效 | `LOC-032` | 新安全候选，但 live #201 去重和 #128 文件冲突未核前禁止开工 |
+| C10 登出不失效 | `LOC-032` | #201 已证为纯文档非重复；采用 per-user token version，排在 LOC-022 的 `auth.ts` owner 释放后串行实施 |
 
-**离线索引限制**：本次整合使用的 GitHub 索引冻结于 2026-07-16；账号恢复后，正式开票前必须现场检查完整 issue 列表、#192 正文、#201 正文及 #206 之后新增票。`PENDING_LIVE_DEDUP` 不得被解释为“确认无重复”。
+**旧仓索引限制与本次处置**：旧仓对新账号返回 404，不能继续依赖 live issue/PR API。LOC-032 已由 #201 固定 Git 对象证明为非重复；GOV-002 已由 PR #190 merge object 与冻结的旧 #148 索引完成单票重建。其他尚未迁入本地规格的旧仓 issue 仍不得凭编号摘要直接派工。
 
 ### 尚未导入本地规格的 live issue 索引（不可直接派工）
 
