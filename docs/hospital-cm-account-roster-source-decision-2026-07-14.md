@@ -1,335 +1,240 @@
-# hospital-cm 月度账户全集来源决策包（#182）
+# hospital-cm 医院全集来源决定与配置合同
 
-> **状态**：PM 决策草案；B0 仅接入空的 candidate schema，权威来源与真实数据尚未批准、尚未接线，也未形成真实就绪证据
+> **状态**：PM 已批准（PM_APPROVED）/ 尚未接入（APPROVED_NOT_CONNECTED）
 >
-> **风险档**：R2（收入、成本、历史数据与经营判断）
+> **风险档**：R2（医院范围、收入/成本覆盖与经营判断）
 >
-> **任务边界**：只裁决“月度账户全集及无病例号收入/成本应信什么”；不操作生产数据、不提交原始医院或患者资料、不修改 readiness、不宣称任何月份已可解锁。
+> **决定日期**：2026-07-16
 >
-> **现场基线**：`origin/master@9c573956e4ccdd5dcb71639db9ca3b6918ec40ad`；2026-07-14 只读取证。最新前移纳入成本域两层框架权威链修订、结算总额 Candidate 锚台账与康湾耗材腿 Candidate 核真报告；本文已按该状态重核。开放 PR/Issue 状态以文末现场链接为准。
+> **决定记录**：[Issue #182 权威 ASCII 决策评论](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/182#issuecomment-4987580797)
+>
+> **范围**：只冻结 hospital-cm “哪些医院必须出现”的产品合同，不代表目录配置、API、页面、月度范围发布、真实金额、D1-1、部署或生产验收已经完成。
+>
+> **动态事实边界**：本文修订取证基线为 `origin/master@388c3cd92ab0f22fa39c2732a37dc3776c722528`。SHA 只是修订时点；PR、checks 与运行态一律现场刷新。
 
-## 0. 给 PM 的一页结论
+## 0. 一页结论
 
-### 业务结果
+PM 已提供完整医院名单，不再等待外部“名单确认”，也不再要求对同一份名单做第二次 roster RATIFIED：
 
-当前系统**没有**可直接视为“某个月全部合作账户”的权威数据源。`/hospital-cm` 当前只枚举已经进入 `case_revenue` 的逐病例对账收入账户；LIS 或 NGS 数据虽可能创建 `partners` 或形成各自独立事实，也不会自动把该账户带进本页。纯代送、纯外送、远程会诊及其他没有病例号的账户，可能整家不出现。此时把未出现解释成 0，会高估组合覆盖率并误导经营判断。
+1. **版本化医院目录配置是账户全集的业务权威**。管理员在系统中维护医院稳定标识、编码、展示名、别名、是否纳入 hospital-cm，以及生效/失效月份。
+2. 配置只回答“这个服务月应出现谁”，**不回答金额是多少，也不证明收入、成本、LIS、关账或 finality 完整**。
+3. 没有金额证据的已配置医院仍必须出现，状态为 `NONE / UNMEASURED`，金额和比率字段返回 `null`，不得填 0、插值或用病例集合反推遗漏医院。
+4. 展示名变化不得撤销数值证据；纳入/退出或生效区间变化只影响对应服务月。稳定身份、编码或别名映射变化只重审受影响的映射证据，不得连带撤销无关月份或固定池以外的历史院级 CM。
+5. #186 的 B0 candidate 快照保留为历史候选输入，不能自动升级为目录配置、C1 范围或 readiness。
 
-### Owner 推荐
+因此，旧的“合同有效账户台账 ∪ 财务月度结算名册，再经独立 roster RATIFIED 才成为全集”政策被本决定替代。合同、结算单、LIS 与其他来源仍可作为**金额和活动证据**，但不再决定医院是否属于配置全集。
 
-建议把下面两类财务事实合成一个受控的“月度账户全集”权威源，且**必须由 PM 与具名财务数据 owner 批准后才生效**：
+## 1. 问题与边界
 
-1. **合同有效账户台账**：回答“这个月理论上有哪些仍在合作的账户”，包括当月零业务账户；
-2. **结算月度名册**：回答“这个月哪些账户有结算、调整、退款或待结算活动”。
+hospital-cm 当前从已有病例/收入数据开始聚合。只从事实表反推医院集合会漏掉：
 
-推荐全集是二者按稳定账户标识映射后的**并集**；冲突、未映射、缺版本或缺来源哈希时，整月不得标“名册完整”。不能只用病例表、`partners`、已导入对账单或某一批结算文件反推全集。
+- 当月零病例但仍在合作的医院；
+- 纯代送、会诊或只有财务记录而无病例号的医院；
+- 已配置但当月金额尚未接入的医院；
+- 因导入、映射或证据缺失暂时没有业务行的医院。
 
-### 当前安全默认
+产品必须先有独立于病例和金额事实的医院全集，再在每个医院上叠加收入、成本、LIS、关账与 finality 证据。
 
-在 PM 尚未批准权威源、财务 owner 尚未具名、真实来源尚未形成受控 source manifest 前：
+本文只决定全集控制面。以下事项仍不在本次完成范围：
 
-- 对任何后续消费者，当前业务状态等价于 `NOT_RATIFIED`；B0 本身不保存 authority/ratification 结论字段；
-- 不自动从 `partners` 或历史病例回填“全集”；
-- 不 seed 账户、不伪造活动、不写 `ready=true`；
-- B0 候选快照不接 `/health`、`/full-health` 或覆盖计算；现行 unknown 折 0 的缺口仍未修复，后续 nullable 增量必须改为 `null`，不得把本票说成已经解决；
-- `/full-health` 继续 403，完整组件不进入 DOM。
+- 不导入真实医院名单或真实财务文件到 Git；
+- 不修改前端、后端、数据库或 CI；
+- 不接通 hospital-cm 消费者；
+- 不把 B0 candidate 变成权威数据；
+- 不执行 D1-1、历史回填、#163 阶段 2、真实关账或 readiness 解锁；
+- 不声明部署、真实业务验收或生产可用。
 
-### 本票实际机器交付与后续目标的分界
+## 2. 当前实现事实
 
-本票第一独立增量 B0 只做 **candidate-source snapshot（单来源候选快照）**：保存“某个声称来源在某月提供了哪些账户键”的不可变候选版本。它不是合同源与结算源的最终并集，不判断来源权威性，不判断全集完整，不计算 `FULL/PARTIAL/NONE`，不接 readiness，也没有 HTTP/前端消费者。
+### 2.1 B0 只是候选快照
 
-合同有效账户台账与结算月度名册的多来源 manifest、跨来源合并、纳入/退出、控制总数、金额/币种守恒和 authoritative snapshot 都属于**后续合同目标**。本文 §3–§5 规定的是那个目标的待拍业务合同，不是 B0 已实现或已机器保证的能力。
+PR #186 只提供 candidate-only 的账户名册存储，没有消费者、端点或 readiness 写路径。其内容哈希不能冒充 C1 的月度范围指纹，也不能自动写入新的目录配置。
 
-### 唯一需要 PM 拍板
+### 2.2 现有 partner 主数据尚不满足本合同
 
-> **是否批准“合同有效账户台账 + 财务结算月度名册的受控并集”作为 hospital-cm 月度账户全集的权威源？**
+现有 partners 可提供稳定数据库身份，但尚未完整提供 hospital-cm 纳入开关、生效月份、失效月份和全局别名治理。因此本文批准的是**目标业务合同**，不是“当前 partners 已经具备完整配置能力”的声明。
 
-Owner 建议：**批准，但附带本文 §3–§6 的来源、月轴、版本、owner、守恒和失效条件。**若不批准，需要 PM/财务 owner 指定一个同样能覆盖“有合同但当月零病例/零结算”的替代源；在替代源获批前产品保持不可测。
+### 2.3 billing 配置不是医院身份权威
 
-## 1. 现场现状：系统现在实际看见什么
+现有 partner_configs 服务于对账/计费解析，名称和编码与计费规则版本耦合。医院身份与 hospital-cm 范围不应依赖计费模板版本，否则只改展示名也可能错误触发金额证据失效。
 
-### 1.1 静态合作方主数据不是月度全集
+后续实现应把医院目录控制面与 billing 配置分开；可以复用管理页面壳层，但不能共用会改变计费解析语义的版本指纹。
 
-`partners` 只有账户标识、合同号、服务范围、当前状态等静态字段，没有合同生效/终止日期、月份、合作形态、当月活动、金额完整度、来源版本或 source hash（`后端代码/server/src/database/DatabaseManager.ts:397-413`）。
+### 2.4 C1 是唯一月度范围底座
 
-而且 `partners` 不只来自财务合同：LIS/订单等导入会按名称查找，不存在就自动新建（`后端代码/server/src/utils/partner-upsert.ts:1-3,43-52`）。因此它适合作为内部稳定 ID 目录，不足以证明“本月全集”。
+PR #187 已提供 hospital_cm_month_scope_snapshots。后续目录配置桥接只能向这套 C1 范围机制发布月度稳定医院集合，禁止再建第二套 scope 表、hash 或失效状态机。
 
-### 1.2 已版本化的逐院配置也不是月度全集
+PR #203 已把院级 `cmValueProfile` 与固定池 `portfolioDenominatorProfile` 的 currentness/失效域隔离。固定池配置变化不得反向撤销院级历史 CM；本合同继续沿用这条边界。
 
-`partner_configs` 有 `partner_id + version` 和不可变版本思路，但没有 `service_month`、合同有效期、当月活动或“该月全量已枚举”证据（`后端代码/server/src/database/DatabaseManager.ts:785-799`）。它适合保存解析/分类政策，不适合回答哪些账户本月应在分母里。
+## 3. 医院目录配置合同
 
-### 1.3 月度对账状态只覆盖已经进入工作流的院月
+### 3.1 最小字段
 
-`reconcile_hospital_months` 有 `partner_id + service_month`、对账与关账状态，但它是计算/复核流程的状态行；没有记录“来源名册共有多少账户、哪些账户尚未进入流程”，也没有 source hash（`后端代码/server/src/database/DatabaseManager.ts:1549-1579`）。拿它当全集会把未进入工作流的账户继续漏掉。
+每个医院目录项至少包含：
 
-### 1.4 无病例号收入在现行写入点被丢掉
-
-现行 `/statement-import/commit` 明确只支持逐 case 模板；无病理号外送行“跳过并计数”（`后端代码/server/src/routes/statement-import-v1.1.ts:120-125`）。循环中缺病理号即 `continue`；若整份都无病理号则拒绝落库（同文件 `:181-191`）。这些金额没有进入 hospital-cm 可消费的无病例号收入账本。
-
-### 1.5 hospital-cm 的账户集合从病例收入开始形成
-
-hospital-cm 当前从 `case_revenue` 读取符合条件的逐病例收入，再按这些病例出现的 `partner_id` 上卷；没有病例收入行的账户不会被枚举（`后端代码/server/src/utils/hospital-cm-service.ts:128-148,225-246`）。
-
-组合层又把无法转成数字的 `unmeasuredRevenue` 当 0 累加，并在分母不存在时把占比返回 0（`后端代码/server/src/utils/portfolio-health.ts:222-262`）。因此“真 0”和“系统没量到”当前无法可靠区分。
-
-## 2. 候选源裁决
-
-> `KEEP` 只表示“保留为候选或证据输入”，**不表示已经获批为权威源**。只有 PM 拍板、具名 owner 认账、source manifest 与机器守恒通过后，才能进入 `RATIFIED`。
-
-| 候选 | 裁决 | 可承担的角色 | 不能承担的角色 | 依据与风险 |
-|---|---|---|---|---|
-| 财务合同有效账户台账 + 结算月度名册 | **KEEP：推荐权威候选，待批准** | 枚举当月合同内账户、零活动账户、结算/调整活动；形成外部于病例管道的完整分母 | 在缺 owner、版本、hash、有效期或控制总数时直接解锁 | 这是当前唯一能同时回答“应有谁”和“本月谁有活动”的业务来源方向；真实系统、导出方式与可得性仍未核实 |
-| `partners` | **REJECT：不可作全集** | 稳定内部账户 ID、名称映射、当前主数据 | 月度完整性、合同有效期、当月活动 | 静态字段不含月度证据，且可被 LIS/订单导入自动创建（见 §1.1） |
-| `partner_configs` | **REJECT：不可作全集** | 逐院解析、分类和口径版本 | 当月账户范围 | 有版本但无月度范围或合同有效期（见 §1.2） |
-| `reconcile_hospital_months` | **REJECT：不可作全集** | 对已经进入流程的院月提供复核/关账信号 | 枚举未进入流程的账户 | 工作流结果不能证明工作流外没有账户（见 §1.3） |
-| `case_revenue` 与现行 statement commit | **REJECT：不可作全集；KEEP 为逐病例金额证据** | 有病例号收入、现行 lab/out/diagnosis 拆分证据 | 无病例号账户、零活动账户、全集 | 无病例号行被跳过；hospital-cm 从该表起算（见 §1.4–§1.5） |
-| `docs/dev/statement-import-schema-v1.md` 中的批次、聚合收入与 OUT 台账设计 | **KEEP：证据底座候选，不是现状** | source hash、非逐病例收入、OUT 金额的可追溯设计参考 | 直接证明活代码已接通或名册完整 | 文档已设计 `statement_import_batches`、`partner_month_revenue_ledger`、`out_settlement_ledger`（`:9-41,180-238`），但这些表当前未出现在活代码 DB initializer；不得把设计稿说成已可用 |
-| `ngs_orders` | **KEEP：仅限 NGS 外购转销子集** | 已核 NGS 售价、外包协议成本、账户、订单月；缺成本时可保持未核 | 全部纯外送、物流、专家费、远程会诊或月度全集 | 活代码明确它是独立 NGS 渠道（`后端代码/server/src/routes/ngs-v1.1.ts:1-7`）；缺外包成本会标未核而不进正常毛利（`:40-56,96-98`），但 schema 没有通用外部服务类型、币种、source hash 或财务应付凭证 |
-| 已合并 PR #170 的结算总额候选台账 | **KEEP：金额与对账方法输入** | 为调查范围内的结算文件提供控制总额、期间和候选锚方法 | 月度合同全集、无病例号台账或已受控权威源 | master 报告登记 61 条 Candidate Anchor + 6 条例外；原件仍待 Issue #181 受控归档，不能升级为权威 A。它调查的是文件包内对象，不证明包外没有账户 |
-| 已合并 PR #169 的成本核真报告 | **REJECT：不属于本项外部成本源** | 内部 IHC 耗材价格校准线索；其报告同时确认当前实际暴露仍为 UNMEASURED | 外部实验室应付、物流、专家/平台费 | master 报告边界是内部 IHC 一抗耗材腿，且证据链仍为 Candidate；不能迁移为纯外送/会诊变量成本 |
-| Issue #163 / PR #168 | **REJECT：不属于名册源** | 保护病例身份与跨月数据，不静默覆盖 | 枚举无病例号账户或提供外部成本 | 它们影响逐病例期间正确性，但不会补出工作流外账户 |
-
-## 3. 后续推荐权威源的证据合同（未批准草案）
-
-> **重要分界**：本节是 B0 之后的 authoritative union 目标。B0 只保存单来源候选快照及证据引用，不组合多个 source manifests，也不产生本节任何完整性、金额或权威结论。
-
-### 3.1 来源级字段
-
-每次名册导入必须先有不可变 source manifest，最少包含：
-
-| 字段 | 规则 |
+| 字段 | 合同 |
 |---|---|
-| `sourceId` / `sourceType` | 稳定 ID；类型限定为合同台账、结算月度名册或获批替代源 |
-| `sourceSystem` / `exportMethod` | 记名来源系统与可复现导出方式，不写个人下载路径 |
-| `serviceMonth` / `sourcePeriod` / `monthBasis` | 目标服务月、原始来源期间、映射依据分别保存，禁止静默混用 |
-| `sourceVersion` / `sourceHash` | 原件或受控导出的稳定版本与 SHA-256；同 hash 重导幂等 |
-| `schemaVersion` / `policyVersion` | 字段解释与纳入/退出政策版本；变化触发重审 |
-| `generatedAt` / `receivedAt` | 来源生成时间与受控接收时间 |
-| `custodian` / `businessOwner` | 数据保管人和对完整性认账的财务 owner，必须具名 |
-| `controlledStorageRef` | 非 Git 的受控记录 ID；不得提交原始财务或患者资料 |
-| `piiClass` / `deidentification` | 最小字段、PII 等级与脱敏方式；D2 不需要患者姓名/证件号 |
-| `declaredAccountCount` / `declaredControlTotal` | 来源声明账户数；金额源适用时再给控制总额和币种 |
-| `ratificationStatus` | `CANDIDATE / RATIFIED / REVOKED`；只有有权 owner 可认账，代码不能自行升格 |
-| `ratifiedBy` / `ratifiedAt` / `revocationReason` | 认账或撤销留痕；值/版本变化后旧认账失效 |
+| stablePartnerId | 不可变内部身份；**必须等于现有 partners.id**，不再定义第二套 ID |
+| accountCode | 稳定、唯一、可审计的业务编码；不得以展示名充当身份 |
+| canonicalDisplayName | 当前展示名；只影响展示 |
+| aliases | 受控别名集合；用于严格映射，不做模糊猜测 |
+| hospitalCmIncluded | 是否属于 hospital-cm 医院全集 |
+| effectiveFromMonth | 首个纳入的 serviceMonth，含边界；hospitalCmIncluded=true 时必填 |
+| effectiveToMonth | 最后纳入的 serviceMonth，含边界；空表示持续有效 |
+| configRevision | 配置变更序号/版本 |
+| changedBy / changedAt / reasonCode | 审计留痕 |
 
-### 3.2 月度账户记录
+真实医院名称属于运行态业务数据，不写入本公开仓库。仓库只保存 schema、测试假数据和合同。
 
-| 字段 | 业务含义 |
-|---|---|
-| `serviceMonth` | hospital-cm 唯一目标月轴，格式 `YYYY-MM` |
-| `accountId` / `externalAccountKey` | 内部稳定账户 ID 与来源稳定键；未映射行不得丢弃，整月保持不完整 |
-| `cooperationForm` | 建议封闭值：全流程、代送加做、纯代阅片、纯外送、远程会诊；新增值须版本化 |
-| `contractEffectiveFrom` / `contractEffectiveTo` | 合同有效范围；边界日规则随政策版本保存 |
-| `activityStatus` / `activityEvidence` | 当月有活动、明确零活动、未知及其证据；“没有导入数据”不等于零活动 |
-| `inclusionReason` / `exclusionReason` | 纳入或退出的机器原因；退出必须有来源证据，不能靠本月没病例 |
-| `revenueCompleteness` / `costCompleteness` | `FULL / PARTIAL / NONE`，并带缺失字段与证据引用 |
-| `currency` | 金额币种；跨币种不得直接合并 |
-| `sourceRowFingerprint` | 规范化来源行指纹，用于重复、篡改与撤销检测 |
+### 3.2 默认值
 
-### 3.3 纳入与退出规则
+- 由 PM/管理员明确录入或确认的医院才允许 hospitalCmIncluded=true。
+- hospitalCmIncluded=true 必须同时填写 effectiveFromMonth；若只知道当前名单而不知道历史开始月，安全默认是配置启用月，更早月份保持 scope 缺失/不完整与 REVIEW_REQUIRED，禁止推成“从无限历史起有效”。
+- 历史 partner、LIS 自动导入产生的 partner、病例导入临时创建的 partner，一律默认 hospitalCmIncluded=false。
+- 未配置项不能因为出现病例、结算行或相似名称而自动加入全集。
+- 删除业务事实不能自动把医院移出全集；退出必须是审计化配置动作并带生效月份。
 
-推荐规则如下，随本次 PM 拍板一并批准或退回：
+### 3.3 映射纪律
 
-1. 合同在目标 `serviceMonth` 任一天有效的账户进入候选全集，即使当月病例数和结算金额都是 0；
-2. 结算名册出现收入、成本、退款、冲销、补结算或待结算活动的账户也进入全集；
-3. 二者取并集后必须全部映射到稳定账户 ID；一条未映射或重复映射都使整月 `rosterComplete=false`；
-4. 账户只有在合同终止早于目标月、且结算名册明确无跨期调整/尾款时才可退出；不能因“系统没收到文件”退出；
-5. 迟到文件、合同追溯变更、账户合并拆分、来源 hash 或政策版本变化时产生**新版本**，不得原地改旧快照；
-6. 新版本必须触发 C1 的范围快照 hash 变化与旧周期证据失效，继续 fail-closed。
+- 先用 stablePartnerId；外部行只能通过已批准 accountCode 或 aliases 严格映射。
+- 未命中返回未映射并进入待处理，不做模糊匹配，不自动创建权威医院。
+- 一个规范化编码/别名在同一有效期内只能指向一个稳定身份。
+- 合并、拆分或改绑稳定身份必须作为高风险映射变更处理，保留旧绑定与受影响月份。
 
-### 3.4 月轴规则
+### 3.4 月度枚举
 
-hospital-cm 的经营月轴继续使用 `case_revenue.service_month` 的权责发生口径。合同台账按有效期映射到 `serviceMonth`；结算名册保留原始 `settlementMonth`，只有存在获批、可追溯的映射依据时才能归到 `serviceMonth`。
+对 serviceMonth=M，医院全集为：
 
-如果来源只能证明结算月、不能证明服务月：保留原始金额与来源，但该账户月最多为 `PARTIAL`，不得为了凑齐目标月而猜测或平移。
+1. hospitalCmIncluded=true；
+2. effectiveFromMonth 已填写且不晚于 M；
+3. effectiveToMonth 为空或不早于 M；
+4. 以 stablePartnerId 去重并稳定排序。
 
-### 3.5 版本与 hash
+病例数、收入、成本、结算状态和是否存在对账文件都不得改变这个集合。
 
-建议 `rosterHash` 对以下规范化内容计算 SHA-256：
+## 4. 版本、hash 与失效域
 
-```text
-schemaVersion
-+ policyVersion
-+ serviceMonth
-+ 排序后的(sourceType, sourceVersion, sourceHash)
-+ 排序后的(accountId, cooperationForm, activityStatus,
-             contractEffectiveFrom, contractEffectiveTo,
-             revenueCompleteness, costCompleteness, sourceRowFingerprint)
-```
+### 4.1 现有 C1 字段与映射指纹必须分开
 
-任一组成项变化即生成新 `rosterVersion/rosterHash`；旧 `RATIFIED`、覆盖派生与 C1 周期证据自动失效。禁止提供可直接写 `rosterComplete=true` 或 `ready=true` 的手工字段。
+1. **配置审计版本**：记录每次管理员保存，便于追责；展示名修改也可以产生新 configRevision。
+2. **现有 C1 rosterSourceHash**：目录桥接对 roster recipe version、serviceMonth 和稳定排序后的 `partners.id` 成员投影计算 SHA-256。它只代表“该月应出现谁”，不含 display name、accountCode/alias、合作形态、活动或金额完整度。
+3. **现有 C1 scopeHash**：继续复用活代码唯一公式 `sha256({ serviceMonth, accounts, rosterSourceHash })`，其中 accounts 就是同一排序后的 `partners.id`。禁止新建 `rosterScopeHash` 或第二套 scope 模型。
+4. **D1 映射证据指纹 mappingEvidenceHash**：服务器对实际用于当前来源归属的稳定身份、规范化 accountCode/alias 绑定及有效期计算。它只约束受影响来源行，不进入 C1 rosterSourceHash/scopeHash。
 
-### 3.6 owner 与职责
+这是**目录桥接 PR 的 target contract**，不是 current C1 注释已经更新的声明：current master 的 C1 注释仍描述旧的多源名册内容 hash，且保存任一新 scope event（即使内容相同）都会因 eventNumber 变化严格失效旧 run。桥接实现必须先比较 current complete scope 的 accounts 与 rosterSourceHash；投影相同就不得调用 `saveMonthScopeSnapshot`。该 PR 还必须同步更新 C1 注释，并**保留**“raw C1 相同内容的新 event 仍严格失效”的底层测试，同时新增“桥接层相同投影不调用 save”的 no-op 测试；完成前不得启动 D1-1。
 
-| 角色 | 必须负责 | 当前状态 |
-|---|---|---|
-| PM / 业务政策 owner | 批准权威源、纳入退出、月轴和覆盖状态含义 | **待本票拍板** |
-| 财务合同/结算数据 owner | 对来源完整性、版本、控制总数和截止状态认账 | **待具名** |
-| 纯代送/会诊业务 owner | 确认合作形态及收入/成本事实源 | **待具名** |
-| 数据保管人 | 受控存储、hash、脱敏和重取 | **待具名** |
-| hospital-cm 实现 owner | 只实现已批准合同；不得自封来源权威 | 按 PR 唯一归属 |
-| 独立 reviewer | 对真实样本、守恒、降级和隐私做 L1 复核 | **待具名** |
+禁止把整个 configRevision 直接塞进 rosterSourceHash、scopeHash 或院级 CM runKey；否则只改展示名也会错误撤销历史数值。
 
-无具名业务 owner 的来源只能是 `CANDIDATE`，不能 `RATIFIED`。
+### 4.2 变化矩阵
 
-## 4. 后续 authoritative union 的守恒与覆盖状态
-
-> 本节全部是后续派生合同；B0 不导入控制总数、不保存金额/币种，也不计算以下守恒或覆盖状态。
-
-### 4.1 账户集合守恒
-
-对每个 `serviceMonth + rosterVersion` 必须同时成立：
-
-```text
-来源规范化账户数
-= 已映射账户数 + 显式拒收账户数
-
-有效全集
-= FULL 集合 ∪ PARTIAL 集合 ∪ NONE 集合
-
-FULL、PARTIAL、NONE 两两互斥
-```
-
-显式拒收必须有机器原因；存在未映射、重复映射、来源账户数不闭合或无批准理由的拒收时，`rosterComplete=false`。
-
-### 4.2 金额守恒
-
-对每个账户月、来源批次和币种，适用时必须能复算：
-
-```text
-来源声明结算总额
-= 逐病例结算金额
- + 无病例号结算金额
- + 显式调整/退款/冲销
- + 未归类金额
-```
-
-`未归类金额 != 0`、期间/币种冲突或声明总额不闭合时，不得标 `FULL`。退款和冲销保留符号，不能 `abs()` 或折成 0。
-
-### 4.3 覆盖派生
-
-- `FULL`：账户在权威名册中；目标月收入完整；按已批准口径要求的可避免变量成本完整，或已由有权业务 owner 明确认定为固定成本且有版本证据；
-- `PARTIAL`：账户已在册且有部分可靠事实，但收入、成本、期间、币种或分类仍缺一项；
-- `NONE`：账户已在册，但没有足够的可靠收入/成本事实可测；
-- 未在权威名册内不等于 `NONE`，而是**名册本身未完成**。
-
-只有权威名册完整、金额完整、已测/未测集合互斥、同期同币种、所有纳入收入非负且分母大于 0 时，才允许展示可证明下界；任一条件失败，`unmeasuredRevenueShare=null`。这一红线延续 readiness 闭环文档（`docs/hospital-cm-readiness-closure-2026-07-12.md:119-128`）。
-
-## 5. 纯代送/会诊成本来源调查与采集缺口
-
-### 5.1 当前能保留的窄来源
-
-`ngs_orders` 可作为 **NGS 外购转销**的窄来源候选：它记录账户、订单月、售价、外包成本，并用 `cost_confirmed` 区分已核/未核（`后端代码/server/src/database/DatabaseManager.ts:748-783,1697-1698`）。这证明系统已有“外部直接成本缺失时不按 0 算”的可复用思想，但它不能扩张解释为所有纯外送。
-
-### 5.2 当前没有可靠活代码来源的成本
-
-| 成本类别 | 当前结论 | 需要的业务来源 | 无来源时的产品状态 |
+| 变化 | C1 rosterSourceHash / scopeHash | 映射证据 | 院级数值/历史状态 |
 |---|---|---|---|
-| 非 NGS 外部实验室应付 | 未发现通用、可追溯的活代码事实表 | 财务应付/供应商结算明细：外部服务类型、账户、服务月、金额、币种、发票/结算引用、来源 hash | `PARTIAL/NONE`，成本 `null` |
-| 物流可变成本 | 未发现能按账户月归属的承运结算事实 | 承运商月账单或运单台账：账户、服务月、运单、计费规则、退款、币种、控制总额 | `PARTIAL/NONE`，不得用平均运费估值 |
-| 会诊专家费/平台费 | 未发现通用事实表 | 专家/平台结算或应付台账：账户、服务月、费用类型、固定/按次属性、金额、凭证、hash | 未获业务分类和金额前保持 `UNMEASURED` |
-| 已批准的固定属性费用 | 当前没有 D2 专用认账 | 由业务 owner 对具体费用版本作“固定/不可避免”认账，并绑定证据与重审触发 | 未认账前不得排除于变量成本 |
+| 只改 canonicalDisplayName | 不变 | 不变 | 不撤销，只刷新展示 |
+| 只改不参与映射的展示字段 | 不变 | 不变 | 不撤销 |
+| accountCode/alias 绑定变化 | 成员不变时不变 | 只重审实际受影响的来源与月份 | 仅当来源行归属或数值输入因此变化时产生新 run |
+| hospitalCmIncluded 变化 | 受影响月份变化 | 受影响月份重审 | 只撤销受影响月份的 scope/readiness/run |
+| effectiveFrom/To 变化 | 受影响月份变化 | 受影响月份重审 | 不影响区间外历史月 |
+| stablePartnerId 合并/拆分/改绑 | 受影响月份变化 | 受影响映射必须重审 | 只重算可证明受影响的月份 |
+| 固定池金额/版本/认账变化 | 不变 | 不变 | 只影响组合分母和 coverage，不撤销院级 CM |
 
-内部库存出库/ABC 与 PR #169 的内部耗材校准不能替代上述外部应付事实；两者即使金额真实，也回答的是不同成本对象。
+相同 serviceMonth、相同 complete 状态、相同排序成员集合和相同 rosterSourceHash 必须 no-op，桥接不得调用 C1 保存函数；因为 current C1 会把任何新 eventNumber 视为 `SCOPE_SNAPSHOT_CHANGED`。不能只因保存时间或无关配置 revision 让旧 run 失效。
 
-### 5.3 最小业务采集方案
+### 4.3 runKey 边界
 
-若财务系统暂时不能直接导出，应由财务/业务 owner 提供受控月度模板，至少收集：
+D1 后续若计算历史状态，服务器生成的院级 runKey 在本合同关心的范围/失效维度上至少绑定以下输入；完整列表以 D1-0 §6.1 为准：
 
-- 稳定账户键、目标服务月、原始结算月、合作形态；
-- 外部服务类型、供应商/专家/平台的受控主体键；
-- 收入、外部应付、物流、专家/平台费、调整/退款/冲销、币种；
-- 原始凭证/批次引用、source hash、导出时间、保管人；
-- 金额完整度、期间映射依据、缺失原因和预计补齐日；
-- 来源控制总额与账户数。
+- C1 当前 scopeHash（由同月 accounts 与 rosterSourceHash 唯一派生）；
+- 已绑定来源 manifest/hash 与实际使用的 mappingEvidenceHash；
+- 当前 close/reopen revision 和真实 finality；
+- 当时可恢复的 cmValueProfile；
+- 公式/状态配方版本；
+- 受控 validation run/check identity 与版本。
 
-频率建议为每月关账后一次；迟到更正走新版本，不覆盖旧版。模板不得包含患者姓名、证件号、联系方式等 D2 不需要的字段。
+display name、固定池配置、页面排序和无关配置版本不得进入院级 runKey。固定池继续使用独立 portfolioDenominatorRunKey；它可以依赖 cmValueRunKey/院级聚合输出，反向依赖被禁止。固定池变化只失效组合 run、coverage 与组合 readiness，不得撤销院级 CM。
 
-## 6. 机器接线前置与最小安全增量
+## 5. 金额、覆盖与诚实不可测
 
-### 6.1 权威来源适配器开工前必须满足
+配置成功只代表该医院应该出现在 serviceMonth 的结果集合。对每个已配置医院，分别判断收入、成本和 LIS/病例覆盖：
 
-1. PM 对本文唯一决策明确批准；
-2. 财务合同/结算 owner、业务 owner、保管人与 reviewer 具名；
-3. 至少一个脱敏真实月份形成受控 source manifest、稳定 hash 和账户控制数；
-4. `serviceMonth` 映射、纳入退出、合作形态与冲突处理已批准；
-5. 稳定账户键映射规则可复现，未映射时能 fail-closed；
-6. C1 的范围快照 `rosterVersion/rosterHash` 消费与失效合同已冻结；
-7. 原始数据不进 Git，生产迁移另走 operator 授权。
-
-### 6.2 本票 B0：candidate-source snapshot 的准确边界
-
-B0 可在权威源尚未拍板时独立验收，因为它只保存候选、绝不派生经营结论：
-
-- 单次提交只代表**一个声称来源**的一个月度候选快照；保存 `serviceMonth`、`claimedSourceKind`、来源版本、证据引用/hash、变更原因和候选账户行；
-- 候选账户行只保存安全账户键、可空 `partnerId`、来源合作原始代码和来源活动原始代码；B0 不把这些原始代码裁成获批业务枚举，也不保存医院名称、金额、币种、控制总数、收入/成本完整度或纳入/退出结论；
-- 服务端派生版本号、逐行 hash 与内容 hash；版本链按 `serviceMonth + claimedSourceKind` 隔离，同一声称来源种类的同月修订才追加新版本，不同来源种类各自从 v1 起步且互不取代；幂等键绑定稳定操作者 ID 与规范化内容、证据引用和变更理由，显示名变化不制造冲突；
-- 空库不 seed 名册；调用者提交 `authority/complete/measured/ready`、服务端版本/hash 或未批准字段时拒绝；
-- 同一候选内的重复账户键、非法月份/hash、格式不安全的来源代码和不安全标识被拒绝；版本、行、幂等记录与成本审计同一事务，失败不留半写；
-- 审计只写候选版本元数据，不复制逐行账户键；读取候选与历史版本的查询数不随账户行数增长；
-- fixture 只证明上述候选控制面行为，不冒充真实来源、完整名册、权威并集或解锁证据。
-
-B0 **明确不保证**：多 source manifest 组合、合同+结算并集、来源账户控制数闭合、导入拒收账、未映射处理、服务月映射、跨币种/金额守恒、`FULL/PARTIAL/NONE`、C1 失效接线、readiness、API 或 UI。它不能标记 #182 完成；这些能力按本文 §3–§6.1 在后续独立 PR 实现。
-
-## 7. 节点、owner 与完成证据
-
-原定日期不在本决策包内自行调整：
-
-| 节点 | owner | 可验收结果 | 机器/业务证据 | 当前状态 |
-|---|---|---|---|---|
-| 权威源方向拍板 | PM + 财务数据 owner | 本文唯一决策获明确批准或指定替代源 | 具名决定、版本、重审触发 | **待拍**；机器接线前置 |
-| 2026-09-30 来源/名册可得性盘点 | 财务合同/结算 owner + 数据保管人 | 来源系统、导出方法、字段、控制数、受控存储与脱敏样本可复查 | source manifest、hash、字段映射、owner、预计日期；缺失则自动 at-risk | **未完成** |
-| B0 第一独立 PR | hospital-cm 实现 owner | 单来源 candidate snapshot 可不可变留证；无 authority/complete/measured/ready 结论、无消费者 | 隔离 DB schema、append-only/幂等/事务负例、字段白名单、审计脱敏、固定查询数；相关既有 golden 零回归 | 条件允许即可验收，但不代表真实数据、权威 union 或 readiness 已接通 |
-| 2026-10-31 诚实覆盖验收 | 财务/业务 owner + 实现 owner + 独立 reviewer | 至少一个脱敏真实月：全集可枚举；可测才算；不可测完整披露 | 真实 manifest、集合/金额守恒、手核、L1、运营签收；数据不足则验收 `UNMEASURED + 采集方案` | **依赖真实数据** |
-
-若 2026-09-30 仍无具名 owner、受控样本或导出承诺，应生成逾期/后移告警并由 PM 选择：继续诚实不可测，或调整后续目标；实现 owner 不自行改日期。
-
-## 8. 主要风险与止损
-
-| 风险 | 业务后果 | 止损 |
+| coverageStatus | 含义 | 金额展示 |
 |---|---|---|
-| 用 `partners` 或病例管道反推全集 | 无病例号/零活动账户消失，覆盖率虚高 | 明确 REJECT；无 `RATIFIED` 外部源即 unavailable |
-| 结算月静默当服务月 | 收入成本错期，院月判断失真 | 双月字段 + `monthBasis`；无批准映射最多 PARTIAL |
-| 把某批结算文件当“全部账户” | 文件包外账户被认为不存在 | 合同有效账户与结算名册并集；来源账户数守恒 |
-| 未知成本按 0 | 纯外送/会诊贡献被高估 | cost completeness 非 FULL 时数值为 null |
-| 退款/冲销取绝对值或丢符号 | 分母和下界错误 | 保留符号；存在负收入时下界 null |
-| 账户别名重复/误合并 | 双计或串院 | 稳定外部键、映射版本、未映射阻断、禁止按模糊名称自动合并 |
-| Candidate 被文案升级成权威 | 未受控数据进入经营判断 | 显式 `CANDIDATE/RATIFIED/REVOKED`；认账和值版本绑定 |
-| 原始财务/患者资料进入 Git | 隐私与商业风险 | 受控存储引用 + 最小字段 + hash；原件不入仓 |
+| FULL | 该医院该月所需金额证据完整且通过当前门 | 可按既有 CM 合同计算 |
+| PARTIAL | 只有部分金额或部分业务形态可测 | 只展示已知分项；完整金额/率为 null |
+| NONE / UNMEASURED | 没有可用或可验证金额证据 | 金额、率和依赖这些值的占比全部为 null |
 
-回滚原则：停止消费新来源，保留 append-only 证据和旧版本；所有受影响账户回到 `PARTIAL/NONE`，比例为 `null`，页面继续校准态。不得通过回滚把未知重新折成 0。
+硬规则：
 
-## 9. 假设、反向核查与诚实边界
+- 0 只表示“有证据证明数值就是 0”；缺证据永远是 null。
+- 不得对空明细调用会生成数值 0 的汇总函数来伪造医院结果。
+- 未测收入占比只有在分子、分母均完整时才可计算；否则返回 null。
+- 配置医院没有病例时仍必须出现；未配置医院即使有业务行也不能静默进入全集，应进入映射/配置异常队列。
+- 配置不替代财务、LIS、成本、关账、finality 或独立 reviewer 的证据门。
 
-### 假设台账
+## 6. 权限、审计与撤销
 
-| 假设 | 级别 | 当前处理 |
+管理员保存医院目录配置即是本政策下的有效业务动作，不再附加独立 roster RATIFIED。运行时仍必须：
+
+- 由具备明确 capability 的管理员修改；
+- 记录变更前后值、actor、time、reasonCode 和受影响月份；
+- 对高风险身份合并/拆分提供独立复核或 maker-checker；
+- 支持前瞻生效和有留痕的更正，禁止静默覆盖历史；
+- 权限撤销或配置回滚后重新计算实际受影响投影。
+
+这项简化只适用于“名单成员资格”。财务金额、成本、拆分口径、固定池、真实 finality 和首周期验收仍按各自具名 owner、manifest/hash、认账与独立复核合同执行。
+
+## 7. B0 与旧来源政策的处置
+
+| 对象 | 新定位 | 禁止 |
 |---|---|---|
-| 财务确有可导出的合同有效账户台账与结算月度名册 | **方向级，未核实** | 不带标记接线；待 PM/财务 owner 证明 |
-| 两类源能用稳定账户键关联 | **方向级，未核实** | 无稳定键即阻断，不按名称猜 |
-| 合同+结算并集能覆盖零活动与迟到调整 | **方向级，待拍** | 本文唯一 PM 决策 |
-| B0 表名、索引与候选快照内部形态 | 细节级 | 可在第一 PR 内按 append-only、candidate-only 原则选择；B0 不提供 API |
+| #186 B0 candidate 快照 | 历史候选、迁移核对或人工录入参考 | 自动开启 included、自动发布 C1 scope、充当 readiness |
+| 合同有效账户台账 | 可作为管理员维护配置的核对材料；也可提供活动/有效期证据 | 自行覆盖配置全集 |
+| 财务月度结算名册 | 金额、结算活动与控制总数证据 | 把文件内医院当作全量全集 |
+| 病例/LIS 集合 | 病例事实和工作量证据 | 反推医院全集 |
+| partner_configs | 计费/解析配置 | 充当稳定身份和 hospital-cm 纳入权威 |
 
-### 反向核查结果
+旧政策中的真实来源 manifest、金额/币种守恒、owner 和 finality 要求没有被删除；它们从“名单是否完整”的前置门移动到各自金额/证据链。
 
-- 尝试以 `partners` 为全集：被“导入可自动建 partner + 无月度有效期”反证；
-- 尝试以 `reconcile_hospital_months` 为全集：被“只覆盖已进入工作流院月”反证；
-- 尝试以 statement/已合并 PR #170 为全集：被“无病例号写入缺口 + 文件包边界 + Candidate 受控源缺口”反证；
-- 尝试以 `ngs_orders` 为纯外送统一成本：被“NGS 专用、字段与来源范围不足”反证；
-- 尝试用内部库存/耗材成本代替外部应付：成本对象不同，拒绝。
+## 8. 分步实现边界
 
-### 尚未核实
+后续必须拆成小 PR，不在本文件修订中顺带实现：
 
-本轮没有访问生产财务系统、合同台账、结算名册、应付系统、物流账单或专家平台；因此未核实真实文件是否存在、覆盖多少账户、由谁保管、何时可导出。本文只完成了**来源候选裁决与机器接线前置草案**，没有完成数据接入、真实月份验收、PM 批准、正式技术审批、合并或发布。
+1. **目录控制面**：partner 稳定身份、code/aliases、included、生效区间、审计 API/UI 与严格映射；legacy/自动创建默认排除。
+2. **C1 桥接**：按 serviceMonth 发布稳定成员集合到既有 C1 scope；相同投影 no-op；名称变化不发布新 scope。
+3. **nullable 覆盖合同**：后端返回可区分的 UNMEASURED 行，金额/率 nullable；总计不折 0。
+4. **展示与导出**：表格、排序、趋势和 CSV 保持 null 语义。
+5. **真实证据验收**：受控金额/LIS/成本/finality、具名 owner/reviewer 和真实月份。
 
-## 10. 现场链接
+每一步都需独立 CLAIM、owned/excluded、测试和固定 SHA 复核。任何一步都不能把 mockup、approved contract、merged code 或 production release 混称为“已完成”。
 
-- 实施票：[#182](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/182)
-- readiness 父级：[#156](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/156)
-- C1 范围快照：[#183](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/183)
-- 结算总额候选台账（已合并、仍为 Candidate）：[PR #170](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/170)；Candidate → 权威 A 受控归档闸：[Issue #181](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/181)
-- 成本核真报告（已合并、仍为 Candidate 诊断）：[PR #169](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/169)
-- 病例跨月修复：[Issue #163](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/163) / [PR #168](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/168)
+## 9. D1-1 准入
 
-## PM 大白话
+本决定**不授权启动 D1-1**。D1-1 至少仍需：
 
-现在系统里的“医院名单”，其实只是“已有逐病例收入进系统的医院名单”，不是“这个月所有合作医院名单”。这会漏掉纯代送、纯外送和会诊账户。Owner 建议以后以财务合同台账管“这个月本来应该有谁”，以月度结算名册管“这个月谁发生了钱或调整”，两张表合起来才算全集；但这件事现在还没获得你的正式批准，也没拿到真实来源，所以正确产品语义必须是“不知道”，不能显示成 0。现行接口还没有完全做到这一点，B0 也不修改接口；nullable 后续增量完成前，不能宣称这个缺口已经解决。你只需拍一个决定：是否按这个组合源推进；批准后，团队才能安全接真实名册并验证一个脱敏月份。
+1. 本目录合同已由运行时代码实现，并向 C1 发布至少一个真实配置月份的 current scope；
+2. #183 剩余 C2/C3/C4 门按实际依赖完成，真实 finality 机器可判；
+3. 财务、LIS、成本与公式来源均有可恢复版本/hash、具名 owner 和实际使用证据；
+4. 首周期独立 reviewer 与真实脱敏样本可复核；
+5. 涉及跨月真实样本时满足 #163 阶段 2；
+6. fixed-pool/profile 隔离继续由 PR #203 的共享机制把守，D1 不复制第二套。
+
+未满足时必须分层表达：财务/LIS/成本/finality 来源仍是 CANDIDATE / UNVERIFIED；已配置医院缺金额证据时是 NONE / UNMEASURED 且金额/比率为 `null`；历史结果按 D1 状态机返回 REVIEW_REQUIRED 或 UNVERIFIABLE。任何一层都不得写成“历史回填完成”。
+
+## 10. 验收例
+
+| 场景 | 预期 |
+|---|---|
+| 已配置医院、当月无病例/金额 | 医院仍出现；UNMEASURED；金额与率 null |
+| 未配置 partner 出现病例 | 不进入权威全集；进入异常队列 |
+| 只改医院展示名 | scope hash 和院级 run 保持 current |
+| 新增别名但不改变既有来源绑定 | scope 不变；无关历史数值不失效 |
+| 别名改绑导致来源行归属变化 | 只重审受影响来源与月份 |
+| included 从 false 改 true，生效 2026-09 | 只发布 2026-09 起受影响 scope |
+| 当前名单录入但历史起始月未知 | effectiveFromMonth 取配置启用月；更早月份保持 scope 缺失/REVIEW_REQUIRED，不向历史倒灌 |
+| 缩短 effectiveToMonth | 区间外旧月份保持 current |
+| 同成员集合重复保存/发布 | no-op，不追加伪失效 |
+| 固定池 owner 或金额变化 | coverage/组合 readiness 失效；院级 CM/历史质量保持 |
+| B0 有 candidate 行但配置未纳入 | candidate 不得自动进入 scope |
+
+## 11. PM 大白话
+
+完整医院名单已经有了，所以不用再请财务确认“是不是全名单”。下一步是把这份名单做成系统里的医院配置：管理员决定哪些医院显示、叫什么、有哪些别名、从哪个月开始有效。配置只保证医院不被漏掉；某家医院这个月还没有财务或成本数据时，页面照样列出来，但明确写“未测”，金额留空，绝不填成 0。现在完成的是这份合同决定，不是配置功能、真实数据接入或 D1-1 回填。

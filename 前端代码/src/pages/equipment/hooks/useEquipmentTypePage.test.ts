@@ -42,22 +42,42 @@ describe('useEquipmentTypePage', () => {
     vi.clearAllMocks()
     window.history.replaceState(null, '', '/')
     localStorage.clear()
-    localStorage.setItem('user', JSON.stringify({ role: 'admin' }))
+    localStorage.setItem('user', JSON.stringify({ role: 'admin', capabilities: { equipment: 'W' } }))
     vi.mocked(equipmentApi.getTypes).mockResolvedValue({ list: [equipmentType], pagination: { total: 1 } } as any)
     vi.mocked(equipmentApi.getTypeStats).mockResolvedValue({ total: 1, active: 1, equipmentCount: 0 } as any)
     vi.mocked(equipmentApi.updateType).mockResolvedValue({ id: 'type-1' } as any)
   })
 
-  it('allows technician users with equipment module access to manage equipment types', () => {
-    localStorage.setItem('user', JSON.stringify({ role: 'technician' }))
+  // 判据读能力矩阵（后端登录下发），与后端 requirePermission('equipment','W') 对齐。
+  //
+  // ⚠️ 夹具角色是**刻意挑的**，必须对「能力矩阵 vs 旧角色白名单 ['admin','technician']」有分辨力：
+  //   下面两例各自在新旧判据下答案**相反**，故实现一旦退回旧白名单，本 spec 必然变红。
+  //   （反例：用 technician 做 W 正例、pathologist 做 R 反例——两者在新旧判据下答案相同 → 整组假绿，
+  //    退回旧白名单仍 7/7 passed。这正是本 spec 上一版的缺陷。）
+  //
+  // W 正例取 lab_director：持 equipment:'W'（rbac-matrix.ts:43）但**不在**旧白名单 → 旧=false / 新=true。
+  //   finance 同样可用（equipment:'W'，rbac-matrix.ts:84）。这两个角色正是旧判据误藏的人群。
+  it('allows users holding equipment:W capability to manage equipment types', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'lab_director', capabilities: { equipment: 'W' } }))
 
     const { result } = renderHook(() => useEquipmentTypePage())
 
     expect(result.current.canManageEquipmentTypes).toBe(true)
   })
 
-  it('keeps pathologist users read-only for equipment types', () => {
-    localStorage.setItem('user', JSON.stringify({ role: 'pathologist', permissions: ['equipment:view'] }))
+  // R 反例取 technician：**在**旧白名单内 → 旧=true；但只持 equipment:'R' → 新=false。
+  it('keeps equipment:R-only users read-only for equipment types', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'technician', capabilities: { equipment: 'R' } }))
+
+    const { result } = renderHook(() => useEquipmentTypePage())
+
+    expect(result.current.canManageEquipmentTypes).toBe(false)
+  })
+
+  // 能力矩阵存在但无 equipment 键（种子矩阵下 pathologist 的真实形状）→ 藏。
+  // 与上一例走不同分支：上一例测「R 不蕴含 W」，本例测「模块缺失即拒」。
+  it('keeps users without any equipment capability read-only for equipment types', () => {
+    localStorage.setItem('user', JSON.stringify({ role: 'pathologist', capabilities: {} }))
 
     const { result } = renderHook(() => useEquipmentTypePage())
 
