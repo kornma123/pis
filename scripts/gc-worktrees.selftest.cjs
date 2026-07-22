@@ -52,7 +52,7 @@ function wt(over) {
 const reasons = (d) => d.keepReasons.map((r) => r.code)
 
 // ───────── isChurn：环境噪声 = true ─────────
-check('isChurn: tracked dev DB + WAL 边车', () => {
+check('isChurn: local untracked dev DB + WAL 边车', () => {
   assert.ok(isChurn('后端代码/server/data/coreone.db'))
   assert.ok(isChurn('后端代码/server/data/coreone.db-shm'))
   assert.ok(isChurn('后端代码/server/data/coreone.db-wal'))

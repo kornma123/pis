@@ -67,7 +67,7 @@
 - 新增字段需兼容旧数据库（检查列存在性）
 - 外键约束使用 `PRAGMA foreign_keys = ON`
 
-> ⚠️ **dev 数据库是 git tracked 的（提交陷阱）**：`后端代码/server/data/coreone.db` 被 git 跟踪（它同时是 **CI e2e 的运行基底**——e2e 无独立 seed 步、后端启动读这个库，所以**不能随手 untrack**，否则会静默改变 e2e 实测对象，只能立项迁移）。**纪律**：起后端 / 跑 seed / 跑 e2e 都会改这个二进制库 → **提交前 `git checkout -- 后端代码/server/data/coreone.db` 复原**、**只显式 `git add` 你改的源码文件、禁用 `git add -A`**（`-A` 会把被跑脏的库和 `.db-shm`/`.db-wal` 一起纳入）。（2026-07-06 机制审查补：此护栏此前只在个人记忆里、无仓库级约束。）
+> ⚠️ **本地 dev 数据库与运行产物不得提交**：当前 Git tree 不跟踪 `后端代码/server/data/coreone.db`，`.gitignore` 忽略 `后端代码/server/data/*.db` 与 `后端代码/server/data/*.db-journal`。起后端 / 跑 seed / 跑 e2e 仍可能在本地创建或改写数据库、`.db-shm` / `.db-wal`、备份和临时运行产物。**纪律**：这些文件一律不提交；提交前同时核对 working tree 与 staged delta，只显式 `git add` 本任务 owned 文件，禁用 `git add -A`。
 
 ## 提交规范
 
@@ -113,11 +113,11 @@ test(e2e): 补充入库流程 E2E 用例
 - Playwright 配置使用 `webServer` 自动启动前后端
 - CI 失败时下载 `e2e-report` artifact 排查
 
-> ⚠️ **E2E 现状（诚实口径，2026-07-06 机制审查核实）——别把"e2e 绿"当回归网**：
-> - **真正拦合并的门只有 vitest**（后端 golden，master required check）。**e2e 不是 required check**、pending 不阻断合并。
-> - **PR/push 的 `e2e.yml` 只硬编码跑 2 个 spec**（`auth` + `supplier-returns`）；`e2e/` 下其余 ~16 个 spec **不在 PR 门里跑**。故"master e2e 双绿"只指这 2-spec 子集，**不是全量回归**。
-> - **全量回归靠夜间 `e2e-full.yml`**（每晚 02:00 UTC 定时）——它**每晚都在跑全部 spec**，但**长期整体飘红**（最近一晚约 2062 passed / 149 failed，是真断言失败非环境问题），且**失败信号目前无人系统消费**（无 issue、无分诊）。一张常年红的网无法分辨"今晚是否摔进了新回归"。
-> - **含义**：改前端/关键流程后，**别依赖 CI 替你兜住 e2e 回归**——要么本地真跑相关 spec，要么把该 spec 纳入 PR 门。**"重建 e2e 回归网可信度"是已登记的 PM 待拍项**（见 `docs/PM待拍板.md`）。
+> ⚠️ **E2E 现状（诚实口径，2026-07-22 现场核实）——别把某次 `e2e` 结论当全量回归**：
+> - GitHub 现场的 `master` 当前无 branch protection / ruleset，因此没有形式上的 required checks；`vitest`、`gate`、`e2e-required` 的运行结果是合并证据，不得写成已由平台强制拦门。这是动态事实，合并前仍须现查。
+> - PR/push 的 `e2e.yml` 已改为 impact planner，不再硬编码 3 个 spec：受保护业务源变更从 `impact-map.json` 的 core specs（当前 `auth` + `psi-read`）起步，再叠加命中的 critical domain specs；纯文档 / 治理脚本变更可计划为 0 spec，legacy 域变更在未补可信 critical spec 前 fail-closed。
+> - `e2e-full.yml` 保留每日 02:00 UTC 与手动入口，分 critical / legacy 两个 suite，并从 impact map 读取 triage owner 与 tracking Issue；新仓当前未查到可用的近期 `e2e-full` run，不得沿用旧仓的通过/失败数冒充现状。
+> - **含义**：验收时同时记录 planner 输出与实际 run 结果；未覆盖的链路仍本地真跑相关 spec，不用“3-spec 绿”、夜间旧快照或任何单次 CI 结论冒充全量回归。
 
 ## 安全红线
 

@@ -144,7 +144,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 - **质量 Loop 家族**:契约+5 薄入口已入仓;焊接队列 #157/#158/#159 活票、#160 已拍 `ai-review-gate`+`ai-review-integrity` required 方向但实施仍回原票、#161 缓;执法 bug 修复票 #147(Issue 交接门漏自动关闭语义)/#148(漂移门未覆盖 PM 待拍板)。
 - **构建纪律闸**:C1 幽灵 404 / C2 无消费者端点 = block(棘轮 baseline 只减不增)、C3 空转参数 = warn、C4 路由注册表(headless 收口死线 2026-10-07)、C5 授权组合子。当前计数属动态事实,以目标 SHA 的 gate 输出为准。
 - **preflight + 共用契约**:开工模式、所有权、越界防护(所有 PR required `gate`)。
-- **E2E 诚实口径(防幻觉)**:真正拦合并的 required check 现为 vitest+gate(以 GitHub 分支保护现场为准);PR 门 e2e 只跑 3 个 spec 的极小子集(以 workflow 现场为准);夜间全量长期飘红无人消费——改关键流程须本地真跑相关 spec(细则见 CLAUDE.md 测试要求);回归网重建策略 = 决策票 [#130](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/130)(M-1)。
+- **E2E 诚实口径(防幻觉)**:是否存在 required check 以 GitHub 分支保护 / ruleset 现场为准;PR 门 e2e 由 `impact-map.json` 的 core specs 加命中的 critical domain specs 动态规划,纯文档 / 治理脚本变更可计划为 0 spec,legacy 域未补可信 critical spec 前 fail-closed;夜间 suite 与近期 run 结果须现场核实——改关键流程仍须本地真跑相关 spec(细则见 CLAUDE.md 测试要求);回归网重建策略 = 决策票 [#130](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/130)(M-1)。
 - **安全**:仓库代码止血已实现并合入 master(PR#119:缺 JWT 配置拒启动/禁弱密钥/生产模式不种默认账号),不冒充外部环境已处理;首次外部试用/正式上线安全门 runbook 就绪(目标环境 JWT 轮换/账号改密仍 NOT_TRIGGERED)。#128/#149/#150 的方向已在 §10 拍定,但登录防暴力、密钥更名/轮换与孤儿配置清理、secret-scan required 等实现仍回原票;全历史重写默认不做,除非出现合规/合同硬要求。
 
 ## 5. 关键口径台账(PUBLIC 脱敏:ID/等级/状态/指针 · 双轴)
@@ -231,7 +231,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 | 三个可回溯周期不存在 | 10-31 节点落空 | O-5:事件后移到「第三个合格周期成立后再做独立验收」,不编固定等待月数或 10 个工作日 |
 | CI e2e 不是回归网 | 关键流回归漏网 | 本地真跑相关 spec;策略票 #130 |
 | 库存双源漂移 | 账实又不可信 | 可用量按 eligible 正批次 `remaining` 求和;#140 收口全部写路径与 `inventory.stock` 守恒,库存探针盯 |
-| dev 库是 git tracked | 跑测试弄脏提交 | 纪律见 guardrails「dev 数据库提交陷阱」条,不在此复述 |
+| 本地 dev 数据库与运行产物误入提交 | 仓库夹带数据库、备份或临时文件 | 当前 Git tree 不跟踪 dev 数据库；不提交数据库、备份或临时运行产物，纪律见 guardrails |
 | 旧口径文档被误当权威 | 复活已废框架 | SUPERSEDED/PARTIAL 头+权威索引;新会话一律走权威链 |
 
 ## 10. 已决策台账(全项目;零待 PM 选择)
