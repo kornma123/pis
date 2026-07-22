@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const {
   assertSafeGhCommand,
   assertSafeGitCommand,
@@ -11,6 +12,7 @@ const {
   classifyIssueDeliveryContract,
   findScopeViolations,
   handoffFieldErrors,
+  isHarnessMemoryPath,
   isRelevantPrompt,
   isPmApprovedStatus,
   isSafeBeforeStartShell,
@@ -302,5 +304,42 @@ assert.equal(settings.hooks.PostToolUse.some((group) => group.matcher === 'Bash|
 
 assert.equal(isRelevantPrompt('按这个 PRD 继续实现 #12'), true);
 assert.equal(isRelevantPrompt('帮我翻译一句话'), false);
+
+// guard 豁免 Claude harness 跨会话记忆目录（~/.claude/projects/<slug>/memory/，仓库外）；
+// 其他仓库外路径与仓库内路径不在豁免范围（PM 2026-07-21 拍板）。
+const harnessProjectsRoot = path.join(os.homedir(), '.claude', 'projects');
+assert.equal(
+  isHarnessMemoryPath(path.join(harnessProjectsRoot, 'proj-slug', 'memory', 'MEMORY.md')),
+  true,
+);
+assert.equal(
+  isHarnessMemoryPath(path.join(harnessProjectsRoot, 'proj-slug', 'memory', 'topic', 'note.md')),
+  true,
+);
+assert.equal(
+  isHarnessMemoryPath(path.join(harnessProjectsRoot, 'proj-slug', 'memoryx', 'note.md')),
+  false,
+);
+assert.equal(
+  isHarnessMemoryPath(path.join(harnessProjectsRoot, 'proj-slug', 'other', 'note.md')),
+  false,
+);
+assert.equal(isHarnessMemoryPath(path.join(harnessProjectsRoot, 'proj-slug')), false);
+assert.equal(isHarnessMemoryPath(path.join(repositoryRoot, 'docs', 'memory', 'x.md')), false);
+assert.equal(isHarnessMemoryPath(path.join(os.homedir(), 'secret.txt')), false);
+assert.equal(isHarnessMemoryPath('/x/.claude/projects/a/memory/b.md', '/x/.claude/projects'), true);
+assert.equal(isHarnessMemoryPath('/x/.claude/projects/a/elsewhere/b.md', '/x/.claude/projects'), false);
+
+// guard 子进程端到端：记忆目录路径 exit 0（无需任务合同），其他仓库外路径与未拥有仓内路径 exit 2。
+function runGuard(filePath, cwd) {
+  const result = spawnSync(process.execPath, [path.join(__dirname, 'claude-task.cjs'), 'guard'], {
+    input: JSON.stringify({ tool_input: { file_path: filePath }, cwd }),
+    encoding: 'utf8',
+  });
+  return result.status ?? 2;
+}
+assert.equal(runGuard(path.join(harnessProjectsRoot, 'proj-slug', 'memory', 'note.md'), repositoryRoot), 0);
+assert.equal(runGuard(path.join(os.homedir(), 'secret.txt'), repositoryRoot), 2);
+assert.equal(runGuard(path.join(repositoryRoot, 'README.md'), repositoryRoot), 2);
 
 console.log('claude-task selftest: PASS');

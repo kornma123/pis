@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
@@ -112,6 +113,16 @@ function globToRegExp(glob) {
 function matchesAny(relativePath, patterns) {
   const candidate = toPosix(relativePath);
   return patterns.some((pattern) => globToRegExp(pattern).test(candidate));
+}
+
+// Claude harness 的跨会话记忆目录在仓库之外（~/.claude/projects/<slug>/memory/），
+// 不属于仓库治理面；Edit/Write 守卫对它豁免任务合同（PM 2026-07-21 拍板）。
+// 仅精确匹配第二段为 memory 的路径，仓库内与其他仓库外路径不受影响。
+function isHarnessMemoryPath(target, projectsRoot = path.resolve(os.homedir(), '.claude', 'projects')) {
+  const relative = path.relative(path.resolve(projectsRoot), path.resolve(String(target)));
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return false;
+  const segments = relative.split(path.sep).filter(Boolean);
+  return segments.length >= 2 && segments[1] === 'memory';
 }
 
 function parseOwnerBlock(body) {
@@ -1270,6 +1281,11 @@ function commandAudit() {
 
 function commandGuard() {
   const input = readHookInput();
+  const requested = resolveHookPath(input);
+  if (requested) {
+    const target = path.resolve(input.cwd || process.cwd(), requested);
+    if (isHarnessMemoryPath(target)) return;
+  }
   const root = repoRoot(input.cwd || process.cwd());
   const active = loadState(root);
   if (!active) {
@@ -1289,7 +1305,6 @@ function commandGuard() {
     return;
   }
 
-  const requested = resolveHookPath(input);
   if (!requested) {
     process.stderr.write('COREONE write blocked: hook could not determine the target file path.');
     process.exitCode = 2;
@@ -1437,6 +1452,7 @@ module.exports = {
   findScopeViolations,
   globToRegExp,
   handoffFieldErrors,
+  isHarnessMemoryPath,
   isRelevantPrompt,
   isPmApprovedStatus,
   isSafeBeforeStartShell,
