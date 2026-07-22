@@ -1,30 +1,37 @@
-name: E2E Full Regression
+name: E2E Nightly Full
 
-# 手动触发或每晚运行完整回归测试
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *'  # 每天凌晨 2 点 UTC
+    - cron: '0 2 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: e2e-nightly-full
+  cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # E2E 后端以 development 运行：fail-closed 安全默认下，仅显式 dev/test 才种夹具账号（E2E 登录依赖）。
   NODE_ENV: development
 
 jobs:
-  e2e-full:
+  e2e-nightly:
+    name: e2e-nightly-${{ matrix.suite }}
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6 小时，完整回归需要更长时间
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: critical
+            test_args: e2e/critical
+          - suite: legacy
+            test_args: e2e/*.spec.ts
 
     steps:
-      - name: Checkout
+      - name: Checkout default branch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
@@ -32,7 +39,20 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 22.23.1
+
+      - name: Record triage owner
+        shell: bash
+        run: |
+          node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const manifest = require('./前端代码/e2e/impact-map.json')
+          console.log('### Nightly E2E ownership')
+          console.log(`- Triage owner: @${manifest.triageOwner}`)
+          console.log(`- Tracking: https://github.com/${process.env.GITHUB_REPOSITORY}/issues/${manifest.trackingIssue}`)
+          console.log(`- Suite: ${process.env.SUITE}`)
+          NODE
+        env:
+          SUITE: ${{ matrix.suite }}
 
       - name: Generate ephemeral CI JWT secret
         shell: bash
@@ -44,26 +64,30 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: 后端代码/server
-        run: npm ci
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install frontend dependencies
         working-directory: 前端代码
-        run: npm ci
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Install Playwright browsers
+      - name: Install Chromium
         working-directory: 前端代码
         run: npx playwright install --with-deps chromium
 
-      - name: Run full E2E tests
+      - name: Run ${{ matrix.suite }} E2E suite
         working-directory: 前端代码
-        run: npx playwright test --reporter=list --workers=1
+        shell: bash
+        run: npx playwright test ${{ matrix.test_args }} --reporter=list --workers=1
         env:
           CI: true
 
-      - name: Upload E2E report
+      - name: Upload ${{ matrix.suite }} evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: e2e-report-full
-          path: 前端代码/e2e-report/
-          retention-days: 7
+          name: e2e-nightly-${{ matrix.suite }}-${{ github.run_id }}
+          path: |
+            前端代码/e2e-report/
+            前端代码/test-results/
+          if-no-files-found: warn
+          retention-days: 14

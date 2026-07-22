@@ -2,12 +2,15 @@ import { defineConfig, devices } from '@playwright/test'
 
 const backendPort = process.env.E2E_BACKEND_PORT || '3001'
 const frontendPort = process.env.E2E_FRONTEND_PORT || '8080'
+const apiBaseURL = process.env.E2E_API_BASE_URL || `http://127.0.0.1:${backendPort}/api/v1`
+
+process.env.E2E_API_BASE_URL = apiBaseURL
 
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: process.env.CI ? 2 : 0,
   workers: 1,
   timeout: 60000,
   reporter: [
@@ -28,9 +31,7 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         launchOptions: process.env.PLAYWRIGHT_CHROMIUM_PATH
           ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
-          : process.env.CI
-            ? undefined
-            : { executablePath: 'C:\\Users\\86185\\AppData\\Local\\ms-playwright\\chromium-1217\\chrome-win64\\chrome.exe' },
+          : undefined,
       },
     },
   ],
@@ -53,7 +54,7 @@ export default defineConfig({
       timeout: 120000,
       env: {
         ...process.env,
-        VITE_API_BASE_URL: `http://127.0.0.1:${backendPort}/api/v1`,
+        VITE_API_BASE_URL: apiBaseURL,
       },
     },
   ],
