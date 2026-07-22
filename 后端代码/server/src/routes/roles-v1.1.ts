@@ -1,9 +1,10 @@
 import { Router } from 'express'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { v4 as uuidv4 } from 'uuid'
 import { parsePermissions } from '../middleware/rbac-matrix.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { findRoleLiveAssignments, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -87,21 +88,49 @@ router.put('/:id', requireRolesWrite, (req, res) => {
     database.exec('COMMIT')
     success(res, { id }, 'Updated')
   } catch (err: any) {
-    try { getDatabase().exec('ROLLBACK') } catch {}
+    try { getDatabase().exec('ROLLBACK') } catch { /* preserve the original update error */ }
     error(res, err.message)
   }
 })
 
 router.delete('/:id', requireRolesWrite, (req, res) => {
+  let database: ReturnType<typeof getDatabase> | undefined
+  let transactionOpen = false
   try {
-    const database = getDatabase()
+    database = getDatabase()
     const { id } = req.params
+    database.exec('BEGIN IMMEDIATE')
+    transactionOpen = true
     const existing = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id) as any
-    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
-    if (existing.code === 'admin') { error(res, 'Cannot delete system admin role', 'FORBIDDEN', 403); return }
+    if (!existing) {
+      database.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Not found', 'NOT_FOUND', 404)
+      return
+    }
+    if (existing.code === 'admin') {
+      database.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Cannot delete system admin role', 'FORBIDDEN', 403)
+      return
+    }
+    if (findRoleLiveAssignments(database, existing.code).length > 0) {
+      database.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Role is still assigned to active users', 'ENTITY_IN_USE', 409)
+      return
+    }
     database.prepare('UPDATE roles SET is_deleted = 1 WHERE id = ?').run(id)
+    database.exec('COMMIT')
+    transactionOpen = false
     success(res, { id }, 'Deleted')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (database && transactionOpen && !recoverFailedDeleteTransaction(database, closeDatabase)) {
+      error(res, 'Delete transaction recovery failed', 'INTERNAL_ERROR', 500)
+      return
+    }
+    error(res, err.message)
+  }
 })
 
 export default router

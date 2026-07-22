@@ -1,7 +1,7 @@
 # FRS-00 全局规范
 
 > **文档编号**: FRS-00  
-> **版本**: v1.1.0  
+> **版本**: v1.1.1
 > **系统**: COREONE 病理科耗材管理系统  
 > **生成时间**: 2026-05-12  
 > **适用范围**: 全部功能模块  
@@ -117,6 +117,7 @@ limit = pageSize
 | `BUSINESS_RULE` | 400 | 违反业务规则 | "Has children" / "Stock exists" |
 | `STOCK_INSUFFICIENT` | 422 | 库存不足 | "Insufficient stock" |
 | `CONFLICT` | 409 | 存在关联数据，无法删除 | "已有出库记录，不可删除" |
+| `ENTITY_IN_USE` | 409 | 主数据仍被现行运营义务或有效分配引用 | "实体仍被使用，无法删除" |
 | `INTERNAL_ERROR` | 500 | 服务端内部异常 | "Internal server error" |
 
 ### 4.2 HTTP 状态码与错误码映射
@@ -305,15 +306,23 @@ limit = pageSize
 
 | 表名 | 删除方式 | 关联影响 | 前置校验 |
 |------|---------|---------|---------|
-| `users` | `is_deleted = 1` | 无级联 | 无 |
-| `roles` | `is_deleted = 1` | 无级联（用户仍可用该 role 登录） | 无 |
-| `suppliers` | `is_deleted = 1` | `materials.supplier_id` 悬空 | 无 |
+| `users` | `is_deleted = 1` | 历史单据、操作日志保留且不级联 | 生效项目负责人或未完成/未取消出库经办存在时返回 409 `ENTITY_IN_USE` |
+| `roles` | `is_deleted = 1` | 历史用户分配保留且不级联 | 启用且未删除用户仍经 `users.role`/`primary_role`/`user_roles` 持有时返回 409 `ENTITY_IN_USE` |
+| `suppliers` | `is_deleted = 1` | 历史物料、采购、入库、退货保留且不级联 | 在途采购、未完成/未取消入库、未退款/未取消退货存在时返回 409 `ENTITY_IN_USE` |
 | `materials` | `is_deleted = 1` | 历史 inbound/outbound 保留 | `inventory.stock = 0` |
 | `categories` | `is_deleted = 1` | 有子/有物料时禁止删除 | 检查子分类、关联物料 |
-| `locations` | `is_deleted = 1` | `inventory.location_id` 悬空 | 无 |
+| `locations` | `is_deleted = 1` | 历史库存、批次、物料、设备记录保留且不级联 | 正库存/剩余批次返回 409 `CONFLICT`；生效物料或设备分配返回 409 `ENTITY_IN_USE` |
 | `boms` | `is_deleted = 1` | 无级联 | 无 |
-| `projects` | `is_deleted = 1` | 无级联 | 无 |
+| `projects` | `is_deleted = 1` | 历史出库、成本异常、LIS 病例和目录映射保留且不级联 | 未完成/未取消出库或未 resolved/closed/ignored 成本异常存在时返回 409 `ENTITY_IN_USE` |
 | `inbound_records` | `is_deleted = 1` | 同步扣减库存/批次/PO | 检查出库记录、使用中状态 |
+
+### 10.1 主数据删除事务不变量
+
+- 上表五类主数据（用户、角色、供应商、库位、项目）的“查实体 → 查活引用 → 写软删除”必须处于同一个 `BEGIN IMMEDIATE` 事务中；引用判断以锁内查询为准。
+- 历史/审计行不级联删除、不改写；只有现行运营义务或有效分配阻断删除。
+- 对带状态的引用，只允许文档列明的终态放行；空值、未知值和未来新增但未登记的状态一律按活引用处理（fail-closed）。
+- 拒绝删除返回 HTTP 409；新增主数据活引用统一使用 `ENTITY_IN_USE`，库位既有正库存/剩余批次合同继续使用 `CONFLICT`。
+- 事务内任一步失败不得留下部分业务写；回滚命令失败时关闭当前数据库连接以触发 SQLite 回滚。回滚与关闭同时失败的处置不在本版合同范围，须保持 500 fail-closed 并由独立故障恢复任务处理。
 
 ---
 
@@ -325,6 +334,6 @@ limit = pageSize
 
 ---
 
-*文档版本: v1.1.0*  
-*最后更新: 2026-05-12*  
+*文档版本: v1.1.1*
+*最后更新: 2026-07-22*
 *维护责任人: 业务分析团队*
