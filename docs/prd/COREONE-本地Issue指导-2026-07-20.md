@@ -17,6 +17,8 @@
 
 ## 1. 使用规则
 
+所有开放 Issue 必须遵循 [`COREONE Issue 分级与上线阻断标签规则`](COREONE-Issue分级与上线阻断标签规则.md)，同时且仅拥有一个 `P0`–`P3` 优先级标签和一个 `阻断上线`/`非阻断上线` 标签。优先级与上线影响是两个独立维度，不得相互替代。
+
 1. 每次开工只认领一个 issue，并在独立 branch/worktree 中冻结 `base SHA`、owned/excluded paths 和唯一 writer。
 2. `ACTIVE_IMPLEMENTATION` 只表示有人正在写；`LOCAL_CANDIDATE_UNREVIEWED` 只表示中央已有可读候选提交；`K3_OBJECTS_RECOVERED_LOCAL_INTEGRATION_IN_PROGRESS` 只表示对象门已通过且 Windows 正在串行集成；`LOCAL_COMBINED_CANDIDATE_NO_GO` 表示组合提交已形成但仍有已证实阻断。以上状态都不算完成。
 3. 完成至少需要：PRD 验收对应的 RED、最小修复、独立 mutation、GREEN、clean scope、固定 SHA 异构复核；涉及 UI 还需真实浏览器/人工验收。
