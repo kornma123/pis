@@ -1,44 +1,75 @@
-name: E2E Tests
+name: E2E Required
 
 on:
-  push:
-    branches: [main, master]
-    # 纯文档/治理改动不触发 e2e（e2e 非 required check，两侧都可安全跳过）
-    paths-ignore: ['**.md', 'docs/**', '.claude/**']
   pull_request:
     branches: [main, master]
-    paths-ignore: ['**.md', 'docs/**', '.claude/**']
+  push:
+    branches: [main, master]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: e2e-required-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
-  # 消除 Node.js 20 弃用警告，强制 action 使用 Node.js 24 运行时
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # E2E 后端以 development 运行：fail-closed 安全默认下，仅显式 dev/test 才种夹具账号（E2E 登录依赖）。
   NODE_ENV: development
 
 jobs:
-  e2e:
+  e2e-required:
+    name: e2e-required
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 90
 
     steps:
-      - name: Checkout
+      - name: Checkout exact candidate
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22
+          node-version: 22.23.1
+
+      - name: Plan impacted E2E specs
+        id: plan
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node scripts/e2e/plan-pr-e2e.selftest.cjs
+          if [[ "$EVENT_NAME" == "workflow_dispatch" || -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            node scripts/e2e/plan-pr-e2e.cjs \
+              --changed-file=.github/workflows/e2e.yml \
+              --format=lines > e2e-specs.txt
+          else
+            node scripts/e2e/plan-pr-e2e.cjs \
+              --base="$BASE_SHA" \
+              --head="$HEAD_SHA" \
+              --format=lines > e2e-specs.txt
+          fi
+          if [[ -s e2e-specs.txt ]]; then
+            echo "has_specs=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_specs=false" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "### E2E impact plan"
+            echo ""
+            echo '```text'
+            if [[ -s e2e-specs.txt ]]; then cat e2e-specs.txt; else echo "No E2E-relevant source change."; fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate ephemeral CI JWT secret
+        if: steps.plan.outputs.has_specs == 'true'
         shell: bash
         run: |
           jwt_secret="$(openssl rand -base64 48)"
@@ -46,39 +77,39 @@ jobs:
           echo "JWT_SECRET=$jwt_secret" >> "$GITHUB_ENV"
           unset jwt_secret
 
-      # 1. 安装后端依赖
-      # 后端 app.ts 启动时会自动调用 initializeDatabase() 创建表结构，无需额外 seed
       - name: Install backend dependencies
+        if: steps.plan.outputs.has_specs == 'true'
         working-directory: 后端代码/server
-        run: npm ci
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
-      # 2. 安装前端依赖
       - name: Install frontend dependencies
+        if: steps.plan.outputs.has_specs == 'true'
         working-directory: 前端代码
-        run: npm ci
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
-      # 3. 安装 Playwright 浏览器
-      - name: Install Playwright browsers
+      - name: Install Chromium
+        if: steps.plan.outputs.has_specs == 'true'
         working-directory: 前端代码
         run: npx playwright install --with-deps chromium
 
-      # 4. 运行 E2E 测试（PR 门只跑这 3 个核心 spec，缩短 CI 时间）
-      # ⚠️ 诚实口径：这里只跑 auth、supplier-returns 与 users 三个 spec；users 覆盖改密后旧口令失效。
-      #    e2e/ 下其余 spec **不在 PR 门里跑**，也**未逐一在本地保绿**——全量回归靠夜间
-      #    e2e-full.yml（每晚 02:00 UTC），但该全量目前长期整体飘红、失败信号尚无人系统消费。
-      #    故本 job 绿 ≠ 全量回归绿；e2e 亦非 required check（不阻断合并）。真拦门的是 backend-tests(vitest)。
-      #    详见 .claude/rules/coreone-guardrails.md「E2E 现状」+ docs/PM待拍板.md（回归网重建=待拍项）。
-      - name: Run E2E tests (core)
+      - name: Run core and impacted E2E specs
+        if: steps.plan.outputs.has_specs == 'true'
         working-directory: 前端代码
-        run: npx playwright test e2e/auth.spec.ts e2e/supplier-returns.spec.ts e2e/users.spec.ts --reporter=list --workers=1
+        shell: bash
+        run: |
+          mapfile -t specs < ../e2e-specs.txt
+          npx playwright test "${specs[@]}" --workers=1
         env:
           CI: true
 
-      # 5. 上传测试报告（失败时也会上传）
-      - name: Upload E2E report
-        if: always()
+      - name: Upload E2E evidence
+        if: always() && steps.plan.outputs.has_specs == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: e2e-report
-          path: 前端代码/e2e-report/
-          retention-days: 7
+          name: e2e-required-${{ github.run_id }}
+          path: |
+            e2e-specs.txt
+            前端代码/e2e-report/
+            前端代码/test-results/
+          if-no-files-found: warn
+          retention-days: 14

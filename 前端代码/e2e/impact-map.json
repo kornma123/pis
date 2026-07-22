@@ -1,0 +1,181 @@
+{
+  "version": 1,
+  "triageOwner": "kornma123",
+  "trackingIssue": 23,
+  "coreSpecs": [
+    "e2e/critical/auth.spec.ts",
+    "e2e/critical/psi-read.spec.ts"
+  ],
+  "guardedRoots": [
+    "前端代码/src/",
+    "后端代码/server/src/"
+  ],
+  "ignored": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/test/**",
+    "**/types/**",
+    "前端代码/src/vite-env.d.ts"
+  ],
+  "domains": [
+    {
+      "id": "auth",
+      "tier": "critical",
+      "owner": "security",
+      "sources": [
+        "前端代码/src/pages/auth/**",
+        "前端代码/src/api/request.ts",
+        "后端代码/server/src/routes/auth.ts",
+        "后端代码/server/src/middleware/auth.ts",
+        "后端代码/server/src/middleware/authz-combinators.ts",
+        "后端代码/server/src/middleware/permissions.ts"
+      ],
+      "specs": ["e2e/critical/auth.spec.ts"]
+    },
+    {
+      "id": "application-shell",
+      "tier": "critical",
+      "owner": "frontend-platform",
+      "sources": [
+        "前端代码/src/App.tsx",
+        "前端代码/src/main.tsx",
+        "前端代码/src/components/layout/**",
+        "前端代码/src/lib/permissions.ts",
+        "前端代码/src/lib/route-registry.ts",
+        "前端代码/src/styles/**"
+      ],
+      "specs": [
+        "e2e/critical/auth.spec.ts",
+        "e2e/critical/psi-read.spec.ts",
+        "e2e/critical/supplier-returns.spec.ts",
+        "e2e/critical/users.spec.ts",
+        "e2e/critical/hospital-cm.spec.ts",
+        "e2e/critical/alerts.spec.ts"
+      ]
+    },
+    {
+      "id": "psi-core",
+      "tier": "critical",
+      "owner": "inventory",
+      "sources": [
+        "前端代码/src/pages/inbound/**",
+        "前端代码/src/pages/outbound/**",
+        "前端代码/src/pages/inventory/**",
+        "前端代码/src/api/inventory.ts",
+        "后端代码/server/src/routes/inbound-v1.1.ts",
+        "后端代码/server/src/routes/outbound-v1.1.ts",
+        "后端代码/server/src/routes/inventory-v1.1.ts"
+      ],
+      "specs": ["e2e/critical/psi-read.spec.ts"]
+    },
+    {
+      "id": "supplier-returns",
+      "tier": "critical",
+      "owner": "supplier-returns",
+      "sources": [
+        "前端代码/src/pages/supplier-returns/**",
+        "后端代码/server/src/routes/supplier-returns-v1.1.ts"
+      ],
+      "specs": ["e2e/critical/supplier-returns.spec.ts"]
+    },
+    {
+      "id": "users",
+      "tier": "critical",
+      "owner": "identity",
+      "sources": [
+        "前端代码/src/pages/system/Users.tsx",
+        "前端代码/src/pages/system/components/User*",
+        "前端代码/src/pages/system/hooks/useUsersPage.ts",
+        "后端代码/server/src/routes/users-v1.1.ts"
+      ],
+      "specs": ["e2e/critical/users.spec.ts"]
+    },
+    {
+      "id": "hospital-cm",
+      "tier": "critical",
+      "owner": "hospital-cm",
+      "sources": [
+        "前端代码/src/pages/hospital-cm/**",
+        "前端代码/src/api/hospital-cm.ts",
+        "后端代码/server/src/routes/hospital-pnl-v1.1.ts",
+        "后端代码/server/src/services/hospital-cm*"
+      ],
+      "specs": ["e2e/critical/hospital-cm.spec.ts"]
+    },
+    {
+      "id": "alerts",
+      "tier": "critical",
+      "owner": "alerts",
+      "sources": [
+        "前端代码/src/pages/alerts/**",
+        "后端代码/server/src/routes/alerts-v1.1.ts",
+        "后端代码/server/src/services/alert*"
+      ],
+      "specs": ["e2e/critical/alerts.spec.ts"]
+    },
+    {
+      "id": "shared-backend",
+      "tier": "critical",
+      "owner": "backend-platform",
+      "sources": [
+        "后端代码/server/src/app.ts",
+        "后端代码/server/src/middleware/audit-log.ts",
+        "后端代码/server/src/middleware/errorHandler.ts",
+        "后端代码/server/src/database/**"
+      ],
+      "specs": [
+        "e2e/critical/auth.spec.ts",
+        "e2e/critical/psi-read.spec.ts",
+        "e2e/critical/supplier-returns.spec.ts",
+        "e2e/critical/users.spec.ts",
+        "e2e/critical/hospital-cm.spec.ts",
+        "e2e/critical/alerts.spec.ts"
+      ]
+    },
+    {
+      "id": "legacy-pages",
+      "tier": "legacy",
+      "owner": "feature-owner-required",
+      "sources": [
+        "前端代码/src/pages/_laneC/**",
+        "前端代码/src/pages/account-reconcile/**",
+        "前端代码/src/pages/bom/**",
+        "前端代码/src/pages/cost/**",
+        "前端代码/src/pages/cost-center/**",
+        "前端代码/src/pages/dashboard/**",
+        "前端代码/src/pages/Dashboard.tsx",
+        "前端代码/src/pages/equipment/**",
+        "前端代码/src/pages/import-console/**",
+        "前端代码/src/pages/import-shared/**",
+        "前端代码/src/pages/import-wizard/**",
+        "前端代码/src/pages/labor/**",
+        "前端代码/src/pages/lis-cases/**",
+        "前端代码/src/pages/master/**",
+        "前端代码/src/pages/partner-config/**",
+        "前端代码/src/pages/purchase/**",
+        "前端代码/src/pages/reconciliation/**",
+        "前端代码/src/pages/report/**",
+        "前端代码/src/pages/returns/**",
+        "前端代码/src/pages/scraps/**",
+        "前端代码/src/pages/system/Logs.tsx",
+        "前端代码/src/pages/system/Roles.tsx",
+        "前端代码/src/pages/system/components/Log*",
+        "前端代码/src/pages/system/components/Role*",
+        "前端代码/src/pages/system/hooks/useLogsPage.ts",
+        "前端代码/src/pages/system/hooks/useRolesPage.ts",
+        "前端代码/src/pages/transfers/**"
+      ],
+      "specs": []
+    },
+    {
+      "id": "legacy-backend",
+      "tier": "legacy",
+      "owner": "feature-owner-required",
+      "sources": [
+        "后端代码/server/src/routes/**",
+        "后端代码/server/src/services/**"
+      ],
+      "specs": []
+    }
+  ]
+}
