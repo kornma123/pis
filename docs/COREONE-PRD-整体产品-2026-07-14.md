@@ -1,7 +1,7 @@
 # COREONE 整体产品 PRD — 病理实验室进销存 · 成本 · 结算 · 院级贡献毛利
 
-> **状态**:v1.4 **文档定稿 · 决策台账零待 PM 选择**(2026-07-16)。PM 已先明确说「定稿」([决定记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4978904201)),再批准 §10 剩余推荐、指定 O-2 四个角色统一称「管理员」并授权满足新头门禁后普通合并 PR #190([批量决策与合并授权](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4979266101));2026-07-16 又将 O-1 更新为管理员维护的版本化医院目录配置([#182 权威 ASCII 决策记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/182#issuecomment-4987580797))。这里的「文档定稿/决策清零」只确认本文可作为后续需求输入与范围导航;不等于「口径定稿」或实施完成,不升级 B/C、RATIFIED 或 Locked Golden,不代表部署/上线、真实业务验收或对外承诺。
-> **修订说明**:v1.0(2026-07-14)首版;v1.1(2026-07-15)逐项处理 PR #190 的[既有复核 P1/P2](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4976504018)与动态事实,并落实[首批 PM 拍板记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4977403367);v1.2 记录文档定稿决定及其权限边界;v1.3 将 §10 全部剩余推荐转为 PM 已决策项、记录 O-2「管理员」与独立性边界,并吸收 E0 mockup 已合入 master 的动态事实;v1.4 只同步 O-1 新决定:完整医院名单不再二次确认,由版本化医院目录配置决定范围,金额/finality 证据门保持不变。首轮 4 镜头只留下汇总、逐项记录未进入仓库或 GitHub,故本版不把「17/17」当可独立复核证据,边界与本轮可访问处置见 §13。本次取证基线 = 云端 `origin/master@388c3cd9` + GitHub 现场事实(2026-07-16);SHA 只是取证时点,实时状态一律现场查 GitHub/Git。
+> **状态**:v1.5 **文档定稿 · 决策台账零待 PM 选择**(2026-07-22)。PM 已先明确说「定稿」并在 2026-07-15 批准 §10 剩余推荐、指定 O-2 四个角色统一称「管理员」;2026-07-16 又将 O-1 更新为管理员维护的版本化医院目录配置。原仓已停止作为实时协作入口,历史链接只保留 provenance;当前执行入口统一为 [`kornma123/pis` Issues](https://github.com/kornma123/pis/issues) 与[本地 Issue 指导](prd/COREONE-本地Issue指导-2026-07-20.md)。这里的「文档定稿/决策清零」只确认本文可作为后续需求输入与范围导航;不等于「口径定稿」或实施完成,不升级 B/C、RATIFIED 或 Locked Golden,不代表部署/上线、真实业务验收或对外承诺。
+> **修订说明**:v1.0(2026-07-14)首版;v1.1(2026-07-15)逐项处理历史 PR #190 的既有复核与动态事实;v1.2 记录文档定稿决定及其权限边界;v1.3 将 §10 全部剩余推荐转为 PM 已决策项、记录 O-2「管理员」与独立性边界,并吸收 E0 mockup 已合入 master 的动态事实;v1.4 同步 O-1 版本化医院目录决定;v1.5 在新仓恢复历史后同步 live Issue 入口、M-1/M-3/M-4/M-5/B-1/B-2/B-4 决策索引、`canAccess` 写门现状及基础债务的诚实状态。本次取证基线 = 云端 `origin/master@90ee70ff` + GitHub 现场事实(2026-07-22);SHA 只是取证时点,实时状态一律现场查 GitHub/Git。
 > **定位**:本文是**项目级总 PRD**——定产品边界、口径底线、验收基线、路线图与决策/实施边界,是后续所有开发工作的**总入口和范围基准**。它不替代单功能 PRD:新功能/大改动仍按 [PRD 质量 Loop](COREONE-PRD质量Loop-2026-07-12.md) 走自己的薄 PRD 与 mockup→写码→验收链,只是以本文为上游。各模块深规格住在 [FRS 套件](FRS/README.md) 与各域权威文档,本文对各域只做点名+最小现状摘要、绝不复制规则;摘要与域权威或活代码冲突时,以后者为准并回来修本文(附录 A 使用规则④;防镜像漂移要求见[质量 Loop 契约](COREONE-质量Loop契约-2026-07-12.md))。
 > **风险档**:R2(收入、成本、库存事实、权限、经营判断)。
 > **碰钱边界(B-5,2026-07-13 已拍)**:本文所有碰钱数字按**内部探索版**口径双轴标注(`evidence_strength` A/B/C + `authority_status`);**对外/对医院可信版**三硬门(≥2 家不同商业模式医院真实三件套 golden、成本结构经完整真数据定向、具名隐私/合规 owner 完成正式判断)未达成前,任何数字不得对外输出。PM 于 2026-07-15 接受的 grade C 只限内部探索观察:恒带「未经业务确认」提示,禁止对医院/第三方输出,不得作为最终盈利判断或真实解锁证据,并进入后续校准队列。(源:[PM 决策索引 B-5](PM待拍板.md))
@@ -53,7 +53,7 @@ RBAC 设计原则:诊断线与技术线分离、最小必要、职责分离(SoD)
 
 使用频率:仓管/技术员每日(出入库/盘点);财务与 PM 集中在月度关账后;采购按订单节奏;独立 reviewer 一次性(首周期)+证据失效重验时。
 
-前端写按钮显隐判据 = `canAccess(module,'W')` 读登录发放的 capabilities(与后端 `requirePermission` 同一事实源);登录响应不含 permissions 数组,任何依赖它的旧判据都是死代码。#135 落地时前端所有写按钮必须随 capability 隐藏或禁用,不能只等待后端 403。
+前端写按钮显隐判据 = `canAccess(module,'W')` 读登录发放的 capabilities(与后端 `requirePermission` 同一事实源);登录响应不含 permissions 数组,任何依赖它的旧判据都是死代码。核心写入口迁移与陈旧会话 fail-closed 回归已合入 master;其余 #135 精确矩阵消费者仍按 [LOC-007](https://github.com/kornma123/pis/issues/7) 逐项验收,不能只等待后端 403。
 
 ## 4. 产品全景与现状
 
@@ -68,13 +68,13 @@ RBAC 设计原则:诊断线与技术线分离、最小必要、职责分离(SoD)
 
 | 类别 | 债 |
 |---|---|
-| 结构性 | 现状 `inventory.stock` 与启用批次 `remaining` 双源可漂移;#139 目标是全批次事实+`inventory.stock` 仅作派生/守恒缓存;现有出库单批次不跨批,会在总量足够但首批不足时误 422,完整 FEFO 明细待 #140 |
-| 弱引用 | 删角色/供应商/库位/项目/用户无关联校验→悬空;供应商编码删后可复用 |
-| 校验缺口 | 库位容量不校验;物料删除不查 `locked_stock`(FRS 2026-05 所列 price 非负与入库正数量缺口已在当前 master 修复) |
-| 假值 | 成本报表 `changeRate` 恒 0;预警无定时任务无推送(BOM `materialCount` 恒 0 的 FRS 2026-05 历史缺陷已在当前 master 修复) |
-| 认证 | 无 Token 黑名单(登出不失效);Access 8h/Refresh 7d |
+| 结构性 | 现状 `inventory.stock` 与启用批次 `remaining` 双源可漂移;#139 目标是全批次事实+`inventory.stock` 仅作派生/守恒缓存;现有出库单批次不跨批,会在总量足够但首批不足时误 422,完整 FEFO 明细由 [LOC-001](https://github.com/kornma123/pis/issues/1) 承接 |
+| 弱引用 | 删角色/供应商/库位/项目/用户无关联校验→悬空,由 [LOC-025A](https://github.com/kornma123/pis/issues/25)/[LOC-025B](https://github.com/kornma123/pis/issues/26) 串行承接;供应商编码删后复用合同见 [LOC-033](https://github.com/kornma123/pis/issues/33) |
+| 校验缺口 | master 仍未形成库位容量全写路径硬门([LOC-029](https://github.com/kornma123/pis/issues/30));物料删除的 `locked_stock`/在途引用合同仍待 LOC-025B(FRS 2026-05 所列 price 非负与入库正数量缺口已修复) |
+| 诚实缺口 | 成本报表当前把同期变化保持为 `null/不可计算`,不是旧文档所称恒 0;真实同比/环比合同仍待 [LOC-030](https://github.com/kornma123/pis/issues/31)。预警 master 仍无主动调度/通知闭环,Phase A 候选见 [LOC-031](https://github.com/kornma123/pis/issues/32) |
+| 认证 | `/auth/logout` 仍未使既有 token 立即失效;已拍 per-user token version 方案由 [LOC-032](https://github.com/kornma123/pis/issues/36) 在 LOC-022 释放 `auth.ts` 后串行实施 |
 
-库存/批次事实模型已在 [#139](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/139) 拍板为 **A 全批次模型**:未指定批次时按 FEFO 自动跨批拆分并逐批留出库明细;指定批次不足整单 422,不得静默换批;没有 eligible 正批次的真实不足同样 422。现有 [#140](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/140) 是唯一工程入口。因项目未上线且无生产数据,先重灌/清理 dev seed 并在任何真实数据进入前完成写路径与约束收口;任何生产 apply 仍属 R3,本 PRD 不授权。
+库存/批次事实模型已在历史 #139 拍板为 **A 全批次模型**:未指定批次时按 FEFO 自动跨批拆分并逐批留出库明细;指定批次不足整单 422,不得静默换批;没有 eligible 正批次的真实不足同样 422。当前唯一工程入口是 [LOC-001](https://github.com/kornma123/pis/issues/1);远端 integration 分支或本地候选均不等于 master 完成。因项目未上线且无生产数据,先重灌/清理 dev seed 并在任何真实数据进入前完成写路径与约束收口;任何生产 apply 仍属 R3,本 PRD 不授权。
 
 ### 4.2 检测项目与统一目录(✅ 已实现并合入 master 的只读对照层)
 
@@ -84,7 +84,7 @@ RBAC 设计原则:诊断线与技术线分离、最小必要、职责分离(SoD)
 
 - **LIS 的角色**:只提供事实(逐病例原始工作量数量列+病理号),不提供金额;金额真值来自财务对账单实收,按病理号 join,两系统松耦合。(源:[LIS 对接说明](COREONE-LIS自动计费与收入分析-对接说明与v2升级路径-2026-06-27.md))
 - **病例身份(#163 已拍板)**:病理号唯一、可跨月结算、绝不两人共号;身份键 `(partner_id, case_no)` 不变,**无 schema 迁移**;case_no 已做 NFKC+连字符归一(统一全角/半角等字符写法,防同号不同形)。导入端硬拒「晚月同号覆盖已入账早月明细」已合并(PR#168)。
-- **📋 阶段 2(可开工)**:读侧按各月收入占比分摊跨月病例成本(Q2'=A 已拍)+ 现有 guard(`loadCrossMonthReuseKeys` 整例扣留合法跨月病例)收窄为异常兜底 + 探针不变量重定义。遗留跟进:导入拒收前端可见性 [#178](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/178)、登记月带留痕更正通道 [#179](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/issues/179)。
+- **📋 阶段 2(方向已拍,master 未完成)**:读侧按各月收入占比分摊跨月病例成本(Q2'=A 已拍)+ 现有 guard(`loadCrossMonthReuseKeys` 整例扣留合法跨月病例)收窄为异常兜底 + 探针不变量重定义,由 [LOC-002](https://github.com/kornma123/pis/issues/2) 承接。导入拒收可见性与登记月带留痕更正统一由 [LOC-020](https://github.com/kornma123/pis/issues/20) 承接;远端 integration 候选仍须进入最新 master combined base 并满足该票复核门。
 
 ### 4.4 对账与结算(✅ 部分硬护栏已实现并合入 master;📋 月结子账本蓝图已定稿待实现)
 
@@ -238,9 +238,9 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 
 **既有决定,直接承接勿重议**:B-5 双轴与三硬门;grade C 仅限内部探索且禁止对外/最终盈利判断/真实解锁证据;两层框架(收官页 §B+ADR-008);#163 身份键+分摊 Q2'=A;#156 五拍(2026-07-14);P-1 最低必要字段+导入即去标识化且无需患者明文回查;P-2 旧拆分结果存在重大高估风险但未对外使用、无需外部更正;#139 A 全批次+未指定批次 FEFO 跨批拆分+指定批次不足 422;#135 finance 无 `abc_config/labor_times`、`cost_analysis:R`,lab_director 两项只读,角色并集不变,两个不同 admin 做提交/复核,前端写按钮跟随 capability;项目仍处开发阶段、代码合入不等于生产上线;8 阈值保守默认;组织处理固定费政策已拍但具体值不在本 PUBLIC PRD 重复;EBER/特染归 IN;B-3 删幽灵入口;M-2 质疑档位用 R0–R3;M-6 构建纪律 C1/C2 block;退库/调拨语义;ABC 19 页处置;depletion 删除;O-9 本 PRD 完成文档定稿,只确认文档版本,不升级 B/C 权威、不授权对外输出或冒充业务实施完成。
 
-2026-07-15 PM 又在[批量决策与合并授权记录](https://github.com/Mazikorn/Coreone-Procurement-Sales-and-Inventory-PSI-Management-System/pull/190#issuecomment-4979266101)明确「除 O-2 外全部按推荐;O-2 都是我,统一称管理员」,因此下表已从推荐转为**最终选择**。右栏只列实施/证据门,不是仍待 PM 选方向;本 PR 不据此自动拆业务任务或宣布实现完成。
+2026-07-15 PM 明确「除 O-2 外全部按推荐;O-2 都是我,统一称管理员」,因此下表已从推荐转为**最终选择**。历史决定由 PR #190 merge object `d9336ffd…` 固定;新仓唯一治理入口为 [GOV-002](https://github.com/kornma123/pis/issues/37)。右栏只列实施/证据门,不是仍待 PM 选方向;本文不据此自动拆业务任务或宣布实现完成。
 
-> **索引同步边界**:`PM待拍板.md` 是既有仓库索引,当前尚未同步本批 M-1/M-3/M-4/M-5/B-1/B-2/B-4 等决定;受本 PR「只改本文」范围限制不在此代改。上述 ID 的最新决定以 2026-07-15 批量决策评论为准;后续同步索引只能转录这些决定,不得重新把它们列为当前待拍。
+> **索引同步边界**:`PM待拍板.md` 已于 v2.1 转录 M-1/M-3/M-4/M-5/B-1/B-2/B-4 最终决定;这只关闭内容漂移,不等于关联实现完成。防止再次漂移的机器 gate 仍由 GOV-002 单独验收,未完成前该治理 Issue 保持开放。
 
 | 组 | ID | PM 最终决定 | 仍须在原 Issue/实施阶段证明的门 |
 |---|---|---|---|
@@ -270,10 +270,10 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 
 **Now(2026-07,已可动工)**
 1. PR#189 关账竞态修复与 PR#187 C1 证据底座均已合入 master,不再列为在途;后续分别回到 #188/#183 的剩余验收边界。
-2. 现有 #140 按 #139 已拍 A 模型推进 dev seed、跨批 FEFO 写路径与约束,作为任何真实数据进入前的硬前置;不新开第二张业务票,不执行生产迁移。
-3. **#163 阶段 2 开工**(读侧分摊+guard 收窄;前提 #168 已合并)。
-4. 决策已清算:O-2 四类角色统一为「管理员」并保留实际复核独立性门;O-3 四问已批准且 E0 mockup 已合入 master;O-1 转 #182 实现版本化医院目录控制面与 C1 scope 桥接,金额证据仍独立守恒。这里不自动启动 B/C/D1/D2/E。
-5. 治理焊接小票:#157/#158/#159;执法 bug #147/#148;小修 #145/#146。
+2. [LOC-001](https://github.com/kornma123/pis/issues/1) 按 #139 已拍 A 模型推进 dev seed、跨批 FEFO 写路径与约束,作为任何真实数据进入前的硬前置;不新开第二张业务票,不执行生产迁移。
+3. [LOC-002](https://github.com/kornma123/pis/issues/2) 承接 #163 阶段 2(读侧分摊+guard 收窄);任何 integration 候选先吸收最新 master 再独立复核。
+4. 决策已清算:O-2 四类角色统一为「管理员」并保留实际复核独立性门;O-3 四问已批准且 E0 mockup 已合入 master;O-1 由 [LOC-003](https://github.com/kornma123/pis/issues/3) 与 [LOC-015](https://github.com/kornma123/pis/issues/15) 串行实现目录 scope 与金额消费者,金额证据仍独立守恒。这里不自动启动 B/C/D1/D2/E。
+5. 治理事实同步见 [GOV-001](https://github.com/kornma123/pis/issues/34)/[GOV-002](https://github.com/kornma123/pis/issues/37);治理完成不计产品功能进度。
 
 **Next(2026-08~09)**
 5. B:固定池真实值+RATIFIED(节点 08-31)。
@@ -287,7 +287,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 11. 三期+首周期独立验证+D2 诚实覆盖验收(条件成立时 10-31)→ **第一个真实解锁院月**。
 12. E:E0 mockup 已拍板并合入;生产前端三态仍须在上游门满足后单独认领实施→hospital-cm 三条 E2E 做成 required gate 候选。
 13. 治理债死线:#131 headless 归位(10-07)、#132 consumer whitelist(10-06)。
-14. wave-2 逐页前端重设计(待 B-1/B-2 口径);#140 已前移为真实数据进入前的 Now 硬前置。
+14. wave-2 已按 B-1/B-2 决定进入“薄 PRD→逐页 mockup”路线,字段/语义未获各自验收前仍不实施;LOC-001 已前移为真实数据进入前的 Now 硬前置。
 15. 对外可信版:三硬门达成后另立 PRD,本文不排期。
 
 ## 12. 假设台账(按契约 §3 两级)
@@ -320,7 +320,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 | P2 K-3/K-8/质疑记录/定稿门 | §5、本节、PM 大白话 | K-3 补 A+记名源;K-8 删除来源不匹配的 median,按 A 算术/B 筛选/Candidate 记录;历史面板降级并列出本轮 findings;定稿门恢复为质量 Loop 全部退出条件+PM 明确说「定稿」 |
 | 动态事实 #187/#189 | §4.4、§4.7、§11 | 现场确认两 PR 均已合入 master,不再写在途 |
 
-本 PRD 已于 2026-07-15 完成**文档定稿**,并在 v1.3 将 §10 收口为**零待 PM 选择**:PM 在 v1.1 固定头 `72245c29` 的检查与复核后明确说「定稿」,随后逐项批准剩余推荐、指定 O-2 四个角色统一为「管理员」并授权满足门禁后普通合并 PR #190。决策清零不等于表中实现/证据门已完成,不升级 B/C、RATIFIED 或 Locked Golden,不代表部署/上线、真实业务验收或对外承诺。PR #190 的合并授权只属于该历史 PR;v1.4 是根据 #182 新决定做的独立同步,仍须通过自己固定 SHA 的 required gates、scope、mergeability 与独立复核,且没有继承自动合并、admin bypass、force、formal review 或 resolve thread 权限。
+本 PRD 已于 2026-07-15 完成**文档定稿**,并在 v1.3 将 §10 收口为**零待 PM 选择**。v1.5 把七项已决内容同步回唯一 PM 索引,并把实时协作入口迁到 `kornma123/pis`;它没有重开产品选择。决策清零不等于表中实现/证据门已完成,不升级 B/C、RATIFIED 或 Locked Golden,不代表部署/上线、真实业务验收或对外承诺。历史 PR 的合并授权不转移给新任务;每个新固定对象仍须通过自己的 scope、验证、独立复核与 PM 合并门,且没有继承自动合并、admin bypass、force、formal review 或 resolve thread 权限。
 
 ## 附录 A · 文档地图(开工导航,按域点名唯一权威)
 
@@ -335,7 +335,7 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 | 对账导入 | [导入器路线图定稿](COREONE-配置驱动导入器-产品路线图-2026-06-29.md)+[PRD-0/1A](prd/00-开发材料索引.md)+dev/ 三件(schema/状态机/质量标记) |
 | 黄金锚 | [golden-registry](golden-registry.md) |
 | 前端 | [前端标准(mockup 先行+说人话)](COREONE-前端标准-流程质量设计文案UX-2026-06-27.md) |
-| 决策 | [PM 待拍板索引](PM待拍板.md)(乙组指回收官页;该索引尚未同步 2026-07-15 本批决定,本批相关 ID 以 §10 链接的较新 PM 评论为准) |
+| 决策 | [PM 决策索引](PM待拍板.md)(乙组继续指回收官页;M-1/M-3/M-4/M-5/B-1/B-2/B-4 已在 v2.1 同步,机器防漂移验收见 GOV-002) |
 | 报告 | docs/reports/(校准/16 院台账/康湾核真/背景审计) |
 
 **使用规则**:①任何开工先 preflight+契约,再查本文对应域现状与 §5 口径,再进域权威;②本文不承载实时状态(分支/PR/checks 现场查);③修订本文走 PRD Loop 修订轮+PM 拍板,修订说明写「这轮改了什么」;④与域权威冲突时,以域权威+活代码为准并回来修本文。
@@ -344,4 +344,4 @@ ABC 前端 19 页处置(PM 2026-07-03):配置类 10 页保留(参数唯一录入
 
 ## PM 大白话
 
-这份「整个项目的总需求书」现在已经**文档定稿,且当前没有待 PM 选择的 PRD 决策**。它把系统分成十个部分,写清楚:**仓库真实做到了哪**(代码/文档已实现或已合入,不冒充生产上线)、**已经选了什么方向**(§10 每项都有最终选择)、**还要拿什么证据/做什么实现才能变绿**。完整医院名单已经有了,O-1 改为做系统内版本化医院目录配置,不再重复确认名单;但配置控制面/C1 scope、真实金额/LIS/成本/finality、真实周期和独立验收都仍未完成,缺失金额继续 UNMEASURED/null。O-2 的四个角色统一叫「管理员」;职责集中已接受,但实施者不能给自己做“独立复核”。E0 mockup 已批准并合入,不等于生产 E1 已做。本次 v1.4 只是同步新合同,不自动启动 D1-1、业务实现或部署,也不会把“决定已拍”写成“业务已完成”。
+这份「整个项目的总需求书」现在已经**文档定稿,且当前没有待 PM 选择的 PRD 决策**。它把系统分成十个部分,写清楚:**仓库真实做到了哪**(代码/文档已实现或已合入,不冒充生产上线)、**已经选了什么方向**(§10 每项都有最终选择)、**还要拿什么证据/做什么实现才能变绿**。完整医院名单已经有了,O-1 改为做系统内版本化医院目录配置,不再重复确认名单;但配置控制面/C1 scope、真实金额/LIS/成本/finality、真实周期和独立验收都仍未完成,缺失金额继续 UNMEASURED/null。O-2 的四个角色统一叫「管理员」;职责集中已接受,但实施者不能给自己做“独立复核”。E0 mockup 已批准并合入,不等于生产 E1 已做。本次 v1.5 只同步新仓入口、稳定决定与 master 事实,不自动启动 D1-1、业务实现或部署,也不会把“决定已拍”写成“业务已完成”。
