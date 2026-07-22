@@ -77,7 +77,7 @@ jobs:
       - name: Run ${{ matrix.suite }} E2E suite
         working-directory: 前端代码
         shell: bash
-        run: npx playwright test ${{ matrix.test_args }} --reporter=list --workers=1
+        run: npx playwright test ${{ matrix.test_args }} --workers=1
         env:
           CI: true
 

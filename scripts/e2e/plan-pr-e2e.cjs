@@ -94,12 +94,24 @@ function planPrE2E(manifest, changedFiles = []) {
   const changed = [...new Set(changedFiles.map(normalizePath).filter(Boolean))].sort();
   const specs = new Set();
   const domains = new Set();
+  const allCriticalSpecs = new Set([
+    ...manifest.coreSpecs,
+    ...manifest.domains
+      .filter((domain) => domain.tier === 'critical')
+      .flatMap((domain) => domain.specs),
+  ]);
   const infraPatterns = [
     '.github/workflows/e2e.yml',
     '.github/workflows/e2e-full.yml',
     'scripts/e2e/**',
     '前端代码/e2e/impact-map.json',
     '前端代码/playwright.config.ts',
+    '前端代码/vite.config.ts',
+    '前端代码/vitest.config.ts',
+    '前端代码/tsconfig*.json',
+    '前端代码/index.html',
+    '前端代码/tailwind.config.ts',
+    '前端代码/postcss.config.js',
     '前端代码/package.json',
     '前端代码/package-lock.json',
     '后端代码/server/package.json',
@@ -111,6 +123,10 @@ function planPrE2E(manifest, changedFiles = []) {
 
     if (matchesAny(file, infraPatterns)) {
       manifest.coreSpecs.forEach((spec) => specs.add(spec));
+    }
+
+    if (matchesAny(file, ['前端代码/e2e/critical/**']) && !file.endsWith('.spec.ts')) {
+      allCriticalSpecs.forEach((spec) => specs.add(spec));
     }
 
     if (/^前端代码\/e2e\/critical\/[^/]+\.spec\.ts$/.test(file)) {
@@ -170,13 +186,13 @@ function parseArgs(argv) {
   return result;
 }
 
-function readChangedFiles(base, head = 'HEAD') {
+function readChangedFiles(base, head = 'HEAD', repoRoot = REPO_ROOT, execFile = execFileSync) {
   if (!base) throw new Error('E2E_IMPACT_ARGS: 未提供 --base，且没有 --changed-file。');
-  const output = execFileSync(
+  const output = execFile(
     'git',
-    ['-c', 'core.quotePath=false', 'diff', '--name-only', '--diff-filter=ACMRT', base, head],
+    ['-c', 'core.quotePath=false', 'diff', '--name-only', '--diff-filter=ACMRT', `${base}...${head}`],
     {
-      cwd: REPO_ROOT,
+      cwd: repoRoot,
       encoding: 'utf8',
     },
   );
@@ -214,6 +230,7 @@ module.exports = {
   matchesAny,
   normalizePath,
   planPrE2E,
+  readChangedFiles,
   validateManifest,
   validateManifestFiles,
 };

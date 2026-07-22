@@ -44,17 +44,18 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
+          node scripts/e2e/plan-pr-e2e.selftest.cjs
           if [[ "$EVENT_NAME" == "workflow_dispatch" || -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
             node scripts/e2e/plan-pr-e2e.cjs \
               --changed-file=.github/workflows/e2e.yml \
-              --format=lines > .e2e-specs.txt
+              --format=lines > e2e-specs.txt
           else
             node scripts/e2e/plan-pr-e2e.cjs \
               --base="$BASE_SHA" \
               --head="$HEAD_SHA" \
-              --format=lines > .e2e-specs.txt
+              --format=lines > e2e-specs.txt
           fi
-          if [[ -s .e2e-specs.txt ]]; then
+          if [[ -s e2e-specs.txt ]]; then
             echo "has_specs=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_specs=false" >> "$GITHUB_OUTPUT"
@@ -63,7 +64,7 @@ jobs:
             echo "### E2E impact plan"
             echo ""
             echo '```text'
-            if [[ -s .e2e-specs.txt ]]; then cat .e2e-specs.txt; else echo "No E2E-relevant source change."; fi
+            if [[ -s e2e-specs.txt ]]; then cat e2e-specs.txt; else echo "No E2E-relevant source change."; fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -96,8 +97,8 @@ jobs:
         working-directory: 前端代码
         shell: bash
         run: |
-          mapfile -t specs < ../.e2e-specs.txt
-          npx playwright test "${specs[@]}" --reporter=list --workers=1
+          mapfile -t specs < ../e2e-specs.txt
+          npx playwright test "${specs[@]}" --workers=1
         env:
           CI: true
 
@@ -107,7 +108,7 @@ jobs:
         with:
           name: e2e-required-${{ github.run_id }}
           path: |
-            .e2e-specs.txt
+            e2e-specs.txt
             前端代码/e2e-report/
             前端代码/test-results/
           if-no-files-found: warn

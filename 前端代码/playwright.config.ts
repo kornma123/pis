@@ -14,7 +14,7 @@ export default defineConfig({
   workers: 1,
   timeout: 60000,
   reporter: [
-    ['html', { outputFolder: 'e2e-report' }],
+    ['html', { outputFolder: 'e2e-report', open: 'never' }],
     ['list'],
   ],
   use: {
