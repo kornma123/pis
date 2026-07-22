@@ -45,6 +45,37 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
+function axios409(code: unknown) {
+  return {
+    name: 'AxiosError',
+    message: 'Request failed with status code 409',
+    code: 'ERR_BAD_REQUEST',
+    isAxiosError: true,
+    response: {
+      status: 409,
+      data: {
+        success: false,
+        error: { code, message: 'correction conflict' },
+      },
+    },
+  }
+}
+
+async function submitCorrection(newOperateTime: string) {
+  await renderDetail()
+  fireEvent.click(screen.getByRole('button', { name: '更正登记时间' }))
+  const form = screen.getByRole('region', { name: '登记时间更正' })
+  fireEvent.change(within(form).getByLabelText('新登记时间'), { target: { value: newOperateTime } })
+  fireEvent.change(within(form).getByLabelText('更正原因'), { target: { value: '冲突提示核对' } })
+  fireEvent.click(within(form).getByRole('checkbox'))
+  fireEvent.click(within(form).getByRole('button', { name: '提交更正' }))
+  return form
+}
+
+function expectOperateTimeUnchanged() {
+  expect(screen.getAllByText('2026-06-20').length).toBeGreaterThan(0)
+}
+
 async function renderDetail() {
   render(<LisCaseDetail partnerId="P-1" caseNo="S26-001" onBack={vi.fn()} />)
   await screen.findByText('S26-001')
@@ -148,36 +179,57 @@ describe('#179 登记月带留痕更正', () => {
     expect(within(form).getByRole('alert')).toHaveTextContent('确认')
   })
 
-  it('stale（服务端 409 STALE_EXPECTED）→ 提示已被修改并需重新加载，不乐观写入', async () => {
-    vi.mocked(lisCasesApi.correct).mockRejectedValue({ status: 409, code: 'STALE_EXPECTED', message: 'stale' })
-    await renderDetail()
-    fireEvent.click(screen.getByRole('button', { name: '更正登记时间' }))
-    const form = screen.getByRole('region', { name: '登记时间更正' })
-    fireEvent.change(within(form).getByLabelText('新登记时间'), { target: { value: '2026-07-05' } })
-    fireEvent.change(within(form).getByLabelText('更正原因'), { target: { value: '登记月录错' } })
-    fireEvent.click(within(form).getByRole('checkbox'))
-    fireEvent.click(within(form).getByRole('button', { name: '提交更正' }))
+  it('真实 Axios 409 STALE_EXPECTED → 提示已被修改并需重新加载，不误读顶层 ERR_BAD_REQUEST', async () => {
+    vi.mocked(lisCasesApi.correct).mockRejectedValue(axios409('STALE_EXPECTED'))
+    const form = await submitCorrection('2026-07-05')
 
     expect(await within(form).findByRole('alert')).toHaveTextContent('已被修改')
-    expect(screen.queryByText('2026-07-05')).not.toBeInTheDocument() // 不乐观写入
+    expectOperateTimeUnchanged()
     // 重新加载后 CAS 基准刷新
     vi.mocked(lisCasesApi.list).mockResolvedValue({ list: [{ ...RECORD, operateTime: '2026-06-30' }], page: 1, pageSize: 20, total: 1 })
     fireEvent.click(within(form).getByRole('button', { name: '重新加载' }))
     expect(await screen.findByText('2026-06-30')).toBeInTheDocument()
   })
 
-  it('same-value（服务端 409 SAME_VALUE）→ 显示无需更正，不伪装成他人修改', async () => {
-    vi.mocked(lisCasesApi.correct).mockRejectedValue({ status: 409, code: 'SAME_VALUE', message: 'same' })
-    await renderDetail()
-    fireEvent.click(screen.getByRole('button', { name: '更正登记时间' }))
-    const form = screen.getByRole('region', { name: '登记时间更正' })
-    fireEvent.change(within(form).getByLabelText('新登记时间'), { target: { value: '2026-06-20' } })
-    fireEvent.change(within(form).getByLabelText('更正原因'), { target: { value: '重复提交检查' } })
-    fireEvent.click(within(form).getByRole('checkbox'))
-    fireEvent.click(within(form).getByRole('button', { name: '提交更正' }))
+  it('真实 Axios 409 SAME_VALUE → 显示无需更正，不伪装成他人修改', async () => {
+    vi.mocked(lisCasesApi.correct).mockRejectedValue(axios409('SAME_VALUE'))
+    const form = await submitCorrection('2026-06-20')
 
     expect(await within(form).findByRole('alert')).toHaveTextContent('无需更正')
     expect(within(form).queryByRole('button', { name: '重新加载' })).not.toBeInTheDocument()
+    expectOperateTimeUnchanged()
+  })
+
+  it('真实 Axios 未知 409 → 通用失败提示，不乐观更新', async () => {
+    vi.mocked(lisCasesApi.correct).mockRejectedValue(axios409('UNRECOGNIZED_CONFLICT'))
+    const form = await submitCorrection('2026-07-05')
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('更正未成功')
+    expect(within(form).queryByRole('button', { name: '重新加载' })).not.toBeInTheDocument()
+    expectOperateTimeUnchanged()
+  })
+
+  it('普通 Axios 网络错误 → 通用失败提示，不乐观更新', async () => {
+    vi.mocked(lisCasesApi.correct).mockRejectedValue({
+      name: 'AxiosError',
+      message: 'Network Error',
+      code: 'ERR_NETWORK',
+      isAxiosError: true,
+      request: {},
+    })
+    const form = await submitCorrection('2026-07-05')
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('更正未成功')
+    expectOperateTimeUnchanged()
+  })
+
+  it('malformed Axios 409 业务码 → fail-closed 通用失败提示，不乐观更新', async () => {
+    vi.mocked(lisCasesApi.correct).mockRejectedValue(axios409({ nested: 'STALE_EXPECTED' }))
+    const form = await submitCorrection('2026-07-05')
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('更正未成功')
+    expect(within(form).queryByRole('button', { name: '重新加载' })).not.toBeInTheDocument()
+    expectOperateTimeUnchanged()
   })
 
   it('双击/重复提交只发一次更正请求', async () => {

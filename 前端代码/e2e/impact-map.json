@@ -124,6 +124,18 @@
       "specs": ["e2e/critical/alerts.spec.ts"]
     },
     {
+      "id": "lis-cases",
+      "tier": "critical",
+      "owner": "lis-cases",
+      "sources": [
+        "前端代码/src/pages/lis-cases/**",
+        "前端代码/src/api/lis-cases.ts",
+        "后端代码/server/src/routes/lis-cases-v1.1.ts",
+        "后端代码/server/src/utils/lis-import.ts"
+      ],
+      "specs": ["e2e/critical/lis-cases.spec.ts"]
+    },
+    {
       "id": "shared-backend",
       "tier": "critical",
       "owner": "backend-platform",
@@ -159,7 +171,6 @@
         "前端代码/src/pages/import-shared/**",
         "前端代码/src/pages/import-wizard/**",
         "前端代码/src/pages/labor/**",
-        "前端代码/src/pages/lis-cases/**",
         "前端代码/src/pages/master/**",
         "前端代码/src/pages/partner-config/**",
         "前端代码/src/pages/purchase/**",

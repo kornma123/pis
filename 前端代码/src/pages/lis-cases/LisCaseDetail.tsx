@@ -16,6 +16,18 @@ function message(_error: unknown, fallback: string) {
   return fallback
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function correctionConflictCode(error: unknown): 'STALE_EXPECTED' | 'SAME_VALUE' | null {
+  if (!isRecord(error) || !isRecord(error.response) || error.response.status !== 409) return null
+  const data = error.response.data
+  if (!isRecord(data) || !isRecord(data.error)) return null
+  const code = data.error.code
+  return code === 'STALE_EXPECTED' || code === 'SAME_VALUE' ? code : null
+}
+
 export default function LisCaseDetail({ partnerId, caseNo, onBack }: { partnerId: string; caseNo: string; onBack: () => void }) {
   const canWrite = canAccess('reconciliation', 'W')
   const requestId = useRef(0)
@@ -111,9 +123,9 @@ export default function LisCaseDetail({ partnerId, caseNo, onBack }: { partnerId
       toast.success('登记时间已更正并留痕')
     } catch (error) {
       // 请求层已 toast 真因；stale（409）需给出重载路径，其余错误不乐观写入
-      const failure = error as { status?: number; code?: string }
-      if (failure?.status === 409 && failure.code === 'STALE_EXPECTED') setCorrectionStale(true)
-      else if (failure?.status === 409 && failure.code === 'SAME_VALUE') setCorrectionError('新登记时间与当前值相同，无需更正')
+      const conflictCode = correctionConflictCode(error)
+      if (conflictCode === 'STALE_EXPECTED') setCorrectionStale(true)
+      else if (conflictCode === 'SAME_VALUE') setCorrectionError('新登记时间与当前值相同，无需更正')
       else setCorrectionError('更正未成功，登记时间未改变，请核对后重试')
     } finally {
       correctionActionRef.current = false
