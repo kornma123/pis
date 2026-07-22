@@ -21,6 +21,7 @@ import {
   InventoryTransactionError,
   restoreBatchStock,
 } from '../services/inventory-transactions.js'
+import { assertLocationCapacityHeld, locationCapacityError } from '../utils/location-capacity.js'
 import {
   checkedAdd,
   checkedMultiply,
@@ -627,6 +628,13 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         restorationLogs.push({ materialId, quantity, before: snapshot.before, after: snapshot.after })
       }
 
+      // 库位容量门（LOC-029）：恢复原出库明细即恢复各物料当前库位占用，
+      // 锁内逐物料重读库位与占用事实，超容抛错回滚（先于任何新明细消费）。
+      for (const materialId of groupRestorationsByMaterial(restorations).keys()) {
+        const restoreLocationId = (db.prepare('SELECT location_id FROM inventory WHERE material_id = ?').get(materialId) as any)?.location_id ?? null
+        assertLocationCapacityHeld(db, restoreLocationId)
+      }
+
       // 现有 tracking 表没有 outbound_id；只能沿用“物料 + 批号 + in-use”的最窄可用清理条件。
       for (const item of transactionOldItems) {
         if (item.batch_no) {
@@ -738,6 +746,8 @@ router.put('/:id', requireWriteAccess, (req, res) => {
 
     success(res, { id, totalCost: newTotalCost }, 'Outbound updated')
   } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
     const inventoryError = inventoryTransactionError(err)
     if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }
@@ -796,6 +806,13 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
         restorationLogs.push({ materialId, quantity, before: snapshot.before, after: snapshot.after })
       }
 
+      // 库位容量门（LOC-029）：删除出库即恢复各物料当前库位占用，
+      // 锁内逐物料重读库位与占用事实，超容抛错回滚。
+      for (const materialId of groupRestorationsByMaterial(restorations).keys()) {
+        const restoreLocationId = (db.prepare('SELECT location_id FROM inventory WHERE material_id = ?').get(materialId) as any)?.location_id ?? null
+        assertLocationCapacityHeld(db, restoreLocationId)
+      }
+
       // tracking 表没有 outbound_id，无法精确识别来源；沿用现有最窄条件清理。
       for (const item of transactionItems) {
         if (item.batch_no) {
@@ -839,6 +856,8 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
       throw err
     }
   } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
     const inventoryError = inventoryTransactionError(err)
     if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     if (err?.code === 'LEDGER_DRIFT') { error(res, err.message, 'LEDGER_DRIFT', 409); return }

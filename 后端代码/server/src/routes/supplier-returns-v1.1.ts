@@ -18,6 +18,7 @@ import {
   inventoryTransactionError,
   restoreBatchStock,
 } from '../services/inventory-transactions.js'
+import { assertLocationCapacityHeld, locationCapacityError } from '../utils/location-capacity.js'
 
 const router = Router()
 
@@ -370,6 +371,9 @@ router.put('/:id/status', requireWriteAccess, (req, res) => {
           lockedRecord.material_id,
           [{ batchId: exactBatchId, quantity: normalizedQuantity }],
         )
+        // 库位容量门（LOC-029）：取消退货恢复物料当前库位占用，锁内重读库位与占用事实，超容抛错回滚
+        const cancelLocationId = (db.prepare('SELECT location_id FROM inventory WHERE material_id = ?').get(lockedRecord.material_id) as any)?.location_id ?? null
+        assertLocationCapacityHeld(db, cancelLocationId)
         db.prepare(`
           INSERT INTO stock_logs
             (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
@@ -394,6 +398,8 @@ router.put('/:id/status', requireWriteAccess, (req, res) => {
     }
     success(res, { id: req.params.id, status }, '状态更新成功')
   } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
     const inventoryError = inventoryTransactionError(err)
     if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     error(res, err.message)
@@ -539,6 +545,10 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
         [{ batchId: exactBatchId, quantity: normalizedQuantity }],
       )
 
+      // 库位容量门（LOC-029）：删除退货恢复物料当前库位占用，锁内重读库位与占用事实，超容抛错回滚
+      const deleteLocationId = (db.prepare('SELECT location_id FROM inventory WHERE material_id = ?').get(record.material_id) as any)?.location_id ?? null
+      assertLocationCapacityHeld(db, deleteLocationId)
+
       // 写库存流水
       const logId = uuidv4()
       db.prepare(`
@@ -553,6 +563,8 @@ router.delete('/:id', requireWriteAccess, (req, res) => {
       throw e
     }
   } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
     const inventoryError = inventoryTransactionError(err)
     if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     error(res, err.message)

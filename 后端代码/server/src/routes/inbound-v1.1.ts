@@ -27,11 +27,23 @@ import {
   subtractBatchStock,
   syncInventoryFromBatches,
 } from '../services/inventory-transactions.js'
+import { assertLocationCapacityHeld, locationCapacityError } from '../utils/location-capacity.js'
 
 const router = Router()
 
 // 写入权限：读 DB 矩阵（inbound W = admin/warehouse_manager/procurement，可在角色权限页改）
 const requireWriteAccess = requirePermission('inbound', 'W')
+
+/**
+ * supplied locationId 形状校验（LOC-029 R2）：必须是 canonical 非空字符串。
+ * number/object/array/null/blank/trim-confused 一律拒绝（稳定 400、零部分态）；
+ * 仅真正未提供（undefined）表示 no-change，不自创 clear-location 语义。
+ */
+function parseSuppliedLocationId(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  if (value.trim() === '' || value.trim() !== value) return null
+  return value
+}
 
 function generateInboundNo(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -485,6 +497,9 @@ router.post('/', requireWriteAccess, (req, res) => {
     if (!type || !materialId || quantity === undefined || !locationId) {
       error(res, 'Missing required fields', 'INVALID_PARAMETER', 400); return
     }
+    if (parseSuppliedLocationId(locationId) === null) {
+      error(res, 'Location id must be a canonical non-empty string', 'INVALID_PARAMETER', 400); return
+    }
     const normalizedQuantity = parseFinitePositiveNumber(quantity)
     if (normalizedQuantity === null) {
       error(res, 'Quantity must be a finite positive number', 'INVALID_PARAMETER', 400); return
@@ -561,6 +576,9 @@ router.post('/', requireWriteAccess, (req, res) => {
         VALUES (?, 'inbound', ?, ?, ?, ?, ?, 'inbound', ?)
       `).run(logId, materialId, normalizedQuantity, batchResult.inventory.before, batchResult.inventory.after, id, operator)
 
+      // 库位容量门（LOC-029）：锁内重读目标库位与占用事实，超容抛错回滚、零部分态
+      assertLocationCapacityHeld(db, locationId)
+
       responseEnvelope = buildSuccessEnvelope({ id, inboundNo, type, materialId, quantity: normalizedQuantity, status: 'completed', purchaseOrderId, purchaseOrderNo }, 'Inbound created')
       if (idemKey) finalizeIdempotency(db, idemKey, 201, responseEnvelope)
       db.exec('COMMIT')
@@ -572,6 +590,8 @@ router.post('/', requireWriteAccess, (req, res) => {
 
     res.status(201).json(responseEnvelope)
   } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
     const inventoryError = inventoryTransactionError(err)
     if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     error(res, err.message)
@@ -586,6 +606,9 @@ router.put('/:id', requireWriteAccess, (req, res) => {
     const { batchNo, quantity, price, supplierId, locationId, productionDate, expiryDate, remark, status } = req.body
     if (batchNo !== undefined && (typeof batchNo !== 'string' || batchNo.trim().length === 0)) {
       error(res, 'Batch number cannot be cleared from an inbound fact', 'INVALID_PARAMETER', 400); return
+    }
+    if (locationId !== undefined && parseSuppliedLocationId(locationId) === null) {
+      error(res, 'Location id must be a canonical non-empty string', 'INVALID_PARAMETER', 400); return
     }
     if (status !== undefined && !['completed', 'cancelled'].includes(status)) {
       error(res, 'Inbound status must be completed or cancelled', 'INVALID_PARAMETER', 400); return
@@ -860,6 +883,19 @@ router.put('/:id', requireWriteAccess, (req, res) => {
         })
         : null
 
+      // 库位容量门（LOC-029）：恢复入库 / 数量上调 / 库位迁移会抬高目标库位占用；
+      // 锁内重读目标库位与占用事实，超容抛错回滚、零部分态。
+      const preOpLocationId = (transactionPlan.inventory?.location_id ?? null) as string | null
+      const locationChanged = typeof locationId === 'string' && locationId !== preOpLocationId
+      const occupancyIncrease = transactionPlan.mode === 'restore'
+        || (transactionPlan.mode === 'edit' && transactionPlan.qtyDiff > 0)
+        || locationChanged
+      if (occupancyIncrease) {
+        const postLocationId = (db.prepare('SELECT location_id FROM inventory WHERE material_id = ?')
+          .get(transactionRecord.material_id) as any)?.location_id ?? null
+        assertLocationCapacityHeld(db, postLocationId)
+      }
+
       // 5. 记录日志
       const logId = uuidv4()
       db.prepare(`
@@ -888,6 +924,8 @@ router.put('/:id', requireWriteAccess, (req, res) => {
       throw err
     }
   } catch (err: any) {
+    const capacityError = locationCapacityError(err)
+    if (capacityError) { error(res, capacityError.message, capacityError.code, capacityError.statusCode); return }
     const inventoryError = inventoryTransactionError(err)
     if (inventoryError) { error(res, inventoryError.message, inventoryError.code, inventoryError.statusCode); return }
     error(res, err.message)
