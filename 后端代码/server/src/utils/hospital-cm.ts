@@ -26,7 +26,7 @@
  * 这不是 readiness 探针版本：任何会改变 `computeCaseCm`、`rollupHospitalCm`
  * 或成本装载语义的变更，都必须显式 bump 本版本，并让历史周期证据绑定该值。
  */
-export const HOSPITAL_CM_FORMULA_VERSION = '2026-07-12.a' as const
+export const HOSPITAL_CM_FORMULA_VERSION = '2026-07-20.a' as const
 
 /** 真抗体申请类型白名单（§10.B）。一行 = 一片一抗（不去重）；Y000006 HE深切重切 / Y000007 白片 / 其它码不计。
  *  与 `reconcile-account.ts` 的 ANTIBODY_ADVICE 同源（Y000001/Y000003）。 */

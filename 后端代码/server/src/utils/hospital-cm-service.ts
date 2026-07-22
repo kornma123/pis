@@ -23,7 +23,6 @@ import {
 } from './antibody-name-map.js'
 import {
   computeCaseCm,
-  makeWithheldCase,
   rollupHospitalCm,
   SECONDARY_PER_SLIDE_DEFAULT,
   type P0CaseInput,
@@ -35,6 +34,75 @@ import {
 
 interface DbLike {
   prepare: (sql: string) => { get: (...a: unknown[]) => unknown; run: (...a: unknown[]) => { changes?: number }; all: (...a: unknown[]) => unknown[] }
+}
+
+export class HospitalCmSourceDataError extends Error {
+  readonly code = 'HOSPITAL_CM_LAB_REVENUE_INVALID'
+  readonly status = 500
+
+  constructor() {
+    super('院级贡献毛利收入事实不可安全计算')
+    this.name = 'HospitalCmSourceDataError'
+  }
+}
+
+const LAB_REVENUE_SCALE = 10_000
+const VALID_SERVICE_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/
+
+interface LabRevenueFact {
+  value: number
+  units: bigint
+}
+
+/** case_revenue.lab_revenue 是 DECIMAL(18,4)：只接受 DB 返回的有限 number，并精确缩放到万分之一元。 */
+function readLabRevenueFact(value: unknown): LabRevenueFact {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw new HospitalCmSourceDataError()
+  const scaled = value * LAB_REVENUE_SCALE
+  const rounded = Math.round(scaled)
+  const tolerance = Number.EPSILON * Math.max(1, Math.abs(scaled)) * 2
+  if (!Number.isSafeInteger(rounded) || Math.abs(scaled - rounded) > tolerance) throw new HospitalCmSourceDataError()
+  return { value, units: BigInt(rounded) }
+}
+
+function sumLabRevenueUnits(facts: readonly LabRevenueFact[]): bigint {
+  let total = 0n
+  for (const fact of facts) total += fact.units
+  if (total > BigInt(Number.MAX_SAFE_INTEGER)) throw new HospitalCmSourceDataError()
+  return total
+}
+
+const round2 = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100
+
+interface WeightedMonth {
+  row: RevenueRow
+  fact: LabRevenueFact
+  index: number
+}
+
+/** PM_DECISION_C：每个 bucket 独立按最大余数法分摊；同余数优先最早 service_month。 */
+function allocateBucket(totalAmount: number, months: readonly WeightedMonth[], denominator: bigint): Map<RevenueRow, number> {
+  const totalCents = Math.round(totalAmount * 100)
+  if (!Number.isSafeInteger(totalCents) || totalCents < 0 || denominator <= 0n) throw new HospitalCmSourceDataError()
+
+  const total = BigInt(totalCents)
+  const shares = months.map((month) => {
+    const numerator = total * month.fact.units
+    return {
+      ...month,
+      cents: numerator / denominator,
+      remainder: numerator % denominator,
+    }
+  })
+  const used = shares.reduce((sum, share) => sum + share.cents, 0n)
+  const remaining = Number(total - used)
+  const ranked = [...shares].sort((a, b) => {
+    if (a.remainder !== b.remainder) return a.remainder > b.remainder ? -1 : 1
+    const monthOrder = String(a.row.service_month).localeCompare(String(b.row.service_month))
+    return monthOrder || a.index - b.index
+  })
+  for (let i = 0; i < remaining; i += 1) ranked[i].cents += 1n
+
+  return new Map(shares.map((share) => [share.row, Number(share.cents) / 100]))
 }
 
 // —— 台账索引 / 别名映射（与 antibody-cost-v1.1.ts 同款·DB 权威源）——
@@ -117,7 +185,7 @@ interface RevenueRow {
   case_no: string
   partner_id: string | null
   partner_name: string | null
-  lab_revenue: number | null
+  lab_revenue: unknown
   revenue_source: string | null
   service_month: string | null
   special_stain_count: number | null
@@ -131,10 +199,9 @@ interface RevenueRow {
  * 引擎按同源闸/准入闸分桶。marker 先按 (partner_id,case_no) 分组（防标量扇出）。
  */
 export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): P0CaseCm[] {
-  let where = "cr.lab_revenue IS NOT NULL AND cr.revenue_source IN ('statement','corrected')"
+  let where = "cr.revenue_source IN ('statement','corrected')"
   const params: unknown[] = []
   if (opts.partnerId) { where += ' AND cr.partner_id = ?'; params.push(opts.partnerId) }
-  if (opts.serviceMonth) { where += ' AND cr.service_month = ?'; params.push(opts.serviceMonth) }
 
   const revRows = db.prepare(`
     SELECT cr.case_no, cr.partner_id, p.name AS partner_name, cr.lab_revenue, cr.revenue_source, cr.service_month,
@@ -146,6 +213,9 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
   `).all(...params) as RevenueRow[]
 
   if (revRows.length === 0) return []
+  // 必须先验证同身份的全部结算月，再做 serviceMonth 输出过滤；TEXT/NaN/Infinity/unsafe/负数/超精度均拒绝发布。
+  const factsByRow = new Map<RevenueRow, LabRevenueFact>()
+  for (const row of revRows) factsByRow.set(row, readLabRevenueFact(row.lab_revenue))
 
   // marker 按 (partner_id, case_no) 分组（等价 CTE·防扇出）。markers 无 service_month，按 partner 过滤（给了 partnerId 时）。
   const markerKey = (pid: string | null, caseNo: string): string => `${pid ?? ''}||${caseNo}`
@@ -179,18 +249,14 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
   const stain = loadStainPerSlide(db)
   const params2: CaseCmParams = { secondaryPerSlide, stainPerSlide: stain.perSlide, stainIsPlaceholder: stain.isPlaceholder }
 
-  // §10.E 跨月复用检测（HIGH·防双计）：case_no 在 case_revenue 跨多个 service_month 复用（lis_cases 键无月·ON CONFLICT 覆盖）
-  //   → 同一份 marker/标量会被多月各计一次。命中者【禁输出贡献毛利·标 cross_month_reuse】，不进任何成本上卷（诚实挡）。
-  const collisionKeys = loadCrossMonthReuseKeys(db, opts.partnerId)
-
-  return revRows.map((r) => {
+  const inputFor = (r: RevenueRow): P0CaseInput => {
     const markers = markersByCase.get(markerKey(r.partner_id, r.case_no)) ?? []
-    const input: P0CaseInput = {
+    return {
       caseNo: r.case_no,
       partnerId: r.partner_id ?? '',
       partnerName: r.partner_name,
       serviceMonth: r.service_month,
-      labRevenue: Number(r.lab_revenue) || 0,
+      labRevenue: factsByRow.get(r)!.value,
       revenueSource: r.revenue_source,
       markers,
       specialStainCount: Number(r.special_stain_count) || 0,
@@ -198,28 +264,63 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
       ihcCount: Number(r.ihc_count) || 0,
       tissueProcessing: loadPartnerTissueDefault(db, r.partner_id ?? ''),
     }
-    if (collisionKeys.has(markerKey(r.partner_id, r.case_no))) return makeWithheldCase(input)
-    return computeCaseCm(input, resolvePrice, params2)
-  })
-}
+  }
 
-/**
- * §10.E 跨月复用键集：`GROUP BY partner_id,case_no HAVING COUNT(DISTINCT service_month)>1`。
- * 键 = `partner_id||case_no`（与 markerKey 同格式）。仅统计准入的 case（lab_revenue NOT NULL·revenue_source∈statement/corrected）。
- */
-function loadCrossMonthReuseKeys(db: DbLike, partnerId?: string): Set<string> {
-  const keys = new Set<string>()
-  let where = "lab_revenue IS NOT NULL AND revenue_source IN ('statement','corrected')"
-  const params: unknown[] = []
-  if (partnerId) { where += ' AND partner_id = ?'; params.push(partnerId) }
-  const rows = db.prepare(`
-    SELECT partner_id, case_no FROM case_revenue
-    WHERE ${where}
-    GROUP BY partner_id, case_no
-    HAVING COUNT(DISTINCT service_month) > 1
-  `).all(...params) as Array<{ partner_id: string | null; case_no: string }>
-  for (const r of rows) keys.add(`${r.partner_id ?? ''}||${r.case_no}`)
-  return keys
+  const rowsByIdentity = new Map<string, RevenueRow[]>()
+  for (const row of revRows) {
+    const key = markerKey(row.partner_id, row.case_no)
+    const rows = rowsByIdentity.get(key) ?? []
+    rows.push(row)
+    rowsByIdentity.set(key, rows)
+  }
+
+  const calculated: P0CaseCm[] = []
+  for (const rows of rowsByIdentity.values()) {
+    const months = new Set(rows.map((row) => row.service_month))
+    if (months.size <= 1) {
+      calculated.push(...rows.map((row) => computeCaseCm(inputFor(row), resolvePrice, params2)))
+      continue
+    }
+    if (rows.some((row) => row.service_month == null || !VALID_SERVICE_MONTH.test(row.service_month))) {
+      throw new HospitalCmSourceDataError()
+    }
+
+    const weighted = rows.map((row, index) => ({ row, fact: factsByRow.get(row)!, index }))
+    const denominator = sumLabRevenueUnits(weighted.map((item) => item.fact))
+    if (denominator === 0n) throw new HospitalCmSourceDataError()
+    const totalLabRevenue = Number(denominator) / LAB_REVENUE_SCALE
+    const original = computeCaseCm({ ...inputFor(rows[0]), labRevenue: totalLabRevenue }, resolvePrice, params2)
+    if (original.bucket !== 'staining') {
+      calculated.push(...rows.map((row) => computeCaseCm(inputFor(row), resolvePrice, params2)))
+      continue
+    }
+
+    const bucketAByRow = allocateBucket(original.bucketA, weighted, denominator)
+    const bucketBByRow = allocateBucket(original.bucketB, weighted, denominator)
+    for (const row of rows) {
+      const input = inputFor(row)
+      if (factsByRow.get(row)!.units === 0n) {
+        calculated.push(computeCaseCm(input, resolvePrice, params2))
+        continue
+      }
+      const bucketA = bucketAByRow.get(row)!
+      const bucketB = bucketBByRow.get(row)!
+      const avoidableCost = round2(bucketA + bucketB)
+      const denominatorCost = bucketA + bucketB
+      calculated.push({
+        ...original,
+        serviceMonth: row.service_month,
+        labRevenue: round2(input.labRevenue),
+        bucketA,
+        bucketB,
+        avoidableCost,
+        cm: round2(input.labRevenue - avoidableCost),
+        starRatio: denominatorCost > 0 ? Math.round((bucketB / denominatorCost + Number.EPSILON) * 10_000) / 10_000 : 0,
+      })
+    }
+  }
+
+  return opts.serviceMonth == null ? calculated : calculated.filter((row) => row.serviceMonth === opts.serviceMonth)
 }
 
 /** 按 partner 上卷院级贡献毛利（每 partner 一行·同月）。 */

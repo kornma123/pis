@@ -413,7 +413,7 @@ export function currentHospitalCmConstantManifest(): Record<string, unknown> {
  * 受代码评审与 drift-guard 保护的基线签名。口径常量变化时，必须显式 bump 版本、更新本签名并让差异进入 PR。
  * 它不是数据库开关，也没有运行时“设为通过”的入口。
  */
-export const EXPECTED_HOSPITAL_CM_CONSTANT_MANIFEST_FINGERPRINT = 'ee1698b353070e73323aaf5eac0bdba8b6050d22b296271948fa870290b4fca1'
+export const EXPECTED_HOSPITAL_CM_CONSTANT_MANIFEST_FINGERPRINT = '4d679e9a42596ce358bae151a6778a3bcc94c6b8c9a083eac8f63bd88f1345bd'
 
 function probeConstantFreeze(sourceState: HospitalCmReadinessSourceState): HospitalCmFoundationProbeCheck {
   const key: FoundationGate = 'constant_freeze'
