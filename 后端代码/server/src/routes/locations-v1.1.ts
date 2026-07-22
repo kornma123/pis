@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { findLocationLiveReferences, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -103,14 +104,57 @@ router.put('/:id', authenticateToken, requireLocationWrite, (req, res) => {
 })
 
 router.delete('/:id', authenticateToken, requireLocationWrite, (req, res) => {
+  let db: ReturnType<typeof getDatabase> | undefined
+  let transactionOpen = false
   try {
     const { id } = req.params
-    const db = getDatabase()
+    db = getDatabase()
+    db.exec('BEGIN IMMEDIATE')
+    transactionOpen = true
     const existing = db.prepare('SELECT * FROM locations WHERE id = ? AND is_deleted = 0').get(id)
-    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (!existing) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Not found', 'NOT_FOUND', 404)
+      return
+    }
+
+    const references = db.prepare(`
+      SELECT
+        EXISTS(
+          SELECT 1 FROM inventory
+          WHERE location_id = ? AND COALESCE(stock, 0) > 0
+        ) AS has_stock,
+        EXISTS(
+          SELECT 1 FROM batches b
+          INNER JOIN inbound_records ir ON ir.id = b.inbound_id
+          WHERE ir.location_id = ? AND COALESCE(b.remaining, 0) > 0
+        ) AS has_remaining_batch
+    `).get(id, id) as { has_stock: number; has_remaining_batch: number }
+
+    if (references.has_stock || references.has_remaining_batch) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Location still has inventory or remaining batches', 'CONFLICT', 409)
+      return
+    }
+    if (findLocationLiveReferences(db, id).length > 0) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Location has live material or equipment assignments', 'ENTITY_IN_USE', 409)
+      return
+    }
     db.prepare('UPDATE locations SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    transactionOpen = false
     success(res, null, 'Deleted')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (db && transactionOpen && !recoverFailedDeleteTransaction(db, closeDatabase)) {
+      error(res, 'Delete transaction recovery failed', 'INTERNAL_ERROR', 500)
+      return
+    }
+    error(res, err.message)
+  }
 })
 
 export default router

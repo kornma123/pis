@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { detectSoDConflicts, requirePermission } from '../middleware/permissions.js'
+import { findUserLiveOwnership, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
 import { accountPasswordProblem, hashMatchesKnownLeakedDefaultPassword } from '../config/security.js'
 
 const router = Router()
@@ -127,18 +128,44 @@ router.put('/:id', requireUsersWrite, (req, res) => {
 })
 
 router.delete('/:id', requireUsersWrite, (req, res) => {
+  let db: ReturnType<typeof getDatabase> | undefined
+  let transactionOpen = false
   try {
     const { id } = req.params
-    const db = getDatabase()
+    db = getDatabase()
+    db.exec('BEGIN IMMEDIATE')
+    transactionOpen = true
     const existing = db.prepare('SELECT * FROM users WHERE id = ? AND is_deleted = 0').get(id) as any
-    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (!existing) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Not found', 'NOT_FOUND', 404)
+      return
+    }
     // 禁止删除 admin 账户
     if (existing.username === 'admin' || existing.id === 'USER-001') {
-      error(res, 'Cannot delete admin account', 'BUSINESS_CONFLICT', 409); return
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Cannot delete admin account', 'BUSINESS_CONFLICT', 409)
+      return
+    }
+    if (findUserLiveOwnership(db, existing.username).length > 0) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'User still owns live assignments', 'ENTITY_IN_USE', 409)
+      return
     }
     db.prepare('UPDATE users SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    transactionOpen = false
     success(res, null, 'Deleted')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (db && transactionOpen && !recoverFailedDeleteTransaction(db, closeDatabase)) {
+      error(res, 'Delete transaction recovery failed', 'INTERNAL_ERROR', 500)
+      return
+    }
+    error(res, err.message)
+  }
 })
 
 export default router
