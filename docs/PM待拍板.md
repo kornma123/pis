@@ -1,12 +1,14 @@
 # PM 决策索引
 
-> **版本**：2.0｜**性质**：稳定的产品决策入口，不是实现/PR 状态看板
+> **版本**：2.1｜**性质**：稳定的产品决策入口，不是实现/PR 状态看板
 > **policy owner**：PM（产品与业务政策）；隐私、合规、平台和发布例外仍由对应有权角色共同决定
-> **maintenance owner**：每次修订只能有一个 owner，身份记在关联 PR/handoff｜**last-reviewed**：2026-07-14
+> **maintenance owner**：每次修订只能有一个 owner，身份记在关联 PR/handoff｜**last-reviewed**：2026-07-22
 > **动态状态边界**：当前分支、SHA、PR、check、测试数量、实现进度和下一步只从 GitHub/Git/关联任务 handoff 读取，不复制到本页。
 > **历史证据**：迁移前的完整原文保存在 [历史快照](archive/PM待拍板-through-2026-07-12.md)，只用于取证，不代表当前状态。
 
 本页的“待拍 / 已拍”只表示**决策生命周期**，不表示代码是否实现、PR 是否合并或功能是否上线。PM 回复“ID + 选择/条件”即可；AI 负责记录具名结论、重审触发和稳定指针，执行状态另行交付。
+
+2026-07-22 同步说明：历史 PR #190 merge object `d9336ffd68dd1d52201b94ab6a68a4e1dfa66eeb` 已固定 M-1/M-3/M-4/M-5/B-1/B-2/B-4 的最终选择；本版只转录决定，不把“已拍”改写成“已实现”。防止索引再次漂移的机器 gate 仍由 [GOV-002](https://github.com/kornma123/pis/issues/37) 验收。
 
 ---
 
@@ -14,11 +16,11 @@
 
 | ID | PM 要决定什么 | 决策 owner | 状态 / 具名结论 | 重审触发 | 稳定依据 / 任务指针 |
 |---|---|---|---|---|---|
-| M-1 | 哪一层 E2E 应成为可信、有人消费的回归门 | PM（优先级）+ QA/工程 owner（门实现） | **待拍**；建议先锁少量关键业务流程，再逐步扩大 | 关键流程已稳定，或全量失败已有 owner 与处理预算 | [COREONE guardrails](../.claude/rules/coreone-guardrails.md) |
+| M-1 | 哪一层 E2E 应成为可信、有人消费的回归门 | PM（优先级）+ QA/工程 owner（门实现） | **已拍（2026-07-15）**：PR 门运行少量关键业务流程；夜间运行全量，失败须有具名 owner 并在 1 个工作日内分诊 | 关键流程集合、运行成本或夜间分诊能力发生实质变化 | [COREONE guardrails](../.claude/rules/coreone-guardrails.md) · [GOV-002](https://github.com/kornma123/pis/issues/37) |
 | M-2 | 质疑/复核强度是否要按风险显式分档 | PM | **已拍（2026-07-12）**：采用通用工作模型 R0–R3；不另造第二套质疑档位 | 重复出现小任务过重，或高风险任务漏审 | [通用工作模型 §3](工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md) |
-| M-3 | 历史 session-log 是否还需做物理归档 | PM + 仓库治理 owner | **待拍**；建议继续作为稀疏历史索引，不在并行活跃期大搬迁 | 文件已无法检索，或有无冲突的迁移窗口与回滚方案 | [Agent operating contract §8](agent-operating-contract.md) |
-| M-4 | 是否降低纯文档 PR 的验证成本，同时保证正式门仍产生可判定结果 | PM + 仓库治理 owner | **待拍**；建议暂不改变正式门，除非有同名 no-op/等价门且经治理层批准 | 文档 PR 成本显著影响交付，或平台提供更可靠的路径过滤方案 | [Backend Tests workflow](../.github/workflows/backend-tests.yml) |
-| M-5 | 合并后的 worktree 回收是否成为例行 | PM + 各 worktree owner | **待拍**；建议只回收 owner 自己、已合并且干净的 worktree，不自动清理他人现场 | 可机验证“已合并 + 干净 + 无 owner 使用”，且有恢复方案 | [Agent operating contract §3/§9](agent-operating-contract.md) |
+| M-3 | 历史 session-log 是否还需做物理归档 | PM + 仓库治理 owner | **已拍（2026-07-15）**：继续作为稀疏历史索引；活跃并行工作期间不做物理迁移 | 文件已无法检索，且存在无冲突迁移窗口、唯一 owner 与回滚方案 | [Agent operating contract §8](agent-operating-contract.md) · [GOV-002](https://github.com/kornma123/pis/issues/37) |
+| M-4 | 是否降低纯文档 PR 的验证成本，同时保证正式门仍产生可判定结果 | PM + 仓库治理 owner | **已拍（2026-07-15）**：不降低正式文档 PR 门 | 平台提供经治理层批准、仍产生同名可判定结果的可靠等价门 | [Backend Tests workflow](../.github/workflows/backend-tests.yml) · [GOV-002](https://github.com/kornma123/pis/issues/37) |
+| M-5 | 合并后的 worktree 回收是否成为例行 | PM + 各 worktree owner | **已拍（2026-07-15）**：只由 owner 清理自己、已合并、干净且无人使用的 worktree；不得代清他人现场 | 可机验证“已合并 + 干净 + 无 owner 使用”，且有恢复方案与 PM 新决定 | [Agent operating contract §3/§9](agent-operating-contract.md) · [GOV-002](https://github.com/kornma123/pis/issues/37) |
 | M-6 | Build Discipline 哪些规则阻断合并 | PM + 仓库治理 owner | **已拍（2026-07-07）**：C1/C2 对新增违规 block；C3 保持 warn | C3 有精确判定与具名豁免出口，或基线/白名单到复核点 | [Build Discipline README](../scripts/build-discipline/README.md) · [workflow](../.github/workflows/build-discipline.yml) |
 
 ## 乙 · 成本域决策入口
@@ -36,10 +38,10 @@
 
 | ID | PM 要决定什么 | 决策 owner | 状态 / 具名结论 | 重审触发 | 稳定依据 / 任务指针 |
 |---|---|---|---|---|---|
-| B-1 | 下一阶段主数据包含哪些对象、字段、唯一性规则和验收边界 | PM | **待拍** | 新业务对象、编码体系或跨模块消费者进入范围 | [FRS 索引](FRS/README.md) |
-| B-2 | 下一阶段 BOM 要补哪些维度，以及版本、用量和可支撑样本数的业务语义 | PM | **待拍** | BOM 被新的出库、成本或审计流程消费 | [BOM FRS](FRS/FRS-12-BOM管理.md) · [BOM 验收场景](TestScenarios/TS-12-BOM管理.md) |
+| B-1 | 下一阶段主数据包含哪些对象、字段、唯一性规则和验收边界 | PM | **已拍（2026-07-15）**：先做 wave-2 薄 PRD 与逐页 mockup；字段和语义逐页获批前不进入实现 | 新业务对象、编码体系或跨模块消费者进入范围，或薄 PRD/逐页 mockup 形成新决定 | [FRS 索引](FRS/README.md) · [LOC-024](https://github.com/kornma123/pis/issues/24) |
+| B-2 | 下一阶段 BOM 要补哪些维度，以及版本、用量和可支撑样本数的业务语义 | PM | **已拍（2026-07-15）**：复用既有 BOM 不可变版本与核准链，不建第二套；`supportableSamples` 实时派生；辅料/物料使用明确角色，禁止借 `is_alternative` 表达 | BOM 被新的出库、成本或审计流程消费，或薄 PRD 提出新的角色/版本语义 | [BOM FRS](FRS/FRS-12-BOM管理.md) · [BOM 验收场景](TestScenarios/TS-12-BOM管理.md) · [LOC-024](https://github.com/kornma123/pis/issues/24) |
 | B-3 | 无后端承接的 ABC 报表入口应删除还是补后端 | PM | **已拍（2026-07-09）**：删除无后端承接的幽灵入口，不为保留按钮虚构 API | PM 批准新的报表需求、口径、后端合同与验收证据 | [ABC 页面处置清单](COREONE-ABC前端页面处置清单-审计与废弃候选-2026-07-03.md) |
-| B-4 | 操作日志导出应建设为真实能力，还是移除入口 | PM | **待拍** | 日志留存/导出合规要求明确，或产品范围改变 | [操作日志 FRS](FRS/FRS-16-操作日志.md) · [验收场景](TestScenarios/TS-16-操作日志.md) |
+| B-4 | 操作日志导出应建设为真实能力，还是移除入口 | PM | **已拍（2026-07-15）**：先移除恒 404 的假导出；只有具名消费者、字段合同与留存要求明确后才建设真实导出 | 日志留存/导出合规要求明确、出现具名消费者，或产品范围改变 | [操作日志 FRS](FRS/FRS-16-操作日志.md) · [验收场景](TestScenarios/TS-16-操作日志.md) · [LOC-024](https://github.com/kornma123/pis/issues/24) |
 | B-5 | PRD 的定位与启动门槛：内部探索版 vs 对外/对医院可信版 | PM | **已拍（2026-07-13，PM 会话派单）**：内部探索版**即刻可启动**（每个碰钱数字同时标 `evidence_strength` 与 `authority_status`）；**对外/对医院可信版**设三硬门＝① ≥2 家不同商业模式医院的真实三件套 golden、② 成本三分方向经真数据定向、③ 合规 P-1 拍板 | 三硬门任一达成，或 PRD 消费者变化 | [PRD 地基口径校准报告](reports/COREONE-PRD地基口径校准-2026-07-13.md)（#163 已拍板“身份键不变＋按各月收入占比分摊＋无 schema”；合法跨月分摊尚未实现，当前 guard 过度扣留合法结果，根③仍为 C·待工程。根②总额的复核证据已由 #170 合并的 [Candidate 台账](reports/COREONE-结算总额Candidate锚台账-16院-2026-07-13.md)拓至 16 院 61 条 Candidate Anchor，另 6 条为例外；61 条可记复核强度 A，但 `authority_status` 全部仍为 Candidate，**本范围当前权威 A=0**，升级待 #181；拆分仍 C。PUBLIC 报告不披露精确财务或商业参数） |
 
 ---

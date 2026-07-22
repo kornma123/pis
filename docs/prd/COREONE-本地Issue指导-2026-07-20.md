@@ -1,33 +1,19 @@
 # COREONE 本地 Issue 指导（PRD 差距清单）
 
-## 0A. 2026-07-21 LOC-020 二次收口与下一轮分配（最新状态）
+## 0. 2026-07-22 新仓基线与当前执行分层
 
-- K3 原候选 `1b2a7b55141c2280cdf8a1d4649c3a1f61ea9b69` 未被直接合并；首个 Windows successor=`ecfd9888fceefa697a4aed53d546513b976db072` 虽本地进入 merge `4994df293008bdcb23785da43c620e428d822699`，随后独立 non-Claude fixed-SHA R2 仍判 `FAIL`（P1×3/P2×1），因此中央未把第一次本地集成冒充验收完成。
-- Windows 单一 owner 已从 `4994df29…` 形成二次 repair=`dbe581d3fd2d63bb776d22d536acfdc01e586fd2`，tree=`a53a413ad86a22c792396583e1e07304aa5ced20`，并以 `--no-ff` 本地合入 integration：merge=`7d80ce4da31bdabf7417e814d4332768c5c3e35a`，parents=`4994df29… + dbe581d3…`，merge tree 与 repair tree 一致，两处 worktree clean。
-- 二次 repair 已闭合：历史脏 oldOperateTime 与 lowercase `t/z` 的 endpoint/API canonical 契约、rejection code↔分类计数守恒、SAME_VALUE/STALE_EXPECTED UI 分流，以及 ROLLBACK+close 双失败时 singleton 先摘除再 best-effort close。官方 Node 22.23.1：focused frontend 30/30、backend 26/26；full frontend 84 files/640 tests、backend 156 files/1882 tests；前后端 build PASS；5/5 production mutations 正确 RED 并恢复。项目级 `tsc -b` 和测试文件 lint 仍只有明确记录的 inherited debt，未越界修理。
-- LOC-020 当前最高状态仍为 `LOCAL_INTEGRATED / AWAITING_NON_AUTHOR_FIXED_SHA_R2 / NO_GO`。未 push、未开 PR、未 merge-to-master、未 release/deploy/生产。
-- `LOC-019` fixed candidate=`4e61f7a4d3b0b43fd9658a481d6107193ca813db` 已完成独立 K3 R2：STATIC PASS、Node22 runtime PASS，P0=0/P1=0，仅 P2 记录裸本地缺 `JWT_SECRET` 的既有环境前置；focused 69/69、related 81/81、contract 9/9、full backend 155 files/1878 tests、build/lint 均 PASS。中央随后以 `--no-ff` 本地合入 integration：merge=`dc8d0d4b738611153e33956f354fe442be5dd6bf`，tree=`48aac663985bf23147e35f2f0fc38c44769f2a0d`，parents=`7d80ce4d… + 4e61f7a4…`，merge tree 与 reviewed candidate tree 一致且 worktree clean。当前为 `LOCAL_INTEGRATED / NO_RELEASE_AUTHORITY`。
-- K3 下一轮仅有 `K3-LOC-029-LOCATION-CAPACITY-V2`。ENTRY/START 曾基于 fixed base=`7d80ce4d…` PASS，但最新 live audit 证明实现交接未完成：HEAD 仍是 base，10 个 owned 路径 dirty/untracked；focused 初始 RED=`29 failed / 4 passed`，当前 full backend=`157 files / 1915 tests PASS`，但 build 在 `locations-v1.1.ts:137:44` 以 TS2345/exit 2 失败；且没有 production mutation、candidate commit、HANDOFF、bundle、evidence archive 或 clean 状态。中央已拒绝 Windows 回收/R2/合并，状态=`INCOMPLETE_IMPLEMENTATION_HANDOFF / NO_GO`；只能由同一 Mac GUI writer 在原 worktree 串行补完，禁止换 writer/task 或把 dirty 文件传 Windows。产品语义仍冻结：`capacity=999999` 是有限容量，不是 infinity sentinel；异常 capacity/used 均 fail closed。旧 v1 继续 `SUPERSEDED_PLAN_ONLY`、coverage=0。
+- 新仓 `kornma123/pis` 的 `master@90ee70ff470585dd8581ba43d0ae3d9cc6b95664` 已通过 [PR #39](https://github.com/kornma123/pis/pull/39) 恢复旧 master 遗漏的 43 个提交；[Issue #38](https://github.com/kornma123/pis/issues/38) 已关闭。该恢复只把既有历史带回 master,不自动包含其后 LOC-001/002/003/019/020/025A/029 的 integration 候选。
+- 远端 `codex/integration-unified-product-release-v1@cd43b590d2330034fe314b05190e05a4ab5dc4ee` 当前相对 master 为 `3 behind / 97 ahead`。它包含多条本地整合线,但不是 master、不是 release candidate,必须先吸收最新 master、逐 Issue 保留独立复核边界后才可请求合并。
+- LOC-019 已有独立 K3 R2 APPROVE;LOC-020、LOC-025A 仍缺各自最终 successor 的 non-author fixed-SHA R2;LOC-029 最新 evidence-only successor 已经独立 Windows R2 APPROVE 并进入上述远端 integration。四票均保持 open,不得用“在一个大分支里”替代逐票验收。
+- LOC-031 Phase A 固定候选已推到 `codex/loc-031a-alert-scheduler@e97902b88d52501010be669192742f1052d3eb5b`,当前只到 `REMOTE_CANDIDATE_AWAITING_K3_R2 / NO_GO`;它只解决主动扫描调度,不等于外部通知闭环。
+- GOV-002 本轮同步七项已决内容;机器 drift gate 尚未实现,所以只能到 `DECISION_CONTENT_SYNCED / DRIFT_GATE_PENDING`,Issue 继续 open。
 
-## 0. 2026-07-21 Windows 直接修复与集成实况（覆盖下文旧快照状态）
-
-- LOC-025A 的 K3 fixed candidate `337cddb0f0f8525e8d8e80db29c7bb3517b1d840` 已完成中央独立对抗复核：原对象因锁外引用发现、rollback 失败后连接仍可复用、`completed` 入库被误当活义务、inactive 用户被误当 active assignment，判定 `STATIC BLOCK`（P1×3、P2×1），未直接合并。
-- Windows 单一 repair owner 已在同一七路径范围内形成 direct-child successor `d3d7a693d5c6afe006f1e7415406a326a083a15a`，并以 `--no-ff` 本地合入 `codex/integration-unified-product-release-v1`：merge=`896b42e2a0542c4f90df91520df1d2a5fd194788`，tree=`a6048eb696dc522ffd74a899a2c23b7983f42a2b`，parents=`392e05ad… d3d7a69…`；merge tree 与已测 successor tree 精确一致。
-- LOC-025A Windows 证据：官方 Node 22.23.1；focused 38/38；相关六套 150/150；dependency contract 9/9；full backend 155 files / 1856 tests；build PASS；lint 0 errors（生产 `src/` 仅继承 warnings）；4 个独立 production mutation 正确 RED、恢复后 GREEN；两处 worktree clean、`diff-check` PASS。
-- LOC-025A 当前上限：`LOCAL_INTEGRATED_CANDIDATE / AWAITING_NON_AUTHOR_FIXED_SHA_R2 / NO_GO`。中央 reviewer 修过 successor，不能把对原 K3 candidate 的独立 R2 转写成对 `d3d7a69…/896b42e…` 的 non-author APPROVE。
-- K3 `REPAIR-0721-01` 已由 Mac 侧正式停止：`SUPERSEDED_BY_WINDOWS_OWNER`；GUI writer 未开始、业务写入为零、base 后无提交、worktree clean。禁止恢复该 repair 链。
-- Windows 唯一 owner 已在 `codex/integration-unified-product-release-v1` 上直接完成剩余修复并提交：`392e05ad1a9be4233212337ae3c554d7f55d7524`，tree=`de1f2ae65393b5c099663cb39aba97bfaeb37447`，parent=`f7d44ae3b5572b74d6f31167882cd4aa77e8ac25`。
-- 已落实：`lab_revenue` 严格 finite/nonnegative fail-closed；`DEC-163-ROUND-001=C` 最大余数法；rollback 命令瞬时故障重试、持续故障关闭不可复用连接；公式版本、常量指纹、测试与说明同步。
-- 证据：RED 11 项；修复后 focused 72/72、hospital-cm 相关 251/251、build PASS、lint 0 errors（仅继承 warnings）；5 个独立生产 mutation 均正确 RED 并恢复；官方 Node 22.23.1 的 dependency contract 9/9 与 full backend suite 均 exit 0。最终 worktree clean。
-- 当前结论：LOC-001/002/003 的本地组合修复已直接进入固定提交，不再等待 K3 import。它仍是 `LOCAL_INTEGRATED_CANDIDATE / AWAITING_INDEPENDENT_REVIEW / NO_GO`，不等于 R2、merge-to-master、release 或 production。
-- 下一调度入口：LOC-020（#178/#179 LIS 纠错闭环）已完成 full-object、owned/allowed-new、dirty-overlap、Node 22.23.1、develop preflight 与 clean START 入口，状态=`ACTIVE_IMPLEMENTATION`；fixed base=`896b42e2a0542c4f90df91520df1d2a5fd194788`。START 只表示唯一 K3 GUI writer 可以开始，不代表已有业务写入、candidate、测试 GREEN 或独立验收。LOC-025B 仍等 `0a08` material owner 的 fixed clean commit，不得抢写。
-
-> **快照日期**：2026-07-20
+> **快照日期**：2026-07-22
 > **性质**：本地规划与派工指导，不是 GitHub 实时看板，不是完成证明，也不授予 merge/release/production 权限。
-> **PRD 基准**：`d144326223d67bb9d986bd9841aac4cffd22238f:docs/COREONE-PRD-整体产品-2026-07-14.md`（v1.4）。
-> **实现比较基准**：本地产品整合候选 `d144326223d67bb9d986bd9841aac4cffd22238f`；当前工作树 `master@a5cbca38c4488ea5e018cb560f532a198ccbc5aa` 是其祖先，不能代表 d144 的产品状态。
-> **K3 本地合并基准**：`codex/integration-unified-product-release-v1@896b42e2a0542c4f90df91520df1d2a5fd194788`；该 merge 仅供 successor 与复核，状态仍为 `NO_GO`。
-> **证据口径**：只把固定 Git 对象、活代码/测试、已归档独立复核和 2026-07-20 K3 handoff 当证据。分支存在、作者自测、静态测试设计、preflight PASS 都不等于验收通过。
+> **PRD 基准**：`master@90ee70ff470585dd8581ba43d0ae3d9cc6b95664:docs/COREONE-PRD-整体产品-2026-07-14.md`（v1.5 候选修订）。
+> **实现比较基准**：云端 `origin/master@90ee70ff…`;任何本地或远端 integration/candidate 必须与该 master 现场比较,不得继续用 d144 或 2026-07-21 的本地 merge 冒充当前产品状态。
+> **远端 integration 基准**：`codex/integration-unified-product-release-v1@cd43b590d2330034fe314b05190e05a4ab5dc4ee`;它仍为 `NO_GO`,不是 master/release/production。
+> **证据口径**：只把固定 Git 对象、活代码/测试、已归档独立复核和 GitHub 上可回读的 fixed-SHA handoff 当证据。分支存在、作者自测、静态测试设计、preflight PASS 都不等于验收通过。
 
 ## 1. 使用规则
 
@@ -47,6 +33,11 @@
 | `LOCAL_COMBINED_CANDIDATE_NO_GO` | Windows 已形成固定组合/本地 merge 提交并重建基础运行证据，但存在已打红的新增攻击探针、缺失 mutation/R2；只能作为 successor base，禁止晋级 |
 | `UNASSIGNED` | PRD 明确未完成，尚未冻结实现 owner |
 | `LOCAL_CANDIDATE_UNREVIEWED` | 已有本地候选，但未通过新 SHA 独立复核/运行门 |
+| `REMOTE_CANDIDATE_AWAITING_R2` | 固定候选已推到远端专用分支，但尚无独立 fixed-SHA R2 结论；不得因“云端可见”视为已完成 |
+| `REMOTE_INTEGRATION_NO_GO` | 候选已进入远端 integration 分支，但尚未吸收最新 master 或仍缺逐票独立验收；不是 master/release/production |
+| `REMOTE_INTEGRATION_AWAITING_NON_AUTHOR_R2` | 最终 successor 已在远端 integration，但尚无非作者 fixed-SHA R2 APPROVE |
+| `REMOTE_INTEGRATION_R2_APPROVED_AWAITING_MASTER` | 最终对象已通过独立 R2 并在远端 integration，下一门是基于最新 master 的 combined-base 验证与具名合并 |
+| `DECISION_CONTENT_SYNCED / DRIFT_GATE_PENDING` | 已决内容已同步到权威索引，但机器漂移闸仍未实现，治理票不得关闭 |
 | `BLOCKED_DEPENDENCY` | 上游合同或具名证据未齐，禁止局部猜测实现 |
 | `PENDING_LIVE_DEDUP` | 本地证据成立，但 GitHub 实时 issue/评论不可读；现场去重或原文确认前不得正式开票 |
 | `EXTERNAL_EVIDENCE` | 代码骨架不是主要缺口，等待发票、真实周期、签字或 manifest |
@@ -77,9 +68,9 @@
 
 ## 3. 建议执行顺序
 
-1. **先修复组合线已证实的两个 P1，并拍板 #163 尾差**：Windows 已按 #163 → #140 D-1 → #182 完成本地串行导入；`lab_revenue` 非法数值与 rollback-command fault 两个新增探针均真实 RED，当前固定组合只能作为 NO_GO successor base。
-2. **补 mutation 并交独立复核**：基础 focused/full/build/lint 已由 Windows Node22 重建；#182 的 12 项 mutation 因回收 archive 为空仍未得到 Windows 证据。两个 P1 最小 successor、尾差裁决、12 mutation 与独立 fixed-SHA R2 全部完成前不得晋级。
-3. **候选线闭合后才开新 issue**：2026-07-21 的 Codex/K3 只排期见 [本地计划](COREONE-2026-07-21-Codex-K3-Issue排期.md)；当前不创建 worktree、不发 START-ACK、不执行明日任务。
+1. **先把远端 integration 重建到最新 master**：`cd43b590…` 已包含 LOC-001/002/003 的组合线、后续 truth repair，以及 LOC-019/020/025A/029；但它相对 `master@90ee70ff…` 仍为 `3 behind / 97 ahead`。必须先做无丢提交的 combined-base 重建，不能直接把旧 integration 合入 master。
+2. **按票保留独立验收门**：LOC-019、LOC-029 已有独立 R2 APPROVE；LOC-020、LOC-025A 仍缺最终 successor 的 non-author R2；LOC-001/002/003 的组合 repair 仍须以最新 combined base 固定对象复核。一个大分支的 GREEN 不能替代逐票结论。
+3. **并行只推进不重叠的远端候选**：LOC-031A 已在专用分支等待 K3 R2；未出 fixed-SHA verdict 前不进入 integration。其他新票先做 PRD/owner/owned-path 门，不以旧排期自动开工。
 4. **先冻结 Phase 1A 直接规格，再交单一对账事实 owner**：先做 LOC-004 的 G0；没有批准的 source/generation 合同前，不继续堆第四套 readiness SQL。
 5. **并行处理不碰业务实现的明确动作**：GOV-001 可修事实转录；GOV-002 已由合并对象重建旧 #148 的唯一治理入口；LOC-026 由财务/管理员在 2026-08-31 前交真实金额与认账，不占代码 owner。
 6. **修复并复核现有业务候选**：LOC-005 至 LOC-013；共享文件同一时间只允许一个 owner。
@@ -90,7 +81,7 @@
 
 ### LOC-001 — #140 全批次库存事实收口（承接 #139 已决 A 模型）
 
-- **状态/优先级**：`LOCAL_COMBINED_CANDIDATE_NO_GO` / P0。
+- **状态/优先级**：`REMOTE_INTEGRATION_NO_GO` / P0。
 - **PRD 对应**：§4.1、§6、§11 Now #140。
 - **已知现场**：完整候选 `1b99e5217965ee7e12102cc907c91b53c8cea721`、tree `db7a13822fa09fcf1b60b1d785a34f31c8d5e492`、parent=`d144326…` 已从 bundle 回收并通过对象门；raw evidence 可读。其 full-suite 原始证据为 152 pass/1 fail files、1772 pass/2 fail tests，两处失败均为 D-1 腐败 fixture 触发新 CHECK，必须在 combined line 修复后重跑。
 - **目标**：所有写路径以批次 `remaining` 为库存事实，`inventory.stock` 只作可验证派生缓存；关闭 dev seed、fresh schema CHECK 与入库唯一事务入口残余。
@@ -106,7 +97,7 @@
 
 ### LOC-002 — #163 阶段 2：跨月病例成本按收入占比分摊
 
-- **状态/优先级**：`LOCAL_COMBINED_CANDIDATE_NO_GO` / P0。
+- **状态/优先级**：`REMOTE_INTEGRATION_NO_GO` / P0。
 - **PRD 对应**：§4.3、§6、§11 Now。
 - **已知现场**：候选 `e0de5511ee28d03a59d05a5124b6d21659228a5b`、tree `a605f3c7af4ca0aeaa67113ebed8ff7ee2c1ec1a`、parent=`d144326…` 已回收并通过对象门；evidence archive 可读。额外 scope 已现场证实仅 `hospital-pnl-readiness-gate.test.ts` 两行版本钉 `2026-07-12.a → 2026-07-20.a`，与交接中的 PM 授权记录一致。
 - **目标**：身份键保持 `(partner_id, case_no)`，同一病例单份标准成本按所有合格结算月的 `lab_revenue` 占比分摊。
@@ -117,14 +108,14 @@
   - #168 晚月覆盖早月明细的写端硬拒继续生效。
 - **PM_DECISION_C（2026-07-21）**：每个 bucket 使用最大余数法；按精确份额先取整分，剩余分按余数降序分配，余数并列取最早 `service_month`；`avoidableCost` 由两个 bucket 相加，不独立分尾差。该决定替代候选“权重最大月”实现，因此必须在 successor 中先 RED 再修复。全零、负收入、冲销仍 fail-closed。
 - **新增 Windows 高风险探针**：`hospital-cm-service.ts` 的跨月权重不得用 `Number(lab_revenue) || 0` 把 malformed/non-finite/unsafe 数据折为 0 或污染权重；必须以行为测试证明 fail-closed 且不发布月成本。若当前 owned/权威不足，只登记 BLOCKED successor scope，不在 integration 中越界修码。
-- **Windows 探针结论（已证实 P1）**：把 `HCR-R1.lab_revenue` 临时改为文本 `NaN` 后，fail-closed 断言真实 RED（该文件 9 绿/1 红：预期抛错，实际未抛）；`finally` 恢复数据库，临时测试随后从工作树撤销。现生产实现会把该值折为 0，不能发布为可信跨月分摊。修复需先冻结有限数、安全范围与金额精度合同；本 integration 未越界猜规则。
+- **Windows 探针与修复状态**：早期把 `HCR-R1.lab_revenue` 临时改为文本 `NaN` 后，fail-closed 断言真实 RED，证明原组合实现会把非法值折为 0。随后 `392e05ad1a9be4233212337ae3c554d7f55d7524`（`fix(hospital-cm): close allocation and rollback truth`）在 integration 上补了金额解析、最大余数分配与行为测试；该提交已远端可达，但仍须在吸收最新 master 后以最终 fixed SHA 做 non-author R2，不能只凭作者/集成运行证据关闭本票。
 - **额外授权核验**：HANDOFF 声称获 PM 扩权修改 `hospital-pnl-readiness-gate.test.ts` 恰好 2 行版本钉；导入前必须同时取得授权记录和 exact 2-line diff，任一不符即停止。
 - **STOP**：全零/负收入、冲销、尾差归属无权威答案时停止；不得改身份键、schema/migration 或导入写端。与 #140 重叠文件必须先保留 #163 版本，再做一次 combined D-1 repair。
 - **完成证据**：比例/守恒 RED、9 个独立 mutation、Node22 targeted+full、固定 SHA 独立复核。
 
 ### LOC-003 — #182/O-1 A：医院目录到 C1 scope 的 gap-only bridge
 
-- **状态/优先级**：`LOCAL_COMBINED_CANDIDATE_NO_GO` / P0。
+- **状态/优先级**：`REMOTE_INTEGRATION_NO_GO` / P0。
 - **PRD 对应**：§4.7 D2、§10 O-1、§11 Now。
 - **已知现场**：候选 `a35175636d384aced40720ad3b891f7c4862cb1a`、tree `aefe2953934af5fc898fb33bdf4467fee69dfd36`、parent=`d144326…` 已回收并通过对象门；但 `evidence.tar.gz` 只有 29 bytes 且为空，Mac 自报的 12 mutations/full 1778 tests 不可采信，必须在 Windows 重建全部 focused/mutation/full/build/lint 证据。
 - **目标**：在一个 `BEGIN IMMEDIATE` 内把月度医院目录投影转成 C1 scope，不建立第二套目录/scope/hash。
@@ -135,7 +126,7 @@
   - 目录读取、scope 写、audit/readback 同事务回滚；调用方不能提交 accounts/hash/revision/ready/actor 等权威事实。
 - **STOP**：不得改目录 runtime、schema/migration、金额/finality、account-reconcile、HTTP/UI。
 - **新增 Windows 高风险探针**：对 `rollbackQuietly` 吞掉 ROLLBACK fault 的路径验证事务状态与零 partial；无法可靠注入时保留显式 residual/NO_GO，不把空 catch 当作已证明回滚，也不在本次 integration 越界重构。
-- **Windows 探针结论（已证实 P1）**：已用真实 `node:sqlite` 连接让第一次 `ROLLBACK` 命令瞬时失败，并在探针 `finally` 中手工清理。当前实现只尝试 1 次且吞错；原异常返回时 `db.isTransaction=true`，同连接可见 `scope=1`、`scope audit=1` 的未提交 partial。安全断言真实 RED（该文件 20 绿/1 红）。因此“任一 fault 全回滚、零 partial”尚不成立；本 integration 未越界重构事务 owner。
+- **Windows 探针与修复状态**：早期真实 `node:sqlite` 探针让第一次 `ROLLBACK` 命令失败时，确认原实现会吞错并留下开启事务及未提交 partial。随后 `392e05ad1a9be4233212337ae3c554d7f55d7524` 在 integration 上增加事务失效/回滚处置与行为测试；该提交不是 master，且尚需在最新 combined base 上做 fixed-SHA non-author R2，因此本票仍为 NO_GO，而不是继续把已被 successor 修改的旧实现写成当前代码。
 - **后续**：A 固定 SHA 通过后再串行拆 B（HTTP/CAS/认证 actor）和 C（管理员 UI/发布体验），不得塞进本提交。
 
 ### K3 candidate recovery / Windows integration gate（LOC-001/002/003 共用）
@@ -144,13 +135,12 @@
 - **证据边界**：#140/#163 archive 可读但只算 K3 实现内循环；#182 archive 为空。`/Users/maxiaoyuan/...` 路径错配保留为文档债，已由实际 bundle/object 取证替代，不再阻塞导入。
 - **每条必交 manifest**：bundle/evidence SHA256、`git bundle list-heads`、完整 40 位 candidate SHA、commit parent/tree/subject、clean status、exact raw delta/modes、base=`d144326…` 证明、Node exec/version、target lock、测试/mutation 原始输出。#163 另交授权记录与 `hospital-pnl-readiness-gate.test.ts` exact 2-line diff。
 - **Windows 固定组合**：fresh d144 worktree/branch=`codex/k3-combined-d144-local-v1`；串行提交为 #163 `d11110b81af7f8b1a4c527417084af53a1d5c60c` → #140+D-1 `bfe625d5f0cf13d348ee337eb9bfb4002c470bba` → #182 `224af411dda595584ef65d528bd09f2e4a428baf` → Windows 测试句柄清理 `6c8da36e6b7bdc391199628aecd69e7e2b3d3778`。最终 tree=`e7cc4680ec6e78a8d769696eae462e8fee6296bb`，parent=`224af411dda595584ef65d528bd09f2e4a428baf`，worktree clean，`diff --check` PASS。
-- **本地 merge**：已把上述 combined branch 以 `--no-ff` 合入 `codex/integration-unified-product-release-v1`；merge commit=`f7d44ae3b5572b74d6f31167882cd4aa77e8ac25`，parents=`d144326… 6c8da36…`，tree 仍精确为 `e7cc468…`。这是 local integration，不是 master/GitHub/release merge。
+- **远端 integration**：上述 combined line 后续进入 `codex/integration-unified-product-release-v1@cd43b590d2330034fe314b05190e05a4ab5dc4ee`。分支已公开可读但不是 master/GitHub PR/release merge；当前相对 master 仍需 combined-base 重建。
 - **Windows 基础运行证据**：官方 `node.exe` v22.23.1；target package/lock 离线安装成功；runtime contract PASS；dependency contract 9/9 PASS；combined focused 17/17 files、382/382 tests PASS；完整 Vitest 154/154 files、1808/1808 tests PASS；build/runtime+tsc PASS；lint exit 0（0 errors、1395 inherited warnings）。机器证据 `full-suite.json` SHA256=`614b55d6f42e93c2822fb8fa1278d7efc304af2bc9ea0a809daf176c9916c7cf`。第一次未显式提供测试 JWT 的全量运行因 `JWT_SECRET` fail-closed 退出，不计 GREEN；复跑使用进程内临时 test-only 值，未写入仓库。
-- **尚未取得**：#182 回收 archive 为空，12 项 mutation 尚未由 Windows 重建；两个新增 P1 探针均 RED；独立 non-author R2 未开始。
-- **successor 入口**：`DEC-163-ROUND-001=C` 已拍；K3 单一 repair 合同见 [COREONE-K3-REPAIR-0721-01-任务合同](COREONE-K3-REPAIR-0721-01-任务合同.md)。两个 P1、最大余数法、#182 12 mutation 与独立 R2 未闭合前继续 NO_GO。
-- **K3 START（2026-07-21）**：full bundle SHA256=`3a8427b12c38856e48c39d2ab0f1b8174e8d6e2743b73ff4901aa26a517f3752`，Mac branch=`codex/k3-repair-0721-01`，exact object/fsck/owned 10/10/Node 22.23.1/develop preflight/START-ACK 均 PASS；状态=`ACTIVE_IMPLEMENTATION`。这只证明入口成立，不代表实现、mutation、Windows 复跑或独立 R2 已通过。
+- **后续 repair**：`DEC-163-ROUND-001=C` 已拍；Windows owner 后续形成 `392e05ad1a9be4233212337ae3c554d7f55d7524`，关闭最大余数法、非法收入值与 rollback fault 的已知生产缺口，并将其作为 `LOC-025A` 的 fixed base。该提交及后续 LOC 线已进入远端 integration，但尚未整体吸收 `master@90ee70ff…`。
+- **尚未取得**：LOC-001/002/003 在最新 master combined base 上的最终 fixed-SHA non-author R2 与逐票合并结论。旧 #182 空 evidence archive、旧 RED、旧 K3 START 只保留为历史链路证据，不再冒充当前实现状态，也不能反向抹除最终 R2 门。
 - **安全默认顺序**：#163 → 在其版本上做 #140 D-1 combined repair → #182。若现场依赖/diff 反证，立即停止并报告，不静默改序。
-- **状态上限**：`LOCAL_COMBINED_CANDIDATE_NO_GO / AWAITING_SUCCESSOR_AND_INDEPENDENT_REVIEW`；不得 push/PR/merge/release/deploy，也不得把 1808 基线 GREEN、K3 自审或 integration owner 探针当独立 R2。
+- **状态上限**：`REMOTE_INTEGRATION_NO_GO / AWAITING_FINAL_FIXED_SHA_INDEPENDENT_REVIEW`；不得开合并 PR/release/deploy，也不得把基线 GREEN、K3 自审或 integration owner 探针当独立 R2。
 
 ### LOC-004 — Phase 1A G0 决策冻结、月结子账本与单一 source readiness
 
@@ -260,10 +250,11 @@
 ### GOV-002 — `PM待拍板.md` 已决条目索引同步
 
 - **来源候选**：Mac C2；M-1/M-3/M-4/M-5/B-1/B-2/B-4 共 7 行仍标“待拍”，但其他权威文件已出现已决执行方向。
-- **状态/优先级**：`READY_RECONSTRUCTED_FROM_OLD_148` / P1 文档治理；不计产品功能进度。
+- **状态/优先级**：`DECISION_CONTENT_SYNCED / DRIFT_GATE_PENDING` / P1 文档治理；不计产品功能进度。
 - **去重裁决（2026-07-22）**：旧仓对新账号返回 404，但本地完整 Git 对象 `d9336ffd68dd1d52201b94ab6a68a4e1dfa66eeb`（PR #190 merge）保存了最终 PRD，并明确引用评论 `4979266101`、声明这 7 项已决且 `PM待拍板.md` 尚未同步；冻结索引中的旧 #148 正是“drift gate 未覆盖 PM 待拍板”。因此不再等待旧仓 live 读取，也不另造一张与旧 #148 并行的票；GOV-002 是新仓中的唯一重建入口。
 - **仅可转录的最终决定**：M-1=PR 跑小而关键流程、夜间全量且失败须具名 owner 分诊；M-3=session-log 保持稀疏索引、不在活跃期物理迁移；M-4=不降低正式文档 PR 门；M-5=只由 owner 清理自己已合并、干净且无人使用的 worktree；B-1/B-2=先做 wave-2 薄 PRD/逐页 mockup，复用 BOM 不可变版本与核准链，`supportableSamples` 实时派生，物料角色不得误用 `is_alternative`；B-4=先移除恒 404 假导出，具名消费者/字段/留存要求齐备后再建真实导出。
-- **验收**：每一行回指 PR #190 merge object、决定日期、原实施票和重开条件；成本域仍只链接权威收官页，不复制第二套状态；为 PM 索引增加机器漂移检查，能发现“已决源 vs 待拍索引”的再次分叉。
+- **本轮完成边界（2026-07-22）**：`docs/PM待拍板.md` 已把 M-1/M-3/M-4/M-5/B-1/B-2/B-4 精确转录为已拍,总 PRD 的“尚未同步”说明也已移除；没有把这些决定写成已实现。
+- **剩余验收**：为 PM 索引增加机器漂移检查,能发现“已决源 vs 待拍索引”的再次分叉；成本域仍只链接权威收官页,不复制第二套状态。gate 固定 SHA 经独立复核前 GOV-002 不关闭。
 
 ### PLATFORM-R1 — Migration predecessor ledger 与执行身份兼容
 
@@ -282,20 +273,20 @@
 | LOC-016 | #184 D1 历史月四态 | `BLOCKED_DEPENDENCY` | 依赖 LOC-014、LOC-015；必要时再依赖 LOC-002 的跨月事实。明确 verified/unmeasured/stale/unavailable 四态，历史月不得用当前目录或 0 fallback 伪装可测 |
 | LOC-017 | #185 E1 生产三态前端 | `BLOCKED_DEPENDENCY` | LOC-014/015/016 backend 合同固定后再认领；校准/就绪/失效 DOM 0→1→0，值变立即收回，URL 不能强开，Playwright 真跑 |
 | LOC-018 | #174/#165/#181 成本外部证据、校准与归档 | `EXTERNAL_EVIDENCE` | 发票与受控原件齐后 L1+golden 改 seed；Candidate 归档/复算链升级；无原件不改值，也不以代码 fixture 冒充真实证据 |
-| LOC-019 | #175/#180 已退役成本合同清理 | `LOCAL_INTEGRATED_K3_R2_APPROVED` | Candidate=`4e61f7a4d3b0b43fd9658a481d6107193ca813db` 经独立 K3 fixed-SHA R2 APPROVE：STATIC/RUNTIME PASS、P0=0/P1=0/P2=1（仅既有 JWT_SECRET 环境前置）；Node22 focused 69/69、related 81/81、contract 9/9、full 155 files/1878 tests、build/lint PASS。Local no-ff merge=`dc8d0d4b738611153e33956f354fe442be5dd6bf`，tree=`48aac663985bf23147e35f2f0fc38c44769f2a0d`，parents=`7d80ce4d… + 4e61f7a4…`，clean。未 push/PR/release/deploy/production。 |
-| LOC-020 | #178/#179 LIS 纠错体验 | `LOCAL_INTEGRATED_AWAITING_NON_AUTHOR_R2` | K3 raw candidate=`1b2a7b55141c2280cdf8a1d4649c3a1f61ea9b69`；首个 Windows successor=`ecfd9888fceefa697a4aed53d546513b976db072` 经独立 non-Claude fixed-SHA R2 判 FAIL（P1×3/P2×1），未把失败结论抹成 PASS。Windows serial repair=`dbe581d3fd2d63bb776d22d536acfdc01e586fd2`（parent=`4994df293008bdcb23785da43c620e428d822699`，tree=`a53a413ad86a22c792396583e1e07304aa5ced20`），local no-ff merge=`7d80ce4da31bdabf7417e814d4332768c5c3e35a`（parents=`4994df29… + dbe581d3…`，same tree）。已闭合：endpoint/API 的历史脏旧值与 lowercase `t/z` canonical 新值契约、rejection code↔分类计数、SAME_VALUE/STALE_EXPECTED UI 分流、ROLLBACK+close 双故障时 singleton 先摘除。官方 Node22 focused frontend 30/30、backend 26/26；full frontend 84 files/640 tests、backend 156 files/1882 tests；前后端 build PASS；5/5 production mutations 正确 RED 并恢复。前端项目级 `tsc -b` 仍有既有跨域诊断，LOC-020 修改文件零新增；测试文件既有 `any` lint debt未越界清理。当前最高仍 `LOCAL_INTEGRATED / AWAITING_NON_AUTHOR_FIXED_SHA_R2 / NO_GO`，未授权 push/PR/R3/release/deploy/production。 |
+| LOC-019 | #175/#180 已退役成本合同清理 | `REMOTE_INTEGRATION_K3_R2_APPROVED_AWAITING_MASTER` | Candidate=`4e61f7a4d3b0b43fd9658a481d6107193ca813db` 经独立 K3 fixed-SHA R2 APPROVE,并已进入远端 integration `cd43b590…`。它尚未进入 `master@90ee70ff…`;下一门是基于最新 master 的 combined-base 复核与具名合并,不是重跑旧作者自证。 |
+| LOC-020 | #178/#179 LIS 纠错体验 | `REMOTE_INTEGRATION_AWAITING_NON_AUTHOR_R2` | Windows repair=`dbe581d3fd2d63bb776d22d536acfdc01e586fd2` 已进入远端 integration `cd43b590…`,但最终 repair 尚无 non-author fixed-SHA APPROVE。首个 successor 的 FAIL 继续有效,不得因分支已推送而抹除;吸收最新 master 后仍须固定最终对象复核。 |
 | LOC-021 | #149 密钥改名、轮换与孤儿配置清理 | `UNASSIGNED` | PRD 标为尽快处理；先冻结实际配置面、兼容窗口与回滚，完成 key rename/rotation、孤儿配置清理和不泄密验证 |
 | LOC-022 | #128/#150 首次外部试用前安全硬门 | `BLOCKED_DEPENDENCY` | 首次外部试用是触发门：登录渐进限速+首登改密、secret-scan required；在此之前不得声称 external-trial ready |
 | LOC-023 | #130/#160 E2E 与 AI review 治理门 | `DEFERRED_PRD` | 重建小而关键的 PR E2E、明确 owner 的夜间全量，并让 AI review 两门 required；它们是治理验收，不与 LOC-021/022 混成一票 |
 | LOC-024 | B-1/B-2 wave-2 + #129 | `DEFERRED_PRD` | 先薄 PRD/逐页 mockup；复用 BOM 不可变版本链；移除恒 404 假导出，有消费者/字段/留存要求后才建真实导出 |
-| LOC-025A | 五类删除路径关联校验 | `LOCAL_INTEGRATED_AWAITING_NON_AUTHOR_R2` | K3 candidate `337cddb…` 经独立 R2 判 `STATIC BLOCK`（P1×3/P2×1），未直接合并；Windows successor=`d3d7a693d5c6afe006f1e7415406a326a083a15a`，local no-ff merge=`896b42e2a0542c4f90df91520df1d2a5fd194788`，tree=`a6048eb…`。Node22 focused 38/38、related 150/150、full 155 files/1856 tests、build/dependency/lint 与 4 mutations 均通过。因修复者不是 successor 的 non-author reviewer，当前仍 `NO_GO`，须对 `d3d7a69…` 或 merge tree 做 fixed-SHA 独立 R2 |
+| LOC-025A | 五类删除路径关联校验 | `REMOTE_INTEGRATION_AWAITING_NON_AUTHOR_R2` | Windows successor=`d3d7a693d5c6afe006f1e7415406a326a083a15a` 已进入远端 integration `cd43b590…`;原 K3 candidate 的 STATIC BLOCK 不可转写成 successor APPROVE。须在吸收最新 master 后对最终 fixed SHA 做非作者复核。 |
 | LOC-025B | 物料删除关联校验 successor | `BLOCKED_ON_MATERIAL_CATALOG_OWNER` | `E:/worktree/0a08` 的 material catalog owner 正在大规模重写 `materials.ts`，且已覆盖 stock、locked_stock、active positive batch 的部分门。先等其 fixed clean commit，再与 LOC-025A 建 combined base；B 只补 in-flight purchase/inbound/outbound/return/scrap/transfer、稳定错误、denial audit 和 race mutation，不得回退 catalog 或既有库存门 |
 | LOC-026 | 固定成本池真实值与管理员认账 | `EXTERNAL_EVIDENCE` | 业务/证据动作票，不是代码票：财务提供真实金额，管理员对不可变值版本 RATIFIED；值变即失效，节点 2026-08-31；实施者不得兼任该周期独立 reviewer |
 | LOC-027 | 证据双轴机器化 | `BLOCKED_DEPENDENCY` | 首批只圈定已有水印/声明的 4 条碰钱路由，派工前冻结 exact route list；API 与导出携带 typed `evidence_strength`、`authority_status`，两轴独立验证且未知 fail-closed。在此之前继续水印/声明列，不把 C/Candidate 升权威 |
 | LOC-028 | #131/#132 构建纪律死线 | `DEFERRED_PRD` | headless route 归位与 consumer whitelist 按 PRD 2026-10 死线执行；以目标 SHA gate 输出为准，不在本文硬编码动态计数 |
-| LOC-029 | 库位容量写入门 | `K3_REPAIR_READY_SAME_WRITER` | K3 candidate=`5b77a9b86645551138719d7c7fa4167696caded1` 的独立 Node22 R2 判 STATIC/RUNTIME FAIL（P1×2/P2×1）：numeric/blank locationId 绕过容量门、capacity:null 静默默认 999999、denial audit 证据不全。Mac 已在原 task/worktree 安装 R2-FAIL-HANDOFF 与新的 REPAIR-SUCCESSOR，HEAD=`5b77a9b…`、clean；未创建新 task/branch/worktree/writer。用户须在原同一 GUI writer 粘贴 `PROMPTS/REPAIR-SUCCESSOR.md`，只形成一个 direct-child repair successor，补 canonical 输入、null/absent 分离、逐类 denial audit、mutations 与全部 GREEN。Windows 在新 SHA 冻结并再次独立 R2 前不导入、不合并，持续 `NO_GO`；最终仍须对最新 integration=`dc8d0d4b…` 做 combined-base 验证。 |
+| LOC-029 | 库位容量写入门 | `REMOTE_INTEGRATION_R2_APPROVED_AWAITING_MASTER` | 原 candidate=`5b77a9b…` 的 R2 FAIL 与中间 `bf00beb…` 的 evidence gap 均已保留;最终 evidence-only successor=`2b6b09ced1b8b4e2e9fd509b9bd15b0573f04c7b` 经独立 Windows Node22 R2 APPROVE,并以 merge=`cd43b590d2330034fe314b05190e05a4ab5dc4ee` 推到远端 integration。该分支相对 master 仍 3 behind/97 ahead,所以 Issue 保持 open;先建立最新 master combined base,再决定合并。 |
 | LOC-030 | 成本报表同期变化真值 | `DEFERRED_PRD` | Mac C8 的“前端 Math.random 兜底”在 d144 未复现：后端当前返回 `changeRate:null`，前端显示不可计算；因此不得按旧触发开 bug。先决定同比/环比期间、缺基期语义和 denominator，再实现真实变化率；同步修正 PRD/FRS 中“恒 0”旧描述并加跨期守恒测试 |
-| LOC-031 | 预警主动生成与通知闭环 | `PHASE_A_RESUMED_NODE22_UNBLOCKED` | 唯一 Codex task=`019f84c6-a2ae-71c0-ad43-43847c96d69c`，fixed base=`dc8d0d4b…`。首轮在写码前因任务未定位到 Node22 而 STOP（preflight=0、文件/commit=0）；中央已现场验证并下发官方 `node.exe v22.23.1` 绝对路径，原任务/原 worktree 已继续，未新开 owner。Phase A 仅闭合“无定时任务”：抽取 manual/scheduler 共用的 BEGIN IMMEDIATE 幂等扫描服务，服务器启动后立即扫描并每 15 分钟扫描，支持严格 interval 配置、重入跳过、失败重试、stop 与脱敏日志；owned exact 仅 app、alerts route、两个 allowed-new service 与一个 allowed-new test。外部短信/邮件/企业微信/浏览器推送、多实例 leader election 明确保留为后续，不恢复旧 Alerts K3 大任务，也不得把 Phase A 冒充完整通知闭环。交付上限 `LOCAL_CANDIDATE / AWAITING_INDEPENDENT_R2 / NO_GO`。 |
+| LOC-031 | 预警主动生成与通知闭环 | `REMOTE_CANDIDATE_AWAITING_K3_R2` | Phase A candidate=`e97902b88d52501010be669192742f1052d3eb5b` 已推到 `codex/loc-031a-alert-scheduler`,exact 5-path delta;author Node22 focused/build 仅作交接证据,K3 独立 R2 尚未回传结论。Phase A 只覆盖启动即扫描+定时扫描、幂等/重入/重试/stop/脱敏日志;外部短信/邮件/企业微信/浏览器推送和多实例 leader election 仍在 Later,不得把本候选叫完整通知闭环。 |
 | LOC-032 | 登出后 token 失效 | `READY_DECIDED_SERIAL_AFTER_LOC022` | 去重已完成：旧 #201 固定 head `82bfead81ae84ee98dfca980c7993ee951e72fe2` 仅修改 FRS-01 文档，不含 token invalidation，故不是重复。权威方案选 **per-user token version**：access/refresh 均携带版本并在每次认证/刷新时与 DB 当前版本精确比较；认证后的 logout 原子递增版本，令该用户全部既有 access/refresh token 立即稳定 401；短寿命+rotation 不能满足立即失效，黑名单不作为首选。若未来需要“仅退出当前设备”，另立 session-id 表方案，不在本票暗改。与 LOC-022（旧 #128/#150）共享 `auth.ts`，必须串行；验收含登录前后基线、logout/refresh 并发、重复 logout、DB/事务失败零部分、旧 token 覆盖所有受保护 API、denial audit 脱敏及 migration/legacy 默认值 |
 | LOC-033 | 供应商 code 删除后复用合同 | `DEFERRED_PRD` | 从原 FRS 大票拆出：先决定软删 code 是否永久保留、可恢复复用还是经审计重分配；创建/恢复/删除在同一 canonical 规则下执行，禁止靠 SQLite unique/trim 偶然行为决定业务语义 |
 
