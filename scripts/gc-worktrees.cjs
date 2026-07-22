@@ -23,8 +23,8 @@
  *
  * ★ churn 白名单为什么这么定（别随手放宽！每加一条 = 多一处「真改动可能藏在这」）★
  *   churn = 「只要起后端 / 跑 seed / 跑 e2e / 开一次会话就必然被写脏」的环境噪声，**不是工作产物**：
- *   - `后端代码/server/data/coreone.db`(+`-shm`/`-wal`)：**git-tracked** 的 SQLite 库，起后端就改
- *     （见 guardrails「dev 数据库是 git tracked 的提交陷阱」）。
+ *   - `后端代码/server/data/coreone.db`(+`-shm`/`-wal`)：当前 Git tree 不跟踪的本地 SQLite 运行产物，起后端可能创建或改写
+ *     （见 guardrails「本地 dev 数据库与运行产物不得提交」）。
  *   - 任意路径段含 `node_modules`：worktree 的 node_modules 是**指向主仓的符号链接**，`.gitignore` 的
  *     `前端代码/node_modules/`（尾斜杠只匹配目录、不匹配符号链接）漏掉它 → 显示为未跟踪 `??`。纯环境。
  *   - `.claude/skills-runtime/`：技能运行时 venv（已 gitignore，旧树的 .gitignore 版本可能没有）。
