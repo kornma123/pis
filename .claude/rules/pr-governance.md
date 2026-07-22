@@ -63,18 +63,18 @@ gh pr checks '<PR>'
 2. 运行 preflight，确认 develop/review 模式、目标 ref、所有权和 excluded files。
 3. 用 `gh pr list` / `gh pr view` 读取当前依赖与在途 PR；不要从仓库快照推断。
 4. 提交前运行相关自测、构建纪律闸与 `git diff --check`，复核无 DB、env、token、临时日志或越界文件。
-5. 开 PR 后只交接 PR URL 与查询入口；等待独立复核和 PM 合并批准。
+5. 开 PR 后只交接 PR URL 与查询入口；固定 SHA 独立复核在线下完成并由 PM 粘贴原文，等待 findings 关闭和 PM 合并批准。
 
 > 需求→mockup→写码→真跑验收各阶段的质量循环见 `docs/COREONE-质量Loop总览-2026-07-12.md`（方法论细化；合并门、所有权与依赖仍以本文与 GitHub 现场为准，质量循环不构成 required 门）。
 
-## 8. Agent 与 GitHub 的交流合同
+## 8. Agent 的线下复核与 GitHub 最小交流合同
 
-- Issue body 的 `coreone-owner` 受控块维护当前 owner，正文其余部分维护整项工作的目标、验收和剩余项；PR body 维护本次交付的实时 handoff；评论只记录一次认领、决定、状态变化、阻塞或复核事件，不能再养一份平行状态。
-- 状态、阻塞和复核评论使用 `docs/github-issue-pr-management-loop.md` §9 的稳定合同；阶段专用流程可以增加字段，但不得省略该合同要求，也不得反向成为全局规则源。
-- 每次 PR 复核都必须在对应 PR 留一条可追踪普通评论，写明目标 head SHA、独立性、Verdict、findings、证据、未覆盖边界和下一动作。审查多个 PR 时逐个评论，不能只在会话里留一份汇总。
+- Issue body 的 `coreone-owner` 受控块维护当前 owner，正文其余部分维护整项工作的目标、验收和剩余项；PR body 只维护正式交付 handoff。模型对话、过程进度和复核原文不放 GitHub。
+- 状态、阻塞和复核使用 `docs/github-issue-pr-management-loop.md` §9 的线下稳定合同；阶段专用流程可以增加字段，但不得省略该合同要求，也不得反向成为全局规则源。
+- 每次 PR 复核都必须留下与目标 head SHA 绑定的线下完整文档，写明独立性、Verdict、findings、证据、未覆盖边界和下一动作，由 PM 原文粘贴交接。不得默认向 PR 发布评论；需要 GitHub 留痕时，只由唯一写 owner 按 PM 对固定 SHA 和文本范围的明确批准发布最终决定摘要。
 - 默认不改变 GitHub 正式 review state，不 APPROVE、不 REQUEST CHANGES、不 MERGE；只有 PM 明确要求该具体动作且平台权限、required gates 和证据均满足时才执行。
-- 评论中的“已检查/可合并”不替代 PR body、required checks、正式审批或 PM 合并授权；目标 SHA 改变后，旧复核是否仍有效必须重新判断。
+- 线下文档或 GitHub 摘要中的“已检查/可合并”不替代 PR body、required checks、正式审批或 PM 合并授权；目标 SHA 改变后，旧复核是否仍有效必须重新判断。
 
 ## PM 大白话
 
-PR 的实时进度以后只看 GitHub，不再维护一张很快过期的大看板。仓库里只留下不会频繁变化的规则：谁拥有哪些文件、依赖谁、怎么验收、谁有权合并。
+GitHub 以后只放必要的 Issue、分支、PR 和经你批准的最终决定摘要。K3/Codex 复核原文和过程进度留在线下，由你粘贴交接；仓库里只留下不会频繁变化的规则：谁拥有哪些文件、依赖谁、怎么验收、谁有权发布与合并。

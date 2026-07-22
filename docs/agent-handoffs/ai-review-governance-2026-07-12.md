@@ -1,5 +1,7 @@
 # COREONE 单人 AI Review 审批链治理
 
+> **SUPERSEDED（2026-07-22）**：本文件只保留历史设计与审计取证价值，不再是活动入口。PM 已决定撤销 GitHub Actions 外部 AI、自动 review/status 与云端 handoff gate；现行规则以 [`docs/agent-operating-contract.md` §9](../agent-operating-contract.md#9-github-自动化与-k3-线下交接安全) 和 [`docs/COREONE-质量Loop契约-2026-07-12.md` §6](../COREONE-质量Loop契约-2026-07-12.md#6-复核堆栈-l0--l1替换旧草稿-5-处散写的强制异构复核) 为准。不得按下文重建 `ai-review-gate`、secret、required status 或自动评论。
+
 > 本文件保存本任务的稳定设计、时间戳审计快照与回滚边界。实时 PR、checks、review 和保护状态仍以 GitHub 为准。
 
 ## 任务身份
