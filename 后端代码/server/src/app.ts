@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import type { Server } from 'node:http'
 import { initializeDatabase } from './database/DatabaseManager.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { authenticateToken } from './middleware/auth.js'
@@ -56,6 +57,11 @@ import ngsRoutes from './routes/ngs-v1.1.js'
 // 配置驱动导入器（P4）：逐院配置单一事实源 + 对账单导入预览/归类
 import partnerConfigRoutes from './routes/partner-config-v1.1.js'
 import statementImportRoutes from './routes/statement-import-v1.1.js'
+import {
+  resolveAlertSchedulerConfig,
+  startAlertScheduler,
+  type AlertScheduler,
+} from './services/alert-scheduler.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -175,15 +181,61 @@ app.use((_req, res) => {
   res.status(404).json({ success: false, error: { message: 'Not found', code: 'NOT_FOUND' } })
 })
 
+export interface ServerRuntime {
+  server: Server
+  stop(): Promise<void>
+  dispose(): Promise<void>
+}
+
+export interface StartServerOptions {
+  host?: string
+  port?: number
+  schedulerEnv?: NodeJS.ProcessEnv
+}
+
+export function startServer(options: StartServerOptions = {}): ServerRuntime {
+  const schedulerConfig = resolveAlertSchedulerConfig(options.schedulerEnv)
+  const host = options.host ?? (isFixtureEnv() ? '127.0.0.1' : '0.0.0.0')
+  const port = options.port ?? Number(PORT)
+  let scheduler: AlertScheduler | undefined
+  let stopPromise: Promise<void> | undefined
+  const server = app.listen(port, host, () => {
+    scheduler = startAlertScheduler({ config: schedulerConfig })
+    console.log(`COREONE Backend Server running on ${host}:${port}`)
+    console.log(`API Base URL: http://localhost:${port}/api/v1`)
+  })
+
+  const stop = (): Promise<void> => {
+    if (stopPromise) return stopPromise
+    scheduler?.stop()
+    stopPromise = new Promise((resolve, reject) => {
+      server.close(error => {
+        if (error) reject(error)
+        else resolve()
+      })
+    })
+    return stopPromise
+  }
+
+  return { server, stop, dispose: stop }
+}
+
+let automaticServerRuntime: ServerRuntime | undefined
+
+export function getAutomaticServerRuntime(): ServerRuntime | undefined {
+  return automaticServerRuntime
+}
+
 // 测试环境下不自动启动服务器（测试用 supertest 的 request(app)，无需常驻端口）
 if (process.env.NODE_ENV !== 'test') {
-  // 安全（P1-4）：开发/夹具环境内置固定默认账号，只绑回环 127.0.0.1，避免在局域网暴露默认凭据；
-  // 生产（无默认账号）绑 0.0.0.0——容器内需被 nginx/宿主访问。
-  const HOST = isFixtureEnv() ? '127.0.0.1' : '0.0.0.0'
-  app.listen(Number(PORT), HOST, () => {
-    console.log(`COREONE Backend Server running on ${HOST}:${PORT}`)
-    console.log(`API Base URL: http://localhost:${PORT}/api/v1`)
-  })
+  automaticServerRuntime = startServer()
+  const shutdown = (): void => {
+    void automaticServerRuntime?.dispose().catch(() => {
+      process.exitCode = 1
+    })
+  }
+  process.once('SIGINT', shutdown)
+  process.once('SIGTERM', shutdown)
 }
 
 export default app
