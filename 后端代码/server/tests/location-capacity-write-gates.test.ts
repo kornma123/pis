@@ -147,6 +147,22 @@ function expectCapacityDenialAudit(method: string, moduleMarker: string, pathMar
   expect(log!.username).toBe('admin')
 }
 
+/** 某类写拒绝审计行的累计条数（归因探针：本次请求须恰好 +1，防「拿旧行冒充本次留痕」） */
+function writeDenialAuditCount(method: string, moduleMarker: string): number {
+  return (db.prepare(
+    `SELECT COUNT(*) AS c FROM operation_logs WHERE outcome = 'denied' AND operation = ?`,
+  ).get(`DENIED ${method} ${moduleMarker}`) as { c: number }).c
+}
+
+/** 最新一条某类写拒绝审计行（配合 writeDenialAuditCount 的 +1 归因后读取） */
+function latestWriteDenialAudit(method: string, moduleMarker: string) {
+  return db.prepare(
+    `SELECT * FROM operation_logs WHERE outcome = 'denied' AND operation = ? ORDER BY rowid DESC LIMIT 1`,
+  ).get(`DENIED ${method} ${moduleMarker}`) as
+    | { description: string; request_data: string; username: string; user_id: string | null }
+    | undefined
+}
+
 /** 确定性 committed-race：rival（真实第二连接、自提交）在首个 BEGIN IMMEDIATE 之前提交占用变化 */
 function installCommittedRace(write: () => void) {
   const original = db.exec.bind(db)
@@ -943,5 +959,38 @@ describe('locations 显式 null 容量（R2 修复）', () => {
     const res = await put(`/api/v1/locations/L-${s}`, { capacity: null })
     expect(res.status).toBe(400)
     expect(row('locations', `L-${s}`).capacity).toBe(10)
+  })
+
+  it('创建库位显式 capacity:null → 稳定 400 + 零写入 + denial 审计留痕（actor=认证上下文、精确 operation/status/code、绝无请求体）', async () => {
+    const s = sfx()
+    const adminUser = db.prepare('SELECT id FROM users WHERE username = ?').get('admin') as { id: string } | undefined
+    expect(adminUser, 'admin user row must exist').toBeTruthy()
+    const probeName = `审计探针-${s}-${PROBE_VALUE}`
+    const locationsBefore = count('locations')
+    const auditBefore = writeDenialAuditCount('POST', 'locations')
+    const res = await post('/api/v1/locations', {
+      name: probeName, zone: 'CAP区', capacity: null, probeNote: PROBE_VALUE,
+    })
+    // 稳定 400 + canonical 拒因码（审计探针字段不影响业务判定）
+    expect(res.status).toBe(400)
+    expect(res.body?.error?.code).toBe('INVALID_PARAMETER')
+    // locations 零写入：行数不变，且探针名库位不存在
+    expect(count('locations')).toBe(locationsBefore)
+    expect(db.prepare('SELECT id FROM locations WHERE name = ?').get(probeName)).toBeUndefined()
+    // 恰好新增一条 outcome='denied' 的拒绝审计行（归因到本次请求，非旧行冒充）
+    expect(writeDenialAuditCount('POST', 'locations')).toBe(auditBefore + 1)
+    const log = latestWriteDenialAudit('POST', 'locations')
+    expect(log, 'missing denial audit row for POST /api/v1/locations capacity:null').toBeTruthy()
+    // actor 只信认证上下文：username/user_id 必须是 JWT 里的 admin，与请求体无关
+    expect(log!.username).toBe('admin')
+    expect(log!.user_id).toBe(adminUser!.id)
+    // 精确 operation / status / code：DENIED POST locations + {status:400, code:INVALID_PARAMETER}
+    expect(log!.description).toContain('POST /api/v1/locations')
+    expect(log!.description).toContain('400')
+    expect(log!.description).toContain('INVALID_PARAMETER')
+    expect(log!.request_data).toBe('{"status":400,"code":"INVALID_PARAMETER"}')
+    // request_data / description 绝无请求体或探针值（name 与 probeNote 都含 PROBE_VALUE）
+    expect(log!.request_data).not.toContain(PROBE_VALUE)
+    expect(log!.description).not.toContain(PROBE_VALUE)
   })
 })
