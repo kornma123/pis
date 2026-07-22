@@ -134,14 +134,16 @@ function parseRejection(value: unknown): RejectionItem {
   throw new Error('LIS 拒收类型不可验证')
 }
 
-export function parseLisImportResult(raw: unknown): VerifiedLisImportResult {
+export function parseLisImportResult(raw: unknown, expectedRowCount: number): VerifiedLisImportResult {
   const value = recordOf(raw)
+  const expected = safeCount(expectedRowCount)
   const imported = safeCount(value.imported), inserted = safeCount(value.inserted), updated = safeCount(value.updated)
   const skipped = safeCount(value.skipped), rejectedCrossMonth = safeCount(value.rejectedCrossMonth)
   const rejectedInvalidDate = safeCount(value.rejectedInvalidDate), rejectedTotal = safeCount(value.rejectedTotal)
   const partnersCreated = safeCount(value.partnersCreated), partnersMatched = safeCount(value.partnersMatched)
   if (imported !== inserted + updated) throw new Error('LIS 导入计数互相矛盾')
   if (rejectedTotal !== skipped + rejectedCrossMonth + rejectedInvalidDate) throw new Error('LIS 拒收计数互相矛盾')
+  if (imported + rejectedTotal !== expected) throw new Error('LIS 导入回执与请求行数不守恒')
   if (!Array.isArray(value.rejections) || typeof value.rejectionsTruncated !== 'boolean') throw new Error('LIS 拒收回执不可验证')
   const rejections = value.rejections.map(parseRejection)
   if (rejections.length > rejectedTotal || value.rejectionsTruncated !== (rejections.length < rejectedTotal)) {
@@ -184,7 +186,7 @@ type ImportLisCases = {
 }
 
 const importLisCases = (async (cases: LisRow[]) => (
-  parseLisImportResult(await request.post('/lis-cases/import', { cases }))
+  parseLisImportResult(await request.post('/lis-cases/import', { cases }), cases.length)
 )) as ImportLisCases
 
 export const lisCasesApi = {

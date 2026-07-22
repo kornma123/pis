@@ -166,7 +166,7 @@ describe('#178 导入拒收可见', () => {
       ['病理号', '送检医院', '登记时间', '蜡块数'],
       ['S26-001', '测试医院', '2026-07-18', 1],
     ])
-    vi.mocked(lisCasesApi.import).mockImplementation(async () => parseLisImportResult({}))
+    vi.mocked(lisCasesApi.import).mockImplementation(async () => parseLisImportResult({}, 1))
     const { toast } = await import('sonner')
 
     await driveSubmit()
@@ -200,7 +200,7 @@ describe('#178 导入拒收可见', () => {
       partnersCreated: 0, partnersMatched: 1,
       rejectedCrossMonth: 0, rejectedInvalidDate: 0, rejectedTotal: 0,
       rejectionsTruncated: false, rejections: [], ...override,
-    }))
+    }, 1))
 
     await driveSubmit()
 
@@ -261,6 +261,70 @@ describe('#178 导入拒收可见', () => {
     expect(lisCasesApi.importMarkers).not.toHaveBeenCalled()
   })
 
+  it('非空病例请求收到全零回执时 fail closed，marker API 不得继续调用', async () => {
+    mocks.readGrid
+      .mockResolvedValueOnce([
+        ['病理号', '送检医院', '登记时间', '蜡块数'],
+        ['S26-001', '测试医院', '2026-07-18', 1],
+      ])
+      .mockResolvedValueOnce([
+        ['病理号', '抗体名'],
+        ['S26-001', 'P53'],
+      ])
+    vi.mocked(lisCasesApi.import).mockImplementation(async (cases) => parseLisImportResult({
+      importBatch: 'LIS-1', imported: 0, inserted: 0, updated: 0, skipped: 0,
+      partnersCreated: 0, partnersMatched: 1,
+      rejectedCrossMonth: 0, rejectedInvalidDate: 0, rejectedTotal: 0,
+      rejectionsTruncated: false, rejections: [],
+    }, cases.length))
+
+    render(<LisImportView onBack={vi.fn()} onDone={vi.fn()} />)
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('选择 LIS 文件'), {
+        target: { files: [new File(['case'], '病例.xlsx'), new File(['marker'], '抗体.xlsx')] },
+      })
+    })
+    fireEvent.click(await screen.findByRole('button', { name: '运行服务端预检' }))
+    await screen.findByText('服务端预检通过')
+    fireEvent.click(screen.getByRole('button', { name: '确认提交导入' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: '确认提交 LIS 数据' })).getByRole('button', { name: '开始提交' }))
+
+    expect(await screen.findByRole('status', { name: '处理结果未知' })).toHaveTextContent('成功回执 0 批')
+    expect(lisCasesApi.importMarkers).not.toHaveBeenCalled()
+  })
+
+  it('ROW_SHAPE_INVALID 跳过病例时 marker API 不得继续调用', async () => {
+    mocks.readGrid
+      .mockResolvedValueOnce([
+        ['病理号', '送检医院', '登记时间', '蜡块数'],
+        ['S26-001', '', '2026-07-18', 1],
+      ])
+      .mockResolvedValueOnce([
+        ['病理号', '抗体名'],
+        ['S26-001', 'P53'],
+      ])
+    vi.mocked(lisCasesApi.import).mockResolvedValue({
+      importBatch: 'LIS-1', imported: 0, inserted: 0, updated: 0, skipped: 1,
+      partnersCreated: 0, partnersMatched: 0,
+      rejectedCrossMonth: 0, rejectedInvalidDate: 0, rejectedTotal: 1, rejectionsTruncated: false,
+      rejections: [{ code: 'ROW_SHAPE_INVALID', caseNo: 'S26-001', partnerName: '' }],
+    } as never)
+
+    render(<LisImportView onBack={vi.fn()} onDone={vi.fn()} />)
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('选择 LIS 文件'), {
+        target: { files: [new File(['case'], '病例.xlsx'), new File(['marker'], '抗体.xlsx')] },
+      })
+    })
+    fireEvent.click(await screen.findByRole('button', { name: '运行服务端预检' }))
+    await screen.findByText('服务端预检通过')
+    fireEvent.click(screen.getByRole('button', { name: '确认提交导入' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: '确认提交 LIS 数据' })).getByRole('button', { name: '开始提交' }))
+
+    expect(await screen.findByRole('status', { name: '部分完成' })).toHaveTextContent('抗体清单未提交')
+    expect(lisCasesApi.importMarkers).not.toHaveBeenCalled()
+  })
+
   it('拒收 code 与分类计数矛盾时网络 parser 拒绝，marker API 不得继续调用', async () => {
     mocks.readGrid
       .mockResolvedValueOnce([
@@ -277,7 +341,7 @@ describe('#178 导入拒收可见', () => {
       rejectedCrossMonth: 0, rejectedInvalidDate: 0, rejectedTotal: 1,
       rejectionsTruncated: false,
       rejections: [{ code: 'CROSS_MONTH_CONFLICT', caseNo: 'S26-001', partnerName: '测试医院', existingMonth: '2026-06', incomingMonth: '2026-07' }],
-    }))
+    }, 1))
 
     render(<LisImportView onBack={vi.fn()} onDone={vi.fn()} />)
     await act(async () => {
@@ -328,6 +392,34 @@ describe('#178 导入拒收可见', () => {
     expect(csv).toContain('2026-06') // canonical 月份的 '-' 不应被公式中和
     expect(anchorClick).toHaveBeenCalled()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:rejection-csv')
+    anchorClick.mockRestore()
+  })
+
+  it('拒收清单 CSV 对 bare CR 后的公式内容保持在引号字段内', async () => {
+    mocks.readGrid.mockResolvedValue([
+      ['病理号', '送检医院', '登记时间', '蜡块数'],
+      ['S26-001', '测试医院', '2026-07-18', 1],
+    ])
+    vi.mocked(lisCasesApi.import).mockResolvedValue({
+      importBatch: 'LIS-1', imported: 0, inserted: 0, updated: 0, skipped: 0,
+      partnersCreated: 0, partnersMatched: 1,
+      rejectedCrossMonth: 1, rejectedInvalidDate: 0, rejectedTotal: 1, rejectionsTruncated: false,
+      rejections: [{ code: 'CROSS_MONTH_CONFLICT', caseNo: 'safe\r=1+1', partnerName: '测试医院', existingMonth: '2026-06', incomingMonth: '2026-07' }],
+    } as never)
+    const createObjectURL = vi.fn((blob: Blob) => {
+      void blob
+      return 'blob:rejection-csv-cr'
+    })
+    Object.defineProperty(URL, 'createObjectURL', { value: createObjectURL, writable: true, configurable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), writable: true, configurable: true })
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    await driveSubmit()
+    await screen.findByRole('status', { name: '部分完成' })
+    fireEvent.click(screen.getByRole('button', { name: '导出拒收清单' }))
+
+    const csv = await blobText(createObjectURL.mock.calls[0][0])
+    expect(csv).toContain('"safe\r=1+1"')
     anchorClick.mockRestore()
   })
 

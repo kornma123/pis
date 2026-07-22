@@ -140,7 +140,7 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
   const exportRejections = useCallback(() => {
     if (rejections.length === 0) return
     if (rejectionsTruncated || rejections.length !== rejectedTotal) return
-    const escape = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value)
+    const escape = (value: string) => (/[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value)
     const lines = ['code,caseNo,partnerName,existingMonth,incomingMonth,value']
     for (const item of rejections) {
       lines.push([
@@ -221,7 +221,7 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
       }
 
       // #178/#179 闭环前提：同次 case 导入被拒收的 caseNo 不得被 marker 导入当作已建立的新来源（整体停住待人工）。
-      markerBlocked = markerRows.length > 0 && (summary.rejectedCrossMonth > 0 || summary.rejectedInvalidDate > 0)
+      markerBlocked = markerRows.length > 0 && (summary.caseSkipped > 0 || summary.rejectedCrossMonth > 0 || summary.rejectedInvalidDate > 0)
       if (!markerBlocked) {
         for (const group of chunks(markerRows)) {
           const response = await lisCasesApi.importMarkers(group)
