@@ -182,6 +182,44 @@ assert.equal(isSafeBeforeStartShell('git status $(touch hacked.txt)'), false);
 assert.equal(isSafeBeforeStartShell('git status `touch hacked.txt`'), false);
 assert.equal(isSafeBeforeStartShell('git diff --output=hacked.txt'), false);
 assert.equal(isSafeBeforeStartShell('git -c diff.external=evil diff --ext-diff'), false);
+const bootstrapWorktree = path.resolve(repositoryRoot, '..', 'claude-bootstrap-worktree');
+assert.equal(
+  isSafeBeforeStartShell(
+    `git worktree add -b claude/fix-bootstrap "${bootstrapWorktree}" origin/master`,
+    repositoryRoot,
+  ),
+  true,
+  'Claude must be able to create the task worktree required before task start',
+);
+assert.equal(
+  isSafeBeforeStartShell(
+    `git worktree add --detach "${bootstrapWorktree}" origin/master`,
+    repositoryRoot,
+  ),
+  false,
+);
+assert.equal(
+  isSafeBeforeStartShell(
+    `git worktree add -B claude/fix-bootstrap "${bootstrapWorktree}" origin/master`,
+    repositoryRoot,
+  ),
+  false,
+);
+assert.equal(
+  isSafeBeforeStartShell(
+    `git worktree add -b master "${bootstrapWorktree}" origin/master`,
+    repositoryRoot,
+  ),
+  false,
+);
+assert.equal(
+  isSafeBeforeStartShell(
+    `git worktree add -b claude/fix-bootstrap "${bootstrapWorktree}" HEAD`,
+    repositoryRoot,
+  ),
+  false,
+);
+assert.equal(isSafeBeforeStartShell('git worktree remove some-worktree', repositoryRoot), false);
 assert.equal(isSafeBeforeStartShell('gh api repos/acme/core -XPOST'), false);
 assert.equal(isSafeBeforeStartShell('node scripts/claude-task.cjs start --issue=12', repositoryRoot), true);
 assert.equal(isSafeBeforeStartShell('node scripts/claude-task.cjs start-r0 --reason=typo-only --owned=README.md', repositoryRoot), true);
@@ -201,6 +239,12 @@ assert.throws(() => assertSafeGitCommand(shellTokens('git push -f origin task'),
 assert.throws(() => assertSafeGitCommand(shellTokens('git push origin HEAD:refs/heads/master'), { mode: 'governed', branch: 'task' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git push --all origin'), { mode: 'governed', branch: 'task' }));
 assert.doesNotThrow(() => assertSafeGitCommand(shellTokens('git push -u origin task'), { mode: 'governed', branch: 'task' }));
+assert.throws(() =>
+  assertSafeGitCommand(
+    shellTokens(`git worktree add -b claude/nested-task "${bootstrapWorktree}" origin/master`),
+    { mode: 'governed', branch: 'task' },
+  ),
+);
 assert.doesNotThrow(() => assertSafeGhCommand(shellTokens('gh issue view 12'), { mode: 'governed', issue: 12 }));
 assert.doesNotThrow(() => assertSafeGhCommand(shellTokens('gh issue comment 12 --body ok'), { mode: 'governed', issue: 12 }));
 assert.throws(() => assertSafeGhCommand(shellTokens('gh issue close 12'), { mode: 'governed', issue: 12 }));
@@ -341,5 +385,28 @@ function runGuard(filePath, cwd) {
 assert.equal(runGuard(path.join(harnessProjectsRoot, 'proj-slug', 'memory', 'note.md'), repositoryRoot), 0);
 assert.equal(runGuard(path.join(os.homedir(), 'secret.txt'), repositoryRoot), 2);
 assert.equal(runGuard(path.join(repositoryRoot, 'README.md'), repositoryRoot), 2);
+
+// shell-guard 子进程端到端：无 task state 时可以建立合规任务 worktree，危险变体继续拒绝。
+function runShellGuard(command, cwd) {
+  const result = spawnSync(process.execPath, [path.join(__dirname, 'claude-task.cjs'), 'shell-guard'], {
+    input: JSON.stringify({ tool_input: { command }, cwd }),
+    encoding: 'utf8',
+  });
+  return result.status ?? 2;
+}
+assert.equal(
+  runShellGuard(
+    `git worktree add -b claude/fix-bootstrap "${bootstrapWorktree}" origin/master`,
+    repositoryRoot,
+  ),
+  0,
+);
+assert.equal(
+  runShellGuard(
+    `git worktree add --detach "${bootstrapWorktree}" origin/master`,
+    repositoryRoot,
+  ),
+  2,
+);
 
 console.log('claude-task selftest: PASS');
