@@ -408,11 +408,11 @@ export default function LisImportView({ onBack, onDone }: { onBack: () => void; 
       {confirmOpen && (
         <Modal
           title="确认提交 LIS 数据"
-          description="提交会写入病例工作量；只有全部请求返回成功，界面才会显示完成。"
           onClose={() => { if (!submitting) setConfirmOpen(false) }}
           size="sm"
         >
           <div className="space-y-3 text-sm text-gray-700">
+            <p>提交会写入病例工作量；只有全部请求返回成功，界面才会显示完成。</p>
             <p>病例 {caseRows.length} 行，抗体 {markerRows.length} 行。文件只保留白名单字段，原始文件不会保存。</p>
             <div className="flex flex-wrap justify-end gap-2">
               <button type="button" className={btnCls} disabled={submitting} onClick={() => setConfirmOpen(false)}>返回检查</button>
