@@ -77,7 +77,27 @@ if (!fixtureDatabase) {
 
 fs.mkdirSync(dirname(DB_PATH), { recursive: true })
 
-let db: DatabaseSync | null = null
+export type ManagedDatabaseSync = DatabaseSync & {
+  /**
+   * Detach this exact handle from the singleton owner before best-effort close.
+   * A stale handle cannot invalidate a newer replacement connection.
+   */
+  invalidateConnection: () => void
+}
+
+let db: ManagedDatabaseSync | null = null
+
+function openManagedDatabase(): ManagedDatabaseSync {
+  const connection = new DatabaseSync(DB_PATH) as ManagedDatabaseSync
+  Object.defineProperty(connection, 'invalidateConnection', {
+    configurable: false,
+    enumerable: false,
+    value: () => {
+      invalidateDatabaseConnection(connection)
+    },
+  })
+  return connection
+}
 
 const USERS_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS users (
@@ -98,9 +118,9 @@ const USERS_TABLE_SQL = `
   )
 `
 
-export function getDatabase(): DatabaseSync {
+export function getDatabase(): ManagedDatabaseSync {
   if (!db) {
-    db = new DatabaseSync(DB_PATH)
+    db = openManagedDatabase()
   }
   return db
 }
@@ -2020,9 +2040,10 @@ export function closeDatabase(): void {
  * A failed rollback leaves the singleton connection's transaction state unknown.
  * Detach it before best-effort close so the next request cannot reuse that handle.
  */
-export function invalidateDatabaseConnection(): void {
+export function invalidateDatabaseConnection(expected?: DatabaseSync): boolean {
   const current = db
+  if (!current || (expected && current !== expected)) return false
   db = null
-  if (!current) return
   try { current.close() } catch { /* detached handle is intentionally discarded */ }
+  return true
 }

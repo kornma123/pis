@@ -42,7 +42,11 @@ export interface HospitalCmPeriodEvidenceDb extends FoundationProbeDb {
   prepare: (sql: string) => PeriodEvidenceStatement
   exec: (sql: string) => unknown
   readonly isTransaction: boolean
-  close?: () => void
+  /**
+   * The connection owner must detach this exact handle before best-effort close.
+   * DatabaseManager.getDatabase() supplies an identity-bound implementation.
+   */
+  invalidateConnection: () => void
 }
 
 export class HospitalCmPeriodEvidenceError extends Error {
@@ -235,8 +239,9 @@ function nowIso(): string {
 /**
  * 事务失败处置(LOC-003 已证实 P1 的修复):任何业务/提交失败后,绝不能把仍在事务中的共享连接静默交还。
  * - ROLLBACK 命令本身可能瞬时失败 → 在 isTransaction 仍成立时重试(上限 2 次);
- * - 回滚无法确认(重试后 isTransaction 仍为真)→ 关闭连接使其不可复用(poison-pill,防 partial 被后续
- *   误提交),并抛稳定脱敏码 PERIOD_EVIDENCE_ROLLBACK_FAILED;原始错误经 cause/rollbackCause 链保留,
+ * - 回滚无法确认(重试后 isTransaction 仍为真)→ 先从连接 owner 摘除该句柄再 best-effort close
+ *   (poison-pill,防 partial 被后续误提交),并抛稳定脱敏码 PERIOD_EVIDENCE_ROLLBACK_FAILED;
+ *   原始错误经 cause/rollbackCause 链保留,
  *   对外消息不回显底层 SQL/驱动细节(审计口径:错误消息不暴露内部实现);
  * - 回滚确认成功 → 原样抛出原始 cause(业务错误码语义不变)。
  */
@@ -251,14 +256,14 @@ function rollbackAndRethrow(db: HospitalCmPeriodEvidenceDb, cause: unknown): nev
   }
   if (db.isTransaction) {
     try {
-      db.close?.()
+      db.invalidateConnection()
     } catch {
-      // 连接仍视为不可复用;只返回稳定错误,不泄漏底层 close/SQL 诊断。
+      // owner 合同要求先摘除再 close；这里只返回稳定错误,不泄漏底层 close/SQL 诊断。
     }
     const error = new HospitalCmPeriodEvidenceError(
       'PERIOD_EVIDENCE_ROLLBACK_FAILED',
       500,
-      '周期证据事务回滚失败,连接已关闭不可复用',
+      '周期证据事务回滚失败,连接已失效不可复用',
     ) as HospitalCmPeriodEvidenceError & { cause?: unknown; rollbackCause?: unknown }
     error.cause = cause
     error.rollbackCause = rollbackFailure
