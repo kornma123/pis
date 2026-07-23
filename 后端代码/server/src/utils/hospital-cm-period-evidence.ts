@@ -10,6 +10,16 @@ import { HOSPITAL_CM_FORMULA_VERSION } from './hospital-cm.js'
 import { SPLIT_FORMULA_VERSION } from './statement-revenue.js'
 import { splitCaliberRatification } from './caliber-ratification.js'
 
+// 本地 node:sqlite 垫片(src/types/node-sqlite.d.ts,@types/node v20 不含 sqlite 类型)未声明
+// isTransaction,但 Node 22 运行时真实存在(本模块 fault-injection 测试在官方 v22.23.1 实测:
+// 提交后 isTransaction=false、事务中=true)。按运行时事实增补,使真实 DatabaseSync 可赋给
+// HospitalCmPeriodEvidenceDb;垫片日后补齐时本增补自然冗余、无害。
+declare module 'node:sqlite' {
+  export interface DatabaseSync {
+    readonly isTransaction: boolean
+  }
+}
+
 /**
  * C1 · hospital-cm 周期证据底座(issue #183 增量 C 第一子交付)。
  *
