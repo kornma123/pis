@@ -64,9 +64,27 @@
         "前端代码/src/api/inventory.ts",
         "后端代码/server/src/routes/inbound-v1.1.ts",
         "后端代码/server/src/routes/outbound-v1.1.ts",
-        "后端代码/server/src/routes/inventory-v1.1.ts"
+        "后端代码/server/src/routes/inventory-v1.1.ts",
+        "后端代码/server/src/routes/scraps-v1.1.ts",
+        "后端代码/server/src/routes/stocktaking-v1.1.ts"
       ],
       "specs": ["e2e/critical/psi-read.spec.ts"]
+    },
+    {
+      "id": "returns",
+      "tier": "critical",
+      "owner": "inventory",
+      "sources": [
+        "前端代码/src/pages/returns/**",
+        "前端代码/src/pages/_laneC/LaneCPage.tsx",
+        "前端代码/src/pages/_laneC/useLaneCPage.ts",
+        "前端代码/src/pages/_laneC/types.ts",
+        "前端代码/src/pages/_laneC/components/LaneCCreateModal.tsx",
+        "前端代码/src/api/inventory.ts",
+        "后端代码/server/src/routes/returns-v1.1.ts",
+        "后端代码/server/src/services/inventory-transactions.ts"
+      ],
+      "specs": ["e2e/critical/returns.spec.ts"]
     },
     {
       "id": "supplier-returns",

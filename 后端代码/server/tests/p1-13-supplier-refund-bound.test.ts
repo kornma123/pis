@@ -35,9 +35,15 @@ beforeAll(async () => {
   // 物料：进价（批次 inbound_price）= 10/瓶
   db.prepare(`INSERT INTO materials (id, code, name, unit, category_id, price, status, is_deleted)
     VALUES ('MAT-SR13', 'C-SR13', '退货试剂', '瓶', 'CAT', 10, 1, 0)`).run()
-  db.prepare(`INSERT INTO inventory (id, material_id, stock) VALUES ('INV-SR13', 'MAT-SR13', 100)`).run()
+  db.prepare(`INSERT INTO inventory (id, material_id, stock) VALUES ('INV-SR13', 'MAT-SR13', 50)`).run()
+  db.prepare(`INSERT INTO inbound_records
+    (id, inbound_no, type, material_id, batch_id, batch_no, quantity, unit, price, amount, location_id, operator, status)
+    VALUES ('IN-SR13', 'IN-SR13', 'purchase', 'MAT-SR13', 'B-SR13', 'BN-SR13', 50, '瓶', 10, 500, 'LOC-SR13', 'test', 'completed')`).run()
   db.prepare(`INSERT INTO batches (id, material_id, batch_no, quantity, remaining, inbound_id, inbound_price, status)
     VALUES ('B-SR13', 'MAT-SR13', 'BN-SR13', 50, 50, 'IN-SR13', 10, 1)`).run()
+  db.prepare(`INSERT INTO inventory_transaction_allocations
+    (id, operation_kind, owner_id, owner_line_id, material_id, batch_id, direction, quantity)
+    VALUES ('ALLOC-IN-SR13', 'inbound', 'IN-SR13', 'IN-SR13', 'MAT-SR13', 'B-SR13', 'in', 50)`).run()
 })
 
 describe('P1-13 退款上界勾稽', () => {
@@ -51,24 +57,24 @@ describe('P1-13 退款上界勾稽', () => {
     expect(res.body.success).toBe(false)
   })
 
-  it('合理退款（≤ 进价×数量）→ 200 通过', async () => {
+  it('合理退款（≤ 进价×数量）→ 201 通过', async () => {
     const request = (await import('supertest')).default
     // 进价 10 × 数量 5 = 上界 50；填 40 应通过
     const res = await request(app).post('/api/v1/supplier-returns').send({
       materialId: 'MAT-SR13', quantity: 5, reason: '质量问题', refundAmount: 40,
     })
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
     expect(res.body.success).toBe(true)
     expect(res.body.data.id).toBeTruthy()
   })
 
-  it('恰好等于上界的退款 → 200 通过（边界）', async () => {
+  it('恰好等于上界的退款 → 201 通过（边界）', async () => {
     const request = (await import('supertest')).default
     // 进价 10 × 数量 3 = 上界 30；填 30 应通过
     const res = await request(app).post('/api/v1/supplier-returns').send({
       materialId: 'MAT-SR13', quantity: 3, reason: '质量问题', refundAmount: 30,
     })
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(201)
     expect(res.body.success).toBe(true)
   })
 })
