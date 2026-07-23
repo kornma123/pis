@@ -12,6 +12,8 @@ import { postStatementGeneration } from '../services/statement-ledger-phase1a.js
 
 const router = Router()
 const requireFinance = requireAnyRole('finance')
+const trustedActor = (req: any): string =>
+  String(req.user?.username ?? req.user?.userId ?? '').trim()
 
 function respondError(res: any, caught: unknown): void {
   if (caught instanceof Phase1AError) {
@@ -24,7 +26,9 @@ function respondError(res: any, caught: unknown): void {
 
 router.post('/preview-normalized', requireFinance, (req, res) => {
   try {
-    const facts = buildStatementNormalizedFacts(req.body as StatementImportInput)
+    const actor = trustedActor(req)
+    const input = { ...(req.body as StatementImportInput), uploadedBy: actor }
+    const facts = buildStatementNormalizedFacts(input, { actor })
     success(res, {
       declaredTotal: facts.declaredTotal,
       parsedTotal: facts.parsedTotal,
@@ -40,7 +44,9 @@ router.post('/preview-normalized', requireFinance, (req, res) => {
 
 router.post('/', requireFinance, (req, res) => {
   try {
-    const result = importStatementBatch(getDatabase(), req.body as StatementImportInput)
+    const actor = trustedActor(req)
+    const input = { ...(req.body as StatementImportInput), uploadedBy: actor }
+    const result = importStatementBatch(getDatabase(), input, { actor })
     success(res, result, result.duplicate ? 'Existing generation returned idempotently' : 'Immutable statement generation created')
   } catch (caught) {
     respondError(res, caught)

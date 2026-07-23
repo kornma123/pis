@@ -1,4 +1,8 @@
-import { Phase1AError } from './statement-normalized-lines.js'
+import {
+  computeAuthoritativeEmptyEvidenceHash,
+  Phase1AError,
+  type AuthoritativeEmptyEvidenceRecord,
+} from './statement-normalized-lines.js'
 
 export type SourceReadinessState =
   | 'complete'
@@ -33,6 +37,54 @@ export interface StatementReadinessSnapshot {
   actualNormalizedLines: number
   current: boolean
   status: string
+  sourceFile?: string | null
+  sourceSheet?: string | null
+  sourceHash?: string | null
+  templateFamily?: string | null
+  emptyEvidenceHash?: string | null
+  emptyVerifiedBy?: string | null
+  emptyVerifiedAt?: string | null
+  emptyCoverageJson?: string | null
+}
+
+function hasValidAuthoritativeEmptyEvidence(snapshot: StatementReadinessSnapshot): boolean {
+  if (
+    !snapshot.sourceFile
+    || !snapshot.sourceSheet
+    || !snapshot.sourceHash
+    || !snapshot.templateFamily
+    || !snapshot.emptyEvidenceHash
+    || !snapshot.emptyVerifiedBy
+    || !snapshot.emptyVerifiedAt
+    || !snapshot.emptyCoverageJson
+    || !Number.isFinite(Date.parse(snapshot.emptyVerifiedAt))
+  ) return false
+  try {
+    const coverage = JSON.parse(snapshot.emptyCoverageJson) as AuthoritativeEmptyEvidenceRecord['coverage']
+    if (
+      coverage.scope !== 'complete_source'
+      || coverage.sourceSheet !== snapshot.sourceSheet
+      || coverage.rawRowCount !== 0
+      || coverage.normalizedLineCount !== 0
+    ) return false
+    const record: AuthoritativeEmptyEvidenceRecord = {
+      schemaVersion: 'statement-authoritative-empty/v1',
+      sourceIdentity: {
+        partnerId: snapshot.partnerId,
+        settlementMonth: snapshot.settlementMonth,
+        sourceFile: snapshot.sourceFile,
+        sourceSheet: snapshot.sourceSheet,
+        templateFamily: snapshot.templateFamily as AuthoritativeEmptyEvidenceRecord['sourceIdentity']['templateFamily'],
+      },
+      coverage,
+      canonicalContentHash: snapshot.sourceHash,
+      verifiedAt: snapshot.emptyVerifiedAt,
+      verifiedBy: snapshot.emptyVerifiedBy,
+    }
+    return computeAuthoritativeEmptyEvidenceHash(record) === snapshot.emptyEvidenceHash
+  } catch {
+    return false
+  }
 }
 
 export function classifyStatementReadiness(
@@ -66,6 +118,13 @@ export function classifyStatementReadiness(
     normalized_lines: snapshot.actualNormalizedLines,
   }
   if (snapshot.actualRawRows === 0 && snapshot.actualNormalizedLines === 0) {
+    if (!hasValidAuthoritativeEmptyEvidence(snapshot)) {
+      return {
+        ...base,
+        state: 'unavailable',
+        reason_code: 'AUTHORITATIVE_EMPTY_EVIDENCE_MISSING_OR_INVALID',
+      }
+    }
     return {
       ...base,
       state: 'complete_empty',
@@ -112,6 +171,14 @@ export function readStatementSourceReadiness(
     actualNormalizedLines: Number(normalized.count),
     current: Boolean(batch.is_current),
     status: String(batch.status),
+    sourceFile: batch.source_file ?? null,
+    sourceSheet: batch.source_sheet ?? null,
+    sourceHash: batch.source_hash ?? null,
+    templateFamily: batch.template_family ?? null,
+    emptyEvidenceHash: batch.empty_evidence_hash ?? null,
+    emptyVerifiedBy: batch.empty_verified_by ?? null,
+    emptyVerifiedAt: batch.empty_verified_at ?? null,
+    emptyCoverageJson: batch.empty_coverage_json ?? null,
   })
 }
 

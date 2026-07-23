@@ -909,13 +909,19 @@ export function initializeDatabase(): void {
         CHECK(status IN ('parsed', 'posted', 'computed', 'complete', 'closed', 'error', 'unavailable')),
       artifact_hash TEXT,
       uploaded_by TEXT,
+      empty_evidence_hash TEXT,
+      empty_verified_by TEXT,
+      empty_verified_at DATETIME,
+      empty_coverage_json TEXT,
       completed_at DATETIME,
       completed_by TEXT,
       closed_at DATETIME,
       closed_by TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(partner_id, settlement_month, source_hash, parser_revision, config_revision)
+      UNIQUE(partner_id, settlement_month, source_hash, parser_revision, config_revision),
+      UNIQUE(id, generation_id),
+      UNIQUE(id, generation_id, partner_id, settlement_month)
     )
   `)
   database.exec(`
@@ -936,7 +942,8 @@ export function initializeDatabase(): void {
       source_row INTEGER NOT NULL CHECK(source_row >= 1),
       row_json TEXT NOT NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(batch_id) REFERENCES statement_import_batches(id),
+      FOREIGN KEY(batch_id, generation_id)
+        REFERENCES statement_import_batches(id, generation_id),
       UNIQUE(generation_id, source_sheet, source_row)
     )
   `)
@@ -972,8 +979,11 @@ export function initializeDatabase(): void {
       report_date TEXT,
       raw_payload TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(batch_id) REFERENCES statement_import_batches(id),
-      UNIQUE(generation_id, source_sheet, source_row, source_column, amount_role)
+      FOREIGN KEY(batch_id, generation_id, partner_id, settlement_month)
+        REFERENCES statement_import_batches(id, generation_id, partner_id, settlement_month),
+      UNIQUE(generation_id, source_sheet, source_row, source_column, amount_role),
+      UNIQUE(id, generation_id, batch_id),
+      UNIQUE(id, generation_id, batch_id, partner_id, settlement_month)
     )
   `)
   database.exec(`
@@ -997,8 +1007,10 @@ export function initializeDatabase(): void {
       reason_code TEXT NOT NULL,
       message TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(related_batch_id) REFERENCES statement_import_batches(id),
-      FOREIGN KEY(related_line_id) REFERENCES statement_normalized_lines(id)
+      FOREIGN KEY(related_batch_id, generation_id, partner_id, settlement_month)
+        REFERENCES statement_import_batches(id, generation_id, partner_id, settlement_month),
+      FOREIGN KEY(related_line_id, generation_id, related_batch_id, partner_id, settlement_month)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id, partner_id, settlement_month)
     )
   `)
   database.exec(`
@@ -1022,8 +1034,10 @@ export function initializeDatabase(): void {
       settlement_amount DECIMAL(18, 4) NOT NULL,
       ledger_scope TEXT NOT NULL DEFAULT 'statement_internal' CHECK(ledger_scope = 'statement_internal'),
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(batch_id) REFERENCES statement_import_batches(id),
-      FOREIGN KEY(source_line_id) REFERENCES statement_normalized_lines(id)
+      FOREIGN KEY(batch_id, generation_id)
+        REFERENCES statement_import_batches(id, generation_id),
+      FOREIGN KEY(source_line_id, generation_id, batch_id)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id)
     )
   `)
   database.exec(`
@@ -1045,8 +1059,10 @@ export function initializeDatabase(): void {
       lab_revenue_amount DECIMAL(18, 4) NOT NULL DEFAULT 0 CHECK(lab_revenue_amount = 0),
       ledger_scope TEXT NOT NULL DEFAULT 'statement_internal' CHECK(ledger_scope = 'statement_internal'),
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(batch_id) REFERENCES statement_import_batches(id),
-      FOREIGN KEY(source_line_id) REFERENCES statement_normalized_lines(id)
+      FOREIGN KEY(batch_id, generation_id)
+        REFERENCES statement_import_batches(id, generation_id),
+      FOREIGN KEY(source_line_id, generation_id, batch_id)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id)
     )
   `)
   database.exec(`
@@ -1063,9 +1079,14 @@ export function initializeDatabase(): void {
       OR OLD.config_revision <> NEW.config_revision
       OR OLD.generation_id <> NEW.generation_id
       OR COALESCE(OLD.source_file, '') <> COALESCE(NEW.source_file, '')
+      OR COALESCE(OLD.source_sheet, '') <> COALESCE(NEW.source_sheet, '')
       OR OLD.template_family <> NEW.template_family
       OR OLD.raw_row_count <> NEW.raw_row_count
       OR OLD.normalized_line_count <> NEW.normalized_line_count
+      OR COALESCE(OLD.empty_evidence_hash, '') <> COALESCE(NEW.empty_evidence_hash, '')
+      OR COALESCE(OLD.empty_verified_by, '') <> COALESCE(NEW.empty_verified_by, '')
+      OR COALESCE(OLD.empty_verified_at, '') <> COALESCE(NEW.empty_verified_at, '')
+      OR COALESCE(OLD.empty_coverage_json, '') <> COALESCE(NEW.empty_coverage_json, '')
     BEGIN
       SELECT RAISE(ABORT, 'IMMUTABLE_IMPORT_FACT');
     END
@@ -1073,8 +1094,17 @@ export function initializeDatabase(): void {
   database.exec(`
     CREATE TRIGGER IF NOT EXISTS trg_statement_batch_no_delete
     BEFORE DELETE ON statement_import_batches
+    WHEN OLD.status <> 'closed'
     BEGIN
       SELECT RAISE(ABORT, 'IMMUTABLE_IMPORT_FACT');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_statement_closed_generation_no_delete
+    BEFORE DELETE ON statement_import_batches
+    WHEN OLD.status = 'closed'
+    BEGIN
+      SELECT RAISE(ABORT, 'CLOSED_GENERATION_IMMUTABLE');
     END
   `)
   database.exec(`
@@ -1085,13 +1115,26 @@ export function initializeDatabase(): void {
       SELECT RAISE(ABORT, 'CLOSED_GENERATION_IMMUTABLE');
     END
   `)
-  for (const [table, code] of [
-    ['statement_raw_rows', 'IMMUTABLE_RAW_FACT'],
-    ['statement_normalized_lines', 'IMMUTABLE_NORMALIZED_FACT'],
-    ['quality_flags', 'IMMUTABLE_QUALITY_FACT'],
-    ['partner_month_revenue_ledger', 'IMMUTABLE_LEDGER_FACT'],
-    ['out_settlement_ledger', 'IMMUTABLE_LEDGER_FACT'],
+  for (const [table, code, parentColumn] of [
+    ['statement_raw_rows', 'IMMUTABLE_RAW_FACT', 'batch_id'],
+    ['statement_normalized_lines', 'IMMUTABLE_NORMALIZED_FACT', 'batch_id'],
+    ['quality_flags', 'IMMUTABLE_QUALITY_FACT', 'related_batch_id'],
+    ['partner_month_revenue_ledger', 'IMMUTABLE_LEDGER_FACT', 'batch_id'],
+    ['out_settlement_ledger', 'IMMUTABLE_LEDGER_FACT', 'batch_id'],
   ] as const) {
+    database.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_closed_parent_no_insert
+      BEFORE INSERT ON ${table}
+      WHEN EXISTS (
+        SELECT 1 FROM statement_import_batches parent
+        WHERE parent.id = NEW.${parentColumn}
+          AND parent.generation_id = NEW.generation_id
+          AND parent.status = 'closed'
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'CLOSED_PARENT_IMMUTABLE');
+      END
+    `)
     database.exec(`
       CREATE TRIGGER IF NOT EXISTS trg_${table}_no_update
       BEFORE UPDATE ON ${table}

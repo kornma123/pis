@@ -33,8 +33,38 @@ export interface StatementImportInput {
   sourceSheet?: string
   headerRow: number
   grid: Grid
+  /** @deprecated A client boolean is never authoritative; use emptyEvidence. */
   authoritativeEmpty?: boolean
+  emptyEvidence?: AuthoritativeEmptyEvidenceInput
   uploadedBy?: string
+}
+
+export interface AuthoritativeEmptyEvidenceInput {
+  schemaVersion: 'statement-authoritative-empty/v1'
+  sourceIdentity: {
+    partnerId: string
+    settlementMonth: string
+    sourceFile: string
+    sourceSheet: string
+    templateFamily: Exclude<StatementTemplate, 'unknown'>
+  }
+  coverage: {
+    scope: 'complete_source'
+    sourceSheet: string
+    rawRowCount: 0
+    normalizedLineCount: 0
+  }
+  canonicalContentHash: string
+  verifiedAt: string
+}
+
+export interface TrustedStatementImportContext {
+  actor?: string
+  now?: Date
+}
+
+export interface AuthoritativeEmptyEvidenceRecord extends AuthoritativeEmptyEvidenceInput {
+  verifiedBy: string
 }
 
 export interface NormalizedLineFact {
@@ -88,11 +118,55 @@ export interface ImportStatementResult {
 }
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
+const SHA256_RE = /^sha256:[0-9a-f]{64}$/
+const DECIMAL_RE = /^[+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,4})?|\.\d{1,4})$/
+const EMPTY_EVIDENCE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+const EMPTY_EVIDENCE_FUTURE_SKEW_MS = 5 * 60 * 1000
 const round4 = (value: number): number => Math.round((value + Number.EPSILON) * 10_000) / 10_000
 
 function stableId(prefix: string, ...parts: unknown[]): string {
   const hash = createHash('sha256').update(parts.map(part => String(part ?? '')).join('\u001f')).digest('hex')
   return `${prefix}-${hash.slice(0, 32)}`
+}
+
+function canonicalGrid(grid: Grid): Grid {
+  if (!Array.isArray(grid)) {
+    throw new Phase1AError('INVALID_STATEMENT_GRID', 'grid must be an array', 400)
+  }
+  return grid.map((row, rowIndex) => {
+    if (!Array.isArray(row)) {
+      throw new Phase1AError('INVALID_STATEMENT_GRID', `row ${rowIndex + 1} must be an array`, 400)
+    }
+    return row.map((cell, columnIndex) => {
+      if (cell === null || cell === undefined) return null
+      if (typeof cell === 'string') return cell
+      if (typeof cell === 'number' && Number.isFinite(cell)) return Object.is(cell, -0) ? 0 : cell
+      throw new Phase1AError(
+        'INVALID_STATEMENT_GRID_CELL',
+        `row ${rowIndex + 1} column ${columnIndex + 1} must be string, finite number or null`,
+        422,
+      )
+    })
+  })
+}
+
+export function computeStatementSourceHash(grid: Grid): string {
+  const serialized = JSON.stringify(canonicalGrid(grid))
+  return `sha256:${createHash('sha256').update(serialized).digest('hex')}`
+}
+
+export function computeAuthoritativeEmptyEvidenceHash(
+  record: AuthoritativeEmptyEvidenceRecord,
+): string {
+  const serialized = JSON.stringify({
+    schemaVersion: record.schemaVersion,
+    sourceIdentity: record.sourceIdentity,
+    coverage: record.coverage,
+    canonicalContentHash: record.canonicalContentHash,
+    verifiedAt: record.verifiedAt,
+    verifiedBy: record.verifiedBy,
+  })
+  return `sha256:${createHash('sha256').update(serialized).digest('hex')}`
 }
 
 export function statementGenerationId(input: Pick<
@@ -109,10 +183,20 @@ export function statementGenerationId(input: Pick<
   )
 }
 
-function finiteAmount(value: unknown, field: string): number | null {
+export function parseStatementAmount(value: unknown, field: string): number | null {
   if (value === null || value === undefined || value === '') return null
-  const normalized = String(value).normalize('NFKC').replace(/[¥,\s]/g, '')
-  const parsed = Number(normalized)
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new Phase1AError('INVALID_FINANCIAL_AMOUNT', `${field} has an invalid type`, 422)
+  }
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throw new Phase1AError('INVALID_FINANCIAL_AMOUNT', `${field} must be finite`, 422)
+  }
+  const normalized = String(value).normalize('NFKC').trim().replace(/^[¥￥]\s*/, '')
+  if (normalized === '') return null
+  if (!DECIMAL_RE.test(normalized)) {
+    throw new Phase1AError('INVALID_FINANCIAL_AMOUNT', `${field} must be a strict decimal`, 422)
+  }
+  const parsed = Number(normalized.replace(/,/g, ''))
   if (!Number.isFinite(parsed)) throw new Phase1AError('INVALID_FINANCIAL_AMOUNT', `${field} is not finite`, 422)
   if (Math.abs(parsed) > Number.MAX_SAFE_INTEGER / 10_000) {
     throw new Phase1AError('INVALID_FINANCIAL_AMOUNT', `${field} exceeds safe precision`, 422)
@@ -155,8 +239,11 @@ function donganFacts(input: StatementImportInput): StatementNormalizedFacts {
   for (let index = input.headerRow + 1; index < input.grid.length; index += 1) {
     const row = input.grid[index] ?? []
     const item = String(row[itemColumn] ?? '').trim()
-    const amount = finiteAmount(row[amountColumn], `row ${index + 1}`)
-    if (!item || amount === null) continue
+    const amount = parseStatementAmount(row[amountColumn], `row ${index + 1}`)
+    if (!item) continue
+    if (amount === null) {
+      throw new Phase1AError('MISSING_FINANCIAL_AMOUNT', `row ${index + 1} settlement amount is missing`, 422)
+    }
     const physicalRow = index + 1
     if (/^(合计|总计)/.test(normalizeStatementText(item))) {
       declaredTotal = amount
@@ -172,7 +259,7 @@ function donganFacts(input: StatementImportInput): StatementNormalizedFacts {
         classificationStatus: 'not_applicable',
         itemName: item,
       })
-      continue
+      break
     }
     const classification = classifyDongan(item)
     const identity = sourceIdentity(physicalRow, sourceColumn)
@@ -225,8 +312,12 @@ function ganzhouFacts(input: StatementImportInput): StatementNormalizedFacts {
     const row = input.grid[index] ?? []
     const physicalRow = index + 1
     const first = normalizeStatementText(row[0])
-    const amount = finiteAmount(row[amountColumn], `row ${physicalRow}`)
-    if (amount === null) continue
+    const itemName = String(row[itemColumn] ?? '').trim()
+    const amount = parseStatementAmount(row[amountColumn], `row ${physicalRow}`)
+    if (amount === null) {
+      if (!first && !itemName) continue
+      throw new Phase1AError('MISSING_FINANCIAL_AMOUNT', `row ${physicalRow} settlement amount is missing`, 422)
+    }
     if (/^(合计|总计)/.test(first)) {
       declaredTotal = amount
       lines.push({
@@ -242,7 +333,6 @@ function ganzhouFacts(input: StatementImportInput): StatementNormalizedFacts {
       })
       continue
     }
-    const itemName = String(row[itemColumn] ?? '').trim()
     if (!itemName) continue
     const reportDate = String(row[reportColumn] ?? '').trim()
     const rowSettlementMonth = statementMonthFromCell(reportDate)
@@ -325,7 +415,10 @@ function pingquanFacts(input: StatementImportInput): StatementNormalizedFacts {
     const physicalRow = index + 1
     const first = normalizeStatementText(row[0])
     if (/^合计/.test(first)) {
-      const immunoAmount = finiteAmount(row[immunoColumn], `row ${physicalRow}`)
+      const immunoAmount = parseStatementAmount(row[immunoColumn], `row ${physicalRow}`)
+      if (immunoAmount === null) {
+        throw new Phase1AError('MISSING_FINANCIAL_AMOUNT', `row ${physicalRow} immuno amount is missing`, 422)
+      }
       if (immunoAmount !== null) {
         lines.push({
           sourceRow: physicalRow,
@@ -356,7 +449,10 @@ function pingquanFacts(input: StatementImportInput): StatementNormalizedFacts {
           })
         }
       }
-      const amount = finiteAmount(row[declaredColumn], `row ${physicalRow}`)
+      const amount = parseStatementAmount(row[declaredColumn], `row ${physicalRow}`)
+      if (amount === null) {
+        throw new Phase1AError('MISSING_FINANCIAL_AMOUNT', `row ${physicalRow} declared amount is missing`, 422)
+      }
       if (amount !== null) {
         declaredTotal = amount
         lines.push({
@@ -374,9 +470,12 @@ function pingquanFacts(input: StatementImportInput): StatementNormalizedFacts {
       continue
     }
     if (/小计/.test(first)) continue
-    const amount = finiteAmount(row[remoteColumn], `row ${physicalRow}`)
     const caseNo = String(row[caseColumn] ?? '').trim()
-    if (!caseNo || amount === null) continue
+    if (!caseNo) continue
+    const amount = parseStatementAmount(row[remoteColumn], `row ${physicalRow}`)
+    if (amount === null) {
+      throw new Phase1AError('MISSING_FINANCIAL_AMOUNT', `row ${physicalRow} remote amount is missing`, 422)
+    }
     lines.push({
       sourceRow: physicalRow,
       sourceColumn: remoteSourceColumn,
@@ -439,24 +538,138 @@ function finalizeFacts(
   return { lines, flags, declaredTotal, parsedTotal, multiMonthBatch: months.size > 1 }
 }
 
-export function buildStatementNormalizedFacts(input: StatementImportInput): StatementNormalizedFacts {
-  if (!input.partnerId || !input.sourceHash || !input.parserRevision || !input.configRevision) {
+interface VerifiedStatementImport {
+  input: StatementImportInput
+  emptyEvidenceRecord: AuthoritativeEmptyEvidenceRecord | null
+  emptyEvidenceHash: string | null
+  emptyCoverageJson: string | null
+}
+
+function verifyStatementImportInput(
+  candidate: StatementImportInput,
+  context: TrustedStatementImportContext = {},
+): VerifiedStatementImport {
+  if (!candidate.partnerId || !candidate.sourceHash || !candidate.parserRevision || !candidate.configRevision) {
     throw new Phase1AError('GENERATION_KEY_INCOMPLETE', 'partner/source/parser/config are required', 400)
   }
-  if (!MONTH_RE.test(input.settlementMonth)) {
+  if (!MONTH_RE.test(candidate.settlementMonth)) {
     throw new Phase1AError('INVALID_SETTLEMENT_MONTH', 'settlementMonth must be YYYY-MM', 400)
   }
-  if (!Number.isInteger(input.headerRow) || input.headerRow < 0 || !Array.isArray(input.grid)) {
+  if (!Number.isInteger(candidate.headerRow) || candidate.headerRow < 0 || !Array.isArray(candidate.grid)) {
     throw new Phase1AError('INVALID_STATEMENT_GRID', 'grid/headerRow are invalid', 400)
   }
-  if (input.authoritativeEmpty === true) {
-    if (input.grid.length !== 0) {
-      throw new Phase1AError('INVALID_AUTHORITATIVE_EMPTY', 'authoritativeEmpty requires an empty parsed grid', 400)
-    }
-    return { lines: [], flags: [], declaredTotal: null, parsedTotal: 0, multiMonthBatch: false }
+  const grid = canonicalGrid(candidate.grid)
+  if (candidate.authoritativeEmpty !== undefined) {
+    throw new Phase1AError(
+      'AUTHORITATIVE_EMPTY_EVIDENCE_REQUIRED',
+      'client authoritativeEmpty boolean is not trusted',
+      422,
+    )
   }
+  const sourceHash = computeStatementSourceHash(grid)
+  if (!SHA256_RE.test(candidate.sourceHash) || candidate.sourceHash !== sourceHash) {
+    throw new Phase1AError(
+      'SOURCE_CONTENT_CONFLICT',
+      'declared sourceHash does not match the server canonical grid hash',
+      409,
+    )
+  }
+  const input: StatementImportInput = { ...candidate, grid, sourceHash }
+
+  if (grid.length !== 0) {
+    if (candidate.emptyEvidence) {
+      throw new Phase1AError(
+        'INVALID_AUTHORITATIVE_EMPTY_EVIDENCE',
+        'authoritative-empty evidence cannot accompany non-empty content',
+        422,
+      )
+    }
+    if (candidate.headerRow >= grid.length) {
+      throw new Phase1AError('INVALID_STATEMENT_GRID', 'headerRow is outside the canonical grid', 400)
+    }
+    return { input, emptyEvidenceRecord: null, emptyEvidenceHash: null, emptyCoverageJson: null }
+  }
+
+  const evidence = candidate.emptyEvidence
+  const actor = context.actor?.trim()
+  if (!evidence || !actor) {
+    throw new Phase1AError(
+      'AUTHORITATIVE_EMPTY_EVIDENCE_REQUIRED',
+      'empty source requires trusted verifier evidence',
+      422,
+    )
+  }
+  const sourceFile = candidate.sourceFile?.trim()
+  const sourceSheet = candidate.sourceSheet?.trim()
+  if (!sourceFile || !sourceSheet) {
+    throw new Phase1AError(
+      'AUTHORITATIVE_EMPTY_SOURCE_UNKNOWN',
+      'empty evidence requires a known source file and sheet',
+      422,
+    )
+  }
+  if (
+    evidence.schemaVersion !== 'statement-authoritative-empty/v1'
+    || evidence.sourceIdentity.partnerId !== candidate.partnerId
+    || evidence.sourceIdentity.settlementMonth !== candidate.settlementMonth
+    || evidence.sourceIdentity.sourceFile !== sourceFile
+    || evidence.sourceIdentity.sourceSheet !== sourceSheet
+    || evidence.sourceIdentity.templateFamily !== candidate.templateFamily
+    || evidence.coverage.scope !== 'complete_source'
+    || evidence.coverage.sourceSheet !== sourceSheet
+    || evidence.coverage.rawRowCount !== 0
+    || evidence.coverage.normalizedLineCount !== 0
+    || evidence.canonicalContentHash !== sourceHash
+  ) {
+    throw new Phase1AError(
+      'INVALID_AUTHORITATIVE_EMPTY_EVIDENCE',
+      'empty evidence is not bound to the source identity, coverage and content',
+      422,
+    )
+  }
+  const verifiedAtMs = Date.parse(evidence.verifiedAt)
+  const nowMs = (context.now ?? new Date()).getTime()
+  if (
+    !Number.isFinite(verifiedAtMs)
+    || verifiedAtMs < nowMs - EMPTY_EVIDENCE_MAX_AGE_MS
+    || verifiedAtMs > nowMs + EMPTY_EVIDENCE_FUTURE_SKEW_MS
+  ) {
+    throw new Phase1AError(
+      'INVALID_AUTHORITATIVE_EMPTY_EVIDENCE_TIME',
+      'empty evidence timestamp is invalid, stale or in the future',
+      422,
+    )
+  }
+  const emptyEvidenceRecord: AuthoritativeEmptyEvidenceRecord = {
+    schemaVersion: evidence.schemaVersion,
+    sourceIdentity: {
+      partnerId: evidence.sourceIdentity.partnerId,
+      settlementMonth: evidence.sourceIdentity.settlementMonth,
+      sourceFile,
+      sourceSheet,
+      templateFamily: evidence.sourceIdentity.templateFamily,
+    },
+    coverage: {
+      scope: evidence.coverage.scope,
+      sourceSheet,
+      rawRowCount: 0,
+      normalizedLineCount: 0,
+    },
+    canonicalContentHash: sourceHash,
+    verifiedAt: new Date(verifiedAtMs).toISOString(),
+    verifiedBy: actor,
+  }
+  return {
+    input,
+    emptyEvidenceRecord,
+    emptyEvidenceHash: computeAuthoritativeEmptyEvidenceHash(emptyEvidenceRecord),
+    emptyCoverageJson: JSON.stringify(emptyEvidenceRecord.coverage),
+  }
+}
+
+function buildVerifiedStatementNormalizedFacts(input: StatementImportInput): StatementNormalizedFacts {
   if (input.grid.length === 0) {
-    throw new Phase1AError('EMPTY_STATEMENT_NOT_CONFIRMED', 'empty grid requires authoritativeEmpty=true', 422)
+    return { lines: [], flags: [], declaredTotal: null, parsedTotal: 0, multiMonthBatch: false }
   }
   if (input.templateFamily === 'category_summary') return donganFacts(input)
   if (input.templateFamily === 'outsourced_detail') return ganzhouFacts(input)
@@ -464,14 +677,28 @@ export function buildStatementNormalizedFacts(input: StatementImportInput): Stat
   throw new Phase1AError('TEMPLATE_NOT_IN_PHASE1A', input.templateFamily, 422)
 }
 
-export function importStatementBatch(db: any, input: StatementImportInput): ImportStatementResult {
+export function buildStatementNormalizedFacts(
+  candidate: StatementImportInput,
+  context: TrustedStatementImportContext = {},
+): StatementNormalizedFacts {
+  return buildVerifiedStatementNormalizedFacts(verifyStatementImportInput(candidate, context).input)
+}
+
+export function importStatementBatch(
+  db: any,
+  candidate: StatementImportInput,
+  context: TrustedStatementImportContext = {},
+): ImportStatementResult {
+  const verified = verifyStatementImportInput(candidate, context)
+  const input = verified.input
   const generationId = statementGenerationId(input)
   const batchId = stableId('STMT', generationId)
-  const facts = buildStatementNormalizedFacts(input)
+  const facts = buildVerifiedStatementNormalizedFacts(input)
   db.exec('BEGIN IMMEDIATE')
   try {
     const existing = db.prepare(`
-      SELECT id, generation_id, supersedes_generation_id, raw_row_count, normalized_line_count
+      SELECT id, generation_id, supersedes_generation_id, raw_row_count, normalized_line_count,
+             empty_evidence_hash
       FROM statement_import_batches
       WHERE partner_id = ? AND settlement_month = ? AND source_hash = ?
         AND parser_revision = ? AND config_revision = ?
@@ -483,6 +710,13 @@ export function importStatementBatch(db: any, input: StatementImportInput): Impo
       input.configRevision,
     ) as any
     if (existing) {
+      if ((existing.empty_evidence_hash ?? null) !== verified.emptyEvidenceHash) {
+        throw new Phase1AError(
+          'AUTHORITATIVE_EMPTY_EVIDENCE_CONFLICT',
+          'the generation already exists with different authoritative-empty evidence',
+          409,
+        )
+      }
       db.exec('COMMIT')
       return {
         batchId: existing.id,
@@ -519,8 +753,9 @@ export function importStatementBatch(db: any, input: StatementImportInput): Impo
         id, partner_id, partner_name, source_file, source_hash, template_family,
         parser_revision, config_revision, settlement_month, generation_id,
         supersedes_generation_id, is_current, source_sheet, declared_total,
-        raw_row_count, normalized_line_count, status, uploaded_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'parsed', ?)
+        raw_row_count, normalized_line_count, status, uploaded_by,
+        empty_evidence_hash, empty_verified_by, empty_verified_at, empty_coverage_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'parsed', ?, ?, ?, ?, ?)
     `).run(
       batchId,
       input.partnerId,
@@ -538,6 +773,10 @@ export function importStatementBatch(db: any, input: StatementImportInput): Impo
       input.grid.length,
       facts.lines.length,
       input.uploadedBy ?? null,
+      verified.emptyEvidenceHash,
+      verified.emptyEvidenceRecord?.verifiedBy ?? null,
+      verified.emptyEvidenceRecord?.verifiedAt ?? null,
+      verified.emptyCoverageJson,
     )
 
     const insertRaw = db.prepare(`

@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   buildStatementNormalizedFacts,
+  computeStatementSourceHash,
   importStatementBatch,
+  parseStatementAmount,
   type StatementImportInput,
 } from '../src/services/statement-normalized-lines.js'
 
@@ -23,7 +25,7 @@ function input(name: string, partnerId: string, settlementMonth: string): Statem
     partnerName: fx.hospital,
     settlementMonth,
     sourceFile: fx.sourceFile,
-    sourceHash: `sha256:${name}`,
+    sourceHash: computeStatementSourceHash(fx.grid),
     templateFamily: fx.template,
     parserRevision: 'parser-phase1a-v1',
     configRevision: 'seed-phase1a-v1',
@@ -81,10 +83,10 @@ describe('S1/S2 Phase 1A canonical schema, immutability and generation idempoten
     expect((db.prepare('SELECT is_current FROM statement_import_batches WHERE id = ?').get(first.batchId) as any).is_current)
       .toBe(0)
 
-    const replacement = importStatementBatch(db, {
-      ...revisedInput,
-      sourceHash: 'sha256:replacement-file',
-    })
+    const replacementInput = structuredClone(revisedInput)
+    replacementInput.grid[0][0] = `${String(replacementInput.grid[0][0] ?? '')} replacement`
+    replacementInput.sourceHash = computeStatementSourceHash(replacementInput.grid)
+    const replacement = importStatementBatch(db, replacementInput)
     expect(replacement.supersedesGenerationId).toBe(revised.generationId)
     expect((db.prepare('SELECT is_current FROM statement_import_batches WHERE id = ?').get(revised.batchId) as any).is_current)
       .toBe(0)
@@ -93,9 +95,79 @@ describe('S1/S2 Phase 1A canonical schema, immutability and generation idempoten
       WHERE partner_id = ? AND settlement_month = ? AND is_current = 1
     `).get('PT-DA-IDEM', '2026-01') as any).n).toBe(1)
   })
+
+  it('rejects concurrent changed content under an idempotency hash with zero partial writes', async () => {
+    const original = input('out_category_summary__dongan_2601.json', 'PT-HASH-CONFLICT', '2026-01')
+    const first = importStatementBatch(db, original)
+    const changed = structuredClone(original)
+    changed.grid[5][5] = 999
+    const competing = structuredClone(original)
+    competing.grid[5][5] = 998
+    const before = {
+      batches: (db.prepare('SELECT COUNT(*) n FROM statement_import_batches WHERE partner_id = ?')
+        .get(original.partnerId) as any).n,
+      raw: (db.prepare('SELECT COUNT(*) n FROM statement_raw_rows WHERE generation_id = ?')
+        .get(first.generationId) as any).n,
+      normalized: (db.prepare('SELECT COUNT(*) n FROM statement_normalized_lines WHERE generation_id = ?')
+        .get(first.generationId) as any).n,
+    }
+    const outcomes = await Promise.allSettled([
+      Promise.resolve().then(() => importStatementBatch(db, changed)),
+      Promise.resolve().then(() => importStatementBatch(db, competing)),
+    ])
+    expect(outcomes).toHaveLength(2)
+    for (const outcome of outcomes) {
+      expect(outcome.status).toBe('rejected')
+      expect(String((outcome as PromiseRejectedResult).reason)).toMatch(/SOURCE_CONTENT_CONFLICT/)
+    }
+    expect({
+      batches: (db.prepare('SELECT COUNT(*) n FROM statement_import_batches WHERE partner_id = ?')
+        .get(original.partnerId) as any).n,
+      raw: (db.prepare('SELECT COUNT(*) n FROM statement_raw_rows WHERE generation_id = ?')
+        .get(first.generationId) as any).n,
+      normalized: (db.prepare('SELECT COUNT(*) n FROM statement_normalized_lines WHERE generation_id = ?')
+        .get(first.generationId) as any).n,
+    }).toEqual(before)
+  })
+
+  it('rejects a generation that points at a different batch parent', () => {
+    const left = importStatementBatch(db, input('out_category_summary__dongan_2601.json', 'PT-FK-LEFT', '2026-01'))
+    const right = importStatementBatch(db, input('out_category_summary__dongan_2601.json', 'PT-FK-RIGHT', '2026-01'))
+    const before = (db.prepare('SELECT COUNT(*) n FROM statement_raw_rows').get() as any).n
+    expect(() => db.prepare(`
+      INSERT INTO statement_raw_rows (
+        id, batch_id, generation_id, source_sheet, source_row, row_json
+      ) VALUES ('RAW-CROSS-GENERATION', ?, ?, 'cross', 999, '[]')
+    `).run(left.batchId, right.generationId)).toThrow(/FOREIGN KEY constraint failed/)
+    expect((db.prepare('SELECT COUNT(*) n FROM statement_raw_rows').get() as any).n).toBe(before)
+  })
 })
 
 describe('S3-S5 three Candidate fixtures', () => {
+  it('never coerces missing, whitespace, NBSP, containers or non-decimal amounts to zero', () => {
+    const invalidValues: unknown[] = [' ', '\u00a0', [], {}, 'not-a-decimal', '1e3']
+    for (const value of invalidValues) {
+      if (typeof value === 'string' && value.trim() === '') {
+        expect(parseStatementAmount(value, 'amount')).toBeNull()
+      } else {
+        expect(() => parseStatementAmount(value, 'amount')).toThrow(/INVALID_FINANCIAL_AMOUNT/)
+      }
+    }
+    for (const value of [' ', '\u00a0']) {
+      const changed = input('out_category_summary__dongan_2601.json', `PT-AMOUNT-${value.length}`, '2026-01')
+      changed.grid[5][3] = value
+      changed.sourceHash = computeStatementSourceHash(changed.grid)
+      expect(() => buildStatementNormalizedFacts(changed)).toThrow(/MISSING_FINANCIAL_AMOUNT/)
+    }
+    const zero = input('out_category_summary__dongan_2601.json', 'PT-AMOUNT-ZERO', '2026-01')
+    zero.grid[5][3] = '0'
+    zero.sourceHash = computeStatementSourceHash(zero.grid)
+    expect(buildStatementNormalizedFacts(zero).lines).toContainEqual(expect.objectContaining({
+      amount: 0,
+      itemName: expect.any(String),
+    }))
+  })
+
   it('normalizes Dongan with declared=121016.9, IN=93264.9 and OUT=27752.0', () => {
     const facts = buildStatementNormalizedFacts(input('out_category_summary__dongan_2601.json', 'PT-DA', '2026-01'))
     const details = facts.lines.filter(line => line.rowKind === 'detail')
@@ -153,6 +225,7 @@ describe('S3-S5 three Candidate fixtures', () => {
       .findIndex(value => String(value).replace(/\s/g, '') === '\u514d\u7ec4\u7ed3\u7b97\u91d1\u989d')
     const totalRow = changed.grid.findIndex(row => String(row[0]).trim() === '\u5408\u8ba1')
     changed.grid[totalRow][immunoColumn] = 1
+    changed.sourceHash = computeStatementSourceHash(changed.grid)
     const facts = buildStatementNormalizedFacts(changed)
     expect(facts.lines).toContainEqual(expect.objectContaining({
       amount: 1,

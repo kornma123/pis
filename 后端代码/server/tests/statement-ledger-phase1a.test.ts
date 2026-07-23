@@ -2,7 +2,11 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { importStatementBatch, type StatementImportInput } from '../src/services/statement-normalized-lines.js'
+import {
+  computeStatementSourceHash,
+  importStatementBatch,
+  type StatementImportInput,
+} from '../src/services/statement-normalized-lines.js'
 import { postStatementGeneration } from '../src/services/statement-ledger-phase1a.js'
 import { buildCanonicalStatementArtifact } from '../src/services/statement-canonical-artifact.js'
 
@@ -16,7 +20,7 @@ function input(name: string, partnerId: string, month: string): StatementImportI
     partnerName: fx.hospital,
     settlementMonth: month,
     sourceFile: fx.sourceFile,
-    sourceHash: `sha256:${name}`,
+    sourceHash: computeStatementSourceHash(fx.grid),
     templateFamily: fx.template,
     parserRevision: 'parser-phase1a-v1',
     configRevision: 'seed-phase1a-v1',
