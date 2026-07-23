@@ -5,10 +5,24 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, error } from '../utils/response.js'
 import { JWT_SECRET, authenticateToken } from '../middleware/auth.js'
 import { isFixtureEnv } from '../config/security.js'
-import { getEffectivePermissions, getUserRoleCodes, canSeeCost, getCostVisibilityRoles, requireAnyRole } from '../middleware/permissions.js'
+import {
+  getEffectivePermissions,
+  getUserRoleCodes,
+  canSeeCost,
+  getCostVisibilityRoles,
+  requestActorHasCurrentNamedRoleCapability,
+  requireAnyRole,
+  resolveCanonicalActiveRoleSelection,
+} from '../middleware/permissions.js'
 
 const router = Router()
 const JWT_EXPIRES = '8h'
+
+function isExactCostVisibilityPayload(value: unknown): value is { roles: unknown } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const ownKeys = Reflect.ownKeys(value)
+  return ownKeys.length === 1 && ownKeys[0] === 'roles'
+}
 
 /** 当前用户能力载荷（数据驱动 RBAC：角色并集权限 + 成本可见性，前端 nav/守卫/仪表盘单一来源） */
 function buildCapabilityPayload(db: any, userId: string, ...preferredRoles: Array<string | undefined>) {
@@ -157,16 +171,46 @@ router.get('/cost-visibility', authenticateToken, (_req, res) => {
 
 // 更新成本可见性角色集合（限运营管理者：admin/lab_director）
 router.put('/cost-visibility', authenticateToken, requireAnyRole('admin', 'lab_director'), (req, res) => {
+  let db: ReturnType<typeof getDatabase> | undefined
+  let transactionStarted = false
   try {
+    db = getDatabase()
+    db.exec('BEGIN IMMEDIATE')
+    transactionStarted = true
+    if (!requestActorHasCurrentNamedRoleCapability(db, req, ['admin', 'lab_director'])) {
+      db.exec('ROLLBACK')
+      transactionStarted = false
+      error(res, 'Forbidden: current actor is no longer authorized', 'FORBIDDEN', 403)
+      return
+    }
+    if (!isExactCostVisibilityPayload(req.body)) {
+      db.exec('ROLLBACK')
+      transactionStarted = false
+      error(res, 'Cost visibility payload must contain only roles', 'INVALID_PARAMETER', 400)
+      return
+    }
     const { roles } = req.body
-    if (!Array.isArray(roles)) { error(res, 'roles must be an array', 'INVALID_PARAMETER', 400); return }
-    const clean = [...new Set(roles.filter((r) => typeof r === 'string'))]
-    if (!clean.includes('admin')) clean.push('admin') // admin 始终可见，防误锁
-    const db = getDatabase()
+    if (!Array.isArray(roles) || roles.length === 0) {
+      db.exec('ROLLBACK')
+      transactionStarted = false
+      error(res, 'Role codes must reference active canonical roles', 'INVALID_PARAMETER', 400)
+      return
+    }
+    const candidateRoles = roles.includes('admin') ? roles : [...roles, 'admin']
+    const resolvedRoles = resolveCanonicalActiveRoleSelection(db, candidateRoles)
+    if (!resolvedRoles) {
+      db.exec('ROLLBACK')
+      transactionStarted = false
+      error(res, 'Role codes must reference active canonical roles', 'INVALID_PARAMETER', 400)
+      return
+    }
     db.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES ('cost_visibility_roles', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP")
-      .run(JSON.stringify(clean))
-    success(res, { roles: clean }, 'Updated')
+      .run(JSON.stringify(resolvedRoles.roles))
+    db.exec('COMMIT')
+    transactionStarted = false
+    success(res, { roles: resolvedRoles.roles }, 'Updated')
   } catch (err: any) {
+    if (db && transactionStarted) db.exec('ROLLBACK')
     error(res, err.message, 'INTERNAL_ERROR', 500)
   }
 })
