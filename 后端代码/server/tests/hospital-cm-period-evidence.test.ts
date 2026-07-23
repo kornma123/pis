@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -36,8 +36,15 @@ const ACTOR = { userId: 'U-EVIDENCE', username: 'evidence-owner' }
 const HEX64 = 'a'.repeat(64)
 
 /** C1 隔离库:10 张 A 源表(A 的 revision 触发器要求在场)+ reconcile_hospital_months + abc_audit_logs。 */
-function createDb(path = ':memory:'): DatabaseSync {
-  const db = new DatabaseSync(path)
+type InvalidatableTestDb = DatabaseSync & { invalidateConnection: () => void }
+
+function createDb(path = ':memory:'): InvalidatableTestDb {
+  const db = new DatabaseSync(path) as InvalidatableTestDb
+  Object.defineProperty(db, 'invalidateConnection', {
+    configurable: false,
+    enumerable: false,
+    value: () => db.close(),
+  })
   db.exec(`
     CREATE TABLE materials (
       id TEXT PRIMARY KEY, code TEXT NOT NULL, name TEXT NOT NULL, unit TEXT NOT NULL,
@@ -1175,7 +1182,12 @@ describe('C1 · candidate、查询预算与行为面不变', () => {
     // 计 prepare 与 statement 执行(get/all/run)两个维度:防"语句提升 + 循环执行"型 N+1 逃过 prepare 计数
     let prepareCount = 0
     let statementCalls = 0
-    const wrapStatement = (statement: { get: Function; all: Function; run: Function }) => new Proxy(statement, {
+    type InstrumentedStatement = {
+      get: (...args: unknown[]) => unknown
+      all: (...args: unknown[]) => unknown
+      run: (...args: unknown[]) => unknown
+    }
+    const wrapStatement = (statement: InstrumentedStatement) => new Proxy(statement, {
       get(target, prop, receiver) {
         if (prop === 'get' || prop === 'all' || prop === 'run') {
           return (...args: unknown[]) => {
@@ -1238,5 +1250,320 @@ describe('C1 · candidate、查询预算与行为面不变', () => {
     const row = db.prepare(`SELECT status FROM reconcile_hospital_months WHERE id = 'RHM-1'`).get() as { status: string }
     expect(row.status).toBe('复核完成')
     expect(closeEvents(db, 'P-1', '2026-05')).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// LOC-003 · 事务回滚原子性(真实 node:sqlite fault injection;禁空 catch/源码 regex/测试 clone)
+// ---------------------------------------------------------------------------
+
+function countRows(db: DatabaseSync, sql: string): number {
+  return Number((db.prepare(sql).get() as { n: number }).n)
+}
+
+function scopeEvidenceCounts(db: DatabaseSync): { scopes: number; scopeAudits: number } {
+  return {
+    scopes: countRows(db, 'SELECT COUNT(*) AS n FROM hospital_cm_month_scope_snapshots'),
+    scopeAudits: countRows(db, `SELECT COUNT(*) AS n FROM abc_audit_logs WHERE module = 'hospital_cm_period_evidence' AND action = 'scope_snapshot_save'`),
+  }
+}
+
+describe('LOC-003 · 事务回滚原子性(rollback-command / 业务写后 / audit fault / retry / success postcondition)', () => {
+  it('DatabaseManager 失效句柄按身份先摘除：close 再失败也返回新连接，旧句柄不能摘掉 replacement', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-loc003-manager-'))
+    const file = join(dir, 'manager.db')
+    const previousDatabasePath = process.env.DATABASE_PATH
+    let manager: typeof import('../src/database/DatabaseManager.js') | null = null
+    let first: (DatabaseSync & { invalidateConnection?: () => void }) | null = null
+    let closeSpy: ReturnType<typeof vi.spyOn> | null = null
+    try {
+      process.env.DATABASE_PATH = file
+      vi.resetModules()
+      manager = await import('../src/database/DatabaseManager.js')
+      first = manager.getDatabase()
+      expect(typeof first.invalidateConnection).toBe('function')
+
+      closeSpy = vi.spyOn(first, 'close').mockImplementation(() => {
+        throw new Error('TEST_MANAGER_CLOSE_FAILURE')
+      })
+      first.invalidateConnection!()
+      closeSpy.mockRestore()
+      closeSpy = null
+
+      const replacement = manager.getDatabase()
+      expect(replacement).not.toBe(first)
+      expect(replacement.isOpen).toBe(true)
+      first.invalidateConnection!()
+      expect(manager.getDatabase()).toBe(replacement)
+    } finally {
+      closeSpy?.mockRestore()
+      try { first?.close() } catch { /* test cleanup */ }
+      try { manager?.closeDatabase() } catch { /* test cleanup */ }
+      if (previousDatabasePath == null) delete process.env.DATABASE_PATH
+      else process.env.DATABASE_PATH = previousDatabasePath
+      vi.resetModules()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rollback-command fault(瞬时):第一次 ROLLBACK 失败后必须重试到事务结束,scope/audit 零 partial,原始错误优先', () => {
+    const db = createDb()
+    let rollbackAttempts = 0
+    const faultDb = {
+      prepare: (sql: string) => db.prepare(sql),
+      exec: (sql: string) => {
+        if (sql === 'COMMIT') throw new Error('TEST_COMMIT_COMMAND_FAILURE')
+        if (sql === 'ROLLBACK') {
+          rollbackAttempts += 1
+          if (rollbackAttempts === 1) throw new Error('TEST_FIRST_ROLLBACK_COMMAND_FAILURE')
+        }
+        return db.exec(sql)
+      },
+      get isTransaction() { return db.isTransaction },
+      invalidateConnection: () => db.invalidateConnection(),
+    }
+    try {
+      expect(() => saveMonthScopeSnapshot(faultDb as never, {
+        serviceMonth: '2026-05',
+        accounts: ['P-1'],
+        rosterSourceRef: 'roster://finance/2026-05/v1',
+        rosterSourceHash: HEX64,
+        status: 'complete',
+        actor: ACTOR,
+        reason: '瞬时 rollback fault 演练',
+      })).toThrow(/TEST_COMMIT_COMMAND_FAILURE/)
+      expect(rollbackAttempts).toBe(2)
+      expect(db.isTransaction).toBe(false)
+      expect(scopeEvidenceCounts(db)).toEqual({ scopes: 0, scopeAudits: 0 })
+    } finally {
+      if (db.isTransaction) db.exec('ROLLBACK')
+      db.close()
+    }
+  })
+
+  it('rollback-command fault(持续):回滚无法确认时关闭不可复用连接,返回稳定脱敏码,磁盘零 committed partial', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-loc003-rollback-'))
+    const file = join(dir, 'rollback-fault.db')
+    let db: DatabaseSync | null = null
+    let checkDb: DatabaseSync | null = null
+    try {
+      db = createDb(file)
+      let rollbackAttempts = 0
+      let invalidationCalled = false
+      const faultDb = {
+        prepare: (sql: string) => db!.prepare(sql),
+        exec: (sql: string) => {
+          if (sql === 'COMMIT') throw new Error('TEST_COMMIT_COMMAND_FAILURE')
+          if (sql === 'ROLLBACK') {
+            rollbackAttempts += 1
+            throw new Error('TEST_ROLLBACK_COMMAND_STILL_BROKEN')
+          }
+          return db!.exec(sql)
+        },
+        get isTransaction() { return db!.isTransaction },
+        invalidateConnection: () => {
+          invalidationCalled = true
+          db!.close()
+        },
+      }
+      try {
+        saveMonthScopeSnapshot(faultDb as never, {
+          serviceMonth: '2026-05',
+          accounts: ['P-1'],
+          rosterSourceRef: 'roster://finance/2026-05/v1',
+          rosterSourceHash: HEX64,
+          status: 'complete',
+          actor: ACTOR,
+          reason: '持续 rollback fault 演练',
+        })
+        throw new Error('expected PERIOD_EVIDENCE_ROLLBACK_FAILED but call succeeded')
+      } catch (error) {
+        expect(error).toBeInstanceOf(HospitalCmPeriodEvidenceError)
+        expect((error as HospitalCmPeriodEvidenceError).code).toBe('PERIOD_EVIDENCE_ROLLBACK_FAILED')
+        expect((error as HospitalCmPeriodEvidenceError).status).toBe(500)
+        // 稳定脱敏诊断:对外消息不得回显底层 COMMIT/ROLLBACK 细节;原始错误经 cause 链保留
+        expect((error as Error).message).not.toMatch(/TEST_COMMIT_COMMAND_FAILURE|TEST_ROLLBACK_COMMAND_STILL_BROKEN/)
+        expect((error as { cause?: Error }).cause?.message).toMatch(/TEST_COMMIT_COMMAND_FAILURE/)
+      }
+      expect(rollbackAttempts).toBe(2)
+      expect(invalidationCalled).toBe(true)
+      db = null // 连接已由实现关闭,所有权移交,测试不再触碰
+      checkDb = new DatabaseSync(file)
+      expect(scopeEvidenceCounts(checkDb)).toEqual({ scopes: 0, scopeAudits: 0 })
+    } finally {
+      try { checkDb?.close() } catch { /* test cleanup */ }
+      try { db?.close() } catch { /* test cleanup */ }
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rollback 与连接关闭同时失败：必须先从 owner 摘除旧句柄并返回稳定脱敏码', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coreone-loc003-invalidate-'))
+    const file = join(dir, 'invalidate-fault.db')
+    const rawDb = createDb(file)
+    let ownerDb: DatabaseSync | null = rawDb
+    let checkDb: DatabaseSync | null = null
+    let invalidationAttempts = 0
+    const faultDb = {
+      prepare: (sql: string) => rawDb.prepare(sql),
+      exec: (sql: string) => {
+        if (sql === 'COMMIT') throw new Error('TEST_COMMIT_COMMAND_FAILURE')
+        if (sql === 'ROLLBACK') throw new Error('TEST_ROLLBACK_COMMAND_STILL_BROKEN')
+        return rawDb.exec(sql)
+      },
+      get isTransaction() { return rawDb.isTransaction },
+      invalidateConnection: () => {
+        invalidationAttempts += 1
+        ownerDb = null
+        throw new Error('TEST_INVALIDATE_CLOSE_FAILURE')
+      },
+    }
+    try {
+      let thrown: unknown
+      try {
+        saveMonthScopeSnapshot(faultDb, {
+          serviceMonth: '2026-05',
+          accounts: ['P-1'],
+          rosterSourceRef: 'roster://finance/2026-05/v1',
+          rosterSourceHash: HEX64,
+          status: 'complete',
+          actor: ACTOR,
+          reason: 'rollback 与 close 双故障演练',
+        })
+      } catch (error) {
+        thrown = error
+      }
+      expect((thrown as HospitalCmPeriodEvidenceError).code).toBe('PERIOD_EVIDENCE_ROLLBACK_FAILED')
+      expect((thrown as Error).message).not.toMatch(/TEST_COMMIT_COMMAND_FAILURE|TEST_ROLLBACK_COMMAND_STILL_BROKEN|TEST_INVALIDATE_CLOSE_FAILURE/)
+      expect(invalidationAttempts).toBe(1)
+      expect(ownerDb).toBeNull()
+      checkDb = new DatabaseSync(file)
+      expect(scopeEvidenceCounts(checkDb)).toEqual({ scopes: 0, scopeAudits: 0 })
+    } finally {
+      try { checkDb?.close() } catch { /* test cleanup */ }
+      try { if (rawDb.isTransaction) rawDb.exec('ROLLBACK') } catch { /* test cleanup */ }
+      try { rawDb.close() } catch { /* test cleanup */ }
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('audit fault:范围行已写入后审计失败,整事务回滚零 partial;故障解除后同连接可成功发布', () => {
+    const db = createDb()
+    db.exec(`
+      CREATE TRIGGER test_audit_fault BEFORE INSERT ON abc_audit_logs
+      BEGIN SELECT RAISE(ABORT, 'TEST_AUDIT_FAULT'); END;
+    `)
+    try {
+      expect(() => saveScope(db)).toThrow(/TEST_AUDIT_FAULT/)
+      expect(db.isTransaction).toBe(false)
+      expect(scopeEvidenceCounts(db)).toEqual({ scopes: 0, scopeAudits: 0 })
+      db.exec('DROP TRIGGER test_audit_fault')
+      // retry/下一次调用:故障解除后同一连接可正常发布,且首个成功版本必须是 v1(证明无 partial 残留)
+      const saved = saveScope(db)
+      expect(saved.versionNo).toBe(1)
+      expect(db.isTransaction).toBe(false)
+      expect(scopeEvidenceCounts(db)).toEqual({ scopes: 1, scopeAudits: 1 })
+    } finally {
+      if (db.isTransaction) db.exec('ROLLBACK')
+      db.close()
+    }
+  })
+
+  it('manifest 登记路径同一守卫:rollback-command fault(瞬时)重试到事务结束,manifest/audit 零 partial', () => {
+    const db = createDb()
+    seedRevenueBatch(db, 'STMT-ROLLBACK-1')
+    let rollbackAttempts = 0
+    const faultDb = {
+      prepare: (sql: string) => db.prepare(sql),
+      exec: (sql: string) => {
+        if (sql === 'COMMIT') throw new Error('TEST_COMMIT_COMMAND_FAILURE')
+        if (sql === 'ROLLBACK') {
+          rollbackAttempts += 1
+          if (rollbackAttempts === 1) throw new Error('TEST_FIRST_ROLLBACK_COMMAND_FAILURE')
+        }
+        return db.exec(sql)
+      },
+      get isTransaction() { return db.isTransaction },
+      invalidateConnection: () => db.invalidateConnection(),
+    }
+    try {
+      expect(() => registerSourceBatchManifest(faultDb as never, {
+        sourceKind: 'case_revenue',
+        batchRef: 'STMT-ROLLBACK-1',
+        actor: ACTOR,
+        reason: 'manifest 路径瞬时 rollback fault 演练',
+      })).toThrow(/TEST_COMMIT_COMMAND_FAILURE/)
+      expect(rollbackAttempts).toBe(2)
+      expect(db.isTransaction).toBe(false)
+      expect(countRows(db, 'SELECT COUNT(*) AS n FROM hospital_cm_source_batch_manifests')).toBe(0)
+      expect(countRows(db, `SELECT COUNT(*) AS n FROM abc_audit_logs WHERE module = 'hospital_cm_period_evidence'`)).toBe(0)
+    } finally {
+      if (db.isTransaction) db.exec('ROLLBACK')
+      db.close()
+    }
+  })
+
+  it('withdraw 路径独立守卫：第一次 ROLLBACK 命令失败后重试闭合，保留 CAS 错误且零 partial', () => {
+    const db = createDb()
+    const saved = saveScope(db)
+    let rollbackAttempts = 0
+    const faultDb = {
+      prepare: (sql: string) => db.prepare(sql),
+      exec: (sql: string) => {
+        if (sql === 'ROLLBACK') {
+          rollbackAttempts += 1
+          if (rollbackAttempts === 1) throw new Error('TEST_WITHDRAW_FIRST_ROLLBACK_FAILURE')
+        }
+        return db.exec(sql)
+      },
+      get isTransaction() { return db.isTransaction },
+      invalidateConnection: () => db.invalidateConnection(),
+    }
+    try {
+      expectCode(() => withdrawMonthScopeSnapshot(faultDb, {
+        serviceMonth: '2026-05',
+        expectedEventNumber: saved.eventNumber + 1,
+        actor: ACTOR,
+        reason: 'withdraw rollback fault 演练',
+      }), 'SCOPE_SNAPSHOT_CONFLICT')
+      expect(rollbackAttempts).toBe(2)
+      expect(db.isTransaction).toBe(false)
+      expect(scopeEvidenceCounts(db)).toEqual({ scopes: 1, scopeAudits: 1 })
+    } finally {
+      if (db.isTransaction) db.exec('ROLLBACK')
+      db.close()
+    }
+  })
+
+  it('success postcondition:正常发布 COMMIT 后事务闭合、证据与审计可读回;withdraw CAS 冲突零 partial 且可正确重试', () => {
+    const db = createDb()
+    try {
+      const saved = saveScope(db)
+      expect(db.isTransaction).toBe(false)
+      expect(saved.versionNo).toBe(1)
+      expect(readCurrentMonthScope(db, '2026-05')?.id).toBe(saved.id)
+      const audits = db.prepare(`
+        SELECT module, action, target_id AS targetId, operator
+        FROM abc_audit_logs
+        WHERE module = 'hospital_cm_period_evidence'
+      `).all() as Array<{ module: string; action: string; targetId: string; operator: string }>
+      expect(audits).toEqual([{ module: 'hospital_cm_period_evidence', action: 'scope_snapshot_save', targetId: saved.id, operator: ACTOR.username }])
+      // withdraw CAS 冲突:原始冲突码稳定、连接干净、不落 withdrawn partial
+      expectCode(() => withdrawMonthScopeSnapshot(db, {
+        serviceMonth: '2026-05', expectedEventNumber: saved.eventNumber + 1, actor: ACTOR, reason: '过期句柄重放',
+      }), 'SCOPE_SNAPSHOT_CONFLICT')
+      expect(db.isTransaction).toBe(false)
+      expect(scopeEvidenceCounts(db)).toEqual({ scopes: 1, scopeAudits: 1 })
+      // 正确句柄重试成功:withdrawn 版本落库且事务闭合
+      const withdrawn = withdrawMonthScopeSnapshot(db, {
+        serviceMonth: '2026-05', expectedEventNumber: saved.eventNumber, actor: ACTOR, reason: '名册源作废',
+      })
+      expect(withdrawn.status).toBe('withdrawn')
+      expect(withdrawn.versionNo).toBe(2)
+      expect(db.isTransaction).toBe(false)
+    } finally {
+      if (db.isTransaction) db.exec('ROLLBACK')
+      db.close()
+    }
   })
 })

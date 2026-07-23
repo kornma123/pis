@@ -10,6 +10,16 @@ import { HOSPITAL_CM_FORMULA_VERSION } from './hospital-cm.js'
 import { SPLIT_FORMULA_VERSION } from './statement-revenue.js'
 import { splitCaliberRatification } from './caliber-ratification.js'
 
+// 本地 node:sqlite 垫片(src/types/node-sqlite.d.ts,@types/node v20 不含 sqlite 类型)未声明
+// isTransaction,但 Node 22 运行时真实存在(本模块 fault-injection 测试在官方 v22.23.1 实测:
+// 提交后 isTransaction=false、事务中=true)。按运行时事实增补,使真实 DatabaseSync 可赋给
+// HospitalCmPeriodEvidenceDb;垫片日后补齐时本增补自然冗余、无害。
+declare module 'node:sqlite' {
+  export interface DatabaseSync {
+    readonly isTransaction: boolean
+  }
+}
+
 /**
  * C1 · hospital-cm 周期证据底座(issue #183 增量 C 第一子交付)。
  *
@@ -31,6 +41,12 @@ interface PeriodEvidenceStatement {
 export interface HospitalCmPeriodEvidenceDb extends FoundationProbeDb {
   prepare: (sql: string) => PeriodEvidenceStatement
   exec: (sql: string) => unknown
+  readonly isTransaction: boolean
+  /**
+   * The connection owner must detach this exact handle before best-effort close.
+   * DatabaseManager.getDatabase() supplies an identity-bound implementation.
+   */
+  invalidateConnection: () => void
 }
 
 export class HospitalCmPeriodEvidenceError extends Error {
@@ -220,12 +236,40 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
-function rollbackQuietly(db: HospitalCmPeriodEvidenceDb): void {
-  try {
-    db.exec('ROLLBACK')
-  } catch {
-    // 事务已被 SQLite 自动回滚时忽略
+/**
+ * 事务失败处置(LOC-003 已证实 P1 的修复):任何业务/提交失败后,绝不能把仍在事务中的共享连接静默交还。
+ * - ROLLBACK 命令本身可能瞬时失败 → 在 isTransaction 仍成立时重试(上限 2 次);
+ * - 回滚无法确认(重试后 isTransaction 仍为真)→ 先从连接 owner 摘除该句柄再 best-effort close
+ *   (poison-pill,防 partial 被后续误提交),并抛稳定脱敏码 PERIOD_EVIDENCE_ROLLBACK_FAILED;
+ *   原始错误经 cause/rollbackCause 链保留,
+ *   对外消息不回显底层 SQL/驱动细节(审计口径:错误消息不暴露内部实现);
+ * - 回滚确认成功 → 原样抛出原始 cause(业务错误码语义不变)。
+ */
+function rollbackAndRethrow(db: HospitalCmPeriodEvidenceDb, cause: unknown): never {
+  let rollbackFailure: unknown = null
+  for (let attempt = 0; attempt < 2 && db.isTransaction; attempt += 1) {
+    try {
+      db.exec('ROLLBACK')
+    } catch (error) {
+      rollbackFailure = error
+    }
   }
+  if (db.isTransaction) {
+    try {
+      db.invalidateConnection()
+    } catch {
+      // owner 合同要求先摘除再 close；这里只返回稳定错误,不泄漏底层 close/SQL 诊断。
+    }
+    const error = new HospitalCmPeriodEvidenceError(
+      'PERIOD_EVIDENCE_ROLLBACK_FAILED',
+      500,
+      '周期证据事务回滚失败,连接已失效不可复用',
+    ) as HospitalCmPeriodEvidenceError & { cause?: unknown; rollbackCause?: unknown }
+    error.cause = cause
+    error.rollbackCause = rollbackFailure
+    throw error
+  }
+  throw cause
 }
 
 /** 行值规范化:BigInt 带类型编码；NaN/±Infinity 不能交给 JSON(null 碰撞)，一律稳定 fail-closed。 */
@@ -705,8 +749,7 @@ export function registerSourceBatchManifest(
     if (row == null) throw new HospitalCmPeriodEvidenceError('MANIFEST_READBACK_FAILED', 500, 'manifest 落库后读回失败')
     return row
   } catch (cause) {
-    rollbackQuietly(db)
-    throw cause
+    rollbackAndRethrow(db, cause)
   }
 }
 
@@ -833,8 +876,7 @@ export function withdrawMonthScopeSnapshot(
     db.exec('COMMIT')
     return saved
   } catch (cause) {
-    rollbackQuietly(db)
-    throw cause
+    rollbackAndRethrow(db, cause)
   }
 }
 
@@ -857,8 +899,7 @@ function insertScopeVersion(
     db.exec('COMMIT')
     return saved
   } catch (cause) {
-    rollbackQuietly(db)
-    throw cause
+    rollbackAndRethrow(db, cause)
   }
 }
 

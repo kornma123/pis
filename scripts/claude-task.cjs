@@ -904,6 +904,33 @@ function assertNoExecutableGitFlags(args) {
   if (hit) throw new Error(`git 参数 ${hit} 可能写文件或执行外部命令，已拒绝。`);
 }
 
+function assertSafeWorktreeAdd(args, options = {}) {
+  if (args.length !== 5 || args[0] !== 'add' || args[1] !== '-b' || args[4] !== 'origin/master') {
+    throw new Error('task start 前只允许 git worktree add -b <新分支> <新路径> origin/master。');
+  }
+
+  const branch = String(args[2] || '');
+  if (
+    !branch ||
+    /^(?:master|main)$/i.test(branch) ||
+    /^[-.]|[/.]$|\.lock$/i.test(branch) ||
+    /(?:\.\.|\/\/|@\{|[\s~^:?*\[\\])/.test(branch)
+  ) {
+    throw new Error(`worktree 分支名 ${branch || '<missing>'} 不是安全的具名任务分支。`);
+  }
+
+  const literalTarget = String(args[3] || '');
+  if (!literalTarget || literalTarget.startsWith('-') || /[$%!*?\[\]`~]/.test(literalTarget)) {
+    throw new Error('worktree 路径必须是无变量、无通配符的字面路径。');
+  }
+  const root = path.resolve(options.root || process.cwd());
+  const target = path.resolve(options.cwd || root, literalTarget);
+  if (target === root) throw new Error('worktree 路径不能覆盖当前仓库。');
+  if (isPathInside(root, target) && !isPathInside(path.join(root, '.claude', 'worktrees'), target)) {
+    throw new Error('仓库内 worktree 只能创建在 .claude/worktrees/<任务名>；也可使用仓库外字面路径。');
+  }
+}
+
 function assertSafeGitRead(command, args, options = {}) {
   const reads = new Set(['status', 'diff', 'log', 'show', 'rev-parse', 'merge-base', 'ls-files', 'ls-remote']);
   assertNoExecutableGitFlags(args);
@@ -916,10 +943,17 @@ function assertSafeGitRead(command, args, options = {}) {
     return;
   }
   if (command === 'worktree') {
-    if (String(args[0] || '').toLowerCase() !== 'list' || args.slice(1).some((arg) => !['--porcelain', '-z', '-v'].includes(arg))) {
-      throw new Error('合同建立前只允许 git worktree list。');
+    if (String(args[0] || '').toLowerCase() === 'list') {
+      if (args.slice(1).some((arg) => !['--porcelain', '-z', '-v'].includes(arg))) {
+        throw new Error('git worktree list 只允许 --porcelain/-z/-v。');
+      }
+      return;
     }
-    return;
+    if (options.allowWorktreeAdd) {
+      assertSafeWorktreeAdd(args, options);
+      return;
+    }
+    throw new Error('活动 task 不允许再创建或修改其他 worktree。');
   }
   if (command === 'remote') {
     if (String(args[0] || '').toLowerCase() !== 'get-url') {
@@ -1186,7 +1220,12 @@ function isSafeBeforeStartShell(command, root = process.cwd(), cwd = root) {
     if (['git', 'git.exe'].includes(executable)) {
       const { globals, command: subcommand, args } = gitSubcommand(tokens);
       assertSafeGitGlobals(globals);
-      assertSafeGitRead(subcommand, args, { allowFetch: true });
+      assertSafeGitRead(subcommand, args, {
+        allowFetch: true,
+        allowWorktreeAdd: true,
+        root,
+        cwd,
+      });
       return true;
     }
     if (['gh', 'gh.exe'].includes(executable)) return isSafeGhRead(tokens);
