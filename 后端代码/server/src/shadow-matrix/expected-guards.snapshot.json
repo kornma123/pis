@@ -1,7 +1,7 @@
 {
   "_doc": "权限影子断言矩阵·已批准守卫快照（ratified）。键=运行时端点「METHOD /path」，值=guardId{module,level,conditions}。断言 B 拿它当 expected 比对当前 actual：模块变/降级 W→R/少条件=BLOCK。改端点守卫→人复核后 SHADOW_MATRIX_UPDATE=1 重批。",
   "generated": "由 SHADOW_MATRIX_UPDATE=1 生成（日期见 git 提交）",
-  "count": 277,
+  "count": 286,
   "guards": {
     "DELETE /api/v1/abc/activity-centers/:id": {
       "module": "abc_config",
@@ -565,6 +565,13 @@
       "level": "R",
       "conditions": []
     },
+    "GET /api/v1/month-close/:settlementMonth/partners/:partnerId/summary": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
     "GET /api/v1/ngs/partner-pnl": {
       "module": "cost_analysis",
       "level": "R",
@@ -760,6 +767,13 @@
       "module": "scraps",
       "level": "R",
       "conditions": []
+    },
+    "GET /api/v1/statement-batches/:id/quality-flags": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
     },
     "GET /api/v1/statement-import/lis-coverage": {
       "module": null,
@@ -1129,6 +1143,27 @@
       "level": "W",
       "conditions": []
     },
+    "POST /api/v1/month-close/:settlementMonth/partners/:partnerId/close": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "POST /api/v1/month-close/:settlementMonth/partners/:partnerId/complete": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "POST /api/v1/month-close/:settlementMonth/partners/:partnerId/compute": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
     "POST /api/v1/ngs/import": {
       "module": null,
       "level": null,
@@ -1222,6 +1257,27 @@
       "module": "scraps",
       "level": "W",
       "conditions": []
+    },
+    "POST /api/v1/statement-batches": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "POST /api/v1/statement-batches/:id/post": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
+    },
+    "POST /api/v1/statement-batches/preview-normalized": {
+      "module": null,
+      "level": null,
+      "conditions": [
+        "anyRole:finance"
+      ]
     },
     "POST /api/v1/statement-import/classify-rule": {
       "module": null,

@@ -1,3 +1,4 @@
+/* eslint-disable no-irregular-whitespace */
 /**
  * 对账单解析层（配置驱动导入器 P1）—— 网格 → 规范化行 + 独立声明合计(declaredTotal) + 模板识别。
  *
@@ -72,6 +73,38 @@ const norm = (s: unknown): string =>
   (s == null ? '' : String(s)).normalize('NFKC').replace(/[\s　]+/g, '').trim()
 
 const cellStr = (v: unknown): string => (v == null ? '' : String(v)).trim()
+
+/** Phase 1A builder 共用的稳定文本归一；不改变既有 parser 返回值。 */
+export const normalizeStatementText = (value: unknown): string => norm(value)
+
+/** 把零基物理列下标转换为稳定 Excel 列身份（A..Z, AA..）。 */
+export function statementColumnIdentity(index: number): string {
+  if (!Number.isInteger(index) || index < 0) throw new Error('INVALID_STATEMENT_COLUMN')
+  let value = index + 1
+  let result = ''
+  while (value > 0) {
+    value -= 1
+    result = String.fromCharCode(65 + (value % 26)) + result
+    value = Math.floor(value / 26)
+  }
+  return result
+}
+
+/** 在物理表头中按归一后的关键词查找列；找不到返回 -1。 */
+export function findStatementColumn(header: Grid[number], patterns: RegExp[]): number {
+  const cells = header.map(norm)
+  return cells.findIndex(cell => patterns.some(pattern => pattern.test(cell)))
+}
+
+/** 从日期单元格提取 YYYY-MM；无可证明月份时返回 null，不做默认补值。 */
+export function statementMonthFromCell(value: unknown): string | null {
+  const text = cellStr(value).normalize('NFKC')
+  const compact = text.match(/^(20\d{2})(0[1-9]|1[0-2])$/)
+  if (compact) return `${compact[1]}-${compact[2]}`
+  const match = text.match(/(20\d{2})[-/.年](0?[1-9]|1[0-2])(?:[-/.月]|$)/)
+  if (!match) return null
+  return `${match[1]}-${match[2].padStart(2, '0')}`
+}
 
 /** 数值解析：容忍 ¥ 千分位 % 与全角；非数返回 NaN。 */
 function toNum(v: unknown): number {

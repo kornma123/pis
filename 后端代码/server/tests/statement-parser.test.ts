@@ -14,6 +14,8 @@ import {
   parseStatement,
   parseCategorySummary,
   parseJointVenture,
+  statementColumnIdentity,
+  statementMonthFromCell,
   type Grid,
 } from '../src/utils/statement-parser/index.js'
 
@@ -30,6 +32,20 @@ const FILES = {
   joint_venture: 'out_joint_venture__shimen_2603.json',
   outsourced_detail: 'out_outsourced_detail__ganzhou.json',
 }
+
+describe('Phase 1A source identity helpers', () => {
+  it('keeps source columns addressable without using display headers as identity', () => {
+    expect(statementColumnIdentity(0)).toBe('A')
+    expect(statementColumnIdentity(25)).toBe('Z')
+    expect(statementColumnIdentity(26)).toBe('AA')
+  })
+
+  it('normalizes supported statement period cells without inventing an unknown month', () => {
+    expect(statementMonthFromCell('202603')).toBe('2026-03')
+    expect(statementMonthFromCell('2026.3')).toBe('2026-03')
+    expect(statementMonthFromCell('not-a-period')).toBeNull()
+  })
+})
 
 describe('detectTemplate（7 模板真实文件全部识别）', () => {
   for (const [tid, file] of Object.entries(FILES)) {
@@ -120,9 +136,12 @@ describe('category_summary（东安人民，行=类别）', () => {
     expect(c!.settle).toBe(51697.5)
   })
   it('dispatcher 路由到 category 解析器', () => {
-    const any = parseStatement(load(FILES.category_summary).grid) as any
-    expect(any.template).toBe('category_summary')
-    expect(any.categories.length).toBeGreaterThan(0)
+    const parsed = parseStatement(load(FILES.category_summary).grid) as {
+      template: string
+      categories: unknown[]
+    }
+    expect(parsed.template).toBe('category_summary')
+    expect(parsed.categories.length).toBeGreaterThan(0)
   })
 })
 

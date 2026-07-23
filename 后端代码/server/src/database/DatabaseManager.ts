@@ -882,6 +882,232 @@ export function initializeDatabase(): void {
   database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_partner_month ON case_revenue(partner_id, service_month)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_lines_case ON case_revenue_lines(case_no)`)
 
+  // Phase 1A 月结子账本：SQLite 是唯一事实层。DTO/canonical JSON 只从以下事实投影。
+  // generation_id 绑定 partner+month+source hash+parser/config revision；同 source 新 revision 追加世代，不覆盖旧事实。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS statement_import_batches (
+      id TEXT PRIMARY KEY,
+      partner_id TEXT NOT NULL,
+      partner_name TEXT,
+      source_file TEXT,
+      source_hash TEXT NOT NULL,
+      template_family TEXT NOT NULL,
+      parser_revision TEXT NOT NULL,
+      config_revision TEXT NOT NULL,
+      settlement_month TEXT NOT NULL CHECK(
+        settlement_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'
+        AND CAST(substr(settlement_month, 6, 2) AS INTEGER) BETWEEN 1 AND 12
+      ),
+      generation_id TEXT NOT NULL UNIQUE,
+      supersedes_generation_id TEXT,
+      is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0, 1)),
+      source_sheet TEXT,
+      declared_total DECIMAL(18, 4),
+      raw_row_count INTEGER NOT NULL CHECK(raw_row_count >= 0),
+      normalized_line_count INTEGER NOT NULL CHECK(normalized_line_count >= 0),
+      status TEXT NOT NULL DEFAULT 'parsed'
+        CHECK(status IN ('parsed', 'posted', 'computed', 'complete', 'closed', 'error', 'unavailable')),
+      artifact_hash TEXT,
+      uploaded_by TEXT,
+      completed_at DATETIME,
+      completed_by TEXT,
+      closed_at DATETIME,
+      closed_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(partner_id, settlement_month, source_hash, parser_revision, config_revision)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_statement_batches_partner_month_current
+      ON statement_import_batches(partner_id, settlement_month, is_current)
+  `)
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_batches_one_current_generation
+      ON statement_import_batches(partner_id, settlement_month)
+      WHERE is_current = 1
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS statement_raw_rows (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      generation_id TEXT NOT NULL,
+      source_sheet TEXT,
+      source_row INTEGER NOT NULL CHECK(source_row >= 1),
+      row_json TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id) REFERENCES statement_import_batches(id),
+      UNIQUE(generation_id, source_sheet, source_row)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_statement_raw_rows_generation
+      ON statement_raw_rows(generation_id, source_row)
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS statement_normalized_lines (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL,
+      row_settlement_month TEXT,
+      settlement_month_basis TEXT,
+      case_no TEXT,
+      external_subject_key TEXT,
+      item_name TEXT,
+      source_sheet TEXT,
+      source_row INTEGER NOT NULL CHECK(source_row >= 1),
+      source_column TEXT NOT NULL,
+      source_label TEXT NOT NULL,
+      template_family TEXT NOT NULL,
+      row_kind TEXT NOT NULL CHECK(row_kind IN ('detail', 'subtotal', 'declared_total', 'header', 'note')),
+      line_grain TEXT NOT NULL CHECK(line_grain IN ('case', 'aggregate', 'out', 'joint', 'adjustment', 'retainer')),
+      business_line TEXT NOT NULL CHECK(business_line IN ('IN', 'OUT', 'UNKNOWN', 'NEUTRAL', 'EXCLUDED')),
+      amount_role TEXT NOT NULL,
+      amount DECIMAL(18, 4) NOT NULL,
+      classification_status TEXT NOT NULL,
+      rule_id TEXT,
+      rule_version TEXT,
+      report_date TEXT,
+      raw_payload TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id) REFERENCES statement_import_batches(id),
+      UNIQUE(generation_id, source_sheet, source_row, source_column, amount_role)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_statement_lines_partner_month_generation
+      ON statement_normalized_lines(partner_id, settlement_month, generation_id)
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS quality_flags (
+      id TEXT PRIMARY KEY,
+      generation_id TEXT NOT NULL,
+      flag_type TEXT NOT NULL,
+      severity TEXT NOT NULL CHECK(severity IN ('blocking', 'warning', 'info')),
+      owner_role TEXT NOT NULL,
+      resolution_action TEXT NOT NULL,
+      blocks_posting INTEGER NOT NULL CHECK(blocks_posting IN (0, 1)),
+      blocks_closing INTEGER NOT NULL CHECK(blocks_closing IN (0, 1)),
+      partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL,
+      related_batch_id TEXT NOT NULL,
+      related_line_id TEXT,
+      reason_code TEXT NOT NULL,
+      message TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(related_batch_id) REFERENCES statement_import_batches(id),
+      FOREIGN KEY(related_line_id) REFERENCES statement_normalized_lines(id)
+    )
+  `)
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_quality_flags_generation_identity
+      ON quality_flags(generation_id, flag_type, COALESCE(related_line_id, ''))
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_quality_flags_generation_blocking
+      ON quality_flags(generation_id, blocks_posting, blocks_closing)
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS partner_month_revenue_ledger (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL,
+      source_line_id TEXT NOT NULL UNIQUE,
+      category_label TEXT,
+      business_line TEXT NOT NULL CHECK(business_line = 'IN'),
+      settlement_amount DECIMAL(18, 4) NOT NULL,
+      ledger_scope TEXT NOT NULL DEFAULT 'statement_internal' CHECK(ledger_scope = 'statement_internal'),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id) REFERENCES statement_import_batches(id),
+      FOREIGN KEY(source_line_id) REFERENCES statement_normalized_lines(id)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_partner_month_revenue_generation
+      ON partner_month_revenue_ledger(partner_id, settlement_month, generation_id)
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS out_settlement_ledger (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL,
+      source_line_id TEXT NOT NULL UNIQUE,
+      out_type TEXT NOT NULL,
+      item_name TEXT,
+      external_subject_key TEXT,
+      settlement_amount DECIMAL(18, 4) NOT NULL,
+      lab_revenue_amount DECIMAL(18, 4) NOT NULL DEFAULT 0 CHECK(lab_revenue_amount = 0),
+      ledger_scope TEXT NOT NULL DEFAULT 'statement_internal' CHECK(ledger_scope = 'statement_internal'),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id) REFERENCES statement_import_batches(id),
+      FOREIGN KEY(source_line_id) REFERENCES statement_normalized_lines(id)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_out_settlement_generation
+      ON out_settlement_ledger(partner_id, settlement_month, generation_id)
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_statement_batch_immutable_identity
+    BEFORE UPDATE ON statement_import_batches
+    WHEN OLD.partner_id <> NEW.partner_id
+      OR OLD.settlement_month <> NEW.settlement_month
+      OR OLD.source_hash <> NEW.source_hash
+      OR OLD.parser_revision <> NEW.parser_revision
+      OR OLD.config_revision <> NEW.config_revision
+      OR OLD.generation_id <> NEW.generation_id
+      OR COALESCE(OLD.source_file, '') <> COALESCE(NEW.source_file, '')
+      OR OLD.template_family <> NEW.template_family
+      OR OLD.raw_row_count <> NEW.raw_row_count
+      OR OLD.normalized_line_count <> NEW.normalized_line_count
+    BEGIN
+      SELECT RAISE(ABORT, 'IMMUTABLE_IMPORT_FACT');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_statement_batch_no_delete
+    BEFORE DELETE ON statement_import_batches
+    BEGIN
+      SELECT RAISE(ABORT, 'IMMUTABLE_IMPORT_FACT');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_statement_closed_generation_no_update
+    BEFORE UPDATE ON statement_import_batches
+    WHEN OLD.status = 'closed'
+    BEGIN
+      SELECT RAISE(ABORT, 'CLOSED_GENERATION_IMMUTABLE');
+    END
+  `)
+  for (const [table, code] of [
+    ['statement_raw_rows', 'IMMUTABLE_RAW_FACT'],
+    ['statement_normalized_lines', 'IMMUTABLE_NORMALIZED_FACT'],
+    ['quality_flags', 'IMMUTABLE_QUALITY_FACT'],
+    ['partner_month_revenue_ledger', 'IMMUTABLE_LEDGER_FACT'],
+    ['out_settlement_ledger', 'IMMUTABLE_LEDGER_FACT'],
+  ] as const) {
+    database.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_update
+      BEFORE UPDATE ON ${table}
+      BEGIN
+        SELECT RAISE(ABORT, '${code}');
+      END
+    `)
+    database.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_delete
+      BEFORE DELETE ON ${table}
+      BEGIN
+        SELECT RAISE(ABORT, '${code}');
+      END
+    `)
+  }
+
   // 收入侧：NGS 基因检测【外购转销】产品目录（参考价）+ 逐单（独立渠道，非 LIS/非对账单）。
   // ⛔ 红线：外包成本(协议价)=外购直接成本，独立于 ABC 内部成本引擎；与院内 charge_codes 占比估算互不读写。
   database.exec(`
