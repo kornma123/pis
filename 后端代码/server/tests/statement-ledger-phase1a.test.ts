@@ -38,6 +38,98 @@ beforeAll(async () => {
 })
 
 describe('S6 derived ledgers and canonical machine artifact', () => {
+  it('accepts raw-SQL ledger rows only when the exact source lineage matches', () => {
+    const source = input('out_category_summary__dongan_2601.json', 'PT-LINEAGE-EXACT', '2026-01')
+    const imported = importStatementBatch(db, source)
+    const inLine = db.prepare(`
+      SELECT id, ledger_settlement_month month, amount
+      FROM statement_normalized_lines
+      WHERE generation_id = ? AND business_line = 'IN' AND amount > 0
+      ORDER BY id LIMIT 1
+    `).get(imported.generationId) as any
+    const outLine = db.prepare(`
+      SELECT id, ledger_settlement_month month, amount
+      FROM statement_normalized_lines
+      WHERE generation_id = ? AND business_line = 'OUT' AND amount > 0
+      ORDER BY id LIMIT 1
+    `).get(imported.generationId) as any
+    db.prepare(`
+      INSERT INTO partner_month_revenue_ledger (
+        id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+        category_label, business_line, settlement_amount, ledger_scope
+      ) VALUES ('PML-EXACT', ?, ?, ?, ?, ?, 'exact', 'IN', ?, 'statement_internal')
+    `).run(
+      imported.batchId,
+      imported.generationId,
+      source.partnerId,
+      inLine.month,
+      inLine.id,
+      inLine.amount,
+    )
+    db.prepare(`
+      INSERT INTO out_settlement_ledger (
+        id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+        out_type, settlement_amount, lab_revenue_amount, ledger_scope
+      ) VALUES ('OUT-EXACT', ?, ?, ?, ?, ?, 'exact', ?, 0, 'statement_internal')
+    `).run(
+      imported.batchId,
+      imported.generationId,
+      source.partnerId,
+      outLine.month,
+      outLine.id,
+      outLine.amount,
+    )
+    expect((db.prepare(`
+      SELECT COUNT(*) n FROM partner_month_revenue_ledger
+      WHERE id = 'PML-EXACT' AND source_line_id = ?
+    `).get(inLine.id) as any).n).toBe(1)
+    expect((db.prepare(`
+      SELECT COUNT(*) n FROM out_settlement_ledger
+      WHERE id = 'OUT-EXACT' AND source_line_id = ?
+    `).get(outLine.id) as any).n).toBe(1)
+  })
+
+  it('rejects raw-SQL cross-partner and cross-month ledger lineage with zero partial rows', () => {
+    const source = input('out_category_summary__dongan_2601.json', 'PT-LINEAGE', '2026-01')
+    const imported = importStatementBatch(db, source)
+    const inLine = db.prepare(`
+      SELECT id FROM statement_normalized_lines
+      WHERE generation_id = ? AND business_line = 'IN' AND amount > 0
+      ORDER BY id LIMIT 1
+    `).get(imported.generationId) as any
+    const outLine = db.prepare(`
+      SELECT id FROM statement_normalized_lines
+      WHERE generation_id = ? AND business_line = 'OUT' AND amount > 0
+      ORDER BY id LIMIT 1
+    `).get(imported.generationId) as any
+    const before = {
+      partner: (db.prepare('SELECT COUNT(*) n FROM partner_month_revenue_ledger').get() as any).n,
+      out: (db.prepare('SELECT COUNT(*) n FROM out_settlement_ledger').get() as any).n,
+    }
+    expect(() => db.prepare(`
+      INSERT INTO partner_month_revenue_ledger (
+        id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+        category_label, business_line, settlement_amount, ledger_scope
+      ) VALUES (
+        'PML-CROSS-PARTNER', ?, ?, 'PT-OTHER', ?, ?, 'cross', 'IN', 1, 'statement_internal'
+      )
+    `).run(imported.batchId, imported.generationId, source.settlementMonth, inLine.id))
+      .toThrow(/FOREIGN KEY constraint failed/)
+    expect(() => db.prepare(`
+      INSERT INTO out_settlement_ledger (
+        id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+        out_type, settlement_amount, lab_revenue_amount, ledger_scope
+      ) VALUES (
+        'OUT-CROSS-MONTH', ?, ?, ?, '2026-02', ?, 'cross', 1, 0, 'statement_internal'
+      )
+    `).run(imported.batchId, imported.generationId, source.partnerId, outLine.id))
+      .toThrow(/FOREIGN KEY constraint failed/)
+    expect({
+      partner: (db.prepare('SELECT COUNT(*) n FROM partner_month_revenue_ledger').get() as any).n,
+      out: (db.prepare('SELECT COUNT(*) n FROM out_settlement_ledger').get() as any).n,
+    }).toEqual(before)
+  })
+
   it('posts Dongan and Ganzhou idempotently without merging into case_revenue', () => {
     const da = importStatementBatch(db, input('out_category_summary__dongan_2601.json', 'PT-DA-ART', '2026-01'))
     const first = postStatementGeneration(db, da.generationId)

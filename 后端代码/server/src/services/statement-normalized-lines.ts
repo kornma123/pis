@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import {
   findStatementColumn,
   normalizeStatementText,
@@ -33,13 +33,15 @@ export interface StatementImportInput {
   sourceSheet?: string
   headerRow: number
   grid: Grid
-  /** @deprecated A client boolean is never authoritative; use emptyEvidence. */
+  /** @deprecated A client boolean is never authoritative. */
   authoritativeEmpty?: boolean
-  emptyEvidence?: AuthoritativeEmptyEvidenceInput
+  /** @deprecated Client-authored evidence is rejected; use a server-issued emptyReceipt. */
+  emptyEvidence?: unknown
+  emptyReceipt?: string
   uploadedBy?: string
 }
 
-export interface AuthoritativeEmptyEvidenceInput {
+export interface AuthoritativeEmptyReceiptClaims {
   schemaVersion: 'statement-authoritative-empty/v1'
   sourceIdentity: {
     partnerId: string
@@ -55,16 +57,24 @@ export interface AuthoritativeEmptyEvidenceInput {
     normalizedLineCount: 0
   }
   canonicalContentHash: string
+  parserRevision: string
+  configRevision: string
+  expectedGenerationId: string
   verifiedAt: string
+  expiresAt: string
+  verifiedBy: string
 }
 
 export interface TrustedStatementImportContext {
   actor?: string
   now?: Date
+  receiptSecret?: string
 }
 
-export interface AuthoritativeEmptyEvidenceRecord extends AuthoritativeEmptyEvidenceInput {
-  verifiedBy: string
+export interface IssuedAuthoritativeEmptyReceipt {
+  receipt: string
+  expectedGenerationId: string
+  expiresAt: string
 }
 
 export interface NormalizedLineFact {
@@ -156,14 +166,18 @@ export function computeStatementSourceHash(grid: Grid): string {
 }
 
 export function computeAuthoritativeEmptyEvidenceHash(
-  record: AuthoritativeEmptyEvidenceRecord,
+  record: AuthoritativeEmptyReceiptClaims,
 ): string {
   const serialized = JSON.stringify({
     schemaVersion: record.schemaVersion,
     sourceIdentity: record.sourceIdentity,
     coverage: record.coverage,
     canonicalContentHash: record.canonicalContentHash,
+    parserRevision: record.parserRevision,
+    configRevision: record.configRevision,
+    expectedGenerationId: record.expectedGenerationId,
     verifiedAt: record.verifiedAt,
+    expiresAt: record.expiresAt,
     verifiedBy: record.verifiedBy,
   })
   return `sha256:${createHash('sha256').update(serialized).digest('hex')}`
@@ -540,15 +554,12 @@ function finalizeFacts(
 
 interface VerifiedStatementImport {
   input: StatementImportInput
-  emptyEvidenceRecord: AuthoritativeEmptyEvidenceRecord | null
+  emptyReceiptClaims: AuthoritativeEmptyReceiptClaims | null
   emptyEvidenceHash: string | null
   emptyCoverageJson: string | null
 }
 
-function verifyStatementImportInput(
-  candidate: StatementImportInput,
-  context: TrustedStatementImportContext = {},
-): VerifiedStatementImport {
+function canonicalStatementImportInput(candidate: StatementImportInput): StatementImportInput {
   if (!candidate.partnerId || !candidate.sourceHash || !candidate.parserRevision || !candidate.configRevision) {
     throw new Phase1AError('GENERATION_KEY_INCOMPLETE', 'partner/source/parser/config are required', 400)
   }
@@ -559,10 +570,10 @@ function verifyStatementImportInput(
     throw new Phase1AError('INVALID_STATEMENT_GRID', 'grid/headerRow are invalid', 400)
   }
   const grid = canonicalGrid(candidate.grid)
-  if (candidate.authoritativeEmpty !== undefined) {
+  if (candidate.authoritativeEmpty !== undefined || candidate.emptyEvidence !== undefined) {
     throw new Phase1AError(
-      'AUTHORITATIVE_EMPTY_EVIDENCE_REQUIRED',
-      'client authoritativeEmpty boolean is not trusted',
+      'AUTHORITATIVE_EMPTY_RECEIPT_REQUIRED',
+      'client-authored authoritative-empty claims are not trusted',
       422,
     )
   }
@@ -574,96 +585,202 @@ function verifyStatementImportInput(
       409,
     )
   }
-  const input: StatementImportInput = { ...candidate, grid, sourceHash }
+  return { ...candidate, grid, sourceHash }
+}
 
-  if (grid.length !== 0) {
-    if (candidate.emptyEvidence) {
-      throw new Phase1AError(
-        'INVALID_AUTHORITATIVE_EMPTY_EVIDENCE',
-        'authoritative-empty evidence cannot accompany non-empty content',
-        422,
-      )
-    }
-    if (candidate.headerRow >= grid.length) {
-      throw new Phase1AError('INVALID_STATEMENT_GRID', 'headerRow is outside the canonical grid', 400)
-    }
-    return { input, emptyEvidenceRecord: null, emptyEvidenceHash: null, emptyCoverageJson: null }
-  }
-
-  const evidence = candidate.emptyEvidence
-  const actor = context.actor?.trim()
-  if (!evidence || !actor) {
+function receiptSecret(context: TrustedStatementImportContext): string {
+  const secret = context.receiptSecret
+  if (!secret || secret.length < 32) {
     throw new Phase1AError(
-      'AUTHORITATIVE_EMPTY_EVIDENCE_REQUIRED',
-      'empty source requires trusted verifier evidence',
-      422,
+      'AUTHORITATIVE_EMPTY_RECEIPT_SIGNER_UNAVAILABLE',
+      'server receipt signer is unavailable',
+      503,
     )
   }
-  const sourceFile = candidate.sourceFile?.trim()
-  const sourceSheet = candidate.sourceSheet?.trim()
+  return secret
+}
+
+function receiptSignature(payload: string, secret: string): string {
+  const separatedKey = createHash('sha256')
+    .update('coreone:statement-authoritative-empty:v1\u0000')
+    .update(secret)
+    .digest()
+  return createHmac('sha256', separatedKey).update(payload).digest('base64url')
+}
+
+function encodeAuthoritativeEmptyReceipt(
+  claims: AuthoritativeEmptyReceiptClaims,
+  secret: string,
+): string {
+  const payload = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url')
+  return `${payload}.${receiptSignature(payload, secret)}`
+}
+
+function decodeAuthoritativeEmptyReceipt(
+  receipt: string,
+  secret: string,
+): AuthoritativeEmptyReceiptClaims {
+  const parts = receipt.split('.')
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_INVALID', 'receipt format is invalid', 422)
+  }
+  const expected = Buffer.from(receiptSignature(parts[0], secret), 'base64url')
+  let supplied: Buffer
+  try {
+    supplied = Buffer.from(parts[1], 'base64url')
+  } catch {
+    throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_INVALID', 'receipt signature is invalid', 422)
+  }
+  if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+    throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_INVALID', 'receipt signature is invalid', 422)
+  }
+  try {
+    return JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8')) as AuthoritativeEmptyReceiptClaims
+  } catch {
+    throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_INVALID', 'receipt payload is invalid', 422)
+  }
+}
+
+function authoritativeEmptyClaims(
+  input: StatementImportInput,
+  context: TrustedStatementImportContext,
+): AuthoritativeEmptyReceiptClaims {
+  const actor = context.actor?.trim()
+  const sourceFile = input.sourceFile?.trim()
+  const sourceSheet = input.sourceSheet?.trim()
+  if (!actor) {
+    throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_ACTOR_REQUIRED', 'trusted verifier is required', 422)
+  }
   if (!sourceFile || !sourceSheet) {
     throw new Phase1AError(
       'AUTHORITATIVE_EMPTY_SOURCE_UNKNOWN',
-      'empty evidence requires a known source file and sheet',
+      'empty receipt requires a known source file and sheet',
       422,
     )
   }
-  if (
-    evidence.schemaVersion !== 'statement-authoritative-empty/v1'
-    || evidence.sourceIdentity.partnerId !== candidate.partnerId
-    || evidence.sourceIdentity.settlementMonth !== candidate.settlementMonth
-    || evidence.sourceIdentity.sourceFile !== sourceFile
-    || evidence.sourceIdentity.sourceSheet !== sourceSheet
-    || evidence.sourceIdentity.templateFamily !== candidate.templateFamily
-    || evidence.coverage.scope !== 'complete_source'
-    || evidence.coverage.sourceSheet !== sourceSheet
-    || evidence.coverage.rawRowCount !== 0
-    || evidence.coverage.normalizedLineCount !== 0
-    || evidence.canonicalContentHash !== sourceHash
-  ) {
-    throw new Phase1AError(
-      'INVALID_AUTHORITATIVE_EMPTY_EVIDENCE',
-      'empty evidence is not bound to the source identity, coverage and content',
-      422,
-    )
+  const verifiedAt = context.now ?? new Date()
+  if (!Number.isFinite(verifiedAt.getTime())) {
+    throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_TIME_INVALID', 'receipt time is invalid', 422)
   }
-  const verifiedAtMs = Date.parse(evidence.verifiedAt)
-  const nowMs = (context.now ?? new Date()).getTime()
-  if (
-    !Number.isFinite(verifiedAtMs)
-    || verifiedAtMs < nowMs - EMPTY_EVIDENCE_MAX_AGE_MS
-    || verifiedAtMs > nowMs + EMPTY_EVIDENCE_FUTURE_SKEW_MS
-  ) {
-    throw new Phase1AError(
-      'INVALID_AUTHORITATIVE_EMPTY_EVIDENCE_TIME',
-      'empty evidence timestamp is invalid, stale or in the future',
-      422,
-    )
-  }
-  const emptyEvidenceRecord: AuthoritativeEmptyEvidenceRecord = {
-    schemaVersion: evidence.schemaVersion,
+  return {
+    schemaVersion: 'statement-authoritative-empty/v1',
     sourceIdentity: {
-      partnerId: evidence.sourceIdentity.partnerId,
-      settlementMonth: evidence.sourceIdentity.settlementMonth,
+      partnerId: input.partnerId,
+      settlementMonth: input.settlementMonth,
       sourceFile,
       sourceSheet,
-      templateFamily: evidence.sourceIdentity.templateFamily,
+      templateFamily: input.templateFamily,
     },
     coverage: {
-      scope: evidence.coverage.scope,
+      scope: 'complete_source',
       sourceSheet,
       rawRowCount: 0,
       normalizedLineCount: 0,
     },
-    canonicalContentHash: sourceHash,
-    verifiedAt: new Date(verifiedAtMs).toISOString(),
+    canonicalContentHash: input.sourceHash,
+    parserRevision: input.parserRevision,
+    configRevision: input.configRevision,
+    expectedGenerationId: statementGenerationId(input),
+    verifiedAt: verifiedAt.toISOString(),
+    expiresAt: new Date(verifiedAt.getTime() + EMPTY_EVIDENCE_MAX_AGE_MS).toISOString(),
     verifiedBy: actor,
+  }
+}
+
+export function issueAuthoritativeEmptyReceipt(
+  candidate: StatementImportInput,
+  context: TrustedStatementImportContext,
+): IssuedAuthoritativeEmptyReceipt {
+  const input = canonicalStatementImportInput(candidate)
+  if (input.grid.length !== 0) {
+    throw new Phase1AError(
+      'AUTHORITATIVE_EMPTY_RECEIPT_NONEMPTY',
+      'receipt can only be issued for an empty canonical source',
+      422,
+    )
+  }
+  if (input.emptyReceipt !== undefined) {
+    throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_INVALID', 'receipt issuance cannot consume a receipt', 422)
+  }
+  const claims = authoritativeEmptyClaims(input, context)
+  return {
+    receipt: encodeAuthoritativeEmptyReceipt(claims, receiptSecret(context)),
+    expectedGenerationId: claims.expectedGenerationId,
+    expiresAt: claims.expiresAt,
+  }
+}
+
+function verifyStatementImportInput(
+  candidate: StatementImportInput,
+  context: TrustedStatementImportContext = {},
+): VerifiedStatementImport {
+  const input = canonicalStatementImportInput(candidate)
+  if (input.grid.length !== 0) {
+    if (candidate.emptyReceipt !== undefined) {
+      throw new Phase1AError(
+        'AUTHORITATIVE_EMPTY_RECEIPT_NONEMPTY',
+        'authoritative-empty receipt cannot accompany non-empty content',
+        422,
+      )
+    }
+    if (candidate.headerRow >= input.grid.length) {
+      throw new Phase1AError('INVALID_STATEMENT_GRID', 'headerRow is outside the canonical grid', 400)
+    }
+    return { input, emptyReceiptClaims: null, emptyEvidenceHash: null, emptyCoverageJson: null }
+  }
+
+  const actor = context.actor?.trim()
+  if (!candidate.emptyReceipt || !actor) {
+    throw new Phase1AError(
+      'AUTHORITATIVE_EMPTY_RECEIPT_REQUIRED',
+      'empty source requires a server-issued receipt and trusted verifier',
+      422,
+    )
+  }
+  const expectedClaims = authoritativeEmptyClaims(input, context)
+  const claims = decodeAuthoritativeEmptyReceipt(candidate.emptyReceipt, receiptSecret(context))
+  const verifiedAtMs = Date.parse(claims.verifiedAt)
+  const expiresAtMs = Date.parse(claims.expiresAt)
+  const nowMs = (context.now ?? new Date()).getTime()
+  if (
+    !Number.isFinite(verifiedAtMs)
+    || !Number.isFinite(expiresAtMs)
+    || new Date(verifiedAtMs).toISOString() !== claims.verifiedAt
+    || new Date(expiresAtMs).toISOString() !== claims.expiresAt
+    || expiresAtMs <= verifiedAtMs
+    || expiresAtMs > verifiedAtMs + EMPTY_EVIDENCE_MAX_AGE_MS
+    || verifiedAtMs > nowMs + EMPTY_EVIDENCE_FUTURE_SKEW_MS
+  ) {
+    throw new Phase1AError(
+      'AUTHORITATIVE_EMPTY_RECEIPT_TIME_INVALID',
+      'receipt timestamps are invalid',
+      422,
+    )
+  }
+  if (nowMs > expiresAtMs) {
+    throw new Phase1AError(
+      'AUTHORITATIVE_EMPTY_RECEIPT_EXPIRED',
+      'receipt has expired',
+      422,
+    )
+  }
+  const boundClaims = {
+    ...expectedClaims,
+    verifiedAt: claims.verifiedAt,
+    expiresAt: claims.expiresAt,
+  }
+  if (JSON.stringify(claims) !== JSON.stringify(boundClaims)) {
+    throw new Phase1AError(
+      'AUTHORITATIVE_EMPTY_RECEIPT_SCOPE_MISMATCH',
+      'receipt does not match partner, month, source, revisions, actor or generation',
+      409,
+    )
   }
   return {
     input,
-    emptyEvidenceRecord,
-    emptyEvidenceHash: computeAuthoritativeEmptyEvidenceHash(emptyEvidenceRecord),
-    emptyCoverageJson: JSON.stringify(emptyEvidenceRecord.coverage),
+    emptyReceiptClaims: claims,
+    emptyEvidenceHash: computeAuthoritativeEmptyEvidenceHash(claims),
+    emptyCoverageJson: JSON.stringify(claims.coverage),
   }
 }
 
@@ -754,8 +871,9 @@ export function importStatementBatch(
         parser_revision, config_revision, settlement_month, generation_id,
         supersedes_generation_id, is_current, source_sheet, declared_total,
         raw_row_count, normalized_line_count, status, uploaded_by,
-        empty_evidence_hash, empty_verified_by, empty_verified_at, empty_coverage_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'parsed', ?, ?, ?, ?, ?)
+        empty_evidence_hash, empty_verified_by, empty_verified_at, empty_expires_at,
+        empty_coverage_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'parsed', ?, ?, ?, ?, ?, ?)
     `).run(
       batchId,
       input.partnerId,
@@ -774,8 +892,9 @@ export function importStatementBatch(
       facts.lines.length,
       input.uploadedBy ?? null,
       verified.emptyEvidenceHash,
-      verified.emptyEvidenceRecord?.verifiedBy ?? null,
-      verified.emptyEvidenceRecord?.verifiedAt ?? null,
+      verified.emptyReceiptClaims?.verifiedBy ?? null,
+      verified.emptyReceiptClaims?.verifiedAt ?? null,
+      verified.emptyReceiptClaims?.expiresAt ?? null,
       verified.emptyCoverageJson,
     )
 
@@ -797,12 +916,13 @@ export function importStatementBatch(
     const lineIds = new Map<string, string>()
     const insertLine = db.prepare(`
       INSERT INTO statement_normalized_lines (
-        id, batch_id, generation_id, partner_id, settlement_month, row_settlement_month,
+        id, batch_id, generation_id, partner_id, settlement_month, ledger_settlement_month,
+        row_settlement_month,
         settlement_month_basis, case_no, external_subject_key, item_name, source_sheet,
         source_row, source_column, source_label, template_family, row_kind, line_grain,
         business_line, amount_role, amount, classification_status, rule_id, rule_version,
         report_date, raw_payload
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     for (const line of facts.lines) {
       const id = stableId('LINE', generationId, input.sourceSheet ?? '', line.sourceRow, line.sourceColumn, line.amountRole)
@@ -813,6 +933,7 @@ export function importStatementBatch(
         generationId,
         input.partnerId,
         input.settlementMonth,
+        line.rowSettlementMonth ?? input.settlementMonth,
         line.rowSettlementMonth ?? null,
         line.settlementMonthBasis ?? null,
         line.caseNo ?? null,

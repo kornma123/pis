@@ -9,7 +9,8 @@ import {
   computeAuthoritativeEmptyEvidenceHash,
   computeStatementSourceHash,
   importStatementBatch,
-  type AuthoritativeEmptyEvidenceRecord,
+  issueAuthoritativeEmptyReceipt,
+  type AuthoritativeEmptyReceiptClaims,
   type StatementImportInput,
 } from '../src/services/statement-normalized-lines.js'
 import { postStatementGeneration } from '../src/services/statement-ledger-phase1a.js'
@@ -28,6 +29,7 @@ import {
 let db: any
 let routeApp: express.Express
 const FX = join(__dirname, 'fixtures', 'statements')
+const RECEIPT_SECRET = 'loc-004b-r2-test-only-receipt-secret-32-bytes'
 
 function dongan(): StatementImportInput {
   const name = 'out_category_summary__dongan_2601.json'
@@ -49,13 +51,17 @@ function dongan(): StatementImportInput {
 }
 
 function authoritativeEmpty(partnerId: string): StatementImportInput {
-  const input: StatementImportInput = {
+  return {
     ...dongan(),
     partnerId,
     grid: [],
     headerRow: 0,
     sourceHash: computeStatementSourceHash([]),
   }
+}
+
+function clientAuthoredEmpty(partnerId: string): StatementImportInput {
+  const input = authoritativeEmpty(partnerId)
   input.emptyEvidence = {
     schemaVersion: 'statement-authoritative-empty/v1',
     sourceIdentity: {
@@ -77,7 +83,18 @@ function authoritativeEmpty(partnerId: string): StatementImportInput {
   return input
 }
 
+function emptyWithReceipt(
+  partnerId: string,
+  now = new Date('2026-07-23T08:00:00.000Z'),
+): { input: StatementImportInput; context: { actor: string; receiptSecret: string; now: Date } } {
+  const input = authoritativeEmpty(partnerId)
+  const context = { actor: 'trusted-finance', receiptSecret: RECEIPT_SECRET, now }
+  input.emptyReceipt = issueAuthoritativeEmptyReceipt(input, context).receipt
+  return { input, context }
+}
+
 beforeAll(async () => {
+  process.env.JWT_SECRET = RECEIPT_SECRET
   const manager = await import('../src/database/DatabaseManager.js')
   manager.initializeDatabase()
   db = manager.getDatabase()
@@ -106,7 +123,7 @@ describe('six-state SourceReadinessResult contract', () => {
       status: 'posted',
     }
     expect(classifyStatementReadiness(base).state).toBe('complete')
-    const emptyRecord: AuthoritativeEmptyEvidenceRecord = {
+    const emptyRecord: AuthoritativeEmptyReceiptClaims = {
       schemaVersion: 'statement-authoritative-empty/v1',
       sourceIdentity: {
         partnerId: base.partnerId,
@@ -122,7 +139,11 @@ describe('six-state SourceReadinessResult contract', () => {
         normalizedLineCount: 0,
       },
       canonicalContentHash: computeStatementSourceHash([]),
+      parserRevision: 'parser-phase1a-v1',
+      configRevision: 'seed-phase1a-v1',
+      expectedGenerationId: 'GEN',
       verifiedAt: '2026-01-31T00:00:00.000Z',
+      expiresAt: '2026-02-01T00:00:00.000Z',
       verifiedBy: 'trusted-finance',
     }
     expect(classifyStatementReadiness({
@@ -135,9 +156,12 @@ describe('six-state SourceReadinessResult contract', () => {
       sourceSheet: emptyRecord.sourceIdentity.sourceSheet,
       sourceHash: emptyRecord.canonicalContentHash,
       templateFamily: emptyRecord.sourceIdentity.templateFamily,
+      parserRevision: emptyRecord.parserRevision,
+      configRevision: emptyRecord.configRevision,
       emptyEvidenceHash: computeAuthoritativeEmptyEvidenceHash(emptyRecord),
       emptyVerifiedBy: emptyRecord.verifiedBy,
       emptyVerifiedAt: emptyRecord.verifiedAt,
+      emptyExpiresAt: emptyRecord.expiresAt,
       emptyCoverageJson: JSON.stringify(emptyRecord.coverage),
     }).state).toBe('complete_empty')
     expect(classifyStatementReadiness({ ...base, actualRawRows: 1 }).state).toBe('partial')
@@ -164,15 +188,14 @@ describe('six-state SourceReadinessResult contract', () => {
 describe('same-generation compute/read/complete/close', () => {
   it('rejects a bare authoritativeEmpty boolean at the service boundary', () => {
     const empty = authoritativeEmpty('PT-EMPTY-BARE')
-    delete empty.emptyEvidence
-    expect(() => importStatementBatch(db, empty)).toThrow(/AUTHORITATIVE_EMPTY_EVIDENCE_REQUIRED/)
+    expect(() => importStatementBatch(db, empty)).toThrow(/AUTHORITATIVE_EMPTY_RECEIPT_REQUIRED/)
     expect(() => importStatementBatch(db, { ...empty, authoritativeEmpty: true }))
-      .toThrow(/AUTHORITATIVE_EMPTY_EVIDENCE_REQUIRED/)
+      .toThrow(/AUTHORITATIVE_EMPTY_RECEIPT_REQUIRED/)
   })
 
-  it('accepts complete_empty only with valid trusted evidence and preserves its DB projection', () => {
-    const empty = authoritativeEmpty('PT-EMPTY-VALID')
-    const imported = importStatementBatch(db, empty, { actor: 'trusted-finance' })
+  it('accepts complete_empty only with a valid server receipt and preserves its DB projection', () => {
+    const { input: empty, context } = emptyWithReceipt('PT-EMPTY-VALID')
+    const imported = importStatementBatch(db, empty, context)
     const readiness = readStatementSourceReadiness(
       db,
       empty.partnerId,
@@ -185,13 +208,94 @@ describe('same-generation compute/read/complete/close', () => {
       totals: { raw_rows: 0, normalized_lines: 0 },
     })
     const row = db.prepare(`
-      SELECT empty_evidence_hash, empty_verified_by, empty_verified_at, empty_coverage_json
+      SELECT empty_evidence_hash, empty_verified_by, empty_verified_at,
+             empty_expires_at, empty_coverage_json
       FROM statement_import_batches WHERE id = ?
     `).get(imported.batchId) as any
     expect(row.empty_evidence_hash).toMatch(/^sha256:[0-9a-f]{64}$/)
     expect(row.empty_verified_by).toBe('trusted-finance')
-    expect(row.empty_verified_at).toBe(empty.emptyEvidence!.verifiedAt)
-    expect(JSON.parse(row.empty_coverage_json)).toEqual(empty.emptyEvidence!.coverage)
+    expect(row.empty_verified_at).toBe(context.now.toISOString())
+    expect(row.empty_expires_at).toBe('2026-07-24T08:00:00.000Z')
+    expect(JSON.parse(row.empty_coverage_json)).toMatchObject({
+      scope: 'complete_source',
+      rawRowCount: 0,
+      normalizedLineCount: 0,
+    })
+  })
+
+  it('rejects replayable client-authored empty evidence even when an authenticated actor submits it', () => {
+    const replayable = clientAuthoredEmpty('PT-EMPTY-CLIENT-EVIDENCE')
+    expect(() => importStatementBatch(db, replayable, { actor: 'trusted-finance', receiptSecret: RECEIPT_SECRET }))
+      .toThrow(/AUTHORITATIVE_EMPTY_RECEIPT_REQUIRED/)
+    expect((db.prepare(`
+      SELECT COUNT(*) n FROM statement_import_batches WHERE partner_id = ?
+    `).get(replayable.partnerId) as any).n).toBe(0)
+  })
+
+  it('binds receipts to partner, month, revisions and generation and rejects tamper or expiry with zero partial writes', () => {
+    const issuedAt = new Date('2026-07-23T08:00:00.000Z')
+    const { input: valid } = emptyWithReceipt('PT-EMPTY-BOUND', issuedAt)
+    const attempts: Array<{ label: string; input: StatementImportInput; now: Date; code: RegExp }> = [
+      {
+        label: 'partner',
+        input: { ...valid, partnerId: 'PT-EMPTY-OTHER' },
+        now: issuedAt,
+        code: /AUTHORITATIVE_EMPTY_RECEIPT_SCOPE_MISMATCH/,
+      },
+      {
+        label: 'month',
+        input: { ...valid, settlementMonth: '2026-02' },
+        now: issuedAt,
+        code: /AUTHORITATIVE_EMPTY_RECEIPT_SCOPE_MISMATCH/,
+      },
+      {
+        label: 'parser revision',
+        input: { ...valid, parserRevision: 'parser-phase1a-v2' },
+        now: issuedAt,
+        code: /AUTHORITATIVE_EMPTY_RECEIPT_SCOPE_MISMATCH/,
+      },
+      {
+        label: 'config revision',
+        input: { ...valid, configRevision: 'seed-phase1a-v2' },
+        now: issuedAt,
+        code: /AUTHORITATIVE_EMPTY_RECEIPT_SCOPE_MISMATCH/,
+      },
+      {
+        label: 'tampered expected generation/signature',
+        input: {
+          ...valid,
+          emptyReceipt: `${valid.emptyReceipt!.slice(0, -1)}${valid.emptyReceipt!.endsWith('a') ? 'b' : 'a'}`,
+        },
+        now: issuedAt,
+        code: /AUTHORITATIVE_EMPTY_RECEIPT_INVALID/,
+      },
+      {
+        label: 'forged',
+        input: { ...valid, emptyReceipt: 'Zm9yZ2Vk.Zm9yZ2Vk' },
+        now: issuedAt,
+        code: /AUTHORITATIVE_EMPTY_RECEIPT_INVALID/,
+      },
+      {
+        label: 'expired',
+        input: valid,
+        now: new Date('2026-07-24T08:00:00.001Z'),
+        code: /AUTHORITATIVE_EMPTY_RECEIPT_EXPIRED/,
+      },
+    ]
+    for (const attempt of attempts) {
+      expect(
+        () => importStatementBatch(db, attempt.input, {
+          actor: 'trusted-finance',
+          receiptSecret: RECEIPT_SECRET,
+          now: attempt.now,
+        }),
+        attempt.label,
+      ).toThrow(attempt.code)
+    }
+    expect((db.prepare(`
+      SELECT COUNT(*) n FROM statement_import_batches
+      WHERE partner_id IN ('PT-EMPTY-BOUND', 'PT-EMPTY-OTHER')
+    `).get() as any).n).toBe(0)
   })
 
   it('keeps a raw-SQL empty batch without trusted evidence unavailable instead of inventing success', () => {
@@ -231,10 +335,10 @@ describe('same-generation compute/read/complete/close', () => {
       authoritativeEmpty: true,
     })
     expect(bare.status).toBe(422)
-    expect(bare.body.error.code).toBe('AUTHORITATIVE_EMPTY_EVIDENCE_REQUIRED')
+    expect(bare.body.error.code).toBe('AUTHORITATIVE_EMPTY_RECEIPT_REQUIRED')
 
     const missingSourceInput = authoritativeEmpty('PT-EMPTY-ROUTE-MISSING')
-    const missingSource = await request(routeApp).post('/api/v1/statement-batches').send({
+    const missingSource = await request(routeApp).post('/api/v1/statement-batches/authoritative-empty-receipts').send({
       ...missingSourceInput,
       sourceFile: undefined,
       sourceSheet: undefined,
@@ -242,6 +346,26 @@ describe('same-generation compute/read/complete/close', () => {
     expect(missingSource.status).toBe(422)
     expect(missingSource.body.error.code).toBe('AUTHORITATIVE_EMPTY_SOURCE_UNKNOWN')
     expect((db.prepare('SELECT COUNT(*) n FROM statement_import_batches').get() as any).n).toBe(before)
+  })
+
+  it('issues a route receipt but rejects its cross-partner replay without partial facts', async () => {
+    const original = authoritativeEmpty('PT-EMPTY-ROUTE-BOUND')
+    const issued = await request(routeApp)
+      .post('/api/v1/statement-batches/authoritative-empty-receipts')
+      .send(original)
+    expect(issued.status).toBe(200)
+    expect(issued.body.data.receipt).toEqual(expect.any(String))
+    const replay = await request(routeApp).post('/api/v1/statement-batches').send({
+      ...original,
+      partnerId: 'PT-EMPTY-ROUTE-OTHER',
+      emptyReceipt: issued.body.data.receipt,
+    })
+    expect(replay.status).toBe(409)
+    expect(replay.body.error.code).toBe('AUTHORITATIVE_EMPTY_RECEIPT_SCOPE_MISMATCH')
+    expect((db.prepare(`
+      SELECT COUNT(*) n FROM statement_import_batches
+      WHERE partner_id IN ('PT-EMPTY-ROUTE-BOUND', 'PT-EMPTY-ROUTE-OTHER')
+    `).get() as any).n).toBe(0)
   })
 
   it('binds all consumers to one generation and makes closed state irreversible', () => {

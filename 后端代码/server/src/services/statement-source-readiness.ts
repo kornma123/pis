@@ -1,7 +1,7 @@
 import {
   computeAuthoritativeEmptyEvidenceHash,
   Phase1AError,
-  type AuthoritativeEmptyEvidenceRecord,
+  type AuthoritativeEmptyReceiptClaims,
 } from './statement-normalized-lines.js'
 
 export type SourceReadinessState =
@@ -44,7 +44,10 @@ export interface StatementReadinessSnapshot {
   emptyEvidenceHash?: string | null
   emptyVerifiedBy?: string | null
   emptyVerifiedAt?: string | null
+  emptyExpiresAt?: string | null
   emptyCoverageJson?: string | null
+  parserRevision?: string | null
+  configRevision?: string | null
 }
 
 function hasValidAuthoritativeEmptyEvidence(snapshot: StatementReadinessSnapshot): boolean {
@@ -56,29 +59,37 @@ function hasValidAuthoritativeEmptyEvidence(snapshot: StatementReadinessSnapshot
     || !snapshot.emptyEvidenceHash
     || !snapshot.emptyVerifiedBy
     || !snapshot.emptyVerifiedAt
+    || !snapshot.emptyExpiresAt
     || !snapshot.emptyCoverageJson
+    || !snapshot.parserRevision
+    || !snapshot.configRevision
     || !Number.isFinite(Date.parse(snapshot.emptyVerifiedAt))
+    || !Number.isFinite(Date.parse(snapshot.emptyExpiresAt))
   ) return false
   try {
-    const coverage = JSON.parse(snapshot.emptyCoverageJson) as AuthoritativeEmptyEvidenceRecord['coverage']
+    const coverage = JSON.parse(snapshot.emptyCoverageJson) as AuthoritativeEmptyReceiptClaims['coverage']
     if (
       coverage.scope !== 'complete_source'
       || coverage.sourceSheet !== snapshot.sourceSheet
       || coverage.rawRowCount !== 0
       || coverage.normalizedLineCount !== 0
     ) return false
-    const record: AuthoritativeEmptyEvidenceRecord = {
+    const record: AuthoritativeEmptyReceiptClaims = {
       schemaVersion: 'statement-authoritative-empty/v1',
       sourceIdentity: {
         partnerId: snapshot.partnerId,
         settlementMonth: snapshot.settlementMonth,
         sourceFile: snapshot.sourceFile,
         sourceSheet: snapshot.sourceSheet,
-        templateFamily: snapshot.templateFamily as AuthoritativeEmptyEvidenceRecord['sourceIdentity']['templateFamily'],
+        templateFamily: snapshot.templateFamily as AuthoritativeEmptyReceiptClaims['sourceIdentity']['templateFamily'],
       },
       coverage,
       canonicalContentHash: snapshot.sourceHash,
+      parserRevision: snapshot.parserRevision,
+      configRevision: snapshot.configRevision,
+      expectedGenerationId: snapshot.generationId,
       verifiedAt: snapshot.emptyVerifiedAt,
+      expiresAt: snapshot.emptyExpiresAt,
       verifiedBy: snapshot.emptyVerifiedBy,
     }
     return computeAuthoritativeEmptyEvidenceHash(record) === snapshot.emptyEvidenceHash
@@ -178,7 +189,10 @@ export function readStatementSourceReadiness(
     emptyEvidenceHash: batch.empty_evidence_hash ?? null,
     emptyVerifiedBy: batch.empty_verified_by ?? null,
     emptyVerifiedAt: batch.empty_verified_at ?? null,
+    emptyExpiresAt: batch.empty_expires_at ?? null,
     emptyCoverageJson: batch.empty_coverage_json ?? null,
+    parserRevision: batch.parser_revision ?? null,
+    configRevision: batch.config_revision ?? null,
   })
 }
 

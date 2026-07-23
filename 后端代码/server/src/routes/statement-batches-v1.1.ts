@@ -5,6 +5,7 @@ import { success, error } from '../utils/response.js'
 import {
   buildStatementNormalizedFacts,
   importStatementBatch,
+  issueAuthoritativeEmptyReceipt,
   Phase1AError,
   type StatementImportInput,
 } from '../services/statement-normalized-lines.js'
@@ -14,6 +15,10 @@ const router = Router()
 const requireFinance = requireAnyRole('finance')
 const trustedActor = (req: any): string =>
   String(req.user?.username ?? req.user?.userId ?? '').trim()
+const receiptContext = (req: any) => ({
+  actor: trustedActor(req),
+  receiptSecret: process.env.JWT_SECRET,
+})
 
 function respondError(res: any, caught: unknown): void {
   if (caught instanceof Phase1AError) {
@@ -28,7 +33,7 @@ router.post('/preview-normalized', requireFinance, (req, res) => {
   try {
     const actor = trustedActor(req)
     const input = { ...(req.body as StatementImportInput), uploadedBy: actor }
-    const facts = buildStatementNormalizedFacts(input, { actor })
+    const facts = buildStatementNormalizedFacts(input, receiptContext(req))
     success(res, {
       declaredTotal: facts.declaredTotal,
       parsedTotal: facts.parsedTotal,
@@ -42,11 +47,25 @@ router.post('/preview-normalized', requireFinance, (req, res) => {
   }
 })
 
+router.post('/authoritative-empty-receipts', requireFinance, (req, res) => {
+  try {
+    const actor = trustedActor(req)
+    const input = { ...(req.body as StatementImportInput), uploadedBy: actor }
+    success(
+      res,
+      issueAuthoritativeEmptyReceipt(input, receiptContext(req)),
+      'Server-issued authoritative-empty receipt',
+    )
+  } catch (caught) {
+    respondError(res, caught)
+  }
+})
+
 router.post('/', requireFinance, (req, res) => {
   try {
     const actor = trustedActor(req)
     const input = { ...(req.body as StatementImportInput), uploadedBy: actor }
-    const result = importStatementBatch(getDatabase(), input, { actor })
+    const result = importStatementBatch(getDatabase(), input, receiptContext(req))
     success(res, result, result.duplicate ? 'Existing generation returned idempotently' : 'Immutable statement generation created')
   } catch (caught) {
     respondError(res, caught)

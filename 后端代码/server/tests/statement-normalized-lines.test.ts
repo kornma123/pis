@@ -2,6 +2,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import {
   buildStatementNormalizedFacts,
   computeStatementSourceHash,
@@ -36,6 +37,92 @@ function input(name: string, partnerId: string, settlementMonth: string): Statem
   }
 }
 
+function createFixedPredecessorSchema(database: DatabaseSync, withInvalidLineage = false): void {
+  database.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE statement_import_batches (
+      id TEXT PRIMARY KEY, partner_id TEXT NOT NULL, partner_name TEXT, source_file TEXT,
+      source_hash TEXT NOT NULL, template_family TEXT NOT NULL, parser_revision TEXT NOT NULL,
+      config_revision TEXT NOT NULL, settlement_month TEXT NOT NULL, generation_id TEXT NOT NULL,
+      supersedes_generation_id TEXT, is_current INTEGER NOT NULL DEFAULT 1, source_sheet TEXT,
+      declared_total DECIMAL(18,4), raw_row_count INTEGER NOT NULL, normalized_line_count INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'parsed', artifact_hash TEXT, uploaded_by TEXT,
+      completed_at DATETIME, completed_by TEXT, closed_at DATETIME, closed_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE statement_raw_rows (
+      id TEXT PRIMARY KEY, batch_id TEXT NOT NULL, generation_id TEXT NOT NULL, source_sheet TEXT,
+      source_row INTEGER NOT NULL, row_json TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE statement_normalized_lines (
+      id TEXT PRIMARY KEY, batch_id TEXT NOT NULL, generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL, settlement_month TEXT NOT NULL, row_settlement_month TEXT,
+      settlement_month_basis TEXT, case_no TEXT, external_subject_key TEXT, item_name TEXT,
+      source_sheet TEXT, source_row INTEGER NOT NULL, source_column TEXT NOT NULL,
+      source_label TEXT NOT NULL, template_family TEXT NOT NULL, row_kind TEXT NOT NULL,
+      line_grain TEXT NOT NULL, business_line TEXT NOT NULL, amount_role TEXT NOT NULL,
+      amount DECIMAL(18,4) NOT NULL, classification_status TEXT NOT NULL, rule_id TEXT,
+      rule_version TEXT, report_date TEXT, raw_payload TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE quality_flags (
+      id TEXT PRIMARY KEY, generation_id TEXT NOT NULL, flag_type TEXT NOT NULL,
+      severity TEXT NOT NULL, owner_role TEXT NOT NULL, resolution_action TEXT NOT NULL,
+      blocks_posting INTEGER NOT NULL, blocks_closing INTEGER NOT NULL, partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL, related_batch_id TEXT NOT NULL, related_line_id TEXT,
+      reason_code TEXT NOT NULL, message TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE partner_month_revenue_ledger (
+      id TEXT PRIMARY KEY, batch_id TEXT NOT NULL, generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL, settlement_month TEXT NOT NULL, source_line_id TEXT NOT NULL UNIQUE,
+      category_label TEXT, business_line TEXT NOT NULL, settlement_amount DECIMAL(18,4) NOT NULL,
+      ledger_scope TEXT NOT NULL DEFAULT 'statement_internal',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE out_settlement_ledger (
+      id TEXT PRIMARY KEY, batch_id TEXT NOT NULL, generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL, settlement_month TEXT NOT NULL, source_line_id TEXT NOT NULL UNIQUE,
+      out_type TEXT NOT NULL, item_name TEXT, external_subject_key TEXT,
+      settlement_amount DECIMAL(18,4) NOT NULL, lab_revenue_amount DECIMAL(18,4) NOT NULL DEFAULT 0,
+      ledger_scope TEXT NOT NULL DEFAULT 'statement_internal',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO statement_import_batches (
+      id, partner_id, source_file, source_hash, template_family, parser_revision, config_revision,
+      settlement_month, generation_id, source_sheet, raw_row_count, normalized_line_count, status
+    ) VALUES (
+      'B-PRE', 'PT-PRE', 'pre.xlsx', 'sha256:predecessor', 'category_summary',
+      'parser-phase1a-v1', 'seed-phase1a-v1', '2026-01', 'GEN-PRE', 'Sheet1', 1, 1, 'parsed'
+    );
+    INSERT INTO statement_raw_rows
+      (id, batch_id, generation_id, source_sheet, source_row, row_json)
+      VALUES ('RAW-PRE', 'B-PRE', 'GEN-PRE', 'Sheet1', 1, '[]');
+    INSERT INTO statement_normalized_lines (
+      id, batch_id, generation_id, partner_id, settlement_month, row_settlement_month,
+      settlement_month_basis, source_sheet, source_row, source_column, source_label,
+      template_family, row_kind, line_grain, business_line, amount_role, amount,
+      classification_status, raw_payload
+    ) VALUES (
+      'LINE-PRE', 'B-PRE', 'GEN-PRE', 'PT-PRE', '2026-01', NULL, 'import_month',
+      'Sheet1', 1, 'A', 'pre', 'category_summary', 'detail', 'aggregate', 'IN',
+      'settlement', 1, 'classified', '{}'
+    )
+  `)
+  if (withInvalidLineage) {
+    database.exec(`
+      INSERT INTO partner_month_revenue_ledger (
+        id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+        category_label, business_line, settlement_amount, ledger_scope
+      ) VALUES (
+        'PML-PRE-BAD', 'B-PRE', 'GEN-PRE', 'PT-OTHER', '2026-02', 'LINE-PRE',
+        'bad', 'IN', 1, 'statement_internal'
+      )
+    `)
+  }
+}
+
 beforeAll(async () => {
   const manager = await import('../src/database/DatabaseManager.js')
   manager.initializeDatabase()
@@ -43,6 +130,79 @@ beforeAll(async () => {
 })
 
 describe('S1/S2 Phase 1A canonical schema, immutability and generation idempotency', () => {
+  it('provides an explicit predecessor-schema upgrade entry instead of relying on CREATE IF NOT EXISTS', async () => {
+    const manager = await import('../src/database/DatabaseManager.js')
+    expect(manager).toHaveProperty('upgradeStatementPhase1ASchema')
+  })
+
+  it('upgrades the fixed predecessor schema transactionally, reruns idempotently and accepts a post-upgrade import', async () => {
+    const manager = await import('../src/database/DatabaseManager.js')
+    const predecessor = new DatabaseSync(':memory:')
+    try {
+      createFixedPredecessorSchema(predecessor)
+      expect(manager.upgradeStatementPhase1ASchema(predecessor)).toBe('upgraded')
+      expect(manager.upgradeStatementPhase1ASchema(predecessor)).toBe('current')
+      const batchColumns = (predecessor.prepare('PRAGMA table_info(statement_import_batches)')
+        .all() as Array<{ name: string }>).map(column => column.name)
+      expect(batchColumns).toEqual(expect.arrayContaining([
+        'empty_evidence_hash',
+        'empty_verified_by',
+        'empty_verified_at',
+        'empty_expires_at',
+        'empty_coverage_json',
+      ]))
+      const lineColumns = (predecessor.prepare('PRAGMA table_info(statement_normalized_lines)')
+        .all() as Array<{ name: string }>).map(column => column.name)
+      expect(lineColumns).toContain('ledger_settlement_month')
+      expect((predecessor.prepare(`
+        SELECT ledger_settlement_month month FROM statement_normalized_lines WHERE id = 'LINE-PRE'
+      `).get() as any).month).toBe('2026-01')
+      expect(predecessor.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+
+      const imported = importStatementBatch(
+        predecessor,
+        input('out_category_summary__dongan_2601.json', 'PT-POST-UPGRADE', '2026-01'),
+      )
+      expect(imported).toMatchObject({ duplicate: false, rawRowCount: expect.any(Number) })
+    } finally {
+      predecessor.close()
+    }
+  })
+
+  it('fails closed on partial/unknown schemas and rolls back an invalid predecessor lineage', async () => {
+    const manager = await import('../src/database/DatabaseManager.js')
+    const partial = new DatabaseSync(':memory:')
+    try {
+      partial.exec('CREATE TABLE statement_import_batches (id TEXT PRIMARY KEY)')
+      expect(() => manager.upgradeStatementPhase1ASchema(partial))
+        .toThrow(/STATEMENT_PHASE1A_SCHEMA_UNSUPPORTED/)
+      expect((partial.prepare(`
+        SELECT COUNT(*) n FROM sqlite_master
+        WHERE type = 'table' AND name = 'statement_import_batches'
+      `).get() as any).n).toBe(1)
+    } finally {
+      partial.close()
+    }
+
+    const invalid = new DatabaseSync(':memory:')
+    try {
+      createFixedPredecessorSchema(invalid, true)
+      expect(() => manager.upgradeStatementPhase1ASchema(invalid))
+        .toThrow(/STATEMENT_PHASE1A_UPGRADE_FAILED/)
+      const columns = (invalid.prepare('PRAGMA table_info(statement_import_batches)')
+        .all() as Array<{ name: string }>).map(column => column.name)
+      expect(columns).not.toContain('empty_evidence_hash')
+      expect((invalid.prepare(`
+        SELECT COUNT(*) n FROM partner_month_revenue_ledger WHERE id = 'PML-PRE-BAD'
+      `).get() as any).n).toBe(1)
+      expect((invalid.prepare(`
+        SELECT COUNT(*) n FROM sqlite_master WHERE name LIKE '__loc004b_predecessor_%'
+      `).get() as any).n).toBe(0)
+    } finally {
+      invalid.close()
+    }
+  })
+
   it('creates all six canonical SQLite tables and keeps raw rows immutable', () => {
     const names = (db.prepare(`
       SELECT name FROM sqlite_master
