@@ -1,18 +1,31 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
-import { success, successList, error } from '../utils/response.js'
+import { buildSuccessEnvelope, error, success, successList } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { checkedSubtract, parseFiniteNumber, parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import { parseFinitePositiveNumber } from '../utils/numeric-input.js'
+import {
+  applyInventoryPlan,
+  inventoryErrorResponse,
+  listActiveAllocationFacts,
+  markAllocationFactsReversed,
+  planExactInventoryAdditions,
+  planInventoryDeductions,
+  replaceAllocationFacts,
+} from '../services/inventory-transactions.js'
+import {
+  claimIdempotency,
+  finalizeIdempotency,
+  fingerprintRequest,
+  isIdempotencyConflict,
+  readIdempotencyKey,
+  tryReplayIdempotency,
+} from '../utils/idempotency.js'
 
 const router = Router()
-
-// 报废写入（改 inventory.stock）：挂载层只 requirePermission('scraps','R')，
-// 写端点必须自带 W 守卫，否则持 scraps:R 者即可越权突变库存。仿 projects/outbound 模式。
 const requireScrapsWrite = requirePermission('scraps', 'W')
-
-// 排序白名单（受控列，杜绝 ORDER BY 注入）
 const SORT_COLUMNS: Record<string, string> = { createdAt: 'r.created_at', quantity: 'r.quantity' }
+
 function orderBy(sortField: unknown, sortOrder: unknown): string {
   const col = SORT_COLUMNS[String(sortField)] || 'r.created_at'
   const dir = String(sortOrder).toLowerCase() === 'asc' ? 'ASC' : 'DESC'
@@ -26,7 +39,6 @@ function generateNo(): string {
   return `SC-${date}-${timestamp}-${random}`
 }
 
-// 报废列表（筛选 + 排序 + 分页）
 router.get('/', (req, res) => {
   try {
     let { page = 1, pageSize = 20 } = req.query as any
@@ -34,7 +46,6 @@ router.get('/', (req, res) => {
     page = Math.max(1, Number(page) || 1)
     pageSize = Math.max(1, Math.min(100, Number(pageSize) || 20))
     const db = getDatabase()
-
     let where = 'r.is_deleted = 0'
     const params: any[] = []
     if (materialId) { where += ' AND r.material_id = ?'; params.push(materialId) }
@@ -42,32 +53,37 @@ router.get('/', (req, res) => {
     if (keyword) { where += ' AND (r.scrap_no LIKE ? OR m.name LIKE ?)'; params.push(`%${keyword}%`, `%${keyword}%`) }
     if (startDate) { where += ' AND r.created_at >= ?'; params.push(startDate) }
     if (endDate) { where += ' AND r.created_at <= ?'; params.push(`${endDate}T23:59:59`) }
-
     const count = (db.prepare(`
-      SELECT COUNT(*) as total FROM scrap_records r
+      SELECT COUNT(*) AS total FROM scrap_records r
       LEFT JOIN materials m ON r.material_id = m.id AND m.is_deleted = 0
       WHERE ${where}
     `).get(...params) as any)?.total || 0
     const offset = (page - 1) * pageSize
-
     const list = db.prepare(`
-      SELECT r.*, m.name as material_name, m.unit as material_unit
+      SELECT r.*, m.name AS material_name, m.unit AS material_unit
       FROM scrap_records r
       LEFT JOIN materials m ON r.material_id = m.id AND m.is_deleted = 0
       WHERE ${where}
       ${orderBy(sortField, sortOrder)}
       LIMIT ? OFFSET ?
     `).all(...params, pageSize, offset) as any[]
-
-    successList(res, list.map((r: any) => ({
-      id: r.id, scrapNo: r.scrap_no, materialId: r.material_id, materialName: r.material_name,
-      quantity: r.quantity, unit: r.material_unit, reason: r.reason, operator: r.operator,
-      status: r.status, remark: r.remark, createdAt: r.created_at,
+    successList(res, list.map((row) => ({
+      id: row.id,
+      scrapNo: row.scrap_no,
+      materialId: row.material_id,
+      materialName: row.material_name,
+      batchId: row.batch_id,
+      quantity: row.quantity,
+      unit: row.material_unit,
+      reason: row.reason,
+      operator: row.operator,
+      status: row.status,
+      remark: row.remark,
+      createdAt: row.created_at,
     })), page, pageSize, count)
   } catch (err: any) { error(res, err.message) }
 })
 
-// 报废统计（本月/件数/涉及物料/今日）
 router.get('/stats', (_req, res) => {
   try {
     const db = getDatabase()
@@ -82,89 +98,116 @@ router.get('/stats', (_req, res) => {
   } catch (err: any) { error(res, err.message) }
 })
 
-// 新增报废（物料退出库存 → 库存 −数量；库存不足则拒绝）
 router.post('/', requireScrapsWrite, (req, res) => {
   try {
-    const { materialId, quantity, reason, operator, remark } = req.body
+    const { materialId, batchId, quantity, reason, operator, remark } = req.body
     const qty = parseFinitePositiveNumber(quantity)
     if (!materialId || qty === null || !reason) {
       error(res, 'Missing or invalid fields', 'INVALID_PARAMETER', 400); return
     }
     const db = getDatabase()
-    const material = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(materialId) as any
-    if (!material) { error(res, '物料不存在或已删除', 'NOT_FOUND', 404); return }
-    const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-    if (!inv || inv.stock < qty) { error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return }
-
+    if (!db.prepare('SELECT id FROM materials WHERE id = ? AND is_deleted = 0').get(materialId)) {
+      error(res, 'Material not found', 'NOT_FOUND', 404); return
+    }
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = 'scrap:create'
+    const idemFingerprint = idemKey ? fingerprintRequest(req.body) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
     db.exec('BEGIN IMMEDIATE')
     try {
-      const lockedInv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any
-      const beforeStock = lockedInv ? parseFiniteNumber(lockedInv.stock) : null
-      const afterStock = beforeStock === null ? null : checkedSubtract(beforeStock, qty)
-      if (beforeStock === null || afterStock === null) {
-        db.exec('ROLLBACK')
-        error(res, '库存计算超出支持的数值范围', 'INVALID_PARAMETER', 400); return
-      }
-      if (afterStock < 0) {
-        db.exec('ROLLBACK')
-        error(res, 'Insufficient stock', 'STOCK_INSUFFICIENT', 422); return
-      }
-
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, operator || 'system')
       const id = uuidv4()
-      db.prepare('INSERT INTO scrap_records (id, scrap_no, material_id, quantity, reason, operator, remark) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(id, generateNo(), materialId, qty, reason, operator || 'system', remark || null)
-      db.prepare('UPDATE inventory SET stock = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(afterStock, materialId)
-
-      const afterCheck = (db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(materialId) as any)?.stock
-      if (afterCheck < 0) {
-        db.exec('ROLLBACK')
-        error(res, '库存不能为负数', 'STOCK_NEGATIVE', 422)
-        return
-      }
-
+      const plan = planInventoryDeductions(db, [{
+        materialId,
+        quantity: qty,
+        pinnedBatchId: batchId || null,
+        ownerLineId: id,
+      }])
+      const exactBatchId = plan.allocations.length === 1 ? plan.allocations[0].batchId : null
       db.prepare(`
-        INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
-        VALUES (?, 'scrap', ?, ?, ?, ?, ?, 'scrap', ?)
-      `).run(uuidv4(), materialId, -qty, beforeStock, afterStock, id, operator || 'system')
-
+        INSERT INTO scrap_records (id, scrap_no, material_id, batch_id, quantity, reason, operator, remark)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, generateNo(), materialId, exactBatchId, qty, reason, operator || 'system', remark || null)
+      applyInventoryPlan(db, plan)
+      replaceAllocationFacts(db, { operationKind: 'scrap', ownerId: id, direction: 'out', allocations: plan.allocations })
+      for (const allocation of plan.allocations) {
+        db.prepare(`
+          INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator)
+          VALUES (?, 'scrap', ?, ?, ?, ?, ?, 'scrap', ?)
+        `).run(uuidv4(), materialId, -allocation.quantity, allocation.inventoryBefore, allocation.inventoryAfter, id, operator || 'system')
+      }
+      responseEnvelope = buildSuccessEnvelope({ id }, 'Scrap created')
+      if (idemKey) finalizeIdempotency(db, idemKey, 201, responseEnvelope)
       db.exec('COMMIT')
-      success(res, { id }, 'Scrap created')
-    } catch (e: any) {
+      res.status(201).json(responseEnvelope)
+    } catch (err) {
       db.exec('ROLLBACK')
-      throw e
+      if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+      throw err
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const failure = inventoryErrorResponse(err)
+    if (failure) { error(res, failure.message, failure.code, failure.status); return }
+    error(res, err.message)
+  }
 })
 
-// 撤销报废（回滚库存 +数量）
 router.delete('/:id', requireScrapsWrite, (req, res) => {
   try {
     const { id } = req.params
     const db = getDatabase()
-    const record = db.prepare('SELECT * FROM scrap_records WHERE id = ? AND is_deleted = 0').get(id) as any
-    if (!record) { error(res, '记录不存在或已删除', 'NOT_FOUND', 404); return }
-
+    const idemKey = readIdempotencyKey(req)
+    const idemScope = `scrap:delete:${id}`
+    const idemFingerprint = idemKey ? fingerprintRequest(req.body || {}) : ''
+    if (tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+    if (!db.prepare('SELECT id FROM scrap_records WHERE id = ? AND is_deleted = 0').get(id)) {
+      error(res, 'Scrap record not found', 'NOT_FOUND', 404); return
+    }
+    let responseEnvelope: ReturnType<typeof buildSuccessEnvelope> | null = null
     db.exec('BEGIN IMMEDIATE')
     try {
+      if (idemKey) claimIdempotency(db, idemKey, idemScope, idemFingerprint, req.body?.operator || 'system')
+      if (!db.prepare('SELECT id FROM scrap_records WHERE id = ? AND is_deleted = 0').get(id)) {
+        error(res, 'Scrap record changed before cancellation', 'CONCURRENT_MODIFICATION', 409)
+        db.exec('ROLLBACK')
+        return
+      }
+      const facts = listActiveAllocationFacts(db, 'scrap', id)
+      if (facts.length === 0) {
+        error(res, 'Scrap allocation is unavailable', 'ALLOCATION_NOT_FOUND', 409)
+        db.exec('ROLLBACK')
+        return
+      }
+      const plan = planExactInventoryAdditions(db, facts.map((fact) => ({
+        materialId: fact.material_id,
+        batchId: fact.batch_id,
+        quantity: fact.quantity,
+        ownerLineId: fact.id,
+      })))
       db.prepare('UPDATE scrap_records SET is_deleted = 1 WHERE id = ?').run(id)
-
-      const inv = db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(record.material_id) as any
-      const beforeStock = inv?.stock || 0
-      const afterStock = beforeStock + record.quantity
-      db.prepare('UPDATE inventory SET stock = ?, update_time = CURRENT_TIMESTAMP WHERE material_id = ?').run(afterStock, record.material_id)
-
-      db.prepare(`
-        INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
-        VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'scrap_cancel', ?, '撤销报废记录')
-      `).run(uuidv4(), record.material_id, record.quantity, beforeStock, afterStock, id, req.body?.operator || 'system')
-
+      applyInventoryPlan(db, plan)
+      markAllocationFactsReversed(db, 'scrap', id)
+      for (const allocation of plan.allocations) {
+        db.prepare(`
+          INSERT INTO stock_logs (id, type, material_id, quantity, before_stock, after_stock, related_id, related_type, operator, remark)
+          VALUES (?, 'cancel', ?, ?, ?, ?, ?, 'scrap_cancel', ?, 'scrap cancellation')
+        `).run(uuidv4(), allocation.materialId, allocation.quantity, allocation.inventoryBefore, allocation.inventoryAfter, id, req.body?.operator || 'system')
+      }
+      responseEnvelope = buildSuccessEnvelope(null, 'Scrap cancelled')
+      if (idemKey) finalizeIdempotency(db, idemKey, 200, responseEnvelope)
       db.exec('COMMIT')
-      success(res, null, '报废记录已撤销')
-    } catch (e: any) {
+      res.status(200).json(responseEnvelope)
+    } catch (err) {
       db.exec('ROLLBACK')
-      throw e
+      if (idemKey && isIdempotencyConflict(err) && tryReplayIdempotency(db, res, idemKey, idemScope, idemFingerprint)) return
+      throw err
     }
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    const failure = inventoryErrorResponse(err)
+    if (failure) { error(res, failure.message, failure.code, failure.status); return }
+    error(res, err.message)
+  }
 })
 
 export default router

@@ -439,10 +439,64 @@ export function initializeDatabase(): void {
     CREATE TABLE IF NOT EXISTS locations (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'shelf', parent_id TEXT, zone TEXT NOT NULL, shelf TEXT, position TEXT, capacity INTEGER DEFAULT 999999, used INTEGER DEFAULT 0, status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT, updated_by TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)
   `)
   database.exec(`
-    CREATE TABLE IF NOT EXISTS inventory (id TEXT PRIMARY KEY, material_id TEXT NOT NULL UNIQUE, stock DECIMAL(18, 4) NOT NULL DEFAULT 0, locked_stock DECIMAL(18, 4) NOT NULL DEFAULT 0, location_id TEXT, last_inbound_id TEXT, last_inbound_date TEXT, last_outbound_id TEXT, last_outbound_date TEXT, update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
+    CREATE TABLE IF NOT EXISTS inventory (
+      id TEXT PRIMARY KEY,
+      material_id TEXT NOT NULL UNIQUE,
+      stock DECIMAL(18, 4) NOT NULL DEFAULT 0
+        CHECK (
+          typeof(stock) IN ('integer', 'real')
+          AND stock >= 0
+          AND stock <= 900719925474.0991
+          AND abs(stock * 10000 - round(stock * 10000)) < 0.000001
+        ),
+      locked_stock DECIMAL(18, 4) NOT NULL DEFAULT 0
+        CHECK (
+          typeof(locked_stock) IN ('integer', 'real')
+          AND locked_stock >= 0
+          AND locked_stock <= 900719925474.0991
+          AND abs(locked_stock * 10000 - round(locked_stock * 10000)) < 0.000001
+        ),
+      location_id TEXT,
+      last_inbound_id TEXT,
+      last_inbound_date TEXT,
+      last_outbound_id TEXT,
+      last_outbound_date TEXT,
+      update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
   `)
   database.exec(`
-    CREATE TABLE IF NOT EXISTS batches (id TEXT PRIMARY KEY, material_id TEXT NOT NULL, batch_no TEXT NOT NULL, quantity DECIMAL(18, 4) NOT NULL DEFAULT 0, remaining DECIMAL(18, 4) NOT NULL DEFAULT 0, production_date TEXT, expiry_date TEXT, inbound_id TEXT NOT NULL, inbound_price DECIMAL(18, 4) DEFAULT 0, supplier_id TEXT, status INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(material_id, batch_no))
+    CREATE TABLE IF NOT EXISTS batches (
+      id TEXT PRIMARY KEY,
+      material_id TEXT NOT NULL,
+      batch_no TEXT NOT NULL,
+      quantity DECIMAL(18, 4) NOT NULL DEFAULT 0
+        CHECK (
+          typeof(quantity) IN ('integer', 'real')
+          AND quantity >= 0
+          AND quantity <= 900719925474.0991
+          AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
+        ),
+      remaining DECIMAL(18, 4) NOT NULL DEFAULT 0
+        CHECK (
+          typeof(remaining) IN ('integer', 'real')
+          AND remaining >= 0
+          AND remaining <= 900719925474.0991
+          AND abs(remaining * 10000 - round(remaining * 10000)) < 0.000001
+        ),
+      production_date TEXT,
+      expiry_date TEXT,
+      inbound_id TEXT NOT NULL,
+      inbound_price DECIMAL(18, 4) DEFAULT 0,
+      supplier_id TEXT,
+      status INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK (remaining <= quantity),
+      CHECK ((remaining = 0 AND status = 0) OR (remaining > 0 AND status = 1)),
+      UNIQUE(material_id, batch_no)
+    )
   `)
 
   // 兼容旧数据库：移除 batches.expiry_date 的 NOT NULL 约束
@@ -454,12 +508,27 @@ export function initializeDatabase(): void {
         BEGIN TRANSACTION;
         CREATE TABLE batches_new (
           id TEXT PRIMARY KEY, material_id TEXT NOT NULL, batch_no TEXT NOT NULL,
-          quantity DECIMAL(18, 4) NOT NULL DEFAULT 0, remaining DECIMAL(18, 4) NOT NULL DEFAULT 0,
+          quantity DECIMAL(18, 4) NOT NULL DEFAULT 0
+            CHECK (
+              typeof(quantity) IN ('integer', 'real')
+              AND quantity >= 0
+              AND quantity <= 900719925474.0991
+              AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
+            ),
+          remaining DECIMAL(18, 4) NOT NULL DEFAULT 0
+            CHECK (
+              typeof(remaining) IN ('integer', 'real')
+              AND remaining >= 0
+              AND remaining <= 900719925474.0991
+              AND abs(remaining * 10000 - round(remaining * 10000)) < 0.000001
+            ),
           production_date TEXT, expiry_date TEXT, inbound_id TEXT NOT NULL,
           inbound_price DECIMAL(18, 4) DEFAULT 0, supplier_id TEXT,
-          status INTEGER NOT NULL DEFAULT 1,
+          status INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)),
           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CHECK (remaining <= quantity),
+          CHECK ((remaining = 0 AND status = 0) OR (remaining > 0 AND status = 1)),
           UNIQUE(material_id, batch_no)
         );
         INSERT INTO batches_new SELECT * FROM batches;
@@ -567,6 +636,51 @@ export function initializeDatabase(): void {
   // status_code / response_body 在写入事务内随首次成功结果一并落库（claim+finalize 同事务，保证已提交行必为完整结果）。
   database.exec(`
     CREATE TABLE IF NOT EXISTS idempotency_keys (idempotency_key TEXT PRIMARY KEY, scope TEXT NOT NULL, request_fingerprint TEXT NOT NULL, status_code INTEGER, response_body TEXT, operator TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS inventory_transaction_allocations (
+      id TEXT PRIMARY KEY,
+      operation_kind TEXT NOT NULL
+        CHECK (operation_kind IN ('inbound', 'outbound', 'return', 'scrap', 'supplier_return')),
+      owner_id TEXT NOT NULL,
+      owner_line_id TEXT,
+      material_id TEXT NOT NULL,
+      batch_id TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK (direction IN ('in', 'out')),
+      quantity DECIMAL(18, 4) NOT NULL
+        CHECK (
+          typeof(quantity) IN ('integer', 'real')
+          AND quantity > 0
+          AND quantity <= 900719925474.0991
+          AND abs(quantity * 10000 - round(quantity * 10000)) < 0.000001
+        ),
+      source_allocation_id TEXT,
+      is_reversed INTEGER NOT NULL DEFAULT 0 CHECK (is_reversed IN (0, 1)),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      reversed_at DATETIME,
+      CHECK (
+        (is_reversed = 0 AND reversed_at IS NULL)
+        OR (is_reversed = 1 AND reversed_at IS NOT NULL)
+      ),
+      UNIQUE(operation_kind, owner_id, owner_line_id, batch_id)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_inventory_allocations_owner
+    ON inventory_transaction_allocations(operation_kind, owner_id, is_reversed)
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_inventory_allocations_source
+    ON inventory_transaction_allocations(source_allocation_id, is_reversed)
+  `)
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_allocations_identity
+    ON inventory_transaction_allocations(
+      operation_kind,
+      owner_id,
+      COALESCE(owner_line_id, ''),
+      batch_id
+    )
   `)
   database.exec(`
     CREATE TABLE IF NOT EXISTS alert_rules (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, threshold INTEGER, threshold_days INTEGER, enabled INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)

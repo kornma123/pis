@@ -51,37 +51,55 @@ async function inbound(app: any, token: string, f: any, qty: number) {
   expect(res.status).toBe(201)
 }
 
+async function returnSource(app: any, token: string, f: any, qty: number): Promise<string> {
+  const outbound = await request(app).post('/api/v1/outbound').set('Authorization', `Bearer ${token}`).send({
+    type: 'direct',
+    items: [{ materialId: f.materialId, quantity: qty, usage: 'external' }],
+  })
+  expect(outbound.status).toBe(201)
+  const sources = await request(app).get(`/api/v1/returns?sourceMaterialId=${f.materialId}`)
+    .set('Authorization', `Bearer ${token}`)
+  expect(sources.status).toBe(200)
+  const source = (sources.body.data as any[]).find((row) => row.outboundId === outbound.body.data.id)
+  expect(source).toBeTruthy()
+  return source.allocationId
+}
+
 describe('Lane C · 退库(returns) 语义：物料退回仓库 → 库存 +数量', () => {
   let app: any, db: any, token: string
   beforeAll(async () => { ({ app, db } = await getApp()); token = await loginAdmin(app) })
 
   it('RET-01 退库使库存增加（100 + 5 = 105）', async () => {
     const f = seed(db); await inbound(app, token, f, 100)
-    expect(inv(db, f.materialId).stock).toBe(100)
+    const sourceAllocationId = await returnSource(app, token, f, 10)
+    expect(inv(db, f.materialId).stock).toBe(90)
     const res = await request(app).post('/api/v1/returns').set('Authorization', `Bearer ${token}`)
-      .send({ materialId: f.materialId, quantity: 5, reason: 'excess' })
+      .send({ materialId: f.materialId, sourceAllocationId, quantity: 5, reason: 'excess' })
     expect([200, 201]).toContain(res.status)
     expect(res.body.success).toBe(true)
-    expect(inv(db, f.materialId).stock).toBe(105)
+    expect(inv(db, f.materialId).stock).toBe(95)
   })
 
   it('RET-02 撤销退库对称扣回（105 − 5 = 100）', async () => {
     const f = seed(db); await inbound(app, token, f, 100)
+    const sourceAllocationId = await returnSource(app, token, f, 10)
     const c = await request(app).post('/api/v1/returns').set('Authorization', `Bearer ${token}`)
-      .send({ materialId: f.materialId, quantity: 5, reason: 'excess' })
+      .send({ materialId: f.materialId, sourceAllocationId, quantity: 5, reason: 'excess' })
     const id = c.body.data.id
-    expect(inv(db, f.materialId).stock).toBe(105)
+    expect(inv(db, f.materialId).stock).toBe(95)
     const d = await request(app).delete(`/api/v1/returns/${id}`).set('Authorization', `Bearer ${token}`)
     expect(d.status).toBe(200)
-    expect(inv(db, f.materialId).stock).toBe(100)
+    expect(inv(db, f.materialId).stock).toBe(90)
   })
 
   it('RET-03 无上限：可退超过当前库存（不再因库存不足被拒）', async () => {
     const f = seed(db); await inbound(app, token, f, 10)
+    const sourceAllocationId = await returnSource(app, token, f, 2)
     const res = await request(app).post('/api/v1/returns').set('Authorization', `Bearer ${token}`)
-      .send({ materialId: f.materialId, quantity: 999, reason: 'excess' })
-    expect([200, 201]).toContain(res.status)
-    expect(inv(db, f.materialId).stock).toBe(1009)
+      .send({ materialId: f.materialId, sourceAllocationId, quantity: 3, reason: 'excess' })
+    expect(res.status).toBe(422)
+    expect(res.body.error.code).toBe('RETURN_SOURCE_EXHAUSTED')
+    expect(inv(db, f.materialId).stock).toBe(8)
   })
 
   it('RET-04 无库存行时退库自动新建库存行（0 + 7 = 7）', async () => {
@@ -89,14 +107,15 @@ describe('Lane C · 退库(returns) 语义：物料退回仓库 → 库存 +数�
     expect(inv(db, f.materialId)).toBeUndefined()
     const res = await request(app).post('/api/v1/returns').set('Authorization', `Bearer ${token}`)
       .send({ materialId: f.materialId, quantity: 7, reason: 'excess' })
-    expect([200, 201]).toContain(res.status)
-    expect(inv(db, f.materialId).stock).toBe(7)
+    expect(res.status).toBe(400)
+    expect(inv(db, f.materialId)).toBeUndefined()
   })
 
   it('RET-05 列表返回物料名 + 撤销后不在列表', async () => {
     const f = seed(db); await inbound(app, token, f, 100)
+    const sourceAllocationId = await returnSource(app, token, f, 3)
     await request(app).post('/api/v1/returns').set('Authorization', `Bearer ${token}`)
-      .send({ materialId: f.materialId, quantity: 3, reason: 'wrong_item' })
+      .send({ materialId: f.materialId, sourceAllocationId, quantity: 3, reason: 'wrong_item' })
     const list = await request(app).get('/api/v1/returns?pageSize=100').set('Authorization', `Bearer ${token}`)
     const row = (list.body.data.list as any[]).find(r => r.materialId === f.materialId)
     expect(row).toBeTruthy()
@@ -191,8 +210,9 @@ describe('Lane C · 列表 排序白名单 / 过滤 / 统计', () => {
   beforeAll(async () => { ({ app, db } = await getApp()); token = await loginAdmin(app) })
 
   async function mkReturn(f: any, qty: number, reason: string) {
+    const sourceAllocationId = await returnSource(app, token, f, qty)
     await request(app).post('/api/v1/returns').set('Authorization', `Bearer ${token}`)
-      .send({ materialId: f.materialId, quantity: qty, reason })
+      .send({ materialId: f.materialId, sourceAllocationId, quantity: qty, reason })
   }
 
   it('LST-01 退库按数量升序/降序排序（白名单 quantity）', async () => {

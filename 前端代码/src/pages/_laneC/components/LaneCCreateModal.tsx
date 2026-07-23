@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
-import type { LaneCConfig, LaneCForm, Material, Location } from '../types'
+import type { LaneCConfig, LaneCForm, Material, Location, ReturnSourceOption } from '../types'
 
 interface Props {
   open: boolean
@@ -18,9 +19,41 @@ const control = 'w-full h-10 px-3 bg-white text-gray-900 border border-gray-300 
 const req = <span className="text-red-500">*</span>
 
 export default function LaneCCreateModal({ open, config, form, setForm, materials, locations, submitting, onClose, onSubmit }: Props) {
-  if (!open) return null
   const set = (patch: Partial<LaneCForm>) => setForm(prev => ({ ...prev, ...patch }))
   const isTransfer = config.createMode === 'transfer'
+  const isReturn = config.module === 'returns'
+  const getSources = config.api.getSources
+  const [returnSources, setReturnSources] = useState<ReturnSourceOption[]>([])
+  const [sourcesLoading, setSourcesLoading] = useState(false)
+  const [sourcesError, setSourcesError] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    if (!open || !isReturn || !form.materialId || !getSources) {
+      setReturnSources([])
+      setSourcesError(false)
+      setSourcesLoading(false)
+      return () => { active = false }
+    }
+    setSourcesLoading(true)
+    setSourcesError(false)
+    getSources(form.materialId)
+      .then((sources) => {
+        if (active) setReturnSources(sources)
+      })
+      .catch(() => {
+        if (active) {
+          setReturnSources([])
+          setSourcesError(true)
+        }
+      })
+      .finally(() => {
+        if (active) setSourcesLoading(false)
+      })
+    return () => { active = false }
+  }, [open, isReturn, form.materialId, getSources])
+
+  if (!open) return null
 
   return (
     <Modal onClose={onClose} title={config.createLabel} size="lg">
@@ -31,13 +64,42 @@ export default function LaneCCreateModal({ open, config, form, setForm, material
 
         <div>
           <label className={label}>物料 {req}</label>
-          <select value={form.materialId} onChange={e => set({ materialId: e.target.value })} className={control}>
+          <select value={form.materialId} onChange={e => set({ materialId: e.target.value, sourceAllocationId: '' })} className={control}>
             <option value="">请选择</option>
             {materials.map(m => (
               <option key={m.id} value={m.id}>{m.name}（{m.code}）· 库存 {m.stock} {m.unit}</option>
             ))}
           </select>
         </div>
+
+        {isReturn && (
+          <div>
+            <label className={label}>原出库批次来源 {req}</label>
+            <select
+              value={form.sourceAllocationId}
+              onChange={e => set({ sourceAllocationId: e.target.value })}
+              className={control}
+              disabled={!form.materialId || sourcesLoading || sourcesError}
+            >
+              <option value="">
+                {!form.materialId
+                  ? '请先选择物料'
+                  : sourcesLoading
+                    ? '正在加载可退来源…'
+                    : sourcesError
+                      ? '来源加载失败，请重试'
+                      : returnSources.length === 0
+                        ? '没有可退的原出库来源'
+                        : '请选择原出库批次'}
+              </option>
+              {returnSources.map(source => (
+                <option key={source.allocationId} value={source.allocationId}>
+                  {source.outboundNo} · 批次 {source.batchNo} · 可退 {source.availableQuantity}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <div>

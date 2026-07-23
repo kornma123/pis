@@ -42,6 +42,17 @@ export interface ReasonOption {
   label: string
 }
 
+export interface ReturnSourceOption {
+  allocationId: string
+  outboundId: string
+  outboundNo: string
+  batchId: string
+  batchNo: string
+  quantity: number
+  availableQuantity: number
+  createdAt: string
+}
+
 // 库存影响标注（据实说清方向，呼应讨论循环确认的语义）
 export interface StockEffect {
   text: string // 如 "库存 +数量"
@@ -70,6 +81,7 @@ export interface LaneCConfig {
   api: {
     getList: (params: any) => Promise<any>
     getStats: () => Promise<any>
+    getSources?: (materialId: string) => Promise<ReturnSourceOption[]>
     create: (form: LaneCForm) => Promise<any>
     remove: (id: string) => Promise<any>
   }
@@ -80,6 +92,7 @@ export interface LaneCForm {
   materialId: string
   quantity: number
   reason: string
+  sourceAllocationId: string
   batchNo: string
   fromLocationId: string
   toLocationId: string
@@ -87,7 +100,7 @@ export interface LaneCForm {
 }
 
 export const emptyForm: LaneCForm = {
-  materialId: '', quantity: 1, reason: '', batchNo: '', fromLocationId: '', toLocationId: '', remark: '',
+  materialId: '', quantity: 1, reason: '', sourceAllocationId: '', batchNo: '', fromLocationId: '', toLocationId: '', remark: '',
 }
 
 export type { Material, Location, LaneCStats }

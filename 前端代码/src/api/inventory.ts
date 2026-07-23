@@ -87,6 +87,17 @@ export interface LaneCStats {
   todayCount: number
 }
 
+export interface ReturnSourceOption {
+  allocationId: string
+  outboundId: string
+  outboundNo: string
+  batchId: string
+  batchNo: string
+  quantity: number
+  availableQuantity: number
+  createdAt: string
+}
+
 export const scrapApi = {
   getList: (params?: LaneCListParams) =>
     request.get<PaginationData<any>>('/scraps', { params }),
@@ -103,8 +114,10 @@ export const returnApi = {
     request.get<PaginationData<any>>('/returns', { params }),
   getStats: () =>
     request.get<LaneCStats>('/returns/stats'),
-  create: (data: { materialId: string; quantity: number; reason: string; operator?: string; remark?: string }) =>
-    request.post<any>('/returns', data),
+  getSources: (materialId: string) =>
+    request.get<ReturnSourceOption[]>('/returns', { params: { sourceMaterialId: materialId } }),
+  create: (data: { materialId: string; sourceAllocationId: string; quantity: number; reason: string; operator?: string; remark?: string }, idempotencyKey: string = genIdempotencyKey()) =>
+    request.post<any>('/returns', data, { headers: { 'Idempotency-Key': idempotencyKey } }),
   delete: (id: string) =>
     request.delete(`/returns/${id}`),
 }
