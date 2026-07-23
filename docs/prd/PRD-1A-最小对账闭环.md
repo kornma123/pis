@@ -1,8 +1,8 @@
 # PRD-1A：最小对账闭环
 
-版本：v1.2（LOC-004A G0 决策冻结候选，2026-07-23）
+版本：v1.2（LOC-004A G0 PM 定稿，2026-07-23）
 
-> **状态**：`PRD_CANDIDATE / AWAITING_PM_ACCEPTANCE`；未经 PM 对固定 commit 明确接受，不得写成 `PM_APPROVED`。
+> **状态**：`PM_APPROVED`；仅结束 LOC-004A PRD 内容闸，不构成 LOC-004B 实现、合并、发布或生产授权。
 >
 > **主 Issue**：GitHub Issue #4（LOC-004A）
 >
@@ -12,11 +12,11 @@
 >
 > **数据边界**：PUBLIC 脱敏规格；只引用仓库内脱敏 fixture 与 golden 登记，不引入真实 DB 或原始 PII。
 >
-> **PM 定稿证据**：无（等待 PM 接受本候选 commit）。
+> **PM 定稿证据**：PM 已在委托主会话明确完成复核并授权合并；GitHub PR #58 的 AI-assisted 结构化评论绑定最终 PR head。
 
 > 对应最终路线图 §12。目标不是完整院级盈亏关账，而是用东安、赣州、平泉三个真实样本跑通“上传 -> 规范行 -> 分类/质量标记 -> 派生账本 -> 最小差异包”的最小对账闭环，并用和睦家黄金值守住病例级收入链路。
 >
-> 本轮变化：把原 §7 三项未决选择改为直接、可测试的 Decided 合同，并冻结事实对象、世代键、source readiness、幂等、关账边界和三样本 expected。LOC-004A 只结束 PRD 内容闸候选，不实现 LOC-004B。
+> 本轮变化：把原 §7 三项未决选择改为直接、可测试的 Decided 合同，并冻结事实对象、世代键、source readiness、幂等、关账边界和三样本 expected。LOC-004A 只结束 PRD 内容闸，不实现 LOC-004B。
 
 ## 1. Executive Summary
 
@@ -242,7 +242,7 @@ Phase 1A 先用固定 seed 规则覆盖三样本，productize 时再由逐院配
 
 ## 9. LOC-004A 退出与下游边界
 
-- 本 commit/PR 的状态上限是 `PRD_CANDIDATE / AWAITING_PM_ACCEPTANCE`。只有 PM 对固定 commit 明确接受后，LOC-004A 才能记为“PRD 内容闸结束”；沉默、PR 创建、checks 通过或 merge 都不替代 PM 接受。
+- 本 commit/PR 的状态是 `PM_APPROVED`：PM 已对本轮内容明确完成复核并授权合并，LOC-004A PRD 内容闸结束；该接受不替代 required checks、正式合并结果或任何下游实现/发布授权。
 - LOC-004A 不等于 LOC-004B 已实现，不等于 PR 已合并，不等于 mockup/实现授权，不等于数据库迁移、发布或生产上线。
 - LOC-004B 仍需以合并后的本 PRD 固定 SHA、PM 确认的工程 Issue、新一轮唯一 ownership/develop preflight 为入口；必须另做 schema、迁移、路由、消费者、RED→GREEN、变异和真跑验收。
 - 当前规格没有剩余会改变 schema、财务口径或三样本 expected 的未决选择；新事实若推翻任一 decided contract，恢复为待修订并重新过 PM 闸，不在实现中静默改写。
