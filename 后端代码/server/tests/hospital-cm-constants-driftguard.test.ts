@@ -30,7 +30,7 @@ import { sha256 } from '../src/utils/hospital-cm-foundation-probes.js'
 
 describe('CM 引擎常量（改 = 立法）', () => {
   it('院级贡献毛利业务公式版本钉死；计算/上卷/成本装载语义变化必须 bump', () => {
-    expect(HOSPITAL_CM_FORMULA_VERSION).toBe('2026-07-12.a')
+    expect(HOSPITAL_CM_FORMULA_VERSION).toBe('2026-07-20.a')
   })
   it('计算与上卷的规范正反例行为签名钉死；实现变了但忘记 bump 也会先红灯', () => {
     expect(sha256(currentHospitalCmFormulaBehaviorArtifact()))

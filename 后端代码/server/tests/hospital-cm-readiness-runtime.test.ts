@@ -866,6 +866,39 @@ describe('hospital-cm readiness A · 持久证据与自动失效', () => {
     expect(after.foundationGatesGreen.period_key).toBe(false)
   })
 
+  it('期间键允许同一 partner_id + case_no 跨合法月份，并保留跨月审计计数', async () => {
+    const db = await getDb()
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES ('P-HCM-XMKEY', 'P-HCM-XMKEY', '跨月期间键测试院', 1)`).run()
+    db.prepare(`
+      INSERT INTO case_revenue
+        (id, case_no, partner_id, gross_amount, net_amount, lab_revenue,
+         out_revenue, discount_rate, revenue_source, service_month, line_count)
+      VALUES
+        ('CR-HCM-XMKEY-06', 'CASE-HCM-XMKEY', 'P-HCM-XMKEY', 100, 80, 80,
+         0, 0.8, 'statement', '2026-06', 1),
+        ('CR-HCM-XMKEY-07', 'CASE-HCM-XMKEY', 'P-HCM-XMKEY', 200, 160, 160,
+         0, 0.8, 'statement', '2026-07', 1)
+    `).run()
+    db.prepare(`
+      INSERT INTO lis_cases (id, case_no, partner_id)
+      VALUES ('LC-HCM-XMKEY', 'CASE-HCM-XMKEY', 'P-HCM-XMKEY')
+    `).run()
+    db.prepare(`
+      INSERT INTO lis_case_markers
+        (id, case_no, partner_id, marker_name, advice_type)
+      VALUES ('LM-HCM-XMKEY', 'CASE-HCM-XMKEY', 'P-HCM-XMKEY', 'CK7', 'Y000001')
+    `).run()
+
+    const run = recordHospitalCmFoundationProbeRun(db, {
+      triggeredByUserId: 'USER-001', triggeredByUsername: 'admin', reasonCode: 'MONTHLY_REVIEW', now: NOW,
+    })
+    expect(run.checks.find((check) => check.key === 'period_key')).toMatchObject({
+      met: true,
+      resultCode: 'PASSED',
+      summary: { crossMonthReuseRows: 1 },
+    })
+  })
+
   it('期间键显式拒绝 NULL 月份', async () => {
     const db = await getDb()
     db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES ('P-HCM-BADKEY', 'P-HCM-BADKEY', '坏期间键测试院', 1)`).run()
