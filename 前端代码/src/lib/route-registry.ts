@@ -113,6 +113,12 @@ export type RouteStatus =
 export interface RouteEntry {
   /** 路由路径（须与 App.tsx 的 <Route path> 一一对应）。 */
   path: string
+  /**
+   * 路由状态（**必填·单一合同**，∈ RouteStatus 封闭枚举）。active=有顶层导航入口
+   * （label/icon/navGroup 必填）；headless=无导航（owner+due+reason 必填·fail-closed）；
+   * deprecated=计划退役（reason 必填）。check-route-nav.cjs 与快照测试共同钉死本合同。
+   */
+  status: RouteStatus
   /** 侧栏文案（active 必填；headless/deprecated 无导航、可省）。 */
   label?: string
   /** 侧栏图标（active 必填）。 */
