@@ -57,10 +57,18 @@ const config: LaneCConfig = {
   api: {
     getList: (params) => returnApi.getList(params),
     getStats: () => returnApi.getStats(),
-    create: (form) => returnApi.create({ materialId: form.materialId, quantity: form.quantity, reason: form.reason, remark: form.remark || undefined }),
+    getSources: (materialId) => returnApi.getSources(materialId),
+    create: (form) => returnApi.create({
+      materialId: form.materialId,
+      sourceAllocationId: form.sourceAllocationId,
+      quantity: form.quantity,
+      reason: form.reason,
+      remark: form.remark || undefined,
+    }),
     remove: (id) => returnApi.delete(id),
   },
   validateCreate: (form) => {
+    if (form.materialId && !form.sourceAllocationId) return '请选择原出库批次来源'
     if (!form.materialId) return '请选择物料'
     if (!form.quantity || form.quantity <= 0) return '请填写正确的退库数量'
     if (!form.reason) return '请选择退库原因'

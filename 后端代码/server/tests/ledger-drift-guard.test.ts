@@ -134,20 +134,38 @@ describe('出库 HTTP 集成：缺批次绝不静默 0 + 落漂移告警', () =>
     expect(Number(itemOf(mat).unit_cost)).toBeCloseTo(21, 4)
     expect(driftExceptionCount(mat)).toBe(0)
   })
-  it('LD-I2 漂移出库(有库存无批次·物料基准价8) → unit_cost=8(非0) + 落 1 条 ledger_drift 告警', async () => {
+  it('LD-I2 有库存无可证明批次 → 稳定 fail-closed 且业务/流水/幂等零 partial', async () => {
     const mat = seed({ stock: 10, materialPrice: 8, batchPrice: null })
-    const res = await outbound(mat, 5)
-    expect(res.body.success).toBe(true)
-    const it = itemOf(mat)
-    expect(Number(it.unit_cost)).toBeCloseTo(8, 4) // 核心不变量：绝不静默 0
-    expect(Number(it.total_cost)).toBeCloseTo(40, 4)
-    expect(it.batch_id).toBeNull()
-    expect(driftExceptionCount(mat)).toBe(1)
+    const key = `LD-I2-${Date.now()}`
+    const res = await request(app).post('/api/v1/outbound')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', key)
+      .send({ type: 'project', items: [{ materialId: mat, quantity: 5 }], operator: 'test' })
+    expect(res.status).toBe(409)
+    expect(res.body).toMatchObject({ success: false, error: { code: 'INVENTORY_LEDGER_CORRUPT' } })
+    expect(db.prepare('SELECT COUNT(*) c FROM outbound_items WHERE material_id = ?').get(mat).c).toBe(0)
+    expect(db.prepare('SELECT COUNT(*) c FROM outbound_records WHERE id IN (SELECT outbound_id FROM outbound_items WHERE material_id = ?)').get(mat).c).toBe(0)
+    expect(db.prepare('SELECT COUNT(*) c FROM stock_logs WHERE material_id = ?').get(mat).c).toBe(0)
+    expect(db.prepare('SELECT COUNT(*) c FROM idempotency_keys WHERE idempotency_key = ?').get(key).c).toBe(0)
+    expect(driftExceptionCount(mat)).toBe(0)
+    expect(Number(db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(mat).stock)).toBe(10)
   })
-  it('LD-I3 漂移出库回归旧病：unit_cost 不得为 0（有价格来源时）', async () => {
+  it('LD-I3 无 eligible 正批次时不以价格兜底伪造成功，且重试仍零 partial', async () => {
     const mat = seed({ stock: 10, materialPrice: 6, batchPrice: null })
-    await outbound(mat, 3)
-    expect(Number(itemOf(mat).unit_cost)).not.toBe(0)
+    const key = `LD-I3-${Date.now()}`
+    const send = () => request(app).post('/api/v1/outbound')
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', key)
+      .send({ type: 'project', items: [{ materialId: mat, quantity: 3 }], operator: 'test' })
+    const first = await send()
+    const retry = await send()
+    expect([first.status, retry.status]).toEqual([409, 409])
+    expect(first.body.error.code).toBe('INVENTORY_LEDGER_CORRUPT')
+    expect(retry.body.error.code).toBe('INVENTORY_LEDGER_CORRUPT')
+    expect(db.prepare('SELECT COUNT(*) c FROM outbound_items WHERE material_id = ?').get(mat).c).toBe(0)
+    expect(db.prepare('SELECT COUNT(*) c FROM stock_logs WHERE material_id = ?').get(mat).c).toBe(0)
+    expect(db.prepare('SELECT COUNT(*) c FROM idempotency_keys WHERE idempotency_key = ?').get(key).c).toBe(0)
+    expect(Number(db.prepare('SELECT stock FROM inventory WHERE material_id = ?').get(mat).stock)).toBe(10)
   })
   it('LD-I4 有活跃批次但零价（真赠品）→ unit_cost=0、无 ledger_drift 假告警（对抗复核 D1）', async () => {
     const mat = seed({ stock: 10, batchPrice: 0 }) // 活跃批次 remaining=10、inbound_price=0
