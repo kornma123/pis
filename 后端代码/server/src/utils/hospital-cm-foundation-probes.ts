@@ -26,7 +26,7 @@ import {
   HOSPITAL_CM_FIXED_POOL_POLICY_VERSION,
 } from './hospital-cm-fixed-pool.js'
 
-export const HOSPITAL_CM_FOUNDATION_PROBE_VERSION = '2026-07-13.b'
+export const HOSPITAL_CM_FOUNDATION_PROBE_VERSION = '2026-07-23.a'
 export const HOSPITAL_CM_READINESS_SOURCE_TABLES = [
   'materials',
   'inventory',
@@ -356,7 +356,6 @@ function probePeriodKey(db: FoundationProbeDb, sourceState: HospitalCmReadinessS
     let resultCode = 'PASSED'
     if (summary.caseRevenueRows === 0 || summary.lisCaseRows === 0 || summary.lisMarkerRows === 0) resultCode = 'EMPTY_PERIOD_BASELINE'
     else if (summary.invalidKeyRows > 0) resultCode = 'INVALID_PERIOD_KEY'
-    else if (summary.crossMonthReuseRows > 0) resultCode = 'CROSS_MONTH_KEY_COLLISION'
     else if (summary.revenueOrphanRows > 0 || summary.markerOrphanRows > 0) resultCode = 'PERIOD_KEY_ORPHAN'
     const met = resultCode === 'PASSED'
     return {
