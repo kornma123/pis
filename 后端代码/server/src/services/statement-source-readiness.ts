@@ -46,6 +46,8 @@ export interface StatementReadinessSnapshot {
   emptyVerifiedAt?: string | null
   emptyExpiresAt?: string | null
   emptyCoverageJson?: string | null
+  emptyReceiptNonce?: string | null
+  emptyIdempotencyKey?: string | null
   parserRevision?: string | null
   configRevision?: string | null
 }
@@ -88,6 +90,8 @@ function hasValidAuthoritativeEmptyEvidence(snapshot: StatementReadinessSnapshot
       parserRevision: snapshot.parserRevision,
       configRevision: snapshot.configRevision,
       expectedGenerationId: snapshot.generationId,
+      nonce: snapshot.emptyReceiptNonce ?? undefined,
+      idempotencyKey: snapshot.emptyIdempotencyKey ?? undefined,
       verifiedAt: snapshot.emptyVerifiedAt,
       expiresAt: snapshot.emptyExpiresAt,
       verifiedBy: snapshot.emptyVerifiedBy,
@@ -191,6 +195,8 @@ export function readStatementSourceReadiness(
     emptyVerifiedAt: batch.empty_verified_at ?? null,
     emptyExpiresAt: batch.empty_expires_at ?? null,
     emptyCoverageJson: batch.empty_coverage_json ?? null,
+    emptyReceiptNonce: batch.empty_receipt_nonce ?? null,
+    emptyIdempotencyKey: batch.empty_idempotency_key ?? null,
     parserRevision: batch.parser_revision ?? null,
     configRevision: batch.config_revision ?? null,
   })

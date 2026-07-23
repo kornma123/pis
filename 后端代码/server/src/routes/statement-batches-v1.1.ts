@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { requireAnyRole } from '../middleware/permissions.js'
+import { setSuccessAuditMetadata } from '../middleware/audit-log.js'
 import { success, error } from '../utils/response.js'
 import {
   buildStatementNormalizedFacts,
@@ -51,9 +52,16 @@ router.post('/authoritative-empty-receipts', requireFinance, (req, res) => {
   try {
     const actor = trustedActor(req)
     const input = { ...(req.body as StatementImportInput), uploadedBy: actor }
+    const issued = issueAuthoritativeEmptyReceipt(input, receiptContext(req))
+    setSuccessAuditMetadata(res, {
+      partnerId: input.partnerId,
+      settlementMonth: input.settlementMonth,
+      expectedGenerationId: issued.expectedGenerationId,
+      expiresAt: issued.expiresAt,
+    })
     success(
       res,
-      issueAuthoritativeEmptyReceipt(input, receiptContext(req)),
+      issued,
       'Server-issued authoritative-empty receipt',
     )
   } catch (caught) {
@@ -66,6 +74,15 @@ router.post('/', requireFinance, (req, res) => {
     const actor = trustedActor(req)
     const input = { ...(req.body as StatementImportInput), uploadedBy: actor }
     const result = importStatementBatch(getDatabase(), input, receiptContext(req))
+    setSuccessAuditMetadata(res, {
+      batchId: result.batchId,
+      generationId: result.generationId,
+      partnerId: input.partnerId,
+      settlementMonth: input.settlementMonth,
+      rawRowCount: result.rawRowCount,
+      normalizedLineCount: result.normalizedLineCount,
+      duplicate: result.duplicate,
+    })
     success(res, result, result.duplicate ? 'Existing generation returned idempotently' : 'Immutable statement generation created')
   } catch (caught) {
     respondError(res, caught)

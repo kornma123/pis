@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import {
   findStatementColumn,
   normalizeStatementText,
@@ -38,6 +38,8 @@ export interface StatementImportInput {
   /** @deprecated Client-authored evidence is rejected; use a server-issued emptyReceipt. */
   emptyEvidence?: unknown
   emptyReceipt?: string
+  idempotencyKey?: string
+  idempotentReplay?: boolean
   uploadedBy?: string
 }
 
@@ -60,6 +62,8 @@ export interface AuthoritativeEmptyReceiptClaims {
   parserRevision: string
   configRevision: string
   expectedGenerationId: string
+  nonce?: string
+  idempotencyKey?: string
   verifiedAt: string
   expiresAt: string
   verifiedBy: string
@@ -176,6 +180,8 @@ export function computeAuthoritativeEmptyEvidenceHash(
     parserRevision: record.parserRevision,
     configRevision: record.configRevision,
     expectedGenerationId: record.expectedGenerationId,
+    nonce: record.nonce,
+    idempotencyKey: record.idempotencyKey,
     verifiedAt: record.verifiedAt,
     expiresAt: record.expiresAt,
     verifiedBy: record.verifiedBy,
@@ -631,7 +637,11 @@ function decodeAuthoritativeEmptyReceipt(
   } catch {
     throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_INVALID', 'receipt signature is invalid', 422)
   }
-  if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+  if (
+    supplied.toString('base64url') !== parts[1]
+    || expected.length !== supplied.length
+    || !timingSafeEqual(expected, supplied)
+  ) {
     throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_INVALID', 'receipt signature is invalid', 422)
   }
   try {
@@ -644,6 +654,7 @@ function decodeAuthoritativeEmptyReceipt(
 function authoritativeEmptyClaims(
   input: StatementImportInput,
   context: TrustedStatementImportContext,
+  nonce: string,
 ): AuthoritativeEmptyReceiptClaims {
   const actor = context.actor?.trim()
   const sourceFile = input.sourceFile?.trim()
@@ -657,6 +668,17 @@ function authoritativeEmptyClaims(
       'empty receipt requires a known source file and sheet',
       422,
     )
+  }
+  const idempotencyKey = input.idempotencyKey?.trim()
+  if (!idempotencyKey || idempotencyKey.length > 128) {
+    throw new Phase1AError(
+      'AUTHORITATIVE_EMPTY_IDEMPOTENCY_KEY_REQUIRED',
+      'authoritative-empty receipt requires an explicit idempotency key',
+      422,
+    )
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(nonce)) {
+    throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_INVALID', 'receipt nonce is invalid', 422)
   }
   const verifiedAt = context.now ?? new Date()
   if (!Number.isFinite(verifiedAt.getTime())) {
@@ -681,6 +703,8 @@ function authoritativeEmptyClaims(
     parserRevision: input.parserRevision,
     configRevision: input.configRevision,
     expectedGenerationId: statementGenerationId(input),
+    nonce,
+    idempotencyKey,
     verifiedAt: verifiedAt.toISOString(),
     expiresAt: new Date(verifiedAt.getTime() + EMPTY_EVIDENCE_MAX_AGE_MS).toISOString(),
     verifiedBy: actor,
@@ -702,7 +726,7 @@ export function issueAuthoritativeEmptyReceipt(
   if (input.emptyReceipt !== undefined) {
     throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_INVALID', 'receipt issuance cannot consume a receipt', 422)
   }
-  const claims = authoritativeEmptyClaims(input, context)
+  const claims = authoritativeEmptyClaims(input, context, randomUUID())
   return {
     receipt: encodeAuthoritativeEmptyReceipt(claims, receiptSecret(context)),
     expectedGenerationId: claims.expectedGenerationId,
@@ -737,8 +761,11 @@ function verifyStatementImportInput(
       422,
     )
   }
-  const expectedClaims = authoritativeEmptyClaims(input, context)
   const claims = decodeAuthoritativeEmptyReceipt(candidate.emptyReceipt, receiptSecret(context))
+  if (!claims.nonce) {
+    throw new Phase1AError('AUTHORITATIVE_EMPTY_RECEIPT_INVALID', 'receipt nonce is missing', 422)
+  }
+  const expectedClaims = authoritativeEmptyClaims(input, context, claims.nonce)
   const verifiedAtMs = Date.parse(claims.verifiedAt)
   const expiresAtMs = Date.parse(claims.expiresAt)
   const nowMs = (context.now ?? new Date()).getTime()
@@ -815,7 +842,7 @@ export function importStatementBatch(
   try {
     const existing = db.prepare(`
       SELECT id, generation_id, supersedes_generation_id, raw_row_count, normalized_line_count,
-             empty_evidence_hash
+             empty_evidence_hash, empty_receipt_nonce, empty_idempotency_key
       FROM statement_import_batches
       WHERE partner_id = ? AND settlement_month = ? AND source_hash = ?
         AND parser_revision = ? AND config_revision = ?
@@ -833,6 +860,25 @@ export function importStatementBatch(
           'the generation already exists with different authoritative-empty evidence',
           409,
         )
+      }
+      if (verified.emptyReceiptClaims) {
+        if (
+          existing.empty_receipt_nonce !== verified.emptyReceiptClaims.nonce
+          || existing.empty_idempotency_key !== verified.emptyReceiptClaims.idempotencyKey
+        ) {
+          throw new Phase1AError(
+            'AUTHORITATIVE_EMPTY_RECEIPT_CONFLICT',
+            'the authoritative-empty receipt identity does not match the committed generation',
+            409,
+          )
+        }
+        if (candidate.idempotentReplay !== true) {
+          throw new Phase1AError(
+            'AUTHORITATIVE_EMPTY_RECEIPT_CONSUMED',
+            'the authoritative-empty receipt was already consumed',
+            409,
+          )
+        }
       }
       db.exec('COMMIT')
       return {
@@ -872,8 +918,8 @@ export function importStatementBatch(
         supersedes_generation_id, is_current, source_sheet, declared_total,
         raw_row_count, normalized_line_count, status, uploaded_by,
         empty_evidence_hash, empty_verified_by, empty_verified_at, empty_expires_at,
-        empty_coverage_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'parsed', ?, ?, ?, ?, ?, ?)
+        empty_coverage_json, empty_receipt_nonce, empty_idempotency_key
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'parsed', ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       batchId,
       input.partnerId,
@@ -896,6 +942,8 @@ export function importStatementBatch(
       verified.emptyReceiptClaims?.verifiedAt ?? null,
       verified.emptyReceiptClaims?.expiresAt ?? null,
       verified.emptyCoverageJson,
+      verified.emptyReceiptClaims?.nonce ?? null,
+      verified.emptyReceiptClaims?.idempotencyKey ?? null,
     )
 
     const insertRaw = db.prepare(`

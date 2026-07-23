@@ -54,6 +54,15 @@ interface AuthRequest extends Request {
   user?: { userId: string; username: string; role: string; roles?: string[] }
 }
 
+const SUCCESS_AUDIT_METADATA = Symbol('coreone.success-audit-metadata')
+
+export function setSuccessAuditMetadata(
+  res: Response,
+  metadata: Record<string, string | number | boolean | null>,
+): void {
+  ;(res as Response & { [SUCCESS_AUDIT_METADATA]?: unknown })[SUCCESS_AUDIT_METADATA] = { ...metadata }
+}
+
 /** 递归打码敏感字段；非对象原样返回；深度/环保护 */
 export function scrubSensitive(value: unknown, depth = 0): unknown {
   if (value === null || typeof value !== 'object' || depth > 6) return value
@@ -324,7 +333,10 @@ export function auditWrite(req: AuthRequest, res: Response, next: NextFunction):
           username: user.username || '',
           operation: `${req.method} ${mod}`,
           description: `${user.username || 'system'} ${req.method} ${req.originalUrl}${targetId ? ` (${targetId})` : ''}`,
-          requestData: stringifyCapped(scrubSensitive(req.body)),
+          requestData: stringifyCapped(
+            (res as Response & { [SUCCESS_AUDIT_METADATA]?: unknown })[SUCCESS_AUDIT_METADATA]
+              ?? scrubSensitive(req.body),
+          ),
           ip,
           ua,
           outcome: null,

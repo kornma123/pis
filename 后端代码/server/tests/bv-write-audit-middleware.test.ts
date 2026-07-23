@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * 行为验证：全站写操作统一审计中间件（middleware/audit-log.ts）
  *
@@ -33,6 +34,7 @@ import {
   DENIAL_AGG_THRESHOLD,
   DENIAL_ALERT_DISTINCT,
 } from '../src/middleware/audit-log.js'
+import { computeStatementSourceHash } from '../src/services/statement-normalized-lines.js'
 
 const countLogs = (db: any) =>
   (db.prepare('SELECT COUNT(*) AS c FROM operation_logs').get() as any).c as number
@@ -102,6 +104,54 @@ describe('审计中间件：全站写操作留痕（集成，admin）', () => {
     expect(row.request_data).toContain('[REDACTED]')  // 敏感字段打码
     expect(row.request_data).not.toContain('should-not-persist')
     expect(row.request_data).not.toContain('nope')
+  })
+
+  it('statement empty import success audit stores only server-controlled safe metadata', async () => {
+    const marker = `RAW_SOURCE_${Date.now()}`
+    const empty = {
+      partnerId: `PT-AUDIT-${Date.now()}`,
+      settlementMonth: '2026-01',
+      sourceFile: `${marker}.xlsx`,
+      sourceHash: computeStatementSourceHash([]),
+      templateFamily: 'category_summary',
+      parserRevision: 'parser-phase1a-v1',
+      configRevision: 'seed-phase1a-v1',
+      sourceSheet: 'Sheet1',
+      headerRow: 0,
+      grid: [],
+      idempotencyKey: `REQ-${marker}`,
+    }
+    const issued = await request(app)
+      .post('/api/v1/statement-batches/authoritative-empty-receipts')
+      .set('Authorization', `Bearer ${token}`)
+      .send(empty)
+    expect(issued.status, JSON.stringify(issued.body)).toBe(200)
+    const receipt = issued.body.data.receipt as string
+    const imported = await request(app)
+      .post('/api/v1/statement-batches')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...empty, emptyReceipt: receipt })
+    expect(imported.status, JSON.stringify(imported.body)).toBe(200)
+
+    const row = db.prepare(`
+      SELECT request_data FROM operation_logs
+      WHERE operation='POST statement-batches'
+      ORDER BY rowid DESC LIMIT 1
+    `).get() as any
+    const metadata = JSON.parse(row.request_data)
+    expect(Object.keys(metadata).sort()).toEqual([
+      'batchId',
+      'duplicate',
+      'generationId',
+      'normalizedLineCount',
+      'partnerId',
+      'rawRowCount',
+      'settlementMonth',
+    ])
+    expect(row.request_data).not.toContain(receipt)
+    expect(row.request_data).not.toContain(marker)
+    expect(row.request_data).not.toContain('emptyReceipt')
+    expect(row.request_data).not.toContain('grid')
   })
 
   it('读(GET /materials) → operation_logs 不新增', async () => {

@@ -465,12 +465,66 @@ function hasStatementLineageForeignKey(database: DatabaseSync, table: string): b
   )
 }
 
-function createUpgradedStatementFactTables(database: DatabaseSync): void {
+function createCanonicalStatementBatchTable(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE statement_import_batches (
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      partner_id BLOB NOT NULL CHECK(typeof(partner_id) = 'text'),
+      partner_name TEXT,
+      source_file TEXT,
+      source_hash BLOB NOT NULL CHECK(typeof(source_hash) = 'text'),
+      template_family TEXT NOT NULL,
+      parser_revision BLOB NOT NULL CHECK(typeof(parser_revision) = 'text'),
+      config_revision BLOB NOT NULL CHECK(typeof(config_revision) = 'text'),
+      settlement_month BLOB NOT NULL CHECK(
+        typeof(settlement_month) = 'text'
+        AND settlement_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'
+        AND CAST(substr(settlement_month, 6, 2) AS INTEGER) BETWEEN 1 AND 12
+      ),
+      generation_id BLOB NOT NULL UNIQUE CHECK(typeof(generation_id) = 'text'),
+      supersedes_generation_id BLOB CHECK(
+        supersedes_generation_id IS NULL OR typeof(supersedes_generation_id) = 'text'
+      ),
+      is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0, 1)),
+      source_sheet TEXT,
+      declared_total DECIMAL(18, 4),
+      raw_row_count INTEGER NOT NULL CHECK(raw_row_count >= 0),
+      normalized_line_count INTEGER NOT NULL CHECK(normalized_line_count >= 0),
+      status TEXT NOT NULL DEFAULT 'parsed'
+        CHECK(status IN ('parsed', 'posted', 'computed', 'complete', 'closed', 'error', 'unavailable')),
+      artifact_hash TEXT,
+      uploaded_by TEXT,
+      empty_evidence_hash TEXT,
+      empty_verified_by TEXT,
+      empty_verified_at DATETIME,
+      empty_expires_at DATETIME,
+      empty_coverage_json TEXT,
+      empty_receipt_nonce BLOB UNIQUE CHECK(
+        empty_receipt_nonce IS NULL OR typeof(empty_receipt_nonce) = 'text'
+      ),
+      empty_idempotency_key BLOB CHECK(
+        empty_idempotency_key IS NULL OR typeof(empty_idempotency_key) = 'text'
+      ),
+      completed_at DATETIME,
+      completed_by TEXT,
+      closed_at DATETIME,
+      closed_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(partner_id, settlement_month, source_hash, parser_revision, config_revision),
+      UNIQUE(id, generation_id),
+      UNIQUE(id, generation_id, partner_id),
+      UNIQUE(id, generation_id, partner_id, settlement_month)
+    )
+  `)
+}
+
+function createCanonicalStatementFactTables(database: DatabaseSync): void {
   database.exec(`
     CREATE TABLE statement_raw_rows (
-      id TEXT PRIMARY KEY,
-      batch_id TEXT NOT NULL,
-      generation_id TEXT NOT NULL,
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      batch_id BLOB NOT NULL CHECK(typeof(batch_id) = 'text'),
+      generation_id BLOB NOT NULL CHECK(typeof(generation_id) = 'text'),
       source_sheet TEXT,
       source_row INTEGER NOT NULL CHECK(source_row >= 1),
       row_json TEXT NOT NULL,
@@ -480,12 +534,12 @@ function createUpgradedStatementFactTables(database: DatabaseSync): void {
       UNIQUE(generation_id, source_sheet, source_row)
     );
     CREATE TABLE statement_normalized_lines (
-      id TEXT PRIMARY KEY,
-      batch_id TEXT NOT NULL,
-      generation_id TEXT NOT NULL,
-      partner_id TEXT NOT NULL,
-      settlement_month TEXT NOT NULL,
-      ledger_settlement_month TEXT NOT NULL,
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      batch_id BLOB NOT NULL CHECK(typeof(batch_id) = 'text'),
+      generation_id BLOB NOT NULL CHECK(typeof(generation_id) = 'text'),
+      partner_id BLOB NOT NULL CHECK(typeof(partner_id) = 'text'),
+      settlement_month BLOB NOT NULL CHECK(typeof(settlement_month) = 'text'),
+      ledger_settlement_month BLOB NOT NULL CHECK(typeof(ledger_settlement_month) = 'text'),
       row_settlement_month TEXT,
       settlement_month_basis TEXT,
       case_no TEXT,
@@ -515,18 +569,18 @@ function createUpgradedStatementFactTables(database: DatabaseSync): void {
       UNIQUE(id, generation_id, batch_id, partner_id, settlement_month)
     );
     CREATE TABLE quality_flags (
-      id TEXT PRIMARY KEY,
-      generation_id TEXT NOT NULL,
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      generation_id BLOB NOT NULL CHECK(typeof(generation_id) = 'text'),
       flag_type TEXT NOT NULL,
       severity TEXT NOT NULL CHECK(severity IN ('blocking', 'warning', 'info')),
       owner_role TEXT NOT NULL,
       resolution_action TEXT NOT NULL,
       blocks_posting INTEGER NOT NULL CHECK(blocks_posting IN (0, 1)),
       blocks_closing INTEGER NOT NULL CHECK(blocks_closing IN (0, 1)),
-      partner_id TEXT NOT NULL,
-      settlement_month TEXT NOT NULL,
-      related_batch_id TEXT NOT NULL,
-      related_line_id TEXT,
+      partner_id BLOB NOT NULL CHECK(typeof(partner_id) = 'text'),
+      settlement_month BLOB NOT NULL CHECK(typeof(settlement_month) = 'text'),
+      related_batch_id BLOB NOT NULL CHECK(typeof(related_batch_id) = 'text'),
+      related_line_id BLOB CHECK(related_line_id IS NULL OR typeof(related_line_id) = 'text'),
       reason_code TEXT NOT NULL,
       message TEXT,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -536,12 +590,12 @@ function createUpgradedStatementFactTables(database: DatabaseSync): void {
         REFERENCES statement_normalized_lines(id, generation_id, batch_id, partner_id, settlement_month)
     );
     CREATE TABLE partner_month_revenue_ledger (
-      id TEXT PRIMARY KEY,
-      batch_id TEXT NOT NULL,
-      generation_id TEXT NOT NULL,
-      partner_id TEXT NOT NULL,
-      settlement_month TEXT NOT NULL,
-      source_line_id TEXT NOT NULL UNIQUE,
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      batch_id BLOB NOT NULL CHECK(typeof(batch_id) = 'text'),
+      generation_id BLOB NOT NULL CHECK(typeof(generation_id) = 'text'),
+      partner_id BLOB NOT NULL CHECK(typeof(partner_id) = 'text'),
+      settlement_month BLOB NOT NULL CHECK(typeof(settlement_month) = 'text'),
+      source_line_id BLOB NOT NULL UNIQUE CHECK(typeof(source_line_id) = 'text'),
       category_label TEXT,
       business_line TEXT NOT NULL CHECK(business_line = 'IN'),
       settlement_amount DECIMAL(18, 4) NOT NULL,
@@ -553,12 +607,12 @@ function createUpgradedStatementFactTables(database: DatabaseSync): void {
         REFERENCES statement_normalized_lines(id, generation_id, batch_id, partner_id, ledger_settlement_month)
     );
     CREATE TABLE out_settlement_ledger (
-      id TEXT PRIMARY KEY,
-      batch_id TEXT NOT NULL,
-      generation_id TEXT NOT NULL,
-      partner_id TEXT NOT NULL,
-      settlement_month TEXT NOT NULL,
-      source_line_id TEXT NOT NULL UNIQUE,
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      batch_id BLOB NOT NULL CHECK(typeof(batch_id) = 'text'),
+      generation_id BLOB NOT NULL CHECK(typeof(generation_id) = 'text'),
+      partner_id BLOB NOT NULL CHECK(typeof(partner_id) = 'text'),
+      settlement_month BLOB NOT NULL CHECK(typeof(settlement_month) = 'text'),
+      source_line_id BLOB NOT NULL UNIQUE CHECK(typeof(source_line_id) = 'text'),
       out_type TEXT NOT NULL,
       item_name TEXT,
       external_subject_key TEXT,
@@ -626,6 +680,8 @@ function ensureUpgradedStatementIndexesAndTriggers(database: DatabaseSync): void
       OR COALESCE(OLD.empty_verified_at, '') <> COALESCE(NEW.empty_verified_at, '')
       OR COALESCE(OLD.empty_expires_at, '') <> COALESCE(NEW.empty_expires_at, '')
       OR COALESCE(OLD.empty_coverage_json, '') <> COALESCE(NEW.empty_coverage_json, '')
+      OR COALESCE(OLD.empty_receipt_nonce, '') <> COALESCE(NEW.empty_receipt_nonce, '')
+      OR COALESCE(OLD.empty_idempotency_key, '') <> COALESCE(NEW.empty_idempotency_key, '')
     BEGIN SELECT RAISE(ABORT, 'IMMUTABLE_IMPORT_FACT'); END;
     CREATE TRIGGER trg_statement_batch_no_delete
     BEFORE DELETE ON statement_import_batches
@@ -667,16 +723,83 @@ function ensureUpgradedStatementIndexesAndTriggers(database: DatabaseSync): void
   }
 }
 
+function createCanonicalStatementPhase1ASchema(database: DatabaseSync): void {
+  createCanonicalStatementBatchTable(database)
+  createCanonicalStatementFactTables(database)
+  ensureUpgradedStatementIndexesAndTriggers(database)
+}
+
+function normalizedStatementSchemaSql(sql: string | null): string {
+  return String(sql ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([(),=])\s*/g, '$1')
+    .trim()
+    .toLowerCase()
+}
+
+function statementSchemaManifest(database: DatabaseSync): string {
+  const tables = STATEMENT_PHASE1A_TABLES.map(table => ({
+    table,
+    columns: database.prepare(`PRAGMA table_xinfo("${table}")`).all(),
+    foreignKeys: database.prepare(`PRAGMA foreign_key_list("${table}")`).all(),
+    tableSql: normalizedStatementSchemaSql(
+      (database.prepare(`
+        SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?
+      `).get(table) as { sql?: string } | undefined)?.sql ?? null,
+    ),
+    indexes: (database.prepare(`
+      SELECT name, sql FROM sqlite_master
+      WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL
+      ORDER BY name
+    `).all(table) as Array<{ name: string; sql: string }>).map(row => ({
+      name: row.name,
+      sql: normalizedStatementSchemaSql(row.sql),
+    })),
+    triggers: (database.prepare(`
+      SELECT name, sql FROM sqlite_master
+      WHERE type = 'trigger' AND tbl_name = ?
+      ORDER BY name
+    `).all(table) as Array<{ name: string; sql: string }>).map(row => ({
+      name: row.name,
+      sql: normalizedStatementSchemaSql(row.sql),
+    })),
+  }))
+  return JSON.stringify(tables)
+}
+
+let canonicalStatementSchemaManifest: string | undefined
+
+function expectedStatementSchemaManifest(): string {
+  if (canonicalStatementSchemaManifest) return canonicalStatementSchemaManifest
+  const reference = new DatabaseSync(':memory:')
+  try {
+    reference.exec('PRAGMA foreign_keys = ON')
+    createCanonicalStatementPhase1ASchema(reference)
+    canonicalStatementSchemaManifest = statementSchemaManifest(reference)
+    return canonicalStatementSchemaManifest
+  } finally {
+    reference.close()
+  }
+}
+
+function hasCurrentStatementSchemaManifest(database: DatabaseSync): boolean {
+  return statementSchemaManifest(database) === expectedStatementSchemaManifest()
+}
+
 export function upgradeStatementPhase1ASchema(
   database: DatabaseSync
 ): 'absent' | 'current' | 'upgraded' {
   const present = STATEMENT_PHASE1A_TABLES.filter(table =>
     Boolean(database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table))
   )
-  if (present.length === 0) return 'absent'
+  if (present.length === 0) {
+    createCanonicalStatementPhase1ASchema(database)
+    return 'upgraded'
+  }
   if (present.length !== STATEMENT_PHASE1A_TABLES.length) {
     throw new Error('STATEMENT_PHASE1A_SCHEMA_UNSUPPORTED: partial table set')
   }
+  if (hasCurrentStatementSchemaManifest(database)) return 'current'
 
   const batchColumns = statementTableColumns(database, 'statement_import_batches')
   const normalizedColumns = statementTableColumns(database, 'statement_normalized_lines')
@@ -686,7 +809,7 @@ export function upgradeStatementPhase1ASchema(
     'empty_evidence_hash', 'empty_verified_by', 'empty_verified_at', 'empty_coverage_json',
     ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(19),
   ])
-  const currentBatch = sameColumns(batchColumns, [
+  const previousCurrentBatch = sameColumns(batchColumns, [
     ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(0, 19),
     ...STATEMENT_EMPTY_EVIDENCE_COLUMNS,
     ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(19),
@@ -703,9 +826,8 @@ export function upgradeStatementPhase1ASchema(
   const currentLineage = hasStatementLineageForeignKey(database, 'partner_month_revenue_ledger')
     && hasStatementLineageForeignKey(database, 'out_settlement_ledger')
 
-  if (currentBatch && currentNormalized && currentLineage) {
-    ensureUpgradedStatementIndexesAndTriggers(database)
-    return 'current'
+  if (previousCurrentBatch && currentNormalized && currentLineage) {
+    throw new Error('STATEMENT_PHASE1A_SCHEMA_UNSUPPORTED: non-canonical current manifest')
   }
   if (!(v0Batch || v1Batch) || !predecessorNormalized) {
     throw new Error('STATEMENT_PHASE1A_SCHEMA_UNSUPPORTED: unknown table shape')
@@ -717,26 +839,39 @@ export function upgradeStatementPhase1ASchema(
   database.exec('PRAGMA foreign_keys = OFF')
   database.exec('BEGIN IMMEDIATE')
   try {
-    for (const table of STATEMENT_PHASE1A_TABLES.slice(1).reverse()) {
+    for (const table of [...STATEMENT_PHASE1A_TABLES].reverse()) {
       database.exec(`ALTER TABLE "${table}" RENAME TO "__loc004b_predecessor_${table}"`)
     }
-    for (const column of STATEMENT_EMPTY_EVIDENCE_COLUMNS) {
-      if (!batchColumns.includes(column)) {
-        database.exec(`ALTER TABLE statement_import_batches ADD COLUMN ${column} ${column.endsWith('_json') ? 'TEXT' : column.endsWith('_at') ? 'DATETIME' : 'TEXT'}`)
-      }
+    const oldObjects = database.prepare(`
+      SELECT type, name FROM sqlite_master
+      WHERE type IN ('index', 'trigger')
+        AND tbl_name LIKE '__loc004b_predecessor_%'
+        AND sql IS NOT NULL
+      ORDER BY CASE type WHEN 'trigger' THEN 0 ELSE 1 END, name
+    `).all() as Array<{ type: 'index' | 'trigger'; name: string }>
+    for (const object of oldObjects) {
+      database.exec(`DROP ${object.type.toUpperCase()} "${object.name.replaceAll('"', '""')}"`)
     }
+    createCanonicalStatementPhase1ASchema(database)
+    const batchTargetColumns = [
+      ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(0, 19),
+      ...STATEMENT_EMPTY_EVIDENCE_COLUMNS,
+      'empty_receipt_nonce',
+      'empty_idempotency_key',
+      ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(19),
+    ]
+    const batchProjection = batchTargetColumns.map(column =>
+      batchColumns.includes(column) ? `"${column}"` : 'NULL'
+    )
     database.exec(`
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_batches_id_generation
-        ON statement_import_batches(id, generation_id);
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_batches_id_generation_partner
-        ON statement_import_batches(id, generation_id, partner_id);
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_batches_id_generation_partner_month
-        ON statement_import_batches(id, generation_id, partner_id, settlement_month)
-    `)
-    createUpgradedStatementFactTables(database)
-    database.exec(`
-      INSERT INTO statement_raw_rows
-        SELECT * FROM __loc004b_predecessor_statement_raw_rows;
+      INSERT INTO statement_import_batches (${batchTargetColumns.join(', ')})
+        SELECT ${batchProjection.join(', ')}
+        FROM __loc004b_predecessor_statement_import_batches;
+      INSERT INTO statement_raw_rows (
+        id, batch_id, generation_id, source_sheet, source_row, row_json, created_at
+      )
+        SELECT id, batch_id, generation_id, source_sheet, source_row, row_json, created_at
+        FROM __loc004b_predecessor_statement_raw_rows;
       INSERT INTO statement_normalized_lines (
         id, batch_id, generation_id, partner_id, settlement_month, ledger_settlement_month,
         row_settlement_month, settlement_month_basis, case_no, external_subject_key, item_name,
@@ -752,20 +887,42 @@ export function upgradeStatementPhase1ASchema(
         business_line, amount_role, amount, classification_status, rule_id, rule_version,
         report_date, raw_payload, created_at
       FROM __loc004b_predecessor_statement_normalized_lines;
-      INSERT INTO quality_flags SELECT * FROM __loc004b_predecessor_quality_flags;
-      INSERT INTO partner_month_revenue_ledger
-        SELECT * FROM __loc004b_predecessor_partner_month_revenue_ledger;
-      INSERT INTO out_settlement_ledger
-        SELECT * FROM __loc004b_predecessor_out_settlement_ledger
+      INSERT INTO quality_flags (
+        id, generation_id, flag_type, severity, owner_role, resolution_action,
+        blocks_posting, blocks_closing, partner_id, settlement_month,
+        related_batch_id, related_line_id, reason_code, message, created_at
+      )
+        SELECT id, generation_id, flag_type, severity, owner_role, resolution_action,
+               blocks_posting, blocks_closing, partner_id, settlement_month,
+               related_batch_id, related_line_id, reason_code, message, created_at
+        FROM __loc004b_predecessor_quality_flags;
+      INSERT INTO partner_month_revenue_ledger (
+        id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+        category_label, business_line, settlement_amount, ledger_scope, created_at
+      )
+        SELECT id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+               category_label, business_line, settlement_amount, ledger_scope, created_at
+        FROM __loc004b_predecessor_partner_month_revenue_ledger;
+      INSERT INTO out_settlement_ledger (
+        id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+        out_type, item_name, external_subject_key, settlement_amount, lab_revenue_amount,
+        ledger_scope, created_at
+      )
+        SELECT id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+               out_type, item_name, external_subject_key, settlement_amount, lab_revenue_amount,
+               ledger_scope, created_at
+        FROM __loc004b_predecessor_out_settlement_ledger
     `)
     const violations = database.prepare('PRAGMA foreign_key_check').all()
     if (violations.length > 0) {
       throw new Error('lineage validation failed')
     }
-    for (const table of STATEMENT_PHASE1A_TABLES.slice(1).reverse()) {
+    for (const table of [...STATEMENT_PHASE1A_TABLES].reverse()) {
       database.exec(`DROP TABLE "__loc004b_predecessor_${table}"`)
     }
-    ensureUpgradedStatementIndexesAndTriggers(database)
+    if (!hasCurrentStatementSchemaManifest(database)) {
+      throw new Error('canonical schema manifest validation failed')
+    }
     database.exec('COMMIT')
   } catch (error) {
     database.exec('ROLLBACK')

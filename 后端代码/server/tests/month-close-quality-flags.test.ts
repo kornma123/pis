@@ -3,7 +3,10 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import express from 'express'
 import request from 'supertest'
 import { readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { DatabaseSync } from 'node:sqlite'
 import statementBatchRoutes from '../src/routes/statement-batches-v1.1.js'
 import {
   computeAuthoritativeEmptyEvidenceHash,
@@ -88,6 +91,7 @@ function emptyWithReceipt(
   now = new Date('2026-07-23T08:00:00.000Z'),
 ): { input: StatementImportInput; context: { actor: string; receiptSecret: string; now: Date } } {
   const input = authoritativeEmpty(partnerId)
+  input.idempotencyKey = `REQ-${partnerId}`
   const context = { actor: 'trusted-finance', receiptSecret: RECEIPT_SECRET, now }
   input.emptyReceipt = issueAuthoritativeEmptyReceipt(input, context).receipt
   return { input, context }
@@ -223,6 +227,51 @@ describe('same-generation compute/read/complete/close', () => {
     })
   })
 
+  it('atomically consumes an empty receipt and only permits an explicit idempotent replay', () => {
+    const { input: empty, context } = emptyWithReceipt('PT-EMPTY-CONSUME')
+    const first = importStatementBatch(db, empty, context)
+    expect(first.duplicate).toBe(false)
+    expect(() => importStatementBatch(db, empty, context))
+      .toThrow(/AUTHORITATIVE_EMPTY_RECEIPT_CONSUMED/)
+    const replay = importStatementBatch(
+      db,
+      { ...empty, idempotentReplay: true } as any,
+      context,
+    )
+    expect(replay).toMatchObject({
+      generationId: first.generationId,
+      duplicate: true,
+    })
+  })
+
+  it('allows only one of two independent SQLite connections to consume the same receipt', async () => {
+    const manager = await import('../src/database/DatabaseManager.js')
+    const directory = mkdtempSync(join(tmpdir(), 'loc004b-receipt-'))
+    const databasePath = join(directory, 'phase1a.sqlite')
+    const firstConnection = new DatabaseSync(databasePath)
+    const secondConnection = new DatabaseSync(databasePath)
+    try {
+      firstConnection.exec('PRAGMA foreign_keys = ON')
+      secondConnection.exec('PRAGMA foreign_keys = ON')
+      expect(manager.upgradeStatementPhase1ASchema(firstConnection)).toBe('upgraded')
+      const { input: empty, context } = emptyWithReceipt('PT-EMPTY-TWO-CONNECTIONS')
+      const accepted = importStatementBatch(firstConnection, empty, context)
+      expect(accepted.duplicate).toBe(false)
+      expect(() => importStatementBatch(secondConnection, empty, context))
+        .toThrow(/AUTHORITATIVE_EMPTY_RECEIPT_CONSUMED/)
+      expect((secondConnection.prepare(`
+        SELECT COUNT(*) n FROM statement_import_batches WHERE partner_id = ?
+      `).get(empty.partnerId) as any).n).toBe(1)
+      for (const table of ['statement_raw_rows', 'statement_normalized_lines', 'quality_flags']) {
+        expect((secondConnection.prepare(`SELECT COUNT(*) n FROM ${table}`).get() as any).n).toBe(0)
+      }
+    } finally {
+      secondConnection.close()
+      firstConnection.close()
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
   it('rejects replayable client-authored empty evidence even when an authenticated actor submits it', () => {
     const replayable = clientAuthoredEmpty('PT-EMPTY-CLIENT-EVIDENCE')
     expect(() => importStatementBatch(db, replayable, { actor: 'trusted-finance', receiptSecret: RECEIPT_SECRET }))
@@ -350,6 +399,7 @@ describe('same-generation compute/read/complete/close', () => {
 
   it('issues a route receipt but rejects its cross-partner replay without partial facts', async () => {
     const original = authoritativeEmpty('PT-EMPTY-ROUTE-BOUND')
+    original.idempotencyKey = 'REQ-EMPTY-ROUTE-BOUND'
     const issued = await request(routeApp)
       .post('/api/v1/statement-batches/authoritative-empty-receipts')
       .send(original)
