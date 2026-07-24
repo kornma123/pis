@@ -12,7 +12,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, RefreshCw, Wallet } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { canAccess } from '@/lib/permissions'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { hospitalCmApi } from '@/api/hospital-cm'
