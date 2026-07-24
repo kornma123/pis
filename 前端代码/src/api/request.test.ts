@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import axios from 'axios'
 
 vi.mock('axios')
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+}))
+
+import { toast } from 'sonner'
 
 describe('request', () => {
   let requestInterceptor: any
@@ -171,5 +176,71 @@ describe('request', () => {
   it('should reject with network error message', async () => {
     const error = { message: 'Network Error' }
     await expect(responseRejected(error)).rejects.toThrow('Network Error')
+  })
+
+  // ===== LOC-013：共享 request 错误诊断不得泄漏原始 body / 敏感嵌套值 =====
+  describe('错误诊断脱敏（LOC-013）', () => {
+    it('success=false 时 toast 不泄漏 message 中的 password 键值', async () => {
+      const response = {
+        data: { success: false, error: { message: '校验失败：password=SECRET_MARKER 不匹配' } },
+      }
+      await expect(responseFulfilled(response)).rejects.toBeTruthy()
+      const arg = vi.mocked(toast.error).mock.calls.at(-1)?.[0] as string
+      expect(arg).not.toContain('SECRET_MARKER')
+      expect(arg).toContain('***')
+      expect(arg).toContain('校验失败')
+    })
+
+    it('success=false 时 toast 不泄漏 JSON 形态敏感键值', async () => {
+      const response = {
+        data: { success: false, error: { message: '{"password":"SECRET_MARKER","field":"x"}' } },
+      }
+      await expect(responseFulfilled(response)).rejects.toBeTruthy()
+      const arg = vi.mocked(toast.error).mock.calls.at(-1)?.[0] as string
+      expect(arg).not.toContain('SECRET_MARKER')
+    })
+
+    it('HTTP 错误 message 含 Bearer token 时 toast 脱敏，且 Authorization 头值不残留', async () => {
+      const error = {
+        message: 'Request failed',
+        response: { status: 500, data: { error: { message: '上游拒绝：Authorization: Bearer SECRET_MARKER_TOKEN' } } },
+      }
+      await expect(responseRejected(error)).rejects.toBeTruthy()
+      const arg = vi.mocked(toast.error).mock.calls.at(-1)?.[0] as string
+      expect(arg).not.toContain('SECRET_MARKER_TOKEN')
+    })
+
+    it('嵌套 details 敏感值不进入 toast；干净 message 原样显示', async () => {
+      const error = {
+        message: 'Request failed',
+        response: {
+          status: 422,
+          data: { error: { message: '样本数必须大于 0', details: { password: 'SECRET_MARKER' } } },
+        },
+      }
+      await expect(responseRejected(error)).rejects.toBeTruthy()
+      const calls = vi.mocked(toast.error).mock.calls.flat()
+      expect(calls.at(-1)).toBe('样本数必须大于 0')
+      expect(JSON.stringify(calls)).not.toContain('SECRET_MARKER')
+    })
+
+    it('sanitizeErrorText 导出纯函数：password/secret/token/api_key/credential 键值均脱敏', () => {
+      const out: string = mod.sanitizeErrorText(
+        'a secret: S3CR3T b token=TOK.123 credential:{"x"} api_key=k-e-y password=pw',
+      )
+      expect(out).not.toContain('S3CR3T')
+      expect(out).not.toContain('TOK.123')
+      expect(out).not.toContain('k-e-y')
+      expect(out).not.toContain('pw')
+      expect(out).toContain('a ')
+      expect(out).toContain(' b ')
+    })
+
+    it('sanitizeErrorText 对非字符串/空输入返回 undefined（调用方走兜底文案）', () => {
+      expect(mod.sanitizeErrorText(undefined)).toBeUndefined()
+      expect(mod.sanitizeErrorText(null)).toBeUndefined()
+      expect(mod.sanitizeErrorText('')).toBeUndefined()
+      expect(mod.sanitizeErrorText(42)).toBeUndefined()
+    })
   })
 })

@@ -693,3 +693,186 @@ export interface EquipmentUsage {
   usageDate?: string
   createdAt: string
 }
+
+// ===== LOC-013 活响应合同运行时守卫 =====
+// 与上方接口对应的运行时边界：live 响应必须先过这些守卫再发布给消费者。
+// 铁律：unknown / null / malformed / unsafe / contradictory 绝不折为 0 / [] / 空成功；
+// 合法 0 与合法空数组保真；null 保持 null（诚实未知），不得改写为 0。
+
+export class ContractError extends Error {
+  readonly endpoint: string
+
+  constructor(endpoint: string, reason: string) {
+    // 消息只含字段路径与规则，绝不内插响应原始值（防敏感值借诊断泄漏）
+    super(`${endpoint} 响应合同校验失败：${reason}`)
+    this.name = 'ContractError'
+    this.endpoint = endpoint
+  }
+}
+
+export function requireObject(endpoint: string, value: unknown, field: string): asserts value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new ContractError(endpoint, `${field} 应为对象`)
+  }
+}
+
+/** 非空字符串（身份字段：id/code/name 等，缺失即身份断裂，拒绝） */
+export function requireIdentity(endpoint: string, value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new ContractError(endpoint, `${field} 缺失或不是非空字符串`)
+  }
+  return value
+}
+
+/** 字符串（允许空串，但类型必须是 string） */
+export function requireString(endpoint: string, value: unknown, field: string): string {
+  if (typeof value !== 'string') {
+    throw new ContractError(endpoint, `${field} 不是字符串`)
+  }
+  return value
+}
+
+/** 可空字符串：null/undefined → null（未知保真），其他非字符串拒绝 */
+export function optionalString(endpoint: string, value: unknown, field: string): string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string') {
+    throw new ContractError(endpoint, `${field} 不是字符串`)
+  }
+  return value
+}
+
+/** 必需有限数：拒绝 null/undefined/NaN/Infinity/非 number；合法 0 通过 */
+export function requireFiniteNumber(
+  endpoint: string,
+  value: unknown,
+  field: string,
+  opts: { min?: number; max?: number; int?: boolean } = {},
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new ContractError(endpoint, `${field} 不是有限数`)
+  }
+  if (opts.int && !Number.isInteger(value)) {
+    throw new ContractError(endpoint, `${field} 不是整数`)
+  }
+  if (opts.min !== undefined && value < opts.min) {
+    throw new ContractError(endpoint, `${field} 低于下界`)
+  }
+  if (opts.max !== undefined && value > opts.max) {
+    throw new ContractError(endpoint, `${field} 高于上界`)
+  }
+  return value
+}
+
+/** 可空有限数：null → null（未知保真，绝不折 0），其余同 requireFiniteNumber */
+export function nullableFiniteNumber(
+  endpoint: string,
+  value: unknown,
+  field: string,
+  opts: { min?: number; max?: number; int?: boolean } = {},
+): number | null {
+  if (value === null) return null
+  return requireFiniteNumber(endpoint, value, field, opts)
+}
+
+export function requireStatus(endpoint: string, value: unknown, field: string): 'active' | 'inactive' {
+  if (value !== 'active' && value !== 'inactive') {
+    throw new ContractError(endpoint, `${field} 非法枚举值`)
+  }
+  return value
+}
+
+export interface ListPagination {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
+/**
+ * successList 信封（后端 utils/response.ts 合同）：data 恒含扁平
+ * page/pageSize/total/totalPages 与嵌套 pagination，二者必须一致；
+ * totalPages 必须等于 ceil(total/pageSize)；total 不得小于已见行数。
+ */
+export function requireListEnvelope(
+  endpoint: string,
+  payload: unknown,
+): { list: Record<string, unknown>[]; pagination: ListPagination } {
+  requireObject(endpoint, payload, 'data')
+  const raw = payload as Record<string, unknown>
+  if (!Array.isArray(raw.list)) {
+    throw new ContractError(endpoint, 'list 缺失或不是数组')
+  }
+  const p = raw.pagination
+  requireObject(endpoint, p, 'pagination')
+  const pagination: ListPagination = {
+    page: requireFiniteNumber(endpoint, p.page, 'pagination.page', { min: 1, int: true }),
+    pageSize: requireFiniteNumber(endpoint, p.pageSize, 'pagination.pageSize', { min: 1, int: true }),
+    total: requireFiniteNumber(endpoint, p.total, 'pagination.total', { min: 0, int: true }),
+    totalPages: requireFiniteNumber(endpoint, p.totalPages, 'pagination.totalPages', { min: 0, int: true }),
+  }
+  for (const key of ['page', 'pageSize', 'total', 'totalPages'] as const) {
+    if (raw[key] !== pagination[key]) {
+      throw new ContractError(endpoint, `扁平 ${key} 与 pagination.${key} 矛盾`)
+    }
+  }
+  if (pagination.totalPages !== Math.ceil(pagination.total / pagination.pageSize)) {
+    throw new ContractError(endpoint, 'totalPages 与 total/pageSize 矛盾')
+  }
+  if (pagination.total < (pagination.page - 1) * pagination.pageSize + raw.list.length) {
+    throw new ContractError(endpoint, 'total 小于当前已见行数')
+  }
+  return { list: raw.list as Record<string, unknown>[], pagination }
+}
+
+// ----- BOM / ABC bom-links 活合同类型（与后端 bom-v1.1.ts、abc-v1.1.ts 对齐） -----
+
+export interface BomListItem {
+  id: string
+  code: string
+  name: string
+  version: string
+  type: string
+  serviceId: string | null
+  materialCount: number
+  supportableSamples: number | null
+  unitCost: number | null
+  status: 'active' | 'inactive'
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BomDetailMaterial {
+  id: string
+  name: string
+  spec: string | null
+  usagePerSample: number
+  unit: string | null
+  price: number
+  stock: number | null
+  costRatio: number
+}
+
+export interface BomDetail {
+  id: string
+  code: string
+  name: string
+  version: string
+  type: string
+  serviceId: string | null
+  supportableSamples: number | null
+  unitCost: number | null
+  status: 'active' | 'inactive'
+  materials: BomDetailMaterial[]
+  versionHistory: BOMVersion[]
+}
+
+export interface BomActivityLink {
+  id: string
+  bomId: string
+  activityCenterId: string
+  activityCenterName: string | null
+  activityCenterCode: string | null
+  quantity: number
+  unit: string | null
+  sortOrder: number
+}

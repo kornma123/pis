@@ -46,6 +46,26 @@ export function clearAuth() {
   localStorage.removeItem('rememberUsername')
 }
 
+// ===== LOC-013：共享 request 错误诊断脱敏 =====
+// 服务端 4xx message（dev 下可能回显输入）与嵌套 details 不得原样进入 UI/日志诊断。
+// 只脱敏展示文本；reject 的原始 error 对象保持不变（既有消费者依赖其结构）。
+const BEARER_PATTERN = /Bearer\s+[A-Za-z0-9._~+/=-]+/gi
+const SENSITIVE_KEY_PATTERN =
+  /(password|passwd|pwd|secret|token|api[-_]?key|authorization|credential|refresh[-_]?token|access[-_]?token)("?\s*[:=]\s*"?)([^\s,"'\]}]+)/gi
+
+/**
+ * 把任意错误文本脱敏为可安全展示/落日志的诊断：
+ * - `Bearer xxx` → `Bearer ***`
+ * - `password=xxx`、`"secret":"xxx"`、`token: xxx` 等敏感键值 → 键名保留、值替换为 `***`
+ * 非字符串/空输入返回 undefined，由调用方走兜底文案。
+ */
+export function sanitizeErrorText(text: unknown): string | undefined {
+  if (typeof text !== 'string' || text.length === 0) return undefined
+  return text
+    .replace(BEARER_PATTERN, 'Bearer ***')
+    .replace(SENSITIVE_KEY_PATTERN, (_match, key: string, sep: string) => `${key}${sep}***`)
+}
+
 /** 清理登录态并跳转登录页 */
 function logoutAndRedirect() {
   clearAuth()
@@ -99,7 +119,7 @@ request.interceptors.response.use(
   (response) => {
     const { data } = response
     if (!data.success) {
-      toast.error(data.error?.message || '操作失败')
+      toast.error(sanitizeErrorText(data.error?.message) || '操作失败')
       return Promise.reject(data.error)
     }
     return data.data
@@ -159,7 +179,7 @@ request.interceptors.response.use(
     }
 
     const msg = error.response?.data
-      ? (error.response.data as any)?.error?.message
+      ? sanitizeErrorText((error.response.data as any)?.error?.message)
       : undefined
     toast.error(msg || error.message || '网络错误')
     return Promise.reject(error)

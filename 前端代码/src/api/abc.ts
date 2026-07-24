@@ -1,4 +1,32 @@
 import request from './request'
+import { ContractError, requireObject, requireIdentity, optionalString, requireFiniteNumber } from '@/types'
+import type { BomActivityLink } from '@/types'
+
+/**
+ * GET /abc/bom-links/:bomId 专属 exact parser（LOC-013）。
+ * 活合同（后端 abc-v1.1.ts）= 裸数组；合法空数组是有效成功（该 BOM 未配置作业关联）。
+ * 信封形状/单对象/畸形行一律拒绝；quantity=0 保真，名称 null 保持 null（诚实未知）。
+ */
+export function parseBomActivityLinks(payload: unknown): BomActivityLink[] {
+  const endpoint = 'GET /abc/bom-links/:bomId'
+  if (!Array.isArray(payload)) {
+    throw new ContractError(endpoint, '响应应为裸数组（合法空数组为有效成功）')
+  }
+  return payload.map((raw: unknown, i: number) => {
+    requireObject(endpoint, raw, `[${i}]`)
+    const item = raw as Record<string, unknown>
+    return {
+      id: requireIdentity(endpoint, item.id, `[${i}].id`),
+      bomId: requireIdentity(endpoint, item.bomId, `[${i}].bomId`),
+      activityCenterId: requireIdentity(endpoint, item.activityCenterId, `[${i}].activityCenterId`),
+      activityCenterName: optionalString(endpoint, item.activityCenterName, `[${i}].activityCenterName`),
+      activityCenterCode: optionalString(endpoint, item.activityCenterCode, `[${i}].activityCenterCode`),
+      quantity: requireFiniteNumber(endpoint, item.quantity, `[${i}].quantity`, { min: 0 }),
+      unit: optionalString(endpoint, item.unit, `[${i}].unit`),
+      sortOrder: requireFiniteNumber(endpoint, item.sortOrder, `[${i}].sortOrder`, { min: 0, int: true }),
+    }
+  })
+}
 
 export const abcApi = {
   // ===== 作业中心管理 =====
@@ -90,8 +118,8 @@ export const abcApi = {
     request.post(`/abc/adjustments/${id}/reject`, data || {}),
 
   // ===== BOM 作业关联 =====
-  getBomLinks: (bomId: string) =>
-    request.get(`/abc/bom-links/${bomId}`),
+  getBomLinks: (bomId: string): Promise<BomActivityLink[]> =>
+    request.get<unknown>(`/abc/bom-links/${bomId}`).then(parseBomActivityLinks),
 
   updateBomLinks: (bomId: string, links: any[]) =>
     request.put(`/abc/bom-links/${bomId}`, { links }),
