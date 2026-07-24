@@ -59,6 +59,31 @@ function allWritePermissions(): Record<string, 'W'> {
   ) as Record<string, 'W'>
 }
 
+type RouteLayer = {
+  name?: string
+  regexp?: { toString(): string }
+  handle?: express.RequestHandler & { stack?: RouteLayer[] }
+  route?: {
+    path: string
+    methods: Record<string, boolean>
+    stack: Array<{ handle: express.RequestHandler }>
+  }
+}
+
+function productionRouteHandlerLayer(
+  mountPattern: string,
+  routePath: string,
+  method: string,
+): { handle: express.RequestHandler } {
+  const mountedRouter = (app as unknown as { _router: { stack: RouteLayer[] } })._router.stack
+    .find((layer) => layer.name === 'router' && layer.regexp?.toString().includes(mountPattern))
+  const routeLayer = mountedRouter?.handle?.stack
+    ?.find((layer) => layer.route?.path === routePath && layer.route.methods[method])
+  const handlerLayer = routeLayer?.route?.stack.at(-1)
+  if (!handlerLayer) throw new Error(`production ${method.toUpperCase()} ${routePath} handler not found`)
+  return handlerLayer
+}
+
 beforeAll(async () => {
   db = await getDb()
   permissionsModule = await import('../src/middleware/permissions.js')
@@ -229,6 +254,37 @@ describe('LOC-007 exported full-capability comparison validates runtime actor sh
 })
 
 describe('LOC-007 literal admin, delegation, takeover, and system protections', () => {
+  it('admin can update non-role fields for a user with zero active roles', async () => {
+    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const userId = `USER-LOC007-NO-ACTIVE-ROLE-${suffix}`
+    const username = `loc007_no_active_role_${suffix}`
+    db.prepare(`
+      INSERT INTO users
+        (id, username, password, real_name, role, primary_role, status, is_deleted)
+      VALUES (?, ?, ?, 'zero active role', ?, ?, 1, 0)
+    `).run(
+      userId,
+      username,
+      bcrypt.hashSync(password, 12),
+      `loc007_missing_${suffix}`,
+      `loc007_missing_${suffix}`,
+    )
+
+    try {
+      const response = await (await import('supertest')).default(app).put(`/api/v1/users/${userId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ realName: 'zero active role updated' })
+
+      expect(response.status).toBe(200)
+      expect(db.prepare('SELECT real_name FROM users WHERE id = ?').get(userId))
+        .toEqual({ real_name: 'zero active role updated' })
+      expect(db.prepare('SELECT role_code FROM user_roles WHERE user_id = ?').all(userId)).toEqual([])
+    } finally {
+      db.prepare('DELETE FROM user_roles WHERE user_id = ?').run(userId)
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId)
+    }
+  })
+
   it('non-admin cannot create a user with literal admin', async () => {
     const username = `loc007_admin_grant_${Date.now()}`
     const response = await (await import('supertest')).default(app).post('/api/v1/users')
@@ -330,5 +386,284 @@ describe('LOC-007 literal admin, delegation, takeover, and system protections', 
     expect(audit.request_data).not.toContain('"actor"')
     expect(audit.request_data).not.toContain('"operator"')
     db.prepare('DELETE FROM roles WHERE code = ?').run(code)
+  })
+})
+
+describe('LOC-007 non-admin delegation subsets and affected-user simulation', () => {
+  it('non-admin role create allows an actor subset and rejects an actor superset', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const subsetCode = `loc007_create_subset_${suffix}`
+    const aboveCode = `loc007_create_above_${suffix}`
+    const request = (await import('supertest')).default
+    try {
+      const subset = await request(app).post('/api/v1/roles')
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          code: subsetCode,
+          name: 'director subset',
+          permissions: { inventory: 'R' },
+          status: 'active',
+        })
+      expect(subset.status).toBe(201)
+      expect(db.prepare('SELECT status FROM roles WHERE code = ?').get(subsetCode)).toEqual({ status: 1 })
+
+      const above = await request(app).post('/api/v1/roles')
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          code: aboveCode,
+          name: 'director superset',
+          permissions: { inventory: 'W' },
+          status: 'active',
+        })
+      expect(above.status).toBe(403)
+      expect(db.prepare('SELECT 1 FROM roles WHERE code = ?').get(aboveCode)).toBeUndefined()
+    } finally {
+      db.prepare('DELETE FROM roles WHERE code IN (?, ?)').run(subsetCode, aboveCode)
+    }
+  })
+
+  it('non-admin role update allows an actor subset and rejects an actor superset', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const id = `ROLE-LOC007-UPDATE-${suffix}`
+    const code = `loc007_update_${suffix}`
+    db.prepare(`
+      INSERT INTO roles (id, code, name, description, permissions, status, is_deleted)
+      VALUES (?, ?, 'director update target', '', '{}', 1, 0)
+    `).run(id, code)
+    const request = (await import('supertest')).default
+    try {
+      const subset = await request(app).put(`/api/v1/roles/${id}`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ permissions: { inventory: 'R' } })
+      expect(subset.status).toBe(200)
+
+      const above = await request(app).put(`/api/v1/roles/${id}`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ permissions: { inventory: 'W' } })
+      expect(above.status).toBe(403)
+      expect(JSON.parse((db.prepare('SELECT permissions FROM roles WHERE id = ?').get(id) as {
+        permissions: string
+      }).permissions)).toEqual({ inventory: 'R' })
+    } finally {
+      db.prepare('DELETE FROM roles WHERE id = ?').run(id)
+    }
+  })
+
+  it('non-admin user create allows a role equal to the actor delegation boundary', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const username = `loc007_director_delegate_${suffix}`
+    try {
+      const response = await (await import('supertest')).default(app).post('/api/v1/users')
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          username,
+          password,
+          realName: 'director delegate',
+          roles: ['lab_director'],
+          primaryRole: 'lab_director',
+        })
+
+      expect(response.status).toBe(201)
+      const created = db.prepare('SELECT id, role, primary_role FROM users WHERE username = ?')
+        .get(username) as { id: string; role: string; primary_role: string }
+      expect(created).toMatchObject({ role: 'lab_director', primary_role: 'lab_director' })
+      expect(db.prepare('SELECT role_code FROM user_roles WHERE user_id = ?').all(created.id))
+        .toEqual([{ role_code: 'lab_director' }])
+    } finally {
+      const created = db.prepare('SELECT id FROM users WHERE username = ?').get(username) as
+        | { id: string }
+        | undefined
+      if (created) {
+        db.prepare('DELETE FROM user_roles WHERE user_id = ?').run(created.id)
+        db.prepare('DELETE FROM users WHERE id = ?').run(created.id)
+      }
+    }
+  })
+
+  it('affected-user simulation blocks a fallback gain beyond the actor', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const assignedId = `ROLE-LOC007-ASSIGNED-${suffix}`
+    const assignedCode = `loc007_assigned_${suffix}`
+    const fallbackId = `ROLE-LOC007-FALLBACK-${suffix}`
+    const fallbackCode = `loc007_fallback_${suffix}`
+    const userId = `USER-LOC007-FALLBACK-${suffix}`
+    db.prepare(`
+      INSERT INTO roles (id, code, name, description, permissions, status, is_deleted)
+      VALUES (?, ?, 'assigned role', '', '{}', 1, 0)
+    `).run(assignedId, assignedCode)
+    db.prepare(`
+      INSERT INTO roles (id, code, name, description, permissions, status, is_deleted)
+      VALUES (?, ?, 'fallback role', '', '{"inventory":"W"}', 1, 0)
+    `).run(fallbackId, fallbackCode)
+    db.prepare(`
+      INSERT INTO users
+        (id, username, password, real_name, role, primary_role, status, is_deleted)
+      VALUES (?, ?, ?, 'fallback gain user', ?, ?, 1, 0)
+    `).run(userId, `loc007_fallback_gain_${suffix}`, bcrypt.hashSync(password, 12), fallbackCode, assignedCode)
+    db.prepare('INSERT INTO user_roles (id, user_id, role_code) VALUES (?, ?, ?)')
+      .run(`UR-${userId}-${assignedCode}`, userId, assignedCode)
+
+    try {
+      const response = await (await import('supertest')).default(app).put(`/api/v1/roles/${assignedId}`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ status: 'inactive' })
+
+      expect(response.status).toBe(403)
+      expect(db.prepare('SELECT status FROM roles WHERE id = ?').get(assignedId)).toEqual({ status: 1 })
+    } finally {
+      db.prepare('DELETE FROM user_roles WHERE user_id = ?').run(userId)
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId)
+      db.prepare('DELETE FROM roles WHERE id IN (?, ?)').run(assignedId, fallbackId)
+    }
+  })
+
+  it('affected-user simulation allows a pure fallback downgrade', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const assignedId = `ROLE-LOC007-DOWNGRADE-${suffix}`
+    const assignedCode = `loc007_downgrade_${suffix}`
+    const fallbackId = `ROLE-LOC007-WEAK-${suffix}`
+    const fallbackCode = `loc007_weak_${suffix}`
+    const userId = `USER-LOC007-DOWNGRADE-${suffix}`
+    db.prepare(`
+      INSERT INTO roles (id, code, name, description, permissions, status, is_deleted)
+      VALUES (?, ?, 'assigned role', '', '{"inventory":"R"}', 1, 0)
+    `).run(assignedId, assignedCode)
+    db.prepare(`
+      INSERT INTO roles (id, code, name, description, permissions, status, is_deleted)
+      VALUES (?, ?, 'weak fallback role', '', '{}', 1, 0)
+    `).run(fallbackId, fallbackCode)
+    db.prepare(`
+      INSERT INTO users
+        (id, username, password, real_name, role, primary_role, status, is_deleted)
+      VALUES (?, ?, ?, 'fallback downgrade user', ?, ?, 1, 0)
+    `).run(userId, `loc007_fallback_down_${suffix}`, bcrypt.hashSync(password, 12), fallbackCode, assignedCode)
+    db.prepare('INSERT INTO user_roles (id, user_id, role_code) VALUES (?, ?, ?)')
+      .run(`UR-${userId}-${assignedCode}`, userId, assignedCode)
+
+    try {
+      const response = await (await import('supertest')).default(app).put(`/api/v1/roles/${assignedId}`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ status: 'inactive' })
+
+      expect(response.status).toBe(200)
+      expect(db.prepare('SELECT status FROM roles WHERE id = ?').get(assignedId)).toEqual({ status: 0 })
+    } finally {
+      db.prepare('DELETE FROM user_roles WHERE user_id = ?').run(userId)
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId)
+      db.prepare('DELETE FROM roles WHERE id IN (?, ?)').run(assignedId, fallbackId)
+    }
+  })
+})
+
+describe('LOC-007 route writes re-read actor authorization inside their transaction', () => {
+  it('role create denies an actor disabled after route guards and writes zero roles', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const code = `loc007_race_role_${suffix}`
+    const actorBefore = db.prepare('SELECT status FROM users WHERE id = ?')
+      .get('USER-LOC007-DIRECTOR') as { status: number }
+    const handlerLayer = productionRouteHandlerLayer('api\\/v1\\/roles', '/', 'post')
+    const originalHandler = handlerLayer.handle
+    let mutationHits = 0
+    handlerLayer.handle = ((req, res, next) => {
+      mutationHits += 1
+      db.prepare('UPDATE users SET status = 0 WHERE id = ?').run('USER-LOC007-DIRECTOR')
+      return originalHandler(req, res, next)
+    }) as express.RequestHandler
+
+    try {
+      const response = await (await import('supertest')).default(app).post('/api/v1/roles')
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          code,
+          name: 'route race role',
+          permissions: { inventory: 'R' },
+          status: 'active',
+        })
+
+      expect(response.status).toBe(403)
+      expect(mutationHits).toBe(1)
+      expect(db.prepare('SELECT 1 FROM roles WHERE code = ?').get(code)).toBeUndefined()
+    } finally {
+      handlerLayer.handle = originalHandler
+      db.prepare('UPDATE users SET status = ? WHERE id = ?')
+        .run(actorBefore.status, 'USER-LOC007-DIRECTOR')
+      db.prepare('DELETE FROM roles WHERE code = ?').run(code)
+    }
+  })
+
+  it('user create denies an actor revoked after route guards and writes zero users', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const username = `loc007_race_user_${suffix}`
+    const roleBefore = db.prepare('SELECT permissions FROM roles WHERE code = ?')
+      .get('lab_director') as { permissions: string }
+    const handlerLayer = productionRouteHandlerLayer('api\\/v1\\/users', '/', 'post')
+    const originalHandler = handlerLayer.handle
+    let mutationHits = 0
+    handlerLayer.handle = ((req, res, next) => {
+      mutationHits += 1
+      db.prepare('UPDATE roles SET permissions = ? WHERE code = ?')
+        .run(JSON.stringify({ inventory: 'R', roles: 'W' }), 'lab_director')
+      return originalHandler(req, res, next)
+    }) as express.RequestHandler
+
+    try {
+      const response = await (await import('supertest')).default(app).post('/api/v1/users')
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          username,
+          password,
+          realName: 'route race user',
+          roles: ['lab_director'],
+        })
+
+      expect(response.status).toBe(403)
+      expect(mutationHits).toBe(1)
+      expect(db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)).toBeUndefined()
+    } finally {
+      handlerLayer.handle = originalHandler
+      db.prepare('UPDATE roles SET permissions = ? WHERE code = ?')
+        .run(roleBefore.permissions, 'lab_director')
+      const created = db.prepare('SELECT id FROM users WHERE username = ?').get(username) as
+        | { id: string }
+        | undefined
+      if (created) {
+        db.prepare('DELETE FROM user_roles WHERE user_id = ?').run(created.id)
+        db.prepare('DELETE FROM users WHERE id = ?').run(created.id)
+      }
+    }
+  })
+})
+
+describe('LOC-007 last effective admin DELETE protection', () => {
+  it('rejects deleting the only active effective admin through the DELETE route', async () => {
+    const suffix = `${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const userId = `USER-LOC007-LAST-ADMIN-${suffix}`
+    const username = `loc007_last_admin_${suffix}`
+    const rootBefore = db.prepare('SELECT status FROM users WHERE id = ?').get('USER-001') as {
+      status: number
+    }
+    db.prepare(`
+      INSERT INTO users
+        (id, username, password, real_name, role, primary_role, status, is_deleted)
+      VALUES (?, ?, ?, 'last admin delete target', 'admin', 'admin', 1, 0)
+    `).run(userId, username, bcrypt.hashSync(password, 12))
+    db.prepare('INSERT INTO user_roles (id, user_id, role_code) VALUES (?, ?, ?)')
+      .run(`UR-${userId}-admin`, userId, 'admin')
+    const token = await login(username, password)
+    db.prepare('UPDATE users SET status = 0 WHERE id = ?').run('USER-001')
+
+    try {
+      const response = await (await import('supertest')).default(app).delete(`/api/v1/users/${userId}`)
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(response.status).toBe(409)
+      expect(response.body.error.code).toBe('BUSINESS_CONFLICT')
+      expect(db.prepare('SELECT is_deleted FROM users WHERE id = ?').get(userId))
+        .toEqual({ is_deleted: 0 })
+    } finally {
+      db.prepare('UPDATE users SET status = ? WHERE id = ?').run(rootBefore.status, 'USER-001')
+      db.prepare('DELETE FROM user_roles WHERE user_id = ?').run(userId)
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId)
+    }
   })
 })

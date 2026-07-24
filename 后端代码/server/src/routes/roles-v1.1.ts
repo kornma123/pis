@@ -49,8 +49,7 @@ router.get('/', (req, res) => {
   successList(res, list, page, pageSize, total)
 })
 
-router.post(
-  '/',
+router.post('/',
   rejectInvalidRoleCodeFields,
   requireRolesWrite,
   rejectUntrustedAuditActorFields,
@@ -91,8 +90,7 @@ router.post(
   }
 })
 
-router.put(
-  '/:id',
+router.put('/:id',
   rejectInvalidRoleCodeFields,
   requireRolesWrite,
   rejectUntrustedAuditActorFields,
@@ -165,8 +163,7 @@ router.put(
   }
 })
 
-router.delete(
-  '/:id',
+router.delete('/:id',
   requireRolesWrite,
   rejectUntrustedAuditActorFields,
   requireRoleDeleteCeiling,

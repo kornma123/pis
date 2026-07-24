@@ -143,8 +143,14 @@ router.put('/:id', requireUsersWrite, rejectUntrustedAuditActorFields, (req, res
       ? data.roles
       : hasOwn(data, 'role') ? [data.role] : getUserRoleCodes(db, id)
     const requestedPrimaryRole = primaryRoleWasRequested ? data.primaryRole : undefined
-    const resolvedRoles = resolveCanonicalActiveRoleSelection(db, requestedRoleCodes, requestedPrimaryRole)
-    if (!resolvedRoles) {
+    const preservesRolelessAccount = !roleSelectionWasRequested
+      && !primaryRoleWasRequested
+      && Array.isArray(requestedRoleCodes)
+      && requestedRoleCodes.length === 0
+    const resolvedRoles = preservesRolelessAccount
+      ? null
+      : resolveCanonicalActiveRoleSelection(db, requestedRoleCodes, requestedPrimaryRole)
+    if (!preservesRolelessAccount && !resolvedRoles) {
       db.exec('ROLLBACK')
       error(res, 'Role codes must reference active canonical roles', 'INVALID_PARAMETER', 400)
       return
@@ -152,7 +158,7 @@ router.put('/:id', requireUsersWrite, rejectUntrustedAuditActorFields, (req, res
     if (userRoleMutationExceedsSecurityCeiling(
       db,
       req,
-      roleSelectionWasRequested ? resolvedRoles.roles : undefined,
+      roleSelectionWasRequested ? resolvedRoles!.roles : undefined,
     )) {
       db.exec('ROLLBACK')
       error(res, 'Forbidden: security administration requires admin', 'FORBIDDEN', 403)
@@ -181,7 +187,7 @@ router.put('/:id', requireUsersWrite, rejectUntrustedAuditActorFields, (req, res
       error(res, 'Password must be replaced before reactivating this account', 'INVALID_PARAMETER', 400)
       return
     }
-    const replacementRoles = roleSelectionWasRequested ? resolvedRoles.roles : undefined
+    const replacementRoles = roleSelectionWasRequested ? resolvedRoles!.roles : undefined
     if (wouldRemoveLastEffectiveAdmin(db, id, { status: data.status, roles: replacementRoles })) {
       db.exec('ROLLBACK')
       error(res, 'Cannot remove the last effective admin', 'BUSINESS_CONFLICT', 409)
@@ -200,8 +206,8 @@ router.put('/:id', requireUsersWrite, rejectUntrustedAuditActorFields, (req, res
     }
     let sodWarning: string[] = []
     if (roleSelectionWasRequested || primaryRoleWasRequested) {
-      syncUserRoles(db, id, resolvedRoles.roles, resolvedRoles.primaryRole)
-      sodWarning = detectSoDConflicts(resolvedRoles.roles)
+      syncUserRoles(db, id, resolvedRoles!.roles, resolvedRoles!.primaryRole)
+      sodWarning = detectSoDConflicts(resolvedRoles!.roles)
     }
     const effectiveRoles = getUserRoles(db, id)
     db.exec('COMMIT')
@@ -212,8 +218,7 @@ router.put('/:id', requireUsersWrite, rejectUntrustedAuditActorFields, (req, res
   }
 })
 
-router.delete(
-  '/:id',
+router.delete('/:id',
   requireUsersWrite,
   rejectUntrustedAuditActorFields,
   requireUserRoleMutationCeiling,
