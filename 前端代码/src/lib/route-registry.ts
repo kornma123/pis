@@ -22,21 +22,10 @@ import {
   Trash2,
   ArrowRightLeft,
   CornerUpLeft,
-  Wrench,
-  Clock,
   TrendingUp,
-  Layers,
   Settings,
   Scale,
   Database,
-  AlertTriangle,
-  History,
-  GitBranch,
-  Container,
-  Receipt,
-  Wallet,
-  ShieldCheck,
-  CalendarClock,
 } from 'lucide-react'
 
 // ============================================================================
@@ -70,8 +59,6 @@ export type NavGroup =
   | 'catalog'       // 主数据（检测项目/BOM/物料分类/耗材）
   | 'consumption'   // 消耗与物料成本（消耗对账/物料成本分析/预警）
   | 'hospital-pnl'  // 按医院成本/盈利（盈利看板/账实核对/合作配置/LIS/导入）
-  | 'abc-cost'      // ABC 成本核算看板（看板/单片/盈利/异常/审计）
-  | 'abc-config'    // ABC 配置类参数录入（活动中心/动因/池/映射/预算/质量/季度/设备/工时/间接）
   | 'system'        // 系统管理（采购/供应商/库位/用户/角色/日志）
 
 /** navGroup 的封闭集合（check-route-nav.cjs 也解析本数组作单一事实源）。 */
@@ -81,8 +68,6 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   'catalog',
   'consumption',
   'hospital-pnl',
-  'abc-cost',
-  'abc-config',
   'system',
 ] as const
 
@@ -100,8 +85,6 @@ export const NAV_GROUP_AREA: Record<NavGroup, MenuArea> = {
   catalog: 'main',
   consumption: 'main',
   'hospital-pnl': 'main',
-  'abc-cost': 'main',
-  'abc-config': 'main',
   system: 'system',
 }
 
@@ -174,25 +157,6 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   { path: '/import-console', label: '导入测试台', icon: FlaskConical, navGroup: 'hospital-pnl', permModule: null, status: 'active' },
   { path: '/import-wizard', label: '财务月度导入', icon: FileText, navGroup: 'hospital-pnl', permModule: null, status: 'active' },
 
-  // ----- ABC 成本核算看板 -----
-  { path: '/abc/dashboard', label: 'ABC成本看板', icon: BarChart3, navGroup: 'abc-cost', permModule: 'abc_dashboard', status: 'active' },
-  { path: '/abc/slide-cost', label: '单片成本分析', icon: Layers, navGroup: 'abc-cost', permModule: 'slide_cost', status: 'active' },
-  { path: '/abc/profitability', label: '盈利分析', icon: TrendingUp, navGroup: 'abc-cost', permModule: 'profitability', status: 'active' },
-  { path: '/abc/alerts', label: '成本异常台账', icon: AlertTriangle, navGroup: 'abc-cost', permModule: 'abc_dashboard', status: 'active' },
-  { path: '/abc/audit', label: '成本审计追溯', icon: History, navGroup: 'abc-cost', permModule: 'abc_dashboard', status: 'active' },
-
-  // ----- ABC 配置类（参数唯一录入入口，I-1 补导航）-----
-  { path: '/abc/activity-centers', label: 'ABC配置', icon: Settings, navGroup: 'abc-config', permModule: 'abc_config', status: 'active' },
-  { path: '/abc/cost-drivers', label: '成本动因', icon: GitBranch, navGroup: 'abc-config', permModule: 'abc_config', status: 'active' },
-  { path: '/abc/cost-pools', label: '成本池', icon: Container, navGroup: 'abc-config', permModule: 'abc_config', status: 'active' },
-  { path: '/abc/fee-mappings', label: '收费映射配置', icon: Receipt, navGroup: 'abc-config', permModule: 'abc_config', status: 'active' },
-  { path: '/abc/budgets', label: '成本预算', icon: Wallet, navGroup: 'abc-config', permModule: 'abc_config', status: 'active' },
-  { path: '/abc/quality-costs', label: '质量成本', icon: ShieldCheck, navGroup: 'abc-config', permModule: 'abc_config', status: 'active' },
-  { path: '/abc/quarterly-adjustment', label: '季度成本调整', icon: CalendarClock, navGroup: 'abc-config', permModule: 'abc_config', status: 'active' },
-  { path: '/equipment', label: '设备管理', icon: Wrench, navGroup: 'abc-config', permModule: 'equipment', status: 'active' },
-  { path: '/labor-times', label: '标准工时库', icon: Clock, navGroup: 'abc-config', permModule: 'labor_times', status: 'active' },
-  { path: '/indirect-costs', label: '间接成本中心', icon: Settings, navGroup: 'abc-config', permModule: 'abc_config', status: 'active' },
-
   // ===== 系统菜单区（menuArea=system）=====
   { path: '/purchase-orders', label: '采购订单', icon: ShoppingCart, navGroup: 'system', permModule: 'purchase_orders', status: 'active' },
   { path: '/suppliers', label: '供应商管理', icon: Truck, navGroup: 'system', permModule: 'suppliers', status: 'active' },
@@ -200,19 +164,6 @@ export const ROUTE_REGISTRY: RouteEntry[] = [
   { path: '/users', label: '用户管理', icon: Users, navGroup: 'system', permModule: 'users', status: 'active' },
   { path: '/roles', label: '角色权限', icon: Shield, navGroup: 'system', permModule: 'roles', status: 'active' },
   { path: '/logs', label: '操作日志', icon: FileText, navGroup: 'system', permModule: 'logs', status: 'active' },
-
-  // ===== headless（可 URL 直达 / 父页下钻·无顶层导航）=====
-  // 孤儿分诊（迁移时逐条·证据=PM 已拍板 ABC 处置清单 #61 + 唯一资产读码 + 口径诚实核实；
-  //   operation_logs 无 path 列·dev 库无直 URL 证据故不作依据）。7 条均有唯一资产且诚实/已诚实降级，
-  //   分诊结论=保留待接入（补导航/合并/口径修正），故 headless（非 deprecated）+ owner+due+reason·
-  //   死线到期须重新分诊（fail-closed·忘填≠永久绿）。真正的补入口/合并/退役是后续独立小 PR。
-  { path: '/equipment/types', permModule: 'equipment', status: 'headless', owner: 'PM待拍（设备主数据）', due: '2026-10-07', reason: '设备类型主数据子页·经父页「设备管理」navigate 进入（有意子路由）·待定是否给面包屑/子导航或维持父页下钻' },
-  { path: '/equipment/depreciation', permModule: 'equipment', status: 'headless', owner: 'PM待拍（设备主数据）', due: '2026-10-07', reason: '设备折旧统计子页（读 /equipment/depreciation-stats）·当前无任何页面链入·待接父页下钻入口或并入报表平台' },
-  { path: '/abc/fee-comparison', permModule: 'abc_dashboard', status: 'headless', owner: 'PM待拍（报表平台 I-2）', due: '2026-10-07', reason: '逐笔出库 cost-vs-fee + 未配收费告警唯一视图（#61 §3B 待定·落点=统一报表平台 I-2）' },
-  { path: '/abc/supplier-costs', permModule: 'cost_analysis', status: 'headless', owner: 'PM待拍（合并 I-5）', due: '2026-10-07', reason: '供应商成本（同端点 cost-analysis 已消费·#61 §3A 合并候选 I-5→cost-analysis 供应商 Tab）·退款三列半成品恒 0·合并前不外显' },
-  { path: '/abc/trend', permModule: 'slide_cost', status: 'headless', owner: 'PM待拍（报表平台 I-2）', due: '2026-10-07', reason: '切片成本/利润率趋势（读 /abc/slide-cost-trend·#61 §3A 合并候选 I-2）·合并须并入逐 BOM 切片折线+季度维度角度' },
-  { path: '/abc/variance', permModule: 'abc_dashboard', status: 'headless', owner: 'PM待拍（口径 I-4）', due: '2026-10-07', reason: '成本差异·标准成本已诚实降级（#99/P-7 后端恒返回 null + 前端仅展示实际成本）·口径修正 I-4 后再定收编/下线（#61 §3B 待定）' },
-  { path: '/abc/model-validation', permModule: 'slide_cost', status: 'headless', owner: 'PM待拍（报表平台 I-2）', due: '2026-10-07', reason: 'BOM what-if 成本试算器（纯只读·无写操作·#61 §3A 合并候选 I-2→并入 /abc/slide-cost）' },
 
   // ===== deprecated（计划退役·真正删页是后续独立 PR）=====
   // 旧「医院盈利看板」从未上线（PM 拍板 #108）→ 直接替换为 /hospital-cm（院级贡献毛利·P0 标准成本）。

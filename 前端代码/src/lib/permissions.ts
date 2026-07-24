@@ -81,19 +81,11 @@ export function canAccess(module: string, level: CapLevel = 'R'): boolean {
   return level === 'R' ? true : got === 'W'
 }
 
-/** 成本/利润可见性（后端 app_settings.cost_visibility_roles 计算后随登录下发）。 */
+/**
+ * 兼容熔断：旧 Dashboard 仍调用该 helper，但 ABC/全成本产品面已退役。
+ * 忽略旧会话的 canSeeCost/capabilities，避免缓存会话重新点亮入口或触发旧 API。
+ */
 export function canSeeCost(): boolean {
-  try {
-    const userStr = localStorage.getItem('user')
-    if (userStr) {
-      const user = JSON.parse(userStr)
-      if (typeof user.canSeeCost === 'boolean') return user.canSeeCost
-    }
-  } catch {
-    /* ignore */
-  }
-  const caps = getCapabilities()
-  if (caps) return ['cost_analysis', 'abc_dashboard', 'slide_cost', 'profitability'].some((m) => caps[m])
   return false
 }
 
@@ -110,16 +102,6 @@ export const NAV_PATH_MODULE: Record<string, string> = {
   // 注：/partner-config、/import-console、/import-wizard 不走模块能力（财务无 partners 等模块能力），
   //   改为按角色(finance/admin)放行——见 getAccessiblePaths，口径与后端 requireAnyRole('finance') 一致。
 
-  '/abc/dashboard': 'abc_dashboard', '/abc/slide-cost': 'slide_cost', '/abc/profitability': 'profitability',
-  '/abc/activity-centers': 'abc_config', '/equipment': 'equipment', '/labor-times': 'labor_times', '/indirect-costs': 'abc_config',
-  // ABC 配置类孤儿路由补导航（I-1）：写操作后端均走 requireCostWrite=abc_config:W、读走 abc_dashboard:R，
-  //   映射到 abc_config 与 /abc/activity-centers 一致。持 abc_config 的角色(lab_director/finance/admin)必同时持
-  //   abc_dashboard:R（见 rbac-matrix SEED_MATRIX），故读端点不会 403。季度调整读 /cost-adjustments 需 cost_analysis:R，
-  //   同批角色亦均持 cost_analysis:R，映 abc_config 仍读安全（写需 cost_analysis:W，lab_director 只读降级不报错）。
-  '/abc/cost-drivers': 'abc_config', '/abc/cost-pools': 'abc_config', '/abc/fee-mappings': 'abc_config',
-  '/abc/budgets': 'abc_config', '/abc/quality-costs': 'abc_config', '/abc/quarterly-adjustment': 'abc_config',
-  // 成本异常台账读 /abc/exceptions、成本操作审计读 /abc/audit-logs 均走 abc_dashboard:R，映 abc_dashboard 口径对齐。
-  '/abc/alerts': 'abc_dashboard', '/abc/audit': 'abc_dashboard',
 }
 
 /** 当前用户可访问的 nav 路径集合（能力驱动；capabilities 缺失→退回旧 ROLE_MENU_MAP）。 */
@@ -151,10 +133,6 @@ export const ROLE_MENU_MAP: Record<string, string[]> = {
     '/projects', '/bom', '/reconciliation', '/account-reconcile', '/cost-analysis',
     '/categories', '/materials', '/alerts',
     '/purchase-orders', '/suppliers', '/locations', '/users', '/roles', '/logs', '/partner-config', '/lis-cases', '/import-console', '/import-wizard',
-    // ABC 成本核算（移植）
-    '/abc/dashboard', '/abc/slide-cost', '/abc/profitability', '/abc/activity-centers', '/equipment', '/labor-times', '/indirect-costs',
-    // ABC 配置类孤儿路由补导航（I-1）
-    '/abc/alerts', '/abc/audit', '/abc/cost-drivers', '/abc/cost-pools', '/abc/fee-mappings', '/abc/budgets', '/abc/quality-costs', '/abc/quarterly-adjustment',
   ],
   warehouse_manager: [
     '/', '/inventory', '/inbound', '/outbound', '/returns', '/supplier-returns', '/scraps', '/transfers', '/stocktaking',
@@ -163,22 +141,14 @@ export const ROLE_MENU_MAP: Record<string, string[]> = {
   technician: [
     '/', '/inventory', '/projects', '/bom', '/reconciliation',
     '/cost-analysis', '/materials', '/categories', '/alerts',
-    // ABC 成本核算（移植，只读看板）
-    '/abc/dashboard', '/abc/slide-cost', '/equipment', '/labor-times',
   ],
   procurement: [
     '/', '/inventory', '/inbound', '/materials', '/suppliers', '/purchase-orders', '/supplier-returns', '/categories', '/alerts',
   ],
   finance: [
     '/', '/inventory', '/supplier-returns', '/reconciliation', '/account-reconcile', '/cost-analysis', '/categories', '/alerts', '/partner-config', '/lis-cases', '/import-console', '/import-wizard',
-    // ABC 成本核算（移植）
-    '/abc/dashboard', '/abc/slide-cost', '/abc/profitability', '/abc/activity-centers', '/equipment', '/labor-times', '/indirect-costs',
-    // ABC 配置类孤儿路由补导航（I-1）
-    '/abc/alerts', '/abc/audit', '/abc/cost-drivers', '/abc/cost-pools', '/abc/fee-mappings', '/abc/budgets', '/abc/quality-costs', '/abc/quarterly-adjustment',
   ],
   pathologist: [
     '/', '/inventory', '/projects', '/bom', '/reconciliation', '/cost-analysis',
-    // ABC 成本核算（移植，只读看板）
-    '/abc/dashboard', '/abc/slide-cost', '/abc/profitability',
   ],
 }
