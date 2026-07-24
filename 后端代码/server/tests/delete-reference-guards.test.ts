@@ -422,6 +422,417 @@ describe('DELETE /api/v1/suppliers/:id — 供应商活引用拦截', () => {
   })
 })
 
+// ── material ────────────────────────────────────────────────────────────────
+
+describe('DELETE /api/v1/materials/:id — 物料库存事实与活引用拦截', () => {
+  it.each([
+    {
+      name: '库存缓存非零',
+      suffix: 'STOCK',
+      seed: (id: string) => {
+        db.prepare('INSERT INTO inventory (id, material_id, stock, locked_stock) VALUES (?, ?, 1, 0)')
+          .run(`INV-${id}`, id)
+      },
+    },
+    {
+      name: '锁定库存非零',
+      suffix: 'LOCKED',
+      seed: (id: string) => {
+        db.prepare('INSERT INTO inventory (id, material_id, stock, locked_stock) VALUES (?, ?, 0, 1)')
+          .run(`INV-${id}`, id)
+      },
+    },
+    {
+      name: '仍有有效批次余量',
+      suffix: 'BATCH',
+      seed: (id: string) => {
+        db.prepare('INSERT INTO inventory (id, material_id, stock, locked_stock) VALUES (?, ?, 0, 0)')
+          .run(`INV-${id}`, id)
+        db.prepare(`
+          INSERT INTO batches (id, material_id, batch_no, quantity, remaining, inbound_id, status)
+          VALUES (?, ?, ?, 1, 1, ?, 1)
+        `).run(`BAT-${id}`, id, `B-${id}`, `IN-${id}`)
+      },
+    },
+  ])('$name → 409 CONFLICT，物料不删除', async ({ suffix, seed }) => {
+    const id = `MAT-DG-${suffix}`
+    seedMaterial(id)
+    seed(id)
+
+    const res = await del(`/api/v1/materials/${id}`, SPOOF_BODY)
+
+    expect(res.status).toBe(409)
+    expect(res.body).toMatchObject({ success: false, error: { code: 'CONFLICT' } })
+    expect(row('materials', id)).toMatchObject({ id, is_deleted: 0 })
+  })
+
+  it.each([
+    {
+      name: 'pending purchase order',
+      suffix: 'PO',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO purchase_orders
+            (id, order_no, material_id, ordered_qty, unit, status, is_deleted)
+          VALUES (?, ?, ?, 1, '盒', 'pending', 0)
+        `).run(`PO-${id}`, `PO-NO-${id}`, id)
+      },
+    },
+    {
+      name: 'pending inbound',
+      suffix: 'INBOUND',
+      seed: (id: string) => {
+        seedLocation(`LOC-${id}`)
+        db.prepare(`
+          INSERT INTO inbound_records
+            (id, inbound_no, type, material_id, quantity, unit, location_id, operator, status, is_deleted)
+          VALUES (?, ?, 'purchase', ?, 1, '盒', ?, 'admin', 'pending', 0)
+        `).run(`IN-${id}`, `IN-NO-${id}`, id, `LOC-${id}`)
+      },
+    },
+    {
+      name: 'pending transfer',
+      suffix: 'TRANSFER',
+      seed: (id: string) => {
+        seedLocation(`LOC-${id}`)
+        db.prepare(`
+          INSERT INTO inbound_records
+            (id, inbound_no, type, material_id, quantity, unit, location_id, operator, status, is_deleted)
+          VALUES (?, ?, 'transfer', ?, 1, '盒', ?, 'admin', 'pending', 0)
+        `).run(`TR-${id}`, `TR-NO-${id}`, id, `LOC-${id}`)
+      },
+    },
+    {
+      name: 'pending outbound',
+      suffix: 'OUTBOUND',
+      seed: (id: string) => {
+        seedOutbound(`OUT-${id}`, null, 'pending')
+        db.prepare(`
+          INSERT INTO outbound_items
+            (id, outbound_id, material_id, quantity, unit, unit_cost, total_cost)
+          VALUES (?, ?, ?, 1, '盒', 1, 1)
+        `).run(`OI-${id}`, `OUT-${id}`, id)
+      },
+    },
+    {
+      name: 'orphan outbound item',
+      suffix: 'OUTBOUND-ORPHAN',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO outbound_items
+            (id, outbound_id, material_id, quantity, unit, unit_cost, total_cost)
+          VALUES (?, ?, ?, 1, '盒', 1, 1)
+        `).run(`OI-${id}`, `MISSING-OUT-${id}`, id)
+      },
+    },
+    {
+      name: 'pending customer return',
+      suffix: 'RETURN',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO return_records
+            (id, return_no, material_id, quantity, reason, operator, status, is_deleted)
+          VALUES (?, ?, ?, 1, '退回', 'admin', 'pending', 0)
+        `).run(`RET-${id}`, `RET-NO-${id}`, id)
+      },
+    },
+    {
+      name: 'received supplier return',
+      suffix: 'SUPRET',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO supplier_returns
+            (id, return_no, material_id, quantity, reason, operator, status, is_deleted)
+          VALUES (?, ?, ?, 1, '退供', 'admin', 'received', 0)
+        `).run(`SRET-${id}`, `SRET-NO-${id}`, id)
+      },
+    },
+    {
+      name: 'pending scrap',
+      suffix: 'SCRAP',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO scrap_records
+            (id, scrap_no, material_id, quantity, reason, operator, status, is_deleted)
+          VALUES (?, ?, ?, 1, '报废', 'admin', 'pending', 0)
+        `).run(`SCR-${id}`, `SCR-NO-${id}`, id)
+      },
+    },
+    {
+      name: 'pending stocktaking',
+      suffix: 'ST',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO stocktaking_records
+            (id, stocktaking_no, material_id, system_stock, actual_stock, difference, operator, status, is_deleted)
+          VALUES (?, ?, ?, 0, 1, 1, 'admin', 'pending', 0)
+        `).run(`ST-${id}`, `ST-NO-${id}`, id)
+      },
+    },
+    {
+      name: 'in-use batch allocation',
+      suffix: 'USAGE',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO batch_usage_tracking
+            (id, material_id, batch, total_qty, remaining, start_date, status)
+          VALUES (?, ?, ?, 1, 1, '2026-07-24', 'in-use')
+        `).run(`BU-${id}`, id, `BU-BATCH-${id}`)
+      },
+    },
+    {
+      name: 'active BOM item',
+      suffix: 'BOM',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO boms (id, code, name, version, type, status, is_deleted)
+          VALUES (?, ?, ?, 'v1', 'material-delete-guard', 1, 0)
+        `).run(`BOM-${id}`, `BOM-CODE-${id}`, `BOM-${id}`)
+        db.prepare(`
+          INSERT INTO bom_items (id, bom_id, material_id, usage_per_sample, unit)
+          VALUES (?, ?, ?, 1, '盒')
+        `).run(`BI-${id}`, `BOM-${id}`, id)
+      },
+    },
+    {
+      name: 'active BOM general reagent',
+      suffix: 'BOM-REAGENT',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO boms (id, code, name, version, type, status, is_deleted)
+          VALUES (?, ?, ?, 'v1', 'material-delete-guard', 1, 0)
+        `).run(`BOM-${id}`, `BOM-CODE-${id}`, `BOM-${id}`)
+        db.prepare(`
+          INSERT INTO bom_general_reagents (id, bom_id, material_id, usage_per_sample, unit)
+          VALUES (?, ?, ?, 1, '盒')
+        `).run(`BGR-${id}`, `BOM-${id}`, id)
+      },
+    },
+    {
+      name: 'active BOM general consumable',
+      suffix: 'BOM-CONSUMABLE',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO boms (id, code, name, version, type, status, is_deleted)
+          VALUES (?, ?, ?, 'v1', 'material-delete-guard', 1, 0)
+        `).run(`BOM-${id}`, `BOM-CODE-${id}`, `BOM-${id}`)
+        db.prepare(`
+          INSERT INTO bom_general_consumables (id, bom_id, material_id, usage_per_sample, unit)
+          VALUES (?, ?, ?, 1, '盒')
+        `).run(`BGC-${id}`, `BOM-${id}`, id)
+      },
+    },
+    {
+      name: 'active BOM quality control',
+      suffix: 'BOM-QC',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO boms (id, code, name, version, type, status, is_deleted)
+          VALUES (?, ?, ?, 'v1', 'material-delete-guard', 1, 0)
+        `).run(`BOM-${id}`, `BOM-CODE-${id}`, `BOM-${id}`)
+        db.prepare(`
+          INSERT INTO bom_quality_controls (id, bom_id, material_id, usage_per_batch, unit)
+          VALUES (?, ?, ?, 1, '盒')
+        `).run(`BQC-${id}`, `BOM-${id}`, id)
+      },
+    },
+    {
+      name: 'pending reconciliation proposal',
+      suffix: 'RECON',
+      seed: (id: string) => {
+        db.prepare(`
+          INSERT INTO reconciliation_logs
+            (id, type, target_id, target_name, reason, operator, status, material_id)
+          VALUES (?, 'bom_usage', ?, ?, '待审批', 'admin', 'pending', ?)
+        `).run(`RC-${id}`, `TARGET-${id}`, `TARGET-${id}`, id)
+      },
+    },
+  ])('$name → 409 ENTITY_IN_USE，锁内拒绝且拒绝审计脱敏', async ({ suffix, seed }) => {
+    const id = `MAT-DG-LIVE-${suffix}`
+    seedMaterial(id)
+    seed(id)
+
+    const trace = installBeginTrace()
+    let res
+    try {
+      res = await del(`/api/v1/materials/${id}`, SPOOF_BODY)
+    } finally {
+      trace.restore()
+    }
+
+    expect(trace.beginCount()).toBe(1)
+    expect(res.status).toBe(409)
+    expect(res.body).toMatchObject({ success: false, error: { code: 'ENTITY_IN_USE' } })
+    expect(row('materials', id)).toMatchObject({ id, is_deleted: 0 })
+    expectSanitizedDenialAudit('materials', id)
+  })
+
+  it('未知/畸形状态不是合法历史：未知退库状态 → 409 ENTITY_IN_USE', async () => {
+    const id = 'MAT-DG-UNKNOWN-STATE'
+    seedMaterial(id)
+    db.prepare(`
+      INSERT INTO return_records
+        (id, return_no, material_id, quantity, reason, operator, status, is_deleted)
+      VALUES ('RET-DG-UNKNOWN-STATE', 'RET-NO-DG-UNKNOWN-STATE', ?, 1, '退回', 'admin', 'future_state', 0)
+    `).run(id)
+
+    const res = await del(`/api/v1/materials/${id}`, SPOOF_BODY)
+
+    expect(res.status).toBe(409)
+    expect(res.body).toMatchObject({ success: false, error: { code: 'ENTITY_IN_USE' } })
+    expect(row('materials', id)).toMatchObject({ id, is_deleted: 0 })
+  })
+
+  it('仅合法零库存与历史/停用引用 → 删除成功且引用行不变', async () => {
+    const id = 'MAT-DG-DELETE-HIST'
+    seedMaterial(id)
+    db.prepare('INSERT INTO inventory (id, material_id, stock, locked_stock) VALUES (?, ?, 0, 0)')
+      .run(`INV-${id}`, id)
+    db.prepare(`
+      INSERT INTO batches (id, material_id, batch_no, quantity, remaining, inbound_id, status)
+      VALUES (?, ?, ?, 5, 0, ?, 0)
+    `).run(`BAT-${id}`, id, `B-${id}`, `IN-${id}`)
+    db.prepare(`
+      INSERT INTO purchase_orders
+        (id, order_no, material_id, ordered_qty, unit, status, is_deleted)
+      VALUES (?, ?, ?, 1, '盒', 'completed', 0)
+    `).run(`PO-${id}`, `PO-NO-${id}`, id)
+    seedLocation(`LOC-${id}`)
+    db.prepare(`
+      INSERT INTO inbound_records
+        (id, inbound_no, type, material_id, quantity, unit, location_id, operator, status, is_deleted)
+      VALUES (?, ?, 'transfer', ?, 1, '盒', ?, 'admin', 'completed', 0)
+    `).run(`IN-${id}`, `IN-NO-${id}`, id, `LOC-${id}`)
+    seedOutbound(`OUT-${id}`, null, 'completed')
+    db.prepare(`
+      INSERT INTO outbound_items
+        (id, outbound_id, material_id, quantity, unit, unit_cost, total_cost)
+      VALUES (?, ?, ?, 1, '盒', 1, 1)
+    `).run(`OI-${id}`, `OUT-${id}`, id)
+    db.prepare(`
+      INSERT INTO return_records
+        (id, return_no, material_id, quantity, reason, operator, status, is_deleted)
+      VALUES (?, ?, ?, 1, '退回', 'admin', 'completed', 0)
+    `).run(`RET-${id}`, `RET-NO-${id}`, id)
+    db.prepare(`
+      INSERT INTO supplier_returns
+        (id, return_no, material_id, quantity, reason, operator, status, is_deleted)
+      VALUES (?, ?, ?, 1, '退供', 'admin', 'refunded', 0)
+    `).run(`SRET-${id}`, `SRET-NO-${id}`, id)
+    db.prepare(`
+      INSERT INTO scrap_records
+        (id, scrap_no, material_id, quantity, reason, operator, status, is_deleted)
+      VALUES (?, ?, ?, 1, '报废', 'admin', 'completed', 0)
+    `).run(`SCR-${id}`, `SCR-NO-${id}`, id)
+    db.prepare(`
+      INSERT INTO stocktaking_records
+        (id, stocktaking_no, material_id, system_stock, actual_stock, difference, operator, status, is_deleted)
+      VALUES (?, ?, ?, 0, 0, 0, 'admin', 'completed', 0)
+    `).run(`ST-${id}`, `ST-NO-${id}`, id)
+    db.prepare(`
+      INSERT INTO boms (id, code, name, version, type, status, is_deleted)
+      VALUES (?, ?, ?, 'v1', 'material-delete-guard', 0, 0)
+    `).run(`BOM-${id}`, `BOM-CODE-${id}`, `BOM-${id}`)
+    db.prepare(`
+      INSERT INTO bom_items (id, bom_id, material_id, usage_per_sample, unit)
+      VALUES (?, ?, ?, 1, '盒')
+    `).run(`BI-${id}`, `BOM-${id}`, id)
+    db.prepare(`
+      INSERT INTO reconciliation_logs
+        (id, type, target_id, target_name, reason, operator, status, material_id)
+      VALUES (?, 'bom_usage', ?, ?, '已应用', 'admin', 'applied', ?)
+    `).run(`RC-${id}`, `TARGET-${id}`, `TARGET-${id}`, id)
+    db.prepare(`
+      INSERT INTO alerts
+        (id, type, level, material_id, material_name, message, status)
+      VALUES (?, 'low-stock', 'warning', ?, ?, '历史派生预警', 'pending')
+    `).run(`ALERT-${id}`, id, `物料-${id}`)
+    db.prepare(`
+      INSERT INTO stock_logs
+        (id, type, material_id, quantity, before_stock, after_stock, operator, remark)
+      VALUES (?, 'historical', ?, 0, 0, 0, 'admin', '历史库存流水')
+    `).run(`LOG-${id}`, id)
+    const beforeRefs = {
+      batch: row('batches', `BAT-${id}`),
+      purchase: row('purchase_orders', `PO-${id}`),
+      inbound: row('inbound_records', `IN-${id}`),
+      outboundItem: row('outbound_items', `OI-${id}`),
+      ret: row('return_records', `RET-${id}`),
+      supplierReturn: row('supplier_returns', `SRET-${id}`),
+      scrap: row('scrap_records', `SCR-${id}`),
+      stocktaking: row('stocktaking_records', `ST-${id}`),
+      bomItem: row('bom_items', `BI-${id}`),
+      reconciliation: row('reconciliation_logs', `RC-${id}`),
+      alert: row('alerts', `ALERT-${id}`),
+      stockLog: row('stock_logs', `LOG-${id}`),
+    }
+
+    const res = await del(`/api/v1/materials/${id}`, SPOOF_BODY)
+
+    expect(res.status).toBe(200)
+    expect(row('materials', id)).toMatchObject({ id, is_deleted: 1 })
+    expect(row('batches', `BAT-${id}`)).toEqual(beforeRefs.batch)
+    expect(row('purchase_orders', `PO-${id}`)).toEqual(beforeRefs.purchase)
+    expect(row('inbound_records', `IN-${id}`)).toEqual(beforeRefs.inbound)
+    expect(row('outbound_items', `OI-${id}`)).toEqual(beforeRefs.outboundItem)
+    expect(row('return_records', `RET-${id}`)).toEqual(beforeRefs.ret)
+    expect(row('supplier_returns', `SRET-${id}`)).toEqual(beforeRefs.supplierReturn)
+    expect(row('scrap_records', `SCR-${id}`)).toEqual(beforeRefs.scrap)
+    expect(row('stocktaking_records', `ST-${id}`)).toEqual(beforeRefs.stocktaking)
+    expect(row('bom_items', `BI-${id}`)).toEqual(beforeRefs.bomItem)
+    expect(row('reconciliation_logs', `RC-${id}`)).toEqual(beforeRefs.reconciliation)
+    expect(row('alerts', `ALERT-${id}`)).toEqual(beforeRefs.alert)
+    expect(row('stock_logs', `LOG-${id}`)).toEqual(beforeRefs.stockLog)
+  })
+
+  it('committed-race：锁前窗口被第二连接提交 pending PO → 锁内重读拦截，零部分写', async () => {
+    const id = 'MAT-DG-DELETE-RACE'
+    seedMaterial(id)
+    const race = installCommittedRace(() => {
+      rival.prepare(`
+        INSERT INTO purchase_orders
+          (id, order_no, material_id, ordered_qty, unit, status, is_deleted)
+        VALUES ('PO-MAT-DG-RACE', 'PO-NO-MAT-DG-RACE', ?, 1, '盒', 'pending', 0)
+      `).run(id)
+    })
+
+    let res
+    try {
+      res = await del(`/api/v1/materials/${id}`, SPOOF_BODY)
+    } finally {
+      race.restore()
+    }
+
+    expect(race.fired()).toBe(true)
+    expect(res.status).toBe(409)
+    expect(res.body).toMatchObject({ success: false, error: { code: 'ENTITY_IN_USE' } })
+    expect(row('materials', id)).toMatchObject({ id, is_deleted: 0 })
+    expect(row('purchase_orders', 'PO-MAT-DG-RACE')).toMatchObject({ material_id: id, status: 'pending' })
+  })
+
+  it('故障回滚：软删除写入失败 → 500 脱敏、物料行不变、可重试', async () => {
+    const id = 'MAT-DG-FAULT'
+    seedMaterial(id)
+    await expectFaultRollback({
+      table: 'materials',
+      id,
+      path: `/api/v1/materials/${id}`,
+      triggerName: 'dg_material_forced_error',
+    })
+  })
+
+  it('ROLLBACK 命令故障：关闭并替换连接，未提交删除回滚且可重试', async () => {
+    const id = 'MAT-DG-ROLLBACK-FAULT'
+    seedMaterial(id)
+    await expectRollbackCommandFault({
+      table: 'materials',
+      id,
+      path: `/api/v1/materials/${id}`,
+      triggerName: 'dg_material_rollback_fault',
+    })
+  })
+})
+
 // ── role ────────────────────────────────────────────────────────────────────
 
 describe('DELETE /api/v1/roles/:id — 角色活跃用户分配拦截', () => {
