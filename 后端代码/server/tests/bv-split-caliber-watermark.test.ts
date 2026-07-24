@@ -13,6 +13,8 @@ import { SPLIT_FORMULA_VERSION } from '../src/utils/statement-revenue.js'
 let app: any, db: any, adminToken = '', financeToken = ''
 const PID = 'PT-WM-1'
 const MONTH = '2026-06'
+const STATEMENT_GENERATION = 'STMT-WM-1'
+const RECONCILE_GENERATION = 'RECON-WM-1'
 
 async function st() { return (await import('supertest')).default }
 
@@ -30,6 +32,31 @@ function expectUnratifiedWatermark(cr: any) {
 beforeAll(async () => {
   db = await getDb()
   db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'WM-1', '水印测试医院', 1)`).run(PID)
+  db.prepare(
+    `INSERT INTO statement_import_batches
+      (id, partner_id, source_hash, template_family, parser_revision, config_revision,
+       settlement_month, generation_id, is_current, raw_row_count, normalized_line_count, status)
+     VALUES ('BATCH-WM-1', ?, 'HASH-WM-1', 'test', 'r1', 'c1', ?, ?, 1, 1, 1, 'posted')`,
+  ).run(PID, MONTH, STATEMENT_GENERATION)
+  db.prepare(
+    `INSERT INTO statement_raw_rows
+      (id, batch_id, generation_id, source_sheet, source_row, row_json)
+     VALUES ('RAW-WM-1', 'BATCH-WM-1', ?, 'sheet', 1, '{}')`,
+  ).run(STATEMENT_GENERATION)
+  db.prepare(
+    `INSERT INTO statement_normalized_lines
+      (id, batch_id, generation_id, partner_id, settlement_month, ledger_settlement_month,
+       case_no, item_name, source_sheet, source_row, source_column, source_label,
+       template_family, row_kind, line_grain, business_line, amount_role, amount, classification_status)
+     VALUES ('LINE-WM-1', 'BATCH-WM-1', ?, ?, ?, ?, 'WM-CASE-1', '免疫组化染色',
+             'sheet', 1, 'amount', '免疫组化染色', 'test', 'detail', 'case',
+             'IN', 'gross', 100, 'classified')`,
+  ).run(STATEMENT_GENERATION, PID, MONTH, MONTH)
+  db.prepare(
+    `INSERT INTO lis_cases
+      (id, case_no, partner_id, ihc_count, special_stain_count, operate_time)
+     VALUES ('LIS-WM-1', 'WM-CASE-1', ?, 1, 0, '2026-06-15')`,
+  ).run(PID)
   // 一条含 lab_revenue 的 case_revenue（供 partner-pnl / hospital-cm / account-reconcile 有数）
   db.prepare(`INSERT OR IGNORE INTO case_revenue (id, case_no, partner_id, partner_name, service_month, gross_amount, net_amount, lab_revenue, revenue_source) VALUES (?, 'WM-CASE-1', ?, '水印测试医院', ?, 1000, 830, 830, 'statement')`)
     .run(`CR-${uuidv4()}`, PID, MONTH)
@@ -50,6 +77,15 @@ beforeAll(async () => {
   ])
   adminToken = await loginAdmin(app)
   financeToken = await loginAs(app, 'caiwu', 'CoreOne2026!')
+  const request = await st()
+  await request(app).post('/api/v1/account-reconcile/compute')
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({
+      partnerId: PID,
+      settlementMonth: MONTH,
+      statementGenerationId: STATEMENT_GENERATION,
+      reconcileGenerationId: RECONCILE_GENERATION,
+    })
 })
 
 const A = (r: any) => r.set('Authorization', `Bearer ${adminToken}`)
@@ -82,10 +118,15 @@ describe('拆分结论对外输出携带未认账水印', () => {
   })
 
   it('GET /account-reconcile/overview（复核总览）带水印·且 board 并存', async () => {
-    const r = await A((await st())(app).get(`/api/v1/account-reconcile/overview?serviceMonth=${MONTH}`))
+    const r = await A((await st())(app).get('/api/v1/account-reconcile/overview').query({
+      partnerId: PID,
+      settlementMonth: MONTH,
+      statementGenerationId: STATEMENT_GENERATION,
+      reconcileGenerationId: RECONCILE_GENERATION,
+    }))
     expect(r.status).toBe(200)
     expectUnratifiedWatermark(r.body.data.caliberRatification)
-    expect(r.body.data.board).toBeTruthy()
+    expect(r.body.data.list).toHaveLength(1)
   })
 
   it('POST /statement-import/preview 带水印·且 revenue.labRevenue 并存', async () => {

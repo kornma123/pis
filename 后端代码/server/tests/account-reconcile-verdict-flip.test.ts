@@ -10,6 +10,8 @@ import { buildTestApp, getDb, loginAdmin } from './p0-harness.js'
 
 const P = 'PT-FLIP-1'
 const M = '2026-08'
+const S = 'STMT-FLIP-1'
+const R = 'RECON-FLIP-1'
 let app: any
 let token = ''
 let diffId = ''
@@ -27,6 +29,26 @@ async function mountApp() {
 beforeAll(async () => {
   const db = await getDb()
   db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'FLIP', '翻转测试院', 1)`).run(P)
+  db.prepare(
+    `INSERT INTO statement_import_batches
+      (id, partner_id, source_hash, template_family, parser_revision, config_revision,
+       settlement_month, generation_id, is_current, raw_row_count, normalized_line_count, status)
+     VALUES ('BATCH-FLIP-1', ?, 'HASH-FLIP-1', 'test', 'r1', 'c1', ?, ?, 1, 1, 1, 'posted')`,
+  ).run(P, M, S)
+  db.prepare(
+    `INSERT INTO statement_raw_rows
+      (id, batch_id, generation_id, source_sheet, source_row, row_json)
+     VALUES ('RAW-FLIP-1', 'BATCH-FLIP-1', ?, 'sheet', 1, '{}')`,
+  ).run(S)
+  db.prepare(
+    `INSERT INTO statement_normalized_lines
+      (id, batch_id, generation_id, partner_id, settlement_month, ledger_settlement_month,
+       case_no, item_name, source_sheet, source_row, source_column, source_label,
+       template_family, row_kind, line_grain, business_line, amount_role, amount, classification_status)
+     VALUES ('LINE-FLIP-1', 'BATCH-FLIP-1', ?, ?, ?, ?, 'FC1', '免疫组化染色*2',
+             'sheet', 1, 'amount', '免疫组化染色*2', 'test', 'detail', 'case',
+             'IN', 'gross', 200, 'classified')`,
+  ).run(S, P, M, M)
   // 账单免疫组化 2 片 vs LIS 5 片 → 漏收 -3（amount 300）
   db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run('fl-1', 'FC1', P, '免疫组化染色', 2, 100, M)
@@ -37,6 +59,7 @@ beforeAll(async () => {
 })
 
 const auth = (r: any) => r.set('Authorization', `Bearer ${token}`)
+const exactBinding = { partnerId: P, settlementMonth: M, statementGenerationId: S, reconcileGenerationId: R }
 const supCount = async () => {
   const s = await auth(request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${M}&status=待补收`))
   return s.body.data.list.length
@@ -44,9 +67,9 @@ const supCount = async () => {
 
 describe('账实核对 · 认定翻转（超期免费 ↔ 漏收补收）', () => {
   it('compute → 得漏收差异', async () => {
-    const c = await auth(request(app).post('/api/v1/account-reconcile/compute').send({ partnerId: P, serviceMonth: M }))
+    const c = await auth(request(app).post('/api/v1/account-reconcile/compute').send(exactBinding))
     expect(c.status).toBe(200)
-    const wb = await auth(request(app).get(`/api/v1/account-reconcile/workbench?partnerId=${P}&serviceMonth=${M}`))
+    const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(exactBinding))
     const d = wb.body.data.diffs.find((x: any) => x.caseNo === 'FC1')
     expect(d.systemHint).toBe('疑似漏收，需补收')
     diffId = d.id
