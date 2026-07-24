@@ -1,8 +1,13 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import {
+  findMaterialInventoryConflicts,
+  findMaterialLiveReferences,
+  recoverFailedDeleteTransaction,
+} from '../utils/delete-reference-guards.js'
 
 const router = Router()
 
@@ -213,19 +218,46 @@ router.put('/:id', requireMaterialWrite, (req, res) => {
 })
 
 router.delete('/:id', requireMaterialWrite, (req, res) => {
+  let db: ReturnType<typeof getDatabase> | undefined
+  let transactionOpen = false
   try {
     const { id } = req.params
-    const db = getDatabase()
+    db = getDatabase()
+    db.exec('BEGIN IMMEDIATE')
+    transactionOpen = true
 
     const existing = db.prepare('SELECT * FROM materials WHERE id = ? AND is_deleted = 0').get(id)
-    if (!existing) { error(res, 'Not found', 'NOT_FOUND', 404); return }
+    if (!existing) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Not found', 'NOT_FOUND', 404)
+      return
+    }
 
-    const hasStock = (db.prepare('SELECT COALESCE(stock, 0) as stock FROM inventory WHERE material_id = ?').get(id) as any)?.stock || 0
-    if (hasStock > 0) { error(res, 'Stock exists', 'CONFLICT', 409); return }
+    if (findMaterialInventoryConflicts(db, id).length > 0) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Material still has inventory, locked stock, or active batches', 'CONFLICT', 409)
+      return
+    }
+    if (findMaterialLiveReferences(db, id).length > 0) {
+      db.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Material still has live operational or catalog references', 'ENTITY_IN_USE', 409)
+      return
+    }
 
     db.prepare('UPDATE materials SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id)
+    db.exec('COMMIT')
+    transactionOpen = false
     success(res, null, 'Deleted')
-  } catch (err: any) { error(res, err.message) }
+  } catch (err: any) {
+    if (db && transactionOpen && !recoverFailedDeleteTransaction(db, closeDatabase)) {
+      error(res, 'Delete transaction recovery failed', 'INTERNAL_ERROR', 500)
+      return
+    }
+    error(res, err.message)
+  }
 })
 
 router.patch('/batch-status', requireMaterialWrite, (req, res) => {
