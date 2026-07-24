@@ -52,6 +52,27 @@
       "owner": "PM待拍（P0 贡献毛利）",
       "deadline": "2026-10-07",
       "reason": "incubating — P0 院级贡献毛利后端 lane（3 端点：/health 体检 / 对照表 / /trend）走 mockup 先行红线，前端 React 待 mockup(v2) 拍板后才写；且影子模式(PORTFOLIO_HEALTH_GATES_VERIFIED=false·三门 A/B/C 未验收前不进经营研判)。见 ADR-008 / PR #77。"
+    },
+    {
+      "path": "/statement-batches",
+      "method": "POST",
+      "owner": "LOC-005 对账并表 owner",
+      "deadline": "2026-10-06",
+      "reason": "incubating — Phase1A backend incubation；由 LOC-005 对账并表工程接线或退役，当前前端与 LOC-005 bridge 明确 excluded。"
+    },
+    {
+      "path": "/statement-batches/*",
+      "method": "*",
+      "owner": "LOC-005 对账并表 owner",
+      "deadline": "2026-10-06",
+      "reason": "incubating — Phase1A backend incubation；覆盖 preview/receipt/post/quality-flags，由 LOC-005 对账并表工程接线或退役，当前前端与 LOC-005 bridge 明确 excluded。"
+    },
+    {
+      "path": "/month-close/*",
+      "method": "*",
+      "owner": "LOC-005 对账并表 owner",
+      "deadline": "2026-10-06",
+      "reason": "incubating — Phase1A backend incubation；覆盖 compute/read/complete/close，由 LOC-005 对账并表工程接线或退役，当前前端与 LOC-005 bridge 明确 excluded。"
     }
   ]
 }

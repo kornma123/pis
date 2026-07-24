@@ -52,6 +52,8 @@ import ngsRoutes from './routes/ngs-v1.1.js'
 // 配置驱动导入器（P4）：逐院配置单一事实源 + 对账单导入预览/归类
 import partnerConfigRoutes from './routes/partner-config-v1.1.js'
 import statementImportRoutes from './routes/statement-import-v1.1.js'
+import statementBatchRoutes from './routes/statement-batches-v1.1.js'
+import monthCloseRoutes from './routes/month-close-v1.1.js'
 import {
   resolveAlertSchedulerConfig,
   startAlertScheduler,
@@ -145,6 +147,9 @@ app.use('/api/v1/ngs', authenticateToken, ngsRoutes)
 app.use('/api/v1/partner-config', authenticateToken, partnerConfigRoutes)
 // 对账单导入（P4）：预览(干跑) + 归类写回该院配置。权限由路由内守卫（财务/管理员）。
 app.use('/api/v1/statement-import', authenticateToken, statementImportRoutes)
+// Phase 1A 月结子账本：与既有逐病例 statement-import/account-reconcile 分离，固定 statement_internal 口径。
+app.use('/api/v1/statement-batches', authenticateToken, statementBatchRoutes)
+app.use('/api/v1/month-close', authenticateToken, monthCloseRoutes)
 
 // 健康检查
 app.get('/api/health', (_req, res) => {

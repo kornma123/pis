@@ -392,6 +392,548 @@ function seedDefaultUsersAfterCredentialCheck(
   }
 }
 
+const STATEMENT_PHASE1A_TABLES = [
+  'statement_import_batches',
+  'statement_raw_rows',
+  'statement_normalized_lines',
+  'quality_flags',
+  'partner_month_revenue_ledger',
+  'out_settlement_ledger',
+] as const
+
+const STATEMENT_BATCH_PREDECESSOR_COLUMNS = [
+  'id', 'partner_id', 'partner_name', 'source_file', 'source_hash', 'template_family',
+  'parser_revision', 'config_revision', 'settlement_month', 'generation_id',
+  'supersedes_generation_id', 'is_current', 'source_sheet', 'declared_total',
+  'raw_row_count', 'normalized_line_count', 'status', 'artifact_hash', 'uploaded_by',
+  'completed_at', 'completed_by', 'closed_at', 'closed_by', 'created_at', 'updated_at',
+] as const
+
+const STATEMENT_EMPTY_EVIDENCE_COLUMNS = [
+  'empty_evidence_hash',
+  'empty_verified_by',
+  'empty_verified_at',
+  'empty_expires_at',
+  'empty_coverage_json',
+] as const
+
+const STATEMENT_NORMALIZED_PREDECESSOR_COLUMNS = [
+  'id', 'batch_id', 'generation_id', 'partner_id', 'settlement_month',
+  'row_settlement_month', 'settlement_month_basis', 'case_no', 'external_subject_key',
+  'item_name', 'source_sheet', 'source_row', 'source_column', 'source_label',
+  'template_family', 'row_kind', 'line_grain', 'business_line', 'amount_role', 'amount',
+  'classification_status', 'rule_id', 'rule_version', 'report_date', 'raw_payload',
+  'created_at',
+] as const
+
+function statementTableColumns(database: DatabaseSync, table: string): string[] {
+  return (database.prepare(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>)
+    .map(column => column.name)
+}
+
+function sameColumns(actual: string[], expected: readonly string[]): boolean {
+  return actual.length === expected.length && actual.every((column, index) => column === expected[index])
+}
+
+function statementForeignKeyGroups(database: DatabaseSync, table: string): string[][] {
+  const rows = database.prepare(`PRAGMA foreign_key_list("${table}")`).all() as Array<{
+    id: number
+    seq: number
+    from: string
+    to: string
+  }>
+  const grouped = new Map<number, Array<{ seq: number; mapping: string }>>()
+  for (const row of rows) {
+    const group = grouped.get(row.id) ?? []
+    group.push({ seq: row.seq, mapping: `${row.from}:${row.to}` })
+    grouped.set(row.id, group)
+  }
+  return [...grouped.values()].map(group =>
+    group.sort((left, right) => left.seq - right.seq).map(item => item.mapping)
+  )
+}
+
+function hasStatementLineageForeignKey(database: DatabaseSync, table: string): boolean {
+  return statementForeignKeyGroups(database, table).some(group =>
+    group.join('|') === [
+      'source_line_id:id',
+      'generation_id:generation_id',
+      'batch_id:batch_id',
+      'partner_id:partner_id',
+      'settlement_month:ledger_settlement_month',
+    ].join('|')
+  )
+}
+
+function createCanonicalStatementBatchTable(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE statement_import_batches (
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      partner_id BLOB NOT NULL CHECK(typeof(partner_id) = 'text'),
+      partner_name TEXT,
+      source_file TEXT,
+      source_hash BLOB NOT NULL CHECK(typeof(source_hash) = 'text'),
+      template_family TEXT NOT NULL,
+      parser_revision BLOB NOT NULL CHECK(typeof(parser_revision) = 'text'),
+      config_revision BLOB NOT NULL CHECK(typeof(config_revision) = 'text'),
+      settlement_month BLOB NOT NULL CHECK(
+        typeof(settlement_month) = 'text'
+        AND settlement_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'
+        AND CAST(substr(settlement_month, 6, 2) AS INTEGER) BETWEEN 1 AND 12
+      ),
+      generation_id BLOB NOT NULL UNIQUE CHECK(typeof(generation_id) = 'text'),
+      supersedes_generation_id BLOB CHECK(
+        supersedes_generation_id IS NULL OR typeof(supersedes_generation_id) = 'text'
+      ),
+      is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0, 1)),
+      source_sheet TEXT,
+      declared_total DECIMAL(18, 4),
+      raw_row_count INTEGER NOT NULL CHECK(raw_row_count >= 0),
+      normalized_line_count INTEGER NOT NULL CHECK(normalized_line_count >= 0),
+      status TEXT NOT NULL DEFAULT 'parsed'
+        CHECK(status IN ('parsed', 'posted', 'computed', 'complete', 'closed', 'error', 'unavailable')),
+      artifact_hash TEXT,
+      uploaded_by TEXT,
+      empty_evidence_hash TEXT,
+      empty_verified_by TEXT,
+      empty_verified_at DATETIME,
+      empty_expires_at DATETIME,
+      empty_coverage_json TEXT,
+      empty_receipt_nonce BLOB UNIQUE CHECK(
+        empty_receipt_nonce IS NULL OR typeof(empty_receipt_nonce) = 'text'
+      ),
+      empty_idempotency_key BLOB CHECK(
+        empty_idempotency_key IS NULL OR typeof(empty_idempotency_key) = 'text'
+      ),
+      completed_at DATETIME,
+      completed_by TEXT,
+      closed_at DATETIME,
+      closed_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(partner_id, settlement_month, source_hash, parser_revision, config_revision),
+      UNIQUE(id, generation_id),
+      UNIQUE(id, generation_id, partner_id),
+      UNIQUE(id, generation_id, partner_id, settlement_month)
+    )
+  `)
+}
+
+function createCanonicalStatementFactTables(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE statement_raw_rows (
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      batch_id BLOB NOT NULL CHECK(typeof(batch_id) = 'text'),
+      generation_id BLOB NOT NULL CHECK(typeof(generation_id) = 'text'),
+      source_sheet TEXT,
+      source_row INTEGER NOT NULL CHECK(source_row >= 1),
+      row_json TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id)
+        REFERENCES statement_import_batches(id, generation_id),
+      UNIQUE(generation_id, source_sheet, source_row)
+    );
+    CREATE TABLE statement_normalized_lines (
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      batch_id BLOB NOT NULL CHECK(typeof(batch_id) = 'text'),
+      generation_id BLOB NOT NULL CHECK(typeof(generation_id) = 'text'),
+      partner_id BLOB NOT NULL CHECK(typeof(partner_id) = 'text'),
+      settlement_month BLOB NOT NULL CHECK(typeof(settlement_month) = 'text'),
+      ledger_settlement_month BLOB NOT NULL CHECK(typeof(ledger_settlement_month) = 'text'),
+      row_settlement_month TEXT,
+      settlement_month_basis TEXT,
+      case_no TEXT,
+      external_subject_key TEXT,
+      item_name TEXT,
+      source_sheet TEXT,
+      source_row INTEGER NOT NULL CHECK(source_row >= 1),
+      source_column TEXT NOT NULL,
+      source_label TEXT NOT NULL,
+      template_family TEXT NOT NULL,
+      row_kind TEXT NOT NULL CHECK(row_kind IN ('detail', 'subtotal', 'declared_total', 'header', 'note')),
+      line_grain TEXT NOT NULL CHECK(line_grain IN ('case', 'aggregate', 'out', 'joint', 'adjustment', 'retainer')),
+      business_line TEXT NOT NULL CHECK(business_line IN ('IN', 'OUT', 'UNKNOWN', 'NEUTRAL', 'EXCLUDED')),
+      amount_role TEXT NOT NULL,
+      amount DECIMAL(18, 4) NOT NULL,
+      classification_status TEXT NOT NULL,
+      rule_id TEXT,
+      rule_version TEXT,
+      report_date TEXT,
+      raw_payload TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id, partner_id, settlement_month)
+        REFERENCES statement_import_batches(id, generation_id, partner_id, settlement_month),
+      UNIQUE(generation_id, source_sheet, source_row, source_column, amount_role),
+      UNIQUE(id, generation_id, batch_id),
+      UNIQUE(id, generation_id, batch_id, partner_id, ledger_settlement_month),
+      UNIQUE(id, generation_id, batch_id, partner_id, settlement_month)
+    );
+    CREATE TABLE quality_flags (
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      generation_id BLOB NOT NULL CHECK(typeof(generation_id) = 'text'),
+      flag_type TEXT NOT NULL,
+      severity TEXT NOT NULL CHECK(severity IN ('blocking', 'warning', 'info')),
+      owner_role TEXT NOT NULL,
+      resolution_action TEXT NOT NULL,
+      blocks_posting INTEGER NOT NULL CHECK(blocks_posting IN (0, 1)),
+      blocks_closing INTEGER NOT NULL CHECK(blocks_closing IN (0, 1)),
+      partner_id BLOB NOT NULL CHECK(typeof(partner_id) = 'text'),
+      settlement_month BLOB NOT NULL CHECK(typeof(settlement_month) = 'text'),
+      related_batch_id BLOB NOT NULL CHECK(typeof(related_batch_id) = 'text'),
+      related_line_id BLOB CHECK(related_line_id IS NULL OR typeof(related_line_id) = 'text'),
+      reason_code TEXT NOT NULL,
+      message TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(related_batch_id, generation_id, partner_id, settlement_month)
+        REFERENCES statement_import_batches(id, generation_id, partner_id, settlement_month),
+      FOREIGN KEY(related_line_id, generation_id, related_batch_id, partner_id, settlement_month)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id, partner_id, settlement_month)
+    );
+    CREATE TABLE partner_month_revenue_ledger (
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      batch_id BLOB NOT NULL CHECK(typeof(batch_id) = 'text'),
+      generation_id BLOB NOT NULL CHECK(typeof(generation_id) = 'text'),
+      partner_id BLOB NOT NULL CHECK(typeof(partner_id) = 'text'),
+      settlement_month BLOB NOT NULL CHECK(typeof(settlement_month) = 'text'),
+      source_line_id BLOB NOT NULL UNIQUE CHECK(typeof(source_line_id) = 'text'),
+      category_label TEXT,
+      business_line TEXT NOT NULL CHECK(business_line = 'IN'),
+      settlement_amount DECIMAL(18, 4) NOT NULL,
+      ledger_scope TEXT NOT NULL DEFAULT 'statement_internal' CHECK(ledger_scope = 'statement_internal'),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id, partner_id)
+        REFERENCES statement_import_batches(id, generation_id, partner_id),
+      FOREIGN KEY(source_line_id, generation_id, batch_id, partner_id, settlement_month)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id, partner_id, ledger_settlement_month)
+    );
+    CREATE TABLE out_settlement_ledger (
+      id BLOB PRIMARY KEY CHECK(typeof(id) = 'text'),
+      batch_id BLOB NOT NULL CHECK(typeof(batch_id) = 'text'),
+      generation_id BLOB NOT NULL CHECK(typeof(generation_id) = 'text'),
+      partner_id BLOB NOT NULL CHECK(typeof(partner_id) = 'text'),
+      settlement_month BLOB NOT NULL CHECK(typeof(settlement_month) = 'text'),
+      source_line_id BLOB NOT NULL UNIQUE CHECK(typeof(source_line_id) = 'text'),
+      out_type TEXT NOT NULL,
+      item_name TEXT,
+      external_subject_key TEXT,
+      settlement_amount DECIMAL(18, 4) NOT NULL,
+      lab_revenue_amount DECIMAL(18, 4) NOT NULL DEFAULT 0 CHECK(lab_revenue_amount = 0),
+      ledger_scope TEXT NOT NULL DEFAULT 'statement_internal' CHECK(ledger_scope = 'statement_internal'),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id, partner_id)
+        REFERENCES statement_import_batches(id, generation_id, partner_id),
+      FOREIGN KEY(source_line_id, generation_id, batch_id, partner_id, settlement_month)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id, partner_id, ledger_settlement_month)
+    )
+  `)
+}
+
+function ensureUpgradedStatementIndexesAndTriggers(database: DatabaseSync): void {
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_statement_batches_partner_month_current
+      ON statement_import_batches(partner_id, settlement_month, is_current);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_batches_one_current_generation
+      ON statement_import_batches(partner_id, settlement_month) WHERE is_current = 1;
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_batches_id_generation
+      ON statement_import_batches(id, generation_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_batches_id_generation_partner
+      ON statement_import_batches(id, generation_id, partner_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_batches_id_generation_partner_month
+      ON statement_import_batches(id, generation_id, partner_id, settlement_month);
+    CREATE INDEX IF NOT EXISTS idx_statement_raw_rows_generation
+      ON statement_raw_rows(generation_id, source_row);
+    CREATE INDEX IF NOT EXISTS idx_statement_lines_partner_month_generation
+      ON statement_normalized_lines(partner_id, settlement_month, generation_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_lines_id_generation_batch
+      ON statement_normalized_lines(id, generation_id, batch_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_lines_exact_ledger_lineage
+      ON statement_normalized_lines(id, generation_id, batch_id, partner_id, ledger_settlement_month);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_lines_exact_batch_lineage
+      ON statement_normalized_lines(id, generation_id, batch_id, partner_id, settlement_month);
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_quality_flags_generation_identity
+      ON quality_flags(generation_id, flag_type, COALESCE(related_line_id, ''));
+    CREATE INDEX IF NOT EXISTS idx_quality_flags_generation_blocking
+      ON quality_flags(generation_id, blocks_posting, blocks_closing);
+    CREATE INDEX IF NOT EXISTS idx_partner_month_revenue_generation
+      ON partner_month_revenue_ledger(partner_id, settlement_month, generation_id);
+    CREATE INDEX IF NOT EXISTS idx_out_settlement_generation
+      ON out_settlement_ledger(partner_id, settlement_month, generation_id);
+    DROP TRIGGER IF EXISTS trg_statement_batch_immutable_identity;
+    DROP TRIGGER IF EXISTS trg_statement_batch_no_delete;
+    DROP TRIGGER IF EXISTS trg_statement_closed_generation_no_delete;
+    DROP TRIGGER IF EXISTS trg_statement_closed_generation_no_update;
+    CREATE TRIGGER trg_statement_batch_immutable_identity
+    BEFORE UPDATE ON statement_import_batches
+    WHEN OLD.partner_id <> NEW.partner_id
+      OR OLD.settlement_month <> NEW.settlement_month
+      OR OLD.source_hash <> NEW.source_hash
+      OR OLD.parser_revision <> NEW.parser_revision
+      OR OLD.config_revision <> NEW.config_revision
+      OR OLD.generation_id <> NEW.generation_id
+      OR COALESCE(OLD.source_file, '') <> COALESCE(NEW.source_file, '')
+      OR COALESCE(OLD.source_sheet, '') <> COALESCE(NEW.source_sheet, '')
+      OR OLD.template_family <> NEW.template_family
+      OR OLD.raw_row_count <> NEW.raw_row_count
+      OR OLD.normalized_line_count <> NEW.normalized_line_count
+      OR COALESCE(OLD.empty_evidence_hash, '') <> COALESCE(NEW.empty_evidence_hash, '')
+      OR COALESCE(OLD.empty_verified_by, '') <> COALESCE(NEW.empty_verified_by, '')
+      OR COALESCE(OLD.empty_verified_at, '') <> COALESCE(NEW.empty_verified_at, '')
+      OR COALESCE(OLD.empty_expires_at, '') <> COALESCE(NEW.empty_expires_at, '')
+      OR COALESCE(OLD.empty_coverage_json, '') <> COALESCE(NEW.empty_coverage_json, '')
+      OR COALESCE(OLD.empty_receipt_nonce, '') <> COALESCE(NEW.empty_receipt_nonce, '')
+      OR COALESCE(OLD.empty_idempotency_key, '') <> COALESCE(NEW.empty_idempotency_key, '')
+    BEGIN SELECT RAISE(ABORT, 'IMMUTABLE_IMPORT_FACT'); END;
+    CREATE TRIGGER trg_statement_batch_no_delete
+    BEFORE DELETE ON statement_import_batches
+    WHEN OLD.status <> 'closed'
+    BEGIN SELECT RAISE(ABORT, 'IMMUTABLE_IMPORT_FACT'); END;
+    CREATE TRIGGER trg_statement_closed_generation_no_delete
+    BEFORE DELETE ON statement_import_batches
+    WHEN OLD.status = 'closed'
+    BEGIN SELECT RAISE(ABORT, 'CLOSED_GENERATION_IMMUTABLE'); END;
+    CREATE TRIGGER trg_statement_closed_generation_no_update
+    BEFORE UPDATE ON statement_import_batches
+    WHEN OLD.status = 'closed'
+    BEGIN SELECT RAISE(ABORT, 'CLOSED_GENERATION_IMMUTABLE'); END
+  `)
+  for (const [table, code, parentColumn] of [
+    ['statement_raw_rows', 'IMMUTABLE_RAW_FACT', 'batch_id'],
+    ['statement_normalized_lines', 'IMMUTABLE_NORMALIZED_FACT', 'batch_id'],
+    ['quality_flags', 'IMMUTABLE_QUALITY_FACT', 'related_batch_id'],
+    ['partner_month_revenue_ledger', 'IMMUTABLE_LEDGER_FACT', 'batch_id'],
+    ['out_settlement_ledger', 'IMMUTABLE_LEDGER_FACT', 'batch_id'],
+  ] as const) {
+    database.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_closed_parent_no_insert
+      BEFORE INSERT ON ${table}
+      WHEN EXISTS (
+        SELECT 1 FROM statement_import_batches parent
+        WHERE parent.id = NEW.${parentColumn}
+          AND parent.generation_id = NEW.generation_id
+          AND parent.status = 'closed'
+      )
+      BEGIN SELECT RAISE(ABORT, 'CLOSED_PARENT_IMMUTABLE'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_update
+      BEFORE UPDATE ON ${table}
+      BEGIN SELECT RAISE(ABORT, '${code}'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_delete
+      BEFORE DELETE ON ${table}
+      BEGIN SELECT RAISE(ABORT, '${code}'); END
+    `)
+  }
+}
+
+function createCanonicalStatementPhase1ASchema(database: DatabaseSync): void {
+  createCanonicalStatementBatchTable(database)
+  createCanonicalStatementFactTables(database)
+  ensureUpgradedStatementIndexesAndTriggers(database)
+}
+
+function normalizedStatementSchemaSql(sql: string | null): string {
+  return String(sql ?? '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([(),=])\s*/g, '$1')
+    .trim()
+    .toLowerCase()
+}
+
+function statementSchemaManifest(database: DatabaseSync): string {
+  const tables = STATEMENT_PHASE1A_TABLES.map(table => ({
+    table,
+    columns: database.prepare(`PRAGMA table_xinfo("${table}")`).all(),
+    foreignKeys: database.prepare(`PRAGMA foreign_key_list("${table}")`).all(),
+    tableSql: normalizedStatementSchemaSql(
+      (database.prepare(`
+        SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?
+      `).get(table) as { sql?: string } | undefined)?.sql ?? null,
+    ),
+    indexes: (database.prepare(`
+      SELECT name, sql FROM sqlite_master
+      WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL
+      ORDER BY name
+    `).all(table) as Array<{ name: string; sql: string }>).map(row => ({
+      name: row.name,
+      sql: normalizedStatementSchemaSql(row.sql),
+    })),
+    triggers: (database.prepare(`
+      SELECT name, sql FROM sqlite_master
+      WHERE type = 'trigger' AND tbl_name = ?
+      ORDER BY name
+    `).all(table) as Array<{ name: string; sql: string }>).map(row => ({
+      name: row.name,
+      sql: normalizedStatementSchemaSql(row.sql),
+    })),
+  }))
+  return JSON.stringify(tables)
+}
+
+let canonicalStatementSchemaManifest: string | undefined
+
+function expectedStatementSchemaManifest(): string {
+  if (canonicalStatementSchemaManifest) return canonicalStatementSchemaManifest
+  const reference = new DatabaseSync(':memory:')
+  try {
+    reference.exec('PRAGMA foreign_keys = ON')
+    createCanonicalStatementPhase1ASchema(reference)
+    canonicalStatementSchemaManifest = statementSchemaManifest(reference)
+    return canonicalStatementSchemaManifest
+  } finally {
+    reference.close()
+  }
+}
+
+function hasCurrentStatementSchemaManifest(database: DatabaseSync): boolean {
+  return statementSchemaManifest(database) === expectedStatementSchemaManifest()
+}
+
+export function upgradeStatementPhase1ASchema(
+  database: DatabaseSync
+): 'absent' | 'current' | 'upgraded' {
+  const present = STATEMENT_PHASE1A_TABLES.filter(table =>
+    Boolean(database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table))
+  )
+  if (present.length === 0) {
+    createCanonicalStatementPhase1ASchema(database)
+    return 'upgraded'
+  }
+  if (present.length !== STATEMENT_PHASE1A_TABLES.length) {
+    throw new Error('STATEMENT_PHASE1A_SCHEMA_UNSUPPORTED: partial table set')
+  }
+  if (hasCurrentStatementSchemaManifest(database)) return 'current'
+
+  const batchColumns = statementTableColumns(database, 'statement_import_batches')
+  const normalizedColumns = statementTableColumns(database, 'statement_normalized_lines')
+  const v0Batch = sameColumns(batchColumns, STATEMENT_BATCH_PREDECESSOR_COLUMNS)
+  const v1Batch = sameColumns(batchColumns, [
+    ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(0, 19),
+    'empty_evidence_hash', 'empty_verified_by', 'empty_verified_at', 'empty_coverage_json',
+    ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(19),
+  ])
+  const previousCurrentBatch = sameColumns(batchColumns, [
+    ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(0, 19),
+    ...STATEMENT_EMPTY_EVIDENCE_COLUMNS,
+    ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(19),
+  ]) || sameColumns(batchColumns, [
+    ...STATEMENT_BATCH_PREDECESSOR_COLUMNS,
+    ...STATEMENT_EMPTY_EVIDENCE_COLUMNS,
+  ])
+  const predecessorNormalized = sameColumns(normalizedColumns, STATEMENT_NORMALIZED_PREDECESSOR_COLUMNS)
+  const currentNormalized = sameColumns(normalizedColumns, [
+    ...STATEMENT_NORMALIZED_PREDECESSOR_COLUMNS.slice(0, 5),
+    'ledger_settlement_month',
+    ...STATEMENT_NORMALIZED_PREDECESSOR_COLUMNS.slice(5),
+  ])
+  const currentLineage = hasStatementLineageForeignKey(database, 'partner_month_revenue_ledger')
+    && hasStatementLineageForeignKey(database, 'out_settlement_ledger')
+
+  if (previousCurrentBatch && currentNormalized && currentLineage) {
+    throw new Error('STATEMENT_PHASE1A_SCHEMA_UNSUPPORTED: non-canonical current manifest')
+  }
+  if (!(v0Batch || v1Batch) || !predecessorNormalized) {
+    throw new Error('STATEMENT_PHASE1A_SCHEMA_UNSUPPORTED: unknown table shape')
+  }
+
+  const foreignKeys = Number(
+    (database.prepare('PRAGMA foreign_keys').get() as { foreign_keys?: number } | undefined)?.foreign_keys ?? 0
+  )
+  database.exec('PRAGMA foreign_keys = OFF')
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    for (const table of [...STATEMENT_PHASE1A_TABLES].reverse()) {
+      database.exec(`ALTER TABLE "${table}" RENAME TO "__loc004b_predecessor_${table}"`)
+    }
+    const oldObjects = database.prepare(`
+      SELECT type, name FROM sqlite_master
+      WHERE type IN ('index', 'trigger')
+        AND tbl_name LIKE '__loc004b_predecessor_%'
+        AND sql IS NOT NULL
+      ORDER BY CASE type WHEN 'trigger' THEN 0 ELSE 1 END, name
+    `).all() as Array<{ type: 'index' | 'trigger'; name: string }>
+    for (const object of oldObjects) {
+      database.exec(`DROP ${object.type.toUpperCase()} "${object.name.replaceAll('"', '""')}"`)
+    }
+    createCanonicalStatementPhase1ASchema(database)
+    const batchTargetColumns = [
+      ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(0, 19),
+      ...STATEMENT_EMPTY_EVIDENCE_COLUMNS,
+      'empty_receipt_nonce',
+      'empty_idempotency_key',
+      ...STATEMENT_BATCH_PREDECESSOR_COLUMNS.slice(19),
+    ]
+    const batchProjection = batchTargetColumns.map(column =>
+      batchColumns.includes(column) ? `"${column}"` : 'NULL'
+    )
+    database.exec(`
+      INSERT INTO statement_import_batches (${batchTargetColumns.join(', ')})
+        SELECT ${batchProjection.join(', ')}
+        FROM __loc004b_predecessor_statement_import_batches;
+      INSERT INTO statement_raw_rows (
+        id, batch_id, generation_id, source_sheet, source_row, row_json, created_at
+      )
+        SELECT id, batch_id, generation_id, source_sheet, source_row, row_json, created_at
+        FROM __loc004b_predecessor_statement_raw_rows;
+      INSERT INTO statement_normalized_lines (
+        id, batch_id, generation_id, partner_id, settlement_month, ledger_settlement_month,
+        row_settlement_month, settlement_month_basis, case_no, external_subject_key, item_name,
+        source_sheet, source_row, source_column, source_label, template_family, row_kind, line_grain,
+        business_line, amount_role, amount, classification_status, rule_id, rule_version,
+        report_date, raw_payload, created_at
+      )
+      SELECT
+        id, batch_id, generation_id, partner_id, settlement_month,
+        COALESCE(row_settlement_month, settlement_month),
+        row_settlement_month, settlement_month_basis, case_no, external_subject_key, item_name,
+        source_sheet, source_row, source_column, source_label, template_family, row_kind, line_grain,
+        business_line, amount_role, amount, classification_status, rule_id, rule_version,
+        report_date, raw_payload, created_at
+      FROM __loc004b_predecessor_statement_normalized_lines;
+      INSERT INTO quality_flags (
+        id, generation_id, flag_type, severity, owner_role, resolution_action,
+        blocks_posting, blocks_closing, partner_id, settlement_month,
+        related_batch_id, related_line_id, reason_code, message, created_at
+      )
+        SELECT id, generation_id, flag_type, severity, owner_role, resolution_action,
+               blocks_posting, blocks_closing, partner_id, settlement_month,
+               related_batch_id, related_line_id, reason_code, message, created_at
+        FROM __loc004b_predecessor_quality_flags;
+      INSERT INTO partner_month_revenue_ledger (
+        id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+        category_label, business_line, settlement_amount, ledger_scope, created_at
+      )
+        SELECT id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+               category_label, business_line, settlement_amount, ledger_scope, created_at
+        FROM __loc004b_predecessor_partner_month_revenue_ledger;
+      INSERT INTO out_settlement_ledger (
+        id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+        out_type, item_name, external_subject_key, settlement_amount, lab_revenue_amount,
+        ledger_scope, created_at
+      )
+        SELECT id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+               out_type, item_name, external_subject_key, settlement_amount, lab_revenue_amount,
+               ledger_scope, created_at
+        FROM __loc004b_predecessor_out_settlement_ledger
+    `)
+    const violations = database.prepare('PRAGMA foreign_key_check').all()
+    if (violations.length > 0) {
+      throw new Error('lineage validation failed')
+    }
+    for (const table of [...STATEMENT_PHASE1A_TABLES].reverse()) {
+      database.exec(`DROP TABLE "__loc004b_predecessor_${table}"`)
+    }
+    if (!hasCurrentStatementSchemaManifest(database)) {
+      throw new Error('canonical schema manifest validation failed')
+    }
+    database.exec('COMMIT')
+  } catch (error) {
+    database.exec('ROLLBACK')
+    const detail = error instanceof Error ? error.message : 'unknown failure'
+    throw new Error(`STATEMENT_PHASE1A_UPGRADE_FAILED: ${detail}`)
+  } finally {
+    database.exec(`PRAGMA foreign_keys = ${foreignKeys === 1 ? 'ON' : 'OFF'}`)
+  }
+  return 'upgraded'
+}
+
 export function initializeDatabase(): void {
   const database = getDatabase()
   const allowFixtures = allowDefaultFixtureUsers()
@@ -881,6 +1423,281 @@ export function initializeDatabase(): void {
   `)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_partner_month ON case_revenue(partner_id, service_month)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_case_revenue_lines_case ON case_revenue_lines(case_no)`)
+
+  // Phase 1A 月结子账本：SQLite 是唯一事实层。DTO/canonical JSON 只从以下事实投影。
+  // generation_id 绑定 partner+month+source hash+parser/config revision；同 source 新 revision 追加世代，不覆盖旧事实。
+  upgradeStatementPhase1ASchema(database)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS statement_import_batches (
+      id TEXT PRIMARY KEY,
+      partner_id TEXT NOT NULL,
+      partner_name TEXT,
+      source_file TEXT,
+      source_hash TEXT NOT NULL,
+      template_family TEXT NOT NULL,
+      parser_revision TEXT NOT NULL,
+      config_revision TEXT NOT NULL,
+      settlement_month TEXT NOT NULL CHECK(
+        settlement_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'
+        AND CAST(substr(settlement_month, 6, 2) AS INTEGER) BETWEEN 1 AND 12
+      ),
+      generation_id TEXT NOT NULL UNIQUE,
+      supersedes_generation_id TEXT,
+      is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0, 1)),
+      source_sheet TEXT,
+      declared_total DECIMAL(18, 4),
+      raw_row_count INTEGER NOT NULL CHECK(raw_row_count >= 0),
+      normalized_line_count INTEGER NOT NULL CHECK(normalized_line_count >= 0),
+      status TEXT NOT NULL DEFAULT 'parsed'
+        CHECK(status IN ('parsed', 'posted', 'computed', 'complete', 'closed', 'error', 'unavailable')),
+      artifact_hash TEXT,
+      uploaded_by TEXT,
+      empty_evidence_hash TEXT,
+      empty_verified_by TEXT,
+      empty_verified_at DATETIME,
+      empty_expires_at DATETIME,
+      empty_coverage_json TEXT,
+      completed_at DATETIME,
+      completed_by TEXT,
+      closed_at DATETIME,
+      closed_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(partner_id, settlement_month, source_hash, parser_revision, config_revision),
+      UNIQUE(id, generation_id),
+      UNIQUE(id, generation_id, partner_id),
+      UNIQUE(id, generation_id, partner_id, settlement_month)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_statement_batches_partner_month_current
+      ON statement_import_batches(partner_id, settlement_month, is_current)
+  `)
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_statement_batches_one_current_generation
+      ON statement_import_batches(partner_id, settlement_month)
+      WHERE is_current = 1
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS statement_raw_rows (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      generation_id TEXT NOT NULL,
+      source_sheet TEXT,
+      source_row INTEGER NOT NULL CHECK(source_row >= 1),
+      row_json TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id)
+        REFERENCES statement_import_batches(id, generation_id),
+      UNIQUE(generation_id, source_sheet, source_row)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_statement_raw_rows_generation
+      ON statement_raw_rows(generation_id, source_row)
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS statement_normalized_lines (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL,
+      ledger_settlement_month TEXT NOT NULL,
+      row_settlement_month TEXT,
+      settlement_month_basis TEXT,
+      case_no TEXT,
+      external_subject_key TEXT,
+      item_name TEXT,
+      source_sheet TEXT,
+      source_row INTEGER NOT NULL CHECK(source_row >= 1),
+      source_column TEXT NOT NULL,
+      source_label TEXT NOT NULL,
+      template_family TEXT NOT NULL,
+      row_kind TEXT NOT NULL CHECK(row_kind IN ('detail', 'subtotal', 'declared_total', 'header', 'note')),
+      line_grain TEXT NOT NULL CHECK(line_grain IN ('case', 'aggregate', 'out', 'joint', 'adjustment', 'retainer')),
+      business_line TEXT NOT NULL CHECK(business_line IN ('IN', 'OUT', 'UNKNOWN', 'NEUTRAL', 'EXCLUDED')),
+      amount_role TEXT NOT NULL,
+      amount DECIMAL(18, 4) NOT NULL,
+      classification_status TEXT NOT NULL,
+      rule_id TEXT,
+      rule_version TEXT,
+      report_date TEXT,
+      raw_payload TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id, partner_id, settlement_month)
+        REFERENCES statement_import_batches(id, generation_id, partner_id, settlement_month),
+      UNIQUE(generation_id, source_sheet, source_row, source_column, amount_role),
+      UNIQUE(id, generation_id, batch_id),
+      UNIQUE(id, generation_id, batch_id, partner_id, ledger_settlement_month),
+      UNIQUE(id, generation_id, batch_id, partner_id, settlement_month)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_statement_lines_partner_month_generation
+      ON statement_normalized_lines(partner_id, settlement_month, generation_id)
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS quality_flags (
+      id TEXT PRIMARY KEY,
+      generation_id TEXT NOT NULL,
+      flag_type TEXT NOT NULL,
+      severity TEXT NOT NULL CHECK(severity IN ('blocking', 'warning', 'info')),
+      owner_role TEXT NOT NULL,
+      resolution_action TEXT NOT NULL,
+      blocks_posting INTEGER NOT NULL CHECK(blocks_posting IN (0, 1)),
+      blocks_closing INTEGER NOT NULL CHECK(blocks_closing IN (0, 1)),
+      partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL,
+      related_batch_id TEXT NOT NULL,
+      related_line_id TEXT,
+      reason_code TEXT NOT NULL,
+      message TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(related_batch_id, generation_id, partner_id, settlement_month)
+        REFERENCES statement_import_batches(id, generation_id, partner_id, settlement_month),
+      FOREIGN KEY(related_line_id, generation_id, related_batch_id, partner_id, settlement_month)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id, partner_id, settlement_month)
+    )
+  `)
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_quality_flags_generation_identity
+      ON quality_flags(generation_id, flag_type, COALESCE(related_line_id, ''))
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_quality_flags_generation_blocking
+      ON quality_flags(generation_id, blocks_posting, blocks_closing)
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS partner_month_revenue_ledger (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL,
+      source_line_id TEXT NOT NULL UNIQUE,
+      category_label TEXT,
+      business_line TEXT NOT NULL CHECK(business_line = 'IN'),
+      settlement_amount DECIMAL(18, 4) NOT NULL,
+      ledger_scope TEXT NOT NULL DEFAULT 'statement_internal' CHECK(ledger_scope = 'statement_internal'),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id, partner_id)
+        REFERENCES statement_import_batches(id, generation_id, partner_id),
+      FOREIGN KEY(source_line_id, generation_id, batch_id, partner_id, settlement_month)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id, partner_id, ledger_settlement_month)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_partner_month_revenue_generation
+      ON partner_month_revenue_ledger(partner_id, settlement_month, generation_id)
+  `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS out_settlement_ledger (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL,
+      source_line_id TEXT NOT NULL UNIQUE,
+      out_type TEXT NOT NULL,
+      item_name TEXT,
+      external_subject_key TEXT,
+      settlement_amount DECIMAL(18, 4) NOT NULL,
+      lab_revenue_amount DECIMAL(18, 4) NOT NULL DEFAULT 0 CHECK(lab_revenue_amount = 0),
+      ledger_scope TEXT NOT NULL DEFAULT 'statement_internal' CHECK(ledger_scope = 'statement_internal'),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id, partner_id)
+        REFERENCES statement_import_batches(id, generation_id, partner_id),
+      FOREIGN KEY(source_line_id, generation_id, batch_id, partner_id, settlement_month)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id, partner_id, ledger_settlement_month)
+    )
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_out_settlement_generation
+      ON out_settlement_ledger(partner_id, settlement_month, generation_id)
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_statement_batch_immutable_identity
+    BEFORE UPDATE ON statement_import_batches
+    WHEN OLD.partner_id <> NEW.partner_id
+      OR OLD.settlement_month <> NEW.settlement_month
+      OR OLD.source_hash <> NEW.source_hash
+      OR OLD.parser_revision <> NEW.parser_revision
+      OR OLD.config_revision <> NEW.config_revision
+      OR OLD.generation_id <> NEW.generation_id
+      OR COALESCE(OLD.source_file, '') <> COALESCE(NEW.source_file, '')
+      OR COALESCE(OLD.source_sheet, '') <> COALESCE(NEW.source_sheet, '')
+      OR OLD.template_family <> NEW.template_family
+      OR OLD.raw_row_count <> NEW.raw_row_count
+      OR OLD.normalized_line_count <> NEW.normalized_line_count
+      OR COALESCE(OLD.empty_evidence_hash, '') <> COALESCE(NEW.empty_evidence_hash, '')
+      OR COALESCE(OLD.empty_verified_by, '') <> COALESCE(NEW.empty_verified_by, '')
+      OR COALESCE(OLD.empty_verified_at, '') <> COALESCE(NEW.empty_verified_at, '')
+      OR COALESCE(OLD.empty_expires_at, '') <> COALESCE(NEW.empty_expires_at, '')
+      OR COALESCE(OLD.empty_coverage_json, '') <> COALESCE(NEW.empty_coverage_json, '')
+    BEGIN
+      SELECT RAISE(ABORT, 'IMMUTABLE_IMPORT_FACT');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_statement_batch_no_delete
+    BEFORE DELETE ON statement_import_batches
+    WHEN OLD.status <> 'closed'
+    BEGIN
+      SELECT RAISE(ABORT, 'IMMUTABLE_IMPORT_FACT');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_statement_closed_generation_no_delete
+    BEFORE DELETE ON statement_import_batches
+    WHEN OLD.status = 'closed'
+    BEGIN
+      SELECT RAISE(ABORT, 'CLOSED_GENERATION_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_statement_closed_generation_no_update
+    BEFORE UPDATE ON statement_import_batches
+    WHEN OLD.status = 'closed'
+    BEGIN
+      SELECT RAISE(ABORT, 'CLOSED_GENERATION_IMMUTABLE');
+    END
+  `)
+  for (const [table, code, parentColumn] of [
+    ['statement_raw_rows', 'IMMUTABLE_RAW_FACT', 'batch_id'],
+    ['statement_normalized_lines', 'IMMUTABLE_NORMALIZED_FACT', 'batch_id'],
+    ['quality_flags', 'IMMUTABLE_QUALITY_FACT', 'related_batch_id'],
+    ['partner_month_revenue_ledger', 'IMMUTABLE_LEDGER_FACT', 'batch_id'],
+    ['out_settlement_ledger', 'IMMUTABLE_LEDGER_FACT', 'batch_id'],
+  ] as const) {
+    database.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_closed_parent_no_insert
+      BEFORE INSERT ON ${table}
+      WHEN EXISTS (
+        SELECT 1 FROM statement_import_batches parent
+        WHERE parent.id = NEW.${parentColumn}
+          AND parent.generation_id = NEW.generation_id
+          AND parent.status = 'closed'
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'CLOSED_PARENT_IMMUTABLE');
+      END
+    `)
+    database.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_update
+      BEFORE UPDATE ON ${table}
+      BEGIN
+        SELECT RAISE(ABORT, '${code}');
+      END
+    `)
+    database.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_no_delete
+      BEFORE DELETE ON ${table}
+      BEGIN
+        SELECT RAISE(ABORT, '${code}');
+      END
+    `)
+  }
 
   // 收入侧：NGS 基因检测【外购转销】产品目录（参考价）+ 逐单（独立渠道，非 LIS/非对账单）。
   // ⛔ 红线：外包成本(协议价)=外购直接成本，独立于 ABC 内部成本引擎；与院内 charge_codes 占比估算互不读写。
