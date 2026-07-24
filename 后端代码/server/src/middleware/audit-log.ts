@@ -58,9 +58,10 @@ const SUCCESS_AUDIT_METADATA = Symbol('coreone.success-audit-metadata')
 
 export function setSuccessAuditMetadata(
   res: Response,
-  metadata: Record<string, string | number | boolean | null>,
+  metadata: Record<string, unknown>,
 ): void {
-  ;(res as Response & { [SUCCESS_AUDIT_METADATA]?: unknown })[SUCCESS_AUDIT_METADATA] = { ...metadata }
+  ;(res as Response & { [SUCCESS_AUDIT_METADATA]?: unknown })[SUCCESS_AUDIT_METADATA] =
+    scrubSensitive(metadata)
 }
 
 /** 递归打码敏感字段；非对象原样返回；深度/环保护 */

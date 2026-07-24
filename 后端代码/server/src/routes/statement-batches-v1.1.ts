@@ -7,8 +7,8 @@ import {
   buildStatementNormalizedFacts,
   importStatementBatch,
   issueAuthoritativeEmptyReceipt,
+  parseStatementImportInput,
   Phase1AError,
-  type StatementImportInput,
 } from '../services/statement-normalized-lines.js'
 import { postStatementGeneration } from '../services/statement-ledger-phase1a.js'
 
@@ -19,6 +19,10 @@ const trustedActor = (req: any): string =>
 const receiptContext = (req: any) => ({
   actor: trustedActor(req),
   receiptSecret: process.env.JWT_SECRET,
+})
+const statementInput = (req: any) => ({
+  ...parseStatementImportInput(req.body),
+  uploadedBy: trustedActor(req),
 })
 
 function respondError(res: any, caught: unknown): void {
@@ -32,8 +36,7 @@ function respondError(res: any, caught: unknown): void {
 
 router.post('/preview-normalized', requireFinance, (req, res) => {
   try {
-    const actor = trustedActor(req)
-    const input = { ...(req.body as StatementImportInput), uploadedBy: actor }
+    const input = statementInput(req)
     const facts = buildStatementNormalizedFacts(input, receiptContext(req))
     success(res, {
       declaredTotal: facts.declaredTotal,
@@ -50,8 +53,7 @@ router.post('/preview-normalized', requireFinance, (req, res) => {
 
 router.post('/authoritative-empty-receipts', requireFinance, (req, res) => {
   try {
-    const actor = trustedActor(req)
-    const input = { ...(req.body as StatementImportInput), uploadedBy: actor }
+    const input = statementInput(req)
     const issued = issueAuthoritativeEmptyReceipt(input, receiptContext(req))
     setSuccessAuditMetadata(res, {
       partnerId: input.partnerId,
@@ -71,8 +73,7 @@ router.post('/authoritative-empty-receipts', requireFinance, (req, res) => {
 
 router.post('/', requireFinance, (req, res) => {
   try {
-    const actor = trustedActor(req)
-    const input = { ...(req.body as StatementImportInput), uploadedBy: actor }
+    const input = statementInput(req)
     const result = importStatementBatch(getDatabase(), input, receiptContext(req))
     setSuccessAuditMetadata(res, {
       batchId: result.batchId,

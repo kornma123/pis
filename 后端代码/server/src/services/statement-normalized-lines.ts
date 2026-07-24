@@ -134,6 +134,21 @@ export interface ImportStatementResult {
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
 const SHA256_RE = /^sha256:[0-9a-f]{64}$/
 const DECIMAL_RE = /^[+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,4})?|\.\d{1,4})$/
+const PHASE1A_TEMPLATES = new Set(['category_summary', 'outsourced_detail', 'consult_remote'])
+export const STATEMENT_INPUT_LIMITS = Object.freeze({
+  partnerId: 128,
+  partnerName: 256,
+  settlementMonth: 7,
+  sourceFile: 512,
+  sourceHash: 71,
+  templateFamily: 32,
+  parserRevision: 128,
+  configRevision: 128,
+  sourceSheet: 128,
+  emptyReceipt: 8_192,
+  idempotencyKey: 128,
+  uploadedBy: 128,
+})
 const EMPTY_EVIDENCE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const EMPTY_EVIDENCE_FUTURE_SKEW_MS = 5 * 60 * 1000
 const round4 = (value: number): number => Math.round((value + Number.EPSILON) * 10_000) / 10_000
@@ -565,33 +580,106 @@ interface VerifiedStatementImport {
   emptyCoverageJson: string | null
 }
 
-function canonicalStatementImportInput(candidate: StatementImportInput): StatementImportInput {
-  if (!candidate.partnerId || !candidate.sourceHash || !candidate.parserRevision || !candidate.configRevision) {
-    throw new Phase1AError('GENERATION_KEY_INCOMPLETE', 'partner/source/parser/config are required', 400)
+function statementInputRecord(candidate: unknown): Record<string, unknown> {
+  if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    throw new Phase1AError('INVALID_STATEMENT_INPUT', 'statement input must be an object', 400)
   }
-  if (!MONTH_RE.test(candidate.settlementMonth)) {
+  return candidate as Record<string, unknown>
+}
+
+function requiredStatementString(
+  record: Record<string, unknown>,
+  field: keyof typeof STATEMENT_INPUT_LIMITS,
+): string {
+  const value = record[field]
+  if (typeof value !== 'string') {
+    throw new Phase1AError('INVALID_STATEMENT_INPUT', `${field} must be a primitive string`, 400)
+  }
+  const canonical = value.trim()
+  if (!canonical || canonical.length > STATEMENT_INPUT_LIMITS[field]) {
+    throw new Phase1AError('INVALID_STATEMENT_INPUT', `${field} is empty or too long`, 400)
+  }
+  return canonical
+}
+
+function optionalStatementString(
+  record: Record<string, unknown>,
+  field: keyof typeof STATEMENT_INPUT_LIMITS,
+): string | undefined {
+  if (!Object.prototype.hasOwnProperty.call(record, field)) return undefined
+  return requiredStatementString(record, field)
+}
+
+export function parseStatementImportInput(candidate: unknown): StatementImportInput {
+  const record = statementInputRecord(candidate)
+  const partnerId = requiredStatementString(record, 'partnerId')
+  const settlementMonth = requiredStatementString(record, 'settlementMonth')
+  const sourceHash = requiredStatementString(record, 'sourceHash')
+  const templateFamily = requiredStatementString(record, 'templateFamily')
+  const parserRevision = requiredStatementString(record, 'parserRevision')
+  const configRevision = requiredStatementString(record, 'configRevision')
+  if (!MONTH_RE.test(settlementMonth)) {
     throw new Phase1AError('INVALID_SETTLEMENT_MONTH', 'settlementMonth must be YYYY-MM', 400)
   }
-  if (!Number.isInteger(candidate.headerRow) || candidate.headerRow < 0 || !Array.isArray(candidate.grid)) {
+  if (!SHA256_RE.test(sourceHash)) {
+    throw new Phase1AError('INVALID_SOURCE_HASH', 'sourceHash must be canonical sha256', 400)
+  }
+  if (!PHASE1A_TEMPLATES.has(templateFamily)) {
+    throw new Phase1AError('TEMPLATE_NOT_IN_PHASE1A', templateFamily, 422)
+  }
+  if (!Number.isSafeInteger(record.headerRow) || (record.headerRow as number) < 0) {
     throw new Phase1AError('INVALID_STATEMENT_GRID', 'grid/headerRow are invalid', 400)
   }
-  const grid = canonicalGrid(candidate.grid)
-  if (candidate.authoritativeEmpty !== undefined || candidate.emptyEvidence !== undefined) {
+  const grid = canonicalGrid(record.grid as Grid)
+  if (
+    Object.prototype.hasOwnProperty.call(record, 'authoritativeEmpty')
+    || Object.prototype.hasOwnProperty.call(record, 'emptyEvidence')
+  ) {
     throw new Phase1AError(
       'AUTHORITATIVE_EMPTY_RECEIPT_REQUIRED',
       'client-authored authoritative-empty claims are not trusted',
       422,
     )
   }
-  const sourceHash = computeStatementSourceHash(grid)
-  if (!SHA256_RE.test(candidate.sourceHash) || candidate.sourceHash !== sourceHash) {
+  if (
+    Object.prototype.hasOwnProperty.call(record, 'idempotentReplay')
+    && typeof record.idempotentReplay !== 'boolean'
+  ) {
+    throw new Phase1AError('INVALID_STATEMENT_INPUT', 'idempotentReplay must be boolean', 400)
+  }
+  const canonicalSourceHash = computeStatementSourceHash(grid)
+  if (sourceHash !== canonicalSourceHash) {
     throw new Phase1AError(
       'SOURCE_CONTENT_CONFLICT',
       'declared sourceHash does not match the server canonical grid hash',
       409,
     )
   }
-  return { ...candidate, grid, sourceHash }
+  const parsed: StatementImportInput = {
+    partnerId,
+    settlementMonth,
+    sourceHash: canonicalSourceHash,
+    templateFamily: templateFamily as Exclude<StatementTemplate, 'unknown'>,
+    parserRevision,
+    configRevision,
+    headerRow: record.headerRow as number,
+    grid,
+  }
+  for (const field of [
+    'partnerName',
+    'sourceFile',
+    'sourceSheet',
+    'emptyReceipt',
+    'idempotencyKey',
+    'uploadedBy',
+  ] as const) {
+    const value = optionalStatementString(record, field)
+    if (value !== undefined) parsed[field] = value
+  }
+  if (typeof record.idempotentReplay === 'boolean') {
+    parsed.idempotentReplay = record.idempotentReplay
+  }
+  return parsed
 }
 
 function receiptSecret(context: TrustedStatementImportContext): string {
@@ -670,7 +758,7 @@ function authoritativeEmptyClaims(
     )
   }
   const idempotencyKey = input.idempotencyKey?.trim()
-  if (!idempotencyKey || idempotencyKey.length > 128) {
+  if (!idempotencyKey || idempotencyKey.length > STATEMENT_INPUT_LIMITS.idempotencyKey) {
     throw new Phase1AError(
       'AUTHORITATIVE_EMPTY_IDEMPOTENCY_KEY_REQUIRED',
       'authoritative-empty receipt requires an explicit idempotency key',
@@ -715,7 +803,7 @@ export function issueAuthoritativeEmptyReceipt(
   candidate: StatementImportInput,
   context: TrustedStatementImportContext,
 ): IssuedAuthoritativeEmptyReceipt {
-  const input = canonicalStatementImportInput(candidate)
+  const input = parseStatementImportInput(candidate)
   if (input.grid.length !== 0) {
     throw new Phase1AError(
       'AUTHORITATIVE_EMPTY_RECEIPT_NONEMPTY',
@@ -738,7 +826,7 @@ function verifyStatementImportInput(
   candidate: StatementImportInput,
   context: TrustedStatementImportContext = {},
 ): VerifiedStatementImport {
-  const input = canonicalStatementImportInput(candidate)
+  const input = parseStatementImportInput(candidate)
   if (input.grid.length !== 0) {
     if (candidate.emptyReceipt !== undefined) {
       throw new Phase1AError(

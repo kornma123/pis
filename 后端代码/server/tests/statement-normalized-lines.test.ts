@@ -7,7 +7,9 @@ import {
   buildStatementNormalizedFacts,
   computeStatementSourceHash,
   importStatementBatch,
+  parseStatementImportInput,
   parseStatementAmount,
+  STATEMENT_INPUT_LIMITS,
   type StatementImportInput,
 } from '../src/services/statement-normalized-lines.js'
 import { postStatementGeneration } from '../src/services/statement-ledger-phase1a.js'
@@ -577,6 +579,105 @@ describe('S1/S2 Phase 1A canonical schema, immutability and generation idempoten
       ) VALUES ('RAW-CROSS-GENERATION', ?, ?, 'cross', 999, '[]')
     `).run(left.batchId, right.generationId)).toThrow(/FOREIGN KEY constraint failed/)
     expect((db.prepare('SELECT COUNT(*) n FROM statement_raw_rows').get() as any).n).toBe(before)
+  })
+})
+
+describe('shared Phase 1A statement input parser', () => {
+  it('pins bounded identity fields and returns canonical primitive scalars', () => {
+    expect(STATEMENT_INPUT_LIMITS).toEqual({
+      partnerId: 128,
+      partnerName: 256,
+      settlementMonth: 7,
+      sourceFile: 512,
+      sourceHash: 71,
+      templateFamily: 32,
+      parserRevision: 128,
+      configRevision: 128,
+      sourceSheet: 128,
+      emptyReceipt: 8192,
+      idempotencyKey: 128,
+      uploadedBy: 128,
+    })
+    const base = input('out_category_summary__dongan_2601.json', 'PT-PARSER', '2026-01')
+    const parsed = parseStatementImportInput({
+      ...base,
+      partnerId: '  PT-PARSER  ',
+      partnerName: '  东安医院  ',
+      settlementMonth: '  2026-01  ',
+      sourceFile: '  source.xlsx  ',
+      sourceHash: `  ${base.sourceHash}  `,
+      templateFamily: '  category_summary  ',
+      parserRevision: '  parser-phase1a-v1  ',
+      configRevision: '  seed-phase1a-v1  ',
+      sourceSheet: '  Sheet1  ',
+      idempotencyKey: '  idem-parser  ',
+      uploadedBy: '  trusted-actor  ',
+    })
+    expect(parsed).toMatchObject({
+      partnerId: 'PT-PARSER',
+      partnerName: '东安医院',
+      settlementMonth: '2026-01',
+      sourceFile: 'source.xlsx',
+      sourceHash: base.sourceHash,
+      templateFamily: 'category_summary',
+      parserRevision: 'parser-phase1a-v1',
+      configRevision: 'seed-phase1a-v1',
+      sourceSheet: 'Sheet1',
+      idempotencyKey: 'idem-parser',
+      uploadedBy: 'trusted-actor',
+    })
+  })
+
+  it('rejects non-primitive, blank and overlong required or optional identities', () => {
+    const base = input('out_category_summary__dongan_2601.json', 'PT-PARSER-INVALID', '2026-01')
+    const required = [
+      'partnerId',
+      'settlementMonth',
+      'sourceHash',
+      'templateFamily',
+      'parserRevision',
+      'configRevision',
+    ] as const
+    const optional = [
+      'partnerName',
+      'sourceFile',
+      'sourceSheet',
+      'emptyReceipt',
+      'idempotencyKey',
+      'uploadedBy',
+    ] as const
+    for (const field of [...required, ...optional]) {
+      for (const value of [{}, [], 7, null, '   ']) {
+        expect(() => parseStatementImportInput({ ...base, [field]: value }))
+          .toThrow(/INVALID_STATEMENT_INPUT/)
+      }
+      expect(() => parseStatementImportInput({
+        ...base,
+        [field]: 'x'.repeat(STATEMENT_INPUT_LIMITS[field] + 1),
+      })).toThrow(/INVALID_STATEMENT_INPUT/)
+    }
+  })
+
+  it('enforces month, hash, template, header and grid contracts before any persistence', () => {
+    const base = input('out_category_summary__dongan_2601.json', 'PT-PARSER-SHAPE', '2026-01')
+    expect(() => parseStatementImportInput({ ...base, settlementMonth: '2026-13' }))
+      .toThrow(/INVALID_SETTLEMENT_MONTH/)
+    expect(() => parseStatementImportInput({ ...base, sourceHash: 'sha256:not-a-hash' }))
+      .toThrow(/INVALID_SOURCE_HASH/)
+    expect(() => parseStatementImportInput({ ...base, templateFamily: 'unknown-template' }))
+      .toThrow(/TEMPLATE_NOT_IN_PHASE1A/)
+    for (const headerRow of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, '0', null]) {
+      expect(() => parseStatementImportInput({ ...base, headerRow }))
+        .toThrow(/INVALID_STATEMENT_GRID/)
+    }
+    for (const grid of [{}, null, [{}], [[{}]]]) {
+      expect(() => parseStatementImportInput({ ...base, grid }))
+        .toThrow(/INVALID_STATEMENT_GRID/)
+    }
+    for (const idempotentReplay of [{}, [], 1, null, 'true']) {
+      expect(() => parseStatementImportInput({ ...base, idempotentReplay }))
+        .toThrow(/INVALID_STATEMENT_INPUT/)
+    }
   })
 })
 

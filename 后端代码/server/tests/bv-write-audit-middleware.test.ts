@@ -24,12 +24,14 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { EventEmitter } from 'node:events'
+import express from 'express'
 import request from 'supertest'
 import app from '../src/app.js'
 import { getDatabase } from '../src/database/DatabaseManager.js'
 import {
   scrubSensitive,
   auditWrite,
+  setSuccessAuditMetadata,
   __resetDenialTrackerForTest,
   DENIAL_AGG_THRESHOLD,
   DENIAL_ALERT_DISTINCT,
@@ -108,8 +110,9 @@ describe('审计中间件：全站写操作留痕（集成，admin）', () => {
 
   it('statement empty import success audit stores only server-controlled safe metadata', async () => {
     const marker = `RAW_SOURCE_${Date.now()}`
+    const canonicalPartnerId = `PT-AUDIT-${Date.now()}`
     const empty = {
-      partnerId: `PT-AUDIT-${Date.now()}`,
+      partnerId: `  ${canonicalPartnerId}  `,
       settlementMonth: '2026-01',
       sourceFile: `${marker}.xlsx`,
       sourceHash: computeStatementSourceHash([]),
@@ -148,10 +151,86 @@ describe('审计中间件：全站写操作留痕（集成，admin）', () => {
       'rawRowCount',
       'settlementMonth',
     ])
+    expect(metadata.partnerId).toBe(canonicalPartnerId)
     expect(row.request_data).not.toContain(receipt)
     expect(row.request_data).not.toContain(marker)
     expect(row.request_data).not.toContain('emptyReceipt')
     expect(row.request_data).not.toContain('grid')
+  })
+
+  it('rejects object identities before receipt/import and never persists their sensitive marker', async () => {
+    const marker = 'R2_AUDIT_SENSITIVE_MARKER'
+    const before = {
+      logs: countLogs(db),
+      batches: (db.prepare('SELECT COUNT(*) n FROM statement_import_batches').get() as any).n,
+      raw: (db.prepare('SELECT COUNT(*) n FROM statement_raw_rows').get() as any).n,
+      normalized: (db.prepare('SELECT COUNT(*) n FROM statement_normalized_lines').get() as any).n,
+    }
+    const invalid = {
+      partnerId: { password: marker },
+      settlementMonth: '2026-01',
+      sourceFile: 'invalid-object.xlsx',
+      sourceHash: computeStatementSourceHash([]),
+      templateFamily: 'category_summary',
+      parserRevision: 'parser-phase1a-v1',
+      configRevision: 'seed-phase1a-v1',
+      sourceSheet: 'Sheet1',
+      headerRow: 0,
+      grid: [],
+      idempotencyKey: 'REQ-invalid-object',
+    }
+    for (const path of [
+      '/api/v1/statement-batches/authoritative-empty-receipts',
+      '/api/v1/statement-batches',
+    ]) {
+      const response = await request(app)
+        .post(path)
+        .set('Authorization', `Bearer ${token}`)
+        .send(path.endsWith('statement-batches') ? { ...invalid, emptyReceipt: 'forged.receipt' } : invalid)
+      expect(response.status).toBe(400)
+      expect(JSON.stringify(response.body)).not.toContain(marker)
+    }
+    expect({
+      batches: (db.prepare('SELECT COUNT(*) n FROM statement_import_batches').get() as any).n,
+      raw: (db.prepare('SELECT COUNT(*) n FROM statement_raw_rows').get() as any).n,
+      normalized: (db.prepare('SELECT COUNT(*) n FROM statement_normalized_lines').get() as any).n,
+    }).toEqual({ batches: before.batches, raw: before.raw, normalized: before.normalized })
+    const newLogs = db.prepare(`
+      SELECT request_data FROM operation_logs WHERE rowid > ?
+      ORDER BY rowid
+    `).all(before.logs) as any[]
+    expect(newLogs).toHaveLength(2)
+    for (const row of newLogs) {
+      expect(String(row.request_data)).not.toContain(marker)
+      expect(Object.keys(JSON.parse(row.request_data)).sort()).toEqual(['code', 'status'])
+    }
+  })
+
+  it('defensively scrubs nested success-audit metadata supplied by another caller', async () => {
+    const marker = `NESTED_AUDIT_SECRET_${Date.now()}`
+    const probe = express()
+    probe.use(express.json())
+    probe.use((req: any, _res, next) => {
+      req.user = { userId: 'U-AUDIT', username: 'audit-probe', role: 'admin', roles: ['admin'] }
+      next()
+    })
+    probe.use(auditWrite)
+    probe.post('/audit-metadata-probe', (_req, res) => {
+      setSuccessAuditMetadata(res, {
+        safe: 'visible',
+        nested: { password: marker, apiToken: marker },
+      })
+      res.status(200).json({ success: true })
+    })
+    const response = await request(probe).post('/audit-metadata-probe').send({})
+    expect(response.status).toBe(200)
+    const row = db.prepare(`
+      SELECT request_data FROM operation_logs
+      WHERE operation='POST audit-metadata-probe'
+      ORDER BY rowid DESC LIMIT 1
+    `).get() as any
+    expect(row.request_data).toContain('[REDACTED]')
+    expect(row.request_data).not.toContain(marker)
   })
 
   it('读(GET /materials) → operation_logs 不新增', async () => {
