@@ -40,7 +40,7 @@ describe('canAccess（能力并集）', () => {
 })
 
 describe('getAccessiblePaths（能力驱动 nav）', () => {
-  it('财务能力 → 含 cost-analysis/abc 不含 outbound', () => {
+  it('财务能力 → 保留材料成本入口，但不再暴露 ABC 产品面', () => {
     setUser({
       role: 'finance',
       roles: ['finance'],
@@ -50,7 +50,9 @@ describe('getAccessiblePaths（能力驱动 nav）', () => {
     expect(paths).toContain('/')
     expect(paths).toContain('/inventory')
     expect(paths).toContain('/cost-analysis')
-    expect(paths).toContain('/abc/dashboard')
+    expect(paths).not.toContain('/abc/dashboard')
+    expect(paths).not.toContain('/abc/slide-cost')
+    expect(paths).not.toContain('/abc/profitability')
     expect(paths).not.toContain('/outbound')
     expect(paths).not.toContain('/users')
   })
@@ -71,10 +73,14 @@ describe('getAccessiblePaths（能力驱动 nav）', () => {
 })
 
 describe('canSeeCost / getRoles', () => {
-  it('canSeeCost 读 user.canSeeCost', () => {
+  it('退役后忽略旧会话的 canSeeCost 与 ABC capabilities', () => {
     setUser({ role: 'finance', canSeeCost: true })
-    expect(canSeeCost()).toBe(true)
-    setUser({ role: 'pathologist', canSeeCost: false })
+    expect(canSeeCost()).toBe(false)
+    setUser({
+      role: 'finance',
+      canSeeCost: true,
+      capabilities: { cost_analysis: 'W', abc_dashboard: 'W', slide_cost: 'W', profitability: 'W' },
+    })
     expect(canSeeCost()).toBe(false)
   })
   it('getRoles 取 roles[]，回退单 role', () => {

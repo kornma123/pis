@@ -7,6 +7,10 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Dashboard from './Dashboard'
 
+const getAbcDashboard = vi.hoisted(() => vi.fn().mockResolvedValue({
+  summary: { totalCost: 100, totalFee: 180, totalProfit: 80 },
+}))
+
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   BarChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -22,14 +26,17 @@ vi.mock('@/api/inventory', () => ({
   purchaseOrderApi: { getList: vi.fn().mockResolvedValue({ pagination: { total: 3 } }) },
 }))
 vi.mock('@/api/master', () => ({ projectApi: { getList: vi.fn().mockResolvedValue({ pagination: { total: 5 } }) } }))
-vi.mock('@/api/abc', () => ({ abcApi: { getDashboard: vi.fn().mockResolvedValue({ summary: { totalCost: 100, totalFee: 180, totalProfit: 80 } }) } }))
+vi.mock('@/api/abc', () => ({ abcApi: { getDashboard: getAbcDashboard } }))
 
 function setUser(capabilities: Record<string, 'R' | 'W'>, canSeeCost: boolean, roles: string[]) {
   localStorage.setItem('user', JSON.stringify({ role: roles[0], roles, capabilities, canSeeCost }))
 }
 const renderDash = () => render(<MemoryRouter><Dashboard /></MemoryRouter>)
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  getAbcDashboard.mockClear()
+})
 
 describe('角色仪表盘（能力驱动）', () => {
   it('病理：检测项目+库存+预警；无成本/入库/出库', async () => {
@@ -44,12 +51,14 @@ describe('角色仪表盘（能力驱动）', () => {
     expect(screen.queryByText('出库领用')).not.toBeInTheDocument()
   })
 
-  it('财务：成本/利润率/对账；无入库登记/盘点写操作', async () => {
+  it('财务：保留材料对账，但旧 ABC 可见标记也不能恢复成本卡片或请求', async () => {
     setUser({ inventory: 'R', cost_analysis: 'W', abc_dashboard: 'W', slide_cost: 'W', profitability: 'W', reconciliation: 'W', alerts: 'R' }, true, ['finance'])
     renderDash()
-    await waitFor(() => expect(screen.getByText('本月成本')).toBeInTheDocument())
-    expect(screen.getByText('利润率')).toBeInTheDocument()
-    expect(screen.getByText('成本看板')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('消耗对账')).toBeInTheDocument())
+    expect(screen.queryByText('本月成本')).not.toBeInTheDocument()
+    expect(screen.queryByText('利润率')).not.toBeInTheDocument()
+    expect(screen.queryByText('成本看板')).not.toBeInTheDocument()
+    expect(getAbcDashboard).not.toHaveBeenCalled()
     expect(screen.getByText('消耗对账')).toBeInTheDocument()
     expect(screen.queryByText('入库登记')).not.toBeInTheDocument()
     expect(screen.queryByText('库存盘点')).not.toBeInTheDocument()
