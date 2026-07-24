@@ -158,6 +158,68 @@ describe('审计中间件：全站写操作留痕（集成，admin）', () => {
     expect(row.request_data).not.toContain('grid')
   })
 
+  it('statement preview success audit persists only verified scalar metadata', async () => {
+    const marker = `PREVIEW_RAW_MARKER_${Date.now()}`
+    const canonicalPartnerId = `PT-PREVIEW-${Date.now()}`
+    const empty = {
+      partnerId: `  ${canonicalPartnerId}  `,
+      settlementMonth: '2026-01',
+      sourceFile: `${marker}.xlsx`,
+      sourceHash: computeStatementSourceHash([]),
+      templateFamily: 'category_summary',
+      parserRevision: 'parser-phase1a-v1',
+      configRevision: 'seed-phase1a-v1',
+      sourceSheet: marker,
+      headerRow: 0,
+      grid: [],
+      idempotencyKey: `REQ-${marker}`,
+    }
+    const issued = await request(app)
+      .post('/api/v1/statement-batches/authoritative-empty-receipts')
+      .set('Authorization', `Bearer ${token}`)
+      .send(empty)
+    expect(issued.status, JSON.stringify(issued.body)).toBe(200)
+    const receipt = issued.body.data.receipt as string
+    const before = {
+      batches: (db.prepare('SELECT COUNT(*) n FROM statement_import_batches').get() as any).n,
+      raw: (db.prepare('SELECT COUNT(*) n FROM statement_raw_rows').get() as any).n,
+      normalized: (db.prepare('SELECT COUNT(*) n FROM statement_normalized_lines').get() as any).n,
+    }
+    const preview = await request(app)
+      .post('/api/v1/statement-batches/preview-normalized')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ...empty, emptyReceipt: receipt })
+    expect(preview.status, JSON.stringify(preview.body)).toBe(200)
+    expect({
+      batches: (db.prepare('SELECT COUNT(*) n FROM statement_import_batches').get() as any).n,
+      raw: (db.prepare('SELECT COUNT(*) n FROM statement_raw_rows').get() as any).n,
+      normalized: (db.prepare('SELECT COUNT(*) n FROM statement_normalized_lines').get() as any).n,
+    }).toEqual(before)
+
+    const row = db.prepare(`
+      SELECT request_data FROM operation_logs
+      WHERE operation='POST statement-batches'
+        AND description LIKE '%/preview-normalized%'
+      ORDER BY rowid DESC LIMIT 1
+    `).get() as any
+    const metadata = JSON.parse(row.request_data)
+    expect(metadata).toEqual({
+      partnerId: canonicalPartnerId,
+      settlementMonth: '2026-01',
+      templateFamily: 'category_summary',
+      parserRevision: 'parser-phase1a-v1',
+      configRevision: 'seed-phase1a-v1',
+      rawRowCount: 0,
+      normalizedLineCount: 0,
+    })
+    expect(row.request_data).not.toContain(marker)
+    expect(row.request_data).not.toContain(receipt)
+    expect(row.request_data).not.toContain('sourceFile')
+    expect(row.request_data).not.toContain('sourceSheet')
+    expect(row.request_data).not.toContain('emptyReceipt')
+    expect(row.request_data).not.toContain('grid')
+  })
+
   it('rejects object identities before receipt/import and never persists their sensitive marker', async () => {
     const marker = 'R2_AUDIT_SENSITIVE_MARKER'
     const before = {

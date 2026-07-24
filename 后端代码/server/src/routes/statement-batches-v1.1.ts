@@ -38,6 +38,15 @@ router.post('/preview-normalized', requireFinance, (req, res) => {
   try {
     const input = statementInput(req)
     const facts = buildStatementNormalizedFacts(input, receiptContext(req))
+    setSuccessAuditMetadata(res, {
+      partnerId: input.partnerId,
+      settlementMonth: input.settlementMonth,
+      templateFamily: input.templateFamily,
+      parserRevision: input.parserRevision,
+      configRevision: input.configRevision,
+      rawRowCount: input.grid.length,
+      normalizedLineCount: facts.lines.length,
+    })
     success(res, {
       declaredTotal: facts.declaredTotal,
       parsedTotal: facts.parsedTotal,
