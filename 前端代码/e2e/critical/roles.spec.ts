@@ -85,33 +85,43 @@ async function createRole(
   return body.data.id
 }
 
-async function cleanupRole(
+async function cleanupRolesByCode(
   request: APIRequestContext,
   adminToken: string,
-  roleId: string,
-  roleCode: string,
+  roleCodes: ReadonlySet<string>,
 ): Promise<void> {
-  const response = await request.delete(`${apiBaseUrl()}/roles/${roleId}`, {
-    headers: authorization(adminToken),
-  })
-  expect(response.status(), `cleanup must delete ${roleCode}`).toBe(200)
+  const trackedCodes = [...roleCodes]
+  const activeRoles = await listRoles(request, adminToken)
+  for (const role of activeRoles.list.filter(({ code }) => roleCodes.has(code))) {
+    const response = await request.delete(`${apiBaseUrl()}/roles/${role.id}`, {
+      headers: authorization(adminToken),
+    })
+    expect(response.status(), `cleanup must delete ${role.code}`).toBe(200)
+  }
+
   const after = await listRoles(request, adminToken)
-  expect(after.list.find((role) => role.code === roleCode)).toBeUndefined()
+  for (const code of trackedCodes) {
+    expect(
+      after.list.find((role) => role.code === code),
+      `cleanup must leave no active role with code ${JSON.stringify(code)}`,
+    ).toBeUndefined()
+  }
 }
 
 test.describe('critical roles API contract', () => {
   test('admin creates and persists a canonical custom role', async ({ request }) => {
-    const adminToken = await apiLogin(request, 'admin')
     const code = uniqueRoleCode('create')
+    const cleanupCodes = new Set([code])
     const name = `E2E canonical role ${code}`
     const description = 'critical roles persistence proof'
-    let roleId: string | undefined
+    let adminToken: string | undefined
 
     try {
+      adminToken = await apiLogin(request, 'admin')
       const before = await listRoles(request, adminToken)
       expect(before.list.find((role) => role.code === code)).toBeUndefined()
 
-      roleId = await createRole(request, adminToken, { code, name, description })
+      const roleId = await createRole(request, adminToken, { code, name, description })
 
       const persisted = (await listRoles(request, adminToken)).list
         .find((role) => role.code === code)
@@ -125,12 +135,11 @@ test.describe('critical roles API contract', () => {
         is_deleted: 0,
       })
     } finally {
-      if (roleId) await cleanupRole(request, adminToken, roleId, code)
+      if (adminToken) await cleanupRolesByCode(request, adminToken, cleanupCodes)
     }
   })
 
   test('admin receives stable 400 responses for non-canonical role codes with zero role writes', async ({ request }) => {
-    const adminToken = await apiLogin(request, 'admin')
     const canonical = uniqueRoleCode('invalid')
     const invalidCodes = [
       ` ${canonical} `,
@@ -138,44 +147,53 @@ test.describe('critical roles API contract', () => {
       `${canonical}\u200B`,
       'constructor',
     ]
-    const before = await listRoles(request, adminToken)
+    const cleanupCodes = new Set(invalidCodes)
+    let adminToken: string | undefined
 
-    for (const [index, code] of invalidCodes.entries()) {
-      const response = await request.post(`${apiBaseUrl()}/roles`, {
-        headers: authorization(adminToken),
-        data: {
-          code,
-          name: `E2E rejected role ${index}`,
-          description: 'must not persist',
-          permissions: { inventory: 'R' },
-          status: 'active',
-        },
-      })
-      expect(response.status(), `non-canonical role code ${index} must be rejected`).toBe(400)
-      const body = await response.json() as ErrorEnvelope
-      expect(body).toMatchObject({
-        success: false,
-        error: { code: 'INVALID_PARAMETER' },
-      })
-    }
+    try {
+      adminToken = await apiLogin(request, 'admin')
+      const before = await listRoles(request, adminToken)
 
-    const after = await listRoles(request, adminToken)
-    expect(after.total).toBe(before.total)
-    for (const code of invalidCodes) {
-      expect(after.list.find((role) => role.code === code)).toBeUndefined()
+      for (const [index, code] of invalidCodes.entries()) {
+        const response = await request.post(`${apiBaseUrl()}/roles`, {
+          headers: authorization(adminToken),
+          data: {
+            code,
+            name: `E2E rejected role ${index}`,
+            description: 'must not persist',
+            permissions: { inventory: 'R' },
+            status: 'active',
+          },
+        })
+        expect(response.status(), `non-canonical role code ${index} must be rejected`).toBe(400)
+        const body = await response.json() as ErrorEnvelope
+        expect(body).toMatchObject({
+          success: false,
+          error: { code: 'INVALID_PARAMETER' },
+        })
+      }
+
+      const after = await listRoles(request, adminToken)
+      expect(after.total).toBe(before.total)
+      for (const code of invalidCodes) {
+        expect(after.list.find((role) => role.code === code)).toBeUndefined()
+      }
+    } finally {
+      if (adminToken) await cleanupRolesByCode(request, adminToken, cleanupCodes)
     }
   })
 
   test('technician POST, PUT, and DELETE remain 403 with zero role writes', async ({ request }) => {
-    const adminToken = await apiLogin(request, 'admin')
-    const technicianToken = await apiLogin(request, 'technician')
     const targetCode = uniqueRoleCode('target')
     const deniedCreateCode = uniqueRoleCode('denied')
+    const cleanupCodes = new Set([targetCode, deniedCreateCode])
     const originalName = `E2E protected role ${targetCode}`
-    let targetId: string | undefined
+    let adminToken: string | undefined
 
     try {
-      targetId = await createRole(request, adminToken, {
+      adminToken = await apiLogin(request, 'admin')
+      const technicianToken = await apiLogin(request, 'technician')
+      const targetId = await createRole(request, adminToken, {
         code: targetCode,
         name: originalName,
         description: 'unauthorized mutation target',
@@ -225,7 +243,7 @@ test.describe('critical roles API contract', () => {
         is_deleted: 0,
       })
     } finally {
-      if (targetId) await cleanupRole(request, adminToken, targetId, targetCode)
+      if (adminToken) await cleanupRolesByCode(request, adminToken, cleanupCodes)
     }
   })
 })
