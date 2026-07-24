@@ -109,6 +109,15 @@
       "specs": ["e2e/critical/users.spec.ts"]
     },
     {
+      "id": "roles",
+      "tier": "critical",
+      "owner": "identity",
+      "sources": [
+        "后端代码/server/src/routes/roles-v1.1.ts"
+      ],
+      "specs": ["e2e/critical/roles.spec.ts"]
+    },
+    {
       "id": "hospital-cm",
       "tier": "critical",
       "owner": "hospital-cm",

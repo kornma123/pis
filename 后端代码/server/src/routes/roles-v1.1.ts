@@ -3,7 +3,16 @@ import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { v4 as uuidv4 } from 'uuid'
 import { parsePermissions } from '../middleware/rbac-matrix.js'
-import { requirePermission } from '../middleware/permissions.js'
+import {
+  rejectInvalidRoleCodeFields,
+  rejectInvalidRolePermissionFields,
+  rejectUntrustedAuditActorFields,
+  requestActorHasCurrentPermission,
+  resolveCanonicalRoleCode,
+  requirePermission,
+  requireRoleMutationCeiling,
+  roleMutationExceedsSecurityCeiling,
+} from '../middleware/permissions.js'
 import { findRoleLiveAssignments, recoverFailedDeleteTransaction } from '../utils/delete-reference-guards.js'
 
 const router = Router()
@@ -11,6 +20,9 @@ const router = Router()
 // 角色写入（改权限矩阵 = 提权面最大）：挂载层只 requirePermission('roles','R')，
 // 写端点必须自带 W 守卫，否则持 roles:R 者即可改矩阵给自己提权。仿 projects/outbound 模式。
 const requireRolesWrite = requirePermission('roles', 'W')
+const requireRoleCreateCeiling = requireRoleMutationCeiling('create')
+const requireRoleUpdateCeiling = requireRoleMutationCeiling('update')
+const requireRoleDeleteCeiling = requireRoleMutationCeiling('delete')
 
 // 规范化权限为对象矩阵 {module:'R'|'W'}（兼容旧数组/含 '*'），落库 + 返回统一形态
 function normalizePerms(raw: any): string {
@@ -37,45 +49,102 @@ router.get('/', (req, res) => {
   successList(res, list, page, pageSize, total)
 })
 
-router.post('/', requireRolesWrite, (req, res) => {
+router.post('/',
+  rejectInvalidRoleCodeFields,
+  requireRolesWrite,
+  rejectUntrustedAuditActorFields,
+  rejectInvalidRolePermissionFields,
+  requireRoleCreateCeiling,
+  (req, res) => {
   try {
     const database = getDatabase()
     const { code, name, description, permissions, status } = req.body
-    if (!code || !name) { error(res, 'Code and name required', 'INVALID_PARAMETER', 400); return }
-    const exists = database.prepare('SELECT 1 FROM roles WHERE code = ? AND is_deleted = 0').get(code)
-    if (exists) { error(res, 'Role code already exists', 'RESOURCE_CONFLICT', 409); return }
+    const canonicalCode = resolveCanonicalRoleCode(code)
+    if (canonicalCode === null || !name) {
+      error(res, 'Code and name required', 'INVALID_PARAMETER', 400)
+      return
+    }
+    database.exec('BEGIN IMMEDIATE')
+    if (
+      !requestActorHasCurrentPermission(database, req, 'roles', 'W')
+      || roleMutationExceedsSecurityCeiling(database, req, 'create')
+    ) {
+      database.exec('ROLLBACK')
+      error(res, 'Forbidden: security administration requires admin', 'FORBIDDEN', 403)
+      return
+    }
+    const exists = database.prepare('SELECT 1 FROM roles WHERE code = ? AND is_deleted = 0').get(canonicalCode)
+    if (exists) {
+      database.exec('ROLLBACK')
+      error(res, 'Role code already exists', 'RESOURCE_CONFLICT', 409)
+      return
+    }
     const id = uuidv4()
     database.prepare('INSERT INTO roles (id, code, name, description, permissions, status) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, code, name, description || '', normalizePerms(permissions), status === 'active' ? 1 : 0)
-    success(res, { id }, 'Created')
-  } catch (err: any) { error(res, err.message) }
+      .run(id, canonicalCode, name, description || '', normalizePerms(permissions), status === 'active' ? 1 : 0)
+    database.exec('COMMIT')
+    success(res, { id }, 'Created', 201)
+  } catch (err: any) {
+    try { getDatabase().exec('ROLLBACK') } catch { /* no active transaction */ }
+    error(res, err.message)
+  }
 })
 
-router.put('/:id', requireRolesWrite, (req, res) => {
+router.put('/:id',
+  rejectInvalidRoleCodeFields,
+  requireRolesWrite,
+  rejectUntrustedAuditActorFields,
+  rejectInvalidRolePermissionFields,
+  requireRoleUpdateCeiling,
+  (req, res) => {
+  let database: ReturnType<typeof getDatabase> | undefined
+  let transactionStarted = false
   try {
-    const database = getDatabase()
+    database = getDatabase()
     const { id } = req.params
     const { code, name, description, permissions, status } = req.body
+    let canonicalCode: string | undefined
+    if (code !== undefined) {
+      const resolvedCode = resolveCanonicalRoleCode(code)
+      if (resolvedCode === null) {
+        error(res, 'Role code must be canonical', 'INVALID_PARAMETER', 400)
+        return
+      }
+      canonicalCode = resolvedCode
+    }
     database.exec('BEGIN IMMEDIATE')
+    transactionStarted = true
+    if (
+      !requestActorHasCurrentPermission(database, req, 'roles', 'W')
+      || roleMutationExceedsSecurityCeiling(database, req, 'update')
+    ) {
+      database.exec('ROLLBACK')
+      transactionStarted = false
+      error(res, 'Forbidden: security administration requires admin', 'FORBIDDEN', 403)
+      return
+    }
     const role = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!role) {
       database.exec('ROLLBACK')
+      transactionStarted = false
       error(res, 'Role not found', 'NOT_FOUND', 404); return
     }
     if (role.code === 'admin') {
       database.exec('ROLLBACK')
+      transactionStarted = false
       error(res, 'Cannot modify system admin role', 'FORBIDDEN', 403); return
     }
     const fields: string[] = []; const params: any[] = []
-    if (code !== undefined) {
-      if (code !== role.code) {
-        const codeExists = database.prepare('SELECT 1 FROM roles WHERE code = ? AND id != ? AND is_deleted = 0').get(code, id)
+    if (canonicalCode !== undefined) {
+      if (canonicalCode !== role.code) {
+        const codeExists = database.prepare('SELECT 1 FROM roles WHERE code = ? AND id != ? AND is_deleted = 0').get(canonicalCode, id)
         if (codeExists) {
           database.exec('ROLLBACK')
+          transactionStarted = false
           error(res, 'Role code already exists', 'RESOURCE_CONFLICT', 409); return
         }
       }
-      fields.push('code = ?'); params.push(code)
+      fields.push('code = ?'); params.push(canonicalCode)
     }
     if (name !== undefined) { fields.push('name = ?'); params.push(name) }
     if (description !== undefined) { fields.push('description = ?'); params.push(description || '') }
@@ -86,14 +155,19 @@ router.put('/:id', requireRolesWrite, (req, res) => {
       database.prepare(`UPDATE roles SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params)
     }
     database.exec('COMMIT')
+    transactionStarted = false
     success(res, { id }, 'Updated')
   } catch (err: any) {
-    try { getDatabase().exec('ROLLBACK') } catch { /* preserve the original update error */ }
+    if (database && transactionStarted) database.exec('ROLLBACK')
     error(res, err.message)
   }
 })
 
-router.delete('/:id', requireRolesWrite, (req, res) => {
+router.delete('/:id',
+  requireRolesWrite,
+  rejectUntrustedAuditActorFields,
+  requireRoleDeleteCeiling,
+  (req, res) => {
   let database: ReturnType<typeof getDatabase> | undefined
   let transactionOpen = false
   try {
@@ -101,6 +175,15 @@ router.delete('/:id', requireRolesWrite, (req, res) => {
     const { id } = req.params
     database.exec('BEGIN IMMEDIATE')
     transactionOpen = true
+    if (
+      !requestActorHasCurrentPermission(database, req, 'roles', 'W')
+      || roleMutationExceedsSecurityCeiling(database, req, 'delete')
+    ) {
+      database.exec('ROLLBACK')
+      transactionOpen = false
+      error(res, 'Forbidden: security administration requires admin', 'FORBIDDEN', 403)
+      return
+    }
     const existing = database.prepare('SELECT * FROM roles WHERE id = ? AND is_deleted = 0').get(id) as any
     if (!existing) {
       database.exec('ROLLBACK')
