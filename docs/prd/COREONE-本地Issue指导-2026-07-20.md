@@ -73,10 +73,10 @@
 
 1. **先把远端 integration 重建到最新 master**：`cd43b590…` 已包含 LOC-001/002/003 的组合线、后续 truth repair，以及 LOC-019/020/025A/029；但它相对 `master@90ee70ff…` 仍为 `3 behind / 97 ahead`。必须先做无丢提交的 combined-base 重建，不能直接把旧 integration 合入 master。
 2. **按票保留独立验收门**：LOC-019、LOC-029 已有独立 R2 APPROVE；LOC-020、LOC-025A 仍缺最终 successor 的 non-author R2；LOC-001/002/003 的组合 repair 仍须以最新 combined base 固定对象复核。一个大分支的 GREEN 不能替代逐票结论。
-3. **并行只推进不重叠的远端候选**：LOC-031A 已在专用分支等待 K3 R2；未出 fixed-SHA verdict 前不进入 integration。其他新票先做 PRD/owner/owned-path 门，不以旧排期自动开工。
+3. **并行只推进不重叠的远端候选**：LOC-031A 已由 PR #43 合入，不再列为待复核候选。其他新票先做 PRD/owner/owned-path 门，不以旧排期自动开工。
 4. **先冻结 Phase 1A 直接规格，再交单一对账事实 owner**：先做 LOC-004 的 G0；没有批准的 source/generation 合同前，不继续堆第四套 readiness SQL。
 5. **并行处理不碰业务实现的明确动作**：GOV-001 可修事实转录；GOV-002 已由合并对象重建旧 #148 的唯一治理入口；LOC-026 由财务/管理员在 2026-08-31 前交真实金额与认账，不占代码 owner。
-6. **修复并复核仍在 PRD 内的业务候选**：LOC-005、LOC-007 至 LOC-010；LOC-006/011/012 已移除，LOC-013 拆为非 ABC 的 BOM 真值新票；共享文件同一时间只允许一个 owner。
+6. **修复并复核仍在 PRD 内的业务候选**：LOC-005、LOC-008 至 LOC-010；LOC-006/011/012 已移除，LOC-013 拆为非 ABC 的 BOM 真值新票；共享文件同一时间只允许一个 owner。
 7. **主线真实解锁**：LOC-014 与 LOC-015 → LOC-016 → LOC-017；真实证据不齐时保持 null/403，不用 fixture 解锁。
 8. **平台/上线门单列**：`PLATFORM-R1` 不属于产品 PRD issue，只有 release owner 明确触发后才进入；不得用工具链工作冒充产品进度。
 
