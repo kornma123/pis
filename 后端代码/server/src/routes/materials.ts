@@ -4,10 +4,12 @@ import { closeDatabase, getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
 import {
-  findMaterialInventoryConflicts,
-  findMaterialLiveReferences,
   recoverFailedDeleteTransaction,
 } from '../utils/delete-reference-guards.js'
+import {
+  findMaterialInventoryConflicts,
+  findMaterialLiveReferences,
+} from '../utils/material-delete-reference-guards.js'
 
 const router = Router()
 

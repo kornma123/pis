@@ -118,6 +118,16 @@
       "specs": ["e2e/critical/roles.spec.ts"]
     },
     {
+      "id": "materials-delete",
+      "tier": "critical",
+      "owner": "inventory",
+      "sources": [
+        "后端代码/server/src/routes/materials.ts",
+        "后端代码/server/src/utils/material-delete-reference-guards.ts"
+      ],
+      "specs": ["e2e/critical/materials.spec.ts"]
+    },
+    {
       "id": "hospital-cm",
       "tier": "critical",
       "owner": "hospital-cm",
