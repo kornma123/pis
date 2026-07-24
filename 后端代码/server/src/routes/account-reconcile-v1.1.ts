@@ -16,14 +16,168 @@ import { writeAuditLog } from '../utils/cost-runs.js'
 import { recordOverride } from '../utils/override-log.js'
 import { buildReconcileInputs, runReconcile, partnerMonthLabRate, tryCloseHospitalMonth } from '../utils/reconcile-compute.js'
 import { computeReconcile, verdictFollowUp, drivesSupplement, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
+import {
+  assertReconcileBinding,
+  closeAccountReconciliation,
+  completeAccountReconciliation,
+  computeAccountReconciliation,
+  forbidAccountReconciliationReopen,
+  readAccountReconciliation,
+  ReconcileLifecycleError,
+  type ReconcileBinding,
+} from '../services/account-reconciliation-lifecycle.js'
 import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：confirmedLabRevenue(拆分派生)输出自带「口径未认账」水印（LEG-2）
 
 const router = Router()
 
 const operatorOf = (req: any): string => req.user?.username ?? req.user?.userId ?? 'unknown'
+const PRE_LOC005_ROUTES_ENABLED = false
+
+const bindingFrom = (source: any): ReconcileBinding => ({
+  partnerId: String(source?.partnerId ?? '').trim(),
+  settlementMonth: source?.settlementMonth,
+  statementGenerationId: String(source?.statementGenerationId ?? '').trim(),
+  reconcileGenerationId: String(source?.reconcileGenerationId ?? '').trim(),
+})
+
+const lifecycleError = (res: any, err: unknown): void => {
+  if (err instanceof ReconcileLifecycleError) {
+    error(res, err.message, err.code, err.status)
+    return
+  }
+  error(res, err instanceof Error ? err.message : 'account reconciliation failed')
+}
+
+// LOC-005 authoritative generation-bound lifecycle. These handlers are registered
+// before the predecessor endpoints below, so no legacy month-only write is reachable.
+router.post('/compute', requirePermission('account_reconcile', 'W'), (req, res) => {
+  try {
+    const binding = bindingFrom(req.body)
+    assertReconcileBinding(binding)
+    success(res, computeAccountReconciliation(getDatabase(), binding, operatorOf(req)))
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+if (PRE_LOC005_ROUTES_ENABLED) router['get']('/generation', (req, res) => {
+  try {
+    const binding = bindingFrom(req.query)
+    assertReconcileBinding(binding)
+    success(res, readAccountReconciliation(getDatabase(), binding))
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+router.get('/overview', (req, res) => {
+  try {
+    const binding = bindingFrom(req.query)
+    assertReconcileBinding(binding)
+    const snapshot = readAccountReconciliation(getDatabase(), binding)
+    successList(res, [snapshot], 1, 1, 1, {
+      caliberRatification: splitCaliberRatification(),
+    })
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+router.get('/workbench', (req, res) => {
+  try {
+    const binding = bindingFrom(req.query)
+    assertReconcileBinding(binding)
+    const snapshot = readAccountReconciliation(getDatabase(), binding) as any
+    const diffs = (getDatabase().prepare(
+      'SELECT * FROM reconcile_diffs WHERE hospital_month_id = ? ORDER BY case_no, line_type',
+    ).all(snapshot.hospitalMonthId) as any[]).map((row) => ({
+      id: row.id,
+      caseNo: row.case_no,
+      lineType: row.line_type,
+      billCount: row.bill_count,
+      lisCount: row.lis_count,
+      delta: row.delta,
+      amountImpact: row.amount_impact,
+      systemHint: row.system_hint,
+      lowConfidence: !!row.low_confidence,
+      verdict: row.verdict,
+      verdictReason: row.verdict_reason,
+      followUp: row.follow_up,
+    }))
+    success(res, {
+      snapshot,
+      diffs,
+      caseHints: snapshot.caseHints ?? {},
+      caliberRatification: splitCaliberRatification(),
+    })
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+router.post('/hospital-months/:id/complete', requirePermission('account_reconcile', 'W'), (req, res) => {
+  try {
+    const binding = bindingFrom(req.body)
+    assertReconcileBinding(binding)
+    const current = readAccountReconciliation(getDatabase(), binding) as any
+    if (current.hospitalMonthId !== req.params.id) {
+      return error(res, 'hospital-month binding mismatch', 'RECONCILE_GENERATION_MISMATCH', 409)
+    }
+    success(res, completeAccountReconciliation(getDatabase(), binding, operatorOf(req)))
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) => {
+  try {
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : []
+    if (rawItems.length !== 1) {
+      return error(
+        res,
+        'exactly one month-level generation binding is required',
+        'GENERATION_BINDING_REQUIRED',
+        400,
+      )
+    }
+    const closed = rawItems.map((item: any) => {
+      const binding = bindingFrom(item)
+      assertReconcileBinding(binding)
+      return closeAccountReconciliation(getDatabase(), binding, operatorOf(req))
+    })
+    success(res, { closed })
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+router.post('/hospital-months/:id/reopen', requirePermission('account_reconcile', 'W'), (_req, res) => {
+  try {
+    forbidAccountReconciliationReopen()
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+router.post('/hospital-months/:id/reopen-close', requirePermission('account_reconcile', 'W'), (_req, res) => {
+  try {
+    forbidAccountReconciliationReopen()
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
 
 // POST /compute —— 跑某院某月账实核对并落库（写）
-router.post('/compute', requirePermission('account_reconcile', 'W'), (req, res) => {
+router.use('/__pre_loc005', (_req, res) => {
+  error(
+    res,
+    'month-only reconciliation endpoints were removed by LOC-005',
+    'GENERATION_BINDING_REQUIRED',
+    410,
+  )
+})
+
+if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/compute', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
     const db = getDatabase()
     const partnerId = String(req.body?.partnerId ?? '').trim()
@@ -46,7 +200,7 @@ router.post('/compute', requirePermission('account_reconcile', 'W'), (req, res) 
 })
 
 // GET /overview?serviceMonth= —— ①复核总览：各院列表 + 状态 + 匹配率 + 差异数 + 看板汇总
-router.get('/overview', (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['get']('/__pre_loc005/overview', (req, res) => {
   try {
     const db = getDatabase()
     const serviceMonth = String(req.query.serviceMonth ?? '').trim()
@@ -91,7 +245,7 @@ router.get('/overview', (req, res) => {
 })
 
 // GET /workbench?partnerId=&serviceMonth= —— ②复核工作台：院·月头 + 逐差异(含认定态) + 未匹配单列
-router.get('/workbench', (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['get']('/__pre_loc005/workbench', (req, res) => {
   try {
     const db = getDatabase()
     const partnerId = String(req.query.partnerId ?? '').trim()
@@ -176,7 +330,7 @@ router.post('/diffs/:id/verdict', requirePermission('account_reconcile', 'W'), (
 })
 
 // POST /hospital-months/:id/complete —— 复核完成（写）：前置=差异全认定
-router.post('/hospital-months/:id/complete', requirePermission('account_reconcile', 'W'), (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/hospital-months/:id/complete', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
     const db = getDatabase()
     const hm = db.prepare('SELECT * FROM reconcile_hospital_months WHERE id = ?').get(req.params.id) as any
@@ -196,7 +350,7 @@ router.post('/hospital-months/:id/complete', requirePermission('account_reconcil
 })
 
 // POST /hospital-months/:id/reopen —— 反向：复核完成 → 待复核（写·必填理由+记经手人）
-router.post('/hospital-months/:id/reopen', requirePermission('account_reconcile', 'W'), (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/hospital-months/:id/reopen', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
     const db = getDatabase()
     const reason = String(req.body?.reason ?? '').trim()
@@ -214,7 +368,7 @@ router.post('/hospital-months/:id/reopen', requirePermission('account_reconcile'
 })
 
 // POST /close —— 关账（写）：部分关账+挂起；前置=复核完成；定版不可逆
-router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/close', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
     const db = getDatabase()
     const serviceMonth = String(req.body?.serviceMonth ?? '').trim()
@@ -243,7 +397,7 @@ router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) =>
 })
 
 // POST /hospital-months/:id/reopen-close —— 反关账（写·慎用·必填理由）：已关账 → 复核完成
-router.post('/hospital-months/:id/reopen-close', requirePermission('account_reconcile', 'W'), (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/hospital-months/:id/reopen-close', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
     const db = getDatabase()
     const reason = String(req.body?.reason ?? '').trim()

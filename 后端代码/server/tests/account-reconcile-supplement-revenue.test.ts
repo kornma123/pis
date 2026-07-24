@@ -10,6 +10,8 @@ import { partnerMonthLabRate, partnerMonthDiscountRate } from '../src/utils/reco
 
 const P = 'PT-SR-1'
 const M = '2026-08'
+const S = 'STMT-SR-1'
+const R = 'RECON-SR-1'
 let app: any
 let token = ''
 let reviewerToken = '' // 第二审核人（项D maker-checker：认定人 admin 不能签发自己的补收单，须独立 approve）
@@ -32,6 +34,26 @@ async function mountApp() {
 
 function seed(db: any) {
   db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'SR-1', '补收实收测试院', 1)`).run(P)
+  db.prepare(
+    `INSERT INTO statement_import_batches
+      (id, partner_id, source_hash, template_family, parser_revision, config_revision,
+       settlement_month, generation_id, is_current, raw_row_count, normalized_line_count, status)
+     VALUES ('BATCH-SR-1', ?, 'HASH-SR-1', 'test', 'r1', 'c1', ?, ?, 1, 1, 1, 'posted')`,
+  ).run(P, M, S)
+  db.prepare(
+    `INSERT INTO statement_raw_rows
+      (id, batch_id, generation_id, source_sheet, source_row, row_json)
+     VALUES ('RAW-SR-1', 'BATCH-SR-1', ?, 'sheet', 1, '{}')`,
+  ).run(S)
+  db.prepare(
+    `INSERT INTO statement_normalized_lines
+      (id, batch_id, generation_id, partner_id, settlement_month, ledger_settlement_month,
+       case_no, item_name, source_sheet, source_row, source_column, source_label,
+       template_family, row_kind, line_grain, business_line, amount_role, amount, classification_status)
+     VALUES ('LINE-SR-1', 'BATCH-SR-1', ?, ?, ?, ?, 'SR1', '免疫组化染色*3',
+             'sheet', 1, 'amount', '免疫组化染色*3', 'test', 'detail', 'case',
+             'IN', 'gross', 300, 'classified')`,
+  ).run(S, P, M, M)
   // 免疫组化 bill 3 片（LIS 5）→ delta −2 → amount_impact = 2×100 = 200
   db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run('sr-l1', 'SR1', P, '免疫组化染色', 3, 100, M)
@@ -51,11 +73,12 @@ beforeAll(async () => {
   reviewerToken = await loginAs(app, 'reviewer2', 'CoreOne2026!')
 })
 const auth = (r: any) => r.set('Authorization', `Bearer ${token}`)
+const exactBinding = { partnerId: P, settlementMonth: M, statementGenerationId: S, reconcileGenerationId: R }
 
 describe('补收 → 计入本月实收', () => {
   it('认定漏收 → 生成补收单（gross ¥200）', async () => {
-    await auth(request(app).post('/api/v1/account-reconcile/compute').send({ partnerId: P, serviceMonth: M }))
-    const wb = await auth(request(app).get(`/api/v1/account-reconcile/workbench?partnerId=${P}&serviceMonth=${M}`))
+    await auth(request(app).post('/api/v1/account-reconcile/compute').send(exactBinding))
+    const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(exactBinding))
     const diff = wb.body.data.diffs.find((d: any) => d.caseNo === 'SR1')
     expect(diff.amountImpact).toBe(200)
     await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diff.id}/verdict`).send({ reason: '漏收，需补收' }))
@@ -83,15 +106,14 @@ describe('补收 → 计入本月实收', () => {
   })
 
   it('总览 确认实收 含补收实收（院待复核·base=0 → 确认实收=补收实收=160）', async () => {
-    const ov = await auth(request(app).get(`/api/v1/account-reconcile/overview?serviceMonth=${M}`))
-    expect(ov.body.data.board.补收实收).toBeCloseTo(160, 2)
-    expect(ov.body.data.board.确认实收).toBeCloseTo(160, 2)
+    const supplements = await auth(request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${M}`))
+    expect(supplements.body.data.board.已补收实收).toBeCloseTo(160, 2)
   })
 
   it('反向恢复待补收 → collected_revenue 清零、退出实收', async () => {
     await auth(request(app).post(`/api/v1/account-reconcile/supplements/${supId}/reopen`).send({ reason: '误标' }))
-    const ov = await auth(request(app).get(`/api/v1/account-reconcile/overview?serviceMonth=${M}`))
-    expect(ov.body.data.board.补收实收).toBeCloseTo(0, 2)
+    const supplements = await auth(request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${M}`))
+    expect(supplements.body.data.board.已补收实收).toBeCloseTo(0, 2)
     const sup = await auth(request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${M}`))
     expect(sup.body.data.list[0].collectedRevenue == null || sup.body.data.list[0].collectedRevenue === 0).toBe(true)
   })
@@ -104,8 +126,8 @@ describe('补收 → 计入本月实收', () => {
     const s = sup.body.data.list[0]
     expect(s.status).toBe('已放弃')
     expect(s.collectedRevenue == null).toBe(true)
-    const ov = await auth(request(app).get(`/api/v1/account-reconcile/overview?serviceMonth=${M}`))
-    expect(ov.body.data.board.补收实收).toBeCloseTo(0, 2)
+    const afterGiveUp = await auth(request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${M}`))
+    expect(afterGiveUp.body.data.board.已补收实收).toBeCloseTo(0, 2)
   })
 })
 

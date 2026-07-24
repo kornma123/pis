@@ -86,12 +86,34 @@ describe('逐抗体初判 · classifyCaseHints', () => {
 describe('逐抗体初判 · 路由集成（compute → workbench 返回 caseHints）', () => {
   const P = 'PT-HINT-1'
   const M = '2026-10'
+  const S = 'STMT-HINT-1'
+  const R = 'RECON-HINT-1'
   let app: any
   let token = ''
 
   beforeAll(async () => {
     const db = await getDb()
     db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'HINT-1', '逐抗体初判测试院', 1)`).run(P)
+    db.prepare(
+      `INSERT INTO statement_import_batches
+        (id, partner_id, source_hash, template_family, parser_revision, config_revision,
+         settlement_month, generation_id, is_current, raw_row_count, normalized_line_count, status)
+       VALUES ('BATCH-HINT-1', ?, 'HASH-HINT-1', 'test', 'r1', 'c1', ?, ?, 1, 1, 1, 'posted')`,
+    ).run(P, M, S)
+    db.prepare(
+      `INSERT INTO statement_raw_rows
+        (id, batch_id, generation_id, source_sheet, source_row, row_json)
+       VALUES ('RAW-HINT-1', 'BATCH-HINT-1', ?, 'sheet', 1, '{}')`,
+    ).run(S)
+    db.prepare(
+      `INSERT INTO statement_normalized_lines
+        (id, batch_id, generation_id, partner_id, settlement_month, ledger_settlement_month,
+         case_no, item_name, source_sheet, source_row, source_column, source_label,
+         template_family, row_kind, line_grain, business_line, amount_role, amount, classification_status)
+       VALUES ('LINE-HINT-1', 'BATCH-HINT-1', ?, ?, ?, ?, 'HC1', '免疫组化染色*3',
+               'sheet', 1, 'amount', '免疫组化染色*3', 'test', 'detail', 'case',
+               'IN', 'gross', 300, 'classified')`,
+    ).run(S, P, M, M)
     db.prepare(`INSERT OR IGNORE INTO lis_cases (id, case_no, partner_id, ihc_count, special_stain_count, operate_time) VALUES (?, ?, ?, ?, ?, ?)`)
       .run('h-lc1', 'HC1', P, 3, 0, '2026-10-05')
     const mk = db.prepare(`INSERT INTO lis_case_markers (id, case_no, partner_id, marker_name, advice_type, wax_no, section_no) VALUES (?, ?, ?, ?, ?, ?, ?)`)
@@ -115,8 +137,14 @@ describe('逐抗体初判 · 路由集成（compute → workbench 返回 caseHin
   const auth = (r: any) => r.set('Authorization', `Bearer ${token}`)
 
   it('compute → workbench.caseHints 含 返工(CD20/A2/2) + 多病灶(CK7/2)，白片不误报', async () => {
-    await auth(request(app).post('/api/v1/account-reconcile/compute').send({ partnerId: P, serviceMonth: M }))
-    const wb = await auth(request(app).get(`/api/v1/account-reconcile/workbench?partnerId=${P}&serviceMonth=${M}`))
+    const exactBinding = {
+      partnerId: P,
+      settlementMonth: M,
+      statementGenerationId: S,
+      reconcileGenerationId: R,
+    }
+    await auth(request(app).post('/api/v1/account-reconcile/compute').send(exactBinding))
+    const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(exactBinding))
     expect(wb.status).toBe(200)
     const hints = wb.body.data.caseHints?.HC1 as any[]
     expect(Array.isArray(hints)).toBe(true)

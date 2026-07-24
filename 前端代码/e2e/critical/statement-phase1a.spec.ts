@@ -21,6 +21,32 @@ async function apiPost(
 }
 
 test.describe('critical Phase 1A statement ledger contract', () => {
+  test('account reconciliation requires exact generations and a strict settlement month', async ({ request }) => {
+    const financeToken = await apiLogin(request, 'finance')
+    const missingGeneration = await apiPost(
+      request,
+      financeToken,
+      '/account-reconcile/compute',
+      { partnerId: 'PT-E2E-LOC005', settlementMonth: '2026-06' },
+    )
+    expect(missingGeneration.status()).toBe(400)
+    expect((await missingGeneration.json())?.error?.code).toBe('GENERATION_BINDING_REQUIRED')
+
+    const invalidMonth = await apiPost(
+      request,
+      financeToken,
+      '/account-reconcile/compute',
+      {
+        partnerId: 'PT-E2E-LOC005',
+        settlementMonth: '2026-13',
+        statementGenerationId: 'STMT-E2E-LOC005',
+        reconcileGenerationId: 'RECON-E2E-LOC005',
+      },
+    )
+    expect(invalidMonth.status()).toBe(400)
+    expect((await invalidMonth.json())?.error?.code).toBe('INVALID_SETTLEMENT_MONTH')
+  })
+
   test('finance completes the authoritative-empty chain while wrong roles and bad receipts fail closed', async ({ request }) => {
     const financeToken = await apiLogin(request, 'finance')
     const wrongRoleToken = await apiLogin(request, 'warehouse_manager')

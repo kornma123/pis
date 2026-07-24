@@ -14,6 +14,8 @@ import { buildTestApp, getDb, loginAdmin, loginAs, seedReviewer } from './p0-har
 
 const P = 'PT-DGATE-1'
 const M = '2026-08'
+const S = 'STMT-DGATE-1'
+const R = 'RECON-DGATE-1'
 let app: any
 let token = '' // admin = 认定人/提交人
 let reviewerToken = '' // reviewer2 = 独立签发人
@@ -30,6 +32,26 @@ async function mountApp() {
 
 function seed(db: any) {
   db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'DG-1', '人闸测试院', 1)`).run(P)
+  db.prepare(
+    `INSERT INTO statement_import_batches
+      (id, partner_id, source_hash, template_family, parser_revision, config_revision,
+       settlement_month, generation_id, is_current, raw_row_count, normalized_line_count, status)
+     VALUES ('BATCH-DGATE-1', ?, 'HASH-DGATE-1', 'test', 'r1', 'c1', ?, ?, 1, 1, 1, 'posted')`,
+  ).run(P, M, S)
+  db.prepare(
+    `INSERT INTO statement_raw_rows
+      (id, batch_id, generation_id, source_sheet, source_row, row_json)
+     VALUES ('RAW-DGATE-1', 'BATCH-DGATE-1', ?, 'sheet', 1, '{}')`,
+  ).run(S)
+  db.prepare(
+    `INSERT INTO statement_normalized_lines
+      (id, batch_id, generation_id, partner_id, settlement_month, ledger_settlement_month,
+       case_no, item_name, source_sheet, source_row, source_column, source_label,
+       template_family, row_kind, line_grain, business_line, amount_role, amount, classification_status)
+     VALUES ('LINE-DGATE-1', 'BATCH-DGATE-1', ?, ?, ?, ?, 'DG1', '免疫组化染色*3',
+             'sheet', 1, 'amount', '免疫组化染色*3', 'test', 'detail', 'case',
+             'IN', 'gross', 300, 'classified')`,
+  ).run(S, P, M, M)
   // 免疫组化 bill 3 片（LIS 5）→ delta −2 → 判「疑似漏收，需补收」→ 驱动补收单
   db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run('dg-l1', 'DG1', P, '免疫组化染色', 3, 100, M)
@@ -43,6 +65,7 @@ const auth = (r: any) => r.set('Authorization', `Bearer ${token}`)
 const asReviewer = (r: any) => r.set('Authorization', `Bearer ${reviewerToken}`)
 const get = (path: string) => auth(request(app).get(path))
 const post = (path: string, body: any = {}) => auth(request(app).post(path).send(body))
+const exactBinding = { partnerId: P, settlementMonth: M, statementGenerationId: S, reconcileGenerationId: R }
 async function supId(): Promise<string> {
   const sup = await get(`/api/v1/account-reconcile/supplements?serviceMonth=${M}`)
   return sup.body.data.list[0].id
@@ -56,8 +79,8 @@ beforeAll(async () => {
   token = await loginAdmin(app)
   reviewerToken = await loginAs(app, 'reviewer2', 'CoreOne2026!')
   // 计算差异 → 认定漏收 → 生成补收单（submitted_by=admin, review_status=pending_review）
-  await post('/api/v1/account-reconcile/compute', { partnerId: P, serviceMonth: M })
-  const wb = await get(`/api/v1/account-reconcile/workbench?partnerId=${P}&serviceMonth=${M}`)
+  await post('/api/v1/account-reconcile/compute', exactBinding)
+  const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(exactBinding))
   const diff = wb.body.data.diffs.find((d: any) => d.caseNo === 'DG1' && d.amountImpact === 200)
   await post(`/api/v1/account-reconcile/diffs/${diff.id}/verdict`, { reason: '漏收，需补收' })
 })

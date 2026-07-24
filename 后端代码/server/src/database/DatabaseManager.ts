@@ -2556,6 +2556,74 @@ export function initializeDatabase(): void {
     )
   `)
   database.exec(`
+    CREATE TABLE IF NOT EXISTS account_reconcile_generations (
+      reconcile_generation_id TEXT PRIMARY KEY,
+      partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL CHECK(
+        settlement_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'
+        AND CAST(substr(settlement_month, 6, 2) AS INTEGER) BETWEEN 1 AND 12
+      ),
+      statement_generation_id TEXT NOT NULL,
+      hospital_month_id TEXT NOT NULL,
+      is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0, 1)),
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending', 'complete', 'closed')),
+      source_readiness_json TEXT NOT NULL,
+      source_readiness_hash TEXT NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      snapshot_hash TEXT NOT NULL,
+      completed_at DATETIME,
+      completed_by TEXT,
+      closed_at DATETIME,
+      closed_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(partner_id, settlement_month, statement_generation_id, reconcile_generation_id),
+      FOREIGN KEY(statement_generation_id) REFERENCES statement_import_batches(generation_id),
+      FOREIGN KEY(hospital_month_id) REFERENCES reconcile_hospital_months(id)
+    )
+  `)
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_account_reconcile_current_month
+      ON account_reconcile_generations(partner_id, settlement_month)
+      WHERE is_current = 1
+  `)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_account_reconcile_statement_generation
+      ON account_reconcile_generations(partner_id, settlement_month, statement_generation_id)
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_account_reconcile_immutable_fact
+    BEFORE UPDATE ON account_reconcile_generations
+    WHEN OLD.reconcile_generation_id <> NEW.reconcile_generation_id
+      OR OLD.partner_id <> NEW.partner_id
+      OR OLD.settlement_month <> NEW.settlement_month
+      OR OLD.statement_generation_id <> NEW.statement_generation_id
+      OR OLD.hospital_month_id <> NEW.hospital_month_id
+      OR OLD.source_readiness_json <> NEW.source_readiness_json
+      OR OLD.source_readiness_hash <> NEW.source_readiness_hash
+      OR OLD.snapshot_json <> NEW.snapshot_json
+      OR OLD.snapshot_hash <> NEW.snapshot_hash
+    BEGIN
+      SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_account_reconcile_no_delete
+    BEFORE DELETE ON account_reconcile_generations
+    BEGIN
+      SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_account_reconcile_closed_immutable
+    BEFORE UPDATE ON account_reconcile_generations
+    WHEN OLD.status = 'closed'
+    BEGIN
+      SELECT RAISE(ABORT, 'CLOSED_RECONCILIATION_IMMUTABLE');
+    END
+  `)
+  database.exec(`
     CREATE TABLE IF NOT EXISTS supplement_orders (
       id TEXT PRIMARY KEY,
       partner_id TEXT NOT NULL,
