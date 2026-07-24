@@ -9,6 +9,7 @@ import {
 } from '../src/services/statement-normalized-lines.js'
 import { postStatementGeneration } from '../src/services/statement-ledger-phase1a.js'
 import { buildCanonicalStatementArtifact } from '../src/services/statement-canonical-artifact.js'
+import { computeStatementMonth } from '../src/services/statement-month-close-phase1a.js'
 
 let db: any
 const FX = join(__dirname, 'fixtures', 'statements')
@@ -162,6 +163,34 @@ describe('S6 derived ledgers and canonical machine artifact', () => {
     ])
     expect((db.prepare('SELECT COUNT(*) n FROM case_revenue WHERE partner_id IN (?, ?)').get('PT-DA', 'PT-GZ') as any).n)
       .toBe(0)
+  })
+
+  it('rejects late post and compute requests for a superseded generation', () => {
+    const firstInput = input(
+      'out_category_summary__dongan_2601.json',
+      'PT-STALE-GENERATION',
+      '2026-01',
+    )
+    const first = importStatementBatch(db, firstInput)
+    postStatementGeneration(db, first.generationId)
+    computeStatementMonth(db, firstInput.partnerId, firstInput.settlementMonth, first.generationId)
+
+    const successor = importStatementBatch(db, {
+      ...firstInput,
+      configRevision: 'seed-phase1a-v2',
+    })
+    expect(successor.generationId).not.toBe(first.generationId)
+    expect((db.prepare(`
+      SELECT is_current FROM statement_import_batches WHERE generation_id = ?
+    `).get(first.generationId) as any).is_current).toBe(0)
+
+    expect(() => postStatementGeneration(db, first.generationId)).toThrow(/STALE_GENERATION/)
+    expect(() => computeStatementMonth(
+      db,
+      firstInput.partnerId,
+      firstInput.settlementMonth,
+      first.generationId,
+    )).toThrow(/STALE_GENERATION/)
   })
 
   it('fails closed for Pingquan period conflict and writes no posted ledger', () => {
