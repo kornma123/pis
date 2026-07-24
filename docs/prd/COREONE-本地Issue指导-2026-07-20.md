@@ -51,6 +51,7 @@
 
 - 标准工时、人工成本录入、人员成本台账；PRD §4.5/§8 明确 labor 永不进入贡献毛利，P0 不引入工时台账。
 - 设备折旧、房租、设备台账或设备成本输入；固定成本只整盘，不摊单院，也不下沉到单例成本。
+- ABC activity center、cost pool、cost driver、全成本分摊、ABC 盈利报表及其独立 close/readiness/dashboard 产品面；现存代码只算待退役兼容债务，详见 [ABC 域退役与兼容边界](COREONE-ABC域退役与兼容边界-2026-07-24.md)。
 - 单独恢复 Equipment、Labor、Alerts 三条旧 K3 任务；它们已被严格 PRD 审计移除，业务改动和有效 coverage 都是 0。PRD §4.1 明列的“预警无主动触发”窄缺口另见 LOC-031，不代表旧 Alerts 大任务复活。
 - 实际成本/财务实付逐笔核算、FISH/NGS 成本建模、自动排名/打分/砍院/谈价清单、对医院可信版、多租户 SaaS。
 - 已删除的 depletion 域、无消费者的幽灵 API、为“入口完整”而新造接口。
@@ -65,7 +66,7 @@
 - PRD-0 的跨院复合键/LIS import guard、配置读取/回滚 normalize、NGS 未核成本隔离已经落码；Phase 1A 规范行和月结子账本仍未落码。
 - #168 晚月同号覆盖硬拒、C1 证据底座、E0 月份 delta mockup、医院目录 runtime 已进入 d144；它们分别是 LOC-002/003/014–017 的上游，不是要重写的任务。
 - `batches.remaining` 事实、`inventory.stock` 同事务派生缓存及 FEFO/422 基线已由 `20156016…` 建立；LOC-001 是剩余写路径/schema/seed 收口。
-- `canAccess` 写门、数据驱动 permission、审计双轨和 fail-closed hospital-cm 门已有基线；LOC-006/007/012 只关闭已发现的合同漏洞。
+- `canAccess` 写门、数据驱动 permission、审计双轨和 fail-closed hospital-cm 门已有基线；LOC-007 继续关闭权限合同漏洞。原 LOC-006/012 属已移除 ABC 产品面，不再推进。
 - G-REV Locked Golden、质量 Loop、preflight 和 build-discipline 骨架已存在；本清单不另开“重建治理体系”大票。
 
 ## 3. 建议执行顺序
@@ -75,7 +76,7 @@
 3. **并行只推进不重叠的远端候选**：LOC-031A 已在专用分支等待 K3 R2；未出 fixed-SHA verdict 前不进入 integration。其他新票先做 PRD/owner/owned-path 门，不以旧排期自动开工。
 4. **先冻结 Phase 1A 直接规格，再交单一对账事实 owner**：先做 LOC-004 的 G0；没有批准的 source/generation 合同前，不继续堆第四套 readiness SQL。
 5. **并行处理不碰业务实现的明确动作**：GOV-001 可修事实转录；GOV-002 已由合并对象重建旧 #148 的唯一治理入口；LOC-026 由财务/管理员在 2026-08-31 前交真实金额与认账，不占代码 owner。
-6. **修复并复核现有业务候选**：LOC-005 至 LOC-013；共享文件同一时间只允许一个 owner。
+6. **修复并复核仍在 PRD 内的业务候选**：LOC-005、LOC-007 至 LOC-010；LOC-006/011/012 已移除，LOC-013 拆为非 ABC 的 BOM 真值新票；共享文件同一时间只允许一个 owner。
 7. **主线真实解锁**：LOC-014 与 LOC-015 → LOC-016 → LOC-017；真实证据不齐时保持 null/403，不用 fixture 解锁。
 8. **平台/上线门单列**：`PLATFORM-R1` 不属于产品 PRD issue，只有 release owner 明确触发后才进入；不得用工具链工作冒充产品进度。
 
@@ -175,11 +176,10 @@
 
 ### LOC-006 — ABC close/readiness 单一身份与分类合同
 
-- **状态/优先级**：`LOCAL_CANDIDATE_UNREVIEWED` / P1。
-- **PRD 对应**：§4.8、§6 ABC/null 降级、月关账 fail-closed。
-- **现有候选**：`a31990ddd32c73cb6c9cdebf2df39915c8137e84`（base 含 d144）。
-- **需证明**：readiness `yearMonth`/period id 精确绑定被关闭 period；blocker/warning 的 code/source/severity/title/count/status exact；error absorption 只落一个权威类别；malformed 500、合法 warning 放行、合法 blocker 422；BEGIN/readiness/CAS/audit/readback/COMMIT 主干不回退。
-- **下一动作**：冻结 a31990 fixed SHA 做独立 Node22 review；任何 finding 必须另出 successor，不在 reviewer 线程修码。
+- **状态/优先级**：`REMOVED_FROM_CURRENT_PRD / CLOSE_NOT_PLANNED`。
+- **裁决**：ABC close/readiness 属已退出当前范围的独立产品能力，不再复核或修复原候选。
+- **历史候选**：`a31990ddd32c73cb6c9cdebf2df39915c8137e84` 仅保留取证，不计 coverage，不得作为新 base。
+- **兼容边界**：若主线仍调用其中通用事务/审计 helper，只能在“后端 ABC 兼容解耦”新票内迁移，不能恢复 ABC close 产品。
 
 ### LOC-007 — RBAC canonical role 与事务内 actor 授权
 
@@ -214,31 +214,23 @@
 
 ### LOC-011 — Profitability 同一快照、distinct 覆盖与 DTO 算术真值
 
-- **状态/优先级**：`UNASSIGNED` / P1。
-- **PRD 对应**：§4.7 两层框架、§6 诚实不可测、§7 unknown 路径清零。
-- **已知失败对象**：`e4528c050095106a55e11f2e5c0bf9ca353cf9f0` 静态复核 FAIL；不要在其上只补前端文案。
-- **依赖顺序**：
-  1. backend 提供 immutable dataset revision/snapshot token 与 distinct outbound coverage/missing count，或原子服务端全量导出；
-  2. frontend 每页要求同 token，消费 freshness/age/revision；
-  3. parser 验证 `material+activity=totalCost`、`fee-totalCost=profit`、rate 与金额一致（按权威容差）；
-  4. stale/混页/重复 snapshot 掩盖缺失时禁导出。
-- **STOP**：没有 backend fixed commit 和 combined base 前冻结 frontend“已闭合”声明；不得把 `snapshotCount >= outboundCount` 当逐 outbound 覆盖证明。
+- **状态/优先级**：`REMOVED_FROM_CURRENT_PRD / CLOSE_NOT_PLANNED`。
+- **裁决**：该票依赖 ABC activity/full-cost profitability 快照，已随 ABC 产品面退出而取消。
+- **保留事项**：hospital-cm 的材料贡献毛利真值、证据双轴与 readiness 继续由主线票承接，不得把本票改名后复活 ABC 全成本。
 
 ### LOC-012 — Dashboard action truth、readiness 与 export
 
-- **状态/优先级**：`LOCAL_CANDIDATE_UNREVIEWED` / P1。
-- **PRD 对应**：§4.8、§6、§7 unknown 路径清零。
-- **现有候选**：`9cf8e16687db9f3577ebd859869f68eb5bae30e3`；**不是 d144 descendant**，不得直接并入，先建 combined base。
-- **需证明**：adjustment 金额/count/adjusted totals/rate 缺失或畸形不能清除 action-unknown；不把 base profit 标成 adjusted profit；readiness 校验 canonical code→source→severity→count；export 使用同一 keyed truth gate 且拒绝空/畸形成功；同步 ref 抢占防 same-tick 双 mutation；warning-only 不冒充 close blocker；TypeChecker guard 覆盖 inferred any value flow。
-- **依赖**：close/readiness 语义先以 LOC-006 backend fixed commit 为准。
+- **状态/优先级**：`REMOVED_FROM_CURRENT_PRD / CLOSE_NOT_PLANNED`。
+- **裁决**：该 Dashboard/readiness/export 候选绑定 ABC close/profitability，已取消；`9cf8e166…` 只保留历史取证。
+- **边界**：统一中文文案、hospital-cm 主线 Dashboard 或普通报表 truth 如有独立缺口，必须按各自 PRD 重新开票，不得继承本票 ABC 口径。
 
 ### LOC-013 — CostModel/BOM live response 诚实消费
 
-- **状态/优先级**：`LOCAL_CANDIDATE_UNREVIEWED` / P1。
-- **PRD 对应**：§4.4 BOM 版本化、§4.5 标准成本、§6 honest unavailable。
-- **现有候选**：`9325b7bb103ea86ce414c56dcd366fda35513604`（base 含 d144）。
-- **需证明**：BOM list/detail、项目、物料和 ABC 响应分别经过 endpoint-specific exact parser；unknown/null/malformed 不折为 0/空；合法 0 保真；刷新错误保留 stale display 但禁写/禁导出；共享 request 错误不泄漏。
-- **下一动作**：固定 SHA 独立复核 + response→parser→consumer behavior mutations；不改成本公式/golden。
+- **状态/优先级**：`SCOPE_SPLIT_REQUIRED / CLOSE_CURRENT`。
+- **PRD 对应**：§4.4 BOM 版本化、§4.5 材料标准成本、§6 honest unavailable；ABC 部分已移除。
+- **远端候选**：PR #66 / `527a88c…` 混合了通用 BOM 真值与已取消 ABC 页面，禁止整体合并。
+- **拆分规则**：只允许从最新 master 重新实现/移植 `master.ts` 的 BOM/project/material endpoint-specific parser 与 `request.ts` 错误脱敏；`abc.ts`、`CostModelValidation.tsx` 及 ABC tests 全部排除。不得整体 cherry-pick。
+- **必须证明**：unknown/null/malformed 不折 0/空，合法 0 保真，响应→parser→非 ABC consumer fail-closed；BOM 任意读写/计算不改变库存；不改成本公式/golden。
 
 ## 6. 非产品 PRD：治理文档与 release 准入
 
@@ -328,13 +320,13 @@
 | Purchase/inbound | `42c03f5a3b9c498b9ff8a00a93b3c8aba0a8130c` | descendant | 待独立复核 |
 | RBAC | `62032d2e8bc8e095bdd56fbc9bb7475967adeb2a` | descendant | 待独立复核 |
 | Supplier return | `270859332798e7f55e7eebbafa3d74d33acb67a9` | descendant | 待独立复核 |
-| CostModel frontend | `9325b7bb103ea86ce414c56dcd366fda35513604` | descendant | 待独立复核 |
+| CostModel/ABC frontend | `9325b7bb103ea86ce414c56dcd366fda35513604`、PR #66 `527a88c…` | historical/mixed | 已移除 ABC 范围；只可按 LOC-013 拆出非 ABC 通用 truth |
 | Account reconcile | `73d8d973e0b591490cd94e157fb16e8670836437` | descendant | 只算 atomicity 部分候选，依赖 LOC-004 |
 | Inventory zero-stock | `aa6eb8f26f3653b1a49317d0fa94948e4eebb407` | descendant | 待独立复核 |
-| ABC close | `a31990ddd32c73cb6c9cdebf2df39915c8137e84` | descendant | 待独立复核 |
-| Dashboard | `9cf8e16687db9f3577ebd859869f68eb5bae30e3` | non-descendant | 先 combined base，再复核 |
+| ABC close | `a31990ddd32c73cb6c9cdebf2df39915c8137e84` | historical | `REMOVED_FROM_CURRENT_PRD`，冻结勿用 |
+| ABC Dashboard | `9cf8e16687db9f3577ebd859869f68eb5bae30e3` | historical/non-descendant | `REMOVED_FROM_CURRENT_PRD`，冻结勿用 |
 
-候选表只回答“产品域代码在哪里”，不回答“是否正确”。当前共 8 个产品域候选，其中 account 只覆盖 atomicity 的局部修复。每个候选进入集成前必须重新证明 parent/tree/exact delta、Node22、target lock、focused/related/build/type/lint/mutation 和独立 review。Migration 平台候选另见 `PLATFORM-R1`，不计入本表。
+候选表只回答“历史代码在哪里”，不回答“是否正确或仍在 PRD”。标为 historical/removed 的候选不得进入集成；其余候选进入集成前必须重新证明 parent/tree/exact delta、Node22、target lock、focused/related/build/type/lint/mutation 和独立 review。Migration 平台候选另见 `PLATFORM-R1`，不计入本表。
 
 ## 9. 全局 Definition of Ready / Done
 
