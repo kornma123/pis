@@ -169,6 +169,23 @@ interface CanonicalAmountFact {
   units: bigint
 }
 
+function canonicalScaledUnits(decimalText: string, code: string, label: string): bigint {
+  const match = CANONICAL_DECIMAL_TEXT.exec(decimalText)
+  if (!match) {
+    fail(`${label} exceeds canonical DECIMAL(18,4) precision`, code, 409)
+  }
+  const negative = decimalText.startsWith('-')
+  const unsigned = negative ? decimalText.slice(1) : decimalText
+  const [whole, fraction = ''] = unsigned.split('.')
+  const units = BigInt(whole) * BigInt(DECIMAL_SCALE)
+    + BigInt(fraction.padEnd(4, '0'))
+  const signedUnits = negative ? -units : units
+  if (signedUnits > MAX_SCALED_DECIMAL || signedUnits < -MAX_SCALED_DECIMAL) {
+    fail(`${label} exceeds the scaled safe-integer boundary`, code, 409)
+  }
+  return signedUnits
+}
+
 function canonicalAmountFact(
   value: unknown,
   code: string,
@@ -176,19 +193,11 @@ function canonicalAmountFact(
   canonicalText?: unknown,
 ): CanonicalAmountFact {
   if (canonicalText !== undefined && canonicalText !== null) {
-    if (typeof canonicalText !== 'string' || !CANONICAL_DECIMAL_TEXT.test(canonicalText)) {
+    if (typeof canonicalText !== 'string') {
       fail(`${label} exceeds canonical DECIMAL(18,4) precision`, code, 409)
     }
     const decimalText = canonicalText as string
-    const negative = decimalText.startsWith('-')
-    const unsigned = negative ? decimalText.slice(1) : decimalText
-    const [whole, fraction = ''] = unsigned.split('.')
-    const units = BigInt(whole) * BigInt(DECIMAL_SCALE)
-      + BigInt(fraction.padEnd(4, '0'))
-    const signedUnits = negative ? -units : units
-    if (signedUnits > MAX_SCALED_DECIMAL || signedUnits < -MAX_SCALED_DECIMAL) {
-      fail(`${label} exceeds the scaled safe-integer boundary`, code, 409)
-    }
+    const signedUnits = canonicalScaledUnits(decimalText, code, label)
     const numeric = Number(decimalText)
     if (
       typeof value !== 'number'
@@ -208,18 +217,10 @@ function canonicalAmountFact(
   if (Math.abs(numeric) >= MAX_UNAMBIGUOUS_NUMBER_AMOUNT) {
     fail(`${label} requires canonical decimal text before Number conversion`, code, 409)
   }
-  const scaled = numeric * DECIMAL_SCALE
-  const roundedScaled = Math.round(scaled)
-  const tolerance = Number.EPSILON * Math.max(1, Math.abs(scaled)) * 2
-  if (
-    !Number.isSafeInteger(roundedScaled)
-    || Math.abs(scaled - roundedScaled) > tolerance
-  ) {
-    fail(`${label} exceeds canonical DECIMAL(18,4) precision`, code, 409)
-  }
+  const signedUnits = canonicalScaledUnits(String(numeric), code, label)
   return {
-    value: roundedScaled / DECIMAL_SCALE,
-    units: BigInt(roundedScaled),
+    value: numeric,
+    units: signedUnits,
   }
 }
 

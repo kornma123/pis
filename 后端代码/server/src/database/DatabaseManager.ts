@@ -1118,7 +1118,9 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
 
   database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_immutable_fact')
   database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_completion_immutable')
+  database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_complete_finality')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_closed_immutable')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_complete_finality')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_final_immutable')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_closed_no_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_final_no_delete')
@@ -1168,11 +1170,76 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
     END
   `)
   database.exec(`
+    CREATE TRIGGER trg_account_reconcile_complete_finality
+    BEFORE UPDATE ON account_reconcile_generations
+    WHEN OLD.status = 'complete'
+      AND (
+        OLD.is_current IS NOT 1
+        OR NEW.is_current IS NOT 1
+        OR NEW.status IS NOT 'closed'
+        OR NEW.closed_at IS NULL
+        OR NEW.closed_by IS NULL
+        OR trim(NEW.closed_by) = ''
+        OR OLD.reconcile_generation_id IS NOT NEW.reconcile_generation_id
+        OR OLD.partner_id IS NOT NEW.partner_id
+        OR OLD.settlement_month IS NOT NEW.settlement_month
+        OR OLD.statement_generation_id IS NOT NEW.statement_generation_id
+        OR OLD.hospital_month_id IS NOT NEW.hospital_month_id
+        OR OLD.source_readiness_json IS NOT NEW.source_readiness_json
+        OR OLD.source_readiness_hash IS NOT NEW.source_readiness_hash
+        OR OLD.statement_artifact_hash IS NOT NEW.statement_artifact_hash
+        OR OLD.snapshot_json IS NOT NEW.snapshot_json
+        OR OLD.snapshot_hash IS NOT NEW.snapshot_hash
+        OR OLD.completion_artifact_json IS NOT NEW.completion_artifact_json
+        OR OLD.completion_artifact_hash IS NOT NEW.completion_artifact_hash
+        OR OLD.completed_at IS NOT NEW.completed_at
+        OR OLD.completed_by IS NOT NEW.completed_by
+        OR OLD.created_at IS NOT NEW.created_at
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'COMPLETE_RECONCILIATION_FINAL');
+    END
+  `)
+  database.exec(`
     CREATE TRIGGER trg_reconcile_hospital_month_closed_immutable
     BEFORE UPDATE ON reconcile_hospital_months
     WHEN OLD.closed_at IS NOT NULL
     BEGIN
       SELECT RAISE(ABORT, 'CLOSED_HOSPITAL_MONTH_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_hospital_month_complete_finality
+    BEFORE UPDATE ON reconcile_hospital_months
+    WHEN OLD.completed_at IS NOT NULL
+      AND OLD.closed_at IS NULL
+      AND (
+        NEW.status IS NOT '已关账'
+        OR NEW.closed_at IS NULL
+        OR NEW.closed_by IS NULL
+        OR trim(NEW.closed_by) = ''
+        OR OLD.id IS NOT NEW.id
+        OR OLD.partner_id IS NOT NEW.partner_id
+        OR OLD.partner_name IS NOT NEW.partner_name
+        OR OLD.service_month IS NOT NEW.service_month
+        OR OLD.name_aligned IS NOT NEW.name_aligned
+        OR OLD.match_rate IS NOT NEW.match_rate
+        OR OLD.match_status IS NOT NEW.match_status
+        OR OLD.statement_ready IS NOT NEW.statement_ready
+        OR OLD.lis_ready IS NOT NEW.lis_ready
+        OR OLD.diff_count IS NOT NEW.diff_count
+        OR OLD.pending_count IS NOT NEW.pending_count
+        OR OLD.unmatched_count IS NOT NEW.unmatched_count
+        OR OLD.confirmed_lab_revenue IS NOT NEW.confirmed_lab_revenue
+        OR OLD.computed_at IS NOT NEW.computed_at
+        OR OLD.completed_at IS NOT NEW.completed_at
+        OR OLD.completed_by IS NOT NEW.completed_by
+        OR OLD.reopened_at IS NOT NEW.reopened_at
+        OR OLD.reopen_reason IS NOT NEW.reopen_reason
+        OR OLD.created_at IS NOT NEW.created_at
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'COMPLETE_HOSPITAL_MONTH_FINAL');
     END
   `)
   database.exec(`
@@ -3065,6 +3132,71 @@ export function initializeDatabase(): void {
     WHEN OLD.status = 'closed'
     BEGIN
       SELECT RAISE(ABORT, 'CLOSED_RECONCILIATION_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_account_reconcile_complete_finality
+    BEFORE UPDATE ON account_reconcile_generations
+    WHEN OLD.status = 'complete'
+      AND (
+        OLD.is_current IS NOT 1
+        OR NEW.is_current IS NOT 1
+        OR NEW.status IS NOT 'closed'
+        OR NEW.closed_at IS NULL
+        OR NEW.closed_by IS NULL
+        OR trim(NEW.closed_by) = ''
+        OR OLD.reconcile_generation_id IS NOT NEW.reconcile_generation_id
+        OR OLD.partner_id IS NOT NEW.partner_id
+        OR OLD.settlement_month IS NOT NEW.settlement_month
+        OR OLD.statement_generation_id IS NOT NEW.statement_generation_id
+        OR OLD.hospital_month_id IS NOT NEW.hospital_month_id
+        OR OLD.source_readiness_json IS NOT NEW.source_readiness_json
+        OR OLD.source_readiness_hash IS NOT NEW.source_readiness_hash
+        OR OLD.statement_artifact_hash IS NOT NEW.statement_artifact_hash
+        OR OLD.snapshot_json IS NOT NEW.snapshot_json
+        OR OLD.snapshot_hash IS NOT NEW.snapshot_hash
+        OR OLD.completion_artifact_json IS NOT NEW.completion_artifact_json
+        OR OLD.completion_artifact_hash IS NOT NEW.completion_artifact_hash
+        OR OLD.completed_at IS NOT NEW.completed_at
+        OR OLD.completed_by IS NOT NEW.completed_by
+        OR OLD.created_at IS NOT NEW.created_at
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'COMPLETE_RECONCILIATION_FINAL');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_reconcile_hospital_month_complete_finality
+    BEFORE UPDATE ON reconcile_hospital_months
+    WHEN OLD.completed_at IS NOT NULL
+      AND OLD.closed_at IS NULL
+      AND (
+        NEW.status IS NOT '已关账'
+        OR NEW.closed_at IS NULL
+        OR NEW.closed_by IS NULL
+        OR trim(NEW.closed_by) = ''
+        OR OLD.id IS NOT NEW.id
+        OR OLD.partner_id IS NOT NEW.partner_id
+        OR OLD.partner_name IS NOT NEW.partner_name
+        OR OLD.service_month IS NOT NEW.service_month
+        OR OLD.name_aligned IS NOT NEW.name_aligned
+        OR OLD.match_rate IS NOT NEW.match_rate
+        OR OLD.match_status IS NOT NEW.match_status
+        OR OLD.statement_ready IS NOT NEW.statement_ready
+        OR OLD.lis_ready IS NOT NEW.lis_ready
+        OR OLD.diff_count IS NOT NEW.diff_count
+        OR OLD.pending_count IS NOT NEW.pending_count
+        OR OLD.unmatched_count IS NOT NEW.unmatched_count
+        OR OLD.confirmed_lab_revenue IS NOT NEW.confirmed_lab_revenue
+        OR OLD.computed_at IS NOT NEW.computed_at
+        OR OLD.completed_at IS NOT NEW.completed_at
+        OR OLD.completed_by IS NOT NEW.completed_by
+        OR OLD.reopened_at IS NOT NEW.reopened_at
+        OR OLD.reopen_reason IS NOT NEW.reopen_reason
+        OR OLD.created_at IS NOT NEW.created_at
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'COMPLETE_HOSPITAL_MONTH_FINAL');
     END
   `)
   database.exec(`

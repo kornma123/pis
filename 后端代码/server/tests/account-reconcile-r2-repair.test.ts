@@ -108,6 +108,25 @@ function expectCode(fn: () => unknown, code: string): void {
   }
 }
 
+function expectDatabaseMutationBlocked(
+  connection: DatabaseSync,
+  mutation: () => unknown,
+  expected: RegExp,
+): void {
+  connection.exec('SAVEPOINT loc005_mutation_probe')
+  let caught: unknown
+  try {
+    mutation()
+  } catch (error) {
+    caught = error
+  } finally {
+    connection.exec('ROLLBACK TO loc005_mutation_probe')
+    connection.exec('RELEASE loc005_mutation_probe')
+  }
+  expect(caught).toBeInstanceOf(Error)
+  expect(String(caught)).toMatch(expected)
+}
+
 function setAdminActive(active: boolean): void {
   db.prepare('UPDATE users SET status = ?, is_deleted = 0 WHERE id = ?')
     .run(active ? 1 : 0, 'USER-001')
@@ -241,6 +260,101 @@ describe('LOC-005 R2 canonical source truth', () => {
       () => lifecycle.computeAccountReconciliation(db, binding, 'USER-001'),
       'REVENUE_AMOUNT_UNAVAILABLE',
     )
+  })
+
+  it('rejects the SQLite REAL fifth-decimal counterexample without magnitude epsilon', () => {
+    expectCode(
+      () => lifecycle.canonicalReconciliationAmount(
+        200000000000.00006,
+        'REVENUE_AMOUNT_UNAVAILABLE',
+        'SQLite REAL fifth decimal',
+      ),
+      'REVENUE_AMOUNT_UNAVAILABLE',
+    )
+    expect(lifecycle.canonicalReconciliationAmount(
+      200000000000.0001,
+      'REVENUE_AMOUNT_UNAVAILABLE',
+      'SQLite REAL canonical four decimals',
+    )).toBe(200000000000.0001)
+  })
+
+  it('rejects a persisted SQLite REAL fifth decimal in statement and revenue facts with zero generation write', () => {
+    const statementBinding = seedSource({
+      name: 'sqlite-real-fifth-statement',
+      amount: 200000000000.00006,
+      revenueAmount: 100,
+    })
+    expectCode(
+      () => lifecycle.computeAccountReconciliation(db, statementBinding, 'USER-001'),
+      'NON_CANONICAL_STATEMENT_AMOUNT',
+    )
+    expect(Number(db.prepare(`
+      SELECT COUNT(*) AS n FROM account_reconcile_generations
+       WHERE reconcile_generation_id = ?
+    `).get(statementBinding.reconcileGenerationId).n)).toBe(0)
+
+    const revenueBinding = seedSource({
+      name: 'sqlite-real-fifth-revenue',
+      revenueAmount: 200000000000.00006,
+    })
+    expectCode(
+      () => lifecycle.computeAccountReconciliation(db, revenueBinding, 'USER-001'),
+      'REVENUE_AMOUNT_UNAVAILABLE',
+    )
+    expect(Number(db.prepare(`
+      SELECT COUNT(*) AS n FROM account_reconcile_generations
+       WHERE reconcile_generation_id = ?
+    `).get(revenueBinding.reconcileGenerationId).n)).toBe(0)
+  })
+
+  it('accepts the persisted SQLite REAL canonical four-decimal counterpart', () => {
+    const binding = seedSource({
+      name: 'sqlite-real-four-decimal',
+      revenueAmount: 200000000000.0001,
+    })
+    lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    expect(lifecycle.completeAccountReconciliation(db, binding, 'USER-001'))
+      .toMatchObject({ status: 'complete', confirmedLabRevenue: 200000000000.0001 })
+  })
+
+  it.each([
+    ['decision', 'reconcile_diffs'],
+    ['supplement', 'supplement_orders'],
+  ])('rejects a persisted SQLite REAL fifth decimal in the %s completion artifact', (_label, table) => {
+    const binding = seedSource({ name: `sqlite-real-fifth-${_label}`, lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db,
+      binding,
+      diff.id,
+      '漏收，需补收',
+      null,
+      'USER-001',
+      'admin',
+    )
+    if (table === 'reconcile_diffs') {
+      db.prepare('UPDATE reconcile_diffs SET amount_impact = ? WHERE id = ?')
+        .run(200000000000.00006, diff.id)
+    } else {
+      db.prepare('UPDATE supplement_orders SET amount = ? WHERE source_diff_id = ?')
+        .run(200000000000.00006, diff.id)
+    }
+
+    expectCode(
+      () => lifecycle.completeAccountReconciliation(db, binding, 'USER-001'),
+      'NON_CANONICAL_DECISION_AMOUNT',
+    )
+    expect(db.prepare(`
+      SELECT status, completion_artifact_json, completion_artifact_hash
+        FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+    `).get(binding.reconcileGenerationId)).toMatchObject({
+      status: 'pending',
+      completion_artifact_json: null,
+      completion_artifact_hash: null,
+    })
   })
 
   it('accepts corrected revenue as canonical', () => {
@@ -666,16 +780,30 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
       'admin',
     )
     lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+    const legacyHospitalMonthId = `HM-LEGACY-UNBINDABLE-${++sequence}`
+    const legacyDiffId = `DIFF-LEGACY-UNBINDABLE-${sequence}`
+    const legacyPartnerId = `PT-LEGACY-UNBINDABLE-${sequence}`
+    db.prepare(`
+      INSERT INTO reconcile_hospital_months
+        (id, partner_id, partner_name, service_month)
+      VALUES (?, ?, 'Legacy unbindable partner', '2026-11')
+    `).run(legacyHospitalMonthId, legacyPartnerId)
+    db.prepare(`
+      INSERT INTO reconcile_diffs
+        (id, hospital_month_id, partner_id, service_month, case_no, line_type)
+      VALUES (?, ?, ?, '2026-11', ?, '免疫组化')
+    `).run(
+      legacyDiffId,
+      legacyHospitalMonthId,
+      legacyPartnerId,
+      `CASE-LEGACY-UNBINDABLE-${sequence}`,
+    )
 
     const upgradePath = join(testDirectory, `forward-upgrade-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(upgradePath)
     let legacy = new DatabaseSync(upgradePath)
     try {
       legacy.exec('PRAGMA foreign_keys = OFF')
-      legacy.prepare(`
-        UPDATE account_reconcile_generations SET is_current = 0
-        WHERE reconcile_generation_id = ?
-      `).run(binding.reconcileGenerationId)
       legacy.exec(`
         DROP TABLE supplement_orders;
         CREATE TABLE supplement_orders (
@@ -705,7 +833,7 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
         INSERT INTO supplement_orders
           (id, partner_id, service_month, source_diff_id, amount, case_count, submitted_by)
         VALUES ('SO-LEGACY-UNBINDABLE', ?, ?, ?, 1, 1, 'legacy')
-      `).run(binding.partnerId, binding.settlementMonth, diff.id)
+      `).run(legacyPartnerId, '2026-11', legacyDiffId)
       legacy.exec('PRAGMA foreign_keys = ON')
 
       expect(() => manager.upgradeAccountReconciliationSchema(legacy))
@@ -751,6 +879,121 @@ describe('LOC-005 R2 legacy binding and decision freeze', () => {
     expect(() => db.prepare(`
       UPDATE reconcile_hospital_months SET status = 'pending' WHERE id = 'HM-LEGACY-CLOSED'
     `).run()).toThrow(/CLOSED_HOSPITAL_MONTH_IMMUTABLE/)
+  })
+
+  it('hard-gates complete generation and hospital-month facts on fresh schema and restart', () => {
+    const binding = seedSource({ name: 'complete-finality-fresh' })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+    const hospitalMonthId = String(snapshot.hospitalMonthId)
+
+    const assertFinality = (connection: DatabaseSync) => {
+      const generationMutations = [
+        'is_current = 0',
+        "status = 'pending'",
+        'completed_at = NULL',
+        "completed_by = 'attacker'",
+        'closed_at = CURRENT_TIMESTAMP',
+      ]
+      for (const assignment of generationMutations) {
+        expectDatabaseMutationBlocked(
+          connection,
+          () => connection.prepare(`
+            UPDATE account_reconcile_generations SET ${assignment}
+             WHERE reconcile_generation_id = ?
+          `).run(binding.reconcileGenerationId),
+          /COMPLETE_RECONCILIATION_FINAL/,
+        )
+      }
+      const hospitalMonthMutations = [
+        "status = '待复核'",
+        'completed_at = NULL',
+        "completed_by = 'attacker'",
+        'confirmed_lab_revenue = 0',
+      ]
+      for (const assignment of hospitalMonthMutations) {
+        expectDatabaseMutationBlocked(
+          connection,
+          () => connection.prepare(`
+            UPDATE reconcile_hospital_months SET ${assignment} WHERE id = ?
+          `).run(hospitalMonthId),
+          /COMPLETE_HOSPITAL_MONTH_FINAL/,
+        )
+      }
+    }
+
+    assertFinality(db)
+    const successor = {
+      ...binding,
+      reconcileGenerationId: `${binding.reconcileGenerationId}-REVIVE`,
+    }
+    expectCode(
+      () => lifecycle.computeAccountReconciliation(db, successor, 'USER-001'),
+      'RECONCILIATION_FINAL',
+    )
+    expect(Number(db.prepare(`
+      SELECT COUNT(*) AS n FROM account_reconcile_generations
+       WHERE reconcile_generation_id = ?
+    `).get(successor.reconcileGenerationId).n)).toBe(0)
+
+    manager.closeDatabase()
+    manager.initializeDatabase()
+    db = manager.getDatabase()
+    assertFinality(db)
+    expect(lifecycle.closeAccountReconciliation(db, binding, 'USER-001'))
+      .toMatchObject({ status: 'closed' })
+  })
+
+  it('installs complete finality hard gates during predecessor upgrade and preserves them on restart', () => {
+    const binding = seedSource({ name: 'complete-finality-upgrade' })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+    const upgradePath = join(testDirectory, `complete-finality-upgrade-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(upgradePath)
+
+    const assertUpgradedFinality = (connection: DatabaseSync) => {
+      expectDatabaseMutationBlocked(
+        connection,
+        () => connection.prepare(`
+          UPDATE account_reconcile_generations SET is_current = 0
+           WHERE reconcile_generation_id = ?
+        `).run(binding.reconcileGenerationId),
+        /COMPLETE_RECONCILIATION_FINAL/,
+      )
+      expectDatabaseMutationBlocked(
+        connection,
+        () => connection.prepare(`
+          UPDATE account_reconcile_generations SET status = 'pending'
+           WHERE reconcile_generation_id = ?
+        `).run(binding.reconcileGenerationId),
+        /COMPLETE_RECONCILIATION_FINAL/,
+      )
+      expectDatabaseMutationBlocked(
+        connection,
+        () => connection.prepare(`
+          UPDATE reconcile_hospital_months SET status = '待复核' WHERE id = ?
+        `).run(String(snapshot.hospitalMonthId)),
+        /COMPLETE_HOSPITAL_MONTH_FINAL/,
+      )
+    }
+
+    let predecessor = new DatabaseSync(upgradePath)
+    try {
+      predecessor.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_complete_finality')
+      predecessor.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_complete_finality')
+      manager.upgradeAccountReconciliationSchema(predecessor)
+      assertUpgradedFinality(predecessor)
+    } finally {
+      predecessor.close()
+    }
+
+    predecessor = new DatabaseSync(upgradePath)
+    try {
+      predecessor.exec('PRAGMA foreign_keys = ON')
+      assertUpgradedFinality(predecessor)
+    } finally {
+      predecessor.close()
+    }
   })
 
   it('freezes decision facts at complete and close revalidates the completion hash', () => {
