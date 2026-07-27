@@ -946,6 +946,96 @@ function ensureDatabaseColumn(
   }
 }
 
+function ensureSupplementGenerationForeignKeys(database: DatabaseSync): void {
+  const columns = database.prepare('PRAGMA table_info(supplement_orders)').all() as Array<{ name: string }>
+  const foreignKeys = database.prepare('PRAGMA foreign_key_list(supplement_orders)').all() as Array<{
+    from: string
+    table: string
+  }>
+  const hasGenerationColumn = columns.some(column => column.name === 'reconcile_generation_id')
+  const hasDiffForeignKey = foreignKeys.some(
+    foreignKey => foreignKey.from === 'source_diff_id' && foreignKey.table === 'reconcile_diffs',
+  )
+  const hasGenerationForeignKey = foreignKeys.some(
+    foreignKey => foreignKey.from === 'reconcile_generation_id'
+      && foreignKey.table === 'account_reconcile_generations',
+  )
+  if (hasGenerationColumn && hasDiffForeignKey && hasGenerationForeignKey) return
+
+  const invalidSource = database.prepare(`
+    SELECT supplement.id
+      FROM supplement_orders supplement
+      LEFT JOIN reconcile_diffs diff ON diff.id = supplement.source_diff_id
+      LEFT JOIN account_reconcile_generations generation
+        ON generation.hospital_month_id = diff.hospital_month_id
+       AND generation.is_current = 1
+     WHERE supplement.source_diff_id IS NOT NULL
+       AND diff.id IS NULL
+     LIMIT 1
+  `).get() as { id?: string } | undefined
+  if (invalidSource?.id) {
+    throw new Error(`SUPPLEMENT_SOURCE_GENERATION_BACKFILL_REQUIRED:${invalidSource.id}`)
+  }
+
+  database.exec('DROP TABLE IF EXISTS supplement_orders__loc005_generation_upgrade')
+  database.exec(`
+    CREATE TABLE supplement_orders__loc005_generation_upgrade (
+      id TEXT PRIMARY KEY,
+      partner_id TEXT NOT NULL,
+      service_month TEXT NOT NULL,
+      source_diff_id TEXT,
+      reconcile_generation_id TEXT,
+      case_no TEXT,
+      amount DECIMAL(18, 4) NOT NULL DEFAULT 0,
+      case_count INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT '待补收',
+      collected_at DATETIME,
+      collected_month TEXT,
+      collected_revenue DECIMAL(18, 4),
+      give_up_reason TEXT,
+      operator TEXT,
+      review_status TEXT NOT NULL DEFAULT 'pending_review',
+      submitted_by TEXT,
+      reviewed_by TEXT,
+      reviewed_at DATETIME,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(
+        source_diff_id IS NOT NULL
+        OR reconcile_generation_id IS NULL
+      ),
+      FOREIGN KEY(source_diff_id) REFERENCES reconcile_diffs(id) ON DELETE RESTRICT,
+      FOREIGN KEY(reconcile_generation_id)
+        REFERENCES account_reconcile_generations(reconcile_generation_id) ON DELETE RESTRICT
+    );
+    INSERT INTO supplement_orders__loc005_generation_upgrade (
+      id, partner_id, service_month, source_diff_id, reconcile_generation_id,
+      case_no, amount, case_count, status, collected_at, collected_month,
+      collected_revenue, give_up_reason, operator, review_status, submitted_by,
+      reviewed_by, reviewed_at, created_at, updated_at
+    )
+    SELECT supplement.id, supplement.partner_id, supplement.service_month,
+           supplement.source_diff_id, generation.reconcile_generation_id,
+           supplement.case_no, supplement.amount, supplement.case_count,
+           supplement.status, supplement.collected_at, supplement.collected_month,
+           supplement.collected_revenue, supplement.give_up_reason, supplement.operator,
+           supplement.review_status, supplement.submitted_by, supplement.reviewed_by,
+           supplement.reviewed_at, supplement.created_at, supplement.updated_at
+      FROM supplement_orders supplement
+      LEFT JOIN reconcile_diffs diff ON diff.id = supplement.source_diff_id
+      LEFT JOIN account_reconcile_generations generation
+        ON generation.hospital_month_id = diff.hospital_month_id
+       AND generation.is_current = 1;
+    DROP TABLE supplement_orders;
+    ALTER TABLE supplement_orders__loc005_generation_upgrade RENAME TO supplement_orders;
+    CREATE INDEX idx_supplement_partner_month
+      ON supplement_orders(partner_id, service_month);
+    CREATE INDEX idx_supplement_status ON supplement_orders(status);
+    CREATE INDEX idx_supplement_generation
+      ON supplement_orders(reconcile_generation_id, source_diff_id);
+  `)
+}
+
 /**
  * Forward-only LOC-005 upgrade. A legacy final hospital-month without an
  * existing current generation remains explicitly unbound and immutable.
@@ -1004,6 +1094,15 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_immutable')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_no_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_no_delete')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_fill')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
+
+  ensureSupplementGenerationForeignKeys(database)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_supplement_generation
+      ON supplement_orders(reconcile_generation_id, source_diff_id)
+  `)
 
   database.exec(`
     CREATE TRIGGER trg_account_reconcile_immutable_fact
@@ -1125,12 +1224,83 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
     END
   `)
   database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_generation_insert
+    BEFORE INSERT ON supplement_orders
+    WHEN NEW.source_diff_id IS NOT NULL
+      AND NEW.reconcile_generation_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+          FROM reconcile_diffs diff
+          JOIN account_reconcile_generations generation
+            ON generation.hospital_month_id = diff.hospital_month_id
+         WHERE diff.id = NEW.source_diff_id
+           AND generation.is_current = 1
+           AND generation.status = 'pending'
+           AND (
+             NEW.reconcile_generation_id IS NULL
+             OR generation.reconcile_generation_id = NEW.reconcile_generation_id
+           )
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'SUPPLEMENT_GENERATION_BINDING_MISMATCH');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_generation_fill
+    AFTER INSERT ON supplement_orders
+    WHEN NEW.source_diff_id IS NOT NULL
+      AND NEW.reconcile_generation_id IS NULL
+      AND EXISTS (
+        SELECT 1
+          FROM reconcile_diffs diff
+          JOIN account_reconcile_generations generation
+            ON generation.hospital_month_id = diff.hospital_month_id
+         WHERE diff.id = NEW.source_diff_id
+           AND generation.is_current = 1
+           AND generation.status = 'pending'
+      )
+    BEGIN
+      UPDATE supplement_orders
+         SET reconcile_generation_id = (
+           SELECT generation.reconcile_generation_id
+             FROM reconcile_diffs diff
+             JOIN account_reconcile_generations generation
+               ON generation.hospital_month_id = diff.hospital_month_id
+            WHERE diff.id = NEW.source_diff_id
+              AND generation.is_current = 1
+              AND generation.status = 'pending'
+         )
+       WHERE id = NEW.id;
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_generation_update
+    BEFORE UPDATE OF source_diff_id, reconcile_generation_id ON supplement_orders
+    WHEN NEW.source_diff_id IS NOT NULL
+      AND NEW.reconcile_generation_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+          FROM reconcile_diffs diff
+          JOIN account_reconcile_generations generation
+            ON generation.hospital_month_id = diff.hospital_month_id
+         WHERE diff.id = NEW.source_diff_id
+           AND (
+             NEW.reconcile_generation_id IS NULL
+             OR generation.reconcile_generation_id = NEW.reconcile_generation_id
+           )
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'SUPPLEMENT_GENERATION_BINDING_MISMATCH');
+    END
+  `)
+  database.exec(`
     CREATE TRIGGER trg_reconcile_supplement_final_immutable
     BEFORE UPDATE ON supplement_orders
     WHEN (
       OLD.partner_id IS NOT NEW.partner_id
       OR OLD.service_month IS NOT NEW.service_month
       OR OLD.source_diff_id IS NOT NEW.source_diff_id
+      OR OLD.reconcile_generation_id IS NOT NEW.reconcile_generation_id
       OR OLD.case_no IS NOT NEW.case_no
       OR OLD.amount IS NOT NEW.amount
       OR OLD.case_count IS NOT NEW.case_count
@@ -2883,6 +3053,7 @@ export function initializeDatabase(): void {
       partner_id TEXT NOT NULL,
       service_month TEXT NOT NULL,
       source_diff_id TEXT,
+      reconcile_generation_id TEXT,
       case_no TEXT,
       amount DECIMAL(18, 4) NOT NULL DEFAULT 0,
       case_count INTEGER NOT NULL DEFAULT 1,
@@ -2892,8 +3063,19 @@ export function initializeDatabase(): void {
       collected_revenue DECIMAL(18, 4),
       give_up_reason TEXT,
       operator TEXT,
+      review_status TEXT NOT NULL DEFAULT 'pending_review',
+      submitted_by TEXT,
+      reviewed_by TEXT,
+      reviewed_at DATETIME,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(
+        source_diff_id IS NOT NULL
+        OR reconcile_generation_id IS NULL
+      ),
+      FOREIGN KEY(source_diff_id) REFERENCES reconcile_diffs(id) ON DELETE RESTRICT,
+      FOREIGN KEY(reconcile_generation_id)
+        REFERENCES account_reconcile_generations(reconcile_generation_id) ON DELETE RESTRICT
     )
   `)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_recon_hm_partner_month ON reconcile_hospital_months(partner_id, service_month)`)

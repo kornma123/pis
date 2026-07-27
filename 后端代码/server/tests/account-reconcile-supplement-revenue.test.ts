@@ -81,7 +81,10 @@ describe('补收 → 计入本月实收', () => {
     const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(exactBinding))
     const diff = wb.body.data.diffs.find((d: any) => d.caseNo === 'SR1')
     expect(diff.amountImpact).toBe(200)
-    await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diff.id}/verdict`).send({ reason: '漏收，需补收' }))
+    await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diff.id}/verdict`).send({
+      ...exactBinding,
+      reason: '漏收，需补收',
+    }))
     const sup = await auth(request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${M}`))
     expect(sup.body.data.list.length).toBe(1)
     supId = sup.body.data.list[0].id

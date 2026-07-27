@@ -82,7 +82,10 @@ beforeAll(async () => {
   await post('/api/v1/account-reconcile/compute', exactBinding)
   const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(exactBinding))
   const diff = wb.body.data.diffs.find((d: any) => d.caseNo === 'DG1' && d.amountImpact === 200)
-  await post(`/api/v1/account-reconcile/diffs/${diff.id}/verdict`, { reason: '漏收，需补收' })
+  await post(`/api/v1/account-reconcile/diffs/${diff.id}/verdict`, {
+    ...exactBinding,
+    reason: '漏收，需补收',
+  })
 })
 
 describe('D · 补收单 maker-checker 人闸', () => {

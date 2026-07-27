@@ -7,7 +7,6 @@
  * 碰钱/口径的写经 writeAuditLog→abc_audit_logs；全站写另由 auditWrite 自动落 operation_logs。
  */
 import { Router } from 'express'
-import { v4 as uuidv4 } from 'uuid'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
@@ -15,7 +14,7 @@ import { assertNotSelfReview } from '../middleware/authz-combinators.js'
 import { writeAuditLog } from '../utils/cost-runs.js'
 import { recordOverride } from '../utils/override-log.js'
 import { buildReconcileInputs, runReconcile, partnerMonthLabRate, tryCloseHospitalMonth } from '../utils/reconcile-compute.js'
-import { computeReconcile, verdictFollowUp, drivesSupplement, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
+import { computeReconcile, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
 import {
   assertReconcileBinding,
   closeAccountReconciliation,
@@ -24,6 +23,7 @@ import {
   forbidAccountReconciliationReopen,
   readAccountReconciliation,
   ReconcileLifecycleError,
+  setAccountReconciliationVerdict,
   type ReconcileBinding,
 } from '../services/account-reconciliation-lifecycle.js'
 import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：confirmedLabRevenue(拆分派生)输出自带「口径未认账」水印（LEG-2）
@@ -299,49 +299,26 @@ if (PRE_LOC005_ROUTES_ENABLED) router['get']('/__pre_loc005/workbench', (req, re
 // POST /diffs/:id/verdict —— 认定（写）：填 6 认定原因之一 → 定下家；漏收驱动补收
 router.post('/diffs/:id/verdict', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
-    const db = getDatabase()
-    const diff = db.prepare('SELECT * FROM reconcile_diffs WHERE id = ?').get(req.params.id) as any
-    if (!diff) return error(res, '差异不存在', 'NOT_FOUND', 404)
-    const hm = db.prepare('SELECT * FROM reconcile_hospital_months WHERE id = ?').get(diff.hospital_month_id) as any
-    const finalGeneration = db.prepare(`
-      SELECT 1 AS final
-        FROM account_reconcile_generations
-       WHERE hospital_month_id = ? AND is_current = 1
-         AND status IN ('complete', 'closed')
-       LIMIT 1
-    `).get(diff.hospital_month_id)
-    if (finalGeneration) {
-      return error(
-        res,
-        'completed reconciliation decisions are immutable',
-        'RECONCILIATION_FINAL',
-        409,
-      )
-    }
-    if (hm?.status === '已关账') return error(res, '已关账·定版不可改认定', 'PERIOD_CLOSED', 409)
+    const binding = bindingFrom(req.body)
+    assertReconcileBinding(binding)
     const reason = String(req.body?.reason ?? '') as VerdictReason
     if (!VERDICT_REASONS.includes(reason)) return error(res, `认定原因须是：${VERDICT_REASONS.join(' / ')}`, 'BAD_REQUEST', 400)
     const note = req.body?.note != null ? String(req.body.note) : null
-    const followUp = verdictFollowUp(reason)
-    const operator = operatorOf(req)
-    db.prepare(`UPDATE reconcile_diffs SET verdict = ?, verdict_reason = ?, verdict_by = ?, verdict_at = CURRENT_TIMESTAMP, follow_up = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-      .run(reason, note, operator, followUp, diff.id)
-
-    // 补收 gate：只有「漏收，需补收」驱动补收。改判则先清此差异下的「待补收」单（已补收/已放弃保留）。
-    db.prepare("DELETE FROM supplement_orders WHERE source_diff_id = ? AND status = '待补收'").run(diff.id)
-    if (drivesSupplement(reason)) {
-      // maker-checker（项D 止血）：认定即提交「待复核」补收单（submitted_by=认定人），须独立 approve 后才可收款。
-      db.prepare(`INSERT INTO supplement_orders (id, partner_id, service_month, source_diff_id, case_no, amount, case_count, status, operator, review_status, submitted_by)
-                  VALUES (?, ?, ?, ?, ?, ?, 1, '待补收', ?, 'pending_review', ?)`)
-        .run(uuidv4(), diff.partner_id, diff.service_month, diff.id, diff.case_no, diff.amount_impact, operator, operator)
-    }
-    // 刷新待认定计数
-    const pending = (db.prepare('SELECT COUNT(*) AS n FROM reconcile_diffs WHERE hospital_month_id = ? AND verdict IS NULL').get(hm.id) as { n: number }).n
-    db.prepare('UPDATE reconcile_hospital_months SET pending_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(pending, hm.id)
-    writeAuditLog(db, 'account_reconcile', 'verdict', diff.id, { reason, followUp, caseNo: diff.case_no, amountImpact: diff.amount_impact }, operator)
-    success(res, { id: diff.id, verdict: reason, followUp, pendingCount: pending }, '已认定')
-  } catch (err: any) {
-    error(res, err.message)
+    success(
+      res,
+      setAccountReconciliationVerdict(
+        getDatabase(),
+        binding,
+        req.params.id,
+        reason,
+        note,
+        actorUserIdOf(req),
+        operatorOf(req),
+      ),
+      '已认定',
+    )
+  } catch (err) {
+    lifecycleError(res, err)
   }
 })
 

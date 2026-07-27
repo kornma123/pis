@@ -193,12 +193,45 @@ describe('账实核对路由 · 认定 + 补收 gate + 复核完成前置 + 关�
     const bIhc = diffs.find((d) => d.caseNo === 'CB')
     const cIhc = diffs.find((d) => d.caseNo === 'CC' && d.lineType === '免疫组化')
     const cSs = diffs.find((d) => d.caseNo === 'CC' && d.lineType === '特染')
-    let r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${bIhc.id}/verdict`).send({ reason: '漏收，需补收' }))
+    const unbound = await auth(
+      request(app).post(`/api/v1/account-reconcile/diffs/${bIhc.id}/verdict`)
+        .send({ reason: '漏收，需补收' }),
+    )
+    expect(unbound.status).toBe(400)
+    expect(unbound.body.error.code).toBe('GENERATION_BINDING_REQUIRED')
+
+    let r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${bIhc.id}/verdict`).send({
+      ...exactBinding(),
+      reason: '漏收，需补收',
+    }))
     expect(r.status).toBe(200)
     expect(r.body.data.followUp).toBe('supplement')
-    r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${cIhc.id}/verdict`).send({ reason: '计费项目用错' }))
+    expect(r.body.data.duplicate).toBe(false)
+
+    const auditBeforeReplay = Number((await getDb()).prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+      WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
+    `).get(bIhc.id).n)
+    const replay = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${bIhc.id}/verdict`).send({
+      ...exactBinding(),
+      reason: '漏收，需补收',
+    }))
+    expect(replay.status).toBe(200)
+    expect(replay.body.data.duplicate).toBe(true)
+    expect(Number((await getDb()).prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+      WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
+    `).get(bIhc.id).n)).toBe(auditBeforeReplay)
+
+    r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${cIhc.id}/verdict`).send({
+      ...exactBinding(),
+      reason: '计费项目用错',
+    }))
     expect(r.body.data.followUp).toBe('external_fix')
-    r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${cSs.id}/verdict`).send({ reason: '核对无误' }))
+    r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${cSs.id}/verdict`).send({
+      ...exactBinding(),
+      reason: '核对无误',
+    }))
     expect(r.body.data.pendingCount).toBe(0)
 
     const sup = await auth(request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${MONTH}`))
@@ -225,7 +258,11 @@ describe('账实核对路由 · 认定 + 补收 gate + 复核完成前置 + 关�
     const response = await auth(
       request(app)
         .post(`/api/v1/account-reconcile/diffs/${target.id}/verdict`)
-        .send({ reason: '超期，免费做的', note: 'must not persist after complete' }),
+        .send({
+          ...exactBinding(),
+          reason: '超期，免费做的',
+          note: 'must not persist after complete',
+        }),
     )
 
     expect(response.status).toBe(409)

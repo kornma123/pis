@@ -76,14 +76,20 @@ describe('账实核对 · 认定翻转（超期免费 ↔ 漏收补收）', () =
   })
 
   it('认定「超期，免费做的」→ 不生成补收单', async () => {
-    const r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diffId}/verdict`).send({ reason: '超期，免费做的' }))
+    const r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diffId}/verdict`).send({
+      ...exactBinding,
+      reason: '超期，免费做的',
+    }))
     expect(r.status).toBe(200)
     expect(r.body.data.followUp).toBe('free')
     expect(await supCount()).toBe(0)
   })
 
   it('翻转：改认定「漏收，需补收」→ 自动生成补收单（¥300 待补收）', async () => {
-    const r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diffId}/verdict`).send({ reason: '漏收，需补收' }))
+    const r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diffId}/verdict`).send({
+      ...exactBinding,
+      reason: '漏收，需补收',
+    }))
     expect(r.status).toBe(200)
     expect(r.body.data.followUp).toBe('supplement')
     const s = await auth(request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${M}&status=待补收`))
@@ -92,7 +98,10 @@ describe('账实核对 · 认定翻转（超期免费 ↔ 漏收补收）', () =
   })
 
   it('翻回「超期，免费做的」→ 待补收单被清（免费状态可逆）', async () => {
-    const r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diffId}/verdict`).send({ reason: '超期，免费做的' }))
+    const r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diffId}/verdict`).send({
+      ...exactBinding,
+      reason: '超期，免费做的',
+    }))
     expect(r.status).toBe(200)
     expect(await supCount()).toBe(0)
   })

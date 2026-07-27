@@ -6,8 +6,11 @@ import {
   classifyChargeItem,
   classifyCaseHints,
   computeReconcile,
+  drivesSupplement,
+  verdictFollowUp,
   type BillCase,
   type LisCase,
+  type VerdictReason,
 } from '../utils/reconcile-account.js'
 import { buildCaseMarkers, parseSlideCount } from '../utils/reconcile-compute.js'
 import {
@@ -89,7 +92,7 @@ function inject(faults: ReconcileFaults | undefined, at: ReconcileFaultStage): v
 function withImmediateTransaction<T>(
   db: any,
   faults: ReconcileFaults | undefined,
-  action: 'compute_generation' | 'complete_generation' | 'close_generation',
+  action: 'compute_generation' | 'verdict_generation' | 'complete_generation' | 'close_generation',
   binding: ReconcileBinding,
   actorUserId: string,
   work: () => T,
@@ -156,29 +159,43 @@ interface SourceSnapshot {
   confirmedLabRevenue: number | null
 }
 
-function canonicalAmount(value: unknown, code: string, label: string): number {
+const DECIMAL_SCALE = 10_000
+
+export function canonicalReconciliationAmount(
+  value: unknown,
+  code: string,
+  label: string,
+): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     fail(`${label} is unavailable or non-numeric`, code, 409)
   }
   const numeric = value as number
-  const rounded = Math.round(numeric * 10_000) / 10_000
-  if (Math.abs(numeric - rounded) > 1e-9) {
+  const scaled = numeric * DECIMAL_SCALE
+  const roundedScaled = Math.round(scaled)
+  const tolerance = Number.EPSILON * Math.max(1, Math.abs(scaled)) * 2
+  if (
+    !Number.isSafeInteger(roundedScaled)
+    || Math.abs(scaled - roundedScaled) > tolerance
+  ) {
     fail(`${label} exceeds canonical DECIMAL(18,4) precision`, code, 409)
   }
-  return rounded
+  return roundedScaled / DECIMAL_SCALE
 }
 
-function canonicalCount(value: unknown, label: string): number {
+export function canonicalReconciliationCount(value: unknown, label: string): number {
   if (
     typeof value !== 'number'
     || !Number.isFinite(value)
     || value < 0
-    || !Number.isInteger(value)
+    || !Number.isSafeInteger(value)
   ) {
     fail(`${label} is unavailable or invalid`, 'LIS_SOURCE_UNAVAILABLE', 409)
   }
   return value as number
 }
+
+const canonicalAmount = canonicalReconciliationAmount
+const canonicalCount = canonicalReconciliationCount
 
 function buildSourceSnapshot(
   db: any,
@@ -348,26 +365,36 @@ function buildSourceSnapshot(
   }
 
   const revenueRows = db.prepare(
-    `SELECT id, lab_revenue
+    `SELECT id, lab_revenue, revenue_source
        FROM case_revenue
       WHERE partner_id = ? AND service_month = ?
       ORDER BY id`,
-  ).all(binding.partnerId, binding.settlementMonth) as Array<{ id: string; lab_revenue: unknown }>
+  ).all(binding.partnerId, binding.settlementMonth) as Array<{
+    id: string
+    lab_revenue: unknown
+    revenue_source: unknown
+  }>
   let confirmedLabRevenue: number | null = null
-  if (revenueRows.length > 0) {
-    confirmedLabRevenue = revenueRows.reduce(
-      (total, row) => total + canonicalAmount(
+  const revenueSources = revenueRows.map(row => String(row.revenue_source ?? 'missing'))
+  const canonicalRevenueSources = revenueRows.length > 0
+    && revenueRows.every(row => row.revenue_source === 'statement' || row.revenue_source === 'corrected')
+  if (canonicalRevenueSources) {
+    let scaledTotal = 0n
+    for (const row of revenueRows) {
+      const amount = canonicalAmount(
         row.lab_revenue,
         'REVENUE_AMOUNT_UNAVAILABLE',
         `confirmed revenue ${row.id}`,
-      ),
-      0,
-    )
-    confirmedLabRevenue = canonicalAmount(
-      confirmedLabRevenue,
-      'REVENUE_AMOUNT_UNAVAILABLE',
-      'confirmed revenue total',
-    )
+      )
+      if (amount < 0) {
+        fail(`confirmed revenue ${row.id} is negative`, 'REVENUE_AMOUNT_UNAVAILABLE', 409)
+      }
+      scaledTotal += BigInt(Math.round(amount * DECIMAL_SCALE))
+      if (scaledTotal > BigInt(Number.MAX_SAFE_INTEGER)) {
+        fail('confirmed revenue total exceeds the scaled safe-integer boundary', 'REVENUE_AMOUNT_UNAVAILABLE', 409)
+      }
+    }
+    confirmedLabRevenue = Number(scaledTotal) / DECIMAL_SCALE
   }
   if (requireRevenue && confirmedLabRevenue === null) {
     fail('confirmed lab revenue is unavailable', 'REVENUE_SOURCE_UNAVAILABLE', 409)
@@ -389,6 +416,7 @@ function buildSourceSnapshot(
     revenue: {
       available: confirmedLabRevenue !== null,
       rowCount: revenueRows.length,
+      sourceKinds: revenueSources,
       confirmedLabRevenue,
     },
   }
@@ -468,16 +496,8 @@ function buildCompletionArtifact(
       id: String(decision.id),
       caseNo: String(decision.case_no),
       lineType: String(decision.line_type),
-      billCount: canonicalAmount(
-        decision.bill_count,
-        'NON_CANONICAL_DECISION_AMOUNT',
-        `decision bill_count ${decision.id}`,
-      ),
-      lisCount: canonicalAmount(
-        decision.lis_count,
-        'NON_CANONICAL_DECISION_AMOUNT',
-        `decision lis_count ${decision.id}`,
-      ),
+      billCount: canonicalCount(decision.bill_count, `decision bill_count ${decision.id}`),
+      lisCount: canonicalCount(decision.lis_count, `decision lis_count ${decision.id}`),
       delta: canonicalAmount(
         decision.delta,
         'NON_CANONICAL_DECISION_AMOUNT',
@@ -810,6 +830,192 @@ export function readAccountReconciliation(db: any, binding: ReconcileBinding): R
     closedAt: row.closed_at,
     closedBy: row.closed_by,
   }
+}
+
+export function setAccountReconciliationVerdict(
+  db: any,
+  binding: ReconcileBinding,
+  diffId: string,
+  reason: VerdictReason,
+  note: string | null,
+  actorUserId: string,
+  operator: string,
+  faults?: ReconcileFaults,
+): Record<string, unknown> {
+  assertReconcileBinding(binding)
+  return withImmediateTransaction(db, faults, 'verdict_generation', binding, actorUserId, () => {
+    const row = readGeneration(db, binding.reconcileGenerationId)
+    if (!row) {
+      fail('reconciliation generation is stale or unavailable', 'STALE_RECONCILE_GENERATION', 409)
+    }
+    if (
+      row.partner_id !== binding.partnerId
+      || row.settlement_month !== binding.settlementMonth
+      || row.statement_generation_id !== binding.statementGenerationId
+      || Number(row.is_current) !== 1
+    ) {
+      fail('reconciliation generation is stale or mismatched', 'STALE_RECONCILE_GENERATION', 409)
+    }
+    if (row.status !== 'pending') {
+      fail('completed reconciliation decisions are immutable', 'RECONCILIATION_FINAL', 409)
+    }
+    assertHospitalMonthBinding(db, binding, row.hospital_month_id)
+
+    const diff = db.prepare(`
+      SELECT * FROM reconcile_diffs
+       WHERE id = ? AND hospital_month_id = ?
+    `).get(diffId, row.hospital_month_id) as any
+    if (!diff) {
+      fail('reconciliation difference is stale or unavailable', 'STALE_RECONCILIATION_DIFF', 409)
+    }
+    const followUp = verdictFollowUp(reason)
+    const pendingBefore = Number((db.prepare(`
+      SELECT COUNT(*) AS n FROM reconcile_diffs
+       WHERE hospital_month_id = ? AND verdict IS NULL
+    `).get(row.hospital_month_id) as any).n)
+    const auditBefore = Number((db.prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+       WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
+    `).get(diff.id) as any).n)
+
+    if (
+      diff.verdict === reason
+      && (diff.verdict_reason ?? null) === note
+      && diff.follow_up === followUp
+    ) {
+      const pendingSupplements = Number((db.prepare(`
+        SELECT COUNT(*) AS n FROM supplement_orders
+         WHERE source_diff_id = ?
+           AND reconcile_generation_id = ?
+           AND status = '待补收'
+      `).get(diff.id, binding.reconcileGenerationId) as any).n)
+      if (
+        (drivesSupplement(reason) && pendingSupplements !== 1)
+        || (!drivesSupplement(reason) && pendingSupplements !== 0)
+      ) {
+        fail('verdict replay state is inconsistent', 'VERDICT_REPLAY_STATE_MISMATCH', 409)
+      }
+      return {
+        id: diff.id,
+        verdict: reason,
+        followUp,
+        pendingCount: pendingBefore,
+        duplicate: true,
+      }
+    }
+
+    const changed = db.prepare(`
+      UPDATE reconcile_diffs
+         SET verdict = ?, verdict_reason = ?, verdict_by = ?,
+             verdict_at = CURRENT_TIMESTAMP, follow_up = ?,
+             updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND hospital_month_id = ?
+         AND (
+           verdict IS NOT ?
+           OR verdict_reason IS NOT ?
+           OR follow_up IS NOT ?
+         )
+    `).run(
+      reason,
+      note,
+      operator,
+      followUp,
+      diff.id,
+      row.hospital_month_id,
+      reason,
+      note,
+      followUp,
+    )
+    if (Number(changed.changes) !== 1) {
+      fail('verdict lost concurrent CAS', 'CAS_CONFLICT', 409)
+    }
+
+    db.prepare(`
+      DELETE FROM supplement_orders
+       WHERE source_diff_id = ?
+         AND reconcile_generation_id = ?
+         AND status = '待补收'
+    `).run(diff.id, binding.reconcileGenerationId)
+    if (drivesSupplement(reason)) {
+      db.prepare(`
+        INSERT INTO supplement_orders
+          (id, partner_id, service_month, source_diff_id, reconcile_generation_id,
+           case_no, amount, case_count, status, operator, review_status, submitted_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, '待补收', ?, 'pending_review', ?)
+      `).run(
+        uuidv4(),
+        diff.partner_id,
+        diff.service_month,
+        diff.id,
+        binding.reconcileGenerationId,
+        diff.case_no,
+        canonicalAmount(
+          diff.amount_impact,
+          'NON_CANONICAL_DECISION_AMOUNT',
+          `decision amount_impact ${diff.id}`,
+        ),
+        operator,
+        operator,
+      )
+    }
+
+    const pending = Number((db.prepare(`
+      SELECT COUNT(*) AS n FROM reconcile_diffs
+       WHERE hospital_month_id = ? AND verdict IS NULL
+    `).get(row.hospital_month_id) as any).n)
+    const hospitalUpdate = db.prepare(`
+      UPDATE reconcile_hospital_months
+         SET pending_count = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND closed_at IS NULL
+    `).run(pending, row.hospital_month_id)
+    if (Number(hospitalUpdate.changes) !== 1) {
+      fail('hospital-month verdict update lost concurrent CAS', 'CAS_CONFLICT', 409)
+    }
+
+    inject(faults, 'afterBusiness')
+    inject(faults, 'beforeAudit')
+    writeAuditLog(db, 'account_reconcile', 'verdict', diff.id, {
+      ...binding,
+      reason,
+      followUp,
+      caseNo: diff.case_no,
+      amountImpact: diff.amount_impact,
+    }, operator)
+    inject(faults, 'afterAudit')
+    inject(faults, 'beforePostcondition')
+
+    const persisted = db.prepare(`
+      SELECT verdict, verdict_reason, follow_up FROM reconcile_diffs
+       WHERE id = ? AND hospital_month_id = ?
+    `).get(diff.id, row.hospital_month_id) as any
+    const auditAfter = Number((db.prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+       WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
+    `).get(diff.id) as any).n)
+    const expectedSupplements = drivesSupplement(reason) ? 1 : 0
+    const pendingSupplements = Number((db.prepare(`
+      SELECT COUNT(*) AS n FROM supplement_orders
+       WHERE source_diff_id = ?
+         AND reconcile_generation_id = ?
+         AND status = '待补收'
+    `).get(diff.id, binding.reconcileGenerationId) as any).n)
+    if (
+      persisted?.verdict !== reason
+      || (persisted?.verdict_reason ?? null) !== note
+      || persisted?.follow_up !== followUp
+      || pendingSupplements !== expectedSupplements
+      || auditAfter !== auditBefore + 1
+    ) {
+      throw new Error('RECONCILIATION_VERDICT_POSTCONDITION')
+    }
+    return {
+      id: diff.id,
+      verdict: reason,
+      followUp,
+      pendingCount: pending,
+      duplicate: false,
+    }
+  })
 }
 
 export function completeAccountReconciliation(

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { DatabaseSync } from 'node:sqlite'
 
 const testDirectory = mkdtempSync(join(tmpdir(), 'coreone-loc005-r2-'))
 const databasePath = join(testDirectory, 'loc005.sqlite')
@@ -29,6 +30,7 @@ function seedSource(options: {
   amount?: unknown
   lisCount?: unknown
   revenueAmount?: unknown
+  revenueSource?: string
 }): Binding {
   const month = options.month ?? '2026-08'
   const suffix = `${options.name}-${++sequence}`
@@ -42,6 +44,7 @@ function seedSource(options: {
   const revenueAmount = Object.prototype.hasOwnProperty.call(options, 'revenueAmount')
     ? options.revenueAmount
     : amount
+  const revenueSource = options.revenueSource ?? 'statement'
 
   db.prepare('INSERT INTO partners (id, code, name, status) VALUES (?, ?, ?, 1)')
     .run(partnerId, `CODE-${suffix}`, `Partner ${suffix}`)
@@ -84,8 +87,8 @@ function seedSource(options: {
   db.prepare(`
     INSERT INTO case_revenue
       (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source)
-    VALUES (?, ?, ?, ?, 100, 100, ?, 'statement')
-  `).run(`REV-${suffix}`, caseNo, partnerId, month, revenueAmount)
+    VALUES (?, ?, ?, ?, 100, 100, ?, ?)
+  `).run(`REV-${suffix}`, caseNo, partnerId, month, revenueAmount, revenueSource)
 
   return { partnerId, settlementMonth: month, statementGenerationId, reconcileGenerationId }
 }
@@ -163,6 +166,258 @@ describe('LOC-005 R2 canonical source truth', () => {
       WHERE reconcile_generation_id = ?
     `).get(binding.reconcileGenerationId).n).toBe(0)
   })
+
+  it.each(['estimated', 'unknown', 'other'])(
+    'fails closed when confirmed revenue uses the %s source kind',
+    (revenueSource) => {
+      const binding = seedSource({ name: `bad-revenue-source-${revenueSource}`, revenueSource })
+      lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, binding, 'USER-001'),
+        'REVENUE_SOURCE_UNAVAILABLE',
+      )
+      expect(lifecycle.readAccountReconciliation(db, binding).status).toBe('pending')
+    },
+  )
+
+  it('fails closed for a mixed canonical and estimated revenue set', () => {
+    const binding = seedSource({ name: 'mixed-revenue-source' })
+    db.prepare(`
+      INSERT INTO case_revenue
+        (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source)
+      VALUES ('REV-ESTIMATED-MIXED', 'CASE-ESTIMATED-MIXED', ?, ?, 1, 1, 1, 'estimated')
+    `).run(binding.partnerId, binding.settlementMonth)
+
+    lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    expectCode(
+      () => lifecycle.completeAccountReconciliation(db, binding, 'USER-001'),
+      'REVENUE_SOURCE_UNAVAILABLE',
+    )
+  })
+
+  it('accepts the DECIMAL(18,4) scaled-safe boundary and rejects the next unit', () => {
+    const accepted = seedSource({
+      name: 'scaled-safe-accepted',
+      revenueAmount: 900719925474.0991,
+    })
+    lifecycle.computeAccountReconciliation(db, accepted, 'USER-001')
+    expect(lifecycle.completeAccountReconciliation(db, accepted, 'USER-001'))
+      .toMatchObject({ confirmedLabRevenue: 900719925474.0991 })
+
+    const rejected = seedSource({
+      name: 'scaled-safe-rejected',
+      revenueAmount: 900719925474.0992,
+    })
+    expectCode(
+      () => lifecycle.computeAccountReconciliation(db, rejected, 'USER-001'),
+      'REVENUE_AMOUNT_UNAVAILABLE',
+    )
+  })
+
+  it('accepts corrected revenue as canonical', () => {
+    const binding = seedSource({ name: 'corrected-revenue', revenueSource: 'corrected' })
+    lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    expect(lifecycle.completeAccountReconciliation(db, binding, 'USER-001'))
+      .toMatchObject({ status: 'complete', confirmedLabRevenue: 100 })
+  })
+
+  it.each([
+    ['precision > 4', 1.00001],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['text', '1.0000'],
+    ['object', { value: 1 }],
+    ['array', [1]],
+  ])('rejects %s at the production DECIMAL(18,4) boundary', (_label, value) => {
+    expectCode(
+      () => lifecycle.canonicalReconciliationAmount(
+        value,
+        'NON_CANONICAL_STATEMENT_AMOUNT',
+        `mutation ${_label}`,
+      ),
+      'NON_CANONICAL_STATEMENT_AMOUNT',
+    )
+  })
+
+  it.each([
+    ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+    ['negative', -1],
+    ['fractional', 1.5],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['text', '1'],
+    ['object', { value: 1 }],
+    ['array', [1]],
+  ])('rejects %s at the production count boundary', (_label, value) => {
+    expectCode(
+      () => lifecycle.canonicalReconciliationCount(value, `mutation ${_label}`),
+      'LIS_SOURCE_UNAVAILABLE',
+    )
+  })
+})
+
+describe('LOC-005 R2 verdict generation transaction and lineage', () => {
+  it('rejects a stale diff after another connection supersedes its generation', () => {
+    const binding = seedSource({ name: 'verdict-stale-double-connection', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    const staleDiff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    const successAuditBefore = Number(db.prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+       WHERE module = 'account_reconcile' AND action = 'verdict'
+    `).get().n)
+
+    const successor = {
+      ...binding,
+      reconcileGenerationId: `${binding.reconcileGenerationId}-SUCCESSOR`,
+    }
+    const secondConnection = new DatabaseSync(databasePath)
+    secondConnection.exec('PRAGMA foreign_keys = ON')
+    try {
+      lifecycle.computeAccountReconciliation(secondConnection, successor, 'USER-001')
+    } finally {
+      secondConnection.close()
+    }
+
+    expectCode(
+      () => lifecycle.setAccountReconciliationVerdict(
+        db,
+        binding,
+        staleDiff.id,
+        '漏收，需补收',
+        null,
+        'USER-001',
+        'admin',
+      ),
+      'STALE_RECONCILE_GENERATION',
+    )
+    expect(Number(db.prepare(`
+      SELECT COUNT(*) AS n FROM supplement_orders WHERE source_diff_id = ?
+    `).get(staleDiff.id).n)).toBe(0)
+    expect(Number(db.prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+       WHERE module = 'account_reconcile' AND action = 'verdict'
+    `).get().n)).toBe(successAuditBefore)
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+  })
+
+  it.each(['afterBusiness', 'beforeAudit', 'afterAudit', 'beforePostcondition', 'beforeCommit'] as const)(
+    'rolls verdict, supplement, and success audit back at %s',
+    (at) => {
+      const binding = seedSource({ name: `verdict-fault-${at}`, lisCount: 2 })
+      const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+      const diff = db.prepare(
+        'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+      ).get(String(snapshot.hospitalMonthId)) as { id: string }
+
+      expect(() => lifecycle.setAccountReconciliationVerdict(
+        db,
+        binding,
+        diff.id,
+        '漏收，需补收',
+        null,
+        'USER-001',
+        'admin',
+        { at },
+      )).toThrow(`INJECTED_RECONCILIATION_FAULT:${at}`)
+      expect(db.prepare('SELECT verdict FROM reconcile_diffs WHERE id = ?').get(diff.id).verdict).toBeNull()
+      expect(Number(db.prepare(
+        'SELECT COUNT(*) AS n FROM supplement_orders WHERE source_diff_id = ?',
+      ).get(diff.id).n)).toBe(0)
+      expect(Number(db.prepare(`
+        SELECT COUNT(*) AS n FROM abc_audit_logs
+         WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
+      `).get(diff.id).n)).toBe(0)
+    },
+  )
+
+  it('revalidates actor permission under lock with zero success writes', () => {
+    const binding = seedSource({ name: 'verdict-revoked', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    setAdminActive(false)
+    try {
+      expectCode(
+        () => lifecycle.setAccountReconciliationVerdict(
+          db,
+          binding,
+          diff.id,
+          '漏收，需补收',
+          null,
+          'USER-001',
+          'admin',
+        ),
+        'ACTOR_PERMISSION_REVOKED',
+      )
+    } finally {
+      setAdminActive(true)
+    }
+    expect(db.prepare('SELECT verdict FROM reconcile_diffs WHERE id = ?').get(diff.id).verdict).toBeNull()
+    expect(Number(db.prepare(
+      'SELECT COUNT(*) AS n FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(diff.id).n)).toBe(0)
+    expect(Number(db.prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+       WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
+    `).get(diff.id).n)).toBe(0)
+  })
+
+  it('persists verifiable supplement foreign keys and generation binding across restart', () => {
+    const binding = seedSource({ name: 'supplement-lineage-restart', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db,
+      binding,
+      diff.id,
+      '漏收，需补收',
+      null,
+      'USER-001',
+      'admin',
+    )
+    const foreignKeys = db.prepare('PRAGMA foreign_key_list(supplement_orders)').all() as Array<{
+      from: string
+      table: string
+    }>
+    expect(foreignKeys).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: 'source_diff_id', table: 'reconcile_diffs' }),
+      expect.objectContaining({
+        from: 'reconcile_generation_id',
+        table: 'account_reconcile_generations',
+      }),
+    ]))
+    const supplement = db.prepare(`
+      SELECT source_diff_id, reconcile_generation_id
+        FROM supplement_orders WHERE source_diff_id = ?
+    `).get(diff.id) as {
+      source_diff_id: string
+      reconcile_generation_id: string
+    }
+    expect(supplement).toEqual({
+      source_diff_id: diff.id,
+      reconcile_generation_id: binding.reconcileGenerationId,
+    })
+
+    manager.closeDatabase()
+    manager.initializeDatabase()
+    db = manager.getDatabase()
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    expect(db.prepare(`
+      SELECT source_diff_id, reconcile_generation_id
+        FROM supplement_orders WHERE source_diff_id = ?
+    `).get(diff.id)).toEqual(supplement)
+    expect(() => db.prepare(`
+      INSERT INTO supplement_orders
+        (id, partner_id, service_month, source_diff_id, reconcile_generation_id)
+      VALUES ('SO-BAD-GENERATION', ?, ?, ?, 'WRONG-GENERATION')
+    `).run(binding.partnerId, binding.settlementMonth, diff.id))
+      .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH|FOREIGN KEY constraint failed/)
+  })
 })
 
 describe('LOC-005 R2 legacy binding and decision freeze', () => {
@@ -204,11 +459,18 @@ describe('LOC-005 R2 legacy binding and decision freeze', () => {
     `).run(diff.id)
     db.prepare(`
       INSERT INTO supplement_orders
-        (id, partner_id, service_month, source_diff_id, case_no, amount, case_count,
+        (id, partner_id, service_month, source_diff_id, reconcile_generation_id,
+         case_no, amount, case_count,
          status, operator, review_status, submitted_by)
-      VALUES ('SO-R2-DECISION', ?, ?, ?, ?, 100, 1, '待补收', 'USER-001',
+      VALUES ('SO-R2-DECISION', ?, ?, ?, ?, ?, 100, 1, '待补收', 'USER-001',
               'pending_review', 'USER-001')
-    `).run(binding.partnerId, binding.settlementMonth, diff.id, diff.case_no)
+    `).run(
+      binding.partnerId,
+      binding.settlementMonth,
+      diff.id,
+      binding.reconcileGenerationId,
+      diff.case_no,
+    )
 
     lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
     const completed = db.prepare(`
@@ -281,6 +543,7 @@ describe('LOC-005 R2 lock-time actor and connection safety', () => {
       'close_generation_denied',
       'complete_generation_denied',
       'compute_generation_denied',
+      'verdict_generation_denied',
     ])
     for (const row of denialRows) {
       expect(row.operator).toBe('USER-001')
