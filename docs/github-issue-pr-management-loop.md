@@ -67,6 +67,8 @@ Issue 必须包含：业务影响、来源链接、现状证据、范围、非�
 - **交接状态**: <实现中 / 待复核 / 待 PM / 待验收 / 阻塞 / 可合并>
 - **下一 owner / 触发条件**: <谁在什么条件下接手>
 - **未完成 follow-up**: 无
+- **我现在最没把握的是什么？ / Least confidence**: <当前证据最弱、假设最重的一点>
+- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: <可能改变当前判断的最大盲区>
 ```
 
 完整满足主 Issue 验收时使用 `Closes #N`；合入默认分支后由 GitHub 自动关闭。只完成一部分、只提供证据或只建立关联时使用 `Refs #N`，主 Issue 保持开放并更新 checklist。
@@ -81,6 +83,8 @@ Issue 必须包含：业务影响、来源链接、现状证据、范围、非�
 
 不能只写“以后处理”“后续优化”或把 TODO 留在评论 / 文档里。相关但不是主源的 PR / Issue 写到现有模板的“依赖与关系”，不要在主 Issue 字段堆多个编号。
 
+两项反盲区回答必须是具体风险、假设或未知，不能留空或只写“无”“没有”“不知道”。确实未发现额外问题时，写“未发现”，并列出已检查范围与仍未检查范围。Issue handoff 评论使用同义机器字段 `least-confidence` 与 `biggest-missing`。
+
 跨会话或跨模型交接时，下一位执行者先读取主 Issue、PR body、最新 checks 和当前 Git 状态，再开始工作；不继承上一会话口头声称的“已完成”。同一文件同一时间只有一个实现 owner，复核模型不在被审文件上代写。
 
 ## 5. 线下检查做什么
@@ -93,7 +97,7 @@ node scripts/issue-handoff/check-pr-body.selftest.cjs
 node scripts/offline-github-governance.cjs
 ```
 
-- checker 检查主 Issue、owner / 模型、交接状态、下一触发条件和 follow-up，以及 task、文件所有权、验收、证据、迁移、回滚和边界字段不是空值或占位符。
+- checker 检查主 Issue、owner / 模型、交接状态、下一触发条件、follow-up 和两项反盲区回答，以及 task、文件所有权、验收、证据、迁移、回滚和边界字段不是空值或占位符。
 - 主 Issue 是否仍开放、编号是否属于本仓库，由唯一 GitHub 写入 owner 在 PM 明确请求发布时做一次现场只读核对；不由 workflow 轮询或写 status。
 - 固定 SHA 的 K3/Codex 异构复核在独立本地 checkout/bundle 中完成，完整原文由 PM 粘贴交接；不要求 GitHub review/comment/status。
 - `offline-github-governance.cjs` 阻止重新引入 `pull_request_target`、workflow 写权限、自动写 status/review/comment、外部 AI secret/endpoint；普通只读 CI、测试、构建和 secret scan 不受影响。

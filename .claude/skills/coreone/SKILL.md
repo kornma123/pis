@@ -164,7 +164,11 @@ evidence: <commit / PR / checks / 真跑证据>
 risk: <残余风险，确无也要说明原因>
 next-owner: <下一角色或具名负责人>
 trigger: <下一步启动条件>
+least-confidence: <当前证据最弱、假设最重的一点，以及缺什么证据>
+biggest-missing: <可能改变当前判断的最大盲区，以及已检查/未检查范围>
 ```
+
+`least-confidence` 与 `biggest-missing` 不能只写 `none`、`无`、`不知道`。确实未发现额外问题时，必须写“未发现”并列出已检查范围和仍未检查范围。
 
 ## 5. 回复主体输出（非最终收口）
 

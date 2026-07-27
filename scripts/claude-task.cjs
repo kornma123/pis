@@ -308,7 +308,15 @@ function parsePmApprovalMarker(body) {
 
 function handoffFieldErrors(body) {
   const errors = [];
-  for (const field of ['result', 'evidence', 'risk', 'next-owner', 'trigger']) {
+  for (const field of [
+    'result',
+    'evidence',
+    'risk',
+    'next-owner',
+    'trigger',
+    'least-confidence',
+    'biggest-missing',
+  ]) {
     const match = String(body || '').match(new RegExp(`^${field}\\s*[:=：]\\s*(.+)$`, 'im'));
     const value = match?.[1]?.trim() || '';
     const minLength = field === 'next-owner' ? 2 : 4;

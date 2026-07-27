@@ -170,9 +170,18 @@ evidence: https://github.com/acme/coreone/actions/runs/1
 risk: checkout remains unavailable
 next-owner: backend-owner
 trigger: API fix merged`;
-assert.deepEqual(handoffFieldErrors(completeHandoff), []);
+assert.deepEqual(handoffFieldErrors(completeHandoff), [
+  'least-confidence', 'biggest-missing',
+]);
+assert.deepEqual(handoffFieldErrors(`${completeHandoff}
+least-confidence: transaction isolation has only been checked in one runtime
+biggest-missing: an upstream schema owner may still change the contract`), []);
+assert.deepEqual(handoffFieldErrors(`${completeHandoff}
+least-confidence: none
+biggest-missing: an upstream schema owner may still change the contract`), ['least-confidence']);
 assert.deepEqual(handoffFieldErrors('[HANDOFF] status=blocked'), [
   'result', 'evidence', 'risk', 'next-owner', 'trigger',
+  'least-confidence', 'biggest-missing',
 ]);
 
 assert.equal(isSafeBeforeStartShell('git status --short'), true);

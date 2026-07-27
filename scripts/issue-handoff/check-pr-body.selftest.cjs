@@ -39,6 +39,10 @@ const validBody = `
 - **回滚方式**: revert 本 PR
 - **未覆盖边界**: 生产参数由运维另行配置
 - **merge authority**: required checks + 异构复核 + PM 明确批准
+
+## 反盲区自检
+- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测
+- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: 上游身份服务可能还有未登记的调用方
 `;
 
 function expectPass(name, body, expectedIssues) {
@@ -65,6 +69,41 @@ expectPass(
 
 expectFail('empty body', '', /PR body 为空/);
 expectFail('missing handoff heading', validBody.replace('## Issue / 会话交接', '## 交接'), /Issue \/ 会话交接/);
+expectFail(
+  'missing least-confidence reflection',
+  validBody.replace('- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n', ''),
+  /我现在最没把握的是什么/,
+);
+expectFail(
+  'missing biggest-missing reflection',
+  validBody.replace('- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: 上游身份服务可能还有未登记的调用方\n', ''),
+  /我可能遗漏的最大问题是什么/,
+);
+expectFail(
+  'weak least-confidence reflection',
+  validBody.replace('生产限速参数尚未在目标环境实测', '无'),
+  /反盲区字段回答过弱.*我现在最没把握的是什么/,
+);
+expectFail(
+  'bare no-finding biggest-missing reflection',
+  validBody.replace('上游身份服务可能还有未登记的调用方', '未发现'),
+  /反盲区字段回答过弱.*我可能遗漏的最大问题是什么/,
+);
+expectFail(
+  'hidden least-confidence cannot mask placeholder',
+  validBody.replace(
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    '<!-- - **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测 -->\n- **我现在最没把握的是什么？ / Least confidence**: _',
+  ),
+  /我现在最没把握的是什么/,
+);
+expectPass(
+  'bounded no-finding explanation is accepted',
+  validBody
+    .replace('生产限速参数尚未在目标环境实测', '未发现；已检查目标代码与测试，未检查生产参数')
+    .replace('上游身份服务可能还有未登记的调用方', '未发现；已检查仓库调用链，未检查仓库外集成'),
+  [128],
+);
 expectFail('missing issue relation', validBody.replace('Closes #128', '无'), /Closes #N.*Refs #N/);
 expectFail('multiple primary issues', validBody.replace('Closes #128', 'Closes #128, Refs #127'), /只能有一个主 Issue/);
 expectFail('blank current owner', validBody.replace('Codex \/ GPT-5', '_'), /当前 owner \/ 模型/);
@@ -143,7 +182,15 @@ const filledRepositoryTemplate = repositoryTemplate
   .replace('- `git diff --check`：_', '- `git diff --check`：PASS')
   .replace('- **迁移方式**:', '- **迁移方式**: 无迁移')
   .replace('- **回滚方式**:', '- **回滚方式**: revert PR')
-  .replace('- **未覆盖边界**:', '- **未覆盖边界**: 不修改分支保护');
+  .replace('- **未覆盖边界**:', '- **未覆盖边界**: 不修改分支保护')
+  .replace(
+    '- **我现在最没把握的是什么？ / Least confidence**: _',
+    '- **我现在最没把握的是什么？ / Least confidence**: 真实部署参数尚未复核',
+  )
+  .replace(
+    '- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: _',
+    '- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: 仍可能存在未登记的旧调用方',
+  );
 expectPass('repository PR template passes after placeholder-only filling', filledRepositoryTemplate, [128]);
 
-console.log('Issue / handoff contract selftest: PASS (24 scenarios)');
+console.log('Issue / handoff contract selftest: PASS (30 scenarios)');

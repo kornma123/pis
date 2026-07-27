@@ -32,6 +32,8 @@ const REQUIRED_FIELDS = [
   ['迁移方式'],
   ['回滚方式'],
   ['未覆盖边界'],
+  ['我现在最没把握的是什么？ / Least confidence'],
+  ['关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing'],
 ];
 
 const STATUS_PATTERN = /^(实现中|待复核|待 PM|待验收|阻塞|可合并)(?:\s|$|[（(：:])/;
@@ -148,6 +150,18 @@ function isPlaceholder(value) {
   return false;
 }
 
+function isWeakReflection(value) {
+  if (isPlaceholder(value)) return true;
+  const clean = value
+    .replace(/<!--.*?-->/g, '')
+    .replace(/\p{Cf}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (/^(?:无|没有|不知道|不确定|none|n\/?a|nil)$/i.test(clean)) return true;
+  if (/^未发现[。.!！]?$/.test(clean)) return true;
+  return clean.length < 8;
+}
+
 function hasHeading(body, heading) {
   return body
     .split(/\r?\n/)
@@ -198,6 +212,15 @@ function validatePrBody(bodyInput) {
     const value = getField(fields, aliases);
     if (isPlaceholder(value)) {
       errors.push(`字段未填写：${aliases[0]}`);
+    }
+  }
+  for (const aliases of [
+    ['我现在最没把握的是什么？ / Least confidence'],
+    ['关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing'],
+  ]) {
+    const value = getField(fields, aliases);
+    if (!isPlaceholder(value) && isWeakReflection(value)) {
+      errors.push(`反盲区字段回答过弱：${aliases[0]}；请写具体风险/假设，或写明已检查与未检查范围。`);
     }
   }
 
@@ -314,6 +337,7 @@ if (require.main === module) main();
 module.exports = {
   collectFields,
   isPlaceholder,
+  isWeakReflection,
   stripIgnoredMarkdown,
   validatePrBody,
 };
