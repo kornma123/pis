@@ -31,6 +31,7 @@ import { splitCaliberRatification } from '../utils/caliber-ratification.js' // �
 const router = Router()
 
 const operatorOf = (req: any): string => req.user?.username ?? req.user?.userId ?? 'unknown'
+const actorUserIdOf = (req: any): string => String(req.user?.userId ?? '')
 const PRE_LOC005_ROUTES_ENABLED = false
 
 const bindingFrom = (source: any): ReconcileBinding => ({
@@ -54,7 +55,7 @@ router.post('/compute', requirePermission('account_reconcile', 'W'), (req, res) 
   try {
     const binding = bindingFrom(req.body)
     assertReconcileBinding(binding)
-    success(res, computeAccountReconciliation(getDatabase(), binding, operatorOf(req)))
+    success(res, computeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req)))
   } catch (err) {
     lifecycleError(res, err)
   }
@@ -123,7 +124,7 @@ router.post('/hospital-months/:id/complete', requirePermission('account_reconcil
     if (current.hospitalMonthId !== req.params.id) {
       return error(res, 'hospital-month binding mismatch', 'RECONCILE_GENERATION_MISMATCH', 409)
     }
-    success(res, completeAccountReconciliation(getDatabase(), binding, operatorOf(req)))
+    success(res, completeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req)))
   } catch (err) {
     lifecycleError(res, err)
   }
@@ -143,7 +144,7 @@ router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) =>
     const closed = rawItems.map((item: any) => {
       const binding = bindingFrom(item)
       assertReconcileBinding(binding)
-      return closeAccountReconciliation(getDatabase(), binding, operatorOf(req))
+      return closeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req))
     })
     success(res, { closed })
   } catch (err) {
@@ -302,6 +303,21 @@ router.post('/diffs/:id/verdict', requirePermission('account_reconcile', 'W'), (
     const diff = db.prepare('SELECT * FROM reconcile_diffs WHERE id = ?').get(req.params.id) as any
     if (!diff) return error(res, '差异不存在', 'NOT_FOUND', 404)
     const hm = db.prepare('SELECT * FROM reconcile_hospital_months WHERE id = ?').get(diff.hospital_month_id) as any
+    const finalGeneration = db.prepare(`
+      SELECT 1 AS final
+        FROM account_reconcile_generations
+       WHERE hospital_month_id = ? AND is_current = 1
+         AND status IN ('complete', 'closed')
+       LIMIT 1
+    `).get(diff.hospital_month_id)
+    if (finalGeneration) {
+      return error(
+        res,
+        'completed reconciliation decisions are immutable',
+        'RECONCILIATION_FINAL',
+        409,
+      )
+    }
     if (hm?.status === '已关账') return error(res, '已关账·定版不可改认定', 'PERIOD_CLOSED', 409)
     const reason = String(req.body?.reason ?? '') as VerdictReason
     if (!VERDICT_REASONS.includes(reason)) return error(res, `认定原因须是：${VERDICT_REASONS.join(' / ')}`, 'BAD_REQUEST', 400)

@@ -136,11 +136,29 @@ function projectFullCapabilitiesForRoleCodes(
 function currentRequestActorCapabilities(db: any, req: Request): FullCapabilityProjection | null {
   const actor = (req as AuthRequest).user
   if (!actor?.userId) return null
+  return currentUserCapabilities(db, actor.userId)
+}
+
+function currentUserCapabilities(db: any, userId: string): FullCapabilityProjection | null {
   const activeActor = db.prepare(
     'SELECT status, is_deleted FROM users WHERE id = ?',
-  ).get(actor.userId) as { status: number; is_deleted: number } | undefined
+  ).get(userId) as { status: number; is_deleted: number } | undefined
   if (!activeActor || activeActor.status !== 1 || activeActor.is_deleted !== 0) return null
-  return projectFullCapabilitiesForRoleCodes(db, getUserRoleCodes(db, actor.userId))
+  return projectFullCapabilitiesForRoleCodes(db, getUserRoleCodes(db, userId))
+}
+
+export function userHasCurrentPermission(
+  db: any,
+  userId: string,
+  module: string,
+  level: Level,
+): boolean {
+  try {
+    const effective = currentUserCapabilities(db, userId)
+    return effective !== null && hasLevel(effective.permissions, module, level)
+  } catch {
+    return false
+  }
 }
 
 export function requestActorHasCurrentPermission(
@@ -149,12 +167,8 @@ export function requestActorHasCurrentPermission(
   module: string,
   level: Level,
 ): boolean {
-  try {
-    const effective = currentRequestActorCapabilities(db, req)
-    return effective !== null && hasLevel(effective.permissions, module, level)
-  } catch {
-    return false
-  }
+  const actor = (req as AuthRequest).user
+  return !!actor?.userId && userHasCurrentPermission(db, actor.userId, module, level)
 }
 
 export function requestActorHasCurrentNamedRoleCapability(

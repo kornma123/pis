@@ -934,6 +934,257 @@ export function upgradeStatementPhase1ASchema(
   return 'upgraded'
 }
 
+function ensureDatabaseColumn(
+  database: DatabaseSync,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (!columns.some(candidate => candidate.name === column)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+}
+
+/**
+ * Forward-only LOC-005 upgrade. A legacy final hospital-month without an
+ * existing current generation remains explicitly unbound and immutable.
+ */
+export function upgradeAccountReconciliationSchema(database: DatabaseSync): void {
+  const requiredTables = [
+    'reconcile_hospital_months',
+    'reconcile_diffs',
+    'account_reconcile_generations',
+    'supplement_orders',
+  ]
+  const existing = new Set(
+    (database.prepare(`
+      SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?)
+    `).all(...requiredTables) as Array<{ name: string }>).map(row => row.name),
+  )
+  if (requiredTables.some(table => !existing.has(table))) return
+
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    ensureDatabaseColumn(database, 'account_reconcile_generations', 'statement_artifact_hash', 'TEXT')
+  ensureDatabaseColumn(database, 'account_reconcile_generations', 'completion_artifact_json', 'TEXT')
+  ensureDatabaseColumn(database, 'account_reconcile_generations', 'completion_artifact_hash', 'TEXT')
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS account_reconcile_hospital_month_bindings (
+      hospital_month_id TEXT PRIMARY KEY,
+      reconcile_generation_id TEXT NOT NULL UNIQUE,
+      binding_state TEXT NOT NULL DEFAULT 'bound' CHECK(binding_state = 'bound'),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(hospital_month_id) REFERENCES reconcile_hospital_months(id),
+      FOREIGN KEY(reconcile_generation_id)
+        REFERENCES account_reconcile_generations(reconcile_generation_id)
+    );
+    INSERT OR IGNORE INTO account_reconcile_hospital_month_bindings
+      (hospital_month_id, reconcile_generation_id, binding_state)
+    SELECT generation.hospital_month_id, generation.reconcile_generation_id, 'bound'
+      FROM account_reconcile_generations generation
+     WHERE generation.is_current = 1
+       AND NOT EXISTS (
+         SELECT 1 FROM account_reconcile_hospital_month_bindings binding
+         WHERE binding.hospital_month_id = generation.hospital_month_id
+       )
+  `)
+
+  database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_immutable_fact')
+  database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_completion_immutable')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_closed_immutable')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_final_immutable')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_closed_no_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_final_no_delete')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_no_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_no_delete')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_immutable')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_no_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_no_delete')
+
+  database.exec(`
+    CREATE TRIGGER trg_account_reconcile_immutable_fact
+    BEFORE UPDATE ON account_reconcile_generations
+    WHEN OLD.reconcile_generation_id <> NEW.reconcile_generation_id
+      OR OLD.partner_id <> NEW.partner_id
+      OR OLD.settlement_month <> NEW.settlement_month
+      OR OLD.statement_generation_id <> NEW.statement_generation_id
+      OR OLD.hospital_month_id <> NEW.hospital_month_id
+      OR OLD.source_readiness_json <> NEW.source_readiness_json
+      OR OLD.source_readiness_hash <> NEW.source_readiness_hash
+      OR OLD.statement_artifact_hash <> NEW.statement_artifact_hash
+      OR OLD.snapshot_json <> NEW.snapshot_json
+      OR OLD.snapshot_hash <> NEW.snapshot_hash
+    BEGIN
+      SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_account_reconcile_completion_immutable
+    BEFORE UPDATE ON account_reconcile_generations
+    WHEN OLD.completion_artifact_hash IS NOT NULL
+      AND (
+        OLD.completion_artifact_json IS NOT NEW.completion_artifact_json
+        OR OLD.completion_artifact_hash IS NOT NEW.completion_artifact_hash
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_COMPLETION');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_hospital_month_closed_immutable
+    BEFORE UPDATE ON reconcile_hospital_months
+    WHEN OLD.closed_at IS NOT NULL
+    BEGIN
+      SELECT RAISE(ABORT, 'CLOSED_HOSPITAL_MONTH_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_binding_final_immutable
+    BEFORE UPDATE ON account_reconcile_hospital_month_bindings
+    WHEN EXISTS (
+      SELECT 1 FROM reconcile_hospital_months hospital_month
+      WHERE hospital_month.id = OLD.hospital_month_id
+        AND hospital_month.closed_at IS NOT NULL
+    )
+      OR EXISTS (
+        SELECT 1 FROM account_reconcile_generations generation
+        WHERE generation.reconcile_generation_id = OLD.reconcile_generation_id
+          AND generation.status IN ('complete', 'closed')
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_BINDING_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_binding_closed_no_insert
+    BEFORE INSERT ON account_reconcile_hospital_month_bindings
+    WHEN EXISTS (
+      SELECT 1 FROM reconcile_hospital_months hospital_month
+      WHERE hospital_month.id = NEW.hospital_month_id
+        AND hospital_month.closed_at IS NOT NULL
+    )
+    BEGIN
+      SELECT RAISE(ABORT, 'CLOSED_HOSPITAL_MONTH_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_binding_final_no_delete
+    BEFORE DELETE ON account_reconcile_hospital_month_bindings
+    WHEN EXISTS (
+      SELECT 1 FROM reconcile_hospital_months hospital_month
+      WHERE hospital_month.id = OLD.hospital_month_id
+        AND hospital_month.closed_at IS NOT NULL
+    )
+      OR EXISTS (
+        SELECT 1 FROM account_reconcile_generations generation
+        WHERE generation.reconcile_generation_id = OLD.reconcile_generation_id
+          AND generation.status IN ('complete', 'closed')
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_BINDING_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_diff_final_immutable
+    BEFORE UPDATE ON reconcile_diffs
+    WHEN EXISTS (
+      SELECT 1 FROM account_reconcile_generations generation
+      WHERE generation.hospital_month_id = OLD.hospital_month_id
+        AND generation.status IN ('complete', 'closed')
+    )
+    BEGIN
+      SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_diff_final_no_insert
+    BEFORE INSERT ON reconcile_diffs
+    WHEN EXISTS (
+      SELECT 1 FROM account_reconcile_generations generation
+      WHERE generation.hospital_month_id = NEW.hospital_month_id
+        AND generation.status IN ('complete', 'closed')
+    )
+    BEGIN
+      SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_diff_final_no_delete
+    BEFORE DELETE ON reconcile_diffs
+    WHEN EXISTS (
+      SELECT 1 FROM account_reconcile_generations generation
+      WHERE generation.hospital_month_id = OLD.hospital_month_id
+        AND generation.status IN ('complete', 'closed')
+    )
+    BEGIN
+      SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_final_immutable
+    BEFORE UPDATE ON supplement_orders
+    WHEN (
+      OLD.partner_id IS NOT NEW.partner_id
+      OR OLD.service_month IS NOT NEW.service_month
+      OR OLD.source_diff_id IS NOT NEW.source_diff_id
+      OR OLD.case_no IS NOT NEW.case_no
+      OR OLD.amount IS NOT NEW.amount
+      OR OLD.case_count IS NOT NEW.case_count
+      OR OLD.submitted_by IS NOT NEW.submitted_by
+    )
+      AND EXISTS (
+        SELECT 1
+          FROM reconcile_diffs diff
+          JOIN account_reconcile_generations generation
+            ON generation.hospital_month_id = diff.hospital_month_id
+         WHERE diff.id = OLD.source_diff_id
+           AND generation.status IN ('complete', 'closed')
+      )
+    BEGIN
+      SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_final_no_insert
+    BEFORE INSERT ON supplement_orders
+    WHEN EXISTS (
+      SELECT 1
+        FROM reconcile_diffs diff
+        JOIN account_reconcile_generations generation
+          ON generation.hospital_month_id = diff.hospital_month_id
+       WHERE diff.id = NEW.source_diff_id
+         AND generation.status IN ('complete', 'closed')
+    )
+    BEGIN
+      SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_final_no_delete
+    BEFORE DELETE ON supplement_orders
+    WHEN EXISTS (
+      SELECT 1
+        FROM reconcile_diffs diff
+        JOIN account_reconcile_generations generation
+          ON generation.hospital_month_id = diff.hospital_month_id
+       WHERE diff.id = OLD.source_diff_id
+         AND generation.status IN ('complete', 'closed')
+    )
+    BEGIN
+      SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
+    END
+  `)
+    database.exec('COMMIT')
+  } catch (error) {
+    try { database.exec('ROLLBACK') } catch { /* startup must propagate the original upgrade failure */ }
+    throw error
+  }
+}
+
 export function initializeDatabase(): void {
   const database = getDatabase()
   const allowFixtures = allowDefaultFixtureUsers()
@@ -2570,8 +2821,11 @@ export function initializeDatabase(): void {
         CHECK(status IN ('pending', 'complete', 'closed')),
       source_readiness_json TEXT NOT NULL,
       source_readiness_hash TEXT NOT NULL,
+      statement_artifact_hash TEXT NOT NULL,
       snapshot_json TEXT NOT NULL,
       snapshot_hash TEXT NOT NULL,
+      completion_artifact_json TEXT,
+      completion_artifact_hash TEXT,
       completed_at DATETIME,
       completed_by TEXT,
       closed_at DATETIME,
@@ -2672,6 +2926,7 @@ export function initializeDatabase(): void {
   ensureColumn('supplement_orders', 'submitted_by', 'TEXT')
   ensureColumn('supplement_orders', 'reviewed_by', 'TEXT')
   ensureColumn('supplement_orders', 'reviewed_at', 'DATETIME')
+  upgradeAccountReconciliationSchema(database)
   ensureColumn('fee_standards', 'project_type', 'TEXT')
   ensureColumn('fee_standards', 'fee_per_slide', 'DECIMAL(18, 4) DEFAULT 0')
   ensureColumn('fee_standards', 'base_price', 'DECIMAL(18, 4) DEFAULT 0')

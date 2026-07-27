@@ -217,6 +217,28 @@ describe('账实核对路由 · 认定 + 补收 gate + 复核完成前置 + 关�
     expect(res.body.data.confirmedLabRevenue).toBe(830)
   })
 
+  it('complete freezes verdict and supplement decision facts', async () => {
+    const target = diffs.find((diff) => diff.caseNo === 'CB')
+    const before = (await auth(
+      request(app).get('/api/v1/account-reconcile/workbench').query(exactBinding()),
+    )).body.data
+    const response = await auth(
+      request(app)
+        .post(`/api/v1/account-reconcile/diffs/${target.id}/verdict`)
+        .send({ reason: '超期，免费做的', note: 'must not persist after complete' }),
+    )
+
+    expect(response.status).toBe(409)
+    expect(response.body.error.code).toBe('RECONCILIATION_FINAL')
+    const after = (await auth(
+      request(app).get('/api/v1/account-reconcile/workbench').query(exactBinding()),
+    )).body.data
+    expect(after.diffs).toEqual(before.diffs)
+    expect((await auth(
+      request(app).get(`/api/v1/account-reconcile/supplements?serviceMonth=${MONTH}`),
+    )).body.data.list).toHaveLength(1)
+  })
+
   it('反向重新打开 → 必填理由（缺理由 400）', async () => {
     const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(exactBinding()))
     const hmId = wb.body.data.snapshot.hospitalMonthId

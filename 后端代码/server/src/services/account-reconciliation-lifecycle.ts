@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { v4 as uuidv4 } from 'uuid'
+import { userHasCurrentPermission } from '../middleware/permissions.js'
 import { writeAuditLog } from '../utils/cost-runs.js'
 import {
   classifyChargeItem,
@@ -9,6 +10,14 @@ import {
   type LisCase,
 } from '../utils/reconcile-account.js'
 import { buildCaseMarkers, parseSlideCount } from '../utils/reconcile-compute.js'
+import {
+  buildCanonicalStatementArtifact,
+  canonicalJson,
+} from './statement-canonical-artifact.js'
+import {
+  readStatementSourceReadiness,
+  type SourceReadinessResult,
+} from './statement-source-readiness.js'
 
 export type ReconcileFaultStage =
   | 'afterBusiness'
@@ -60,11 +69,15 @@ export function assertReconcileBinding(input: Partial<ReconcileBinding>): assert
 }
 
 function stableJson(value: unknown): string {
-  return JSON.stringify(value)
+  return canonicalJson(value)
 }
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
+}
+
+function prefixedSha256(value: string): string {
+  return `sha256:${sha256(value)}`
 }
 
 function inject(faults: ReconcileFaults | undefined, at: ReconcileFaultStage): void {
@@ -76,19 +89,48 @@ function inject(faults: ReconcileFaults | undefined, at: ReconcileFaultStage): v
 function withImmediateTransaction<T>(
   db: any,
   faults: ReconcileFaults | undefined,
+  action: 'compute_generation' | 'complete_generation' | 'close_generation',
+  binding: ReconcileBinding,
+  actorUserId: string,
   work: () => T,
 ): T {
   db.exec('BEGIN IMMEDIATE')
+  let transactionEnded = false
   try {
+    if (!actorUserId || !userHasCurrentPermission(db, actorUserId, 'account_reconcile', 'W')) {
+      writeAuditLog(
+        db,
+        'account_reconcile',
+        `${action}_denied`,
+        binding.reconcileGenerationId,
+        {
+          partnerId: binding.partnerId,
+          settlementMonth: binding.settlementMonth,
+          reconcileGenerationId: binding.reconcileGenerationId,
+          reasonCode: 'ACTOR_PERMISSION_REVOKED',
+        },
+        actorUserId || 'unknown',
+      )
+      db.exec('COMMIT')
+      transactionEnded = true
+      fail('actor is inactive or no longer has account_reconcile:W', 'ACTOR_PERMISSION_REVOKED', 403)
+    }
     const result = work()
     inject(faults, 'beforeCommit')
     db.exec('COMMIT')
+    transactionEnded = true
     return result
   } catch (err) {
+    if (transactionEnded) throw err
     try {
       db.exec('ROLLBACK')
     } catch {
-      // A successful COMMIT ends the transaction. All injected faults occur before it.
+      try {
+        if (typeof db.invalidateConnection === 'function') db.invalidateConnection()
+        else if (typeof db.close === 'function') db.close()
+      } catch {
+        // The unsafe handle is already detached when invalidateConnection is available.
+      }
     }
     throw err
   }
@@ -99,7 +141,7 @@ interface StatementLine {
   case_no: string | null
   item_name: string | null
   source_label: string
-  amount: number
+  amount: unknown
   business_line: string
   line_grain: string
 }
@@ -108,9 +150,34 @@ interface SourceSnapshot {
   readiness: Record<string, unknown>
   readinessJson: string
   readinessHash: string
+  statementArtifactHash: string
   bills: BillCase[]
   lis: LisCase[]
   confirmedLabRevenue: number | null
+}
+
+function canonicalAmount(value: unknown, code: string, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    fail(`${label} is unavailable or non-numeric`, code, 409)
+  }
+  const numeric = value as number
+  const rounded = Math.round(numeric * 10_000) / 10_000
+  if (Math.abs(numeric - rounded) > 1e-9) {
+    fail(`${label} exceeds canonical DECIMAL(18,4) precision`, code, 409)
+  }
+  return rounded
+}
+
+function canonicalCount(value: unknown, label: string): number {
+  if (
+    typeof value !== 'number'
+    || !Number.isFinite(value)
+    || value < 0
+    || !Number.isInteger(value)
+  ) {
+    fail(`${label} is unavailable or invalid`, 'LIS_SOURCE_UNAVAILABLE', 409)
+  }
+  return value as number
 }
 
 function buildSourceSnapshot(
@@ -119,25 +186,64 @@ function buildSourceSnapshot(
   requireRevenue: boolean,
 ): SourceSnapshot {
   const batch = db.prepare(
-    `SELECT id, partner_id, settlement_month, generation_id, is_current, status,
-            raw_row_count, normalized_line_count
+    `SELECT id, partner_id, settlement_month, generation_id, artifact_hash
        FROM statement_import_batches
       WHERE partner_id = ? AND generation_id = ?`,
   ).get(binding.partnerId, binding.statementGenerationId) as any
   if (!batch) fail('statement generation does not match partner', 'STATEMENT_GENERATION_NOT_FOUND', 404)
-  if (Number(batch.is_current) !== 1) fail('statement generation is stale', 'STALE_STATEMENT_GENERATION', 409)
-  if (!['posted', 'computed', 'complete', 'closed'].includes(String(batch.status))) {
-    fail('statement generation is not ready', 'STATEMENT_SOURCE_UNAVAILABLE', 409)
+  const statementReadiness = readStatementSourceReadiness(
+    db,
+    binding.partnerId,
+    String(batch.settlement_month),
+    binding.statementGenerationId,
+  ) as SourceReadinessResult
+  if (!['complete', 'complete_empty'].includes(statementReadiness.state)) {
+    fail(
+      `statement source is not complete: ${statementReadiness.reason_code}`,
+      'STATEMENT_SOURCE_NOT_COMPLETE',
+      409,
+    )
   }
-
-  const rawCount = Number((db.prepare(
-    'SELECT COUNT(*) AS n FROM statement_raw_rows WHERE batch_id = ? AND generation_id = ?',
-  ).get(batch.id, binding.statementGenerationId) as any).n)
-  const normalizedCount = Number((db.prepare(
-    'SELECT COUNT(*) AS n FROM statement_normalized_lines WHERE batch_id = ? AND generation_id = ?',
-  ).get(batch.id, binding.statementGenerationId) as any).n)
-  if (rawCount !== Number(batch.raw_row_count) || normalizedCount !== Number(batch.normalized_line_count)) {
-    fail('statement generation is partial', 'STATEMENT_SOURCE_PARTIAL', 409)
+  const statementArtifact = buildCanonicalStatementArtifact(db, binding.statementGenerationId)
+  if (batch.artifact_hash && batch.artifact_hash !== statementArtifact.artifactHash) {
+    fail('canonical statement artifact hash changed', 'STATEMENT_ARTIFACT_HASH_MISMATCH', 409)
+  }
+  for (const [label, amount] of Object.entries({
+    parsed_total: statementArtifact.artifact.parsed_total,
+    in_amount: statementArtifact.artifact.in_amount,
+    out_amount: statementArtifact.artifact.out_amount,
+    unknown_amount: statementArtifact.artifact.unknown_amount,
+  })) {
+    canonicalAmount(amount, 'NON_CANONICAL_STATEMENT_AMOUNT', `statement artifact ${label}`)
+  }
+  if (statementArtifact.artifact.declared_total !== null) {
+    canonicalAmount(
+      statementArtifact.artifact.declared_total,
+      'NON_CANONICAL_STATEMENT_AMOUNT',
+      'statement artifact declared_total',
+    )
+  }
+  const canonicalFactAmounts = db.prepare(`
+    SELECT 'statement_normalized_lines:' || id AS fact_ref, amount
+      FROM statement_normalized_lines WHERE generation_id = ?
+    UNION ALL
+    SELECT 'partner_month_revenue_ledger:' || id AS fact_ref, settlement_amount AS amount
+      FROM partner_month_revenue_ledger WHERE generation_id = ?
+    UNION ALL
+    SELECT 'out_settlement_ledger:' || id AS fact_ref, settlement_amount AS amount
+      FROM out_settlement_ledger WHERE generation_id = ?
+    ORDER BY fact_ref
+  `).all(
+    binding.statementGenerationId,
+    binding.statementGenerationId,
+    binding.statementGenerationId,
+  ) as Array<{ fact_ref: string; amount: unknown }>
+  for (const fact of canonicalFactAmounts) {
+    canonicalAmount(
+      fact.amount,
+      'NON_CANONICAL_STATEMENT_AMOUNT',
+      `canonical statement fact ${fact.fact_ref}`,
+    )
   }
 
   const blockingFlags = Number((db.prepare(
@@ -167,13 +273,24 @@ function buildSourceSnapshot(
   if (targetLines.length === 0) {
     fail('target month has no authoritative statement facts', 'TARGET_MONTH_UNAVAILABLE', 409)
   }
+  const targetAmounts = new Map<string, number>()
+  for (const line of targetLines) {
+    targetAmounts.set(
+      line.id,
+      canonicalAmount(line.amount, 'NON_CANONICAL_STATEMENT_AMOUNT', `statement line ${line.id}`),
+    )
+  }
 
   const expectedIn = targetLines
-    .filter((line) => line.business_line === 'IN' && line.line_grain === 'aggregate' && Number(line.amount) !== 0)
+    .filter((line) =>
+      line.business_line === 'IN'
+      && line.line_grain === 'aggregate'
+      && targetAmounts.get(line.id) !== 0
+    )
     .map((line) => line.id)
     .sort()
   const expectedOut = targetLines
-    .filter((line) => line.business_line === 'OUT' && Number(line.amount) !== 0)
+    .filter((line) => line.business_line === 'OUT' && targetAmounts.get(line.id) !== 0)
     .map((line) => line.id)
     .sort()
   const actualIn = (db.prepare(
@@ -204,10 +321,10 @@ function buildSourceSnapshot(
     const current = billMap.get(line.case_no) ?? { caseNo: line.case_no, ihc: 0, ss: 0 }
     if (lineType === '免疫组化') {
       current.ihc += count
-      current.ihcUnitPrice ??= Math.abs(Number(line.amount)) / count
+      current.ihcUnitPrice ??= Math.abs(targetAmounts.get(line.id)!) / count
     } else {
       current.ss += count
-      current.ssUnitPrice ??= Math.abs(Number(line.amount)) / count
+      current.ssUnitPrice ??= Math.abs(targetAmounts.get(line.id)!) / count
     }
     billMap.set(line.case_no, current)
   }
@@ -225,18 +342,33 @@ function buildSourceSnapshot(
   for (const row of lisRows) {
     if (!row.case_no) continue
     const current = lisMap.get(row.case_no) ?? { caseNo: row.case_no, ihc: 0, ss: 0 }
-    current.ihc += Number(row.ihc_count) || 0
-    current.ss += Number(row.special_stain_count) || 0
+    current.ihc += canonicalCount(row.ihc_count, `LIS ihc_count ${row.case_no}`)
+    current.ss += canonicalCount(row.special_stain_count, `LIS special_stain_count ${row.case_no}`)
     lisMap.set(row.case_no, current)
   }
 
-  const revenue = db.prepare(
-    `SELECT COUNT(*) AS n, SUM(lab_revenue) AS amount
+  const revenueRows = db.prepare(
+    `SELECT id, lab_revenue
        FROM case_revenue
-      WHERE partner_id = ? AND service_month = ?`,
-  ).get(binding.partnerId, binding.settlementMonth) as any
-  const revenueCount = Number(revenue.n)
-  const confirmedLabRevenue = revenueCount > 0 ? Number(revenue.amount) : null
+      WHERE partner_id = ? AND service_month = ?
+      ORDER BY id`,
+  ).all(binding.partnerId, binding.settlementMonth) as Array<{ id: string; lab_revenue: unknown }>
+  let confirmedLabRevenue: number | null = null
+  if (revenueRows.length > 0) {
+    confirmedLabRevenue = revenueRows.reduce(
+      (total, row) => total + canonicalAmount(
+        row.lab_revenue,
+        'REVENUE_AMOUNT_UNAVAILABLE',
+        `confirmed revenue ${row.id}`,
+      ),
+      0,
+    )
+    confirmedLabRevenue = canonicalAmount(
+      confirmedLabRevenue,
+      'REVENUE_AMOUNT_UNAVAILABLE',
+      'confirmed revenue total',
+    )
+  }
   if (requireRevenue && confirmedLabRevenue === null) {
     fail('confirmed lab revenue is unavailable', 'REVENUE_SOURCE_UNAVAILABLE', 409)
   }
@@ -244,18 +376,19 @@ function buildSourceSnapshot(
   const bills = [...billMap.values()].sort((a, b) => a.caseNo.localeCompare(b.caseNo))
   const lis = [...lisMap.values()].sort((a, b) => a.caseNo.localeCompare(b.caseNo))
   const readiness = {
-    partnerId: binding.partnerId,
-    settlementMonth: binding.settlementMonth,
-    statementGenerationId: binding.statementGenerationId,
-    statementBatchId: batch.id,
-    statementBatchMonth: batch.settlement_month,
-    statementStatus: batch.status,
+    statement: statementReadiness,
+    statementArtifactHash: statementArtifact.artifactHash,
     targetLineIds: targetLines.map((line) => line.id),
     ledger: { expectedIn, actualIn, expectedOut, actualOut },
-    lis,
+    lis: {
+      partnerId: binding.partnerId,
+      settlementMonth: binding.settlementMonth,
+      rowCount: lisRows.length,
+      cases: lis,
+    },
     revenue: {
       available: confirmedLabRevenue !== null,
-      rowCount: revenueCount,
+      rowCount: revenueRows.length,
       confirmedLabRevenue,
     },
   }
@@ -264,6 +397,7 @@ function buildSourceSnapshot(
     readiness,
     readinessJson,
     readinessHash: sha256(readinessJson),
+    statementArtifactHash: statementArtifact.artifactHash,
     bills,
     lis,
     confirmedLabRevenue,
@@ -294,11 +428,154 @@ function assertReadinessUnchanged(row: any, source: SourceSnapshot): void {
   if (row.source_readiness_hash !== source.readinessHash) {
     fail('source readiness changed; a new reconciliation generation is required', 'SOURCE_READINESS_CHANGED', 409)
   }
+  if (row.statement_artifact_hash !== source.statementArtifactHash) {
+    fail('canonical statement artifact changed', 'STATEMENT_ARTIFACT_HASH_MISMATCH', 409)
+  }
+}
+
+interface CompletionArtifact {
+  schemaVersion: 'account-reconciliation-completion/v1'
+  binding: ReconcileBinding
+  hospitalMonthId: string
+  sourceReadinessHash: string
+  statementArtifactHash: string
+  confirmedLabRevenue: number
+  decisions: Array<Record<string, unknown>>
+  supplements: Array<Record<string, unknown>>
+}
+
+function buildCompletionArtifact(
+  db: any,
+  binding: ReconcileBinding,
+  row: any,
+  source: SourceSnapshot,
+): { artifact: CompletionArtifact; json: string; hash: string } {
+  if (source.confirmedLabRevenue === null) {
+    fail('confirmed lab revenue is unavailable', 'REVENUE_SOURCE_UNAVAILABLE', 409)
+  }
+  const confirmedLabRevenue = source.confirmedLabRevenue as number
+  const decisions = (db.prepare(`
+    SELECT id, case_no, line_type, bill_count, lis_count, delta, amount_impact,
+           verdict, verdict_reason, verdict_by, verdict_at, follow_up
+      FROM reconcile_diffs
+     WHERE hospital_month_id = ?
+     ORDER BY case_no, line_type, id
+  `).all(row.hospital_month_id) as any[]).map(decision => {
+    if (!decision.verdict) {
+      fail('all differences must be reviewed before completion', 'RECONCILIATION_PENDING', 409)
+    }
+    return {
+      id: String(decision.id),
+      caseNo: String(decision.case_no),
+      lineType: String(decision.line_type),
+      billCount: canonicalAmount(
+        decision.bill_count,
+        'NON_CANONICAL_DECISION_AMOUNT',
+        `decision bill_count ${decision.id}`,
+      ),
+      lisCount: canonicalAmount(
+        decision.lis_count,
+        'NON_CANONICAL_DECISION_AMOUNT',
+        `decision lis_count ${decision.id}`,
+      ),
+      delta: canonicalAmount(
+        decision.delta,
+        'NON_CANONICAL_DECISION_AMOUNT',
+        `decision delta ${decision.id}`,
+      ),
+      amountImpact: canonicalAmount(
+        decision.amount_impact,
+        'NON_CANONICAL_DECISION_AMOUNT',
+        `decision amount_impact ${decision.id}`,
+      ),
+      verdict: String(decision.verdict),
+      verdictReason: decision.verdict_reason === null ? null : String(decision.verdict_reason),
+      verdictBy: decision.verdict_by === null ? null : String(decision.verdict_by),
+      verdictAt: decision.verdict_at === null ? null : String(decision.verdict_at),
+      followUp: decision.follow_up === null ? null : String(decision.follow_up),
+    }
+  })
+  const supplements = (db.prepare(`
+    SELECT supplement.id, supplement.source_diff_id, supplement.partner_id,
+           supplement.service_month, supplement.case_no, supplement.amount,
+           supplement.case_count, supplement.submitted_by
+      FROM supplement_orders supplement
+      JOIN reconcile_diffs decision ON decision.id = supplement.source_diff_id
+     WHERE decision.hospital_month_id = ?
+     ORDER BY supplement.source_diff_id, supplement.id
+  `).all(row.hospital_month_id) as any[]).map(supplement => ({
+    id: String(supplement.id),
+    sourceDiffId: String(supplement.source_diff_id),
+    partnerId: String(supplement.partner_id),
+    settlementMonth: String(supplement.service_month),
+    caseNo: supplement.case_no === null ? null : String(supplement.case_no),
+    amount: canonicalAmount(
+      supplement.amount,
+      'NON_CANONICAL_DECISION_AMOUNT',
+      `supplement amount ${supplement.id}`,
+    ),
+    caseCount: canonicalCount(supplement.case_count, `supplement case_count ${supplement.id}`),
+    submittedBy: supplement.submitted_by === null ? null : String(supplement.submitted_by),
+  }))
+  const artifact: CompletionArtifact = {
+    schemaVersion: 'account-reconciliation-completion/v1',
+    binding,
+    hospitalMonthId: String(row.hospital_month_id),
+    sourceReadinessHash: source.readinessHash,
+    statementArtifactHash: source.statementArtifactHash,
+    confirmedLabRevenue,
+    decisions,
+    supplements,
+  }
+  const json = stableJson(artifact)
+  return { artifact, json, hash: prefixedSha256(json) }
+}
+
+function assertHospitalMonthBinding(db: any, binding: ReconcileBinding, hospitalMonthId: string): void {
+  const hospitalMonth = db.prepare(`
+    SELECT reconcile_generation_id, binding_state
+      FROM account_reconcile_hospital_month_bindings
+     WHERE hospital_month_id = ?
+  `).get(hospitalMonthId) as any
+  if (
+    hospitalMonth?.reconcile_generation_id !== binding.reconcileGenerationId
+    || hospitalMonth?.binding_state !== 'bound'
+  ) {
+    fail('hospital-month generation binding changed', 'RECONCILE_GENERATION_MISMATCH', 409)
+  }
+}
+
+function bindHospitalMonth(db: any, binding: ReconcileBinding, hospitalMonthId: string): void {
+  db.prepare(`
+    INSERT INTO account_reconcile_hospital_month_bindings
+      (hospital_month_id, reconcile_generation_id, binding_state, updated_at)
+    VALUES (?, ?, 'bound', CURRENT_TIMESTAMP)
+    ON CONFLICT(hospital_month_id) DO UPDATE SET
+      reconcile_generation_id = excluded.reconcile_generation_id,
+      binding_state = 'bound',
+      updated_at = CURRENT_TIMESTAMP
+  `).run(hospitalMonthId, binding.reconcileGenerationId)
 }
 
 function assertPostcondition(db: any, binding: ReconcileBinding, status: string, action: string): void {
   const row = assertExactGeneration(db, binding)
   if (row.status !== status) throw new Error(`RECONCILIATION_POSTCONDITION:${status}`)
+  const hospitalMonth = db.prepare(`
+    SELECT reconcile_generation_id, binding_state
+      FROM account_reconcile_hospital_month_bindings WHERE hospital_month_id = ?
+  `).get(row.hospital_month_id) as any
+  if (
+    hospitalMonth?.reconcile_generation_id !== binding.reconcileGenerationId
+    || hospitalMonth?.binding_state !== 'bound'
+  ) {
+    throw new Error('RECONCILIATION_HOSPITAL_MONTH_BINDING_POSTCONDITION')
+  }
+  if (
+    status !== 'pending'
+    && (!row.completion_artifact_json || !row.completion_artifact_hash)
+  ) {
+    throw new Error('RECONCILIATION_COMPLETION_ARTIFACT_POSTCONDITION')
+  }
   const audit = db.prepare(
     `SELECT COUNT(*) AS n
        FROM abc_audit_logs
@@ -316,7 +593,7 @@ export function computeAccountReconciliation(
   faults?: ReconcileFaults,
 ): Record<string, unknown> {
   assertReconcileBinding(binding)
-  return withImmediateTransaction(db, faults, () => {
+  return withImmediateTransaction(db, faults, 'compute_generation', binding, operator, () => {
     const source = buildSourceSnapshot(db, binding, false)
     const sameGeneration = readGeneration(db, binding.reconcileGenerationId)
     if (sameGeneration) {
@@ -359,6 +636,23 @@ export function computeAccountReconciliation(
     const hospitalMonth = db.prepare(
       'SELECT * FROM reconcile_hospital_months WHERE partner_id = ? AND service_month = ?',
     ).get(binding.partnerId, binding.settlementMonth) as any
+    const hospitalMonthBinding = hospitalMonth
+      ? db.prepare(`
+          SELECT reconcile_generation_id
+            FROM account_reconcile_hospital_month_bindings
+           WHERE hospital_month_id = ?
+        `).get(hospitalMonth.id)
+      : undefined
+    if (hospitalMonth?.closed_at && !hospitalMonthBinding) {
+      fail(
+        'legacy closed reconciliation requires an explicit governed generation backfill',
+        'LEGACY_CLOSED_RECONCILIATION_REQUIRES_BACKFILL',
+        409,
+      )
+    }
+    if (hospitalMonth?.closed_at) {
+      fail('completed reconciliation facts cannot be reopened or superseded', 'RECONCILIATION_FINAL', 409)
+    }
     const hospitalMonthId = hospitalMonth?.id ?? uuidv4()
     if (hospitalMonth) {
       db.prepare(
@@ -368,7 +662,7 @@ export function computeAccountReconciliation(
                 diff_count = ?, pending_count = ?, unmatched_count = ?,
                 confirmed_lab_revenue = NULL, completed_at = NULL, completed_by = NULL,
                 computed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?`,
+          WHERE id = ? AND closed_at IS NULL`,
       ).run(
         partner.name,
         result.matchRate,
@@ -397,7 +691,6 @@ export function computeAccountReconciliation(
         result.unmatched.length,
       )
     }
-
     db.prepare('DELETE FROM reconcile_diffs WHERE hospital_month_id = ?').run(hospitalMonthId)
     const insertDiff = db.prepare(
       `INSERT INTO reconcile_diffs
@@ -458,6 +751,7 @@ export function computeAccountReconciliation(
       hospitalMonthId,
       status: 'pending',
       sourceReadiness: source.readiness,
+      statementArtifactHash: source.statementArtifactHash,
       confirmedLabRevenue: source.confirmedLabRevenue,
       result,
       caseHints,
@@ -467,8 +761,8 @@ export function computeAccountReconciliation(
       `INSERT INTO account_reconcile_generations
         (reconcile_generation_id, partner_id, settlement_month, statement_generation_id,
          hospital_month_id, is_current, status, source_readiness_json,
-         source_readiness_hash, snapshot_json, snapshot_hash)
-       VALUES (?, ?, ?, ?, ?, 1, 'pending', ?, ?, ?, ?)`,
+         source_readiness_hash, statement_artifact_hash, snapshot_json, snapshot_hash)
+       VALUES (?, ?, ?, ?, ?, 1, 'pending', ?, ?, ?, ?, ?)`,
     ).run(
       binding.reconcileGenerationId,
       binding.partnerId,
@@ -477,9 +771,11 @@ export function computeAccountReconciliation(
       hospitalMonthId,
       source.readinessJson,
       source.readinessHash,
+      source.statementArtifactHash,
       snapshotJson,
       sha256(snapshotJson),
     )
+    bindHospitalMonth(db, binding, hospitalMonthId)
     inject(faults, 'afterBusiness')
     inject(faults, 'beforeAudit')
     writeAuditLog(
@@ -491,6 +787,7 @@ export function computeAccountReconciliation(
         partnerId: binding.partnerId,
         settlementMonth: binding.settlementMonth,
         statementGenerationId: binding.statementGenerationId,
+        statementArtifactHash: source.statementArtifactHash,
         snapshotHash: sha256(snapshotJson),
       },
       operator,
@@ -522,22 +819,30 @@ export function completeAccountReconciliation(
   faults?: ReconcileFaults,
 ): Record<string, unknown> {
   assertReconcileBinding(binding)
-  return withImmediateTransaction(db, faults, () => {
+  return withImmediateTransaction(db, faults, 'complete_generation', binding, operator, () => {
     const row = assertExactGeneration(db, binding)
     if (row.status !== 'pending') fail('only pending reconciliation can complete', 'CAS_CONFLICT', 409)
+    assertHospitalMonthBinding(db, binding, row.hospital_month_id)
     const source = buildSourceSnapshot(db, binding, true)
     assertReadinessUnchanged(row, source)
     const pending = Number((db.prepare(
       'SELECT COUNT(*) AS n FROM reconcile_diffs WHERE hospital_month_id = ? AND verdict IS NULL',
     ).get(row.hospital_month_id) as any).n)
     if (pending !== 0) fail('all differences must be reviewed before completion', 'RECONCILIATION_PENDING', 409)
+    const completion = buildCompletionArtifact(db, binding, row, source)
 
     const generationUpdate = db.prepare(
       `UPDATE account_reconcile_generations
           SET status = 'complete', completed_at = CURRENT_TIMESTAMP,
-              completed_by = ?, updated_at = CURRENT_TIMESTAMP
+              completed_by = ?, completion_artifact_json = ?,
+              completion_artifact_hash = ?, updated_at = CURRENT_TIMESTAMP
         WHERE reconcile_generation_id = ? AND is_current = 1 AND status = 'pending'`,
-    ).run(operator, binding.reconcileGenerationId)
+    ).run(
+      operator,
+      completion.json,
+      completion.hash,
+      binding.reconcileGenerationId,
+    )
     if (Number(generationUpdate.changes) !== 1) fail('completion lost concurrent CAS', 'CAS_CONFLICT', 409)
     const hospitalUpdate = db.prepare(
       `UPDATE reconcile_hospital_months
@@ -553,6 +858,8 @@ export function completeAccountReconciliation(
       ...binding,
       confirmedLabRevenue: source.confirmedLabRevenue,
       sourceReadinessHash: source.readinessHash,
+      statementArtifactHash: source.statementArtifactHash,
+      completionArtifactHash: completion.hash,
     }, operator)
     inject(faults, 'afterAudit')
     inject(faults, 'beforePostcondition')
@@ -573,11 +880,19 @@ export function closeAccountReconciliation(
   faults?: ReconcileFaults,
 ): Record<string, unknown> {
   assertReconcileBinding(binding)
-  return withImmediateTransaction(db, faults, () => {
+  return withImmediateTransaction(db, faults, 'close_generation', binding, operator, () => {
     const row = assertExactGeneration(db, binding)
     if (row.status !== 'complete') fail('only complete reconciliation can close', 'CAS_CONFLICT', 409)
+    assertHospitalMonthBinding(db, binding, row.hospital_month_id)
     const source = buildSourceSnapshot(db, binding, true)
     assertReadinessUnchanged(row, source)
+    const completion = buildCompletionArtifact(db, binding, row, source)
+    if (
+      row.completion_artifact_json !== completion.json
+      || row.completion_artifact_hash !== completion.hash
+    ) {
+      fail('completion decision set changed', 'DECISION_SET_CHANGED', 409)
+    }
     const generationUpdate = db.prepare(
       `UPDATE account_reconcile_generations
           SET status = 'closed', closed_at = CURRENT_TIMESTAMP,
@@ -598,6 +913,8 @@ export function closeAccountReconciliation(
     writeAuditLog(db, 'account_reconcile', 'close_generation', binding.reconcileGenerationId, {
       ...binding,
       sourceReadinessHash: source.readinessHash,
+      statementArtifactHash: source.statementArtifactHash,
+      completionArtifactHash: completion.hash,
     }, operator)
     inject(faults, 'afterAudit')
     inject(faults, 'beforePostcondition')

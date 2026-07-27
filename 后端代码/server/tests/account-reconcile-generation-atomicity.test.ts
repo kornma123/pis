@@ -130,8 +130,8 @@ describe('LOC-005 generation/month binding and month-local close', () => {
     const june = binding(source, '2026-06', 'RECON-JUNE')
     const july = binding(source, '2026-07', 'RECON-JULY')
 
-    const juneSnapshot = computeAccountReconciliation(db, june, 'tester') as any
-    const julySnapshot = computeAccountReconciliation(db, july, 'tester') as any
+    const juneSnapshot = computeAccountReconciliation(db, june, 'USER-001') as any
+    const julySnapshot = computeAccountReconciliation(db, july, 'USER-001') as any
     expect(juneSnapshot.sourceReadiness.targetLineIds).toEqual(
       expect.arrayContaining([expect.stringContaining('multi-month')]),
     )
@@ -144,9 +144,9 @@ describe('LOC-005 generation/month binding and month-local close', () => {
       matchedCaseCount: 1,
       matchRate: 1,
     })
-    completeAccountReconciliation(db, june, 'tester')
-    completeAccountReconciliation(db, july, 'tester')
-    closeAccountReconciliation(db, june, 'tester')
+    completeAccountReconciliation(db, june, 'USER-001')
+    completeAccountReconciliation(db, july, 'USER-001')
+    closeAccountReconciliation(db, june, 'USER-001')
 
     expect(readAccountReconciliation(db, june).status).toBe('closed')
     expect(readAccountReconciliation(db, july).status).toBe('complete')
@@ -166,8 +166,8 @@ describe('LOC-005 generation/month binding and month-local close', () => {
     ])
     const oldBinding = binding(source, '2026-08', 'RECON-OLD')
     const newBinding = binding(source, '2026-08', 'RECON-NEW')
-    computeAccountReconciliation(db, oldBinding, 'tester')
-    computeAccountReconciliation(db, newBinding, 'tester')
+    computeAccountReconciliation(db, oldBinding, 'USER-001')
+    computeAccountReconciliation(db, newBinding, 'USER-001')
     expectCode(() => readAccountReconciliation(db, oldBinding), 'STALE_RECONCILE_GENERATION')
     expect(readAccountReconciliation(db, newBinding).status).toBe('pending')
   })
@@ -187,7 +187,7 @@ describe('LOC-005 transaction rollback mutations', () => {
       { month: '2026-09', caseNo: `CASE-${stage}`, item: '免疫组化染色', amount: 100, lisCount: 1 },
     ])
     const target = binding(source, '2026-09', `RECON-${stage}`)
-    expect(() => computeAccountReconciliation(db, target, 'tester', { at: stage })).toThrow(
+    expect(() => computeAccountReconciliation(db, target, 'USER-001', { at: stage })).toThrow(
       `INJECTED_RECONCILIATION_FAULT:${stage}`,
     )
     expect(db.prepare(
@@ -207,8 +207,8 @@ describe('LOC-005 transaction rollback mutations', () => {
       { month: '2026-10', caseNo: 'CASE-OCT', item: '免疫组化染色', amount: 100, lisCount: 1 },
     ])
     const target = binding(source, '2026-10', 'RECON-COMPLETE-FAULT')
-    const computed = computeAccountReconciliation(db, target, 'tester') as any
-    expect(() => completeAccountReconciliation(db, target, 'tester', { at: 'afterAudit' })).toThrow(
+    const computed = computeAccountReconciliation(db, target, 'USER-001') as any
+    expect(() => completeAccountReconciliation(db, target, 'USER-001', { at: 'afterAudit' })).toThrow(
       'INJECTED_RECONCILIATION_FAULT:afterAudit',
     )
     expect(readAccountReconciliation(db, target).status).toBe('pending')
@@ -228,10 +228,10 @@ describe('LOC-005 conditional close CAS', () => {
       { month: '2026-11', caseNo: 'CASE-NOV', item: '免疫组化染色', amount: 100, lisCount: 1 },
     ])
     const target = binding(source, '2026-11', 'RECON-CAS')
-    computeAccountReconciliation(db, target, 'tester')
-    completeAccountReconciliation(db, target, 'tester')
-    expect(closeAccountReconciliation(db, target, 'winner').status).toBe('closed')
-    expectCode(() => closeAccountReconciliation(db, target, 'loser'), 'CAS_CONFLICT')
+    computeAccountReconciliation(db, target, 'USER-001')
+    completeAccountReconciliation(db, target, 'USER-001')
+    expect(closeAccountReconciliation(db, target, 'USER-001').status).toBe('closed')
+    expectCode(() => closeAccountReconciliation(db, target, 'USER-001'), 'CAS_CONFLICT')
     expect((db.prepare(
       `SELECT COUNT(*) AS n FROM abc_audit_logs
         WHERE action = 'close_generation' AND target_id = ?`,
