@@ -179,6 +179,15 @@ biggest-missing: an upstream schema owner may still change the contract`), []);
 assert.deepEqual(handoffFieldErrors(`${completeHandoff}
 least-confidence: none
 biggest-missing: an upstream schema owner may still change the contract`), ['least-confidence']);
+assert.deepEqual(handoffFieldErrors(`${completeHandoff}
+least-confidence: 没有发现
+biggest-missing: an upstream schema owner may still change the contract`), ['least-confidence']);
+assert.deepEqual(handoffFieldErrors(`${completeHandoff}
+least-confidence: transaction isolation has only been checked in one runtime
+biggest-missing: 未发现`), ['biggest-missing']);
+assert.deepEqual(handoffFieldErrors(`${completeHandoff}
+least-confidence: 未发现；已检查固定对象和测试，尚未检查生产环境
+biggest-missing: an upstream schema owner may still change the contract`), []);
 assert.deepEqual(handoffFieldErrors('[HANDOFF] status=blocked'), [
   'result', 'evidence', 'risk', 'next-owner', 'trigger',
   'least-confidence', 'biggest-missing',

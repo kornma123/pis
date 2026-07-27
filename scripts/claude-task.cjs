@@ -306,6 +306,16 @@ function parsePmApprovalMarker(body) {
   return marker ? marker[1] : null;
 }
 
+function isWeakHandoffReflection(value) {
+  const clean = String(value || '')
+    .replace(/\p{Cf}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (/^(?:无|没有|不知道|不确定|none|n\/?a|nil)$/i.test(clean)) return true;
+  if (/^未发现[。.!！]?$/.test(clean)) return true;
+  return clean.length < 8;
+}
+
 function handoffFieldErrors(body) {
   const errors = [];
   for (const field of [
@@ -319,6 +329,10 @@ function handoffFieldErrors(body) {
   ]) {
     const match = String(body || '').match(new RegExp(`^${field}\\s*[:=：]\\s*(.+)$`, 'im'));
     const value = match?.[1]?.trim() || '';
+    if (field === 'least-confidence' || field === 'biggest-missing') {
+      if (isWeakHandoffReflection(value)) errors.push(field);
+      continue;
+    }
     const minLength = field === 'next-owner' ? 2 : 4;
     if (value.length < minLength || /^(?:todo|tbd|n\/?a|none|无|待补|\.\.\.)$/i.test(value)) errors.push(field);
   }
