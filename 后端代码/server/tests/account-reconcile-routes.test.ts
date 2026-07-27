@@ -72,12 +72,13 @@ async function mountApp() {
   const routes = (await import('../src/routes/account-reconcile-v1.1.js')).default
   const { authenticateToken } = await import('../src/middleware/auth.js')
   const { requirePermission } = await import('../src/middleware/permissions.js')
+  const { auditWrite } = await import('../src/middleware/audit-log.js')
   return buildTestApp([
     { path: '/api/v1/auth', router: (await import('../src/routes/auth.js')).default },
     {
       path: '/api/v1/account-reconcile',
       router: routes,
-      middleware: [authenticateToken, requirePermission('account_reconcile', 'R')],
+      middleware: [auditWrite, authenticateToken, requirePermission('account_reconcile', 'R')],
     },
   ])
 }
@@ -189,6 +190,46 @@ describe('账实核对路由 · 认定 + 补收 gate + 复核完成前置 + 关�
     expect(res.status).toBe(409)
   })
 
+  it('production auditWrite rejects unknown verdict keys without leaking raw body sentinels', async () => {
+    const target = diffs.find((diff) => diff.caseNo === 'CB')
+    const database = await getDb()
+    const businessBefore = Number(database.prepare(
+      'SELECT COUNT(*) AS n FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(target.id).n)
+    const abcBefore = Number(database.prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+      WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
+    `).get(target.id).n)
+
+    const response = await auth(
+      request(app).post(`/api/v1/account-reconcile/diffs/${target.id}/verdict`).send({
+        ...exactBinding(),
+        reason: '漏收，需补收',
+        patientName: 'LOC005_PATIENT_SENTINEL',
+        rawReceipt: 'LOC005_RECEIPT_SENTINEL',
+        nested: { diagnosis: 'LOC005_DIAGNOSIS_SENTINEL' },
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect(response.body.error.code).toBe('BAD_REQUEST')
+    expect(Number(database.prepare(
+      'SELECT COUNT(*) AS n FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(target.id).n)).toBe(businessBefore)
+    expect(Number(database.prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+      WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
+    `).get(target.id).n)).toBe(abcBefore)
+
+    const denied = database.prepare(`
+      SELECT request_data FROM operation_logs
+      WHERE operation = 'DENIED POST account-reconcile'
+      ORDER BY rowid DESC LIMIT 1
+    `).get() as { request_data: string }
+    expect(denied.request_data).not.toContain('LOC005_PATIENT_SENTINEL')
+    expect(denied.request_data).not.toContain('LOC005_RECEIPT_SENTINEL')
+    expect(denied.request_data).not.toContain('LOC005_DIAGNOSIS_SENTINEL')
+  })
+
   it('认定「漏收，需补收」→ 生成补收单；其它原因不驱动补收', async () => {
     const bIhc = diffs.find((d) => d.caseNo === 'CB')
     const cIhc = diffs.find((d) => d.caseNo === 'CC' && d.lineType === '免疫组化')
@@ -200,13 +241,36 @@ describe('账实核对路由 · 认定 + 补收 gate + 复核完成前置 + 关�
     expect(unbound.status).toBe(400)
     expect(unbound.body.error.code).toBe('GENERATION_BINDING_REQUIRED')
 
+    const operationBefore = Number((await getDb()).prepare(`
+      SELECT COUNT(*) AS n FROM operation_logs WHERE operation = 'POST account-reconcile'
+    `).get().n)
     let r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${bIhc.id}/verdict`).send({
       ...exactBinding(),
       reason: '漏收，需补收',
+      note: 'LOC005_ALLOWED_NOTE_DIAGNOSIS_SENTINEL',
     }))
     expect(r.status).toBe(200)
     expect(r.body.data.followUp).toBe('supplement')
     expect(r.body.data.duplicate).toBe(false)
+    const operationAfterWrite = Number((await getDb()).prepare(`
+      SELECT COUNT(*) AS n FROM operation_logs WHERE operation = 'POST account-reconcile'
+    `).get().n)
+    expect(operationAfterWrite).toBe(operationBefore + 1)
+    const operation = (await getDb()).prepare(`
+      SELECT request_data FROM operation_logs
+      WHERE operation = 'POST account-reconcile'
+      ORDER BY rowid DESC LIMIT 1
+    `).get() as { request_data: string }
+    expect(operation.request_data).not.toContain('LOC005_ALLOWED_NOTE_DIAGNOSIS_SENTINEL')
+    expect(JSON.parse(operation.request_data)).toEqual({
+      action: 'verdict',
+      partnerId: PARTNER,
+      settlementMonth: MONTH,
+      statementGenerationId: STATEMENT_GENERATION,
+      reconcileGenerationId: RECONCILE_GENERATION,
+      diffId: bIhc.id,
+      duplicate: false,
+    })
 
     const auditBeforeReplay = Number((await getDb()).prepare(`
       SELECT COUNT(*) AS n FROM abc_audit_logs
@@ -215,6 +279,7 @@ describe('账实核对路由 · 认定 + 补收 gate + 复核完成前置 + 关�
     const replay = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${bIhc.id}/verdict`).send({
       ...exactBinding(),
       reason: '漏收，需补收',
+      note: 'LOC005_ALLOWED_NOTE_DIAGNOSIS_SENTINEL',
     }))
     expect(replay.status).toBe(200)
     expect(replay.body.data.duplicate).toBe(true)
@@ -222,6 +287,9 @@ describe('账实核对路由 · 认定 + 补收 gate + 复核完成前置 + 关�
       SELECT COUNT(*) AS n FROM abc_audit_logs
       WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
     `).get(bIhc.id).n)).toBe(auditBeforeReplay)
+    expect(Number((await getDb()).prepare(`
+      SELECT COUNT(*) AS n FROM operation_logs WHERE operation = 'POST account-reconcile'
+    `).get().n)).toBe(operationAfterWrite)
 
     r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${cIhc.id}/verdict`).send({
       ...exactBinding(),

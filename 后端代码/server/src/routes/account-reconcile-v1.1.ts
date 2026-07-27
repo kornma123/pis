@@ -10,6 +10,7 @@ import { Router } from 'express'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import { setSuccessAuditMetadata } from '../middleware/audit-log.js'
 import { assertNotSelfReview } from '../middleware/authz-combinators.js'
 import { writeAuditLog } from '../utils/cost-runs.js'
 import { recordOverride } from '../utils/override-log.js'
@@ -33,6 +34,39 @@ const router = Router()
 const operatorOf = (req: any): string => req.user?.username ?? req.user?.userId ?? 'unknown'
 const actorUserIdOf = (req: any): string => String(req.user?.userId ?? '')
 const PRE_LOC005_ROUTES_ENABLED = false
+const BINDING_KEYS = [
+  'partnerId',
+  'settlementMonth',
+  'statementGenerationId',
+  'reconcileGenerationId',
+] as const
+
+function hasOnlyKeys(value: unknown, allowed: readonly string[]): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const allowedKeys = new Set(allowed)
+  return Object.keys(value).every(key => allowedKeys.has(key))
+}
+
+function rejectUnknownBodyKeys(res: any, value: unknown, allowed: readonly string[]): boolean {
+  if (hasOnlyKeys(value, allowed)) return false
+  error(res, 'request body contains unsupported fields', 'BAD_REQUEST', 400)
+  return true
+}
+
+function lifecycleAuditMetadata(
+  action: string,
+  binding: ReconcileBinding,
+  extra: Record<string, string | boolean> = {},
+): Record<string, string | boolean> {
+  return {
+    action,
+    partnerId: binding.partnerId,
+    settlementMonth: binding.settlementMonth,
+    statementGenerationId: binding.statementGenerationId,
+    reconcileGenerationId: binding.reconcileGenerationId,
+    ...extra,
+  }
+}
 
 const bindingFrom = (source: any): ReconcileBinding => ({
   partnerId: String(source?.partnerId ?? '').trim(),
@@ -53,9 +87,12 @@ const lifecycleError = (res: any, err: unknown): void => {
 // before the predecessor endpoints below, so no legacy month-only write is reachable.
 router.post('/compute', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
+    if (rejectUnknownBodyKeys(res, req.body, BINDING_KEYS)) return
     const binding = bindingFrom(req.body)
     assertReconcileBinding(binding)
-    success(res, computeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req)))
+    const result = computeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req))
+    setSuccessAuditMetadata(res, lifecycleAuditMetadata('compute', binding))
+    success(res, result)
   } catch (err) {
     lifecycleError(res, err)
   }
@@ -118,13 +155,18 @@ router.get('/workbench', (req, res) => {
 
 router.post('/hospital-months/:id/complete', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
+    if (rejectUnknownBodyKeys(res, req.body, BINDING_KEYS)) return
     const binding = bindingFrom(req.body)
     assertReconcileBinding(binding)
     const current = readAccountReconciliation(getDatabase(), binding) as any
     if (current.hospitalMonthId !== req.params.id) {
       return error(res, 'hospital-month binding mismatch', 'RECONCILE_GENERATION_MISMATCH', 409)
     }
-    success(res, completeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req)))
+    const result = completeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req))
+    setSuccessAuditMetadata(res, lifecycleAuditMetadata('complete', binding, {
+      hospitalMonthId: req.params.id,
+    }))
+    success(res, result)
   } catch (err) {
     lifecycleError(res, err)
   }
@@ -132,6 +174,7 @@ router.post('/hospital-months/:id/complete', requirePermission('account_reconcil
 
 router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
+    if (rejectUnknownBodyKeys(res, req.body, ['items'])) return
     const rawItems = Array.isArray(req.body?.items) ? req.body.items : []
     if (rawItems.length !== 1) {
       return error(
@@ -141,11 +184,16 @@ router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) =>
         400,
       )
     }
+    if (!rawItems.every((item: unknown) => hasOnlyKeys(item, BINDING_KEYS))) {
+      return error(res, 'close item contains unsupported fields', 'BAD_REQUEST', 400)
+    }
     const closed = rawItems.map((item: any) => {
       const binding = bindingFrom(item)
       assertReconcileBinding(binding)
       return closeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req))
     })
+    const binding = bindingFrom(rawItems[0])
+    setSuccessAuditMetadata(res, lifecycleAuditMetadata('close', binding))
     success(res, { closed })
   } catch (err) {
     lifecycleError(res, err)
@@ -299,14 +347,13 @@ if (PRE_LOC005_ROUTES_ENABLED) router['get']('/__pre_loc005/workbench', (req, re
 // POST /diffs/:id/verdict —— 认定（写）：填 6 认定原因之一 → 定下家；漏收驱动补收
 router.post('/diffs/:id/verdict', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
+    if (rejectUnknownBodyKeys(res, req.body, [...BINDING_KEYS, 'reason', 'note'])) return
     const binding = bindingFrom(req.body)
     assertReconcileBinding(binding)
     const reason = String(req.body?.reason ?? '') as VerdictReason
     if (!VERDICT_REASONS.includes(reason)) return error(res, `认定原因须是：${VERDICT_REASONS.join(' / ')}`, 'BAD_REQUEST', 400)
     const note = req.body?.note != null ? String(req.body.note) : null
-    success(
-      res,
-      setAccountReconciliationVerdict(
+    const result = setAccountReconciliationVerdict(
         getDatabase(),
         binding,
         req.params.id,
@@ -314,7 +361,22 @@ router.post('/diffs/:id/verdict', requirePermission('account_reconcile', 'W'), (
         note,
         actorUserIdOf(req),
         operatorOf(req),
-      ),
+      )
+    if (result.duplicate === true) {
+      // An exact replay is a read-equivalent acknowledgement: the lifecycle
+      // transaction proved zero business/supplement/domain-audit writes.
+      // Clearing this request-local actor prevents the global success fallback
+      // from manufacturing a second operation audit for the same fact.
+      ;(req as any).user = undefined
+    } else {
+      setSuccessAuditMetadata(res, lifecycleAuditMetadata('verdict', binding, {
+        diffId: req.params.id,
+        duplicate: false,
+      }))
+    }
+    success(
+      res,
+      result,
       '已认定',
     )
   } catch (err) {

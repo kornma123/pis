@@ -160,16 +160,54 @@ interface SourceSnapshot {
 }
 
 const DECIMAL_SCALE = 10_000
+const MAX_SCALED_DECIMAL = BigInt(Number.MAX_SAFE_INTEGER)
+const MAX_UNAMBIGUOUS_NUMBER_AMOUNT = 2 ** 39
+const CANONICAL_DECIMAL_TEXT = /^-?(?:0|[1-9]\d{0,13})(?:\.(\d{1,4}))?$/
 
-export function canonicalReconciliationAmount(
+interface CanonicalAmountFact {
+  value: number
+  units: bigint
+}
+
+function canonicalAmountFact(
   value: unknown,
   code: string,
   label: string,
-): number {
+  canonicalText?: unknown,
+): CanonicalAmountFact {
+  if (canonicalText !== undefined && canonicalText !== null) {
+    if (typeof canonicalText !== 'string' || !CANONICAL_DECIMAL_TEXT.test(canonicalText)) {
+      fail(`${label} exceeds canonical DECIMAL(18,4) precision`, code, 409)
+    }
+    const decimalText = canonicalText as string
+    const negative = decimalText.startsWith('-')
+    const unsigned = negative ? decimalText.slice(1) : decimalText
+    const [whole, fraction = ''] = unsigned.split('.')
+    const units = BigInt(whole) * BigInt(DECIMAL_SCALE)
+      + BigInt(fraction.padEnd(4, '0'))
+    const signedUnits = negative ? -units : units
+    if (signedUnits > MAX_SCALED_DECIMAL || signedUnits < -MAX_SCALED_DECIMAL) {
+      fail(`${label} exceeds the scaled safe-integer boundary`, code, 409)
+    }
+    const numeric = Number(decimalText)
+    if (
+      typeof value !== 'number'
+      || !Number.isFinite(value)
+      || !Number.isFinite(numeric)
+      || value !== numeric
+    ) {
+      fail(`${label} does not match its canonical decimal text`, code, 409)
+    }
+    return { value: numeric, units: signedUnits }
+  }
+
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     fail(`${label} is unavailable or non-numeric`, code, 409)
   }
   const numeric = value as number
+  if (Math.abs(numeric) >= MAX_UNAMBIGUOUS_NUMBER_AMOUNT) {
+    fail(`${label} requires canonical decimal text before Number conversion`, code, 409)
+  }
   const scaled = numeric * DECIMAL_SCALE
   const roundedScaled = Math.round(scaled)
   const tolerance = Number.EPSILON * Math.max(1, Math.abs(scaled)) * 2
@@ -179,7 +217,19 @@ export function canonicalReconciliationAmount(
   ) {
     fail(`${label} exceeds canonical DECIMAL(18,4) precision`, code, 409)
   }
-  return roundedScaled / DECIMAL_SCALE
+  return {
+    value: roundedScaled / DECIMAL_SCALE,
+    units: BigInt(roundedScaled),
+  }
+}
+
+export function canonicalReconciliationAmount(
+  value: unknown,
+  code: string,
+  label: string,
+  canonicalText?: unknown,
+): number {
+  return canonicalAmountFact(value, code, label, canonicalText).value
 }
 
 export function canonicalReconciliationCount(value: unknown, label: string): number {
@@ -365,13 +415,14 @@ function buildSourceSnapshot(
   }
 
   const revenueRows = db.prepare(
-    `SELECT id, lab_revenue, revenue_source
+    `SELECT id, lab_revenue, lab_revenue_canonical, revenue_source
        FROM case_revenue
       WHERE partner_id = ? AND service_month = ?
       ORDER BY id`,
   ).all(binding.partnerId, binding.settlementMonth) as Array<{
     id: string
     lab_revenue: unknown
+    lab_revenue_canonical: unknown
     revenue_source: unknown
   }>
   let confirmedLabRevenue: number | null = null
@@ -381,16 +432,17 @@ function buildSourceSnapshot(
   if (canonicalRevenueSources) {
     let scaledTotal = 0n
     for (const row of revenueRows) {
-      const amount = canonicalAmount(
+      const amount = canonicalAmountFact(
         row.lab_revenue,
         'REVENUE_AMOUNT_UNAVAILABLE',
         `confirmed revenue ${row.id}`,
+        row.lab_revenue_canonical,
       )
-      if (amount < 0) {
+      if (amount.value < 0) {
         fail(`confirmed revenue ${row.id} is negative`, 'REVENUE_AMOUNT_UNAVAILABLE', 409)
       }
-      scaledTotal += BigInt(Math.round(amount * DECIMAL_SCALE))
-      if (scaledTotal > BigInt(Number.MAX_SAFE_INTEGER)) {
+      scaledTotal += amount.units
+      if (scaledTotal > MAX_SCALED_DECIMAL) {
         fail('confirmed revenue total exceeds the scaled safe-integer boundary', 'REVENUE_AMOUNT_UNAVAILABLE', 409)
       }
     }
@@ -522,8 +574,9 @@ function buildCompletionArtifact(
       FROM supplement_orders supplement
       JOIN reconcile_diffs decision ON decision.id = supplement.source_diff_id
      WHERE decision.hospital_month_id = ?
+       AND supplement.reconcile_generation_id = ?
      ORDER BY supplement.source_diff_id, supplement.id
-  `).all(row.hospital_month_id) as any[]).map(supplement => ({
+  `).all(row.hospital_month_id, binding.reconcileGenerationId) as any[]).map(supplement => ({
     id: String(supplement.id),
     sourceDiffId: String(supplement.source_diff_id),
     partnerId: String(supplement.partner_id),

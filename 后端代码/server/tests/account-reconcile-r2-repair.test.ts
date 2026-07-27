@@ -28,9 +28,10 @@ function seedSource(options: {
   name: string
   month?: string
   amount?: unknown
-  lisCount?: unknown
-  revenueAmount?: unknown
-  revenueSource?: string
+    lisCount?: unknown
+    revenueAmount?: unknown
+    revenueSource?: string
+    revenueCanonical?: string
 }): Binding {
   const month = options.month ?? '2026-08'
   const suffix = `${options.name}-${++sequence}`
@@ -89,6 +90,10 @@ function seedSource(options: {
       (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source)
     VALUES (?, ?, ?, ?, 100, 100, ?, ?)
   `).run(`REV-${suffix}`, caseNo, partnerId, month, revenueAmount, revenueSource)
+  if (options.revenueCanonical !== undefined) {
+    db.prepare('UPDATE case_revenue SET lab_revenue_canonical = ? WHERE id = ?')
+      .run(options.revenueCanonical, `REV-${suffix}`)
+  }
 
   return { partnerId, settlementMonth: month, statementGenerationId, reconcileGenerationId }
 }
@@ -199,6 +204,7 @@ describe('LOC-005 R2 canonical source truth', () => {
     const accepted = seedSource({
       name: 'scaled-safe-accepted',
       revenueAmount: 900719925474.0991,
+      revenueCanonical: '900719925474.0991',
     })
     lifecycle.computeAccountReconciliation(db, accepted, 'USER-001')
     expect(lifecycle.completeAccountReconciliation(db, accepted, 'USER-001'))
@@ -210,6 +216,29 @@ describe('LOC-005 R2 canonical source truth', () => {
     })
     expectCode(
       () => lifecycle.computeAccountReconciliation(db, rejected, 'USER-001'),
+      'REVENUE_AMOUNT_UNAVAILABLE',
+    )
+  })
+
+  it('rejects a high-value fifth decimal before Number rounding can erase it', () => {
+    expectCode(
+      () => lifecycle.canonicalReconciliationAmount(
+        900719925474.09915,
+        'REVENUE_AMOUNT_UNAVAILABLE',
+        'high-value fifth decimal',
+      ),
+      'REVENUE_AMOUNT_UNAVAILABLE',
+    )
+  })
+
+  it('rejects a high-value fifth decimal through the persisted revenue entry', () => {
+    const binding = seedSource({
+      name: 'high-fifth-decimal-entry',
+      revenueAmount: 900719925474.09915,
+      revenueCanonical: '900719925474.09915',
+    })
+    expectCode(
+      () => lifecycle.computeAccountReconciliation(db, binding, 'USER-001'),
       'REVENUE_AMOUNT_UNAVAILABLE',
     )
   })
@@ -417,6 +446,197 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
       VALUES ('SO-BAD-GENERATION', ?, ?, ?, 'WRONG-GENERATION')
     `).run(binding.partnerId, binding.settlementMonth, diff.id))
       .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH|FOREIGN KEY constraint failed/)
+  })
+
+  it('rejects raw SQL with a source diff but no reconcile generation on a fresh schema', () => {
+    const binding = seedSource({ name: 'supplement-null-generation', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+
+    expect(() => db.prepare(`
+      INSERT INTO supplement_orders
+        (id, partner_id, service_month, source_diff_id, reconcile_generation_id)
+      VALUES ('SO-NULL-GENERATION', ?, ?, ?, NULL)
+    `).run(binding.partnerId, binding.settlementMonth, diff.id))
+      .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH|CHECK constraint failed/)
+  })
+
+  it('rejects rebinding a current supplement to a stale generation', () => {
+    const binding = seedSource({ name: 'supplement-stale-update', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db,
+      binding,
+      diff.id,
+      '漏收，需补收',
+      null,
+      'USER-001',
+      'admin',
+    )
+    const staleGenerationId = `${binding.reconcileGenerationId}-STALE`
+    db.prepare(`
+      INSERT INTO account_reconcile_generations
+        (reconcile_generation_id, partner_id, settlement_month, statement_generation_id,
+         hospital_month_id, is_current, status, source_readiness_json, source_readiness_hash,
+         statement_artifact_hash, snapshot_json, snapshot_hash)
+      SELECT ?, partner_id, settlement_month, statement_generation_id,
+             hospital_month_id, 0, 'pending', source_readiness_json, source_readiness_hash,
+             statement_artifact_hash, snapshot_json, snapshot_hash
+        FROM account_reconcile_generations
+       WHERE reconcile_generation_id = ?
+    `).run(staleGenerationId, binding.reconcileGenerationId)
+
+    expect(() => db.prepare(`
+      UPDATE supplement_orders
+         SET reconcile_generation_id = ?
+       WHERE source_diff_id = ?
+    `).run(staleGenerationId, diff.id))
+      .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+  })
+
+  it('builds the completion artifact from supplements bound to the exact generation only', () => {
+    const binding = seedSource({ name: 'supplement-artifact-generation', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db,
+      binding,
+      diff.id,
+      '漏收，需补收',
+      null,
+      'USER-001',
+      'admin',
+    )
+    const currentSupplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(diff.id) as { id: string }
+    const staleGenerationId = `${binding.reconcileGenerationId}-ARTIFACT-STALE`
+    db.prepare(`
+      INSERT INTO account_reconcile_generations
+        (reconcile_generation_id, partner_id, settlement_month, statement_generation_id,
+         hospital_month_id, is_current, status, source_readiness_json, source_readiness_hash,
+         statement_artifact_hash, snapshot_json, snapshot_hash)
+      SELECT ?, partner_id, settlement_month, statement_generation_id,
+             hospital_month_id, 0, 'pending', source_readiness_json, source_readiness_hash,
+             statement_artifact_hash, snapshot_json, snapshot_hash
+        FROM account_reconcile_generations
+       WHERE reconcile_generation_id = ?
+    `).run(staleGenerationId, binding.reconcileGenerationId)
+
+    let supplementIds: string[] = []
+    try {
+      const insertTrigger = db.prepare(`
+        SELECT sql FROM sqlite_master
+        WHERE type = 'trigger' AND name = 'trg_reconcile_supplement_generation_insert'
+      `).get() as { sql: string }
+      db.exec('DROP TRIGGER trg_reconcile_supplement_generation_insert')
+      db.prepare(`
+        INSERT INTO supplement_orders
+          (id, partner_id, service_month, source_diff_id, reconcile_generation_id,
+           case_no, amount, case_count, submitted_by)
+        SELECT 'SO-STALE-ARTIFACT', partner_id, service_month, source_diff_id, ?, case_no,
+               amount, case_count, submitted_by
+          FROM supplement_orders WHERE id = ?
+      `).run(staleGenerationId, currentSupplement.id)
+      db.exec(insertTrigger.sql)
+
+      lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+      const completed = db.prepare(`
+        SELECT completion_artifact_json FROM account_reconcile_generations
+        WHERE reconcile_generation_id = ?
+      `).get(binding.reconcileGenerationId) as { completion_artifact_json: string }
+      supplementIds = JSON.parse(completed.completion_artifact_json).supplements
+        .map((supplement: { id: string }) => supplement.id)
+    } finally {
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_no_delete')
+      db.prepare("DELETE FROM supplement_orders WHERE id = 'SO-STALE-ARTIFACT'").run()
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+    expect(supplementIds).toEqual([currentSupplement.id])
+  })
+
+  it('fails a forward upgrade and every restart when a legacy diff cannot bind one current pending generation', () => {
+    const binding = seedSource({ name: 'supplement-forward-fail', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db,
+      binding,
+      diff.id,
+      '漏收，需补收',
+      null,
+      'USER-001',
+      'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+
+    const upgradePath = join(testDirectory, `forward-upgrade-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(upgradePath)
+    let legacy = new DatabaseSync(upgradePath)
+    try {
+      legacy.exec('PRAGMA foreign_keys = OFF')
+      legacy.prepare(`
+        UPDATE account_reconcile_generations SET is_current = 0
+        WHERE reconcile_generation_id = ?
+      `).run(binding.reconcileGenerationId)
+      legacy.exec(`
+        DROP TABLE supplement_orders;
+        CREATE TABLE supplement_orders (
+          id TEXT PRIMARY KEY,
+          partner_id TEXT NOT NULL,
+          service_month TEXT NOT NULL,
+          source_diff_id TEXT,
+          case_no TEXT,
+          amount DECIMAL(18, 4) NOT NULL DEFAULT 0,
+          case_count INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT '待补收',
+          collected_at DATETIME,
+          collected_month TEXT,
+          collected_revenue DECIMAL(18, 4),
+          give_up_reason TEXT,
+          operator TEXT,
+          review_status TEXT NOT NULL DEFAULT 'pending_review',
+          submitted_by TEXT,
+          reviewed_by TEXT,
+          reviewed_at DATETIME,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(source_diff_id) REFERENCES reconcile_diffs(id) ON DELETE RESTRICT
+        );
+      `)
+      legacy.prepare(`
+        INSERT INTO supplement_orders
+          (id, partner_id, service_month, source_diff_id, amount, case_count, submitted_by)
+        VALUES ('SO-LEGACY-UNBINDABLE', ?, ?, ?, 1, 1, 'legacy')
+      `).run(binding.partnerId, binding.settlementMonth, diff.id)
+      legacy.exec('PRAGMA foreign_keys = ON')
+
+      expect(() => manager.upgradeAccountReconciliationSchema(legacy))
+        .toThrow(/SUPPLEMENT_SOURCE_GENERATION_BACKFILL_REQUIRED/)
+      expect((legacy.prepare('PRAGMA table_info(supplement_orders)').all() as Array<{ name: string }>)
+        .some(column => column.name === 'reconcile_generation_id')).toBe(false)
+    } finally {
+      legacy.close()
+    }
+
+    legacy = new DatabaseSync(upgradePath)
+    try {
+      legacy.exec('PRAGMA foreign_keys = ON')
+      expect(() => manager.upgradeAccountReconciliationSchema(legacy))
+        .toThrow(/SUPPLEMENT_SOURCE_GENERATION_BACKFILL_REQUIRED/)
+      expect(legacy.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      legacy.close()
+    }
   })
 })
 
