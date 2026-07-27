@@ -541,7 +541,7 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
 
   it('rejects every non-lineage update of a supplement after its pending generation becomes stale, including after restart', () => {
     const binding = seedSource({ name: 'supplement-stale-non-lineage-update', lisCount: 2 })
-    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
     const diff = db.prepare(
       'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
     ).get(String(snapshot.hospitalMonthId)) as { id: string }
@@ -560,7 +560,7 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
        WHERE reconcile_generation_id = ?
     `).run(binding.reconcileGenerationId)
 
-    const rejectStaleUpdates = (connection: any) => {
+    const rejectStaleUpdates = (connection: DatabaseSync) => {
       expect(() => connection.prepare(`
         UPDATE supplement_orders SET amount = 99 WHERE source_diff_id = ?
       `).run(diff.id)).toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH/)

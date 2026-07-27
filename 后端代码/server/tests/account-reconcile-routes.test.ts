@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import request from 'supertest'
+import type { RequestHandler } from 'express'
 import { buildTestApp, getDb, loginAdmin, loginAs, seedReviewer } from './p0-harness.js'
 
 const PARTNER = 'PT-RECON-1'
@@ -79,14 +80,18 @@ async function mountApp() {
   const { authenticateToken } = await import('../src/middleware/auth.js')
   const { requirePermission } = await import('../src/middleware/permissions.js')
   const { auditWrite } = await import('../src/middleware/audit-log.js')
-  const captureActorUntilFinish = (req: any, res: any, next: any) => {
-    const before = req.user?.userId ?? null
+  type ActorRequest = Parameters<RequestHandler>[0] & {
+    user?: { userId?: string }
+  }
+  const captureActorUntilFinish: RequestHandler = (req, res, next) => {
+    const actorRequest = req as ActorRequest
+    const before = actorRequest.user?.userId ?? null
     res.on('finish', () => {
       finishedActorSnapshots.push({
         method: req.method,
         url: req.originalUrl,
         before,
-        after: req.user?.userId ?? null,
+        after: actorRequest.user?.userId ?? null,
       })
     })
     next()
