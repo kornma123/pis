@@ -1,0 +1,17 @@
+{
+  "_doc": "COREONE 文档权威清单。stableDocuments 只保存稳定规则与 live 入口，不得嵌入易变状态；historicalDocuments 保留取证内容，但必须在文首标明 SUPERSEDED / 历史考古资料。",
+  "version": 1,
+  "liveAuthority": "https://github.com/kornma123/pis/issues",
+  "stableDocuments": [
+    "docs/COREONE-PRD-整体产品-2026-07-14.md",
+    "docs/agent-operating-contract.md",
+    "docs/github-issue-pr-management-loop.md"
+  ],
+  "historicalDocuments": [
+    "docs/prd/COREONE-本地Issue指导-2026-07-20.md",
+    "docs/reports/COREONE-K3项目深度对齐审计-2026-07-24.md",
+    "docs/reports/COREONE-产品功能侧对抗分析-2026-07-25.md",
+    "docs/reports/COREONE-产品功能实现层质疑-2026-07-25.md",
+    "docs/reports/COREONE-深度对抗分析与改进建议-2026-07-25.md"
+  ]
+}
