@@ -52,6 +52,12 @@ jobs:
       # Claude Code 跨设备任务守卫：确保任务合同、owned/excluded files 与交接状态机持续可执行。
       - name: Claude task guard selftest
         run: node scripts/claude-task.selftest.cjs
+      # 文档权威漂移闸：稳定文档不得复制实时状态，历史报告必须显式 SUPERSEDED。
+      # 仍复用既有 gate required context；不新增 workflow、token 写权限或自动评论。
+      - name: Document authority drift gate
+        run: |
+          node scripts/check-document-drift.selftest.cjs
+          node scripts/check-document-drift.cjs
       # 自测：守护闸工具自身没被静默改坏（解析器漂了/口径变哑）。失败即红。
       - name: Selftest（工具不变量）
         run: node scripts/build-discipline/selftest.cjs

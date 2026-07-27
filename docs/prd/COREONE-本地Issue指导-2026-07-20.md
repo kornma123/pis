@@ -1,5 +1,10 @@
 # COREONE 本地 Issue 指导（PRD 差距清单）
 
+<!-- coreone-document-authority:historical -->
+> **权威状态：SUPERSEDED / 历史考古资料**
+>
+> 本文保留 2026-07-20 至 2026-07-24 的本地规划、对象回收与派工证据，不再维护当前 Issue、PR、owner、SHA 或 checks。当前任务状态统一读取 [kornma123/pis Issues](https://github.com/kornma123/pis/issues) 与对应 PR；本文不得作为当前派工、合并或上线依据。
+
 ## 0. 2026-07-22 新仓基线与当前执行分层
 
 - 新仓 `kornma123/pis` 的 `master@90ee70ff470585dd8581ba43d0ae3d9cc6b95664` 已通过 [PR #39](https://github.com/kornma123/pis/pull/39) 恢复旧 master 遗漏的 43 个提交；[Issue #38](https://github.com/kornma123/pis/issues/38) 已关闭。该恢复只把既有历史带回 master,不自动包含其后 LOC-001/002/003/019/020/025A/029 的 integration 候选。
