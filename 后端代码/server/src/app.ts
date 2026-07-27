@@ -95,6 +95,11 @@ const retiredProductApiPrefixes = [
   '/api/v1/abc',
   '/api/v1/cost-adjustments',
   '/api/v1/partner-pnl',
+  // antibody-cost 宽泛 router 中只退役含人工/设备/场地的旧全成本子面；
+  // 抗体台账、名称解析、别名与检测系统仍作为材料标准成本兼容底座保留。
+  '/api/v1/antibody-cost/cost-preview',
+  '/api/v1/antibody-cost/cost-params',
+  '/api/v1/antibody-cost/special-stains',
 ]
 const retiredProductApi = (_req: express.Request, res: express.Response) => {
   res.status(410).json({

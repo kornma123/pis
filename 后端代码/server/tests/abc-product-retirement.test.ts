@@ -12,9 +12,12 @@ const retiredReads = [
   '/api/v1/abc/dashboard',
   '/api/v1/cost-adjustments',
   '/api/v1/partner-pnl',
+  '/api/v1/antibody-cost/cost-preview?perTestPrice=10',
+  '/api/v1/antibody-cost/cost-params',
+  '/api/v1/antibody-cost/special-stains',
 ]
 
-const retiredWrites: Array<{ method: 'post' | 'put'; path: string }> = [
+const retiredWrites: Array<{ method: 'post' | 'put'; path: string; body?: Record<string, unknown> }> = [
   { method: 'put', path: '/api/v1/auth/cost-visibility' },
   { method: 'post', path: '/api/v1/equipment' },
   { method: 'post', path: '/api/v1/equipment-types' },
@@ -23,6 +26,21 @@ const retiredWrites: Array<{ method: 'post' | 'put'; path: string }> = [
   { method: 'post', path: '/api/v1/abc/periods' },
   { method: 'post', path: '/api/v1/cost-adjustments' },
   { method: 'post', path: '/api/v1/partner-pnl/backfill-abc-partner' },
+  {
+    method: 'put',
+    path: '/api/v1/antibody-cost/cost-params/labor_per_slide',
+    body: { value: 9876, source: 'R2 retirement mutation probe' },
+  },
+  {
+    method: 'post',
+    path: '/api/v1/antibody-cost/cost-params/calibrate',
+    body: {
+      monthlyTechnicianCost: 120000,
+      monthlyEquipmentDepreciation: 30000,
+      monthlyFacilityCost: 10000,
+      monthlySlideVolume: 5000,
+    },
+  },
 ]
 
 const businessTables = [
@@ -49,6 +67,12 @@ const businessState = () => {
         | { value: string }
         | undefined
     )?.value,
+    ihcCostParams: db.prepare(`
+      SELECT param_key, value, source, confidence, remark
+      FROM ihc_cost_params
+      ORDER BY param_key
+    `).all(),
+    abcAuditCount: (db.prepare('SELECT COUNT(*) AS count FROM abc_audit_logs').get() as { count: number }).count,
   }
 }
 
@@ -88,11 +112,11 @@ describe('ABC-RETIRE-001 legacy API retirement boundary', () => {
     const before = businessState()
     const marker = `RETIRED_WRITE_BODY_${Date.now()}`
 
-    for (const { method, path } of retiredWrites) {
+    for (const { method, path, body } of retiredWrites) {
       const pending = method === 'put' ? request(app).put(path) : request(app).post(path)
       const response = await pending
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: marker, password: marker })
+        .send({ name: marker, password: marker, ...body })
       expect(response.status, `${path}: ${JSON.stringify(response.body)}`).toBe(410)
       expect(response.body?.error?.code).toBe('FEATURE_RETIRED')
     }
@@ -114,7 +138,15 @@ describe('ABC-RETIRE-001 legacy API retirement boundary', () => {
   })
 
   it('does not retire current material contribution-margin or inventory/BOM APIs', async () => {
-    for (const path of ['/api/v1/hospital-pnl/readiness', '/api/v1/inventory', '/api/v1/boms']) {
+    for (const path of [
+      '/api/v1/hospital-pnl/readiness',
+      '/api/v1/inventory',
+      '/api/v1/boms',
+      '/api/v1/antibody-cost/antibodies?pageSize=1',
+      '/api/v1/antibody-cost/antibodies/resolve?name=2SC',
+      '/api/v1/antibody-cost/detection-systems',
+      '/api/v1/antibody-cost/antibody-aliases',
+    ]) {
       const response = await request(app)
         .get(path)
         .set('Authorization', `Bearer ${token}`)
