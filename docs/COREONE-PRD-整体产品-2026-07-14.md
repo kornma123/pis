@@ -71,7 +71,7 @@ RBAC 设计原则:诊断线与技术线分离、最小必要、职责分离(SoD)
 | 结构性 | 现状 `inventory.stock` 与启用批次 `remaining` 双源可漂移;#139 目标是全批次事实+`inventory.stock` 仅作派生/守恒缓存;现有出库单批次不跨批,会在总量足够但首批不足时误 422,完整 FEFO 明细由 [LOC-001](https://github.com/kornma123/pis/issues/1) 承接 |
 | 弱引用 | 删角色/供应商/库位/项目/用户无关联校验→悬空,由 [LOC-025A](https://github.com/kornma123/pis/issues/25)/[LOC-025B](https://github.com/kornma123/pis/issues/26) 串行承接;供应商编码删后复用合同见 [LOC-033](https://github.com/kornma123/pis/issues/33) |
 | 校验缺口 | master 仍未形成库位容量全写路径硬门([LOC-029](https://github.com/kornma123/pis/issues/30));物料删除的 `locked_stock`/在途引用合同仍待 LOC-025B(FRS 2026-05 所列 price 非负与入库正数量缺口已修复) |
-| 诚实缺口 | 成本报表当前把同期变化保持为 `null/不可计算`,不是旧文档所称恒 0;真实同比/环比合同仍待 [LOC-030](https://github.com/kornma123/pis/issues/31)。预警 master 仍无主动调度/通知闭环,Phase A 候选见 [LOC-031](https://github.com/kornma123/pis/issues/32) |
+| 诚实缺口 | 成本报表同期变化:后端 `changeRate:null` 曾被前端 `Math.random` 兜底伪造成随机百分比,已随 [#31](https://github.com/kornma123/pis/issues/31) 移除并 fail-closed 显示「不可计算」(合法 0 显示 0),不是旧文档所称恒 0;真实同比/环比公式仍未冻结,不得猜公式,合同仍待 [LOC-030](https://github.com/kornma123/pis/issues/31)。预警 master 仍无主动调度/通知闭环,Phase A 候选见 [LOC-031](https://github.com/kornma123/pis/issues/32) |
 | 认证 | `/auth/logout` 仍未使既有 token 立即失效;已拍 per-user token version 方案由 [LOC-032](https://github.com/kornma123/pis/issues/36) 在 LOC-022 释放 `auth.ts` 后串行实施 |
 
 库存/批次事实模型已在历史 #139 拍板为 **A 全批次模型**:未指定批次时按 FEFO 自动跨批拆分并逐批留出库明细;指定批次不足整单 422,不得静默换批;没有 eligible 正批次的真实不足同样 422。当前唯一工程入口是 [LOC-001](https://github.com/kornma123/pis/issues/1);远端 integration 分支或本地候选均不等于 master 完成。因项目未上线且无生产数据,先重灌/清理 dev seed 并在任何真实数据进入前完成写路径与约束收口;任何生产 apply 仍属 R3,本 PRD 不授权。
