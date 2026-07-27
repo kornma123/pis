@@ -604,6 +604,70 @@ function buildCompletionArtifact(
   return { artifact, json, hash: prefixedSha256(json) }
 }
 
+function assertExactVerdictReplayState(
+  db: any,
+  binding: ReconcileBinding,
+  row: any,
+  diff: any,
+  reason: VerdictReason,
+  note: string | null,
+  followUp: string,
+): void {
+  const supplements = db.prepare(`
+    SELECT id
+      FROM supplement_orders
+     WHERE source_diff_id = ?
+       AND reconcile_generation_id = ?
+     ORDER BY id
+  `).all(diff.id, binding.reconcileGenerationId) as Array<{ id: string }>
+  const expectedSupplements = drivesSupplement(reason) ? 1 : 0
+  if (supplements.length !== expectedSupplements) {
+    fail('verdict replay state is inconsistent', 'VERDICT_REPLAY_STATE_MISMATCH', 409)
+  }
+  if (row.status === 'pending') return
+  if (row.status !== 'complete' && row.status !== 'closed') {
+    fail('completed reconciliation decisions are immutable', 'RECONCILIATION_FINAL', 409)
+  }
+
+  const completionJson = row.completion_artifact_json
+  const completionHash = row.completion_artifact_hash
+  if (
+    typeof completionJson !== 'string'
+    || typeof completionHash !== 'string'
+    || prefixedSha256(completionJson) !== completionHash
+  ) {
+    fail('verdict replay completion artifact is unavailable', 'VERDICT_REPLAY_STATE_MISMATCH', 409)
+  }
+  let artifact: any
+  try {
+    artifact = JSON.parse(completionJson)
+  } catch {
+    fail('verdict replay completion artifact is invalid', 'VERDICT_REPLAY_STATE_MISMATCH', 409)
+  }
+  const decisions = Array.isArray(artifact?.decisions)
+    ? artifact.decisions.filter((decision: any) => decision?.id === diff.id)
+    : []
+  const artifactSupplements = Array.isArray(artifact?.supplements)
+    ? artifact.supplements
+      .filter((supplement: any) => supplement?.sourceDiffId === diff.id)
+      .map((supplement: any) => String(supplement.id))
+      .sort()
+    : []
+  const liveSupplementIds = supplements.map(supplement => String(supplement.id)).sort()
+  if (
+    artifact?.schemaVersion !== 'account-reconciliation-completion/v1'
+    || stableJson(artifact?.binding) !== stableJson(binding)
+    || artifact?.hospitalMonthId !== String(row.hospital_month_id)
+    || decisions.length !== 1
+    || decisions[0]?.verdict !== reason
+    || (decisions[0]?.verdictReason ?? null) !== note
+    || decisions[0]?.followUp !== followUp
+    || stableJson(artifactSupplements) !== stableJson(liveSupplementIds)
+  ) {
+    fail('verdict replay state is inconsistent', 'VERDICT_REPLAY_STATE_MISMATCH', 409)
+  }
+}
+
 function assertHospitalMonthBinding(db: any, binding: ReconcileBinding, hospitalMonthId: string): void {
   const hospitalMonth = db.prepare(`
     SELECT reconcile_generation_id, binding_state
@@ -909,9 +973,6 @@ export function setAccountReconciliationVerdict(
     ) {
       fail('reconciliation generation is stale or mismatched', 'STALE_RECONCILE_GENERATION', 409)
     }
-    if (row.status !== 'pending') {
-      fail('completed reconciliation decisions are immutable', 'RECONCILIATION_FINAL', 409)
-    }
     assertHospitalMonthBinding(db, binding, row.hospital_month_id)
 
     const diff = db.prepare(`
@@ -936,18 +997,7 @@ export function setAccountReconciliationVerdict(
       && (diff.verdict_reason ?? null) === note
       && diff.follow_up === followUp
     ) {
-      const pendingSupplements = Number((db.prepare(`
-        SELECT COUNT(*) AS n FROM supplement_orders
-         WHERE source_diff_id = ?
-           AND reconcile_generation_id = ?
-           AND status = '待补收'
-      `).get(diff.id, binding.reconcileGenerationId) as any).n)
-      if (
-        (drivesSupplement(reason) && pendingSupplements !== 1)
-        || (!drivesSupplement(reason) && pendingSupplements !== 0)
-      ) {
-        fail('verdict replay state is inconsistent', 'VERDICT_REPLAY_STATE_MISMATCH', 409)
-      }
+      assertExactVerdictReplayState(db, binding, row, diff, reason, note, followUp)
       return {
         id: diff.id,
         verdict: reason,
@@ -955,6 +1005,9 @@ export function setAccountReconciliationVerdict(
         pendingCount: pendingBefore,
         duplicate: true,
       }
+    }
+    if (row.status !== 'pending') {
+      fail('completed reconciliation decisions are immutable', 'RECONCILIATION_FINAL', 409)
     }
 
     const changed = db.prepare(`

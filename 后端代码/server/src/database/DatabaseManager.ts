@@ -1275,42 +1275,27 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
         )
       )
     BEGIN
-      -- Pre-LOC-005 writers can still create a supplement before any generation
-      -- exists. Preserve that legacy business row without inventing lineage:
-      -- the stored fact is explicitly unbound (both lineage columns NULL).
-      INSERT INTO supplement_orders (
-        id, partner_id, service_month, source_diff_id, reconcile_generation_id,
-        case_no, amount, case_count, status, collected_at, collected_month,
-        collected_revenue, give_up_reason, operator, review_status, submitted_by,
-        reviewed_by, reviewed_at, created_at, updated_at
-      )
-      SELECT NEW.id, NEW.partner_id, NEW.service_month, NULL, NULL,
-             NEW.case_no, NEW.amount, NEW.case_count, NEW.status, NEW.collected_at,
-             NEW.collected_month, NEW.collected_revenue, NEW.give_up_reason,
-             NEW.operator, NEW.review_status, NEW.submitted_by, NEW.reviewed_by,
-             NEW.reviewed_at, NEW.created_at, NEW.updated_at
-       WHERE NEW.source_diff_id IS NOT NULL
-         AND NEW.reconcile_generation_id IS NULL
-         AND EXISTS (
-           SELECT 1 FROM reconcile_diffs diff WHERE diff.id = NEW.source_diff_id
-         )
-         AND NOT EXISTS (
-           SELECT 1
-             FROM reconcile_diffs diff
-             JOIN account_reconcile_generations generation
-               ON generation.hospital_month_id = diff.hospital_month_id
-            WHERE diff.id = NEW.source_diff_id
-         );
-      SELECT CASE
-        WHEN changes() = 1 THEN RAISE(IGNORE)
-        ELSE RAISE(ABORT, 'SUPPLEMENT_GENERATION_BINDING_MISMATCH')
-      END;
+      SELECT RAISE(ABORT, 'SUPPLEMENT_GENERATION_BINDING_MISMATCH');
     END
   `)
   database.exec(`
     CREATE TRIGGER trg_reconcile_supplement_generation_update
-    BEFORE UPDATE OF source_diff_id, reconcile_generation_id ON supplement_orders
-    WHEN (NEW.source_diff_id IS NULL) <> (NEW.reconcile_generation_id IS NULL)
+    BEFORE UPDATE ON supplement_orders
+    WHEN (OLD.source_diff_id IS NULL) <> (OLD.reconcile_generation_id IS NULL)
+      OR (NEW.source_diff_id IS NULL) <> (NEW.reconcile_generation_id IS NULL)
+      OR (
+        OLD.source_diff_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+            FROM reconcile_diffs diff
+            JOIN account_reconcile_generations generation
+              ON generation.hospital_month_id = diff.hospital_month_id
+           WHERE diff.id = OLD.source_diff_id
+             AND generation.reconcile_generation_id = OLD.reconcile_generation_id
+             AND generation.is_current = 1
+             AND generation.status = 'pending'
+        )
+      )
       OR (
         NEW.source_diff_id IS NOT NULL
         AND NOT EXISTS (

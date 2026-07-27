@@ -10,7 +10,10 @@ import { Router } from 'express'
 import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { setSuccessAuditMetadata } from '../middleware/audit-log.js'
+import {
+  setSuccessAuditMetadata,
+  suppressSuccessAuditForRequest,
+} from '../middleware/audit-log.js'
 import { assertNotSelfReview } from '../middleware/authz-combinators.js'
 import { writeAuditLog } from '../utils/cost-runs.js'
 import { recordOverride } from '../utils/override-log.js'
@@ -363,11 +366,9 @@ router.post('/diffs/:id/verdict', requirePermission('account_reconcile', 'W'), (
         operatorOf(req),
       )
     if (result.duplicate === true) {
-      // An exact replay is a read-equivalent acknowledgement: the lifecycle
-      // transaction proved zero business/supplement/domain-audit writes.
-      // Clearing this request-local actor prevents the global success fallback
-      // from manufacturing a second operation audit for the same fact.
-      ;(req as any).user = undefined
+      // An exact replay is a read-equivalent acknowledgement. Keep the trusted
+      // actor intact while suppressing only this request's duplicate success row.
+      suppressSuccessAuditForRequest(req)
     } else {
       setSuccessAuditMetadata(res, lifecycleAuditMetadata('verdict', binding, {
         diffId: req.params.id,

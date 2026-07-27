@@ -114,8 +114,7 @@ describe('runReconcile 关账窗口竞态（预检通过 → 另一连接关账 
 
     // 推进到「复核完成」（关账前置态，与 /complete 同字段），并挂一张待补收单
     victim.prepare(`UPDATE reconcile_hospital_months SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = 'op-setup', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(hmId)
-    const diffId = diffIds(victim, hmId)[0]
-    victim.prepare(`INSERT INTO supplement_orders (id, partner_id, service_month, source_diff_id, case_no, amount, case_count, operator) VALUES ('SUP-RACE-1', ?, ?, ?, 'CB', 200, 2, 'op-setup')`).run(P1, MONTH, diffId)
+    victim.prepare(`INSERT INTO supplement_orders (id, partner_id, service_month, case_no, amount, case_count, operator) VALUES ('SUP-RACE-1', ?, ?, 'CB', 200, 2, 'op-setup')`).run(P1, MONTH)
 
     // 改变输入（新增 CC 1 vs 4 差异）：若定版被覆写，diff_count/差异集必然变化 → 覆写可被无歧义检出
     seedPartnerMonth(victim, P1, [{ caseNo: 'CC', bill: 1, lis: 4 }])

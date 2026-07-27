@@ -463,6 +463,46 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
       .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH|CHECK constraint failed/)
   })
 
+  it('rejects a source-only raw supplement when its hospital-month has no generation, including after restart', () => {
+    const binding = seedSource({ name: 'supplement-source-only-no-generation' })
+    const hospitalMonthId = `HM-NO-GENERATION-${++sequence}`
+    const diffId = `DIFF-NO-GENERATION-${sequence}`
+    db.prepare(`
+      INSERT INTO reconcile_hospital_months
+        (id, partner_id, partner_name, service_month)
+      VALUES (?, ?, 'No generation partner', ?)
+    `).run(hospitalMonthId, binding.partnerId, binding.settlementMonth)
+    db.prepare(`
+      INSERT INTO reconcile_diffs
+        (id, hospital_month_id, partner_id, service_month, case_no, line_type)
+      VALUES (?, ?, ?, ?, 'CASE-NO-GENERATION', '免疫组化')
+    `).run(diffId, hospitalMonthId, binding.partnerId, binding.settlementMonth)
+
+    expect(() => db.prepare(`
+      INSERT INTO supplement_orders
+        (id, partner_id, service_month, source_diff_id, reconcile_generation_id)
+      VALUES ('SO-NO-GENERATION-FRESH', ?, ?, ?, NULL)
+    `).run(binding.partnerId, binding.settlementMonth, diffId))
+      .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH|CHECK constraint failed/)
+    expect(db.prepare(
+      "SELECT id FROM supplement_orders WHERE id = 'SO-NO-GENERATION-FRESH'",
+    ).get()).toBeUndefined()
+
+    manager.closeDatabase()
+    manager.initializeDatabase()
+    db = manager.getDatabase()
+
+    expect(() => db.prepare(`
+      INSERT INTO supplement_orders
+        (id, partner_id, service_month, source_diff_id, reconcile_generation_id)
+      VALUES ('SO-NO-GENERATION-RESTART', ?, ?, ?, NULL)
+    `).run(binding.partnerId, binding.settlementMonth, diffId))
+      .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH|CHECK constraint failed/)
+    expect(db.prepare(
+      "SELECT id FROM supplement_orders WHERE id = 'SO-NO-GENERATION-RESTART'",
+    ).get()).toBeUndefined()
+  })
+
   it('rejects rebinding a current supplement to a stale generation', () => {
     const binding = seedSource({ name: 'supplement-stale-update', lisCount: 2 })
     const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
@@ -497,6 +537,54 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
        WHERE source_diff_id = ?
     `).run(staleGenerationId, diff.id))
       .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+  })
+
+  it('rejects every non-lineage update of a supplement after its pending generation becomes stale, including after restart', () => {
+    const binding = seedSource({ name: 'supplement-stale-non-lineage-update', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db,
+      binding,
+      diff.id,
+      '漏收，需补收',
+      null,
+      'USER-001',
+      'admin',
+    )
+    db.prepare(`
+      UPDATE account_reconcile_generations
+         SET is_current = 0
+       WHERE reconcile_generation_id = ?
+    `).run(binding.reconcileGenerationId)
+
+    const rejectStaleUpdates = (connection: any) => {
+      expect(() => connection.prepare(`
+        UPDATE supplement_orders SET amount = 99 WHERE source_diff_id = ?
+      `).run(diff.id)).toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+      expect(() => connection.prepare(`
+        UPDATE supplement_orders SET status = '已放弃' WHERE source_diff_id = ?
+      `).run(diff.id)).toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+      expect(connection.prepare(`
+        SELECT amount, status FROM supplement_orders WHERE source_diff_id = ?
+      `).get(diff.id)).toMatchObject({ amount: 100, status: '待补收' })
+    }
+
+    rejectStaleUpdates(db)
+    manager.closeDatabase()
+    const restarted = new DatabaseSync(databasePath)
+    restarted.exec('PRAGMA foreign_keys = ON')
+    rejectStaleUpdates(restarted)
+    restarted.prepare(`
+      UPDATE account_reconcile_generations
+         SET is_current = 1
+       WHERE reconcile_generation_id = ?
+    `).run(binding.reconcileGenerationId)
+    restarted.close()
+    manager.initializeDatabase()
+    db = manager.getDatabase()
   })
 
   it('builds the completion artifact from supplements bound to the exact generation only', () => {
