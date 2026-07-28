@@ -1140,3 +1140,212 @@ describe('LOC-005 R2 lock-time actor and connection safety', () => {
     })
   })
 })
+
+describe('LOC-005 R2 respin — supplement lifecycle and governed regeneration', () => {
+  it('allows supplement lifecycle updates while its generation stays current after complete and close', () => {
+    const binding = seedSource({ name: 'supplement-lifecycle-after-final', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db, binding, diff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const supplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(diff.id) as { id: string }
+
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+
+    db.prepare(`
+      UPDATE supplement_orders
+         SET review_status = 'approved', reviewed_by = 'USER-002', reviewed_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `).run(supplement.id)
+    db.prepare(`
+      UPDATE supplement_orders
+         SET status = '已补收', collected_at = CURRENT_TIMESTAMP, collected_month = '2026-09',
+             collected_revenue = 100, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `).run(supplement.id)
+    db.prepare(`
+      UPDATE supplement_orders
+         SET status = '待补收', collected_at = NULL, collected_month = NULL,
+             collected_revenue = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `).run(supplement.id)
+    db.prepare(`
+      UPDATE supplement_orders
+         SET status = '已放弃', give_up_reason = '确认无法收回', updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `).run(supplement.id)
+
+    expect(() => db.prepare(
+      'UPDATE supplement_orders SET amount = 999 WHERE id = ?',
+    ).run(supplement.id)).toThrow(/FINAL_RECONCILIATION_DECISIONS_IMMUTABLE/)
+
+    lifecycle.closeAccountReconciliation(db, binding, 'USER-001')
+    db.prepare(`
+      UPDATE supplement_orders
+         SET status = '待补收', give_up_reason = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `).run(supplement.id)
+    const persisted = db.prepare(
+      'SELECT status, review_status FROM supplement_orders WHERE id = ?',
+    ).get(supplement.id) as { status: string; review_status: string }
+    expect(persisted).toMatchObject({ status: '待补收', review_status: 'approved' })
+  })
+
+  it('refuses to supersede a generation that still has open supplements with an explicit 409', () => {
+    const binding = seedSource({ name: 'supersede-open-supplement', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db, binding, diff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const diffCountBefore = Number(db.prepare(
+      'SELECT COUNT(*) AS n FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)).n)
+
+    const nextBinding = {
+      ...binding,
+      reconcileGenerationId: `${binding.reconcileGenerationId}-NEXT`,
+    }
+    expectCode(
+      () => lifecycle.computeAccountReconciliation(db, nextBinding, 'USER-001'),
+      'RECONCILE_GENERATION_HAS_OPEN_SUPPLEMENTS',
+    )
+
+    expect(db.prepare(`
+      SELECT is_current, status FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(binding.reconcileGenerationId)).toMatchObject({ is_current: 1, status: 'pending' })
+    expect(Number(db.prepare(`
+      SELECT COUNT(*) AS n FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(nextBinding.reconcileGenerationId).n)).toBe(0)
+    expect(Number(db.prepare(
+      'SELECT COUNT(*) AS n FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)).n)).toBe(diffCountBefore)
+  })
+
+  it('supersedes a generation whose supplements are all terminal, freezing them as history across restart', () => {
+    const binding = seedSource({ name: 'supersede-terminal-supplement', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    const hospitalMonthId = String(snapshot.hospitalMonthId)
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(hospitalMonthId) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db, binding, diff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const supplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(diff.id) as { id: string }
+    db.prepare(`
+      UPDATE supplement_orders
+         SET review_status = 'approved', reviewed_by = 'USER-002', reviewed_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `).run(supplement.id)
+    db.prepare(`
+      UPDATE supplement_orders
+         SET status = '已补收', collected_at = CURRENT_TIMESTAMP, collected_month = '2026-09',
+             collected_revenue = 100
+       WHERE id = ?
+    `).run(supplement.id)
+
+    const nextBinding = {
+      ...binding,
+      reconcileGenerationId: `${binding.reconcileGenerationId}-NEXT`,
+    }
+    const nextSnapshot = lifecycle.computeAccountReconciliation(db, nextBinding, 'USER-001') as any
+    expect(nextSnapshot.status).toBe('pending')
+
+    expect(db.prepare(`
+      SELECT is_current, status FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(binding.reconcileGenerationId)).toMatchObject({ is_current: 0, status: 'pending' })
+    expect(db.prepare(`
+      SELECT is_current, status FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(nextBinding.reconcileGenerationId)).toMatchObject({ is_current: 1, status: 'pending' })
+
+    const oldDiff = db.prepare(
+      'SELECT reconcile_generation_id, verdict FROM reconcile_diffs WHERE id = ?',
+    ).get(diff.id) as { reconcile_generation_id: string | null; verdict: string }
+    expect(oldDiff.reconcile_generation_id).toBe(binding.reconcileGenerationId)
+    expect(oldDiff.verdict).toBe('漏收，需补收')
+    const nextDiffs = db.prepare(`
+      SELECT id, reconcile_generation_id FROM reconcile_diffs
+       WHERE hospital_month_id = ? AND reconcile_generation_id = ?
+    `).all(hospitalMonthId, nextBinding.reconcileGenerationId) as Array<{
+      id: string
+      reconcile_generation_id: string
+    }>
+    expect(nextDiffs.length).toBe(1)
+    expect(nextDiffs[0].id).not.toBe(diff.id)
+
+    expectCode(
+      () => lifecycle.setAccountReconciliationVerdict(
+        db, nextBinding, diff.id, '核对无误', null, 'USER-001', 'admin',
+      ),
+      'STALE_RECONCILIATION_DIFF',
+    )
+    expect(() => db.prepare(
+      `UPDATE supplement_orders SET status = '已放弃', give_up_reason = 'stale' WHERE id = ?`,
+    ).run(supplement.id)).toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+
+    lifecycle.setAccountReconciliationVerdict(
+      db, nextBinding, nextDiffs[0].id, '核对无误', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, nextBinding, 'USER-001')
+    const completed = db.prepare(`
+      SELECT completion_artifact_json FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(nextBinding.reconcileGenerationId) as { completion_artifact_json: string }
+    const artifact = JSON.parse(completed.completion_artifact_json) as {
+      decisions: Array<{ id: string }>
+    }
+    expect(artifact.decisions.map(decision => decision.id)).toEqual([nextDiffs[0].id])
+
+    manager.closeDatabase()
+    manager.initializeDatabase()
+    db = manager.getDatabase()
+    expect(db.prepare(`
+      SELECT is_current FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(binding.reconcileGenerationId)).toMatchObject({ is_current: 0 })
+    expect(() => db.prepare(
+      `UPDATE supplement_orders SET amount = 100 WHERE id = ?`,
+    ).run(supplement.id)).toThrow(/FINAL_RECONCILIATION_DECISIONS_IMMUTABLE|SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+  })
+
+  it('rejects confirmed revenue totals beyond the scaled safe-integer boundary at compute without leaving a generation', () => {
+    const binding = seedSource({
+      name: 'revenue-total-overflow',
+      lisCount: 1,
+      revenueAmount: 600000000000,
+      revenueCanonical: '600000000000.0000',
+    })
+    db.prepare(`
+      INSERT INTO case_revenue
+        (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source)
+      VALUES (?, ?, ?, ?, 600000000000, 600000000000, 600000000000, 'statement')
+    `).run(`REV-EXTRA-${binding.partnerId}`, `CASE-EXTRA-${binding.partnerId}`,
+      binding.partnerId, binding.settlementMonth)
+    db.prepare('UPDATE case_revenue SET lab_revenue_canonical = ? WHERE id = ?')
+      .run('600000000000.0000', `REV-EXTRA-${binding.partnerId}`)
+
+    expectCode(
+      () => lifecycle.computeAccountReconciliation(db, binding, 'USER-001'),
+      'REVENUE_AMOUNT_UNAVAILABLE',
+    )
+    expect(Number(db.prepare(`
+      SELECT COUNT(*) AS n FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(binding.reconcileGenerationId).n)).toBe(0)
+  })
+})

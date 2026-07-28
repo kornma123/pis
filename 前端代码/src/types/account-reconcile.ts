@@ -41,6 +41,69 @@ export interface HospitalMonth {
   confirmedLabRevenue: number | null
 }
 
+/** LOC-005 权威四元组绑定：院 + 月 + statement 代 + 对账代。所有读/写调用必须携带。 */
+export interface ReconcileBinding {
+  partnerId: string
+  settlementMonth: string
+  statementGenerationId: string
+  reconcileGenerationId: string
+}
+
+/** GET /board 的每院条目：HospitalMonth 展示字段 + 代次绑定（未计算的院 id/status 为 null）。 */
+export interface BoardItem {
+  id: string | null
+  partnerId: string
+  partnerName: string | null
+  serviceMonth: string
+  status: HmStatus | null
+  matchRate: number | null
+  matchStatus: MatchStatus | null
+  statementReady: boolean
+  lisReady: boolean
+  diffCount: number
+  pendingCount: number
+  unmatchedCount: number
+  confirmedLabRevenue: number | null
+  hospitalMonthId: string | null
+  statementGenerationId: string | null
+  statementBatchStatus: string | null
+  reconcileGenerationId: string | null
+  /** 当前对账代自身绑定的 statement 代；与 statementGenerationId 不等 = 账单已更新、重算需铸新对账代。 */
+  reconcileStatementGenerationId: string | null
+  generationStatus: 'pending' | 'complete' | 'closed' | null
+}
+
+export interface BoardResp {
+  settlementMonth: string
+  items: BoardItem[]
+  board: OverviewBoard
+}
+
+/** compute / workbench 返回的 snapshot（readAccountReconciliation 形状）。 */
+export interface ReconcileSnapshot {
+  partnerId: string
+  settlementMonth: string
+  statementGenerationId: string
+  reconcileGenerationId: string
+  hospitalMonthId: string
+  status: 'pending' | 'complete' | 'closed'
+  completedAt: string | null
+  completedBy: string | null
+  closedAt: string | null
+  closedBy: string | null
+  confirmedLabRevenue: number | null
+  statementArtifactHash: string
+  result: {
+    matchRate: number
+    matchStatus: MatchStatus
+    diffs: unknown[]
+    unmatched: UnmatchedCase[]
+  }
+  caseHints: Record<string, CaseHint[]>
+}
+
+export type ComputeResp = ReconcileSnapshot
+
 export interface OverviewBoard {
   total: number
   待复核: number
@@ -85,21 +148,9 @@ export interface CaseHint {
 }
 
 export interface WorkbenchResp {
-  hospitalMonth: HospitalMonth
+  snapshot: ReconcileSnapshot
   diffs: ReconcileDiff[]
-  unmatched: UnmatchedCase[]
   caseHints: Record<string, CaseHint[]>
-}
-
-export interface ComputeResp {
-  hospitalMonthId: string
-  matchRate: number
-  matchStatus: MatchStatus
-  diffCount: number
-  pendingCount: number
-  unmatchedCount: number
-  statementReady: boolean
-  lisReady: boolean
 }
 
 export interface SupplementOrder {

@@ -188,10 +188,14 @@ describe('账实核对路由 · compute + 总览 + 工作台', () => {
   })
 
   it('GET /overview → 看板计入该院（待复核 1）', async () => {
-    const res = await auth(request(app).get('/api/v1/account-reconcile/overview').query(exactBinding()))
+    const res = await auth(request(app).get('/api/v1/account-reconcile/overview').query({ settlementMonth: MONTH }))
     expect(res.status).toBe(200)
-    expect(res.body.data.list).toHaveLength(1)
-    expect(res.body.data.list[0].partnerId).toBe(PARTNER)
+    const items = res.body.data.items as any[]
+    const item = items.find((i) => i.partnerId === PARTNER)
+    expect(item).toBeTruthy()
+    expect(item.reconcileGenerationId).toBe(exactBinding().reconcileGenerationId)
+    expect(item.status).toBe('待复核')
+    expect(res.body.data.board.待复核).toBeGreaterThanOrEqual(1)
   })
 
   it('GET /workbench → 3 条差异 + 系统初判正确', async () => {
@@ -589,5 +593,201 @@ describe('账实核对路由 · 账单片数 floor（回归：statement 无 qty 
     expect(d.lisCount).toBe(3)
     expect(d.delta).toBe(-1)
     expect(d.amountImpact).toBeCloseTo(120, 2) // |−1| × (240/2)
+  })
+})
+
+describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治理性重出 + board 发现端点）', () => {
+  const FB_PARTNER = 'PT-RECON-FB'
+  const FB_MONTH = '2026-09'
+  const FB_STMT = 'stmt-recon-fb-v1'
+  const FB_RECON = 'recon-fb-v1'
+  const FC_PARTNER = 'PT-RECON-FC'
+  const FC_STMT = 'stmt-recon-fc-v1'
+  const FC_RECON = 'recon-fc-v1'
+  const BOARD_ONLY_PARTNER = 'PT-RECON-BOARDONLY'
+  const BOARD_ONLY_STMT = 'stmt-recon-boardonly-v1'
+
+  const fbBinding = (overrides: Record<string, unknown> = {}) => ({
+    partnerId: FB_PARTNER,
+    settlementMonth: FB_MONTH,
+    statementGenerationId: FB_STMT,
+    reconcileGenerationId: FB_RECON,
+    ...overrides,
+  })
+  const fcBinding = (reconcileGenerationId: string) => ({
+    partnerId: FC_PARTNER,
+    settlementMonth: FB_MONTH,
+    statementGenerationId: FC_STMT,
+    reconcileGenerationId,
+  })
+
+  beforeAll(async () => {
+    const db = await getDb()
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-FB', '补收生命周期医院', 1)`).run(FB_PARTNER)
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-FC', '治理重出医院', 1)`).run(FC_PARTNER)
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-BO', '仅账单医院', 1)`).run(BOARD_ONLY_PARTNER)
+    for (const [partner, stmt, tag] of [[FB_PARTNER, FB_STMT, 'fb'], [FC_PARTNER, FC_STMT, 'fc']] as const) {
+      seedStatementGeneration(db, partner, FB_MONTH, stmt, [
+        { caseNo: `D1-${tag}`, item: '免疫组化染色*3', amount: 300 },
+        { caseNo: `D2-${tag}`, item: '免疫组化染色*3', amount: 300 },
+      ])
+      const bill = db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      bill.run(`l-${tag}-d1`, `D1-${tag}`, partner, '免疫组化染色', 3, 100, FB_MONTH)
+      bill.run(`l-${tag}-d2`, `D2-${tag}`, partner, '免疫组化染色', 3, 100, FB_MONTH)
+      const lis = db.prepare(`INSERT OR IGNORE INTO lis_cases (id, case_no, partner_id, ihc_count, special_stain_count, operate_time) VALUES (?, ?, ?, ?, ?, ?)`)
+      lis.run(`lc-${tag}-d1`, `D1-${tag}`, partner, 5, 0, `${FB_MONTH}-10`)
+      lis.run(`lc-${tag}-d2`, `D2-${tag}`, partner, 5, 0, `${FB_MONTH}-11`)
+      db.prepare(`INSERT OR IGNORE INTO case_revenue (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source) VALUES (?, ?, ?, ?, ?, ?, ?, 'statement')`)
+        .run(`cr-${tag}-1`, `D1-${tag}`, partner, FB_MONTH, 1000, 830, 830)
+    }
+    seedStatementGeneration(db, BOARD_ONLY_PARTNER, FB_MONTH, BOARD_ONLY_STMT, [
+      { caseNo: 'D1-bo', item: '免疫组化染色*1', amount: 100 },
+    ])
+  })
+
+  it('complete/close 后补收单签发·收款·放弃·退回继续可用（含跨月收款）', async () => {
+    const computed = await auth(request(app).post('/api/v1/account-reconcile/compute').send(fbBinding()))
+    expect(computed.status).toBe(200)
+    const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(fbBinding()))
+    const fbDiffs = wb.body.data.diffs as Array<{ id: string; caseNo: string }>
+    expect(fbDiffs.length).toBe(2)
+    for (const diff of fbDiffs) {
+      const r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diff.id}/verdict`).send({
+        ...fbBinding(),
+        reason: '漏收，需补收',
+      }))
+      expect(r.status).toBe(200)
+    }
+    const db = await getDb()
+    const supplements = db.prepare(`
+      SELECT s.id, s.case_no FROM supplement_orders s
+       JOIN reconcile_diffs d ON d.id = s.source_diff_id
+      WHERE s.reconcile_generation_id = ? ORDER BY s.case_no
+    `).all(FB_RECON) as Array<{ id: string; case_no: string }>
+    expect(supplements.length).toBe(2)
+
+    const hmId = wb.body.data.snapshot.hospitalMonthId
+    const completed = await auth(request(app).post(`/api/v1/account-reconcile/hospital-months/${hmId}/complete`).send(fbBinding()))
+    expect(completed.status).toBe(200)
+
+    const approved = await request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplements[0].id}/approve`)
+      .set('Authorization', `Bearer ${reviewerToken}`)
+      .send({})
+    expect(approved.status).toBe(200)
+    const collected = await auth(request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplements[0].id}/collect`)
+      .send({ collectedMonth: '2026-10' }))
+    expect(collected.status).toBe(200)
+    const givenUp = await auth(request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplements[1].id}/giveup`)
+      .send({ reason: '医院确认不付' }))
+    expect(givenUp.status).toBe(200)
+    const reopened = await auth(request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplements[1].id}/reopen`)
+      .send({ reason: '医院改口同意补' }))
+    expect(reopened.status).toBe(200)
+
+    const closed = await auth(request(app).post('/api/v1/account-reconcile/close').send({ items: [fbBinding()] }))
+    expect(closed.status).toBe(200)
+
+    const approvedAfterClose = await request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplements[1].id}/approve`)
+      .set('Authorization', `Bearer ${reviewerToken}`)
+      .send({})
+    expect(approvedAfterClose.status).toBe(200)
+    const collectedAfterClose = await auth(request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplements[1].id}/collect`)
+      .send({ collectedMonth: '2026-11' }))
+    expect(collectedAfterClose.status).toBe(200)
+  })
+
+  it('带待补收补收单的月份重出返回 409 明确错误码，终结后重出成功且旧单冻结留痕', async () => {
+    const computed = await auth(request(app).post('/api/v1/account-reconcile/compute').send(fcBinding(FC_RECON)))
+    expect(computed.status).toBe(200)
+    const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(fcBinding(FC_RECON)))
+    const fcDiffs = wb.body.data.diffs as Array<{ id: string; caseNo: string }>
+    for (const diff of fcDiffs) {
+      const r = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diff.id}/verdict`).send({
+        ...fcBinding(FC_RECON),
+        reason: '漏收，需补收',
+      }))
+      expect(r.status).toBe(200)
+    }
+    const db = await getDb()
+    const openSupplements = db.prepare(
+      `SELECT id FROM supplement_orders WHERE reconcile_generation_id = ? AND status = '待补收'`,
+    ).all(FC_RECON) as Array<{ id: string }>
+    expect(openSupplements.length).toBe(2)
+
+    const refused = await auth(request(app).post('/api/v1/account-reconcile/compute').send(fcBinding(`${FC_RECON}-NEXT`)))
+    expect(refused.status).toBe(409)
+    expect(refused.body.error.code).toBe('RECONCILE_GENERATION_HAS_OPEN_SUPPLEMENTS')
+
+    for (const supplement of openSupplements) {
+      const givenUp = await auth(request(app)
+        .post(`/api/v1/account-reconcile/supplements/${supplement.id}/giveup`)
+        .send({ reason: '重出前确认不追' }))
+      expect(givenUp.status).toBe(200)
+    }
+
+    const regenerated = await auth(request(app).post('/api/v1/account-reconcile/compute').send(fcBinding(`${FC_RECON}-NEXT`)))
+    expect(regenerated.status).toBe(200)
+    const wbNext = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(fcBinding(`${FC_RECON}-NEXT`)))
+    const nextDiffIds = (wbNext.body.data.diffs as Array<{ id: string }>).map(diff => diff.id).sort()
+    expect(nextDiffIds.length).toBe(2)
+    expect(nextDiffIds).not.toContain(fcDiffs[0].id)
+    expect(nextDiffIds).not.toContain(fcDiffs[1].id)
+
+    const staleVerdict = await auth(request(app)
+      .post(`/api/v1/account-reconcile/diffs/${fcDiffs[0].id}/verdict`)
+      .send({ ...fcBinding(`${FC_RECON}-NEXT`), reason: '核对无误' }))
+    expect(staleVerdict.status).toBe(409)
+    expect(staleVerdict.body.error.code).toBe('STALE_RECONCILIATION_DIFF')
+
+    const frozenSupplement = await auth(request(app)
+      .post(`/api/v1/account-reconcile/supplements/${openSupplements[0].id}/reopen`)
+      .send({ reason: '旧代应冻结' }))
+    expect(frozenSupplement.status).toBe(500)
+    expect(db.prepare(
+      `SELECT status FROM supplement_orders WHERE id = ?`,
+    ).get(openSupplements[0].id)).toMatchObject({ status: '已放弃' })
+  })
+
+  it('GET /overview 返回月份级各院代次绑定与看板汇总，非法月份 400', async () => {
+    const invalid = await auth(request(app).get('/api/v1/account-reconcile/overview').query({ settlementMonth: '2026-13' }))
+    expect(invalid.status).toBe(400)
+    expect(invalid.body.error.code).toBe('INVALID_SETTLEMENT_MONTH')
+
+    const res = await auth(request(app).get('/api/v1/account-reconcile/overview').query({ settlementMonth: FB_MONTH }))
+    expect(res.status).toBe(200)
+    const items = res.body.data.items as Array<Record<string, unknown>>
+    const fb = items.find(item => item.partnerId === FB_PARTNER)
+    expect(fb).toMatchObject({
+      partnerId: FB_PARTNER,
+      statementGenerationId: FB_STMT,
+      reconcileGenerationId: FB_RECON,
+      generationStatus: 'closed',
+      status: '已关账',
+    })
+    const fc = items.find(item => item.partnerId === FC_PARTNER)
+    expect(fc).toMatchObject({
+      partnerId: FC_PARTNER,
+      statementGenerationId: FC_STMT,
+      reconcileGenerationId: `${FC_RECON}-NEXT`,
+      generationStatus: 'pending',
+      status: '待复核',
+    })
+    const boardOnly = items.find(item => item.partnerId === BOARD_ONLY_PARTNER)
+    expect(boardOnly).toMatchObject({
+      partnerId: BOARD_ONLY_PARTNER,
+      statementGenerationId: BOARD_ONLY_STMT,
+      reconcileGenerationId: null,
+    })
+    expect(res.body.data.board).toMatchObject({
+      total: expect.any(Number),
+      已关账: expect.any(Number),
+      确认实收: expect.any(Number),
+    })
   })
 })

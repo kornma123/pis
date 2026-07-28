@@ -25,6 +25,7 @@ import {
   completeAccountReconciliation,
   computeAccountReconciliation,
   forbidAccountReconciliationReopen,
+  isStrictSettlementMonth,
   readAccountReconciliation,
   ReconcileLifecycleError,
   setAccountReconciliationVerdict,
@@ -111,16 +112,105 @@ if (PRE_LOC005_ROUTES_ENABLED) router['get']('/generation', (req, res) => {
   }
 })
 
+// GET /overview?settlementMonth= —— 月份级代次发现 + 看板：前端唯一取得四元组 binding 的入口。
+// 汇总三源（当前 statement 批 / 院·月行 / 当前对账代），每院给齐 binding 与展示字段。
 router.get('/overview', (req, res) => {
   try {
-    const binding = bindingFrom(req.query)
-    assertReconcileBinding(binding)
-    const snapshot = readAccountReconciliation(getDatabase(), binding)
-    successList(res, [snapshot], 1, 1, 1, {
-      caliberRatification: splitCaliberRatification(),
-    })
-  } catch (err) {
-    lifecycleError(res, err)
+    const settlementMonth = req.query.settlementMonth
+    if (!isStrictSettlementMonth(settlementMonth)) {
+      return error(res, 'settlementMonth must be strict YYYY-(01..12)', 'INVALID_SETTLEMENT_MONTH', 400)
+    }
+    const db = getDatabase()
+    const batches = db.prepare(`
+      SELECT b.partner_id, p.name AS partner_name, b.generation_id, b.status AS batch_status
+        FROM statement_import_batches b
+        LEFT JOIN partners p ON p.id = b.partner_id
+       WHERE b.settlement_month = ? AND b.is_current = 1
+    `).all(settlementMonth) as any[]
+    const hospitalMonths = db.prepare(
+      'SELECT * FROM reconcile_hospital_months WHERE service_month = ? ORDER BY partner_name',
+    ).all(settlementMonth) as any[]
+    const generations = db.prepare(`
+      SELECT * FROM account_reconcile_generations
+       WHERE settlement_month = ? AND is_current = 1
+    `).all(settlementMonth) as any[]
+
+    const byPartner = new Map<string, any>()
+    const ensure = (partnerId: string) => {
+      if (!byPartner.has(partnerId)) byPartner.set(partnerId, { partnerId })
+      return byPartner.get(partnerId)
+    }
+    for (const batch of batches) {
+      const item = ensure(String(batch.partner_id))
+      item.partnerName = item.partnerName ?? batch.partner_name ?? null
+      item.statementGenerationId = batch.generation_id
+      item.statementBatchStatus = batch.batch_status
+    }
+    for (const generation of generations) {
+      const item = ensure(String(generation.partner_id))
+      item.reconcileGenerationId = generation.reconcile_generation_id
+      item.generationStatus = generation.status
+      item.hospitalMonthId = generation.hospital_month_id
+      item.reconcileStatementGenerationId = generation.statement_generation_id
+      item.statementGenerationId = item.statementGenerationId ?? generation.statement_generation_id
+    }
+    for (const hm of hospitalMonths) {
+      const item = ensure(String(hm.partner_id))
+      item.id = hm.id
+      item.partnerName = hm.partner_name
+      item.serviceMonth = hm.service_month
+      item.status = hm.status
+      item.matchRate = hm.match_rate
+      item.matchStatus = hm.match_status
+      item.statementReady = !!hm.statement_ready
+      item.lisReady = !!hm.lis_ready
+      item.diffCount = hm.diff_count
+      item.pendingCount = hm.pending_count
+      item.unmatchedCount = hm.unmatched_count
+      item.confirmedLabRevenue = hm.confirmed_lab_revenue
+      item.hospitalMonthId = item.hospitalMonthId ?? hm.id
+    }
+    const items = [...byPartner.values()].map((item) => ({
+      id: item.id ?? null,
+      partnerId: item.partnerId,
+      partnerName: item.partnerName ?? null,
+      serviceMonth: settlementMonth,
+      status: item.status ?? null,
+      matchRate: item.matchRate ?? null,
+      matchStatus: item.matchStatus ?? null,
+      statementReady: item.statementReady ?? false,
+      lisReady: item.lisReady ?? false,
+      diffCount: item.diffCount ?? 0,
+      pendingCount: item.pendingCount ?? 0,
+      unmatchedCount: item.unmatchedCount ?? 0,
+      confirmedLabRevenue: item.confirmedLabRevenue ?? null,
+      hospitalMonthId: item.hospitalMonthId ?? null,
+      statementGenerationId: item.statementGenerationId ?? null,
+      statementBatchStatus: item.statementBatchStatus ?? null,
+      reconcileGenerationId: item.reconcileGenerationId ?? null,
+      reconcileStatementGenerationId: item.reconcileStatementGenerationId ?? null,
+      generationStatus: item.generationStatus ?? null,
+    })).sort((a, b) => String(a.partnerName ?? a.partnerId).localeCompare(String(b.partnerName ?? b.partnerId)))
+
+    const computed = items.filter((item) => item.id !== null)
+    const 补收实收 = Math.round(
+      (db.prepare(`SELECT COALESCE(SUM(collected_revenue),0) s FROM supplement_orders WHERE collected_month = ? AND status = '已补收'`)
+        .get(settlementMonth) as { s: number }).s * 100,
+    ) / 100
+    const base确认实收 = computed
+      .filter((item) => item.status === '复核完成' || item.status === '已关账')
+      .reduce((sum, item) => sum + (Number(item.confirmedLabRevenue) || 0), 0)
+    const board = {
+      total: computed.length,
+      待复核: computed.filter((item) => item.status === '待复核').length,
+      复核完成: computed.filter((item) => item.status === '复核完成').length,
+      已关账: computed.filter((item) => item.status === '已关账').length,
+      补收实收,
+      确认实收: Math.round((base确认实收 + 补收实收) * 100) / 100,
+    }
+    success(res, { settlementMonth, items, board, caliberRatification: splitCaliberRatification() })
+  } catch (err: any) {
+    error(res, err.message)
   }
 })
 
@@ -130,8 +220,11 @@ router.get('/workbench', (req, res) => {
     assertReconcileBinding(binding)
     const snapshot = readAccountReconciliation(getDatabase(), binding) as any
     const diffs = (getDatabase().prepare(
-      'SELECT * FROM reconcile_diffs WHERE hospital_month_id = ? ORDER BY case_no, line_type',
-    ).all(snapshot.hospitalMonthId) as any[]).map((row) => ({
+      `SELECT * FROM reconcile_diffs
+        WHERE hospital_month_id = ?
+          AND reconcile_generation_id = ?
+        ORDER BY case_no, line_type`,
+    ).all(snapshot.hospitalMonthId, binding.reconcileGenerationId) as any[]).map((row) => ({
       id: row.id,
       caseNo: row.case_no,
       lineType: row.line_type,

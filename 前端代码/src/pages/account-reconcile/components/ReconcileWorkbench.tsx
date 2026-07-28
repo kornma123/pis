@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { accountReconcileApi } from '@/api/account-reconcile'
-import { VERDICT_REASONS, type ReconcileDiff, type UnmatchedCase, type HospitalMonth, type VerdictReason, type CaseHint } from '@/types/account-reconcile'
+import { VERDICT_REASONS, type ReconcileBinding, type ReconcileDiff, type ReconcileSnapshot, type HmStatus, type VerdictReason, type CaseHint } from '@/types/account-reconcile'
 import { HmPill, matchStatusMeta, wan, yuan, cnMonth, btnCls, btnPri, btnGhost, cardCls, selectCls } from '../ui'
-import { ReasonModal } from './ReasonModal'
 
 interface Props {
   partnerId: string
@@ -13,10 +12,17 @@ interface Props {
   onBack: () => void
 }
 
+/** generation 状态 → 院·月展示状态。 */
+const GEN_TO_HM_STATUS: Record<ReconcileSnapshot['status'], HmStatus> = {
+  pending: '待复核',
+  complete: '复核完成',
+  closed: '已关账',
+}
+
 export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, onBack }: Props) {
-  const [hm, setHm] = useState<HospitalMonth | null>(null)
+  const [binding, setBinding] = useState<ReconcileBinding | null>(null)
+  const [snap, setSnap] = useState<ReconcileSnapshot | null>(null)
   const [diffs, setDiffs] = useState<ReconcileDiff[]>([])
-  const [unmatched, setUnmatched] = useState<UnmatchedCase[]>([])
   const [caseHints, setCaseHints] = useState<Record<string, CaseHint[]>>({})
   const [loading, setLoading] = useState(true)
   const [showUnmatched, setShowUnmatched] = useState(false)
@@ -25,10 +31,27 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await accountReconcileApi.workbench(partnerId, month)
-      setHm(res.hospitalMonth)
+      // 代次发现：从 board 解析该院本月的权威四元组 binding（LOC-005 合同；
+      // 页面壳不在本任务 lease 内，故工作台自行解析，保证拿到的是当前代）。
+      const b = await accountReconcileApi.board(month)
+      const item = (b.items || []).find((i) => i.partnerId === partnerId)
+      if (!item?.statementGenerationId || !item.reconcileGenerationId) {
+        setBinding(null)
+        setSnap(null)
+        setDiffs([])
+        setCaseHints({})
+        return
+      }
+      const nb: ReconcileBinding = {
+        partnerId,
+        settlementMonth: month,
+        statementGenerationId: item.statementGenerationId,
+        reconcileGenerationId: item.reconcileGenerationId,
+      }
+      setBinding(nb)
+      const res = await accountReconcileApi.workbench(nb)
+      setSnap(res.snapshot || null)
       setDiffs(res.diffs || [])
-      setUnmatched(res.unmatched || [])
       setCaseHints(res.caseHints || {})
     } catch {
       /* toast handled */
@@ -39,13 +62,29 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
 
   useEffect(() => { load() }, [load])
 
+  // 由 snapshot 组装展示用院·月视图（状态/匹配率/差异数/未匹配/实收）。
+  const hm = snap
+    ? {
+        id: snap.hospitalMonthId,
+        status: GEN_TO_HM_STATUS[snap.status],
+        matchRate: snap.result?.matchRate ?? 0,
+        matchStatus: snap.result?.matchStatus ?? null,
+        diffCount: diffs.length,
+        unmatchedCount: snap.result?.unmatched?.length ?? 0,
+        confirmedLabRevenue: snap.confirmedLabRevenue,
+      }
+    : null
+  const unmatched = snap?.result?.unmatched ?? []
+
   const pending = diffs.filter((d) => !d.verdict).length
-  const readOnly = !canWrite || hm?.status === '已关账'
+  // 只有「待复核」（当前代 pending）可认定/改认定；复核完成与已关账只读。
+  const readOnly = !canWrite || !hm || hm.status !== '待复核'
 
   const setVerdict = useCallback(async (diff: ReconcileDiff, reason: VerdictReason) => {
+    if (!binding) return
     setSavingId(diff.id)
     try {
-      const r = await accountReconcileApi.verdict(diff.id, reason)
+      const r = await accountReconcileApi.verdict(diff.id, binding, reason)
       setDiffs((prev) => prev.map((d) => (d.id === diff.id ? { ...d, verdict: reason, followUp: r.followUp as ReconcileDiff['followUp'], verdictBy: '我' } : d)))
       if (reason === '漏收，需补收') toast.success('已认定漏收，已生成补收单（去「补收追踪」催收）')
       else toast.success(`已认定：${reason}`)
@@ -54,34 +93,18 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
     } finally {
       setSavingId(null)
     }
-  }, [])
+  }, [binding])
 
   const complete = useCallback(async () => {
-    if (!hm) return
+    if (!hm || !binding) return
     try {
-      const r = await accountReconcileApi.complete(hm.id)
+      const r = await accountReconcileApi.complete(hm.id, binding)
       toast.success(`复核完成 · 已确认实收 ${wan(r.confirmedLabRevenue)}`)
       onBack()
     } catch {
       /* toast handled */
     }
-  }, [hm, onBack])
-
-  const [reverseOpen, setReverseOpen] = useState(false)
-  const isClosed = hm?.status === '已关账'
-  const doReverse = useCallback(async (reason: string) => {
-    if (!hm) return
-    const closed = hm.status === '已关账'
-    try {
-      if (closed) await accountReconcileApi.reopenClose(hm.id, reason)
-      else await accountReconcileApi.reopen(hm.id, reason)
-      toast.success(closed ? '已反关账' : '已重新打开')
-      setReverseOpen(false)
-      await load()
-    } catch {
-      /* toast handled */
-    }
-  }, [hm, load])
+  }, [hm, binding, onBack])
 
   const mm = matchStatusMeta(hm?.matchStatus ?? null)
 
@@ -155,9 +178,6 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
               未匹配 {hm.unmatchedCount} 例（一边有、一边没有）单列「算不了」{showUnmatched ? '▲' : '▾'}
             </button>
             <div className="flex items-center gap-2">
-              {(hm.status === '复核完成' || hm.status === '已关账') && canWrite && (
-                <button className={btnCls} onClick={() => setReverseOpen(true)}>{hm.status === '已关账' ? '反关账' : '重新打开'}</button>
-              )}
               {hm.status === '待复核' && (
                 <button className={btnPri} disabled={readOnly || pending > 0} onClick={complete}>
                   {pending > 0 ? `复核完成（还有 ${pending} 条待认定）` : '复核完成'}
@@ -186,18 +206,6 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
             </div>
           )}
         </>
-      )}
-      {hm && (
-        <ReasonModal
-          open={reverseOpen}
-          title={isClosed ? '反关账（慎用）' : '重新打开复核'}
-          description={isClosed
-            ? '把已关账（定版）的院·月退回「复核完成」。此为敏感操作，请填理由并记录经手人。'
-            : '把「复核完成」退回「待复核」，可继续改认定。请填理由并记录经手人。'}
-          confirmLabel={isClosed ? '确认反关账' : '确认重新打开'}
-          onConfirm={doReverse}
-          onClose={() => setReverseOpen(false)}
-        />
       )}
     </div>
   )

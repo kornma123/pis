@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import type { useAccountReconcile } from '../hooks/useAccountReconcile'
-import type { HospitalMonth } from '@/types/account-reconcile'
+import type { BoardItem } from '@/types/account-reconcile'
 import { HmPill, matchStatusMeta, wan, cnMonth, btnCls, btnGhost, cardCls, selectCls } from '../ui'
 
 type Ctx = ReturnType<typeof useAccountReconcile>
 
-function DataState({ h }: { h: HospitalMonth }) {
+function DataState({ h }: { h: BoardItem }) {
   if (h.statementReady && h.lisReady) {
     return <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" />院名已对齐</span>
   }
@@ -13,7 +13,7 @@ function DataState({ h }: { h: HospitalMonth }) {
   return <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />{miss}</span>
 }
 
-function MatchRate({ h }: { h: HospitalMonth }) {
+function MatchRate({ h }: { h: BoardItem }) {
   if (!h.matchStatus || h.matchStatus === '待对齐') return <span className="text-gray-400">—</span>
   const m = matchStatusMeta(h.matchStatus)
   return (
@@ -23,7 +23,7 @@ function MatchRate({ h }: { h: HospitalMonth }) {
   )
 }
 
-function DiffCell({ h }: { h: HospitalMonth }) {
+function DiffCell({ h }: { h: BoardItem }) {
   if (h.matchStatus === '先查') return <span className="text-gray-400">先查</span>
   if (!h.matchStatus || h.matchStatus === '待对齐') return <span className="text-gray-400">—</span>
   return (
@@ -34,10 +34,11 @@ function DiffCell({ h }: { h: HospitalMonth }) {
   )
 }
 
-function Row({ h, ctx }: { h: HospitalMonth; ctx: Ctx }) {
-  const clickable = h.statementReady && h.lisReady
+function Row({ h, ctx }: { h: BoardItem; ctx: Ctx }) {
+  // 进工作台需要完整四元组 binding（数据齐 + 已有对账代次）；否则引导先计算/重算。
+  const canOpen = h.statementReady && h.lisReady && !!h.reconcileGenerationId
   return (
-    <tr className={clickable ? 'hover:bg-blue-50/60' : ''}>
+    <tr className={canOpen ? 'hover:bg-blue-50/60' : ''}>
       <td className="px-4 py-3">
         <div className="font-semibold text-gray-900">{h.partnerName || h.partnerId}</div>
       </td>
@@ -47,14 +48,18 @@ function Row({ h, ctx }: { h: HospitalMonth; ctx: Ctx }) {
       <td className="px-4 py-3 text-right tabular-nums text-gray-900">
         {h.confirmedLabRevenue != null ? wan(h.confirmedLabRevenue) : <span className="text-gray-400">待定</span>}
       </td>
-      <td className="px-4 py-3"><HmPill status={h.status} /></td>
+      <td className="px-4 py-3">{h.status ? <HmPill status={h.status} /> : <span className="text-gray-400">—</span>}</td>
       <td className="px-4 py-3 text-right">
-        {clickable ? (
+        {canOpen ? (
           <button className={btnGhost} onClick={() => ctx.openWorkbench(h.partnerId, h.partnerName || h.partnerId)}>
             {h.status === '待复核' ? '去核对 →' : '看明细'}
           </button>
         ) : (
-          ctx.canWrite && <button className={btnGhost} disabled={ctx.busy} onClick={() => ctx.computePartner(h.partnerId)}>重算</button>
+          ctx.canWrite && (
+            <button className={btnGhost} disabled={ctx.busy} onClick={() => ctx.computePartner(h.partnerId)}>
+              {h.reconcileGenerationId ? '重算' : '计算'}
+            </button>
+          )
         )}
       </td>
     </tr>
@@ -147,7 +152,7 @@ export function ReconcileOverview({ ctx }: { ctx: Ctx }) {
   )
 }
 
-function Group({ title, hint, rows, ctx }: { title: string; hint: string; rows: HospitalMonth[]; ctx: Ctx }) {
+function Group({ title, hint, rows, ctx }: { title: string; hint: string; rows: BoardItem[]; ctx: Ctx }) {
   if (!rows.length) return null
   return (
     <div className="mt-6">
@@ -161,7 +166,7 @@ function Group({ title, hint, rows, ctx }: { title: string; hint: string; rows: 
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {rows.map((h) => <Row key={h.id} h={h} ctx={ctx} />)}
+            {rows.map((h) => <Row key={h.id || h.partnerId} h={h} ctx={ctx} />)}
           </tbody>
         </table>
       </div>

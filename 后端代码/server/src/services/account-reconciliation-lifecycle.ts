@@ -540,8 +540,9 @@ function buildCompletionArtifact(
            verdict, verdict_reason, verdict_by, verdict_at, follow_up
       FROM reconcile_diffs
      WHERE hospital_month_id = ?
+       AND reconcile_generation_id = ?
      ORDER BY case_no, line_type, id
-  `).all(row.hospital_month_id) as any[]).map(decision => {
+  `).all(row.hospital_month_id, binding.reconcileGenerationId) as any[]).map(decision => {
     if (!decision.verdict) {
       fail('all differences must be reviewed before completion', 'RECONCILIATION_PENDING', 409)
     }
@@ -760,6 +761,22 @@ export function computeAccountReconciliation(
       fail('completed reconciliation facts cannot be reopened or superseded', 'RECONCILIATION_FINAL', 409)
     }
     if (current) {
+      // 治理性重出前置：当前代仍有未终结（待补收）补收单时拒绝 supersede。
+      // 未终结单挂在新代被冻结会滞留成永远收不了的「待补收」并与新代重开的单双重计账；
+      // 操作者须先收款、放弃或改认定（三者均留痕）再重出。终结单随旧代冻结留痕。
+      const openSupplements = Number((db.prepare(`
+        SELECT COUNT(*) AS n
+          FROM supplement_orders
+         WHERE reconcile_generation_id = ?
+           AND status NOT IN ('已补收', '已放弃')
+      `).get(current.reconcile_generation_id) as any).n)
+      if (openSupplements > 0) {
+        fail(
+          `current generation still has ${openSupplements} open supplement(s); collect, give up, or re-verdict them before starting a new generation`,
+          'RECONCILE_GENERATION_HAS_OPEN_SUPPLEMENTS',
+          409,
+        )
+      }
       const changed = db.prepare(
         `UPDATE account_reconcile_generations
             SET is_current = 0, updated_at = CURRENT_TIMESTAMP
@@ -829,12 +846,21 @@ export function computeAccountReconciliation(
         result.unmatched.length,
       )
     }
-    db.prepare('DELETE FROM reconcile_diffs WHERE hospital_month_id = ?').run(hospitalMonthId)
+    // 只删无补收单引用的 diff；被终结补收单引用的旧代 diff 保留为冻结历史
+    //（FK RESTRICT 保护，且读路径一律按当前代过滤，旧代行不再可见）。
+    db.prepare(`
+      DELETE FROM reconcile_diffs
+       WHERE hospital_month_id = ?
+         AND id NOT IN (
+           SELECT source_diff_id FROM supplement_orders WHERE source_diff_id IS NOT NULL
+         )
+    `).run(hospitalMonthId)
     const insertDiff = db.prepare(
       `INSERT INTO reconcile_diffs
         (id, hospital_month_id, partner_id, service_month, case_no, line_type,
-         bill_count, lis_count, delta, amount_impact, system_hint, low_confidence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         bill_count, lis_count, delta, amount_impact, system_hint, low_confidence,
+         reconcile_generation_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     for (const diff of result.diffs) {
       insertDiff.run(
@@ -850,6 +876,7 @@ export function computeAccountReconciliation(
         diff.amountImpact,
         diff.systemHint,
         diff.lowConfidence ? 1 : 0,
+        binding.reconcileGenerationId,
       )
     }
 
@@ -979,7 +1006,8 @@ export function setAccountReconciliationVerdict(
     const diff = db.prepare(`
       SELECT * FROM reconcile_diffs
        WHERE id = ? AND hospital_month_id = ?
-    `).get(diffId, row.hospital_month_id) as any
+         AND reconcile_generation_id = ?
+    `).get(diffId, row.hospital_month_id, binding.reconcileGenerationId) as any
     if (!diff) {
       fail('reconciliation difference is stale or unavailable', 'STALE_RECONCILIATION_DIFF', 409)
     }
@@ -987,7 +1015,8 @@ export function setAccountReconciliationVerdict(
     const pendingBefore = Number((db.prepare(`
       SELECT COUNT(*) AS n FROM reconcile_diffs
        WHERE hospital_month_id = ? AND verdict IS NULL
-    `).get(row.hospital_month_id) as any).n)
+         AND reconcile_generation_id = ?
+    `).get(row.hospital_month_id, binding.reconcileGenerationId) as any).n)
     const auditBefore = Number((db.prepare(`
       SELECT COUNT(*) AS n FROM abc_audit_logs
        WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
@@ -1069,7 +1098,8 @@ export function setAccountReconciliationVerdict(
     const pending = Number((db.prepare(`
       SELECT COUNT(*) AS n FROM reconcile_diffs
        WHERE hospital_month_id = ? AND verdict IS NULL
-    `).get(row.hospital_month_id) as any).n)
+         AND reconcile_generation_id = ?
+    `).get(row.hospital_month_id, binding.reconcileGenerationId) as any).n)
     const hospitalUpdate = db.prepare(`
       UPDATE reconcile_hospital_months
          SET pending_count = ?, updated_at = CURRENT_TIMESTAMP
@@ -1094,7 +1124,8 @@ export function setAccountReconciliationVerdict(
     const persisted = db.prepare(`
       SELECT verdict, verdict_reason, follow_up FROM reconcile_diffs
        WHERE id = ? AND hospital_month_id = ?
-    `).get(diff.id, row.hospital_month_id) as any
+         AND reconcile_generation_id = ?
+    `).get(diff.id, row.hospital_month_id, binding.reconcileGenerationId) as any
     const auditAfter = Number((db.prepare(`
       SELECT COUNT(*) AS n FROM abc_audit_logs
        WHERE module = 'account_reconcile' AND action = 'verdict' AND target_id = ?
@@ -1139,8 +1170,10 @@ export function completeAccountReconciliation(
     const source = buildSourceSnapshot(db, binding, true)
     assertReadinessUnchanged(row, source)
     const pending = Number((db.prepare(
-      'SELECT COUNT(*) AS n FROM reconcile_diffs WHERE hospital_month_id = ? AND verdict IS NULL',
-    ).get(row.hospital_month_id) as any).n)
+      `SELECT COUNT(*) AS n FROM reconcile_diffs
+        WHERE hospital_month_id = ? AND verdict IS NULL
+          AND reconcile_generation_id = ?`,
+    ).get(row.hospital_month_id, binding.reconcileGenerationId) as any).n)
     if (pending !== 0) fail('all differences must be reviewed before completion', 'RECONCILIATION_PENDING', 409)
     const completion = buildCompletionArtifact(db, binding, row, source)
 

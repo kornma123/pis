@@ -147,4 +147,54 @@ test.describe('critical Phase 1A statement ledger contract', () => {
       reason_code: 'AUTHORITATIVE_EMPTY_IMPORT',
     })
   })
+
+  test('overview board discovers statement generations and reports no reconcile generation before compute', async ({ request }) => {
+    const financeToken = await apiLogin(request, 'finance')
+
+    const invalid = await request.get(
+      `${apiBaseUrl()}/account-reconcile/overview?settlementMonth=2026-13`,
+      { headers: { Authorization: `Bearer ${financeToken}` } },
+    )
+    expect(invalid.status()).toBe(400)
+    expect((await invalid.json())?.error?.code).toBe('INVALID_SETTLEMENT_MONTH')
+
+    const identity = randomUUID()
+    const partnerId = `PT-E2E-BOARD-${identity}`
+    const input = {
+      partnerId,
+      settlementMonth: '2026-02',
+      sourceFile: `phase1a-board-${identity}.xlsx`,
+      sourceHash: `sha256:${createHash('sha256').update('[]').digest('hex')}`,
+      templateFamily: 'category_summary',
+      parserRevision: 'parser-phase1a-v1',
+      configRevision: 'seed-phase1a-v1',
+      sourceSheet: 'Sheet1',
+      headerRow: 0,
+      grid: [],
+      idempotencyKey: `REQ-${identity}`,
+    }
+    const receiptResp = await apiPost(request, financeToken, '/statement-batches/authoritative-empty-receipts', input)
+    expect(receiptResp.status()).toBe(200)
+    const receipt = (await receiptResp.json())?.data?.receipt
+    const imported = await apiPost(request, financeToken, '/statement-batches', { ...input, emptyReceipt: receipt })
+    expect(imported.status()).toBe(200)
+    const importedData = (await imported.json())?.data
+    const posted = await apiPost(request, financeToken, `/statement-batches/${importedData.batchId}/post`, {})
+    expect(posted.status()).toBe(200)
+
+    const board = await request.get(
+      `${apiBaseUrl()}/account-reconcile/overview?settlementMonth=${input.settlementMonth}`,
+      { headers: { Authorization: `Bearer ${financeToken}` } },
+    )
+    expect(board.status()).toBe(200)
+    const boardData = (await board.json())?.data
+    expect(boardData?.settlementMonth).toBe(input.settlementMonth)
+    const item = (boardData?.items || []).find((i: { partnerId: string }) => i.partnerId === partnerId)
+    expect(item, 'board must expose the imported partner').toBeTruthy()
+    expect(item.statementGenerationId).toBe(importedData.generationId)
+    expect(item.statementBatchStatus).toBe('posted')
+    expect(item.reconcileGenerationId).toBeNull()
+    expect(item.generationStatus).toBeNull()
+    expect(boardData?.board?.total).toEqual(expect.any(Number))
+  })
 })

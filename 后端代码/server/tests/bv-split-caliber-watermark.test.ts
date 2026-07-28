@@ -119,14 +119,12 @@ describe('拆分结论对外输出携带未认账水印', () => {
 
   it('GET /account-reconcile/overview（复核总览）带水印·且 board 并存', async () => {
     const r = await A((await st())(app).get('/api/v1/account-reconcile/overview').query({
-      partnerId: PID,
       settlementMonth: MONTH,
-      statementGenerationId: STATEMENT_GENERATION,
-      reconcileGenerationId: RECONCILE_GENERATION,
     }))
     expect(r.status).toBe(200)
     expectUnratifiedWatermark(r.body.data.caliberRatification)
-    expect(r.body.data.list).toHaveLength(1)
+    const items = r.body.data.items as Array<{ partnerId: string }>
+    expect(items.some((item) => item.partnerId === PID)).toBe(true)
   })
 
   it('POST /statement-import/preview 带水印·且 revenue.labRevenue 并存', async () => {
