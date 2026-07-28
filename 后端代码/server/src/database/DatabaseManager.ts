@@ -1103,26 +1103,6 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   // LOC-005 R2 respin：diffs 按 generation 代次隔离。supersede 只删无补收单引用的 diff，
   // 被引用的旧代 diff 连同其终结补收单冻结留痕（旧代仍可读、不可改）。
   ensureDatabaseColumn(database, 'reconcile_diffs', 'reconcile_generation_id', 'TEXT')
-  // 回填：代次列引入前写入的 diff 无代次戳；唯一活解释是该院·月当前代
-  //（compute 历来整月重写 diff 集合，现存行必属当前代）。
-  database.exec(`
-    UPDATE reconcile_diffs
-       SET reconcile_generation_id = (
-         SELECT generation.reconcile_generation_id
-           FROM account_reconcile_generations generation
-          WHERE generation.hospital_month_id = reconcile_diffs.hospital_month_id
-            AND generation.is_current = 1
-       )
-     WHERE reconcile_generation_id IS NULL
-       AND EXISTS (
-         SELECT 1
-           FROM account_reconcile_generations generation
-          WHERE generation.hospital_month_id = reconcile_diffs.hospital_month_id
-            AND generation.is_current = 1
-       );
-    CREATE INDEX IF NOT EXISTS idx_reconcile_diffs_generation
-      ON reconcile_diffs(hospital_month_id, reconcile_generation_id);
-  `)
 
   database.exec(`
     CREATE TABLE IF NOT EXISTS account_reconcile_hospital_month_bindings (
@@ -1163,6 +1143,30 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_fill')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
+
+  // R3-1：diffs 代次回填必须排在旧 trigger DROP 之后——父版库的
+  // trg_reconcile_diff_final_immutable 对 complete/closed 月 diff 的任意 UPDATE 一律 ABORT，
+  // 先回填会被旧 trigger 打死、整个升级事务回滚、每次开机都失败。
+  // 回填：代次列引入前写入的 diff 无代次戳；唯一活解释是该院·月当前代
+  //（compute 历来整月重写 diff 集合，现存行必属当前代）。
+  database.exec(`
+    UPDATE reconcile_diffs
+       SET reconcile_generation_id = (
+         SELECT generation.reconcile_generation_id
+           FROM account_reconcile_generations generation
+          WHERE generation.hospital_month_id = reconcile_diffs.hospital_month_id
+            AND generation.is_current = 1
+       )
+     WHERE reconcile_generation_id IS NULL
+       AND EXISTS (
+         SELECT 1
+           FROM account_reconcile_generations generation
+          WHERE generation.hospital_month_id = reconcile_diffs.hospital_month_id
+            AND generation.is_current = 1
+       );
+    CREATE INDEX IF NOT EXISTS idx_reconcile_diffs_generation
+      ON reconcile_diffs(hospital_month_id, reconcile_generation_id);
+  `)
 
   ensureSupplementGenerationForeignKeys(database)
   database.exec(`

@@ -57,6 +57,16 @@ function rejectUnknownBodyKeys(res: any, value: unknown, allowed: readonly strin
   return true
 }
 
+// R3-3：被取代旧代的补收单彻底冻结是既定口径（trigger 层 RAISE(ABORT,...) 硬冻结），
+// 但该稳定信号不能透成被掩码的裸 500——映射为可诊断的 409 稳定码；其余未知错误仍走 500。
+function errorSupplementLifecycle(res: any, err: any): void {
+  if (String(err?.message ?? '').includes('SUPPLEMENT_GENERATION_BINDING_MISMATCH')) {
+    error(res, '该补收单属于已被取代的旧对账代次，已彻底冻结', 'SUPPLEMENT_GENERATION_BINDING_MISMATCH', 409)
+    return
+  }
+  error(res, err.message)
+}
+
 function lifecycleAuditMetadata(
   action: string,
   binding: ReconcileBinding,
@@ -623,7 +633,7 @@ router.post('/supplements/:id/approve', requirePermission('account_reconcile', '
     })
     success(res, { id: so.id, reviewStatus: 'approved', reviewedBy: operator }, '已签发补收单')
   } catch (err: any) {
-    error(res, err.message)
+    errorSupplementLifecycle(res, err)
   }
 })
 
@@ -648,7 +658,7 @@ router.post('/supplements/:id/collect', requirePermission('account_reconcile', '
     writeAuditLog(db, 'account_reconcile', 'supplement_collect', so.id, { amount: so.amount, collectedMonth, collectedRevenue, rate }, operatorOf(req))
     success(res, { id: so.id, status: '已补收', collectedMonth, collectedRevenue }, '已标记补收，计入本月实收')
   } catch (err: any) {
-    error(res, err.message)
+    errorSupplementLifecycle(res, err)
   }
 })
 
@@ -665,7 +675,7 @@ router.post('/supplements/:id/giveup', requirePermission('account_reconcile', 'W
     writeAuditLog(db, 'account_reconcile', 'supplement_giveup', so.id, { amount: so.amount, reason }, operatorOf(req))
     success(res, { id: so.id, status: '已放弃' }, '已放弃补收')
   } catch (err: any) {
-    error(res, err.message)
+    errorSupplementLifecycle(res, err)
   }
 })
 
@@ -683,7 +693,7 @@ router.post('/supplements/:id/reopen', requirePermission('account_reconcile', 'W
     writeAuditLog(db, 'account_reconcile', 'supplement_reopen', so.id, { reason, from: so.status }, operatorOf(req))
     success(res, { id: so.id, status: '待补收' }, '已恢复待补收')
   } catch (err: any) {
-    error(res, err.message)
+    errorSupplementLifecycle(res, err)
   }
 })
 

@@ -854,6 +854,150 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
       legacy.close()
     }
   })
+
+  it('upgrades a predecessor complete-month database: diff backfill runs after legacy trigger drop', () => {
+    // R3-1：父版分支库（diffs 无代次列 + 父版终版冻结 trigger 对 complete/closed 月的任意
+    // UPDATE 一律 ABORT）升级时，backfill UPDATE 必须排在旧 trigger DROP 之后，
+    // 否则旧 trigger 把回填打死、升级事务回滚、每次开机都失败。
+    const binding = seedSource({ name: 'predecessor-complete-upgrade', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(String(snapshot.hospitalMonthId)) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db,
+      binding,
+      diff.id,
+      '漏收，需补收',
+      null,
+      'USER-001',
+      'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+
+    const upgradePath = join(testDirectory, `predecessor-complete-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(upgradePath)
+    let legacy = new DatabaseSync(upgradePath)
+    try {
+      legacy.exec('PRAGMA foreign_keys = OFF')
+      // 回滚到父版形状：diffs 去掉代次列（父版无此列）。
+      // 注意：supplement 侧 5 个 trigger 的子查询引用 reconcile_diffs，重建 diffs 表期间会悬空，
+      // 故先摘掉；升级函数本就会在数据迁移前 DROP 全部旧 trigger、迁移后重装新版，
+      // 且升级过程不写 supplement 行，这些 trigger 在升级路径上不参与点火。
+      legacy.exec(`
+        DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_insert;
+        DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update;
+        DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_immutable;
+        DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_no_insert;
+        DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_no_delete;
+        DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable;
+        DROP TRIGGER IF EXISTS trg_reconcile_diff_final_no_insert;
+        DROP TRIGGER IF EXISTS trg_reconcile_diff_final_no_delete;
+        CREATE TABLE reconcile_diffs__parent_shape (
+          id TEXT PRIMARY KEY,
+          hospital_month_id TEXT NOT NULL,
+          partner_id TEXT NOT NULL,
+          service_month TEXT NOT NULL,
+          case_no TEXT NOT NULL,
+          line_type TEXT NOT NULL,
+          bill_count DECIMAL(18, 4) NOT NULL DEFAULT 0,
+          lis_count DECIMAL(18, 4) NOT NULL DEFAULT 0,
+          delta DECIMAL(18, 4) NOT NULL DEFAULT 0,
+          amount_impact DECIMAL(18, 4) NOT NULL DEFAULT 0,
+          system_hint TEXT,
+          low_confidence INTEGER NOT NULL DEFAULT 0,
+          verdict TEXT,
+          verdict_reason TEXT,
+          verdict_by TEXT,
+          verdict_at DATETIME,
+          follow_up TEXT,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO reconcile_diffs__parent_shape (
+          id, hospital_month_id, partner_id, service_month, case_no, line_type,
+          bill_count, lis_count, delta, amount_impact, system_hint, low_confidence,
+          verdict, verdict_reason, verdict_by, verdict_at, follow_up, created_at, updated_at
+        )
+        SELECT id, hospital_month_id, partner_id, service_month, case_no, line_type,
+               bill_count, lis_count, delta, amount_impact, system_hint, low_confidence,
+               verdict, verdict_reason, verdict_by, verdict_at, follow_up, created_at, updated_at
+          FROM reconcile_diffs;
+        DROP TABLE reconcile_diffs;
+        ALTER TABLE reconcile_diffs__parent_shape RENAME TO reconcile_diffs;
+      `)
+      // 父版终版冻结三 trigger（对 complete/closed 月的 diff 任意写一律 ABORT，不区分列）。
+      legacy.exec(`
+        CREATE TRIGGER trg_reconcile_diff_final_immutable
+        BEFORE UPDATE ON reconcile_diffs
+        WHEN EXISTS (
+          SELECT 1 FROM account_reconcile_generations generation
+          WHERE generation.hospital_month_id = OLD.hospital_month_id
+            AND generation.status IN ('complete', 'closed')
+        )
+        BEGIN
+          SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
+        END
+      `)
+      legacy.exec(`
+        CREATE TRIGGER trg_reconcile_diff_final_no_insert
+        BEFORE INSERT ON reconcile_diffs
+        WHEN EXISTS (
+          SELECT 1 FROM account_reconcile_generations generation
+          WHERE generation.hospital_month_id = NEW.hospital_month_id
+            AND generation.status IN ('complete', 'closed')
+        )
+        BEGIN
+          SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
+        END
+      `)
+      legacy.exec(`
+        CREATE TRIGGER trg_reconcile_diff_final_no_delete
+        BEFORE DELETE ON reconcile_diffs
+        WHEN EXISTS (
+          SELECT 1 FROM account_reconcile_generations generation
+          WHERE generation.hospital_month_id = OLD.hospital_month_id
+            AND generation.status IN ('complete', 'closed')
+        )
+        BEGIN
+          SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
+        END
+      `)
+      legacy.exec('PRAGMA foreign_keys = ON')
+
+      // 升级必须成功（backfill 排在旧 trigger DROP 之后）。
+      expect(() => manager.upgradeAccountReconciliationSchema(legacy)).not.toThrow()
+
+      // 该院·月全部 diff 回填为当前代。
+      const stamped = legacy.prepare(`
+        SELECT DISTINCT reconcile_generation_id FROM reconcile_diffs
+        WHERE hospital_month_id = ?
+      `).all(String(snapshot.hospitalMonthId)) as Array<{ reconcile_generation_id: string }>
+      expect(stamped).toEqual([{ reconcile_generation_id: binding.reconcileGenerationId }])
+
+      // 终版冻结仍由重装的新 trigger 守护：complete 月 diff 的篡改 UPDATE 仍须被拒。
+      expect(() => legacy.prepare(
+        'UPDATE reconcile_diffs SET verdict = ? WHERE hospital_month_id = ?',
+      ).run('篡改', String(snapshot.hospitalMonthId))).toThrow(/FINAL_RECONCILIATION_DECISIONS_IMMUTABLE/)
+      expect(legacy.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      legacy.close()
+    }
+
+    // 重启幂等：同一库再跑一遍升级仍成功、状态不变。
+    legacy = new DatabaseSync(upgradePath)
+    try {
+      legacy.exec('PRAGMA foreign_keys = ON')
+      expect(() => manager.upgradeAccountReconciliationSchema(legacy)).not.toThrow()
+      const stamped = legacy.prepare(`
+        SELECT DISTINCT reconcile_generation_id FROM reconcile_diffs
+        WHERE hospital_month_id = ?
+      `).all(String(snapshot.hospitalMonthId)) as Array<{ reconcile_generation_id: string }>
+      expect(stamped).toEqual([{ reconcile_generation_id: binding.reconcileGenerationId }])
+    } finally {
+      legacy.close()
+    }
+  })
 })
 
 describe('LOC-005 R2 legacy binding and decision freeze', () => {

@@ -748,7 +748,9 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
     const frozenSupplement = await auth(request(app)
       .post(`/api/v1/account-reconcile/supplements/${openSupplements[0].id}/reopen`)
       .send({ reason: '旧代应冻结' }))
-    expect(frozenSupplement.status).toBe(500)
+    // R3-3：旧代彻底冻结的口径不变，但错误面必须是有稳定码的 409，不是被掩码的裸 500。
+    expect(frozenSupplement.status).toBe(409)
+    expect(frozenSupplement.body.error.code).toBe('SUPPLEMENT_GENERATION_BINDING_MISMATCH')
     expect(db.prepare(
       `SELECT status FROM supplement_orders WHERE id = ?`,
     ).get(openSupplements[0].id)).toMatchObject({ status: '已放弃' })
