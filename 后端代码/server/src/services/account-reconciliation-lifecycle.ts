@@ -569,6 +569,25 @@ function buildCompletionArtifact(
       followUp: decision.follow_up === null ? null : String(decision.follow_up),
     }
   })
+  // R4 纵深收口：complete/close 前显式校验「本代补收单的 source_diff 属于本代事实集」。
+  // binding trigger（写入闸）与启动校验（开机闸）之外，这里在 artifact 生成前 fail-closed：
+  // 错配行或悬空 source_diff（运行时 FK 未强制、INNER JOIN 会静默丢行）一律拒绝 complete/close，
+  // 绝不产出 decisions 与 supplements 内部不一致的定版 artifact。
+  const lineageMismatch = db.prepare(`
+    SELECT supplement.id
+      FROM supplement_orders supplement
+      LEFT JOIN reconcile_diffs decision ON decision.id = supplement.source_diff_id
+     WHERE supplement.reconcile_generation_id = ?
+       AND (decision.id IS NULL OR decision.reconcile_generation_id IS NOT ?)
+     LIMIT 1
+  `).get(binding.reconcileGenerationId, binding.reconcileGenerationId) as { id?: string } | undefined
+  if (lineageMismatch?.id) {
+    fail(
+      `supplement ${lineageMismatch.id} lineage does not match the completion fact set`,
+      'RECONCILIATION_LINEAGE_MISMATCH',
+      409,
+    )
+  }
   const supplements = (db.prepare(`
     SELECT supplement.id, supplement.source_diff_id, supplement.partner_id,
            supplement.service_month, supplement.case_no, supplement.amount,

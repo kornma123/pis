@@ -1007,6 +1007,26 @@ function ensureSupplementGenerationForeignKeys(database: DatabaseSync): void {
   if (invalidSource?.id) {
     throw new Error(`SUPPLEMENT_SOURCE_GENERATION_BACKFILL_REQUIRED:${invalidSource.id}`)
   }
+  // R4 谱系等值启动校验：supplement 的 source_diff 必须属于 supplement 自己的代。
+  // binding trigger 是写入侧第一道闸；本探针是开机 fail-closed 第二道——经直接 SQL、
+  // 未来写路径或回填工具缺陷产生的跨代行（含悬空 source_diff，LEFT JOIN 下 diff 列为
+  // NULL、IS NOT 成立而被捕获）在启动时拒绝服务并给出可诊断的 supplement id，
+  // 按受治理修复流程处置，绝不静默放行或自动改写。
+  const diffColumns = database.prepare('PRAGMA table_info(reconcile_diffs)').all() as Array<{ name: string }>
+  const diffHasGenerationColumn = diffColumns.some(column => column.name === 'reconcile_generation_id')
+  if (hasGenerationColumn && diffHasGenerationColumn) {
+    const lineageMismatch = database.prepare(`
+      SELECT supplement.id
+        FROM supplement_orders supplement
+        LEFT JOIN reconcile_diffs diff ON diff.id = supplement.source_diff_id
+       WHERE supplement.source_diff_id IS NOT NULL
+         AND diff.reconcile_generation_id IS NOT supplement.reconcile_generation_id
+       LIMIT 1
+    `).get() as { id?: string } | undefined
+    if (lineageMismatch?.id) {
+      throw new Error(`SUPPLEMENT_GENERATION_BINDING_MISMATCH:${lineageMismatch.id}`)
+    }
+  }
   if (
     hasGenerationColumn
     && hasDiffForeignKey
@@ -1370,6 +1390,7 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
           JOIN account_reconcile_generations generation
             ON generation.hospital_month_id = diff.hospital_month_id
          WHERE diff.id = NEW.source_diff_id
+            AND diff.reconcile_generation_id = NEW.reconcile_generation_id
             AND generation.is_current = 1
             AND generation.status = 'pending'
             AND generation.reconcile_generation_id = NEW.reconcile_generation_id
@@ -1392,6 +1413,7 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
             JOIN account_reconcile_generations generation
               ON generation.hospital_month_id = diff.hospital_month_id
            WHERE diff.id = OLD.source_diff_id
+             AND diff.reconcile_generation_id = OLD.reconcile_generation_id
              AND generation.reconcile_generation_id = OLD.reconcile_generation_id
              AND generation.is_current = 1
         )
@@ -1404,6 +1426,7 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
           JOIN account_reconcile_generations generation
             ON generation.hospital_month_id = diff.hospital_month_id
          WHERE diff.id = NEW.source_diff_id
+           AND diff.reconcile_generation_id = NEW.reconcile_generation_id
            AND generation.reconcile_generation_id = NEW.reconcile_generation_id
            AND generation.is_current = 1
         )

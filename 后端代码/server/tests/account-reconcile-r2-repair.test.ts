@@ -1493,3 +1493,188 @@ describe('LOC-005 R2 respin — supplement lifecycle and governed regeneration',
     `).get(binding.reconcileGenerationId).n)).toBe(0)
   })
 })
+
+describe('LOC-005 R4 lineage hard-gate closure', () => {
+  // R4 夹具：G1 漏收认定 → 补收单走完「已补收」终结 → supersede 出 G2(当前 pending)。
+  // 旧代 diff 因被终结补收单引用而在 supersede 中存活（compute 只删无引用 diff），
+  // 形成「同院·同月·不同代」的存活 diff ——跨代绑定攻击的对象。
+  function seedSupersededWithSurvivingDiff(name: string) {
+    const binding = seedSource({ name, lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const hospitalMonthId = String(snapshot.hospitalMonthId)
+    const oldDiff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(hospitalMonthId) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db, binding, oldDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const oldSupplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(oldDiff.id) as { id: string }
+    db.prepare(`
+      UPDATE supplement_orders
+         SET review_status = 'approved', reviewed_by = 'USER-002', reviewed_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `).run(oldSupplement.id)
+    db.prepare(`
+      UPDATE supplement_orders
+         SET status = '已补收', collected_at = CURRENT_TIMESTAMP, collected_month = '2026-09',
+             collected_revenue = 100
+       WHERE id = ?
+    `).run(oldSupplement.id)
+    const nextBinding = {
+      ...binding,
+      reconcileGenerationId: `${binding.reconcileGenerationId}-NEXT`,
+    }
+    lifecycle.computeAccountReconciliation(db, nextBinding, 'USER-001')
+    const nextDiff = db.prepare(`
+      SELECT id FROM reconcile_diffs
+       WHERE hospital_month_id = ? AND reconcile_generation_id = ?
+    `).get(hospitalMonthId, nextBinding.reconcileGenerationId) as { id: string }
+    return { binding, nextBinding, hospitalMonthId, oldDiff, nextDiff, oldSupplement }
+  }
+
+  // 绕过 insert trigger 造出一行错配单（旧代 diff + 当前代），模拟未来写路径/回填工具缺陷；
+  // 返回触发器原文以便调用后原样重装（文本运行时从 sqlite_master 读取，含 R4 修复）。
+  function injectLineageMismatch(rowId: string, oldDiffId: string, generationId: string, templateSupplementId: string): void {
+    const insertTrigger = db.prepare(`
+      SELECT sql FROM sqlite_master
+      WHERE type = 'trigger' AND name = 'trg_reconcile_supplement_generation_insert'
+    `).get() as { sql: string }
+    db.exec('DROP TRIGGER trg_reconcile_supplement_generation_insert')
+    db.prepare(`
+      INSERT INTO supplement_orders
+        (id, partner_id, service_month, source_diff_id, reconcile_generation_id,
+         case_no, amount, case_count, submitted_by)
+      SELECT ?, partner_id, service_month, ?, ?, case_no, amount, case_count, submitted_by
+        FROM supplement_orders WHERE id = ?
+    `).run(rowId, oldDiffId, generationId, templateSupplementId)
+    db.exec(insertTrigger.sql)
+  }
+
+  it('rejects binding a current-generation supplement to a superseded-generation diff', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r4-cross-generation-insert')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        INSERT INTO supplement_orders
+          (id, partner_id, service_month, source_diff_id, reconcile_generation_id,
+           case_no, amount, case_count, submitted_by)
+        SELECT 'SO-R4-CROSS-INSERT', partner_id, service_month, ?, ?, case_no,
+               amount, case_count, submitted_by
+          FROM supplement_orders WHERE id = ?
+      `).run(fixture.oldDiff.id, fixture.nextBinding.reconcileGenerationId, fixture.oldSupplement.id)
+    }, /SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+
+    // 同代对照：同样的裸 SQL 绑定「本代 diff + 本代」必须仍然放行（守卫不误伤合法写入）。
+    db.prepare(`
+      INSERT INTO supplement_orders
+        (id, partner_id, service_month, source_diff_id, reconcile_generation_id,
+         case_no, amount, case_count, submitted_by)
+      SELECT 'SO-R4-SAME-GEN-CONTROL', partner_id, service_month, ?, ?, case_no,
+             amount, case_count, submitted_by
+        FROM supplement_orders WHERE id = ?
+    `).run(fixture.nextDiff.id, fixture.nextBinding.reconcileGenerationId, fixture.oldSupplement.id)
+    db.prepare("DELETE FROM supplement_orders WHERE id = 'SO-R4-SAME-GEN-CONTROL'").run()
+  })
+
+  it('rejects rebinding a current supplement onto a superseded-generation diff', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r4-cross-generation-update')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const nextSupplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string }
+
+    // NEW 侧：把当前代补收单改绑到旧代 diff。
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('UPDATE supplement_orders SET source_diff_id = ? WHERE id = ?')
+        .run(fixture.oldDiff.id, nextSupplement.id)
+    }, /SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+  })
+
+  it('freezes every update of a lineage-mismatched supplement row', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r4-mismatched-row-freeze')
+    injectLineageMismatch(
+      'SO-R4-MISMATCH',
+      fixture.oldDiff.id,
+      fixture.nextBinding.reconcileGenerationId,
+      fixture.oldSupplement.id,
+    )
+    try {
+      // OLD 侧：错配行一旦存在，任何 UPDATE（含收款/放弃等生命周期写）一律被拒。
+      expectDatabaseMutationBlocked(db, () => {
+        db.prepare("UPDATE supplement_orders SET amount = 88 WHERE id = 'SO-R4-MISMATCH'").run()
+      }, /SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+      expectDatabaseMutationBlocked(db, () => {
+        db.prepare("UPDATE supplement_orders SET status = '已补收', collected_revenue = 88 WHERE id = 'SO-R4-MISMATCH'").run()
+      }, /SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+    } finally {
+      db.prepare("DELETE FROM supplement_orders WHERE id = 'SO-R4-MISMATCH'").run()
+    }
+  })
+
+  it('fails startup validation and every retry when a supplement lineage-mismatches its source diff generation', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r4-startup-lineage-probe')
+    const probePath = join(testDirectory, `r4-lineage-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const probe = new DatabaseSync(probePath)
+    try {
+      probe.exec('DROP TRIGGER trg_reconcile_supplement_generation_insert')
+      probe.prepare(`
+        INSERT INTO supplement_orders
+          (id, partner_id, service_month, source_diff_id, reconcile_generation_id,
+           case_no, amount, case_count, submitted_by)
+        SELECT 'SO-R4-STARTUP', partner_id, service_month, ?, ?, case_no,
+               amount, case_count, submitted_by
+          FROM supplement_orders WHERE id = ?
+      `).run(fixture.oldDiff.id, fixture.nextBinding.reconcileGenerationId, fixture.oldSupplement.id)
+
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH:SO-R4-STARTUP/)
+      // fail-closed 稳定：库未被升级事务污染、外键检查为空、重试仍拒。
+      expect(probe.prepare('PRAGMA foreign_key_check').all().length).toBe(0)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH:SO-R4-STARTUP/)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('fails complete while a bound supplement lineage-mismatches the generation fact set', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r4-complete-lineage-guard')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    injectLineageMismatch(
+      'SO-R4-COMPLETE',
+      fixture.oldDiff.id,
+      fixture.nextBinding.reconcileGenerationId,
+      fixture.oldSupplement.id,
+    )
+    try {
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      db.prepare("DELETE FROM supplement_orders WHERE id = 'SO-R4-COMPLETE'").run()
+    }
+
+    // 清掉错配行后同一代 complete 必须成功（纵深守卫不误伤正常关账链）。
+    lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001')
+    expect(db.prepare(`
+      SELECT status FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+    `).get(fixture.nextBinding.reconcileGenerationId)).toMatchObject({ status: 'complete' })
+    const completed = db.prepare(`
+      SELECT completion_artifact_json FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(fixture.nextBinding.reconcileGenerationId) as { completion_artifact_json: string }
+    const artifact = JSON.parse(completed.completion_artifact_json) as {
+      decisions: Array<{ id: string }>
+      supplements: Array<{ id: string, sourceDiffId: string }>
+    }
+    expect(artifact.decisions.map(decision => decision.id)).toEqual([fixture.nextDiff.id])
+    expect(artifact.supplements.map(supplement => supplement.id)).toEqual([])
+  })
+})
