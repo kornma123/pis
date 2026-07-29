@@ -156,6 +156,7 @@ const HTML_ENTITIES = new Map([
   ['zwj', '\u200D'],
   ['zwnj', '\u200C'],
 ]);
+const HTML_ENTITY_NAMES = [...HTML_ENTITIES.keys()];
 
 function normalizeLabel(label) {
   return canonicalizeFieldKey(label);
@@ -736,6 +737,22 @@ function decodeHtmlEntities(value) {
   return decodeHtmlEntitiesDetailed(value).value;
 }
 
+function hasIncompleteSupportedEntity(value) {
+  const source = String(value || '');
+  for (const match of source.matchAll(
+    /&([a-z][a-z0-9]*)(?=$|[& \t.,，。;；:：!?！？…、/_+-])/giu,
+  )) {
+    const candidate = match[1].toLowerCase();
+    if (
+      candidate.length >= 2 &&
+      HTML_ENTITY_NAMES.some((entityName) => entityName.startsWith(candidate))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function findVisibleFieldDelimiter(value, allowEquals) {
   const raw = String(value || '');
   const delimiters = new Set(allowEquals ? [':', '：', '='] : [':', '：']);
@@ -886,10 +903,11 @@ function isPlaceholder(value) {
 function isObviousReflectionPlaceholder(value) {
   const comparison = String(value || '')
     .trim()
-    .replace(/[ \t.,，。;；:：!?！？…、/_+-]+$/gu, '')
+    .replace(/[ \t.,，。;；:：!?！？…、/_+&-]+$/gu, '')
     .trim();
   return (
     isExplicitPlaceholder(comparison) ||
+    /^n(?:[./_+-])?a$/iu.test(comparison) ||
     /^(?:all|everything|nothing|anything|something|unknown)$/iu.test(comparison) ||
     /^(?:无|無|不知道|全部|所有)$/u.test(comparison)
   );
@@ -922,6 +940,9 @@ function canonicalizeReflectionContract(value) {
 
   const canonical = decoded.value.normalize('NFKC').trim();
   if (!canonical) return reflectionParseFailure('empty');
+  if (hasIncompleteSupportedEntity(canonical)) {
+    return reflectionParseFailure('incomplete-entity');
+  }
   if (/[`*~<>[\]{}()\\]/u.test(canonical)) {
     return reflectionParseFailure('markup-or-escape');
   }

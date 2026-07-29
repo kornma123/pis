@@ -948,6 +948,71 @@ assert.equal(
   ).reason,
   'unresolved-entity',
 );
+const naSeparatorCores = [
+  ...['n', 'N'].flatMap((letter) =>
+    ['', '-', '_', '+', '.', '/'].map((separator) => `${letter}${separator}${letter === 'N' ? 'A' : 'a'}`),
+  ),
+  'ｎ－ａ',
+  ...[45, 95, 43, 46, 47].flatMap((codePoint) => [
+    `n&#${codePoint};a`,
+    `n&amp;#${codePoint};a`,
+    `n&amp;amp;#${codePoint};a`,
+  ]),
+];
+const placeholderComparisonSuffixes = ['', '.', '。', '…', '/_+-', '。/_+-', '   '];
+function encodeAmpersands(value, depth) {
+  let encoded = value;
+  for (let pass = 0; pass < depth; pass += 1) encoded = encoded.replaceAll('&', '&amp;');
+  return encoded;
+}
+const generatedPlaceholderContracts = [];
+for (const core of naSeparatorCores) {
+  for (const suffix of placeholderComparisonSuffixes) {
+    generatedPlaceholderContracts.push(
+      [
+        `N/A separator risk ${JSON.stringify(core + suffix)}`,
+        `risk-v1; anchor=id:auth; uncertainty=unknown:${core}${suffix}`,
+        false,
+      ],
+      [
+        `N/A separator no-finding ${JSON.stringify(core + suffix)}`,
+        `no-finding-v1; checked=name:${core}${suffix}; unchecked=name:库存同步`,
+        false,
+      ],
+    );
+  }
+}
+for (const core of [
+  'unknown&amp;',
+  'unknown&amp;amp;',
+  'unknown&amp;#38;',
+  'unknown&amp;amp',
+  'unknown&amp;am',
+  'ｕｎｋｎｏｗｎ＆',
+  'ｕｎｋｎｏｗｎ＆ａｍｐ',
+  encodeAmpersands('unknown&', 8),
+]) {
+  for (const suffix of placeholderComparisonSuffixes) {
+    generatedPlaceholderContracts.push([
+      `amp-tail risk ${JSON.stringify(core + suffix)}`,
+      `risk-v1; anchor=id:auth; uncertainty=unknown:${core}${suffix}`,
+      false,
+    ]);
+  }
+}
+for (const suffix of placeholderComparisonSuffixes) {
+  generatedPlaceholderContracts.push([
+    `amp-tail no-finding ${JSON.stringify(suffix)}`,
+    `no-finding-v1; checked=name:everything&amp;${suffix}; unchecked=name:nothing&amp;${suffix}`,
+    false,
+  ]);
+}
+assert.equal(
+  parseReflectionContract(
+    `risk-v1; anchor=id:auth; uncertainty=unknown:${encodeAmpersands('unknown&', 9)}`,
+  ).reason,
+  'unresolved-entity',
+);
 for (const [name, value, expectedOk] of [
   ['typed risk grammar', typedRisk, true],
   ['typed no-finding grammar', typedNoFinding, true],
@@ -1024,6 +1089,7 @@ for (const [name, value, expectedOk] of [
   ['typed C++ detail stays substantive', 'risk-v1; anchor=id:auth; uncertainty=unknown:C++', true],
   ['typed snake_case detail stays substantive', 'risk-v1; anchor=id:auth; uncertainty=unknown:snake_case', true],
   ['typed encoded R&D+ stays substantive', 'risk-v1; anchor=name:R&amp;D+; uncertainty=unknown:R&amp;D+', true],
+  ['typed encoded A&B stays substantive', 'risk-v1; anchor=name:A&amp;B; uncertainty=unknown:A&amp;B', true],
   ['typed encoded HTML comment detail', 'risk-v1; anchor=id:Redis; uncertainty=unknown:&lt;!--xx--&gt;', false],
   ['typed Markdown link detail', 'risk-v1; anchor=id:Redis; uncertainty=unknown:[](xx)', false],
   ['typed underscore-wrapped detail', 'risk-v1; anchor=id:Redis; uncertainty=unknown:__xx__', false],
@@ -1078,7 +1144,14 @@ for (const [name, value, expectedOk] of [
     '未发现问题；已检查范围：主要流程；未检查范围：次要流程',
     false,
   ],
+  ...generatedPlaceholderContracts,
 ]) {
+  const direct = parseReflectionContract(value);
+  if (direct.ok !== expectedOk) {
+    reflectionRegressionFailures.push(
+      `${name}: direct parser expected ok=${expectedOk}, actual=${direct.ok} (${direct.reason || 'ok'})`,
+    );
+  }
   for (const field of ['least-confidence', 'biggest-missing']) {
     const leastConfidence = field === 'least-confidence' ? value : typedRisk;
     const biggestMissing = field === 'biggest-missing' ? value : typedRisk;
@@ -2048,6 +2121,35 @@ for (const [name, value] of [
     );
   }
 }
+const newPlaceholderLifecycleFailures = [];
+for (const [name, value] of [
+  ['N/A separator placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:n-a。/_+-'],
+  ['N/A separator no-finding placeholder', 'no-finding-v1; checked=name:n_a; unchecked=name:库存同步'],
+  ['amp-tail uncertainty placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:unknown&amp;'],
+  ['amp-tail no-finding placeholders', 'no-finding-v1; checked=name:everything&amp;; unchecked=name:nothing&amp;'],
+  ['incomplete supported entity placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:unknown&amp;amp'],
+  ['NFKC incomplete supported entity placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:ｕｎｋｎｏｗｎ＆ａｍｐ'],
+]) {
+  const lifecycle = runIsolatedHandoff(value);
+  if (lifecycle.status !== 1) {
+    newPlaceholderLifecycleFailures.push(
+      `${name}: expected exit=1, actual=${lifecycle.status}`,
+    );
+  }
+  if (!lifecycle.stateExists) {
+    newPlaceholderLifecycleFailures.push(`${name}: active task state was deleted`);
+  }
+  if (!/least-confidence/.test(lifecycle.stderr)) {
+    newPlaceholderLifecycleFailures.push(
+      `${name}: missing least-confidence error (${lifecycle.stderr})`,
+    );
+  }
+}
+assert.deepEqual(
+  newPlaceholderLifecycleFailures,
+  [],
+  'N/A, amp-tail, and incomplete-entity handoffs must fail before state deletion',
+);
 const observationNoFindingHandoff = runIsolatedHandoff('暂未观察到异常');
 if (observationNoFindingHandoff.status !== 1) {
   reflectionRegressionFailures.push(

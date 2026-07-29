@@ -597,7 +597,74 @@ const informativeTerminalContracts = [
     'repository path remains substantive',
     'no-finding-v1; checked=path:scripts/foo-bar.cjs; unchecked=path:docs/bar_baz.md',
   ],
+  [
+    'encoded A&B remains substantive',
+    'risk-v1; anchor=name:A&amp;B; uncertainty=unknown:A&amp;B',
+  ],
 ];
+const naSeparatorCores = [
+  ...['n', 'N'].flatMap((letter) =>
+    ['', '-', '_', '+', '.', '/'].map((separator) => `${letter}${separator}${letter === 'N' ? 'A' : 'a'}`),
+  ),
+  'ｎ－ａ',
+  ...[45, 95, 43, 46, 47].flatMap((codePoint) => [
+    `n&#${codePoint};a`,
+    `n&amp;#${codePoint};a`,
+    `n&amp;amp;#${codePoint};a`,
+  ]),
+];
+const placeholderComparisonSuffixes = ['', '.', '。', '…', '/_+-', '。/_+-', '   '];
+for (const core of naSeparatorCores) {
+  for (const suffix of placeholderComparisonSuffixes) {
+    placeholderTerminalInvalidContracts.push(
+      [
+        `N/A separator risk ${JSON.stringify(core + suffix)}`,
+        `risk-v1; anchor=id:auth; uncertainty=unknown:${core}${suffix}`,
+      ],
+      [
+        `N/A separator no-finding ${JSON.stringify(core + suffix)}`,
+        `no-finding-v1; checked=name:${core}${suffix}; unchecked=name:库存同步`,
+      ],
+    );
+  }
+}
+function encodeAmpersands(value, depth) {
+  let encoded = value;
+  for (let pass = 0; pass < depth; pass += 1) encoded = encoded.replaceAll('&', '&amp;');
+  return encoded;
+}
+const ampPlaceholderCores = [
+  'unknown&amp;',
+  'unknown&amp;amp;',
+  'unknown&amp;#38;',
+  'unknown&amp;amp',
+  'unknown&amp;am',
+  'ｕｎｋｎｏｗｎ＆',
+  'ｕｎｋｎｏｗｎ＆ａｍｐ',
+  encodeAmpersands('unknown&', 8),
+];
+for (const core of ampPlaceholderCores) {
+  for (const suffix of placeholderComparisonSuffixes) {
+    placeholderTerminalInvalidContracts.push(
+      [
+        `amp-tail risk ${JSON.stringify(core + suffix)}`,
+        `risk-v1; anchor=id:auth; uncertainty=unknown:${core}${suffix}`,
+      ],
+    );
+  }
+}
+for (const suffix of placeholderComparisonSuffixes) {
+  placeholderTerminalInvalidContracts.push([
+    `amp-tail no-finding ${JSON.stringify(suffix)}`,
+    `no-finding-v1; checked=name:everything&amp;${suffix}; unchecked=name:nothing&amp;${suffix}`,
+  ]);
+}
+assert.equal(
+  parseReflectionContract(
+    `risk-v1; anchor=id:auth; uncertainty=unknown:${encodeAmpersands('unknown&', 9)}`,
+  ).reason,
+  'unresolved-entity',
+);
 const placeholderTerminalRegressionFailures = [];
 for (const [name, value] of placeholderTerminalInvalidContracts) {
   const direct = parseReflectionContract(value);
@@ -645,6 +712,11 @@ const parsedInformativeAmpersand = parseReflectionContract(
 );
 assert.equal(parsedInformativeAmpersand.anchor.value, 'R&D+');
 assert.equal(parsedInformativeAmpersand.uncertainty.detail, 'R&D+');
+const parsedInformativeBareAmpersand = parseReflectionContract(
+  'risk-v1; anchor=name:A&amp;B; uncertainty=unknown:A&amp;B',
+);
+assert.equal(parsedInformativeBareAmpersand.anchor.value, 'A&B');
+assert.equal(parsedInformativeBareAmpersand.uncertainty.detail, 'A&B');
 assert.equal(
   parseReflectionContract(
     'risk-v1; anchor=id:auth; uncertainty=unknown:C++',
