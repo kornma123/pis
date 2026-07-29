@@ -770,8 +770,10 @@ function collectVisibleFields(body, parseOptions = {}) {
       ) {
         if (isUnambiguousUnknownFieldBoundary(unknownBoundaryCandidate)) {
           activeReflectionKey = null;
-        } else {
+        } else if (continuesVisibleReflectionParagraph(line)) {
           appendReflectionContinuation(line);
+        } else {
+          activeReflectionKey = null;
         }
         continue;
       }
@@ -790,6 +792,14 @@ function collectVisibleFields(body, parseOptions = {}) {
       malformed.push(parsed.malformedReason || 'unsafe-parse');
       continue;
     }
+    if (activeReflectionKey && !parsed.key) {
+      if (continuesVisibleReflectionParagraph(line)) {
+        appendReflectionContinuation(line);
+      } else {
+        activeReflectionKey = null;
+      }
+      continue;
+    }
     const isKnownFieldBoundary =
       parsed.key &&
       continuationBoundaryKeys instanceof Set &&
@@ -803,7 +813,8 @@ function collectVisibleFields(body, parseOptions = {}) {
       parsed.key &&
       continuationBoundaryKeys instanceof Set &&
       !isKnownFieldBoundary &&
-      !isUnknownFieldBoundary
+      !isUnknownFieldBoundary &&
+      continuesVisibleReflectionParagraph(line)
     ) {
       appendReflectionContinuation(line);
       continue;

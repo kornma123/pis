@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   collectFields,
+  collectVisibleFields,
   parseReflectionContract,
   parseVisibleFieldLine,
   stripIgnoredMarkdown,
@@ -561,15 +562,15 @@ const ambiguousUnknownContinuationPayloads = [
   ['equation', 'x=42'],
 ];
 const unknownBoundaryMimicPayloads = [
-  ['space-before-delimiter equation', 'x = 42', '- **x** = 42'],
-  ['space-padded equation', 'x= 42', '- **x**= 42'],
-  ['Tab-padded equation', 'x=\t42', '- **x**=\t42'],
-  ['entity-delimited equation', 'x&#61; 42', '- **x**&#61; 42'],
-  ['nested-entity-delimited equation', 'x&amp;#61; 42', '- **x**&amp;#61; 42'],
-  ['spaced URL scheme', 'https: //example.test/proof', '- **https**: //example.test/proof'],
-  ['spaced mailto scheme', 'mailto: security@example.test', '- **mailto**: security@example.test'],
-  ['unpadded custom namespace', 'custom-note:value', '- **custom-note**:value'],
-  ['empty custom namespace value', 'custom-note: ', '- **custom-note**: '],
+  ['space-before-delimiter equation', 'x = 42', '  x = 42'],
+  ['space-padded equation', 'x= 42', '  x= 42'],
+  ['Tab-padded equation', 'x=\t42', '  x=\t42'],
+  ['entity-delimited equation', 'x&#61; 42', '  x&#61; 42'],
+  ['nested-entity-delimited equation', 'x&amp;#61; 42', '  x&amp;#61; 42'],
+  ['spaced URL scheme', 'https: //example.test/proof', '  https: //example.test/proof'],
+  ['spaced mailto scheme', 'mailto: security@example.test', '  mailto: security@example.test'],
+  ['unpadded custom namespace', 'custom-note:value', '  custom-note:value'],
+  ['empty custom namespace value', 'custom-note: ', '  custom-note: '],
 ];
 const hangingContinuationPayloads = [
   ['four-space hanging indent', '    lazy&amp;#9;continuation'],
@@ -578,6 +579,21 @@ const hangingContinuationPayloads = [
 const prFenceLikeHangingContinuationPayloads = [
   ['backtick fence-shaped continuation', '    ```md', '      ```md'],
   ['tilde fence-shaped continuation', '    ~~~md', '      ~~~md'],
+];
+const emptyKeyContinuationPayloads = [
+  ['ASCII colon', ': arbitrary continuation'],
+  ['fullwidth colon', '： arbitrary continuation'],
+  ['named colon entity', '&colon; arbitrary continuation'],
+  ['nested numeric colon entity', '&amp;#58; arbitrary continuation'],
+  ['empty HTML key', '<b></b>: arbitrary continuation'],
+];
+const prMarkdownBlockBoundary = '- **Supplemental**: evidence';
+const prPeerBlockBoundaries = [
+  ['equation peer block', '- **x**= 42'],
+  ['URL peer block', '- **https**: //example.test/proof'],
+  ['unpadded custom peer block', '- **custom-note**:value'],
+  ['empty custom peer block', '- **custom-note**: '],
+  ['empty-key peer block', '- **:** arbitrary continuation'],
 ];
 for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
   for (const [payloadName, payload] of lazyContinuationPayloads) {
@@ -627,7 +643,7 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       `${endingName}/${payloadName}: direct parser rejects a field-shaped continuation`,
     );
     expectFail(
-      `${endingName}/${payloadName}: PR collector rejects a non-custom bullet boundary`,
+      `${endingName}/${payloadName}: PR list-content mimic remains in reflection raw`,
       validBody.replace(
         leastConfidenceLine,
         `${leastConfidenceLine}${lineEnding}${prPayload}`,
@@ -666,6 +682,83 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
         `${leastConfidenceLine}${lineEnding}${prPayload}`,
       ),
       /我现在最没把握的是什么|Least confidence/,
+    );
+  }
+  for (const [payloadName, payload] of emptyKeyContinuationPayloads) {
+    const plainFields = collectVisibleFields(
+      stripIgnoredMarkdown(
+        `least-confidence: ${typedRisk}${lineEnding}${payload}`,
+      ),
+      {
+        allowEquals: true,
+        allowUnknownFieldBoundaries: true,
+        continuationBoundaryKeys: new Set(['least-confidence']),
+      },
+    );
+    const plainRaw = plainFields.rawValues.get('least-confidence');
+    assert.equal(
+      parseReflectionContract(`${typedRisk}${lineEnding}${payload}`).reason,
+      'control-character',
+      `${endingName}/${payloadName}: direct parser rejects an empty-key continuation`,
+    );
+    assert.equal(
+      plainRaw,
+      `${typedRisk}\n${payload}`,
+      `${endingName}/${payloadName}: plain collector preserves empty-key continuation raw`,
+    );
+    assert.equal(
+      parseReflectionContract(plainRaw).reason,
+      'control-character',
+      `${endingName}/${payloadName}: preserved plain raw fails closed`,
+    );
+    expectFail(
+      `${endingName}/${payloadName}: PR list-content continuation remains in reflection raw`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}  ${payload}`,
+      ),
+      /我现在最没把握的是什么|Least confidence/,
+    );
+  }
+  assert.equal(
+    parseReflectionContract(`${typedRisk}${lineEnding}${prMarkdownBlockBoundary}`).ok,
+    false,
+    `${endingName}: direct parser rejects an authored Markdown block in raw`,
+  );
+  expectPass(
+    `${endingName}: independent PR block after reflection is a boundary`,
+    validBody.replace(
+      leastConfidenceLine,
+      `${leastConfidenceLine}${lineEnding}${prMarkdownBlockBoundary}`,
+    ),
+    [128],
+  );
+  expectPass(
+    `${endingName}: independent PR block before reflection has the same semantics`,
+    validBody.replace(
+      leastConfidenceLine,
+      `${prMarkdownBlockBoundary}${lineEnding}${leastConfidenceLine}`,
+    ),
+    [128],
+  );
+  // A real peer list item is a Markdown block boundary regardless of whether
+  // its key resembles an inline mimic or a malformed custom/empty-key field.
+  for (const [blockName, peerBlock] of prPeerBlockBoundaries) {
+    expectPass(
+      `${endingName}/${blockName}: peer block after reflection is independent`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}${peerBlock}`,
+      ),
+      [128],
+    );
+    expectPass(
+      `${endingName}/${blockName}: peer block before reflection is independent`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${peerBlock}${lineEnding}${leastConfidenceLine}`,
+      ),
+      [128],
     );
   }
 }
@@ -1513,14 +1606,14 @@ for (const [name, encodedDelimiter] of [
     /字段|重复/,
   );
 }
-expectFail(
-  'non-custom internal underscore line remains reflection content',
+expectPass(
+  'non-custom internal underscore peer block stays independent',
   validBody.replace(
     leastConfidenceLine,
     `${leastConfidenceLine}\n` +
       '- **我现在最没把握的是什么？ / Leas_t confidence**: TODO later fill this',
   ),
-  /我现在最没把握的是什么|Least confidence/,
+  [128],
 );
 expectPass(
   'NFKC-equivalent required key is recognized',

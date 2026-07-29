@@ -745,15 +745,15 @@ const ambiguousUnknownContinuationPayloads = [
   ['equation', 'x=42'],
 ];
 const unknownBoundaryMimicPayloads = [
-  ['space-before-delimiter equation', 'x = 42', '- **x** = 42'],
-  ['space-padded equation', 'x= 42', '- **x**= 42'],
-  ['Tab-padded equation', 'x=\t42', '- **x**=\t42'],
-  ['entity-delimited equation', 'x&#61; 42', '- **x**&#61; 42'],
-  ['nested-entity-delimited equation', 'x&amp;#61; 42', '- **x**&amp;#61; 42'],
-  ['spaced URL scheme', 'https: //example.test/proof', '- **https**: //example.test/proof'],
-  ['spaced mailto scheme', 'mailto: security@example.test', '- **mailto**: security@example.test'],
-  ['unpadded custom namespace', 'custom-note:value', '- **custom-note**:value'],
-  ['empty custom namespace value', 'custom-note: ', '- **custom-note**: '],
+  ['space-before-delimiter equation', 'x = 42', '  x = 42'],
+  ['space-padded equation', 'x= 42', '  x= 42'],
+  ['Tab-padded equation', 'x=\t42', '  x=\t42'],
+  ['entity-delimited equation', 'x&#61; 42', '  x&#61; 42'],
+  ['nested-entity-delimited equation', 'x&amp;#61; 42', '  x&amp;#61; 42'],
+  ['spaced URL scheme', 'https: //example.test/proof', '  https: //example.test/proof'],
+  ['spaced mailto scheme', 'mailto: security@example.test', '  mailto: security@example.test'],
+  ['unpadded custom namespace', 'custom-note:value', '  custom-note:value'],
+  ['empty custom namespace value', 'custom-note: ', '  custom-note: '],
 ];
 const hangingContinuationPayloads = [
   ['four-space hanging indent', '    lazy&amp;#9;continuation'],
@@ -768,6 +768,27 @@ const rootFenceLikeHangingContinuationPayloads = [
 const prFenceLikeHangingContinuationPayloads = [
   ['backtick fence-shaped list continuation', '    ```md', '      ```md'],
   ['tilde fence-shaped list continuation', '    ~~~md', '      ~~~md'],
+];
+const emptyKeyContinuationPayloads = [
+  ['ASCII colon', ': arbitrary continuation'],
+  ['fullwidth colon', '： arbitrary continuation'],
+  ['named colon entity', '&colon; arbitrary continuation'],
+  ['nested numeric colon entity', '&amp;#58; arbitrary continuation'],
+  ['empty HTML key', '<b></b>: arbitrary continuation'],
+];
+const issueMarkdownBlockBoundaries = [
+  ['ATX heading', '## Supplemental: evidence'],
+  ['blockquote', '> supplemental: evidence'],
+  ['unordered list item', '- supplemental: evidence'],
+  ['ordered list item', '1. supplemental: evidence'],
+];
+const prMarkdownBlockBoundary = '- **Supplemental**: evidence';
+const prPeerBlockBoundaries = [
+  ['equation peer block', '- **x**= 42'],
+  ['URL peer block', '- **https**: //example.test/proof'],
+  ['unpadded custom peer block', '- **custom-note**:value'],
+  ['empty custom peer block', '- **custom-note**: '],
+  ['empty-key peer block', '- **:** arbitrary continuation'],
 ];
 for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
   for (const [payloadName, payload] of lazyContinuationPayloads) {
@@ -913,6 +934,109 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       reflectionRegressionFailures.push(
         `${endingName}/${payloadName}: list-content indent escaped PR reflection ` +
         `(direct=${direct.ok}, pr=${prResult.ok})`,
+      );
+    }
+  }
+  for (const [payloadName, payload] of emptyKeyContinuationPayloads) {
+    const direct = parseReflectionContract(
+      `${strongLeastConfidence}${lineEnding}${payload}`,
+    );
+    const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${payload}`,
+      );
+    const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        prStrongLeastConfidenceLine,
+        `${prStrongLeastConfidenceLine}${lineEnding}  ${payload}`,
+      );
+    const handoffFields = collectHandoffFields(handoffBody);
+    const prFields = collectFields(stripIgnoredMarkdown(prBody));
+    const handoffRaw = handoffFields.rawValues.get('least-confidence');
+    const prLeastConfidenceKey = [...prFields.rawValues.keys()].find((key) =>
+      key.includes('least confidence'));
+    const prRaw = prFields.rawValues.get(prLeastConfidenceKey);
+    const handoffErrors = handoffFieldErrors(handoffBody);
+    const prResult = validatePrBody(prBody);
+    if (
+      direct.reason !== 'control-character' ||
+      parseReflectionContract(handoffRaw || '').reason !== 'control-character' ||
+      !handoffErrors.includes('least-confidence') ||
+      parseReflectionContract(prRaw || '').reason !== 'control-character' ||
+      prResult.ok
+    ) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName}: empty-key continuation truncated reflection raw ` +
+        `(direct=${direct.reason}, handoff-raw=${JSON.stringify(handoffRaw)}, ` +
+        `handoff-errors=${handoffErrors.join('|')}, pr-raw=${JSON.stringify(prRaw)}, ` +
+        `pr=${prResult.ok})`,
+      );
+    }
+  }
+  for (const [blockName, handoffBlock] of issueMarkdownBlockBoundaries) {
+    const direct = parseReflectionContract(
+      `${strongLeastConfidence}${lineEnding}${handoffBlock}`,
+    );
+    const handoffAfter = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${handoffBlock}`,
+      );
+    const handoffBefore = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffBlock}${lineEnding}${handoffStrongLeastConfidenceLine}`,
+      );
+    const afterErrors = handoffFieldErrors(handoffAfter);
+    const beforeErrors = handoffFieldErrors(handoffBefore);
+    if (direct.ok || afterErrors.length !== 0 || beforeErrors.length !== 0) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${blockName}: Issue block boundary depends on field order ` +
+        `(direct=${direct.ok}, after=${afterErrors.join('|')}, ` +
+        `before=${beforeErrors.join('|')})`,
+      );
+    }
+  }
+  const directPrBlock = parseReflectionContract(
+    `${strongLeastConfidence}${lineEnding}${prMarkdownBlockBoundary}`,
+  );
+  const prAfter = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+    .replace(
+      prStrongLeastConfidenceLine,
+      `${prStrongLeastConfidenceLine}${lineEnding}${prMarkdownBlockBoundary}`,
+    );
+  const prBefore = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+    .replace(
+      prStrongLeastConfidenceLine,
+      `${prMarkdownBlockBoundary}${lineEnding}${prStrongLeastConfidenceLine}`,
+    );
+  const prAfterResult = validatePrBody(prAfter);
+  const prBeforeResult = validatePrBody(prBefore);
+  if (directPrBlock.ok || !prAfterResult.ok || !prBeforeResult.ok) {
+    reflectionRegressionFailures.push(
+      `${endingName}: independent PR block boundary depends on field order ` +
+      `(direct=${directPrBlock.ok}, after=${prAfterResult.ok}, ` +
+      `before=${prBeforeResult.ok})`,
+    );
+  }
+  for (const [blockName, peerBlock] of prPeerBlockBoundaries) {
+    const peerAfter = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        prStrongLeastConfidenceLine,
+        `${prStrongLeastConfidenceLine}${lineEnding}${peerBlock}`,
+      );
+    const peerBefore = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        prStrongLeastConfidenceLine,
+        `${peerBlock}${lineEnding}${prStrongLeastConfidenceLine}`,
+      );
+    const peerAfterResult = validatePrBody(peerAfter);
+    const peerBeforeResult = validatePrBody(peerBefore);
+    if (!peerAfterResult.ok || !peerBeforeResult.ok) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${blockName}: real peer block depends on reflection order ` +
+        `(after=${peerAfterResult.ok}, before=${peerBeforeResult.ok})`,
       );
     }
   }
@@ -2732,6 +2856,56 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
         `${endingName}/${payloadName} lifecycle missed least-confidence error: ` +
         lifecycle.stderr,
       );
+    }
+  }
+  for (const [payloadName, payload] of emptyKeyContinuationPayloads) {
+    const lifecycle = runIsolatedHandoff(
+      strongLeastConfidence,
+      (body) => body.replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${payload}`,
+      ),
+    );
+    if (lifecycle.status !== 1) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} empty-key lifecycle expected exit=1, ` +
+        `actual=${lifecycle.status}`,
+      );
+    }
+    if (!lifecycle.stateExists) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} empty-key lifecycle deleted active task state`,
+      );
+    }
+    if (!/least-confidence/.test(lifecycle.stderr)) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} empty-key lifecycle missed least-confidence: ` +
+        lifecycle.stderr,
+      );
+    }
+  }
+  for (const [blockName, block] of issueMarkdownBlockBoundaries) {
+    for (const order of ['after', 'before']) {
+      const lifecycle = runIsolatedHandoff(
+        strongLeastConfidence,
+        (body) => body.replace(
+          handoffStrongLeastConfidenceLine,
+          order === 'after'
+            ? `${handoffStrongLeastConfidenceLine}${lineEnding}${block}`
+            : `${block}${lineEnding}${handoffStrongLeastConfidenceLine}`,
+        ),
+      );
+      if (lifecycle.status !== 0) {
+        reflectionRegressionFailures.push(
+          `${endingName}/${blockName}/${order} block lifecycle expected exit=0, ` +
+          `actual=${lifecycle.status}: ${lifecycle.stderr}`,
+        );
+      }
+      if (lifecycle.stateExists) {
+        reflectionRegressionFailures.push(
+          `${endingName}/${blockName}/${order} block lifecycle retained task state`,
+        );
+      }
     }
   }
 }
