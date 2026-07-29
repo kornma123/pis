@@ -730,6 +730,12 @@ const lazyContinuationPayloads = [
   ['numeric Tab entity', 'lazy&#9;continuation'],
   ['nested named Tab entity', 'lazy&amp;Tab;continuation'],
   ['nested numeric Tab entity', 'lazy&amp;#9;continuation'],
+  ['ordered start zero period', '0. x=42'],
+  ['ordered start two period', '2. x=42'],
+  ['ordered start two parenthesis', '2) x=42'],
+  ['empty unordered marker', '-'],
+  ['empty ordered one marker', '1.'],
+  ['empty ordered two marker', '2.'],
 ];
 const lazyContinuationLineEndings = [
   ['LF', '\n'],
@@ -784,6 +790,9 @@ const issueMarkdownBlockBoundaries = [
 ];
 const prMarkdownBlockBoundary = '- **Supplemental**: evidence';
 const prPeerBlockBoundaries = [
+  ['empty peer block', '-'],
+  ['empty ordered peer block', '2.'],
+  ['non-one ordered peer block', '2. x=42'],
   ['equation peer block', '- **x**= 42'],
   ['URL peer block', '- **https**: //example.test/proof'],
   ['unpadded custom peer block', '- **custom-note**:value'],

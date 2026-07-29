@@ -382,10 +382,33 @@ function beginHtmlBlock(sourceLine, decodedLine, paragraphOpen) {
 }
 
 function startsNonParagraphBlock(line) {
+  // With no paragraph open, every valid list marker (including empty items and
+  // ordered starts other than 1) begins a block.
+  const value = String(line || '');
   return (
-    /^ {0,3}(?:>|#{1,6}(?:[ \t]+|$)|(?:[-+*]|\d{1,9}[.)])[ \t]+)/u.test(line) ||
-    /^(?: {4,}|\t)/u.test(line) ||
-    /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/u.test(line)
+    /^ {0,3}(?:>|#{1,6}(?:[ \t]+|$)|(?:[-+*]|\d{1,9}[.)])(?:[ \t]+|$))/u.test(value) ||
+    /^(?: {4,}|\t)/u.test(value) ||
+    /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/u.test(value)
+  );
+}
+
+function interruptsOpenParagraph(line) {
+  // CommonMark paragraph interruption is narrower: list items must be
+  // non-empty, and ordered items must start at 1.
+  const value = String(line || '');
+  if (
+    /^ {0,3}(?:>|#{1,6}(?:[ \t]+|$))/u.test(value) ||
+    /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/u.test(value)
+  ) {
+    return true;
+  }
+  const unordered = value.match(/^ {0,3}[-+*]([ \t]+)([\s\S]*)$/u);
+  if (unordered) return /[^ \t]/u.test(unordered[2]);
+  const ordered = value.match(/^ {0,3}(\d{1,9})[.)]([ \t]+)([\s\S]*)$/u);
+  return Boolean(
+    ordered &&
+    Number.parseInt(ordered[1], 10) === 1 &&
+    /[^ \t]/u.test(ordered[3]),
   );
 }
 
@@ -574,7 +597,13 @@ function lineOpensParagraph(syntaxLine, previousParagraphOpen) {
   if (previousParagraphOpen && /^(?: {4,}|\t)/u.test(syntaxLine)) return true;
   if (previousParagraphOpen && /^ {0,3}(?:=+|-+)[ \t]*$/u.test(syntaxLine)) return false;
   if (!previousParagraphOpen && isLinkReferenceDefinition(syntaxLine)) return false;
-  if (startsNonParagraphBlock(syntaxLine)) return false;
+  if (
+    previousParagraphOpen
+      ? interruptsOpenParagraph(syntaxLine)
+      : startsNonParagraphBlock(syntaxLine)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -614,7 +643,8 @@ function stripIgnoredMarkdown(body) {
           inheritsParagraphContainer ||
           (
             parsedContainer.frame.kind === 'root' &&
-            !startsNonParagraphBlock(line)
+            !/^(?: {4,}|\t)/u.test(line) &&
+            !interruptsOpenParagraph(line)
           )
         ) &&
         lineOpensParagraph(decodedSyntaxLine, true),
@@ -724,7 +754,18 @@ function continuesVisibleReflectionParagraph(line) {
   // paragraph is open. A surviving four-space / Tab line therefore inherits
   // the open paragraph and must remain part of the reflection's raw value.
   if (/^(?: {4,}|\t)/u.test(value)) return true;
-  return !startsNonParagraphBlock(value);
+  return !interruptsOpenParagraph(value);
+}
+
+function isSameLevelPrListBoundary(line, activeBulletIndent) {
+  // PR reflection fields live in a list container. A peer marker at the same
+  // indentation ends that field even when the item is empty or starts at 0/2;
+  // deeper markers remain paragraph content and are validated fail-closed.
+  if (!Number.isInteger(activeBulletIndent)) return false;
+  const marker = String(line || '').match(
+    /^( {0,3})(?:[-+*]|\d{1,9}[.)])(?:[ \t]+[\s\S]*|[ \t]*)$/u,
+  );
+  return Boolean(marker && marker[1].length === activeBulletIndent);
 }
 
 function isUnambiguousUnknownFieldBoundary(parsed) {
@@ -743,6 +784,7 @@ function collectVisibleFields(body, parseOptions = {}) {
   const malformed = [];
   const continuationBoundaryKeys = parseOptions.continuationBoundaryKeys;
   let activeReflectionKey = null;
+  let activeReflectionBulletIndent = null;
 
   function appendReflectionContinuation(line) {
     const rawValue = `${rawValues.get(activeReflectionKey)}\n${line}`;
@@ -763,6 +805,15 @@ function collectVisibleFields(body, parseOptions = {}) {
       continuationBoundaryKeys instanceof Set &&
       continuationBoundaryKeys.has(unknownBoundaryCandidate.key);
     if (!parsed) {
+      if (
+        activeReflectionKey &&
+        parseOptions.bullet === true &&
+        isSameLevelPrListBoundary(line, activeReflectionBulletIndent)
+      ) {
+        activeReflectionKey = null;
+        activeReflectionBulletIndent = null;
+        continue;
+      }
       if (
         unknownBoundaryCandidate &&
         !unknownBoundaryCandidate.malformed &&
@@ -827,6 +878,7 @@ function collectVisibleFields(body, parseOptions = {}) {
       rawValues.set(parsed.key, parsed.rawValue);
       if (REFLECTION_FIELD_KEYS.has(parsed.key)) {
         activeReflectionKey = parsed.key;
+        activeReflectionBulletIndent = parsed.bulletIndent;
       }
     }
   }
@@ -987,10 +1039,12 @@ function normalizeFieldValue(value) {
 function parseVisibleFieldLine(line, options = {}) {
   const rawLine = String(line || '');
   let content;
+  let bulletIndent = null;
   if (options.bullet) {
-    const bullet = rawLine.match(/^ {0,3}-[ \t]+([\s\S]*)$/u);
+    const bullet = rawLine.match(/^( {0,3})-[ \t]+([\s\S]*)$/u);
     if (!bullet) return null;
-    content = bullet[1];
+    bulletIndent = bullet[1].length;
+    content = bullet[2];
   } else {
     if (/^(?: {4,}|\t)/u.test(rawLine)) return null;
     const plain = rawLine.match(/^ {0,3}([\s\S]*)$/u);
@@ -1027,6 +1081,7 @@ function parseVisibleFieldLine(line, options = {}) {
     rawValuePadding,
     malformed: Boolean(key.malformedReason),
     malformedReason: key.malformedReason,
+    bulletIndent,
   };
 }
 
