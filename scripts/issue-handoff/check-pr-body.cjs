@@ -153,7 +153,7 @@ function normalizeLineEndings(value) {
 function parseMarkdownContainer(line) {
   let content = String(line || '');
   let blockquoteDepth = 0;
-  let listDepth = 0;
+  const listIndents = [];
 
   for (let depth = 0; depth < 32; depth += 1) {
     const blockquote = content.match(/^ {0,3}>[ \t]?/u);
@@ -162,10 +162,14 @@ function parseMarkdownContainer(line) {
       blockquoteDepth += 1;
       continue;
     }
-    const list = content.match(/^ {0,3}(?:[-+*]|\d{1,9}[.)])(?:[ \t]+)/u);
+    const list = content.match(/^( {0,3})((?:[-+*]|\d{1,9}[.)]))([ \t]+)/u);
     if (list) {
       content = content.slice(list[0].length);
-      listDepth += 1;
+      listIndents.push(
+        list[1].length +
+        list[2].length +
+        Math.min(markdownIndentWidth(list[3]), 4),
+      );
       continue;
     }
     break;
@@ -173,27 +177,42 @@ function parseMarkdownContainer(line) {
 
   return {
     content,
-    frame: listDepth > 0
-      ? { kind: 'list', blockquoteDepth, minimumIndent: 2 }
+    frame: listIndents.length > 0
+      ? {
+          kind: 'list',
+          blockquoteDepth,
+          listIndents,
+          minimumIndent: listIndents.reduce((sum, width) => sum + width, 0),
+        }
       : blockquoteDepth > 0
         ? { kind: 'blockquote', depth: blockquoteDepth }
         : { kind: 'root' },
   };
 }
 
+function markdownIndentWidth(value) {
+  let width = 0;
+  for (const character of String(value || '')) {
+    width = character === '\t' ? width + (4 - (width % 4)) : width + 1;
+  }
+  return width;
+}
+
 function continuesMarkdownContainer(line, frame) {
   if (!frame || frame.kind === 'root') return true;
-  const parsed = parseMarkdownContainer(line);
-  if (frame.kind === 'list') {
-    const hasContinuationIndent = (value) =>
-      String(value || '').startsWith('\t') ||
-      String(value || '').match(/^ */u)[0].length >= frame.minimumIndent;
-    if (hasContinuationIndent(line)) return true;
-    if (frame.blockquoteDepth === 0 || parsed.frame.kind !== 'blockquote') return false;
-    return parsed.frame.depth >= frame.blockquoteDepth &&
-      hasContinuationIndent(parsed.content);
+  let content = String(line || '');
+  let blockquoteDepth = 0;
+  while (blockquoteDepth < (frame.blockquoteDepth || frame.depth || 0)) {
+    const blockquote = content.match(/^ {0,3}>[ \t]?/u);
+    if (!blockquote) return false;
+    content = content.slice(blockquote[0].length);
+    blockquoteDepth += 1;
   }
-  return parsed.frame.kind === 'blockquote' && parsed.frame.depth >= frame.depth;
+  if (frame.kind === 'list') {
+    const indentation = content.match(/^[ \t]*/u)?.[0] || '';
+    return markdownIndentWidth(indentation) >= frame.minimumIndent;
+  }
+  return true;
 }
 
 function encodedHtmlSyntax(sourceLine, decodedLine) {
@@ -279,7 +298,7 @@ function beginHtmlBlock(sourceLine, decodedLine, paragraphOpen) {
     return { state: stack.length > 0 ? { kind: 'product', stack } : null };
   }
 
-  if (/^ {0,3}<(?:pre|script|style|textarea)(?=[\t >]|\/>|$)/iu.test(decodedLine)) {
+  if (/^ {0,3}<(?:pre|script|style|textarea)(?=[\t >]|$)/iu.test(decodedLine)) {
     const end = /<\/(?:pre|script|style|textarea)>/iu;
     return { state: end.test(decodedLine) ? null : { kind: 'delimited', end, type: 1 } };
   }
@@ -346,8 +365,95 @@ function isLinkReferenceDefinition(line) {
   );
 }
 
+function linkReferenceSyntaxLine(lines, index) {
+  if (index >= lines.length) return null;
+  const syntaxLine = parseMarkdownContainer(lines[index]).content;
+  return decodeHtmlEntitiesDetailed(syntaxLine).value;
+}
+
+function consumeLinkDestination(value) {
+  const input = String(value || '').replace(/^[ \t]+/u, '');
+  if (!input) return null;
+  if (input.startsWith('<')) {
+    const match = input.match(/^<[^<>\n]*>/u);
+    return match ? { rest: input.slice(match[0].length) } : null;
+  }
+  const match = input.match(/^(?:\\.|[^ \t\n])+/u);
+  return match ? { rest: input.slice(match[0].length) } : null;
+}
+
+function consumeLinkTitle(lines, startIndex, initialText) {
+  const input = String(initialText || '').replace(/^[ \t]+/u, '');
+  const opener = input[0];
+  const closer = opener === '(' ? ')' : opener;
+  if (!['"', "'", '('].includes(opener)) return null;
+
+  let index = startIndex;
+  let text = input.slice(1);
+  for (;;) {
+    let escaped = false;
+    for (let cursor = 0; cursor < text.length; cursor += 1) {
+      const character = text[cursor];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (character === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (character === closer) {
+        return /^[ \t]*$/u.test(text.slice(cursor + 1))
+          ? { endIndex: index }
+          : null;
+      }
+    }
+
+    index += 1;
+    const next = linkReferenceSyntaxLine(lines, index);
+    if (next === null || /^[ \t]*$/u.test(next)) return null;
+    text = next;
+  }
+}
+
+function scanLinkReferenceDefinition(lines, startIndex) {
+  const first = linkReferenceSyntaxLine(lines, startIndex);
+  const opening = first?.match(
+    /^ {0,3}\[(?:\\.|[^\[\]\\])+\]:([ \t]*)(.*)$/u,
+  );
+  if (!opening) return 0;
+
+  const state = {
+    endIndex: startIndex,
+    remainder: opening[2],
+  };
+  if (!state.remainder) {
+    state.endIndex += 1;
+    const destinationLine = linkReferenceSyntaxLine(lines, state.endIndex);
+    if (destinationLine === null || /^[ \t]*$/u.test(destinationLine)) return 0;
+    state.remainder = destinationLine;
+  }
+
+  const destination = consumeLinkDestination(state.remainder);
+  if (!destination) return 0;
+  const trailing = destination.rest;
+  if (trailing.trim()) {
+    const title = consumeLinkTitle(lines, state.endIndex, trailing);
+    return title ? title.endIndex - startIndex + 1 : 0;
+  }
+
+  const possibleTitleIndex = state.endIndex + 1;
+  const possibleTitle = linkReferenceSyntaxLine(lines, possibleTitleIndex);
+  if (possibleTitle && /^[ \t]*["'(]/u.test(possibleTitle)) {
+    const title = consumeLinkTitle(lines, possibleTitleIndex, possibleTitle);
+    if (title) return title.endIndex - startIndex + 1;
+  }
+  return state.endIndex - startIndex + 1;
+}
+
 function lineOpensParagraph(syntaxLine, previousParagraphOpen) {
   if (/^[ \t]*$/u.test(syntaxLine)) return false;
+  if (previousParagraphOpen && /^(?: {4,}|\t)/u.test(syntaxLine)) return true;
   if (previousParagraphOpen && /^ {0,3}(?:=+|-+)[ \t]*$/u.test(syntaxLine)) return false;
   if (!previousParagraphOpen && isLinkReferenceDefinition(syntaxLine)) return false;
   if (startsNonParagraphBlock(syntaxLine)) return false;
@@ -359,8 +465,10 @@ function stripIgnoredMarkdown(body) {
   let htmlBlock = null;
   let paragraphOpen = false;
   const visibleLines = [];
+  const lines = normalizeLineEndings(body).split('\n');
 
-  for (const line of normalizeLineEndings(body).split('\n')) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
     let handled = false;
     while (!handled) {
       const container = parseMarkdownContainer(line);
@@ -403,6 +511,19 @@ function stripIgnoredMarkdown(body) {
         continue;
       }
 
+      if (!paragraphOpen) {
+        const linkReferenceLength = scanLinkReferenceDefinition(lines, lineIndex);
+        if (linkReferenceLength > 0) {
+          for (let count = 0; count < linkReferenceLength; count += 1) {
+            visibleLines.push('');
+          }
+          lineIndex += linkReferenceLength - 1;
+          paragraphOpen = false;
+          handled = true;
+          continue;
+        }
+      }
+
       const htmlStart = beginHtmlBlock(syntaxLine, decodedSyntaxLine, paragraphOpen);
       if (htmlStart) {
         htmlBlock = htmlStart.state
@@ -414,7 +535,7 @@ function stripIgnoredMarkdown(body) {
         continue;
       }
 
-      if (/^(?: {4,}|\t)/u.test(syntaxLine)) {
+      if (!paragraphOpen && /^(?: {4,}|\t)/u.test(syntaxLine)) {
         visibleLines.push('');
         paragraphOpen = false;
         handled = true;
@@ -520,7 +641,7 @@ function normalizeDecodedInline(value) {
 function canonicalizeFieldKeyDetailed(value) {
   const decoded = decodeHtmlEntitiesDetailed(value);
   const unsafeInvisible =
-    /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/u.test(decoded.value) ||
+    /\p{White_Space}/u.test(decoded.value.replace(/[ \t]/gu, '')) ||
     /\p{Default_Ignorable_Code_Point}/u.test(decoded.value);
   const unsafeParse =
     decoded.unresolved ||
@@ -556,6 +677,7 @@ function parseVisibleFieldLine(line, options = {}) {
     if (!bullet) return null;
     content = bullet[1];
   } else {
+    if (/^(?: {4,}|\t)/u.test(rawLine)) return null;
     const plain = rawLine.match(/^ {0,3}([\s\S]*)$/u);
     if (!plain) return null;
     content = plain[1];
@@ -625,10 +747,10 @@ function hasSubstantiveScope(value) {
 
   const compact = clean.replace(/[\s:：,，、/\\()[\]{}<>《》“”"'`-]+/gu, '');
   if (!compact) return false;
-  if (/^(?:检查|核对|验证|审查|覆盖|复核|查看|确认|评估|分析|调查|测试|执行|处理|跟进|完成|排查|扫描|检视|过|了)+$/u.test(compact)) {
+  if (/^(?:检查|核对|验证|审查|覆盖|复核|查看|确认|评估|分析|调查|测试|执行|处理|跟进|完成|排查|扫描|检视|工作|事情|事项|内容|和|与|及|以及|或|或者|过|了)+$/u.test(compact)) {
     return false;
   }
-  return !/^(?:check|checked|checking|inspection|inspections|inspect|inspected|inspecting|scan|scans|scanned|scanning|verify|verified|verification|validate|validated|validation|review|reviewed|audit|audited|coverage|test|testing|analysis|investigation)+$/iu.test(
+  return !/^(?:check|checked|checking|inspection|inspections|inspect|inspected|inspecting|scan|scans|scanned|scanning|verify|verified|verification|validate|validated|validation|review|reviewed|audit|audited|coverage|test|testing|analysis|investigation|work|task|thing|something|anything|and|or)+$/iu.test(
     compact,
   );
 }
@@ -665,6 +787,13 @@ function hasBoundedNoFindingScopes(value) {
 
 function hasSubstantiveRisk(value) {
   const clean = canonicalizeMarkdownText(value);
+  if (
+    /^(?:no|not[ \t]+any)[ \t]+(?:errors?|failures?|issues?|problems?|risks?|findings?)(?:[ \t]+(?:was|were|is|are))?[ \t]+(?:detected|found|identified|observed)[.!]?$/iu.test(
+      clean,
+    )
+  ) {
+    return false;
+  }
   const hasState =
     /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|未(?:查|检查|核对|验证|审查|覆盖|复核|排查|扫描|测试|实测|量化|确认|登记|完成|评估|分析|测量)|尚未|待(?:查|检查|核对|验证|审查|复核|排查|扫描|测试|实测|量化|确认|评估|分析|测量)|需(?:要)?(?:查|检查|核对|验证|审查|复核|排查|扫描|测试|实测|量化|确认|评估|分析|测量)|可能|也许|担心|局限|依赖|只在|仅在|变化)/u.test(clean) ||
     /\b(?:incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|not|only|may|might|could|depends?|needs?|requires?|unmeasured|fail(?:ed|ure)?|error)\b/iu.test(clean);
@@ -672,11 +801,11 @@ function hasSubstantiveRisk(value) {
 
   const object = clean
     .replace(
-      /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|尚未|未|待|需(?:要)?|可能|也许|担心|局限|依赖|只在|仅在|变化|检查|核对|验证|审查|复核|排查|扫描|检视|确认|评估|分析|调查|执行|处理|跟进|完成|实测|量化|测量|观察|识别|登记|风险|问题)/gu,
+      /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|尚未|未|待|需(?:要)?|可能|也许|担心|局限|依赖|只在|仅在|变化|检查|核对|验证|审查|复核|排查|扫描|检视|确认|评估|分析|调查|执行|处理|跟进|完成|实测|量化|测量|观察|识别|检测|登记|风险|问题|工作|事情|事项|内容|某事|某些|一些|任何|所有|相关|其他|其它|通用|一般|和|与|及|以及|或|或者)/gu,
       ' ',
     )
     .replace(
-      /\b(?:a|an|the|be|has|have|had|been|being|is|are|was|were|still|not|only|may|might|could|depends?|needs?|requires?|incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|unmeasured|measured|measurement|check(?:ed|ing)?|inspect(?:ed|ing|ion|ions)?|scan(?:ned|ning|s)?|verif(?:y|ied|ication)|validat(?:e|ed|ion)|review(?:ed|ing)?|audit(?:ed|ing)?|test(?:ed|ing)?|quantif(?:y|ied|ication)|fail(?:ed|ure)?|error|risk|risks|issue|issues|problem|problems|gap|gaps|missing|change(?:d|s|ing)?)\b/giu,
+      /\b(?:a|an|the|be|has|have|had|been|being|is|are|was|were|still|no|not|any|only|may|might|could|depends?|needs?|requires?|incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|unmeasured|measured|measurement|check(?:ed|ing)?|inspect(?:ed|ing|ion|ions)?|scan(?:ned|ning|s)?|verif(?:y|ied|ication)|validat(?:e|ed|ion)|review(?:ed|ing)?|audit(?:ed|ing)?|test(?:ed|ing)?|quantif(?:y|ied|ication)|detect(?:ed|ing|ion)?|observ(?:e|ed|ing|ation)|identif(?:y|ied|ication)|fail(?:ed|ure)?|error|risk|risks|issue|issues|problem|problems|finding|findings|gap|gaps|missing|change(?:d|s|ing)?|work|task|thing|something|anything|generic|general|related|other|and|or)\b/giu,
       ' ',
     );
   const compactObject = object.replace(/[^\p{L}\p{N}]+/gu, '');

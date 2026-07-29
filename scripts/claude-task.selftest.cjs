@@ -222,10 +222,10 @@ function reflectionPrBody(leastConfidence, biggestMissing) {
 `;
 }
 
-function wrapListFence(body, opener = '- ```md') {
+function wrapListFence(body, opener = '- ```md', indentation = '  ') {
   return `${opener}
-${body.split('\n').map((line) => `  ${line}`).join('\n')}
-  \`\`\``;
+${body.split('\n').map((line) => `${indentation}${line}`).join('\n')}
+${indentation}\`\`\``;
 }
 
 function wrapTopLevelFence(body) {
@@ -349,11 +349,10 @@ function checkVisibilitySemantics(name, wrap, expectedOk) {
 for (const [name, wrap] of [
   ['top-level fenced contract is hidden', wrapTopLevelFence],
   ['list fenced contract is hidden', wrapListFence],
-  ['ordered-list fenced contract is hidden', (body) => wrapListFence(body, '1. ```md')],
-  ['nested-list fenced contract is hidden', (body) => wrapListFence(body, '- - ```md')],
+  ['ordered-list fenced contract is hidden', (body) => wrapListFence(body, '1. ```md', '   ')],
+  ['nested-list fenced contract is hidden', (body) => wrapListFence(body, '- - ```md', '    ')],
   ['blockquote fenced contract is hidden', wrapBlockquoteFence],
   ['proper blockquote-list fenced contract is hidden', wrapBlockquoteListFence],
-  ['blockquote-list fenced contract is hidden', (body) => wrapListFence(body, '> - ```md')],
   ['encoded raw pre contract is hidden', (body) => wrapRawHtmlBlock('pre', body)],
   ['encoded raw code contract is hidden', (body) => wrapRawHtmlBlock('code', body)],
   ['encoded raw div contract is hidden', (body) => wrapRawHtmlBlock('div', body)],
@@ -417,6 +416,30 @@ ${body}
       body,
     ),
   ],
+  [
+    'multiline link-reference title permits a following Type7 block',
+    (body) => prependWithoutBlank(
+      '[leaf]: /url\n  "title"\n&lt;custom-element&gt;',
+      body,
+    ),
+  ],
+  [
+    'multiline link-reference destination and title permit a following Type7 block',
+    (body) => prependWithoutBlank(
+      '[leaf]:\n  /url\n  "title"\n&lt;custom-element&gt;',
+      body,
+    ),
+  ],
+  [
+    'ordered-list fence retains content at the real marker width',
+    (body) => `100. \`\`\`md
+${body.trim().split('\n').map((line) => `     ${line}`).join('\n')}`,
+  ],
+  [
+    'self-closing pre hides content until a blank line',
+    (body) => `&lt;pre/&gt;
+${body.trimStart()}`,
+  ],
 ]) {
   checkVisibilitySemantics(name, wrap, false);
 }
@@ -463,6 +486,28 @@ for (const [name, wrap, expectedOk] of [
   [
     'Type6 closing tag rejects a non-tag slash suffix',
     (body) => prependWithoutBlank('&lt;/table/not-a-tag', body),
+    true,
+  ],
+  [
+    'paragraph hanging indent remains paragraph content',
+    (body) => prependWithoutBlank(
+      'paragraph text\n    hanging continuation\n&lt;custom-element&gt;',
+      body,
+    ),
+    true,
+  ],
+  [
+    'ordered-list fence exits below the real marker width',
+    (body) => `100. \`\`\`md
+${body.trim().split('\n').map((line) => `  ${line}`).join('\n')}`,
+    true,
+  ],
+  [
+    'self-closing pre ends at a blank line',
+    (body) => `&lt;pre/&gt;
+hidden-before-blank
+
+${body.trimStart()}`,
     true,
   ],
   [
@@ -589,12 +634,22 @@ const adversarialReflectionCorpus = [
   ['bare English issue noun', 'issue', false],
   ['Chinese action-only uncertainty', '未完成检查', false],
   ['English action-only uncertainty', 'Review may be incomplete', false],
+  ['English negative error detection', 'No error detected', false],
+  ['English negative failure detection', 'No failure detected', false],
+  ['Chinese generic work completion', '未完成工作', false],
+  ['English generic object failure', 'something may fail', false],
+  [
+    'connected action-only no-finding scopes',
+    '未发现；已检查验证和复核；未检查审计和扫描',
+    false,
+  ],
   ['short concrete test risk', '测试覆盖不足', true],
   ['short concrete external-call risk', '外部调用未查', true],
   ['concrete rate-limit measurement risk', '生产限速参数需实测', true],
   ['concrete timeout quantification risk', '生产超时行为待量化', true],
   ['English concrete measurement risk', 'production timeout needs measurement', true],
   ['concrete certificate review risk', '证书轮换窗口需复核', true],
+  ['English concrete failure risk', 'payment webhook may fail', true],
   ['substantive bounded no-finding', '未发现；已检查固定对象和测试，未检查生产参数', true],
   ['generic modifiers with concrete objects', '未发现；已检查所有目标代码；未检查相关生产参数', true],
   [
@@ -843,6 +898,26 @@ for (const [name, handoffKey, prKey] of [
     'nested numeric combining grapheme joiner single key',
     'lea&amp;#847;st-confidence',
     'Lea&amp;#847;st confidence',
+  ],
+  [
+    'literal line separator single key',
+    'least\u2028-confidence',
+    'Least\u2028confidence',
+  ],
+  [
+    'literal paragraph separator single key',
+    'least\u2029-confidence',
+    'Least\u2029confidence',
+  ],
+  [
+    'numeric line separator entity single key',
+    'least&#8232;-confidence',
+    'Least&#8232;confidence',
+  ],
+  [
+    'nested numeric paragraph separator entity single key',
+    'least&amp;#8233;-confidence',
+    'Least&amp;#8233;confidence',
   ],
   ['literal variation selector single key', 'least-confid\uFE0Fence', 'Least confid\uFE0Fence'],
   [
@@ -1103,6 +1178,7 @@ biggest-missing: an upstream schema owner may still change the contract
 );
 assert.deepEqual(
   handoffFieldErrors(`${completeHandoff}
+
     least-confidence: transaction isolation has only been checked in one runtime
 least-confidence: TODO later fill this
 biggest-missing: an upstream schema owner may still change the contract`),
@@ -1111,6 +1187,7 @@ biggest-missing: an upstream schema owner may still change the contract`),
 );
 assert.deepEqual(
   handoffFieldErrors(`${completeHandoff}
+
     least-confidence: transaction isolation has only been checked in one runtime
     biggest-missing: an upstream schema owner may still change the contract`),
   ['least-confidence', 'biggest-missing'],
@@ -1563,6 +1640,61 @@ if (!leafHiddenHandoff.stateExists) {
 if (!/result|least-confidence/.test(leafHiddenHandoff.stderr)) {
   reflectionRegressionFailures.push(
     `Setext/Type7 hidden handoff did not report hidden fields: ${leafHiddenHandoff.stderr}`,
+  );
+}
+const multilineLinkHiddenHandoff = runIsolatedHandoff(
+  'production timeout behavior has not been measured',
+  (body) => `[leaf]: /url
+  "title"
+&lt;custom-element&gt;
+${body}`,
+);
+if (multilineLinkHiddenHandoff.status !== 1) {
+  reflectionRegressionFailures.push(
+    `multiline-link/Type7 hidden handoff expected exit=1, actual=${multilineLinkHiddenHandoff.status}`,
+  );
+}
+if (!multilineLinkHiddenHandoff.stateExists) {
+  reflectionRegressionFailures.push(
+    'multiline-link/Type7 hidden handoff removed the active task state file',
+  );
+}
+if (!/result|least-confidence/.test(multilineLinkHiddenHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `multiline-link/Type7 hidden handoff did not report hidden fields: ${multilineLinkHiddenHandoff.stderr}`,
+  );
+}
+const hangingParagraphHandoff = runIsolatedHandoff(
+  'production timeout behavior has not been measured',
+  (body) => `paragraph text
+    hanging continuation
+&lt;custom-element&gt;
+${body}`,
+);
+if (hangingParagraphHandoff.status !== 0) {
+  reflectionRegressionFailures.push(
+    `paragraph hanging-indent handoff expected exit=0, actual=${hangingParagraphHandoff.status}: ${hangingParagraphHandoff.stderr}`,
+  );
+}
+if (hangingParagraphHandoff.stateExists) {
+  reflectionRegressionFailures.push(
+    'paragraph hanging-indent handoff retained the active task state file',
+  );
+}
+const noErrorDetectedHandoff = runIsolatedHandoff('No error detected');
+if (noErrorDetectedHandoff.status !== 1) {
+  reflectionRegressionFailures.push(
+    `negative-detection handoff expected exit=1, actual=${noErrorDetectedHandoff.status}`,
+  );
+}
+if (!noErrorDetectedHandoff.stateExists) {
+  reflectionRegressionFailures.push(
+    'negative-detection handoff removed the active task state file',
+  );
+}
+if (!/least-confidence/.test(noErrorDetectedHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `negative-detection handoff did not report least-confidence: ${noErrorDetectedHandoff.stderr}`,
   );
 }
 const validHandoff = runIsolatedHandoff('production timeout behavior has not been measured');

@@ -72,10 +72,10 @@ function replaceBiggestMissing(body, value) {
   return body.replace('上游身份服务可能还有未登记的调用方', value);
 }
 
-function wrapListFence(body, opener = '- ```md') {
+function wrapListFence(body, opener = '- ```md', indentation = '  ') {
   return `${opener}
-${body.split('\n').map((line) => `  ${line}`).join('\n')}
-  \`\`\``;
+${body.split('\n').map((line) => `${indentation}${line}`).join('\n')}
+${indentation}\`\`\``;
 }
 
 function wrapTopLevelFence(body) {
@@ -190,14 +190,10 @@ expectPass(
 for (const [name, wrap] of [
   ['contract hidden in top-level fenced block', wrapTopLevelFence],
   ['contract hidden in list fenced block', wrapListFence],
-  ['contract hidden in ordered-list fenced block', (body) => wrapListFence(body, '1. ```md')],
-  ['contract hidden in nested-list fenced block', (body) => wrapListFence(body, '- - ```md')],
+  ['contract hidden in ordered-list fenced block', (body) => wrapListFence(body, '1. ```md', '   ')],
+  ['contract hidden in nested-list fenced block', (body) => wrapListFence(body, '- - ```md', '    ')],
   ['contract hidden in blockquote fenced block', wrapBlockquoteFence],
   ['contract hidden in proper blockquote-list fenced block', wrapBlockquoteListFence],
-  [
-    'contract hidden in blockquote-list fenced block',
-    (body) => wrapListFence(body, '> - ```md'),
-  ],
   ['contract hidden in encoded raw HTML pre block', (body) => wrapRawHtmlBlock('pre', body)],
   ['contract hidden in encoded raw HTML code block', (body) => wrapRawHtmlBlock('code', body)],
   ['contract hidden in encoded raw HTML div block', (body) => wrapRawHtmlBlock('div', body)],
@@ -253,6 +249,14 @@ for (const [name, prefix] of [
     'link-reference leaf with title allows following Type7 block to hide contract',
     '[leaf]: &lt;https://example.invalid&gt; "title"\n&lt;custom-element&gt;',
   ],
+  [
+    'multiline link-reference title allows following Type7 block to hide contract',
+    '[leaf]: /url\n  "title"\n&lt;custom-element&gt;',
+  ],
+  [
+    'multiline link-reference destination and title allow following Type7 block to hide contract',
+    '[leaf]:\n  /url\n  "title"\n&lt;custom-element&gt;',
+  ],
 ]) {
   expectFail(name, prependWithoutBlank(prefix, validBody), /Issue \/ 会话交接/);
 }
@@ -265,9 +269,39 @@ for (const [name, prefix] of [
   ['backtick info containing backtick is not a fence opener', '```foo`bar'],
   ['Type6 opening tag rejects a non-tag slash suffix', '&lt;div/not-a-tag'],
   ['Type6 closing tag rejects a non-tag slash suffix', '&lt;/table/not-a-tag'],
+  [
+    'paragraph hanging indent remains paragraph so Type7 cannot hide following contract',
+    'paragraph text\n    hanging continuation\n&lt;custom-element&gt;',
+  ],
 ]) {
   expectPass(name, prependWithoutBlank(prefix, validBody), [128]);
 }
+expectPass(
+  'ordered-list fence exits at the real marker width',
+  `100. \`\`\`md
+${validBody.trim().split('\n').map((line) => `  ${line}`).join('\n')}`,
+  [128],
+);
+expectFail(
+  'ordered-list fence retains content indented to the real marker width',
+  `100. \`\`\`md
+${validBody.trim().split('\n').map((line) => `     ${line}`).join('\n')}`,
+  /Issue \/ 会话交接/,
+);
+expectPass(
+  'self-closing pre uses blank-terminated HTML visibility',
+  `&lt;pre/&gt;
+hidden-before-blank
+
+${validBody.trimStart()}`,
+  [128],
+);
+expectFail(
+  'self-closing pre hides a contract before its terminating blank',
+  `&lt;pre/&gt;
+${validBody.trimStart()}`,
+  /Issue \/ 会话交接/,
+);
 expectPass(
   'invalid link-reference syntax remains paragraph text so Type7 cannot interrupt it',
   prependWithoutBlank('[leaf]: /url "title" trailing\n&lt;custom-element&gt;', validBody),
@@ -587,6 +621,10 @@ for (const [name, unsafeKey] of [
   ['nested numeric NBSP entity in a single required key', 'Least&amp;#160;confidence'],
   ['literal combining grapheme joiner in a single required key', 'Lea\u034Fst confidence'],
   ['nested numeric combining grapheme joiner in a single required key', 'Lea&amp;#847;st confidence'],
+  ['literal line separator in a single required key', 'Least\u2028confidence'],
+  ['literal paragraph separator in a single required key', 'Least\u2029confidence'],
+  ['numeric line separator entity in a single required key', 'Least&#8232;confidence'],
+  ['nested numeric paragraph separator entity in a single required key', 'Least&amp;#8233;confidence'],
 ]) {
   expectFail(
     name,
@@ -735,6 +773,14 @@ for (const [name, value] of [
   ['bare English issue noun is rejected', 'issue'],
   ['Chinese action-only uncertainty is rejected', '未完成检查'],
   ['English action-only uncertainty is rejected', 'Review may be incomplete'],
+  ['English negative error detection is rejected', 'No error detected'],
+  ['English negative failure detection is rejected', 'No failure detected'],
+  ['Chinese generic work completion is rejected', '未完成工作'],
+  ['English generic object failure is rejected', 'something may fail'],
+  [
+    'no-finding rejects connected action-only scopes',
+    '未发现；已检查验证和复核；未检查审计和扫描',
+  ],
 ]) {
   expectFail(
     name,
@@ -794,6 +840,7 @@ for (const [name, value] of [
   ['concrete timeout quantification risk is accepted', '生产超时行为待量化'],
   ['English concrete measurement risk is accepted', 'production timeout needs measurement'],
   ['concrete certificate review risk is accepted', '证书轮换窗口需复核'],
+  ['English concrete failure risk is accepted', 'payment webhook may fail'],
 ]) {
   expectPass(name, replaceLeastConfidence(validBody, value), [128]);
 }
