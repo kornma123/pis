@@ -5,6 +5,10 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
+const {
+  isWeakReflection,
+  stripIgnoredMarkdown,
+} = require('./issue-handoff/check-pr-body.cjs');
 
 const MODIFY_STAGES = new Set(['prd', 'mockup', 'implementation', 'acceptance']);
 const HANDOFF_STATUSES = new Set([
@@ -306,18 +310,25 @@ function parsePmApprovalMarker(body) {
   return marker ? marker[1] : null;
 }
 
-function isWeakHandoffReflection(value) {
-  const clean = String(value || '')
-    .replace(/\p{Cf}/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (/^(?:无|没有|不知道|不确定|none|n\/?a|nil)$/i.test(clean)) return true;
-  if (/^未发现[。.!！]?$/.test(clean)) return true;
-  return clean.length < 8;
+function collectHandoffFields(body) {
+  const values = new Map();
+  const duplicates = new Set();
+
+  for (const line of stripIgnoredMarkdown(String(body || '')).split(/\r?\n/)) {
+    const match = line.match(/^ {0,3}([a-z][a-z0-9-]*)\s*[:=：]\s*(.*)$/i);
+    if (!match) continue;
+
+    const field = match[1].toLowerCase();
+    if (values.has(field)) duplicates.add(field);
+    else values.set(field, match[2].trim());
+  }
+
+  return { values, duplicates };
 }
 
 function handoffFieldErrors(body) {
   const errors = [];
+  const fields = collectHandoffFields(body);
   for (const field of [
     'result',
     'evidence',
@@ -327,10 +338,13 @@ function handoffFieldErrors(body) {
     'least-confidence',
     'biggest-missing',
   ]) {
-    const match = String(body || '').match(new RegExp(`^${field}\\s*[:=：]\\s*(.+)$`, 'im'));
-    const value = match?.[1]?.trim() || '';
+    if (fields.duplicates.has(field)) {
+      errors.push(field);
+      continue;
+    }
+    const value = fields.values.get(field) || '';
     if (field === 'least-confidence' || field === 'biggest-missing') {
-      if (isWeakHandoffReflection(value)) errors.push(field);
+      if (isWeakReflection(value)) errors.push(field);
       continue;
     }
     const minLength = field === 'next-owner' ? 2 : 4;
@@ -1510,6 +1524,7 @@ module.exports = {
   assertSafeGitCommand,
   assertSafeNodeCommand,
   classifyIssueDeliveryContract,
+  collectHandoffFields,
   findScopeViolations,
   globToRegExp,
   handoffFieldErrors,

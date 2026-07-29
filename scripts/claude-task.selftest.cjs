@@ -170,6 +170,12 @@ evidence: https://github.com/acme/coreone/actions/runs/1
 risk: checkout remains unavailable
 next-owner: backend-owner
 trigger: API fix merged`;
+function reflectionHandoff(leastConfidence, biggestMissing) {
+  return `${completeHandoff}
+least-confidence: ${leastConfidence}
+biggest-missing: ${biggestMissing}`;
+}
+
 assert.deepEqual(handoffFieldErrors(completeHandoff), [
   'least-confidence', 'biggest-missing',
 ]);
@@ -188,6 +194,104 @@ biggest-missing: 未发现`), ['biggest-missing']);
 assert.deepEqual(handoffFieldErrors(`${completeHandoff}
 least-confidence: 未发现；已检查固定对象和测试，尚未检查生产环境
 biggest-missing: an upstream schema owner may still change the contract`), []);
+assert.deepEqual(
+  handoffFieldErrors(reflectionHandoff('测试覆盖不足', '外部调用未查')),
+  [],
+  'short concrete Chinese risks must pass without an arbitrary length threshold',
+);
+assert.deepEqual(
+  handoffFieldErrors(`${completeHandoff}
+<!--
+least-confidence: transaction isolation has only been checked in one runtime
+-->
+least-confidence: TODO later fill this
+biggest-missing: an upstream schema owner may still change the contract`),
+  ['least-confidence'],
+  'HTML-comment fields must not mask a visible placeholder',
+);
+assert.deepEqual(
+  handoffFieldErrors(`${completeHandoff}
+<!--
+least-confidence: transaction isolation has only been checked in one runtime
+biggest-missing: an upstream schema owner may still change the contract
+-->`),
+  ['least-confidence', 'biggest-missing'],
+  'HTML-comment-only reflection fields must remain missing',
+);
+assert.deepEqual(
+  handoffFieldErrors(`${completeHandoff}
+\`\`\`text
+least-confidence: transaction isolation has only been checked in one runtime
+\`\`\`
+least-confidence: TODO later fill this
+biggest-missing: an upstream schema owner may still change the contract`),
+  ['least-confidence'],
+  'fenced-code fields must not mask a visible placeholder',
+);
+assert.deepEqual(
+  handoffFieldErrors(`${completeHandoff}
+\`\`\`text
+least-confidence: transaction isolation has only been checked in one runtime
+biggest-missing: an upstream schema owner may still change the contract
+\`\`\``),
+  ['least-confidence', 'biggest-missing'],
+  'fenced-code-only reflection fields must remain missing',
+);
+assert.deepEqual(
+  handoffFieldErrors(`${completeHandoff}
+    least-confidence: transaction isolation has only been checked in one runtime
+least-confidence: TODO later fill this
+biggest-missing: an upstream schema owner may still change the contract`),
+  ['least-confidence'],
+  'indented-code fields must not count as visible fields',
+);
+assert.deepEqual(
+  handoffFieldErrors(`${completeHandoff}
+    least-confidence: transaction isolation has only been checked in one runtime
+    biggest-missing: an upstream schema owner may still change the contract`),
+  ['least-confidence', 'biggest-missing'],
+  'indented-code-only reflection fields must remain missing',
+);
+assert.deepEqual(
+  handoffFieldErrors(`${reflectionHandoff(
+    'transaction isolation has only been checked in one runtime',
+    'an upstream schema owner may still change the contract',
+  )}
+least-confidence: TODO later fill this`),
+  ['least-confidence'],
+  'duplicate reflection fields must fail closed even when the first value is strong',
+);
+for (const placeholder of [
+  'TODO later fill this',
+  'T&#79;DO later fill this',
+  'T\u200BO\u200BD\u200BO later fill this',
+  '待填写：稍后补充具体风险与证据',
+]) {
+  assert.deepEqual(
+    handoffFieldErrors(reflectionHandoff(
+      placeholder,
+      'an upstream schema owner may still change the contract',
+    )),
+    ['least-confidence'],
+    `explicit placeholder must fail after normalization: ${placeholder}`,
+  );
+}
+assert.deepEqual(
+  handoffFieldErrors(reflectionHandoff(
+    '未发现；暂无其他问题',
+    'an upstream schema owner may still change the contract',
+  )),
+  ['least-confidence'],
+  '未发现 must include both checked and unchecked boundaries',
+);
+assert.deepEqual(
+  handoffFieldErrors(reflectionHandoff(
+    '未发现；已检查固定对象和测试，尚未检查生产环境',
+    '未发现；已核对仓库调用链，未核对仓库外集成',
+  )),
+  [],
+  'bounded 未发现 answers with checked and unchecked scopes must pass',
+);
 assert.deepEqual(handoffFieldErrors('[HANDOFF] status=blocked'), [
   'result', 'evidence', 'risk', 'next-owner', 'trigger',
   'least-confidence', 'biggest-missing',

@@ -57,6 +57,14 @@ function expectFail(name, body, pattern) {
   assert.match(result.errors.join('\n'), pattern, name);
 }
 
+function replaceLeastConfidence(body, value) {
+  return body.replace('生产限速参数尚未在目标环境实测', value);
+}
+
+function replaceBiggestMissing(body, value) {
+  return body.replace('上游身份服务可能还有未登记的调用方', value);
+}
+
 expectPass('complete delivery', validBody, [128]);
 
 expectPass(
@@ -102,6 +110,72 @@ expectPass(
   validBody
     .replace('生产限速参数尚未在目标环境实测', '未发现；已检查目标代码与测试，未检查生产参数')
     .replace('上游身份服务可能还有未登记的调用方', '未发现；已检查仓库调用链，未检查仓库外集成'),
+  [128],
+);
+expectPass(
+  'short concrete Chinese risks are accepted',
+  replaceBiggestMissing(replaceLeastConfidence(validBody, '测试覆盖不足'), '外部调用未查'),
+  [128],
+);
+expectFail(
+  'HTML-comment reflection cannot mask visible placeholder',
+  validBody.replace(
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    '<!-- - **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测 -->\n' +
+      '- **我现在最没把握的是什么？ / Least confidence**: TODO later fill this',
+  ),
+  /我现在最没把握的是什么/,
+);
+expectFail(
+  'fenced-code reflection cannot mask visible placeholder',
+  validBody.replace(
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    '```text\n- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n```\n' +
+      '- **我现在最没把握的是什么？ / Least confidence**: TODO later fill this',
+  ),
+  /我现在最没把握的是什么/,
+);
+expectFail(
+  'indented-code reflection cannot mask visible placeholder',
+  validBody.replace(
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    '    - **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+      '- **我现在最没把握的是什么？ / Least confidence**: TODO later fill this',
+  ),
+  /我现在最没把握的是什么/,
+);
+expectFail(
+  'duplicate reflection fails closed with strong value first',
+  validBody.replace(
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+      '- **我现在最没把握的是什么？ / Least confidence**: TODO later fill this',
+  ),
+  /必填字段重复：我现在最没把握的是什么/,
+);
+for (const [name, placeholder] of [
+  ['long explicit placeholder', 'TODO later fill this'],
+  ['HTML-entity placeholder', 'T&#79;DO later fill this'],
+  ['zero-width placeholder', 'T\u200BO\u200BD\u200BO later fill this'],
+  ['long Chinese placeholder', '待填写：稍后补充具体风险与证据'],
+]) {
+  expectFail(
+    name,
+    replaceLeastConfidence(validBody, placeholder),
+    /我现在最没把握的是什么/,
+  );
+}
+expectFail(
+  'unbounded no-finding explanation is rejected',
+  replaceLeastConfidence(validBody, '未发现；暂无其他问题'),
+  /反盲区字段回答过弱.*我现在最没把握的是什么/,
+);
+expectPass(
+  'bounded no-finding requires checked and unchecked scopes',
+  replaceBiggestMissing(
+    replaceLeastConfidence(validBody, '未发现；已检查目标代码与测试，尚未检查生产参数'),
+    '未发现；已核对仓库调用链，未核对仓库外集成',
+  ),
   [128],
 );
 expectFail('missing issue relation', validBody.replace('Closes #128', '无'), /Closes #N.*Refs #N/);
@@ -193,4 +267,4 @@ const filledRepositoryTemplate = repositoryTemplate
   );
 expectPass('repository PR template passes after placeholder-only filling', filledRepositoryTemplate, [128]);
 
-console.log('Issue / handoff contract selftest: PASS (30 scenarios)');
+console.log('Issue / handoff contract selftest: PASS (41 scenarios)');

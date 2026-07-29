@@ -39,6 +39,22 @@ const REQUIRED_FIELDS = [
 const STATUS_PATTERN = /^(实现中|待复核|待 PM|待验收|阻塞|可合并)(?:\s|$|[（(：:])/;
 const ISSUE_RELATION_PATTERN = /\b(Closes|Refs)\s+#(\d+)\b/gi;
 const FOLLOW_UP_PATTERN = /#(\d+)\b/g;
+const HTML_ENTITIES = new Map([
+  ['amp', '&'],
+  ['apos', "'"],
+  ['emsp', ' '],
+  ['ensp', ' '],
+  ['gt', '>'],
+  ['lt', '<'],
+  ['nbsp', ' '],
+  ['newline', '\n'],
+  ['quot', '"'],
+  ['tab', '\t'],
+  ['thinsp', ' '],
+  ['zerowidthspace', '\u200B'],
+  ['zwj', '\u200D'],
+  ['zwnj', '\u200C'],
+]);
 
 function normalizeLabel(label) {
   return label
@@ -96,8 +112,15 @@ function stripFencedCode(body) {
   return visibleLines.join('\n');
 }
 
+function stripIndentedCode(body) {
+  return body
+    .split(/\r?\n/)
+    .map((line) => /^(?: {4,}|\t)/.test(line) ? '' : line)
+    .join('\n');
+}
+
 function stripIgnoredMarkdown(body) {
-  return stripFencedCode(stripHtmlComments(body));
+  return stripIndentedCode(stripFencedCode(stripHtmlComments(body)));
 }
 
 function collectFields(body) {
@@ -132,34 +155,61 @@ function getField(fields, aliases) {
   return undefined;
 }
 
-function isPlaceholder(value) {
-  if (value === undefined) return true;
-
-  const clean = value
-    .replace(/<!--.*?-->/g, '')
-    .replace(/\p{Cf}/gu, '')
-    .trim();
-  const normalized = clean
-    .replace(/&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]+);/gi, '')
-    .trim();
-
-  if (!normalized) return true;
-  if (/^[_-]+$/.test(normalized)) return true;
-  if (/^(tbd|todo|待填|待填写|待定|#_)$/i.test(normalized)) return true;
-  if (/^<[^>]+>$/.test(normalized)) return true;
-  return false;
+function decodeHtmlEntities(value) {
+  return String(value || '').replace(
+    /&(?:#(\d+)|#x([0-9a-f]+)|([a-z][a-z0-9]+));/gi,
+    (match, decimal, hexadecimal, named) => {
+      if (decimal || hexadecimal) {
+        const codePoint = Number.parseInt(decimal || hexadecimal, decimal ? 10 : 16);
+        if (
+          Number.isInteger(codePoint) &&
+          codePoint >= 0 &&
+          codePoint <= 0x10FFFF &&
+          !(codePoint >= 0xD800 && codePoint <= 0xDFFF)
+        ) {
+          return String.fromCodePoint(codePoint);
+        }
+        return '';
+      }
+      return HTML_ENTITIES.get(named.toLowerCase()) ?? match;
+    },
+  );
 }
 
-function isWeakReflection(value) {
-  if (isPlaceholder(value)) return true;
-  const clean = value
-    .replace(/<!--.*?-->/g, '')
+function normalizeFieldValue(value) {
+  return decodeHtmlEntities(value)
+    .normalize('NFKC')
     .replace(/\p{Cf}/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function isExplicitPlaceholder(value) {
+  if (!value) return true;
+  if (/^#?[_\-.…]+$/u.test(value)) return true;
+  if (/^<[^>]+>$/.test(value)) return true;
+  if (/^(?:none|nil|n\/?a)$/i.test(value)) return true;
+  if (/^(?:todo|tbd|placeholder)(?:\b|[\s:：,，.!！_-])/i.test(value)) return true;
+  return /^(?:待填(?:写)?|待补(?:充)?|待定|稍后(?:填写|补充)|后续(?:填写|补充)|以后(?:填写|补充))(?:$|[\s:：,，。.!！_-])/u.test(
+    value,
+  );
+}
+
+function isPlaceholder(value) {
+  if (value === undefined) return true;
+
+  return isExplicitPlaceholder(normalizeFieldValue(value));
+}
+
+function isWeakReflection(value) {
+  const clean = normalizeFieldValue(value);
+  if (isExplicitPlaceholder(clean)) return true;
   if (/^(?:无|没有|不知道|不确定|none|n\/?a|nil)$/i.test(clean)) return true;
-  if (/^未发现[。.!！]?$/.test(clean)) return true;
-  return clean.length < 8;
+  if (!/^(?:未发现|没有发现)/u.test(clean)) return false;
+
+  const hasCheckedBoundary = /(?:已|已经)(?:检查|核对|验证|审查|覆盖)/u.test(clean);
+  const hasUncheckedBoundary = /(?:尚未|仍未|未)(?:检查|核对|验证|审查|覆盖)/u.test(clean);
+  return !(hasCheckedBoundary && hasUncheckedBoundary);
 }
 
 function hasHeading(body, heading) {
@@ -336,8 +386,10 @@ if (require.main === module) main();
 
 module.exports = {
   collectFields,
+  decodeHtmlEntities,
   isPlaceholder,
   isWeakReflection,
+  normalizeFieldValue,
   stripIgnoredMarkdown,
   validatePrBody,
 };
