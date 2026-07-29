@@ -104,7 +104,7 @@ const COMMONMARK_TYPE_6_TAGS = [
   'ul',
 ];
 const COMMONMARK_TYPE_6_PATTERN = new RegExp(
-  `^ {0,3}</?(?:${COMMONMARK_TYPE_6_TAGS.join('|')})(?=[\\t />]|$)`,
+  `^ {0,3}</?(?:${COMMONMARK_TYPE_6_TAGS.join('|')})(?=[\\t >]|/>|$)`,
   'i',
 );
 const COMMONMARK_TYPE_7_TAG_NAME = '[A-Za-z][A-Za-z0-9-]*';
@@ -121,22 +121,22 @@ const COMMONMARK_TYPE_7_PATTERN = new RegExp(
 );
 const PRODUCT_ENCODED_CONTAINER_TAGS = new Set(['code', 'div', 'xmp']);
 const NO_FINDING_PREFIX_PATTERN =
-  /^(?:(?:(?:目前|当前|暂时|现阶段|迄今|截至目前|到目前为止)(?:仍|还)?)[ \t，,]*|(?:(?:currently|for now|so far|at present|temporarily)[ \t，,]+))?(?:未发现(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没有发现(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没发现(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|无(?:任何|其他)?(?:明显)?(?:问题|风险|异常)|暂无(?:其他)?(?:问题|风险|异常)|未见(?:其他)?(?:问题|风险|异常)|一切正常|no[ \t]+(?:issues?|problems?|findings?)(?:[ \t]+(?:were[ \t]+)?found)?|nothing[ \t]+(?:was[ \t]+)?(?:found|to[ \t]+report)|all[ \t]+(?:looks[ \t]+)?(?:good|normal|clear)|looks?[ \t]+(?:good|fine|okay|normal|clear)|lgtm)(?=$|[ \t:：;；,.，。!！])/iu;
+  /^(?:(?:(?:目前|当前|暂时|暂|现阶段|迄今|截至目前|到目前为止)(?:仍|还)?)[ \t，,]*|(?:(?:currently|for now|so far|at present|temporarily)[ \t，,]+))?(?:未(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没有(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|无(?:任何|其他)?(?:明显)?(?:问题|风险|异常)|暂无(?:其他)?(?:问题|风险|异常)|未见(?:其他)?(?:问题|风险|异常)|一切正常|no[ \t]+(?:issues?|problems?|findings?)(?:[ \t]+(?:were[ \t]+)?found)?|no[ \t]+risks?(?:[ \t]+(?:were[ \t]+)?identified)?|nothing[ \t]+(?:was[ \t]+)?(?:found|to[ \t]+report)|all[ \t]+(?:looks[ \t]+)?(?:good|normal|clear)|looks?[ \t]+(?:good|fine|okay|normal|clear)|lgtm)(?=$|[ \t:：;；,.，。!！])/iu;
 const HTML_ENTITIES = new Map([
   ['amp', '&'],
   ['apos', "'"],
   ['colon', ':'],
-  ['emsp', ' '],
-  ['ensp', ' '],
+  ['emsp', '\u2003'],
+  ['ensp', '\u2002'],
   ['gt', '>'],
   ['invisibletimes', '\u2062'],
   ['lt', '<'],
-  ['nbsp', ' '],
+  ['nbsp', '\u00A0'],
   ['newline', '\n'],
   ['nobreak', '\u2060'],
   ['quot', '"'],
   ['tab', '\t'],
-  ['thinsp', ' '],
+  ['thinsp', '\u2009'],
   ['zerowidthspace', '\u200B'],
   ['zwj', '\u200D'],
   ['zwnj', '\u200C'],
@@ -150,24 +150,50 @@ function normalizeLineEndings(value) {
   return String(value || '').replace(/\r\n?|\n/g, '\n');
 }
 
-function stripMarkdownContainerPrefix(line) {
+function parseMarkdownContainer(line) {
   let content = String(line || '');
+  let blockquoteDepth = 0;
+  let listDepth = 0;
 
   for (let depth = 0; depth < 32; depth += 1) {
     const blockquote = content.match(/^ {0,3}>[ \t]?/u);
     if (blockquote) {
       content = content.slice(blockquote[0].length);
+      blockquoteDepth += 1;
       continue;
     }
     const list = content.match(/^ {0,3}(?:[-+*]|\d{1,9}[.)])(?:[ \t]+)/u);
     if (list) {
       content = content.slice(list[0].length);
+      listDepth += 1;
       continue;
     }
     break;
   }
 
-  return content;
+  return {
+    content,
+    frame: listDepth > 0
+      ? { kind: 'list', blockquoteDepth, minimumIndent: 2 }
+      : blockquoteDepth > 0
+        ? { kind: 'blockquote', depth: blockquoteDepth }
+        : { kind: 'root' },
+  };
+}
+
+function continuesMarkdownContainer(line, frame) {
+  if (!frame || frame.kind === 'root') return true;
+  const parsed = parseMarkdownContainer(line);
+  if (frame.kind === 'list') {
+    const hasContinuationIndent = (value) =>
+      String(value || '').startsWith('\t') ||
+      String(value || '').match(/^ */u)[0].length >= frame.minimumIndent;
+    if (hasContinuationIndent(line)) return true;
+    if (frame.blockquoteDepth === 0 || parsed.frame.kind !== 'blockquote') return false;
+    return parsed.frame.depth >= frame.blockquoteDepth &&
+      hasContinuationIndent(parsed.content);
+  }
+  return parsed.frame.kind === 'blockquote' && parsed.frame.depth >= frame.depth;
 }
 
 function encodedHtmlSyntax(sourceLine, decodedLine) {
@@ -192,7 +218,11 @@ function scanProductContainerTokens(line) {
     if (!nameMatch) continue;
     const tag = nameMatch[0].toLowerCase();
     cursor += nameMatch[0].length;
-    if (!PRODUCT_ENCODED_CONTAINER_TAGS.has(tag) || !/^[\t />]$/.test(input[cursor] || '')) {
+    const boundary = input.slice(cursor);
+    if (
+      !PRODUCT_ENCODED_CONTAINER_TAGS.has(tag) ||
+      !/^(?:[\t ]|>|\/>|$)/u.test(boundary)
+    ) {
       continue;
     }
 
@@ -243,13 +273,13 @@ function beginHtmlBlock(sourceLine, decodedLine, paragraphOpen) {
   // 1–5: delimited blocks end only at their specified token; EOF is fail-closed.
   // 6–7: CommonMark block tags / complete tags end at a blank line; type 7 cannot interrupt a paragraph.
   // product: encoded code/div/xmp containers are nesting-aware and end only at matching close tags.
-  const product = decodedLine.match(/^ {0,3}<(code|div|xmp)(?=[\t />]|$)/iu);
+  const product = decodedLine.match(/^ {0,3}<(code|div|xmp)(?=[\t >]|\/>|$)/iu);
   if (product && encodedHtmlSyntax(sourceLine, decodedLine)) {
     const stack = updateProductContainerStack([], decodedLine, product[1].toLowerCase());
     return { state: stack.length > 0 ? { kind: 'product', stack } : null };
   }
 
-  if (/^ {0,3}<(?:pre|script|style|textarea)(?=[\t >]|$)/iu.test(decodedLine)) {
+  if (/^ {0,3}<(?:pre|script|style|textarea)(?=[\t >]|\/>|$)/iu.test(decodedLine)) {
     const end = /<\/(?:pre|script|style|textarea)>/iu;
     return { state: end.test(decodedLine) ? null : { kind: 'delimited', end, type: 1 } };
   }
@@ -282,6 +312,13 @@ function startsNonParagraphBlock(line) {
   );
 }
 
+function parseFenceOpening(line) {
+  const opening = String(line || '').match(/^ {0,3}(`{3,}|~{3,})([^\n]*)$/u);
+  if (!opening) return null;
+  if (opening[1][0] === '`' && opening[2].includes('`')) return null;
+  return { char: opening[1][0], length: opening[1].length };
+}
+
 function isClosingFence(line, fence) {
   const closing = line.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/u);
   return Boolean(
@@ -303,8 +340,17 @@ function advanceHtmlBlock(state, decodedLine, syntaxLine) {
   return state;
 }
 
-function lineOpensParagraph(line, syntaxLine) {
-  if (/^[ \t]*$/u.test(syntaxLine) || startsNonParagraphBlock(line)) return false;
+function isLinkReferenceDefinition(line) {
+  return /^ {0,3}\[(?:\\.|[^\[\]\\])+\]:[ \t]*(?:<[^<>\n]*>|[^ \t\n]+)(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?[ \t]*$/u.test(
+    String(line || ''),
+  );
+}
+
+function lineOpensParagraph(syntaxLine, previousParagraphOpen) {
+  if (/^[ \t]*$/u.test(syntaxLine)) return false;
+  if (previousParagraphOpen && /^ {0,3}(?:=+|-+)[ \t]*$/u.test(syntaxLine)) return false;
+  if (!previousParagraphOpen && isLinkReferenceDefinition(syntaxLine)) return false;
+  if (startsNonParagraphBlock(syntaxLine)) return false;
   return true;
 }
 
@@ -315,47 +361,70 @@ function stripIgnoredMarkdown(body) {
   const visibleLines = [];
 
   for (const line of normalizeLineEndings(body).split('\n')) {
-    const syntaxLine = stripMarkdownContainerPrefix(line);
-    const decodedSyntaxLine = decodeHtmlEntitiesDetailed(syntaxLine).value;
+    let handled = false;
+    while (!handled) {
+      const container = parseMarkdownContainer(line);
+      const syntaxLine = container.content;
+      const decodedSyntaxLine = decodeHtmlEntitiesDetailed(syntaxLine).value;
 
-    if (fence) {
-      if (isClosingFence(syntaxLine, fence)) fence = null;
-      visibleLines.push('');
-      paragraphOpen = false;
-      continue;
+      if (fence && !continuesMarkdownContainer(line, fence.container)) {
+        fence = null;
+        paragraphOpen = false;
+        continue;
+      }
+      if (htmlBlock && !continuesMarkdownContainer(line, htmlBlock.container)) {
+        htmlBlock = null;
+        paragraphOpen = false;
+        continue;
+      }
+
+      if (fence) {
+        if (isClosingFence(syntaxLine, fence)) fence = null;
+        visibleLines.push('');
+        paragraphOpen = false;
+        handled = true;
+        continue;
+      }
+
+      if (htmlBlock) {
+        htmlBlock = advanceHtmlBlock(htmlBlock, decodedSyntaxLine, syntaxLine);
+        visibleLines.push('');
+        paragraphOpen = false;
+        handled = true;
+        continue;
+      }
+
+      const openingFence = parseFenceOpening(syntaxLine);
+      if (openingFence) {
+        fence = { ...openingFence, container: container.frame };
+        visibleLines.push('');
+        paragraphOpen = false;
+        handled = true;
+        continue;
+      }
+
+      const htmlStart = beginHtmlBlock(syntaxLine, decodedSyntaxLine, paragraphOpen);
+      if (htmlStart) {
+        htmlBlock = htmlStart.state
+          ? { ...htmlStart.state, container: container.frame }
+          : null;
+        visibleLines.push('');
+        paragraphOpen = false;
+        handled = true;
+        continue;
+      }
+
+      if (/^(?: {4,}|\t)/u.test(syntaxLine)) {
+        visibleLines.push('');
+        paragraphOpen = false;
+        handled = true;
+        continue;
+      }
+
+      visibleLines.push(line);
+      paragraphOpen = lineOpensParagraph(decodedSyntaxLine, paragraphOpen);
+      handled = true;
     }
-
-    if (htmlBlock) {
-      htmlBlock = advanceHtmlBlock(htmlBlock, decodedSyntaxLine, syntaxLine);
-      visibleLines.push('');
-      paragraphOpen = false;
-      continue;
-    }
-
-    const marker = syntaxLine.match(/^ {0,3}(`{3,}|~{3,})/u);
-    if (marker) {
-      fence = { char: marker[1][0], length: marker[1].length };
-      visibleLines.push('');
-      paragraphOpen = false;
-      continue;
-    }
-
-    const htmlStart = beginHtmlBlock(syntaxLine, decodedSyntaxLine, paragraphOpen);
-    if (htmlStart) {
-      htmlBlock = htmlStart.state;
-      visibleLines.push('');
-      paragraphOpen = false;
-      continue;
-    }
-
-    if (/^(?: {4,}|\t)/u.test(syntaxLine)) {
-      visibleLines.push('');
-      paragraphOpen = false;
-      continue;
-    }
-
-    visibleLines.push(line);
-    paragraphOpen = lineOpensParagraph(line, syntaxLine);
   }
 
   return visibleLines.join('\n');
@@ -370,7 +439,7 @@ function collectFields(body) {
     const parsed = parseVisibleFieldLine(line, { bullet: true });
     if (!parsed) continue;
     if (parsed.malformed) {
-      malformed.push(line);
+      malformed.push(parsed.malformedReason || 'unsafe-parse');
       continue;
     }
     if (!parsed.key) continue;
@@ -450,11 +519,20 @@ function normalizeDecodedInline(value) {
 
 function canonicalizeFieldKeyDetailed(value) {
   const decoded = decodeHtmlEntitiesDetailed(value);
+  const unsafeInvisible =
+    /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/u.test(decoded.value) ||
+    /\p{Default_Ignorable_Code_Point}/u.test(decoded.value);
+  const unsafeParse =
+    decoded.unresolved ||
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFD]/u.test(decoded.value);
   return {
     key: normalizeDecodedInline(decoded.value).toLowerCase(),
-    unresolved:
-      decoded.unresolved ||
-      /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFD]/u.test(decoded.value),
+    unresolved: unsafeParse,
+    malformedReason: unsafeInvisible
+      ? 'unsafe-invisible'
+      : unsafeParse
+        ? 'unsafe-parse'
+        : null,
   };
 }
 
@@ -487,7 +565,14 @@ function parseVisibleFieldLine(line, options = {}) {
   const delimiters = options.allowEquals ? /[:=：]/u : /[:：]/u;
   const delimiter = decoded.value.match(delimiters);
   if (!delimiter) {
-    return decoded.unresolved ? { key: '', value: '', malformed: true } : null;
+    return decoded.unresolved
+      ? {
+          key: '',
+          value: '',
+          malformed: true,
+          malformedReason: 'unsafe-parse',
+        }
+      : null;
   }
 
   const delimiterIndex = delimiter.index;
@@ -495,7 +580,8 @@ function parseVisibleFieldLine(line, options = {}) {
   return {
     key: key.key,
     value: decoded.value.slice(delimiterIndex + delimiter[0].length).trim(),
-    malformed: key.unresolved,
+    malformed: Boolean(key.malformedReason),
+    malformedReason: key.malformedReason,
   };
 }
 
@@ -579,11 +665,23 @@ function hasBoundedNoFindingScopes(value) {
 
 function hasSubstantiveRisk(value) {
   const clean = canonicalizeMarkdownText(value);
-  if (!hasSubstantiveScope(clean)) return false;
-  return (
-    /(?:风险|问题|不足|缺口|遗漏|异常|失败|错误|未知|不确定|未|尚|可能|也许|担心|局限|依赖|只在|仅在|变化)/u.test(clean) ||
-    /\b(?:risk|issue|problem|gap|missing|incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|not|only|may|might|could|depends?|change|fail(?:ed|ure)?|error|outside|external)\b/iu.test(clean)
-  );
+  const hasState =
+    /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|未(?:查|检查|核对|验证|审查|覆盖|复核|排查|扫描|测试|实测|量化|确认|登记|完成|评估|分析|测量)|尚未|待(?:查|检查|核对|验证|审查|复核|排查|扫描|测试|实测|量化|确认|评估|分析|测量)|需(?:要)?(?:查|检查|核对|验证|审查|复核|排查|扫描|测试|实测|量化|确认|评估|分析|测量)|可能|也许|担心|局限|依赖|只在|仅在|变化)/u.test(clean) ||
+    /\b(?:incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|not|only|may|might|could|depends?|needs?|requires?|unmeasured|fail(?:ed|ure)?|error)\b/iu.test(clean);
+  if (!hasState) return false;
+
+  const object = clean
+    .replace(
+      /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|尚未|未|待|需(?:要)?|可能|也许|担心|局限|依赖|只在|仅在|变化|检查|核对|验证|审查|复核|排查|扫描|检视|确认|评估|分析|调查|执行|处理|跟进|完成|实测|量化|测量|观察|识别|登记|风险|问题)/gu,
+      ' ',
+    )
+    .replace(
+      /\b(?:a|an|the|be|has|have|had|been|being|is|are|was|were|still|not|only|may|might|could|depends?|needs?|requires?|incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|unmeasured|measured|measurement|check(?:ed|ing)?|inspect(?:ed|ing|ion|ions)?|scan(?:ned|ning|s)?|verif(?:y|ied|ication)|validat(?:e|ed|ion)|review(?:ed|ing)?|audit(?:ed|ing)?|test(?:ed|ing)?|quantif(?:y|ied|ication)|fail(?:ed|ure)?|error|risk|risks|issue|issues|problem|problems|gap|gaps|missing|change(?:d|s|ing)?)\b/giu,
+      ' ',
+    );
+  const compactObject = object.replace(/[^\p{L}\p{N}]+/gu, '');
+  if (/测试.*覆盖|覆盖.*测试/u.test(compactObject)) return true;
+  return hasSubstantiveScope(object);
 }
 
 function isWeakReflection(value) {
@@ -636,7 +734,10 @@ function validatePrBody(bodyInput) {
   }
 
   const fields = collectFields(body);
-  if (fields.malformed.length > 0) {
+  if (fields.malformed.includes('unsafe-invisible')) {
+    errors.push('字段键包含不可见字符或非标准空白；请只使用普通空格/Tab 与可见字段名。');
+  }
+  if (fields.malformed.some((reason) => reason !== 'unsafe-invisible')) {
     errors.push('字段键无法安全解析；请使用可见的标准字段名与分隔符。');
   }
   const protectedLabels = new Set([

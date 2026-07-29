@@ -90,6 +90,12 @@ ${body.split('\n').map((line) => `> ${line}`).join('\n')}
 > \`\`\``;
 }
 
+function wrapBlockquoteListFence(body) {
+  return `> - \`\`\`md
+${body.split('\n').map((line) => `>   ${line}`).join('\n')}
+>   \`\`\``;
+}
+
 function wrapRawHtmlBlock(tag, body) {
   return `&lt;${tag}&gt;
 ${body}
@@ -107,6 +113,30 @@ function wrapDelimitedRawHtmlBlock(opening, closing, body) {
   return `${opening}
 ${body}
 ${closing}`;
+}
+
+function prependWithoutBlank(prefix, body) {
+  return `${prefix}
+${body.trimStart()}`;
+}
+
+function compactMarkdown(body) {
+  return body.trim().replace(/\n[ \t]*\n/gu, '\n');
+}
+
+function wrapBlockquoteType6(body) {
+  return `> &lt;table&gt;
+${compactMarkdown(body).split('\n').map((line) => `> ${line}`).join('\n')}`;
+}
+
+function wrapListType6(body) {
+  return `- &lt;table&gt;
+${compactMarkdown(body).split('\n').map((line) => `  ${line}`).join('\n')}`;
+}
+
+function wrapBlockquoteListType6(body) {
+  return `> - &lt;table&gt;
+${compactMarkdown(body).split('\n').map((line) => `>   ${line}`).join('\n')}`;
 }
 
 function wrapVisibleList(body) {
@@ -163,6 +193,7 @@ for (const [name, wrap] of [
   ['contract hidden in ordered-list fenced block', (body) => wrapListFence(body, '1. ```md')],
   ['contract hidden in nested-list fenced block', (body) => wrapListFence(body, '- - ```md')],
   ['contract hidden in blockquote fenced block', wrapBlockquoteFence],
+  ['contract hidden in proper blockquote-list fenced block', wrapBlockquoteListFence],
   [
     'contract hidden in blockquote-list fenced block',
     (body) => wrapListFence(body, '> - ```md'),
@@ -208,9 +239,45 @@ ${body}
 &lt;/code&gt;
 &lt;/DiV&gt;`,
   ],
+  ['contract hidden in blockquote Type6 block', wrapBlockquoteType6],
+  ['contract hidden in list Type6 block', wrapListType6],
+  ['contract hidden in proper blockquote-list Type6 block', wrapBlockquoteListType6],
 ]) {
   expectFail(name, wrap(validBody), /Issue \/ 会话交接/);
 }
+for (const [name, prefix] of [
+  ['Setext equals leaf allows following Type7 block to hide contract', 'Leaf heading\n===\n&lt;custom-element&gt;'],
+  ['Setext dash leaf allows following Type7 block to hide contract', 'Leaf heading\n---\n&lt;custom-element&gt;'],
+  ['link-reference leaf allows following Type7 block to hide contract', '[leaf]: /url\n&lt;custom-element&gt;'],
+  [
+    'link-reference leaf with title allows following Type7 block to hide contract',
+    '[leaf]: &lt;https://example.invalid&gt; "title"\n&lt;custom-element&gt;',
+  ],
+]) {
+  expectFail(name, prependWithoutBlank(prefix, validBody), /Issue \/ 会话交接/);
+}
+for (const [name, prefix] of [
+  ['blockquote fence ends when its container exits', '> ```md'],
+  ['blockquote product HTML ends when its container exits', '> &lt;div&gt;'],
+  ['list fence ends when its container exits', '- ```md'],
+  ['list product HTML ends when its container exits', '- &lt;div&gt;'],
+  ['nested blockquote-list fence ends when its container exits', '> - ```md'],
+  ['backtick info containing backtick is not a fence opener', '```foo`bar'],
+  ['Type6 opening tag rejects a non-tag slash suffix', '&lt;div/not-a-tag'],
+  ['Type6 closing tag rejects a non-tag slash suffix', '&lt;/table/not-a-tag'],
+]) {
+  expectPass(name, prependWithoutBlank(prefix, validBody), [128]);
+}
+expectPass(
+  'invalid link-reference syntax remains paragraph text so Type7 cannot interrupt it',
+  prependWithoutBlank('[leaf]: /url "title" trailing\n&lt;custom-element&gt;', validBody),
+  [128],
+);
+expectFail(
+  'tilde fence info may contain a backtick and still hides the contract',
+  prependWithoutBlank('~~~foo`bar', validBody),
+  /Issue \/ 会话交接/,
+);
 expectVisibleMarkdown(
   'CommonMark type 6 ends at the first blank line',
   '&lt;table&gt;\nhidden-type-6\n\nvisible-after-type-6',
@@ -396,7 +463,7 @@ expectFail(
     '- **我现在最没把握的是什么？ / Lea\u034Fst confidence**: TODO later fill this\n' +
       '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
   ),
-  /必填字段重复：我现在最没把握的是什么/,
+  /字段键包含不可见字符或非标准空白/,
 );
 expectFail(
   'NUL field key cannot bypass duplicate detection',
@@ -504,6 +571,50 @@ expectPass(
   ),
   [128],
 );
+expectPass(
+  'ordinary tab remains allowed inside a field key',
+  validBody.replace(
+    '我现在最没把握的是什么？ / Least confidence',
+    '我现在最没把握的是什么？ / Least\tconfidence',
+  ),
+  [128],
+);
+const unsafeFieldKeyError =
+  /字段键包含不可见字符或非标准空白；请只使用普通空格\/Tab 与可见字段名。/;
+for (const [name, unsafeKey] of [
+  ['literal NBSP in a single required key', 'Least\u00A0confidence'],
+  ['nested named NBSP entity in a single required key', 'Least&amp;nbsp;confidence'],
+  ['nested numeric NBSP entity in a single required key', 'Least&amp;#160;confidence'],
+  ['literal combining grapheme joiner in a single required key', 'Lea\u034Fst confidence'],
+  ['nested numeric combining grapheme joiner in a single required key', 'Lea&amp;#847;st confidence'],
+]) {
+  expectFail(
+    name,
+    validBody.replace(
+      '我现在最没把握的是什么？ / Least confidence',
+      `我现在最没把握的是什么？ / ${unsafeKey}`,
+    ),
+    unsafeFieldKeyError,
+  );
+}
+for (const [name, replacement] of [
+  [
+    'unsafe key duplicate fails closed with canonical key first',
+    `${leastConfidenceLine}
+- **我现在最没把握的是什么？ / Least confid\uFE0Fence**: TODO later fill this`,
+  ],
+  [
+    'unsafe key duplicate fails closed with unsafe key first',
+    `- **我现在最没把握的是什么？ / Least confid\uFE0Fence**: TODO later fill this
+${leastConfidenceLine}`,
+  ],
+]) {
+  expectFail(
+    name,
+    validBody.replace(leastConfidenceLine, replacement),
+    unsafeFieldKeyError,
+  );
+}
 for (const [name, first, second] of [
   [
     'NFKC duplicate with canonical key first',
@@ -592,6 +703,8 @@ for (const noFinding of [
   'Nothing to report',
   'All clear',
   'LGTM',
+  '暂未观察到异常',
+  'No risk identified',
 ]) {
   expectFail(
     `no-finding synonym is rejected without boundaries: ${noFinding}`,
@@ -617,6 +730,18 @@ expectFail(
   ),
   /反盲区字段回答过弱.*我现在最没把握的是什么/,
 );
+for (const [name, value] of [
+  ['bare English risk noun is rejected', 'risk'],
+  ['bare English issue noun is rejected', 'issue'],
+  ['Chinese action-only uncertainty is rejected', '未完成检查'],
+  ['English action-only uncertainty is rejected', 'Review may be incomplete'],
+]) {
+  expectFail(
+    name,
+    replaceLeastConfidence(validBody, value),
+    /反盲区字段回答过弱.*我现在最没把握的是什么/,
+  );
+}
 expectPass(
   'bounded no-finding requires checked and unchecked scopes',
   replaceBiggestMissing(
@@ -664,6 +789,14 @@ expectPass(
   ),
   [128],
 );
+for (const [name, value] of [
+  ['concrete rate-limit measurement risk is accepted', '生产限速参数需实测'],
+  ['concrete timeout quantification risk is accepted', '生产超时行为待量化'],
+  ['English concrete measurement risk is accepted', 'production timeout needs measurement'],
+  ['concrete certificate review risk is accepted', '证书轮换窗口需复核'],
+]) {
+  expectPass(name, replaceLeastConfidence(validBody, value), [128]);
+}
 expectFail('missing issue relation', validBody.replace('Closes #128', '无'), /Closes #N.*Refs #N/);
 expectFail('multiple primary issues', validBody.replace('Closes #128', 'Closes #128, Refs #127'), /只能有一个主 Issue/);
 expectFail('blank current owner', validBody.replace('Codex \/ GPT-5', '_'), /当前 owner \/ 模型/);

@@ -240,6 +240,12 @@ ${body.split('\n').map((line) => `> ${line}`).join('\n')}
 > \`\`\``;
 }
 
+function wrapBlockquoteListFence(body) {
+  return `> - \`\`\`md
+${body.split('\n').map((line) => `>   ${line}`).join('\n')}
+>   \`\`\``;
+}
+
 function wrapRawHtmlBlock(tag, body) {
   return `&lt;${tag}&gt;
 ${body}
@@ -257,6 +263,30 @@ function wrapDelimitedRawHtmlBlock(opening, closing, body) {
   return `${opening}
 ${body}
 ${closing}`;
+}
+
+function prependWithoutBlank(prefix, body) {
+  return `${prefix}
+${body.trimStart()}`;
+}
+
+function compactMarkdown(body) {
+  return body.trim().replace(/\n[ \t]*\n/gu, '\n');
+}
+
+function wrapBlockquoteType6(body) {
+  return `> &lt;table&gt;
+${compactMarkdown(body).split('\n').map((line) => `> ${line}`).join('\n')}`;
+}
+
+function wrapListType6(body) {
+  return `- &lt;table&gt;
+${compactMarkdown(body).split('\n').map((line) => `  ${line}`).join('\n')}`;
+}
+
+function wrapBlockquoteListType6(body) {
+  return `> - &lt;table&gt;
+${compactMarkdown(body).split('\n').map((line) => `>   ${line}`).join('\n')}`;
 }
 
 function wrapVisibleList(body) {
@@ -322,6 +352,7 @@ for (const [name, wrap] of [
   ['ordered-list fenced contract is hidden', (body) => wrapListFence(body, '1. ```md')],
   ['nested-list fenced contract is hidden', (body) => wrapListFence(body, '- - ```md')],
   ['blockquote fenced contract is hidden', wrapBlockquoteFence],
+  ['proper blockquote-list fenced contract is hidden', wrapBlockquoteListFence],
   ['blockquote-list fenced contract is hidden', (body) => wrapListFence(body, '> - ```md')],
   ['encoded raw pre contract is hidden', (body) => wrapRawHtmlBlock('pre', body)],
   ['encoded raw code contract is hidden', (body) => wrapRawHtmlBlock('code', body)],
@@ -364,6 +395,28 @@ ${body}
 &lt;/code&gt;
 &lt;/DiV&gt;`,
   ],
+  ['blockquote Type6 contract is hidden', wrapBlockquoteType6],
+  ['list Type6 contract is hidden', wrapListType6],
+  ['proper blockquote-list Type6 contract is hidden', wrapBlockquoteListType6],
+  [
+    'Setext equals leaf permits a following Type7 block',
+    (body) => prependWithoutBlank('Leaf heading\n===\n&lt;custom-element&gt;', body),
+  ],
+  [
+    'Setext dash leaf permits a following Type7 block',
+    (body) => prependWithoutBlank('Leaf heading\n---\n&lt;custom-element&gt;', body),
+  ],
+  [
+    'link-reference leaf permits a following Type7 block',
+    (body) => prependWithoutBlank('[leaf]: /url\n&lt;custom-element&gt;', body),
+  ],
+  [
+    'link-reference leaf with a title permits a following Type7 block',
+    (body) => prependWithoutBlank(
+      '[leaf]: &lt;https://example.invalid&gt; "title"\n&lt;custom-element&gt;',
+      body,
+    ),
+  ],
 ]) {
   checkVisibilitySemantics(name, wrap, false);
 }
@@ -372,9 +425,62 @@ for (const [name, wrap, expectedOk] of [
   ['visible blockquote contract is quoted content', wrapBlockquote, false],
   ['visible nested-list contract is outside canonical shape', wrapNestedList, false],
   ['table-cell contract is outside canonical shape', wrapTable, false],
+  [
+    'blockquote fence ends when its container exits',
+    (body) => prependWithoutBlank('> ```md', body),
+    true,
+  ],
+  [
+    'blockquote product HTML ends when its container exits',
+    (body) => prependWithoutBlank('> &lt;div&gt;', body),
+    true,
+  ],
+  [
+    'list fence ends when its container exits',
+    (body) => prependWithoutBlank('- ```md', body),
+    true,
+  ],
+  [
+    'list product HTML ends when its container exits',
+    (body) => prependWithoutBlank('- &lt;div&gt;', body),
+    true,
+  ],
+  [
+    'nested blockquote-list fence ends when its container exits',
+    (body) => prependWithoutBlank('> - ```md', body),
+    true,
+  ],
+  [
+    'backtick info containing a backtick is not a fence',
+    (body) => prependWithoutBlank('```foo`bar', body),
+    true,
+  ],
+  [
+    'Type6 opening tag rejects a non-tag slash suffix',
+    (body) => prependWithoutBlank('&lt;div/not-a-tag', body),
+    true,
+  ],
+  [
+    'Type6 closing tag rejects a non-tag slash suffix',
+    (body) => prependWithoutBlank('&lt;/table/not-a-tag', body),
+    true,
+  ],
+  [
+    'invalid link-reference syntax remains paragraph content',
+    (body) => prependWithoutBlank(
+      '[leaf]: /url "title" trailing\n&lt;custom-element&gt;',
+      body,
+    ),
+    true,
+  ],
 ]) {
   checkVisibilitySemantics(name, wrap, expectedOk);
 }
+checkVisibilitySemantics(
+  'tilde fence info may contain a backtick',
+  (body) => prependWithoutBlank('~~~foo`bar', body),
+  false,
+);
 
 for (const [name, input, visible, hidden] of [
   [
@@ -468,6 +574,8 @@ const adversarialReflectionCorpus = [
   ['bare Nothing to report synonym', 'Nothing to report', false],
   ['bare All clear synonym', 'All clear', false],
   ['bare LGTM synonym', 'LGTM', false],
+  ['temporal observation no-finding synonym', '暂未观察到异常', false],
+  ['English risk no-finding synonym', 'No risk identified', false],
   ['generic modifiers plus action-only scopes', '未发现；已检查所有验证；未检查相关审查', false],
   ['generic Chinese inspection nouns', '未发现；已检查所有排查；未检查相关扫描', false],
   [
@@ -477,8 +585,16 @@ const adversarialReflectionCorpus = [
   ],
   ['bare object without risk state', '生产参数', false],
   ['English bare object without risk state', 'production settings', false],
+  ['bare English risk noun', 'risk', false],
+  ['bare English issue noun', 'issue', false],
+  ['Chinese action-only uncertainty', '未完成检查', false],
+  ['English action-only uncertainty', 'Review may be incomplete', false],
   ['short concrete test risk', '测试覆盖不足', true],
   ['short concrete external-call risk', '外部调用未查', true],
+  ['concrete rate-limit measurement risk', '生产限速参数需实测', true],
+  ['concrete timeout quantification risk', '生产超时行为待量化', true],
+  ['English concrete measurement risk', 'production timeout needs measurement', true],
+  ['concrete certificate review risk', '证书轮换窗口需复核', true],
   ['substantive bounded no-finding', '未发现；已检查固定对象和测试，未检查生产参数', true],
   ['generic modifiers with concrete objects', '未发现；已检查所有目标代码；未检查相关生产参数', true],
   [
@@ -708,6 +824,77 @@ assert.deepEqual(
   [],
   'NFKC-equivalent required handoff key must be recognized',
 );
+assert.deepEqual(
+  handoffFieldErrors(reflectionHandoff(
+    'transaction isolation has only been checked in one runtime',
+    'an upstream schema owner may still change the contract',
+  ).replace('least-confidence:', 'least-confidence\t:')),
+  [],
+  'ordinary tab remains allowed inside a handoff field key',
+);
+const unsafeFieldKeyPrError =
+  '字段键包含不可见字符或非标准空白；请只使用普通空格/Tab 与可见字段名。';
+for (const [name, handoffKey, prKey] of [
+  ['literal NBSP single key', 'least\u00A0confidence', 'Least\u00A0confidence'],
+  ['nested named NBSP single key', 'least&amp;nbsp;confidence', 'Least&amp;nbsp;confidence'],
+  ['nested numeric NBSP single key', 'least&amp;#160;confidence', 'Least&amp;#160;confidence'],
+  ['literal combining grapheme joiner single key', 'lea\u034Fst-confidence', 'Lea\u034Fst confidence'],
+  [
+    'nested numeric combining grapheme joiner single key',
+    'lea&amp;#847;st-confidence',
+    'Lea&amp;#847;st confidence',
+  ],
+  ['literal variation selector single key', 'least-confid\uFE0Fence', 'Least confid\uFE0Fence'],
+  [
+    'nested numeric variation selector single key',
+    'least-confid&amp;#65039;ence',
+    'Least confid&amp;#65039;ence',
+  ],
+]) {
+  const handoffErrors = handoffFieldErrors(
+    reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace('least-confidence:', `${handoffKey}:`),
+  );
+  const prResult = validatePrBody(
+    reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace('Least confidence**:', `${prKey}**:`),
+  );
+  if (
+    handoffErrors.length !== 2 ||
+    handoffErrors[0] !== 'field-key-invisible' ||
+    handoffErrors[1] !== 'least-confidence'
+  ) {
+    reflectionRegressionFailures.push(
+      `${name}: expected exact handoff field-key-invisible,least-confidence; got ${handoffErrors.join(',')}`,
+    );
+  }
+  if (prResult.ok || !prResult.errors.includes(unsafeFieldKeyPrError)) {
+    reflectionRegressionFailures.push(
+      `${name}: expected exact PR unsafe key error; got ${prResult.errors.join('; ')}`,
+    );
+  }
+}
+for (const [name, body] of [
+  [
+    'unsafe handoff duplicate with canonical key first',
+    `${reflectionHandoff(strongLeastConfidence, strongBiggestMissing)}
+least-confid\uFE0Fence: TODO later fill this`,
+  ],
+  [
+    'unsafe handoff duplicate with unsafe key first',
+    `${completeHandoff}
+least-confid\uFE0Fence: TODO later fill this
+least-confidence: ${strongLeastConfidence}
+biggest-missing: ${strongBiggestMissing}`,
+  ],
+]) {
+  const errors = handoffFieldErrors(body);
+  if (errors.length !== 1 || errors[0] !== 'field-key-invisible') {
+    reflectionRegressionFailures.push(
+      `${name}: expected exact field-key-invisible; got ${errors.join(',')}`,
+    );
+  }
+}
 for (const [name, first, second] of [
   [
     'NFKC-equivalent handoff duplicate, canonical first',
@@ -1208,7 +1395,7 @@ assert.equal(
   2,
 );
 
-function runIsolatedHandoff(leastConfidence) {
+function runIsolatedHandoff(leastConfidence, transformBody = (body) => body) {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-handoff-lifecycle-'));
   const repo = path.join(sandbox, 'repo');
   const remote = path.join(sandbox, 'origin.git');
@@ -1218,14 +1405,14 @@ function runIsolatedHandoff(leastConfidence) {
 <!-- coreone-owner:end -->`;
   const startedAt = new Date(Date.now() - 2_000).toISOString();
   const observedAt = new Date().toISOString();
-  const handoffBody = `[HANDOFF] status=blocked
+  const handoffBody = transformBody(`[HANDOFF] status=blocked
 result: isolated lifecycle proof
 evidence: local fake GitHub fixture
 risk: release remains blocked
 next-owner: reviewer
 trigger: fixed SHA available
 least-confidence: ${leastConfidence}
-biggest-missing: external caller inventory is incomplete`;
+biggest-missing: external caller inventory is incomplete`);
 
   function runGit(args, cwd = repo) {
     const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -1340,6 +1527,42 @@ if (!invalidHandoff.stateExists) {
 if (!/least-confidence/.test(invalidHandoff.stderr)) {
   reflectionRegressionFailures.push(
     `invalid handoff end-to-end did not report least-confidence: ${invalidHandoff.stderr}`,
+  );
+}
+const observationNoFindingHandoff = runIsolatedHandoff('暂未观察到异常');
+if (observationNoFindingHandoff.status !== 1) {
+  reflectionRegressionFailures.push(
+    `observation no-finding handoff expected exit=1, actual=${observationNoFindingHandoff.status}`,
+  );
+}
+if (!observationNoFindingHandoff.stateExists) {
+  reflectionRegressionFailures.push(
+    'observation no-finding handoff removed the active task state file',
+  );
+}
+if (!/least-confidence/.test(observationNoFindingHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `observation no-finding handoff did not report least-confidence: ${observationNoFindingHandoff.stderr}`,
+  );
+}
+const leafHiddenHandoff = runIsolatedHandoff(
+  'production timeout behavior has not been measured',
+  (body) => `Leaf heading
+===
+&lt;custom-element&gt;
+${body}`,
+);
+if (leafHiddenHandoff.status !== 1) {
+  reflectionRegressionFailures.push(
+    `Setext/Type7 hidden handoff expected exit=1, actual=${leafHiddenHandoff.status}`,
+  );
+}
+if (!leafHiddenHandoff.stateExists) {
+  reflectionRegressionFailures.push('Setext/Type7 hidden handoff removed the active task state file');
+}
+if (!/result|least-confidence/.test(leafHiddenHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `Setext/Type7 hidden handoff did not report hidden fields: ${leafHiddenHandoff.stderr}`,
   );
 }
 const validHandoff = runIsolatedHandoff('production timeout behavior has not been measured');

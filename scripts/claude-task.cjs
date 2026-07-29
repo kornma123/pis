@@ -320,7 +320,7 @@ function collectHandoffFields(body) {
     const parsed = parseVisibleFieldLine(line, { allowEquals: true });
     if (!parsed) continue;
     if (parsed.malformed) {
-      malformed.push(line);
+      malformed.push(parsed.malformedReason || 'unsafe-parse');
       continue;
     }
     if (!parsed.key) continue;
@@ -334,7 +334,8 @@ function collectHandoffFields(body) {
 function handoffFieldErrors(body) {
   const errors = [];
   const fields = collectHandoffFields(body);
-  if (fields.malformed.length > 0) errors.push('field-key');
+  if (fields.malformed.includes('unsafe-invisible')) errors.push('field-key-invisible');
+  if (fields.malformed.some((reason) => reason !== 'unsafe-invisible')) errors.push('field-key');
   for (const field of [
     'result',
     'evidence',
