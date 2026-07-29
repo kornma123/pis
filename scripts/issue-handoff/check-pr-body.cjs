@@ -757,15 +757,43 @@ function continuesVisibleReflectionParagraph(line) {
   return !interruptsOpenParagraph(value);
 }
 
-function isSameLevelPrListBoundary(line, activeBulletIndent) {
-  // PR reflection fields live in a list container. A peer marker at the same
-  // indentation ends that field even when the item is empty or starts at 0/2;
-  // deeper markers remain paragraph content and are validated fail-closed.
-  if (!Number.isInteger(activeBulletIndent)) return false;
+function getPrListMarkerIndent(line) {
   const marker = String(line || '').match(
     /^( {0,3})(?:[-+*]|\d{1,9}[.)])(?:[ \t]+[\s\S]*|[ \t]*)$/u,
   );
-  return Boolean(marker && marker[1].length === activeBulletIndent);
+  return marker ? marker[1].length : null;
+}
+
+function isOutsideActivePrListItem(line, activeContentIndent) {
+  // A PR reflection field is authored as a list item. CommonMark requires
+  // continuation content to reach that item's content column; a marker before
+  // that column is a peer/container-exit boundary even when indented 1 space.
+  const markerIndent = getPrListMarkerIndent(line);
+  return Boolean(
+    Number.isInteger(activeContentIndent) &&
+    markerIndent !== null &&
+    markerIndent < activeContentIndent,
+  );
+}
+
+function isNestedPrListContent(line, parseOptions, activeContentIndent) {
+  if (
+    parseOptions.bullet !== true ||
+    !Number.isInteger(activeContentIndent)
+  ) {
+    return false;
+  }
+  const markerIndent = getPrListMarkerIndent(line);
+  return markerIndent !== null && markerIndent >= activeContentIndent;
+}
+
+function continuesReflectionParagraphInContext(
+  line,
+  parseOptions,
+  activeContentIndent,
+) {
+  if (isNestedPrListContent(line, parseOptions, activeContentIndent)) return true;
+  return continuesVisibleReflectionParagraph(line);
 }
 
 function isUnambiguousUnknownFieldBoundary(parsed) {
@@ -784,7 +812,7 @@ function collectVisibleFields(body, parseOptions = {}) {
   const malformed = [];
   const continuationBoundaryKeys = parseOptions.continuationBoundaryKeys;
   let activeReflectionKey = null;
-  let activeReflectionBulletIndent = null;
+  let activeReflectionContentIndent = null;
 
   function appendReflectionContinuation(line) {
     const rawValue = `${rawValues.get(activeReflectionKey)}\n${line}`;
@@ -808,10 +836,10 @@ function collectVisibleFields(body, parseOptions = {}) {
       if (
         activeReflectionKey &&
         parseOptions.bullet === true &&
-        isSameLevelPrListBoundary(line, activeReflectionBulletIndent)
+        isOutsideActivePrListItem(line, activeReflectionContentIndent)
       ) {
         activeReflectionKey = null;
-        activeReflectionBulletIndent = null;
+        activeReflectionContentIndent = null;
         continue;
       }
       if (
@@ -819,9 +847,22 @@ function collectVisibleFields(body, parseOptions = {}) {
         !unknownBoundaryCandidate.malformed &&
         !candidateIsKnownBoundary
       ) {
-        if (isUnambiguousUnknownFieldBoundary(unknownBoundaryCandidate)) {
+        if (
+          isUnambiguousUnknownFieldBoundary(unknownBoundaryCandidate) &&
+          !isNestedPrListContent(
+            line,
+            parseOptions,
+            activeReflectionContentIndent,
+          )
+        ) {
           activeReflectionKey = null;
-        } else if (continuesVisibleReflectionParagraph(line)) {
+        } else if (
+          continuesReflectionParagraphInContext(
+            line,
+            parseOptions,
+            activeReflectionContentIndent,
+          )
+        ) {
           appendReflectionContinuation(line);
         } else {
           activeReflectionKey = null;
@@ -830,7 +871,11 @@ function collectVisibleFields(body, parseOptions = {}) {
       }
       if (
         activeReflectionKey &&
-        continuesVisibleReflectionParagraph(line)
+        continuesReflectionParagraphInContext(
+          line,
+          parseOptions,
+          activeReflectionContentIndent,
+        )
       ) {
         appendReflectionContinuation(line);
       } else {
@@ -844,7 +889,13 @@ function collectVisibleFields(body, parseOptions = {}) {
       continue;
     }
     if (activeReflectionKey && !parsed.key) {
-      if (continuesVisibleReflectionParagraph(line)) {
+      if (
+        continuesReflectionParagraphInContext(
+          line,
+          parseOptions,
+          activeReflectionContentIndent,
+        )
+      ) {
         appendReflectionContinuation(line);
       } else {
         activeReflectionKey = null;
@@ -858,14 +909,23 @@ function collectVisibleFields(body, parseOptions = {}) {
     const isUnknownFieldBoundary =
       parseOptions.allowUnknownFieldBoundaries === true &&
       !isKnownFieldBoundary &&
-      isUnambiguousUnknownFieldBoundary(parsed);
+      isUnambiguousUnknownFieldBoundary(parsed) &&
+      !isNestedPrListContent(
+        line,
+        parseOptions,
+        activeReflectionContentIndent,
+      );
     if (
       activeReflectionKey &&
       parsed.key &&
       continuationBoundaryKeys instanceof Set &&
       !isKnownFieldBoundary &&
       !isUnknownFieldBoundary &&
-      continuesVisibleReflectionParagraph(line)
+      continuesReflectionParagraphInContext(
+        line,
+        parseOptions,
+        activeReflectionContentIndent,
+      )
     ) {
       appendReflectionContinuation(line);
       continue;
@@ -878,7 +938,7 @@ function collectVisibleFields(body, parseOptions = {}) {
       rawValues.set(parsed.key, parsed.rawValue);
       if (REFLECTION_FIELD_KEYS.has(parsed.key)) {
         activeReflectionKey = parsed.key;
-        activeReflectionBulletIndent = parsed.bulletIndent;
+        activeReflectionContentIndent = parsed.bulletContentIndent;
       }
     }
   }
@@ -1040,11 +1100,20 @@ function parseVisibleFieldLine(line, options = {}) {
   const rawLine = String(line || '');
   let content;
   let bulletIndent = null;
+  let bulletContentIndent = null;
   if (options.bullet) {
-    const bullet = rawLine.match(/^( {0,3})-[ \t]+([\s\S]*)$/u);
+    const bullet = rawLine.match(/^( {0,3})-([ \t]+)([\s\S]*)$/u);
     if (!bullet) return null;
     bulletIndent = bullet[1].length;
-    content = bullet[2];
+    const padding = bullet[2];
+    bulletContentIndent = bulletIndent + 1;
+    for (const character of padding) {
+      bulletContentIndent =
+        character === '\t'
+          ? bulletContentIndent + (4 - (bulletContentIndent % 4))
+          : bulletContentIndent + 1;
+    }
+    content = bullet[3];
   } else {
     if (/^(?: {4,}|\t)/u.test(rawLine)) return null;
     const plain = rawLine.match(/^ {0,3}([\s\S]*)$/u);
@@ -1082,6 +1151,7 @@ function parseVisibleFieldLine(line, options = {}) {
     malformed: Boolean(key.malformedReason),
     malformedReason: key.malformedReason,
     bulletIndent,
+    bulletContentIndent,
   };
 }
 

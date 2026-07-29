@@ -596,13 +596,35 @@ const emptyKeyContinuationPayloads = [
 const prMarkdownBlockBoundary = '- **Supplemental**: evidence';
 const prPeerBlockBoundaries = [
   ['empty peer block', '-'],
+  ['one-space empty peer block', ' -'],
   ['empty ordered peer block', '2.'],
+  ['one-space empty ordered peer block', ' 2.'],
   ['non-one ordered peer block', '2. x=42'],
+  ['one-space non-one ordered peer block', ' 2. x=42'],
   ['equation peer block', '- **x**= 42'],
   ['URL peer block', '- **https**: //example.test/proof'],
   ['unpadded custom peer block', '- **custom-note**:value'],
+  ['one-space custom peer block', ' - **custom-note**: value'],
   ['empty custom peer block', '- **custom-note**: '],
   ['empty-key peer block', '- **:** arbitrary continuation'],
+];
+const prNestedListContinuationPayloads = [
+  ['two-space unordered item', '  - x=42'],
+  ['three-space unordered item', '   - x=42'],
+  ['two-space plus item', '  + x=42'],
+  ['three-space star item', '   * x=42'],
+  ['two-space empty unordered item', '  -'],
+  ['three-space empty unordered item', '   -'],
+  ['two-space ordered item', '  1. x=42'],
+  ['three-space ordered item', '   1. x=42'],
+  ['two-space parenthesized ordered item', '  1) x=42'],
+  ['three-space parenthesized ordered item', '   1) x=42'],
+  ['two-space empty ordered item', '  1.'],
+  ['three-space empty ordered item', '   1.'],
+  ['two-space custom field item', '  - **custom-note**: value'],
+  ['three-space custom field item', '   - **custom-note**: value'],
+  ['two-space equals custom field item', '  - **custom_note**= value'],
+  ['three-space Tab-padded custom field item', '   - **custom-tab**:\tvalue'],
 ];
 for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
   for (const [payloadName, payload] of lazyContinuationPayloads) {
@@ -768,6 +790,16 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
         `${peerBlock}${lineEnding}${leastConfidenceLine}`,
       ),
       [128],
+    );
+  }
+  for (const [payloadName, payload] of prNestedListContinuationPayloads) {
+    expectFail(
+      `${endingName}/${payloadName}: nested PR list content remains in reflection raw`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}${payload}`,
+      ),
+      /我现在最没把握的是什么|Least confidence/,
     );
   }
 }
