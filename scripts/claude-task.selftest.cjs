@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -28,6 +29,7 @@ const {
   shellTokens,
   toPosix,
 } = require('./claude-task.cjs');
+const { validatePrBody } = require('./issue-handoff/check-pr-body.cjs');
 
 const repositoryRoot = path.resolve(__dirname, '..');
 
@@ -174,6 +176,115 @@ function reflectionHandoff(leastConfidence, biggestMissing) {
   return `${completeHandoff}
 least-confidence: ${leastConfidence}
 biggest-missing: ${biggestMissing}`;
+}
+
+function reflectionPrBody(leastConfidence, biggestMissing) {
+  return `
+## Issue / 会话交接
+- **Issue**: Refs #81
+- **当前 owner / 模型**: Codex
+- **交接状态**: 待复核
+- **下一 owner / 触发条件**: non-author reviewer 在 fixed SHA 可用后复核
+- **未完成 follow-up**: #81
+
+## 任务身份
+- **task id**: GOV-004-reflection-regression
+- **owner / author**: Codex
+- **reviewer**: non-author reviewer
+- **base SHA**: 874631d
+- **worktree**: isolated-worktree
+
+## 变更摘要
+- **当前状态 → 目标状态**: 弱回答可绕过 → 弱回答 fail-closed
+
+## 文件所有权
+- **owned files**: scripts/claude-task.cjs
+- **excluded files**: .github/workflows/**
+- **ABC / 共享事实链影响**: 不涉及业务事实
+
+## 验证
+- BDD / 验收：双入口对抗语料等价
+- 测试与真数据 / golden 证据：Node22 selftest
+- agent preflight / drift check：PASS
+- \`git diff --check\`：PASS
+
+## 迁移、回滚与边界
+- **迁移方式**: 无迁移
+- **回滚方式**: revert commit
+- **未覆盖边界**: 不修改 workflow
+
+## 反盲区自检
+- **我现在最没把握的是什么？ / Least confidence**: ${leastConfidence}
+- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: ${biggestMissing}
+`;
+}
+
+const reflectionRegressionFailures = [];
+const adversarialReflectionCorpus = [
+  ['unresolved nested NoBreak entity', '&amp;NoBreak;', false],
+  ['unresolved nested InvisibleTimes entity', '&amp;InvisibleTimes;', false],
+  ['bold-wrapped TODO', '**TODO** later fill this', false],
+  ['inline-code-wrapped TODO', '`TODO` later fill this', false],
+  ['encoded HTML-wrapped TODO', '&lt;strong&gt;TODO&lt;/strong&gt; later fill this', false],
+  ['default-ignorable TODO', 'T\uFE0FO\u034FD\uFE0FO later fill this', false],
+  ['pure punctuation', '?', false],
+  ['generic risk word', '风险', false],
+  ['prefixed TODO', '风险：TODO later fill this', false],
+  ['empty no-finding clauses', '未发现；已检查；未检查', false],
+  ['short concrete test risk', '测试覆盖不足', true],
+  ['short concrete external-call risk', '外部调用未查', true],
+  ['substantive bounded no-finding', '未发现；已检查固定对象和测试，未检查生产参数', true],
+];
+for (const [name, value, expectedOk] of adversarialReflectionCorpus) {
+  const handoffErrors = handoffFieldErrors(reflectionHandoff(
+    value,
+    'an upstream schema owner may still change the contract',
+  ));
+  const handoffOk = !handoffErrors.includes('least-confidence');
+  const prResult = validatePrBody(reflectionPrBody(
+    value,
+    'an upstream schema owner may still change the contract',
+  ));
+  if (handoffOk !== expectedOk) {
+    reflectionRegressionFailures.push(`${name}: Issue handoff expected ok=${expectedOk}, actual=${handoffOk}`);
+  }
+  if (prResult.ok !== expectedOk) {
+    reflectionRegressionFailures.push(
+      `${name}: PR validator expected ok=${expectedOk}, actual=${prResult.ok} (${prResult.errors.join('; ')})`,
+    );
+  }
+  if (handoffOk !== prResult.ok) {
+    reflectionRegressionFailures.push(`${name}: validators disagree`);
+  }
+}
+
+for (const [name, body] of [
+  [
+    'canonical strong field before encoded weak duplicate',
+    `${reflectionHandoff(
+      'transaction isolation has only been checked in one runtime',
+      'an upstream schema owner may still change the contract',
+    )}
+least-confid&amp;#101;nce: TODO later fill this`,
+  ],
+  [
+    'encoded weak field before canonical strong duplicate',
+    `${completeHandoff}
+least-confid&amp;#101;nce: TODO later fill this
+least-confidence: transaction isolation has only been checked in one runtime
+biggest-missing: an upstream schema owner may still change the contract`,
+  ],
+  [
+    'default-ignorable weak field before canonical strong duplicate',
+    `${completeHandoff}
+least-confid\uFE0Fence: TODO later fill this
+least-confidence: transaction isolation has only been checked in one runtime
+biggest-missing: an upstream schema owner may still change the contract`,
+  ],
+]) {
+  if (!handoffFieldErrors(body).includes('least-confidence')) {
+    reflectionRegressionFailures.push(`${name}: Issue handoff duplicate was accepted`);
+  }
 }
 
 assert.deepEqual(handoffFieldErrors(completeHandoff), [
@@ -529,6 +640,137 @@ assert.equal(
     repositoryRoot,
   ),
   2,
+);
+
+function runInvalidHandoffStatePreservation() {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-invalid-handoff-'));
+  const repo = path.join(sandbox, 'repo');
+  const remote = path.join(sandbox, 'origin.git');
+  const fakeBin = path.join(sandbox, 'bin');
+  const issueBody = `<!-- coreone-owner:start -->
+- **current owner**: Test Owner
+<!-- coreone-owner:end -->`;
+  const startedAt = new Date(Date.now() - 2_000).toISOString();
+  const observedAt = new Date().toISOString();
+
+  function runGit(args, cwd = repo) {
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    assert.equal(result.status, 0, `git ${args.join(' ')}: ${result.stderr || result.stdout}`);
+    return String(result.stdout || '').trim();
+  }
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    fs.mkdirSync(fakeBin, { recursive: true });
+    runGit(['init', '--bare', remote], sandbox);
+    runGit(['init', '--initial-branch=task-reflection-test'], repo);
+    runGit(['config', 'user.name', 'Reflection Test'], repo);
+    runGit(['config', 'user.email', 'reflection-test@example.invalid'], repo);
+    fs.writeFileSync(path.join(repo, 'seed.txt'), 'seed\n', 'utf8');
+    runGit(['add', 'seed.txt'], repo);
+    runGit(['commit', '-m', 'test: seed isolated handoff repo'], repo);
+    runGit(['remote', 'add', 'origin', remote], repo);
+    runGit(['push', 'origin', 'HEAD:refs/heads/master'], repo);
+
+    const head = runGit(['rev-parse', 'HEAD'], repo);
+    const statePath = runGit(
+      ['rev-parse', '--path-format=absolute', '--git-path', 'coreone/claude-task-state.json'],
+      repo,
+    );
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, `${JSON.stringify({
+      version: 1,
+      mode: 'governed',
+      issue: 81,
+      issueUrl: 'https://github.com/acme/coreone/issues/81',
+      issueTitle: 'Reflection regression',
+      issueBodyHash: crypto.createHash('sha256').update(issueBody, 'utf8').digest('hex'),
+      stage: 'implementation',
+      owner: 'Test Owner',
+      risk: 'R1',
+      branch: 'task-reflection-test',
+      baseSha: head,
+      startedHead: head,
+      startedAt,
+      verifiedAt: startedAt,
+      owned: ['scripts/**'],
+      excluded: [],
+    }, null, 2)}\n`, 'utf8');
+
+    const fakeGh = path.join(fakeBin, 'gh');
+    fs.writeFileSync(fakeGh, `#!/usr/bin/env node
+'use strict';
+const args = process.argv.slice(2);
+const issueBody = ${JSON.stringify(issueBody)};
+const observedAt = ${JSON.stringify(observedAt)};
+if (args[0] === 'repo' && args[1] === 'view') {
+  console.log(JSON.stringify({ nameWithOwner: 'acme/coreone', url: 'https://github.com/acme/coreone' }));
+} else if (args[0] === 'issue' && args[1] === 'view') {
+  console.log(JSON.stringify({
+    number: 81,
+    state: 'OPEN',
+    url: 'https://github.com/acme/coreone/issues/81',
+    body: issueBody,
+    updatedAt: observedAt,
+  }));
+} else if (args[0] === 'api' && args[1] === 'repos/acme/coreone/issues/comments/123') {
+  console.log(JSON.stringify({
+    issue_url: 'https://api.github.com/repos/acme/coreone/issues/81',
+    created_at: observedAt,
+    user: { login: 'test-actor' },
+    body: '[HANDOFF] status=blocked\\nresult: isolated rejection proof\\nevidence: local fake GitHub fixture\\nrisk: release remains blocked\\nnext-owner: reviewer\\ntrigger: fixed SHA available\\nleast-confidence: 风险\\nbiggest-missing: external caller inventory is incomplete',
+  }));
+} else if (args[0] === 'api' && args[1] === 'user') {
+  console.log('test-actor');
+} else {
+  console.error('unexpected fake gh invocation: ' + args.join(' '));
+  process.exitCode = 9;
+}
+`, { encoding: 'utf8', mode: 0o755 });
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(__dirname, 'claude-task.cjs'),
+        'handoff',
+        '--status=blocked',
+        '--evidence=https://github.com/acme/coreone/issues/81#issuecomment-123',
+      ],
+      {
+        cwd: repo,
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH || ''}` },
+      },
+    );
+    return {
+      status: result.status,
+      stderr: String(result.stderr || ''),
+      stateExists: fs.existsSync(statePath),
+    };
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+const invalidHandoff = runInvalidHandoffStatePreservation();
+if (invalidHandoff.status !== 1) {
+  reflectionRegressionFailures.push(
+    `invalid handoff end-to-end expected exit=1, actual=${invalidHandoff.status}`,
+  );
+}
+if (!invalidHandoff.stateExists) {
+  reflectionRegressionFailures.push('invalid handoff end-to-end removed the active task state file');
+}
+if (!/least-confidence/.test(invalidHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `invalid handoff end-to-end did not report least-confidence: ${invalidHandoff.stderr}`,
+  );
+}
+
+assert.deepEqual(
+  reflectionRegressionFailures,
+  [],
+  'reflection adversarial corpus, duplicate canonicalization, and state preservation must hold',
 );
 
 console.log('claude-task selftest: PASS');

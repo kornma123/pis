@@ -6,6 +6,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const {
+  canonicalizeMarkdownText,
   isWeakReflection,
   stripIgnoredMarkdown,
 } = require('./issue-handoff/check-pr-body.cjs');
@@ -315,10 +316,10 @@ function collectHandoffFields(body) {
   const duplicates = new Set();
 
   for (const line of stripIgnoredMarkdown(String(body || '')).split(/\r?\n/)) {
-    const match = line.match(/^ {0,3}([a-z][a-z0-9-]*)\s*[:=：]\s*(.*)$/i);
+    const match = line.match(/^ {0,3}([^:=：]+?)\s*[:=：]\s*(.*)$/u);
     if (!match) continue;
 
-    const field = match[1].toLowerCase();
+    const field = canonicalizeMarkdownText(match[1]).toLowerCase();
     if (values.has(field)) duplicates.add(field);
     else values.set(field, match[2].trim());
   }

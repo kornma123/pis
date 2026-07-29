@@ -57,12 +57,7 @@ const HTML_ENTITIES = new Map([
 ]);
 
 function normalizeLabel(label) {
-  return label
-    .replace(/\*\*/g, '')
-    .replace(/`/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+  return canonicalizeMarkdownText(label).toLowerCase();
 }
 
 function stripHtmlComments(body) {
@@ -156,40 +151,59 @@ function getField(fields, aliases) {
 }
 
 function decodeHtmlEntities(value) {
-  return String(value || '').replace(
-    /&(?:#(\d+)|#x([0-9a-f]+)|([a-z][a-z0-9]+));/gi,
-    (match, decimal, hexadecimal, named) => {
-      if (decimal || hexadecimal) {
-        const codePoint = Number.parseInt(decimal || hexadecimal, decimal ? 10 : 16);
-        if (
-          Number.isInteger(codePoint) &&
-          codePoint >= 0 &&
-          codePoint <= 0x10FFFF &&
-          !(codePoint >= 0xD800 && codePoint <= 0xDFFF)
-        ) {
-          return String.fromCodePoint(codePoint);
+  let decoded = String(value || '');
+
+  for (let pass = 0; pass < 8; pass += 1) {
+    const next = decoded.replace(
+      /&(?:#(\d+)|#x([0-9a-f]+)|([a-z][a-z0-9]+));/gi,
+      (match, decimal, hexadecimal, named) => {
+        if (decimal || hexadecimal) {
+          const codePoint = Number.parseInt(decimal || hexadecimal, decimal ? 10 : 16);
+          if (
+            Number.isInteger(codePoint) &&
+            codePoint >= 0 &&
+            codePoint <= 0x10FFFF &&
+            !(codePoint >= 0xD800 && codePoint <= 0xDFFF)
+          ) {
+            return String.fromCodePoint(codePoint);
+          }
+          return '';
         }
-        return '';
-      }
-      return HTML_ENTITIES.get(named.toLowerCase()) ?? match;
-    },
-  );
+        return HTML_ENTITIES.get(named.toLowerCase()) ?? match;
+      },
+    );
+    if (next === decoded) break;
+    decoded = next;
+  }
+
+  return decoded;
 }
 
-function normalizeFieldValue(value) {
+function canonicalizeMarkdownText(value) {
   return decodeHtmlEntities(value)
     .normalize('NFKC')
-    .replace(/\p{Cf}/gu, '')
+    .replace(/\p{Default_Ignorable_Code_Point}/gu, '')
+    .replace(/<\/?(?:b|code|del|em|i|kbd|mark|s|span|strike|strong|u)\b[^>]*>/gi, '')
+    .replace(/[*_~`]+/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
+function normalizeFieldValue(value) {
+  return canonicalizeMarkdownText(value);
+}
+
+function hasUnresolvedNamedEntity(value) {
+  return /&[a-z][a-z0-9]+;/i.test(value);
+}
+
 function isExplicitPlaceholder(value) {
   if (!value) return true;
+  if (hasUnresolvedNamedEntity(value)) return true;
   if (/^#?[_\-.…]+$/u.test(value)) return true;
   if (/^<[^>]+>$/.test(value)) return true;
   if (/^(?:none|nil|n\/?a)$/i.test(value)) return true;
-  if (/^(?:todo|tbd|placeholder)(?:\b|[\s:：,，.!！_-])/i.test(value)) return true;
+  if (/\b(?:todo|tbd|placeholder)\b/i.test(value)) return true;
   return /^(?:待填(?:写)?|待补(?:充)?|待定|稍后(?:填写|补充)|后续(?:填写|补充)|以后(?:填写|补充))(?:$|[\s:：,，。.!！_-])/u.test(
     value,
   );
@@ -201,15 +215,43 @@ function isPlaceholder(value) {
   return isExplicitPlaceholder(normalizeFieldValue(value));
 }
 
+function hasSubstantiveScope(value) {
+  const clean = canonicalizeMarkdownText(value);
+  if (isExplicitPlaceholder(clean) || !/[\p{L}\p{N}]/u.test(clean)) return false;
+  return !/^(?:内容|事项|项目|范围|相关内容|相关事项|上述|以上)$/u.test(clean);
+}
+
+function hasBoundedNoFindingScopes(value) {
+  let checkedScope = false;
+  let uncheckedScope = false;
+
+  for (const clause of value.split(/[；;。.!！,，\n]+/u)) {
+    const clean = clause.trim();
+    const checked = clean.match(
+      /^(?:已|已经)(?:检查|核对|验证|审查|覆盖)(?:了|过)?(?:范围)?\s*[:：]?\s*(.*)$/u,
+    );
+    if (checked && hasSubstantiveScope(checked[1])) checkedScope = true;
+
+    const unchecked = clean.match(
+      /^(?:尚未|仍未|未)(?:检查|核对|验证|审查|覆盖)(?:了|过)?(?:范围)?\s*[:：]?\s*(.*)$/u,
+    );
+    if (unchecked && hasSubstantiveScope(unchecked[1])) uncheckedScope = true;
+  }
+
+  return checkedScope && uncheckedScope;
+}
+
 function isWeakReflection(value) {
   const clean = normalizeFieldValue(value);
   if (isExplicitPlaceholder(clean)) return true;
   if (/^(?:无|没有|不知道|不确定|none|n\/?a|nil)$/i.test(clean)) return true;
-  if (!/^(?:未发现|没有发现)/u.test(clean)) return false;
+  if (!/[\p{L}\p{N}]/u.test(clean)) return true;
+  if (/^(?:风险|有风险|存在风险|问题|有问题|存在问题|未知风险|情况不明|待确认|需确认|需要确认|需关注|需要关注)[。.!！]?$/u.test(clean)) {
+    return true;
+  }
+  if (!/(?:未发现|没有发现)/u.test(clean)) return false;
 
-  const hasCheckedBoundary = /(?:已|已经)(?:检查|核对|验证|审查|覆盖)/u.test(clean);
-  const hasUncheckedBoundary = /(?:尚未|仍未|未)(?:检查|核对|验证|审查|覆盖)/u.test(clean);
-  return !(hasCheckedBoundary && hasUncheckedBoundary);
+  return !hasBoundedNoFindingScopes(clean);
 }
 
 function hasHeading(body, heading) {
@@ -385,6 +427,7 @@ function main() {
 if (require.main === module) main();
 
 module.exports = {
+  canonicalizeMarkdownText,
   collectFields,
   decodeHtmlEntities,
   isPlaceholder,

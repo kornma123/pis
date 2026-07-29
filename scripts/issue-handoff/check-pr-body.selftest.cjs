@@ -45,13 +45,17 @@ const validBody = `
 - **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: 上游身份服务可能还有未登记的调用方
 `;
 
+let scenarioCount = 0;
+
 function expectPass(name, body, expectedIssues) {
+  scenarioCount += 1;
   const result = validatePrBody(body);
   assert.equal(result.ok, true, `${name}: ${result.errors.join('; ')}`);
   assert.deepEqual(result.issueNumbers, expectedIssues, name);
 }
 
 function expectFail(name, body, pattern) {
+  scenarioCount += 1;
   const result = validatePrBody(body);
   assert.equal(result.ok, false, `${name}: expected failure`);
   assert.match(result.errors.join('\n'), pattern, name);
@@ -153,11 +157,47 @@ expectFail(
   ),
   /必填字段重复：我现在最没把握的是什么/,
 );
+expectFail(
+  'encoded duplicate fails closed with canonical strong value first',
+  validBody.replace(
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+      '- **我现在最没把握的是什么？ / Lea&amp;#115;t confidence**: TODO later fill this',
+  ),
+  /必填字段重复：我现在最没把握的是什么/,
+);
+expectFail(
+  'encoded duplicate fails closed with encoded weak value first',
+  validBody.replace(
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    '- **我现在最没把握的是什么？ / Lea&amp;#115;t confidence**: TODO later fill this\n' +
+      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+  ),
+  /必填字段重复：我现在最没把握的是什么/,
+);
+expectFail(
+  'default-ignorable field key cannot bypass duplicate detection',
+  validBody.replace(
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    '- **我现在最没把握的是什么？ / Lea\u034Fst confidence**: TODO later fill this\n' +
+      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+  ),
+  /必填字段重复：我现在最没把握的是什么/,
+);
 for (const [name, placeholder] of [
   ['long explicit placeholder', 'TODO later fill this'],
   ['HTML-entity placeholder', 'T&#79;DO later fill this'],
   ['zero-width placeholder', 'T\u200BO\u200BD\u200BO later fill this'],
   ['long Chinese placeholder', '待填写：稍后补充具体风险与证据'],
+  ['nested unresolved NoBreak entity', '&amp;NoBreak;'],
+  ['nested unresolved InvisibleTimes entity', '&amp;InvisibleTimes;'],
+  ['bold-wrapped TODO', '**TODO** later fill this'],
+  ['inline-code-wrapped TODO', '`TODO` later fill this'],
+  ['encoded HTML-wrapped TODO', '&lt;strong&gt;TODO&lt;/strong&gt; later fill this'],
+  ['default-ignorable TODO', 'T\uFE0FO\u034FD\uFE0FO later fill this'],
+  ['prefixed TODO', '风险：TODO later fill this'],
+  ['pure punctuation', '?'],
+  ['generic risk word', '风险'],
 ]) {
   expectFail(
     name,
@@ -168,6 +208,11 @@ for (const [name, placeholder] of [
 expectFail(
   'unbounded no-finding explanation is rejected',
   replaceLeastConfidence(validBody, '未发现；暂无其他问题'),
+  /反盲区字段回答过弱.*我现在最没把握的是什么/,
+);
+expectFail(
+  'no-finding requires substantive checked and unchecked clauses',
+  replaceLeastConfidence(validBody, '未发现；已检查；未检查'),
   /反盲区字段回答过弱.*我现在最没把握的是什么/,
 );
 expectPass(
@@ -267,4 +312,4 @@ const filledRepositoryTemplate = repositoryTemplate
   );
 expectPass('repository PR template passes after placeholder-only filling', filledRepositoryTemplate, [128]);
 
-console.log('Issue / handoff contract selftest: PASS (41 scenarios)');
+console.log(`Issue / handoff contract selftest: PASS (${scenarioCount} scenarios)`);
