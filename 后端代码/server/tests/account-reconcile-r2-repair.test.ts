@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -730,6 +731,10 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
     const restarted = new DatabaseSync(databasePath)
     restarted.exec('PRAGMA foreign_keys = ON')
     rejectStaleUpdates(restarted)
+    // #87：is_current 0→1 复活已被 trg_account_reconcile_pending_state_guard 拒绝
+    //（应用无任何复活流，直写复活=攻击形状）。此处是夹具恢复而非业务流，摘 guard 恢复；
+    // 紧随的 initializeDatabase 经升级函数 DROP+CREATE 重装全部 trigger（含本 guard）。
+    restarted.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_pending_state_guard')
     restarted.prepare(`
       UPDATE account_reconcile_generations
          SET is_current = 1
@@ -2987,4 +2992,661 @@ describe('LOC-005 FUP #95 identity-table row-id write guards', () => {
       }
     })
   }
+})
+
+describe('LOC-005 FUP #87 trigger single authority, pending state machines, binding relation guards and boot fail-closed scans', () => {
+  // #87 勘误后有效合同（Issue #87 body 2026-07-29 勘误版）：
+  // a) trigger 单一权威——init 段不再保存漂移副本；trg_account_reconcile_no_delete /
+  //    trg_account_reconcile_closed_immutable 纳入每次 boot 的 DROP+CREATE 部署集合；
+  //    fresh/存量启动后实际 sqlite_master 集合与关键 SQL 文本由本文件的权威清单钉版。
+  // b) pending generation 状态机 DB 闸：直接 SQL pending→closed/非法 status、is_current
+  //    0→1 复活拒绝；合法退役(1→0)、pending→complete、complete→closed 不误伤。
+  // c) pending hospital-month 状态机 DB 闸：pending 窗口（completed_at/closed_at 均 NULL）
+  //    的关账字段伪写、非法/直接关账状态、malformed 完成、reopen 伪造全拒；
+  //    合法 compute/verdict/complete/close 全链路绿。
+  // d) binding 行级关系闸：hospital_month_id 漂移全拒；generation INSERT 必须存在且
+  //    hospital_month_id 等值；UPDATE 还必须指向当前代（合法 upsert rebind 总是指向
+  //    刚 INSERT 的 is_current=1 新代，同月 stale 代漂移被 NOT_CURRENT 拒）。
+  // e) 启动 fail-closed：bindings 表先存判定（同 R8 P1-2 列先存范式）——仅真 predecessor
+  //    （表原本不存在）才 backfill；当前形状库不再经 INSERT OR IGNORE 静默修；
+  //    缺 binding / 悬空 generation / binding↔generation 医院月不等值三扫描各自独立命中。
+
+  const normalizeTriggerSql = (sql: string) => sql.replace(/\s+/g, ' ').trim()
+
+  // 权威关键文本（钉版对象：#87 漂移主体 immutable_fact + 两只原 init-only 部署缺口）。
+  // 两侧均经 normalizeTriggerSql 归一，格式漂移不造成假红，语义漂移必红。
+  const AUTHORITATIVE_TRIGGER_TEXTS: Record<string, string> = {
+    trg_account_reconcile_immutable_fact: `
+      CREATE TRIGGER trg_account_reconcile_immutable_fact
+      BEFORE UPDATE ON account_reconcile_generations
+      WHEN OLD.reconcile_generation_id <> NEW.reconcile_generation_id
+        OR OLD.partner_id <> NEW.partner_id
+        OR OLD.settlement_month <> NEW.settlement_month
+        OR OLD.statement_generation_id <> NEW.statement_generation_id
+        OR OLD.hospital_month_id <> NEW.hospital_month_id
+        OR OLD.source_readiness_json <> NEW.source_readiness_json
+        OR OLD.source_readiness_hash <> NEW.source_readiness_hash
+        OR OLD.statement_artifact_hash <> NEW.statement_artifact_hash
+        OR OLD.snapshot_json <> NEW.snapshot_json
+        OR OLD.snapshot_hash <> NEW.snapshot_hash
+      BEGIN
+        SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
+      END`,
+    trg_account_reconcile_no_delete: `
+      CREATE TRIGGER trg_account_reconcile_no_delete
+      BEFORE DELETE ON account_reconcile_generations
+      BEGIN
+        SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
+      END`,
+    trg_account_reconcile_closed_immutable: `
+      CREATE TRIGGER trg_account_reconcile_closed_immutable
+      BEFORE UPDATE ON account_reconcile_generations
+      WHEN OLD.status = 'closed'
+      BEGIN
+        SELECT RAISE(ABORT, 'CLOSED_RECONCILIATION_IMMUTABLE');
+      END`,
+  }
+
+  // 权威集合（钉版对象）：升级函数每次 boot DROP+CREATE 的全部 reconcile 族 trigger。
+  // trg_hcm_% 族属 hospital-cm-period-evidence 模块自有权威（IF NOT EXISTS 安装），不在本清单。
+  // 任何一只从升级函数部署集合移除/新增而不同步本清单 → 本清单钉版测试红。
+  const AUTHORITATIVE_TRIGGER_SET: Record<string, string[]> = {
+    reconcile_diffs: [
+      'trg_reconcile_diff_row_id_insert',
+      'trg_reconcile_diff_row_id_update',
+      'trg_reconcile_diff_final_immutable',
+      'trg_reconcile_diff_final_no_insert',
+      'trg_reconcile_diff_final_no_delete',
+      'trg_reconcile_diff_identity_immutable',
+    ],
+    supplement_orders: [
+      'trg_reconcile_supplement_row_id_insert',
+      'trg_reconcile_supplement_row_id_update',
+      'trg_reconcile_supplement_generation_insert',
+      'trg_reconcile_supplement_generation_update',
+      'trg_reconcile_supplement_final_immutable',
+      'trg_reconcile_supplement_final_no_insert',
+      'trg_reconcile_supplement_final_no_delete',
+      'trg_reconcile_supplement_collected_month_insert',
+      'trg_reconcile_supplement_collected_month_update',
+    ],
+    account_reconcile_generations: [
+      'trg_account_reconcile_generation_row_id_insert',
+      'trg_account_reconcile_generation_row_id_update',
+      'trg_account_reconcile_immutable_fact',
+      'trg_account_reconcile_completion_immutable',
+      'trg_account_reconcile_complete_finality',
+      'trg_account_reconcile_no_delete',
+      'trg_account_reconcile_closed_immutable',
+      'trg_account_reconcile_pending_state_guard',
+    ],
+    reconcile_hospital_months: [
+      'trg_reconcile_hospital_month_row_id_insert',
+      'trg_reconcile_hospital_month_row_id_update',
+      'trg_reconcile_hospital_month_closed_immutable',
+      'trg_reconcile_hospital_month_complete_finality',
+      'trg_reconcile_hospital_month_pending_guard',
+    ],
+    account_reconcile_hospital_month_bindings: [
+      'trg_reconcile_binding_final_immutable',
+      'trg_reconcile_binding_closed_no_insert',
+      'trg_reconcile_binding_final_no_delete',
+      'trg_reconcile_binding_month_immutable',
+      'trg_reconcile_binding_generation_relation_insert',
+      'trg_reconcile_binding_generation_relation_update',
+    ],
+  }
+  const RECONCILE_GUARD_TABLES = Object.keys(AUTHORITATIVE_TRIGGER_SET)
+
+  function reconcileTriggerNames(connection: DatabaseSync): Record<string, string[]> {
+    const rows = connection.prepare(`
+      SELECT tbl_name AS tbl, name AS name
+        FROM sqlite_master
+       WHERE type = 'trigger' AND name NOT LIKE 'trg_hcm_%'
+    `).all() as Array<{ tbl: string; name: string }>
+    const grouped: Record<string, string[]> = {}
+    for (const table of RECONCILE_GUARD_TABLES) grouped[table] = []
+    for (const row of rows) {
+      if (RECONCILE_GUARD_TABLES.includes(row.tbl)) grouped[row.tbl].push(row.name)
+    }
+    for (const table of RECONCILE_GUARD_TABLES) grouped[table].sort()
+    return grouped
+  }
+
+  function triggerSqlByName(connection: DatabaseSync, name: string): string {
+    const row = connection.prepare(
+      `SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?`,
+    ).get(name) as { sql: string } | undefined
+    if (!row) throw new Error(`trigger missing: ${name}`)
+    return String(row.sql)
+  }
+
+  function vacuumProbe(label: string): DatabaseSync {
+    const probePath = join(testDirectory, `${label}-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    return new DatabaseSync(probePath)
+  }
+
+  function seedPendingMonth(name: string) {
+    const binding = seedSource({ name, lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    return { binding, hospitalMonthId: String(snapshot.hospitalMonthId) }
+  }
+
+  // ── a) trigger 单一权威与钉版 ──────────────────────────────────────────────
+
+  it('keeps a single trigger authority: no IF-NOT-EXISTS drift copies of the reconcile family remain in DatabaseManager source', () => {
+    // 源码级钉版：init 段不得再保存 reconcile 族 trigger 副本——升级函数是唯一权威。
+    // IF NOT EXISTS 形状是漂移副本的机械签名（升级函数用plain CREATE TRIGGER），
+    // 修复前 init 段恰有 5 只（immutable_fact 9 条件漂移版/no_delete/closed_immutable/
+    // 两只 complete_finality），本断言修复前必红。
+    const sourcePath = fileURLToPath(new URL('../src/database/DatabaseManager.ts', import.meta.url))
+    const source = readFileSync(sourcePath, 'utf8')
+    const driftCopies = source.match(
+      /CREATE TRIGGER IF NOT EXISTS trg_(account_reconcile|reconcile_hospital_month|reconcile_binding|reconcile_diff|reconcile_supplement)[\w]*/g,
+    )
+    expect(driftCopies).toBeNull()
+  })
+
+  it('reinstalls authoritative texts over stale no_delete/closed_immutable/immutable_fact on existing databases at boot', () => {
+    // 部署缺口 RED：两只原 init-only trigger 不在重装集合时，存量库上的陈旧文本
+    // （此处模拟为改写过 RAISE 消息/少条件的版本）开机后仍残留；纳入重装集合后被权威文本替换。
+    // immutable_fact 腿修复前即绿（升级函数历来重装它）——作为钉版对照保留。
+    const probe = vacuumProbe('87-stale-text')
+    try {
+      probe.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_immutable_fact')
+      probe.exec(`
+        CREATE TRIGGER trg_account_reconcile_immutable_fact
+        BEFORE UPDATE ON account_reconcile_generations
+        WHEN OLD.reconcile_generation_id <> NEW.reconcile_generation_id
+          OR OLD.partner_id <> NEW.partner_id
+          OR OLD.settlement_month <> NEW.settlement_month
+          OR OLD.statement_generation_id <> NEW.statement_generation_id
+          OR OLD.hospital_month_id <> NEW.hospital_month_id
+          OR OLD.source_readiness_json <> NEW.source_readiness_json
+          OR OLD.source_readiness_hash <> NEW.source_readiness_hash
+          OR OLD.snapshot_json <> NEW.snapshot_json
+          OR OLD.snapshot_hash <> NEW.snapshot_hash
+        BEGIN
+          SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
+        END
+      `)
+      probe.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_no_delete')
+      probe.exec(`
+        CREATE TRIGGER trg_account_reconcile_no_delete
+        BEFORE DELETE ON account_reconcile_generations
+        BEGIN
+          SELECT RAISE(ABORT, 'STALE_NO_DELETE_TEXT');
+        END
+      `)
+      probe.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_closed_immutable')
+      probe.exec(`
+        CREATE TRIGGER trg_account_reconcile_closed_immutable
+        BEFORE UPDATE ON account_reconcile_generations
+        WHEN OLD.status = 'closed'
+        BEGIN
+          SELECT RAISE(ABORT, 'STALE_CLOSED_TEXT');
+        END
+      `)
+      manager.upgradeAccountReconciliationSchema(probe)
+      for (const [name, text] of Object.entries(AUTHORITATIVE_TRIGGER_TEXTS)) {
+        expect(normalizeTriggerSql(triggerSqlByName(probe, name)))
+          .toBe(normalizeTriggerSql(text))
+      }
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('pins the full reconcile trigger set and key texts after dropping the whole family and rebooting an existing database', () => {
+    // 部署集合钉版：把探针库上 reconcile 族 trigger 全部摘掉后开机——升级函数必须
+    // 按权威清单重装全集（缺任意一只 CREATE → 集合不齐 → 红；多任何一只 → 红）。
+    // 修复前 5 只新 guard 不存在于任何重装路径 → 集合必缺 → 本例必红。
+    const probe = vacuumProbe('87-trigger-set')
+    try {
+      for (const names of Object.values(reconcileTriggerNames(probe))) {
+        for (const name of names) probe.exec(`DROP TRIGGER IF EXISTS ${name}`)
+      }
+      expect(Object.values(reconcileTriggerNames(probe)).flat()).toEqual([])
+      manager.upgradeAccountReconciliationSchema(probe)
+      const actual = reconcileTriggerNames(probe)
+      for (const table of RECONCILE_GUARD_TABLES) {
+        expect(actual[table]).toEqual([...AUTHORITATIVE_TRIGGER_SET[table]].sort())
+      }
+      for (const [name, text] of Object.entries(AUTHORITATIVE_TRIGGER_TEXTS)) {
+        expect(normalizeTriggerSql(triggerSqlByName(probe, name)))
+          .toBe(normalizeTriggerSql(text))
+      }
+    } finally {
+      probe.close()
+    }
+  })
+
+  // ── b) pending generation 状态机 DB 闸 ────────────────────────────────────
+
+  it('rejects direct pending→closed and out-of-state-machine status writes on a pending generation (zero write)', () => {
+    const { binding } = seedPendingMonth('87-gen-pending')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = 'attacker'
+         WHERE reconcile_generation_id = ?
+      `).run(binding.reconcileGenerationId)
+    }, /PENDING_RECONCILIATION_TRANSITION_INVALID/)
+    // 非法 status：修复前由 DDL CHECK 以通用 constraint 文案拒绝；修复后 BEFORE trigger
+    // 先于约束检查以专属稳定码拒绝（BEFORE trigger 先求值，本断言钉的是新码归属）。
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE account_reconcile_generations SET status = 'garbage'
+         WHERE reconcile_generation_id = ?
+      `).run(binding.reconcileGenerationId)
+    }, /PENDING_RECONCILIATION_TRANSITION_INVALID/)
+    const row = db.prepare(`
+      SELECT status, closed_at, closed_by FROM account_reconcile_generations
+       WHERE reconcile_generation_id = ?
+    `).get(binding.reconcileGenerationId) as { status: string; closed_at: unknown; closed_by: unknown }
+    expect(row).toMatchObject({ status: 'pending', closed_at: null, closed_by: null })
+  })
+
+  it('rejects is_current resurrection 0→1 on a retired pending generation while allowing legal retirement 1→0 (probe)', () => {
+    // 退役(1→0)=合法 supersede 形状（本例显式钉放行）；复活(0→1)=攻击形状
+    //（stale 事实集复活为当前代，应用无任何复活流）。探针库上退役后无同院月当前代，
+    // partial unique index 不代打——拒复活完全由新 guard 承重。
+    const { binding } = seedPendingMonth('87-gen-resurrect')
+    const probe = vacuumProbe('87-gen-resurrect')
+    try {
+      const retired = probe.prepare(`
+        UPDATE account_reconcile_generations SET is_current = 0
+         WHERE reconcile_generation_id = ? AND is_current = 1 AND status = 'pending'
+      `).run(binding.reconcileGenerationId)
+      expect(Number(retired.changes)).toBe(1)
+      expectDatabaseMutationBlocked(probe, () => {
+        probe.prepare(`
+          UPDATE account_reconcile_generations SET is_current = 1
+           WHERE reconcile_generation_id = ?
+        `).run(binding.reconcileGenerationId)
+      }, /PENDING_RECONCILIATION_CURRENT_RESURRECT/)
+      const row = probe.prepare(`
+        SELECT is_current FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+      `).get(binding.reconcileGenerationId) as { is_current: number }
+      expect(Number(row.is_current)).toBe(0)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('keeps the legal compute→verdict→complete→close chain green through every new guard', () => {
+    // 不误伤对照：generation pending→complete→closed 与医院月 待复核→复核完成→已关账
+    // 全链路真实跑通（verdict 走 '核对无误' 无补收单；#95 合法流例已覆盖补收收款腿）。
+    const binding = seedSource({ name: '87-legal-chain', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const hospitalMonthId = String(snapshot.hospitalMonthId)
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(hospitalMonthId) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db, binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+    lifecycle.closeAccountReconciliation(db, binding, 'USER-001')
+    const generation = db.prepare(`
+      SELECT status, is_current FROM account_reconcile_generations
+       WHERE reconcile_generation_id = ?
+    `).get(binding.reconcileGenerationId) as { status: string; is_current: number }
+    expect(generation).toMatchObject({ status: 'closed', is_current: 1 })
+    const month = db.prepare(`
+      SELECT status, completed_by, closed_by FROM reconcile_hospital_months WHERE id = ?
+    `).get(hospitalMonthId) as { status: string; completed_by: string; closed_by: string }
+    expect(month).toMatchObject({ status: '已关账', completed_by: 'USER-001', closed_by: 'USER-001' })
+    const bindingRow = db.prepare(`
+      SELECT reconcile_generation_id AS generationId
+        FROM account_reconcile_hospital_month_bindings WHERE hospital_month_id = ?
+    `).get(hospitalMonthId) as { generationId: string }
+    expect(bindingRow.generationId).toBe(binding.reconcileGenerationId)
+  })
+
+  // ── c) pending hospital-month 状态机 DB 闸 ────────────────────────────────
+
+  it('rejects forged close fields on a pending hospital month (zero write)', () => {
+    const { hospitalMonthId } = seedPendingMonth('87-month-close-forge')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE reconcile_hospital_months
+           SET status = '已关账', closed_at = CURRENT_TIMESTAMP, closed_by = 'attacker'
+         WHERE id = ?
+      `).run(hospitalMonthId)
+    }, /PENDING_HOSPITAL_MONTH_CLOSE_FORGED/)
+    const row = db.prepare(
+      'SELECT status, closed_at, closed_by FROM reconcile_hospital_months WHERE id = ?',
+    ).get(hospitalMonthId) as { status: string; closed_at: unknown; closed_by: unknown }
+    expect(row).toMatchObject({ status: '待复核', closed_at: null, closed_by: null })
+  })
+
+  it('rejects direct-close and garbage status values on a pending hospital month (zero write)', () => {
+    const { hospitalMonthId } = seedPendingMonth('87-month-status')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`UPDATE reconcile_hospital_months SET status = '已关账' WHERE id = ?`)
+        .run(hospitalMonthId)
+    }, /PENDING_HOSPITAL_MONTH_TRANSITION_INVALID/)
+    // 医院月 status 无 DDL CHECK——garbage 值修复前真实落库（真 RED），修复后专属码拒。
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`UPDATE reconcile_hospital_months SET status = 'bogus' WHERE id = ?`)
+        .run(hospitalMonthId)
+    }, /PENDING_HOSPITAL_MONTH_TRANSITION_INVALID/)
+    const row = db.prepare(
+      'SELECT status FROM reconcile_hospital_months WHERE id = ?',
+    ).get(hospitalMonthId) as { status: string }
+    expect(row.status).toBe('待复核')
+  })
+
+  it('rejects malformed completion writes on a pending hospital month (zero write)', () => {
+    const { hospitalMonthId } = seedPendingMonth('87-month-complete-malformed')
+    // 只翻状态不带终结字段：后续 complete_finality 窗口不接管（completed_at 仍 NULL），
+    // 假「复核完成」永远卡死且绕过终结保护——必须在写入侧拒。
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`UPDATE reconcile_hospital_months SET status = '复核完成' WHERE id = ?`)
+        .run(hospitalMonthId)
+    }, /PENDING_HOSPITAL_MONTH_COMPLETION_MALFORMED/)
+    // 只写终结字段不翻状态：待复核行携带完成留痕=矛盾形状（合法 compute 显式写 NULL）。
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE reconcile_hospital_months
+           SET completed_at = CURRENT_TIMESTAMP, completed_by = 'attacker'
+         WHERE id = ?
+      `).run(hospitalMonthId)
+    }, /PENDING_HOSPITAL_MONTH_COMPLETION_MALFORMED/)
+    const row = db.prepare(
+      'SELECT status, completed_at, completed_by FROM reconcile_hospital_months WHERE id = ?',
+    ).get(hospitalMonthId) as { status: string; completed_at: unknown; completed_by: unknown }
+    expect(row).toMatchObject({ status: '待复核', completed_at: null, completed_by: null })
+  })
+
+  it('rejects forged reopen fields on a pending hospital month (zero write)', () => {
+    // reopened_at/reopen_reason 在 pending 窗口无合法写者（唯一历史写者是已禁用且
+    // 被 complete_finality/closed_immutable 拦截的 pre-LOC005 reopen 路由）。
+    const { hospitalMonthId } = seedPendingMonth('87-month-reopen-forge')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE reconcile_hospital_months
+           SET reopened_at = CURRENT_TIMESTAMP, reopen_reason = 'forged'
+         WHERE id = ?
+      `).run(hospitalMonthId)
+    }, /PENDING_HOSPITAL_MONTH_REOPEN_FORGED/)
+    const row = db.prepare(
+      'SELECT reopened_at, reopen_reason FROM reconcile_hospital_months WHERE id = ?',
+    ).get(hospitalMonthId) as { reopened_at: unknown; reopen_reason: unknown }
+    expect(row).toMatchObject({ reopened_at: null, reopen_reason: null })
+  })
+
+  // ── d) binding 行级关系闸 ─────────────────────────────────────────────────
+
+  it('rejects binding UPDATE repointing to the stale same-month generation (zero write)', () => {
+    // #87 主攻击形状：pending 窗口把 binding 直改到同月 stale（is_current=0）旧代——
+    // 存在且等值但非当前代；assertHospitalMonthBinding 只在业务动作时 409 延迟发现。
+    const fixture = seedSupersededWithSurvivingDiff('87-binding-stale')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = ?
+         WHERE hospital_month_id = ?
+      `).run(fixture.binding.reconcileGenerationId, fixture.hospitalMonthId)
+    }, /RECONCILE_BINDING_GENERATION_NOT_CURRENT/)
+    const row = db.prepare(`
+      SELECT reconcile_generation_id AS generationId
+        FROM account_reconcile_hospital_month_bindings WHERE hospital_month_id = ?
+    `).get(fixture.hospitalMonthId) as { generationId: string }
+    expect(row.generationId).toBe(fixture.nextBinding.reconcileGenerationId)
+  })
+
+  it('rejects binding UPDATE repointing to another month generation (zero write)', () => {
+    // 目标=other 的 stale 旧代：属于 other 的月（与 binding 月不等值）、supersede 后
+    // 已从 other binding 解绑（UNIQUE(reconcile_generation_id) 不代打）、FK 存在
+    //（FK 不代打）——修复前真实放行；修复后 MISMATCH 段先于 NOT CURRENT 段命中
+    //（同体两段顺序 SELECT RAISE，与 #95 row-id update guard 同范式，不靠创建顺序）。
+    const fixture = seedSupersededWithSurvivingDiff('87-binding-crossmonth')
+    const other = seedSupersededWithSurvivingDiff('87-binding-crossmonth-other')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = ?
+         WHERE hospital_month_id = ?
+      `).run(other.binding.reconcileGenerationId, fixture.hospitalMonthId)
+    }, /RECONCILE_BINDING_GENERATION_MISMATCH/)
+    const row = db.prepare(`
+      SELECT reconcile_generation_id AS generationId
+        FROM account_reconcile_hospital_month_bindings WHERE hospital_month_id = ?
+    `).get(fixture.hospitalMonthId) as { generationId: string }
+    expect(row.generationId).toBe(fixture.nextBinding.reconcileGenerationId)
+  })
+
+  it('rejects binding UPDATE of hospital_month_id (zero write)', () => {
+    // 目标=直插的独立月 C（无 generation、无 binding——PK(hospital_month_id) 不代打）;
+    // FK 存在不代打——修复前真实放行。
+    const fixture = seedSupersededWithSurvivingDiff('87-binding-month-drift')
+    const monthCId = `HM-87-D3-${++sequence}`
+    db.prepare('INSERT INTO reconcile_hospital_months (id, partner_id, service_month) VALUES (?, ?, ?)')
+      .run(monthCId, fixture.binding.partnerId, '2099-04')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET hospital_month_id = ?
+         WHERE hospital_month_id = ?
+      `).run(monthCId, fixture.hospitalMonthId)
+    }, /RECONCILE_BINDING_MONTH_IMMUTABLE/)
+    const rows = db.prepare(`
+      SELECT hospital_month_id AS monthId FROM account_reconcile_hospital_month_bindings
+       WHERE reconcile_generation_id = ?
+    `).all(fixture.nextBinding.reconcileGenerationId) as Array<{ monthId: string }>
+    expect(rows).toEqual([{ monthId: fixture.hospitalMonthId }])
+  })
+
+  it('rejects binding INSERT whose generation belongs to another hospital month (zero write)', () => {
+    // 构造：无 generation 的独立月 C + 属于月 B 的未绑 standalone 代 G（is_current=0，
+    // 绕 partial current unique、绕 UNIQUE(reconcile_generation_id)——无约束代打）。
+    // 修复前 FK/UNIQUE 全部合法直插成功；修复后关系闸以等值谓词拒。
+    const fixture = seedPendingMonth('87-binding-insert-mismatch')
+    const monthCId = `HM-87-C-${++sequence}`
+    const standaloneGenerationId = `GEN-87-STANDALONE-${++sequence}`
+    db.prepare('INSERT INTO reconcile_hospital_months (id, partner_id, service_month) VALUES (?, ?, ?)')
+      .run(monthCId, fixture.binding.partnerId, '2099-02')
+    db.prepare(`
+      INSERT INTO account_reconcile_generations (
+        reconcile_generation_id, partner_id, settlement_month, statement_generation_id,
+        hospital_month_id, is_current, source_readiness_json, source_readiness_hash,
+        statement_artifact_hash, snapshot_json, snapshot_hash
+      ) VALUES (?, ?, ?, ?, ?, 0, '{}', 'rid87', 'rid87', '{}', 'rid87')
+    `).run(
+      standaloneGenerationId,
+      fixture.binding.partnerId,
+      '2099-02',
+      fixture.binding.statementGenerationId,
+      fixture.hospitalMonthId,
+    )
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        INSERT INTO account_reconcile_hospital_month_bindings
+          (hospital_month_id, reconcile_generation_id, binding_state)
+        VALUES (?, ?, 'bound')
+      `).run(monthCId, standaloneGenerationId)
+    }, /RECONCILE_BINDING_GENERATION_MISMATCH/)
+    const orphan = db.prepare(`
+      SELECT COUNT(*) AS n FROM account_reconcile_hospital_month_bindings
+       WHERE hospital_month_id = ? OR reconcile_generation_id = ?
+    `).get(monthCId, standaloneGenerationId) as { n: number }
+    expect(Number(orphan.n)).toBe(0)
+  })
+
+  it('rejects binding INSERT with a dangling generation (probe, FK off, then FK restored)', () => {
+    // 悬空代 INSERT：FK 会代打，故在独立 probe 上 FK=OFF（读回 0）仅用于证明
+    // 关系闸自身承重；SAVEPOINT 回滚脏写后 FK=ON 读回 1 + foreign_key_check 为空。
+    const fixture = seedPendingMonth('87-binding-insert-dangling')
+    const probe = vacuumProbe('87-binding-insert-dangling')
+    try {
+      probe.exec('PRAGMA foreign_keys = OFF')
+      expect(foreignKeysPragmaValue(probe)).toBe(0)
+      const monthCId = `HM-87-DANGLE-${++sequence}`
+      probe.prepare('INSERT INTO reconcile_hospital_months (id, partner_id, service_month) VALUES (?, ?, ?)')
+        .run(monthCId, fixture.binding.partnerId, '2099-03')
+      expectDatabaseMutationBlocked(probe, () => {
+        probe.prepare(`
+          INSERT INTO account_reconcile_hospital_month_bindings
+            (hospital_month_id, reconcile_generation_id, binding_state)
+          VALUES (?, 'GHOST-GEN-87', 'bound')
+        `).run(monthCId)
+      }, /RECONCILE_BINDING_GENERATION_MISMATCH/)
+      probe.exec('PRAGMA foreign_keys = ON')
+      expect(foreignKeysPragmaValue(probe)).toBe(1)
+      expect(probe.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('keeps the legal supersede rebind green through the new relation guards', () => {
+    // 不误伤对照：每次 supersede 夹具都经 bindHospitalMonth upsert（ON CONFLICT
+    // DO UPDATE reconcile_generation_id）真实穿过新 UPDATE 关系闸——新代在 bind 前
+    // 已以 is_current=1 INSERT，存在+等值+当前代三谓词全放行。本例钉死最终结果。
+    const fixture = seedSupersededWithSurvivingDiff('87-binding-legal')
+    const row = db.prepare(`
+      SELECT reconcile_generation_id AS generationId, binding_state AS state
+        FROM account_reconcile_hospital_month_bindings WHERE hospital_month_id = ?
+    `).get(fixture.hospitalMonthId) as { generationId: string; state: string }
+    expect(row).toEqual({ generationId: fixture.nextBinding.reconcileGenerationId, state: 'bound' })
+  })
+
+  // ── e) 启动 fail-closed 扫描 ───────────────────────────────────────────────
+
+  it('fails closed at first boot and restart when a current-shape database lost a binding, then recovers', () => {
+    // 缺 binding：当前形状库（bindings 表先存）不得经 INSERT OR IGNORE 静默修复——
+    // pending 窗口 binding_final_no_delete 不拦 DELETE，遗留缺绑必须由启动扫描带出。
+    // 修复前开机静默回补（本例必红）；修复后首启+重启均拒，恢复后第三次开机绿。
+    const fixture = seedSupersededWithSurvivingDiff('87-scan-missing')
+    const probe = vacuumProbe('87-scan-missing')
+    try {
+      probe.prepare(`
+        DELETE FROM account_reconcile_hospital_month_bindings WHERE hospital_month_id = ?
+      `).run(fixture.hospitalMonthId)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(new RegExp(`RECONCILE_BINDING_MISSING:${fixture.hospitalMonthId}`))
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(new RegExp(`RECONCILE_BINDING_MISSING:${fixture.hospitalMonthId}`))
+      // 恢复：关系闸放行（generation 存在且等值），第三次开机绿
+      probe.prepare(`
+        INSERT INTO account_reconcile_hospital_month_bindings
+          (hospital_month_id, reconcile_generation_id, binding_state)
+        VALUES (?, ?, 'bound')
+      `).run(fixture.hospitalMonthId, fixture.nextBinding.reconcileGenerationId)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe)).not.toThrow()
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('fails closed on a dangling binding generation at first boot and restart, then recovers', () => {
+    // 悬空 generation：FK=ON 下无法直接造成（UPDATE 被 FK 拒），摘关系闸+FK=OFF 造脏；
+    // 开机扫描必须独立于 FK 命中（FK 只拦写入，拦不了已入库的悬空）。
+    const fixture = seedSupersededWithSurvivingDiff('87-scan-dangling')
+    const probe = vacuumProbe('87-scan-dangling')
+    try {
+      probe.exec('PRAGMA foreign_keys = OFF')
+      expect(foreignKeysPragmaValue(probe)).toBe(0)
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_generation_relation_update')
+      probe.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = 'GHOST-GEN-87-DANGLING'
+         WHERE hospital_month_id = ?
+      `).run(fixture.hospitalMonthId)
+      probe.exec('PRAGMA foreign_keys = ON')
+      expect(foreignKeysPragmaValue(probe)).toBe(1)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(new RegExp(`RECONCILE_BINDING_GENERATION_DANGLING:${fixture.hospitalMonthId}`))
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(new RegExp(`RECONCILE_BINDING_GENERATION_DANGLING:${fixture.hospitalMonthId}`))
+      // 恢复（关系闸已被摘除于事务外，拒启开机的 ROLLBACK 不恢复它——直写恢复）；
+      // FK 校验为空后第三次开机绿（升级函数重装全部 guard）。
+      probe.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = ?
+         WHERE hospital_month_id = ?
+      `).run(fixture.nextBinding.reconcileGenerationId, fixture.hospitalMonthId)
+      expect(probe.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      expect(() => manager.upgradeAccountReconciliationSchema(probe)).not.toThrow()
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('fails closed on binding↔generation hospital-month mismatch at first boot and restart, then recovers', () => {
+    // 不等值：两院月 binding 互换 generation——缺 binding 扫描（按月查存在性）与
+    // 悬空扫描（按代查存在性）双双不命中，只有等值扫描能独立带出。
+    // 三步交换绕 UNIQUE(reconcile_generation_id)；FK=OFF 仅为临时占位值。
+    const fixtureA = seedSupersededWithSurvivingDiff('87-scan-mismatch-a')
+    const fixtureB = seedSupersededWithSurvivingDiff('87-scan-mismatch-b')
+    const generationA = fixtureA.nextBinding.reconcileGenerationId
+    const generationB = fixtureB.nextBinding.reconcileGenerationId
+    const probe = vacuumProbe('87-scan-mismatch')
+    try {
+      probe.exec('PRAGMA foreign_keys = OFF')
+      expect(foreignKeysPragmaValue(probe)).toBe(0)
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_generation_relation_update')
+      probe.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = 'TMP-87-SWAP' WHERE hospital_month_id = ?
+      `).run(fixtureA.hospitalMonthId)
+      probe.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = ? WHERE hospital_month_id = ?
+      `).run(generationA, fixtureB.hospitalMonthId)
+      probe.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = ? WHERE hospital_month_id = ?
+      `).run(generationB, fixtureA.hospitalMonthId)
+      probe.exec('PRAGMA foreign_keys = ON')
+      expect(foreignKeysPragmaValue(probe)).toBe(1)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/RECONCILE_BINDING_GENERATION_MONTH_MISMATCH:/)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/RECONCILE_BINDING_GENERATION_MONTH_MISMATCH:/)
+      probe.exec('PRAGMA foreign_keys = OFF')
+      probe.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = 'TMP-87-SWAP-BACK' WHERE hospital_month_id = ?
+      `).run(fixtureA.hospitalMonthId)
+      probe.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = ? WHERE hospital_month_id = ?
+      `).run(generationB, fixtureB.hospitalMonthId)
+      probe.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = ? WHERE hospital_month_id = ?
+      `).run(generationA, fixtureA.hospitalMonthId)
+      probe.exec('PRAGMA foreign_keys = ON')
+      expect(foreignKeysPragmaValue(probe)).toBe(1)
+      expect(probe.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      expect(() => manager.upgradeAccountReconciliationSchema(probe)).not.toThrow()
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('keeps predecessor first-bind backfill green and rebuilds bindings on first upgrade', () => {
+    // 合法 predecessor：bindings 表原本不存在 → 建表 + 按当前代 backfill 是首次绑定
+    // 正路（不误伤）；backfill 产物必须满足三扫描（存在/等值由 SELECT 构造保证）。
+    const fixture = seedSupersededWithSurvivingDiff('87-scan-predecessor')
+    const probe = vacuumProbe('87-scan-predecessor')
+    try {
+      probe.exec('DROP TABLE account_reconcile_hospital_month_bindings')
+      expect(() => manager.upgradeAccountReconciliationSchema(probe)).not.toThrow()
+      const rebuilt = probe.prepare(`
+        SELECT reconcile_generation_id AS generationId, binding_state AS state
+          FROM account_reconcile_hospital_month_bindings WHERE hospital_month_id = ?
+      `).get(fixture.hospitalMonthId) as { generationId: string; state: string } | undefined
+      expect(rebuilt).toEqual({
+        generationId: fixture.nextBinding.reconcileGenerationId,
+        state: 'bound',
+      })
+    } finally {
+      probe.close()
+    }
+  })
 })

@@ -1269,6 +1269,53 @@ function ensureReconcileIdentityRowIds(database: DatabaseSync): void {
   }
 }
 
+// #87 e)：binding 关系开机三扫描（缺 binding / 悬空 generation / 医院月不等值各自独立
+// 命中，行存在判定与 R8 P1-1 同口径）。当前形状库（bindings 表先存）不再经
+// INSERT OR IGNORE 静默修损坏；扫描排在 trigger 重装段之前，违例 throw 即整体
+// ROLLBACK、开机 fail-closed。三谓词正交：缺绑定按月查存在性（不看代指向）、悬空按代
+// 查存在性（不看月）、不等值在两者皆存时查月一致——交换两座 binding 的代只有第三扫描
+// 能独立带出。
+function ensureReconcileHospitalMonthBindings(database: DatabaseSync): void {
+  const missingBinding = database.prepare(`
+    SELECT generation.hospital_month_id AS hospitalMonthId
+      FROM account_reconcile_generations generation
+     WHERE generation.is_current = 1
+       AND NOT EXISTS (
+         SELECT 1
+           FROM account_reconcile_hospital_month_bindings binding
+          WHERE binding.hospital_month_id = generation.hospital_month_id
+       )
+     LIMIT 1
+  `).get() as { hospitalMonthId?: string | null } | undefined
+  if (missingBinding) {
+    throw new Error(`RECONCILE_BINDING_MISSING:${String(missingBinding.hospitalMonthId ?? '<null>')}`)
+  }
+  const danglingGeneration = database.prepare(`
+    SELECT binding.hospital_month_id AS hospitalMonthId
+      FROM account_reconcile_hospital_month_bindings binding
+     WHERE NOT EXISTS (
+       SELECT 1
+         FROM account_reconcile_generations generation
+        WHERE generation.reconcile_generation_id = binding.reconcile_generation_id
+     )
+     LIMIT 1
+  `).get() as { hospitalMonthId?: string | null } | undefined
+  if (danglingGeneration) {
+    throw new Error(`RECONCILE_BINDING_GENERATION_DANGLING:${String(danglingGeneration.hospitalMonthId ?? '<null>')}`)
+  }
+  const monthMismatch = database.prepare(`
+    SELECT binding.hospital_month_id AS hospitalMonthId
+      FROM account_reconcile_hospital_month_bindings binding
+      JOIN account_reconcile_generations generation
+        ON generation.reconcile_generation_id = binding.reconcile_generation_id
+     WHERE generation.hospital_month_id IS NOT binding.hospital_month_id
+     LIMIT 1
+  `).get() as { hospitalMonthId?: string | null } | undefined
+  if (monthMismatch) {
+    throw new Error(`RECONCILE_BINDING_GENERATION_MONTH_MISMATCH:${String(monthMismatch.hospitalMonthId ?? '<null>')}`)
+  }
+}
+
 /**
  * Forward-only LOC-005 upgrade. A legacy final hospital-month without an
  * existing current generation remains explicitly unbound and immutable.
@@ -1302,6 +1349,13 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
     .some(column => column.name === 'reconcile_generation_id')
   ensureDatabaseColumn(database, 'reconcile_diffs', 'reconcile_generation_id', 'TEXT')
 
+  // #87 e)：bindings 表先存判定（同 R8 P1-2 列先存范式）——仅真 predecessor（表原本
+  // 不存在）允许下方 backfill 首次绑定；当前形状库（表先存）不再经 INSERT OR IGNORE
+  // 静默修缺绑/错绑，由 ensureReconcileHospitalMonthBindings 三扫描 fail-closed 带出。
+  const bindingsTablePreExisting = database.prepare(`
+    SELECT name FROM sqlite_master
+     WHERE type = 'table' AND name = 'account_reconcile_hospital_month_bindings'
+  `).get() !== undefined
   database.exec(`
     CREATE TABLE IF NOT EXISTS account_reconcile_hospital_month_bindings (
       hospital_month_id TEXT PRIMARY KEY,
@@ -1313,16 +1367,20 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       FOREIGN KEY(reconcile_generation_id)
         REFERENCES account_reconcile_generations(reconcile_generation_id)
     );
-    INSERT OR IGNORE INTO account_reconcile_hospital_month_bindings
-      (hospital_month_id, reconcile_generation_id, binding_state)
-    SELECT generation.hospital_month_id, generation.reconcile_generation_id, 'bound'
-      FROM account_reconcile_generations generation
-     WHERE generation.is_current = 1
-       AND NOT EXISTS (
-         SELECT 1 FROM account_reconcile_hospital_month_bindings binding
-         WHERE binding.hospital_month_id = generation.hospital_month_id
-       )
   `)
+  if (!bindingsTablePreExisting) {
+    database.exec(`
+      INSERT OR IGNORE INTO account_reconcile_hospital_month_bindings
+        (hospital_month_id, reconcile_generation_id, binding_state)
+      SELECT generation.hospital_month_id, generation.reconcile_generation_id, 'bound'
+        FROM account_reconcile_generations generation
+       WHERE generation.is_current = 1
+         AND NOT EXISTS (
+           SELECT 1 FROM account_reconcile_hospital_month_bindings binding
+           WHERE binding.hospital_month_id = generation.hospital_month_id
+         )
+    `)
+  }
 
   database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_immutable_fact')
   database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_completion_immutable')
@@ -1352,6 +1410,16 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_generation_row_id_update')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_row_id_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_row_id_update')
+  // #87 a)：两只原 init-only trigger 纳入每次 boot 的 DROP+CREATE 部署集合（部署缺口修复）。
+  database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_no_delete')
+  database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_closed_immutable')
+  // #87 b)/c)：pending 状态机 DB 闸。
+  database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_pending_state_guard')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_pending_guard')
+  // #87 d)：binding 行级关系闸。
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_month_immutable')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_generation_relation_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_generation_relation_update')
 
   // R3-1：diffs 代次回填必须排在旧 trigger DROP 之后——父版库的
   // trg_reconcile_diff_final_immutable 对 complete/closed 月 diff 的任意 UPDATE 一律 ABORT，
@@ -1413,6 +1481,10 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   ensureSupplementCollectedMonthIntegrity(database)
   // R8 P1-1 纵深：身份表主键 NULL/'' 开机扫描（排在漂移扫描之后，纯主键空值收口）。
   ensureReconcileIdentityRowIds(database)
+  // #87 e)：binding 关系开机三扫描——当前形状库缺 binding/悬空 generation/医院月
+  // 不等值各自独立命中（谓词正交性见函数头注释）；仅真 predecessor 的首次 backfill
+  // 产物由 SELECT 构造保证等值，天然绿。
+  ensureReconcileHospitalMonthBindings(database)
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_supplement_generation
       ON supplement_orders(reconcile_generation_id, source_diff_id)
@@ -1552,6 +1624,38 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       SELECT RAISE(ABORT, 'COMPLETE_RECONCILIATION_FINAL');
     END
   `)
+  // #87 a)：原 init-only 两只移入重装集合（权威文本=原 init 版，init 段副本已退役）。
+  database.exec(`
+    CREATE TRIGGER trg_account_reconcile_no_delete
+    BEFORE DELETE ON account_reconcile_generations
+    BEGIN
+      SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_account_reconcile_closed_immutable
+    BEFORE UPDATE ON account_reconcile_generations
+    WHEN OLD.status = 'closed'
+    BEGIN
+      SELECT RAISE(ABORT, 'CLOSED_RECONCILIATION_IMMUTABLE');
+    END
+  `)
+  // #87 b)：pending generation 状态机 DB 闸。finality/immutable 族只约束 complete/
+  // closed 旧态；pending 窗口的非法转移（直伪造 closed、枚举外 status——BEFORE trigger
+  // 先于 DDL CHECK 求值故本码先于通用 constraint 文案命中、is_current 0→1 复活）
+  // 在此收口。合法形状全放行：supersede 退役(pending 1→0)、complete(pending→complete)、
+  // close 走 complete_finality 窗口（OLD.status='complete'，本 guard WHEN 不命中）。
+  database.exec(`
+    CREATE TRIGGER trg_account_reconcile_pending_state_guard
+    BEFORE UPDATE ON account_reconcile_generations
+    WHEN OLD.status = 'pending'
+    BEGIN
+      SELECT RAISE(ABORT, 'PENDING_RECONCILIATION_TRANSITION_INVALID')
+       WHERE NEW.status NOT IN ('pending', 'complete');
+      SELECT RAISE(ABORT, 'PENDING_RECONCILIATION_CURRENT_RESURRECT')
+       WHERE OLD.is_current = 0 AND NEW.is_current <> 0;
+    END
+  `)
   database.exec(`
     CREATE TRIGGER trg_reconcile_hospital_month_closed_immutable
     BEFORE UPDATE ON reconcile_hospital_months
@@ -1592,6 +1696,36 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       )
     BEGIN
       SELECT RAISE(ABORT, 'COMPLETE_HOSPITAL_MONTH_FINAL');
+    END
+  `)
+  // #87 c)：pending 医院月状态机 DB 闸。complete_finality 管 completed_at 非空窗口、
+  // closed_immutable 管 closed_at 非空窗口；本 guard 管 pending 窗口（两终结字段均 NULL）：
+  // 关账字段伪写（伪造已关账后被 closed_immutable 永久冻结的 DoS 形状）、非法/直接
+  // 关账状态（status 无 DDL CHECK，garbage 值修复前真实落库）、malformed 完成
+  //（只翻状态不带终结字段→假「复核完成」永远卡死；只写终结字段不翻状态→矛盾行）、
+  // reopen 伪造（pending 窗口无合法写者：唯一历史写者是已禁用且被 closed_immutable
+  // 拦截的 pre-LOC005 reopen 路由）。合法形状逐字核对放行：compute 重算写
+  // status='待复核' + completed_at/completed_by=NULL、verdict 只动 pending_count、
+  // complete 写 status='复核完成'+completed_at+completed_by（非空）、close 在
+  // complete_finality 窗口（本 guard WHEN 不命中）。两段同体顺序 SELECT RAISE。
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_hospital_month_pending_guard
+    BEFORE UPDATE ON reconcile_hospital_months
+    WHEN OLD.completed_at IS NULL AND OLD.closed_at IS NULL
+    BEGIN
+      SELECT RAISE(ABORT, 'PENDING_HOSPITAL_MONTH_CLOSE_FORGED')
+       WHERE NEW.closed_at IS NOT NULL OR NEW.closed_by IS NOT NULL;
+      SELECT RAISE(ABORT, 'PENDING_HOSPITAL_MONTH_TRANSITION_INVALID')
+       WHERE NEW.status NOT IN ('待复核', '复核完成');
+      SELECT RAISE(ABORT, 'PENDING_HOSPITAL_MONTH_COMPLETION_MALFORMED')
+       WHERE NEW.status = '复核完成'
+         AND (NEW.completed_at IS NULL OR NEW.completed_by IS NULL OR trim(NEW.completed_by) = '');
+      SELECT RAISE(ABORT, 'PENDING_HOSPITAL_MONTH_COMPLETION_MALFORMED')
+       WHERE NEW.status = '待复核'
+         AND (NEW.completed_at IS NOT NULL OR NEW.completed_by IS NOT NULL);
+      SELECT RAISE(ABORT, 'PENDING_HOSPITAL_MONTH_REOPEN_FORGED')
+       WHERE OLD.reopened_at IS NOT NEW.reopened_at
+          OR OLD.reopen_reason IS NOT NEW.reopen_reason;
     END
   `)
   database.exec(`
@@ -1638,6 +1772,55 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       )
     BEGIN
       SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_BINDING_IMMUTABLE');
+    END
+  `)
+  // #87 d)：binding 行级关系闸。final_immutable 只在月已关账或原代 complete/closed
+  // 时拒 UPDATE——pending 窗口的关系漂移在此收口：
+  // ① hospital_month_id 任何漂移即拒（无合法写者——bindHospitalMonth upsert 的
+  //    ON CONFLICT DO UPDATE 只动 reconcile_generation_id/binding_state/updated_at）；
+  // ②③ INSERT/UPDATE 必须保证 generation 存在且 generation.hospital_month_id =
+  //    binding.hospital_month_id（FK 只拦写入拦不了 FK-OFF 入库的历史损坏，且 FK 不查
+  //    月等值）；UPDATE 另要求指向当前代（is_current=1）——合法 upsert rebind 在
+  //    supersede 中总指向刚 INSERT 的当前新代（先退役旧代→INSERT 新代 is_current=1→
+  //    bind），同月 stale 代漂移被 NOT CURRENT 立即拒（此前只有业务动作时
+  //    assertHospitalMonthBinding 409 延迟发现）。UPDATE 同体两段顺序 SELECT RAISE：
+  //    先存在+等值（MISMATCH），再当前代（NOT CURRENT），不靠创建顺序。
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_binding_month_immutable
+    BEFORE UPDATE ON account_reconcile_hospital_month_bindings
+    WHEN NEW.hospital_month_id IS NOT OLD.hospital_month_id
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_BINDING_MONTH_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_binding_generation_relation_insert
+    BEFORE INSERT ON account_reconcile_hospital_month_bindings
+    WHEN NOT EXISTS (
+      SELECT 1 FROM account_reconcile_generations generation
+       WHERE generation.reconcile_generation_id = NEW.reconcile_generation_id
+         AND generation.hospital_month_id = NEW.hospital_month_id
+    )
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_BINDING_GENERATION_MISMATCH');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_binding_generation_relation_update
+    BEFORE UPDATE OF reconcile_generation_id ON account_reconcile_hospital_month_bindings
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_BINDING_GENERATION_MISMATCH')
+       WHERE NOT EXISTS (
+         SELECT 1 FROM account_reconcile_generations generation
+          WHERE generation.reconcile_generation_id = NEW.reconcile_generation_id
+            AND generation.hospital_month_id = NEW.hospital_month_id
+       );
+      SELECT RAISE(ABORT, 'RECONCILE_BINDING_GENERATION_NOT_CURRENT')
+       WHERE NOT EXISTS (
+         SELECT 1 FROM account_reconcile_generations generation
+          WHERE generation.reconcile_generation_id = NEW.reconcile_generation_id
+            AND generation.is_current = 1
+       );
     END
   `)
   database.exec(`
@@ -1813,8 +1996,8 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   // 窗口，旧代仍 pending 但已被取代）或 complete/closed 即禁删。
   // 月级分支保留的理由（R6 更正，替换 R5 误述）：a) 覆盖 reconcile_generation_id 为 NULL 的
   // 遗留补收单（行级分支按 NULL 代查不到任何 generation 行）；b) 纵深防御——
-  // trg_account_reconcile_no_delete（init-only，不在本函数重装集合内，见 #87）虽在运行态
-  // 无条件拒删 generation 行，本族 trigger 的正确性不押在重装集合之外的 trigger 上。
+  // trg_account_reconcile_no_delete（#87 起已纳入本函数重装集合）虽在运行态
+  // 无条件拒删 generation 行，本族 trigger 的正确性不押在另一只 trigger 上。
   // 合法口径不受影响：verdict 的 scoped DELETE（当前 pending 代、其月无 complete/closed 代）
   // 两分支均不命中。
   database.exec(`
@@ -3538,102 +3721,11 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_account_reconcile_statement_generation
       ON account_reconcile_generations(partner_id, settlement_month, statement_generation_id)
   `)
-  database.exec(`
-    CREATE TRIGGER IF NOT EXISTS trg_account_reconcile_immutable_fact
-    BEFORE UPDATE ON account_reconcile_generations
-    WHEN OLD.reconcile_generation_id <> NEW.reconcile_generation_id
-      OR OLD.partner_id <> NEW.partner_id
-      OR OLD.settlement_month <> NEW.settlement_month
-      OR OLD.statement_generation_id <> NEW.statement_generation_id
-      OR OLD.hospital_month_id <> NEW.hospital_month_id
-      OR OLD.source_readiness_json <> NEW.source_readiness_json
-      OR OLD.source_readiness_hash <> NEW.source_readiness_hash
-      OR OLD.snapshot_json <> NEW.snapshot_json
-      OR OLD.snapshot_hash <> NEW.snapshot_hash
-    BEGIN
-      SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
-    END
-  `)
-  database.exec(`
-    CREATE TRIGGER IF NOT EXISTS trg_account_reconcile_no_delete
-    BEFORE DELETE ON account_reconcile_generations
-    BEGIN
-      SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
-    END
-  `)
-  database.exec(`
-    CREATE TRIGGER IF NOT EXISTS trg_account_reconcile_closed_immutable
-    BEFORE UPDATE ON account_reconcile_generations
-    WHEN OLD.status = 'closed'
-    BEGIN
-      SELECT RAISE(ABORT, 'CLOSED_RECONCILIATION_IMMUTABLE');
-    END
-  `)
-  database.exec(`
-    CREATE TRIGGER IF NOT EXISTS trg_account_reconcile_complete_finality
-    BEFORE UPDATE ON account_reconcile_generations
-    WHEN OLD.status = 'complete'
-      AND (
-        OLD.is_current IS NOT 1
-        OR NEW.is_current IS NOT 1
-        OR NEW.status IS NOT 'closed'
-        OR NEW.closed_at IS NULL
-        OR NEW.closed_by IS NULL
-        OR trim(NEW.closed_by) = ''
-        OR OLD.reconcile_generation_id IS NOT NEW.reconcile_generation_id
-        OR OLD.partner_id IS NOT NEW.partner_id
-        OR OLD.settlement_month IS NOT NEW.settlement_month
-        OR OLD.statement_generation_id IS NOT NEW.statement_generation_id
-        OR OLD.hospital_month_id IS NOT NEW.hospital_month_id
-        OR OLD.source_readiness_json IS NOT NEW.source_readiness_json
-        OR OLD.source_readiness_hash IS NOT NEW.source_readiness_hash
-        OR OLD.statement_artifact_hash IS NOT NEW.statement_artifact_hash
-        OR OLD.snapshot_json IS NOT NEW.snapshot_json
-        OR OLD.snapshot_hash IS NOT NEW.snapshot_hash
-        OR OLD.completion_artifact_json IS NOT NEW.completion_artifact_json
-        OR OLD.completion_artifact_hash IS NOT NEW.completion_artifact_hash
-        OR OLD.completed_at IS NOT NEW.completed_at
-        OR OLD.completed_by IS NOT NEW.completed_by
-        OR OLD.created_at IS NOT NEW.created_at
-      )
-    BEGIN
-      SELECT RAISE(ABORT, 'COMPLETE_RECONCILIATION_FINAL');
-    END
-  `)
-  database.exec(`
-    CREATE TRIGGER IF NOT EXISTS trg_reconcile_hospital_month_complete_finality
-    BEFORE UPDATE ON reconcile_hospital_months
-    WHEN OLD.completed_at IS NOT NULL
-      AND OLD.closed_at IS NULL
-      AND (
-        NEW.status IS NOT '已关账'
-        OR NEW.closed_at IS NULL
-        OR NEW.closed_by IS NULL
-        OR trim(NEW.closed_by) = ''
-        OR OLD.id IS NOT NEW.id
-        OR OLD.partner_id IS NOT NEW.partner_id
-        OR OLD.partner_name IS NOT NEW.partner_name
-        OR OLD.service_month IS NOT NEW.service_month
-        OR OLD.name_aligned IS NOT NEW.name_aligned
-        OR OLD.match_rate IS NOT NEW.match_rate
-        OR OLD.match_status IS NOT NEW.match_status
-        OR OLD.statement_ready IS NOT NEW.statement_ready
-        OR OLD.lis_ready IS NOT NEW.lis_ready
-        OR OLD.diff_count IS NOT NEW.diff_count
-        OR OLD.pending_count IS NOT NEW.pending_count
-        OR OLD.unmatched_count IS NOT NEW.unmatched_count
-        OR OLD.confirmed_lab_revenue IS NOT NEW.confirmed_lab_revenue
-        OR OLD.computed_at IS NOT NEW.computed_at
-        OR OLD.completed_at IS NOT NEW.completed_at
-        OR OLD.completed_by IS NOT NEW.completed_by
-        OR OLD.reopened_at IS NOT NEW.reopened_at
-        OR OLD.reopen_reason IS NOT NEW.reopen_reason
-        OR OLD.created_at IS NOT NEW.created_at
-      )
-    BEGIN
-      SELECT RAISE(ABORT, 'COMPLETE_HOSPITAL_MONTH_FINAL');
-    END
-  `)
+  // #87 a)：reconcile 族 trigger 在此不再保存副本——upgradeAccountReconciliationSchema
+  // 是唯一定义点与部署权威（每次 boot 先 DROP 后重装，fresh 与存量库同一份文本）。
+  // 原 init 段 5 只 IF NOT EXISTS 副本（immutable_fact 9 条件漂移版 / no_delete /
+  // closed_immutable / complete_finality / hospital_month_complete_finality）已退役：
+  // 双份定义存在维护漂移风险，且 init-only 两只不在重装集合时存量库收不到文本更新。
   database.exec(`
     CREATE TABLE IF NOT EXISTS supplement_orders (
       id TEXT PRIMARY KEY,
