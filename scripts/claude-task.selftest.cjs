@@ -31,6 +31,7 @@ const {
   toPosix,
 } = require('./claude-task.cjs');
 const {
+  collectFields,
   parseReflectionContract,
   stripIgnoredMarkdown,
   validatePrBody,
@@ -726,6 +727,18 @@ const lazyContinuationLineEndings = [
   ['CRLF', '\r\n'],
   ['lone CR', '\r'],
 ];
+const ambiguousUnknownContinuationPayloads = [
+  ['URL scheme', 'https://example.test/proof'],
+  ['encoded-colon URL', 'https&colon;//example.test/proof'],
+  ['nested encoded-colon URL', 'https&amp;colon;//example.test/proof'],
+  ['mailto address', 'mailto:security@example.test'],
+  ['Windows path', 'C:\\proof\\artifact.txt'],
+  ['equation', 'x=42'],
+];
+const hangingContinuationPayloads = [
+  ['four-space hanging indent', '    lazy&amp;#9;continuation'],
+  ['raw-Tab hanging indent', '\tlazy&amp;#9;continuation'],
+];
 for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
   for (const [payloadName, payload] of lazyContinuationPayloads) {
     const direct = parseReflectionContract(
@@ -749,6 +762,89 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
         `(direct=${direct.ok}, handoff=${handoffOk}, pr=${prOk})`,
       );
     }
+  }
+}
+for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
+  for (const [payloadName, payload] of ambiguousUnknownContinuationPayloads) {
+    const direct = parseReflectionContract(
+      `${strongLeastConfidence}${lineEnding}${payload}`,
+    );
+    const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${payload}`,
+      );
+    const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        prStrongLeastConfidenceLine,
+        `${prStrongLeastConfidenceLine}${lineEnding}  ${payload}`,
+      );
+    const handoffOk = handoffFieldErrors(handoffBody).length === 0;
+    const prOk = validatePrBody(prBody).ok;
+    if (direct.ok || handoffOk || prOk || handoffOk !== prOk) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName}: ambiguous unknown wire bypassed validation ` +
+        `(direct=${direct.ok}, handoff=${handoffOk}, pr=${prOk})`,
+      );
+    }
+  }
+  for (const [payloadName, payload] of hangingContinuationPayloads) {
+    const direct = parseReflectionContract(
+      `${strongLeastConfidence}${lineEnding}${payload}`,
+    );
+    const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${payload}`,
+      );
+    const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        prStrongLeastConfidenceLine,
+        `${prStrongLeastConfidenceLine}${lineEnding}${payload}`,
+      );
+    const handoffOk = handoffFieldErrors(handoffBody).length === 0;
+    const prOk = validatePrBody(prBody).ok;
+    if (direct.ok || handoffOk || prOk || handoffOk !== prOk) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName}: hanging continuation escaped the open paragraph ` +
+        `(direct=${direct.ok}, handoff=${handoffOk}, pr=${prOk})`,
+      );
+    }
+  }
+}
+for (const [name, handoffUnknownField, prUnknownField] of [
+  ['colon unknown boundary', 'custom-note: value', '- **custom-note**: value'],
+  ['equals unknown boundary', 'custom_note= value', '- **custom_note**= value'],
+  ['raw-Tab padded unknown boundary', 'custom-tab:\tvalue', '- **custom-tab**:\tvalue'],
+]) {
+  const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+    .replace(
+      handoffStrongLeastConfidenceLine,
+      `${handoffStrongLeastConfidenceLine}\n${handoffUnknownField}`,
+    );
+  const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+    .replace(
+      prStrongLeastConfidenceLine,
+      `${prStrongLeastConfidenceLine}\n${prUnknownField}`,
+    );
+  const handoffFields = collectHandoffFields(handoffBody);
+  const prFields = collectFields(stripIgnoredMarkdown(prBody));
+  const directHandoffOk = parseReflectionContract(
+    handoffFields.rawValues.get('least-confidence'),
+  ).ok;
+  const prLeastConfidenceKey = [...prFields.rawValues.keys()].find((key) =>
+    key.includes('least confidence'));
+  const directPrOk = parseReflectionContract(
+    prFields.rawValues.get(prLeastConfidenceKey),
+  ).ok;
+  const handoffOk = handoffFieldErrors(handoffBody).length === 0;
+  const prOk = validatePrBody(prBody).ok;
+  if (!directHandoffOk || !directPrOk || !handoffOk || !prOk) {
+    reflectionRegressionFailures.push(
+      `${name}: legitimate unknown boundary lost parity ` +
+      `(direct-handoff=${directHandoffOk}, direct-pr=${directPrOk}, ` +
+      `handoff=${handoffOk}, pr=${prOk})`,
+    );
   }
 }
 const rawLazyHandoffFields = collectHandoffFields(
@@ -2441,6 +2537,36 @@ for (const [name, value] of structuralTabInvalidContracts) {
 }
 for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
   for (const [payloadName, payload] of lazyContinuationPayloads) {
+    const lifecycle = runIsolatedHandoff(
+      strongLeastConfidence,
+      (body) => body.replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${payload}`,
+      ),
+    );
+    if (lifecycle.status !== 1) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} lifecycle expected exit=1, actual=${lifecycle.status}`,
+      );
+    }
+    if (!lifecycle.stateExists) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} lifecycle deleted active task state`,
+      );
+    }
+    if (!/least-confidence/.test(lifecycle.stderr)) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} lifecycle missed least-confidence error: ` +
+        lifecycle.stderr,
+      );
+    }
+  }
+}
+for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
+  for (const [payloadName, payload] of [
+    ...ambiguousUnknownContinuationPayloads,
+    ...hangingContinuationPayloads,
+  ]) {
     const lifecycle = runIsolatedHandoff(
       strongLeastConfidence,
       (body) => body.replace(

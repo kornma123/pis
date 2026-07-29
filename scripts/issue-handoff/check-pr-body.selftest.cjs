@@ -551,6 +551,19 @@ const lazyContinuationLineEndings = [
   ['CRLF', '\r\n'],
   ['lone CR', '\r'],
 ];
+const leastConfidenceKey = parseVisibleFieldLine(leastConfidenceLine, { bullet: true }).key;
+const ambiguousUnknownContinuationPayloads = [
+  ['URL scheme', 'https://example.test/proof'],
+  ['encoded-colon URL', 'https&colon;//example.test/proof'],
+  ['nested encoded-colon URL', 'https&amp;colon;//example.test/proof'],
+  ['mailto address', 'mailto:security@example.test'],
+  ['Windows path', 'C:\\proof\\artifact.txt'],
+  ['equation', 'x=42'],
+];
+const hangingContinuationPayloads = [
+  ['four-space hanging indent', '    lazy&amp;#9;continuation'],
+  ['raw-Tab hanging indent', '\tlazy&amp;#9;continuation'],
+];
 for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
   for (const [payloadName, payload] of lazyContinuationPayloads) {
     assert.equal(
@@ -576,13 +589,61 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
     );
   }
 }
+for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
+  for (const [payloadName, payload] of ambiguousUnknownContinuationPayloads) {
+    assert.equal(
+      parseReflectionContract(`${typedRisk}${lineEnding}${payload}`).ok,
+      false,
+      `${endingName}/${payloadName}: direct parser must reject an ambiguous multiline wire`,
+    );
+    expectFail(
+      `${endingName}/${payloadName}: PR collector keeps ambiguous unknown wire in least-confidence`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}  ${payload}`,
+      ),
+      /我现在最没把握的是什么|Least confidence/,
+    );
+  }
+  for (const [payloadName, payload] of hangingContinuationPayloads) {
+    assert.equal(
+      parseReflectionContract(`${typedRisk}${lineEnding}${payload}`).ok,
+      false,
+      `${endingName}/${payloadName}: direct parser must reject a hanging continuation`,
+    );
+    expectFail(
+      `${endingName}/${payloadName}: PR collector inherits the open paragraph`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}${payload}`,
+      ),
+      /我现在最没把握的是什么|Least confidence/,
+    );
+  }
+}
+for (const [name, unknownFieldLine] of [
+  ['colon unknown boundary', '- **custom-note**: value'],
+  ['equals unknown boundary', '- **custom_note**= value'],
+  ['raw-Tab padded unknown boundary', '- **custom-tab**:\tvalue'],
+]) {
+  const body = validBody.replace(
+    leastConfidenceLine,
+    `${leastConfidenceLine}\n${unknownFieldLine}`,
+  );
+  const fields = collectFields(stripIgnoredMarkdown(body));
+  assert.equal(
+    parseReflectionContract(fields.rawValues.get(leastConfidenceKey)).ok,
+    true,
+    `${name}: direct parser must receive only the reflection wire`,
+  );
+  expectPass(`${name}: PR collector preserves a legitimate unknown boundary`, body, [128]);
+}
 const rawLazyPrFields = collectFields(stripIgnoredMarkdown(
   validBody.replace(
     leastConfidenceLine,
     `${leastConfidenceLine}\n  lazy&amp;Tab;continuation`,
   ),
 ));
-const leastConfidenceKey = parseVisibleFieldLine(leastConfidenceLine, { bullet: true }).key;
 assert.equal(
   rawLazyPrFields.rawValues.get(leastConfidenceKey),
   `${VALID_LEAST_CONFIDENCE}\n  lazy&amp;Tab;continuation`,
@@ -595,6 +656,17 @@ const rawVisibleReflection = parseVisibleFieldLine(
 assert.equal(rawVisibleReflection.key, 'least-confidence');
 assert.equal(rawVisibleReflection.value, `${rawWirePrefix}&#120;`);
 assert.equal(rawVisibleReflection.rawValue, `${rawWirePrefix}&#120;`);
+assert.equal(rawVisibleReflection.rawDelimiter, '&amp;#58;');
+assert.equal(rawVisibleReflection.rawValuePadding, ' ');
+const rawUrlFieldShape = parseVisibleFieldLine('https://example.test/proof', {
+  allowEquals: true,
+});
+assert.equal(rawUrlFieldShape.rawDelimiter, ':');
+assert.equal(rawUrlFieldShape.rawValuePadding, '');
+assert.equal(
+  parseVisibleFieldLine('custom-tab:\tvalue', { allowEquals: true }).rawValuePadding,
+  '\t',
+);
 assert.equal(
   parseReflectionContract(
     'risk-v1; anchor=id:auth; uncertainty=unknown:&amp;#120;',

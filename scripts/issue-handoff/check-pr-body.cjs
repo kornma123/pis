@@ -168,6 +168,10 @@ const REFLECTION_FIELD_KEYS = new Set([
   'least-confidence',
   'biggest-missing',
 ].map(normalizeLabel));
+const PR_CONTINUATION_BOUNDARY_KEYS = new Set([
+  'Issue',
+  ...REQUIRED_FIELDS.flat(),
+].map(normalizeLabel));
 
 function normalizeLineEndings(value) {
   return String(value || '').replace(/\r\n?|\n/g, '\n');
@@ -578,6 +582,7 @@ function stripIgnoredMarkdown(body) {
   let fence = null;
   let htmlBlock = null;
   let paragraphOpen = false;
+  let paragraphContainer = null;
   const visibleLines = [];
   const lines = normalizeLineEndings(body).split('\n');
 
@@ -585,9 +590,35 @@ function stripIgnoredMarkdown(body) {
     const line = lines[lineIndex];
     let handled = false;
     while (!handled) {
-      const container = parseMarkdownContainer(line);
+      const parsedContainer = parseMarkdownContainer(line);
+      const inheritsParagraphContainer = Boolean(
+        paragraphOpen &&
+        paragraphContainer &&
+        (
+          paragraphContainer.kind === 'root'
+            ? parsedContainer.frame.kind === 'root'
+            : continuesMarkdownContainer(line, paragraphContainer)
+        ),
+      );
+      const container = inheritsParagraphContainer
+        ? {
+            content: stripMarkdownContainerIndent(line, paragraphContainer),
+            frame: paragraphContainer,
+          }
+        : parsedContainer;
       const syntaxLine = container.content;
       const decodedSyntaxLine = decodeHtmlEntitiesDetailed(syntaxLine).value;
+      const continuesParagraphIntoLine = Boolean(
+        paragraphOpen &&
+        (
+          inheritsParagraphContainer ||
+          (
+            parsedContainer.frame.kind === 'root' &&
+            !startsNonParagraphBlock(line)
+          )
+        ) &&
+        lineOpensParagraph(decodedSyntaxLine, true),
+      );
 
       if (
         fence &&
@@ -595,11 +626,13 @@ function stripIgnoredMarkdown(body) {
       ) {
         fence = null;
         paragraphOpen = false;
+        paragraphContainer = null;
         continue;
       }
       if (htmlBlock && !continuesMarkdownContainer(line, htmlBlock.container)) {
         htmlBlock = null;
         paragraphOpen = false;
+        paragraphContainer = null;
         continue;
       }
 
@@ -608,6 +641,7 @@ function stripIgnoredMarkdown(body) {
         if (isClosingFence(fenceSyntaxLine, fence)) fence = null;
         visibleLines.push('');
         paragraphOpen = false;
+        paragraphContainer = null;
         handled = true;
         continue;
       }
@@ -616,6 +650,7 @@ function stripIgnoredMarkdown(body) {
         htmlBlock = advanceHtmlBlock(htmlBlock, decodedSyntaxLine, syntaxLine);
         visibleLines.push('');
         paragraphOpen = false;
+        paragraphContainer = null;
         handled = true;
         continue;
       }
@@ -625,11 +660,12 @@ function stripIgnoredMarkdown(body) {
         fence = { ...openingFence, container: container.frame };
         visibleLines.push('');
         paragraphOpen = false;
+        paragraphContainer = null;
         handled = true;
         continue;
       }
 
-      if (!paragraphOpen) {
+      if (!continuesParagraphIntoLine) {
         const linkReferenceLength = scanLinkReferenceDefinition(lines, lineIndex);
         if (linkReferenceLength > 0) {
           for (let count = 0; count < linkReferenceLength; count += 1) {
@@ -637,31 +673,43 @@ function stripIgnoredMarkdown(body) {
           }
           lineIndex += linkReferenceLength - 1;
           paragraphOpen = false;
+          paragraphContainer = null;
           handled = true;
           continue;
         }
       }
 
-      const htmlStart = beginHtmlBlock(syntaxLine, decodedSyntaxLine, paragraphOpen);
+      const htmlStart = beginHtmlBlock(
+        syntaxLine,
+        decodedSyntaxLine,
+        continuesParagraphIntoLine,
+      );
       if (htmlStart) {
         htmlBlock = htmlStart.state
           ? { ...htmlStart.state, container: container.frame }
           : null;
         visibleLines.push('');
         paragraphOpen = false;
+        paragraphContainer = null;
         handled = true;
         continue;
       }
 
-      if (!paragraphOpen && /^(?: {4,}|\t)/u.test(syntaxLine)) {
+      if (!continuesParagraphIntoLine && /^(?: {4,}|\t)/u.test(syntaxLine)) {
         visibleLines.push('');
         paragraphOpen = false;
+        paragraphContainer = null;
         handled = true;
         continue;
       }
 
       visibleLines.push(line);
       paragraphOpen = lineOpensParagraph(decodedSyntaxLine, paragraphOpen);
+      paragraphContainer = paragraphOpen
+        ? continuesParagraphIntoLine
+          ? paragraphContainer
+          : container.frame
+        : null;
       handled = true;
     }
   }
@@ -672,7 +720,21 @@ function stripIgnoredMarkdown(body) {
 function continuesVisibleReflectionParagraph(line) {
   const value = String(line || '');
   if (/^[ \t]*$/u.test(value)) return false;
+  // stripIgnoredMarkdown already removes an indented code block when no
+  // paragraph is open. A surviving four-space / Tab line therefore inherits
+  // the open paragraph and must remain part of the reflection's raw value.
+  if (/^(?: {4,}|\t)/u.test(value)) {
+    return !parseFenceOpening(value.replace(/^[ \t]+/u, ''));
+  }
   return !startsNonParagraphBlock(value);
+}
+
+function isUnambiguousUnknownFieldBoundary(parsed) {
+  return Boolean(
+    parsed?.key &&
+    /^[a-z][a-z0-9_-]*$/iu.test(parsed.key) &&
+    /^[ \t]+$/u.test(parsed.rawValuePadding || ''),
+  );
 }
 
 function collectVisibleFields(body, parseOptions = {}) {
@@ -691,7 +753,26 @@ function collectVisibleFields(body, parseOptions = {}) {
 
   for (const line of body.split('\n')) {
     const parsed = parseVisibleFieldLine(line, parseOptions);
+    const unknownBoundaryCandidate =
+      activeReflectionKey &&
+      parseOptions.allowUnknownFieldBoundaries === true &&
+      !parsed
+        ? parseVisibleFieldLine(line, { ...parseOptions, allowEquals: true })
+        : null;
+    const candidateIsKnownBoundary =
+      unknownBoundaryCandidate?.key &&
+      continuationBoundaryKeys instanceof Set &&
+      continuationBoundaryKeys.has(unknownBoundaryCandidate.key);
     if (!parsed) {
+      if (
+        unknownBoundaryCandidate &&
+        !unknownBoundaryCandidate.malformed &&
+        !candidateIsKnownBoundary &&
+        isUnambiguousUnknownFieldBoundary(unknownBoundaryCandidate)
+      ) {
+        activeReflectionKey = null;
+        continue;
+      }
       if (
         activeReflectionKey &&
         continuesVisibleReflectionParagraph(line)
@@ -707,14 +788,19 @@ function collectVisibleFields(body, parseOptions = {}) {
       malformed.push(parsed.malformedReason || 'unsafe-parse');
       continue;
     }
+    const isKnownFieldBoundary =
+      parsed.key &&
+      continuationBoundaryKeys instanceof Set &&
+      continuationBoundaryKeys.has(parsed.key);
     const isUnknownFieldBoundary =
       parseOptions.allowUnknownFieldBoundaries === true &&
-      /^[a-z][a-z0-9_-]*$/iu.test(parsed.key);
+      !isKnownFieldBoundary &&
+      isUnambiguousUnknownFieldBoundary(parsed);
     if (
       activeReflectionKey &&
       parsed.key &&
       continuationBoundaryKeys instanceof Set &&
-      !continuationBoundaryKeys.has(parsed.key) &&
+      !isKnownFieldBoundary &&
       !isUnknownFieldBoundary &&
       continuesVisibleReflectionParagraph(line)
     ) {
@@ -737,7 +823,11 @@ function collectVisibleFields(body, parseOptions = {}) {
 }
 
 function collectFields(body) {
-  return collectVisibleFields(body, { bullet: true });
+  return collectVisibleFields(body, {
+    bullet: true,
+    allowUnknownFieldBoundaries: true,
+    continuationBoundaryKeys: PR_CONTINUATION_BOUNDARY_KEYS,
+  });
 }
 
 function getField(fields, aliases, source = 'values') {
@@ -910,13 +1000,19 @@ function parseVisibleFieldLine(line, options = {}) {
   }
 
   const key = canonicalizeFieldKeyDetailed(content.slice(0, delimiter.rawStart));
-  const rawValue = content.slice(delimiter.rawEnd).replace(/^[ \t]+|[ \t]+$/gu, '');
+  const rawAfterDelimiter = content.slice(delimiter.rawEnd);
+  const rawValuePadding = rawAfterDelimiter.match(/^[ \t]*/u)?.[0] || '';
+  const rawValue = rawAfterDelimiter
+    .slice(rawValuePadding.length)
+    .replace(/[ \t]+$/gu, '');
   return {
     key: key.key,
     value: REFLECTION_FIELD_KEYS.has(key.key)
       ? rawValue
       : decodeHtmlEntitiesDetailed(rawValue).value.trim(),
     rawValue,
+    rawDelimiter: content.slice(delimiter.rawStart, delimiter.rawEnd),
+    rawValuePadding,
     malformed: Boolean(key.malformedReason),
     malformedReason: key.malformedReason,
   };
