@@ -246,6 +246,7 @@ router.get('/workbench', (req, res) => {
       lowConfidence: !!row.low_confidence,
       verdict: row.verdict,
       verdictReason: row.verdict_reason,
+      verdictBy: row.verdict_by,
       followUp: row.follow_up,
     }))
     success(res, {

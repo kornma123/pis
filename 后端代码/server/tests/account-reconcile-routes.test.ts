@@ -793,9 +793,15 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
     })
   })
 
-  it('collect 非法 collectedMonth 稳定 400 且零写（R7 严格月校验），合法值照旧入账', async () => {
-    // R7 P1-2：collectedMonth 复用严格 YYYY-(01..12) 校验——非法值 HTTP 400 且
-    // 补收单行与审计台账双零写（before/after 快照逐字段相等）；合法值不受影响。
+  it('collect 非法 collectedMonth 稳定 400：零业务写、零 supplement_collect 成功审计；4xx 拒绝审计仍按 operation_logs 逐条合同完整计入（R7 严格月校验），合法值照旧入账', async () => {
+    // R7 P1-2：collectedMonth 复用严格 YYYY-(01..12) 校验。准确口径——零业务写、
+    // 零 supplement_collect 成功审计；4xx 拒绝审计仍按 operation_logs 的逐条/聚合合同
+    // 完整计入，且不落原始请求体。本例 4 次拒绝远低于聚合阈值、全部逐条：
+    // operation='DENIED POST account-reconcile'、outcome='denied'、request_data 精确
+    // {status:400, code:'INVALID_COLLECTED_MONTH'}，四种原始值均不得出现在
+    // request_data/description/response_data。
+    const { __resetDenialTrackerForTest, DENIAL_AGG_THRESHOLD } = await import('../src/middleware/audit-log.js')
+    __resetDenialTrackerForTest() // 只隔离进程内拒绝窗；不清数据库历史
     const CM_PARTNER = 'PT-RECON-CM'
     const CM_STMT = 'stmt-recon-cm-v1'
     const CM_RECON = 'recon-cm-v1'
@@ -841,9 +847,14 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
     ).get(supplement.id) as { n: number }).n
     const before = snapshot()
     const auditBefore = auditCount()
+    const denialRowidBefore = (db.prepare(
+      'SELECT COALESCE(MAX(rowid), 0) AS m FROM operation_logs',
+    ).get() as { m: number }).m
     expect(before).toMatchObject({ status: '待补收', collected_month: null })
 
-    for (const collectedMonth of ['2026-13', '2026-00', '2026-1', 'abc']) {
+    const badMonths = ['2026-13', '2026-00', '2026-1', 'LOC005-R7-CM-SENTINEL']
+    expect(badMonths.length).toBeLessThanOrEqual(DENIAL_AGG_THRESHOLD) // 逐条窗内，无聚合
+    for (const collectedMonth of badMonths) {
       const refused = await auth(request(app)
         .post(`/api/v1/account-reconcile/supplements/${supplement.id}/collect`)
         .send({ collectedMonth }))
@@ -851,6 +862,34 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
       expect(refused.body.error.code).toBe('INVALID_COLLECTED_MONTH')
       expect(snapshot()).toEqual(before)
       expect(auditCount()).toBe(auditBefore)
+    }
+
+    // 4xx 拒绝审计：4 次拒绝 = 4 条 individual denial，零聚合；每条仅 {status,code} 元数据，
+    // response_data 恒 null，四种原始值均不落 request_data/description/response_data。
+    const newAuditRows = db.prepare(`
+      SELECT operation, outcome, description, request_data, response_data
+        FROM operation_logs
+       WHERE rowid > ?
+       ORDER BY rowid
+    `).all(denialRowidBefore) as Array<{
+      operation: string
+      outcome: string | null
+      description: string
+      request_data: string | null
+      response_data: string | null
+    }>
+    const collectDenied = newAuditRows.filter(row => row.operation === 'DENIED POST account-reconcile')
+    expect(collectDenied).toHaveLength(badMonths.length)
+    expect(newAuditRows.filter(row => row.operation.startsWith('DENIED_AGG'))).toHaveLength(0)
+    for (const row of collectDenied) {
+      expect(row.outcome).toBe('denied')
+      expect(row.description).toContain(`/supplements/${supplement.id}/collect`)
+      expect(JSON.parse(String(row.request_data))).toEqual({ status: 400, code: 'INVALID_COLLECTED_MONTH' })
+      expect(row.response_data).toBeNull()
+      for (const raw of badMonths) {
+        expect(String(row.request_data)).not.toContain(raw)
+        expect(row.description).not.toContain(raw)
+      }
     }
 
     const collected = await auth(request(app)
@@ -864,8 +903,12 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
     // R8 P1-3 路由侧：collectedMonth 仅在字段完全缺席时默认当月；字段存在时不做
     // String()/trim() 救赎，原始值直接过 strict validator，且置于一切 DB/资源状态
     // 查询之前——whitespace/array/object/null/'' 在 approved/已补收/未签发/不存在
-    // 四种资源状态下均稳定 400 INVALID_COLLECTED_MONTH 且零业务/审计写。
+    // 四种资源状态下均稳定 400 INVALID_COLLECTED_MONTH。准确口径——零业务写、
+    // 零 supplement_collect 成功审计；4xx 拒绝审计仍按 operation_logs 的逐条/聚合
+    // 合同完整计入（32 次拒绝非「行数 +32」），且不落原始请求体。
     // 0000-01 与 9999-12 按既有合同保留合法。
+    const { __resetDenialTrackerForTest, DENIAL_AGG_THRESHOLD } = await import('../src/middleware/audit-log.js')
+    __resetDenialTrackerForTest() // 只隔离进程内拒绝窗；不清数据库历史
     const CM8_PARTNER = 'PT-RECON-CM8'
     const CM8_STMT = 'stmt-recon-cm8-v1'
     const CM8_RECON = 'recon-cm8-v1'
@@ -923,6 +966,9 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
     ).get() as { n: number }).n
     const beforeRows = supplements.map(entry => snapshot(entry.id))
     const auditBefore = auditCount()
+    const denialRowidBefore = (db.prepare(
+      'SELECT COALESCE(MAX(rowid), 0) AS m FROM operation_logs',
+    ).get() as { m: number }).m
 
     const badValues: unknown[] = [
       ' 2026-07', '2026-07 ', '', null, ['2026-07'], { month: '2026-07' }, 202607, '2026-13',
@@ -937,11 +983,66 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
         expect(res.body.error.code).toBe('INVALID_COLLECTED_MONTH')
       }
     }
-    // 全形状零写：四行快照逐字段相等 + 审计零增量
+    // 全形状零业务写：四行快照逐字段相等 + supplement_collect 成功审计零增量
     supplements.forEach((entry, index) => {
       expect(snapshot(entry.id)).toEqual(beforeRows[index])
     })
     expect(auditCount()).toBe(auditBefore)
+
+    // 4xx 拒绝审计按 operation_logs 逐条/聚合合同完整计入（非「行数 +32」）：
+    // 阈值内逐条 = DENIAL_AGG_THRESHOLD 条 individual（仅 {status,code} 元数据、
+    // outcome='denied'、response_data 恒 null）；恰一条 denied_agg（total=32、
+    // suppressed=32-threshold）；individual + agg.suppressed = 32 证明每次拒绝都被
+    // 逻辑计入。所有新增行均不含任一原始 body 值（agg 侧 windowStart 为数值型
+    // 窗口戳，不可能承载 body，泄漏检查用剔除该字段的视图）。
+    const newAuditRows = db.prepare(`
+      SELECT operation, outcome, description, request_data, response_data
+        FROM operation_logs
+       WHERE rowid > ?
+       ORDER BY rowid
+    `).all(denialRowidBefore) as Array<{
+      operation: string
+      outcome: string | null
+      description: string
+      request_data: string | null
+      response_data: string | null
+    }>
+    const individual = newAuditRows.filter(row => row.operation === 'DENIED POST account-reconcile')
+    const aggregated = newAuditRows.filter(row => row.operation === 'DENIED_AGG account-reconcile')
+    expect(individual).toHaveLength(DENIAL_AGG_THRESHOLD)
+    expect(aggregated).toHaveLength(1)
+    for (const row of individual) {
+      expect(row.outcome).toBe('denied')
+      expect(JSON.parse(String(row.request_data))).toEqual({ status: 400, code: 'INVALID_COLLECTED_MONTH' })
+      expect(row.response_data).toBeNull()
+    }
+    expect(aggregated[0].outcome).toBe('denied_agg')
+    const aggPayload = JSON.parse(String(aggregated[0].request_data)) as Record<string, unknown>
+    expect(Object.keys(aggPayload).sort()).toEqual(
+      ['aggregated', 'statusClass', 'suppressed', 'total', 'windowStart'],
+    )
+    expect(aggPayload).toMatchObject({
+      aggregated: true,
+      statusClass: 'other',
+      total: badValues.length * targets.length,
+      suppressed: badValues.length * targets.length - DENIAL_AGG_THRESHOLD,
+    })
+    expect(typeof aggPayload.windowStart).toBe('number')
+    expect(individual.length + Number(aggPayload.suppressed)).toBe(badValues.length * targets.length)
+    const aggLeakView = { ...aggPayload }
+    delete aggLeakView.windowStart
+    const leakHaystacks = [
+      ...individual.map(row => `${row.description}\n${String(row.request_data)}`),
+      `${aggregated[0].description}\n${JSON.stringify(aggLeakView)}`,
+    ]
+    for (const value of badValues) {
+      if (value === '') continue
+      const rendered = typeof value === 'string' ? value : JSON.stringify(value)
+      if (!rendered) continue
+      for (const haystack of leakHaystacks) {
+        expect(haystack).not.toContain(rendered)
+      }
+    }
 
     // 缺席默认当月：字段完全不出现 → 200 入账当月
     const defaulted = await auth(request(app)
@@ -963,5 +1064,87 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
       .send({ collectedMonth: '9999-12' }))
     expect(edgeHigh.status).toBe(200)
     expect(snapshot(supplements[4].id)).toMatchObject({ collected_month: '9999-12' })
+  })
+})
+
+describe('账实核对路由 · workbench verdictBy DTO（P2：认定者回填 + 代次隔离）', () => {
+  // GET /workbench diffs DTO 漏 verdictBy——认定前必须为 null、认定后必须返回真实
+  // operator id（登录 admin 用户的 username；operatorOf=req.user.username，与全站
+  // 审计 operator=用户名 口径一致），且跨代次不串值（他代同形 diff 保持 null）。
+  const VB_MONTH = '2026-10'
+
+  it('workbench diffs expose verdictBy: null 认定前、真实 operator id 认定后、跨代不串值', async () => {
+    const db = await getDb()
+    const seedVerdictPartner = (partner: string, stmt: string, tag: string) => {
+      db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, ?, ?, 1)`)
+        .run(partner, `RC-${tag}`, `verdictBy医院${tag}`)
+      seedStatementGeneration(db, partner, VB_MONTH, stmt, [
+        { caseNo: `D1-${tag}`, item: '免疫组化染色*3', amount: 300 },
+      ])
+      db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(`l-${tag}-d1`, `D1-${tag}`, partner, '免疫组化染色', 3, 100, VB_MONTH)
+      db.prepare(`INSERT OR IGNORE INTO lis_cases (id, case_no, partner_id, ihc_count, special_stain_count, operate_time) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(`lc-${tag}-d1`, `D1-${tag}`, partner, 5, 0, `${VB_MONTH}-10`)
+    }
+    seedVerdictPartner('PT-RECON-VBA', 'stmt-recon-vba-v1', 'vba')
+    seedVerdictPartner('PT-RECON-VBB', 'stmt-recon-vbb-v1', 'vbb')
+    const bindingA = {
+      partnerId: 'PT-RECON-VBA',
+      settlementMonth: VB_MONTH,
+      statementGenerationId: 'stmt-recon-vba-v1',
+      reconcileGenerationId: 'recon-vba-v1',
+    }
+    const bindingB = {
+      partnerId: 'PT-RECON-VBB',
+      settlementMonth: VB_MONTH,
+      statementGenerationId: 'stmt-recon-vbb-v1',
+      reconcileGenerationId: 'recon-vbb-v1',
+    }
+    expect((await auth(request(app).post('/api/v1/account-reconcile/compute').send(bindingA))).status).toBe(200)
+    expect((await auth(request(app).post('/api/v1/account-reconcile/compute').send(bindingB))).status).toBe(200)
+
+    const workbenchDiffs = async (binding: Record<string, unknown>) => {
+      const res = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(binding))
+      expect(res.status).toBe(200)
+      return res.body.data.diffs as Array<{
+        id: string
+        verdict: string | null
+        verdictBy?: string | null
+      }>
+    }
+    // 认定前：A/B 两代 verdictBy 均为 null（键在且值为 null，不是 undefined 缺键）
+    const diffsA0 = await workbenchDiffs(bindingA)
+    expect(diffsA0.length).toBeGreaterThan(0)
+    for (const diff of diffsA0) {
+      expect(diff.verdict).toBeNull()
+      expect(diff.verdictBy).toBeNull()
+    }
+    const diffsB0 = await workbenchDiffs(bindingB)
+    expect(diffsB0.length).toBeGreaterThan(0)
+    for (const diff of diffsB0) {
+      expect(diff.verdictBy).toBeNull()
+    }
+
+    // 认定 A 代首条 diff（真实路由、真实 operator）
+    const verdict = await auth(request(app)
+      .post(`/api/v1/account-reconcile/diffs/${diffsA0[0].id}/verdict`)
+      .send({ ...bindingA, reason: '核对无误' }))
+    expect(verdict.status).toBe(200)
+
+    // 认定后：A 代该 diff verdictBy=真实 operator id（admin 用户名）；A 代其余 diff 仍 null（行级隔离）
+    const diffsA1 = await workbenchDiffs(bindingA)
+    const verdicted = diffsA1.find(diff => diff.id === diffsA0[0].id)
+    expect(verdicted?.verdict).toBe('核对无误')
+    expect(verdicted?.verdictBy).toBe('admin')
+    for (const diff of diffsA1.filter(diff => diff.id !== diffsA0[0].id)) {
+      expect(diff.verdictBy).toBeNull()
+    }
+    // 代次隔离：B 代不受 A 代认定影响
+    const diffsB1 = await workbenchDiffs(bindingB)
+    expect(diffsB1.length).toBe(diffsB0.length)
+    for (const diff of diffsB1) {
+      expect(diff.verdict).toBeNull()
+      expect(diff.verdictBy).toBeNull()
+    }
   })
 })

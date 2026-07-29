@@ -23,6 +23,7 @@ import {
 } from './statement-source-readiness.js'
 
 export type ReconcileFaultStage =
+  | 'afterRevenuePrime'
   | 'afterBusiness'
   | 'beforeAudit'
   | 'afterAudit'
@@ -1250,6 +1251,24 @@ export function completeAccountReconciliation(
     ).get(row.hospital_month_id, binding.reconcileGenerationId) as any).n)
     if (pending !== 0) fail('all differences must be reviewed before completion', 'RECONCILIATION_PENDING', 409)
     const completion = buildCompletionArtifact(db, binding, row, source)
+
+    // P1 事实集封存（主控写序收口）：下方 generation pending→complete 写入会触发
+    // pending_state_guard，以 reconcile_hospital_months.confirmed_lab_revenue 为
+    // revenue 唯一权威校验 artifact 封存值——先把本次 source.confirmedLabRevenue
+    // 严格 CAS prime 进目标月行（仅本 id、status='待复核'、completed/closed 皆
+    // NULL、changes=1），再让 generation trigger 校验已封存月值；下方原 month
+    // complete UPDATE 写同值。prime 后任一点失败由事务整体回滚，对外不存在
+    // pending+revenue 中间态（回归：afterRevenuePrime 注入故障零写回滚）。
+    const revenuePrime = db.prepare(
+      `UPDATE reconcile_hospital_months
+          SET confirmed_lab_revenue = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND status = '待复核'
+          AND completed_at IS NULL AND closed_at IS NULL`,
+    ).run(source.confirmedLabRevenue, row.hospital_month_id)
+    if (Number(revenuePrime.changes) !== 1) {
+      fail('hospital-month revenue prime lost concurrent CAS', 'CAS_CONFLICT', 409)
+    }
+    inject(faults, 'afterRevenuePrime')
 
     const generationUpdate = db.prepare(
       `UPDATE account_reconcile_generations

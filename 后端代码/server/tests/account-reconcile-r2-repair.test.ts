@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
+import { createHash } from 'node:crypto'
 
 const testDirectory = mkdtempSync(join(tmpdir(), 'coreone-loc005-r2-'))
 const databasePath = join(testDirectory, 'loc005.sqlite')
@@ -24,6 +25,17 @@ let manager: typeof import('../src/database/DatabaseManager.js')
 let lifecycle: typeof import('../src/services/account-reconciliation-lifecycle.js')
 let db: any
 let sequence = 0
+
+// UDF 是 SQLite 连接级状态：凡会在已安装 trigger 上写入的 raw 测试连接一律经本包装器
+//（new DatabaseSync 后立即注册 coreone_completion_artifact_valid，同名幂等替换），
+// 防止合法测试写入因连接未注册报 no such function 而失真。
+// 唯一例外：「raw probe upgrade→write 注册证明」用例必须直接 new DatabaseSync、
+// 先 upgrade 再写，不得经本包装器预注册掩盖 upgrade 头部单一注册入口。
+function openRegisteredTestDatabase(location: string): DatabaseSync {
+  const connection = new DatabaseSync(location)
+  manager.registerCoreoneSqlFunctions(connection)
+  return connection
+}
 
 function seedSource(options: {
   name: string
@@ -455,7 +467,7 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
       ...binding,
       reconcileGenerationId: `${binding.reconcileGenerationId}-SUCCESSOR`,
     }
-    const secondConnection = new DatabaseSync(databasePath)
+    const secondConnection = openRegisteredTestDatabase(databasePath)
     secondConnection.exec('PRAGMA foreign_keys = ON')
     try {
       lifecycle.computeAccountReconciliation(secondConnection, successor, 'USER-001')
@@ -728,7 +740,7 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
 
     rejectStaleUpdates(db)
     manager.closeDatabase()
-    const restarted = new DatabaseSync(databasePath)
+    const restarted = openRegisteredTestDatabase(databasePath)
     restarted.exec('PRAGMA foreign_keys = ON')
     rejectStaleUpdates(restarted)
     // #87：is_current 0→1 复活已被 trg_account_reconcile_pending_state_guard 拒绝
@@ -852,7 +864,7 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
 
     const upgradePath = join(testDirectory, `forward-upgrade-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(upgradePath)
-    let legacy = new DatabaseSync(upgradePath)
+    let legacy = openRegisteredTestDatabase(upgradePath)
     try {
       legacy.exec('PRAGMA foreign_keys = OFF')
       legacy.exec(`
@@ -895,7 +907,7 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
       legacy.close()
     }
 
-    legacy = new DatabaseSync(upgradePath)
+    legacy = openRegisteredTestDatabase(upgradePath)
     try {
       legacy.exec('PRAGMA foreign_keys = ON')
       expect(() => manager.upgradeAccountReconciliationSchema(legacy))
@@ -928,13 +940,16 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
 
     const upgradePath = join(testDirectory, `predecessor-complete-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(upgradePath)
-    let legacy = new DatabaseSync(upgradePath)
+    let legacy = openRegisteredTestDatabase(upgradePath)
     try {
       legacy.exec('PRAGMA foreign_keys = OFF')
       // 回滚到父版形状：diffs 去掉代次列（父版无此列）。
       // 注意：supplement 侧 5 个 trigger 的子查询引用 reconcile_diffs，重建 diffs 表期间会悬空，
       // 故先摘掉；升级函数本就会在数据迁移前 DROP 全部旧 trigger、迁移后重装新版，
       // 且升级过程不写 supplement 行，这些 trigger 在升级路径上不参与点火。
+      // P1 事实集封存后，complete_finality / pending_state_guard 的期望事实子查询同样
+      // 引用 reconcile_diffs——DROP TABLE/RENAME 会让 SQLite 重解析全部 trigger 体，
+      // 悬空即「error in trigger: no such table」，故与 supplement 侧一并先摘除。
       legacy.exec(`
         DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_insert;
         DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update;
@@ -944,6 +959,8 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
         DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable;
         DROP TRIGGER IF EXISTS trg_reconcile_diff_final_no_insert;
         DROP TRIGGER IF EXISTS trg_reconcile_diff_final_no_delete;
+        DROP TRIGGER IF EXISTS trg_account_reconcile_complete_finality;
+        DROP TRIGGER IF EXISTS trg_account_reconcile_pending_state_guard;
         CREATE TABLE reconcile_diffs__parent_shape (
           id TEXT PRIMARY KEY,
           hospital_month_id TEXT NOT NULL,
@@ -1036,7 +1053,7 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
     }
 
     // 重启幂等：同一库再跑一遍升级仍成功、状态不变。
-    legacy = new DatabaseSync(upgradePath)
+    legacy = openRegisteredTestDatabase(upgradePath)
     try {
       legacy.exec('PRAGMA foreign_keys = ON')
       expect(() => manager.upgradeAccountReconciliationSchema(legacy)).not.toThrow()
@@ -1172,7 +1189,7 @@ describe('LOC-005 R2 legacy binding and decision freeze', () => {
       )
     }
 
-    let predecessor = new DatabaseSync(upgradePath)
+    let predecessor = openRegisteredTestDatabase(upgradePath)
     try {
       predecessor.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_complete_finality')
       predecessor.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_complete_finality')
@@ -1182,7 +1199,7 @@ describe('LOC-005 R2 legacy binding and decision freeze', () => {
       predecessor.close()
     }
 
-    predecessor = new DatabaseSync(upgradePath)
+    predecessor = openRegisteredTestDatabase(upgradePath)
     try {
       predecessor.exec('PRAGMA foreign_keys = ON')
       assertUpgradedFinality(predecessor)
@@ -1236,6 +1253,14 @@ describe('LOC-005 R2 legacy binding and decision freeze', () => {
       'DECISION_SET_CHANGED',
     )
     expect(lifecycle.readAccountReconciliation(db, binding).status).toBe('complete')
+    // P1 事实集封存：被篡改的决定事实使 stored artifact ≠ 当前事实集——开机扫描与
+    // close 的 hash 重算同权 fail-closed（真实不变量升级，非新增松动）。
+    expect(() => manager.upgradeAccountReconciliationSchema(db)).toThrow(
+      new RegExp(`RECONCILE_GENERATION_COMPLETION_MALFORMED:${binding.reconcileGenerationId}`),
+    )
+    // 恢复事实（手动摘窗期内可写），随后 upgrade 重装全部闸并转绿——共享库零污染，
+    // 后续用例的 boot/upgrade 不继承本例的篡改行。
+    db.prepare('UPDATE reconcile_diffs SET verdict_reason = ? WHERE id = ?').run('R2 reviewed', diff.id)
     manager.upgradeAccountReconciliationSchema(db)
   })
 })
@@ -1632,7 +1657,7 @@ describe('LOC-005 R4 lineage hard-gate closure', () => {
     const fixture = seedSupersededWithSurvivingDiff('r4-startup-lineage-probe')
     const probePath = join(testDirectory, `r4-lineage-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probePath)
-    const probe = new DatabaseSync(probePath)
+    const probe = openRegisteredTestDatabase(probePath)
     try {
       probe.exec('DROP TRIGGER trg_reconcile_supplement_generation_insert')
       probe.prepare(`
@@ -1820,7 +1845,7 @@ describe('LOC-005 R5 lineage guard direction closure and stale-delete freeze', (
     const fixture = seedSupersededWithSurvivingDiff('r5-inverse-startup-probe')
     const probePath = join(testDirectory, `r5-inverse-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probePath)
-    const probe = new DatabaseSync(probePath)
+    const probe = openRegisteredTestDatabase(probePath)
     try {
       // R6 起拷贝库带 identity trigger——先摘再注入（探针层独立验证）。
       probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
@@ -2076,7 +2101,7 @@ describe('LOC-005 R6 partner/month identity closure', () => {
     // 探针 A：supplement 键漂移（摘 binding update trigger 注入）。
     const probeAPath = join(testDirectory, `r6-probe-a-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probeAPath)
-    const probeA = new DatabaseSync(probeAPath)
+    const probeA = openRegisteredTestDatabase(probeAPath)
     try {
       probeA.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
       probeA.prepare('UPDATE supplement_orders SET partner_id = ? WHERE id = ?')
@@ -2089,7 +2114,7 @@ describe('LOC-005 R6 partner/month identity closure', () => {
     // 探针 B：diff 键漂移（摘 identity trigger 注入）。
     const probeBPath = join(testDirectory, `r6-probe-b-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probeBPath)
-    const probeB = new DatabaseSync(probeBPath)
+    const probeB = openRegisteredTestDatabase(probeBPath)
     try {
       probeB.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
       probeB.prepare('UPDATE reconcile_diffs SET service_month = ? WHERE id = ?')
@@ -2145,7 +2170,7 @@ describe('LOC-005 R7 diff-anchored boot scan and collected-month integrity', () 
     for (const injection of injections) {
       const probePath = join(testDirectory, `r7-diff-${injection.label}-${++sequence}.sqlite`)
       db.prepare('VACUUM INTO ?').run(probePath)
-      const probe = new DatabaseSync(probePath)
+      const probe = openRegisteredTestDatabase(probePath)
       try {
         probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
         probe.prepare(injection.sql).run(injection.value, fixture.nextDiff.id)
@@ -2158,7 +2183,7 @@ describe('LOC-005 R7 diff-anchored boot scan and collected-month integrity', () 
     // 对照：无漂移拷贝开机放行（扫描不误伤合法库）。
     const cleanPath = join(testDirectory, `r7-diff-clean-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(cleanPath)
-    const clean = new DatabaseSync(cleanPath)
+    const clean = openRegisteredTestDatabase(cleanPath)
     try {
       expect(() => manager.upgradeAccountReconciliationSchema(clean)).not.toThrow()
     } finally {
@@ -2196,7 +2221,7 @@ describe('LOC-005 R7 diff-anchored boot scan and collected-month integrity', () 
     // legacy 扫描：拷贝库内摘 update trigger 注入历史脏行，开机扫描必须拒启并带出行 id。
     const probePath = join(testDirectory, `r7-collected-legacy-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probePath)
-    const probe = new DatabaseSync(probePath)
+    const probe = openRegisteredTestDatabase(probePath)
     try {
       probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_update')
       probe.prepare('UPDATE supplement_orders SET collected_month = ? WHERE id = ?')
@@ -2225,7 +2250,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
     // 探针 A：NULL-id 漂移行——真值判断下行存在却被当「无行」放行
     const probeAPath = join(testDirectory, `r8-null-id-a-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probeAPath)
-    const probeA = new DatabaseSync(probeAPath)
+    const probeA = openRegisteredTestDatabase(probeAPath)
     try {
       probeA.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
       probeA.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_update')
@@ -2241,7 +2266,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
     // 就地修复被带出的行后重启必须继续拒启（剩余脏行浮出水面，LIMIT 1 遮挡解除）。
     const probeBPath = join(testDirectory, `r8-null-id-b-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probeBPath)
-    const probeB = new DatabaseSync(probeBPath)
+    const probeB = openRegisteredTestDatabase(probeBPath)
     try {
       probeB.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
       probeB.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_update')
@@ -2274,7 +2299,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
     // 身份表主键空值只能经直接 SQL 产生（全部应用写者用 uuid），fail-closed 不误伤。
     const probeCPath = join(testDirectory, `r8-empty-id-c-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probeCPath)
-    const probeC = new DatabaseSync(probeCPath)
+    const probeC = openRegisteredTestDatabase(probeCPath)
     try {
       probeC.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
       probeC.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_update')
@@ -2350,7 +2375,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
     const fixture = seedSupersededWithSurvivingDiff('r8-null-gen')
     const probePath = join(testDirectory, `r8-null-gen-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probePath)
-    const probe = new DatabaseSync(probePath)
+    const probe = openRegisteredTestDatabase(probePath)
     try {
       probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
       probe.prepare('UPDATE reconcile_diffs SET reconcile_generation_id = NULL WHERE id = ?')
@@ -2368,7 +2393,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
     const legacyPartner = seedSource({ name: 'r8-unbound-partner' })
     const legacyPath = join(testDirectory, `r8-null-gen-legacy-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(legacyPath)
-    const legacy = new DatabaseSync(legacyPath)
+    const legacy = openRegisteredTestDatabase(legacyPath)
     try {
       const legacyMonthId = `HM-R8-UNBOUND-${sequence}`
       legacy.prepare(`
@@ -2411,7 +2436,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
     // legacy 扫描：摘 update trigger 注入 NUL 脏行，开机扫描必须拒启
     const probePath = join(testDirectory, `r8-collected-nul-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probePath)
-    const probe = new DatabaseSync(probePath)
+    const probe = openRegisteredTestDatabase(probePath)
     try {
       probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_update')
       probe.prepare(`UPDATE supplement_orders SET collected_month = '2026-12' || char(0) || 'junk' WHERE id = ?`)
@@ -2598,7 +2623,7 @@ describe('LOC-005 FUP #85 managed-connection foreign_keys explicit pinning', () 
   it('fails closed when the read-back cannot confirm foreign_keys = 1', () => {
     // SQLite 在事务内把 foreign_keys 开关变更当 no-op：FK=0 连接 BEGIN 后调用钉版函数，
     // 读回仍为 0，必须 fail-closed（稳定可诊断错误，不静默继续）。
-    const probe = new DatabaseSync(':memory:')
+    const probe = openRegisteredTestDatabase(':memory:')
     try {
       probe.exec('PRAGMA foreign_keys = OFF')
       expect(foreignKeysPragmaValue(probe)).toBe(0)
@@ -2615,7 +2640,7 @@ describe('LOC-005 FUP #85 managed-connection foreign_keys explicit pinning', () 
   })
 
   it('restores foreign_keys = 1 after Phase-1A upgrade success even when entered with 0', () => {
-    const predecessor = new DatabaseSync(':memory:')
+    const predecessor = openRegisteredTestDatabase(':memory:')
     try {
       createPhase1APredecessorFixture(predecessor)
       predecessor.exec('PRAGMA foreign_keys = OFF')
@@ -2629,7 +2654,7 @@ describe('LOC-005 FUP #85 managed-connection foreign_keys explicit pinning', () 
   })
 
   it('restores foreign_keys = 1 after injected Phase-1A upgrade failure even when entered with 0', () => {
-    const predecessor = new DatabaseSync(':memory:')
+    const predecessor = openRegisteredTestDatabase(':memory:')
     try {
       createPhase1APredecessorFixture(predecessor, true)
       predecessor.exec('PRAGMA foreign_keys = OFF')
@@ -2649,7 +2674,7 @@ describe('LOC-005 FUP #85 managed-connection foreign_keys explicit pinning', () 
     const fixture = seedSupersededWithSurvivingDiff('fk85-restrict')
     const probePath = join(testDirectory, `fk85-restrict-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probePath)
-    const probe = new DatabaseSync(probePath)
+    const probe = openRegisteredTestDatabase(probePath)
     try {
       probe.exec('PRAGMA foreign_keys = ON')
       probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_no_delete')
@@ -2664,7 +2689,7 @@ describe('LOC-005 FUP #85 managed-connection foreign_keys explicit pinning', () 
   it('releases the connection handle when open-path pinning fails (主控复核点 1)', () => {
     // openManagedDatabase 的钉版失败路径：fail-closed 的同时必须 close 新连接，
     // 不能泄漏句柄。用事务内 pragma no-op 制造真实的钉版失败态。
-    const probe = new DatabaseSync(':memory:')
+    const probe = openRegisteredTestDatabase(':memory:')
     probe.exec('PRAGMA foreign_keys = OFF')
     probe.exec('BEGIN')
     expect(() => manager.assertForeignKeysPinnedOrClose(probe, 'open-probe'))
@@ -2676,7 +2701,7 @@ describe('LOC-005 FUP #85 managed-connection foreign_keys explicit pinning', () 
   it('preserves the original migration error when Phase-1A re-pinning fails (主控复核点 2)', () => {
     // 钉版失败的真实病理态 = 迁移失败后连接仍在事务内（ROLLBACK 未成功），
     // 此时 pragma no-op、读回为 0。诊断合同：原迁移错误上下文不得被钉版错误覆盖。
-    const probe = new DatabaseSync(':memory:')
+    const probe = openRegisteredTestDatabase(':memory:')
     try {
       probe.exec('PRAGMA foreign_keys = OFF')
       probe.exec('BEGIN')
@@ -2708,11 +2733,11 @@ describe('LOC-005 FUP #85 managed-connection foreign_keys explicit pinning', () 
     // 且 busy_timeout=0——B 的 BEGIN IMMEDIATE 必失败，而 PRAGMA OFF 已先生效。
     // 合同：函数抛出、错误保留原始锁失败上下文，且 B 不得被留在 FK=0。
     const probePath = join(testDirectory, `phase1a-busy-${++sequence}.sqlite`)
-    const probeB = new DatabaseSync(probePath)
+    const probeB = openRegisteredTestDatabase(probePath)
     try {
       createPhase1APredecessorFixture(probeB)
       probeB.exec('PRAGMA busy_timeout = 0')
-      const probeA = new DatabaseSync(probePath)
+      const probeA = openRegisteredTestDatabase(probePath)
       try {
         probeA.exec('BEGIN IMMEDIATE')
         let caught: unknown
@@ -2793,7 +2818,7 @@ describe('LOC-005 FUP #95 identity-table row-id write guards', () => {
       const fixture = seedRowIdFixture(`rowid-update-${target.label}`)
       const probePath = join(testDirectory, `rowid-update-${target.label}-${++sequence}.sqlite`)
       db.prepare('VACUUM INTO ?').run(probePath)
-      const probe = new DatabaseSync(probePath)
+      const probe = openRegisteredTestDatabase(probePath)
       try {
         probe.exec('PRAGMA foreign_keys = OFF')
         expect(foreignKeysPragmaValue(probe)).toBe(0)
@@ -2962,7 +2987,7 @@ describe('LOC-005 FUP #95 identity-table row-id write guards', () => {
       const fixture = seedRowIdFixture(`rowid-history-${target.label}`)
       const probePath = join(testDirectory, `rowid-history-${target.label}-${++sequence}.sqlite`)
       db.prepare('VACUUM INTO ?').run(probePath)
-      const probe = new DatabaseSync(probePath)
+      const probe = openRegisteredTestDatabase(probePath)
       try {
         // 摘新 guard（修复前不存在则 DROP IF EXISTS 无效果）后 INSERT ''-id 历史脏行；
         // INSERT 造脏不碰既有引用链，FK=ON 下其余列/FK 全合法，无扫描代打。
@@ -3013,22 +3038,23 @@ describe('LOC-005 FUP #87 trigger single authority, pending state machines, bind
 
   const normalizeTriggerSql = (sql: string) => sql.replace(/\s+/g, ' ').trim()
 
-  // 权威关键文本（钉版对象：#87 漂移主体 immutable_fact + 两只原 init-only 部署缺口）。
-  // 两侧均经 normalizeTriggerSql 归一，格式漂移不造成假红，语义漂移必红。
+  // 权威关键文本（钉版对象：P1-C 起 immutable_fact 十列全 NULL-safe IS NOT——原 `<>`
+  // 三值旁路在 statement_artifact_hash NULL 时放行 NULL↔value 漂移；两只原 init-only
+  // 部署缺口不变）。两侧均经 normalizeTriggerSql 归一，格式漂移不造成假红，语义漂移必红。
   const AUTHORITATIVE_TRIGGER_TEXTS: Record<string, string> = {
     trg_account_reconcile_immutable_fact: `
       CREATE TRIGGER trg_account_reconcile_immutable_fact
       BEFORE UPDATE ON account_reconcile_generations
-      WHEN OLD.reconcile_generation_id <> NEW.reconcile_generation_id
-        OR OLD.partner_id <> NEW.partner_id
-        OR OLD.settlement_month <> NEW.settlement_month
-        OR OLD.statement_generation_id <> NEW.statement_generation_id
-        OR OLD.hospital_month_id <> NEW.hospital_month_id
-        OR OLD.source_readiness_json <> NEW.source_readiness_json
-        OR OLD.source_readiness_hash <> NEW.source_readiness_hash
-        OR OLD.statement_artifact_hash <> NEW.statement_artifact_hash
-        OR OLD.snapshot_json <> NEW.snapshot_json
-        OR OLD.snapshot_hash <> NEW.snapshot_hash
+      WHEN OLD.reconcile_generation_id IS NOT NEW.reconcile_generation_id
+        OR OLD.partner_id IS NOT NEW.partner_id
+        OR OLD.settlement_month IS NOT NEW.settlement_month
+        OR OLD.statement_generation_id IS NOT NEW.statement_generation_id
+        OR OLD.hospital_month_id IS NOT NEW.hospital_month_id
+        OR OLD.source_readiness_json IS NOT NEW.source_readiness_json
+        OR OLD.source_readiness_hash IS NOT NEW.source_readiness_hash
+        OR OLD.statement_artifact_hash IS NOT NEW.statement_artifact_hash
+        OR OLD.snapshot_json IS NOT NEW.snapshot_json
+        OR OLD.snapshot_hash IS NOT NEW.snapshot_hash
       BEGIN
         SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
       END`,
@@ -3086,6 +3112,7 @@ describe('LOC-005 FUP #87 trigger single authority, pending state machines, bind
       'trg_reconcile_hospital_month_closed_immutable',
       'trg_reconcile_hospital_month_complete_finality',
       'trg_reconcile_hospital_month_pending_guard',
+      'trg_reconcile_hospital_month_pending_identity_freeze',
     ],
     account_reconcile_hospital_month_bindings: [
       'trg_reconcile_binding_final_immutable',
@@ -3124,7 +3151,7 @@ describe('LOC-005 FUP #87 trigger single authority, pending state machines, bind
   function vacuumProbe(label: string): DatabaseSync {
     const probePath = join(testDirectory, `${label}-${++sequence}.sqlite`)
     db.prepare('VACUUM INTO ?').run(probePath)
-    return new DatabaseSync(probePath)
+    return openRegisteredTestDatabase(probePath)
   }
 
   function seedPendingMonth(name: string) {
@@ -3376,6 +3403,115 @@ describe('LOC-005 FUP #87 trigger single authority, pending state machines, bind
       'SELECT reopened_at, reopen_reason FROM reconcile_hospital_months WHERE id = ?',
     ).get(hospitalMonthId) as { reopened_at: unknown; reopen_reason: unknown }
     expect(row).toMatchObject({ reopened_at: null, reopen_reason: null })
+  })
+
+  // ── c2) #92 pending 医院月身份冻结（partner_id/service_month 两键）────────────
+
+  it('rejects partner_id drift on a pending hospital month (zero write; fresh schema, real restart, reconcile-authority-only)', () => {
+    // #92：partner_id 是医院月身份键——pending 窗口直改会把整月差异/补收事实集静默
+    // 挂到别院（月行仍在原 id，diff/supplement 自带 partner_id 不动 → 跨主体拼接）。
+    // 现状诚实口径：hcm 周期证据模块的侧挂 trigger（trg_hcm_reconcile_identity_immutable，
+    // IF-NOT-EXISTS 安装、明确不在 reconcile 重装权威集）偶然挡住了此写——本域身份
+    // 不变量不能寄生于另一模块的侧 trigger（该模块退役/漂移即静默失守）。本测试
+    // 前两段断「行为」（fresh/真实 restart 下必须零写失败，两 trigger 均可为拦者）；
+    // 第三段断「归属」：探针库摘掉 hcm 侧 trigger 后只剩 reconcile 单一权威——
+    // 修复前漂移真实落库（RED），修复后由新权威 trigger 以专属码拒绝（GREEN）。
+    // UNIQUE(partner_id, service_month) 只挡撞键，漂移值用全新串规避。
+    const { binding, hospitalMonthId } = seedPendingMonth('92-month-identity-partner')
+    const drifted = `PARTNER-DRIFT-92-${++sequence}`
+    const driftProbe = (connection: DatabaseSync, expected: RegExp) => {
+      expectDatabaseMutationBlocked(connection, () => {
+        connection.prepare(`
+          UPDATE reconcile_hospital_months SET partner_id = ? WHERE id = ?
+        `).run(drifted, hospitalMonthId)
+      }, expected)
+      const row = connection.prepare(
+        'SELECT partner_id, service_month FROM reconcile_hospital_months WHERE id = ?',
+      ).get(hospitalMonthId) as { partner_id: string; service_month: string }
+      expect(row).toMatchObject({
+        partner_id: binding.partnerId,
+        service_month: binding.settlementMonth,
+      })
+    }
+    driftProbe(db, /PENDING_HOSPITAL_MONTH_IDENTITY_DRIFT|RECONCILE_MONTH_IDENTITY_IMMUTABLE/)
+    manager.closeDatabase()
+    manager.initializeDatabase()
+    db = manager.getDatabase()
+    driftProbe(db, /PENDING_HOSPITAL_MONTH_IDENTITY_DRIFT|RECONCILE_MONTH_IDENTITY_IMMUTABLE/)
+    const probe = vacuumProbe('92-identity-partner')
+    try {
+      probe.exec('DROP TRIGGER trg_hcm_reconcile_identity_immutable')
+      manager.upgradeAccountReconciliationSchema(probe)
+      driftProbe(probe, /PENDING_HOSPITAL_MONTH_IDENTITY_DRIFT/)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('rejects service_month drift on a pending hospital month (zero write; fresh schema, real restart, reconcile-authority-only)', () => {
+    // #92：service_month 同身份键——直改把整月事实集静默挂到别月（账期错位）。
+    // 结构同上单；漂移值 '2099-12' 与本院（每测试唯一 partner）不构成既有
+    // UNIQUE 键，拒绝只能来自 trigger。
+    const { binding, hospitalMonthId } = seedPendingMonth('92-month-identity-month')
+    const driftProbe = (connection: DatabaseSync, expected: RegExp) => {
+      expectDatabaseMutationBlocked(connection, () => {
+        connection.prepare(`
+          UPDATE reconcile_hospital_months SET service_month = '2099-12' WHERE id = ?
+        `).run(hospitalMonthId)
+      }, expected)
+      const row = connection.prepare(
+        'SELECT partner_id, service_month FROM reconcile_hospital_months WHERE id = ?',
+      ).get(hospitalMonthId) as { partner_id: string; service_month: string }
+      expect(row).toMatchObject({
+        partner_id: binding.partnerId,
+        service_month: binding.settlementMonth,
+      })
+    }
+    driftProbe(db, /PENDING_HOSPITAL_MONTH_IDENTITY_DRIFT|RECONCILE_MONTH_IDENTITY_IMMUTABLE/)
+    manager.closeDatabase()
+    manager.initializeDatabase()
+    db = manager.getDatabase()
+    driftProbe(db, /PENDING_HOSPITAL_MONTH_IDENTITY_DRIFT|RECONCILE_MONTH_IDENTITY_IMMUTABLE/)
+    const probe = vacuumProbe('92-identity-month')
+    try {
+      probe.exec('DROP TRIGGER trg_hcm_reconcile_identity_immutable')
+      manager.upgradeAccountReconciliationSchema(probe)
+      driftProbe(probe, /PENDING_HOSPITAL_MONTH_IDENTITY_DRIFT/)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('keeps legal pending-window and lifecycle writes green through the identity freeze (verdict/complete/close)', () => {
+    // #92 正控：身份冻结只钉 partner_id/service_month 两键——lifecycle 五个合法
+    // UPDATE（compute 重算/verdict 的 pending_count/revenue prime/complete 状态+
+    // 时间戳+收入/close 状态+时间戳）均不改两键，必须照常绿零误伤。completed
+    // 窗口的身份冻结仍归 complete_finality（中途探针证明正交不失）、closed 窗口
+    // 归 closed_immutable——三窗各司其职不重叠。
+    const { binding, hospitalMonthId } = seedPendingMonth('92-month-identity-legal')
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(hospitalMonthId) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db, binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+    // completed 窗口正交合同：身份漂移由 complete_finality 以自有码拒绝（既有行为不变）。
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE reconcile_hospital_months SET partner_id = 'PARTNER-DRIFT-92-COMPLETED' WHERE id = ?
+      `).run(hospitalMonthId)
+    }, /COMPLETE_HOSPITAL_MONTH_FINAL|RECONCILE_MONTH_IDENTITY_IMMUTABLE/)
+    expect(lifecycle.closeAccountReconciliation(db, binding, 'USER-001'))
+      .toMatchObject({ status: 'closed' })
+    const row = db.prepare(
+      'SELECT status, partner_id, service_month FROM reconcile_hospital_months WHERE id = ?',
+    ).get(hospitalMonthId) as { status: string; partner_id: string; service_month: string }
+    expect(row).toMatchObject({
+      status: '已关账',
+      partner_id: binding.partnerId,
+      service_month: binding.settlementMonth,
+    })
   })
 
   // ── d) binding 行级关系闸 ─────────────────────────────────────────────────
@@ -3647,6 +3783,1554 @@ describe('LOC-005 FUP #87 trigger single authority, pending state machines, bind
       })
     } finally {
       probe.close()
+    }
+  })
+})
+
+describe('LOC-005 FUP P1 binding currentness, generation completion shape and NULL-safe immutable facts', () => {
+  // 三路 non-author review REQUEST_CHANGES 的纠正版 RED（按主控勘误 comment-5121977091 A/B/C/D)。
+  // production 暂停；本 describe 仅测试改动。
+  // P1-A：INSERT binding→stale（is_current=0）代被接受 + 启动扫描无 currentness。
+  // P1-B：pending 保持态携带 completion/close 字段、pending→complete 缺 evidence、
+  //        is_current=0+complete、缺 evidence 的 malformed complete 可被 close、
+  //        current-shape 启动扫描不拦、真 predecessor 缺两列时需 durable sentinel。
+  // P1-C：immutable_fact 用 <>（NULL 三值旁路），NULL→value / value→NULL 均绕过。
+
+  function seedPendingMonthP1(name: string) {
+    const binding = seedSource({ name, lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    return { binding, hospitalMonthId: String(snapshot.hospitalMonthId) }
+  }
+
+  function vacuumProbeP1(label: string): DatabaseSync {
+    const probePath = join(testDirectory, `${label}-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    return openRegisteredTestDatabase(probePath)
+  }
+
+  function bindingGenerationRow(connection: DatabaseSync, generationId: string) {
+    return connection.prepare(`
+      SELECT status, is_current, completed_at, completed_by, closed_at, closed_by,
+             completion_artifact_json, completion_artifact_hash
+        FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+    `).get(generationId) as Record<string, unknown> | undefined
+  }
+
+  // 精确断言 ReconcileLifecycleError + status=409 + 指定 code；不抛/抛别类都算失败（无兜底）。
+  function expectLifecycle409(fn: () => unknown, code: string): void {
+    let caught: unknown
+    try {
+      fn()
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(lifecycle.ReconcileLifecycleError)
+    const typed = caught as InstanceType<typeof lifecycle.ReconcileLifecycleError>
+    expect(typed.code).toBe(code)
+    expect(typed.status).toBe(409)
+  }
+
+  // B/C：只用 ALTER TABLE DROP COLUMN（摘引用 trigger 后），并断言原 CHECK/UNIQUE/FK/索引
+  // 仍在。先摘所有引用该表的 trigger（DROP COLUMN 时它们引用旧 schema 报错）。
+  function dropReferencingTriggers(connection: DatabaseSync, table: string) {
+    const refs = connection.prepare(`
+      SELECT name FROM sqlite_master WHERE type = 'trigger' AND sql LIKE '%' || ? || '%'
+    `).all(table) as Array<{ name: string }>
+    for (const { name } of refs) connection.exec(`DROP TRIGGER IF EXISTS ${name}`)
+  }
+
+  // 断言 generations 表的关键约束/索引仍在（DROP COLUMN 不得误伤未引用该列者）。
+  function expectGenerationsConstraintsIntact(connection: DatabaseSync) {
+    const sql = connection.prepare(`
+      SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'account_reconcile_generations'
+    `).get() as { sql: string }
+    expect(sql.sql).toMatch("UNIQUE(partner_id, settlement_month, statement_generation_id, reconcile_generation_id)")
+    expect(sql.sql).toMatch('FOREIGN KEY(statement_generation_id)')
+    expect(sql.sql).toMatch('FOREIGN KEY(hospital_month_id)')
+    expect(sql.sql).toMatch('settlement_month GLOB')
+    expect(sql.sql).toMatch('is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0, 1))')
+    expect(sql.sql).toMatch("CHECK(status IN ('pending', 'complete', 'closed'))")
+    const idx = connection.prepare(`
+      SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'account_reconcile_generations'
+    `).all() as Array<{ name: string }>
+    const names = idx.map(r => r.name)
+    expect(names).toContain('uq_account_reconcile_current_month')
+    expect(names).toContain('idx_account_reconcile_statement_generation')
+    // PRAGMA 双验证（DROP COLUMN / full-DDL rebuild 两路径都必须过）：精确两条 FK 引用结构
+    //（statement_generation_id→batches.generation_id、hospital_month_id→months.id），
+    // 且 foreign_key_check 零违例。
+    const foreignKeys = connection.prepare(
+      'PRAGMA foreign_key_list(account_reconcile_generations)',
+    ).all() as Array<{ table: string; from: string; to: string }>
+    expect(foreignKeys).toHaveLength(2)
+    expect(foreignKeys).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        table: 'statement_import_batches',
+        from: 'statement_generation_id',
+        to: 'generation_id',
+      }),
+      expect.objectContaining({
+        table: 'reconcile_hospital_months',
+        from: 'hospital_month_id',
+        to: 'id',
+      }),
+    ]))
+    expect(
+      connection.prepare('PRAGMA foreign_key_check(account_reconcile_generations)').all(),
+    ).toEqual([])
+  }
+
+  // 完整精确 DDL 重建 generations（statement_artifact_hash 改 nullable，保留全部约束/索引/行）。
+  // 用于 value→NULL：列 pre-existing 但 nullable 且值非 NULL 的真实形状。
+  function rebuildGenerationsNullableArtifactHashFullDdl(connection: DatabaseSync) {
+    connection.exec('PRAGMA foreign_keys = OFF')
+    dropReferencingTriggers(connection, 'account_reconcile_generations')
+    connection.exec('BEGIN')
+    connection.exec(`
+      CREATE TABLE account_reconcile_generations__v (
+        reconcile_generation_id TEXT PRIMARY KEY,
+        partner_id TEXT NOT NULL,
+        settlement_month TEXT NOT NULL CHECK(
+          settlement_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'
+          AND CAST(substr(settlement_month, 6, 2) AS INTEGER) BETWEEN 1 AND 12
+        ),
+        statement_generation_id TEXT NOT NULL,
+        hospital_month_id TEXT NOT NULL,
+        is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0, 1)),
+        status TEXT NOT NULL DEFAULT 'pending'
+          CHECK(status IN ('pending', 'complete', 'closed')),
+        source_readiness_json TEXT NOT NULL,
+        source_readiness_hash TEXT NOT NULL,
+        statement_artifact_hash TEXT,
+        snapshot_json TEXT NOT NULL,
+        snapshot_hash TEXT NOT NULL,
+        completion_artifact_json TEXT,
+        completion_artifact_hash TEXT,
+        completed_at DATETIME,
+        completed_by TEXT,
+        closed_at DATETIME,
+        closed_by TEXT,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(partner_id, settlement_month, statement_generation_id, reconcile_generation_id),
+        FOREIGN KEY(statement_generation_id) REFERENCES statement_import_batches(generation_id),
+        FOREIGN KEY(hospital_month_id) REFERENCES reconcile_hospital_months(id)
+      )
+    `)
+    connection.exec(`
+      INSERT INTO account_reconcile_generations__v
+        SELECT reconcile_generation_id, partner_id, settlement_month, statement_generation_id,
+               hospital_month_id, is_current, status, source_readiness_json, source_readiness_hash,
+               statement_artifact_hash, snapshot_json, snapshot_hash,
+               completion_artifact_json, completion_artifact_hash,
+               completed_at, completed_by, closed_at, closed_by, created_at, updated_at
+          FROM account_reconcile_generations
+    `)
+    connection.exec('DROP TABLE account_reconcile_generations')
+    connection.exec('ALTER TABLE account_reconcile_generations__v RENAME TO account_reconcile_generations')
+    connection.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_account_reconcile_current_month
+        ON account_reconcile_generations(partner_id, settlement_month) WHERE is_current = 1
+    `)
+    connection.exec(`
+      CREATE INDEX IF NOT EXISTS idx_account_reconcile_statement_generation
+        ON account_reconcile_generations(partner_id, settlement_month, statement_generation_id)
+    `)
+    connection.exec('COMMIT')
+    connection.exec('PRAGMA foreign_keys = ON')
+  }
+
+  const AUTHORITATIVE_IMMUTABLE_FACT_TEXT = `
+    CREATE TRIGGER trg_account_reconcile_immutable_fact
+    BEFORE UPDATE ON account_reconcile_generations
+    WHEN OLD.reconcile_generation_id IS NOT NEW.reconcile_generation_id
+      OR OLD.partner_id IS NOT NEW.partner_id
+      OR OLD.settlement_month IS NOT NEW.settlement_month
+      OR OLD.statement_generation_id IS NOT NEW.statement_generation_id
+      OR OLD.hospital_month_id IS NOT NEW.hospital_month_id
+      OR OLD.source_readiness_json IS NOT NEW.source_readiness_json
+      OR OLD.source_readiness_hash IS NOT NEW.source_readiness_hash
+      OR OLD.statement_artifact_hash IS NOT NEW.statement_artifact_hash
+      OR OLD.snapshot_json IS NOT NEW.snapshot_json
+      OR OLD.snapshot_hash IS NOT NEW.snapshot_hash
+    BEGIN
+      SELECT RAISE(ABORT, 'IMMUTABLE_RECONCILIATION_FACT');
+    END`
+
+  // ── P1-A binding stale 首绑 / 启动 currentness ────────────────────────────
+
+  it('rejects first-bind INSERT pointing at a stale same-month generation (zero write)', () => {
+    // 同 hospital_month 同时有 current 新代与 is_current=0 stale 旧代，首次 INSERT binding
+    // 指向 stale——修复前 relation_insert 只查存在+等值，放行。
+    const fixture = seedSupersededWithSurvivingDiff('p1a-insert-stale')
+    const probe = vacuumProbeP1('p1a-insert-stale')
+    try {
+      probe.prepare(`
+        DELETE FROM account_reconcile_hospital_month_bindings WHERE hospital_month_id = ?
+      `).run(fixture.hospitalMonthId)
+      expectDatabaseMutationBlocked(probe, () => {
+        probe.prepare(`
+          INSERT INTO account_reconcile_hospital_month_bindings
+            (hospital_month_id, reconcile_generation_id, binding_state)
+          VALUES (?, ?, 'bound')
+        `).run(fixture.hospitalMonthId, fixture.binding.reconcileGenerationId)
+      }, /RECONCILE_BINDING_GENERATION_NOT_CURRENT/)
+      const orphan = probe.prepare(`
+        SELECT COUNT(*) AS n FROM account_reconcile_hospital_month_bindings WHERE hospital_month_id = ?
+      `).get(fixture.hospitalMonthId) as { n: number }
+      expect(Number(orphan.n)).toBe(0)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('fails closed at first boot and restart when a current-shape binding points at a stale generation, then recovers', () => {
+    // 启动 currentness 扫描：binding 指向 is_current=0 stale 代——缺 binding/悬空/月不等值
+    // 三扫描均不命中（代存在、等值），须由独立 currentness 检查带出。
+    // 真重启形状：seed 脏文件→close→first 连接 reopen 同一未修文件 throw+close→
+    // second 全新连接再 reopen 同一未修文件仍 throw+close→最后才 repair（禁同连接连调冒充重启）。
+    const fixture = seedSupersededWithSurvivingDiff('p1a-scan-stale')
+    const probePath = join(testDirectory, `p1a-scan-stale-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      seed.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_generation_relation_update')
+      seed.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = ?
+         WHERE hospital_month_id = ?
+      `).run(fixture.binding.reconcileGenerationId, fixture.hospitalMonthId)
+    } finally {
+      seed.close()
+    }
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first))
+        .toThrow(/RECONCILE_BINDING_GENERATION_NOT_CURRENT:/)
+    } finally {
+      first.close()
+    }
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second))
+        .toThrow(/RECONCILE_BINDING_GENERATION_NOT_CURRENT:/)
+    } finally {
+      second.close()
+    }
+    const repair = openRegisteredTestDatabase(probePath)
+    try {
+      repair.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_generation_relation_update')
+      repair.prepare(`
+        UPDATE account_reconcile_hospital_month_bindings
+           SET reconcile_generation_id = ?
+         WHERE hospital_month_id = ?
+      `).run(fixture.nextBinding.reconcileGenerationId, fixture.hospitalMonthId)
+      expect(() => manager.upgradeAccountReconciliationSchema(repair)).not.toThrow()
+    } finally {
+      repair.close()
+    }
+  })
+
+  it('keeps legal current first-bind green through the INSERT currentness guard', () => {
+    // 不误伤对照：current 代（is_current=1）首绑放行。
+    const fixture = seedPendingMonthP1('p1a-legal-current')
+    const monthCId = `HM-P1A-LEGAL-${++sequence}`
+    db.prepare('INSERT INTO reconcile_hospital_months (id, partner_id, service_month) VALUES (?, ?, ?)')
+      .run(monthCId, fixture.binding.partnerId, '2099-07')
+    const currentGenId = `GEN-P1A-CURRENT-${++sequence}`
+    db.prepare(`
+      INSERT INTO account_reconcile_generations (
+        reconcile_generation_id, partner_id, settlement_month, statement_generation_id,
+        hospital_month_id, is_current, source_readiness_json, source_readiness_hash,
+        statement_artifact_hash, snapshot_json, snapshot_hash
+      ) VALUES (?, ?, ?, ?, ?, 1, '{}', 'rid', 'rid', '{}', 'rid')
+    `).run(
+      currentGenId,
+      fixture.binding.partnerId,
+      '2099-07',
+      fixture.binding.statementGenerationId,
+      monthCId,
+    )
+    db.prepare(`
+      INSERT INTO account_reconcile_hospital_month_bindings
+        (hospital_month_id, reconcile_generation_id, binding_state)
+      VALUES (?, ?, 'bound')
+    `).run(monthCId, currentGenId)
+    const row = db.prepare(`
+      SELECT reconcile_generation_id AS generationId FROM account_reconcile_hospital_month_bindings
+       WHERE hospital_month_id = ?
+    `).get(monthCId) as { generationId: string }
+    expect(row.generationId).toBe(currentGenId)
+  })
+
+  // ── P1-B generation pending 状态机形状 ───────────────────────────────────
+
+  it('rejects completion/close field writes on a pending generation that stays pending (zero write)', () => {
+    const { binding } = seedPendingMonthP1('p1b-pending-fields')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE account_reconcile_generations
+           SET completed_at = CURRENT_TIMESTAMP, completed_by = 'attacker'
+         WHERE reconcile_generation_id = ?
+      `).run(binding.reconcileGenerationId)
+    }, /PENDING_RECONCILIATION_COMPLETION_MALFORMED/)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE account_reconcile_generations
+           SET closed_at = CURRENT_TIMESTAMP, closed_by = 'attacker'
+         WHERE reconcile_generation_id = ?
+      `).run(binding.reconcileGenerationId)
+    }, /PENDING_RECONCILIATION_COMPLETION_MALFORMED/)
+    expect(bindingGenerationRow(db, binding.reconcileGenerationId)).toMatchObject({
+      status: 'pending', completed_at: null, completed_by: null, closed_at: null, closed_by: null,
+    })
+  })
+
+  it('rejects pending→complete with missing completion shape (zero write)', () => {
+    const { binding } = seedPendingMonthP1('p1b-complete-shape')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE account_reconcile_generations SET status = 'complete'
+         WHERE reconcile_generation_id = ?
+      `).run(binding.reconcileGenerationId)
+    }, /PENDING_RECONCILIATION_COMPLETION_MALFORMED/)
+    expect(bindingGenerationRow(db, binding.reconcileGenerationId)).toMatchObject({ status: 'pending' })
+  })
+
+  it('rejects is_current flip to 0 together with complete on a pending generation (zero write)', () => {
+    const { binding } = seedPendingMonthP1('p1b-complete-not-current')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', is_current = 0,
+               completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001',
+               completion_artifact_json = '{"supplements":[]}', completion_artifact_hash = 'h'
+         WHERE reconcile_generation_id = ?
+      `).run(binding.reconcileGenerationId)
+    }, /PENDING_RECONCILIATION_COMPLETION_MALFORMED/)
+    expect(bindingGenerationRow(db, binding.reconcileGenerationId)).toMatchObject({
+      status: 'pending', is_current: 1,
+    })
+  })
+
+  it('rejects closing a malformed complete generation lacking evidence, while legal lifecycle close stays green', () => {
+    // A 修正：在独立 probe 上先摘 pending guard 造「缺 evidence 的 malformed complete」
+    //（应用流不可能产出），complete_finality 基于 OLD completion shape 拒绝其 close；
+    // legal lifecycle close（OLD evidence 完整）在独立对照例保绿。判别只看 OLD 行形状，
+    // 不区分 direct SQL/应用流。必须用私有 probe 而非共享 db：production 启动扫描会对
+    // malformed current-shape complete fail-closed，共享库残留脏行会污染后续全部用例。
+    const binding = seedSource({ name: 'p1b-malformed-close', lisCount: 2 })
+    lifecycle.computeAccountReconciliation(db, binding, 'USER-001')
+    const probe = vacuumProbeP1('p1b-malformed-close')
+    try {
+      probe.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_pending_state_guard')
+      probe.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001'
+         WHERE reconcile_generation_id = ?
+      `).run(binding.reconcileGenerationId)
+      expectDatabaseMutationBlocked(probe, () => {
+        probe.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = 'attacker'
+           WHERE reconcile_generation_id = ?
+        `).run(binding.reconcileGenerationId)
+      }, /COMPLETE_RECONCILIATION_CLOSE_MALFORMED/)
+      expect(bindingGenerationRow(probe, binding.reconcileGenerationId)).toMatchObject({
+        status: 'complete', closed_at: null, closed_by: null,
+        completion_artifact_json: null, completion_artifact_hash: null,
+      })
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('keeps the legal complete→close lifecycle chain green through the tightened finality guards', () => {
+    const binding = seedSource({ name: 'p1b-legal-close', lisCount: 2 })
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const hospitalMonthId = String(snapshot.hospitalMonthId)
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(hospitalMonthId) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db, binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+    lifecycle.closeAccountReconciliation(db, binding, 'USER-001')
+    expect(bindingGenerationRow(db, binding.reconcileGenerationId)).toMatchObject({
+      status: 'closed', is_current: 1,
+    })
+  })
+
+  it('fails closed at first boot and a real restart on the SAME unrepaired malformed current-shape database, then repairs', () => {
+    // A 修正：first upgrade throw → 关闭连接 → 重开同一未修脏库 → 再次 throw → 最后才 repair。
+    // 先 DROP guard 造历史 malformed complete（列先存、evidence 缺失）。
+    const fixture = seedPendingMonthP1('p1b-scan-malformed')
+    const probePath = join(testDirectory, `p1b-scan-malformed-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      // 先由真实 service 写入 verdict（differences 全部复核是真实 complete 的前置），
+      // 再摘 guard 造历史 malformed complete（列先存、evidence 缺失）。
+      const diff = seed.prepare(
+        'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+      ).get(fixture.hospitalMonthId) as { id: string }
+      lifecycle.setAccountReconciliationVerdict(
+        seed as any, fixture.binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+      )
+      seed.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_pending_state_guard')
+      seed.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_complete_finality')
+      seed.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001'
+         WHERE reconcile_generation_id = ?
+      `).run(fixture.binding.reconcileGenerationId)
+    } finally {
+      seed.close()
+    }
+    // 首启 fail-closed（同一未修脏库）
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first))
+        .toThrow(/RECONCILE_GENERATION_COMPLETION_MALFORMED:/)
+    } finally {
+      first.close()
+    }
+    // 真实重启：重开同一未修脏库，仍 fail-closed（脏行未被修复）
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second))
+        .toThrow(/RECONCILE_GENERATION_COMPLETION_MALFORMED:/)
+    } finally {
+      second.close()
+    }
+    // 最后才 repair：回退 pending 后由真实 lifecycle complete 产出真实自洽的
+    // account-reconciliation-completion/v1 artifact + 匹配 sha256 hash（禁 dummy evidence）。
+    const repair = openRegisteredTestDatabase(probePath)
+    try {
+      repair.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_pending_state_guard')
+      repair.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_complete_finality')
+      repair.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'pending', completed_at = NULL, completed_by = NULL
+         WHERE reconcile_generation_id = ?
+      `).run(fixture.binding.reconcileGenerationId)
+      lifecycle.completeAccountReconciliation(repair as any, fixture.binding, 'USER-001')
+      const repaired = repair.prepare(`
+        SELECT completion_artifact_json AS json, completion_artifact_hash AS hash
+          FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as { json: string; hash: string }
+      expect(repaired.json).toContain('account-reconciliation-completion/v1')
+      expect(repaired.hash).toBe(
+        `sha256:${createHash('sha256').update(repaired.json).digest('hex')}`,
+      )
+      expect(() => manager.upgradeAccountReconciliationSchema(repair)).not.toThrow()
+    } finally {
+      repair.close()
+    }
+  })
+
+  it('writes a durable hash-consistent legacy-missing-artifact sentinel for a real predecessor complete row, staying green across a second boot while close/replay stay fail-closed', () => {
+    // A durable：真 predecessor 缺 completion_artifact_json/hash 两列时，既存 complete 行属
+    // 受支持旧形状。首启须写入持久、可审计、hash 自洽的 legacy-missing-artifact sentinel
+    //（生产实现），断言首启绿、真实第二启（关闭重开）仍绿；service close/replay 对 sentinel
+    // 行仍 fail-closed（409 精确码）。修复前无 sentinel 机制，本例必红。
+    const fixture = seedPendingMonthP1('p1b-predecessor')
+    const probePath = join(testDirectory, `p1b-predecessor-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    let replayDiffId: string
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      // 先由真实 service 写入一个 verdict，作为后续 exact replay 的输入；
+      // 再人为制造 predecessor complete（真缺两列）。
+      const diff = seed.prepare(
+        'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+      ).get(fixture.hospitalMonthId) as { id: string }
+      replayDiffId = diff.id
+      lifecycle.setAccountReconciliationVerdict(
+        seed as any, fixture.binding, replayDiffId, '核对无误', null, 'USER-001', 'admin',
+      )
+      seed.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_pending_state_guard')
+      seed.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_complete_finality')
+      seed.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001'
+         WHERE reconcile_generation_id = ?
+      `).run(fixture.binding.reconcileGenerationId)
+      dropReferencingTriggers(seed, 'account_reconcile_generations')
+      seed.exec('ALTER TABLE account_reconcile_generations DROP COLUMN completion_artifact_json')
+      seed.exec('ALTER TABLE account_reconcile_generations DROP COLUMN completion_artifact_hash')
+      expectGenerationsConstraintsIntact(seed)
+    } finally {
+      seed.close()
+    }
+    // 首启：补列 + 写 sentinel（持久）→ 绿
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first)).not.toThrow()
+      const sentinel = first.prepare(`
+        SELECT completion_artifact_json AS json, completion_artifact_hash AS hash
+          FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as { json: unknown; hash: unknown }
+      // sentinel 持久且 hash 自洽：非 NULL、含 legacy-missing-artifact 标记，
+      // hash 精确等于 sha256:<createHash('sha256').update(json).digest('hex')>（禁格式 regex 兜底）。
+      expect(typeof sentinel.json).toBe('string')
+      expect(String(sentinel.json)).toContain('legacy-missing-artifact')
+      const expectedDigest = createHash('sha256').update(String(sentinel.json)).digest('hex')
+      expect(String(sentinel.hash)).toBe(`sha256:${expectedDigest}`)
+    } finally {
+      first.close()
+    }
+    // 真实第二启：关闭重开同一库仍绿（sentinel 持久，不首启放行次启自锁）
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second)).not.toThrow()
+    } finally {
+      second.close()
+    }
+    // close/replay 对 sentinel 行仍 fail-closed（精确错误，无任意异常兜底）：
+    // sentinel 非真实 evidence——close 重算 artifact 与 sentinel 不等 → 409 DECISION_SET_CHANGED；
+    // 用 seed 阶段真实写入的 verdict 做 exact replay，sentinel artifact 的 decisions 集
+    // 与该 verdict 不符 → 409 VERDICT_REPLAY_STATE_MISMATCH。
+    const third = openRegisteredTestDatabase(probePath)
+    try {
+      manager.upgradeAccountReconciliationSchema(third)
+      expectLifecycle409(
+        () => lifecycle.closeAccountReconciliation(third as any, fixture.binding, 'USER-001'),
+        'DECISION_SET_CHANGED',
+      )
+      expectLifecycle409(
+        () => lifecycle.setAccountReconciliationVerdict(
+          third as any, fixture.binding, replayDiffId, '核对无误', null, 'USER-001', 'admin',
+        ),
+        'VERDICT_REPLAY_STATE_MISMATCH',
+      )
+    } finally {
+      third.close()
+    }
+  })
+
+  // ── P1-C immutable_fact NULL 三值旁路 ────────────────────────────────────
+
+  it('rejects NULL→value drift on statement_artifact_hash via NULL-safe compare (real predecessor)', () => {
+    // B：真 predecessor 用纯 ALTER DROP COLUMN（摘引用 trigger 后），断言 CHECK/UNIQUE/FK/索引
+    // 仍在；由 ensureDatabaseColumn 加回 nullable 列（既存行该列 NULL）→ NULL→value 拒。
+    const fixture = seedPendingMonthP1('p1c-null-drift')
+    const probe = vacuumProbeP1('p1c-null-drift')
+    try {
+      dropReferencingTriggers(probe, 'account_reconcile_generations')
+      // P1 真有效性扫描下，probe 拷贝里其他用例积累的 complete/closed 行在列 drop 后会
+      // 形成「artifact.statementArtifactHash ≠ 行 NULL」的真实 drift——本例测 immutable_fact
+      // 行为而非 completion 扫描：先把这些行隔离为 pending 形状（清 completion/close 字段），
+      // 使列迁移只作用于形状一致的行（主控裁定：不弱化 validator，隔离 fixture）。
+      probe.exec(`
+        UPDATE account_reconcile_generations
+           SET status = 'pending', completed_at = NULL, completed_by = NULL,
+               closed_at = NULL, closed_by = NULL,
+               completion_artifact_json = NULL, completion_artifact_hash = NULL
+         WHERE status IN ('complete', 'closed')
+      `)
+      probe.exec('ALTER TABLE account_reconcile_generations DROP COLUMN statement_artifact_hash')
+      expectGenerationsConstraintsIntact(probe)
+      manager.upgradeAccountReconciliationSchema(probe) // 加回 nullable 列 + 重装权威 trigger
+      const col = probe.prepare(`
+        SELECT statement_artifact_hash FROM account_reconcile_generations
+         WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as { statement_artifact_hash: unknown }
+      expect(col.statement_artifact_hash).toBeNull()
+      expectDatabaseMutationBlocked(probe, () => {
+        probe.prepare(`
+          UPDATE account_reconcile_generations SET statement_artifact_hash = 'sha256:attacker'
+           WHERE reconcile_generation_id = ?
+        `).run(fixture.binding.reconcileGenerationId)
+      }, /IMMUTABLE_RECONCILIATION_FACT/)
+      expect(probe.prepare(`
+        SELECT statement_artifact_hash FROM account_reconcile_generations
+         WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId)).toEqual({ statement_artifact_hash: null })
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('rejects value→NULL drift on statement_artifact_hash via NULL-safe compare (fresh non-NULL row)', () => {
+    // C：完整精确 DDL 重建使 statement_artifact_hash nullable 且保留非 NULL 值，保留
+    // CHECK/UNIQUE/FK并重建/断言索引；upgrade 装 trigger 后测 value→NULL（禁 NOT NULL 代打）。
+    const fixture = seedPendingMonthP1('p1c-value-to-null')
+    const probe = vacuumProbeP1('p1c-value-to-null')
+    try {
+      rebuildGenerationsNullableArtifactHashFullDdl(probe)
+      expectGenerationsConstraintsIntact(probe)
+      manager.upgradeAccountReconciliationSchema(probe) // 重装权威 trigger（含 immutable_fact）
+      const before = probe.prepare(`
+        SELECT statement_artifact_hash FROM account_reconcile_generations
+         WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as { statement_artifact_hash: unknown }
+      expect(typeof before.statement_artifact_hash).toBe('string')
+      expectDatabaseMutationBlocked(probe, () => {
+        probe.prepare(`
+          UPDATE account_reconcile_generations SET statement_artifact_hash = NULL
+           WHERE reconcile_generation_id = ?
+        `).run(fixture.binding.reconcileGenerationId)
+      }, /IMMUTABLE_RECONCILIATION_FACT/)
+      expect(probe.prepare(`
+        SELECT statement_artifact_hash FROM account_reconcile_generations
+         WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId)).toEqual(before)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('pins the authoritative immutable_fact text to NULL-safe IS NOT for all fact columns', () => {
+    const probe = vacuumProbeP1('p1c-authoritative-text')
+    try {
+      manager.upgradeAccountReconciliationSchema(probe)
+      const sql = probe.prepare(
+        `SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_account_reconcile_immutable_fact'`,
+      ).get() as { sql: string }
+      expect(sql.sql.replace(/\s+/g, ' ').trim())
+        .toBe(AUTHORITATIVE_IMMUTABLE_FACT_TEXT.replace(/\s+/g, ' ').trim())
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('keeps a legal predecessor upgrade green after NULL-safe immutable_fact reinstall (NULL stays NULL)', () => {
+    const fixture = seedPendingMonthP1('p1c-legal-predecessor')
+    const probe = vacuumProbeP1('p1c-legal-predecessor')
+    try {
+      dropReferencingTriggers(probe, 'account_reconcile_generations')
+      // 同 p1c-null-drift：先把其他用例积累的 complete/closed 行隔离为 pending 形状，
+      // 再做事例列迁移（statement_artifact_hash DROP→ensure 回 nullable）——真有效性扫描
+      // 对 drift 行 fail-closed 是正确行为，不得靠它误伤本例的「合法 predecessor」语义。
+      probe.exec(`
+        UPDATE account_reconcile_generations
+           SET status = 'pending', completed_at = NULL, completed_by = NULL,
+               closed_at = NULL, closed_by = NULL,
+               completion_artifact_json = NULL, completion_artifact_hash = NULL
+         WHERE status IN ('complete', 'closed')
+      `)
+      probe.exec('ALTER TABLE account_reconcile_generations DROP COLUMN statement_artifact_hash')
+      expectGenerationsConstraintsIntact(probe)
+      manager.upgradeAccountReconciliationSchema(probe)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe)).not.toThrow()
+      probe.prepare(`
+        UPDATE account_reconcile_generations
+           SET source_readiness_json = source_readiness_json
+         WHERE reconcile_generation_id = ?
+      `).run(fixture.binding.reconcileGenerationId)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe)).not.toThrow()
+    } finally {
+      probe.close()
+    }
+  })
+
+  // ── P1 artifact 真有效性（主控 hostile 探针永久并入）────────────────────────────
+  // 合同：有效性 = stored JSON 精确字节的 sha256 自洽 + 结构/行绑定（schemaVersion 精确、
+  // binding 四键与 hospitalMonthId/sourceReadinessHash/statementArtifactHash 逐项等于
+  // generation 行、confirmedLabRevenue finite、decisions/supplements 为数组且元素受检、
+  // id 不重复、supplement.sourceDiffId ∈ decisions）。「{}+正确 hash」等自洽伪凭证必须拒。
+  // legacy sentinel 是唯一例外且仅 startup 扫描放行（精确 well-formed）；pending→complete
+  // 与 direct SQL close 永不接受 sentinel（trigger 段 allowLegacy=0）。
+  // UDF 注册纪律：单一幂等入口由 upgrade 头部承担——本组所有 raw probe 一律先
+  // upgrade（注册 + 重装权威 trigger）再做任何写入，绝不手动注册、不旁路。
+
+  const prefixedSha256Of = (json: string) =>
+    `sha256:${createHash('sha256').update(json).digest('hex')}`
+
+  interface ArtifactForgeContext {
+    binding: Binding
+    hospitalMonthId: string
+    sourceReadinessHash: unknown
+    statementArtifactHash: unknown
+    facts: CompletionFactSet
+  }
+
+  // 事实集（主控：完成凭证必须封存当前事实集）——测试侧独立构造，与 lifecycle
+  // artifact builder 同源同序：decisions 按 case_no, line_type, id（14 键=artifact
+  // v1 形状）；supplements 按 source_diff_id, id（8 键，service_month→settlementMonth）；
+  // confirmedLabRevenue 权威=reconcile_hospital_months.confirmed_lab_revenue。
+  interface CompletionFactSet {
+    confirmedLabRevenue: unknown
+    decisions: Array<Record<string, unknown>>
+    supplements: Array<Record<string, unknown>>
+  }
+
+  function readCurrentFactsP1(
+    connection: DatabaseSync,
+    hospitalMonthId: string,
+    generationId: string,
+  ): CompletionFactSet {
+    const month = connection.prepare(`
+      SELECT confirmed_lab_revenue AS confirmedLabRevenue
+        FROM reconcile_hospital_months WHERE id = ?
+    `).get(hospitalMonthId) as { confirmedLabRevenue: unknown } | undefined
+    const decisions = (connection.prepare(`
+      SELECT id, partner_id, service_month, case_no, line_type, bill_count, lis_count,
+             delta, amount_impact, verdict, verdict_reason, verdict_by, verdict_at, follow_up
+        FROM reconcile_diffs
+       WHERE hospital_month_id = ? AND reconcile_generation_id = ?
+       ORDER BY case_no, line_type, id
+    `).all(hospitalMonthId, generationId) as Array<Record<string, unknown>>)
+      .map(row => ({
+        id: row.id,
+        partnerId: row.partner_id,
+        serviceMonth: row.service_month,
+        caseNo: row.case_no,
+        lineType: row.line_type,
+        billCount: row.bill_count,
+        lisCount: row.lis_count,
+        delta: row.delta,
+        amountImpact: row.amount_impact,
+        verdict: row.verdict,
+        verdictReason: row.verdict_reason,
+        verdictBy: row.verdict_by,
+        verdictAt: row.verdict_at,
+        followUp: row.follow_up,
+      }))
+    const supplements = (connection.prepare(`
+      SELECT supplement.id, supplement.source_diff_id, supplement.partner_id,
+             supplement.service_month, supplement.case_no, supplement.amount,
+             supplement.case_count, supplement.submitted_by
+        FROM supplement_orders supplement
+        JOIN reconcile_diffs decision ON decision.id = supplement.source_diff_id
+       WHERE decision.hospital_month_id = ?
+         AND supplement.reconcile_generation_id = ?
+         AND decision.reconcile_generation_id = ?
+       ORDER BY supplement.source_diff_id, supplement.id
+    `).all(hospitalMonthId, generationId, generationId) as Array<Record<string, unknown>>)
+      .map(row => ({
+        id: row.id,
+        sourceDiffId: row.source_diff_id,
+        partnerId: row.partner_id,
+        settlementMonth: row.service_month,
+        caseNo: row.case_no,
+        amount: row.amount,
+        caseCount: row.case_count,
+        submittedBy: row.submitted_by,
+      }))
+    return { confirmedLabRevenue: month?.confirmedLabRevenue, decisions, supplements }
+  }
+
+  function artifactForgeContext(
+    connection: DatabaseSync,
+    fixture: { binding: Binding; hospitalMonthId: string; facts?: CompletionFactSet },
+  ): ArtifactForgeContext {
+    const row = connection.prepare(`
+      SELECT source_readiness_hash AS sourceReadinessHash,
+             statement_artifact_hash AS statementArtifactHash
+        FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+    `).get(fixture.binding.reconcileGenerationId) as {
+      sourceReadinessHash: unknown
+      statementArtifactHash: unknown
+    }
+    return {
+      binding: fixture.binding,
+      hospitalMonthId: fixture.hospitalMonthId,
+      sourceReadinessHash: row.sourceReadinessHash,
+      statementArtifactHash: row.statementArtifactHash,
+      facts: fixture.facts ?? readCurrentFactsP1(
+        connection, fixture.hospitalMonthId, fixture.binding.reconcileGenerationId,
+      ),
+    }
+  }
+
+  // 真 artifact 事实基准：在一次性 probe 上走真实 lifecycle complete，读回 stored
+  // artifact 的事实三件套（confirmedLabRevenue/decisions/supplements）——伪造基准与
+  // builder 输出逐字节同形，单字段变异即最小事实漂移（结构/绑定/hash 恒合法，
+  // 保证 RED 只可能是「事实集未比对」而不是形状巧合）。
+  function realArtifactFactsP1(
+    fixture: { binding: Binding; hospitalMonthId: string },
+    label: string,
+  ): CompletionFactSet {
+    const probePath = join(testDirectory, `${label}-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const probe = openRegisteredTestDatabase(probePath)
+    try {
+      manager.upgradeAccountReconciliationSchema(probe)
+      lifecycle.completeAccountReconciliation(probe as any, fixture.binding, 'USER-001')
+      const stored = probe.prepare(`
+        SELECT completion_artifact_json AS json
+          FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as { json: string }
+      const parsed = JSON.parse(stored.json) as Record<string, unknown>
+      return {
+        confirmedLabRevenue: parsed.confirmedLabRevenue,
+        decisions: parsed.decisions as Array<Record<string, unknown>>,
+        supplements: parsed.supplements as Array<Record<string, unknown>>,
+      }
+    } finally {
+      probe.close()
+    }
+  }
+
+  // 结构合法（可定向变异）的 v1 伪凭证：默认逐项绑定真实行值，decisions/supplements 空数组。
+  function forgedV1ArtifactJson(
+    context: ArtifactForgeContext,
+    overrides: Record<string, unknown> = {},
+  ): string {
+    return JSON.stringify({
+      schemaVersion: 'account-reconciliation-completion/v1',
+      binding: {
+        partnerId: context.binding.partnerId,
+        settlementMonth: context.binding.settlementMonth,
+        statementGenerationId: context.binding.statementGenerationId,
+        reconcileGenerationId: context.binding.reconcileGenerationId,
+      },
+      hospitalMonthId: context.hospitalMonthId,
+      sourceReadinessHash: context.sourceReadinessHash,
+      statementArtifactHash: context.statementArtifactHash,
+      confirmedLabRevenue: 0,
+      decisions: [],
+      supplements: [],
+      ...overrides,
+    })
+  }
+
+  // 结构+行绑定+hash 全合法、但事实集可定向变异的 v1 伪凭证——「空证据」攻击面：
+  // 凭证与事实集逐项比对前，结构完整、绑定正确、hash 精确的 decisions:[] 会被全通道接受。
+  function factBoundArtifactJson(
+    context: ArtifactForgeContext,
+    facts: CompletionFactSet,
+  ): string {
+    return JSON.stringify({
+      schemaVersion: 'account-reconciliation-completion/v1',
+      binding: {
+        partnerId: context.binding.partnerId,
+        settlementMonth: context.binding.settlementMonth,
+        statementGenerationId: context.binding.statementGenerationId,
+        reconcileGenerationId: context.binding.reconcileGenerationId,
+      },
+      hospitalMonthId: context.hospitalMonthId,
+      sourceReadinessHash: context.sourceReadinessHash,
+      statementArtifactHash: context.statementArtifactHash,
+      confirmedLabRevenue: facts.confirmedLabRevenue,
+      decisions: facts.decisions,
+      supplements: facts.supplements,
+    })
+  }
+
+  // 事实集丰富 fixture：同院同月 2 条 diff——case A 漏收（bill 1 vs lis 2，认定
+  // 「漏收，需补收」驱动一张补收单入 facts.supplements）、case B 计费差异
+  // （bill 2 vs lis 0，认定「核对无误」）；generation 保持 pending，供「缺/改/多事实」
+  // 单变量伪造提供非空 decisions 与 supplements 基准。批申报数在 INSERT 时即写实（2/2）——
+  // posted 批次由 IMMUTABLE_IMPORT_FACT 冻结，事后 UPDATE 计数会被拒。
+  function seedFactRichMonthP1(name: string) {
+    const month = '2026-08'
+    const suffix = `${name}-${++sequence}`
+    const partnerId = `PT-LOC005-R2-${suffix}`
+    const statementGenerationId = `STMT-LOC005-R2-${suffix}`
+    const reconcileGenerationId = `RECON-LOC005-R2-${suffix}`
+    const batchId = `BATCH-LOC005-R2-${suffix}`
+    const caseNoA = `CASE-LOC005-R2-${suffix}-A`
+    const caseNoB = `CASE-LOC005-R2-${suffix}-B`
+    db.prepare('INSERT INTO partners (id, code, name, status) VALUES (?, ?, ?, 1)')
+      .run(partnerId, `CODE-${suffix}`, `Partner ${suffix}`)
+    db.prepare(`
+      INSERT INTO statement_import_batches
+        (id, partner_id, source_hash, template_family, parser_revision, config_revision,
+         settlement_month, generation_id, is_current, raw_row_count, normalized_line_count, status)
+      VALUES (?, ?, ?, 'loc005-r2-test', 'r1', 'c1', ?, ?, 1, 2, 2, 'posted')
+    `).run(batchId, partnerId, `HASH-${suffix}`, month, statementGenerationId)
+    const insertRaw = db.prepare(`
+      INSERT INTO statement_raw_rows
+        (id, batch_id, generation_id, source_sheet, source_row, row_json)
+      VALUES (?, ?, ?, 'sheet', ?, ?)
+    `)
+    insertRaw.run(`RAW-${suffix}-A`, batchId, statementGenerationId, 1, JSON.stringify({ caseNo: caseNoA, amount: 100 }))
+    insertRaw.run(`RAW-${suffix}-B`, batchId, statementGenerationId, 2, JSON.stringify({ caseNo: caseNoB, amount: 200 }))
+    const insertLine = db.prepare(`
+      INSERT INTO statement_normalized_lines
+        (id, batch_id, generation_id, partner_id, settlement_month, ledger_settlement_month,
+         case_no, item_name, source_sheet, source_row, source_column, source_label,
+         template_family, row_kind, line_grain, business_line, amount_role, amount,
+         classification_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sheet', ?, 'amount', ?,
+              'loc005-r2-test', 'detail', 'case', 'IN', 'gross', ?, 'classified')
+    `)
+    insertLine.run(
+      `LINE-${suffix}-A`, batchId, statementGenerationId, partnerId, month, month,
+      caseNoA, '免疫组化染色*1', 1, '免疫组化染色*1', 100,
+    )
+    insertLine.run(
+      `LINE-${suffix}-B`, batchId, statementGenerationId, partnerId, month, month,
+      caseNoB, '免疫组化染色*2', 2, '免疫组化染色*2', 200,
+    )
+    const insertLis = db.prepare(`
+      INSERT INTO lis_cases
+        (id, case_no, partner_id, ihc_count, special_stain_count, operate_time)
+      VALUES (?, ?, ?, ?, 0, ?)
+    `)
+    insertLis.run(`LIS-${suffix}-A`, caseNoA, partnerId, 2, `${month}-15`)
+    insertLis.run(`LIS-${suffix}-B`, caseNoB, partnerId, 0, `${month}-16`)
+    const insertRevenue = db.prepare(`
+      INSERT INTO case_revenue
+        (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'statement')
+    `)
+    insertRevenue.run(`REV-${suffix}-A`, caseNoA, partnerId, month, 100, 100, 100)
+    insertRevenue.run(`REV-${suffix}-B`, caseNoB, partnerId, month, 200, 200, 200)
+    const binding: Binding = { partnerId, settlementMonth: month, statementGenerationId, reconcileGenerationId }
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const hospitalMonthId = String(snapshot.hospitalMonthId)
+    const diffs = db.prepare(`
+      SELECT id, case_no FROM reconcile_diffs
+       WHERE hospital_month_id = ? ORDER BY case_no
+    `).all(hospitalMonthId) as Array<{ id: string; case_no: string }>
+    expect(diffs).toHaveLength(2)
+    for (const diff of diffs) {
+      lifecycle.setAccountReconciliationVerdict(
+        db,
+        binding,
+        diff.id,
+        diff.case_no === caseNoA ? '漏收，需补收' : '核对无误',
+        null,
+        'USER-001',
+        'admin',
+      )
+    }
+    const sqlFacts = readCurrentFactsP1(db, hospitalMonthId, binding.reconcileGenerationId)
+    expect(sqlFacts.decisions).toHaveLength(2)
+    expect(sqlFacts.supplements).toHaveLength(1)
+    // 事实基准 = 真实 builder 产物（独立 probe 上 complete 一次，共享库保持 pending 不受污染）
+    const facts = realArtifactFactsP1({ binding, hospitalMonthId }, `${name}-facts`)
+    expect(facts.decisions).toHaveLength(2)
+    expect(facts.supplements).toHaveLength(1)
+    return { binding, hospitalMonthId, facts }
+  }
+
+  // 造一行 current-shape complete（artifact 由 forge 给出）→ 首启 fail-closed
+  // RECONCILE_GENERATION_COMPLETION_MALFORMED:<id> → 关连接真实重启同一未修库仍同码 →
+  // 伪造行零持久修复（json/hash 原样仍在）。
+  function expectArtifactBootForgeryRejected(
+    label: string,
+    forge: (context: ArtifactForgeContext) => { json: string; hash: string },
+    seedFixture: (
+      name: string,
+    ) => { binding: Binding; hospitalMonthId: string; facts?: CompletionFactSet } = seedPendingMonthP1,
+  ): void {
+    const fixture = seedFixture(label)
+    const probePath = join(testDirectory, `${label}-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    let forgedJson = ''
+    let forgedHash = ''
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      const forged = forge(artifactForgeContext(seed, fixture))
+      forgedJson = forged.json
+      forgedHash = forged.hash
+      dropReferencingTriggers(seed, 'account_reconcile_generations')
+      seed.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001',
+               completion_artifact_json = ?, completion_artifact_hash = ?
+         WHERE reconcile_generation_id = ?
+      `).run(forged.json, forged.hash, fixture.binding.reconcileGenerationId)
+    } finally {
+      seed.close()
+    }
+    const expected = new RegExp(
+      `RECONCILE_GENERATION_COMPLETION_MALFORMED:${fixture.binding.reconcileGenerationId}`,
+    )
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first)).toThrow(expected)
+    } finally {
+      first.close()
+    }
+    // 真实重启：关闭重开同一未修库，仍 fail-closed 同码，且伪造行零持久修复
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second)).toThrow(expected)
+      const persisted = second.prepare(`
+        SELECT completion_artifact_json AS json, completion_artifact_hash AS hash
+          FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as { json: string; hash: string }
+      expect(persisted).toEqual({ json: forgedJson, hash: forgedHash })
+    } finally {
+      second.close()
+    }
+  }
+
+  it('rejects a well-hashed empty-object artifact at first boot and a real restart', () => {
+    expectArtifactBootForgeryRejected('p1v-empty-object', () => ({
+      json: '{}',
+      hash: prefixedSha256Of('{}'),
+    }))
+  })
+
+  it('rejects an unparseable artifact whose hash matches its exact stored bytes', () => {
+    const broken = '{"schemaVersion":"account-reconciliation-completion/v1",'
+    expectArtifactBootForgeryRejected('p1v-unparseable', () => ({
+      json: broken,
+      hash: prefixedSha256Of(broken),
+    }))
+  })
+
+  it('rejects a structurally row-bound v1 artifact whose hash does not match', () => {
+    expectArtifactBootForgeryRejected('p1v-hash-mismatch', context => ({
+      json: forgedV1ArtifactJson(context),
+      hash: `sha256:${'0'.repeat(64)}`,
+    }))
+  })
+
+  it('rejects a well-hashed v1 artifact with a forged binding', () => {
+    expectArtifactBootForgeryRejected('p1v-wrong-binding', context => {
+      const json = forgedV1ArtifactJson(context, {
+        binding: {
+          partnerId: 'PT-FORGED',
+          settlementMonth: context.binding.settlementMonth,
+          statementGenerationId: context.binding.statementGenerationId,
+          reconcileGenerationId: context.binding.reconcileGenerationId,
+        },
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  it('rejects a well-hashed artifact with a wrong schemaVersion', () => {
+    expectArtifactBootForgeryRejected('p1v-wrong-schema', context => {
+      const json = forgedV1ArtifactJson(context, {
+        schemaVersion: 'account-reconciliation-completion/v2',
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  it('rejects a well-hashed v1 artifact with a forged sourceReadinessHash', () => {
+    expectArtifactBootForgeryRejected('p1v-wrong-source-hash', context => {
+      const json = forgedV1ArtifactJson(context, {
+        sourceReadinessHash: 'sha256:forged-source-readiness',
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  it('rejects a well-hashed v1 artifact with a forged statementArtifactHash', () => {
+    expectArtifactBootForgeryRejected('p1v-wrong-statement-hash', context => {
+      const json = forgedV1ArtifactJson(context, {
+        statementArtifactHash: 'sha256:forged-statement-artifact',
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  it('rejects a well-hashed v1 artifact with a non-finite (null) confirmedLabRevenue', () => {
+    expectArtifactBootForgeryRejected('p1v-null-revenue', context => {
+      const json = forgedV1ArtifactJson(context, { confirmedLabRevenue: null })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  it('rejects a well-hashed v1 artifact with non-array decisions', () => {
+    expectArtifactBootForgeryRejected('p1v-nonarray-decisions', context => {
+      const json = forgedV1ArtifactJson(context, { decisions: {} })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  it('rejects a well-hashed v1 artifact whose decision identity drifts from the generation', () => {
+    expectArtifactBootForgeryRejected('p1v-decision-identity', context => {
+      const json = forgedV1ArtifactJson(context, {
+        decisions: [{
+          id: 'diff-forged',
+          partnerId: 'PT-FORGED',
+          serviceMonth: context.binding.settlementMonth,
+          caseNo: 'CASE-X',
+          lineType: '免疫组化',
+          billCount: 1,
+          lisCount: 2,
+          delta: -1,
+          amountImpact: -100,
+          verdict: '核对无误',
+          verdictReason: null,
+          verdictBy: 'USER-001',
+          verdictAt: '2026-08-01 00:00:00',
+          followUp: null,
+        }],
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  it('rejects a well-hashed v1 artifact whose supplement points outside decisions', () => {
+    expectArtifactBootForgeryRejected('p1v-supplement-dangling', context => {
+      const json = forgedV1ArtifactJson(context, {
+        supplements: [{
+          id: 'so-forged',
+          sourceDiffId: 'diff-not-in-decisions',
+          partnerId: context.binding.partnerId,
+          settlementMonth: context.binding.settlementMonth,
+          caseNo: 'CASE-X',
+          amount: 100,
+          caseCount: 1,
+          submittedBy: 'USER-001',
+        }],
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  it('rejects a well-hashed sentinel with a wrong reason even at startup (allowLegacy path)', () => {
+    expectArtifactBootForgeryRejected('p1v-sentinel-reason', context => {
+      const json = JSON.stringify({
+        schemaVersion: 'account-reconciliation-completion/legacy-sentinel-v1',
+        marker: 'legacy-missing-artifact',
+        reconcileGenerationId: context.binding.reconcileGenerationId,
+        reason: 'forged reason',
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  it('rejects a well-hashed sentinel carrying an extra field even at startup', () => {
+    expectArtifactBootForgeryRejected('p1v-sentinel-extra', context => {
+      const json = JSON.stringify({
+        schemaVersion: 'account-reconciliation-completion/legacy-sentinel-v1',
+        marker: 'legacy-missing-artifact',
+        reconcileGenerationId: context.binding.reconcileGenerationId,
+        reason: 'predecessor schema had no completion artifact columns; original artifact is unrecoverable',
+        extra: true,
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  // ── P1 事实集封存（主控：完成凭证必须封存当前事实集）────────────────────────────
+  // 结构+行绑定+hash 全合法但事实集漂移的伪凭证，startup/pending→complete/direct close
+  // 三通道一律拒绝：空证据（decisions:[]）、缺/篡改一条 decision、缺/多一条 supplement、
+  // confirmedLabRevenue ≠ reconcile_hospital_months.confirmed_lab_revenue。
+  // 真实 lifecycle artifact（p1v-real-artifact）是两通道正向对照，须保持绿。
+
+  it('rejects a well-hashed fully-bound artifact whose decisions omit the current fact set (empty evidence)', () => {
+    expectArtifactBootForgeryRejected('p1f-empty-decisions', context => {
+      // 空证据：decisions/supplements 双空 + 真实 revenue——结构与行绑定完全自洽，
+      // 只有事实集比对能拒（主控 hostile 探针原型形状）。
+      const json = factBoundArtifactJson(context, {
+        ...context.facts,
+        decisions: [],
+        supplements: [],
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    }, seedFactRichMonthP1)
+  })
+
+  it('rejects a well-hashed fully-bound artifact missing one current decision', () => {
+    expectArtifactBootForgeryRejected('p1f-missing-decision', context => {
+      // 缺 case B 一条 decision；保留带补收单的 case A 使 supplements 内部一致——
+      // 结构/谱系自洽，只有「decisions ≠ 当前事实集」能拒。
+      const json = factBoundArtifactJson(context, {
+        ...context.facts,
+        decisions: context.facts.decisions.slice(0, 1),
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    }, seedFactRichMonthP1)
+  })
+
+  it('rejects a well-hashed fully-bound artifact with one altered decision field', () => {
+    expectArtifactBootForgeryRejected('p1f-altered-decision', context => {
+      const decisions = context.facts.decisions.map((decision, index) =>
+        index === 0 ? { ...decision, delta: Number(decision.delta) + 1 } : decision)
+      const json = factBoundArtifactJson(context, { ...context.facts, decisions })
+      return { json, hash: prefixedSha256Of(json) }
+    }, seedFactRichMonthP1)
+  })
+
+  it('rejects a well-hashed fully-bound artifact whose supplements omit the current one', () => {
+    expectArtifactBootForgeryRejected('p1f-missing-supplement', context => {
+      const json = factBoundArtifactJson(context, { ...context.facts, supplements: [] })
+      return { json, hash: prefixedSha256Of(json) }
+    }, seedFactRichMonthP1)
+  })
+
+  it('rejects a well-hashed fully-bound artifact carrying an extra forged supplement', () => {
+    expectArtifactBootForgeryRejected('p1f-extra-supplement', context => {
+      const real = context.facts.supplements[0] as Record<string, unknown>
+      // 结构合法（sourceDiffId ∈ decisions、id 不重复、partner/月一致）但事实集不存在的补收单
+      const forged = { ...real, id: `${String(real.id)}-forged` }
+      const json = factBoundArtifactJson(context, {
+        ...context.facts,
+        supplements: [...context.facts.supplements, forged],
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    }, seedFactRichMonthP1)
+  })
+
+  it('rejects a well-hashed fully-bound artifact whose confirmedLabRevenue drifts from the hospital month', () => {
+    expectArtifactBootForgeryRejected('p1f-revenue-drift', context => {
+      const json = factBoundArtifactJson(context, {
+        ...context.facts,
+        confirmedLabRevenue: Number(context.facts.confirmedLabRevenue) + 1,
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    }, seedFactRichMonthP1)
+  })
+
+  it('rejects a forged pending→complete write carrying fully-bound empty-fact evidence with zero write', () => {
+    const fixture = seedFactRichMonthP1('p1f-forged-complete-empty')
+    const probe = vacuumProbeP1('p1f-forged-complete-empty')
+    try {
+      manager.upgradeAccountReconciliationSchema(probe) // 注册 UDF（单一入口）
+      const context = artifactForgeContext(probe, fixture)
+      const json = factBoundArtifactJson(context, {
+        ...context.facts,
+        decisions: [],
+        supplements: [],
+      })
+      expectDatabaseMutationBlocked(probe, () => {
+        probe.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001',
+                 completion_artifact_json = ?, completion_artifact_hash = ?
+           WHERE reconcile_generation_id = ?
+        `).run(json, prefixedSha256Of(json), fixture.binding.reconcileGenerationId)
+      }, /PENDING_RECONCILIATION_COMPLETION_MALFORMED/)
+      expect(bindingGenerationRow(probe, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'pending',
+        completed_at: null,
+        completed_by: null,
+        completion_artifact_json: null,
+        completion_artifact_hash: null,
+      })
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('rejects a direct SQL close on a complete row carrying fully-bound empty-fact evidence', () => {
+    expectDirectCloseRejectedWithCloseMalformed('p1f-close-empty', context => {
+      const json = factBoundArtifactJson(context, {
+        ...context.facts,
+        decisions: [],
+        supplements: [],
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    }, seedFactRichMonthP1)
+  })
+
+  it('rolls back the revenue prime when a fault is injected right after it (no pending+revenue intermediate state)', () => {
+    // 主控合同：prime CAS（revenue 先于 generation 写入月行）之后任一点失败，
+    // 事务必须整体回滚——generation 仍 pending、月行仍 待复核、confirmed_lab_revenue
+    // 仍 NULL、completion artifact 与 complete audit 均零写，对外不存在
+    // pending+revenue 中间态。
+    const fixture = seedPendingMonthP1('p1f-revenue-prime-rollback')
+    const diffs = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).all(fixture.hospitalMonthId) as Array<{ id: string }>
+    for (const diff of diffs) {
+      lifecycle.setAccountReconciliationVerdict(
+        db, fixture.binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+      )
+    }
+    const monthBefore = db.prepare(`
+      SELECT status, completed_at, completed_by, confirmed_lab_revenue
+        FROM reconcile_hospital_months WHERE id = ?
+    `).get(fixture.hospitalMonthId) as Record<string, unknown>
+    expect(monthBefore).toMatchObject({
+      status: '待复核',
+      completed_at: null,
+      completed_by: null,
+      confirmed_lab_revenue: null,
+    })
+    const auditBefore = Number((db.prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+       WHERE module = 'account_reconcile' AND action = 'complete_generation' AND target_id = ?
+    `).get(fixture.binding.reconcileGenerationId) as { n: number }).n)
+    let caught: unknown
+    try {
+      lifecycle.completeAccountReconciliation(
+        db, fixture.binding, 'USER-001', { at: 'afterRevenuePrime' },
+      )
+    } catch (error) {
+      caught = error
+    }
+    expect(String(caught)).toContain('INJECTED_RECONCILIATION_FAULT:afterRevenuePrime')
+    expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId)).toMatchObject({
+      status: 'pending',
+      completed_at: null,
+      completed_by: null,
+      completion_artifact_json: null,
+      completion_artifact_hash: null,
+    })
+    expect(db.prepare(`
+      SELECT status, completed_at, completed_by, confirmed_lab_revenue
+        FROM reconcile_hospital_months WHERE id = ?
+    `).get(fixture.hospitalMonthId)).toMatchObject({
+      status: '待复核',
+      completed_at: null,
+      completed_by: null,
+      confirmed_lab_revenue: null,
+    })
+    const auditAfter = Number((db.prepare(`
+      SELECT COUNT(*) AS n FROM abc_audit_logs
+       WHERE module = 'account_reconcile' AND action = 'complete_generation' AND target_id = ?
+    `).get(fixture.binding.reconcileGenerationId) as { n: number }).n)
+    expect(auditAfter).toBe(auditBefore)
+  })
+
+  it('pins confirmedLabRevenue round-trip precision beyond 15 significant digits (kills plain %.17g)', () => {
+    // 主控实证：SQLite printf('%.17g', 1.2345678901234567) = '1.234567890123457'
+    // （截断，Number 后不再等于原值）；printf('%!.17g', …) = '1.2345678901234567'
+    // （双精度 round-trip 精确）。事实 SQL 的 revenue 传输必须让 stored REAL 与
+    // artifact 数值严格 ===——17 位有效数字的月值首启与真实重启均不得被误拒，
+    // 也不得以 epsilon 近似放行。
+    const PRECISE = 1.2345678901234567
+    const fixture = seedPendingMonthP1('p1f-revenue-roundtrip')
+    const diffs = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).all(fixture.hospitalMonthId) as Array<{ id: string }>
+    for (const diff of diffs) {
+      lifecycle.setAccountReconciliationVerdict(
+        db, fixture.binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+      )
+    }
+    const probePath = join(testDirectory, `p1f-revenue-roundtrip-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      const context = artifactForgeContext(seed, fixture)
+      // pending 窗口合法写：直接 SQL 预置 17 位有效数字月值，artifact 封存同一数值
+      seed.prepare(
+        'UPDATE reconcile_hospital_months SET confirmed_lab_revenue = ? WHERE id = ?',
+      ).run(PRECISE, fixture.hospitalMonthId)
+      const json = factBoundArtifactJson(context, {
+        ...context.facts,
+        confirmedLabRevenue: PRECISE,
+      })
+      dropReferencingTriggers(seed, 'account_reconcile_generations')
+      seed.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001',
+               completion_artifact_json = ?, completion_artifact_hash = ?
+         WHERE reconcile_generation_id = ?
+      `).run(json, prefixedSha256Of(json), fixture.binding.reconcileGenerationId)
+    } finally {
+      seed.close()
+    }
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first)).not.toThrow()
+    } finally {
+      first.close()
+    }
+    // 真实重启：同一库再开仍绿（精确数值两通道一致，无修复动作）
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second)).not.toThrow()
+    } finally {
+      second.close()
+    }
+  })
+
+  it('accepts the real service completion artifact (exact stored-bytes sha256) at first boot and a real restart (raw-probe upgrade→write registration proof)', () => {
+    // 正向对照 + 注册覆盖回归：raw probe 不手动注册——upgrade 头部单一入口完成幂等注册；
+    // 随后真实 lifecycle complete 触发 pending_state_guard 真有效性段并放行（UDF 在场），
+    // artifact stored 字节 sha256 精确自洽，首启与真实重启都绿。
+    const fixture = seedPendingMonthP1('p1v-real-artifact')
+    const probePath = join(testDirectory, `p1v-real-artifact-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    // 本例是注册证明：两条连接都必须直接 new DatabaseSync（不经包装器预注册），
+    // UDF 只能来自 upgrade 头部单一入口。
+    const seed = new DatabaseSync(probePath)
+    try {
+      manager.upgradeAccountReconciliationSchema(seed) // 单一注册入口：raw 连接经 upgrade 获得 UDF
+      const diffs = seed.prepare(
+        'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+      ).all(fixture.hospitalMonthId) as Array<{ id: string }>
+      for (const diff of diffs) {
+        lifecycle.setAccountReconciliationVerdict(
+          seed as any, fixture.binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+        )
+      }
+      lifecycle.completeAccountReconciliation(seed as any, fixture.binding, 'USER-001')
+      const stored = seed.prepare(`
+        SELECT completion_artifact_json AS json, completion_artifact_hash AS hash
+          FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as { json: string; hash: string }
+      expect(stored.json).toContain('account-reconciliation-completion/v1')
+      expect(stored.hash).toBe(prefixedSha256Of(stored.json))
+      expect(() => manager.upgradeAccountReconciliationSchema(seed)).not.toThrow()
+    } finally {
+      seed.close()
+    }
+    // 真实重启：同样直接 new DatabaseSync（不经包装器），靠 upgrade 头部注册
+    const second = new DatabaseSync(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second)).not.toThrow()
+    } finally {
+      second.close()
+    }
+  })
+
+  it('rejects a forged pending→complete write (well-hashed {} artifact) with zero write', () => {
+    // pending_state_guard 真有效性段：伪造非空 artifact（'{}' + 正确 sha256）必须零写拒绝——
+    // 「非空/格式像 sha256」不算有效，须过结构与行绑定校验。
+    const fixture = seedPendingMonthP1('p1v-forged-complete')
+    const probe = vacuumProbeP1('p1v-forged-complete')
+    try {
+      manager.upgradeAccountReconciliationSchema(probe) // 注册 UDF（单一入口）
+      expectDatabaseMutationBlocked(probe, () => {
+        probe.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001',
+                 completion_artifact_json = '{}', completion_artifact_hash = ?
+           WHERE reconcile_generation_id = ?
+        `).run(prefixedSha256Of('{}'), fixture.binding.reconcileGenerationId)
+      }, /PENDING_RECONCILIATION_COMPLETION_MALFORMED/)
+      expect(bindingGenerationRow(probe, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'pending',
+        completed_at: null,
+        completed_by: null,
+        completion_artifact_json: null,
+        completion_artifact_hash: null,
+      })
+    } finally {
+      probe.close()
+    }
+  })
+
+  // direct SQL close 通道：complete_finality 真有效性段对 OLD complete 的伪造/sentinel
+  // artifact 一律 CLOSE_MALFORMED 零写（allowLegacy=0——sentinel 自洽也不得通行）。
+  // forge 接收本 helper 内部 fixture 的行上下文——sentinel 的 reconcileGenerationId 与
+  // 该 complete 行完全一致，hash 按相同精确字节计算（绝非「错绑定 sentinel」）。
+  function expectDirectCloseRejectedWithCloseMalformed(
+    label: string,
+    forge: (context: ArtifactForgeContext) => { json: string; hash: string },
+    seedFixture: (
+      name: string,
+    ) => { binding: Binding; hospitalMonthId: string; facts?: CompletionFactSet } = seedPendingMonthP1,
+  ): void {
+    const fixture = seedFixture(label)
+    const probe = vacuumProbeP1(label)
+    try {
+      manager.upgradeAccountReconciliationSchema(probe) // 注册 UDF + 重装权威 trigger
+      const forged = forge(artifactForgeContext(probe, fixture))
+      dropReferencingTriggers(probe, 'account_reconcile_generations')
+      probe.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001',
+               completion_artifact_json = ?, completion_artifact_hash = ?
+         WHERE reconcile_generation_id = ?
+      `).run(forged.json, forged.hash, fixture.binding.reconcileGenerationId)
+      // 从共享库 sqlite_master 取 complete_finality 权威原文重装（零转录风险）
+      const finalitySql = (db.prepare(
+        `SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_account_reconcile_complete_finality'`,
+      ).get() as { sql: string }).sql
+      probe.exec(finalitySql)
+      expectDatabaseMutationBlocked(probe, () => {
+        probe.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = 'USER-001'
+           WHERE reconcile_generation_id = ?
+        `).run(fixture.binding.reconcileGenerationId)
+      }, /COMPLETE_RECONCILIATION_CLOSE_MALFORMED/)
+      expect(bindingGenerationRow(probe, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'complete',
+        closed_at: null,
+        closed_by: null,
+      })
+    } finally {
+      probe.close()
+    }
+  }
+
+  it('rejects a direct SQL close on a complete row carrying a forged well-hashed artifact', () => {
+    expectDirectCloseRejectedWithCloseMalformed('p1v-close-forged', () => ({
+      json: '{}',
+      hash: prefixedSha256Of('{}'),
+    }))
+  })
+
+  it('rejects a direct SQL close on a complete row carrying an exact self-consistent sentinel bound to that row', () => {
+    expectDirectCloseRejectedWithCloseMalformed('p1v-close-sentinel', context => {
+      const json = JSON.stringify({
+        schemaVersion: 'account-reconciliation-completion/legacy-sentinel-v1',
+        marker: 'legacy-missing-artifact',
+        reconcileGenerationId: context.binding.reconcileGenerationId,
+        reason: 'predecessor schema had no completion artifact columns; original artifact is unrecoverable',
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  // ── P1 partial schema 判别 ─────────────────────────────────────────────────────
+  // 受支持 predecessor 仅允许两列都原本不存在；只预存 json 或只预存 hash 都是
+  // current/partial schema drift——两个方向首启+真实重启 fail-closed 稳定精确码，
+  // 且零持久修复（ensure/回填一律不持久）。
+
+  it('fails closed on partial schema (only completion_artifact_json pre-existing) at first boot and a real restart, with zero persistent repair', () => {
+    const fixture = seedPendingMonthP1('p1s-partial-hash-missing')
+    const probePath = join(testDirectory, `p1s-partial-hash-missing-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      dropReferencingTriggers(seed, 'account_reconcile_generations')
+      seed.exec('ALTER TABLE account_reconcile_generations DROP COLUMN completion_artifact_hash')
+      expectGenerationsConstraintsIntact(seed)
+    } finally {
+      seed.close()
+    }
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first))
+        .toThrow('RECONCILE_COMPLETION_ARTIFACT_SCHEMA_PARTIAL:hash')
+    } finally {
+      first.close()
+    }
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second))
+        .toThrow('RECONCILE_COMPLETION_ARTIFACT_SCHEMA_PARTIAL:hash')
+      // 零持久修复证据：hash 列仍缺席（ensure 未持久）、json 列与行原样（无 sentinel/无改写）
+      const columns = (second.prepare('PRAGMA table_info(account_reconcile_generations)').all() as Array<{ name: string }>)
+        .map(column => column.name)
+      expect(columns).toContain('completion_artifact_json')
+      expect(columns).not.toContain('completion_artifact_hash')
+      const row = second.prepare(`
+        SELECT status, completion_artifact_json AS json
+          FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as { status: string; json: unknown }
+      expect(row).toEqual({ status: 'pending', json: null })
+    } finally {
+      second.close()
+    }
+  })
+
+  it('fails closed on partial schema (only completion_artifact_hash pre-existing) at first boot and a real restart, with zero persistent repair', () => {
+    const fixture = seedPendingMonthP1('p1s-partial-json-missing')
+    const probePath = join(testDirectory, `p1s-partial-json-missing-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      dropReferencingTriggers(seed, 'account_reconcile_generations')
+      seed.exec('ALTER TABLE account_reconcile_generations DROP COLUMN completion_artifact_json')
+      expectGenerationsConstraintsIntact(seed)
+    } finally {
+      seed.close()
+    }
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first))
+        .toThrow('RECONCILE_COMPLETION_ARTIFACT_SCHEMA_PARTIAL:json')
+    } finally {
+      first.close()
+    }
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second))
+        .toThrow('RECONCILE_COMPLETION_ARTIFACT_SCHEMA_PARTIAL:json')
+      const columns = (second.prepare('PRAGMA table_info(account_reconcile_generations)').all() as Array<{ name: string }>)
+        .map(column => column.name)
+      expect(columns).not.toContain('completion_artifact_json')
+      expect(columns).toContain('completion_artifact_hash')
+      const row = second.prepare(`
+        SELECT status, completion_artifact_hash AS hash
+          FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as { status: string; hash: unknown }
+      expect(row).toEqual({ status: 'pending', hash: null })
+    } finally {
+      second.close()
     }
   })
 })
