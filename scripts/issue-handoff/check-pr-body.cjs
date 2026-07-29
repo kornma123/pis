@@ -886,12 +886,12 @@ function isPlaceholder(value) {
 function isObviousReflectionPlaceholder(value) {
   const comparison = String(value || '')
     .trim()
-    .replace(/[ \t.,，。;；:：!?！？…、]+$/gu, '')
+    .replace(/[ \t.,，。;；:：!?！？…、/_+-]+$/gu, '')
     .trim();
   return (
     isExplicitPlaceholder(comparison) ||
-    /^(?:all|everything|nothing|anything|something)$/iu.test(comparison) ||
-    /^(?:无|不知道|全部|所有)$/u.test(comparison)
+    /^(?:all|everything|nothing|anything|something|unknown)$/iu.test(comparison) ||
+    /^(?:无|無|不知道|全部|所有)$/u.test(comparison)
   );
 }
 
@@ -922,7 +922,7 @@ function canonicalizeReflectionContract(value) {
 
   const canonical = decoded.value.normalize('NFKC').trim();
   if (!canonical) return reflectionParseFailure('empty');
-  if (/[`*~<>&[\]{}()\\]/u.test(canonical)) {
+  if (/[`*~<>[\]{}()\\]/u.test(canonical)) {
     return reflectionParseFailure('markup-or-escape');
   }
   if (Buffer.byteLength(canonical, 'utf8') > REFLECTION_CONTRACT_MAX_BYTES) {
@@ -978,7 +978,7 @@ function isValidReflectionAnchor(type, value) {
   }
   return (
     (value.match(/[\p{L}\p{N}]/gu) || []).length >= 2 &&
-    /^[\p{L}\p{N} .,'，。·/+_-]+$/u.test(value)
+    /^[\p{L}\p{N} .,'，。·/&+_-]+$/u.test(value)
   );
 }
 
@@ -1032,7 +1032,7 @@ function parseReflectionUncertainty(value) {
     hasMarkdownUnderscoreWrapper(detail) ||
     !/[\p{L}\p{N}]/u.test(detail) ||
     /[;=]/u.test(detail) ||
-    !/^[\p{L}\p{N} .,'，。!?！？/+_-]+$/u.test(detail) ||
+    !/^[\p{L}\p{N} .,'，。!?！？/&+_-]+$/u.test(detail) ||
     Buffer.byteLength(value, 'utf8') > REFLECTION_UNCERTAINTY_MAX_BYTES
   ) {
     return reflectionParseFailure('uncertainty-value');

@@ -568,6 +568,95 @@ assert.equal(
   ).reason,
   'no-finding-anchor',
 );
+const placeholderTerminalInvalidContracts = [
+  ['lowercase unknown with punctuation', 'risk-v1; anchor=id:auth; uncertainty=unknown:unknown.'],
+  ['uppercase unknown with punctuation', 'risk-v1; anchor=id:auth; uncertainty=unknown:UNKNOWN...'],
+  ['NFKC-equivalent unknown', 'risk-v1; anchor=id:auth; uncertainty=unknown:ｕｎｋｎｏｗｎ'],
+  ['numeric-entity unknown', 'risk-v1; anchor=id:auth; uncertainty=unknown:unkn&#111;wn!'],
+  ['nested-entity unknown', 'risk-v1; anchor=id:auth; uncertainty=unknown:unkn&amp;#111;wn!'],
+  ['traditional Chinese placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:無。'],
+  ['underscore-padded Chinese placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:无_'],
+  ['hyphen-padded Chinese placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:无-'],
+  ['plus-padded Chinese placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:无+'],
+  ['slash-padded unknown placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:unknown/'],
+  ['hyphen-padded unknown placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:unknown-'],
+  ['underscore-padded n/a placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:n/a_'],
+  [
+    'padded no-finding placeholders',
+    'no-finding-v1; checked=name:everything_; unchecked=name:nothing+',
+  ],
+];
+const informativeTerminalContracts = [
+  ['C++ detail remains substantive', 'risk-v1; anchor=id:auth; uncertainty=unknown:C++'],
+  ['snake_case detail remains substantive', 'risk-v1; anchor=id:auth; uncertainty=unknown:snake_case'],
+  [
+    'encoded ampersand and plus remain substantive',
+    'risk-v1; anchor=name:R&amp;D+; uncertainty=unknown:R&amp;D+',
+  ],
+  [
+    'repository path remains substantive',
+    'no-finding-v1; checked=path:scripts/foo-bar.cjs; unchecked=path:docs/bar_baz.md',
+  ],
+];
+const placeholderTerminalRegressionFailures = [];
+for (const [name, value] of placeholderTerminalInvalidContracts) {
+  const direct = parseReflectionContract(value);
+  if (direct.ok) {
+    placeholderTerminalRegressionFailures.push(`${name}: direct parser accepted placeholder`);
+  }
+  for (const [field, body] of [
+    ['least-confidence', replaceLeastConfidence(validBody, value)],
+    ['biggest-missing', replaceBiggestMissing(validBody, value)],
+  ]) {
+    scenarioCount += 1;
+    const result = validatePrBody(body);
+    if (result.ok) {
+      placeholderTerminalRegressionFailures.push(`${name}: PR ${field} accepted placeholder`);
+    }
+  }
+}
+for (const [name, value] of informativeTerminalContracts) {
+  const direct = parseReflectionContract(value);
+  if (!direct.ok) {
+    placeholderTerminalRegressionFailures.push(
+      `${name}: direct parser rejected substantive value (${direct.reason})`,
+    );
+  }
+  for (const [field, body] of [
+    ['least-confidence', replaceLeastConfidence(validBody, value)],
+    ['biggest-missing', replaceBiggestMissing(validBody, value)],
+  ]) {
+    scenarioCount += 1;
+    const result = validatePrBody(body);
+    if (!result.ok) {
+      placeholderTerminalRegressionFailures.push(
+        `${name}: PR ${field} rejected substantive value (${result.errors.join('; ')})`,
+      );
+    }
+  }
+}
+assert.deepEqual(
+  placeholderTerminalRegressionFailures,
+  [],
+  'placeholder terminal normalization must reject disguised placeholders without damaging content',
+);
+const parsedInformativeAmpersand = parseReflectionContract(
+  'risk-v1; anchor=name:R&amp;D+; uncertainty=unknown:R&amp;D+',
+);
+assert.equal(parsedInformativeAmpersand.anchor.value, 'R&D+');
+assert.equal(parsedInformativeAmpersand.uncertainty.detail, 'R&D+');
+assert.equal(
+  parseReflectionContract(
+    'risk-v1; anchor=id:auth; uncertainty=unknown:C++',
+  ).uncertainty.detail,
+  'C++',
+);
+assert.equal(
+  parseReflectionContract(
+    'risk-v1; anchor=id:auth; uncertainty=unknown:snake_case',
+  ).uncertainty.detail,
+  'snake_case',
+);
 const adjacentUnsafeRefs = parseReflectionContract(
   'no-finding-v1; checked=ref:Issue#9007199254740992; unchecked=ref:Issue#9007199254740993',
 );

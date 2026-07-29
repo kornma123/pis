@@ -50,7 +50,7 @@
 - **我现在最没把握的是什么？ / Least confidence**: risk-v1; anchor=name:支付回调; uncertainty=unverified:目标环境重试行为
 - **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: no-finding-v1; checked=path:scripts/example.cjs; unchecked=ref:Issue#81
 
-> PR / Issue 机器入口只接受共用契约 §6.1 的 `risk-v1` / `no-finding-v1` typed wire grammar，不接受旧 free-form，也不要带 Markdown/HTML 包装。ASCII mode/key/id 是 entity decode + NFKC 后的 canonical 形态；raw 与 canonical contract 都须 `<=4096` UTF-8 bytes，ref 编号按 digit string 比较，placeholder 比较会忽略连续句末标点。checker 只校验 wire shape 与 lexical anchor；名称真实性、检查是否实际执行和回答是否诚实仍须人审。最终直接面向用户的交付结尾继续使用产品大白话。
+> PR / Issue 机器入口只接受共用契约 §6.1 的 `risk-v1` / `no-finding-v1` typed wire grammar，不接受旧 free-form，也不要带 Markdown/HTML 包装。ASCII mode/key/id 是 entity decode + NFKC 后的 canonical 形态；raw 与 canonical contract 都须 `<=4096` UTF-8 bytes，ref 编号按 digit string 比较。placeholder 比较会忽略连续句末标点及 `/ _ + -` 终止填充，但保留 `C++`、`snake_case`、`R&D+` 与路径等实质内容；支持的 entity 解码后 `&` 可作为普通可见文本。checker 只校验 wire shape 与 lexical anchor；名称真实性、检查是否实际执行和回答是否诚实仍须人审。最终直接面向用户的交付结尾继续使用产品大白话。
 
 ## PM 大白话
 
