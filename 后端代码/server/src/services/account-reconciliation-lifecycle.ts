@@ -604,10 +604,13 @@ function buildCompletionArtifact(
     row.settlement_month,
     row.partner_id,
     row.settlement_month,
-  ) as { id?: string } | undefined
-  if (lineageMismatch?.id) {
+  ) as { id?: string | null } | undefined
+  // R8 P1-1：以「是否返回行」判定命中——SQLite 普通表 TEXT PRIMARY KEY 允许 NULL/''，
+  // .get() 返回 {id:NULL} 对象（行存在）但 row?.id 为假，真值判断会让漂移行不可见；
+  // 错误 id 用 <null> 占位保持可诊断。
+  if (lineageMismatch) {
     fail(
-      `supplement ${lineageMismatch.id} lineage does not match the completion fact set`,
+      `supplement ${String(lineageMismatch.id ?? '<null>')} lineage does not match the completion fact set`,
       'RECONCILIATION_LINEAGE_MISMATCH',
       409,
     )
@@ -629,10 +632,11 @@ function buildCompletionArtifact(
     row.partner_id,
     row.settlement_month,
     row.hospital_month_id,
-  ) as { id?: string } | undefined
-  if (decisionIdentityMismatch?.id) {
+  ) as { id?: string | null } | undefined
+  // R8 P1-1：行存在判定（同型同因，见上方守卫注释）。
+  if (decisionIdentityMismatch) {
     fail(
-      `decision ${decisionIdentityMismatch.id} identity does not match the completion fact set`,
+      `decision ${String(decisionIdentityMismatch.id ?? '<null>')} identity does not match the completion fact set`,
       'RECONCILIATION_LINEAGE_MISMATCH',
       409,
     )

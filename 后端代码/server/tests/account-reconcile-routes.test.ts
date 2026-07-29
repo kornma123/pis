@@ -859,4 +859,109 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
     expect(collected.status).toBe(200)
     expect(snapshot()).toMatchObject({ status: '已补收', collected_month: '2026-12' })
   })
+
+  it('collect 字段存在即严格校验原始值且先于资源状态（R8 真 strict），缺席才默认当月', async () => {
+    // R8 P1-3 路由侧：collectedMonth 仅在字段完全缺席时默认当月；字段存在时不做
+    // String()/trim() 救赎，原始值直接过 strict validator，且置于一切 DB/资源状态
+    // 查询之前——whitespace/array/object/null/'' 在 approved/已补收/未签发/不存在
+    // 四种资源状态下均稳定 400 INVALID_COLLECTED_MONTH 且零业务/审计写。
+    // 0000-01 与 9999-12 按既有合同保留合法。
+    const CM8_PARTNER = 'PT-RECON-CM8'
+    const CM8_STMT = 'stmt-recon-cm8-v1'
+    const CM8_RECON = 'recon-cm8-v1'
+    const cm8Binding = {
+      partnerId: CM8_PARTNER,
+      settlementMonth: FB_MONTH,
+      statementGenerationId: CM8_STMT,
+      reconcileGenerationId: CM8_RECON,
+    }
+    const db = await getDb()
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-CM8', 'R8严格月医院', 1)`).run(CM8_PARTNER)
+    const cm8Cases = ['D1-cm8', 'D2-cm8', 'D3-cm8', 'D4-cm8', 'D5-cm8']
+    seedStatementGeneration(db, CM8_PARTNER, FB_MONTH, CM8_STMT,
+      cm8Cases.map(caseNo => ({ caseNo, item: '免疫组化染色*1', amount: 100 })))
+    cm8Cases.forEach((caseNo, index) => {
+      db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(`l-cm8-d${index + 1}`, caseNo, CM8_PARTNER, '免疫组化染色', 1, 100, FB_MONTH)
+      db.prepare(`INSERT OR IGNORE INTO lis_cases (id, case_no, partner_id, ihc_count, special_stain_count, operate_time) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(`lc-cm8-d${index + 1}`, caseNo, CM8_PARTNER, 5, 0, `${FB_MONTH}-10`)
+    })
+
+    const computed = await auth(request(app).post('/api/v1/account-reconcile/compute').send(cm8Binding))
+    expect(computed.status).toBe(200)
+    const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(cm8Binding))
+    const cm8Diffs = wb.body.data.diffs as Array<{ id: string }>
+    expect(cm8Diffs.length).toBe(5)
+    for (const diff of cm8Diffs) {
+      const verdict = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${diff.id}/verdict`).send({
+        ...cm8Binding,
+        reason: '漏收，需补收',
+      }))
+      expect(verdict.status).toBe(200)
+    }
+    const supplements = db.prepare(
+      `SELECT id FROM supplement_orders WHERE reconcile_generation_id = ? ORDER BY id`,
+    ).all(CM8_RECON) as Array<{ id: string }>
+    expect(supplements.length).toBe(5)
+    // 资源状态矩阵：[0] approved 待补收；[1] approved+已补收；[2] pending_review 未签发；
+    // 'so-r8-nonexistent' 不存在；[3]/[4] 留给边界合法值入账。
+    const approve = (id: string) => request(app)
+      .post(`/api/v1/account-reconcile/supplements/${id}/approve`)
+      .set('Authorization', `Bearer ${reviewerToken}`)
+      .send({})
+    expect((await approve(supplements[0].id)).status).toBe(200)
+    expect((await approve(supplements[1].id)).status).toBe(200)
+    expect((await auth(request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplements[1].id}/collect`)
+      .send({ collectedMonth: '2026-12' }))).status).toBe(200)
+
+    const snapshot = (id: string) => db.prepare(
+      `SELECT status, collected_at, collected_month, collected_revenue FROM supplement_orders WHERE id = ?`,
+    ).get(id)
+    const auditCount = () => (db.prepare(
+      `SELECT COUNT(*) AS n FROM abc_audit_logs WHERE action = 'supplement_collect'`,
+    ).get() as { n: number }).n
+    const beforeRows = supplements.map(entry => snapshot(entry.id))
+    const auditBefore = auditCount()
+
+    const badValues: unknown[] = [
+      ' 2026-07', '2026-07 ', '', null, ['2026-07'], { month: '2026-07' }, 202607, '2026-13',
+    ]
+    const targets = [supplements[0].id, supplements[1].id, supplements[2].id, 'so-r8-nonexistent']
+    for (const collectedMonth of badValues) {
+      for (const target of targets) {
+        const res = await auth(request(app)
+          .post(`/api/v1/account-reconcile/supplements/${target}/collect`)
+          .send({ collectedMonth }))
+        expect(res.status).toBe(400)
+        expect(res.body.error.code).toBe('INVALID_COLLECTED_MONTH')
+      }
+    }
+    // 全形状零写：四行快照逐字段相等 + 审计零增量
+    supplements.forEach((entry, index) => {
+      expect(snapshot(entry.id)).toEqual(beforeRows[index])
+    })
+    expect(auditCount()).toBe(auditBefore)
+
+    // 缺席默认当月：字段完全不出现 → 200 入账当月
+    const defaulted = await auth(request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplements[0].id}/collect`)
+      .send({}))
+    expect(defaulted.status).toBe(200)
+    const defaultMonth = new Date().toISOString().slice(0, 7)
+    expect(snapshot(supplements[0].id)).toMatchObject({ status: '已补收', collected_month: defaultMonth })
+    // 边界合法值按既有合同保留：0000-01 / 9999-12
+    expect((await approve(supplements[3].id)).status).toBe(200)
+    const edgeLow = await auth(request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplements[3].id}/collect`)
+      .send({ collectedMonth: '0000-01' }))
+    expect(edgeLow.status).toBe(200)
+    expect(snapshot(supplements[3].id)).toMatchObject({ collected_month: '0000-01' })
+    expect((await approve(supplements[4].id)).status).toBe(200)
+    const edgeHigh = await auth(request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplements[4].id}/collect`)
+      .send({ collectedMonth: '9999-12' }))
+    expect(edgeHigh.status).toBe(200)
+    expect(snapshot(supplements[4].id)).toMatchObject({ collected_month: '9999-12' })
+  })
 })

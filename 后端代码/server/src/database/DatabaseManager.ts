@@ -1003,9 +1003,12 @@ function ensureSupplementGenerationForeignKeys(database: DatabaseSync): void {
        )
      LIMIT 1
   `
-  const invalidSource = database.prepare(invalidSourceSql).get() as { id?: string } | undefined
-  if (invalidSource?.id) {
-    throw new Error(`SUPPLEMENT_SOURCE_GENERATION_BACKFILL_REQUIRED:${invalidSource.id}`)
+  // R8 P1-1：以「是否返回行」判定命中——SQLite 普通表 TEXT PRIMARY KEY 允许 NULL/''，
+  // .get() 返回 {id:NULL} 对象（行存在）但 row?.id 为假，真值判断会让脏行不可见、
+  // 并在 LIMIT 1 下遮住后续脏行；错误 id 用 <null> 占位保持可诊断。
+  const invalidSource = database.prepare(invalidSourceSql).get() as { id?: string | null } | undefined
+  if (invalidSource) {
+    throw new Error(`SUPPLEMENT_SOURCE_GENERATION_BACKFILL_REQUIRED:${String(invalidSource.id ?? '<null>')}`)
   }
   // R4 谱系等值启动校验 + R6 身份等值启动校验：supplement 的 source_diff 必须属于
   // supplement 自己的代，且 supplement/diff/generation 的 partner·月键必须一致。
@@ -1032,9 +1035,10 @@ function ensureSupplementGenerationForeignKeys(database: DatabaseSync): void {
                   AND (generation.partner_id IS NOT supplement.partner_id
                        OR generation.settlement_month IS NOT supplement.service_month)))
        LIMIT 1
-    `).get() as { id?: string } | undefined
-    if (lineageMismatch?.id) {
-      throw new Error(`SUPPLEMENT_GENERATION_BINDING_MISMATCH:${lineageMismatch.id}`)
+    `).get() as { id?: string | null } | undefined
+    // R8 P1-1：行存在判定（同型同因，见上方 BACKFILL_REQUIRED 注释）。
+    if (lineageMismatch) {
+      throw new Error(`SUPPLEMENT_GENERATION_BINDING_MISMATCH:${String(lineageMismatch.id ?? '<null>')}`)
     }
   }
   if (
@@ -1125,16 +1129,21 @@ function ensureReconcileDiffGenerationIdentity(database: DatabaseSync): void {
             OR generation.partner_id IS NOT diff.partner_id
             OR generation.settlement_month IS NOT diff.service_month)
      LIMIT 1
-  `).get() as { id?: string } | undefined
-  if (identityMismatch?.id) {
-    throw new Error(`RECONCILE_DIFF_GENERATION_IDENTITY_MISMATCH:${identityMismatch.id}`)
+  `).get() as { id?: string | null } | undefined
+  // R8 P1-1：行存在判定——{id:NULL} 命中行在真值判断下不可见且遮住后续脏行。
+  if (identityMismatch) {
+    throw new Error(`RECONCILE_DIFF_GENERATION_IDENTITY_MISMATCH:${String(identityMismatch.id ?? '<null>')}`)
   }
 }
 
 // R7 P1-2：collected_month 历史脏数据启动扫描（第三道）——路由严格校验是第一道、
 // trg_reconcile_supplement_collected_month_* trigger 是第二道（写入侧）；本扫描在开机时
-// 拦截经直接 SQL/历史遗留落入的非法月份（非 YYYY-MM 或月份超出 01-12），
-// 防脏值使收入聚合（collected_month = ? 等值匹配）静默漏计。NULL 放行（未收款/放弃态）。
+// 拦截经直接 SQL/历史遗留落入的非法月份，防脏值使收入聚合（collected_month = ? 等值匹配）
+// 静默漏计。NULL 放行（未收款/放弃态）。
+// R8 P1-3：谓词升级为 typeof='text' 且字节长度恰 7——SQLite length()/GLOB 对 TEXT 均在
+// 首个 NUL 处截断（'2026-12'||char(0)||'junk' 会骗过旧子句），CAST AS BLOB 计全字节；
+// BLOB/INTEGER typeof 一并拒绝。
+// R8 P1-1：行存在判定（{id:NULL} 脏行不得因真值判断不可见）。
 function ensureSupplementCollectedMonthIntegrity(database: DatabaseSync): void {
   const columns = database.prepare('PRAGMA table_info(supplement_orders)').all() as Array<{ name: string }>
   if (!columns.some(column => column.name === 'collected_month')) return
@@ -1142,12 +1151,37 @@ function ensureSupplementCollectedMonthIntegrity(database: DatabaseSync): void {
     SELECT id
       FROM supplement_orders
      WHERE collected_month IS NOT NULL
-       AND (collected_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+       AND (typeof(collected_month) <> 'text'
+            OR length(CAST(collected_month AS BLOB)) <> 7
+            OR collected_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
             OR substr(collected_month, 6, 2) NOT BETWEEN '01' AND '12')
      LIMIT 1
-  `).get() as { id?: string } | undefined
-  if (dirty?.id) {
-    throw new Error(`SUPPLEMENT_COLLECTED_MONTH_INVALID:${dirty.id}`)
+  `).get() as { id?: string | null } | undefined
+  if (dirty) {
+    throw new Error(`SUPPLEMENT_COLLECTED_MONTH_INVALID:${String(dirty.id ?? '<null>')}`)
+  }
+}
+
+// R8 P1-1 纵深：身份表主键 NULL/'' 开机扫描。SQLite 普通表 TEXT PRIMARY KEY 不强制
+// NOT NULL/非空——此类行只能经直接 SQL 产生（全部应用写者用 uuid），开机 fail-closed。
+// 不采 DDL CHECK/NOT NULL 重建表的理由：逐表重建对 predecessor 升级面过大，且 R3 教训
+// 表明重建 reconcile_diffs 会悬空 supplement 侧 trigger 引用；本扫描提供同等 fail-closed
+// 且零 DDL 风险。调用点排在各漂移扫描之后：带漂移的 NULL-id 行由专用错误码先行带出
+// （可诊断性更强），纯主键空值行由本扫描收口。
+function ensureReconcileIdentityRowIds(database: DatabaseSync): void {
+  const identityColumns: Array<{ table: string; column: string }> = [
+    { table: 'reconcile_diffs', column: 'id' },
+    { table: 'supplement_orders', column: 'id' },
+    { table: 'account_reconcile_generations', column: 'reconcile_generation_id' },
+    { table: 'reconcile_hospital_months', column: 'id' },
+  ]
+  for (const { table, column } of identityColumns) {
+    const violating = database.prepare(
+      `SELECT rowid FROM ${table} WHERE ${column} IS NULL OR ${column} = '' LIMIT 1`,
+    ).get() as { rowid?: number | null } | undefined
+    if (violating) {
+      throw new Error(`RECONCILE_ROW_ID_EMPTY:${table}:${String(violating.rowid ?? '<null>')}`)
+    }
   }
 }
 
@@ -1177,6 +1211,11 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
 
   // LOC-005 R2 respin：diffs 按 generation 代次隔离。supersede 只删无补收单引用的 diff，
   // 被引用的旧代 diff 连同其终结补收单冻结留痕（旧代仍可读、不可改）。
+  // R8 P1-2：ensureDatabaseColumn 前记录列是否原本存在——只有真 predecessor schema
+  //（列原本不存在）允许下方兼容回填；列已存在时 IS NULL 是当前库损坏，
+  // 必须 fail-closed，绝不静默回填（回填按当前代修复键、掩盖 drift）。
+  const diffGenerationColumnPreExisting = (database.prepare('PRAGMA table_info(reconcile_diffs)').all() as Array<{ name: string }>)
+    .some(column => column.name === 'reconcile_generation_id')
   ensureDatabaseColumn(database, 'reconcile_diffs', 'reconcile_generation_id', 'TEXT')
 
   database.exec(`
@@ -1227,30 +1266,61 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   // 先回填会被旧 trigger 打死、整个升级事务回滚、每次开机都失败。
   // 回填：代次列引入前写入的 diff 无代次戳；唯一活解释是该院·月当前代
   //（compute 历来整月重写 diff 集合，现存行必属当前代）。
+  // R8 P1-2：回填仅限真 predecessor schema（列原本不存在）；列已存在时的 NULL 是
+  // 当前库损坏，由下方 fail-closed 检查拦截，绝不经本路径静默修复。
+  if (!diffGenerationColumnPreExisting) {
+    database.exec(`
+      UPDATE reconcile_diffs
+         SET reconcile_generation_id = (
+           SELECT generation.reconcile_generation_id
+             FROM account_reconcile_generations generation
+            WHERE generation.hospital_month_id = reconcile_diffs.hospital_month_id
+              AND generation.is_current = 1
+         )
+       WHERE reconcile_generation_id IS NULL
+         AND EXISTS (
+           SELECT 1
+             FROM account_reconcile_generations generation
+            WHERE generation.hospital_month_id = reconcile_diffs.hospital_month_id
+              AND generation.is_current = 1
+         );
+    `)
+  }
   database.exec(`
-    UPDATE reconcile_diffs
-       SET reconcile_generation_id = (
-         SELECT generation.reconcile_generation_id
-           FROM account_reconcile_generations generation
-          WHERE generation.hospital_month_id = reconcile_diffs.hospital_month_id
-            AND generation.is_current = 1
-       )
-     WHERE reconcile_generation_id IS NULL
-       AND EXISTS (
-         SELECT 1
-           FROM account_reconcile_generations generation
-          WHERE generation.hospital_month_id = reconcile_diffs.hospital_month_id
-            AND generation.is_current = 1
-       );
     CREATE INDEX IF NOT EXISTS idx_reconcile_diffs_generation
       ON reconcile_diffs(hospital_month_id, reconcile_generation_id);
   `)
+
+  // R8 P1-2：列已存在（当前形状）时「本可回填却 NULL」的代次 = 当前库损坏——谓词与
+  // 回填的 EXISTS 完全同款（院·月存在当前代），在 trigger 重装前 fail-closed
+  //（行存在即命中，错误 id 用 <null> 占位，与 R8 P1-1 行存在口径一致）。
+  // 无当前代可绑的 NULL（unbound legacy，回填本身也不会触碰）不在此拦截——
+  // 与 R2「无代遗留月显式不绑」治理形状及 #83 口径一致。
+  if (diffGenerationColumnPreExisting) {
+    const nullGenerationDiff = database.prepare(`
+      SELECT diff.id
+        FROM reconcile_diffs diff
+       WHERE diff.reconcile_generation_id IS NULL
+         AND EXISTS (
+           SELECT 1
+             FROM account_reconcile_generations generation
+            WHERE generation.hospital_month_id = diff.hospital_month_id
+              AND generation.is_current = 1
+         )
+       LIMIT 1
+    `).get() as { id?: string | null } | undefined
+    if (nullGenerationDiff) {
+      throw new Error(`RECONCILE_DIFF_GENERATION_NULL:${String(nullGenerationDiff.id ?? '<null>')}`)
+    }
+  }
 
   ensureSupplementGenerationForeignKeys(database)
   // R7：diff 锚定扫描与 collected_month legacy 扫描排在 trigger 重装段之前——
   // 违例 throw 即整体 ROLLBACK，开机 fail-closed（详见两函数头注释）。
   ensureReconcileDiffGenerationIdentity(database)
   ensureSupplementCollectedMonthIntegrity(database)
+  // R8 P1-1 纵深：身份表主键 NULL/'' 开机扫描（排在漂移扫描之后，纯主键空值收口）。
+  ensureReconcileIdentityRowIds(database)
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_supplement_generation
       ON supplement_orders(reconcile_generation_id, source_diff_id)
@@ -1607,11 +1677,16 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   // 启动 legacy 扫描（ensureSupplementCollectedMonthIntegrity）是第三道（历史脏数据拒启）。
   // 口径：NULL 放行（未收款/放弃态）；非 NULL 必须 YYYY-MM 且月份 01-12，
   // 与收入聚合 collected_month = ? 的等值匹配口径一致（脏值会静默漏计实收）。
+  // R8 P1-3：typeof 必须 'text' 且字节长度恰 7——SQLite length()/GLOB 对 TEXT 均在首个
+  // NUL 处截断，'2026-12'||char(0)||'junk' 会骗过旧子句；CAST AS BLOB 计全字节，
+  // BLOB/INTEGER typeof 一并拒绝。
   database.exec(`
     CREATE TRIGGER trg_reconcile_supplement_collected_month_insert
     BEFORE INSERT ON supplement_orders
     WHEN NEW.collected_month IS NOT NULL
-      AND (NEW.collected_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+      AND (typeof(NEW.collected_month) <> 'text'
+           OR length(CAST(NEW.collected_month AS BLOB)) <> 7
+           OR NEW.collected_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
            OR substr(NEW.collected_month, 6, 2) NOT BETWEEN '01' AND '12')
     BEGIN
       SELECT RAISE(ABORT, 'SUPPLEMENT_COLLECTED_MONTH_INVALID');
@@ -1621,7 +1696,9 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
     CREATE TRIGGER trg_reconcile_supplement_collected_month_update
     BEFORE UPDATE ON supplement_orders
     WHEN NEW.collected_month IS NOT NULL
-      AND (NEW.collected_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+      AND (typeof(NEW.collected_month) <> 'text'
+           OR length(CAST(NEW.collected_month AS BLOB)) <> 7
+           OR NEW.collected_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
            OR substr(NEW.collected_month, 6, 2) NOT BETWEEN '01' AND '12')
     BEGIN
       SELECT RAISE(ABORT, 'SUPPLEMENT_COLLECTED_MONTH_INVALID');

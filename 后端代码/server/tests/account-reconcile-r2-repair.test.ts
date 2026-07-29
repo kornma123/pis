@@ -2203,3 +2203,213 @@ describe('LOC-005 R7 diff-anchored boot scan and collected-month integrity', () 
     }
   })
 })
+
+describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collected-month storage', () => {
+  it('rejects NULL/empty-string id rows at startup instead of masking later dirty rows (P1-1 boot side)', () => {
+    // R8 P1-1：SQLite 普通表 TEXT PRIMARY KEY 允许 NULL/''；.get() 返回 {id:NULL} 对象
+    // （行存在）但 row?.id 为假——真值判断下该脏行不可见，且 LIMIT 1 下遮住后续脏行。
+    // 探针 A：单条 NULL-id 漂移行今天开机竟放行；探针 B：NULL-id 行与正常 id 脏行并存，
+    // 修复后逐条被带出（修复首条后重启仍拒，证明遮挡解除）；探针 C：''-id 行纵深扫描拒启。
+    const fixture = seedSupersededWithSurvivingDiff('r8-null-id-scan')
+    const extra = seedSource({ name: 'r8-null-id-extra', lisCount: 2 })
+    lifecycle.computeAccountReconciliation(db, extra, 'USER-001')
+    const extraDiff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE reconcile_generation_id = ?',
+    ).get(extra.reconcileGenerationId) as { id: string }
+
+    // 探针 A：NULL-id 漂移行——真值判断下行存在却被当「无行」放行
+    const probeAPath = join(testDirectory, `r8-null-id-a-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probeAPath)
+    const probeA = new DatabaseSync(probeAPath)
+    try {
+      probeA.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+      probeA.prepare('UPDATE reconcile_diffs SET id = NULL, partner_id = ? WHERE id = ?')
+        .run('PT-GHOST-R8', fixture.nextDiff.id)
+      expect(() => manager.upgradeAccountReconciliationSchema(probeA))
+        .toThrow(/RECONCILE_DIFF_GENERATION_IDENTITY_MISMATCH:<null>/)
+    } finally {
+      probeA.close()
+    }
+
+    // 探针 B：遮挡——NULL-id 脏行 + 正常 id 脏行并存；首轮拒启并带出首条，
+    // 就地修复被带出的行后重启必须继续拒启（剩余脏行浮出水面，LIMIT 1 遮挡解除）。
+    const probeBPath = join(testDirectory, `r8-null-id-b-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probeBPath)
+    const probeB = new DatabaseSync(probeBPath)
+    try {
+      probeB.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+      probeB.prepare('UPDATE reconcile_diffs SET id = NULL, partner_id = ? WHERE id = ?')
+        .run('PT-GHOST-R8', fixture.nextDiff.id)
+      probeB.prepare('UPDATE reconcile_diffs SET partner_id = ? WHERE id = ?')
+        .run('PT-GHOST-R8', extraDiff.id)
+      let first: unknown
+      try {
+        manager.upgradeAccountReconciliationSchema(probeB)
+      } catch (error) {
+        first = error
+      }
+      expect(String(first)).toMatch(/RECONCILE_DIFF_GENERATION_IDENTITY_MISMATCH/)
+      // 启动事务已回滚，注入仍在库内；修复被带出的那条（id 为 NULL 的行或正常 id 行）
+      if (String(first).endsWith(':<null>')) {
+        probeB.prepare('UPDATE reconcile_diffs SET id = ?, partner_id = ? WHERE id IS NULL')
+          .run(fixture.nextDiff.id, fixture.nextBinding.partnerId)
+      } else {
+        probeB.prepare('UPDATE reconcile_diffs SET partner_id = ? WHERE id = ?')
+          .run(extra.partnerId, extraDiff.id)
+      }
+      expect(() => manager.upgradeAccountReconciliationSchema(probeB))
+        .toThrow(/RECONCILE_DIFF_GENERATION_IDENTITY_MISMATCH/)
+    } finally {
+      probeB.close()
+    }
+
+    // 探针 C：''-id 行（键未漂移，纯主键空值）——纵深扫描拒启；
+    // 身份表主键空值只能经直接 SQL 产生（全部应用写者用 uuid），fail-closed 不误伤。
+    const probeCPath = join(testDirectory, `r8-empty-id-c-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probeCPath)
+    const probeC = new DatabaseSync(probeCPath)
+    try {
+      probeC.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+      probeC.prepare(`UPDATE reconcile_diffs SET id = '' WHERE id = ?`)
+        .run(fixture.nextDiff.id)
+      expect(() => manager.upgradeAccountReconciliationSchema(probeC))
+        .toThrow(/RECONCILE_ROW_ID_EMPTY:reconcile_diffs/)
+    } finally {
+      probeC.close()
+    }
+  })
+
+  it('rejects complete when a NULL-id supplement carries lineage drift (P1-1 guard side)', () => {
+    // R8 P1-1 complete 侧：谱系守卫 SELECT supplement.id ... LIMIT 1 返回 {id:NULL}
+    // 时真值判断放行——漂移补收单带伪造键进定版。行存在必须视同命中。
+    const fixture = seedSupersededWithSurvivingDiff('r8-null-id-guard')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const supplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string }
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
+    db.prepare('UPDATE supplement_orders SET id = NULL, partner_id = ? WHERE id = ?')
+      .run('PT-GHOST-R8', supplement.id)
+    try {
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      // RED 态 complete 竟成功则月内已出 complete 代——先摘终版 trigger 再恢复，
+      // 最后走升级函数统一重装+启动探针自检（R6 同款姿势）。
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_immutable')
+      db.prepare(`
+        UPDATE supplement_orders SET id = ?, partner_id = ?
+         WHERE rowid = (SELECT rowid FROM supplement_orders WHERE id IS NULL)
+      `).run(supplement.id, fixture.nextBinding.partnerId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+  })
+
+  it('rejects complete when a NULL-id diff carries key drift (P1-1 decisions assert side)', () => {
+    // R8 P1-1 断言侧：decisions 身份断言 SELECT id FROM reconcile_diffs ... LIMIT 1
+    // 同型失明——{id:NULL} 被当真值判断的「无行」，漂移 diff 静默进定版。
+    const fixture = seedSupersededWithSurvivingDiff('r8-null-id-assert')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+    db.prepare('UPDATE reconcile_diffs SET id = NULL, partner_id = ? WHERE id = ?')
+      .run('PT-GHOST-R8', fixture.nextDiff.id)
+    try {
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable')
+      db.prepare('UPDATE reconcile_diffs SET id = ?, partner_id = ? WHERE id IS NULL')
+        .run(fixture.nextDiff.id, fixture.nextBinding.partnerId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+  })
+
+  it('rejects startup and restart when a current-shape diff carries NULL generation (P1-2)', () => {
+    // R8 P1-2：reconcile_generation_id 列已存在（当前形状）时 IS NULL = 当前库损坏——
+    // 绝不静默回填（回填按当前代修复键、掩盖 drift）；首次启动与重启（事务回滚后脏行
+    // 仍在）均 fail-closed。predecessor schema（列原本不存在）的兼容回填不受影响，
+    // 由既有 R3-1 绿测钉住。
+    const fixture = seedSupersededWithSurvivingDiff('r8-null-gen')
+    const probePath = join(testDirectory, `r8-null-gen-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const probe = new DatabaseSync(probePath)
+    try {
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+      probe.prepare('UPDATE reconcile_diffs SET reconcile_generation_id = NULL WHERE id = ?')
+        .run(fixture.nextDiff.id)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/RECONCILE_DIFF_GENERATION_NULL/)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/RECONCILE_DIFF_GENERATION_NULL/)
+    } finally {
+      probe.close()
+    }
+    // 对照：unbound legacy（院·月无当前代可绑）NULL-gen diff 不拦截——
+    // 与 R2「无代遗留月显式不绑」治理形状及 #83 口径一致。
+    // 独立新 partner（不 compute），避免与夹具既有月份撞 partner+month 唯一键。
+    const legacyPartner = seedSource({ name: 'r8-unbound-partner' })
+    const legacyPath = join(testDirectory, `r8-null-gen-legacy-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(legacyPath)
+    const legacy = new DatabaseSync(legacyPath)
+    try {
+      const legacyMonthId = `HM-R8-UNBOUND-${sequence}`
+      legacy.prepare(`
+        INSERT INTO reconcile_hospital_months (id, partner_id, partner_name, service_month)
+        VALUES (?, ?, 'R8 unbound legacy partner', ?)
+      `).run(legacyMonthId, legacyPartner.partnerId, legacyPartner.settlementMonth)
+      legacy.prepare(`
+        INSERT INTO reconcile_diffs (id, hospital_month_id, partner_id, service_month, case_no, line_type)
+        VALUES (?, ?, ?, ?, 'CASE-R8-UNBOUND', '免疫组化')
+      `).run(`DIFF-R8-UNBOUND-${sequence}`, legacyMonthId, legacyPartner.partnerId, legacyPartner.settlementMonth)
+      expect(() => manager.upgradeAccountReconciliationSchema(legacy)).not.toThrow()
+    } finally {
+      legacy.close()
+    }
+  })
+
+  it('blocks non-text/NUL-padded collected_month at DB triggers and legacy scan (P1-3 DB side)', () => {
+    // R8 P1-3 DB 侧：typeof 必须 'text' 且字节长度恰 7——SQLite length() 与 GLOB 对
+    // TEXT 均在首个 NUL 处截断，'2026-12'||char(0)||'junk' 会骗过既有子句；必须
+    // length(CAST(... AS BLOB))=7 计全字节。BLOB/INTEGER typeof 一并拒绝。
+    const fixture = seedSupersededWithSurvivingDiff('r8-collected-strict')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const supplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string }
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`UPDATE supplement_orders SET collected_month = '2026-12' || char(0) || 'junk' WHERE id = ?`)
+        .run(supplement.id)
+    }, /SUPPLEMENT_COLLECTED_MONTH_INVALID/)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`INSERT INTO supplement_orders (id, partner_id, service_month, collected_month) VALUES (?, ?, ?, x'323032362D3132')`)
+        .run(`SO-R8-BLOB-${++sequence}`, fixture.nextBinding.partnerId, fixture.nextBinding.settlementMonth)
+    }, /SUPPLEMENT_COLLECTED_MONTH_INVALID/)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`INSERT INTO supplement_orders (id, partner_id, service_month, collected_month) VALUES (?, ?, ?, 202612)`)
+        .run(`SO-R8-INT-${++sequence}`, fixture.nextBinding.partnerId, fixture.nextBinding.settlementMonth)
+    }, /SUPPLEMENT_COLLECTED_MONTH_INVALID/)
+    // legacy 扫描：摘 update trigger 注入 NUL 脏行，开机扫描必须拒启
+    const probePath = join(testDirectory, `r8-collected-nul-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const probe = new DatabaseSync(probePath)
+    try {
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_update')
+      probe.prepare(`UPDATE supplement_orders SET collected_month = '2026-12' || char(0) || 'junk' WHERE id = ?`)
+        .run(supplement.id)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/SUPPLEMENT_COLLECTED_MONTH_INVALID/)
+    } finally {
+      probe.close()
+    }
+  })
+})
