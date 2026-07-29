@@ -219,7 +219,127 @@ function reflectionPrBody(leastConfidence, biggestMissing) {
 `;
 }
 
+function wrapListFence(body, opener = '- ```md') {
+  return `${opener}
+${body.split('\n').map((line) => `  ${line}`).join('\n')}
+  \`\`\``;
+}
+
+function wrapTopLevelFence(body) {
+  return `\`\`\`md
+${body}
+\`\`\``;
+}
+
+function wrapBlockquoteFence(body) {
+  return `> \`\`\`md
+${body.split('\n').map((line) => `> ${line}`).join('\n')}
+> \`\`\``;
+}
+
+function wrapRawHtmlBlock(tag, body) {
+  return `&lt;${tag}&gt;
+${body}
+&lt;/${tag}&gt;`;
+}
+
+function wrapVisibleList(body) {
+  return `- authored contract
+${body.trim().split('\n').map((line) => `  ${line}`).join('\n')}`;
+}
+
+function wrapBlockquote(body) {
+  return body.trim().split('\n').map((line) => `> ${line}`).join('\n');
+}
+
+function wrapNestedList(body) {
+  return `- outer
+  - authored contract
+${body.trim().split('\n').map((line) => `    ${line}`).join('\n')}`;
+}
+
+function wrapTable(body) {
+  return body.trim().split('\n').map((line) => `| ${line || ' '} |`).join('\n');
+}
+
 const reflectionRegressionFailures = [];
+const strongLeastConfidence = 'transaction isolation has only been checked in one runtime';
+const strongBiggestMissing = 'an upstream schema owner may still change the contract';
+
+function checkVisibilitySemantics(name, wrap, expectedOk) {
+  const handoffOk = handoffFieldErrors(
+    wrap(reflectionHandoff(strongLeastConfidence, strongBiggestMissing)),
+  ).length === 0;
+  const prResult = validatePrBody(
+    wrap(reflectionPrBody(strongLeastConfidence, strongBiggestMissing)),
+  );
+  if (handoffOk !== expectedOk) {
+    reflectionRegressionFailures.push(
+      `${name}: Issue handoff expected ok=${expectedOk}, actual=${handoffOk}`,
+    );
+  }
+  if (prResult.ok !== expectedOk) {
+    reflectionRegressionFailures.push(
+      `${name}: PR validator expected ok=${expectedOk}, actual=${prResult.ok} (${prResult.errors.join('; ')})`,
+    );
+  }
+  if (handoffOk !== prResult.ok) {
+    reflectionRegressionFailures.push(`${name}: validators disagree`);
+  }
+}
+
+for (const [name, wrap] of [
+  ['top-level fenced contract is hidden', wrapTopLevelFence],
+  ['list fenced contract is hidden', wrapListFence],
+  ['ordered-list fenced contract is hidden', (body) => wrapListFence(body, '1. ```md')],
+  ['nested-list fenced contract is hidden', (body) => wrapListFence(body, '- - ```md')],
+  ['blockquote fenced contract is hidden', wrapBlockquoteFence],
+  ['blockquote-list fenced contract is hidden', (body) => wrapListFence(body, '> - ```md')],
+  ['encoded raw pre contract is hidden', (body) => wrapRawHtmlBlock('pre', body)],
+  ['encoded raw code contract is hidden', (body) => wrapRawHtmlBlock('code', body)],
+  ['encoded raw div contract is hidden', (body) => wrapRawHtmlBlock('div', body)],
+]) {
+  checkVisibilitySemantics(name, wrap, false);
+}
+for (const [name, wrap, expectedOk] of [
+  ['visible list contract is authored content', wrapVisibleList, true],
+  ['visible blockquote contract is quoted content', wrapBlockquote, false],
+  ['visible nested-list contract is outside canonical shape', wrapNestedList, false],
+  ['table-cell contract is outside canonical shape', wrapTable, false],
+]) {
+  checkVisibilitySemantics(name, wrap, expectedOk);
+}
+
+const prStrongLeastConfidenceLine =
+  `- **我现在最没把握的是什么？ / Least confidence**: ${strongLeastConfidence}`;
+const handoffStrongLeastConfidenceLine = `least-confidence: ${strongLeastConfidence}`;
+for (const [name, wrap] of [
+  ['list-fence hidden strong value', wrapListFence],
+  ['raw-pre hidden strong value', (body) => wrapRawHtmlBlock('pre', body)],
+  ['raw-code hidden strong value', (body) => wrapRawHtmlBlock('code', body)],
+  ['raw-div hidden strong value', (body) => wrapRawHtmlBlock('div', body)],
+]) {
+  const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+    .replace(
+      handoffStrongLeastConfidenceLine,
+      `${wrap(handoffStrongLeastConfidenceLine)}
+least-confidence: 暂无问题`,
+    );
+  const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+    .replace(
+      prStrongLeastConfidenceLine,
+      `${wrap(prStrongLeastConfidenceLine)}
+- **我现在最没把握的是什么？ / Least confidence**: 暂无问题`,
+    );
+  const handoffOk = handoffFieldErrors(handoffBody).length === 0;
+  const prOk = validatePrBody(prBody).ok;
+  if (handoffOk || prOk || handoffOk !== prOk) {
+    reflectionRegressionFailures.push(
+      `${name}: hidden strong value masked visible weak value (handoff=${handoffOk}, pr=${prOk})`,
+    );
+  }
+}
+
 const adversarialReflectionCorpus = [
   ['unresolved nested NoBreak entity', '&amp;NoBreak;', false],
   ['unresolved nested InvisibleTimes entity', '&amp;InvisibleTimes;', false],
@@ -234,9 +354,21 @@ const adversarialReflectionCorpus = [
   ['empty no-finding clauses', '未发现；已检查；未检查', false],
   ['action-only no-finding scopes', '未发现；已检查验证；未检查审查', false],
   ['alternate action-only no-finding scopes', '没有发现；已经核对过覆盖；仍未验证检查', false],
+  ['bare 没发现问题 synonym', '没发现问题', false],
+  ['bare 暂无问题 synonym', '暂无问题', false],
+  ['bare 未见问题 synonym', '未见问题', false],
+  ['bare 一切正常 synonym', '一切正常', false],
+  ['bare English no-finding synonym', 'No issues found', false],
+  ['generic modifiers plus action-only scopes', '未发现；已检查所有验证；未检查相关审查', false],
   ['short concrete test risk', '测试覆盖不足', true],
   ['short concrete external-call risk', '外部调用未查', true],
   ['substantive bounded no-finding', '未发现；已检查固定对象和测试，未检查生产参数', true],
+  ['generic modifiers with concrete objects', '未发现；已检查所有目标代码；未检查相关生产参数', true],
+  [
+    'English bounded no-finding',
+    'No issues found; checked target code and tests; not checked production settings',
+    true,
+  ],
   [
     'HTML-like product scopes',
     '未发现；已检查&lt;code-v2&gt;与R&amp;D，未检查&lt;span-v3&gt;',
@@ -263,6 +395,72 @@ for (const [name, value, expectedOk] of adversarialReflectionCorpus) {
   }
   if (handoffOk !== prResult.ok) {
     reflectionRegressionFailures.push(`${name}: validators disagree`);
+  }
+}
+
+const malformedPrError = '字段键无法安全解析；请使用可见的标准字段名与分隔符。';
+for (const entity of ['copy', 'bogus']) {
+  const maliciousHandoff =
+    `least-confid&amp;${entity};ence: TODO later fill this`;
+  const maliciousHandoffWithoutDelimiter =
+    `least-confidence&amp;${entity}; TODO later fill this`;
+  const maliciousPr =
+    `- **我现在最没把握的是什么？ / Least confid&amp;${entity};ence**: TODO later fill this`;
+  const maliciousPrWithoutDelimiter =
+    `- **我现在最没把握的是什么？ / Least confidence**&amp;${entity}; TODO later fill this`;
+  for (const [order, handoffBody, prBody] of [
+    [
+      'canonical first',
+      `${reflectionHandoff(strongLeastConfidence, strongBiggestMissing)}
+${maliciousHandoff}`,
+      reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+        .replace(prStrongLeastConfidenceLine, `${prStrongLeastConfidenceLine}\n${maliciousPr}`),
+    ],
+    [
+      'malformed first',
+      `${completeHandoff}
+${maliciousHandoff}
+${handoffStrongLeastConfidenceLine}
+biggest-missing: ${strongBiggestMissing}`,
+      reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+        .replace(prStrongLeastConfidenceLine, `${maliciousPr}\n${prStrongLeastConfidenceLine}`),
+    ],
+    [
+      'no delimiter',
+      `${reflectionHandoff(strongLeastConfidence, strongBiggestMissing)}
+${maliciousHandoffWithoutDelimiter}`,
+      reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+        .replace(
+          prStrongLeastConfidenceLine,
+          `${prStrongLeastConfidenceLine}\n${maliciousPrWithoutDelimiter}`,
+        ),
+    ],
+  ]) {
+    const handoffErrors = handoffFieldErrors(handoffBody);
+    const prResult = validatePrBody(prBody);
+    if (handoffErrors.length !== 1 || handoffErrors[0] !== 'field-key') {
+      reflectionRegressionFailures.push(
+        `unknown ${entity} ${order}: expected exact handoff field-key, got ${handoffErrors.join(',')}`,
+      );
+    }
+    if (prResult.ok || !prResult.errors.includes(malformedPrError)) {
+      reflectionRegressionFailures.push(
+        `unknown ${entity} ${order}: expected exact PR malformed error, got ${prResult.errors.join('; ')}`,
+      );
+    }
+  }
+  const handoffReplacementErrors = handoffFieldErrors(
+    reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(handoffStrongLeastConfidenceLine, maliciousHandoff),
+  );
+  if (
+    handoffReplacementErrors.length !== 2 ||
+    handoffReplacementErrors[0] !== 'field-key' ||
+    handoffReplacementErrors[1] !== 'least-confidence'
+  ) {
+    reflectionRegressionFailures.push(
+      `unknown ${entity} required replacement: expected field-key,least-confidence; got ${handoffReplacementErrors.join(',')}`,
+    );
   }
 }
 
@@ -886,9 +1084,7 @@ if (args[0] === 'repo' && args[1] === 'view') {
   }
 }
 
-const invalidHandoff = runIsolatedHandoff(
-  'production timeout behavior has not been measured\nleast-confidence&amp;#58; TODO later fill this',
-);
+const invalidHandoff = runIsolatedHandoff('暂无问题');
 if (invalidHandoff.status !== 1) {
   reflectionRegressionFailures.push(
     `invalid handoff end-to-end expected exit=1, actual=${invalidHandoff.status}`,

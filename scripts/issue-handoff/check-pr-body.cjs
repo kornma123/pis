@@ -39,6 +39,69 @@ const REQUIRED_FIELDS = [
 const STATUS_PATTERN = /^(实现中|待复核|待 PM|待验收|阻塞|可合并)(?:\s|$|[（(：:])/;
 const ISSUE_RELATION_PATTERN = /\b(Closes|Refs)\s+#(\d+)\b/gi;
 const FOLLOW_UP_PATTERN = /#(\d+)\b/g;
+const RAW_HTML_CONTAINER_TAGS = [
+  'address',
+  'article',
+  'aside',
+  'blockquote',
+  'body',
+  'caption',
+  'center',
+  'code',
+  'colgroup',
+  'dd',
+  'details',
+  'dialog',
+  'dir',
+  'div',
+  'dl',
+  'dt',
+  'fieldset',
+  'figcaption',
+  'figure',
+  'footer',
+  'form',
+  'frameset',
+  'head',
+  'header',
+  'html',
+  'iframe',
+  'legend',
+  'li',
+  'main',
+  'menu',
+  'nav',
+  'noframes',
+  'noembed',
+  'ol',
+  'optgroup',
+  'option',
+  'p',
+  'plaintext',
+  'pre',
+  'script',
+  'search',
+  'section',
+  'style',
+  'summary',
+  'table',
+  'tbody',
+  'td',
+  'textarea',
+  'tfoot',
+  'th',
+  'thead',
+  'title',
+  'tr',
+  'ul',
+  'xmp',
+];
+const RAW_HTML_CONTAINER_PATTERN = new RegExp(
+  `^ {0,3}<(${RAW_HTML_CONTAINER_TAGS.join('|')})(?=[\\s>])[^>]*>`,
+  'i',
+);
+const NO_FINDING_PREFIX_PATTERN =
+  /^(?:未发现(?:任何|其他)?(?:问题)?|没有发现(?:任何|其他)?(?:问题)?|没发现(?:任何|其他)?(?:问题)?|暂无(?:其他)?问题|未见(?:其他)?问题|一切正常|no\s+(?:issues?|problems?)(?:\s+(?:were\s+)?found)?|nothing\s+(?:was\s+)?found|all\s+(?:looks\s+)?(?:good|normal))(?=$|[\s:：;；,.，。!！])/iu;
 const HTML_ENTITIES = new Map([
   ['amp', '&'],
   ['apos', "'"],
@@ -84,41 +147,78 @@ function stripHtmlComments(body) {
   return output;
 }
 
-function stripFencedCode(body) {
-  let fence = null;
-  const visibleLines = [];
+function stripMarkdownContainerPrefix(line) {
+  let content = String(line || '');
 
-  for (const line of body.split(/\r?\n/)) {
-    const marker = line.match(/^ {0,3}(`{3,}|~{3,})/);
-    if (!fence) {
-      if (marker) {
-        fence = { char: marker[1][0], length: marker[1].length };
-        visibleLines.push('');
-      } else {
-        visibleLines.push(line);
-      }
+  for (let depth = 0; depth < 32; depth += 1) {
+    const blockquote = content.match(/^ {0,3}>\s?/u);
+    if (blockquote) {
+      content = content.slice(blockquote[0].length);
       continue;
     }
-
-    const closing = line.match(/^ {0,3}(`{3,}|~{3,})\s*$/);
-    if (closing && closing[1][0] === fence.char && closing[1].length >= fence.length) {
-      fence = null;
+    const list = content.match(/^ {0,3}(?:[-+*]|\d{1,9}[.)])(?:[ \t]+)/u);
+    if (list) {
+      content = content.slice(list[0].length);
+      continue;
     }
-    visibleLines.push('');
+    break;
   }
 
-  return visibleLines.join('\n');
+  return content;
 }
 
-function stripIndentedCode(body) {
-  return body
-    .split(/\r?\n/)
-    .map((line) => /^(?: {4,}|\t)/.test(line) ? '' : line)
-    .join('\n');
+function rawHtmlClosingPattern(tag) {
+  return new RegExp(`</${tag}\\s*>`, 'i');
 }
 
 function stripIgnoredMarkdown(body) {
-  return stripIndentedCode(stripFencedCode(stripHtmlComments(body)));
+  let fence = null;
+  let rawHtmlTag = null;
+  const visibleLines = [];
+
+  for (const line of stripHtmlComments(String(body || '')).split(/\r?\n/)) {
+    const syntaxLine = stripMarkdownContainerPrefix(line);
+    const decodedSyntaxLine = decodeHtmlEntitiesDetailed(syntaxLine).value;
+
+    if (fence) {
+      const closing = syntaxLine.match(/^ {0,3}(`{3,}|~{3,})\s*$/u);
+      if (
+        closing &&
+        closing[1][0] === fence.char &&
+        closing[1].length >= fence.length
+      ) {
+        fence = null;
+      }
+      visibleLines.push('');
+      continue;
+    }
+
+    if (rawHtmlTag) {
+      if (rawHtmlClosingPattern(rawHtmlTag).test(decodedSyntaxLine)) rawHtmlTag = null;
+      visibleLines.push('');
+      continue;
+    }
+
+    const marker = syntaxLine.match(/^ {0,3}(`{3,}|~{3,})/u);
+    if (marker) {
+      fence = { char: marker[1][0], length: marker[1].length };
+      visibleLines.push('');
+      continue;
+    }
+
+    const rawHtml = decodedSyntaxLine.match(RAW_HTML_CONTAINER_PATTERN);
+    if (rawHtml) {
+      const tag = rawHtml[1].toLowerCase();
+      const afterOpeningTag = decodedSyntaxLine.slice(rawHtml.index + rawHtml[0].length);
+      if (!rawHtmlClosingPattern(tag).test(afterOpeningTag)) rawHtmlTag = tag;
+      visibleLines.push('');
+      continue;
+    }
+
+    visibleLines.push(/^(?: {4,}|\t)/u.test(syntaxLine) ? '' : line);
+  }
+
+  return visibleLines.join('\n');
 }
 
 function collectFields(body) {
@@ -282,11 +382,26 @@ function isPlaceholder(value) {
 }
 
 function hasSubstantiveScope(value) {
-  const clean = canonicalizeMarkdownText(value);
+  let clean = canonicalizeMarkdownText(value);
   if (isExplicitPlaceholder(clean) || !/[\p{L}\p{N}]/u.test(clean)) return false;
   if (/^(?:内容|事项|项目|范围|相关内容|相关事项|上述|以上)$/u.test(clean)) return false;
+
+  for (let pass = 0; pass < 8; pass += 1) {
+    const next = clean
+      .replace(/^(?:(?:所有|全部|相关|其他|其它|一般|常规|通用|上述|以上|各项|相应)\s*)+/u, '')
+      .replace(/^(?:(?:all|any|related|other|generic|general|relevant|remaining)\s+)+/iu, '');
+    if (next === clean) break;
+    clean = next;
+  }
+
   const compact = clean.replace(/[\s:：,，、/\\()[\]{}<>《》“”"'`-]+/gu, '');
-  return !/^(?:检查|核对|验证|审查|覆盖|复核|查看|确认|评估|分析|调查|测试|执行|处理|跟进|完成|过|了)+$/u.test(compact);
+  if (!compact) return false;
+  if (/^(?:检查|核对|验证|审查|覆盖|复核|查看|确认|评估|分析|调查|测试|执行|处理|跟进|完成|过|了)+$/u.test(compact)) {
+    return false;
+  }
+  return !/^(?:check|checked|checking|verify|verified|verification|validate|validated|validation|review|reviewed|audit|audited|coverage|test|testing|analysis|investigation)+$/iu.test(
+    compact,
+  );
 }
 
 function hasBoundedNoFindingScopes(value) {
@@ -304,6 +419,16 @@ function hasBoundedNoFindingScopes(value) {
       /^(?:尚未|仍未|未)(?:检查|核对|验证|审查|覆盖)(?:了|过)?(?:范围)?\s*[:：]?\s*(.*)$/u,
     );
     if (unchecked && hasSubstantiveScope(unchecked[1])) uncheckedScope = true;
+
+    const checkedEnglish = clean.match(
+      /^(?:checked|verified|validated|reviewed|audited|covered)(?:\s+(?:scope|range))?\s*[:：]?\s+(.+)$/iu,
+    );
+    if (checkedEnglish && hasSubstantiveScope(checkedEnglish[1])) checkedScope = true;
+
+    const uncheckedEnglish = clean.match(
+      /^(?:(?:not(?:\s+yet)?)|(?:still\s+not))\s+(?:checked|verified|validated|reviewed|audited|covered)(?:\s+(?:scope|range))?\s*[:：]?\s+(.+)$/iu,
+    );
+    if (uncheckedEnglish && hasSubstantiveScope(uncheckedEnglish[1])) uncheckedScope = true;
   }
 
   return checkedScope && uncheckedScope;
@@ -317,7 +442,7 @@ function isWeakReflection(value) {
   if (/^(?:风险|有风险|存在风险|问题|有问题|存在问题|未知风险|情况不明|待确认|需确认|需要确认|需关注|需要关注)[。.!！]?$/u.test(clean)) {
     return true;
   }
-  if (!/(?:未发现|没有发现)/u.test(clean)) return false;
+  if (!NO_FINDING_PREFIX_PATTERN.test(clean)) return false;
 
   return !hasBoundedNoFindingScopes(clean);
 }

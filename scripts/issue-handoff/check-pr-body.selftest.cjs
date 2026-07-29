@@ -69,6 +69,49 @@ function replaceBiggestMissing(body, value) {
   return body.replace('上游身份服务可能还有未登记的调用方', value);
 }
 
+function wrapListFence(body, opener = '- ```md') {
+  return `${opener}
+${body.split('\n').map((line) => `  ${line}`).join('\n')}
+  \`\`\``;
+}
+
+function wrapTopLevelFence(body) {
+  return `\`\`\`md
+${body}
+\`\`\``;
+}
+
+function wrapBlockquoteFence(body) {
+  return `> \`\`\`md
+${body.split('\n').map((line) => `> ${line}`).join('\n')}
+> \`\`\``;
+}
+
+function wrapRawHtmlBlock(tag, body) {
+  return `&lt;${tag}&gt;
+${body}
+&lt;/${tag}&gt;`;
+}
+
+function wrapVisibleList(body) {
+  return `- authored contract
+${body.trim().split('\n').map((line) => `  ${line}`).join('\n')}`;
+}
+
+function wrapBlockquote(body) {
+  return body.trim().split('\n').map((line) => `> ${line}`).join('\n');
+}
+
+function wrapNestedList(body) {
+  return `- outer
+  - authored contract
+${body.trim().split('\n').map((line) => `    ${line}`).join('\n')}`;
+}
+
+function wrapTable(body) {
+  return body.trim().split('\n').map((line) => `| ${line || ' '} |`).join('\n');
+}
+
 expectPass('complete delivery', validBody, [128]);
 
 expectPass(
@@ -78,6 +121,46 @@ expectPass(
     .replace('未完成 follow-up**: 无', '未完成 follow-up**: #132 — 外部运维触发后处理'),
   [128, 132],
 );
+
+for (const [name, wrap] of [
+  ['contract hidden in top-level fenced block', wrapTopLevelFence],
+  ['contract hidden in list fenced block', wrapListFence],
+  ['contract hidden in ordered-list fenced block', (body) => wrapListFence(body, '1. ```md')],
+  ['contract hidden in nested-list fenced block', (body) => wrapListFence(body, '- - ```md')],
+  ['contract hidden in blockquote fenced block', wrapBlockquoteFence],
+  [
+    'contract hidden in blockquote-list fenced block',
+    (body) => wrapListFence(body, '> - ```md'),
+  ],
+  ['contract hidden in encoded raw HTML pre block', (body) => wrapRawHtmlBlock('pre', body)],
+  ['contract hidden in encoded raw HTML code block', (body) => wrapRawHtmlBlock('code', body)],
+  ['contract hidden in encoded raw HTML div block', (body) => wrapRawHtmlBlock('div', body)],
+]) {
+  expectFail(name, wrap(validBody), /Issue \/ 会话交接/);
+}
+expectPass('visible list contract is accepted', wrapVisibleList(validBody), [128]);
+expectFail('visible blockquote contract is rejected', wrapBlockquote(validBody), /Issue \/ 会话交接/);
+expectFail('visible nested-list contract is rejected', wrapNestedList(validBody), /Issue \/ 会话交接/);
+expectFail('table-cell contract is rejected', wrapTable(validBody), /Issue \/ 会话交接/);
+
+const leastConfidenceLine =
+  '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测';
+for (const [name, wrap] of [
+  ['list-fence hidden strong value', wrapListFence],
+  ['raw-pre hidden strong value', (body) => wrapRawHtmlBlock('pre', body)],
+  ['raw-code hidden strong value', (body) => wrapRawHtmlBlock('code', body)],
+  ['raw-div hidden strong value', (body) => wrapRawHtmlBlock('div', body)],
+]) {
+  expectFail(
+    `${name} cannot mask visible weak value`,
+    validBody.replace(
+      leastConfidenceLine,
+      `${wrap(leastConfidenceLine)}
+- **我现在最没把握的是什么？ / Least confidence**: 暂无问题`,
+    ),
+    /我现在最没把握的是什么/,
+  );
+}
 
 expectFail('empty body', '', /PR body 为空/);
 expectFail('missing handoff heading', validBody.replace('## Issue / 会话交接', '## 交接'), /Issue \/ 会话交接/);
@@ -207,6 +290,33 @@ for (const [name, encodedLabel] of [
     /字段|重复/,
   );
 }
+for (const entity of ['copy', 'bogus']) {
+  const malformedError = /字段键无法安全解析；请使用可见的标准字段名与分隔符。/;
+  const malformedField =
+    `- **我现在最没把握的是什么？ / Least confid&amp;${entity};ence**: TODO later fill this`;
+  const malformedWithoutDelimiter =
+    `- **我现在最没把握的是什么？ / Least confidence**&amp;${entity}; TODO later fill this`;
+  expectFail(
+    `unknown ${entity} entity after canonical required key is malformed`,
+    validBody.replace(leastConfidenceLine, `${leastConfidenceLine}\n${malformedField}`),
+    malformedError,
+  );
+  expectFail(
+    `unknown ${entity} entity before canonical required key is malformed`,
+    validBody.replace(leastConfidenceLine, `${malformedField}\n${leastConfidenceLine}`),
+    malformedError,
+  );
+  expectFail(
+    `unknown ${entity} entity without delimiter is malformed`,
+    validBody.replace(leastConfidenceLine, `${leastConfidenceLine}\n${malformedWithoutDelimiter}`),
+    malformedError,
+  );
+  expectFail(
+    `unknown ${entity} entity cannot replace required key`,
+    validBody.replace(leastConfidenceLine, malformedField),
+    malformedError,
+  );
+}
 for (const [name, encodedDelimiter] of [
   ['numeric encoded delimiter', '&amp;#58;'],
   ['named encoded delimiter', '&amp;colon;'],
@@ -311,11 +421,45 @@ expectFail(
   replaceLeastConfidence(validBody, '没有发现；已经核对过覆盖；仍未验证检查'),
   /反盲区字段回答过弱.*我现在最没把握的是什么/,
 );
+for (const noFinding of [
+  '没发现问题',
+  '暂无问题',
+  '未见问题',
+  '一切正常',
+  'No issues found',
+]) {
+  expectFail(
+    `no-finding synonym is rejected without boundaries: ${noFinding}`,
+    replaceLeastConfidence(validBody, noFinding),
+    /反盲区字段回答过弱.*我现在最没把握的是什么/,
+  );
+}
+expectFail(
+  'no-finding rejects generic modifiers plus action-only scopes',
+  replaceLeastConfidence(validBody, '未发现；已检查所有验证；未检查相关审查'),
+  /反盲区字段回答过弱.*我现在最没把握的是什么/,
+);
 expectPass(
   'bounded no-finding requires checked and unchecked scopes',
   replaceBiggestMissing(
     replaceLeastConfidence(validBody, '未发现；已检查目标代码与测试，尚未检查生产参数'),
     '未发现；已核对仓库调用链，未核对仓库外集成',
+  ),
+  [128],
+);
+expectPass(
+  'English no-finding accepts concrete checked and unchecked scopes',
+  replaceLeastConfidence(
+    validBody,
+    'No issues found; checked target code and tests; not checked production settings',
+  ),
+  [128],
+);
+expectPass(
+  'generic scope modifiers preserve concrete objects',
+  replaceLeastConfidence(
+    validBody,
+    '未发现；已检查所有目标代码；未检查相关生产参数',
   ),
   [128],
 );
