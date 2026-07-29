@@ -122,6 +122,14 @@ const COMMONMARK_TYPE_7_PATTERN = new RegExp(
 const PRODUCT_ENCODED_CONTAINER_TAGS = new Set(['code', 'div', 'xmp']);
 const NO_FINDING_PREFIX_PATTERN =
   /^(?:(?:(?:目前|当前|暂时|暂|现阶段|迄今|截至目前|到目前为止)(?:仍|还)?)[ \t，,]*|(?:(?:currently|for now|so far|at present|temporarily)[ \t，,]+))?(?:未(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没有(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|无(?:任何|其他)?(?:明显)?(?:问题|风险|异常)|暂无(?:其他)?(?:问题|风险|异常)|未见(?:其他)?(?:问题|风险|异常)|一切正常|no[ \t]+(?:issues?|problems?|findings?)(?:[ \t]+(?:were[ \t]+)?found)?|no[ \t]+risks?(?:[ \t]+(?:were[ \t]+)?identified)?|nothing[ \t]+(?:was[ \t]+)?(?:found|to[ \t]+report)|all[ \t]+(?:looks[ \t]+)?(?:good|normal|clear)|looks?[ \t]+(?:good|fine|okay|normal|clear)|lgtm)(?=$|[ \t:：;；,.，。!！])/iu;
+const CHINESE_FUNCTION_OR_GENERIC_PATTERN =
+  /(?:这些|那些|这个|那个|它们|他们|她们|然后|不过|但是|可是|然而|并且|而且|所以|因此|其中|这里|那里|什么|它|他|她|这|那|其|该|此|有|到|的|地|得|内容|事项|项目|范围|相关内容|相关事项|上述|以上|工作|事情|某事|某些|一些|任何|所有|全部|相关|其他|其它|通用|一般|常规|各项|相应|和|与|及|以及|或|或者)/gu;
+const ENGLISH_FUNCTION_OR_GENERIC_PATTERN =
+  /\b(?:a|an|the|this|that|these|those|it|its|they|them|their|there|here|then|however|but|yet|so|therefore|also|still|no|not|any|all|some|none|nothing|only|other|related|relevant|remaining|generic|general|work|task|thing|things|something|anything|content|item|items|scope|range|and|or|be|been|being|is|are|was|were|has|have|had)\b/giu;
+const CHINESE_ACTION_OR_STATE_PATTERN =
+  /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|尚未|仍未|没有|没|未|待|需(?:要)?|可能|也许|担心|局限|依赖|只在|仅在|变化|检查|核对|验证|审查|覆盖|复核|排查|扫描|检视|确认|评估|分析|调查|执行|处理|跟进|完成|实测|量化|测量|观察|识别|检测|检出|查出|发现|登记|风险|问题|过|了)/gu;
+const ENGLISH_ACTION_OR_STATE_PATTERN =
+  /\b(?:may|might|could|depends?|needs?|requires?|incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|unmeasured|measured|measurement|check(?:ed|ing)?|inspect(?:ed|ing|ion|ions)?|scan(?:ned|ning|s)?|verif(?:y|ied|ication)|validat(?:e|ed|ion)|review(?:ed|ing)?|audit(?:ed|ing)?|test(?:ed|ing)?|quantif(?:y|ied|ication)|detect(?:ed|ing|ion)?|observ(?:e|ed|ing|ation)|identif(?:y|ied|ication)|find|found|fail(?:ed|ure)?|error|errors|risk|risks|issue|issues|problem|problems|finding|findings|gap|gaps|missing|change(?:d|s|ing)?)\b/giu;
 const HTML_ENTITIES = new Map([
   ['amp', '&'],
   ['apos', "'"],
@@ -154,6 +162,7 @@ function parseMarkdownContainer(line) {
   let content = String(line || '');
   let blockquoteDepth = 0;
   const listIndents = [];
+  let tabPadding = false;
 
   for (let depth = 0; depth < 32; depth += 1) {
     const blockquote = content.match(/^ {0,3}>[ \t]?/u);
@@ -162,14 +171,24 @@ function parseMarkdownContainer(line) {
       blockquoteDepth += 1;
       continue;
     }
-    const list = content.match(/^( {0,3})((?:[-+*]|\d{1,9}[.)]))([ \t]+)/u);
+    const list = content.match(
+      /^( {0,3})((?:[-+*]|\d{1,9}[.)]))([ \t]+)([\s\S]*)$/u,
+    );
     if (list) {
-      content = content.slice(list[0].length);
+      const markerColumn = list[1].length + list[2].length;
+      const paddingWidth = markdownIndentWidth(list[3], markerColumn);
+      const consumedPadding = paddingWidth <= 4 ? list[3].length : 1;
+      const effectivePadding = markdownIndentWidth(
+        list[3].slice(0, consumedPadding),
+        markerColumn,
+      );
+      content = `${list[3].slice(consumedPadding)}${list[4]}`;
       listIndents.push(
         list[1].length +
         list[2].length +
-        Math.min(markdownIndentWidth(list[3]), 4),
+        effectivePadding,
       );
+      tabPadding ||= list[3].slice(0, consumedPadding).includes('\t');
       continue;
     }
     break;
@@ -183,6 +202,7 @@ function parseMarkdownContainer(line) {
           blockquoteDepth,
           listIndents,
           minimumIndent: listIndents.reduce((sum, width) => sum + width, 0),
+          tabPadding,
         }
       : blockquoteDepth > 0
         ? { kind: 'blockquote', depth: blockquoteDepth }
@@ -190,12 +210,34 @@ function parseMarkdownContainer(line) {
   };
 }
 
-function markdownIndentWidth(value) {
-  let width = 0;
+function markdownIndentWidth(value, startColumn = 0) {
+  let column = startColumn;
   for (const character of String(value || '')) {
-    width = character === '\t' ? width + (4 - (width % 4)) : width + 1;
+    column = character === '\t' ? column + (4 - (column % 4)) : column + 1;
   }
-  return width;
+  return column - startColumn;
+}
+
+function stripMarkdownContainerIndent(line, frame) {
+  let content = String(line || '');
+  let blockquoteDepth = 0;
+  while (blockquoteDepth < (frame?.blockquoteDepth || frame?.depth || 0)) {
+    const blockquote = content.match(/^ {0,3}>[ \t]?/u);
+    if (!blockquote) return content;
+    content = content.slice(blockquote[0].length);
+    blockquoteDepth += 1;
+  }
+  if (frame?.kind !== 'list') return content;
+
+  let column = 0;
+  let index = 0;
+  while (index < content.length && column < frame.minimumIndent) {
+    const character = content[index];
+    if (character !== ' ' && character !== '\t') break;
+    column = character === '\t' ? column + (4 - (column % 4)) : column + 1;
+    index += 1;
+  }
+  return column >= frame.minimumIndent ? content.slice(index) : content;
 }
 
 function continuesMarkdownContainer(line, frame) {
@@ -365,10 +407,17 @@ function isLinkReferenceDefinition(line) {
   );
 }
 
-function linkReferenceSyntaxLine(lines, index) {
+function linkReferenceSyntaxLine(lines, index, frame = null) {
   if (index >= lines.length) return null;
-  const syntaxLine = parseMarkdownContainer(lines[index]).content;
-  return decodeHtmlEntitiesDetailed(syntaxLine).value;
+  const line = lines[index];
+  if (frame && !continuesMarkdownContainer(line, frame)) return null;
+  const syntaxLine = frame
+    ? stripMarkdownContainerIndent(line, frame)
+    : parseMarkdownContainer(line).content;
+  return {
+    frame: frame || parseMarkdownContainer(line).frame,
+    value: decodeHtmlEntitiesDetailed(syntaxLine).value,
+  };
 }
 
 function consumeLinkDestination(value) {
@@ -382,7 +431,7 @@ function consumeLinkDestination(value) {
   return match ? { rest: input.slice(match[0].length) } : null;
 }
 
-function consumeLinkTitle(lines, startIndex, initialText) {
+function consumeLinkTitle(lines, startIndex, initialText, frame) {
   const input = String(initialText || '').replace(/^[ \t]+/u, '');
   const opener = input[0];
   const closer = opener === '(' ? ')' : opener;
@@ -410,42 +459,95 @@ function consumeLinkTitle(lines, startIndex, initialText) {
     }
 
     index += 1;
-    const next = linkReferenceSyntaxLine(lines, index);
-    if (next === null || /^[ \t]*$/u.test(next)) return null;
-    text = next;
+    const next = linkReferenceSyntaxLine(lines, index, frame);
+    if (next === null || /^[ \t]*$/u.test(next.value)) return null;
+    text = next.value;
   }
 }
 
-function scanLinkReferenceDefinition(lines, startIndex) {
+function scanLinkReferenceLabel(lines, startIndex) {
   const first = linkReferenceSyntaxLine(lines, startIndex);
-  const opening = first?.match(
-    /^ {0,3}\[(?:\\.|[^\[\]\\])+\]:([ \t]*)(.*)$/u,
-  );
-  if (!opening) return 0;
+  const opening = first?.value.match(/^ {0,3}\[([\s\S]*)$/u);
+  if (!opening) return null;
+
+  const firstRemainder = opening[1];
+  const maxEndIndex = startIndex + (firstRemainder ? 1 : 2);
+  let label = '';
+  let escaped = false;
+  for (let index = startIndex; index <= maxEndIndex && index < lines.length; index += 1) {
+    const text = index === startIndex
+      ? firstRemainder
+      : linkReferenceSyntaxLine(lines, index, first.frame)?.value;
+    if (text === undefined || text === null) return null;
+    if (index > startIndex) label += '\n';
+
+    for (let cursor = 0; cursor < text.length; cursor += 1) {
+      const character = text[cursor];
+      if (escaped) {
+        label += character;
+        escaped = false;
+        continue;
+      }
+      if (character === '\\') {
+        label += character;
+        escaped = true;
+        continue;
+      }
+      if (character === '[') return null;
+      if (character !== ']') {
+        label += character;
+        continue;
+      }
+      const after = text.slice(cursor + 1);
+      if (!after.startsWith(':')) return null;
+      if (
+        [...label].length > 999 ||
+        !/[^\t \n]/u.test(label)
+      ) {
+        return null;
+      }
+      return {
+        endIndex: index,
+        frame: first.frame,
+        remainder: after.slice(1).replace(/^[ \t]+/u, ''),
+      };
+    }
+  }
+  return null;
+}
+
+function scanLinkReferenceDefinition(lines, startIndex) {
+  const label = scanLinkReferenceLabel(lines, startIndex);
+  if (!label) return 0;
 
   const state = {
-    endIndex: startIndex,
-    remainder: opening[2],
+    endIndex: label.endIndex,
+    remainder: label.remainder,
   };
   if (!state.remainder) {
     state.endIndex += 1;
-    const destinationLine = linkReferenceSyntaxLine(lines, state.endIndex);
-    if (destinationLine === null || /^[ \t]*$/u.test(destinationLine)) return 0;
-    state.remainder = destinationLine;
+    const destinationLine = linkReferenceSyntaxLine(lines, state.endIndex, label.frame);
+    if (destinationLine === null || /^[ \t]*$/u.test(destinationLine.value)) return 0;
+    state.remainder = destinationLine.value;
   }
 
   const destination = consumeLinkDestination(state.remainder);
   if (!destination) return 0;
   const trailing = destination.rest;
   if (trailing.trim()) {
-    const title = consumeLinkTitle(lines, state.endIndex, trailing);
+    const title = consumeLinkTitle(lines, state.endIndex, trailing, label.frame);
     return title ? title.endIndex - startIndex + 1 : 0;
   }
 
   const possibleTitleIndex = state.endIndex + 1;
-  const possibleTitle = linkReferenceSyntaxLine(lines, possibleTitleIndex);
-  if (possibleTitle && /^[ \t]*["'(]/u.test(possibleTitle)) {
-    const title = consumeLinkTitle(lines, possibleTitleIndex, possibleTitle);
+  const possibleTitle = linkReferenceSyntaxLine(lines, possibleTitleIndex, label.frame);
+  if (possibleTitle && /^[ \t]*["'(]/u.test(possibleTitle.value)) {
+    const title = consumeLinkTitle(
+      lines,
+      possibleTitleIndex,
+      possibleTitle.value,
+      label.frame,
+    );
     if (title) return title.endIndex - startIndex + 1;
   }
   return state.endIndex - startIndex + 1;
@@ -475,7 +577,11 @@ function stripIgnoredMarkdown(body) {
       const syntaxLine = container.content;
       const decodedSyntaxLine = decodeHtmlEntitiesDetailed(syntaxLine).value;
 
-      if (fence && !continuesMarkdownContainer(line, fence.container)) {
+      if (
+        fence &&
+        !continuesMarkdownContainer(line, fence.container) &&
+        !fence.container?.tabPadding
+      ) {
         fence = null;
         paragraphOpen = false;
         continue;
@@ -487,7 +593,8 @@ function stripIgnoredMarkdown(body) {
       }
 
       if (fence) {
-        if (isClosingFence(syntaxLine, fence)) fence = null;
+        const fenceSyntaxLine = stripMarkdownContainerIndent(line, fence.container);
+        if (isClosingFence(fenceSyntaxLine, fence)) fence = null;
         visibleLines.push('');
         paragraphOpen = false;
         handled = true;
@@ -733,25 +840,19 @@ function isPlaceholder(value) {
 }
 
 function hasSubstantiveScope(value) {
-  let clean = canonicalizeMarkdownText(value);
+  const clean = canonicalizeMarkdownText(value);
   if (isExplicitPlaceholder(clean) || !/[\p{L}\p{N}]/u.test(clean)) return false;
-  if (/^(?:内容|事项|项目|范围|相关内容|相关事项|上述|以上)$/u.test(clean)) return false;
-
-  for (let pass = 0; pass < 8; pass += 1) {
-    const next = clean
-      .replace(/^(?:(?:所有|全部|相关|其他|其它|一般|常规|通用|上述|以上|各项|相应)\s*)+/u, '')
-      .replace(/^(?:(?:all|any|related|other|generic|general|relevant|remaining)\s+)+/iu, '');
-    if (next === clean) break;
-    clean = next;
+  if (/测试.*覆盖|覆盖.*测试/u.test(clean) || /\btest(?:ing)?[ \t]+coverage\b/iu.test(clean)) {
+    return true;
   }
 
-  const compact = clean.replace(/[\s:：,，、/\\()[\]{}<>《》“”"'`-]+/gu, '');
-  if (!compact) return false;
-  if (/^(?:检查|核对|验证|审查|覆盖|复核|查看|确认|评估|分析|调查|测试|执行|处理|跟进|完成|排查|扫描|检视|工作|事情|事项|内容|和|与|及|以及|或|或者|过|了)+$/u.test(compact)) {
-    return false;
-  }
-  return !/^(?:check|checked|checking|inspection|inspections|inspect|inspected|inspecting|scan|scans|scanned|scanning|verify|verified|verification|validate|validated|validation|review|reviewed|audit|audited|coverage|test|testing|analysis|investigation|work|task|thing|something|anything|and|or)+$/iu.test(
-    compact,
+  const object = clean
+    .replace(CHINESE_FUNCTION_OR_GENERIC_PATTERN, ' ')
+    .replace(CHINESE_ACTION_OR_STATE_PATTERN, ' ')
+    .replace(ENGLISH_FUNCTION_OR_GENERIC_PATTERN, ' ')
+    .replace(ENGLISH_ACTION_OR_STATE_PATTERN, ' ');
+  return /[\p{L}\p{N}]/u.test(
+    object.replace(/[\s:：,，、/\\()[\]{}<>《》“”"'`-]+/gu, ''),
   );
 }
 
@@ -787,30 +888,11 @@ function hasBoundedNoFindingScopes(value) {
 
 function hasSubstantiveRisk(value) {
   const clean = canonicalizeMarkdownText(value);
-  if (
-    /^(?:no|not[ \t]+any)[ \t]+(?:errors?|failures?|issues?|problems?|risks?|findings?)(?:[ \t]+(?:was|were|is|are))?[ \t]+(?:detected|found|identified|observed)[.!]?$/iu.test(
-      clean,
-    )
-  ) {
-    return false;
-  }
   const hasState =
     /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|未(?:查|检查|核对|验证|审查|覆盖|复核|排查|扫描|测试|实测|量化|确认|登记|完成|评估|分析|测量)|尚未|待(?:查|检查|核对|验证|审查|复核|排查|扫描|测试|实测|量化|确认|评估|分析|测量)|需(?:要)?(?:查|检查|核对|验证|审查|复核|排查|扫描|测试|实测|量化|确认|评估|分析|测量)|可能|也许|担心|局限|依赖|只在|仅在|变化)/u.test(clean) ||
     /\b(?:incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|not|only|may|might|could|depends?|needs?|requires?|unmeasured|fail(?:ed|ure)?|error)\b/iu.test(clean);
   if (!hasState) return false;
-
-  const object = clean
-    .replace(
-      /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|尚未|未|待|需(?:要)?|可能|也许|担心|局限|依赖|只在|仅在|变化|检查|核对|验证|审查|复核|排查|扫描|检视|确认|评估|分析|调查|执行|处理|跟进|完成|实测|量化|测量|观察|识别|检测|登记|风险|问题|工作|事情|事项|内容|某事|某些|一些|任何|所有|相关|其他|其它|通用|一般|和|与|及|以及|或|或者)/gu,
-      ' ',
-    )
-    .replace(
-      /\b(?:a|an|the|be|has|have|had|been|being|is|are|was|were|still|no|not|any|only|may|might|could|depends?|needs?|requires?|incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|unmeasured|measured|measurement|check(?:ed|ing)?|inspect(?:ed|ing|ion|ions)?|scan(?:ned|ning|s)?|verif(?:y|ied|ication)|validat(?:e|ed|ion)|review(?:ed|ing)?|audit(?:ed|ing)?|test(?:ed|ing)?|quantif(?:y|ied|ication)|detect(?:ed|ing|ion)?|observ(?:e|ed|ing|ation)|identif(?:y|ied|ication)|fail(?:ed|ure)?|error|risk|risks|issue|issues|problem|problems|finding|findings|gap|gaps|missing|change(?:d|s|ing)?|work|task|thing|something|anything|generic|general|related|other|and|or)\b/giu,
-      ' ',
-    );
-  const compactObject = object.replace(/[^\p{L}\p{N}]+/gu, '');
-  if (/测试.*覆盖|覆盖.*测试/u.test(compactObject)) return true;
-  return hasSubstantiveScope(object);
+  return hasSubstantiveScope(clean);
 }
 
 function isWeakReflection(value) {

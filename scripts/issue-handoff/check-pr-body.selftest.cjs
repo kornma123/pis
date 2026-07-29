@@ -343,6 +343,92 @@ expectFail('table-cell contract is rejected', wrapTable(validBody), /Issue \/ �
 
 const leastConfidenceLine =
   '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测';
+const biggestMissingLine =
+  '- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: 上游身份服务可能还有未登记的调用方';
+for (const [name, fieldLine, destination] of [
+  [
+    'multiline link-reference label hides least-confidence',
+    leastConfidenceLine,
+    '/least',
+  ],
+  [
+    'multiline link-reference label hides biggest-missing',
+    biggestMissingLine,
+    '/biggest',
+  ],
+]) {
+  expectFail(
+    name,
+    validBody.replace(fieldLine, `
+[
+${fieldLine}
+]: ${destination}`),
+    /(?:字段未填写|反盲区字段缺少).*(?:我现在最没把握的是什么|我可能遗漏的最大问题是什么)/,
+  );
+}
+for (const marker of ['-', '1.']) {
+  for (const indentation of [1, 2, 3]) {
+    expectFail(
+      `${marker} tab-list fence hides least-confidence at ${indentation}-space content indent`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${marker}\t\`\`\`md
+${' '.repeat(indentation)}${leastConfidenceLine}
+    \`\`\``,
+      ),
+      /(?:字段未填写|反盲区字段缺少).*我现在最没把握的是什么/,
+    );
+  }
+}
+expectPass(
+  'tab-list fenced code closes before a following visible contract',
+  validBody.replace(
+    leastConfidenceLine,
+    `-\t\`\`\`md
+ hidden code
+    \`\`\`
+${leastConfidenceLine}`,
+  ),
+  [128],
+);
+expectPass(
+  'ordered tab-list fenced code closes at its absolute content column',
+  validBody.replace(
+    leastConfidenceLine,
+    `1.\t\`\`\`md
+ hidden code
+    \`\`\`
+${leastConfidenceLine}`,
+  ),
+  [128],
+);
+expectPass(
+  'list padding beyond four columns is preserved instead of opening a fence',
+  `-     \`\`\`md
+${validBody.trimStart()}`,
+  [128],
+);
+expectPass(
+  'multiline link-reference label cannot interrupt a paragraph',
+  validBody.replace(
+    leastConfidenceLine,
+    `paragraph continuation
+[
+${leastConfidenceLine}
+]: /least`,
+  ),
+  [128],
+);
+expectPass(
+  'multiline link-reference label ends when its blockquote container exits',
+  validBody.replace(
+    leastConfidenceLine,
+    `> [
+${leastConfidenceLine}
+]: /least`,
+  ),
+  [128],
+);
 for (const [name, wrap] of [
   ['list-fence hidden strong value', wrapListFence],
   ['raw-pre hidden strong value', (body) => wrapRawHtmlBlock('pre', body)],
@@ -777,6 +863,17 @@ for (const [name, value] of [
   ['English negative failure detection is rejected', 'No failure detected'],
   ['Chinese generic work completion is rejected', '未完成工作'],
   ['English generic object failure is rejected', 'something may fail'],
+  ['Chinese generic pronoun failure is rejected', '它可能失败'],
+  ['Chinese plural demonstrative uncertainty is rejected', '这些尚未确认'],
+  ['English singular demonstrative failure is rejected', 'that could fail'],
+  ['English plural demonstrative failure is rejected', 'these may fail'],
+  ['Chinese leading connector failure is rejected', '然后可能失败'],
+  ['Chinese contrast connector problem is rejected', '不过可能有问题'],
+  ['Chinese negative detection is rejected', '没检测到错误'],
+  ['Chinese negative discovery of anomaly is rejected', '未检出异常'],
+  ['Chinese negative discovery of problem is rejected', '未查出问题'],
+  ['English nothing-failed form is rejected', 'nothing failed'],
+  ['English existential generic risk is rejected', 'there may be a risk'],
   [
     'no-finding rejects connected action-only scopes',
     '未发现；已检查验证和复核；未检查审计和扫描',
@@ -841,6 +938,8 @@ for (const [name, value] of [
   ['English concrete measurement risk is accepted', 'production timeout needs measurement'],
   ['concrete certificate review risk is accepted', '证书轮换窗口需复核'],
   ['English concrete failure risk is accepted', 'payment webhook may fail'],
+  ['Chinese demonstrative with concrete object is accepted', '这些支付回调可能失败'],
+  ['English demonstrative with concrete object is accepted', 'these payment webhooks may fail'],
 ]) {
   expectPass(name, replaceLeastConfidence(validBody, value), [128]);
 }

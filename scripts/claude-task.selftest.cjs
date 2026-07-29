@@ -565,6 +565,117 @@ for (const [name, input, visible, hidden] of [
 const prStrongLeastConfidenceLine =
   `- **我现在最没把握的是什么？ / Least confidence**: ${strongLeastConfidence}`;
 const handoffStrongLeastConfidenceLine = `least-confidence: ${strongLeastConfidence}`;
+const prStrongBiggestMissingLine =
+  `- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: ${strongBiggestMissing}`;
+const handoffStrongBiggestMissingLine = `biggest-missing: ${strongBiggestMissing}`;
+for (const [name, handoffField, prField, destination] of [
+  [
+    'multiline link-reference label hides least-confidence',
+    handoffStrongLeastConfidenceLine,
+    prStrongLeastConfidenceLine,
+    '/least',
+  ],
+  [
+    'multiline link-reference label hides biggest-missing',
+    handoffStrongBiggestMissingLine,
+    prStrongBiggestMissingLine,
+    '/biggest',
+  ],
+]) {
+  const wrapHandoff = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+    .replace(handoffField, `
+[
+${handoffField}
+]: ${destination}`);
+  const wrapPr = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+    .replace(prField, `
+[
+${prField}
+]: ${destination}`);
+  const handoffOk = handoffFieldErrors(wrapHandoff).length === 0;
+  const prOk = validatePrBody(wrapPr).ok;
+  if (handoffOk || prOk || handoffOk !== prOk) {
+    reflectionRegressionFailures.push(
+      `${name}: hidden field accepted (handoff=${handoffOk}, pr=${prOk})`,
+    );
+  }
+}
+for (const marker of ['-', '1.']) {
+  for (const indentation of [1, 2, 3]) {
+    const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        handoffStrongLeastConfidenceLine,
+        `${marker}\t\`\`\`md
+${' '.repeat(indentation)}${handoffStrongLeastConfidenceLine}
+    \`\`\``,
+      );
+    const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        prStrongLeastConfidenceLine,
+        `${marker}\t\`\`\`md
+${' '.repeat(indentation)}${prStrongLeastConfidenceLine}
+    \`\`\``,
+      );
+    const handoffOk = handoffFieldErrors(handoffBody).length === 0;
+    const prOk = validatePrBody(prBody).ok;
+    if (handoffOk || prOk || handoffOk !== prOk) {
+      reflectionRegressionFailures.push(
+        `${marker} tab-list fence ${indentation}-space indent accepted hidden field ` +
+        `(handoff=${handoffOk}, pr=${prOk})`,
+      );
+    }
+  }
+}
+for (const [name, transform] of [
+  [
+    'ordered tab-list fence closes before visible contract',
+    (body) => `1.\t\`\`\`md
+ hidden code
+    \`\`\`
+${body}`,
+  ],
+  [
+    'list padding beyond four columns does not open a fence',
+    (body) => `-     \`\`\`md
+${body}`,
+  ],
+]) {
+  checkVisibilitySemantics(name, transform, true);
+}
+for (const [name, handoffPrefix, prPrefix] of [
+  [
+    'multiline link-reference cannot interrupt paragraph',
+    'paragraph continuation\n[',
+    'paragraph continuation\n[',
+  ],
+  [
+    'multiline link-reference ends at blockquote container exit',
+    '> [',
+    '> [',
+  ],
+]) {
+  const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+    .replace(
+      handoffStrongLeastConfidenceLine,
+      `${handoffPrefix}
+${handoffStrongLeastConfidenceLine}
+]: /least`,
+    );
+  const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+    .replace(
+      prStrongLeastConfidenceLine,
+      `${prPrefix}
+${prStrongLeastConfidenceLine}
+]: /least`,
+    );
+  const handoffOk = handoffFieldErrors(handoffBody).length === 0;
+  const prOk = validatePrBody(prBody).ok;
+  if (!handoffOk || !prOk || handoffOk !== prOk) {
+    reflectionRegressionFailures.push(
+      `${name}: visible field rejected (handoff=${handoffOk}, pr=${prOk})`,
+    );
+  }
+}
 for (const [name, wrap] of [
   ['list-fence hidden strong value', wrapListFence],
   ['raw-pre hidden strong value', (body) => wrapRawHtmlBlock('pre', body)],
@@ -638,6 +749,17 @@ const adversarialReflectionCorpus = [
   ['English negative failure detection', 'No failure detected', false],
   ['Chinese generic work completion', '未完成工作', false],
   ['English generic object failure', 'something may fail', false],
+  ['Chinese generic pronoun failure', '它可能失败', false],
+  ['Chinese plural demonstrative uncertainty', '这些尚未确认', false],
+  ['English singular demonstrative failure', 'that could fail', false],
+  ['English plural demonstrative failure', 'these may fail', false],
+  ['Chinese leading connector failure', '然后可能失败', false],
+  ['Chinese contrast connector problem', '不过可能有问题', false],
+  ['Chinese negative detection', '没检测到错误', false],
+  ['Chinese negative discovery of anomaly', '未检出异常', false],
+  ['Chinese negative discovery of problem', '未查出问题', false],
+  ['English nothing-failed form', 'nothing failed', false],
+  ['English existential generic risk', 'there may be a risk', false],
   [
     'connected action-only no-finding scopes',
     '未发现；已检查验证和复核；未检查审计和扫描',
@@ -650,6 +772,8 @@ const adversarialReflectionCorpus = [
   ['English concrete measurement risk', 'production timeout needs measurement', true],
   ['concrete certificate review risk', '证书轮换窗口需复核', true],
   ['English concrete failure risk', 'payment webhook may fail', true],
+  ['Chinese demonstrative with concrete object', '这些支付回调可能失败', true],
+  ['English demonstrative with concrete object', 'these payment webhooks may fail', true],
   ['substantive bounded no-finding', '未发现；已检查固定对象和测试，未检查生产参数', true],
   ['generic modifiers with concrete objects', '未发现；已检查所有目标代码；未检查相关生产参数', true],
   [
@@ -1695,6 +1819,71 @@ if (!noErrorDetectedHandoff.stateExists) {
 if (!/least-confidence/.test(noErrorDetectedHandoff.stderr)) {
   reflectionRegressionFailures.push(
     `negative-detection handoff did not report least-confidence: ${noErrorDetectedHandoff.stderr}`,
+  );
+}
+const multilineLabelHiddenHandoff = runIsolatedHandoff(
+  'production timeout behavior has not been measured',
+  (body) => body.replace(
+    'least-confidence: production timeout behavior has not been measured',
+    `
+[
+least-confidence: production timeout behavior has not been measured
+]: /least`,
+  ),
+);
+if (multilineLabelHiddenHandoff.status !== 1) {
+  reflectionRegressionFailures.push(
+    `multiline-label hidden handoff expected exit=1, actual=${multilineLabelHiddenHandoff.status}`,
+  );
+}
+if (!multilineLabelHiddenHandoff.stateExists) {
+  reflectionRegressionFailures.push(
+    'multiline-label hidden handoff removed the active task state file',
+  );
+}
+if (!/least-confidence/.test(multilineLabelHiddenHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `multiline-label hidden handoff did not report least-confidence: ${multilineLabelHiddenHandoff.stderr}`,
+  );
+}
+const tabListFenceHiddenHandoff = runIsolatedHandoff(
+  'production timeout behavior has not been measured',
+  (body) => body.replace(
+    'least-confidence: production timeout behavior has not been measured',
+    `-\t\`\`\`md
+ least-confidence: production timeout behavior has not been measured
+    \`\`\``,
+  ),
+);
+if (tabListFenceHiddenHandoff.status !== 1) {
+  reflectionRegressionFailures.push(
+    `tab-list hidden handoff expected exit=1, actual=${tabListFenceHiddenHandoff.status}`,
+  );
+}
+if (!tabListFenceHiddenHandoff.stateExists) {
+  reflectionRegressionFailures.push(
+    'tab-list hidden handoff removed the active task state file',
+  );
+}
+if (!/least-confidence/.test(tabListFenceHiddenHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `tab-list hidden handoff did not report least-confidence: ${tabListFenceHiddenHandoff.stderr}`,
+  );
+}
+const genericPronounHandoff = runIsolatedHandoff('它可能失败');
+if (genericPronounHandoff.status !== 1) {
+  reflectionRegressionFailures.push(
+    `generic-pronoun handoff expected exit=1, actual=${genericPronounHandoff.status}`,
+  );
+}
+if (!genericPronounHandoff.stateExists) {
+  reflectionRegressionFailures.push(
+    'generic-pronoun handoff removed the active task state file',
+  );
+}
+if (!/least-confidence/.test(genericPronounHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `generic-pronoun handoff did not report least-confidence: ${genericPronounHandoff.stderr}`,
   );
 }
 const validHandoff = runIsolatedHandoff('production timeout behavior has not been measured');
