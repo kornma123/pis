@@ -29,7 +29,10 @@ const {
   shellTokens,
   toPosix,
 } = require('./claude-task.cjs');
-const { validatePrBody } = require('./issue-handoff/check-pr-body.cjs');
+const {
+  stripIgnoredMarkdown,
+  validatePrBody,
+} = require('./issue-handoff/check-pr-body.cjs');
 
 const repositoryRoot = path.resolve(__dirname, '..');
 
@@ -243,6 +246,19 @@ ${body}
 &lt;/${tag}&gt;`;
 }
 
+function wrapMultilineRawHtmlBlock(tag, body) {
+  return `&lt;${tag}
+ data-mode="hidden"&gt;
+${body}
+&lt;/${tag}&gt;`;
+}
+
+function wrapDelimitedRawHtmlBlock(opening, closing, body) {
+  return `${opening}
+${body}
+${closing}`;
+}
+
 function wrapVisibleList(body) {
   return `- authored contract
 ${body.trim().split('\n').map((line) => `  ${line}`).join('\n')}`;
@@ -260,6 +276,18 @@ ${body.trim().split('\n').map((line) => `    ${line}`).join('\n')}`;
 
 function wrapTable(body) {
   return body.trim().split('\n').map((line) => `| ${line || ' '} |`).join('\n');
+}
+
+function convertLineEndings(body, endings) {
+  const lines = body.split('\n');
+  return lines.map((line, index) =>
+    index === lines.length - 1 ? line : `${line}${endings[index % endings.length]}`).join('');
+}
+
+function replaceMarkdownSyntaxSeparator(body, replacement) {
+  return body
+    .replace(/^## /gm, `##${replacement}`)
+    .replace(/^- /gm, `-${replacement}`);
 }
 
 const reflectionRegressionFailures = [];
@@ -298,6 +326,44 @@ for (const [name, wrap] of [
   ['encoded raw pre contract is hidden', (body) => wrapRawHtmlBlock('pre', body)],
   ['encoded raw code contract is hidden', (body) => wrapRawHtmlBlock('code', body)],
   ['encoded raw div contract is hidden', (body) => wrapRawHtmlBlock('div', body)],
+  ['multiline pre opener contract is hidden', (body) => wrapMultilineRawHtmlBlock('pre', body)],
+  ['multiline script opener contract is hidden', (body) => wrapMultilineRawHtmlBlock('script', body)],
+  ['multiline style opener contract is hidden', (body) => wrapMultilineRawHtmlBlock('style', body)],
+  ['multiline textarea opener contract is hidden', (body) => wrapMultilineRawHtmlBlock('textarea', body)],
+  [
+    'encoded HTML comment contract is hidden',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;!--', '--&gt;', body),
+  ],
+  [
+    'processing instruction contract is hidden',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;?hidden', '?&gt;', body),
+  ],
+  [
+    'declaration contract is hidden',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;!DOCTYPE hidden', '&gt;', body),
+  ],
+  [
+    'CDATA contract is hidden',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;![CDATA[', ']]&gt;', body),
+  ],
+  ['unclosed pre contract is hidden to EOF', (body) => `&lt;pre\n data-mode="hidden"\n${body}`],
+  ['encoded xmp product container is hidden', (body) => wrapRawHtmlBlock('xmp', body)],
+  [
+    'multiline encoded div product opener contract is hidden',
+    (body) => wrapMultilineRawHtmlBlock('DiV', body),
+  ],
+  [
+    'unclosed multiline encoded xmp product opener hides to EOF',
+    (body) => `&lt;XmP\n data-mode="hidden"\n${body}`,
+  ],
+  [
+    'nested encoded product containers are hidden',
+    (body) => `&lt;DiV data-mode="hidden"&gt;
+&lt;code&gt;
+${body}
+&lt;/code&gt;
+&lt;/DiV&gt;`,
+  ],
 ]) {
   checkVisibilitySemantics(name, wrap, false);
 }
@@ -308,6 +374,41 @@ for (const [name, wrap, expectedOk] of [
   ['table-cell contract is outside canonical shape', wrapTable, false],
 ]) {
   checkVisibilitySemantics(name, wrap, expectedOk);
+}
+
+for (const [name, input, visible, hidden] of [
+  [
+    'CommonMark type 6 ends at a blank line',
+    '&lt;table&gt;\nhidden-type-6\n\nvisible-after-type-6',
+    ['visible-after-type-6'],
+    ['hidden-type-6'],
+  ],
+  [
+    'CommonMark type 7 ends at a blank line',
+    '&lt;custom-element data-mode="hidden"&gt;\nhidden-type-7\n\nvisible-after-type-7',
+    ['visible-after-type-7'],
+    ['hidden-type-7'],
+  ],
+  [
+    'CommonMark type 7 does not interrupt a paragraph',
+    'paragraph text\n&lt;custom-element&gt;\nvisible-paragraph-continuation',
+    ['paragraph text', 'custom-element', 'visible-paragraph-continuation'],
+    [],
+  ],
+  [
+    'encoded div product container spans blank lines',
+    '&lt;DiV data-mode="hidden"&gt;\nhidden-div-before\n\nhidden-div-after\n&lt;/dIv&gt;\nvisible-after-div',
+    ['visible-after-div'],
+    ['hidden-div-before', 'hidden-div-after'],
+  ],
+]) {
+  const output = stripIgnoredMarkdown(input);
+  for (const value of visible) {
+    if (!output.includes(value)) reflectionRegressionFailures.push(`${name}: ${value} was hidden`);
+  }
+  for (const value of hidden) {
+    if (output.includes(value)) reflectionRegressionFailures.push(`${name}: ${value} remained visible`);
+  }
 }
 
 const prStrongLeastConfidenceLine =
@@ -359,7 +460,23 @@ const adversarialReflectionCorpus = [
   ['bare 未见问题 synonym', '未见问题', false],
   ['bare 一切正常 synonym', '一切正常', false],
   ['bare English no-finding synonym', 'No issues found', false],
+  ['bare 无问题 synonym', '无问题', false],
+  ['bare 无明显问题 synonym', '无明显问题', false],
+  ['temporal 目前未发现问题 synonym', '目前未发现问题', false],
+  ['temporal 暂时没发现问题 synonym', '暂时没发现问题', false],
+  ['bare No findings synonym', 'No findings', false],
+  ['bare Nothing to report synonym', 'Nothing to report', false],
+  ['bare All clear synonym', 'All clear', false],
+  ['bare LGTM synonym', 'LGTM', false],
   ['generic modifiers plus action-only scopes', '未发现；已检查所有验证；未检查相关审查', false],
+  ['generic Chinese inspection nouns', '未发现；已检查所有排查；未检查相关扫描', false],
+  [
+    'generic English inspection nouns',
+    'No issues found; checked all inspections; not checked related scans',
+    false,
+  ],
+  ['bare object without risk state', '生产参数', false],
+  ['English bare object without risk state', 'production settings', false],
   ['short concrete test risk', '测试覆盖不足', true],
   ['short concrete external-call risk', '外部调用未查', true],
   ['substantive bounded no-finding', '未发现；已检查固定对象和测试，未检查生产参数', true],
@@ -370,8 +487,28 @@ const adversarialReflectionCorpus = [
     true,
   ],
   [
+    'temporal Chinese bounded no-finding',
+    '目前未发现问题；已检查目标代码；未检查生产参数',
+    true,
+  ],
+  [
+    'English findings bounded synonym',
+    'No findings; checked target code; not checked production settings',
+    true,
+  ],
+  [
+    'LGTM bounded synonym',
+    'LGTM; checked target code; not checked production settings',
+    true,
+  ],
+  [
     'HTML-like product scopes',
     '未发现；已检查&lt;code-v2&gt;与R&amp;D，未检查&lt;span-v3&gt;',
+    true,
+  ],
+  [
+    'concrete objects survive action normalization',
+    '未发现；已排查支付回调重试，未扫描仓库外 webhook 配置',
     true,
   ],
 ];
@@ -589,6 +726,113 @@ ${second}: TODO later fill this
 biggest-missing: an upstream schema owner may still change the contract`;
   if (!handoffFieldErrors(body).includes('least-confidence')) {
     reflectionRegressionFailures.push(`${name} was accepted`);
+  }
+}
+
+for (const [name, handoffBody, prBody] of [
+  [
+    'lone CR duplicate with strong field first',
+    reflectionHandoff(strongLeastConfidence, strongBiggestMissing).replace(
+      handoffStrongLeastConfidenceLine,
+      `${handoffStrongLeastConfidenceLine}\rleast-confidence: 暂无问题`,
+    ),
+    reflectionPrBody(strongLeastConfidence, strongBiggestMissing).replace(
+      prStrongLeastConfidenceLine,
+      `${prStrongLeastConfidenceLine}\r- **我现在最没把握的是什么？ / Least confidence**: 暂无问题`,
+    ),
+  ],
+  [
+    'lone CR duplicate with weak field first',
+    reflectionHandoff(strongLeastConfidence, strongBiggestMissing).replace(
+      handoffStrongLeastConfidenceLine,
+      `least-confidence: 暂无问题\r${handoffStrongLeastConfidenceLine}`,
+    ),
+    reflectionPrBody(strongLeastConfidence, strongBiggestMissing).replace(
+      prStrongLeastConfidenceLine,
+      `- **我现在最没把握的是什么？ / Least confidence**: 暂无问题\r${prStrongLeastConfidenceLine}`,
+    ),
+  ],
+]) {
+  const handoffErrors = handoffFieldErrors(handoffBody);
+  const prResult = validatePrBody(prBody);
+  if (!handoffErrors.includes('least-confidence')) {
+    reflectionRegressionFailures.push(`${name}: handoff duplicate was accepted`);
+  }
+  if (prResult.ok || !prResult.errors.some((error) => /必填字段重复/.test(error))) {
+    reflectionRegressionFailures.push(`${name}: PR duplicate was accepted`);
+  }
+}
+
+for (const [name, endings] of [
+  ['all lone CR', ['\r']],
+  ['all CRLF', ['\r\n']],
+  ['mixed CRLF LF and CR', ['\r\n', '\n', '\r']],
+]) {
+  const handoffErrors = handoffFieldErrors(convertLineEndings(
+    reflectionHandoff(strongLeastConfidence, strongBiggestMissing),
+    endings,
+  ));
+  const prResult = validatePrBody(convertLineEndings(
+    reflectionPrBody(strongLeastConfidence, strongBiggestMissing),
+    endings,
+  ));
+  if (handoffErrors.length !== 0 || !prResult.ok) {
+    reflectionRegressionFailures.push(
+      `${name}: normalized documents disagreed or failed (handoff=${handoffErrors.join(',')}, pr=${prResult.errors.join('; ')})`,
+    );
+  }
+}
+
+for (const [name, replacement, expectedOk] of [
+  ['NBSP Markdown separators', '\u00A0', false],
+  ['form-feed Markdown separators', '\f', false],
+  ['tab Markdown separators', '\t', true],
+]) {
+  const result = validatePrBody(replaceMarkdownSyntaxSeparator(
+    reflectionPrBody(strongLeastConfidence, strongBiggestMissing),
+    replacement,
+  ));
+  if (result.ok !== expectedOk) {
+    reflectionRegressionFailures.push(
+      `${name}: PR expected ok=${expectedOk}, actual=${result.ok} (${result.errors.join('; ')})`,
+    );
+  }
+}
+
+for (const [name, handoffKey, prKey] of [
+  ['NUL inside field key', 'lea\u0000st-confidence', 'Lea\u0000st confidence'],
+  [
+    'NUL before encoded delimiter',
+    'least-confidence\u0000&amp;#58; TODO later fill this',
+    'Least confidence**\u0000&amp;#58; TODO later fill this',
+  ],
+]) {
+  let handoffBody;
+  let prBody;
+  if (name === 'NUL inside field key') {
+    handoffBody = `${reflectionHandoff(strongLeastConfidence, strongBiggestMissing)}
+${handoffKey}: TODO later fill this`;
+    prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing).replace(
+      prStrongLeastConfidenceLine,
+      `${prStrongLeastConfidenceLine}
+- **我现在最没把握的是什么？ / ${prKey}**: TODO later fill this`,
+    );
+  } else {
+    handoffBody = `${reflectionHandoff(strongLeastConfidence, strongBiggestMissing)}
+${handoffKey}`;
+    prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing).replace(
+      prStrongLeastConfidenceLine,
+      `${prStrongLeastConfidenceLine}
+- **我现在最没把握的是什么？ / ${prKey}`,
+    );
+  }
+  const handoffErrors = handoffFieldErrors(handoffBody);
+  const prResult = validatePrBody(prBody);
+  if (!handoffErrors.includes('field-key')) {
+    reflectionRegressionFailures.push(`${name}: handoff did not fail with field-key`);
+  }
+  if (!prResult.errors.includes(malformedPrError)) {
+    reflectionRegressionFailures.push(`${name}: PR did not fail with exact malformed error`);
   }
 }
 
@@ -1084,7 +1328,7 @@ if (args[0] === 'repo' && args[1] === 'view') {
   }
 }
 
-const invalidHandoff = runIsolatedHandoff('暂无问题');
+const invalidHandoff = runIsolatedHandoff('LGTM');
 if (invalidHandoff.status !== 1) {
   reflectionRegressionFailures.push(
     `invalid handoff end-to-end expected exit=1, actual=${invalidHandoff.status}`,

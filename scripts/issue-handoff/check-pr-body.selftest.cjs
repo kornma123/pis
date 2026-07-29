@@ -3,7 +3,10 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { validatePrBody } = require('./check-pr-body.cjs');
+const {
+  stripIgnoredMarkdown,
+  validatePrBody,
+} = require('./check-pr-body.cjs');
 
 const validBody = `
 ## Issue / 会话交接
@@ -93,6 +96,19 @@ ${body}
 &lt;/${tag}&gt;`;
 }
 
+function wrapMultilineRawHtmlBlock(tag, body) {
+  return `&lt;${tag}
+ data-mode="hidden"&gt;
+${body}
+&lt;/${tag}&gt;`;
+}
+
+function wrapDelimitedRawHtmlBlock(opening, closing, body) {
+  return `${opening}
+${body}
+${closing}`;
+}
+
 function wrapVisibleList(body) {
   return `- authored contract
 ${body.trim().split('\n').map((line) => `  ${line}`).join('\n')}`;
@@ -110,6 +126,25 @@ ${body.trim().split('\n').map((line) => `    ${line}`).join('\n')}`;
 
 function wrapTable(body) {
   return body.trim().split('\n').map((line) => `| ${line || ' '} |`).join('\n');
+}
+
+function convertLineEndings(body, endings) {
+  const lines = body.split('\n');
+  return lines.map((line, index) =>
+    index === lines.length - 1 ? line : `${line}${endings[index % endings.length]}`).join('');
+}
+
+function replaceMarkdownSyntaxSeparator(body, replacement) {
+  return body
+    .replace(/^## /gm, `##${replacement}`)
+    .replace(/^- /gm, `-${replacement}`);
+}
+
+function expectVisibleMarkdown(name, input, visible, hidden) {
+  scenarioCount += 1;
+  const output = stripIgnoredMarkdown(input);
+  for (const value of visible) assert.match(output, value, `${name}: expected visible ${value}`);
+  for (const value of hidden) assert.doesNotMatch(output, value, `${name}: expected hidden ${value}`);
 }
 
 expectPass('complete delivery', validBody, [128]);
@@ -135,9 +170,71 @@ for (const [name, wrap] of [
   ['contract hidden in encoded raw HTML pre block', (body) => wrapRawHtmlBlock('pre', body)],
   ['contract hidden in encoded raw HTML code block', (body) => wrapRawHtmlBlock('code', body)],
   ['contract hidden in encoded raw HTML div block', (body) => wrapRawHtmlBlock('div', body)],
+  ['contract hidden in multiline pre opener', (body) => wrapMultilineRawHtmlBlock('pre', body)],
+  ['contract hidden in multiline script opener', (body) => wrapMultilineRawHtmlBlock('script', body)],
+  ['contract hidden in multiline style opener', (body) => wrapMultilineRawHtmlBlock('style', body)],
+  ['contract hidden in multiline textarea opener', (body) => wrapMultilineRawHtmlBlock('textarea', body)],
+  [
+    'contract hidden in encoded HTML comment block',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;!--', '--&gt;', body),
+  ],
+  [
+    'contract hidden in processing instruction block',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;?hidden', '?&gt;', body),
+  ],
+  [
+    'contract hidden in declaration block',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;!DOCTYPE hidden', '&gt;', body),
+  ],
+  [
+    'contract hidden in CDATA block',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;![CDATA[', ']]&gt;', body),
+  ],
+  ['contract hidden after unclosed pre opener', (body) => `&lt;pre\n data-mode="hidden"\n${body}`],
+  ['contract hidden in encoded xmp product container', (body) => wrapRawHtmlBlock('xmp', body)],
+  [
+    'contract hidden in multiline encoded div product opener',
+    (body) => wrapMultilineRawHtmlBlock('DiV', body),
+  ],
+  [
+    'contract hidden after unclosed multiline encoded xmp product opener',
+    (body) => `&lt;XmP\n data-mode="hidden"\n${body}`,
+  ],
+  [
+    'contract hidden in nested encoded product containers',
+    (body) => `&lt;DiV data-mode="hidden"&gt;
+&lt;code&gt;
+${body}
+&lt;/code&gt;
+&lt;/DiV&gt;`,
+  ],
 ]) {
   expectFail(name, wrap(validBody), /Issue \/ 会话交接/);
 }
+expectVisibleMarkdown(
+  'CommonMark type 6 ends at the first blank line',
+  '&lt;table&gt;\nhidden-type-6\n\nvisible-after-type-6',
+  [/visible-after-type-6/],
+  [/hidden-type-6/],
+);
+expectVisibleMarkdown(
+  'CommonMark type 7 complete tag ends at the first blank line',
+  '&lt;custom-element data-mode="hidden"&gt;\nhidden-type-7\n\nvisible-after-type-7',
+  [/visible-after-type-7/],
+  [/hidden-type-7/],
+);
+expectVisibleMarkdown(
+  'CommonMark type 7 cannot interrupt a paragraph',
+  'paragraph text\n&lt;custom-element&gt;\nvisible-paragraph-continuation',
+  [/paragraph text/, /custom-element/, /visible-paragraph-continuation/],
+  [],
+);
+expectVisibleMarkdown(
+  'encoded div product container remains hidden across blank lines',
+  '&lt;DiV data-mode="hidden"&gt;\nhidden-div-before\n\nhidden-div-after\n&lt;/dIv&gt;\nvisible-after-div',
+  [/visible-after-div/],
+  [/hidden-div-before/, /hidden-div-after/],
+);
 expectPass('visible list contract is accepted', wrapVisibleList(validBody), [128]);
 expectFail('visible blockquote contract is rejected', wrapBlockquote(validBody), /Issue \/ 会话交接/);
 expectFail('visible nested-list contract is rejected', wrapNestedList(validBody), /Issue \/ 会话交接/);
@@ -241,6 +338,40 @@ expectFail(
   /必填字段重复：我现在最没把握的是什么/,
 );
 expectFail(
+  'lone CR duplicate fails closed with strong value first',
+  validBody.replace(
+    leastConfidenceLine,
+    `${leastConfidenceLine}\r- **我现在最没把握的是什么？ / Least confidence**: 暂无问题`,
+  ),
+  /必填字段重复：我现在最没把握的是什么/,
+);
+expectFail(
+  'lone CR duplicate fails closed with weak value first',
+  validBody.replace(
+    leastConfidenceLine,
+    `- **我现在最没把握的是什么？ / Least confidence**: 暂无问题\r${leastConfidenceLine}`,
+  ),
+  /必填字段重复：我现在最没把握的是什么/,
+);
+expectPass('all-lone-CR document is normalized', convertLineEndings(validBody, ['\r']), [128]);
+expectPass('CRLF document is normalized', convertLineEndings(validBody, ['\r\n']), [128]);
+expectPass(
+  'mixed CRLF LF and CR document is normalized',
+  convertLineEndings(validBody, ['\r\n', '\n', '\r']),
+  [128],
+);
+expectFail(
+  'mixed line endings retain duplicate detection',
+  convertLineEndings(
+    validBody.replace(
+      leastConfidenceLine,
+      `${leastConfidenceLine}\n- **我现在最没把握的是什么？ / Least confidence**: 暂无问题`,
+    ),
+    ['\r\n', '\r', '\n'],
+  ),
+  /必填字段重复：我现在最没把握的是什么/,
+);
+expectFail(
   'encoded duplicate fails closed with canonical strong value first',
   validBody.replace(
     '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
@@ -266,6 +397,22 @@ expectFail(
       '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
   ),
   /必填字段重复：我现在最没把握的是什么/,
+);
+expectFail(
+  'NUL field key cannot bypass duplicate detection',
+  validBody.replace(
+    leastConfidenceLine,
+    `${leastConfidenceLine}\n- **我现在最没把握的是什么？ / Lea\u0000st confidence**: TODO later fill this`,
+  ),
+  /字段键无法安全解析/,
+);
+expectFail(
+  'NUL before encoded delimiter fails closed',
+  validBody.replace(
+    leastConfidenceLine,
+    `${leastConfidenceLine}\n- **我现在最没把握的是什么？ / Least confidence**\u0000&amp;#58; TODO later fill this`,
+  ),
+  /字段键无法安全解析/,
 );
 for (const [name, encodedLabel] of [
   ['unresolved named entity after canonical field', 'Least confid&amp;NoBreak;ence'],
@@ -345,7 +492,7 @@ expectPass(
   validBody.replace(
     '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
     '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
-      '- **我现在最没把握的是什么？ / Least_confidence**: TODO later fill this',
+      '- **我现在最没把握的是什么？ / Leas_t confidence**: TODO later fill this',
   ),
   [128],
 );
@@ -402,6 +549,16 @@ for (const [name, placeholder] of [
   );
 }
 expectFail(
+  'bare object without a risk or uncertainty state is rejected',
+  replaceLeastConfidence(validBody, '生产参数'),
+  /反盲区字段回答过弱.*我现在最没把握的是什么/,
+);
+expectFail(
+  'English bare object without a risk or uncertainty state is rejected',
+  replaceLeastConfidence(validBody, 'production settings'),
+  /反盲区字段回答过弱.*我现在最没把握的是什么/,
+);
+expectFail(
   'unbounded no-finding explanation is rejected',
   replaceLeastConfidence(validBody, '未发现；暂无其他问题'),
   /反盲区字段回答过弱.*我现在最没把握的是什么/,
@@ -427,6 +584,14 @@ for (const noFinding of [
   '未见问题',
   '一切正常',
   'No issues found',
+  '无问题',
+  '无明显问题',
+  '目前未发现问题',
+  '暂时没发现问题',
+  'No findings',
+  'Nothing to report',
+  'All clear',
+  'LGTM',
 ]) {
   expectFail(
     `no-finding synonym is rejected without boundaries: ${noFinding}`,
@@ -437,6 +602,19 @@ for (const noFinding of [
 expectFail(
   'no-finding rejects generic modifiers plus action-only scopes',
   replaceLeastConfidence(validBody, '未发现；已检查所有验证；未检查相关审查'),
+  /反盲区字段回答过弱.*我现在最没把握的是什么/,
+);
+expectFail(
+  'no-finding rejects generic Chinese inspection nouns',
+  replaceLeastConfidence(validBody, '未发现；已检查所有排查；未检查相关扫描'),
+  /反盲区字段回答过弱.*我现在最没把握的是什么/,
+);
+expectFail(
+  'no-finding rejects generic English inspection nouns',
+  replaceLeastConfidence(
+    validBody,
+    'No issues found; checked all inspections; not checked related scans',
+  ),
   /反盲区字段回答过弱.*我现在最没把握的是什么/,
 );
 expectPass(
@@ -455,6 +633,13 @@ expectPass(
   ),
   [128],
 );
+for (const [name, value] of [
+  ['temporal Chinese no-finding accepts concrete boundaries', '目前未发现问题；已检查目标代码；未检查生产参数'],
+  ['English findings synonym accepts concrete boundaries', 'No findings; checked target code; not checked production settings'],
+  ['LGTM synonym accepts concrete boundaries', 'LGTM; checked target code; not checked production settings'],
+]) {
+  expectPass(name, replaceLeastConfidence(validBody, value), [128]);
+}
 expectPass(
   'generic scope modifiers preserve concrete objects',
   replaceLeastConfidence(
@@ -468,6 +653,14 @@ expectPass(
   replaceLeastConfidence(
     validBody,
     '未发现；已检查&lt;code-v2&gt;与R&amp;D，未检查&lt;span-v3&gt;',
+  ),
+  [128],
+);
+expectPass(
+  'concrete inspection objects remain substantive after action normalization',
+  replaceLeastConfidence(
+    validBody,
+    '未发现；已排查支付回调重试，未扫描仓库外 webhook 配置',
   ),
   [128],
 );
@@ -487,6 +680,21 @@ expectFail(
   /follow-up.*#N/,
 );
 expectFail('missing verification heading', validBody.replace('## 验证', '## 测试'), /## 验证/);
+expectFail(
+  'NBSP is not a CommonMark heading or list separator',
+  replaceMarkdownSyntaxSeparator(validBody, '\u00A0'),
+  /缺少必填标题：## Issue \/ 会话交接/,
+);
+expectFail(
+  'form feed is not a CommonMark heading or list separator',
+  replaceMarkdownSyntaxSeparator(validBody, '\f'),
+  /缺少必填标题：## Issue \/ 会话交接/,
+);
+expectPass(
+  'tab remains a valid CommonMark heading and list separator',
+  replaceMarkdownSyntaxSeparator(validBody, '\t'),
+  [128],
+);
 expectFail('handoff hidden in HTML comment', `<!--\n${validBody}\n-->`, /Issue \/ 会话交接/);
 expectFail('handoff hidden in fenced code', `\`\`\`md\n${validBody}\n\`\`\``, /Issue \/ 会话交接/);
 expectFail('handoff hidden in tilde fence', `~~~md\n${validBody}\n~~~`, /Issue \/ 会话交接/);

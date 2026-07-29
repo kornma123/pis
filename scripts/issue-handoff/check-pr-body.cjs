@@ -39,15 +39,17 @@ const REQUIRED_FIELDS = [
 const STATUS_PATTERN = /^(实现中|待复核|待 PM|待验收|阻塞|可合并)(?:\s|$|[（(：:])/;
 const ISSUE_RELATION_PATTERN = /\b(Closes|Refs)\s+#(\d+)\b/gi;
 const FOLLOW_UP_PATTERN = /#(\d+)\b/g;
-const RAW_HTML_CONTAINER_TAGS = [
+const COMMONMARK_TYPE_6_TAGS = [
   'address',
   'article',
   'aside',
+  'base',
+  'basefont',
   'blockquote',
   'body',
   'caption',
   'center',
-  'code',
+  'col',
   'colgroup',
   'dd',
   'details',
@@ -61,47 +63,65 @@ const RAW_HTML_CONTAINER_TAGS = [
   'figure',
   'footer',
   'form',
+  'frame',
   'frameset',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
   'head',
   'header',
+  'hr',
   'html',
   'iframe',
   'legend',
   'li',
+  'link',
   'main',
   'menu',
+  'menuitem',
   'nav',
   'noframes',
-  'noembed',
   'ol',
   'optgroup',
   'option',
   'p',
-  'plaintext',
-  'pre',
-  'script',
+  'param',
   'search',
   'section',
-  'style',
   'summary',
   'table',
   'tbody',
   'td',
-  'textarea',
   'tfoot',
   'th',
   'thead',
   'title',
+  'track',
   'tr',
   'ul',
-  'xmp',
 ];
-const RAW_HTML_CONTAINER_PATTERN = new RegExp(
-  `^ {0,3}<(${RAW_HTML_CONTAINER_TAGS.join('|')})(?=[\\s>])[^>]*>`,
+const COMMONMARK_TYPE_6_PATTERN = new RegExp(
+  `^ {0,3}</?(?:${COMMONMARK_TYPE_6_TAGS.join('|')})(?=[\\t />]|$)`,
   'i',
 );
+const COMMONMARK_TYPE_7_TAG_NAME = '[A-Za-z][A-Za-z0-9-]*';
+const COMMONMARK_TYPE_7_ATTRIBUTE_NAME = '[A-Za-z_:][A-Za-z0-9_.:-]*';
+const COMMONMARK_TYPE_7_UNQUOTED_VALUE = "[^\\t\\n \"'=<>`]+";
+const COMMONMARK_TYPE_7_ATTRIBUTE =
+  `[\\t ]+${COMMONMARK_TYPE_7_ATTRIBUTE_NAME}` +
+  `(?:[\\t ]*=[\\t ]*(?:${COMMONMARK_TYPE_7_UNQUOTED_VALUE}|'[^']*'|"[^"]*"))?`;
+const COMMONMARK_TYPE_7_PATTERN = new RegExp(
+  `^ {0,3}(?:` +
+    `<${COMMONMARK_TYPE_7_TAG_NAME}(?:${COMMONMARK_TYPE_7_ATTRIBUTE})*[\\t ]*/?>` +
+    `|</${COMMONMARK_TYPE_7_TAG_NAME}[\\t ]*>` +
+  `)[\\t ]*$`,
+);
+const PRODUCT_ENCODED_CONTAINER_TAGS = new Set(['code', 'div', 'xmp']);
 const NO_FINDING_PREFIX_PATTERN =
-  /^(?:未发现(?:任何|其他)?(?:问题)?|没有发现(?:任何|其他)?(?:问题)?|没发现(?:任何|其他)?(?:问题)?|暂无(?:其他)?问题|未见(?:其他)?问题|一切正常|no\s+(?:issues?|problems?)(?:\s+(?:were\s+)?found)?|nothing\s+(?:was\s+)?found|all\s+(?:looks\s+)?(?:good|normal))(?=$|[\s:：;；,.，。!！])/iu;
+  /^(?:(?:(?:目前|当前|暂时|现阶段|迄今|截至目前|到目前为止)(?:仍|还)?)[ \t，,]*|(?:(?:currently|for now|so far|at present|temporarily)[ \t，,]+))?(?:未发现(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没有发现(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没发现(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|无(?:任何|其他)?(?:明显)?(?:问题|风险|异常)|暂无(?:其他)?(?:问题|风险|异常)|未见(?:其他)?(?:问题|风险|异常)|一切正常|no[ \t]+(?:issues?|problems?|findings?)(?:[ \t]+(?:were[ \t]+)?found)?|nothing[ \t]+(?:was[ \t]+)?(?:found|to[ \t]+report)|all[ \t]+(?:looks[ \t]+)?(?:good|normal|clear)|looks?[ \t]+(?:good|fine|okay|normal|clear)|lgtm)(?=$|[ \t:：;；,.，。!！])/iu;
 const HTML_ENTITIES = new Map([
   ['amp', '&'],
   ['apos', "'"],
@@ -126,32 +146,15 @@ function normalizeLabel(label) {
   return canonicalizeFieldKey(label);
 }
 
-function stripHtmlComments(body) {
-  let output = '';
-  let inComment = false;
-
-  for (let index = 0; index < body.length;) {
-    if (!inComment && body.startsWith('<!--', index)) {
-      inComment = true;
-      index += 4;
-    } else if (inComment && body.startsWith('-->', index)) {
-      inComment = false;
-      index += 3;
-    } else {
-      const char = body[index];
-      if (!inComment || char === '\n' || char === '\r') output += char;
-      index += 1;
-    }
-  }
-
-  return output;
+function normalizeLineEndings(value) {
+  return String(value || '').replace(/\r\n?|\n/g, '\n');
 }
 
 function stripMarkdownContainerPrefix(line) {
   let content = String(line || '');
 
   for (let depth = 0; depth < 32; depth += 1) {
-    const blockquote = content.match(/^ {0,3}>\s?/u);
+    const blockquote = content.match(/^ {0,3}>[ \t]?/u);
     if (blockquote) {
       content = content.slice(blockquote[0].length);
       continue;
@@ -167,35 +170,165 @@ function stripMarkdownContainerPrefix(line) {
   return content;
 }
 
-function rawHtmlClosingPattern(tag) {
-  return new RegExp(`</${tag}\\s*>`, 'i');
+function encodedHtmlSyntax(sourceLine, decodedLine) {
+  const source = String(sourceLine || '').replace(/^ {0,3}/u, '');
+  const decoded = String(decodedLine || '').replace(/^ {0,3}/u, '');
+  return !source.startsWith('<') && decoded.startsWith('<') && source !== decoded;
+}
+
+function scanProductContainerTokens(line) {
+  const tokens = [];
+  const input = String(line || '');
+
+  for (let index = 0; index < input.length; index += 1) {
+    if (input[index] !== '<') continue;
+    let cursor = index + 1;
+    let closing = false;
+    if (input[cursor] === '/') {
+      closing = true;
+      cursor += 1;
+    }
+    const nameMatch = input.slice(cursor).match(/^[A-Za-z][A-Za-z0-9-]*/u);
+    if (!nameMatch) continue;
+    const tag = nameMatch[0].toLowerCase();
+    cursor += nameMatch[0].length;
+    if (!PRODUCT_ENCODED_CONTAINER_TAGS.has(tag) || !/^[\t />]$/.test(input[cursor] || '')) {
+      continue;
+    }
+
+    let quote = null;
+    let end = -1;
+    for (; cursor < input.length; cursor += 1) {
+      const char = input[cursor];
+      if (quote) {
+        if (char === quote) quote = null;
+      } else if (char === '"' || char === "'") {
+        quote = char;
+      } else if (char === '>') {
+        end = cursor;
+        break;
+      }
+    }
+    if (end < 0) continue;
+    const raw = input.slice(index, end + 1);
+    tokens.push({
+      closing,
+      selfClosing: !closing && /\/[ \t]*>$/u.test(raw),
+      tag,
+    });
+    index = end;
+  }
+
+  return tokens;
+}
+
+function updateProductContainerStack(stack, line, initialTag = null) {
+  const tokens = scanProductContainerTokens(line);
+  if (tokens.length === 0 && initialTag) return [initialTag];
+  const next = [...stack];
+
+  for (const token of tokens) {
+    if (!token.closing) {
+      if (!token.selfClosing) next.push(token.tag);
+      continue;
+    }
+    if (next[next.length - 1] === token.tag) next.pop();
+  }
+
+  return next;
+}
+
+function beginHtmlBlock(sourceLine, decodedLine, paragraphOpen) {
+  // Visible-Markdown state table:
+  // 1–5: delimited blocks end only at their specified token; EOF is fail-closed.
+  // 6–7: CommonMark block tags / complete tags end at a blank line; type 7 cannot interrupt a paragraph.
+  // product: encoded code/div/xmp containers are nesting-aware and end only at matching close tags.
+  const product = decodedLine.match(/^ {0,3}<(code|div|xmp)(?=[\t />]|$)/iu);
+  if (product && encodedHtmlSyntax(sourceLine, decodedLine)) {
+    const stack = updateProductContainerStack([], decodedLine, product[1].toLowerCase());
+    return { state: stack.length > 0 ? { kind: 'product', stack } : null };
+  }
+
+  if (/^ {0,3}<(?:pre|script|style|textarea)(?=[\t >]|$)/iu.test(decodedLine)) {
+    const end = /<\/(?:pre|script|style|textarea)>/iu;
+    return { state: end.test(decodedLine) ? null : { kind: 'delimited', end, type: 1 } };
+  }
+  if (/^ {0,3}<!--/u.test(decodedLine)) {
+    return { state: decodedLine.includes('-->') ? null : { kind: 'delimited', end: /-->/u, type: 2 } };
+  }
+  if (/^ {0,3}<\?/u.test(decodedLine)) {
+    return { state: decodedLine.includes('?>') ? null : { kind: 'delimited', end: /\?>/u, type: 3 } };
+  }
+  if (/^ {0,3}<![A-Za-z]/u.test(decodedLine)) {
+    return { state: decodedLine.includes('>') ? null : { kind: 'delimited', end: />/u, type: 4 } };
+  }
+  if (/^ {0,3}<!\[CDATA\[/u.test(decodedLine)) {
+    return { state: decodedLine.includes(']]>') ? null : { kind: 'delimited', end: /\]\]>/u, type: 5 } };
+  }
+  if (COMMONMARK_TYPE_6_PATTERN.test(decodedLine)) {
+    return { state: { kind: 'blank', type: 6 } };
+  }
+  if (!paragraphOpen && COMMONMARK_TYPE_7_PATTERN.test(decodedLine)) {
+    return { state: { kind: 'blank', type: 7 } };
+  }
+  return null;
+}
+
+function startsNonParagraphBlock(line) {
+  return (
+    /^ {0,3}(?:>|#{1,6}(?:[ \t]+|$)|(?:[-+*]|\d{1,9}[.)])[ \t]+)/u.test(line) ||
+    /^(?: {4,}|\t)/u.test(line) ||
+    /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/u.test(line)
+  );
+}
+
+function isClosingFence(line, fence) {
+  const closing = line.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/u);
+  return Boolean(
+    closing &&
+    closing[1][0] === fence.char &&
+    closing[1].length >= fence.length,
+  );
+}
+
+function advanceHtmlBlock(state, decodedLine, syntaxLine) {
+  if (state.kind === 'product') {
+    const stack = updateProductContainerStack(state.stack, decodedLine);
+    return stack.length > 0 ? { ...state, stack } : null;
+  }
+  if (state.kind === 'delimited') {
+    return state.end.test(decodedLine) ? null : state;
+  }
+  if (state.kind === 'blank' && /^[ \t]*$/u.test(syntaxLine)) return null;
+  return state;
+}
+
+function lineOpensParagraph(line, syntaxLine) {
+  if (/^[ \t]*$/u.test(syntaxLine) || startsNonParagraphBlock(line)) return false;
+  return true;
 }
 
 function stripIgnoredMarkdown(body) {
   let fence = null;
-  let rawHtmlTag = null;
+  let htmlBlock = null;
+  let paragraphOpen = false;
   const visibleLines = [];
 
-  for (const line of stripHtmlComments(String(body || '')).split(/\r?\n/)) {
+  for (const line of normalizeLineEndings(body).split('\n')) {
     const syntaxLine = stripMarkdownContainerPrefix(line);
     const decodedSyntaxLine = decodeHtmlEntitiesDetailed(syntaxLine).value;
 
     if (fence) {
-      const closing = syntaxLine.match(/^ {0,3}(`{3,}|~{3,})\s*$/u);
-      if (
-        closing &&
-        closing[1][0] === fence.char &&
-        closing[1].length >= fence.length
-      ) {
-        fence = null;
-      }
+      if (isClosingFence(syntaxLine, fence)) fence = null;
       visibleLines.push('');
+      paragraphOpen = false;
       continue;
     }
 
-    if (rawHtmlTag) {
-      if (rawHtmlClosingPattern(rawHtmlTag).test(decodedSyntaxLine)) rawHtmlTag = null;
+    if (htmlBlock) {
+      htmlBlock = advanceHtmlBlock(htmlBlock, decodedSyntaxLine, syntaxLine);
       visibleLines.push('');
+      paragraphOpen = false;
       continue;
     }
 
@@ -203,19 +336,26 @@ function stripIgnoredMarkdown(body) {
     if (marker) {
       fence = { char: marker[1][0], length: marker[1].length };
       visibleLines.push('');
+      paragraphOpen = false;
       continue;
     }
 
-    const rawHtml = decodedSyntaxLine.match(RAW_HTML_CONTAINER_PATTERN);
-    if (rawHtml) {
-      const tag = rawHtml[1].toLowerCase();
-      const afterOpeningTag = decodedSyntaxLine.slice(rawHtml.index + rawHtml[0].length);
-      if (!rawHtmlClosingPattern(tag).test(afterOpeningTag)) rawHtmlTag = tag;
+    const htmlStart = beginHtmlBlock(syntaxLine, decodedSyntaxLine, paragraphOpen);
+    if (htmlStart) {
+      htmlBlock = htmlStart.state;
       visibleLines.push('');
+      paragraphOpen = false;
       continue;
     }
 
-    visibleLines.push(/^(?: {4,}|\t)/u.test(syntaxLine) ? '' : line);
+    if (/^(?: {4,}|\t)/u.test(syntaxLine)) {
+      visibleLines.push('');
+      paragraphOpen = false;
+      continue;
+    }
+
+    visibleLines.push(line);
+    paragraphOpen = lineOpensParagraph(line, syntaxLine);
   }
 
   return visibleLines.join('\n');
@@ -226,7 +366,7 @@ function collectFields(body) {
   const duplicates = new Set();
   const malformed = [];
 
-  for (const line of body.split(/\r?\n/)) {
+  for (const line of body.split('\n')) {
     const parsed = parseVisibleFieldLine(line, { bullet: true });
     if (!parsed) continue;
     if (parsed.malformed) {
@@ -312,7 +452,9 @@ function canonicalizeFieldKeyDetailed(value) {
   const decoded = decodeHtmlEntitiesDetailed(value);
   return {
     key: normalizeDecodedInline(decoded.value).toLowerCase(),
-    unresolved: decoded.unresolved,
+    unresolved:
+      decoded.unresolved ||
+      /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFD]/u.test(decoded.value),
   };
 }
 
@@ -332,7 +474,7 @@ function parseVisibleFieldLine(line, options = {}) {
   const rawLine = String(line || '');
   let content;
   if (options.bullet) {
-    const bullet = rawLine.match(/^ {0,3}-\s+([\s\S]*)$/u);
+    const bullet = rawLine.match(/^ {0,3}-[ \t]+([\s\S]*)$/u);
     if (!bullet) return null;
     content = bullet[1];
   } else {
@@ -363,6 +505,7 @@ function hasUnresolvedEntity(value) {
 
 function isExplicitPlaceholder(value) {
   if (!value) return true;
+  if (/[\u0000\uFFFD]/u.test(value)) return true;
   if (hasUnresolvedEntity(value)) return true;
   if (/^#?[_\-.…]+$/u.test(value)) return true;
   if (/^<\s*(?:todo|tbd|placeholder|none|nil|n\/?a|待填(?:写)?|待补(?:充)?|待定)\s*>$/iu.test(value)) {
@@ -396,10 +539,10 @@ function hasSubstantiveScope(value) {
 
   const compact = clean.replace(/[\s:：,，、/\\()[\]{}<>《》“”"'`-]+/gu, '');
   if (!compact) return false;
-  if (/^(?:检查|核对|验证|审查|覆盖|复核|查看|确认|评估|分析|调查|测试|执行|处理|跟进|完成|过|了)+$/u.test(compact)) {
+  if (/^(?:检查|核对|验证|审查|覆盖|复核|查看|确认|评估|分析|调查|测试|执行|处理|跟进|完成|排查|扫描|检视|过|了)+$/u.test(compact)) {
     return false;
   }
-  return !/^(?:check|checked|checking|verify|verified|verification|validate|validated|validation|review|reviewed|audit|audited|coverage|test|testing|analysis|investigation)+$/iu.test(
+  return !/^(?:check|checked|checking|inspection|inspections|inspect|inspected|inspecting|scan|scans|scanned|scanning|verify|verified|verification|validate|validated|validation|review|reviewed|audit|audited|coverage|test|testing|analysis|investigation)+$/iu.test(
     compact,
   );
 }
@@ -411,27 +554,36 @@ function hasBoundedNoFindingScopes(value) {
   for (const clause of value.split(/[；;。.!！,，\n]+/u)) {
     const clean = clause.trim();
     const checked = clean.match(
-      /^(?:已|已经)(?:检查|核对|验证|审查|覆盖)(?:了|过)?(?:范围)?\s*[:：]?\s*(.*)$/u,
+      /^(?:已|已经)(?:检查|核对|验证|审查|覆盖|复核|排查|扫描|检视)(?:了|过)?(?:范围)?[ \t]*[:：]?[ \t]*(.*)$/u,
     );
     if (checked && hasSubstantiveScope(checked[1])) checkedScope = true;
 
     const unchecked = clean.match(
-      /^(?:尚未|仍未|未)(?:检查|核对|验证|审查|覆盖)(?:了|过)?(?:范围)?\s*[:：]?\s*(.*)$/u,
+      /^(?:尚未|仍未|未)(?:检查|核对|验证|审查|覆盖|复核|排查|扫描|检视)(?:了|过)?(?:范围)?[ \t]*[:：]?[ \t]*(.*)$/u,
     );
     if (unchecked && hasSubstantiveScope(unchecked[1])) uncheckedScope = true;
 
     const checkedEnglish = clean.match(
-      /^(?:checked|verified|validated|reviewed|audited|covered)(?:\s+(?:scope|range))?\s*[:：]?\s+(.+)$/iu,
+      /^(?:checked|inspected|scanned|verified|validated|reviewed|audited|covered)(?:[ \t]+(?:scope|range))?[ \t]*[:：]?[ \t]+(.+)$/iu,
     );
     if (checkedEnglish && hasSubstantiveScope(checkedEnglish[1])) checkedScope = true;
 
     const uncheckedEnglish = clean.match(
-      /^(?:(?:not(?:\s+yet)?)|(?:still\s+not))\s+(?:checked|verified|validated|reviewed|audited|covered)(?:\s+(?:scope|range))?\s*[:：]?\s+(.+)$/iu,
+      /^(?:(?:not(?:[ \t]+yet)?)|(?:still[ \t]+not))[ \t]+(?:checked|inspected|scanned|verified|validated|reviewed|audited|covered)(?:[ \t]+(?:scope|range))?[ \t]*[:：]?[ \t]+(.+)$/iu,
     );
     if (uncheckedEnglish && hasSubstantiveScope(uncheckedEnglish[1])) uncheckedScope = true;
   }
 
   return checkedScope && uncheckedScope;
+}
+
+function hasSubstantiveRisk(value) {
+  const clean = canonicalizeMarkdownText(value);
+  if (!hasSubstantiveScope(clean)) return false;
+  return (
+    /(?:风险|问题|不足|缺口|遗漏|异常|失败|错误|未知|不确定|未|尚|可能|也许|担心|局限|依赖|只在|仅在|变化)/u.test(clean) ||
+    /\b(?:risk|issue|problem|gap|missing|incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|not|only|may|might|could|depends?|change|fail(?:ed|ure)?|error|outside|external)\b/iu.test(clean)
+  );
 }
 
 function isWeakReflection(value) {
@@ -442,16 +594,16 @@ function isWeakReflection(value) {
   if (/^(?:风险|有风险|存在风险|问题|有问题|存在问题|未知风险|情况不明|待确认|需确认|需要确认|需关注|需要关注)[。.!！]?$/u.test(clean)) {
     return true;
   }
-  if (!NO_FINDING_PREFIX_PATTERN.test(clean)) return false;
+  if (!NO_FINDING_PREFIX_PATTERN.test(clean)) return !hasSubstantiveRisk(clean);
 
   return !hasBoundedNoFindingScopes(clean);
 }
 
 function hasHeading(body, heading) {
   return body
-    .split(/\r?\n/)
+    .split('\n')
     .some((line) => {
-      const match = line.match(/^ {0,3}##\s+(.+?)\s*$/);
+      const match = line.match(/^ {0,3}##[ \t]+(.+?)[ \t]*$/);
       return match?.[1] === heading;
     });
 }
