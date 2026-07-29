@@ -161,6 +161,13 @@ function normalizeLabel(label) {
   return canonicalizeFieldKey(label);
 }
 
+const REFLECTION_FIELD_KEYS = new Set([
+  '我现在最没把握的是什么？ / Least confidence',
+  '关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing',
+  'least-confidence',
+  'biggest-missing',
+].map(normalizeLabel));
+
 function normalizeLineEndings(value) {
   return String(value || '').replace(/\r\n?|\n/g, '\n');
 }
@@ -663,6 +670,7 @@ function stripIgnoredMarkdown(body) {
 
 function collectFields(body) {
   const values = new Map();
+  const rawValues = new Map();
   const duplicates = new Set();
   const malformed = [];
 
@@ -675,15 +683,18 @@ function collectFields(body) {
     }
     if (!parsed.key) continue;
     if (values.has(parsed.key)) duplicates.add(parsed.key);
-    else values.set(parsed.key, parsed.value);
+    else {
+      values.set(parsed.key, parsed.value);
+      rawValues.set(parsed.key, parsed.rawValue);
+    }
   }
 
-  return { values, duplicates, malformed };
+  return { values, rawValues, duplicates, malformed };
 }
 
-function getField(fields, aliases) {
+function getField(fields, aliases, source = 'values') {
   for (const alias of aliases) {
-    const value = fields.values.get(normalizeLabel(alias));
+    const value = fields[source].get(normalizeLabel(alias));
     if (value !== undefined) return value;
   }
   return undefined;
@@ -723,6 +734,34 @@ function decodeHtmlEntitiesDetailed(value) {
 
 function decodeHtmlEntities(value) {
   return decodeHtmlEntitiesDetailed(value).value;
+}
+
+function findVisibleFieldDelimiter(value, allowEquals) {
+  const raw = String(value || '');
+  const delimiters = new Set(allowEquals ? [':', '：', '='] : [':', '：']);
+
+  for (let index = 0; index < raw.length; index += 1) {
+    if (delimiters.has(raw[index])) {
+      return { rawStart: index, rawEnd: index + 1 };
+    }
+    if (raw[index] !== '&') continue;
+
+    let semicolon = index;
+    for (let pass = 0; pass < 8; pass += 1) {
+      semicolon = raw.indexOf(';', semicolon + 1);
+      if (semicolon < 0) break;
+      const candidate = decodeHtmlEntitiesDetailed(raw.slice(index, semicolon + 1));
+      if (
+        !candidate.unresolved &&
+        candidate.value.length === 1 &&
+        delimiters.has(candidate.value)
+      ) {
+        return { rawStart: index, rawEnd: semicolon + 1 };
+      }
+    }
+  }
+
+  return null;
 }
 
 function stripPairedInlineWrappers(value) {
@@ -793,10 +832,9 @@ function parseVisibleFieldLine(line, options = {}) {
     content = plain[1];
   }
 
-  const decoded = decodeHtmlEntitiesDetailed(content);
-  const delimiters = options.allowEquals ? /[:=：]/u : /[:：]/u;
-  const delimiter = decoded.value.match(delimiters);
+  const delimiter = findVisibleFieldDelimiter(content, options.allowEquals);
   if (!delimiter) {
+    const decoded = decodeHtmlEntitiesDetailed(content);
     return decoded.unresolved
       ? {
           key: '',
@@ -807,11 +845,14 @@ function parseVisibleFieldLine(line, options = {}) {
       : null;
   }
 
-  const delimiterIndex = delimiter.index;
-  const key = canonicalizeFieldKeyDetailed(decoded.value.slice(0, delimiterIndex));
+  const key = canonicalizeFieldKeyDetailed(content.slice(0, delimiter.rawStart));
+  const rawValue = content.slice(delimiter.rawEnd).replace(/^[ \t]+|[ \t]+$/gu, '');
   return {
     key: key.key,
-    value: decoded.value.slice(delimiterIndex + delimiter[0].length).trim(),
+    value: REFLECTION_FIELD_KEYS.has(key.key)
+      ? rawValue
+      : decodeHtmlEntitiesDetailed(rawValue).value.trim(),
+    rawValue,
     malformed: Boolean(key.malformedReason),
     malformedReason: key.malformedReason,
   };
@@ -843,10 +884,14 @@ function isPlaceholder(value) {
 }
 
 function isObviousReflectionPlaceholder(value) {
+  const comparison = String(value || '')
+    .trim()
+    .replace(/[ \t.,，。;；:：!?！？…、]+$/gu, '')
+    .trim();
   return (
-    isExplicitPlaceholder(value) ||
-    /^(?:all|everything|nothing|anything|something)$/iu.test(value) ||
-    /^(?:无|不知道|全部|所有)$/u.test(value)
+    isExplicitPlaceholder(comparison) ||
+    /^(?:all|everything|nothing|anything|something)$/iu.test(comparison) ||
+    /^(?:无|不知道|全部|所有)$/u.test(comparison)
   );
 }
 
@@ -859,10 +904,11 @@ function reflectionParseFailure(reason) {
 }
 
 function canonicalizeReflectionContract(value) {
-  if (Buffer.byteLength(String(value || ''), 'utf8') > REFLECTION_CONTRACT_MAX_BYTES) {
+  const raw = String(value || '').replace(/^[ \t]+|[ \t]+$/gu, '');
+  if (Buffer.byteLength(raw, 'utf8') > REFLECTION_CONTRACT_MAX_BYTES) {
     return reflectionParseFailure('contract-too-long');
   }
-  const decoded = decodeHtmlEntitiesDetailed(value);
+  const decoded = decodeHtmlEntitiesDetailed(raw);
   if (decoded.unresolved) return reflectionParseFailure('unresolved-entity');
   if (/[\p{Cc}\p{Cs}\uFFFD]/u.test(decoded.value)) {
     return reflectionParseFailure('control-character');
@@ -950,7 +996,7 @@ function parseReflectionAnchor(value) {
     const tracked = anchorValue.match(/^(issue|pr|ticket|bug) ?#([1-9][0-9]*)$/iu);
     if (tracked) {
       const kind = tracked[1].toLowerCase();
-      const number = Number.parseInt(tracked[2], 10);
+      const number = tracked[2];
       return {
         ok: true,
         type,
@@ -1102,7 +1148,13 @@ function validatePrBody(bodyInput) {
   }
   for (const aliases of REQUIRED_FIELDS) {
     const value = getField(fields, aliases);
-    if (isPlaceholder(value)) {
+    const isReflectionField = aliases.some((alias) =>
+      REFLECTION_FIELD_KEYS.has(normalizeLabel(alias)));
+    if (
+      isReflectionField
+        ? value === undefined || !String(value).trim()
+        : isPlaceholder(value)
+    ) {
       errors.push(`字段未填写：${aliases[0]}`);
     }
   }
@@ -1110,8 +1162,8 @@ function validatePrBody(bodyInput) {
     ['我现在最没把握的是什么？ / Least confidence'],
     ['关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing'],
   ]) {
-    const value = getField(fields, aliases);
-    if (!isPlaceholder(value) && isWeakReflection(value)) {
+    const value = getField(fields, aliases, 'rawValues');
+    if (value !== undefined && String(value).trim() && isWeakReflection(value)) {
       errors.push(
         `反盲区字段回答过弱或格式无效：${aliases[0]}；请使用 risk-v1 或 no-finding-v1 typed grammar。`,
       );

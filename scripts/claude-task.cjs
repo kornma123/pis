@@ -286,7 +286,8 @@ function verifyGitHubEvidence(root, value, options = {}) {
     if (missing.length > 0) {
       throw new Error(
         `handoff 评论缺少字段或字段格式无效：${missing.join(', ')}。` +
-        'least-confidence / biggest-missing 必须使用 risk-v1 或 no-finding-v1 typed grammar。',
+        'least-confidence / biggest-missing 必须使用 risk-v1 或 no-finding-v1 typed grammar；' +
+        'raw/canonical contract 均不得超过 4096 UTF-8 bytes。',
       );
     }
   }
@@ -318,6 +319,7 @@ function parsePmApprovalMarker(body) {
 
 function collectHandoffFields(body) {
   const values = new Map();
+  const rawValues = new Map();
   const duplicates = new Set();
   const malformed = [];
 
@@ -330,10 +332,13 @@ function collectHandoffFields(body) {
     }
     if (!parsed.key) continue;
     if (values.has(parsed.key)) duplicates.add(parsed.key);
-    else values.set(parsed.key, parsed.value);
+    else {
+      values.set(parsed.key, parsed.value);
+      rawValues.set(parsed.key, parsed.rawValue);
+    }
   }
 
-  return { values, duplicates, malformed };
+  return { values, rawValues, duplicates, malformed };
 }
 
 function handoffFieldErrors(body) {
@@ -354,7 +359,10 @@ function handoffFieldErrors(body) {
       errors.push(field);
       continue;
     }
-    const value = fields.values.get(field) || '';
+    const value =
+      field === 'least-confidence' || field === 'biggest-missing'
+        ? fields.rawValues.get(field) || ''
+        : fields.values.get(field) || '';
     if (field === 'least-confidence' || field === 'biggest-missing') {
       if (isWeakReflection(value)) errors.push(field);
       continue;

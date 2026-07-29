@@ -70,7 +70,9 @@
 <!-- 机器入口仅接受以下 strict typed wire grammar（无旧 free-form fallback；字段顺序可交换）：
 risk-v1; anchor=<id|ref|name|path>:<value>; uncertainty=<unverified|untested|unmeasured|unknown|assumption|dependency|risk>:<detail>
 no-finding-v1; checked=<id|ref|name|path>:<value>; unchecked=<id|ref|name|path>:<value>
-不要加入 Markdown/HTML 包装。checker 只校验 shape/lexical anchor；内容真实性仍由 reviewer/PM 人审。 -->
+ASCII mode/key/id 指 entity decode + NFKC 后的 canonical 形态；raw/canonical contract 均 <=4096 UTF-8 bytes。
+ref 编号保留 digit string；placeholder 比较忽略连续句末标点。不要加入 Markdown/HTML 包装。
+checker 只校验 shape/lexical anchor；内容真实性仍由 reviewer/PM 人审。 -->
 - **我现在最没把握的是什么？ / Least confidence**: _
 - **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: _
 

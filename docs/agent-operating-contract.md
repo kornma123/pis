@@ -99,9 +99,10 @@ risk-v1; anchor=<type>:<value>; uncertainty=<kind>:<detail>
 no-finding-v1; checked=<type>:<value>; unchecked=<type>:<value>
 ```
 
-- `type` 仅允许 `id|ref|name|path`。`id` 是 ASCII identifier；`ref` 是 `Issue#N` / `Issue #N`、`PR#N`、ticket/bug 正整数编号或 7–40 位 fixed SHA；`path` 是仓库相对路径/文件名或 `/api/...` 应用 route；`name` 是操作者显式声明的产品/领域名称，至少包含两个字母或数字。
-- `kind` 仅允许 `unverified|untested|unmeasured|unknown|assumption|dependency|risk`；`detail` 必须是非占位、可见的纯文本。
-- 合同整体、anchor、uncertainty 的 UTF-8 上限分别为 4096、512、2048 bytes。严格拒绝缺键、重复键、未知键/类型/kind、控制字符、非普通空格、default-ignorable、未解析 entity、Markdown/HTML 包装与分隔符注入。
+- 解析顺序固定为：字段分隔符后的首尾普通 space/tab 只算排版 padding，先移除；再对**原始 wire contract**执行 UTF-8 `<=4096 bytes`，迭代解码受支持的 numeric / 基础 named entity，拒绝未解析 entity、控制字符、非普通空格与 default-ignorable，再做 NFKC + 首尾普通空格裁剪，最后对 canonical contract 再执行 UTF-8 `<=4096 bytes` 并校验 grammar。这里的“ASCII mode / key / `id` 语法”指 entity decode + NFKC 后的 canonical 形态；raw fullwidth 等 NFKC 等价值是允许输入，不得在 canonicalize 前误拒。反盲区合同只能由该 parser 解码一次，PR body / Issue handoff 的字段扫描不得先解码 value。
+- `type` 仅允许 `id|ref|name|path`。canonical `id` 为 `[A-Za-z_][A-Za-z0-9_.-]*`；`ref` 为 `Issue#N` / `Issue #N`、`PR#N`、ticket/bug 正整数字符串或 7–40 位 fixed SHA，编号禁止前导零且始终保留十进制 digit string，不转 JavaScript `Number`；`path` 是仓库相对路径/文件名或 `/api/...` 应用 route；`name` 是操作者显式声明的产品/领域名称，至少包含两个字母或数字。
+- `kind` 仅允许 `unverified|untested|unmeasured|unknown|assumption|dependency|risk`；`detail` 必须是非占位、可见的纯文本。anchor typed value 与完整 uncertainty typed value 的 UTF-8 上限分别为 512、2048 bytes；合同内只允许 parser 声明的字母/数字/普通空格和有限可见标点，拒绝 Markdown/HTML 元字符、反斜线、分隔符注入。
+- placeholder 判定只为比较而移除连续句末普通空格及中英文句号、逗号、分号、冒号、感叹号、问号、ellipsis 等终止标点；不会改写返回的合法 anchor/detail。严格拒绝缺键、重复键、未知键/类型/kind、空值与 placeholder。
 - `no-finding-v1` 的 checked / unchecked 在规范化后必须是不同 identity；ref 的大小写与 `#` 前单个空格不构成差异，`id:auth` 与 `name:auth` 也不构成差异。
 - checker 只证明 wire shape 与 lexical anchor 可审计；不能证明 anchor 真实存在或可达、类型声明真实、detail 确属未知、checked / unchecked 真已执行，亦不能证明回答诚实。这些仍由异构 reviewer / PM 人审。
 

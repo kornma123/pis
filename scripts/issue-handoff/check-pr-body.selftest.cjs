@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
+  parseReflectionContract,
+  parseVisibleFieldLine,
   stripIgnoredMarkdown,
   validatePrBody,
 } = require('./check-pr-body.cjs');
@@ -515,6 +517,68 @@ const typedRisk =
   'risk-v1; anchor=id:Redis; uncertainty=unverified:production failure mode';
 const typedNoFinding =
   'no-finding-v1; checked=path:scripts/issue-handoff/check-pr-body.cjs; unchecked=ref:Issue #81';
+const rawWirePrefix = 'risk-v1; anchor=id:auth; uncertainty=unknown:';
+function encodedContractAtRawBytes(byteLength) {
+  const remaining = byteLength - Buffer.byteLength(rawWirePrefix, 'utf8');
+  assert.ok(remaining >= 0, 'raw wire boundary must fit the typed prefix');
+  const entity = '&#120;';
+  return (
+    rawWirePrefix +
+    entity.repeat(Math.floor(remaining / Buffer.byteLength(entity, 'utf8'))) +
+    'x'.repeat(remaining % Buffer.byteLength(entity, 'utf8'))
+  );
+}
+const encodedRawWire6KiB = `${rawWirePrefix}${'&#120;'.repeat(1_000)}`;
+const encodedRawWire4096 = encodedContractAtRawBytes(4_096);
+const encodedRawWire4097 = encodedContractAtRawBytes(4_097);
+assert.equal(Buffer.byteLength(encodedRawWire6KiB, 'utf8'), 6_045);
+assert.equal(Buffer.byteLength(encodedRawWire4096, 'utf8'), 4_096);
+assert.equal(Buffer.byteLength(encodedRawWire4097, 'utf8'), 4_097);
+assert.equal(parseReflectionContract(encodedRawWire6KiB).reason, 'contract-too-long');
+assert.equal(parseReflectionContract(encodedRawWire4096).ok, true);
+assert.equal(parseReflectionContract(encodedRawWire4097).reason, 'contract-too-long');
+const rawVisibleReflection = parseVisibleFieldLine(
+  `least-confidence&amp;#58; ${rawWirePrefix}&#120;`,
+  { allowEquals: true },
+);
+assert.equal(rawVisibleReflection.key, 'least-confidence');
+assert.equal(rawVisibleReflection.value, `${rawWirePrefix}&#120;`);
+assert.equal(rawVisibleReflection.rawValue, `${rawWirePrefix}&#120;`);
+assert.equal(
+  parseReflectionContract(
+    'risk-v1; anchor=id:auth; uncertainty=unknown:&amp;#120;',
+  ).ok,
+  true,
+);
+assert.equal(
+  parseReflectionContract(
+    'risk-v1; anchor=id:auth; uncertainty=unknown:&amp;bogus;',
+  ).reason,
+  'unresolved-entity',
+);
+assert.equal(
+  parseReflectionContract(
+    'risk-v1; anchor=id:auth; uncertainty=unknown:无。',
+  ).reason,
+  'uncertainty-value',
+);
+assert.equal(
+  parseReflectionContract(
+    'no-finding-v1; checked=name:everything.; unchecked=name:nothing.',
+  ).reason,
+  'no-finding-anchor',
+);
+const adjacentUnsafeRefs = parseReflectionContract(
+  'no-finding-v1; checked=ref:Issue#9007199254740992; unchecked=ref:Issue#9007199254740993',
+);
+assert.equal(adjacentUnsafeRefs.ok, true);
+const fourHundredDigitRef = '9'.repeat(400);
+const parsedFourHundredDigitRef = parseReflectionContract(
+  `risk-v1; anchor=ref:Issue#${fourHundredDigitRef}; uncertainty=unverified:review coverage`,
+);
+assert.equal(parsedFourHundredDigitRef.ok, true);
+assert.equal(parsedFourHundredDigitRef.anchor.value, `issue#${fourHundredDigitRef}`);
+assert.equal(parsedFourHundredDigitRef.anchor.number, fourHundredDigitRef);
 expectPass(
   'typed risk grammar is accepted for both reflection fields',
   replaceBiggestMissing(replaceLeastConfidence(validBody, typedRisk), typedRisk),
@@ -548,6 +612,27 @@ for (const [name, value] of [
     'typed no-finding accepts distinct typed anchors',
     'no-finding-v1; checked=name:支付回调; unchecked=path:/api/auth',
   ],
+  [
+    'typed uncertainty keeps concrete terminal punctuation',
+    'risk-v1; anchor=id:auth; uncertainty=unknown:生产调用方清单。',
+  ],
+  [
+    'typed no-finding keeps concrete terminal punctuation',
+    'no-finding-v1; checked=name:支付回调。; unchecked=name:库存同步。',
+  ],
+  [
+    'typed ref keeps a 400-digit tracked number stable',
+    `risk-v1; anchor=ref:Issue#${'9'.repeat(400)}; uncertainty=unverified:review coverage`,
+  ],
+  [
+    'typed no-finding keeps adjacent unsafe-integer refs distinct',
+    'no-finding-v1; checked=ref:Issue#9007199254740992; unchecked=ref:Issue#9007199254740993',
+  ],
+  [
+    'typed nested entity has direct and consumer parity',
+    'risk-v1; anchor=id:auth; uncertainty=unknown:&amp;#120;',
+  ],
+  ['typed raw wire accepts exactly 4096 bytes', encodedRawWire4096],
 ]) {
   expectPass(
     name,
@@ -568,10 +653,13 @@ for (const [name, value] of [
   ['typed id rejects whitespace', 'risk-v1; anchor=id:two words; uncertainty=risk:failure'],
   ['typed name rejects a single grapheme', 'risk-v1; anchor=name:x; uncertainty=risk:failure'],
   ['typed name rejects an obvious quantifier', 'risk-v1; anchor=name:everything; uncertainty=risk:failure'],
+  ['typed name rejects a punctuated obvious quantifier', 'risk-v1; anchor=name:everything...; uncertainty=risk:failure'],
   ['typed uncertainty requires a closed kind', 'risk-v1; anchor=id:Redis; uncertainty=verified'],
   ['typed uncertainty rejects an unknown kind with detail', 'risk-v1; anchor=id:Redis; uncertainty=verified:passed'],
   ['typed uncertainty rejects an untyped empty claim', 'risk-v1; anchor=name:系统; uncertainty=无'],
   ['typed uncertainty rejects an untyped unknown claim', 'risk-v1; anchor=name:系统; uncertainty=不知道'],
+  ['typed uncertainty rejects a punctuated placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:无。'],
+  ['typed uncertainty rejects mixed terminal punctuation and spaces', 'risk-v1; anchor=id:auth; uncertainty=unknown:无。 ！？…'],
   ['typed uncertainty rejects encoded HTML comments', 'risk-v1; anchor=id:Redis; uncertainty=unknown:&lt;!--xx--&gt;'],
   ['typed uncertainty rejects Markdown links', 'risk-v1; anchor=id:Redis; uncertainty=unknown:[](xx)'],
   ['typed uncertainty rejects underscore wrappers', 'risk-v1; anchor=id:Redis; uncertainty=unknown:__xx__'],
@@ -593,7 +681,13 @@ for (const [name, value] of [
   ['typed no-finding rejects encoded hidden anchor markup', 'no-finding-v1; checked=name:&lt;span hidden&gt;auth&lt;/span&gt;; unchecked=id:cache'],
   ['typed id rejects underscore wrappers', 'no-finding-v1; checked=id:__auth__; unchecked=id:cache'],
   ['typed no-finding rejects placeholder names', 'no-finding-v1; checked=name:everything; unchecked=name:nothing'],
+  ['typed no-finding rejects punctuated placeholder names', 'no-finding-v1; checked=name:everything.; unchecked=name:nothing.'],
+  ['typed no-finding rejects mixed terminal punctuation and spaces', 'no-finding-v1; checked=name:everything. ，。; unchecked=name:nothing, ...'],
   ['typed id rejects non-ASCII confusables', 'no-finding-v1; checked=id:ΡR82; unchecked=id:auth'],
+  ['typed ref rejects a leading zero', 'risk-v1; anchor=ref:Issue#081; uncertainty=unverified:review coverage'],
+  ['typed unresolved nested entity has direct and consumer parity', 'risk-v1; anchor=id:auth; uncertainty=unknown:&amp;bogus;'],
+  ['typed raw wire rejects 6045 encoded bytes', encodedRawWire6KiB],
+  ['typed raw wire rejects 4097 bytes', encodedRawWire4097],
   ['typed no-finding rejects an unknown key', 'no-finding-v1; checked=id:auth; unchecked=id:timeout; uncertainty=none'],
   ['typed grammar rejects an unknown version', 'risk-v2; anchor=id:Redis; uncertainty=risk:failover'],
   ['legacy specific free-form is rejected', 'Redis may fail'],

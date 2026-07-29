@@ -168,7 +168,7 @@ least-confidence: risk-v1; anchor=name:支付回调; uncertainty=unverified:目�
 biggest-missing: no-finding-v1; checked=path:scripts/example.cjs; unchecked=ref:Issue#81
 ```
 
-`least-confidence` 与 `biggest-missing` 只接受共用契约 §6.1 的 `risk-v1` / `no-finding-v1` strict typed wire grammar，不接受旧 free-form，也不要加入 Markdown/HTML 包装。checker 只证明 wire shape 与 lexical anchor 可审计；不能证明 anchor 真实、detail 真未知、checked / unchecked 真执行或回答诚实，这些仍由 reviewer / PM 人审。最终直接面向用户的产品化结尾继续用产品大白话。
+`least-confidence` 与 `biggest-missing` 只接受共用契约 §6.1 的 `risk-v1` / `no-finding-v1` strict typed wire grammar，不接受旧 free-form，也不要加入 Markdown/HTML 包装。ASCII mode/key/id 是 entity decode + NFKC 后的 canonical 形态；raw/canonical contract 均 `<=4096` UTF-8 bytes，ref 编号保持 digit string，placeholder 比较忽略连续句末标点。checker 只证明 wire shape 与 lexical anchor 可审计；不能证明 anchor 真实、detail 真未知、checked / unchecked 真执行或回答诚实，这些仍由 reviewer / PM 人审。最终直接面向用户的产品化结尾继续用产品大白话。
 
 ## 5. 回复主体输出（非最终收口）
 

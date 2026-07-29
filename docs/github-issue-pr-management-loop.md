@@ -83,7 +83,7 @@ Issue 必须包含：业务影响、来源链接、现状证据、范围、非�
 
 不能只写“以后处理”“后续优化”或把 TODO 留在评论 / 文档里。相关但不是主源的 PR / Issue 写到现有模板的“依赖与关系”，不要在主 Issue 字段堆多个编号。
 
-两项反盲区回答在 PR body 与 Issue handoff 评论中使用同一严格机器合同：`risk-v1; anchor=<type>:<value>; uncertainty=<kind>:<detail>` 或 `no-finding-v1; checked=<type>:<value>; unchecked=<type>:<value>`；Issue 评论字段名为 `least-confidence` 与 `biggest-missing`。旧 free-form 没有兼容 fallback，完整 lexical 规则与长度上限以共用契约 §6.1 为准。checker 只证明 wire shape / lexical anchor，不证明声明为真或检查确已执行；reviewer / PM 必须继续审查内容真实性。最终用户交付仍用产品大白话。
+两项反盲区回答在 PR body 与 Issue handoff 评论中使用同一严格机器合同：`risk-v1; anchor=<type>:<value>; uncertainty=<kind>:<detail>` 或 `no-finding-v1; checked=<type>:<value>; unchecked=<type>:<value>`；Issue 评论字段名为 `least-confidence` 与 `biggest-missing`。旧 free-form 没有兼容 fallback；ASCII mode/key/id 是 entity decode + NFKC 后的 canonical 形态，raw 与 canonical contract 都须 `<=4096` UTF-8 bytes，ref 正整数始终以 digit string 保真，placeholder 比较忽略连续句末标点。完整 lexical 规则以共用契约 §6.1 为准。checker 只证明 wire shape / lexical anchor，不证明声明为真或检查确已执行；reviewer / PM 必须继续审查内容真实性。最终用户交付仍用产品大白话。
 
 跨会话或跨模型交接时，下一位执行者先读取主 Issue、PR body、最新 checks 和当前 Git 状态，再开始工作；不继承上一会话口头声称的“已完成”。同一文件同一时间只有一个实现 owner，复核模型不在被审文件上代写。
 

@@ -30,6 +30,7 @@ const {
   toPosix,
 } = require('./claude-task.cjs');
 const {
+  parseReflectionContract,
   stripIgnoredMarkdown,
   validatePrBody,
 } = require('./issue-handoff/check-pr-body.cjs');
@@ -915,6 +916,38 @@ const typedRisk =
   'risk-v1; anchor=id:Redis; uncertainty=unverified:production failure mode';
 const typedNoFinding =
   'no-finding-v1; checked=path:scripts/issue-handoff/check-pr-body.cjs; unchecked=ref:Issue #81';
+const rawWirePrefix = 'risk-v1; anchor=id:auth; uncertainty=unknown:';
+function encodedContractAtRawBytes(byteLength) {
+  const remaining = byteLength - Buffer.byteLength(rawWirePrefix, 'utf8');
+  assert.ok(remaining >= 0, 'raw wire boundary must fit the typed prefix');
+  const entity = '&#120;';
+  return (
+    rawWirePrefix +
+    entity.repeat(Math.floor(remaining / Buffer.byteLength(entity, 'utf8'))) +
+    'x'.repeat(remaining % Buffer.byteLength(entity, 'utf8'))
+  );
+}
+const encodedRawWire6KiB = `${rawWirePrefix}${'&#120;'.repeat(1_000)}`;
+const encodedRawWire4096 = encodedContractAtRawBytes(4_096);
+const encodedRawWire4097 = encodedContractAtRawBytes(4_097);
+assert.equal(Buffer.byteLength(encodedRawWire6KiB, 'utf8'), 6_045);
+assert.equal(Buffer.byteLength(encodedRawWire4096, 'utf8'), 4_096);
+assert.equal(Buffer.byteLength(encodedRawWire4097, 'utf8'), 4_097);
+assert.equal(parseReflectionContract(encodedRawWire6KiB).reason, 'contract-too-long');
+assert.equal(parseReflectionContract(encodedRawWire4096).ok, true);
+assert.equal(parseReflectionContract(encodedRawWire4097).reason, 'contract-too-long');
+assert.equal(
+  parseReflectionContract(
+    'risk-v1; anchor=id:auth; uncertainty=unknown:&amp;#120;',
+  ).ok,
+  true,
+);
+assert.equal(
+  parseReflectionContract(
+    'risk-v1; anchor=id:auth; uncertainty=unknown:&amp;bogus;',
+  ).reason,
+  'unresolved-entity',
+);
 for (const [name, value, expectedOk] of [
   ['typed risk grammar', typedRisk, true],
   ['typed no-finding grammar', typedNoFinding, true],
@@ -938,6 +971,20 @@ for (const [name, value, expectedOk] of [
   ['typed fixed SHA ref', 'risk-v1; anchor=ref:2a3b50dd; uncertainty=unverified:review coverage', true],
   ['typed reordered fields', 'risk-v1; uncertainty=unverified:review coverage; anchor=ref:PR#82', true],
   ['typed distinct no-finding anchors', 'no-finding-v1; checked=name:支付回调; unchecked=path:/api/auth', true],
+  ['typed concrete terminal punctuation', 'risk-v1; anchor=id:auth; uncertainty=unknown:生产调用方清单。', true],
+  ['typed concrete no-finding punctuation', 'no-finding-v1; checked=name:支付回调。; unchecked=name:库存同步。', true],
+  [
+    'typed 400-digit tracked ref',
+    `risk-v1; anchor=ref:Issue#${'9'.repeat(400)}; uncertainty=unverified:review coverage`,
+    true,
+  ],
+  [
+    'typed adjacent unsafe-integer refs stay distinct',
+    'no-finding-v1; checked=ref:Issue#9007199254740992; unchecked=ref:Issue#9007199254740993',
+    true,
+  ],
+  ['typed nested entity parity', 'risk-v1; anchor=id:auth; uncertainty=unknown:&amp;#120;', true],
+  ['typed raw wire 4096-byte boundary', encodedRawWire4096, true],
   [
     'typed uncertainty readable boundary',
     `risk-v1; anchor=id:auth; uncertainty=unknown:${'x'.repeat(2_040)}`,
@@ -955,10 +1002,13 @@ for (const [name, value, expectedOk] of [
   ['typed malformed id', 'risk-v1; anchor=id:two words; uncertainty=risk:failure', false],
   ['typed one-grapheme name', 'risk-v1; anchor=name:x; uncertainty=risk:failure', false],
   ['typed quantifier name', 'risk-v1; anchor=name:everything; uncertainty=risk:failure', false],
+  ['typed punctuated quantifier name', 'risk-v1; anchor=name:everything...; uncertainty=risk:failure', false],
   ['typed uncertainty without a closed kind', 'risk-v1; anchor=id:Redis; uncertainty=verified', false],
   ['typed uncertainty unknown kind with detail', 'risk-v1; anchor=id:Redis; uncertainty=verified:passed', false],
   ['typed uncertainty empty Chinese claim', 'risk-v1; anchor=name:系统; uncertainty=无', false],
   ['typed uncertainty unknown Chinese claim', 'risk-v1; anchor=name:系统; uncertainty=不知道', false],
+  ['typed uncertainty punctuated placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:无。', false],
+  ['typed uncertainty mixed terminal punctuation', 'risk-v1; anchor=id:auth; uncertainty=unknown:无。 ！？…', false],
   ['typed encoded HTML comment detail', 'risk-v1; anchor=id:Redis; uncertainty=unknown:&lt;!--xx--&gt;', false],
   ['typed Markdown link detail', 'risk-v1; anchor=id:Redis; uncertainty=unknown:[](xx)', false],
   ['typed underscore-wrapped detail', 'risk-v1; anchor=id:Redis; uncertainty=unknown:__xx__', false],
@@ -980,7 +1030,13 @@ for (const [name, value, expectedOk] of [
   ['typed encoded hidden anchor markup', 'no-finding-v1; checked=name:&lt;span hidden&gt;auth&lt;/span&gt;; unchecked=id:cache', false],
   ['typed underscore-wrapped id', 'no-finding-v1; checked=id:__auth__; unchecked=id:cache', false],
   ['typed no-finding placeholder names', 'no-finding-v1; checked=name:everything; unchecked=name:nothing', false],
+  ['typed no-finding punctuated placeholder names', 'no-finding-v1; checked=name:everything.; unchecked=name:nothing.', false],
+  ['typed no-finding mixed terminal punctuation', 'no-finding-v1; checked=name:everything. ，。; unchecked=name:nothing, ...', false],
   ['typed non-ASCII id confusable', 'no-finding-v1; checked=id:ΡR82; unchecked=id:auth', false],
+  ['typed leading-zero ref', 'risk-v1; anchor=ref:Issue#081; uncertainty=unverified:review coverage', false],
+  ['typed unresolved nested entity parity', 'risk-v1; anchor=id:auth; uncertainty=unknown:&amp;bogus;', false],
+  ['typed raw wire 6045 encoded bytes', encodedRawWire6KiB, false],
+  ['typed raw wire 4097-byte boundary', encodedRawWire4097, false],
   ['typed no-finding unknown key', 'no-finding-v1; checked=id:auth; unchecked=id:timeout; uncertainty=none', false],
   [
     'typed uncertainty above readable boundary',
@@ -1949,6 +2005,28 @@ if (!/least-confidence/.test(invalidTypedHandoff.stderr)) {
   reflectionRegressionFailures.push(
     `invalid typed handoff did not report least-confidence: ${invalidTypedHandoff.stderr}`,
   );
+}
+for (const [name, value] of [
+  ['oversized raw-wire', encodedRawWire6KiB],
+  ['punctuated uncertainty placeholder', 'risk-v1; anchor=id:auth; uncertainty=unknown:无。'],
+  ['punctuated no-finding placeholders', 'no-finding-v1; checked=name:everything.; unchecked=name:nothing.'],
+]) {
+  const lifecycle = runIsolatedHandoff(value);
+  if (lifecycle.status !== 1) {
+    reflectionRegressionFailures.push(
+      `${name} handoff expected exit=1, actual=${lifecycle.status}`,
+    );
+  }
+  if (!lifecycle.stateExists) {
+    reflectionRegressionFailures.push(
+      `${name} handoff removed the active task state file`,
+    );
+  }
+  if (!/least-confidence/.test(lifecycle.stderr)) {
+    reflectionRegressionFailures.push(
+      `${name} handoff did not report least-confidence: ${lifecycle.stderr}`,
+    );
+  }
 }
 const observationNoFindingHandoff = runIsolatedHandoff('暂未观察到异常');
 if (observationNoFindingHandoff.status !== 1) {
