@@ -1051,49 +1051,54 @@ for (const entityName of supportedEntityOracle) {
   }
 }
 const postNfkcUnknownEntityContracts = [
-  ['literal lowercase entity-shaped tail', 'risk-v1; anchor=name:scope&bogus; uncertainty=unknown:real risk', false],
-  ['post-NFKC fullwidth ampersand', 'risk-v1; anchor=name:scope＆bogus; uncertainty=unknown:real risk', false],
-  ['post-NFKC Greek question mark', 'risk-v1; anchor=name:scope＆bogus\u037E uncertainty=unknown:real risk', false],
-  ['post-NFKC presentation semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE14 uncertainty=unknown:real risk', false],
-  ['post-NFKC small semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE54 uncertainty=unknown:real risk', false],
-  ['post-NFKC fullwidth semicolon', 'risk-v1; anchor=name:scope＆bogus\uFF1B uncertainty=unknown:real risk', false],
-  ['post-NFKC numeric ampersand', 'risk-v1; anchor=name:scope&#65286;bogus; uncertainty=unknown:real risk', false],
-  ['post-NFKC nested numeric ampersand', 'risk-v1; anchor=name:scope&amp;#65286;bogus; uncertainty=unknown:real risk', false],
+  ['final lowercase unknown entity', 'risk-v1; uncertainty=unknown:real risk; anchor=name:scope&amp;bogus;', false],
+  ['final uppercase unknown entity', 'risk-v1; uncertainty=unknown:real risk; anchor=name:scope&amp;Bogus;', false],
+  ['non-final lowercase unknown entity', 'risk-v1; anchor=name:scope&amp;bogus;; uncertainty=unknown:real risk', false],
+  ['non-final uppercase unknown entity', 'risk-v1; anchor=name:scope&amp;Bogus;; uncertainty=unknown:real risk', false],
+  ['no-finding final unknown entity', 'no-finding-v1; checked=name:库存同步; unchecked=name:scope&amp;Bogus;', false],
+  ['no-finding non-final unknown entity', 'no-finding-v1; checked=name:scope&amp;bogus;; unchecked=name:库存同步', false],
+  ['post-NFKC fullwidth ampersand', 'risk-v1; anchor=name:scope＆bogus;; uncertainty=unknown:real risk', false],
+  ['post-NFKC Greek question mark', 'risk-v1; anchor=name:scope＆bogus\u037E; uncertainty=unknown:real risk', false],
+  ['post-NFKC presentation semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE14; uncertainty=unknown:real risk', false],
+  ['post-NFKC small semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE54; uncertainty=unknown:real risk', false],
+  ['post-NFKC fullwidth semicolon', 'risk-v1; anchor=name:scope＆bogus\uFF1B; uncertainty=unknown:real risk', false],
+  ['post-NFKC numeric ampersand', 'risk-v1; anchor=name:scope&#65286;bogus;; uncertainty=unknown:real risk', false],
+  ['post-NFKC nested numeric ampersand', 'risk-v1; anchor=name:scope&amp;#65286;bogus;; uncertainty=unknown:real risk', false],
   [
     'post-NFKC numeric ampersand and semicolon',
-    'risk-v1; anchor=name:scope&#65286;bogus&#65307; uncertainty=unknown:real risk',
+    'risk-v1; anchor=name:scope&#65286;bogus&#65307;; uncertainty=unknown:real risk',
     false,
   ],
 ];
-const ampersandOrderContracts = [
-  [
-    'risk anchor before uncertainty preserves Rock&Roll',
-    'risk-v1; anchor=name:Rock&Roll; uncertainty=unknown:scope detail',
-    true,
-  ],
-  [
-    'risk uncertainty before anchor preserves Rock&Roll',
-    'risk-v1; uncertainty=unknown:scope detail; anchor=name:Rock&Roll',
-    true,
-  ],
-  [
-    'no-finding Rock before Sales',
-    'no-finding-v1; checked=name:Rock&Roll; unchecked=name:Sales & Marketing',
-    true,
-  ],
-  [
-    'no-finding Sales before Rock',
-    'no-finding-v1; unchecked=name:Sales & Marketing; checked=name:Rock&Roll',
-    true,
-  ],
-  ['bare A&B', 'risk-v1; anchor=name:A&B; uncertainty=unknown:scope detail', true],
-  ['bare R&D+', 'risk-v1; anchor=name:R&D+; uncertainty=unknown:scope detail', true],
-  [
-    'bare Sales & Marketing',
-    'risk-v1; anchor=name:Sales & Marketing; uncertainty=unknown:scope detail',
-    true,
-  ],
+const ampersandProductOracle = [
+  ['lowercase encoded product', 'rock&amp;roll', 'rock&roll'],
+  ['mixed-case encoded product', 'Rock&amp;Roll', 'Rock&Roll'],
+  ['bare initials', 'A&B', 'A&B'],
+  ['encoded research name', 'R&amp;D+', 'R&D+'],
+  ['spaced department name', 'Sales &amp; Marketing', 'Sales & Marketing'],
 ];
+const ampersandOrderContracts = ampersandProductOracle.flatMap(([name, wireValue]) => [
+  [
+    `${name}: risk anchor before uncertainty`,
+    `risk-v1; anchor=name:${wireValue}; uncertainty=unknown:scope detail`,
+    true,
+  ],
+  [
+    `${name}: risk uncertainty before anchor`,
+    `risk-v1; uncertainty=unknown:scope detail; anchor=name:${wireValue}`,
+    true,
+  ],
+  [
+    `${name}: no-finding checked before unchecked`,
+    `no-finding-v1; checked=name:${wireValue}; unchecked=name:库存同步`,
+    true,
+  ],
+  [
+    `${name}: no-finding unchecked before checked`,
+    `no-finding-v1; unchecked=name:库存同步; checked=name:${wireValue}`,
+    true,
+  ],
+]);
 assert.equal(
   parseReflectionContract(
     `risk-v1; anchor=id:auth; uncertainty=unknown:${encodeAmpersands('unknown&', 9)}`,
@@ -2249,10 +2254,7 @@ for (const [name, value] of [
     'CJK-boundary incomplete supported entity',
     'risk-v1; anchor=id:auth; uncertainty=unknown:unknown&amp;am中',
   ],
-  [
-    'post-NFKC unresolved entity',
-    'risk-v1; anchor=name:scope＆bogus; uncertainty=unknown:real risk',
-  ],
+  ...postNfkcUnknownEntityContracts.map(([name, value]) => [name, value]),
 ]) {
   const lifecycle = runIsolatedHandoff(value);
   if (lifecycle.status !== 1) {
@@ -2269,17 +2271,16 @@ for (const [name, value] of [
     );
   }
 }
-const rockAndRollLifecycle = runIsolatedHandoff(
-  'risk-v1; anchor=name:Rock&Roll; uncertainty=unknown:scope detail',
-);
-if (rockAndRollLifecycle.status !== 0) {
-  reflectionRegressionFailures.push(
-    `Rock&Roll lifecycle expected exit=0, actual=${rockAndRollLifecycle.status}: ` +
-      rockAndRollLifecycle.stderr,
-  );
-}
-if (rockAndRollLifecycle.stateExists) {
-  reflectionRegressionFailures.push('Rock&Roll lifecycle retained active task state');
+for (const [name, value] of ampersandOrderContracts) {
+  const lifecycle = runIsolatedHandoff(value);
+  if (lifecycle.status !== 0) {
+    reflectionRegressionFailures.push(
+      `${name} lifecycle expected exit=0, actual=${lifecycle.status}: ${lifecycle.stderr}`,
+    );
+  }
+  if (lifecycle.stateExists) {
+    reflectionRegressionFailures.push(`${name} lifecycle retained active task state`);
+  }
 }
 const observationNoFindingHandoff = runIsolatedHandoff('暂未观察到异常');
 if (observationNoFindingHandoff.status !== 1) {

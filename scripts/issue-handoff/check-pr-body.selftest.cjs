@@ -702,43 +702,49 @@ for (const entityName of supportedEntityOracle) {
   }
 }
 const postNfkcUnknownEntityContracts = [
-  ['literal lowercase entity-shaped tail', 'risk-v1; anchor=name:scope&bogus; uncertainty=unknown:real risk'],
-  ['fullwidth ampersand', 'risk-v1; anchor=name:scope＆bogus; uncertainty=unknown:real risk'],
-  ['Greek question mark', 'risk-v1; anchor=name:scope＆bogus\u037E uncertainty=unknown:real risk'],
-  ['presentation semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE14 uncertainty=unknown:real risk'],
-  ['small semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE54 uncertainty=unknown:real risk'],
-  ['fullwidth semicolon', 'risk-v1; anchor=name:scope＆bogus\uFF1B uncertainty=unknown:real risk'],
-  ['numeric ampersand', 'risk-v1; anchor=name:scope&#65286;bogus; uncertainty=unknown:real risk'],
-  ['nested numeric ampersand', 'risk-v1; anchor=name:scope&amp;#65286;bogus; uncertainty=unknown:real risk'],
+  ['final lowercase unknown entity', 'risk-v1; uncertainty=unknown:real risk; anchor=name:scope&amp;bogus;'],
+  ['final uppercase unknown entity', 'risk-v1; uncertainty=unknown:real risk; anchor=name:scope&amp;Bogus;'],
+  ['non-final lowercase unknown entity', 'risk-v1; anchor=name:scope&amp;bogus;; uncertainty=unknown:real risk'],
+  ['non-final uppercase unknown entity', 'risk-v1; anchor=name:scope&amp;Bogus;; uncertainty=unknown:real risk'],
+  ['no-finding final unknown entity', 'no-finding-v1; checked=name:库存同步; unchecked=name:scope&amp;Bogus;'],
+  ['no-finding non-final unknown entity', 'no-finding-v1; checked=name:scope&amp;bogus;; unchecked=name:库存同步'],
+  ['fullwidth ampersand', 'risk-v1; anchor=name:scope＆bogus;; uncertainty=unknown:real risk'],
+  ['Greek question mark', 'risk-v1; anchor=name:scope＆bogus\u037E; uncertainty=unknown:real risk'],
+  ['presentation semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE14; uncertainty=unknown:real risk'],
+  ['small semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE54; uncertainty=unknown:real risk'],
+  ['fullwidth semicolon', 'risk-v1; anchor=name:scope＆bogus\uFF1B; uncertainty=unknown:real risk'],
+  ['numeric ampersand', 'risk-v1; anchor=name:scope&#65286;bogus;; uncertainty=unknown:real risk'],
+  ['nested numeric ampersand', 'risk-v1; anchor=name:scope&amp;#65286;bogus;; uncertainty=unknown:real risk'],
   [
     'numeric ampersand and semicolon',
-    'risk-v1; anchor=name:scope&#65286;bogus&#65307; uncertainty=unknown:real risk',
+    'risk-v1; anchor=name:scope&#65286;bogus&#65307;; uncertainty=unknown:real risk',
   ],
 ];
-const ampersandOrderContracts = [
-  [
-    'risk anchor before uncertainty',
-    'risk-v1; anchor=name:Rock&Roll; uncertainty=unknown:scope detail',
-  ],
-  [
-    'risk uncertainty before anchor',
-    'risk-v1; uncertainty=unknown:scope detail; anchor=name:Rock&Roll',
-  ],
-  [
-    'no-finding Rock before Sales',
-    'no-finding-v1; checked=name:Rock&Roll; unchecked=name:Sales & Marketing',
-  ],
-  [
-    'no-finding Sales before Rock',
-    'no-finding-v1; unchecked=name:Sales & Marketing; checked=name:Rock&Roll',
-  ],
-  ['bare A&B', 'risk-v1; anchor=name:A&B; uncertainty=unknown:scope detail'],
-  ['bare R&D+', 'risk-v1; anchor=name:R&D+; uncertainty=unknown:scope detail'],
-  [
-    'bare Sales & Marketing',
-    'risk-v1; anchor=name:Sales & Marketing; uncertainty=unknown:scope detail',
-  ],
+const ampersandProductOracle = [
+  ['lowercase encoded product', 'rock&amp;roll', 'rock&roll'],
+  ['mixed-case encoded product', 'Rock&amp;Roll', 'Rock&Roll'],
+  ['bare initials', 'A&B', 'A&B'],
+  ['encoded research name', 'R&amp;D+', 'R&D+'],
+  ['spaced department name', 'Sales &amp; Marketing', 'Sales & Marketing'],
 ];
+const ampersandOrderContracts = ampersandProductOracle.flatMap(([name, wireValue]) => [
+  [
+    `${name}: risk anchor before uncertainty`,
+    `risk-v1; anchor=name:${wireValue}; uncertainty=unknown:scope detail`,
+  ],
+  [
+    `${name}: risk uncertainty before anchor`,
+    `risk-v1; uncertainty=unknown:scope detail; anchor=name:${wireValue}`,
+  ],
+  [
+    `${name}: no-finding checked before unchecked`,
+    `no-finding-v1; checked=name:${wireValue}; unchecked=name:库存同步`,
+  ],
+  [
+    `${name}: no-finding unchecked before checked`,
+    `no-finding-v1; unchecked=name:库存同步; checked=name:${wireValue}`,
+  ],
+]);
 let newEntityRegressionFailureCount = 0;
 const newEntityRegressionFailureSamples = [];
 function recordNewEntityRegressionFailure(message) {
@@ -781,14 +787,28 @@ for (const [name, value] of ampersandOrderContracts) {
     }
   }
 }
-const preservedRockAndRoll = parseReflectionContract(
-  'risk-v1; anchor=name:Rock&Roll; uncertainty=unknown:scope detail',
-);
-if (preservedRockAndRoll.anchor?.value !== 'Rock&Roll') {
-  recordNewEntityRegressionFailure(
-    `Rock&Roll value was not preserved (${preservedRockAndRoll.anchor?.value || 'missing'})`,
+for (const [name, wireValue, expectedValue] of ampersandProductOracle) {
+  const preserved = parseReflectionContract(
+    `risk-v1; anchor=name:${wireValue}; uncertainty=unknown:scope detail`,
   );
+  if (preserved.anchor?.value !== expectedValue) {
+    recordNewEntityRegressionFailure(
+      `${name} value was not preserved (${preserved.anchor?.value || 'missing'})`,
+    );
+  }
 }
+assert.equal(
+  parseReflectionContract(
+    'risk-v1; anchor=name:Redis; anchor=name:Claude; uncertainty=unknown:scope detail',
+  ).ok,
+  false,
+);
+assert.equal(
+  parseReflectionContract(
+    'risk-v1; anchor=name:Redis; extra=name:Claude; uncertainty=unknown:scope detail',
+  ).ok,
+  false,
+);
 assert.equal(
   newEntityRegressionFailureCount,
   0,

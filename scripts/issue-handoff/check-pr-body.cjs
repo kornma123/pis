@@ -958,18 +958,15 @@ function canonicalReflectionTokenFailure(value) {
 
 function splitReflectionContractSegments(value) {
   const source = String(value || '');
-  const segments = [];
-  let start = 0;
+  const modeDelimiter = source.indexOf(';');
+  if (modeDelimiter < 0) return { ok: true, segments: [source] };
 
-  for (let index = 0; index < source.length; index += 1) {
+  const segments = [source.slice(0, modeDelimiter)];
+  let start = modeDelimiter + 1;
+  for (let index = start; index < source.length; index += 1) {
     if (source[index] !== ';') continue;
-    const entityTail = source.slice(start, index).match(
-      /&(?:#(?:\d+|x[0-9a-f]+)|([a-z][a-z0-9]+))$/iu,
-    );
-    const named = entityTail?.[1] || '';
-    if (entityTail && (!named || named === named.toLowerCase())) {
-      return reflectionParseFailure('unresolved-entity');
-    }
+    const following = source.slice(index + 1);
+    if (!/^[ \t]*[A-Za-z][A-Za-z0-9-]*[ \t]*=/u.test(following)) continue;
     segments.push(source.slice(start, index));
     start = index + 1;
   }
