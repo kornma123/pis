@@ -2223,6 +2223,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
     const probeA = new DatabaseSync(probeAPath)
     try {
       probeA.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+      probeA.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_update')
       probeA.prepare('UPDATE reconcile_diffs SET id = NULL, partner_id = ? WHERE id = ?')
         .run('PT-GHOST-R8', fixture.nextDiff.id)
       expect(() => manager.upgradeAccountReconciliationSchema(probeA))
@@ -2238,6 +2239,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
     const probeB = new DatabaseSync(probeBPath)
     try {
       probeB.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+      probeB.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_update')
       probeB.prepare('UPDATE reconcile_diffs SET id = NULL, partner_id = ? WHERE id = ?')
         .run('PT-GHOST-R8', fixture.nextDiff.id)
       probeB.prepare('UPDATE reconcile_diffs SET partner_id = ? WHERE id = ?')
@@ -2270,6 +2272,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
     const probeC = new DatabaseSync(probeCPath)
     try {
       probeC.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+      probeC.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_update')
       probeC.prepare(`UPDATE reconcile_diffs SET id = '' WHERE id = ?`)
         .run(fixture.nextDiff.id)
       expect(() => manager.upgradeAccountReconciliationSchema(probeC))
@@ -2290,6 +2293,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
       'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
     ).get(fixture.nextDiff.id) as { id: string }
     db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_row_id_update')
     db.prepare('UPDATE supplement_orders SET id = NULL, partner_id = ? WHERE id = ?')
       .run('PT-GHOST-R8', supplement.id)
     try {
@@ -2317,6 +2321,7 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
       db, fixture.nextBinding, fixture.nextDiff.id, '核对无误', null, 'USER-001', 'admin',
     )
     db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_update')
     db.prepare('UPDATE reconcile_diffs SET id = NULL, partner_id = ? WHERE id = ?')
       .run('PT-GHOST-R8', fixture.nextDiff.id)
     try {
@@ -2412,4 +2417,574 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
       probe.close()
     }
   })
+})
+
+// ---------------------------------------------------------------------------
+// FUP #85：managed 主连接 foreign_keys 显式钉版（不依赖 Node 版本默认值）。
+// 夹具为 statement-normalized-lines.test.ts createFixedPredecessorSchema 的剪枝复刻
+// （该文件非本任务 owned，不可编辑或跨文件 import；CREATE TABLE 列序与
+// STATEMENT_*_PREDECESSOR_COLUMNS 逐序一致，仅裁剪数据行数与 trigger/index）。
+// ---------------------------------------------------------------------------
+
+function foreignKeysPragmaValue(connection: DatabaseSync): number {
+  return Number(
+    (connection.prepare('PRAGMA foreign_keys').get() as { foreign_keys?: number } | undefined)
+      ?.foreign_keys ?? 0,
+  )
+}
+
+function createPhase1APredecessorFixture(database: DatabaseSync, withInvalidLineage = false): void {
+  database.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE statement_import_batches (
+      id TEXT PRIMARY KEY, partner_id TEXT NOT NULL, partner_name TEXT, source_file TEXT,
+      source_hash TEXT NOT NULL, template_family TEXT NOT NULL, parser_revision TEXT NOT NULL,
+      config_revision TEXT NOT NULL,
+      settlement_month TEXT NOT NULL CHECK(settlement_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+      generation_id TEXT NOT NULL UNIQUE, supersedes_generation_id TEXT,
+      is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0, 1)), source_sheet TEXT,
+      declared_total DECIMAL(18,4), raw_row_count INTEGER NOT NULL CHECK(raw_row_count >= 0),
+      normalized_line_count INTEGER NOT NULL CHECK(normalized_line_count >= 0),
+      status TEXT NOT NULL DEFAULT 'parsed'
+        CHECK(status IN ('parsed', 'posted', 'computed', 'complete', 'closed', 'error', 'unavailable')),
+      artifact_hash TEXT, uploaded_by TEXT,
+      completed_at DATETIME, completed_by TEXT, closed_at DATETIME, closed_by TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(partner_id, settlement_month, source_hash, parser_revision, config_revision),
+      UNIQUE(id, generation_id),
+      UNIQUE(id, generation_id, partner_id, settlement_month)
+    );
+    CREATE TABLE statement_raw_rows (
+      id TEXT PRIMARY KEY, batch_id TEXT NOT NULL, generation_id TEXT NOT NULL, source_sheet TEXT,
+      source_row INTEGER NOT NULL CHECK(source_row >= 1), row_json TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id) REFERENCES statement_import_batches(id, generation_id),
+      UNIQUE(generation_id, source_sheet, source_row)
+    );
+    CREATE TABLE statement_normalized_lines (
+      id TEXT PRIMARY KEY, batch_id TEXT NOT NULL, generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL, settlement_month TEXT NOT NULL, row_settlement_month TEXT,
+      settlement_month_basis TEXT, case_no TEXT, external_subject_key TEXT, item_name TEXT,
+      source_sheet TEXT, source_row INTEGER NOT NULL, source_column TEXT NOT NULL,
+      source_label TEXT NOT NULL, template_family TEXT NOT NULL,
+      row_kind TEXT NOT NULL CHECK(row_kind IN ('detail', 'subtotal', 'declared_total', 'header', 'note')),
+      line_grain TEXT NOT NULL CHECK(line_grain IN ('case', 'aggregate', 'out', 'joint', 'adjustment', 'retainer')),
+      business_line TEXT NOT NULL CHECK(business_line IN ('IN', 'OUT', 'UNKNOWN', 'NEUTRAL', 'EXCLUDED')),
+      amount_role TEXT NOT NULL,
+      amount DECIMAL(18,4) NOT NULL, classification_status TEXT NOT NULL, rule_id TEXT,
+      rule_version TEXT, report_date TEXT, raw_payload TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id, partner_id, settlement_month)
+        REFERENCES statement_import_batches(id, generation_id, partner_id, settlement_month),
+      UNIQUE(generation_id, source_sheet, source_row, source_column, amount_role),
+      UNIQUE(id, generation_id, batch_id),
+      UNIQUE(id, generation_id, batch_id, partner_id, settlement_month)
+    );
+    CREATE TABLE quality_flags (
+      id TEXT PRIMARY KEY, generation_id TEXT NOT NULL, flag_type TEXT NOT NULL,
+      severity TEXT NOT NULL CHECK(severity IN ('blocking', 'warning', 'info')),
+      owner_role TEXT NOT NULL, resolution_action TEXT NOT NULL,
+      blocks_posting INTEGER NOT NULL CHECK(blocks_posting IN (0, 1)),
+      blocks_closing INTEGER NOT NULL CHECK(blocks_closing IN (0, 1)), partner_id TEXT NOT NULL,
+      settlement_month TEXT NOT NULL, related_batch_id TEXT NOT NULL, related_line_id TEXT,
+      reason_code TEXT NOT NULL, message TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(related_batch_id, generation_id, partner_id, settlement_month)
+        REFERENCES statement_import_batches(id, generation_id, partner_id, settlement_month),
+      FOREIGN KEY(related_line_id, generation_id, related_batch_id, partner_id, settlement_month)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id, partner_id, settlement_month)
+    );
+    CREATE TABLE partner_month_revenue_ledger (
+      id TEXT PRIMARY KEY, batch_id TEXT NOT NULL, generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL, settlement_month TEXT NOT NULL, source_line_id TEXT NOT NULL UNIQUE,
+      category_label TEXT, business_line TEXT NOT NULL CHECK(business_line = 'IN'),
+      settlement_amount DECIMAL(18,4) NOT NULL,
+      ledger_scope TEXT NOT NULL DEFAULT 'statement_internal' CHECK(ledger_scope = 'statement_internal'),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id) REFERENCES statement_import_batches(id, generation_id),
+      FOREIGN KEY(source_line_id, generation_id, batch_id)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id)
+    );
+    CREATE TABLE out_settlement_ledger (
+      id TEXT PRIMARY KEY, batch_id TEXT NOT NULL, generation_id TEXT NOT NULL,
+      partner_id TEXT NOT NULL, settlement_month TEXT NOT NULL, source_line_id TEXT NOT NULL UNIQUE,
+      out_type TEXT NOT NULL, item_name TEXT, external_subject_key TEXT,
+      settlement_amount DECIMAL(18,4) NOT NULL,
+      lab_revenue_amount DECIMAL(18,4) NOT NULL DEFAULT 0 CHECK(lab_revenue_amount = 0),
+      ledger_scope TEXT NOT NULL DEFAULT 'statement_internal' CHECK(ledger_scope = 'statement_internal'),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id, generation_id) REFERENCES statement_import_batches(id, generation_id),
+      FOREIGN KEY(source_line_id, generation_id, batch_id)
+        REFERENCES statement_normalized_lines(id, generation_id, batch_id)
+    );
+    INSERT INTO statement_import_batches (
+      id, partner_id, source_file, source_hash, template_family, parser_revision, config_revision,
+      settlement_month, generation_id, source_sheet, raw_row_count, normalized_line_count, status
+    ) VALUES (
+      'B-PRE', 'PT-PRE', 'pre.xlsx', 'sha256:predecessor', 'category_summary',
+      'parser-phase1a-v1', 'seed-phase1a-v1', '2026-01', 'GEN-PRE', 'Sheet1', 1, 1, 'parsed'
+    );
+    INSERT INTO statement_raw_rows
+      (id, batch_id, generation_id, source_sheet, source_row, row_json)
+      VALUES ('RAW-PRE', 'B-PRE', 'GEN-PRE', 'Sheet1', 1, '[]');
+    INSERT INTO statement_normalized_lines (
+      id, batch_id, generation_id, partner_id, settlement_month, row_settlement_month,
+      settlement_month_basis, source_sheet, source_row, source_column, source_label,
+      template_family, row_kind, line_grain, business_line, amount_role, amount,
+      classification_status, raw_payload
+    ) VALUES (
+      'LINE-PRE', 'B-PRE', 'GEN-PRE', 'PT-PRE', '2026-01', NULL, 'import_month',
+      'Sheet1', 1, 'A', 'pre', 'category_summary', 'detail', 'aggregate', 'IN',
+      'settlement', 1, 'classified', '{}'
+    );
+    INSERT INTO statement_normalized_lines (
+      id, batch_id, generation_id, partner_id, settlement_month, row_settlement_month,
+      settlement_month_basis, source_sheet, source_row, source_column, source_label,
+      template_family, row_kind, line_grain, business_line, amount_role, amount,
+      classification_status, raw_payload
+    ) VALUES (
+      'LINE-PRE-2', 'B-PRE', 'GEN-PRE', 'PT-PRE', '2026-01', NULL, 'import_month',
+      'Sheet1', 2, 'A2', 'pre', 'category_summary', 'detail', 'aggregate', 'IN',
+      'settlement', 1, 'classified', '{}'
+    );
+    INSERT INTO quality_flags (
+      id, generation_id, flag_type, severity, owner_role, resolution_action,
+      blocks_posting, blocks_closing, partner_id, settlement_month,
+      related_batch_id, related_line_id, reason_code, message
+    ) VALUES ('FLAG-PRE-1', 'GEN-PRE', 'pre_flag_1', 'info', 'finance', 'none', 0, 0,
+      'PT-PRE', '2026-01', 'B-PRE', NULL, 'PRE_FLAG_1', 'predecessor fixture');
+    INSERT INTO partner_month_revenue_ledger (
+      id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+      category_label, business_line, settlement_amount, ledger_scope
+    ) VALUES ('PML-PRE-1', 'B-PRE', 'GEN-PRE', 'PT-PRE', '2026-01', 'LINE-PRE',
+      'pre', 'IN', 1, 'statement_internal');
+    INSERT INTO out_settlement_ledger (
+      id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+      out_type, item_name, external_subject_key, settlement_amount, lab_revenue_amount, ledger_scope
+    ) VALUES ('OUT-PRE-1', 'B-PRE', 'GEN-PRE', 'PT-PRE', '2026-01', 'LINE-PRE',
+      'pre', 'pre', NULL, 1, 0, 'statement_internal')
+  `)
+  if (withInvalidLineage) {
+    // 与源夹具同形：坏行的 partner/month 与批次不一致——predecessor 自身 FK 查不出，
+    // 拷入 canonical schema（lineage FK 到批次四元组）后 foreign_key_check 才失败。
+    database.exec('PRAGMA foreign_keys = OFF')
+    database.exec(`
+      INSERT INTO partner_month_revenue_ledger (
+        id, batch_id, generation_id, partner_id, settlement_month, source_line_id,
+        category_label, business_line, settlement_amount, ledger_scope
+      ) VALUES (
+        'PML-PRE-BAD', 'B-PRE', 'GEN-PRE', 'PT-OTHER', '2026-02', 'LINE-PRE-2',
+        'bad', 'IN', 1, 'statement_internal'
+      )
+    `)
+    database.exec('PRAGMA foreign_keys = ON')
+  }
+}
+
+describe('LOC-005 FUP #85 managed-connection foreign_keys explicit pinning', () => {
+  it('pins foreign_keys = 1 on the managed connection on fresh open and across restart', () => {
+    expect(foreignKeysPragmaValue(db)).toBe(1)
+    manager.closeDatabase()
+    manager.initializeDatabase()
+    db = manager.getDatabase()
+    expect(foreignKeysPragmaValue(db)).toBe(1)
+  })
+
+  it('fails closed when the read-back cannot confirm foreign_keys = 1', () => {
+    // SQLite 在事务内把 foreign_keys 开关变更当 no-op：FK=0 连接 BEGIN 后调用钉版函数，
+    // 读回仍为 0，必须 fail-closed（稳定可诊断错误，不静默继续）。
+    const probe = new DatabaseSync(':memory:')
+    try {
+      probe.exec('PRAGMA foreign_keys = OFF')
+      expect(foreignKeysPragmaValue(probe)).toBe(0)
+      probe.exec('BEGIN')
+      expect(() => manager.assertManagedConnectionForeignKeys(probe, 'probe'))
+        .toThrow(/DATABASE_FOREIGN_KEYS_UNAVAILABLE:probe:0/)
+      probe.exec('ROLLBACK')
+      // 事务外：显式 ON + 读回 = 1，放行
+      expect(() => manager.assertManagedConnectionForeignKeys(probe, 'probe')).not.toThrow()
+      expect(foreignKeysPragmaValue(probe)).toBe(1)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('restores foreign_keys = 1 after Phase-1A upgrade success even when entered with 0', () => {
+    const predecessor = new DatabaseSync(':memory:')
+    try {
+      createPhase1APredecessorFixture(predecessor)
+      predecessor.exec('PRAGMA foreign_keys = OFF')
+      expect(foreignKeysPragmaValue(predecessor)).toBe(0)
+      expect(manager.upgradeStatementPhase1ASchema(predecessor)).toBe('upgraded')
+      // 进入前为 0 本身就是失防；迁移成功后必须钉回 1，不能按进入前值恢复为 0
+      expect(foreignKeysPragmaValue(predecessor)).toBe(1)
+    } finally {
+      predecessor.close()
+    }
+  })
+
+  it('restores foreign_keys = 1 after injected Phase-1A upgrade failure even when entered with 0', () => {
+    const predecessor = new DatabaseSync(':memory:')
+    try {
+      createPhase1APredecessorFixture(predecessor, true)
+      predecessor.exec('PRAGMA foreign_keys = OFF')
+      expect(foreignKeysPragmaValue(predecessor)).toBe(0)
+      expect(() => manager.upgradeStatementPhase1ASchema(predecessor))
+        .toThrow(/STATEMENT_PHASE1A_UPGRADE_FAILED/)
+      expect(foreignKeysPragmaValue(predecessor)).toBe(1)
+    } finally {
+      predecessor.close()
+    }
+  })
+
+  it('keeps FK RESTRICT rejecting dangling deletes after business triggers are dropped, with empty foreign_key_check', () => {
+    // 钉版（本例修复前即为绿）：摘掉业务层 trg_reconcile_diff_final_no_delete 后，
+    // 删被已终结补收单引用的 diff 仍被数据库层 FK 拒绝，且 foreign_key_check 为空——
+    // 证明 FK 防线真实承重，而不是依赖 trigger 单点。
+    const fixture = seedSupersededWithSurvivingDiff('fk85-restrict')
+    const probePath = join(testDirectory, `fk85-restrict-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const probe = new DatabaseSync(probePath)
+    try {
+      probe.exec('PRAGMA foreign_keys = ON')
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_no_delete')
+      expect(() => probe.prepare('DELETE FROM reconcile_diffs WHERE id = ?').run(fixture.oldDiff.id))
+        .toThrow(/FOREIGN KEY constraint failed/)
+      expect(probe.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('releases the connection handle when open-path pinning fails (主控复核点 1)', () => {
+    // openManagedDatabase 的钉版失败路径：fail-closed 的同时必须 close 新连接，
+    // 不能泄漏句柄。用事务内 pragma no-op 制造真实的钉版失败态。
+    const probe = new DatabaseSync(':memory:')
+    probe.exec('PRAGMA foreign_keys = OFF')
+    probe.exec('BEGIN')
+    expect(() => manager.assertForeignKeysPinnedOrClose(probe, 'open-probe'))
+      .toThrow(/DATABASE_FOREIGN_KEYS_UNAVAILABLE:open-probe:0/)
+    // 句柄已释放：对关闭连接的任何操作必须报错，而不是静默可用
+    expect(() => probe.prepare('SELECT 1')).toThrow()
+  })
+
+  it('preserves the original migration error when Phase-1A re-pinning fails (主控复核点 2)', () => {
+    // 钉版失败的真实病理态 = 迁移失败后连接仍在事务内（ROLLBACK 未成功），
+    // 此时 pragma no-op、读回为 0。诊断合同：原迁移错误上下文不得被钉版错误覆盖。
+    const probe = new DatabaseSync(':memory:')
+    try {
+      probe.exec('PRAGMA foreign_keys = OFF')
+      probe.exec('BEGIN')
+      const original = new Error('STATEMENT_PHASE1A_UPGRADE_FAILED: injected boom')
+      // 单调用单捕获：对同一错误对象同时断言原迁移错误与钉版错误两段都在
+      let combined: unknown
+      try {
+        manager.repinForeignKeysAfterMigration(probe, 'statement-phase1a-upgrade', original)
+      } catch (error) {
+        combined = error
+      }
+      expect(String(combined)).toMatch(/STATEMENT_PHASE1A_UPGRADE_FAILED: injected boom/)
+      expect(String(combined)).toMatch(/DATABASE_FOREIGN_KEYS_UNAVAILABLE:statement-phase1a-upgrade:0/)
+      // 无原错误时：钉版错误原样抛出（bare）
+      expect(() => manager.repinForeignKeysAfterMigration(probe, 'statement-phase1a-upgrade', null))
+        .toThrow(/DATABASE_FOREIGN_KEYS_UNAVAILABLE:statement-phase1a-upgrade:0/)
+      probe.exec('ROLLBACK')
+      // 事务外钉版成功：不抛错，读回 = 1，原错误由调用方自行抛出
+      expect(() => manager.repinForeignKeysAfterMigration(probe, 'statement-phase1a-upgrade', original))
+        .not.toThrow()
+      expect(foreignKeysPragmaValue(probe)).toBe(1)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('re-pins foreign_keys = 1 when BEGIN IMMEDIATE fails on lock contention (主控复核点 3)', () => {
+    // 真实锁竞争：连接 A 持 BEGIN IMMEDIATE（RESERVED 锁），连接 B 为合法 predecessor
+    // 且 busy_timeout=0——B 的 BEGIN IMMEDIATE 必失败，而 PRAGMA OFF 已先生效。
+    // 合同：函数抛出、错误保留原始锁失败上下文，且 B 不得被留在 FK=0。
+    const probePath = join(testDirectory, `phase1a-busy-${++sequence}.sqlite`)
+    const probeB = new DatabaseSync(probePath)
+    try {
+      createPhase1APredecessorFixture(probeB)
+      probeB.exec('PRAGMA busy_timeout = 0')
+      const probeA = new DatabaseSync(probePath)
+      try {
+        probeA.exec('BEGIN IMMEDIATE')
+        let caught: unknown
+        try {
+          manager.upgradeStatementPhase1ASchema(probeB)
+        } catch (error) {
+          caught = error
+        }
+        expect(String(caught)).toMatch(/STATEMENT_PHASE1A_UPGRADE_FAILED/)
+        expect(String(caught)).toMatch(/database is locked/)
+        expect(foreignKeysPragmaValue(probeB)).toBe(1)
+      } finally {
+        probeA.close()
+      }
+    } finally {
+      probeB.close()
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// FUP #95：四身份表主键写入侧硬闸（INSERT NULL/'' 与 UPDATE NULL/''/改 ID 即拒）。
+// 防代打纪律（主控 2026-07-29 纠偏）：
+// - UPDATE 承重探针一律在独立 probe 上跑：事务外 FK=OFF（读回确认 0），
+//   generation 另 DROP trg_account_reconcile_immutable_fact（其 <> 谓词已拦 A→B/A→''，
+//   不摘则新 guard 缺失也绿=假绿），目标行一律 pending（避开 finality trigger 的 IS NOT 谓词）；
+//   断言新 guard 专属错误码（EMPTY 带 $ 锚与启动扫描的 :<rowid> 码区分）与零写；
+//   每个 probe 收尾 FK 回 ON + 读回 1 + foreign_key_check 为空，不留关 FK 的「绿」。
+// - INSERT 探针 FK=ON 主库直跑，其余列/FK 全部合法，只坏主键。
+// - 错误码合同：EMPTY(NULL/'')与 IMMUTABLE(A→B)由同一只 UPDATE trigger 体内
+//   两段 SELECT RAISE ... WHERE 顺序求值区分，不依赖多 trigger 创建顺序。
+// ---------------------------------------------------------------------------
+
+describe('LOC-005 FUP #95 identity-table row-id write guards', () => {
+  type RowIdFixture = ReturnType<typeof seedSupersededWithSurvivingDiff> & {
+    g2SupplementId?: string
+  }
+  const rowIdTargets = [
+    { label: 'reconcile_diffs', idColumn: 'id', extraDrops: [] as string[] },
+    { label: 'supplement_orders', idColumn: 'id', extraDrops: [] as string[] },
+    {
+      label: 'account_reconcile_generations',
+      idColumn: 'reconcile_generation_id',
+      extraDrops: ['trg_account_reconcile_immutable_fact'],
+    },
+    { label: 'reconcile_hospital_months', idColumn: 'id', extraDrops: [] as string[] },
+  ] as const
+
+  function pickRowId(target: (typeof rowIdTargets)[number], fixture: RowIdFixture): string {
+    switch (target.label) {
+      case 'reconcile_diffs':
+        return fixture.nextDiff.id
+      case 'supplement_orders':
+        return String(fixture.g2SupplementId)
+      case 'account_reconcile_generations':
+        return fixture.nextBinding.reconcileGenerationId
+      case 'reconcile_hospital_months':
+        return fixture.hospitalMonthId
+    }
+  }
+
+  function seedRowIdFixture(name: string): RowIdFixture {
+    const fixture = seedSupersededWithSurvivingDiff(name) as RowIdFixture
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    fixture.g2SupplementId = (db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string }).id
+    return fixture
+  }
+
+  // 例 1（四表各一 it）：UPDATE 写入侧承重探针——独立 probe + FK=OFF（读回 0）+
+  // 代打 trigger 摘除 + pending 目标行；断新 guard 专属错误码与零写；
+  // 收尾 FK=ON + 读回 1 + foreign_key_check 为空。
+  for (const target of rowIdTargets) {
+    it(`rejects UPDATE to empty/NULL/changed row id on ${target.label} (probe, FK off, de-conflicted)`, () => {
+      const fixture = seedRowIdFixture(`rowid-update-${target.label}`)
+      const probePath = join(testDirectory, `rowid-update-${target.label}-${++sequence}.sqlite`)
+      db.prepare('VACUUM INTO ?').run(probePath)
+      const probe = new DatabaseSync(probePath)
+      try {
+        probe.exec('PRAGMA foreign_keys = OFF')
+        expect(foreignKeysPragmaValue(probe)).toBe(0)
+        for (const drop of target.extraDrops) {
+          probe.exec(`DROP TRIGGER IF EXISTS ${drop}`)
+        }
+        const targetId = pickRowId(target, fixture)
+        expectDatabaseMutationBlocked(probe, () => {
+          probe.prepare(`UPDATE ${target.label} SET ${target.idColumn} = '' WHERE ${target.idColumn} = ?`)
+            .run(targetId)
+        }, new RegExp(`RECONCILE_ROW_ID_EMPTY:${target.label}$`))
+        expectDatabaseMutationBlocked(probe, () => {
+          probe.prepare(`UPDATE ${target.label} SET ${target.idColumn} = NULL WHERE ${target.idColumn} = ?`)
+            .run(targetId)
+        }, new RegExp(`RECONCILE_ROW_ID_EMPTY:${target.label}$`))
+        expectDatabaseMutationBlocked(probe, () => {
+          probe.prepare(`UPDATE ${target.label} SET ${target.idColumn} = ? WHERE ${target.idColumn} = ?`)
+            .run(`DRIFTED-${target.label}`, targetId)
+        }, new RegExp(`RECONCILE_ROW_ID_IMMUTABLE:${target.label}$`))
+        // 零写：原 ID 行仍在，空/NULL/漂移 ID 均不存在
+        expect(
+          probe.prepare(`SELECT ${target.idColumn} AS id FROM ${target.label} WHERE ${target.idColumn} = ?`)
+            .get(targetId),
+        ).toEqual({ id: targetId })
+        const dirty = probe.prepare(`
+          SELECT COUNT(*) AS n FROM ${target.label}
+           WHERE ${target.idColumn} IS NULL OR ${target.idColumn} = '' OR ${target.idColumn} = ?
+        `).get(`DRIFTED-${target.label}`) as { n: number }
+        expect(dirty.n).toBe(0)
+        // 收尾：FK 回 ON + 读回 1 + foreign_key_check 为空
+        probe.exec('PRAGMA foreign_keys = ON')
+        expect(foreignKeysPragmaValue(probe)).toBe(1)
+        expect(probe.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+      } finally {
+        probe.close()
+      }
+    })
+  }
+
+  // 例 2（四表各一 it）：INSERT 写入侧探针——FK=ON 主库直跑，其余列/FK 全合法只坏主键；
+  // 断新 guard 专属错误码与全表零脏行。
+  const insertLegalWriters: Record<string, (fixture: RowIdFixture, badId: string | null) => void> = {
+    reconcile_diffs: (fixture, badId) => {
+      db.prepare(`
+        INSERT INTO reconcile_diffs (id, hospital_month_id, partner_id, service_month, case_no, line_type)
+        VALUES (?, ?, ?, ?, ?, '少收')
+      `).run(
+        badId, fixture.hospitalMonthId, fixture.binding.partnerId, fixture.binding.settlementMonth,
+        `CASE-RID95-${++sequence}`,
+      )
+    },
+    supplement_orders: (fixture, badId) => {
+      db.prepare('INSERT INTO supplement_orders (id, partner_id, service_month) VALUES (?, ?, ?)')
+        .run(badId, fixture.binding.partnerId, fixture.binding.settlementMonth)
+    },
+    account_reconcile_generations: (fixture, badId) => {
+      db.prepare(`
+        INSERT INTO account_reconcile_generations (
+          reconcile_generation_id, partner_id, settlement_month, statement_generation_id,
+          hospital_month_id, source_readiness_json, source_readiness_hash,
+          statement_artifact_hash, snapshot_json, snapshot_hash
+        ) VALUES (?, ?, '2099-01', ?, ?, '{}', 'rid95', 'rid95', '{}', 'rid95')
+      `).run(badId, fixture.binding.partnerId, fixture.binding.statementGenerationId, fixture.hospitalMonthId)
+    },
+    reconcile_hospital_months: (_fixture, badId) => {
+      db.prepare('INSERT INTO reconcile_hospital_months (id, partner_id, service_month) VALUES (?, ?, ?)')
+        .run(badId, `PT-RID95-${++sequence}`, '2099-01')
+    },
+  }
+
+  for (const target of rowIdTargets) {
+    it(`rejects INSERT with NULL or empty row id on ${target.label} (FK on, otherwise-legal row)`, () => {
+      const fixture = seedRowIdFixture(`rowid-insert-${target.label}`)
+      expectDatabaseMutationBlocked(db, () => {
+        insertLegalWriters[target.label](fixture, null)
+      }, new RegExp(`RECONCILE_ROW_ID_EMPTY:${target.label}$`))
+      expectDatabaseMutationBlocked(db, () => {
+        insertLegalWriters[target.label](fixture, '')
+      }, new RegExp(`RECONCILE_ROW_ID_EMPTY:${target.label}$`))
+      const dirty = db.prepare(`
+        SELECT COUNT(*) AS n FROM ${target.label} WHERE ${target.idColumn} IS NULL OR ${target.idColumn} = ''
+      `).get() as { n: number }
+      expect(dirty.n).toBe(0)
+    })
+  }
+
+  it('keeps legitimate verdict, supplement-collect, complete and close writes green', () => {
+    // 不误伤对照：合法写者从不改写主键——verdict / 补收审批与收款 / complete / close 全绿。
+    const fixture = seedRowIdFixture('rowid-legit')
+    db.prepare(`
+      UPDATE supplement_orders
+         SET review_status = 'approved', reviewed_by = 'USER-002', reviewed_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `).run(String(fixture.g2SupplementId))
+    db.prepare(`
+      UPDATE supplement_orders
+         SET status = '已补收', collected_at = CURRENT_TIMESTAMP, collected_month = '2026-09',
+             collected_revenue = 100
+       WHERE id = ?
+    `).run(String(fixture.g2SupplementId))
+    lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001')
+    lifecycle.closeAccountReconciliation(db, fixture.nextBinding, 'USER-001')
+    expect(
+      db.prepare('SELECT id FROM supplement_orders WHERE id = ?').get(String(fixture.g2SupplementId)),
+    ).toEqual({ id: String(fixture.g2SupplementId) })
+    const closed = db.prepare(`
+      SELECT status FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+    `).get(fixture.nextBinding.reconcileGenerationId) as { status: string }
+    expect(closed.status).toBe('closed')
+  })
+
+  // 例 4（四表各一 it）：历史脏行逐表首启/重启——INSERT 造脏（不碰既有引用链，无扫描代打），
+  // 摘新 guard 后写入 ''-id 行；首启拒 → 重启（事务回滚脏行仍在，第二次是独立完整运行）再拒 →
+  // DELETE 脏行恢复 → FK=ON+读回 1+check 空 → 第三次 upgrade 成功。
+  const historyDirtyWriters: Record<string, (connection: DatabaseSync, fixture: RowIdFixture) => void> = {
+    reconcile_diffs: (connection, fixture) => {
+      connection.prepare(`
+        INSERT INTO reconcile_diffs
+          (id, hospital_month_id, partner_id, service_month, case_no, line_type, reconcile_generation_id)
+        VALUES ('', ?, ?, ?, ?, '少收', ?)
+      `).run(
+        fixture.hospitalMonthId, fixture.binding.partnerId, fixture.binding.settlementMonth,
+        `CASE-RID95-DIRTY-${++sequence}`, fixture.nextBinding.reconcileGenerationId,
+      )
+    },
+    supplement_orders: (connection, fixture) => {
+      connection.prepare('INSERT INTO supplement_orders (id, partner_id, service_month) VALUES (?, ?, ?)')
+        .run('', fixture.binding.partnerId, fixture.binding.settlementMonth)
+    },
+    account_reconcile_generations: (connection, fixture) => {
+      // 与 fixture 同一合法 partner/month/statement/hospital binding（后续 #87 binding
+      // 启动扫描不会在此行上代打）；is_current=0 绕开 partial current unique，
+      // 新行无下游引用（无 diff/supplement 指向它）。
+      connection.prepare(`
+        INSERT INTO account_reconcile_generations (
+          reconcile_generation_id, partner_id, settlement_month, statement_generation_id,
+          hospital_month_id, is_current, source_readiness_json, source_readiness_hash,
+          statement_artifact_hash, snapshot_json, snapshot_hash
+        ) VALUES ('', ?, ?, ?, ?, 0, '{}', 'rid95', 'rid95', '{}', 'rid95')
+      `).run(
+        fixture.binding.partnerId, fixture.binding.settlementMonth,
+        fixture.binding.statementGenerationId, fixture.hospitalMonthId,
+      )
+    },
+    reconcile_hospital_months: (connection, fixture) => {
+      connection.prepare('INSERT INTO reconcile_hospital_months (id, partner_id, service_month) VALUES (?, ?, ?)')
+        .run('', fixture.binding.partnerId, '2099-01')
+    },
+  }
+
+  const rowIdGuardTriggerNames: Record<string, string[]> = {
+    reconcile_diffs: ['trg_reconcile_diff_row_id_insert', 'trg_reconcile_diff_row_id_update'],
+    supplement_orders: ['trg_reconcile_supplement_row_id_insert', 'trg_reconcile_supplement_row_id_update'],
+    account_reconcile_generations: [
+      'trg_account_reconcile_generation_row_id_insert',
+      'trg_account_reconcile_generation_row_id_update',
+    ],
+    reconcile_hospital_months: [
+      'trg_reconcile_hospital_month_row_id_insert',
+      'trg_reconcile_hospital_month_row_id_update',
+    ],
+  }
+
+  for (const target of rowIdTargets) {
+    it(`catches pre-existing dirty row id on ${target.label} at first boot and restart, then recovers`, () => {
+      const fixture = seedRowIdFixture(`rowid-history-${target.label}`)
+      const probePath = join(testDirectory, `rowid-history-${target.label}-${++sequence}.sqlite`)
+      db.prepare('VACUUM INTO ?').run(probePath)
+      const probe = new DatabaseSync(probePath)
+      try {
+        // 摘新 guard（修复前不存在则 DROP IF EXISTS 无效果）后 INSERT ''-id 历史脏行；
+        // INSERT 造脏不碰既有引用链，FK=ON 下其余列/FK 全合法，无扫描代打。
+        for (const name of rowIdGuardTriggerNames[target.label]) {
+          probe.exec(`DROP TRIGGER IF EXISTS ${name}`)
+        }
+        historyDirtyWriters[target.label](probe, fixture)
+        // 首启拒启
+        expect(() => manager.upgradeAccountReconciliationSchema(probe))
+          .toThrow(new RegExp(`RECONCILE_ROW_ID_EMPTY:${target.label}:`))
+        // 重启仍拒启（启动事务回滚，脏行仍在——第二次是独立完整运行，非首启余波）
+        expect(() => manager.upgradeAccountReconciliationSchema(probe))
+          .toThrow(new RegExp(`RECONCILE_ROW_ID_EMPTY:${target.label}:`))
+        // 恢复：DELETE 脏行（generations 的 init-only no_delete 需先摘）
+        if (target.label === 'account_reconcile_generations') {
+          probe.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_no_delete')
+        }
+        probe.prepare(`DELETE FROM ${target.label} WHERE ${target.idColumn} = ''`).run()
+        // FK 回 ON + 读回 1 + foreign_key_check 为空（全程未关 FK，幂等确认）
+        probe.exec('PRAGMA foreign_keys = ON')
+        expect(foreignKeysPragmaValue(probe)).toBe(1)
+        expect(probe.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+        // 第三次 upgrade 成功（扫描放行 + trigger 重装就位）
+        expect(() => manager.upgradeAccountReconciliationSchema(probe)).not.toThrow()
+      } finally {
+        probe.close()
+      }
+    })
+  }
 })

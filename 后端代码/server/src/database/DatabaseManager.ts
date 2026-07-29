@@ -87,8 +87,72 @@ export type ManagedDatabaseSync = DatabaseSync & {
 
 let db: ManagedDatabaseSync | null = null
 
+/**
+ * #85：managed 连接 foreign_keys 显式钉版——不依赖 Node/sqlite 编译期默认值。
+ * 显式 `PRAGMA foreign_keys = ON` 后立即读回，读回必须恰为 1，否则 fail-closed
+ * （稳定可诊断错误）。SQLite 在事务内把该开关变更当 no-op，因此读回是真实验证，
+ * 不是形式确认；任何迁移/升级路径结束后都必须重新调用本函数钉回 1，
+ * 不能按「进入前的值」恢复——进入前为 0 本身就是失防状态。
+ */
+export function assertManagedConnectionForeignKeys(
+  connection: DatabaseSync,
+  context: string,
+): void {
+  connection.exec('PRAGMA foreign_keys = ON')
+  const value = Number(
+    (connection.prepare('PRAGMA foreign_keys').get() as { foreign_keys?: number } | undefined)
+      ?.foreign_keys ?? 0,
+  )
+  if (value !== 1) {
+    throw new Error(`DATABASE_FOREIGN_KEYS_UNAVAILABLE:${context}:${value}`)
+  }
+}
+
+/**
+ * #85 主控复核点 1：open 路径钉版失败时必须同时释放新连接句柄——
+ * fail-closed 不能以句柄泄漏为代价；释放失败本身不遮蔽钉版错误。
+ */
+export function assertForeignKeysPinnedOrClose(
+  connection: DatabaseSync,
+  context: string,
+): void {
+  try {
+    assertManagedConnectionForeignKeys(connection, context)
+  } catch (error) {
+    try {
+      connection.close()
+    } catch {
+      // 释放失败不遮蔽钉版错误
+    }
+    throw error
+  }
+}
+
+/**
+ * #85 主控复核点 2：迁移结束后重新钉版（成功与异常恢复路径都必经）。
+ * 钉版失败的真实病理态 = 迁移失败后连接仍在事务内（pragma no-op、读回 0）。
+ * 诊断合同：有原迁移错误时抛出同时含双方上下文的组合错误，
+ * 原错误不得被钉版错误覆盖；无原错误时钉版错误原样抛出。
+ */
+export function repinForeignKeysAfterMigration(
+  database: DatabaseSync,
+  context: string,
+  originalError: Error | null,
+): void {
+  try {
+    assertManagedConnectionForeignKeys(database, context)
+  } catch (pinError) {
+    if (originalError) {
+      const pinDetail = pinError instanceof Error ? pinError.message : String(pinError)
+      throw new Error(`${originalError.message}；外键钉版亦失败：${pinDetail}`)
+    }
+    throw pinError
+  }
+}
+
 function openManagedDatabase(): ManagedDatabaseSync {
   const connection = new DatabaseSync(DB_PATH) as ManagedDatabaseSync
+  assertForeignKeysPinnedOrClose(connection, 'open')
   Object.defineProperty(connection, 'invalidateConnection', {
     configurable: false,
     enumerable: false,
@@ -833,12 +897,16 @@ export function upgradeStatementPhase1ASchema(
     throw new Error('STATEMENT_PHASE1A_SCHEMA_UNSUPPORTED: unknown table shape')
   }
 
-  const foreignKeys = Number(
-    (database.prepare('PRAGMA foreign_keys').get() as { foreign_keys?: number } | undefined)?.foreign_keys ?? 0
-  )
-  database.exec('PRAGMA foreign_keys = OFF')
-  database.exec('BEGIN IMMEDIATE')
+  // #85 主控复核点 3：PRAGMA OFF 与 BEGIN IMMEDIATE 也纳入受控路径——BEGIN 因锁竞争
+  // 失败时连接不得留在 FK=0，也不得对未建立的事务执行 ROLLBACK；transactionStarted
+  // 跟踪真实事务状态，仅在事务确实建立时 ROLLBACK，任何阶段失败统一经 repin 钉回 1
+  // 并保留原错误上下文。
+  let upgradeError: Error | null = null
+  let transactionStarted = false
   try {
+    database.exec('PRAGMA foreign_keys = OFF')
+    database.exec('BEGIN IMMEDIATE')
+    transactionStarted = true
     for (const table of [...STATEMENT_PHASE1A_TABLES].reverse()) {
       database.exec(`ALTER TABLE "${table}" RENAME TO "__loc004b_predecessor_${table}"`)
     }
@@ -924,12 +992,28 @@ export function upgradeStatementPhase1ASchema(
       throw new Error('canonical schema manifest validation failed')
     }
     database.exec('COMMIT')
+    transactionStarted = false
   } catch (error) {
-    database.exec('ROLLBACK')
     const detail = error instanceof Error ? error.message : 'unknown failure'
-    throw new Error(`STATEMENT_PHASE1A_UPGRADE_FAILED: ${detail}`)
-  } finally {
-    database.exec(`PRAGMA foreign_keys = ${foreignKeys === 1 ? 'ON' : 'OFF'}`)
+    if (transactionStarted) {
+      try {
+        database.exec('ROLLBACK')
+        transactionStarted = false
+        upgradeError = new Error(`STATEMENT_PHASE1A_UPGRADE_FAILED: ${detail}`)
+      } catch (rollbackError) {
+        const rollbackDetail = rollbackError instanceof Error ? rollbackError.message : 'unknown rollback failure'
+        upgradeError = new Error(`STATEMENT_PHASE1A_UPGRADE_FAILED: ${detail}（ROLLBACK 亦失败：${rollbackDetail}）`)
+      }
+    } else {
+      upgradeError = new Error(`STATEMENT_PHASE1A_UPGRADE_FAILED: ${detail}`)
+    }
+  }
+  // #85：迁移成功或异常恢复后都必须重新 ON + 读回钉版，不能按进入前值恢复——
+  // 进入前为 0 本身就是失防状态，恢复为 0 等于把迁移窗口的失防固化为常态；
+  // 钉版失败不得覆盖原迁移错误上下文（主控复核点 2，合同见 helper 注释）。
+  repinForeignKeysAfterMigration(database, 'statement-phase1a-upgrade', upgradeError)
+  if (upgradeError) {
+    throw upgradeError
   }
   return 'upgraded'
 }
@@ -1260,6 +1344,14 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_update')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_update')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_row_id_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_row_id_update')
+  database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_generation_row_id_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_generation_row_id_update')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_row_id_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_row_id_update')
 
   // R3-1：diffs 代次回填必须排在旧 trigger DROP 之后——父版库的
   // trg_reconcile_diff_final_immutable 对 complete/closed 月 diff 的任意 UPDATE 一律 ABORT，
@@ -1326,6 +1418,80 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       ON supplement_orders(reconcile_generation_id, source_diff_id)
   `)
 
+  // #95：四张身份表的主键在写入侧 fail-closed。INSERT 拒绝 NULL/空串；
+  // UPDATE 在同一 trigger 体内先判空、再判改键，错误优先级不依赖 trigger 创建顺序。
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_diff_row_id_insert
+    BEFORE INSERT ON reconcile_diffs
+    WHEN NEW.id IS NULL OR NEW.id = ''
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_EMPTY:reconcile_diffs');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_diff_row_id_update
+    BEFORE UPDATE OF id ON reconcile_diffs
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_EMPTY:reconcile_diffs')
+       WHERE NEW.id IS NULL OR NEW.id = '';
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_IMMUTABLE:reconcile_diffs')
+       WHERE NEW.id IS NOT OLD.id;
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_row_id_insert
+    BEFORE INSERT ON supplement_orders
+    WHEN NEW.id IS NULL OR NEW.id = ''
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_EMPTY:supplement_orders');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_row_id_update
+    BEFORE UPDATE OF id ON supplement_orders
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_EMPTY:supplement_orders')
+       WHERE NEW.id IS NULL OR NEW.id = '';
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_IMMUTABLE:supplement_orders')
+       WHERE NEW.id IS NOT OLD.id;
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_account_reconcile_generation_row_id_insert
+    BEFORE INSERT ON account_reconcile_generations
+    WHEN NEW.reconcile_generation_id IS NULL OR NEW.reconcile_generation_id = ''
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_EMPTY:account_reconcile_generations');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_account_reconcile_generation_row_id_update
+    BEFORE UPDATE OF reconcile_generation_id ON account_reconcile_generations
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_EMPTY:account_reconcile_generations')
+       WHERE NEW.reconcile_generation_id IS NULL OR NEW.reconcile_generation_id = '';
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_IMMUTABLE:account_reconcile_generations')
+       WHERE NEW.reconcile_generation_id IS NOT OLD.reconcile_generation_id;
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_hospital_month_row_id_insert
+    BEFORE INSERT ON reconcile_hospital_months
+    WHEN NEW.id IS NULL OR NEW.id = ''
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_EMPTY:reconcile_hospital_months');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_hospital_month_row_id_update
+    BEFORE UPDATE OF id ON reconcile_hospital_months
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_EMPTY:reconcile_hospital_months')
+       WHERE NEW.id IS NULL OR NEW.id = '';
+      SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_IMMUTABLE:reconcile_hospital_months')
+       WHERE NEW.id IS NOT OLD.id;
+    END
+  `)
   database.exec(`
     CREATE TRIGGER trg_account_reconcile_immutable_fact
     BEFORE UPDATE ON account_reconcile_generations
