@@ -47,10 +47,10 @@
 
 ## 反盲区自检
 
-- **我现在最没把握的是什么？ / Least confidence**:
-- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**:
+- **我现在最没把握的是什么？ / Least confidence**: risk-v1; anchor=name:支付回调; uncertainty=unverified:目标环境重试行为
+- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: no-finding-v1; checked=path:scripts/example.cjs; unchecked=ref:Issue#81
 
-> 两项都必须写具体风险、假设或未知。不能只写“无”；确实未发现时，写明已检查范围和仍未检查范围。
+> PR / Issue 机器入口只接受共用契约 §6.1 的 `risk-v1` / `no-finding-v1` typed wire grammar，不接受旧 free-form，也不要带 Markdown/HTML 包装。checker 只校验 wire shape 与 lexical anchor；名称真实性、检查是否实际执行和回答是否诚实仍须人审。最终直接面向用户的交付结尾继续使用产品大白话。
 
 ## PM 大白话
 

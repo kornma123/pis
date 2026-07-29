@@ -120,89 +120,23 @@ const COMMONMARK_TYPE_7_PATTERN = new RegExp(
   `)[\\t ]*$`,
 );
 const PRODUCT_ENCODED_CONTAINER_TAGS = new Set(['code', 'div', 'xmp']);
-const NO_FINDING_PREFIX_PATTERN =
-  /^(?:(?:(?:目前|当前|暂时|暂|现阶段|迄今|截至目前|到目前为止)(?:仍|还)?)[ \t，,]*|(?:(?:currently|for now|so far|at present|temporarily)[ \t，,]+))?(?:未(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没有(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|无(?:任何|其他)?(?:明显)?(?:问题|风险|异常)|暂无(?:其他)?(?:问题|风险|异常)|未见(?:其他)?(?:问题|风险|异常)|一切正常|no[ \t]+(?:issues?|problems?|findings?)(?:[ \t]+(?:were[ \t]+)?found)?|no[ \t]+risks?(?:[ \t]+(?:were[ \t]+)?identified)?|nothing[ \t]+(?:was[ \t]+)?(?:found|to[ \t]+report)|all[ \t]+(?:looks[ \t]+)?(?:good|normal|clear)|looks?[ \t]+(?:good|fine|okay|normal|clear)|lgtm)(?=$|[ \t:：;；,.，。!！])/iu;
-const CHINESE_FUNCTION_OR_GENERIC_PATTERN =
-  /(?:这些|那些|这个|那个|某个|某种|某处|某类|它们|他们|她们|然后|不过|但是|可是|然而|并且|而且|所以|因此|其中|这里|那里|依然|还是|什么|它|他|她|这|那|其|该|此|有|到|的|地|得|内容|事项|项目|范围|相关内容|相关事项|上述|以上|工作|事情|某事|某些|一些|任何|所有|全部|相关|其他|其它|通用|一般|常规|各项|相应|和|与|及|以及|或|或者)/gu;
-const ENGLISH_FUNCTION_OR_GENERIC_PATTERN =
-  /\b(?:a|an|the|this|that|these|those|it|its|they|them|their|there|here|then|however|but|yet|so|therefore|also|still|no|not|any|all|some|none|nothing|only|other|related|relevant|remaining|generic|general|work|task|thing|things|something|anything|content|item|items|scope|range|and|or|of|to|for|from|in|on|at|by|with|without|as|be|been|being|is|are|was|were|has|have|had|can|will|would|should|maybe|perhaps|possibly|likely)\b/giu;
-const CHINESE_ACTION_OR_STATE_PATTERN =
-  /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|尚未|仍未|没有|没|未|待|需(?:要)?|可能(?:会)?|也许(?:会)?|大概(?:会)?|或许(?:会)?|担心|局限|依赖|只在|仅在|变化|发生|不行|出错|检查|核对|验证|审查|覆盖|复核|排查|扫描|检视|确认|评估|分析|调查|执行|处理|跟进|完成|实测|量化|测量|观察|识别|检测|检出|查出|发现|登记|风险|问题|过|了)/gu;
-const ENGLISH_ACTION_OR_STATE_PATTERN =
-  /\b(?:may|might|could|depends?|needs?|requires?|incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|unmeasured|measured|measurement|check(?:ed|ing)?|inspect(?:ed|ing|ion|ions)?|scan(?:ned|ning|s)?|verif(?:y|ied|ication)|validat(?:e|ed|ion)|review(?:ed|ing)?|audit(?:ed|ing)?|test(?:ed|ing)?|quantif(?:y|ied|ication)|detect(?:ed|ing|ion)?|observ(?:e|ed|ing|ation)|identif(?:y|ied|ication)|find|found|fail(?:ed|ure)?|error|errors|risk|risks|issue|issues|problem|problems|finding|findings|gap|gaps|missing|change(?:d|s|ing)?)\b/giu;
-const CHINESE_GENERIC_CONTENT_PATTERN =
-  /(?:东西|系统|服务|地方|位置|部分|模块|组件|情况|状态|方面|行为|结果|对象|平台|应用程序|程序|功能|页面)/gu;
-const ENGLISH_GENERIC_CONTENT_TOKENS = new Set([
-  'api',
-  'apis',
-  'app',
-  'application',
-  'applications',
-  'area',
-  'areas',
-  'backend',
-  'backends',
-  'bad',
-  'behavior',
-  'behaviors',
-  'behaviour',
-  'behaviours',
-  'break',
-  'breaks',
-  'broke',
-  'broken',
-  'component',
-  'components',
-  'database',
-  'db',
-  'endpoint',
-  'endpoints',
-  'failure',
-  'failures',
-  'frontend',
-  'frontends',
-  'go',
-  'goes',
-  'going',
-  'happen',
-  'happens',
-  'happened',
-  'interface',
-  'interfaces',
-  'module',
-  'modules',
-  'object',
-  'objects',
-  'occur',
-  'occurs',
-  'occurred',
-  'part',
-  'parts',
-  'place',
-  'places',
-  'platform',
-  'platforms',
-  'process',
-  'processes',
-  'program',
-  'programs',
-  'server',
-  'servers',
-  'service',
-  'services',
-  'state',
-  'states',
-  'status',
-  'statuses',
-  'stuff',
-  'system',
-  'systems',
-  'thing',
-  'things',
-  'unknown',
-  'unknowns',
-  'wrong',
+const REFLECTION_SCHEMAS = new Map([
+  ['risk-v1', new Set(['anchor', 'uncertainty'])],
+  ['no-finding-v1', new Set(['checked', 'unchecked'])],
 ]);
+const REFLECTION_ANCHOR_TYPES = new Set(['id', 'ref', 'name', 'path']);
+const REFLECTION_UNCERTAINTY_KINDS = new Set([
+  'unverified',
+  'untested',
+  'unmeasured',
+  'unknown',
+  'assumption',
+  'dependency',
+  'risk',
+]);
+const REFLECTION_CONTRACT_MAX_BYTES = 4_096;
+const REFLECTION_ANCHOR_MAX_BYTES = 512;
+const REFLECTION_UNCERTAINTY_MAX_BYTES = 2_048;
 const HTML_ENTITIES = new Map([
   ['amp', '&'],
   ['apos', "'"],
@@ -908,126 +842,210 @@ function isPlaceholder(value) {
   return isExplicitPlaceholder(normalizeFieldValue(value));
 }
 
-function normalizedAnchorSource(value) {
-  return decodeHtmlEntities(value)
-    .normalize('NFKC')
-    .replace(/\p{Default_Ignorable_Code_Point}/gu, '');
-}
-
-function hasExplicitAnchorWrapper(value) {
-  const source = normalizedAnchorSource(value);
+function isObviousReflectionPlaceholder(value) {
   return (
-    /`[^`\n]*[\p{L}\p{N}][^`\n]*`/u.test(source) ||
-    /<code(?=[\s>])[^>]*>[^<]*[\p{L}\p{N}][^<]*<\/code>/iu.test(source) ||
-    /(?:「[^」]*[\p{L}\p{N}][^」]*」|《[^》]*[\p{L}\p{N}][^》]*》|“[^”]*[\p{L}\p{N}][^”]*”)/u.test(
-      source,
-    )
+    isExplicitPlaceholder(value) ||
+    /^(?:all|everything|nothing|anything|something)$/iu.test(value) ||
+    /^(?:无|不知道|全部|所有)$/u.test(value)
   );
 }
 
-function contentTokens(value) {
-  const nonHan = value.replace(/\p{Script=Han}+/gu, ' ');
+function hasMarkdownUnderscoreWrapper(value) {
+  return /^(__|_).+\1$/u.test(value);
+}
+
+function reflectionParseFailure(reason) {
+  return { ok: false, reason };
+}
+
+function canonicalizeReflectionContract(value) {
+  if (Buffer.byteLength(String(value || ''), 'utf8') > REFLECTION_CONTRACT_MAX_BYTES) {
+    return reflectionParseFailure('contract-too-long');
+  }
+  const decoded = decodeHtmlEntitiesDetailed(value);
+  if (decoded.unresolved) return reflectionParseFailure('unresolved-entity');
+  if (/[\p{Cc}\p{Cs}\uFFFD]/u.test(decoded.value)) {
+    return reflectionParseFailure('control-character');
+  }
+  if (/\p{Default_Ignorable_Code_Point}/u.test(decoded.value)) {
+    return reflectionParseFailure('default-ignorable');
+  }
+  if (/\p{White_Space}/u.test(decoded.value.replace(/ /gu, ''))) {
+    return reflectionParseFailure('non-ascii-whitespace');
+  }
+
+  const canonical = decoded.value.normalize('NFKC').trim();
+  if (!canonical) return reflectionParseFailure('empty');
+  if (/[`*~<>&[\]{}()\\]/u.test(canonical)) {
+    return reflectionParseFailure('markup-or-escape');
+  }
+  if (Buffer.byteLength(canonical, 'utf8') > REFLECTION_CONTRACT_MAX_BYTES) {
+    return reflectionParseFailure('contract-too-long');
+  }
+  return { ok: true, value: canonical };
+}
+
+function isValidReflectionAnchor(type, value) {
+  if (!REFLECTION_ANCHOR_TYPES.has(type)) return false;
+  if (
+    !value ||
+    isObviousReflectionPlaceholder(value) ||
+    hasMarkdownUnderscoreWrapper(value) ||
+    !/[\p{L}\p{N}]/u.test(value) ||
+    /[;:=]/u.test(value)
+  ) {
+    return false;
+  }
+  if (Buffer.byteLength(value, 'utf8') > REFLECTION_ANCHOR_MAX_BYTES) return false;
+
+  if (type === 'ref') {
+    return (
+      /^(?:issue|pr|ticket|bug) ?#[1-9][0-9]*$/iu.test(value) ||
+      /^[a-f0-9]{7,40}$/iu.test(value)
+    );
+  }
+  if (type === 'id') {
+    return /^[a-z_][a-z0-9_.-]*$/iu.test(value);
+  }
+  if (type === 'path') {
+    if (
+      /[\s\\]/u.test(value) ||
+      value.endsWith('/') ||
+      value.startsWith('~') ||
+      /^[a-z]:/iu.test(value)
+    ) {
+      return false;
+    }
+    const segments = value.split('/').filter(Boolean);
+    if (segments.some((segment) => segment === '.' || segment === '..')) return false;
+    if (value.startsWith('/')) {
+      return /^\/api\/[\p{L}\p{N}_.@+-]+(?:\/[\p{L}\p{N}_.@+-]+)*$/u.test(value);
+    }
+    if (value.includes('/')) {
+      return /^[\p{L}\p{N}_.@+-]+(?:\/[\p{L}\p{N}_.@+-]+)+$/u.test(value);
+    }
+    return (
+      /^\.[\p{L}\p{N}_.@+-]+$/u.test(value) ||
+      /^[\p{L}\p{N}_@+-][\p{L}\p{N}_.@+-]*\.[\p{L}\p{N}]+$/u.test(value) ||
+      /^[A-Z][A-Z0-9_-]+$/u.test(value)
+    );
+  }
   return (
-    nonHan.match(
-      /[\p{L}\p{N}]+(?:[._:/#@+-][\p{L}\p{N}]+)*/gu,
-    ) || []
-  ).filter((token) => {
-    const lower = token.toLowerCase();
-    if (ENGLISH_GENERIC_CONTENT_TOKENS.has(lower)) return false;
-    return [...token].length > 1 || /\p{N}/u.test(token);
-  });
+    (value.match(/[\p{L}\p{N}]/gu) || []).length >= 2 &&
+    /^[\p{L}\p{N} .,'，。·/+_-]+$/u.test(value)
+  );
 }
 
-function isStrongStandaloneToken(token, value) {
-  const lower = token.toLowerCase();
-  if (ENGLISH_GENERIC_CONTENT_TOKENS.has(lower)) return false;
-  const hasLetter = /\p{L}/u.test(token);
-  const hasNumber = /\p{N}/u.test(token);
-  if (hasLetter && hasNumber) return true;
-  if (hasLetter && /[._:/#@+-]/u.test(token)) return true;
-  if (/^\p{Lu}{2,}$/u.test(token)) return true;
-  if (/\p{Ll}.*\p{Lu}/u.test(token)) return true;
-  return hasExplicitAnchorWrapper(value);
+function parseReflectionAnchor(value) {
+  const separator = value.indexOf(':');
+  if (separator <= 0 || value.indexOf(':', separator + 1) >= 0) {
+    return reflectionParseFailure('anchor-shape');
+  }
+  const type = value.slice(0, separator).trim().toLowerCase();
+  const anchorValue = value.slice(separator + 1).trim();
+  if (!isValidReflectionAnchor(type, anchorValue)) {
+    return reflectionParseFailure('anchor-value');
+  }
+  if (type === 'ref') {
+    const tracked = anchorValue.match(/^(issue|pr|ticket|bug) ?#([1-9][0-9]*)$/iu);
+    if (tracked) {
+      const kind = tracked[1].toLowerCase();
+      const number = Number.parseInt(tracked[2], 10);
+      return {
+        ok: true,
+        type,
+        value: `${kind}#${number}`,
+        kind,
+        number,
+        identity: `ref:${kind}:${number}`,
+      };
+    }
+    const sha = anchorValue.toLowerCase();
+    return { ok: true, type, value: sha, kind: 'sha', identity: `text:${sha}` };
+  }
+  const identityValue = anchorValue.normalize('NFKC').toLowerCase().replace(/ +/gu, ' ');
+  return {
+    ok: true,
+    type,
+    value: anchorValue,
+    identity: `text:${identityValue}`,
+  };
 }
 
-function hasSpecificContentAnchor(value, object) {
-  const content = object.replace(CHINESE_GENERIC_CONTENT_PATTERN, ' ');
-  const hanLength = (content.match(/\p{Script=Han}/gu) || []).length;
-  const tokens = contentTokens(content);
-
-  // Require a compound/qualified object; one token is reserved for an explicit identifier.
-  if (hanLength >= 3 || tokens.length >= 2) return true;
-  if (hanLength >= 2 && tokens.length >= 1) return true;
-  if (hanLength >= 2 && hasExplicitAnchorWrapper(value)) return true;
-  if (tokens.length === 1 && isStrongStandaloneToken(tokens[0], value)) return true;
-  return /\b\p{Lu}\s*&\s*\p{Lu}\b/u.test(normalizedAnchorSource(value));
+function parseReflectionUncertainty(value) {
+  const separator = value.indexOf(':');
+  if (separator <= 0 || value.indexOf(':', separator + 1) >= 0) {
+    return reflectionParseFailure('uncertainty-shape');
+  }
+  const kind = value.slice(0, separator).trim().toLowerCase();
+  const detail = value.slice(separator + 1).trim();
+  if (
+    !REFLECTION_UNCERTAINTY_KINDS.has(kind) ||
+    !detail ||
+    isObviousReflectionPlaceholder(detail) ||
+    hasMarkdownUnderscoreWrapper(detail) ||
+    !/[\p{L}\p{N}]/u.test(detail) ||
+    /[;=]/u.test(detail) ||
+    !/^[\p{L}\p{N} .,'，。!?！？/+_-]+$/u.test(detail) ||
+    Buffer.byteLength(value, 'utf8') > REFLECTION_UNCERTAINTY_MAX_BYTES
+  ) {
+    return reflectionParseFailure('uncertainty-value');
+  }
+  return { ok: true, kind, detail };
 }
 
-function hasSubstantiveScope(value) {
-  const clean = canonicalizeMarkdownText(value);
-  if (isExplicitPlaceholder(clean) || !/[\p{L}\p{N}]/u.test(clean)) return false;
-  if (/测试.*覆盖|覆盖.*测试/u.test(clean) || /\btest(?:ing)?[ \t]+coverage\b/iu.test(clean)) {
-    return true;
+function parseReflectionContract(value) {
+  const canonical = canonicalizeReflectionContract(value);
+  if (!canonical.ok) return canonical;
+
+  const segments = canonical.value.split(';');
+  const mode = segments.shift()?.trim().toLowerCase() || '';
+  const requiredKeys = REFLECTION_SCHEMAS.get(mode);
+  if (!requiredKeys) return reflectionParseFailure('mode');
+  if (segments.length !== requiredKeys.size || segments.some((segment) => !segment.trim())) {
+    return reflectionParseFailure('field-count');
   }
 
-  const object = clean
-    .replace(CHINESE_FUNCTION_OR_GENERIC_PATTERN, ' ')
-    .replace(CHINESE_ACTION_OR_STATE_PATTERN, ' ')
-    .replace(ENGLISH_FUNCTION_OR_GENERIC_PATTERN, ' ')
-    .replace(ENGLISH_ACTION_OR_STATE_PATTERN, ' ');
-  return hasSpecificContentAnchor(value, object);
-}
-
-function hasBoundedNoFindingScopes(value) {
-  let checkedScope = false;
-  let uncheckedScope = false;
-
-  for (const clause of value.split(/[；;。.!！,，\n]+/u)) {
-    const clean = clause.trim();
-    const checked = clean.match(
-      /^(?:已|已经)(?:检查|核对|验证|审查|覆盖|复核|排查|扫描|检视)(?:了|过)?(?:范围)?[ \t]*[:：]?[ \t]*(.*)$/u,
-    );
-    if (checked && hasSubstantiveScope(checked[1])) checkedScope = true;
-
-    const unchecked = clean.match(
-      /^(?:尚未|仍未|未)(?:检查|核对|验证|审查|覆盖|复核|排查|扫描|检视)(?:了|过)?(?:范围)?[ \t]*[:：]?[ \t]*(.*)$/u,
-    );
-    if (unchecked && hasSubstantiveScope(unchecked[1])) uncheckedScope = true;
-
-    const checkedEnglish = clean.match(
-      /^(?:checked|inspected|scanned|verified|validated|reviewed|audited|covered)(?:[ \t]+(?:scope|range))?[ \t]*[:：]?[ \t]+(.+)$/iu,
-    );
-    if (checkedEnglish && hasSubstantiveScope(checkedEnglish[1])) checkedScope = true;
-
-    const uncheckedEnglish = clean.match(
-      /^(?:(?:not(?:[ \t]+yet)?)|(?:still[ \t]+not))[ \t]+(?:checked|inspected|scanned|verified|validated|reviewed|audited|covered)(?:[ \t]+(?:scope|range))?[ \t]*[:：]?[ \t]+(.+)$/iu,
-    );
-    if (uncheckedEnglish && hasSubstantiveScope(uncheckedEnglish[1])) uncheckedScope = true;
+  const fields = new Map();
+  for (const segment of segments) {
+    const separator = segment.indexOf('=');
+    if (separator <= 0 || segment.indexOf('=', separator + 1) >= 0) {
+      return reflectionParseFailure('field-shape');
+    }
+    const key = segment.slice(0, separator).trim().toLowerCase();
+    const fieldValue = segment.slice(separator + 1).trim();
+    if (!/^[a-z-]+$/u.test(key) || !requiredKeys.has(key)) {
+      return reflectionParseFailure('unknown-key');
+    }
+    if (fields.has(key)) return reflectionParseFailure('duplicate-key');
+    if (!fieldValue) return reflectionParseFailure('empty-value');
+    fields.set(key, fieldValue);
+  }
+  if ([...requiredKeys].some((key) => !fields.has(key))) {
+    return reflectionParseFailure('missing-key');
   }
 
-  return checkedScope && uncheckedScope;
-}
+  if (mode === 'risk-v1') {
+    const anchor = parseReflectionAnchor(fields.get('anchor'));
+    if (!anchor.ok) return anchor;
+    const uncertainty = parseReflectionUncertainty(fields.get('uncertainty'));
+    if (!uncertainty.ok) return uncertainty;
+    return { ok: true, mode, anchor, uncertainty };
+  }
 
-function hasSubstantiveRisk(value) {
-  const clean = canonicalizeMarkdownText(value);
-  const hasState =
-    /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|未(?:查|检查|核对|验证|审查|覆盖|复核|排查|扫描|测试|实测|量化|确认|登记|完成|评估|分析|测量)|尚未|待(?:查|检查|核对|验证|审查|复核|排查|扫描|测试|实测|量化|确认|评估|分析|测量)|需(?:要)?(?:查|检查|核对|验证|审查|复核|排查|扫描|测试|实测|量化|确认|评估|分析|测量)|可能|也许|担心|局限|依赖|只在|仅在|变化)/u.test(clean) ||
-    /\b(?:incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|not|only|may|might|could|depends?|needs?|requires?|unmeasured|fail(?:ed|ure)?|error)\b/iu.test(clean);
-  if (!hasState) return false;
-  return hasSubstantiveScope(value);
+  const checked = parseReflectionAnchor(fields.get('checked'));
+  const unchecked = parseReflectionAnchor(fields.get('unchecked'));
+  if (!checked.ok || !unchecked.ok) {
+    return reflectionParseFailure('no-finding-anchor');
+  }
+  if (checked.identity === unchecked.identity) {
+    return reflectionParseFailure('identical-no-finding-boundaries');
+  }
+  return { ok: true, mode, checked, unchecked };
 }
 
 function isWeakReflection(value) {
-  const clean = normalizeFieldValue(value);
-  if (isExplicitPlaceholder(clean)) return true;
-  if (/^(?:无|没有|不知道|不确定|none|n\/?a|nil)$/i.test(clean)) return true;
-  if (!/[\p{L}\p{N}]/u.test(clean)) return true;
-  if (/^(?:风险|有风险|存在风险|问题|有问题|存在问题|未知风险|情况不明|待确认|需确认|需要确认|需关注|需要关注)[。.!！]?$/u.test(clean)) {
-    return true;
-  }
-  if (!NO_FINDING_PREFIX_PATTERN.test(clean)) return !hasSubstantiveRisk(value);
-
-  return !hasBoundedNoFindingScopes(clean);
+  return !parseReflectionContract(value).ok;
 }
 
 function hasHeading(body, heading) {
@@ -1094,7 +1112,9 @@ function validatePrBody(bodyInput) {
   ]) {
     const value = getField(fields, aliases);
     if (!isPlaceholder(value) && isWeakReflection(value)) {
-      errors.push(`反盲区字段回答过弱：${aliases[0]}；请写具体风险/假设，或写明已检查与未检查范围。`);
+      errors.push(
+        `反盲区字段回答过弱或格式无效：${aliases[0]}；请使用 risk-v1 或 no-finding-v1 typed grammar。`,
+      );
     }
   }
 
@@ -1216,6 +1236,7 @@ module.exports = {
   isPlaceholder,
   isWeakReflection,
   normalizeFieldValue,
+  parseReflectionContract,
   parseVisibleFieldLine,
   stripIgnoredMarkdown,
   validatePrBody,

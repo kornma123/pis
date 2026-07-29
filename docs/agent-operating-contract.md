@@ -92,6 +92,19 @@ preflight 默认只读：不会 fetch、merge、rebase、prune、删除 worktree
 
 技术日志、SHA、checks 和测试数量可以作为前文证据，但不能替代这六项。第 5、6 项必须是具体风险、假设或未知；不能留空，也不能只写“无”“没有”“不知道”。确实未发现额外问题时，写“未发现”并列出已检查范围及仍未检查的范围。纯咨询或本轮没有改动系统时，也必须明确写出“本轮未改动系统”，并按上述两种合法形态说明下一步。结尾中的“下一步”只描述产品路径，不自动授予任何状态变更权限，包括但不限于修改文件或数据、Git/GitHub 写入、提交、推送、部署、合并或启动下一阶段。
 
+上面第 5、6 项面向最终用户时继续使用产品大白话；写入 PR body 或 Issue `[HANDOFF]` 评论这类机器入口时，两项都必须改写为以下无兼容 fallback 的 `v1` typed wire grammar（字段顺序可交换）：
+
+```text
+risk-v1; anchor=<type>:<value>; uncertainty=<kind>:<detail>
+no-finding-v1; checked=<type>:<value>; unchecked=<type>:<value>
+```
+
+- `type` 仅允许 `id|ref|name|path`。`id` 是 ASCII identifier；`ref` 是 `Issue#N` / `Issue #N`、`PR#N`、ticket/bug 正整数编号或 7–40 位 fixed SHA；`path` 是仓库相对路径/文件名或 `/api/...` 应用 route；`name` 是操作者显式声明的产品/领域名称，至少包含两个字母或数字。
+- `kind` 仅允许 `unverified|untested|unmeasured|unknown|assumption|dependency|risk`；`detail` 必须是非占位、可见的纯文本。
+- 合同整体、anchor、uncertainty 的 UTF-8 上限分别为 4096、512、2048 bytes。严格拒绝缺键、重复键、未知键/类型/kind、控制字符、非普通空格、default-ignorable、未解析 entity、Markdown/HTML 包装与分隔符注入。
+- `no-finding-v1` 的 checked / unchecked 在规范化后必须是不同 identity；ref 的大小写与 `#` 前单个空格不构成差异，`id:auth` 与 `name:auth` 也不构成差异。
+- checker 只证明 wire shape 与 lexical anchor 可审计；不能证明 anchor 真实存在或可达、类型声明真实、detail 确属未知、checked / unchecked 真已执行，亦不能证明回答诚实。这些仍由异构 reviewer / PM 人审。
+
 要求只返回 schema JSON/XML 等严格机器格式的自动化输出，以及工具响应、内部 subagent 消息和结构化平台制品，均不属于“直接向最终用户交付结果的交互式根任务会话最终回复”；不得为满足本节而破坏其机器合同。承接这些产物并最终回复用户的根会话仍必须按本节收口。
 
 ## 7. 提交、PR 与合并权限

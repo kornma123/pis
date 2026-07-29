@@ -164,11 +164,11 @@ evidence: <commit / PR / checks / 真跑证据>
 risk: <残余风险，确无也要说明原因>
 next-owner: <下一角色或具名负责人>
 trigger: <下一步启动条件>
-least-confidence: <当前证据最弱、假设最重的一点，以及缺什么证据>
-biggest-missing: <可能改变当前判断的最大盲区，以及已检查/未检查范围>
+least-confidence: risk-v1; anchor=name:支付回调; uncertainty=unverified:目标环境重试行为
+biggest-missing: no-finding-v1; checked=path:scripts/example.cjs; unchecked=ref:Issue#81
 ```
 
-`least-confidence` 与 `biggest-missing` 不能只写 `none`、`无`、`不知道`。确实未发现额外问题时，必须写“未发现”并列出已检查范围和仍未检查范围。
+`least-confidence` 与 `biggest-missing` 只接受共用契约 §6.1 的 `risk-v1` / `no-finding-v1` strict typed wire grammar，不接受旧 free-form，也不要加入 Markdown/HTML 包装。checker 只证明 wire shape 与 lexical anchor 可审计；不能证明 anchor 真实、detail 真未知、checked / unchecked 真执行或回答诚实，这些仍由 reviewer / PM 人审。最终直接面向用户的产品化结尾继续用产品大白话。
 
 ## 5. 回复主体输出（非最终收口）
 

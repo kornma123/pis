@@ -321,8 +321,10 @@ function replaceMarkdownSyntaxSeparator(body, replacement) {
 }
 
 const reflectionRegressionFailures = [];
-const strongLeastConfidence = 'transaction isolation has only been checked in one runtime';
-const strongBiggestMissing = 'an upstream schema owner may still change the contract';
+const strongLeastConfidence =
+  'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes';
+const strongBiggestMissing =
+  'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability';
 
 function checkVisibilitySemantics(name, wrap, expectedOk) {
   const handoffOk = handoffFieldErrors(
@@ -828,73 +830,73 @@ const adversarialReflectionCorpus = [
     '未发现；已检查验证和复核；未检查审计和扫描',
     false,
   ],
-  ['short concrete test risk', '测试覆盖不足', true],
-  ['short concrete external-call risk', '外部调用未查', true],
-  ['concrete rate-limit measurement risk', '生产限速参数需实测', true],
-  ['concrete timeout quantification risk', '生产超时行为待量化', true],
-  ['English concrete measurement risk', 'production timeout needs measurement', true],
-  ['concrete certificate review risk', '证书轮换窗口需复核', true],
-  ['English concrete failure risk', 'payment webhook may fail', true],
-  ['Chinese demonstrative with concrete object', '这些支付回调可能失败', true],
-  ['English demonstrative with concrete object', 'these payment webhooks may fail', true],
-  ['concrete Chinese callback risk', '支付回调可能失败', true],
-  ['concrete PostgreSQL timeout risk', 'PostgreSQL 15 lock timeout is unmeasured', true],
-  ['concrete checkout retry risk', 'checkout webhook retry policy is unverified', true],
-  ['concrete certificate rotation risk', '证书轮换窗口需复核', true],
-  ['encoded concrete Chinese callback', '支付回&#35843;可能失败', true],
-  ['NFKC concrete PostgreSQL timeout', 'ＰｏｓｔｇｒｅＳＱＬ １５ lock timeout is unmeasured', true],
-  ['encoded concrete checkout retry', 'checkout web&#104;ook retry policy is unverified', true],
-  ['inline-code proper anchor', '`nginx` is unverified', true],
-  ['encoded code proper anchor', '&lt;code&gt;nginx&lt;/code&gt; is unverified', true],
-  ['short quoted Chinese proper anchor', '「微信」可能失败', true],
-  ['two concrete English anchors survive generic category', 'payment service retry may fail', true],
-  ['concrete English anchors survive generic API wording', 'warehouse API timeout is unmeasured', true],
-  ['concrete Chinese anchors survive generic service word', '订单服务重试可能失败', true],
-  ['explicit single proper-name anchor', '`Redis` may fail', true],
-  ['qualified Chinese content fragment', '缓存键可能失败', true],
-  ['two English content anchors', 'cache eviction may fail', true],
-  ['substantive bounded no-finding', '未发现；已检查固定对象和测试，未检查生产参数', true],
-  ['generic modifiers with concrete objects', '未发现；已检查所有目标代码；未检查相关生产参数', true],
+  ['legacy short concrete test risk', '测试覆盖不足', false],
+  ['legacy short concrete external-call risk', '外部调用未查', false],
+  ['legacy concrete rate-limit measurement risk', '生产限速参数需实测', false],
+  ['legacy concrete timeout quantification risk', '生产超时行为待量化', false],
+  ['legacy English concrete measurement risk', 'production timeout needs measurement', false],
+  ['legacy concrete certificate review risk', '证书轮换窗口需复核', false],
+  ['legacy English concrete failure risk', 'payment webhook may fail', false],
+  ['legacy Chinese demonstrative with concrete object', '这些支付回调可能失败', false],
+  ['legacy English demonstrative with concrete object', 'these payment webhooks may fail', false],
+  ['legacy concrete Chinese callback risk', '支付回调可能失败', false],
+  ['legacy concrete PostgreSQL timeout risk', 'PostgreSQL 15 lock timeout is unmeasured', false],
+  ['legacy concrete checkout retry risk', 'checkout webhook retry policy is unverified', false],
+  ['legacy concrete certificate rotation risk', '证书轮换窗口需复核', false],
+  ['legacy encoded concrete Chinese callback', '支付回&#35843;可能失败', false],
+  ['legacy NFKC concrete PostgreSQL timeout', 'ＰｏｓｔｇｒｅＳＱＬ １５ lock timeout is unmeasured', false],
+  ['legacy encoded concrete checkout retry', 'checkout web&#104;ook retry policy is unverified', false],
+  ['legacy inline-code proper anchor', '`nginx` is unverified', false],
+  ['legacy encoded code proper anchor', '&lt;code&gt;nginx&lt;/code&gt; is unverified', false],
+  ['legacy short quoted Chinese proper anchor', '「微信」可能失败', false],
+  ['legacy two concrete English anchors', 'payment service retry may fail', false],
+  ['legacy concrete English API wording', 'warehouse API timeout is unmeasured', false],
+  ['legacy concrete Chinese service wording', '订单服务重试可能失败', false],
+  ['legacy explicit proper-name anchor', '`Redis` may fail', false],
+  ['legacy qualified Chinese content fragment', '缓存键可能失败', false],
+  ['legacy two English content anchors', 'cache eviction may fail', false],
+  ['legacy substantive bounded no-finding', '未发现；已检查固定对象和测试，未检查生产参数', false],
+  ['legacy generic modifiers with concrete objects', '未发现；已检查所有目标代码；未检查相关生产参数', false],
   [
     'English bounded no-finding',
     'No issues found; checked target code and tests; not checked production settings',
-    true,
+    false,
   ],
   [
     'temporal Chinese bounded no-finding',
     '目前未发现问题；已检查目标代码；未检查生产参数',
-    true,
+    false,
   ],
   [
     'English findings bounded synonym',
     'No findings; checked target code; not checked production settings',
-    true,
+    false,
   ],
   [
     'LGTM bounded synonym',
     'LGTM; checked target code; not checked production settings',
-    true,
+    false,
   ],
   [
     'HTML-like product scopes',
     '未发现；已检查&lt;code-v2&gt;与R&amp;D，未检查&lt;span-v3&gt;',
-    true,
+    false,
   ],
   [
     'concrete objects survive action normalization',
     '未发现；已排查支付回调重试，未扫描仓库外 webhook 配置',
-    true,
+    false,
   ],
 ];
 for (const [name, value, expectedOk] of adversarialReflectionCorpus) {
   const handoffErrors = handoffFieldErrors(reflectionHandoff(
     value,
-    'an upstream schema owner may still change the contract',
+    'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
   ));
   const handoffOk = !handoffErrors.includes('least-confidence');
   const prResult = validatePrBody(reflectionPrBody(
     value,
-    'an upstream schema owner may still change the contract',
+    'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
   ));
   if (handoffOk !== expectedOk) {
     reflectionRegressionFailures.push(`${name}: Issue handoff expected ok=${expectedOk}, actual=${handoffOk}`);
@@ -906,6 +908,127 @@ for (const [name, value, expectedOk] of adversarialReflectionCorpus) {
   }
   if (handoffOk !== prResult.ok) {
     reflectionRegressionFailures.push(`${name}: validators disagree`);
+  }
+}
+
+const typedRisk =
+  'risk-v1; anchor=id:Redis; uncertainty=unverified:production failure mode';
+const typedNoFinding =
+  'no-finding-v1; checked=path:scripts/issue-handoff/check-pr-body.cjs; unchecked=ref:Issue #81';
+for (const [name, value, expectedOk] of [
+  ['typed risk grammar', typedRisk, true],
+  ['typed no-finding grammar', typedNoFinding, true],
+  ['typed name short CJK product', 'risk-v1; anchor=name:微信; uncertainty=unverified:生产回调行为', true],
+  ['typed name Redis', 'risk-v1; anchor=name:Redis; uncertainty=unverified:failover behavior', true],
+  ['typed name Claude', 'risk-v1; anchor=name:Claude; uncertainty=unverified:model fallback', true],
+  ['typed NFKC name Redis', 'risk-v1; anchor=name:Ｒｅｄｉｓ; uncertainty=unverified:failover behavior', true],
+  ['typed numeric-entity name', 'risk-v1; anchor=name:微&#20449;; uncertainty=unverified:生产回调行为', true],
+  [
+    'typed NFKC mode and keys',
+    'ｒｉｓｋ－ｖ１； ａｎｃｈｏｒ＝ｉｄ：ａｕｔｈ； ｕｎｃｅｒｔａｉｎｔｙ＝ｕｎｖｅｒｉｆｉｅｄ：token expiry',
+    true,
+  ],
+  ['typed id auth', 'risk-v1; anchor=id:auth; uncertainty=unverified:token expiry behavior', true],
+  ['typed path API', 'risk-v1; anchor=path:/api/auth; uncertainty=unverified:error handling', true],
+  ['typed repository-relative path', 'risk-v1; anchor=path:scripts/claude-task.cjs; uncertainty=unverified:error handling', true],
+  ['typed dotfile path', 'risk-v1; anchor=path:.gitignore; uncertainty=unverified:ignore coverage', true],
+  ['typed root README path', 'risk-v1; anchor=path:README; uncertainty=unverified:documentation coverage', true],
+  ['typed ref without space', 'risk-v1; anchor=ref:Issue#81; uncertainty=unverified:review coverage', true],
+  ['typed ref with one space', 'risk-v1; anchor=ref:Issue #81; uncertainty=unverified:review coverage', true],
+  ['typed fixed SHA ref', 'risk-v1; anchor=ref:2a3b50dd; uncertainty=unverified:review coverage', true],
+  ['typed reordered fields', 'risk-v1; uncertainty=unverified:review coverage; anchor=ref:PR#82', true],
+  ['typed distinct no-finding anchors', 'no-finding-v1; checked=name:支付回调; unchecked=path:/api/auth', true],
+  [
+    'typed uncertainty readable boundary',
+    `risk-v1; anchor=id:auth; uncertainty=unknown:${'x'.repeat(2_040)}`,
+    true,
+  ],
+  ['typed risk duplicate anchor', 'risk-v1; anchor=id:Redis; anchor=id:OAuth; uncertainty=risk:failover', false],
+  ['typed risk unknown key', 'risk-v1; anchor=id:Redis; uncertainty=risk:failover; extra=id:OAuth', false],
+  ['typed risk unknown anchor type', 'risk-v1; anchor=system:Redis; uncertainty=risk:failover', false],
+  ['typed malformed ref', 'risk-v1; anchor=ref:Redis; uncertainty=risk:failover', false],
+  ['typed malformed path', 'risk-v1; anchor=path:auth; uncertainty=risk:failover', false],
+  ['typed arbitrary absolute POSIX path', 'risk-v1; anchor=path:/etc/passwd; uncertainty=risk:exposure', false],
+  ['typed user-home absolute path', 'risk-v1; anchor=path:/Users/max/repo; uncertainty=risk:exposure', false],
+  ['typed Windows drive path', 'risk-v1; anchor=path:C:\\repo\\file.cjs; uncertainty=risk:exposure', false],
+  ['typed parent traversal', 'risk-v1; anchor=path:../scripts/a.cjs; uncertainty=risk:exposure', false],
+  ['typed malformed id', 'risk-v1; anchor=id:two words; uncertainty=risk:failure', false],
+  ['typed one-grapheme name', 'risk-v1; anchor=name:x; uncertainty=risk:failure', false],
+  ['typed quantifier name', 'risk-v1; anchor=name:everything; uncertainty=risk:failure', false],
+  ['typed uncertainty without a closed kind', 'risk-v1; anchor=id:Redis; uncertainty=verified', false],
+  ['typed uncertainty unknown kind with detail', 'risk-v1; anchor=id:Redis; uncertainty=verified:passed', false],
+  ['typed uncertainty empty Chinese claim', 'risk-v1; anchor=name:系统; uncertainty=无', false],
+  ['typed uncertainty unknown Chinese claim', 'risk-v1; anchor=name:系统; uncertainty=不知道', false],
+  ['typed encoded HTML comment detail', 'risk-v1; anchor=id:Redis; uncertainty=unknown:&lt;!--xx--&gt;', false],
+  ['typed Markdown link detail', 'risk-v1; anchor=id:Redis; uncertainty=unknown:[](xx)', false],
+  ['typed underscore-wrapped detail', 'risk-v1; anchor=id:Redis; uncertainty=unknown:__xx__', false],
+  ['typed encoded hidden HTML detail', 'risk-v1; anchor=id:Redis; uncertainty=unknown:&lt;span hidden&gt;xx&lt;/span&gt;', false],
+  ['typed unresolved entity', 'risk-v1; anchor=id:Red&amp;bogus;is; uncertainty=risk:failure', false],
+  ['typed default-ignorable confusion', 'risk-v1; anchor=id:Re\u200Ddis; uncertainty=risk:failure', false],
+  ['typed control character', 'risk-v1; anchor=id:Redis; uncertainty=risk:may\u0000 fail', false],
+  ['typed semicolon injection', 'risk-v1; anchor=id:Redis; uncertainty=risk:failover; checked=id:auth', false],
+  ['typed encoded semicolon injection', 'risk-v1; anchor=id:Redis; uncertainty=risk:fail&#59; extra=id:auth', false],
+  ['typed mixed-mode keys', 'risk-v1; checked=id:auth; unchecked=id:timeout', false],
+  ['typed duplicate checked key', 'no-finding-v1; checked=id:auth; checked=id:cache; unchecked=id:timeout', false],
+  ['typed invalid checked anchor', 'no-finding-v1; checked=path:auth; unchecked=id:timeout', false],
+  ['typed invalid unchecked anchor', 'no-finding-v1; checked=id:auth; unchecked=ref:Redis', false],
+  ['typed identical no-finding boundaries', 'no-finding-v1; checked=id:auth; unchecked=id:auth', false],
+  ['typed case-equivalent ref boundaries', 'no-finding-v1; checked=ref:PR#82; unchecked=ref:pr #82', false],
+  ['typed cross-type identical boundaries', 'no-finding-v1; checked=id:auth; unchecked=name:auth', false],
+  ['typed repeated-space equivalent boundaries', 'no-finding-v1; checked=name:Auth Service; unchecked=name:auth  service', false],
+  ['typed fixed-SHA cross-type boundaries', 'no-finding-v1; checked=ref:2a3b50dd; unchecked=name:2A3B50DD', false],
+  ['typed encoded hidden anchor markup', 'no-finding-v1; checked=name:&lt;span hidden&gt;auth&lt;/span&gt;; unchecked=id:cache', false],
+  ['typed underscore-wrapped id', 'no-finding-v1; checked=id:__auth__; unchecked=id:cache', false],
+  ['typed no-finding placeholder names', 'no-finding-v1; checked=name:everything; unchecked=name:nothing', false],
+  ['typed non-ASCII id confusable', 'no-finding-v1; checked=id:ΡR82; unchecked=id:auth', false],
+  ['typed no-finding unknown key', 'no-finding-v1; checked=id:auth; unchecked=id:timeout; uncertainty=none', false],
+  [
+    'typed uncertainty above readable boundary',
+    `risk-v1; anchor=id:auth; uncertainty=unknown:${'x'.repeat(2_041)}`,
+    false,
+  ],
+  [
+    'typed anchor above readable boundary',
+    `risk-v1; anchor=id:${`a${'x'.repeat(512)}`}; uncertainty=unknown:scope`,
+    false,
+  ],
+  [
+    'typed oversized whole contract',
+    `risk-v1${' '.repeat(4_097)}; anchor=id:auth; uncertainty=unknown:scope`,
+    false,
+  ],
+  ['typed unknown version', 'risk-v2; anchor=id:Redis; uncertainty=risk:failover', false],
+  ['legacy specific free-form', 'Redis may fail', false],
+  ['legacy vague free-form', '可能存在某种隐患', false],
+  [
+    'legacy bounded no-finding free-form',
+    '未发现问题；已检查范围：主要流程；未检查范围：次要流程',
+    false,
+  ],
+]) {
+  for (const field of ['least-confidence', 'biggest-missing']) {
+    const leastConfidence = field === 'least-confidence' ? value : typedRisk;
+    const biggestMissing = field === 'biggest-missing' ? value : typedRisk;
+    const handoffOk = handoffFieldErrors(
+      reflectionHandoff(leastConfidence, biggestMissing),
+    ).length === 0;
+    const prResult = validatePrBody(
+      reflectionPrBody(leastConfidence, biggestMissing),
+    );
+    if (handoffOk !== expectedOk) {
+      reflectionRegressionFailures.push(
+        `${name} in ${field}: Issue handoff expected ok=${expectedOk}, actual=${handoffOk}`,
+      );
+    }
+    if (prResult.ok !== expectedOk) {
+      reflectionRegressionFailures.push(
+        `${name} in ${field}: PR validator expected ok=${expectedOk}, actual=${prResult.ok} ` +
+        `(${prResult.errors.join('; ')})`,
+      );
+    }
+    if (handoffOk !== prResult.ok) {
+      reflectionRegressionFailures.push(`${name} in ${field}: validators disagree`);
+    }
   }
 }
 
@@ -979,8 +1102,8 @@ for (const [name, body] of [
   [
     'canonical strong field before encoded weak duplicate',
     `${reflectionHandoff(
-      'transaction isolation has only been checked in one runtime',
-      'an upstream schema owner may still change the contract',
+      'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
+      'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
     )}
 least-confid&amp;#101;nce: TODO later fill this`,
   ],
@@ -988,21 +1111,21 @@ least-confid&amp;#101;nce: TODO later fill this`,
     'encoded weak field before canonical strong duplicate',
     `${completeHandoff}
 least-confid&amp;#101;nce: TODO later fill this
-least-confidence: transaction isolation has only been checked in one runtime
-biggest-missing: an upstream schema owner may still change the contract`,
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`,
   ],
   [
     'default-ignorable weak field before canonical strong duplicate',
     `${completeHandoff}
 least-confid\uFE0Fence: TODO later fill this
-least-confidence: transaction isolation has only been checked in one runtime
-biggest-missing: an upstream schema owner may still change the contract`,
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`,
   ],
   [
     'unresolved named weak field after canonical strong duplicate',
     `${reflectionHandoff(
-      'transaction isolation has only been checked in one runtime',
-      'an upstream schema owner may still change the contract',
+      'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
+      'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
     )}
 least-confid&amp;NoBreak;ence: TODO later fill this`,
   ],
@@ -1010,14 +1133,14 @@ least-confid&amp;NoBreak;ence: TODO later fill this`,
     'unresolved named weak field before canonical strong duplicate',
     `${completeHandoff}
 least-confid&amp;NoBreak;ence: TODO later fill this
-least-confidence: transaction isolation has only been checked in one runtime
-biggest-missing: an upstream schema owner may still change the contract`,
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`,
   ],
   [
     'nested unresolved named weak field after canonical strong duplicate',
     `${reflectionHandoff(
-      'transaction isolation has only been checked in one runtime',
-      'an upstream schema owner may still change the contract',
+      'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
+      'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
     )}
 least-confid&amp;amp;NoBreak;ence: TODO later fill this`,
   ],
@@ -1025,14 +1148,14 @@ least-confid&amp;amp;NoBreak;ence: TODO later fill this`,
     'nested unresolved named weak field before canonical strong duplicate',
     `${completeHandoff}
 least-confid&amp;amp;NoBreak;ence: TODO later fill this
-least-confidence: transaction isolation has only been checked in one runtime
-biggest-missing: an upstream schema owner may still change the contract`,
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`,
   ],
   [
     'numeric encoded delimiter after canonical strong field',
     `${reflectionHandoff(
-      'transaction isolation has only been checked in one runtime',
-      'an upstream schema owner may still change the contract',
+      'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
+      'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
     )}
 least-confidence&amp;#58; TODO later fill this`,
   ],
@@ -1040,14 +1163,14 @@ least-confidence&amp;#58; TODO later fill this`,
     'numeric encoded delimiter before canonical strong field',
     `${completeHandoff}
 least-confidence&amp;#58; TODO later fill this
-least-confidence: transaction isolation has only been checked in one runtime
-biggest-missing: an upstream schema owner may still change the contract`,
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`,
   ],
   [
     'named encoded delimiter after canonical strong field',
     `${reflectionHandoff(
-      'transaction isolation has only been checked in one runtime',
-      'an upstream schema owner may still change the contract',
+      'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
+      'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
     )}
 least-confidence&amp;colon; TODO later fill this`,
   ],
@@ -1055,8 +1178,8 @@ least-confidence&amp;colon; TODO later fill this`,
     'named encoded delimiter before canonical strong field',
     `${completeHandoff}
 least-confidence&amp;colon; TODO later fill this
-least-confidence: transaction isolation has only been checked in one runtime
-biggest-missing: an upstream schema owner may still change the contract`,
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`,
   ],
 ]) {
   if (handoffFieldErrors(body).length === 0) {
@@ -1068,24 +1191,24 @@ if (!handoffFieldErrors(completeHandoff.replace('result:', 'res_ult:')).includes
   reflectionRegressionFailures.push('internal underscore in res_ult was accepted as result');
 }
 if (handoffFieldErrors(`${reflectionHandoff(
-  'transaction isolation has only been checked in one runtime',
-  'an upstream schema owner may still change the contract',
+  'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
+  'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
 )}
 res_ult: unrelated informational field`).length !== 0) {
   reflectionRegressionFailures.push('internal underscore in res_ult collided with result');
 }
 assert.deepEqual(
   handoffFieldErrors(reflectionHandoff(
-    'transaction isolation has only been checked in one runtime',
-    'an upstream schema owner may still change the contract',
+    'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
+    'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
   ).replace('least-confidence:', 'ｌｅａｓｔ－ｃｏｎｆｉｄｅｎｃｅ:')),
   [],
   'NFKC-equivalent required handoff key must be recognized',
 );
 assert.deepEqual(
   handoffFieldErrors(reflectionHandoff(
-    'transaction isolation has only been checked in one runtime',
-    'an upstream schema owner may still change the contract',
+    'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
+    'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
   ).replace('least-confidence:', 'least-confidence\t:')),
   [],
   'ordinary tab remains allowed inside a handoff field key',
@@ -1186,9 +1309,9 @@ for (const [name, first, second] of [
   ],
 ]) {
   const body = `${completeHandoff}
-${first}: transaction isolation has only been checked in one runtime
+${first}: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
 ${second}: TODO later fill this
-biggest-missing: an upstream schema owner may still change the contract`;
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`;
   if (!handoffFieldErrors(body).includes('least-confidence')) {
     reflectionRegressionFailures.push(`${name} was accepted`);
   }
@@ -1305,14 +1428,14 @@ const longConcreteRisk = `外部调用未查${'；外部调用未查'.repeat(8_1
 const lengthBoundaryStartedAt = Date.now();
 const longHandoffErrors = handoffFieldErrors(reflectionHandoff(
   longConcreteRisk,
-  'an upstream schema owner may still change the contract',
+  'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
 ));
 const longPrResult = validatePrBody(reflectionPrBody(
   longConcreteRisk,
-  'an upstream schema owner may still change the contract',
+  'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
 ));
-if (longHandoffErrors.length !== 0 || !longPrResult.ok) {
-  reflectionRegressionFailures.push('64KiB concrete reflection boundary was rejected');
+if (!longHandoffErrors.includes('least-confidence') || longPrResult.ok) {
+  reflectionRegressionFailures.push('64KiB reflection boundary was not rejected');
 }
 if (Date.now() - lengthBoundaryStartedAt > 2_000) {
   reflectionRegressionFailures.push('64KiB reflection boundary exceeded 2s');
@@ -1322,40 +1445,40 @@ assert.deepEqual(handoffFieldErrors(completeHandoff), [
   'least-confidence', 'biggest-missing',
 ]);
 assert.deepEqual(handoffFieldErrors(`${completeHandoff}
-least-confidence: transaction isolation has only been checked in one runtime
-biggest-missing: an upstream schema owner may still change the contract`), []);
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`), []);
 assert.deepEqual(handoffFieldErrors(`${completeHandoff}
 least-confidence: none
-biggest-missing: an upstream schema owner may still change the contract`), ['least-confidence']);
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`), ['least-confidence']);
 assert.deepEqual(handoffFieldErrors(`${completeHandoff}
 least-confidence: 没有发现
-biggest-missing: an upstream schema owner may still change the contract`), ['least-confidence']);
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`), ['least-confidence']);
 assert.deepEqual(handoffFieldErrors(`${completeHandoff}
-least-confidence: transaction isolation has only been checked in one runtime
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
 biggest-missing: 未发现`), ['biggest-missing']);
 assert.deepEqual(handoffFieldErrors(`${completeHandoff}
 least-confidence: 未发现；已检查固定对象和测试，尚未检查生产环境
-biggest-missing: an upstream schema owner may still change the contract`), []);
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`), ['least-confidence']);
 assert.deepEqual(
   handoffFieldErrors(reflectionHandoff('测试覆盖不足', '外部调用未查')),
-  [],
-  'short concrete Chinese risks must pass without an arbitrary length threshold',
+  ['least-confidence', 'biggest-missing'],
+  'legacy free-form risks must be rejected without typed anchors',
 );
 assert.deepEqual(
   handoffFieldErrors(`${completeHandoff}
 <!--
-least-confidence: transaction isolation has only been checked in one runtime
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
 -->
 least-confidence: TODO later fill this
-biggest-missing: an upstream schema owner may still change the contract`),
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`),
   ['least-confidence'],
   'HTML-comment fields must not mask a visible placeholder',
 );
 assert.deepEqual(
   handoffFieldErrors(`${completeHandoff}
 <!--
-least-confidence: transaction isolation has only been checked in one runtime
-biggest-missing: an upstream schema owner may still change the contract
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability
 -->`),
   ['least-confidence', 'biggest-missing'],
   'HTML-comment-only reflection fields must remain missing',
@@ -1363,18 +1486,18 @@ biggest-missing: an upstream schema owner may still change the contract
 assert.deepEqual(
   handoffFieldErrors(`${completeHandoff}
 \`\`\`text
-least-confidence: transaction isolation has only been checked in one runtime
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
 \`\`\`
 least-confidence: TODO later fill this
-biggest-missing: an upstream schema owner may still change the contract`),
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`),
   ['least-confidence'],
   'fenced-code fields must not mask a visible placeholder',
 );
 assert.deepEqual(
   handoffFieldErrors(`${completeHandoff}
 \`\`\`text
-least-confidence: transaction isolation has only been checked in one runtime
-biggest-missing: an upstream schema owner may still change the contract
+least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability
 \`\`\``),
   ['least-confidence', 'biggest-missing'],
   'fenced-code-only reflection fields must remain missing',
@@ -1382,24 +1505,24 @@ biggest-missing: an upstream schema owner may still change the contract
 assert.deepEqual(
   handoffFieldErrors(`${completeHandoff}
 
-    least-confidence: transaction isolation has only been checked in one runtime
+    least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
 least-confidence: TODO later fill this
-biggest-missing: an upstream schema owner may still change the contract`),
+biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`),
   ['least-confidence'],
   'indented-code fields must not count as visible fields',
 );
 assert.deepEqual(
   handoffFieldErrors(`${completeHandoff}
 
-    least-confidence: transaction isolation has only been checked in one runtime
-    biggest-missing: an upstream schema owner may still change the contract`),
+    least-confidence: risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes
+    biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability`),
   ['least-confidence', 'biggest-missing'],
   'indented-code-only reflection fields must remain missing',
 );
 assert.deepEqual(
   handoffFieldErrors(`${reflectionHandoff(
-    'transaction isolation has only been checked in one runtime',
-    'an upstream schema owner may still change the contract',
+    'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
+    'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
   )}
 least-confidence: TODO later fill this`),
   ['least-confidence'],
@@ -1414,7 +1537,7 @@ for (const placeholder of [
   assert.deepEqual(
     handoffFieldErrors(reflectionHandoff(
       placeholder,
-      'an upstream schema owner may still change the contract',
+      'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
     )),
     ['least-confidence'],
     `explicit placeholder must fail after normalization: ${placeholder}`,
@@ -1423,7 +1546,7 @@ for (const placeholder of [
 assert.deepEqual(
   handoffFieldErrors(reflectionHandoff(
     '未发现；暂无其他问题',
-    'an upstream schema owner may still change the contract',
+    'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
   )),
   ['least-confidence'],
   '未发现 must include both checked and unchecked boundaries',
@@ -1433,8 +1556,8 @@ assert.deepEqual(
     '未发现；已检查固定对象和测试，尚未检查生产环境',
     '未发现；已核对仓库调用链，未核对仓库外集成',
   )),
-  [],
-  'bounded 未发现 answers with checked and unchecked scopes must pass',
+  ['least-confidence', 'biggest-missing'],
+  'legacy bounded no-finding prose must be rejected',
 );
 assert.deepEqual(handoffFieldErrors('[HANDOFF] status=blocked'), [
   'result', 'evidence', 'risk', 'next-owner', 'trigger',
@@ -1692,7 +1815,7 @@ risk: release remains blocked
 next-owner: reviewer
 trigger: fixed SHA available
 least-confidence: ${leastConfidence}
-biggest-missing: external caller inventory is incomplete`);
+biggest-missing: risk-v1; anchor=name:external caller inventory; uncertainty=unknown:inventory completeness`);
 
   function runGit(args, cwd = repo) {
     const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -1809,6 +1932,24 @@ if (!/least-confidence/.test(invalidHandoff.stderr)) {
     `invalid handoff end-to-end did not report least-confidence: ${invalidHandoff.stderr}`,
   );
 }
+const invalidTypedHandoff = runIsolatedHandoff(
+  'no-finding-v1; checked=id:auth; unchecked=name:auth',
+);
+if (invalidTypedHandoff.status !== 1) {
+  reflectionRegressionFailures.push(
+    `invalid typed handoff expected exit=1, actual=${invalidTypedHandoff.status}`,
+  );
+}
+if (!invalidTypedHandoff.stateExists) {
+  reflectionRegressionFailures.push(
+    'invalid typed handoff removed the active task state file',
+  );
+}
+if (!/least-confidence/.test(invalidTypedHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `invalid typed handoff did not report least-confidence: ${invalidTypedHandoff.stderr}`,
+  );
+}
 const observationNoFindingHandoff = runIsolatedHandoff('暂未观察到异常');
 if (observationNoFindingHandoff.status !== 1) {
   reflectionRegressionFailures.push(
@@ -1826,7 +1967,7 @@ if (!/least-confidence/.test(observationNoFindingHandoff.stderr)) {
   );
 }
 const leafHiddenHandoff = runIsolatedHandoff(
-  'production timeout behavior has not been measured',
+  'risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
   (body) => `Leaf heading
 ===
 &lt;custom-element&gt;
@@ -1846,7 +1987,7 @@ if (!/result|least-confidence/.test(leafHiddenHandoff.stderr)) {
   );
 }
 const multilineLinkHiddenHandoff = runIsolatedHandoff(
-  'production timeout behavior has not been measured',
+  'risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
   (body) => `[leaf]: /url
   "title"
 &lt;custom-element&gt;
@@ -1868,7 +2009,7 @@ if (!/result|least-confidence/.test(multilineLinkHiddenHandoff.stderr)) {
   );
 }
 const hangingParagraphHandoff = runIsolatedHandoff(
-  'production timeout behavior has not been measured',
+  'risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
   (body) => `paragraph text
     hanging continuation
 &lt;custom-element&gt;
@@ -1901,12 +2042,12 @@ if (!/least-confidence/.test(noErrorDetectedHandoff.stderr)) {
   );
 }
 const multilineLabelHiddenHandoff = runIsolatedHandoff(
-  'production timeout behavior has not been measured',
+  'risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
   (body) => body.replace(
-    'least-confidence: production timeout behavior has not been measured',
+    'least-confidence: risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
     `
 [
-least-confidence: production timeout behavior has not been measured
+least-confidence: risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment
 ]: /least`,
   ),
 );
@@ -1926,11 +2067,11 @@ if (!/least-confidence/.test(multilineLabelHiddenHandoff.stderr)) {
   );
 }
 const tabListFenceVisibleHandoff = runIsolatedHandoff(
-  'production timeout behavior has not been measured',
+  'risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
   (body) => body.replace(
-    'least-confidence: production timeout behavior has not been measured',
+    'least-confidence: risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
     `-\t\`\`\`md
- least-confidence: production timeout behavior has not been measured
+ least-confidence: risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment
     \`\`\``,
   ),
 );
@@ -1946,11 +2087,11 @@ if (tabListFenceVisibleHandoff.stateExists) {
   );
 }
 const tabListFenceHiddenHandoff = runIsolatedHandoff(
-  'production timeout behavior has not been measured',
+  'risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
   (body) => body.replace(
-    'least-confidence: production timeout behavior has not been measured',
+    'least-confidence: risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
     `-\t\`\`\`md
-    least-confidence: production timeout behavior has not been measured
+    least-confidence: risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment
     \`\`\``,
   ),
 );
@@ -2001,7 +2142,7 @@ if (!/least-confidence/.test(genericContentHandoff.stderr)) {
     `generic-content handoff did not report least-confidence: ${genericContentHandoff.stderr}`,
   );
 }
-const validHandoff = runIsolatedHandoff('production timeout behavior has not been measured');
+const validHandoff = runIsolatedHandoff('risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment');
 if (validHandoff.status !== 0) {
   reflectionRegressionFailures.push(
     `valid handoff end-to-end expected exit=0, actual=${validHandoff.status}: ${validHandoff.stderr}`,

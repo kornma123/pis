@@ -67,7 +67,10 @@
 - **merge authority**: required checks + 异构复核 + PM 明确批准；实现代理不得自动合并。
 
 ## 反盲区自检
-<!-- 必须写具体风险、假设或未知；不能只写“无”。确实未发现时，写明已检查范围和仍未检查范围。 -->
+<!-- 机器入口仅接受以下 strict typed wire grammar（无旧 free-form fallback；字段顺序可交换）：
+risk-v1; anchor=<id|ref|name|path>:<value>; uncertainty=<unverified|untested|unmeasured|unknown|assumption|dependency|risk>:<detail>
+no-finding-v1; checked=<id|ref|name|path>:<value>; unchecked=<id|ref|name|path>:<value>
+不要加入 Markdown/HTML 包装。checker 只校验 shape/lexical anchor；内容真实性仍由 reviewer/PM 人审。 -->
 - **我现在最没把握的是什么？ / Least confidence**: _
 - **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: _
 

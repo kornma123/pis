@@ -283,7 +283,12 @@ function verifyGitHubEvidence(root, value, options = {}) {
   }
   if (options.requireHandoffFields) {
     const missing = handoffFieldErrors(body);
-    if (missing.length > 0) throw new Error(`handoff 评论缺少非占位字段：${missing.join(', ')}。`);
+    if (missing.length > 0) {
+      throw new Error(
+        `handoff 评论缺少字段或字段格式无效：${missing.join(', ')}。` +
+        'least-confidence / biggest-missing 必须使用 risk-v1 或 no-finding-v1 typed grammar。',
+      );
+    }
   }
   if (options.requireCurrentActor) {
     const login = run('gh', ['api', 'user', '--jq', '.login'], { cwd: root, timeout: 10_000 }).stdout;

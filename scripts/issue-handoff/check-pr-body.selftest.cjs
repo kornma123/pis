@@ -8,6 +8,11 @@ const {
   validatePrBody,
 } = require('./check-pr-body.cjs');
 
+const VALID_LEAST_CONFIDENCE =
+  'risk-v1; anchor=name:生产限速参数; uncertainty=untested:目标环境参数';
+const VALID_BIGGEST_MISSING =
+  'risk-v1; anchor=name:上游身份服务; uncertainty=unknown:调用方清单完整性';
+
 const validBody = `
 ## Issue / 会话交接
 - **Issue**: Closes #128
@@ -44,8 +49,8 @@ const validBody = `
 - **merge authority**: required checks + 异构复核 + PM 明确批准
 
 ## 反盲区自检
-- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测
-- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: 上游身份服务可能还有未登记的调用方
+- **我现在最没把握的是什么？ / Least confidence**: ${VALID_LEAST_CONFIDENCE}
+- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: ${VALID_BIGGEST_MISSING}
 `;
 
 let scenarioCount = 0;
@@ -65,11 +70,11 @@ function expectFail(name, body, pattern) {
 }
 
 function replaceLeastConfidence(body, value) {
-  return body.replace('生产限速参数尚未在目标环境实测', value);
+  return body.replace(VALID_LEAST_CONFIDENCE, value);
 }
 
 function replaceBiggestMissing(body, value) {
-  return body.replace('上游身份服务可能还有未登记的调用方', value);
+  return body.replace(VALID_BIGGEST_MISSING, value);
 }
 
 function wrapListFence(body, opener = '- ```md', indentation = '  ') {
@@ -342,9 +347,9 @@ expectFail('visible nested-list contract is rejected', wrapNestedList(validBody)
 expectFail('table-cell contract is rejected', wrapTable(validBody), /Issue \/ 会话交接/);
 
 const leastConfidenceLine =
-  '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测';
+  `- **我现在最没把握的是什么？ / Least confidence**: ${VALID_LEAST_CONFIDENCE}`;
 const biggestMissingLine =
-  '- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: 上游身份服务可能还有未登记的调用方';
+  `- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: ${VALID_BIGGEST_MISSING}`;
 for (const [name, fieldLine, destination] of [
   [
     'multiline link-reference label hides least-confidence',
@@ -488,49 +493,178 @@ expectFail('empty body', '', /PR body 为空/);
 expectFail('missing handoff heading', validBody.replace('## Issue / 会话交接', '## 交接'), /Issue \/ 会话交接/);
 expectFail(
   'missing least-confidence reflection',
-  validBody.replace('- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n', ''),
+  validBody.replace(`${leastConfidenceLine}\n`, ''),
   /我现在最没把握的是什么/,
 );
 expectFail(
   'missing biggest-missing reflection',
-  validBody.replace('- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: 上游身份服务可能还有未登记的调用方\n', ''),
+  validBody.replace(`${biggestMissingLine}\n`, ''),
   /我可能遗漏的最大问题是什么/,
 );
 expectFail(
   'weak least-confidence reflection',
-  validBody.replace('生产限速参数尚未在目标环境实测', '无'),
+  replaceLeastConfidence(validBody, '无'),
   /反盲区字段回答过弱.*我现在最没把握的是什么/,
 );
 expectFail(
   'bare no-finding biggest-missing reflection',
-  validBody.replace('上游身份服务可能还有未登记的调用方', '未发现'),
+  replaceBiggestMissing(validBody, '未发现'),
   /反盲区字段回答过弱.*我可能遗漏的最大问题是什么/,
 );
+const typedRisk =
+  'risk-v1; anchor=id:Redis; uncertainty=unverified:production failure mode';
+const typedNoFinding =
+  'no-finding-v1; checked=path:scripts/issue-handoff/check-pr-body.cjs; unchecked=ref:Issue #81';
+expectPass(
+  'typed risk grammar is accepted for both reflection fields',
+  replaceBiggestMissing(replaceLeastConfidence(validBody, typedRisk), typedRisk),
+  [128],
+);
+expectPass(
+  'typed no-finding grammar is accepted for both reflection fields',
+  replaceBiggestMissing(replaceLeastConfidence(validBody, typedNoFinding), typedNoFinding),
+  [128],
+);
+for (const [name, value] of [
+  ['typed name accepts a short CJK product', 'risk-v1; anchor=name:微信; uncertainty=unverified:生产回调行为'],
+  ['typed name accepts Redis', 'risk-v1; anchor=name:Redis; uncertainty=unverified:failover behavior'],
+  ['typed name accepts Claude', 'risk-v1; anchor=name:Claude; uncertainty=unverified:model fallback'],
+  ['typed name accepts NFKC-equivalent Redis', 'risk-v1; anchor=name:Ｒｅｄｉｓ; uncertainty=unverified:failover behavior'],
+  ['typed name accepts a numeric entity', 'risk-v1; anchor=name:微&#20449;; uncertainty=unverified:生产回调行为'],
+  [
+    'typed grammar accepts NFKC-equivalent mode and keys',
+    'ｒｉｓｋ－ｖ１； ａｎｃｈｏｒ＝ｉｄ：ａｕｔｈ； ｕｎｃｅｒｔａｉｎｔｙ＝ｕｎｖｅｒｉｆｉｅｄ：token expiry',
+  ],
+  ['typed id accepts auth', 'risk-v1; anchor=id:auth; uncertainty=unverified:token expiry behavior'],
+  ['typed path accepts an API route', 'risk-v1; anchor=path:/api/auth; uncertainty=unverified:error handling'],
+  ['typed path accepts a repository-relative file', 'risk-v1; anchor=path:scripts/claude-task.cjs; uncertainty=unverified:error handling'],
+  ['typed path accepts dotfile', 'risk-v1; anchor=path:.gitignore; uncertainty=unverified:ignore coverage'],
+  ['typed path accepts root README', 'risk-v1; anchor=path:README; uncertainty=unverified:documentation coverage'],
+  ['typed ref accepts Issue without a space', 'risk-v1; anchor=ref:Issue#81; uncertainty=unverified:review coverage'],
+  ['typed ref accepts Issue with one space', 'risk-v1; anchor=ref:Issue #81; uncertainty=unverified:review coverage'],
+  ['typed ref accepts a fixed SHA', 'risk-v1; anchor=ref:2a3b50dd; uncertainty=unverified:review coverage'],
+  ['typed fields may be reordered', 'risk-v1; uncertainty=unverified:review coverage; anchor=ref:PR#82'],
+  [
+    'typed no-finding accepts distinct typed anchors',
+    'no-finding-v1; checked=name:支付回调; unchecked=path:/api/auth',
+  ],
+]) {
+  expectPass(
+    name,
+    replaceBiggestMissing(replaceLeastConfidence(validBody, value), typedRisk),
+    [128],
+  );
+}
+for (const [name, value] of [
+  ['typed risk rejects duplicate anchor key', 'risk-v1; anchor=id:Redis; anchor=id:OAuth; uncertainty=risk:failover'],
+  ['typed risk rejects unknown key', 'risk-v1; anchor=id:Redis; uncertainty=risk:failover; extra=id:OAuth'],
+  ['typed risk rejects unknown anchor type', 'risk-v1; anchor=system:Redis; uncertainty=risk:failover'],
+  ['typed ref requires a tracked-number shape', 'risk-v1; anchor=ref:Redis; uncertainty=risk:failover'],
+  ['typed path requires path or filename structure', 'risk-v1; anchor=path:auth; uncertainty=risk:failover'],
+  ['typed path rejects an arbitrary absolute POSIX path', 'risk-v1; anchor=path:/etc/passwd; uncertainty=risk:exposure'],
+  ['typed path rejects a user-home absolute path', 'risk-v1; anchor=path:/Users/max/repo; uncertainty=risk:exposure'],
+  ['typed path rejects a Windows drive path', 'risk-v1; anchor=path:C:\\repo\\file.cjs; uncertainty=risk:exposure'],
+  ['typed path rejects parent traversal', 'risk-v1; anchor=path:../scripts/a.cjs; uncertainty=risk:exposure'],
+  ['typed id rejects whitespace', 'risk-v1; anchor=id:two words; uncertainty=risk:failure'],
+  ['typed name rejects a single grapheme', 'risk-v1; anchor=name:x; uncertainty=risk:failure'],
+  ['typed name rejects an obvious quantifier', 'risk-v1; anchor=name:everything; uncertainty=risk:failure'],
+  ['typed uncertainty requires a closed kind', 'risk-v1; anchor=id:Redis; uncertainty=verified'],
+  ['typed uncertainty rejects an unknown kind with detail', 'risk-v1; anchor=id:Redis; uncertainty=verified:passed'],
+  ['typed uncertainty rejects an untyped empty claim', 'risk-v1; anchor=name:系统; uncertainty=无'],
+  ['typed uncertainty rejects an untyped unknown claim', 'risk-v1; anchor=name:系统; uncertainty=不知道'],
+  ['typed uncertainty rejects encoded HTML comments', 'risk-v1; anchor=id:Redis; uncertainty=unknown:&lt;!--xx--&gt;'],
+  ['typed uncertainty rejects Markdown links', 'risk-v1; anchor=id:Redis; uncertainty=unknown:[](xx)'],
+  ['typed uncertainty rejects underscore wrappers', 'risk-v1; anchor=id:Redis; uncertainty=unknown:__xx__'],
+  ['typed uncertainty rejects encoded hidden HTML', 'risk-v1; anchor=id:Redis; uncertainty=unknown:&lt;span hidden&gt;xx&lt;/span&gt;'],
+  ['typed risk rejects unresolved entity', 'risk-v1; anchor=id:Red&amp;bogus;is; uncertainty=risk:failure'],
+  ['typed risk rejects default-ignorable confusion', 'risk-v1; anchor=id:Re\u200Ddis; uncertainty=risk:failure'],
+  ['typed risk rejects control characters', 'risk-v1; anchor=id:Redis; uncertainty=risk:may\u0000 fail'],
+  ['typed risk rejects semicolon injection', 'risk-v1; anchor=id:Redis; uncertainty=risk:failover; checked=id:auth'],
+  ['typed risk rejects encoded semicolon injection', 'risk-v1; anchor=id:Redis; uncertainty=risk:fail&#59; extra=id:auth'],
+  ['typed risk rejects mixed-mode keys', 'risk-v1; checked=id:auth; unchecked=id:timeout'],
+  ['typed no-finding rejects duplicate checked key', 'no-finding-v1; checked=id:auth; checked=id:cache; unchecked=id:timeout'],
+  ['typed no-finding rejects an invalid checked anchor', 'no-finding-v1; checked=path:auth; unchecked=id:timeout'],
+  ['typed no-finding rejects an invalid unchecked anchor', 'no-finding-v1; checked=id:auth; unchecked=ref:Redis'],
+  ['typed no-finding rejects identical boundaries', 'no-finding-v1; checked=id:auth; unchecked=id:auth'],
+  ['typed no-finding normalizes ref case and spacing', 'no-finding-v1; checked=ref:PR#82; unchecked=ref:pr #82'],
+  ['typed no-finding rejects cross-type identical values', 'no-finding-v1; checked=id:auth; unchecked=name:auth'],
+  ['typed no-finding normalizes repeated spaces', 'no-finding-v1; checked=name:Auth Service; unchecked=name:auth  service'],
+  ['typed no-finding compares fixed SHA across types', 'no-finding-v1; checked=ref:2a3b50dd; unchecked=name:2A3B50DD'],
+  ['typed no-finding rejects encoded hidden anchor markup', 'no-finding-v1; checked=name:&lt;span hidden&gt;auth&lt;/span&gt;; unchecked=id:cache'],
+  ['typed id rejects underscore wrappers', 'no-finding-v1; checked=id:__auth__; unchecked=id:cache'],
+  ['typed no-finding rejects placeholder names', 'no-finding-v1; checked=name:everything; unchecked=name:nothing'],
+  ['typed id rejects non-ASCII confusables', 'no-finding-v1; checked=id:ΡR82; unchecked=id:auth'],
+  ['typed no-finding rejects an unknown key', 'no-finding-v1; checked=id:auth; unchecked=id:timeout; uncertainty=none'],
+  ['typed grammar rejects an unknown version', 'risk-v2; anchor=id:Redis; uncertainty=risk:failover'],
+  ['legacy specific free-form is rejected', 'Redis may fail'],
+  ['legacy vague free-form is rejected', '可能存在某种隐患'],
+  ['legacy bounded no-finding free-form is rejected', '未发现问题；已检查范围：主要流程；未检查范围：次要流程'],
+]) {
+  expectFail(
+    name,
+    replaceBiggestMissing(replaceLeastConfidence(validBody, value), typedRisk),
+    /我现在最没把握的是什么|Least confidence/,
+  );
+  expectFail(
+    `${name} in biggest-missing`,
+    replaceBiggestMissing(replaceLeastConfidence(validBody, typedRisk), value),
+    /我可能遗漏的最大问题是什么|Biggest missing/,
+  );
+}
+expectPass(
+  'typed uncertainty accepts the documented readable boundary',
+  replaceBiggestMissing(
+    replaceLeastConfidence(
+      validBody,
+      `risk-v1; anchor=id:auth; uncertainty=unknown:${'x'.repeat(2_040)}`,
+    ),
+    typedRisk,
+  ),
+  [128],
+);
+for (const [name, value] of [
+  [
+    'typed contract rejects uncertainty above its readable boundary',
+    `risk-v1; anchor=id:auth; uncertainty=unknown:${'x'.repeat(2_041)}`,
+  ],
+  [
+    'typed contract rejects anchor above its readable boundary',
+    `risk-v1; anchor=id:${`a${'x'.repeat(512)}`}; uncertainty=unknown:scope`,
+  ],
+  [
+    'typed contract rejects an oversized whole contract before parsing',
+    `risk-v1${' '.repeat(4_097)}; anchor=id:auth; uncertainty=unknown:scope`,
+  ],
+]) {
+  expectFail(
+    name,
+    replaceBiggestMissing(replaceLeastConfidence(validBody, value), typedRisk),
+    /反盲区字段回答过弱.*我现在最没把握的是什么/,
+  );
+}
 expectFail(
   'hidden least-confidence cannot mask placeholder',
   validBody.replace(
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
-    '<!-- - **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测 -->\n- **我现在最没把握的是什么？ / Least confidence**: _',
+    leastConfidenceLine,
+    `<!-- ${leastConfidenceLine} -->\n- **我现在最没把握的是什么？ / Least confidence**: _`,
   ),
   /我现在最没把握的是什么/,
 );
 expectPass(
-  'bounded no-finding explanation is accepted',
-  validBody
-    .replace('生产限速参数尚未在目标环境实测', '未发现；已检查目标代码与测试，未检查生产参数')
-    .replace('上游身份服务可能还有未登记的调用方', '未发现；已检查仓库调用链，未检查仓库外集成'),
+  'typed no-finding explanation is accepted',
+  replaceBiggestMissing(replaceLeastConfidence(validBody, typedNoFinding), typedNoFinding),
   [128],
 );
-expectPass(
-  'short concrete Chinese risks are accepted',
+expectFail(
+  'legacy short concrete Chinese risks are rejected without typed anchors',
   replaceBiggestMissing(replaceLeastConfidence(validBody, '测试覆盖不足'), '外部调用未查'),
-  [128],
+  /反盲区字段回答过弱/,
 );
 expectFail(
   'HTML-comment reflection cannot mask visible placeholder',
   validBody.replace(
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
-    '<!-- - **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测 -->\n' +
+    leastConfidenceLine,
+    `<!-- ${leastConfidenceLine} -->\n` +
       '- **我现在最没把握的是什么？ / Least confidence**: TODO later fill this',
   ),
   /我现在最没把握的是什么/,
@@ -538,8 +672,8 @@ expectFail(
 expectFail(
   'fenced-code reflection cannot mask visible placeholder',
   validBody.replace(
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
-    '```text\n- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n```\n' +
+    leastConfidenceLine,
+    `\`\`\`text\n${leastConfidenceLine}\n\`\`\`\n` +
       '- **我现在最没把握的是什么？ / Least confidence**: TODO later fill this',
   ),
   /我现在最没把握的是什么/,
@@ -547,8 +681,8 @@ expectFail(
 expectFail(
   'indented-code reflection cannot mask visible placeholder',
   validBody.replace(
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
-    '    - **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+    leastConfidenceLine,
+    `    ${leastConfidenceLine}\n` +
       '- **我现在最没把握的是什么？ / Least confidence**: TODO later fill this',
   ),
   /我现在最没把握的是什么/,
@@ -556,8 +690,8 @@ expectFail(
 expectFail(
   'duplicate reflection fails closed with strong value first',
   validBody.replace(
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+    leastConfidenceLine,
+    `${leastConfidenceLine}\n` +
       '- **我现在最没把握的是什么？ / Least confidence**: TODO later fill this',
   ),
   /必填字段重复：我现在最没把握的是什么/,
@@ -599,8 +733,8 @@ expectFail(
 expectFail(
   'encoded duplicate fails closed with canonical strong value first',
   validBody.replace(
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+    leastConfidenceLine,
+    `${leastConfidenceLine}\n` +
       '- **我现在最没把握的是什么？ / Lea&amp;#115;t confidence**: TODO later fill this',
   ),
   /必填字段重复：我现在最没把握的是什么/,
@@ -608,18 +742,18 @@ expectFail(
 expectFail(
   'encoded duplicate fails closed with encoded weak value first',
   validBody.replace(
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    leastConfidenceLine,
     '- **我现在最没把握的是什么？ / Lea&amp;#115;t confidence**: TODO later fill this\n' +
-      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+      leastConfidenceLine,
   ),
   /必填字段重复：我现在最没把握的是什么/,
 );
 expectFail(
   'default-ignorable field key cannot bypass duplicate detection',
   validBody.replace(
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    leastConfidenceLine,
     '- **我现在最没把握的是什么？ / Lea\u034Fst confidence**: TODO later fill this\n' +
-      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+      leastConfidenceLine,
   ),
   /字段键包含不可见字符或非标准空白/,
 );
@@ -646,8 +780,8 @@ for (const [name, encodedLabel] of [
   expectFail(
     name,
     validBody.replace(
-      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
-      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+      leastConfidenceLine,
+      `${leastConfidenceLine}\n` +
         `- **我现在最没把握的是什么？ / ${encodedLabel}**: TODO later fill this`,
     ),
     /字段|重复/,
@@ -655,9 +789,9 @@ for (const [name, encodedLabel] of [
   expectFail(
     `${name}, encoded field first`,
     validBody.replace(
-      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+      leastConfidenceLine,
       `- **我现在最没把握的是什么？ / ${encodedLabel}**: TODO later fill this\n` +
-        '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+        leastConfidenceLine,
     ),
     /字段|重复/,
   );
@@ -696,8 +830,8 @@ for (const [name, encodedDelimiter] of [
   expectFail(
     `${name} cannot hide duplicate after canonical field`,
     validBody.replace(
-      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
-      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+      leastConfidenceLine,
+      `${leastConfidenceLine}\n` +
         `- **我现在最没把握的是什么？ / Least confidence**${encodedDelimiter} TODO later fill this`,
     ),
     /字段|重复/,
@@ -705,9 +839,9 @@ for (const [name, encodedDelimiter] of [
   expectFail(
     `${name} cannot hide duplicate before canonical field`,
     validBody.replace(
-      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+      leastConfidenceLine,
       `- **我现在最没把握的是什么？ / Least confidence**${encodedDelimiter} TODO later fill this\n` +
-        '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+        leastConfidenceLine,
     ),
     /字段|重复/,
   );
@@ -715,8 +849,8 @@ for (const [name, encodedDelimiter] of [
 expectPass(
   'internal underscore does not collide with required key',
   validBody.replace(
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
-    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+    leastConfidenceLine,
+    `${leastConfidenceLine}\n` +
       '- **我现在最没把握的是什么？ / Leas_t confidence**: TODO later fill this',
   ),
   [128],
@@ -792,8 +926,8 @@ for (const [name, first, second] of [
   expectFail(
     name,
     validBody.replace(
-      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
-      `- **我现在最没把握的是什么？ / ${first}**: 生产限速参数尚未在目标环境实测\n` +
+      leastConfidenceLine,
+      `- **我现在最没把握的是什么？ / ${first}**: ${VALID_LEAST_CONFIDENCE}\n` +
         `- **我现在最没把握的是什么？ / ${second}**: TODO later fill this`,
     ),
     /必填字段重复：我现在最没把握的是什么/,
@@ -954,79 +1088,79 @@ for (const [name, value] of [
     /反盲区字段回答过弱.*我现在最没把握的是什么/,
   );
 }
-expectPass(
-  'bounded no-finding requires checked and unchecked scopes',
+expectFail(
+  'legacy bounded no-finding is rejected despite concrete scopes',
   replaceBiggestMissing(
     replaceLeastConfidence(validBody, '未发现；已检查目标代码与测试，尚未检查生产参数'),
     '未发现；已核对仓库调用链，未核对仓库外集成',
   ),
-  [128],
+  /反盲区字段回答过弱/,
 );
-expectPass(
-  'English no-finding accepts concrete checked and unchecked scopes',
+expectFail(
+  'legacy English bounded no-finding is rejected',
   replaceLeastConfidence(
     validBody,
     'No issues found; checked target code and tests; not checked production settings',
   ),
-  [128],
+  /反盲区字段回答过弱/,
 );
 for (const [name, value] of [
-  ['temporal Chinese no-finding accepts concrete boundaries', '目前未发现问题；已检查目标代码；未检查生产参数'],
-  ['English findings synonym accepts concrete boundaries', 'No findings; checked target code; not checked production settings'],
-  ['LGTM synonym accepts concrete boundaries', 'LGTM; checked target code; not checked production settings'],
+  ['legacy temporal Chinese no-finding is rejected', '目前未发现问题；已检查目标代码；未检查生产参数'],
+  ['legacy English findings synonym is rejected', 'No findings; checked target code; not checked production settings'],
+  ['legacy LGTM synonym is rejected', 'LGTM; checked target code; not checked production settings'],
 ]) {
-  expectPass(name, replaceLeastConfidence(validBody, value), [128]);
+  expectFail(name, replaceLeastConfidence(validBody, value), /反盲区字段回答过弱/);
 }
-expectPass(
-  'generic scope modifiers preserve concrete objects',
+expectFail(
+  'legacy scope modifiers do not create typed boundaries',
   replaceLeastConfidence(
     validBody,
     '未发现；已检查所有目标代码；未检查相关生产参数',
   ),
-  [128],
+  /反盲区字段回答过弱/,
 );
-expectPass(
-  'HTML-like product names and ampersand remain substantive scopes',
+expectFail(
+  'legacy HTML-like product scopes are rejected',
   replaceLeastConfidence(
     validBody,
     '未发现；已检查&lt;code-v2&gt;与R&amp;D，未检查&lt;span-v3&gt;',
   ),
-  [128],
+  /反盲区字段回答过弱/,
 );
-expectPass(
-  'concrete inspection objects remain substantive after action normalization',
+expectFail(
+  'legacy inspection prose is rejected',
   replaceLeastConfidence(
     validBody,
     '未发现；已排查支付回调重试，未扫描仓库外 webhook 配置',
   ),
-  [128],
+  /反盲区字段回答过弱/,
 );
 for (const [name, value] of [
-  ['concrete rate-limit measurement risk is accepted', '生产限速参数需实测'],
-  ['concrete timeout quantification risk is accepted', '生产超时行为待量化'],
-  ['English concrete measurement risk is accepted', 'production timeout needs measurement'],
-  ['concrete certificate review risk is accepted', '证书轮换窗口需复核'],
-  ['English concrete failure risk is accepted', 'payment webhook may fail'],
-  ['Chinese demonstrative with concrete object is accepted', '这些支付回调可能失败'],
-  ['English demonstrative with concrete object is accepted', 'these payment webhooks may fail'],
-  ['concrete Chinese callback risk is accepted', '支付回调可能失败'],
-  ['concrete PostgreSQL timeout risk is accepted', 'PostgreSQL 15 lock timeout is unmeasured'],
-  ['concrete checkout retry risk is accepted', 'checkout webhook retry policy is unverified'],
-  ['concrete certificate rotation risk is accepted', '证书轮换窗口需复核'],
-  ['encoded concrete Chinese callback is accepted', '支付回&#35843;可能失败'],
-  ['NFKC concrete PostgreSQL timeout is accepted', 'ＰｏｓｔｇｒｅＳＱＬ １５ lock timeout is unmeasured'],
-  ['encoded concrete checkout retry is accepted', 'checkout web&#104;ook retry policy is unverified'],
-  ['inline-code proper anchor is accepted', '`nginx` is unverified'],
-  ['encoded code proper anchor is accepted', '&lt;code&gt;nginx&lt;/code&gt; is unverified'],
-  ['short quoted Chinese proper anchor is accepted', '「微信」可能失败'],
-  ['two concrete English anchors survive a generic category', 'payment service retry may fail'],
-  ['concrete English anchors survive generic API wording', 'warehouse API timeout is unmeasured'],
-  ['concrete Chinese anchors survive a generic service word', '订单服务重试可能失败'],
-  ['explicit single proper-name anchor is accepted', '`Redis` may fail'],
-  ['qualified Chinese content fragment is accepted', '缓存键可能失败'],
-  ['two English content anchors are accepted', 'cache eviction may fail'],
+  ['legacy concrete rate-limit prose is rejected', '生产限速参数需实测'],
+  ['legacy concrete timeout prose is rejected', '生产超时行为待量化'],
+  ['legacy English measurement prose is rejected', 'production timeout needs measurement'],
+  ['legacy certificate prose is rejected', '证书轮换窗口需复核'],
+  ['legacy English failure prose is rejected', 'payment webhook may fail'],
+  ['legacy Chinese demonstrative prose is rejected', '这些支付回调可能失败'],
+  ['legacy English demonstrative prose is rejected', 'these payment webhooks may fail'],
+  ['legacy Chinese callback prose is rejected', '支付回调可能失败'],
+  ['legacy PostgreSQL prose is rejected', 'PostgreSQL 15 lock timeout is unmeasured'],
+  ['legacy checkout prose is rejected', 'checkout webhook retry policy is unverified'],
+  ['legacy certificate rotation prose is rejected', '证书轮换窗口需复核'],
+  ['legacy encoded Chinese prose is rejected', '支付回&#35843;可能失败'],
+  ['legacy NFKC PostgreSQL prose is rejected', 'ＰｏｓｔｇｒｅＳＱＬ １５ lock timeout is unmeasured'],
+  ['legacy encoded checkout prose is rejected', 'checkout web&#104;ook retry policy is unverified'],
+  ['legacy inline-code prose is rejected', '`nginx` is unverified'],
+  ['legacy encoded code prose is rejected', '&lt;code&gt;nginx&lt;/code&gt; is unverified'],
+  ['legacy quoted Chinese prose is rejected', '「微信」可能失败'],
+  ['legacy multi-anchor prose is rejected', 'payment service retry may fail'],
+  ['legacy API prose is rejected', 'warehouse API timeout is unmeasured'],
+  ['legacy service prose is rejected', '订单服务重试可能失败'],
+  ['legacy proper-name prose is rejected', '`Redis` may fail'],
+  ['legacy qualified Chinese prose is rejected', '缓存键可能失败'],
+  ['legacy English content prose is rejected', 'cache eviction may fail'],
 ]) {
-  expectPass(name, replaceLeastConfidence(validBody, value), [128]);
+  expectFail(name, replaceLeastConfidence(validBody, value), /反盲区字段回答过弱/);
 }
 expectFail('missing issue relation', validBody.replace('Closes #128', '无'), /Closes #N.*Refs #N/);
 expectFail('multiple primary issues', validBody.replace('Closes #128', 'Closes #128, Refs #127'), /只能有一个主 Issue/);
@@ -1124,11 +1258,13 @@ const filledRepositoryTemplate = repositoryTemplate
   .replace('- **未覆盖边界**:', '- **未覆盖边界**: 不修改分支保护')
   .replace(
     '- **我现在最没把握的是什么？ / Least confidence**: _',
-    '- **我现在最没把握的是什么？ / Least confidence**: 真实部署参数尚未复核',
+    '- **我现在最没把握的是什么？ / Least confidence**: ' +
+      'risk-v1; anchor=name:真实部署参数; uncertainty=unverified:目标环境取值',
   )
   .replace(
     '- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: _',
-    '- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: 仍可能存在未登记的旧调用方',
+    '- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: ' +
+      'risk-v1; anchor=name:旧调用方; uncertainty=unknown:登记完整性',
   );
 expectPass('repository PR template passes after placeholder-only filling', filledRepositoryTemplate, [128]);
 
