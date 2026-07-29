@@ -776,15 +776,29 @@ function isOutsideActivePrListItem(line, activeContentIndent) {
   );
 }
 
-function isNestedPrListContent(line, parseOptions, activeContentIndent) {
+function leadingIndentColumns(line) {
+  let columns = 0;
+  for (const character of String(line || '')) {
+    if (character === ' ') {
+      columns += 1;
+    } else if (character === '\t') {
+      columns += 4 - (columns % 4);
+    } else {
+      break;
+    }
+  }
+  return columns;
+}
+
+function isInsideActivePrListItem(line, parseOptions, activeContentIndent) {
   if (
     parseOptions.bullet !== true ||
-    !Number.isInteger(activeContentIndent)
+    !Number.isInteger(activeContentIndent) ||
+    /^[ \t]*$/u.test(String(line || ''))
   ) {
     return false;
   }
-  const markerIndent = getPrListMarkerIndent(line);
-  return markerIndent !== null && markerIndent >= activeContentIndent;
+  return leadingIndentColumns(line) >= activeContentIndent;
 }
 
 function continuesReflectionParagraphInContext(
@@ -792,7 +806,7 @@ function continuesReflectionParagraphInContext(
   parseOptions,
   activeContentIndent,
 ) {
-  if (isNestedPrListContent(line, parseOptions, activeContentIndent)) return true;
+  if (isInsideActivePrListItem(line, parseOptions, activeContentIndent)) return true;
   return continuesVisibleReflectionParagraph(line);
 }
 
@@ -849,7 +863,7 @@ function collectVisibleFields(body, parseOptions = {}) {
       ) {
         if (
           isUnambiguousUnknownFieldBoundary(unknownBoundaryCandidate) &&
-          !isNestedPrListContent(
+          !isInsideActivePrListItem(
             line,
             parseOptions,
             activeReflectionContentIndent,
@@ -902,6 +916,18 @@ function collectVisibleFields(body, parseOptions = {}) {
       }
       continue;
     }
+    if (
+      activeReflectionKey &&
+      parsed.key &&
+      isInsideActivePrListItem(
+        line,
+        parseOptions,
+        activeReflectionContentIndent,
+      )
+    ) {
+      appendReflectionContinuation(line);
+      continue;
+    }
     const isKnownFieldBoundary =
       parsed.key &&
       continuationBoundaryKeys instanceof Set &&
@@ -910,7 +936,7 @@ function collectVisibleFields(body, parseOptions = {}) {
       parseOptions.allowUnknownFieldBoundaries === true &&
       !isKnownFieldBoundary &&
       isUnambiguousUnknownFieldBoundary(parsed) &&
-      !isNestedPrListContent(
+      !isInsideActivePrListItem(
         line,
         parseOptions,
         activeReflectionContentIndent,

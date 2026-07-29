@@ -625,6 +625,10 @@ const prNestedListContinuationPayloads = [
   ['three-space custom field item', '   - **custom-note**: value'],
   ['two-space equals custom field item', '  - **custom_note**= value'],
   ['three-space Tab-padded custom field item', '   - **custom-tab**:\tvalue'],
+  ['two-space blockquote content', '  > x=42'],
+  ['three-space heading content', '   # x=42'],
+  ['two-space thematic-break content', '  ---'],
+  ['raw-Tab blockquote content', '\t> x=42'],
 ];
 for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
   for (const [payloadName, payload] of lazyContinuationPayloads) {
@@ -802,6 +806,26 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       /我现在最没把握的是什么|Least confidence/,
     );
   }
+  expectFail(
+    `${endingName}: a required reflection field relocated inside the active list item remains raw`,
+    validBody
+      .replace(biggestMissingLine, '')
+      .replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}  ${biggestMissingLine}`,
+      ),
+    /我现在最没把握的是什么|Least confidence/,
+  );
+  expectFail(
+    `${endingName}: a required reflection field relocated by raw Tab remains raw`,
+    validBody
+      .replace(biggestMissingLine, '')
+      .replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}\t${biggestMissingLine}`,
+      ),
+    /我现在最没把握的是什么|Least confidence/,
+  );
 }
 for (const [name, unknownFieldLine] of [
   ['colon unknown boundary', '- **custom-note**: value'],
