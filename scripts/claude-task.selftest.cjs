@@ -1077,6 +1077,89 @@ const ampersandProductOracle = [
   ['encoded research name', 'R&amp;D+', 'R&D+'],
   ['spaced department name', 'Sales &amp; Marketing', 'Sales & Marketing'],
 ];
+const delimiterDisambiguationValidContracts = [
+  [
+    'single grammar delimiter after lowercase bare ampersand token',
+    'risk-v1; anchor=name:scope&amp;bogus; uncertainty=unknown:scope detail',
+    true,
+  ],
+  [
+    'single grammar delimiter after uppercase bare ampersand token',
+    'risk-v1; anchor=name:scope&amp;Bogus; uncertainty=unknown:scope detail',
+    true,
+  ],
+  [
+    'single grammar delimiter in no-finding contract',
+    'no-finding-v1; checked=name:scope&amp;bogus; unchecked=name:库存同步',
+    true,
+  ],
+];
+const structuralTabValidContracts = [
+  [
+    'raw tabs at segment boundaries',
+    'risk-v1;\tanchor=id:auth;\tuncertainty=unknown:scope detail',
+    true,
+  ],
+  [
+    'raw tabs around keys equals and values',
+    'risk-v1\t;\tanchor\t=\tid:auth\t;\tuncertainty\t=\tunknown:scope detail\t',
+    true,
+  ],
+  [
+    'raw tabs with reordered risk fields',
+    'risk-v1 ;\tuncertainty\t=\tunknown:scope detail\t;\tanchor\t=\tid:auth',
+    true,
+  ],
+  [
+    'raw tabs in no-finding grammar padding',
+    'no-finding-v1\t;\tchecked\t=\tname:支付回调\t;\tunchecked\t=\tpath:/api/auth\t',
+    true,
+  ],
+];
+const structuralTabInvalidContracts = [
+  ['raw tab inside id anchor', 'risk-v1; anchor=id:au\tth; uncertainty=unknown:scope detail', false],
+  ['raw tab inside uncertainty kind', 'risk-v1; anchor=id:auth; uncertainty=unk\tnown:scope detail', false],
+  ['raw tab inside uncertainty detail', 'risk-v1; anchor=id:auth; uncertainty=unknown:scope\tdetail', false],
+  [
+    'raw tab inside no-finding anchor',
+    'no-finding-v1; checked=name:支付\t回调; unchecked=path:/api/auth',
+    false,
+  ],
+  ['named entity tab as segment padding', 'risk-v1;&Tab;anchor=id:auth; uncertainty=unknown:scope detail', false],
+  ['numeric entity tab as value padding', 'risk-v1; anchor=&#9;id:auth; uncertainty=unknown:scope detail', false],
+  ['hex entity tab as segment padding', 'risk-v1;&#x9;anchor=id:auth; uncertainty=unknown:scope detail', false],
+  [
+    'nested entity tab around equals',
+    'risk-v1; anchor&amp;Tab;=id:auth; uncertainty=unknown:scope detail',
+    false,
+  ],
+  [
+    'nested numeric entity tab as segment padding',
+    'no-finding-v1;&amp;#9;checked=name:支付回调; unchecked=path:/api/auth',
+    false,
+  ],
+  [
+    'nested hex entity tab as segment padding',
+    'no-finding-v1;&amp;#x9;checked=name:支付回调; unchecked=path:/api/auth',
+    false,
+  ],
+  ['named entity tab', 'risk-v1; anchor=id:auth; uncertainty=unknown:scope&Tab;detail', false],
+  ['numeric entity tab', 'risk-v1; anchor=id:auth; uncertainty=unknown:scope&#9;detail', false],
+  ['nested named entity tab', 'risk-v1; anchor=id:auth; uncertainty=unknown:scope&amp;Tab;detail', false],
+  ['nested numeric entity tab', 'risk-v1; anchor=id:auth; uncertainty=unknown:scope&amp;#9;detail', false],
+  [
+    'deeply nested named entity tab',
+    'no-finding-v1; checked=name:支付回调; unchecked=name:库存&amp;amp;Tab;同步',
+    false,
+  ],
+];
+for (const [name, value] of structuralTabInvalidContracts) {
+  assert.equal(
+    parseReflectionContract(value).reason,
+    'control-character',
+    `${name} must fail at the Tab provenance/position boundary`,
+  );
+}
 const ampersandOrderContracts = ampersandProductOracle.flatMap(([name, wireValue]) => [
   [
     `${name}: risk anchor before uncertainty`,
@@ -1239,6 +1322,9 @@ for (const [name, value, expectedOk] of [
   ...generatedEntityBoundaryContracts,
   ...postNfkcUnknownEntityContracts,
   ...ampersandOrderContracts,
+  ...delimiterDisambiguationValidContracts,
+  ...structuralTabValidContracts,
+  ...structuralTabInvalidContracts,
   ...generatedPlaceholderContracts,
 ]) {
   const direct = parseReflectionContract(value);
@@ -2271,7 +2357,11 @@ for (const [name, value] of [
     );
   }
 }
-for (const [name, value] of ampersandOrderContracts) {
+for (const [name, value] of [
+  ...ampersandOrderContracts,
+  ...delimiterDisambiguationValidContracts,
+  ...structuralTabValidContracts,
+]) {
   const lifecycle = runIsolatedHandoff(value);
   if (lifecycle.status !== 0) {
     reflectionRegressionFailures.push(
@@ -2280,6 +2370,22 @@ for (const [name, value] of ampersandOrderContracts) {
   }
   if (lifecycle.stateExists) {
     reflectionRegressionFailures.push(`${name} lifecycle retained active task state`);
+  }
+}
+for (const [name, value] of structuralTabInvalidContracts) {
+  const lifecycle = runIsolatedHandoff(value);
+  if (lifecycle.status !== 1) {
+    reflectionRegressionFailures.push(
+      `${name} lifecycle expected exit=1, actual=${lifecycle.status}`,
+    );
+  }
+  if (!lifecycle.stateExists) {
+    reflectionRegressionFailures.push(`${name} lifecycle deleted active task state`);
+  }
+  if (!/least-confidence/.test(lifecycle.stderr)) {
+    reflectionRegressionFailures.push(
+      `${name} lifecycle missed least-confidence error: ${lifecycle.stderr}`,
+    );
   }
 }
 const observationNoFindingHandoff = runIsolatedHandoff('暂未观察到异常');

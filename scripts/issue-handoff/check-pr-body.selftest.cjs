@@ -727,6 +727,77 @@ const ampersandProductOracle = [
   ['encoded research name', 'R&amp;D+', 'R&D+'],
   ['spaced department name', 'Sales &amp; Marketing', 'Sales & Marketing'],
 ];
+const delimiterDisambiguationValidContracts = [
+  [
+    'single grammar delimiter after lowercase bare ampersand token',
+    'risk-v1; anchor=name:scope&amp;bogus; uncertainty=unknown:scope detail',
+  ],
+  [
+    'single grammar delimiter after uppercase bare ampersand token',
+    'risk-v1; anchor=name:scope&amp;Bogus; uncertainty=unknown:scope detail',
+  ],
+  [
+    'single grammar delimiter in no-finding contract',
+    'no-finding-v1; checked=name:scope&amp;bogus; unchecked=name:库存同步',
+  ],
+];
+const structuralTabValidContracts = [
+  [
+    'raw tabs at segment boundaries',
+    'risk-v1;\tanchor=id:auth;\tuncertainty=unknown:scope detail',
+  ],
+  [
+    'raw tabs around keys equals and values',
+    'risk-v1\t;\tanchor\t=\tid:auth\t;\tuncertainty\t=\tunknown:scope detail\t',
+  ],
+  [
+    'raw tabs with reordered risk fields',
+    'risk-v1 ;\tuncertainty\t=\tunknown:scope detail\t;\tanchor\t=\tid:auth',
+  ],
+  [
+    'raw tabs in no-finding grammar padding',
+    'no-finding-v1\t;\tchecked\t=\tname:支付回调\t;\tunchecked\t=\tpath:/api/auth\t',
+  ],
+];
+const structuralTabInvalidContracts = [
+  ['raw tab inside id anchor', 'risk-v1; anchor=id:au\tth; uncertainty=unknown:scope detail'],
+  ['raw tab inside uncertainty kind', 'risk-v1; anchor=id:auth; uncertainty=unk\tnown:scope detail'],
+  ['raw tab inside uncertainty detail', 'risk-v1; anchor=id:auth; uncertainty=unknown:scope\tdetail'],
+  [
+    'raw tab inside no-finding anchor',
+    'no-finding-v1; checked=name:支付\t回调; unchecked=path:/api/auth',
+  ],
+  ['named entity tab as segment padding', 'risk-v1;&Tab;anchor=id:auth; uncertainty=unknown:scope detail'],
+  ['numeric entity tab as value padding', 'risk-v1; anchor=&#9;id:auth; uncertainty=unknown:scope detail'],
+  ['hex entity tab as segment padding', 'risk-v1;&#x9;anchor=id:auth; uncertainty=unknown:scope detail'],
+  [
+    'nested entity tab around equals',
+    'risk-v1; anchor&amp;Tab;=id:auth; uncertainty=unknown:scope detail',
+  ],
+  [
+    'nested numeric entity tab as segment padding',
+    'no-finding-v1;&amp;#9;checked=name:支付回调; unchecked=path:/api/auth',
+  ],
+  [
+    'nested hex entity tab as segment padding',
+    'no-finding-v1;&amp;#x9;checked=name:支付回调; unchecked=path:/api/auth',
+  ],
+  ['named entity tab', 'risk-v1; anchor=id:auth; uncertainty=unknown:scope&Tab;detail'],
+  ['numeric entity tab', 'risk-v1; anchor=id:auth; uncertainty=unknown:scope&#9;detail'],
+  ['nested named entity tab', 'risk-v1; anchor=id:auth; uncertainty=unknown:scope&amp;Tab;detail'],
+  ['nested numeric entity tab', 'risk-v1; anchor=id:auth; uncertainty=unknown:scope&amp;#9;detail'],
+  [
+    'deeply nested named entity tab',
+    'no-finding-v1; checked=name:支付回调; unchecked=name:库存&amp;amp;Tab;同步',
+  ],
+];
+for (const [name, value] of structuralTabInvalidContracts) {
+  assert.equal(
+    parseReflectionContract(value).reason,
+    'control-character',
+    `${name} must fail at the Tab provenance/position boundary`,
+  );
+}
 const ampersandOrderContracts = ampersandProductOracle.flatMap(([name, wireValue]) => [
   [
     `${name}: risk anchor before uncertainty`,
@@ -756,6 +827,7 @@ function recordNewEntityRegressionFailure(message) {
 for (const [name, value] of [
   ...incompleteEntityContracts,
   ...postNfkcUnknownEntityContracts,
+  ...structuralTabInvalidContracts,
 ]) {
   const direct = parseReflectionContract(value);
   if (direct.ok) recordNewEntityRegressionFailure(`${name}: direct parser accepted invalid wire`);
@@ -769,7 +841,11 @@ for (const [name, value] of [
     }
   }
 }
-for (const [name, value] of ampersandOrderContracts) {
+for (const [name, value] of [
+  ...ampersandOrderContracts,
+  ...delimiterDisambiguationValidContracts,
+  ...structuralTabValidContracts,
+]) {
   const direct = parseReflectionContract(value);
   if (!direct.ok) {
     recordNewEntityRegressionFailure(`${name}: direct parser rejected (${direct.reason})`);
@@ -797,6 +873,14 @@ for (const [name, wireValue, expectedValue] of ampersandProductOracle) {
     );
   }
 }
+assert.equal(
+  parseReflectionContract(delimiterDisambiguationValidContracts[0][1]).anchor?.value,
+  'scope&bogus',
+);
+assert.equal(
+  parseReflectionContract(delimiterDisambiguationValidContracts[1][1]).anchor?.value,
+  'scope&Bogus',
+);
 assert.equal(
   parseReflectionContract(
     'risk-v1; anchor=name:Redis; anchor=name:Claude; uncertainty=unknown:scope detail',

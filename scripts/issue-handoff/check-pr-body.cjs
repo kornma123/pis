@@ -927,13 +927,18 @@ function canonicalizeReflectionContract(value) {
     return reflectionParseFailure('contract-too-long');
   }
   const decoded = decodeHtmlEntitiesDetailed(raw);
-  if (/[\p{Cc}\p{Cs}\uFFFD]/u.test(decoded.value)) {
+  const rawTabCount = (raw.match(/\t/gu) || []).length;
+  const decodedTabCount = (decoded.value.match(/\t/gu) || []).length;
+  if (
+    decodedTabCount !== rawTabCount ||
+    /[\p{Cc}\p{Cs}\uFFFD]/u.test(decoded.value.replace(/\t/gu, ''))
+  ) {
     return reflectionParseFailure('control-character');
   }
   if (/\p{Default_Ignorable_Code_Point}/u.test(decoded.value)) {
     return reflectionParseFailure('default-ignorable');
   }
-  if (/\p{White_Space}/u.test(decoded.value.replace(/ /gu, ''))) {
+  if (/\p{White_Space}/u.test(decoded.value.replace(/[ \t]/gu, ''))) {
     return reflectionParseFailure('non-ascii-whitespace');
   }
 
@@ -972,6 +977,21 @@ function splitReflectionContractSegments(value) {
   }
   segments.push(source.slice(start));
   return { ok: true, segments };
+}
+
+function hasUnsafeReflectionTabPadding(segments) {
+  return segments.some((segment, index) => {
+    if (!segment.includes('\t')) return false;
+    if (index === 0) {
+      return segment.replace(/^[ \t]+|[ \t]+$/gu, '').includes('\t');
+    }
+
+    const separator = segment.indexOf('=');
+    if (separator < 0) return true;
+    const key = segment.slice(0, separator).replace(/^[ \t]+|[ \t]+$/gu, '');
+    const fieldValue = segment.slice(separator + 1).replace(/^[ \t]+|[ \t]+$/gu, '');
+    return key.includes('\t') || fieldValue.includes('\t');
+  });
 }
 
 function isValidReflectionAnchor(type, value) {
@@ -1090,6 +1110,9 @@ function parseReflectionContract(value) {
   const split = splitReflectionContractSegments(canonical.value);
   if (!split.ok) return split;
   const segments = split.segments;
+  if (hasUnsafeReflectionTabPadding(segments)) {
+    return reflectionParseFailure('control-character');
+  }
   const mode = segments.shift()?.trim().toLowerCase() || '';
   const modeEntityFailure = canonicalReflectionTokenFailure(mode);
   if (modeEntityFailure) return modeEntityFailure;
