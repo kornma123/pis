@@ -132,6 +132,45 @@ function setAdminActive(active: boolean): void {
     .run(active ? 1 : 0, 'USER-001')
 }
 
+// R4/R5 共用夹具：G1 漏收认定 → 补收单走完「已补收」终结 → supersede 出 G2(当前 pending)。
+// 旧代 diff 因被终结补收单引用而在 supersede 中存活（compute 只删无引用 diff），
+// 形成「同院·同月·不同代」的存活 diff ——跨代绑定攻击的对象。
+function seedSupersededWithSurvivingDiff(name: string) {
+  const binding = seedSource({ name, lisCount: 2 })
+  const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+  const hospitalMonthId = String(snapshot.hospitalMonthId)
+  const oldDiff = db.prepare(
+    'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+  ).get(hospitalMonthId) as { id: string }
+  lifecycle.setAccountReconciliationVerdict(
+    db, binding, oldDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+  )
+  const oldSupplement = db.prepare(
+    'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+  ).get(oldDiff.id) as { id: string }
+  db.prepare(`
+    UPDATE supplement_orders
+       SET review_status = 'approved', reviewed_by = 'USER-002', reviewed_at = CURRENT_TIMESTAMP
+     WHERE id = ?
+  `).run(oldSupplement.id)
+  db.prepare(`
+    UPDATE supplement_orders
+       SET status = '已补收', collected_at = CURRENT_TIMESTAMP, collected_month = '2026-09',
+           collected_revenue = 100
+     WHERE id = ?
+  `).run(oldSupplement.id)
+  const nextBinding = {
+    ...binding,
+    reconcileGenerationId: `${binding.reconcileGenerationId}-NEXT`,
+  }
+  lifecycle.computeAccountReconciliation(db, nextBinding, 'USER-001')
+  const nextDiff = db.prepare(`
+    SELECT id FROM reconcile_diffs
+     WHERE hospital_month_id = ? AND reconcile_generation_id = ?
+  `).get(hospitalMonthId, nextBinding.reconcileGenerationId) as { id: string }
+  return { binding, nextBinding, hospitalMonthId, oldDiff, nextDiff, oldSupplement }
+}
+
 beforeAll(async () => {
   manager = await import('../src/database/DatabaseManager.js')
   lifecycle = await import('../src/services/account-reconciliation-lifecycle.js')
@@ -701,7 +740,7 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
     db = manager.getDatabase()
   })
 
-  it('builds the completion artifact from supplements bound to the exact generation only', () => {
+  it('rejects completion while a stale-generation supplement references the fact set, then completes cleanly after governed cleanup', () => {
     const binding = seedSource({ name: 'supplement-artifact-generation', lisCount: 2 })
     const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
     const diff = db.prepare(
@@ -732,7 +771,6 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
        WHERE reconcile_generation_id = ?
     `).run(staleGenerationId, binding.reconcileGenerationId)
 
-    let supplementIds: string[] = []
     try {
       const insertTrigger = db.prepare(`
         SELECT sql FROM sqlite_master
@@ -749,18 +787,26 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
       `).run(staleGenerationId, currentSupplement.id)
       db.exec(insertTrigger.sql)
 
-      lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
-      const completed = db.prepare(`
-        SELECT completion_artifact_json FROM account_reconcile_generations
-        WHERE reconcile_generation_id = ?
-      `).get(binding.reconcileGenerationId) as { completion_artifact_json: string }
-      supplementIds = JSON.parse(completed.completion_artifact_json).supplements
-        .map((supplement: { id: string }) => supplement.id)
+      // R5 语义强化：反向错配（旧代单 → 本代 diff）不再是「静默过滤出 artifact」，
+      // 而是与正向同权——complete fail-closed 拒绝定版，绝不产出 decisions/supplements 内部不一致的 artifact。
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, binding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
     } finally {
       db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_no_delete')
       db.prepare("DELETE FROM supplement_orders WHERE id = 'SO-STALE-ARTIFACT'").run()
       manager.upgradeAccountReconciliationSchema(db)
     }
+
+    // 治理清理后 complete 成功，artifact 精确只含本代补收单（原「exact generation only」纯度断言保留）。
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+    const completed = db.prepare(`
+      SELECT completion_artifact_json FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(binding.reconcileGenerationId) as { completion_artifact_json: string }
+    const supplementIds = JSON.parse(completed.completion_artifact_json).supplements
+      .map((supplement: { id: string }) => supplement.id)
     expect(supplementIds).toEqual([currentSupplement.id])
   })
 
@@ -1495,44 +1541,7 @@ describe('LOC-005 R2 respin — supplement lifecycle and governed regeneration',
 })
 
 describe('LOC-005 R4 lineage hard-gate closure', () => {
-  // R4 夹具：G1 漏收认定 → 补收单走完「已补收」终结 → supersede 出 G2(当前 pending)。
-  // 旧代 diff 因被终结补收单引用而在 supersede 中存活（compute 只删无引用 diff），
-  // 形成「同院·同月·不同代」的存活 diff ——跨代绑定攻击的对象。
-  function seedSupersededWithSurvivingDiff(name: string) {
-    const binding = seedSource({ name, lisCount: 2 })
-    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
-    const hospitalMonthId = String(snapshot.hospitalMonthId)
-    const oldDiff = db.prepare(
-      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
-    ).get(hospitalMonthId) as { id: string }
-    lifecycle.setAccountReconciliationVerdict(
-      db, binding, oldDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
-    )
-    const oldSupplement = db.prepare(
-      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
-    ).get(oldDiff.id) as { id: string }
-    db.prepare(`
-      UPDATE supplement_orders
-         SET review_status = 'approved', reviewed_by = 'USER-002', reviewed_at = CURRENT_TIMESTAMP
-       WHERE id = ?
-    `).run(oldSupplement.id)
-    db.prepare(`
-      UPDATE supplement_orders
-         SET status = '已补收', collected_at = CURRENT_TIMESTAMP, collected_month = '2026-09',
-             collected_revenue = 100
-       WHERE id = ?
-    `).run(oldSupplement.id)
-    const nextBinding = {
-      ...binding,
-      reconcileGenerationId: `${binding.reconcileGenerationId}-NEXT`,
-    }
-    lifecycle.computeAccountReconciliation(db, nextBinding, 'USER-001')
-    const nextDiff = db.prepare(`
-      SELECT id FROM reconcile_diffs
-       WHERE hospital_month_id = ? AND reconcile_generation_id = ?
-    `).get(hospitalMonthId, nextBinding.reconcileGenerationId) as { id: string }
-    return { binding, nextBinding, hospitalMonthId, oldDiff, nextDiff, oldSupplement }
-  }
+  // seedSupersededWithSurvivingDiff 已提升到文件级（R5 describe 共用）。
 
   // 绕过 insert trigger 造出一行错配单（旧代 diff + 当前代），模拟未来写路径/回填工具缺陷；
   // 返回触发器原文以便调用后原样重装（文本运行时从 sqlite_master 读取，含 R4 修复）。
@@ -1676,5 +1685,189 @@ describe('LOC-005 R4 lineage hard-gate closure', () => {
     }
     expect(artifact.decisions.map(decision => decision.id)).toEqual([fixture.nextDiff.id])
     expect(artifact.supplements.map(supplement => supplement.id)).toEqual([])
+  })
+})
+
+describe('LOC-005 R5 lineage guard direction closure and stale-delete freeze', () => {
+  // R5 反向注入：pending 窗口无任何 trigger 拦 diff 的代次改写（trg_reconcile_diff_final_*
+  // 只在月内有 complete/closed 代时生效）——把存活旧代 diff 的代次直接改写成当前代，
+  // 即造出复核者指出的反向形状：旧代补收单(gen=G1) → diff(gen=G2)。
+  function rewriteDiffGeneration(diffId: string, generationId: string): void {
+    db.prepare('UPDATE reconcile_diffs SET reconcile_generation_id = ? WHERE id = ?')
+      .run(generationId, diffId)
+  }
+
+  it('rejects complete when a stale-generation supplement references a current-generation diff (inverse mismatch)', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r5-inverse-complete')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    rewriteDiffGeneration(fixture.oldDiff.id, fixture.nextBinding.reconcileGenerationId)
+    try {
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      // 共享库必须复原。RED 态下若 complete 竟成功，月内已出现 complete 代、
+      // diff 终版 trigger 会拦恢复——先摘再恢复，最后走升级函数统一重装+启动探针自检。
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable')
+      rewriteDiffGeneration(fixture.oldDiff.id, fixture.binding.reconcileGenerationId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+  })
+
+  it('rejects close when the inverse mismatch is injected after completion', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r5-inverse-close')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001')
+    // complete 后 trg_reconcile_diff_final_immutable 会拦 diff UPDATE——绕过它注入
+    // （直接 SQL 攻击者的等价能力），验证 artifact 守卫独立于 trigger 兜底：
+    // close 重建 artifact 时守卫先于 hash 比对 fail-closed。
+    const diffTrigger = db.prepare(`
+      SELECT sql FROM sqlite_master
+      WHERE type = 'trigger' AND name = 'trg_reconcile_diff_final_immutable'
+    `).get() as { sql: string }
+    db.exec('DROP TRIGGER trg_reconcile_diff_final_immutable')
+    rewriteDiffGeneration(fixture.oldDiff.id, fixture.nextBinding.reconcileGenerationId)
+    db.exec(diffTrigger.sql)
+    try {
+      expectCode(
+        () => lifecycle.closeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable')
+      rewriteDiffGeneration(fixture.oldDiff.id, fixture.binding.reconcileGenerationId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+  })
+
+  it('does not flag consistent stale pairs and completes with only exact-generation supplements in the artifact', () => {
+    // 反向候选集的误伤对照：一致旧代对（S→D 同为 G1）不属于本代事实集、不得候选；
+    // G2 complete 成功且 artifact 精确只含 G2 补收单。
+    const fixture = seedSupersededWithSurvivingDiff('r5-consistent-stale-pair')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const nextSupplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string }
+    lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001')
+    const completed = db.prepare(`
+      SELECT completion_artifact_json FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(fixture.nextBinding.reconcileGenerationId) as { completion_artifact_json: string }
+    const artifact = JSON.parse(completed.completion_artifact_json) as {
+      supplements: Array<{ id: string, sourceDiffId: string }>
+    }
+    expect(artifact.supplements.map(supplement => supplement.id)).toEqual([nextSupplement.id])
+  })
+
+  it('rejects deleting a terminated supplement of a superseded generation before the successor completes', () => {
+    // P2（继承债）：旧 no_delete 只在「diff 所在月有 complete/closed 代」时拒删——
+    // supersede 后 successor 完成前的窗口内旧代终结单可被 DELETE（毁审计痕 + 旧 diff
+    // 变无引用后被 compute 连删）。修复后按 OLD 所在代直判：is_current=0 即拒删。
+    const fixture = seedSupersededWithSurvivingDiff('r5-stale-delete-window')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('DELETE FROM supplement_orders WHERE id = ?').run(fixture.oldSupplement.id)
+    }, /FINAL_RECONCILIATION_DECISIONS_IMMUTABLE/)
+  })
+
+  it('keeps the current-generation supplement revoke path deletable (verdict scoped-DELETE control)', () => {
+    // 不误伤对照：应用层唯一 DELETE（verdict 改判的 scoped DELETE，lifecycle:1088，
+    // 锁定当前 pending 代 + 待补收）必须仍放行。
+    const fixture = seedSupersededWithSurvivingDiff('r5-current-delete-control')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const nextSupplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string }
+    const deleted = db.prepare(`
+      DELETE FROM supplement_orders
+       WHERE source_diff_id = ? AND reconcile_generation_id = ? AND status = '待补收'
+    `).run(fixture.nextDiff.id, fixture.nextBinding.reconcileGenerationId)
+    expect(Number(deleted.changes)).toBe(1)
+    expect(db.prepare(
+      'SELECT COUNT(*) AS n FROM supplement_orders WHERE id = ?',
+    ).get(nextSupplement.id)).toMatchObject({ n: 0 })
+  })
+
+  it('keeps rejecting the stale delete after a boot-time trigger reinstall', () => {
+    // trigger 文本唯一定义点在升级函数、每次 boot 重装——重装后窗口期拒删口径不变。
+    const fixture = seedSupersededWithSurvivingDiff('r5-stale-delete-reinstall')
+    manager.upgradeAccountReconciliationSchema(db)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('DELETE FROM supplement_orders WHERE id = ?').run(fixture.oldSupplement.id)
+    }, /FINAL_RECONCILIATION_DECISIONS_IMMUTABLE/)
+  })
+
+  it('fails startup validation on the inverse mismatch as well (boot probe is bidirectional)', () => {
+    // 层间等价对照：开机谱系探针本就是双向全局校验，反向形状同样拒启——
+    // R5 把 complete/close 时的 artifact 守卫补齐到同一方向完备性。
+    const fixture = seedSupersededWithSurvivingDiff('r5-inverse-startup-probe')
+    const probePath = join(testDirectory, `r5-inverse-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const probe = new DatabaseSync(probePath)
+    try {
+      probe.prepare('UPDATE reconcile_diffs SET reconcile_generation_id = ? WHERE id = ?')
+        .run(fixture.nextBinding.reconcileGenerationId, fixture.oldDiff.id)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('rejects complete when a current-generation diff is drifted to another month in the pending window', () => {
+    // 面板扩展形状：pending 窗口同样无 trigger 拦 diff 的 hospital_month_id 改写——
+    // 把本代补收单引用的本代 diff 跨月搬移（gen 一致、月漂移），旧守卫候选虽命中
+    // 但代次一致判无违例，artifact 查询再静默丢掉该单。守卫的月谓词补上这一类。
+    const fixture = seedSupersededWithSurvivingDiff('r5-month-drift-complete')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const rewriteMonth = (monthId: string) => {
+      db.prepare('UPDATE reconcile_diffs SET hospital_month_id = ? WHERE id = ?')
+        .run(monthId, fixture.nextDiff.id)
+    }
+    rewriteMonth('hospital-month-drifted-out')
+    try {
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      // RED 态下 complete 若竟成功，月内已出现 complete 代——同 inverse 测试的恢复姿势。
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable')
+      rewriteMonth(fixture.hospitalMonthId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+  })
+
+  it('closes a cleanly completed month with a byte-identical artifact rebuild (added predicates are no-ops on a clean DB)', () => {
+    // 兼容钉：守卫三谓词与 artifact 查询的显式代次条件在干净库上必须是恒真/恒等——
+    // complete→close 全链路成功，且 close 前后的定版 artifact 逐字节一致
+    //（close 内部重建 artifact 做 hash 比对，成功即字节级证明；此处再显式比对一次）。
+    const fixture = seedSupersededWithSurvivingDiff('r5-close-compat')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001')
+    const readArtifact = () => (db.prepare(`
+      SELECT completion_artifact_json FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(fixture.nextBinding.reconcileGenerationId) as { completion_artifact_json: string })
+      .completion_artifact_json
+    const artifactBeforeClose = readArtifact()
+    lifecycle.closeAccountReconciliation(db, fixture.nextBinding, 'USER-001')
+    expect(readArtifact()).toBe(artifactBeforeClose)
+    const closed = db.prepare(`
+      SELECT status FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+    `).get(fixture.nextBinding.reconcileGenerationId) as { status: string }
+    expect(closed.status).toBe('closed')
   })
 })

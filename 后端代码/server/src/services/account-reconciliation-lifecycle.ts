@@ -569,18 +569,28 @@ function buildCompletionArtifact(
       followUp: decision.follow_up === null ? null : String(decision.follow_up),
     }
   })
-  // R4 纵深收口：complete/close 前显式校验「本代补收单的 source_diff 属于本代事实集」。
-  // binding trigger（写入闸）与启动校验（开机闸）之外，这里在 artifact 生成前 fail-closed：
-  // 错配行或悬空 source_diff（运行时 FK 未强制、INNER JOIN 会静默丢行）一律拒绝 complete/close，
-  // 绝不产出 decisions 与 supplements 内部不一致的定版 artifact。
+  // R4 纵深收口 + R5 方向收口：complete/close 前显式校验补收单谱系与本代事实集一致。
+  // 候选集双向——本代补收单 ∪ 引用本代 diff 的补收单；违例三态——
+  //   悬空 source_diff / diff 代次不等于补收单代次（正向：本代单→旧代 diff；反向：旧代单→本代 diff，
+  //   经 pending 窗口直接 SQL 改写 diff 代次可达）/ diff 医院月不属于本代事实集（跨月搬移，同窗口可达）。
+  // 一致旧代对（旧单→旧 diff）不属本代事实集，不候选、不误伤。
+  // binding trigger（写入闸）与启动校验（开机闸）之外，这里在 artifact 生成前最后收口，
+  // 绝不产出 decisions 与 supplements 内部不一致或静默缺行的定版 artifact
+  // （运行时 FK 未强制、INNER JOIN 会静默丢行，静默排除比失败更糟）。
   const lineageMismatch = db.prepare(`
     SELECT supplement.id
       FROM supplement_orders supplement
       LEFT JOIN reconcile_diffs decision ON decision.id = supplement.source_diff_id
-     WHERE supplement.reconcile_generation_id = ?
-       AND (decision.id IS NULL OR decision.reconcile_generation_id IS NOT ?)
+     WHERE (supplement.reconcile_generation_id = ? OR decision.reconcile_generation_id = ?)
+       AND (decision.id IS NULL
+            OR decision.reconcile_generation_id IS NOT supplement.reconcile_generation_id
+            OR decision.hospital_month_id IS NOT ?)
      LIMIT 1
-  `).get(binding.reconcileGenerationId, binding.reconcileGenerationId) as { id?: string } | undefined
+  `).get(
+    binding.reconcileGenerationId,
+    binding.reconcileGenerationId,
+    row.hospital_month_id,
+  ) as { id?: string } | undefined
   if (lineageMismatch?.id) {
     fail(
       `supplement ${lineageMismatch.id} lineage does not match the completion fact set`,
@@ -588,6 +598,7 @@ function buildCompletionArtifact(
       409,
     )
   }
+  // artifact 补收集显式钉住谱系不变量：上方守卫已 fail-closed，正常库下述条件恒真（纵深表意）。
   const supplements = (db.prepare(`
     SELECT supplement.id, supplement.source_diff_id, supplement.partner_id,
            supplement.service_month, supplement.case_no, supplement.amount,
@@ -596,8 +607,9 @@ function buildCompletionArtifact(
       JOIN reconcile_diffs decision ON decision.id = supplement.source_diff_id
      WHERE decision.hospital_month_id = ?
        AND supplement.reconcile_generation_id = ?
+       AND decision.reconcile_generation_id = ?
      ORDER BY supplement.source_diff_id, supplement.id
-  `).all(row.hospital_month_id, binding.reconcileGenerationId) as any[]).map(supplement => ({
+  `).all(row.hospital_month_id, binding.reconcileGenerationId, binding.reconcileGenerationId) as any[]).map(supplement => ({
     id: String(supplement.id),
     sourceDiffId: String(supplement.source_diff_id),
     partnerId: String(supplement.partner_id),

@@ -1475,6 +1475,11 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
     END
   `)
+  // no_delete 双分支并集：①月级分支——source_diff 所在月已有 complete/closed 代时禁删（保留原口径，
+  // generations 表没有 BEFORE DELETE trigger，若只剩行级分支，直接 SQL 删掉 generation 行即可静默绕过）；
+  // ②行级分支（R5 补）——按 OLD.reconcile_generation_id 查本行所属代，is_current=0（supersede 窗口，
+  // 旧代仍 pending 但已被取代）或 complete/closed 即禁删，补上 supersede→successor-complete 窗口的审计链缺口。
+  // 合法口径不受影响：verdict 的 scoped DELETE（当前 pending 代、其月无 complete/closed 代）两分支均不命中。
   database.exec(`
     CREATE TRIGGER trg_reconcile_supplement_final_no_delete
     BEFORE DELETE ON supplement_orders
@@ -1485,6 +1490,12 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
           ON generation.hospital_month_id = diff.hospital_month_id
        WHERE diff.id = OLD.source_diff_id
          AND generation.status IN ('complete', 'closed')
+    )
+    OR EXISTS (
+      SELECT 1
+        FROM account_reconcile_generations generation
+       WHERE generation.reconcile_generation_id = OLD.reconcile_generation_id
+         AND (generation.is_current = 0 OR generation.status IN ('complete', 'closed'))
     )
     BEGIN
       SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
