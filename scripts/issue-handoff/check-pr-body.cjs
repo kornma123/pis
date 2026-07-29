@@ -653,7 +653,6 @@ function stripIgnoredMarkdown(body) {
         activeReflectionSawBlank = false;
       }
       if (
-        activeReflectionSawBlank &&
         Number.isInteger(activeReflectionContentIndent) &&
         isInsideActivePrListItem(
           line,
@@ -665,7 +664,7 @@ function stripIgnoredMarkdown(body) {
         // reflection field. A code/HTML/fence block at the active list item's
         // content column is still authored inside that field's container, so
         // preserve it for collectVisibleFields to fold into the raw wire and
-        // fail closed. This also covers a loose-list continuation after blanks.
+        // fail closed. This covers both tight and loose list continuations.
         visibleLines.push(line);
         paragraphOpen = false;
         paragraphContainer = null;

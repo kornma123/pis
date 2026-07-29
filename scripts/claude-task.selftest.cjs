@@ -624,10 +624,11 @@ ${' '.repeat(indentation)}${prStrongLeastConfidenceLine}
     const handoffOk = handoffFieldErrors(handoffBody).length === 0;
     const prOk = validatePrBody(prBody).ok;
     // The plain field opens a root paragraph, so the surviving four-space
-    // closing-looking line is content. The PR field opens list content, where
-    // the same raw indentation is a real 0–3-space fence after container strip.
+    // closing-looking line is content. In PR form, 1–2-space field markers
+    // put that orphan fence inside the reflection item's content column; three
+    // spaces exits beyond it, while four spaces keeps the field hidden.
     const expectedHandoffOk = false;
-    const expectedPrOk = indentation < 4;
+    const expectedPrOk = indentation === 3;
     if (handoffOk !== expectedHandoffOk || prOk !== expectedPrOk) {
       reflectionRegressionFailures.push(
         `${marker} tab-list fence ${indentation}-space indent mismatch ` +
@@ -659,10 +660,11 @@ ${' '.repeat(indentation)}${prStrongLeastConfidenceLine}
       );
     const handoffOk = handoffFieldErrors(handoffBody).length === 0;
     const prOk = validatePrBody(prBody).ok;
-    // Container exit leaves a root hanging indent in plain handoff format,
-    // while the authored PR bullet retains its independent list-fence shape.
+    // Container exit leaves a root hanging indent in plain handoff format. In
+    // PR form the orphan fence remains in a 1–2-space reflection item's
+    // content column, exits a three-space item, and hides a four-space field.
     const expectedHandoffOk = false;
-    const expectedPrOk = indentation < 4;
+    const expectedPrOk = indentation === 3;
     if (handoffOk !== expectedHandoffOk || prOk !== expectedPrOk) {
       reflectionRegressionFailures.push(
         `${name} ${indentation}-space indent mismatch ` +

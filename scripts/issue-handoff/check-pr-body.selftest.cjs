@@ -377,16 +377,28 @@ ${fieldLine}
 }
 for (const marker of ['-', '1.']) {
   for (const indentation of [1, 2, 3]) {
-    expectPass(
-      `${marker} tab-list fence exposes least-confidence after exiting at ${indentation}-space content indent`,
-      validBody.replace(
-        leastConfidenceLine,
-        `${marker}\t\`\`\`md
+    const tabListExitBody = validBody.replace(
+      leastConfidenceLine,
+      `${marker}\t\`\`\`md
 ${' '.repeat(indentation)}${leastConfidenceLine}
     \`\`\``,
-      ),
-      [128],
     );
+    if (indentation <= 2) {
+      // The field itself opens a new list item whose content column is at most
+      // column 4. The orphan four-space fence therefore belongs to the active
+      // reflection item and must remain raw/fail-closed.
+      expectFail(
+        `${marker} tab-list exit keeps its orphan fence in the ${indentation}-space reflection item`,
+        tabListExitBody,
+        /我现在最没把握的是什么|Least confidence/,
+      );
+    } else {
+      expectPass(
+        `${marker} tab-list fence exposes least-confidence after exiting beyond its content column`,
+        tabListExitBody,
+        [128],
+      );
+    }
   }
   expectFail(
     `${marker} tab-list fence hides least-confidence at its 4-space content column`,
@@ -405,16 +417,25 @@ for (const [name, opener] of [
   ['blockquote nested tab-list fence', '> - -\t```md'],
 ]) {
   for (const indentation of [1, 2, 3]) {
-    expectPass(
-      `${name} exposes a field after container exit at ${indentation}-space indent`,
-      validBody.replace(
-        leastConfidenceLine,
-        `${opener}
+    const nestedExitBody = validBody.replace(
+      leastConfidenceLine,
+      `${opener}
 ${' '.repeat(indentation)}${leastConfidenceLine}
     \`\`\``,
-      ),
-      [128],
     );
+    if (indentation <= 2) {
+      expectFail(
+        `${name} keeps its orphan fence in the ${indentation}-space reflection item`,
+        nestedExitBody,
+        /我现在最没把握的是什么|Least confidence/,
+      );
+    } else {
+      expectPass(
+        `${name} exposes a field after exiting beyond its content column`,
+        nestedExitBody,
+        [128],
+      );
+    }
   }
   expectFail(
     `${name} keeps a field hidden at 4-space indent`,
@@ -776,6 +797,20 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
     ),
     [128],
   );
+  for (const [blockName, blockLines] of [
+    ['root fenced block', ['```md', 'independent=42', '```']],
+    ['root type-1 HTML block', ['<pre>', 'independent=42', '</pre>']],
+    ['root encoded product HTML block', ['&lt;div&gt;', 'independent=42', '&lt;/div&gt;']],
+  ]) {
+    expectPass(
+      `${endingName}/${blockName}: tight root exit remains independent`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}${blockLines.join(lineEnding)}`,
+      ),
+      [128],
+    );
+  }
   // A real peer list item is a Markdown block boundary regardless of whether
   // its key resembles an inline mimic or a malformed custom/empty-key field.
   for (const [blockName, peerBlock] of prPeerBlockBoundaries) {
@@ -852,6 +887,29 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
     ),
     /我现在最没把握的是什么|Least confidence/,
   );
+  for (const [indentName, indent] of [
+    ['two-space content indent', '  '],
+    ['raw-Tab content indent', '\t'],
+    ['space+Tab content indent', ' \t'],
+  ]) {
+    for (const [blockName, blockLines] of [
+      ['fenced block', ['```md', 'x=42', '```']],
+      ['type-6 HTML block', ['<div>', 'x=42', '</div>']],
+      ['type-1 HTML block', ['<pre>', 'x=42', '</pre>']],
+      ['encoded product HTML block', ['&lt;div&gt;', 'x=42', '&lt;/div&gt;']],
+    ]) {
+      expectFail(
+        `${endingName}/${indentName}/${blockName}: tight content remains in the active list item raw`,
+        validBody.replace(
+          leastConfidenceLine,
+          `${leastConfidenceLine}${lineEnding}${blockLines
+            .map((line) => `${indent}${line}`)
+            .join(lineEnding)}`,
+        ),
+        /我现在最没把握的是什么|Least confidence/,
+      );
+    }
+  }
   expectFail(
     `${endingName}: a blank-separated fenced block remains in the active list item raw`,
     validBody.replace(
