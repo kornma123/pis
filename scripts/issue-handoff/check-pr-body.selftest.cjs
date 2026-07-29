@@ -368,17 +368,55 @@ ${fieldLine}
 }
 for (const marker of ['-', '1.']) {
   for (const indentation of [1, 2, 3]) {
-    expectFail(
-      `${marker} tab-list fence hides least-confidence at ${indentation}-space content indent`,
+    expectPass(
+      `${marker} tab-list fence exposes least-confidence after exiting at ${indentation}-space content indent`,
       validBody.replace(
         leastConfidenceLine,
         `${marker}\t\`\`\`md
 ${' '.repeat(indentation)}${leastConfidenceLine}
     \`\`\``,
       ),
-      /(?:字段未填写|反盲区字段缺少).*我现在最没把握的是什么/,
+      [128],
     );
   }
+  expectFail(
+    `${marker} tab-list fence hides least-confidence at its 4-space content column`,
+    validBody.replace(
+      leastConfidenceLine,
+      `${marker}\t\`\`\`md
+    ${leastConfidenceLine}
+    \`\`\``,
+    ),
+    /(?:字段未填写|反盲区字段缺少).*我现在最没把握的是什么/,
+  );
+}
+for (const [name, opener] of [
+  ['blockquote tab-list fence', '> -\t```md'],
+  ['nested tab-list fence', '- -\t```md'],
+  ['blockquote nested tab-list fence', '> - -\t```md'],
+]) {
+  for (const indentation of [1, 2, 3]) {
+    expectPass(
+      `${name} exposes a field after container exit at ${indentation}-space indent`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${opener}
+${' '.repeat(indentation)}${leastConfidenceLine}
+    \`\`\``,
+      ),
+      [128],
+    );
+  }
+  expectFail(
+    `${name} keeps a field hidden at 4-space indent`,
+    validBody.replace(
+      leastConfidenceLine,
+      `${opener}
+    ${leastConfidenceLine}
+    \`\`\``,
+    ),
+    /(?:字段未填写|反盲区字段缺少).*我现在最没把握的是什么/,
+  );
 }
 expectPass(
   'tab-list fenced code closes before a following visible contract',
@@ -874,6 +912,37 @@ for (const [name, value] of [
   ['Chinese negative discovery of problem is rejected', '未查出问题'],
   ['English nothing-failed form is rejected', 'nothing failed'],
   ['English existential generic risk is rejected', 'there may be a risk'],
+  ['generic Chinese thing is rejected', '东西可能失败'],
+  ['generic Chinese system is rejected', '系统可能失败'],
+  ['generic Chinese service is rejected', '服务可能失败'],
+  ['generic Chinese problem event is rejected', '问题可能发生'],
+  ['generic Chinese state is rejected', '可能不行'],
+  ['generic Chinese place is rejected', '某个地方可能出错'],
+  ['generic English stuff is rejected', 'stuff may fail'],
+  ['generic English system is rejected', 'system may fail'],
+  ['generic English service is rejected', 'service may fail'],
+  ['generic English things event is rejected', 'things could break'],
+  ['generic English bad event is rejected', 'something bad may happen'],
+  ['generic English unknowns are rejected', 'unknown unknowns'],
+  ['encoded generic Chinese thing is rejected', '东&#35199;可能失败'],
+  ['default-ignorable generic Chinese system is rejected', '系\u200D统可能失败'],
+  ['fullwidth generic English system is rejected', 'ｓｙｓｔｅｍ may fail'],
+  ['encoded generic English service is rejected', 'serv&#105;ce may fail'],
+  ['nested zero-width entity cannot strengthen a generic service', 'serv&amp;ZeroWidthSpace;ice may fail'],
+  ['encoded code wrapper cannot strengthen a generic system', '&lt;code&gt;system&lt;/code&gt; may fail'],
+  ['function-word generic English system is rejected', 'this system may still fail'],
+  ['function-word generic Chinese thing is rejected', '这些东西也许会失败'],
+  ['stacked English function words remain generic', 'some service can maybe fail'],
+  ['stacked English category words remain generic', 'the generic backend and frontend may break'],
+  ['stacked Chinese function words remain generic', '相关系统依然还是可能失败'],
+  ['stacked Chinese modal words remain generic', '某种情况大概会出错'],
+  ['encoded stacked English generic stays weak', 'syst&#101;m can possibly fail'],
+  ['NFKC stacked English generic stays weak', 'ｓｅｒｖｉｃｅ would likely break'],
+  ['two-character Chinese object without qualifier stays weak', '缓存可能失败'],
+  ['single lowercase English content token stays weak', 'timeout may fail'],
+  ['sentence capitalization does not create a proper anchor', 'Timeout may fail'],
+  ['combined Chinese category nouns stay weak', '系统服务可能失败'],
+  ['combined English category nouns stay weak', 'system service may fail'],
   [
     'no-finding rejects connected action-only scopes',
     '未发现；已检查验证和复核；未检查审计和扫描',
@@ -940,6 +1009,22 @@ for (const [name, value] of [
   ['English concrete failure risk is accepted', 'payment webhook may fail'],
   ['Chinese demonstrative with concrete object is accepted', '这些支付回调可能失败'],
   ['English demonstrative with concrete object is accepted', 'these payment webhooks may fail'],
+  ['concrete Chinese callback risk is accepted', '支付回调可能失败'],
+  ['concrete PostgreSQL timeout risk is accepted', 'PostgreSQL 15 lock timeout is unmeasured'],
+  ['concrete checkout retry risk is accepted', 'checkout webhook retry policy is unverified'],
+  ['concrete certificate rotation risk is accepted', '证书轮换窗口需复核'],
+  ['encoded concrete Chinese callback is accepted', '支付回&#35843;可能失败'],
+  ['NFKC concrete PostgreSQL timeout is accepted', 'ＰｏｓｔｇｒｅＳＱＬ １５ lock timeout is unmeasured'],
+  ['encoded concrete checkout retry is accepted', 'checkout web&#104;ook retry policy is unverified'],
+  ['inline-code proper anchor is accepted', '`nginx` is unverified'],
+  ['encoded code proper anchor is accepted', '&lt;code&gt;nginx&lt;/code&gt; is unverified'],
+  ['short quoted Chinese proper anchor is accepted', '「微信」可能失败'],
+  ['two concrete English anchors survive a generic category', 'payment service retry may fail'],
+  ['concrete English anchors survive generic API wording', 'warehouse API timeout is unmeasured'],
+  ['concrete Chinese anchors survive a generic service word', '订单服务重试可能失败'],
+  ['explicit single proper-name anchor is accepted', '`Redis` may fail'],
+  ['qualified Chinese content fragment is accepted', '缓存键可能失败'],
+  ['two English content anchors are accepted', 'cache eviction may fail'],
 ]) {
   expectPass(name, replaceLeastConfidence(validBody, value), [128]);
 }

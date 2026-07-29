@@ -123,13 +123,86 @@ const PRODUCT_ENCODED_CONTAINER_TAGS = new Set(['code', 'div', 'xmp']);
 const NO_FINDING_PREFIX_PATTERN =
   /^(?:(?:(?:目前|当前|暂时|暂|现阶段|迄今|截至目前|到目前为止)(?:仍|还)?)[ \t，,]*|(?:(?:currently|for now|so far|at present|temporarily)[ \t，,]+))?(?:未(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没有(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|没(?:发现|观察到|识别出)(?:任何|其他)?(?:明显)?(?:问题|风险|异常)?|无(?:任何|其他)?(?:明显)?(?:问题|风险|异常)|暂无(?:其他)?(?:问题|风险|异常)|未见(?:其他)?(?:问题|风险|异常)|一切正常|no[ \t]+(?:issues?|problems?|findings?)(?:[ \t]+(?:were[ \t]+)?found)?|no[ \t]+risks?(?:[ \t]+(?:were[ \t]+)?identified)?|nothing[ \t]+(?:was[ \t]+)?(?:found|to[ \t]+report)|all[ \t]+(?:looks[ \t]+)?(?:good|normal|clear)|looks?[ \t]+(?:good|fine|okay|normal|clear)|lgtm)(?=$|[ \t:：;；,.，。!！])/iu;
 const CHINESE_FUNCTION_OR_GENERIC_PATTERN =
-  /(?:这些|那些|这个|那个|它们|他们|她们|然后|不过|但是|可是|然而|并且|而且|所以|因此|其中|这里|那里|什么|它|他|她|这|那|其|该|此|有|到|的|地|得|内容|事项|项目|范围|相关内容|相关事项|上述|以上|工作|事情|某事|某些|一些|任何|所有|全部|相关|其他|其它|通用|一般|常规|各项|相应|和|与|及|以及|或|或者)/gu;
+  /(?:这些|那些|这个|那个|某个|某种|某处|某类|它们|他们|她们|然后|不过|但是|可是|然而|并且|而且|所以|因此|其中|这里|那里|依然|还是|什么|它|他|她|这|那|其|该|此|有|到|的|地|得|内容|事项|项目|范围|相关内容|相关事项|上述|以上|工作|事情|某事|某些|一些|任何|所有|全部|相关|其他|其它|通用|一般|常规|各项|相应|和|与|及|以及|或|或者)/gu;
 const ENGLISH_FUNCTION_OR_GENERIC_PATTERN =
-  /\b(?:a|an|the|this|that|these|those|it|its|they|them|their|there|here|then|however|but|yet|so|therefore|also|still|no|not|any|all|some|none|nothing|only|other|related|relevant|remaining|generic|general|work|task|thing|things|something|anything|content|item|items|scope|range|and|or|be|been|being|is|are|was|were|has|have|had)\b/giu;
+  /\b(?:a|an|the|this|that|these|those|it|its|they|them|their|there|here|then|however|but|yet|so|therefore|also|still|no|not|any|all|some|none|nothing|only|other|related|relevant|remaining|generic|general|work|task|thing|things|something|anything|content|item|items|scope|range|and|or|of|to|for|from|in|on|at|by|with|without|as|be|been|being|is|are|was|were|has|have|had|can|will|would|should|maybe|perhaps|possibly|likely)\b/giu;
 const CHINESE_ACTION_OR_STATE_PATTERN =
-  /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|尚未|仍未|没有|没|未|待|需(?:要)?|可能|也许|担心|局限|依赖|只在|仅在|变化|检查|核对|验证|审查|覆盖|复核|排查|扫描|检视|确认|评估|分析|调查|执行|处理|跟进|完成|实测|量化|测量|观察|识别|检测|检出|查出|发现|登记|风险|问题|过|了)/gu;
+  /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|尚未|仍未|没有|没|未|待|需(?:要)?|可能(?:会)?|也许(?:会)?|大概(?:会)?|或许(?:会)?|担心|局限|依赖|只在|仅在|变化|发生|不行|出错|检查|核对|验证|审查|覆盖|复核|排查|扫描|检视|确认|评估|分析|调查|执行|处理|跟进|完成|实测|量化|测量|观察|识别|检测|检出|查出|发现|登记|风险|问题|过|了)/gu;
 const ENGLISH_ACTION_OR_STATE_PATTERN =
   /\b(?:may|might|could|depends?|needs?|requires?|incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|unmeasured|measured|measurement|check(?:ed|ing)?|inspect(?:ed|ing|ion|ions)?|scan(?:ned|ning|s)?|verif(?:y|ied|ication)|validat(?:e|ed|ion)|review(?:ed|ing)?|audit(?:ed|ing)?|test(?:ed|ing)?|quantif(?:y|ied|ication)|detect(?:ed|ing|ion)?|observ(?:e|ed|ing|ation)|identif(?:y|ied|ication)|find|found|fail(?:ed|ure)?|error|errors|risk|risks|issue|issues|problem|problems|finding|findings|gap|gaps|missing|change(?:d|s|ing)?)\b/giu;
+const CHINESE_GENERIC_CONTENT_PATTERN =
+  /(?:东西|系统|服务|地方|位置|部分|模块|组件|情况|状态|方面|行为|结果|对象|平台|应用程序|程序|功能|页面)/gu;
+const ENGLISH_GENERIC_CONTENT_TOKENS = new Set([
+  'api',
+  'apis',
+  'app',
+  'application',
+  'applications',
+  'area',
+  'areas',
+  'backend',
+  'backends',
+  'bad',
+  'behavior',
+  'behaviors',
+  'behaviour',
+  'behaviours',
+  'break',
+  'breaks',
+  'broke',
+  'broken',
+  'component',
+  'components',
+  'database',
+  'db',
+  'endpoint',
+  'endpoints',
+  'failure',
+  'failures',
+  'frontend',
+  'frontends',
+  'go',
+  'goes',
+  'going',
+  'happen',
+  'happens',
+  'happened',
+  'interface',
+  'interfaces',
+  'module',
+  'modules',
+  'object',
+  'objects',
+  'occur',
+  'occurs',
+  'occurred',
+  'part',
+  'parts',
+  'place',
+  'places',
+  'platform',
+  'platforms',
+  'process',
+  'processes',
+  'program',
+  'programs',
+  'server',
+  'servers',
+  'service',
+  'services',
+  'state',
+  'states',
+  'status',
+  'statuses',
+  'stuff',
+  'system',
+  'systems',
+  'thing',
+  'things',
+  'unknown',
+  'unknowns',
+  'wrong',
+]);
 const HTML_ENTITIES = new Map([
   ['amp', '&'],
   ['apos', "'"],
@@ -162,7 +235,6 @@ function parseMarkdownContainer(line) {
   let content = String(line || '');
   let blockquoteDepth = 0;
   const listIndents = [];
-  let tabPadding = false;
 
   for (let depth = 0; depth < 32; depth += 1) {
     const blockquote = content.match(/^ {0,3}>[ \t]?/u);
@@ -188,7 +260,6 @@ function parseMarkdownContainer(line) {
         list[2].length +
         effectivePadding,
       );
-      tabPadding ||= list[3].slice(0, consumedPadding).includes('\t');
       continue;
     }
     break;
@@ -202,7 +273,6 @@ function parseMarkdownContainer(line) {
           blockquoteDepth,
           listIndents,
           minimumIndent: listIndents.reduce((sum, width) => sum + width, 0),
-          tabPadding,
         }
       : blockquoteDepth > 0
         ? { kind: 'blockquote', depth: blockquoteDepth }
@@ -579,8 +649,7 @@ function stripIgnoredMarkdown(body) {
 
       if (
         fence &&
-        !continuesMarkdownContainer(line, fence.container) &&
-        !fence.container?.tabPadding
+        !continuesMarkdownContainer(line, fence.container)
       ) {
         fence = null;
         paragraphOpen = false;
@@ -839,6 +908,61 @@ function isPlaceholder(value) {
   return isExplicitPlaceholder(normalizeFieldValue(value));
 }
 
+function normalizedAnchorSource(value) {
+  return decodeHtmlEntities(value)
+    .normalize('NFKC')
+    .replace(/\p{Default_Ignorable_Code_Point}/gu, '');
+}
+
+function hasExplicitAnchorWrapper(value) {
+  const source = normalizedAnchorSource(value);
+  return (
+    /`[^`\n]*[\p{L}\p{N}][^`\n]*`/u.test(source) ||
+    /<code(?=[\s>])[^>]*>[^<]*[\p{L}\p{N}][^<]*<\/code>/iu.test(source) ||
+    /(?:「[^」]*[\p{L}\p{N}][^」]*」|《[^》]*[\p{L}\p{N}][^》]*》|“[^”]*[\p{L}\p{N}][^”]*”)/u.test(
+      source,
+    )
+  );
+}
+
+function contentTokens(value) {
+  const nonHan = value.replace(/\p{Script=Han}+/gu, ' ');
+  return (
+    nonHan.match(
+      /[\p{L}\p{N}]+(?:[._:/#@+-][\p{L}\p{N}]+)*/gu,
+    ) || []
+  ).filter((token) => {
+    const lower = token.toLowerCase();
+    if (ENGLISH_GENERIC_CONTENT_TOKENS.has(lower)) return false;
+    return [...token].length > 1 || /\p{N}/u.test(token);
+  });
+}
+
+function isStrongStandaloneToken(token, value) {
+  const lower = token.toLowerCase();
+  if (ENGLISH_GENERIC_CONTENT_TOKENS.has(lower)) return false;
+  const hasLetter = /\p{L}/u.test(token);
+  const hasNumber = /\p{N}/u.test(token);
+  if (hasLetter && hasNumber) return true;
+  if (hasLetter && /[._:/#@+-]/u.test(token)) return true;
+  if (/^\p{Lu}{2,}$/u.test(token)) return true;
+  if (/\p{Ll}.*\p{Lu}/u.test(token)) return true;
+  return hasExplicitAnchorWrapper(value);
+}
+
+function hasSpecificContentAnchor(value, object) {
+  const content = object.replace(CHINESE_GENERIC_CONTENT_PATTERN, ' ');
+  const hanLength = (content.match(/\p{Script=Han}/gu) || []).length;
+  const tokens = contentTokens(content);
+
+  // Require a compound/qualified object; one token is reserved for an explicit identifier.
+  if (hanLength >= 3 || tokens.length >= 2) return true;
+  if (hanLength >= 2 && tokens.length >= 1) return true;
+  if (hanLength >= 2 && hasExplicitAnchorWrapper(value)) return true;
+  if (tokens.length === 1 && isStrongStandaloneToken(tokens[0], value)) return true;
+  return /\b\p{Lu}\s*&\s*\p{Lu}\b/u.test(normalizedAnchorSource(value));
+}
+
 function hasSubstantiveScope(value) {
   const clean = canonicalizeMarkdownText(value);
   if (isExplicitPlaceholder(clean) || !/[\p{L}\p{N}]/u.test(clean)) return false;
@@ -851,9 +975,7 @@ function hasSubstantiveScope(value) {
     .replace(CHINESE_ACTION_OR_STATE_PATTERN, ' ')
     .replace(ENGLISH_FUNCTION_OR_GENERIC_PATTERN, ' ')
     .replace(ENGLISH_ACTION_OR_STATE_PATTERN, ' ');
-  return /[\p{L}\p{N}]/u.test(
-    object.replace(/[\s:：,，、/\\()[\]{}<>《》“”"'`-]+/gu, ''),
-  );
+  return hasSpecificContentAnchor(value, object);
 }
 
 function hasBoundedNoFindingScopes(value) {
@@ -892,7 +1014,7 @@ function hasSubstantiveRisk(value) {
     /(?:不足|缺失|缺口|遗漏|异常|失败|错误|未知|不确定|未(?:查|检查|核对|验证|审查|覆盖|复核|排查|扫描|测试|实测|量化|确认|登记|完成|评估|分析|测量)|尚未|待(?:查|检查|核对|验证|审查|复核|排查|扫描|测试|实测|量化|确认|评估|分析|测量)|需(?:要)?(?:查|检查|核对|验证|审查|复核|排查|扫描|测试|实测|量化|确认|评估|分析|测量)|可能|也许|担心|局限|依赖|只在|仅在|变化)/u.test(clean) ||
     /\b(?:incomplete|insufficient|unverified|unchecked|unknown|uncertain|limited|not|only|may|might|could|depends?|needs?|requires?|unmeasured|fail(?:ed|ure)?|error)\b/iu.test(clean);
   if (!hasState) return false;
-  return hasSubstantiveScope(clean);
+  return hasSubstantiveScope(value);
 }
 
 function isWeakReflection(value) {
@@ -903,7 +1025,7 @@ function isWeakReflection(value) {
   if (/^(?:风险|有风险|存在风险|问题|有问题|存在问题|未知风险|情况不明|待确认|需确认|需要确认|需关注|需要关注)[。.!！]?$/u.test(clean)) {
     return true;
   }
-  if (!NO_FINDING_PREFIX_PATTERN.test(clean)) return !hasSubstantiveRisk(clean);
+  if (!NO_FINDING_PREFIX_PATTERN.test(clean)) return !hasSubstantiveRisk(value);
 
   return !hasBoundedNoFindingScopes(clean);
 }

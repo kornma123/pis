@@ -601,7 +601,7 @@ ${prField}
   }
 }
 for (const marker of ['-', '1.']) {
-  for (const indentation of [1, 2, 3]) {
+  for (const indentation of [1, 2, 3, 4]) {
     const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
       .replace(
         handoffStrongLeastConfidenceLine,
@@ -618,10 +618,42 @@ ${' '.repeat(indentation)}${prStrongLeastConfidenceLine}
       );
     const handoffOk = handoffFieldErrors(handoffBody).length === 0;
     const prOk = validatePrBody(prBody).ok;
-    if (handoffOk || prOk || handoffOk !== prOk) {
+    const expectedOk = indentation < 4;
+    if (handoffOk !== expectedOk || prOk !== expectedOk || handoffOk !== prOk) {
       reflectionRegressionFailures.push(
-        `${marker} tab-list fence ${indentation}-space indent accepted hidden field ` +
-        `(handoff=${handoffOk}, pr=${prOk})`,
+        `${marker} tab-list fence ${indentation}-space indent mismatch ` +
+        `(expected=${expectedOk}, handoff=${handoffOk}, pr=${prOk})`,
+      );
+    }
+  }
+}
+for (const [name, opener] of [
+  ['blockquote tab-list fence', '> -\t```md'],
+  ['nested tab-list fence', '- -\t```md'],
+  ['blockquote nested tab-list fence', '> - -\t```md'],
+]) {
+  for (const indentation of [1, 2, 3, 4]) {
+    const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        handoffStrongLeastConfidenceLine,
+        `${opener}
+${' '.repeat(indentation)}${handoffStrongLeastConfidenceLine}
+    \`\`\``,
+      );
+    const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        prStrongLeastConfidenceLine,
+        `${opener}
+${' '.repeat(indentation)}${prStrongLeastConfidenceLine}
+    \`\`\``,
+      );
+    const handoffOk = handoffFieldErrors(handoffBody).length === 0;
+    const prOk = validatePrBody(prBody).ok;
+    const expectedOk = indentation < 4;
+    if (handoffOk !== expectedOk || prOk !== expectedOk || handoffOk !== prOk) {
+      reflectionRegressionFailures.push(
+        `${name} ${indentation}-space indent mismatch ` +
+        `(expected=${expectedOk}, handoff=${handoffOk}, pr=${prOk})`,
       );
     }
   }
@@ -760,6 +792,37 @@ const adversarialReflectionCorpus = [
   ['Chinese negative discovery of problem', '未查出问题', false],
   ['English nothing-failed form', 'nothing failed', false],
   ['English existential generic risk', 'there may be a risk', false],
+  ['generic Chinese thing', '东西可能失败', false],
+  ['generic Chinese system', '系统可能失败', false],
+  ['generic Chinese service', '服务可能失败', false],
+  ['generic Chinese problem event', '问题可能发生', false],
+  ['generic Chinese state', '可能不行', false],
+  ['generic Chinese place', '某个地方可能出错', false],
+  ['generic English stuff', 'stuff may fail', false],
+  ['generic English system', 'system may fail', false],
+  ['generic English service', 'service may fail', false],
+  ['generic English things event', 'things could break', false],
+  ['generic English bad event', 'something bad may happen', false],
+  ['generic English unknowns', 'unknown unknowns', false],
+  ['encoded generic Chinese thing', '东&#35199;可能失败', false],
+  ['default-ignorable generic Chinese system', '系\u200D统可能失败', false],
+  ['fullwidth generic English system', 'ｓｙｓｔｅｍ may fail', false],
+  ['encoded generic English service', 'serv&#105;ce may fail', false],
+  ['nested zero-width generic service', 'serv&amp;ZeroWidthSpace;ice may fail', false],
+  ['encoded code generic system', '&lt;code&gt;system&lt;/code&gt; may fail', false],
+  ['function-word generic English system', 'this system may still fail', false],
+  ['function-word generic Chinese thing', '这些东西也许会失败', false],
+  ['stacked English function words', 'some service can maybe fail', false],
+  ['stacked English category words', 'the generic backend and frontend may break', false],
+  ['stacked Chinese function words', '相关系统依然还是可能失败', false],
+  ['stacked Chinese modal words', '某种情况大概会出错', false],
+  ['encoded stacked English generic', 'syst&#101;m can possibly fail', false],
+  ['NFKC stacked English generic', 'ｓｅｒｖｉｃｅ would likely break', false],
+  ['two-character Chinese object without qualifier', '缓存可能失败', false],
+  ['single lowercase English content token', 'timeout may fail', false],
+  ['sentence capitalization is not a proper anchor', 'Timeout may fail', false],
+  ['combined Chinese category nouns', '系统服务可能失败', false],
+  ['combined English category nouns', 'system service may fail', false],
   [
     'connected action-only no-finding scopes',
     '未发现；已检查验证和复核；未检查审计和扫描',
@@ -774,6 +837,22 @@ const adversarialReflectionCorpus = [
   ['English concrete failure risk', 'payment webhook may fail', true],
   ['Chinese demonstrative with concrete object', '这些支付回调可能失败', true],
   ['English demonstrative with concrete object', 'these payment webhooks may fail', true],
+  ['concrete Chinese callback risk', '支付回调可能失败', true],
+  ['concrete PostgreSQL timeout risk', 'PostgreSQL 15 lock timeout is unmeasured', true],
+  ['concrete checkout retry risk', 'checkout webhook retry policy is unverified', true],
+  ['concrete certificate rotation risk', '证书轮换窗口需复核', true],
+  ['encoded concrete Chinese callback', '支付回&#35843;可能失败', true],
+  ['NFKC concrete PostgreSQL timeout', 'ＰｏｓｔｇｒｅＳＱＬ １５ lock timeout is unmeasured', true],
+  ['encoded concrete checkout retry', 'checkout web&#104;ook retry policy is unverified', true],
+  ['inline-code proper anchor', '`nginx` is unverified', true],
+  ['encoded code proper anchor', '&lt;code&gt;nginx&lt;/code&gt; is unverified', true],
+  ['short quoted Chinese proper anchor', '「微信」可能失败', true],
+  ['two concrete English anchors survive generic category', 'payment service retry may fail', true],
+  ['concrete English anchors survive generic API wording', 'warehouse API timeout is unmeasured', true],
+  ['concrete Chinese anchors survive generic service word', '订单服务重试可能失败', true],
+  ['explicit single proper-name anchor', '`Redis` may fail', true],
+  ['qualified Chinese content fragment', '缓存键可能失败', true],
+  ['two English content anchors', 'cache eviction may fail', true],
   ['substantive bounded no-finding', '未发现；已检查固定对象和测试，未检查生产参数', true],
   ['generic modifiers with concrete objects', '未发现；已检查所有目标代码；未检查相关生产参数', true],
   [
@@ -1846,12 +1925,32 @@ if (!/least-confidence/.test(multilineLabelHiddenHandoff.stderr)) {
     `multiline-label hidden handoff did not report least-confidence: ${multilineLabelHiddenHandoff.stderr}`,
   );
 }
-const tabListFenceHiddenHandoff = runIsolatedHandoff(
+const tabListFenceVisibleHandoff = runIsolatedHandoff(
   'production timeout behavior has not been measured',
   (body) => body.replace(
     'least-confidence: production timeout behavior has not been measured',
     `-\t\`\`\`md
  least-confidence: production timeout behavior has not been measured
+    \`\`\``,
+  ),
+);
+if (tabListFenceVisibleHandoff.status !== 0) {
+  reflectionRegressionFailures.push(
+    `tab-list visible handoff expected exit=0, actual=${tabListFenceVisibleHandoff.status}: ` +
+    tabListFenceVisibleHandoff.stderr,
+  );
+}
+if (tabListFenceVisibleHandoff.stateExists) {
+  reflectionRegressionFailures.push(
+    'tab-list visible handoff retained the active task state file',
+  );
+}
+const tabListFenceHiddenHandoff = runIsolatedHandoff(
+  'production timeout behavior has not been measured',
+  (body) => body.replace(
+    'least-confidence: production timeout behavior has not been measured',
+    `-\t\`\`\`md
+    least-confidence: production timeout behavior has not been measured
     \`\`\``,
   ),
 );
@@ -1884,6 +1983,22 @@ if (!genericPronounHandoff.stateExists) {
 if (!/least-confidence/.test(genericPronounHandoff.stderr)) {
   reflectionRegressionFailures.push(
     `generic-pronoun handoff did not report least-confidence: ${genericPronounHandoff.stderr}`,
+  );
+}
+const genericContentHandoff = runIsolatedHandoff('系统可能失败');
+if (genericContentHandoff.status !== 1) {
+  reflectionRegressionFailures.push(
+    `generic-content handoff expected exit=1, actual=${genericContentHandoff.status}`,
+  );
+}
+if (!genericContentHandoff.stateExists) {
+  reflectionRegressionFailures.push(
+    'generic-content handoff removed the active task state file',
+  );
+}
+if (!/least-confidence/.test(genericContentHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `generic-content handoff did not report least-confidence: ${genericContentHandoff.stderr}`,
   );
 }
 const validHandoff = runIsolatedHandoff('production timeout behavior has not been measured');
