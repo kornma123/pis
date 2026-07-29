@@ -1106,6 +1106,51 @@ function ensureSupplementGenerationForeignKeys(database: DatabaseSync): void {
   `)
 }
 
+// R7 P1-1：diff 锚定启动扫描——独立锚定所有已绑代 diff（reconcile_generation_id IS NOT NULL），
+// 不依赖 supplement 引用。supplement 锚定探针（ensureSupplementGenerationForeignKeys）对
+// 无补收单引用的 diff 天然失明；本扫描覆盖其 generation 悬空（行被删/代次写成幽灵值）与
+// hospital_month_id/partner_id/service_month 相对所属 generation 的漂移。
+// 调用点排在升级函数 trigger 重装段之前：违例 throw → 整个升级事务 ROLLBACK → 开机 fail-closed，
+// 按受治理修复流程处置，绝不静默放行或自动改写。
+// NULL-gen 遗留 diff 不在本扫描范围（由代次回填与 #83 治理形状负责），与既有探针口径一致。
+function ensureReconcileDiffGenerationIdentity(database: DatabaseSync): void {
+  const identityMismatch = database.prepare(`
+    SELECT diff.id
+      FROM reconcile_diffs diff
+      LEFT JOIN account_reconcile_generations generation
+        ON generation.reconcile_generation_id = diff.reconcile_generation_id
+     WHERE diff.reconcile_generation_id IS NOT NULL
+       AND (generation.reconcile_generation_id IS NULL
+            OR generation.hospital_month_id IS NOT diff.hospital_month_id
+            OR generation.partner_id IS NOT diff.partner_id
+            OR generation.settlement_month IS NOT diff.service_month)
+     LIMIT 1
+  `).get() as { id?: string } | undefined
+  if (identityMismatch?.id) {
+    throw new Error(`RECONCILE_DIFF_GENERATION_IDENTITY_MISMATCH:${identityMismatch.id}`)
+  }
+}
+
+// R7 P1-2：collected_month 历史脏数据启动扫描（第三道）——路由严格校验是第一道、
+// trg_reconcile_supplement_collected_month_* trigger 是第二道（写入侧）；本扫描在开机时
+// 拦截经直接 SQL/历史遗留落入的非法月份（非 YYYY-MM 或月份超出 01-12），
+// 防脏值使收入聚合（collected_month = ? 等值匹配）静默漏计。NULL 放行（未收款/放弃态）。
+function ensureSupplementCollectedMonthIntegrity(database: DatabaseSync): void {
+  const columns = database.prepare('PRAGMA table_info(supplement_orders)').all() as Array<{ name: string }>
+  if (!columns.some(column => column.name === 'collected_month')) return
+  const dirty = database.prepare(`
+    SELECT id
+      FROM supplement_orders
+     WHERE collected_month IS NOT NULL
+       AND (collected_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+            OR substr(collected_month, 6, 2) NOT BETWEEN '01' AND '12')
+     LIMIT 1
+  `).get() as { id?: string } | undefined
+  if (dirty?.id) {
+    throw new Error(`SUPPLEMENT_COLLECTED_MONTH_INVALID:${dirty.id}`)
+  }
+}
+
 /**
  * Forward-only LOC-005 upgrade. A legacy final hospital-month without an
  * existing current generation remains explicitly unbound and immutable.
@@ -1174,6 +1219,8 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_fill')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_update')
 
   // R3-1：diffs 代次回填必须排在旧 trigger DROP 之后——父版库的
   // trg_reconcile_diff_final_immutable 对 complete/closed 月 diff 的任意 UPDATE 一律 ABORT，
@@ -1200,6 +1247,10 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   `)
 
   ensureSupplementGenerationForeignKeys(database)
+  // R7：diff 锚定扫描与 collected_month legacy 扫描排在 trigger 重装段之前——
+  // 违例 throw 即整体 ROLLBACK，开机 fail-closed（详见两函数头注释）。
+  ensureReconcileDiffGenerationIdentity(database)
+  ensureSupplementCollectedMonthIntegrity(database)
   database.exec(`
     CREATE INDEX IF NOT EXISTS idx_supplement_generation
       ON supplement_orders(reconcile_generation_id, source_diff_id)
@@ -1549,6 +1600,31 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
     )
     BEGIN
       SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
+    END
+  `)
+  // R7 P1-2：collected_month 格式硬闸（第二道，写入侧）——路由层 isStrictSettlementMonth
+  // 是第一道；本族 trigger 拦直接 SQL/未来写路径绕过路由写入的非法月份；
+  // 启动 legacy 扫描（ensureSupplementCollectedMonthIntegrity）是第三道（历史脏数据拒启）。
+  // 口径：NULL 放行（未收款/放弃态）；非 NULL 必须 YYYY-MM 且月份 01-12，
+  // 与收入聚合 collected_month = ? 的等值匹配口径一致（脏值会静默漏计实收）。
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_collected_month_insert
+    BEFORE INSERT ON supplement_orders
+    WHEN NEW.collected_month IS NOT NULL
+      AND (NEW.collected_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+           OR substr(NEW.collected_month, 6, 2) NOT BETWEEN '01' AND '12')
+    BEGIN
+      SELECT RAISE(ABORT, 'SUPPLEMENT_COLLECTED_MONTH_INVALID');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_collected_month_update
+    BEFORE UPDATE ON supplement_orders
+    WHEN NEW.collected_month IS NOT NULL
+      AND (NEW.collected_month NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'
+           OR substr(NEW.collected_month, 6, 2) NOT BETWEEN '01' AND '12')
+    BEGIN
+      SELECT RAISE(ABORT, 'SUPPLEMENT_COLLECTED_MONTH_INVALID');
     END
   `)
     database.exec('COMMIT')

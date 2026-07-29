@@ -647,6 +647,13 @@ router.post('/supplements/:id/collect', requirePermission('account_reconcile', '
     // 人闸（项D 止血）：未经独立签发（approve）的补收单不可收款——防「认定人一步直发真金追加收费单」。
     if (so.review_status !== 'approved') return error(res, '补收单未经独立复核签发，不可收款', 'NOT_APPROVED', 409)
     const collectedMonth = String(req.body?.collectedMonth ?? '').trim() || new Date().toISOString().slice(0, 7)
+    // R7：collectedMonth 复用严格 YYYY-(01..12) 校验（与 compute/overview 同一把尺）——
+    // 非法值 400 且零写（不落 UPDATE、不落审计）；DB 层由
+    // trg_reconcile_supplement_collected_month_* trigger 与启动 legacy 扫描兜底，
+    // 防直接 SQL/历史脏数据使收入聚合（collected_month = ? 等值匹配）静默漏计。
+    if (!isStrictSettlementMonth(collectedMonth)) {
+      return error(res, '收款月份须为 YYYY-MM 格式（月份 01-12）', 'INVALID_COLLECTED_MONTH', 400)
+    }
     // 折实收：账单口径 amount ×（原漏收月的**实验室工序行扣率**）；计入 collectedMonth 的实收。
     //   只读 case_revenue_lines 算扣率、**不写收入侧**（保护 golden）。
     //   不变量（防重复计）：漏收的补收只经补收单进实收，**绝不把这笔钱回填 case_revenue**——

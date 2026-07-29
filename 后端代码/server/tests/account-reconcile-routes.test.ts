@@ -792,4 +792,71 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
       确认实收: expect.any(Number),
     })
   })
+
+  it('collect 非法 collectedMonth 稳定 400 且零写（R7 严格月校验），合法值照旧入账', async () => {
+    // R7 P1-2：collectedMonth 复用严格 YYYY-(01..12) 校验——非法值 HTTP 400 且
+    // 补收单行与审计台账双零写（before/after 快照逐字段相等）；合法值不受影响。
+    const CM_PARTNER = 'PT-RECON-CM'
+    const CM_STMT = 'stmt-recon-cm-v1'
+    const CM_RECON = 'recon-cm-v1'
+    const cmBinding = {
+      partnerId: CM_PARTNER,
+      settlementMonth: FB_MONTH,
+      statementGenerationId: CM_STMT,
+      reconcileGenerationId: CM_RECON,
+    }
+    const db = await getDb()
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-CM', '严格月校验医院', 1)`).run(CM_PARTNER)
+    seedStatementGeneration(db, CM_PARTNER, FB_MONTH, CM_STMT, [
+      { caseNo: 'D1-cm', item: '免疫组化染色*3', amount: 300 },
+    ])
+    db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run('l-cm-d1', 'D1-cm', CM_PARTNER, '免疫组化染色', 3, 100, FB_MONTH)
+    db.prepare(`INSERT OR IGNORE INTO lis_cases (id, case_no, partner_id, ihc_count, special_stain_count, operate_time) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('lc-cm-d1', 'D1-cm', CM_PARTNER, 5, 0, `${FB_MONTH}-10`)
+
+    const computed = await auth(request(app).post('/api/v1/account-reconcile/compute').send(cmBinding))
+    expect(computed.status).toBe(200)
+    const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(cmBinding))
+    const cmDiff = (wb.body.data.diffs as Array<{ id: string }>)[0]
+    const verdict = await auth(request(app).post(`/api/v1/account-reconcile/diffs/${cmDiff.id}/verdict`).send({
+      ...cmBinding,
+      reason: '漏收，需补收',
+    }))
+    expect(verdict.status).toBe(200)
+    const supplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(cmDiff.id) as { id: string }
+    const approved = await request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplement.id}/approve`)
+      .set('Authorization', `Bearer ${reviewerToken}`)
+      .send({})
+    expect(approved.status).toBe(200)
+
+    const snapshot = () => db.prepare(
+      `SELECT status, collected_at, collected_month, collected_revenue FROM supplement_orders WHERE id = ?`,
+    ).get(supplement.id)
+    const auditCount = () => (db.prepare(
+      `SELECT COUNT(*) AS n FROM abc_audit_logs WHERE action = 'supplement_collect' AND target_id = ?`,
+    ).get(supplement.id) as { n: number }).n
+    const before = snapshot()
+    const auditBefore = auditCount()
+    expect(before).toMatchObject({ status: '待补收', collected_month: null })
+
+    for (const collectedMonth of ['2026-13', '2026-00', '2026-1', 'abc']) {
+      const refused = await auth(request(app)
+        .post(`/api/v1/account-reconcile/supplements/${supplement.id}/collect`)
+        .send({ collectedMonth }))
+      expect(refused.status).toBe(400)
+      expect(refused.body.error.code).toBe('INVALID_COLLECTED_MONTH')
+      expect(snapshot()).toEqual(before)
+      expect(auditCount()).toBe(auditBefore)
+    }
+
+    const collected = await auth(request(app)
+      .post(`/api/v1/account-reconcile/supplements/${supplement.id}/collect`)
+      .send({ collectedMonth: '2026-12' }))
+    expect(collected.status).toBe(200)
+    expect(snapshot()).toMatchObject({ status: '已补收', collected_month: '2026-12' })
+  })
 })

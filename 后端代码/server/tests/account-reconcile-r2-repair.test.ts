@@ -2124,3 +2124,82 @@ describe('LOC-005 R6 partner/month identity closure', () => {
     }, /IMMUTABLE_RECONCILIATION_FACT/)
   })
 })
+
+describe('LOC-005 R7 diff-anchored boot scan and collected-month integrity', () => {
+  it('fails startup on supplement-less diff identity drift (diff-anchored scan)', () => {
+    // R7 P1-1：启动扫描独立锚定所有已绑代 diff——supplement 锚定探针对无补收单引用的
+    // diff（本夹具 nextDiff）天然失明；generation 悬空/hospital_month_id/partner_id/
+    // service_month 四种漂移各备一枚探针库，必须在 trigger 重装前 fail-closed。
+    const fixture = seedSupersededWithSurvivingDiff('r7-diff-scan')
+    const injections: Array<{ label: string; sql: string; value: string }> = [
+      { label: 'partner', sql: 'UPDATE reconcile_diffs SET partner_id = ? WHERE id = ?', value: 'PT-GHOST-R7' },
+      { label: 'month', sql: 'UPDATE reconcile_diffs SET service_month = ? WHERE id = ?', value: '1999-12' },
+      { label: 'hm', sql: 'UPDATE reconcile_diffs SET hospital_month_id = ? WHERE id = ?', value: 'HM-GHOST-R7' },
+      { label: 'generation', sql: 'UPDATE reconcile_diffs SET reconcile_generation_id = ? WHERE id = ?', value: 'GEN-GHOST-R7' },
+    ]
+    for (const injection of injections) {
+      const probePath = join(testDirectory, `r7-diff-${injection.label}-${++sequence}.sqlite`)
+      db.prepare('VACUUM INTO ?').run(probePath)
+      const probe = new DatabaseSync(probePath)
+      try {
+        probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+        probe.prepare(injection.sql).run(injection.value, fixture.nextDiff.id)
+        expect(() => manager.upgradeAccountReconciliationSchema(probe))
+          .toThrow(/RECONCILE_DIFF_GENERATION_IDENTITY_MISMATCH/)
+      } finally {
+        probe.close()
+      }
+    }
+    // 对照：无漂移拷贝开机放行（扫描不误伤合法库）。
+    const cleanPath = join(testDirectory, `r7-diff-clean-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(cleanPath)
+    const clean = new DatabaseSync(cleanPath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(clean)).not.toThrow()
+    } finally {
+      clean.close()
+    }
+  })
+
+  it('blocks invalid collected_month via DB triggers and rejects startup on legacy dirty rows', () => {
+    // R7 P1-2 第二/三道：DB trigger 拦直接 SQL 非法 collected_month；启动 legacy 扫描
+    // 拦历史脏数据（摘 trigger 注入的脏行在开机时 fail-closed）。合法值对照不误伤。
+    const fixture = seedSupersededWithSurvivingDiff('r7-collected-month')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const supplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string }
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('UPDATE supplement_orders SET collected_month = ? WHERE id = ?')
+        .run('2026-13', supplement.id)
+    }, /SUPPLEMENT_COLLECTED_MONTH_INVALID/)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('INSERT INTO supplement_orders (id, partner_id, service_month, collected_month) VALUES (?, ?, ?, ?)')
+        .run(`SO-R7-DIRTY-${++sequence}`, fixture.nextBinding.partnerId, fixture.nextBinding.settlementMonth, '2026-1')
+    }, /SUPPLEMENT_COLLECTED_MONTH_INVALID/)
+    // 合法值对照：直写放行，随后还原（不污染主库后续用例）。
+    db.prepare('UPDATE supplement_orders SET collected_month = ? WHERE id = ?')
+      .run('2026-10', supplement.id)
+    const written = db.prepare('SELECT collected_month FROM supplement_orders WHERE id = ?')
+      .get(supplement.id) as { collected_month: string }
+    expect(written.collected_month).toBe('2026-10')
+    db.prepare('UPDATE supplement_orders SET collected_month = NULL WHERE id = ?')
+      .run(supplement.id)
+
+    // legacy 扫描：拷贝库内摘 update trigger 注入历史脏行，开机扫描必须拒启并带出行 id。
+    const probePath = join(testDirectory, `r7-collected-legacy-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const probe = new DatabaseSync(probePath)
+    try {
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_update')
+      probe.prepare('UPDATE supplement_orders SET collected_month = ? WHERE id = ?')
+        .run('2026-13', supplement.id)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/SUPPLEMENT_COLLECTED_MONTH_INVALID/)
+    } finally {
+      probe.close()
+    }
+  })
+})
