@@ -612,6 +612,8 @@ function stripIgnoredMarkdown(body) {
   let htmlBlock = null;
   let paragraphOpen = false;
   let paragraphContainer = null;
+  let activeReflectionContentIndent = null;
+  let activeReflectionSawBlank = false;
   const visibleLines = [];
   const lines = normalizeLineEndings(body).split('\n');
 
@@ -637,6 +639,39 @@ function stripIgnoredMarkdown(body) {
         : parsedContainer;
       const syntaxLine = container.content;
       const decodedSyntaxLine = decodeHtmlEntitiesDetailed(syntaxLine).value;
+      if (
+        activeReflectionSawBlank &&
+        Number.isInteger(activeReflectionContentIndent) &&
+        !/^[ \t]*$/u.test(line) &&
+        !isInsideActivePrListItem(
+          line,
+          { bullet: true },
+          activeReflectionContentIndent,
+        )
+      ) {
+        activeReflectionContentIndent = null;
+        activeReflectionSawBlank = false;
+      }
+      if (
+        activeReflectionSawBlank &&
+        Number.isInteger(activeReflectionContentIndent) &&
+        isInsideActivePrListItem(
+          line,
+          { bullet: true },
+          activeReflectionContentIndent,
+        )
+      ) {
+        // Ignored Markdown is only inert when it is independent of a required
+        // reflection field. A code/HTML/fence block at the active list item's
+        // content column is still authored inside that field's container, so
+        // preserve it for collectVisibleFields to fold into the raw wire and
+        // fail closed. This also covers a loose-list continuation after blanks.
+        visibleLines.push(line);
+        paragraphOpen = false;
+        paragraphContainer = null;
+        handled = true;
+        continue;
+      }
       const continuesParagraphIntoLine = Boolean(
         paragraphOpen &&
         (
@@ -734,6 +769,42 @@ function stripIgnoredMarkdown(body) {
       }
 
       visibleLines.push(line);
+      const visibleField = parseVisibleFieldLine(line, { bullet: true });
+      if (
+        Number.isInteger(activeReflectionContentIndent) &&
+        /^[ \t]*$/u.test(line)
+      ) {
+        activeReflectionSawBlank = true;
+      } else if (!/^[ \t]*$/u.test(line)) {
+        activeReflectionSawBlank = false;
+      }
+      if (
+        visibleField?.key &&
+        REFLECTION_FIELD_KEYS.has(visibleField.key)
+      ) {
+        activeReflectionContentIndent = visibleField.bulletContentIndent;
+        activeReflectionSawBlank = false;
+      } else if (
+        Number.isInteger(activeReflectionContentIndent) &&
+        (
+          isOutsideActivePrListItem(line, activeReflectionContentIndent) ||
+          (
+            visibleField?.key &&
+            !REFLECTION_FIELD_KEYS.has(visibleField.key)
+          ) ||
+          (
+            !isInsideActivePrListItem(
+              line,
+              { bullet: true },
+              activeReflectionContentIndent,
+            ) &&
+            interruptsOpenParagraph(line)
+          )
+        )
+      ) {
+        activeReflectionContentIndent = null;
+        activeReflectionSawBlank = false;
+      }
       paragraphOpen = lineOpensParagraph(decodedSyntaxLine, paragraphOpen);
       paragraphContainer = paragraphOpen
         ? continuesParagraphIntoLine
@@ -827,14 +898,45 @@ function collectVisibleFields(body, parseOptions = {}) {
   const continuationBoundaryKeys = parseOptions.continuationBoundaryKeys;
   let activeReflectionKey = null;
   let activeReflectionContentIndent = null;
+  let activeReflectionPendingBlankLines = 0;
 
   function appendReflectionContinuation(line) {
-    const rawValue = `${rawValues.get(activeReflectionKey)}\n${line}`;
+    const separator = '\n'.repeat(activeReflectionPendingBlankLines + 1);
+    const rawValue = `${rawValues.get(activeReflectionKey)}${separator}${line}`;
     rawValues.set(activeReflectionKey, rawValue);
     values.set(activeReflectionKey, rawValue);
+    activeReflectionPendingBlankLines = 0;
+  }
+
+  function clearActiveReflection() {
+    activeReflectionKey = null;
+    activeReflectionContentIndent = null;
+    activeReflectionPendingBlankLines = 0;
   }
 
   for (const line of body.split('\n')) {
+    if (
+      activeReflectionKey &&
+      parseOptions.bullet === true &&
+      /^[ \t]*$/u.test(String(line || ''))
+    ) {
+      // A blank line does not by itself leave a CommonMark list item. Defer it
+      // until the next nonblank line proves whether content resumes at the
+      // active item's content column or exits to a peer/root container.
+      activeReflectionPendingBlankLines += 1;
+      continue;
+    }
+    if (
+      activeReflectionKey &&
+      activeReflectionPendingBlankLines > 0 &&
+      !isInsideActivePrListItem(
+        line,
+        parseOptions,
+        activeReflectionContentIndent,
+      )
+    ) {
+      clearActiveReflection();
+    }
     const parsed = parseVisibleFieldLine(line, parseOptions);
     const unknownBoundaryCandidate =
       activeReflectionKey &&
@@ -852,8 +954,7 @@ function collectVisibleFields(body, parseOptions = {}) {
         parseOptions.bullet === true &&
         isOutsideActivePrListItem(line, activeReflectionContentIndent)
       ) {
-        activeReflectionKey = null;
-        activeReflectionContentIndent = null;
+        clearActiveReflection();
         continue;
       }
       if (
@@ -869,7 +970,7 @@ function collectVisibleFields(body, parseOptions = {}) {
             activeReflectionContentIndent,
           )
         ) {
-          activeReflectionKey = null;
+          clearActiveReflection();
         } else if (
           continuesReflectionParagraphInContext(
             line,
@@ -879,7 +980,7 @@ function collectVisibleFields(body, parseOptions = {}) {
         ) {
           appendReflectionContinuation(line);
         } else {
-          activeReflectionKey = null;
+          clearActiveReflection();
         }
         continue;
       }
@@ -893,12 +994,12 @@ function collectVisibleFields(body, parseOptions = {}) {
       ) {
         appendReflectionContinuation(line);
       } else {
-        activeReflectionKey = null;
+        clearActiveReflection();
       }
       continue;
     }
     if (parsed.malformed) {
-      activeReflectionKey = null;
+      clearActiveReflection();
       malformed.push(parsed.malformedReason || 'unsafe-parse');
       continue;
     }
@@ -912,7 +1013,7 @@ function collectVisibleFields(body, parseOptions = {}) {
       ) {
         appendReflectionContinuation(line);
       } else {
-        activeReflectionKey = null;
+        clearActiveReflection();
       }
       continue;
     }
@@ -956,7 +1057,7 @@ function collectVisibleFields(body, parseOptions = {}) {
       appendReflectionContinuation(line);
       continue;
     }
-    activeReflectionKey = null;
+    clearActiveReflection();
     if (!parsed.key) continue;
     if (values.has(parsed.key)) duplicates.add(parsed.key);
     else {

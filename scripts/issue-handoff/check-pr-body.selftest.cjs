@@ -805,7 +805,23 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       ),
       /我现在最没把握的是什么|Least confidence/,
     );
+    expectFail(
+      `${endingName}/${payloadName}: blank-separated nested content remains in reflection raw`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}${lineEnding}${payload}`,
+      ),
+      /我现在最没把握的是什么|Least confidence/,
+    );
   }
+  expectPass(
+    `${endingName}: a one-space peer after a blank line exits the active list item`,
+    validBody.replace(
+      leastConfidenceLine,
+      `${leastConfidenceLine}${lineEnding}${lineEnding} - **custom-note**: value`,
+    ),
+    [128],
+  );
   expectFail(
     `${endingName}: a required reflection field relocated inside the active list item remains raw`,
     validBody
@@ -823,7 +839,33 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       .replace(
         leastConfidenceLine,
         `${leastConfidenceLine}${lineEnding}\t${biggestMissingLine}`,
-      ),
+    ),
+    /我现在最没把握的是什么|Least confidence/,
+  );
+  expectFail(
+    `${endingName}: a blank-separated required field remains in the active list item raw`,
+    validBody
+      .replace(biggestMissingLine, '')
+      .replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}${lineEnding}  ${biggestMissingLine}`,
+    ),
+    /我现在最没把握的是什么|Least confidence/,
+  );
+  expectFail(
+    `${endingName}: a blank-separated fenced block remains in the active list item raw`,
+    validBody.replace(
+      leastConfidenceLine,
+      `${leastConfidenceLine}${lineEnding}${lineEnding}  \`\`\`md${lineEnding}  x=42${lineEnding}  \`\`\``,
+    ),
+    /我现在最没把握的是什么|Least confidence/,
+  );
+  expectFail(
+    `${endingName}: a blank-separated HTML block remains in the active list item raw`,
+    validBody.replace(
+      leastConfidenceLine,
+      `${leastConfidenceLine}${lineEnding}${lineEnding}  <div>${lineEnding}  x=42${lineEnding}  </div>`,
+    ),
     /我现在最没把握的是什么|Least confidence/,
   );
 }
