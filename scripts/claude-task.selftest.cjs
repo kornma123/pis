@@ -11,6 +11,7 @@ const {
   assertSafeGitCommand,
   assertSafeNodeCommand,
   classifyIssueDeliveryContract,
+  collectHandoffFields,
   findScopeViolations,
   handoffFieldErrors,
   isHarnessMemoryPath,
@@ -705,12 +706,62 @@ ${prStrongLeastConfidenceLine}
     );
   const handoffOk = handoffFieldErrors(handoffBody).length === 0;
   const prOk = validatePrBody(prBody).ok;
-  if (!handoffOk || !prOk || handoffOk !== prOk) {
+  if (handoffOk || prOk || handoffOk !== prOk) {
     reflectionRegressionFailures.push(
-      `${name}: visible field rejected (handoff=${handoffOk}, pr=${prOk})`,
+      `${name}: visible multiline-link tail was ignored ` +
+      `(handoff=${handoffOk}, pr=${prOk})`,
     );
   }
 }
+const lazyContinuationPayloads = [
+  ['plain text', 'lazy continuation'],
+  ['raw Tab', 'lazy\tcontinuation'],
+  ['named Tab entity', 'lazy&Tab;continuation'],
+  ['numeric Tab entity', 'lazy&#9;continuation'],
+  ['nested named Tab entity', 'lazy&amp;Tab;continuation'],
+  ['nested numeric Tab entity', 'lazy&amp;#9;continuation'],
+];
+const lazyContinuationLineEndings = [
+  ['LF', '\n'],
+  ['CRLF', '\r\n'],
+  ['lone CR', '\r'],
+];
+for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
+  for (const [payloadName, payload] of lazyContinuationPayloads) {
+    const direct = parseReflectionContract(
+      `${strongLeastConfidence}${lineEnding}${payload}`,
+    );
+    const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${payload}`,
+      );
+    const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        prStrongLeastConfidenceLine,
+        `${prStrongLeastConfidenceLine}${lineEnding}  ${payload}`,
+      );
+    const handoffOk = handoffFieldErrors(handoffBody).length === 0;
+    const prOk = validatePrBody(prBody).ok;
+    if (direct.ok || handoffOk || prOk || handoffOk !== prOk) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName}: lazy continuation bypassed validation ` +
+        `(direct=${direct.ok}, handoff=${handoffOk}, pr=${prOk})`,
+      );
+    }
+  }
+}
+const rawLazyHandoffFields = collectHandoffFields(
+  reflectionHandoff(strongLeastConfidence, strongBiggestMissing).replace(
+    handoffStrongLeastConfidenceLine,
+    `${handoffStrongLeastConfidenceLine}\nlazy&amp;Tab;continuation`,
+  ),
+);
+assert.equal(
+  rawLazyHandoffFields.rawValues.get('least-confidence'),
+  `${strongLeastConfidence}\nlazy&amp;Tab;continuation`,
+  'Issue collector must preserve the complete raw multiline reflection without predecoding',
+);
 for (const [name, wrap] of [
   ['list-fence hidden strong value', wrapListFence],
   ['raw-pre hidden strong value', (body) => wrapRawHtmlBlock('pre', body)],
@@ -2386,6 +2437,33 @@ for (const [name, value] of structuralTabInvalidContracts) {
     reflectionRegressionFailures.push(
       `${name} lifecycle missed least-confidence error: ${lifecycle.stderr}`,
     );
+  }
+}
+for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
+  for (const [payloadName, payload] of lazyContinuationPayloads) {
+    const lifecycle = runIsolatedHandoff(
+      strongLeastConfidence,
+      (body) => body.replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${payload}`,
+      ),
+    );
+    if (lifecycle.status !== 1) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} lifecycle expected exit=1, actual=${lifecycle.status}`,
+      );
+    }
+    if (!lifecycle.stateExists) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} lifecycle deleted active task state`,
+      );
+    }
+    if (!/least-confidence/.test(lifecycle.stderr)) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} lifecycle missed least-confidence error: ` +
+        lifecycle.stderr,
+      );
+    }
   }
 }
 const observationNoFindingHandoff = runIsolatedHandoff('暂未观察到异常');

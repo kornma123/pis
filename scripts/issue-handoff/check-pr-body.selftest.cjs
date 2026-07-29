@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
+  collectFields,
   parseReflectionContract,
   parseVisibleFieldLine,
   stripIgnoredMarkdown,
@@ -453,8 +454,8 @@ expectPass(
 ${validBody.trimStart()}`,
   [128],
 );
-expectPass(
-  'multiline link-reference label cannot interrupt a paragraph',
+expectFail(
+  'visible multiline-link tail is part of the reflection paragraph',
   validBody.replace(
     leastConfidenceLine,
     `paragraph continuation
@@ -462,17 +463,17 @@ expectPass(
 ${leastConfidenceLine}
 ]: /least`,
   ),
-  [128],
+  /我现在最没把握的是什么|Least confidence/,
 );
-expectPass(
-  'multiline link-reference label ends when its blockquote container exits',
+expectFail(
+  'container-exit multiline-link tail is part of the reflection paragraph',
   validBody.replace(
     leastConfidenceLine,
     `> [
 ${leastConfidenceLine}
 ]: /least`,
   ),
-  [128],
+  /我现在最没把握的是什么|Least confidence/,
 );
 for (const [name, wrap] of [
   ['list-fence hidden strong value', wrapListFence],
@@ -537,6 +538,56 @@ assert.equal(Buffer.byteLength(encodedRawWire4097, 'utf8'), 4_097);
 assert.equal(parseReflectionContract(encodedRawWire6KiB).reason, 'contract-too-long');
 assert.equal(parseReflectionContract(encodedRawWire4096).ok, true);
 assert.equal(parseReflectionContract(encodedRawWire4097).reason, 'contract-too-long');
+const lazyContinuationPayloads = [
+  ['plain text', 'lazy continuation'],
+  ['raw Tab', 'lazy\tcontinuation'],
+  ['named Tab entity', 'lazy&Tab;continuation'],
+  ['numeric Tab entity', 'lazy&#9;continuation'],
+  ['nested named Tab entity', 'lazy&amp;Tab;continuation'],
+  ['nested numeric Tab entity', 'lazy&amp;#9;continuation'],
+];
+const lazyContinuationLineEndings = [
+  ['LF', '\n'],
+  ['CRLF', '\r\n'],
+  ['lone CR', '\r'],
+];
+for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
+  for (const [payloadName, payload] of lazyContinuationPayloads) {
+    assert.equal(
+      parseReflectionContract(`${typedRisk}${lineEnding}${payload}`).ok,
+      false,
+      `${endingName}/${payloadName}: direct parser must reject a multiline raw value`,
+    );
+    expectFail(
+      `${endingName}/${payloadName}: least-confidence lazy continuation fails closed`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}  ${payload}`,
+      ),
+      /我现在最没把握的是什么|Least confidence/,
+    );
+    expectFail(
+      `${endingName}/${payloadName}: biggest-missing lazy continuation fails closed`,
+      validBody.replace(
+        biggestMissingLine,
+        `${biggestMissingLine}${lineEnding}  ${payload}`,
+      ),
+      /我可能遗漏的最大问题是什么|Biggest missing/,
+    );
+  }
+}
+const rawLazyPrFields = collectFields(stripIgnoredMarkdown(
+  validBody.replace(
+    leastConfidenceLine,
+    `${leastConfidenceLine}\n  lazy&amp;Tab;continuation`,
+  ),
+));
+const leastConfidenceKey = parseVisibleFieldLine(leastConfidenceLine, { bullet: true }).key;
+assert.equal(
+  rawLazyPrFields.rawValues.get(leastConfidenceKey),
+  `${VALID_LEAST_CONFIDENCE}\n  lazy&amp;Tab;continuation`,
+  'PR collector must preserve the complete raw multiline reflection without predecoding',
+);
 const rawVisibleReflection = parseVisibleFieldLine(
   `least-confidence&amp;#58; ${rawWirePrefix}&#120;`,
   { allowEquals: true },

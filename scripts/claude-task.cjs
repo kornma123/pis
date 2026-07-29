@@ -6,8 +6,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const {
+  collectVisibleFields,
   isWeakReflection,
-  parseVisibleFieldLine,
   stripIgnoredMarkdown,
 } = require('./issue-handoff/check-pr-body.cjs');
 
@@ -22,6 +22,15 @@ const HANDOFF_STATUSES = new Set([
 ]);
 const STATE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const LIVE_RECHECK_MS = 10 * 60 * 1000;
+const HANDOFF_CONTINUATION_BOUNDARY_KEYS = new Set([
+  'result',
+  'evidence',
+  'risk',
+  'next-owner',
+  'trigger',
+  'least-confidence',
+  'biggest-missing',
+]);
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -318,27 +327,14 @@ function parsePmApprovalMarker(body) {
 }
 
 function collectHandoffFields(body) {
-  const values = new Map();
-  const rawValues = new Map();
-  const duplicates = new Set();
-  const malformed = [];
-
-  for (const line of stripIgnoredMarkdown(String(body || '')).split(/\r?\n/)) {
-    const parsed = parseVisibleFieldLine(line, { allowEquals: true });
-    if (!parsed) continue;
-    if (parsed.malformed) {
-      malformed.push(parsed.malformedReason || 'unsafe-parse');
-      continue;
-    }
-    if (!parsed.key) continue;
-    if (values.has(parsed.key)) duplicates.add(parsed.key);
-    else {
-      values.set(parsed.key, parsed.value);
-      rawValues.set(parsed.key, parsed.rawValue);
-    }
-  }
-
-  return { values, rawValues, duplicates, malformed };
+  return collectVisibleFields(
+    stripIgnoredMarkdown(String(body || '')),
+    {
+      allowEquals: true,
+      allowUnknownFieldBoundaries: true,
+      continuationBoundaryKeys: HANDOFF_CONTINUATION_BOUNDARY_KEYS,
+    },
+  );
 }
 
 function handoffFieldErrors(body) {

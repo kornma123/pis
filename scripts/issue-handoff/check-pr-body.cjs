@@ -669,28 +669,75 @@ function stripIgnoredMarkdown(body) {
   return visibleLines.join('\n');
 }
 
-function collectFields(body) {
+function continuesVisibleReflectionParagraph(line) {
+  const value = String(line || '');
+  if (/^[ \t]*$/u.test(value)) return false;
+  return !startsNonParagraphBlock(value);
+}
+
+function collectVisibleFields(body, parseOptions = {}) {
   const values = new Map();
   const rawValues = new Map();
   const duplicates = new Set();
   const malformed = [];
+  const continuationBoundaryKeys = parseOptions.continuationBoundaryKeys;
+  let activeReflectionKey = null;
+
+  function appendReflectionContinuation(line) {
+    const rawValue = `${rawValues.get(activeReflectionKey)}\n${line}`;
+    rawValues.set(activeReflectionKey, rawValue);
+    values.set(activeReflectionKey, rawValue);
+  }
 
   for (const line of body.split('\n')) {
-    const parsed = parseVisibleFieldLine(line, { bullet: true });
-    if (!parsed) continue;
+    const parsed = parseVisibleFieldLine(line, parseOptions);
+    if (!parsed) {
+      if (
+        activeReflectionKey &&
+        continuesVisibleReflectionParagraph(line)
+      ) {
+        appendReflectionContinuation(line);
+      } else {
+        activeReflectionKey = null;
+      }
+      continue;
+    }
     if (parsed.malformed) {
+      activeReflectionKey = null;
       malformed.push(parsed.malformedReason || 'unsafe-parse');
       continue;
     }
+    const isUnknownFieldBoundary =
+      parseOptions.allowUnknownFieldBoundaries === true &&
+      /^[a-z][a-z0-9_-]*$/iu.test(parsed.key);
+    if (
+      activeReflectionKey &&
+      parsed.key &&
+      continuationBoundaryKeys instanceof Set &&
+      !continuationBoundaryKeys.has(parsed.key) &&
+      !isUnknownFieldBoundary &&
+      continuesVisibleReflectionParagraph(line)
+    ) {
+      appendReflectionContinuation(line);
+      continue;
+    }
+    activeReflectionKey = null;
     if (!parsed.key) continue;
     if (values.has(parsed.key)) duplicates.add(parsed.key);
     else {
       values.set(parsed.key, parsed.value);
       rawValues.set(parsed.key, parsed.rawValue);
+      if (REFLECTION_FIELD_KEYS.has(parsed.key)) {
+        activeReflectionKey = parsed.key;
+      }
     }
   }
 
   return { values, rawValues, duplicates, malformed };
+}
+
+function collectFields(body) {
+  return collectVisibleFields(body, { bullet: true });
 }
 
 function getField(fields, aliases, source = 'values') {
@@ -1356,6 +1403,7 @@ module.exports = {
   canonicalizeMarkdownText,
   canonicalizeFieldKey,
   collectFields,
+  collectVisibleFields,
   decodeHtmlEntities,
   isPlaceholder,
   isWeakReflection,
