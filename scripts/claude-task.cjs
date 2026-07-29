@@ -6,8 +6,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const {
-  canonicalizeMarkdownText,
   isWeakReflection,
+  parseVisibleFieldLine,
   stripIgnoredMarkdown,
 } = require('./issue-handoff/check-pr-body.cjs');
 
@@ -314,22 +314,27 @@ function parsePmApprovalMarker(body) {
 function collectHandoffFields(body) {
   const values = new Map();
   const duplicates = new Set();
+  const malformed = [];
 
   for (const line of stripIgnoredMarkdown(String(body || '')).split(/\r?\n/)) {
-    const match = line.match(/^ {0,3}([^:=：]+?)\s*[:=：]\s*(.*)$/u);
-    if (!match) continue;
-
-    const field = canonicalizeMarkdownText(match[1]).toLowerCase();
-    if (values.has(field)) duplicates.add(field);
-    else values.set(field, match[2].trim());
+    const parsed = parseVisibleFieldLine(line, { allowEquals: true });
+    if (!parsed) continue;
+    if (parsed.malformed) {
+      malformed.push(line);
+      continue;
+    }
+    if (!parsed.key) continue;
+    if (values.has(parsed.key)) duplicates.add(parsed.key);
+    else values.set(parsed.key, parsed.value);
   }
 
-  return { values, duplicates };
+  return { values, duplicates, malformed };
 }
 
 function handoffFieldErrors(body) {
   const errors = [];
   const fields = collectHandoffFields(body);
+  if (fields.malformed.length > 0) errors.push('field-key');
   for (const field of [
     'result',
     'evidence',

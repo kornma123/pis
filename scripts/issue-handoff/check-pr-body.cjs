@@ -42,12 +42,15 @@ const FOLLOW_UP_PATTERN = /#(\d+)\b/g;
 const HTML_ENTITIES = new Map([
   ['amp', '&'],
   ['apos', "'"],
+  ['colon', ':'],
   ['emsp', ' '],
   ['ensp', ' '],
   ['gt', '>'],
+  ['invisibletimes', '\u2062'],
   ['lt', '<'],
   ['nbsp', ' '],
   ['newline', '\n'],
+  ['nobreak', '\u2060'],
   ['quot', '"'],
   ['tab', '\t'],
   ['thinsp', ' '],
@@ -57,7 +60,7 @@ const HTML_ENTITIES = new Map([
 ]);
 
 function normalizeLabel(label) {
-  return canonicalizeMarkdownText(label).toLowerCase();
+  return canonicalizeFieldKey(label);
 }
 
 function stripHtmlComments(body) {
@@ -121,25 +124,21 @@ function stripIgnoredMarkdown(body) {
 function collectFields(body) {
   const values = new Map();
   const duplicates = new Set();
+  const malformed = [];
 
   for (const line of body.split(/\r?\n/)) {
-    if (!/^ {0,3}-\s+/.test(line)) continue;
-
-    const content = line.replace(/^ {0,3}-\s+/, '');
-    const asciiColon = content.indexOf(':');
-    const fullWidthColon = content.indexOf('：');
-    const indexes = [asciiColon, fullWidthColon].filter((index) => index >= 0);
-    if (indexes.length === 0) continue;
-
-    const colonIndex = Math.min(...indexes);
-    const label = normalizeLabel(content.slice(0, colonIndex));
-    const value = content.slice(colonIndex + 1).trim();
-    if (!label) continue;
-    if (values.has(label)) duplicates.add(label);
-    else values.set(label, value);
+    const parsed = parseVisibleFieldLine(line, { bullet: true });
+    if (!parsed) continue;
+    if (parsed.malformed) {
+      malformed.push(line);
+      continue;
+    }
+    if (!parsed.key) continue;
+    if (values.has(parsed.key)) duplicates.add(parsed.key);
+    else values.set(parsed.key, parsed.value);
   }
 
-  return { values, duplicates };
+  return { values, duplicates, malformed };
 }
 
 function getField(fields, aliases) {
@@ -150,7 +149,7 @@ function getField(fields, aliases) {
   return undefined;
 }
 
-function decodeHtmlEntities(value) {
+function decodeHtmlEntitiesDetailed(value) {
   let decoded = String(value || '');
 
   for (let pass = 0; pass < 8; pass += 1) {
@@ -167,7 +166,7 @@ function decodeHtmlEntities(value) {
           ) {
             return String.fromCodePoint(codePoint);
           }
-          return '';
+          return match;
         }
         return HTML_ENTITIES.get(named.toLowerCase()) ?? match;
       },
@@ -176,32 +175,99 @@ function decodeHtmlEntities(value) {
     decoded = next;
   }
 
-  return decoded;
+  return {
+    value: decoded,
+    unresolved: /&(?:#(?:\d+|x[0-9a-f]+)|[a-z][a-z0-9]+);/i.test(decoded),
+  };
+}
+
+function decodeHtmlEntities(value) {
+  return decodeHtmlEntitiesDetailed(value).value;
+}
+
+function stripPairedInlineWrappers(value) {
+  let clean = String(value || '');
+  for (let pass = 0; pass < 4; pass += 1) {
+    const next = clean
+      .replace(/(?<![\p{L}\p{N}])(\*\*|__|~~|`)(?=\S)([^\n]*?\S)\1(?![\p{L}\p{N}])/gu, '$2')
+      .replace(/(?<![\p{L}\p{N}*_])([*_])(?=\S)([^*_\n]*?\S)\1(?![\p{L}\p{N}*_])/gu, '$2');
+    if (next === clean) break;
+    clean = next;
+  }
+  return clean;
+}
+
+function normalizeDecodedInline(value) {
+  return stripPairedInlineWrappers(
+    String(value || '')
+      .normalize('NFKC')
+      .replace(/\p{Default_Ignorable_Code_Point}/gu, '')
+      .replace(/<\/?(?:b|code|del|em|i|kbd|mark|s|span|strike|strong|u)(?=[\s/>])[^>]*>/gi, ''),
+  )
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function canonicalizeFieldKeyDetailed(value) {
+  const decoded = decodeHtmlEntitiesDetailed(value);
+  return {
+    key: normalizeDecodedInline(decoded.value).toLowerCase(),
+    unresolved: decoded.unresolved,
+  };
+}
+
+function canonicalizeFieldKey(value) {
+  return canonicalizeFieldKeyDetailed(value).key;
 }
 
 function canonicalizeMarkdownText(value) {
-  return decodeHtmlEntities(value)
-    .normalize('NFKC')
-    .replace(/\p{Default_Ignorable_Code_Point}/gu, '')
-    .replace(/<\/?(?:b|code|del|em|i|kbd|mark|s|span|strike|strong|u)\b[^>]*>/gi, '')
-    .replace(/[*_~`]+/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeDecodedInline(decodeHtmlEntities(value));
 }
 
 function normalizeFieldValue(value) {
   return canonicalizeMarkdownText(value);
 }
 
-function hasUnresolvedNamedEntity(value) {
-  return /&[a-z][a-z0-9]+;/i.test(value);
+function parseVisibleFieldLine(line, options = {}) {
+  const rawLine = String(line || '');
+  let content;
+  if (options.bullet) {
+    const bullet = rawLine.match(/^ {0,3}-\s+([\s\S]*)$/u);
+    if (!bullet) return null;
+    content = bullet[1];
+  } else {
+    const plain = rawLine.match(/^ {0,3}([\s\S]*)$/u);
+    if (!plain) return null;
+    content = plain[1];
+  }
+
+  const decoded = decodeHtmlEntitiesDetailed(content);
+  const delimiters = options.allowEquals ? /[:=：]/u : /[:：]/u;
+  const delimiter = decoded.value.match(delimiters);
+  if (!delimiter) {
+    return decoded.unresolved ? { key: '', value: '', malformed: true } : null;
+  }
+
+  const delimiterIndex = delimiter.index;
+  const key = canonicalizeFieldKeyDetailed(decoded.value.slice(0, delimiterIndex));
+  return {
+    key: key.key,
+    value: decoded.value.slice(delimiterIndex + delimiter[0].length).trim(),
+    malformed: key.unresolved,
+  };
+}
+
+function hasUnresolvedEntity(value) {
+  return /&(?:#(?:\d+|x[0-9a-f]+)|[a-z][a-z0-9]+);/i.test(value);
 }
 
 function isExplicitPlaceholder(value) {
   if (!value) return true;
-  if (hasUnresolvedNamedEntity(value)) return true;
+  if (hasUnresolvedEntity(value)) return true;
   if (/^#?[_\-.…]+$/u.test(value)) return true;
-  if (/^<[^>]+>$/.test(value)) return true;
+  if (/^<\s*(?:todo|tbd|placeholder|none|nil|n\/?a|待填(?:写)?|待补(?:充)?|待定)\s*>$/iu.test(value)) {
+    return true;
+  }
   if (/^(?:none|nil|n\/?a)$/i.test(value)) return true;
   if (/\b(?:todo|tbd|placeholder)\b/i.test(value)) return true;
   return /^(?:待填(?:写)?|待补(?:充)?|待定|稍后(?:填写|补充)|后续(?:填写|补充)|以后(?:填写|补充))(?:$|[\s:：,，。.!！_-])/u.test(
@@ -218,7 +284,9 @@ function isPlaceholder(value) {
 function hasSubstantiveScope(value) {
   const clean = canonicalizeMarkdownText(value);
   if (isExplicitPlaceholder(clean) || !/[\p{L}\p{N}]/u.test(clean)) return false;
-  return !/^(?:内容|事项|项目|范围|相关内容|相关事项|上述|以上)$/u.test(clean);
+  if (/^(?:内容|事项|项目|范围|相关内容|相关事项|上述|以上)$/u.test(clean)) return false;
+  const compact = clean.replace(/[\s:：,，、/\\()[\]{}<>《》“”"'`-]+/gu, '');
+  return !/^(?:检查|核对|验证|审查|覆盖|复核|查看|确认|评估|分析|调查|测试|执行|处理|跟进|完成|过|了)+$/u.test(compact);
 }
 
 function hasBoundedNoFindingScopes(value) {
@@ -291,6 +359,9 @@ function validatePrBody(bodyInput) {
   }
 
   const fields = collectFields(body);
+  if (fields.malformed.length > 0) {
+    errors.push('字段键无法安全解析；请使用可见的标准字段名与分隔符。');
+  }
   const protectedLabels = new Set([
     'Issue',
     ...REQUIRED_FIELDS.flat(),
@@ -428,11 +499,13 @@ if (require.main === module) main();
 
 module.exports = {
   canonicalizeMarkdownText,
+  canonicalizeFieldKey,
   collectFields,
   decodeHtmlEntities,
   isPlaceholder,
   isWeakReflection,
   normalizeFieldValue,
+  parseVisibleFieldLine,
   stripIgnoredMarkdown,
   validatePrBody,
 };

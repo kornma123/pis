@@ -184,6 +184,91 @@ expectFail(
   ),
   /必填字段重复：我现在最没把握的是什么/,
 );
+for (const [name, encodedLabel] of [
+  ['unresolved named entity after canonical field', 'Least confid&amp;NoBreak;ence'],
+  ['nested unresolved named entity after canonical field', 'Least confid&amp;amp;NoBreak;ence'],
+]) {
+  expectFail(
+    name,
+    validBody.replace(
+      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+        `- **我现在最没把握的是什么？ / ${encodedLabel}**: TODO later fill this`,
+    ),
+    /字段|重复/,
+  );
+  expectFail(
+    `${name}, encoded field first`,
+    validBody.replace(
+      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+      `- **我现在最没把握的是什么？ / ${encodedLabel}**: TODO later fill this\n` +
+        '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    ),
+    /字段|重复/,
+  );
+}
+for (const [name, encodedDelimiter] of [
+  ['numeric encoded delimiter', '&amp;#58;'],
+  ['named encoded delimiter', '&amp;colon;'],
+]) {
+  expectFail(
+    `${name} cannot hide duplicate after canonical field`,
+    validBody.replace(
+      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+        `- **我现在最没把握的是什么？ / Least confidence**${encodedDelimiter} TODO later fill this`,
+    ),
+    /字段|重复/,
+  );
+  expectFail(
+    `${name} cannot hide duplicate before canonical field`,
+    validBody.replace(
+      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+      `- **我现在最没把握的是什么？ / Least confidence**${encodedDelimiter} TODO later fill this\n` +
+        '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    ),
+    /字段|重复/,
+  );
+}
+expectPass(
+  'internal underscore does not collide with required key',
+  validBody.replace(
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+    '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测\n' +
+      '- **我现在最没把握的是什么？ / Least_confidence**: TODO later fill this',
+  ),
+  [128],
+);
+expectPass(
+  'NFKC-equivalent required key is recognized',
+  validBody.replace(
+    '我现在最没把握的是什么？ / Least confidence',
+    '我现在最没把握的是什么？ / Ｌｅａｓｔ ｃｏｎｆｉｄｅｎｃｅ',
+  ),
+  [128],
+);
+for (const [name, first, second] of [
+  [
+    'NFKC duplicate with canonical key first',
+    'Least confidence',
+    'Ｌｅａｓｔ ｃｏｎｆｉｄｅｎｃｅ',
+  ],
+  [
+    'NFKC duplicate with fullwidth key first',
+    'Ｌｅａｓｔ ｃｏｎｆｉｄｅｎｃｅ',
+    'Least confidence',
+  ],
+]) {
+  expectFail(
+    name,
+    validBody.replace(
+      '- **我现在最没把握的是什么？ / Least confidence**: 生产限速参数尚未在目标环境实测',
+      `- **我现在最没把握的是什么？ / ${first}**: 生产限速参数尚未在目标环境实测\n` +
+        `- **我现在最没把握的是什么？ / ${second}**: TODO later fill this`,
+    ),
+    /必填字段重复：我现在最没把握的是什么/,
+  );
+}
 for (const [name, placeholder] of [
   ['long explicit placeholder', 'TODO later fill this'],
   ['HTML-entity placeholder', 'T&#79;DO later fill this'],
@@ -195,6 +280,7 @@ for (const [name, placeholder] of [
   ['inline-code-wrapped TODO', '`TODO` later fill this'],
   ['encoded HTML-wrapped TODO', '&lt;strong&gt;TODO&lt;/strong&gt; later fill this'],
   ['default-ignorable TODO', 'T\uFE0FO\u034FD\uFE0FO later fill this'],
+  ['fullwidth NFKC TODO', 'ＴＯＤＯ later fill this'],
   ['prefixed TODO', '风险：TODO later fill this'],
   ['pure punctuation', '?'],
   ['generic risk word', '风险'],
@@ -215,11 +301,29 @@ expectFail(
   replaceLeastConfidence(validBody, '未发现；已检查；未检查'),
   /反盲区字段回答过弱.*我现在最没把握的是什么/,
 );
+expectFail(
+  'no-finding rejects checked and unchecked action-only scopes',
+  replaceLeastConfidence(validBody, '未发现；已检查验证；未检查审查'),
+  /反盲区字段回答过弱.*我现在最没把握的是什么/,
+);
+expectFail(
+  'no-finding rejects alternate action-only scopes',
+  replaceLeastConfidence(validBody, '没有发现；已经核对过覆盖；仍未验证检查'),
+  /反盲区字段回答过弱.*我现在最没把握的是什么/,
+);
 expectPass(
   'bounded no-finding requires checked and unchecked scopes',
   replaceBiggestMissing(
     replaceLeastConfidence(validBody, '未发现；已检查目标代码与测试，尚未检查生产参数'),
     '未发现；已核对仓库调用链，未核对仓库外集成',
+  ),
+  [128],
+);
+expectPass(
+  'HTML-like product names and ampersand remain substantive scopes',
+  replaceLeastConfidence(
+    validBody,
+    '未发现；已检查&lt;code-v2&gt;与R&amp;D，未检查&lt;span-v3&gt;',
   ),
   [128],
 );

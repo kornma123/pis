@@ -227,13 +227,21 @@ const adversarialReflectionCorpus = [
   ['inline-code-wrapped TODO', '`TODO` later fill this', false],
   ['encoded HTML-wrapped TODO', '&lt;strong&gt;TODO&lt;/strong&gt; later fill this', false],
   ['default-ignorable TODO', 'T\uFE0FO\u034FD\uFE0FO later fill this', false],
+  ['fullwidth NFKC TODO', 'ＴＯＤＯ later fill this', false],
   ['pure punctuation', '?', false],
   ['generic risk word', '风险', false],
   ['prefixed TODO', '风险：TODO later fill this', false],
   ['empty no-finding clauses', '未发现；已检查；未检查', false],
+  ['action-only no-finding scopes', '未发现；已检查验证；未检查审查', false],
+  ['alternate action-only no-finding scopes', '没有发现；已经核对过覆盖；仍未验证检查', false],
   ['short concrete test risk', '测试覆盖不足', true],
   ['short concrete external-call risk', '外部调用未查', true],
   ['substantive bounded no-finding', '未发现；已检查固定对象和测试，未检查生产参数', true],
+  [
+    'HTML-like product scopes',
+    '未发现；已检查&lt;code-v2&gt;与R&amp;D，未检查&lt;span-v3&gt;',
+    true,
+  ],
 ];
 for (const [name, value, expectedOk] of adversarialReflectionCorpus) {
   const handoffErrors = handoffFieldErrors(reflectionHandoff(
@@ -281,10 +289,126 @@ least-confid\uFE0Fence: TODO later fill this
 least-confidence: transaction isolation has only been checked in one runtime
 biggest-missing: an upstream schema owner may still change the contract`,
   ],
+  [
+    'unresolved named weak field after canonical strong duplicate',
+    `${reflectionHandoff(
+      'transaction isolation has only been checked in one runtime',
+      'an upstream schema owner may still change the contract',
+    )}
+least-confid&amp;NoBreak;ence: TODO later fill this`,
+  ],
+  [
+    'unresolved named weak field before canonical strong duplicate',
+    `${completeHandoff}
+least-confid&amp;NoBreak;ence: TODO later fill this
+least-confidence: transaction isolation has only been checked in one runtime
+biggest-missing: an upstream schema owner may still change the contract`,
+  ],
+  [
+    'nested unresolved named weak field after canonical strong duplicate',
+    `${reflectionHandoff(
+      'transaction isolation has only been checked in one runtime',
+      'an upstream schema owner may still change the contract',
+    )}
+least-confid&amp;amp;NoBreak;ence: TODO later fill this`,
+  ],
+  [
+    'nested unresolved named weak field before canonical strong duplicate',
+    `${completeHandoff}
+least-confid&amp;amp;NoBreak;ence: TODO later fill this
+least-confidence: transaction isolation has only been checked in one runtime
+biggest-missing: an upstream schema owner may still change the contract`,
+  ],
+  [
+    'numeric encoded delimiter after canonical strong field',
+    `${reflectionHandoff(
+      'transaction isolation has only been checked in one runtime',
+      'an upstream schema owner may still change the contract',
+    )}
+least-confidence&amp;#58; TODO later fill this`,
+  ],
+  [
+    'numeric encoded delimiter before canonical strong field',
+    `${completeHandoff}
+least-confidence&amp;#58; TODO later fill this
+least-confidence: transaction isolation has only been checked in one runtime
+biggest-missing: an upstream schema owner may still change the contract`,
+  ],
+  [
+    'named encoded delimiter after canonical strong field',
+    `${reflectionHandoff(
+      'transaction isolation has only been checked in one runtime',
+      'an upstream schema owner may still change the contract',
+    )}
+least-confidence&amp;colon; TODO later fill this`,
+  ],
+  [
+    'named encoded delimiter before canonical strong field',
+    `${completeHandoff}
+least-confidence&amp;colon; TODO later fill this
+least-confidence: transaction isolation has only been checked in one runtime
+biggest-missing: an upstream schema owner may still change the contract`,
+  ],
 ]) {
-  if (!handoffFieldErrors(body).includes('least-confidence')) {
+  if (handoffFieldErrors(body).length === 0) {
     reflectionRegressionFailures.push(`${name}: Issue handoff duplicate was accepted`);
   }
+}
+
+if (!handoffFieldErrors(completeHandoff.replace('result:', 'res_ult:')).includes('result')) {
+  reflectionRegressionFailures.push('internal underscore in res_ult was accepted as result');
+}
+if (handoffFieldErrors(`${reflectionHandoff(
+  'transaction isolation has only been checked in one runtime',
+  'an upstream schema owner may still change the contract',
+)}
+res_ult: unrelated informational field`).length !== 0) {
+  reflectionRegressionFailures.push('internal underscore in res_ult collided with result');
+}
+assert.deepEqual(
+  handoffFieldErrors(reflectionHandoff(
+    'transaction isolation has only been checked in one runtime',
+    'an upstream schema owner may still change the contract',
+  ).replace('least-confidence:', 'ｌｅａｓｔ－ｃｏｎｆｉｄｅｎｃｅ:')),
+  [],
+  'NFKC-equivalent required handoff key must be recognized',
+);
+for (const [name, first, second] of [
+  [
+    'NFKC-equivalent handoff duplicate, canonical first',
+    'least-confidence',
+    'ｌｅａｓｔ－ｃｏｎｆｉｄｅｎｃｅ',
+  ],
+  [
+    'NFKC-equivalent handoff duplicate, fullwidth first',
+    'ｌｅａｓｔ－ｃｏｎｆｉｄｅｎｃｅ',
+    'least-confidence',
+  ],
+]) {
+  const body = `${completeHandoff}
+${first}: transaction isolation has only been checked in one runtime
+${second}: TODO later fill this
+biggest-missing: an upstream schema owner may still change the contract`;
+  if (!handoffFieldErrors(body).includes('least-confidence')) {
+    reflectionRegressionFailures.push(`${name} was accepted`);
+  }
+}
+
+const longConcreteRisk = `外部调用未查${'；外部调用未查'.repeat(8_192)}`;
+const lengthBoundaryStartedAt = Date.now();
+const longHandoffErrors = handoffFieldErrors(reflectionHandoff(
+  longConcreteRisk,
+  'an upstream schema owner may still change the contract',
+));
+const longPrResult = validatePrBody(reflectionPrBody(
+  longConcreteRisk,
+  'an upstream schema owner may still change the contract',
+));
+if (longHandoffErrors.length !== 0 || !longPrResult.ok) {
+  reflectionRegressionFailures.push('64KiB concrete reflection boundary was rejected');
+}
+if (Date.now() - lengthBoundaryStartedAt > 2_000) {
+  reflectionRegressionFailures.push('64KiB reflection boundary exceeded 2s');
 }
 
 assert.deepEqual(handoffFieldErrors(completeHandoff), [
@@ -642,8 +766,8 @@ assert.equal(
   2,
 );
 
-function runInvalidHandoffStatePreservation() {
-  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-invalid-handoff-'));
+function runIsolatedHandoff(leastConfidence) {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-handoff-lifecycle-'));
   const repo = path.join(sandbox, 'repo');
   const remote = path.join(sandbox, 'origin.git');
   const fakeBin = path.join(sandbox, 'bin');
@@ -652,6 +776,14 @@ function runInvalidHandoffStatePreservation() {
 <!-- coreone-owner:end -->`;
   const startedAt = new Date(Date.now() - 2_000).toISOString();
   const observedAt = new Date().toISOString();
+  const handoffBody = `[HANDOFF] status=blocked
+result: isolated lifecycle proof
+evidence: local fake GitHub fixture
+risk: release remains blocked
+next-owner: reviewer
+trigger: fixed SHA available
+least-confidence: ${leastConfidence}
+biggest-missing: external caller inventory is incomplete`;
 
   function runGit(args, cwd = repo) {
     const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -703,6 +835,7 @@ function runInvalidHandoffStatePreservation() {
 const args = process.argv.slice(2);
 const issueBody = ${JSON.stringify(issueBody)};
 const observedAt = ${JSON.stringify(observedAt)};
+const handoffBody = ${JSON.stringify(handoffBody)};
 if (args[0] === 'repo' && args[1] === 'view') {
   console.log(JSON.stringify({ nameWithOwner: 'acme/coreone', url: 'https://github.com/acme/coreone' }));
 } else if (args[0] === 'issue' && args[1] === 'view') {
@@ -718,7 +851,7 @@ if (args[0] === 'repo' && args[1] === 'view') {
     issue_url: 'https://api.github.com/repos/acme/coreone/issues/81',
     created_at: observedAt,
     user: { login: 'test-actor' },
-    body: '[HANDOFF] status=blocked\\nresult: isolated rejection proof\\nevidence: local fake GitHub fixture\\nrisk: release remains blocked\\nnext-owner: reviewer\\ntrigger: fixed SHA available\\nleast-confidence: 风险\\nbiggest-missing: external caller inventory is incomplete',
+    body: handoffBody,
   }));
 } else if (args[0] === 'api' && args[1] === 'user') {
   console.log('test-actor');
@@ -744,6 +877,7 @@ if (args[0] === 'repo' && args[1] === 'view') {
     );
     return {
       status: result.status,
+      stdout: String(result.stdout || ''),
       stderr: String(result.stderr || ''),
       stateExists: fs.existsSync(statePath),
     };
@@ -752,7 +886,9 @@ if (args[0] === 'repo' && args[1] === 'view') {
   }
 }
 
-const invalidHandoff = runInvalidHandoffStatePreservation();
+const invalidHandoff = runIsolatedHandoff(
+  'production timeout behavior has not been measured\nleast-confidence&amp;#58; TODO later fill this',
+);
 if (invalidHandoff.status !== 1) {
   reflectionRegressionFailures.push(
     `invalid handoff end-to-end expected exit=1, actual=${invalidHandoff.status}`,
@@ -764,6 +900,20 @@ if (!invalidHandoff.stateExists) {
 if (!/least-confidence/.test(invalidHandoff.stderr)) {
   reflectionRegressionFailures.push(
     `invalid handoff end-to-end did not report least-confidence: ${invalidHandoff.stderr}`,
+  );
+}
+const validHandoff = runIsolatedHandoff('production timeout behavior has not been measured');
+if (validHandoff.status !== 0) {
+  reflectionRegressionFailures.push(
+    `valid handoff end-to-end expected exit=0, actual=${validHandoff.status}: ${validHandoff.stderr}`,
+  );
+}
+if (validHandoff.stateExists) {
+  reflectionRegressionFailures.push('valid handoff end-to-end retained the active task state file');
+}
+if (!/Local task state cleared/.test(validHandoff.stdout)) {
+  reflectionRegressionFailures.push(
+    `valid handoff end-to-end did not report state cleanup: ${validHandoff.stdout}`,
   );
 }
 
