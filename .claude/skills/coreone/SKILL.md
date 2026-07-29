@@ -168,7 +168,7 @@ least-confidence: risk-v1; anchor=name:支付回调; uncertainty=unverified:目�
 biggest-missing: no-finding-v1; checked=path:scripts/example.cjs; unchecked=ref:Issue#81
 ```
 
-`least-confidence` 与 `biggest-missing` 只接受共用契约 §6.1 的 `risk-v1` / `no-finding-v1` strict typed wire grammar，不接受旧 free-form，也不要加入 Markdown/HTML 包装。ASCII mode/key/id 是 entity decode + NFKC 后的 canonical 形态；raw/canonical contract 均 `<=4096` UTF-8 bytes，ref 编号保持 digit string。placeholder 比较忽略连续句末标点及 `/ _ + - &` 终止填充，并拒绝 canonical `n(?:[./_+-])?a` 等价族；内部的 `C++`、`snake_case`、`R&D+`、`A&B` 与路径保持不变。完整支持的 entity 可解码，裸 `&` 可作可见文本；无分号的受支持 entity 名/前缀 fail-closed。checker 只证明 wire shape 与 lexical anchor 可审计；不能证明 anchor 真实、detail 真未知、checked / unchecked 真执行或回答诚实，这些仍由 reviewer / PM 人审。最终直接面向用户的产品化结尾继续用产品大白话。
+`least-confidence` 与 `biggest-missing` 只接受共用契约 §6.1 的 `risk-v1` / `no-finding-v1` strict typed wire grammar，不接受旧 free-form，也不要加入 Markdown/HTML 包装。ASCII mode/key/id 是 entity decode + NFKC 后的 canonical 形态；raw/canonical contract 均 `<=4096` UTF-8 bytes，ref 编号保持 digit string。canonical grammar 先分段、再逐 token 重检 entity，NFKC 后新出现的 unresolved entity 也 fail-closed；字段分隔符不会与前一 value 的裸 `&` 拼成伪 entity。placeholder 比较忽略连续句末标点及 `/ _ + - &` 终止填充，并拒绝 canonical `n(?:[./_+-])?a` 等价族；内部的 `C++`、`snake_case`、`R&D+`、`A&B` 与路径保持不变。完整支持的 entity 可解码，裸 `&` 可作可见文本；entity 名边界按 ASCII 名 token 推导，无分号的受支持 entity 名/前缀 fail-closed。checker 只证明 wire shape 与 lexical anchor 可审计；不能证明 anchor 真实、detail 真未知、checked / unchecked 真执行或回答诚实，这些仍由 reviewer / PM 人审。最终直接面向用户的产品化结尾继续用产品大白话。
 
 ## 5. 回复主体输出（非最终收口）
 

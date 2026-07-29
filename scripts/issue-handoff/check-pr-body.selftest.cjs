@@ -659,6 +659,142 @@ for (const suffix of placeholderComparisonSuffixes) {
     `no-finding-v1; checked=name:everything&amp;${suffix}; unchecked=name:nothing&amp;${suffix}`,
   ]);
 }
+const supportedEntityOracle = [
+  'amp',
+  'apos',
+  'colon',
+  'emsp',
+  'ensp',
+  'gt',
+  'invisibletimes',
+  'lt',
+  'nbsp',
+  'newline',
+  'nobreak',
+  'quot',
+  'tab',
+  'thinsp',
+  'zerowidthspace',
+  'zwj',
+  'zwnj',
+];
+const incompleteEntityBoundaryOracle = ["'", '·', '中', 'λ', '＇'];
+const incompleteEntityAmpEncoders = [
+  ['literal', (prefix) => `&${prefix}`],
+  ['numeric', (prefix) => `&#38;${prefix}`],
+  ['named', (prefix) => `&amp;${prefix}`],
+  ['nested', (prefix) => `&amp;amp;${prefix}`],
+  ['NFKC', (prefix) => `＆${prefix}`],
+];
+const incompleteEntityContracts = [];
+for (const entityName of supportedEntityOracle) {
+  for (let length = 2; length <= entityName.length; length += 1) {
+    const prefix = entityName.slice(0, length);
+    for (const boundary of incompleteEntityBoundaryOracle) {
+      for (const [encoding, encode] of incompleteEntityAmpEncoders) {
+        incompleteEntityContracts.push([
+          `${entityName}/${prefix}/${encoding}/${JSON.stringify(boundary)}`,
+          `risk-v1; anchor=name:Scope${encode(prefix)}${boundary}Risk; ` +
+            'uncertainty=unknown:real risk',
+        ]);
+      }
+    }
+  }
+}
+const postNfkcUnknownEntityContracts = [
+  ['literal lowercase entity-shaped tail', 'risk-v1; anchor=name:scope&bogus; uncertainty=unknown:real risk'],
+  ['fullwidth ampersand', 'risk-v1; anchor=name:scope＆bogus; uncertainty=unknown:real risk'],
+  ['Greek question mark', 'risk-v1; anchor=name:scope＆bogus\u037E uncertainty=unknown:real risk'],
+  ['presentation semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE14 uncertainty=unknown:real risk'],
+  ['small semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE54 uncertainty=unknown:real risk'],
+  ['fullwidth semicolon', 'risk-v1; anchor=name:scope＆bogus\uFF1B uncertainty=unknown:real risk'],
+  ['numeric ampersand', 'risk-v1; anchor=name:scope&#65286;bogus; uncertainty=unknown:real risk'],
+  ['nested numeric ampersand', 'risk-v1; anchor=name:scope&amp;#65286;bogus; uncertainty=unknown:real risk'],
+  [
+    'numeric ampersand and semicolon',
+    'risk-v1; anchor=name:scope&#65286;bogus&#65307; uncertainty=unknown:real risk',
+  ],
+];
+const ampersandOrderContracts = [
+  [
+    'risk anchor before uncertainty',
+    'risk-v1; anchor=name:Rock&Roll; uncertainty=unknown:scope detail',
+  ],
+  [
+    'risk uncertainty before anchor',
+    'risk-v1; uncertainty=unknown:scope detail; anchor=name:Rock&Roll',
+  ],
+  [
+    'no-finding Rock before Sales',
+    'no-finding-v1; checked=name:Rock&Roll; unchecked=name:Sales & Marketing',
+  ],
+  [
+    'no-finding Sales before Rock',
+    'no-finding-v1; unchecked=name:Sales & Marketing; checked=name:Rock&Roll',
+  ],
+  ['bare A&B', 'risk-v1; anchor=name:A&B; uncertainty=unknown:scope detail'],
+  ['bare R&D+', 'risk-v1; anchor=name:R&D+; uncertainty=unknown:scope detail'],
+  [
+    'bare Sales & Marketing',
+    'risk-v1; anchor=name:Sales & Marketing; uncertainty=unknown:scope detail',
+  ],
+];
+let newEntityRegressionFailureCount = 0;
+const newEntityRegressionFailureSamples = [];
+function recordNewEntityRegressionFailure(message) {
+  newEntityRegressionFailureCount += 1;
+  if (newEntityRegressionFailureSamples.length < 20) {
+    newEntityRegressionFailureSamples.push(message);
+  }
+}
+for (const [name, value] of [
+  ...incompleteEntityContracts,
+  ...postNfkcUnknownEntityContracts,
+]) {
+  const direct = parseReflectionContract(value);
+  if (direct.ok) recordNewEntityRegressionFailure(`${name}: direct parser accepted invalid wire`);
+  for (const [field, body] of [
+    ['least-confidence', replaceLeastConfidence(validBody, value)],
+    ['biggest-missing', replaceBiggestMissing(validBody, value)],
+  ]) {
+    scenarioCount += 1;
+    if (validatePrBody(body).ok) {
+      recordNewEntityRegressionFailure(`${name}: PR ${field} accepted invalid wire`);
+    }
+  }
+}
+for (const [name, value] of ampersandOrderContracts) {
+  const direct = parseReflectionContract(value);
+  if (!direct.ok) {
+    recordNewEntityRegressionFailure(`${name}: direct parser rejected (${direct.reason})`);
+  }
+  for (const [field, body] of [
+    ['least-confidence', replaceLeastConfidence(validBody, value)],
+    ['biggest-missing', replaceBiggestMissing(validBody, value)],
+  ]) {
+    scenarioCount += 1;
+    const result = validatePrBody(body);
+    if (!result.ok) {
+      recordNewEntityRegressionFailure(
+        `${name}: PR ${field} rejected (${result.errors.join('; ')})`,
+      );
+    }
+  }
+}
+const preservedRockAndRoll = parseReflectionContract(
+  'risk-v1; anchor=name:Rock&Roll; uncertainty=unknown:scope detail',
+);
+if (preservedRockAndRoll.anchor?.value !== 'Rock&Roll') {
+  recordNewEntityRegressionFailure(
+    `Rock&Roll value was not preserved (${preservedRockAndRoll.anchor?.value || 'missing'})`,
+  );
+}
+assert.equal(
+  newEntityRegressionFailureCount,
+  0,
+  'entity-prefix boundaries, post-NFKC entities, and ampersand field ordering regressed:\n' +
+    newEntityRegressionFailureSamples.join('\n'),
+);
 assert.equal(
   parseReflectionContract(
     `risk-v1; anchor=id:auth; uncertainty=unknown:${encodeAmpersands('unknown&', 9)}`,

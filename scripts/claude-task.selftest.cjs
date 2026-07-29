@@ -1007,6 +1007,93 @@ for (const suffix of placeholderComparisonSuffixes) {
     false,
   ]);
 }
+const supportedEntityOracle = [
+  'amp',
+  'apos',
+  'colon',
+  'emsp',
+  'ensp',
+  'gt',
+  'invisibletimes',
+  'lt',
+  'nbsp',
+  'newline',
+  'nobreak',
+  'quot',
+  'tab',
+  'thinsp',
+  'zerowidthspace',
+  'zwj',
+  'zwnj',
+];
+const incompleteEntityBoundaryOracle = ["'", '·', '中', 'λ', '＇'];
+const incompleteEntityAmpEncoders = [
+  ['literal', (prefix) => `&${prefix}`],
+  ['numeric', (prefix) => `&#38;${prefix}`],
+  ['named', (prefix) => `&amp;${prefix}`],
+  ['nested', (prefix) => `&amp;amp;${prefix}`],
+  ['NFKC', (prefix) => `＆${prefix}`],
+];
+const generatedEntityBoundaryContracts = [];
+for (const entityName of supportedEntityOracle) {
+  for (let length = 2; length <= entityName.length; length += 1) {
+    const prefix = entityName.slice(0, length);
+    for (const boundary of incompleteEntityBoundaryOracle) {
+      for (const [encoding, encode] of incompleteEntityAmpEncoders) {
+        generatedEntityBoundaryContracts.push([
+          `incomplete ${entityName}/${prefix}/${encoding}/${JSON.stringify(boundary)}`,
+          `risk-v1; anchor=name:Scope${encode(prefix)}${boundary}Risk; ` +
+            'uncertainty=unknown:real risk',
+          false,
+        ]);
+      }
+    }
+  }
+}
+const postNfkcUnknownEntityContracts = [
+  ['literal lowercase entity-shaped tail', 'risk-v1; anchor=name:scope&bogus; uncertainty=unknown:real risk', false],
+  ['post-NFKC fullwidth ampersand', 'risk-v1; anchor=name:scope＆bogus; uncertainty=unknown:real risk', false],
+  ['post-NFKC Greek question mark', 'risk-v1; anchor=name:scope＆bogus\u037E uncertainty=unknown:real risk', false],
+  ['post-NFKC presentation semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE14 uncertainty=unknown:real risk', false],
+  ['post-NFKC small semicolon', 'risk-v1; anchor=name:scope＆bogus\uFE54 uncertainty=unknown:real risk', false],
+  ['post-NFKC fullwidth semicolon', 'risk-v1; anchor=name:scope＆bogus\uFF1B uncertainty=unknown:real risk', false],
+  ['post-NFKC numeric ampersand', 'risk-v1; anchor=name:scope&#65286;bogus; uncertainty=unknown:real risk', false],
+  ['post-NFKC nested numeric ampersand', 'risk-v1; anchor=name:scope&amp;#65286;bogus; uncertainty=unknown:real risk', false],
+  [
+    'post-NFKC numeric ampersand and semicolon',
+    'risk-v1; anchor=name:scope&#65286;bogus&#65307; uncertainty=unknown:real risk',
+    false,
+  ],
+];
+const ampersandOrderContracts = [
+  [
+    'risk anchor before uncertainty preserves Rock&Roll',
+    'risk-v1; anchor=name:Rock&Roll; uncertainty=unknown:scope detail',
+    true,
+  ],
+  [
+    'risk uncertainty before anchor preserves Rock&Roll',
+    'risk-v1; uncertainty=unknown:scope detail; anchor=name:Rock&Roll',
+    true,
+  ],
+  [
+    'no-finding Rock before Sales',
+    'no-finding-v1; checked=name:Rock&Roll; unchecked=name:Sales & Marketing',
+    true,
+  ],
+  [
+    'no-finding Sales before Rock',
+    'no-finding-v1; unchecked=name:Sales & Marketing; checked=name:Rock&Roll',
+    true,
+  ],
+  ['bare A&B', 'risk-v1; anchor=name:A&B; uncertainty=unknown:scope detail', true],
+  ['bare R&D+', 'risk-v1; anchor=name:R&D+; uncertainty=unknown:scope detail', true],
+  [
+    'bare Sales & Marketing',
+    'risk-v1; anchor=name:Sales & Marketing; uncertainty=unknown:scope detail',
+    true,
+  ],
+];
 assert.equal(
   parseReflectionContract(
     `risk-v1; anchor=id:auth; uncertainty=unknown:${encodeAmpersands('unknown&', 9)}`,
@@ -1144,6 +1231,9 @@ for (const [name, value, expectedOk] of [
     '未发现问题；已检查范围：主要流程；未检查范围：次要流程',
     false,
   ],
+  ...generatedEntityBoundaryContracts,
+  ...postNfkcUnknownEntityContracts,
+  ...ampersandOrderContracts,
   ...generatedPlaceholderContracts,
 ]) {
   const direct = parseReflectionContract(value);
@@ -2150,6 +2240,47 @@ assert.deepEqual(
   [],
   'N/A, amp-tail, and incomplete-entity handoffs must fail before state deletion',
 );
+for (const [name, value] of [
+  [
+    'apostrophe incomplete supported entity',
+    "risk-v1; anchor=id:auth; uncertainty=unknown:unknown&amp;amp'",
+  ],
+  [
+    'CJK-boundary incomplete supported entity',
+    'risk-v1; anchor=id:auth; uncertainty=unknown:unknown&amp;am中',
+  ],
+  [
+    'post-NFKC unresolved entity',
+    'risk-v1; anchor=name:scope＆bogus; uncertainty=unknown:real risk',
+  ],
+]) {
+  const lifecycle = runIsolatedHandoff(value);
+  if (lifecycle.status !== 1) {
+    reflectionRegressionFailures.push(
+      `${name} lifecycle expected exit=1, actual=${lifecycle.status}`,
+    );
+  }
+  if (!lifecycle.stateExists) {
+    reflectionRegressionFailures.push(`${name} lifecycle deleted active task state`);
+  }
+  if (!/least-confidence/.test(lifecycle.stderr)) {
+    reflectionRegressionFailures.push(
+      `${name} lifecycle missed least-confidence error: ${lifecycle.stderr}`,
+    );
+  }
+}
+const rockAndRollLifecycle = runIsolatedHandoff(
+  'risk-v1; anchor=name:Rock&Roll; uncertainty=unknown:scope detail',
+);
+if (rockAndRollLifecycle.status !== 0) {
+  reflectionRegressionFailures.push(
+    `Rock&Roll lifecycle expected exit=0, actual=${rockAndRollLifecycle.status}: ` +
+      rockAndRollLifecycle.stderr,
+  );
+}
+if (rockAndRollLifecycle.stateExists) {
+  reflectionRegressionFailures.push('Rock&Roll lifecycle retained active task state');
+}
 const observationNoFindingHandoff = runIsolatedHandoff('暂未观察到异常');
 if (observationNoFindingHandoff.status !== 1) {
   reflectionRegressionFailures.push(

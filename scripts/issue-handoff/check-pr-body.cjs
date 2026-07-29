@@ -739,12 +739,12 @@ function decodeHtmlEntities(value) {
 
 function hasIncompleteSupportedEntity(value) {
   const source = String(value || '');
-  for (const match of source.matchAll(
-    /&([a-z][a-z0-9]*)(?=$|[& \t.,，。;；:：!?！？…、/_+-])/giu,
-  )) {
-    const candidate = match[1].toLowerCase();
+  for (let index = source.indexOf('&'); index >= 0; index = source.indexOf('&', index + 1)) {
+    const token = source.slice(index + 1).match(/^[A-Za-z][A-Za-z0-9]*/u)?.[0] || '';
+    const terminator = source[index + token.length + 1];
+    if (token.length < 2 || terminator === ';') continue;
+    const candidate = token.toLowerCase();
     if (
-      candidate.length >= 2 &&
       HTML_ENTITY_NAMES.some((entityName) => entityName.startsWith(candidate))
     ) {
       return true;
@@ -927,7 +927,6 @@ function canonicalizeReflectionContract(value) {
     return reflectionParseFailure('contract-too-long');
   }
   const decoded = decodeHtmlEntitiesDetailed(raw);
-  if (decoded.unresolved) return reflectionParseFailure('unresolved-entity');
   if (/[\p{Cc}\p{Cs}\uFFFD]/u.test(decoded.value)) {
     return reflectionParseFailure('control-character');
   }
@@ -940,9 +939,6 @@ function canonicalizeReflectionContract(value) {
 
   const canonical = decoded.value.normalize('NFKC').trim();
   if (!canonical) return reflectionParseFailure('empty');
-  if (hasIncompleteSupportedEntity(canonical)) {
-    return reflectionParseFailure('incomplete-entity');
-  }
   if (/[`*~<>[\]{}()\\]/u.test(canonical)) {
     return reflectionParseFailure('markup-or-escape');
   }
@@ -950,6 +946,35 @@ function canonicalizeReflectionContract(value) {
     return reflectionParseFailure('contract-too-long');
   }
   return { ok: true, value: canonical };
+}
+
+function canonicalReflectionTokenFailure(value) {
+  if (hasUnresolvedEntity(value)) return reflectionParseFailure('unresolved-entity');
+  if (hasIncompleteSupportedEntity(value)) {
+    return reflectionParseFailure('incomplete-entity');
+  }
+  return null;
+}
+
+function splitReflectionContractSegments(value) {
+  const source = String(value || '');
+  const segments = [];
+  let start = 0;
+
+  for (let index = 0; index < source.length; index += 1) {
+    if (source[index] !== ';') continue;
+    const entityTail = source.slice(start, index).match(
+      /&(?:#(?:\d+|x[0-9a-f]+)|([a-z][a-z0-9]+))$/iu,
+    );
+    const named = entityTail?.[1] || '';
+    if (entityTail && (!named || named === named.toLowerCase())) {
+      return reflectionParseFailure('unresolved-entity');
+    }
+    segments.push(source.slice(start, index));
+    start = index + 1;
+  }
+  segments.push(source.slice(start));
+  return { ok: true, segments };
 }
 
 function isValidReflectionAnchor(type, value) {
@@ -1065,8 +1090,12 @@ function parseReflectionContract(value) {
   const canonical = canonicalizeReflectionContract(value);
   if (!canonical.ok) return canonical;
 
-  const segments = canonical.value.split(';');
+  const split = splitReflectionContractSegments(canonical.value);
+  if (!split.ok) return split;
+  const segments = split.segments;
   const mode = segments.shift()?.trim().toLowerCase() || '';
+  const modeEntityFailure = canonicalReflectionTokenFailure(mode);
+  if (modeEntityFailure) return modeEntityFailure;
   const requiredKeys = REFLECTION_SCHEMAS.get(mode);
   if (!requiredKeys) return reflectionParseFailure('mode');
   if (segments.length !== requiredKeys.size || segments.some((segment) => !segment.trim())) {
@@ -1075,6 +1104,8 @@ function parseReflectionContract(value) {
 
   const fields = new Map();
   for (const segment of segments) {
+    const segmentEntityFailure = canonicalReflectionTokenFailure(segment);
+    if (segmentEntityFailure) return segmentEntityFailure;
     const separator = segment.indexOf('=');
     if (separator <= 0 || segment.indexOf('=', separator + 1) >= 0) {
       return reflectionParseFailure('field-shape');
