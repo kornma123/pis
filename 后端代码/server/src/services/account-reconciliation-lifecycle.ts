@@ -536,8 +536,8 @@ function buildCompletionArtifact(
   }
   const confirmedLabRevenue = source.confirmedLabRevenue as number
   const decisions = (db.prepare(`
-    SELECT id, case_no, line_type, bill_count, lis_count, delta, amount_impact,
-           verdict, verdict_reason, verdict_by, verdict_at, follow_up
+    SELECT id, partner_id, service_month, case_no, line_type, bill_count, lis_count,
+           delta, amount_impact, verdict, verdict_reason, verdict_by, verdict_at, follow_up
       FROM reconcile_diffs
      WHERE hospital_month_id = ?
        AND reconcile_generation_id = ?
@@ -548,6 +548,8 @@ function buildCompletionArtifact(
     }
     return {
       id: String(decision.id),
+      partnerId: String(decision.partner_id),
+      serviceMonth: String(decision.service_month),
       caseNo: String(decision.case_no),
       lineType: String(decision.line_type),
       billCount: canonicalCount(decision.bill_count, `decision bill_count ${decision.id}`),
@@ -569,10 +571,12 @@ function buildCompletionArtifact(
       followUp: decision.follow_up === null ? null : String(decision.follow_up),
     }
   })
-  // R4 纵深收口 + R5 方向收口：complete/close 前显式校验补收单谱系与本代事实集一致。
-  // 候选集双向——本代补收单 ∪ 引用本代 diff 的补收单；违例三态——
-  //   悬空 source_diff / diff 代次不等于补收单代次（正向：本代单→旧代 diff；反向：旧代单→本代 diff，
-  //   经 pending 窗口直接 SQL 改写 diff 代次可达）/ diff 医院月不属于本代事实集（跨月搬移，同窗口可达）。
+  // R4 纵深收口 + R5 方向收口 + R6 身份收口：complete/close 前显式校验补收单谱系与本代事实集一致。
+  // 候选集双向——本代补收单 ∪ 引用本代 diff 的补收单；违例五态——
+  //   悬空 source_diff / diff 代次不等于补收单代次（正/反向，pending 窗口直接 SQL 可达）/
+  //   diff 医院月不属于本代事实集（跨月搬移）/ diff 或补收单的 partner·月键不等于本代 generation
+  //   的 partner_id·settlement_month（身份漂移——R6 起 diff 身份列另有 identity trigger 冻结，
+  //   此处守卫独立兜底，DDL 级攻击者摘 trigger 后仍 fail-closed）。
   // 一致旧代对（旧单→旧 diff）不属本代事实集，不候选、不误伤。
   // binding trigger（写入闸）与启动校验（开机闸）之外，这里在 artifact 生成前最后收口，
   // 绝不产出 decisions 与 supplements 内部不一致或静默缺行的定版 artifact
@@ -584,16 +588,47 @@ function buildCompletionArtifact(
      WHERE (supplement.reconcile_generation_id = ? OR decision.reconcile_generation_id = ?)
        AND (decision.id IS NULL
             OR decision.reconcile_generation_id IS NOT supplement.reconcile_generation_id
-            OR decision.hospital_month_id IS NOT ?)
+            OR decision.hospital_month_id IS NOT ?
+            OR decision.partner_id IS NOT ?
+            OR decision.service_month IS NOT ?
+            OR supplement.partner_id IS NOT ?
+            OR supplement.service_month IS NOT ?)
      LIMIT 1
   `).get(
     binding.reconcileGenerationId,
     binding.reconcileGenerationId,
     row.hospital_month_id,
+    row.partner_id,
+    row.settlement_month,
+    row.partner_id,
+    row.settlement_month,
   ) as { id?: string } | undefined
   if (lineageMismatch?.id) {
     fail(
       `supplement ${lineageMismatch.id} lineage does not match the completion fact set`,
+      'RECONCILIATION_LINEAGE_MISMATCH',
+      409,
+    )
+  }
+  // R6 身份断言（补收单谱系之外）：本代事实集内每一条 diff 的 partner·月键都必须等于
+  // 本代 generation——覆盖「无补收单引用的 diff 键漂移」形状（守卫候选集锚不到它，
+  // 但它照样进 decisions 进 artifact；月键谓词同理钉住，防静默排除）。
+  const decisionIdentityMismatch = db.prepare(`
+    SELECT id
+      FROM reconcile_diffs
+     WHERE hospital_month_id = ?
+       AND reconcile_generation_id = ?
+       AND (partner_id IS NOT ? OR service_month IS NOT ?)
+     LIMIT 1
+  `).get(
+    row.hospital_month_id,
+    binding.reconcileGenerationId,
+    row.partner_id,
+    row.settlement_month,
+  ) as { id?: string } | undefined
+  if (decisionIdentityMismatch?.id) {
+    fail(
+      `decision ${decisionIdentityMismatch.id} identity does not match the completion fact set`,
       'RECONCILIATION_LINEAGE_MISMATCH',
       409,
     )

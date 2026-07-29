@@ -1702,6 +1702,9 @@ describe('LOC-005 R5 lineage guard direction closure and stale-delete freeze', (
     lifecycle.setAccountReconciliationVerdict(
       db, fixture.nextBinding, fixture.nextDiff.id, '核对无误', null, 'USER-001', 'admin',
     )
+    // R6 起 diff 身份列由 trg_reconcile_diff_identity_immutable 冻结——摘掉它模拟
+    // DDL 级攻击者，验证守卫层独立于 trigger 兜底（清理段统一重装）。
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
     rewriteDiffGeneration(fixture.oldDiff.id, fixture.nextBinding.reconcileGenerationId)
     try {
       expectCode(
@@ -1731,6 +1734,7 @@ describe('LOC-005 R5 lineage guard direction closure and stale-delete freeze', (
       WHERE type = 'trigger' AND name = 'trg_reconcile_diff_final_immutable'
     `).get() as { sql: string }
     db.exec('DROP TRIGGER trg_reconcile_diff_final_immutable')
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
     rewriteDiffGeneration(fixture.oldDiff.id, fixture.nextBinding.reconcileGenerationId)
     db.exec(diffTrigger.sql)
     try {
@@ -1813,6 +1817,8 @@ describe('LOC-005 R5 lineage guard direction closure and stale-delete freeze', (
     db.prepare('VACUUM INTO ?').run(probePath)
     const probe = new DatabaseSync(probePath)
     try {
+      // R6 起拷贝库带 identity trigger——先摘再注入（探针层独立验证）。
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
       probe.prepare('UPDATE reconcile_diffs SET reconcile_generation_id = ? WHERE id = ?')
         .run(fixture.nextBinding.reconcileGenerationId, fixture.oldDiff.id)
       expect(() => manager.upgradeAccountReconciliationSchema(probe))
@@ -1834,6 +1840,8 @@ describe('LOC-005 R5 lineage guard direction closure and stale-delete freeze', (
       db.prepare('UPDATE reconcile_diffs SET hospital_month_id = ? WHERE id = ?')
         .run(monthId, fixture.nextDiff.id)
     }
+    // R6 起月键同属冻结身份列——摘 identity trigger 注入（守卫层独立验证）。
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
     rewriteMonth('hospital-month-drifted-out')
     try {
       expectCode(
@@ -1869,5 +1877,182 @@ describe('LOC-005 R5 lineage guard direction closure and stale-delete freeze', (
       SELECT status FROM account_reconcile_generations WHERE reconcile_generation_id = ?
     `).get(fixture.nextBinding.reconcileGenerationId) as { status: string }
     expect(closed.status).toBe('closed')
+  })
+})
+
+describe('LOC-005 R6 partner/month identity closure', () => {
+  // R6（对 e785c649 增量 R2 P1）：R5 守卫只钉代次与 hospital_month_id，
+  // diff/supplement 自身的 partner_id/service_month 在 pending 窗口可漂移（无 trigger 拦），
+  // artifact decisions 又不存这些键——complete 把伪造键写进定版、close hash 兜底失明。
+  // 修复三层：complete/close 守卫 + 开机探针 + binding/新 identity trigger 同查 partner/月键；
+  // artifact decisions 纳入 partnerId/serviceMonth 作为定版身份事实。
+
+  it('freezes diff identity columns at the DB layer (new identity trigger)', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r6-diff-key-trigger')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('UPDATE reconcile_diffs SET partner_id = ? WHERE id = ?')
+        .run('partner-drifted', fixture.nextDiff.id)
+    }, /RECONCILE_DIFF_IDENTITY_IMMUTABLE/)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('UPDATE reconcile_diffs SET service_month = ? WHERE id = ?')
+        .run('1999-12', fixture.nextDiff.id)
+    }, /RECONCILE_DIFF_IDENTITY_IMMUTABLE/)
+  })
+
+  it('rejects complete when a fact-set diff partner/month key is drifted (guard layer)', () => {
+    // 摘 identity trigger 模拟 DDL 级攻击者——守卫层必须独立 fail-closed。
+    // 用无补收单的本代 diff（先给核对无误 verdict 过决策完备检查），
+    // 覆盖「守卫候选集锚不到、只能靠 decisions 身份断言兜底」的形状。
+    const fixture = seedSupersededWithSurvivingDiff('r6-diff-key-guard')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+    db.prepare('UPDATE reconcile_diffs SET partner_id = ? WHERE id = ?')
+      .run('partner-drifted', fixture.nextDiff.id)
+    try {
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      // RED 态下 complete 若竟成功，月内已出现 complete 代——先摘终版 trigger 再恢复，
+      // 最后走升级函数统一重装+启动探针自检（R5 同款姿势；identity trigger 已由升级函数重装）。
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable')
+      db.prepare('UPDATE reconcile_diffs SET partner_id = ? WHERE id = ?')
+        .run(fixture.nextBinding.partnerId, fixture.nextDiff.id)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+  })
+
+  it('rejects supplement partner/month key drift at the DB layer (extended binding trigger)', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r6-supplement-key-binding')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const supplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string }
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('UPDATE supplement_orders SET partner_id = ? WHERE id = ?')
+        .run('partner-drifted', supplement.id)
+    }, /SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('UPDATE supplement_orders SET service_month = ? WHERE id = ?')
+        .run('1999-12', supplement.id)
+    }, /SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+  })
+
+  it('rejects complete when a supplement key is drifted past a dropped binding trigger (guard layer)', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r6-supplement-key-guard')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const supplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string }
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
+    db.prepare('UPDATE supplement_orders SET partner_id = ? WHERE id = ?')
+      .run('partner-drifted', supplement.id)
+    try {
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      // 同上级联防御：RED 态 complete 竟成功则终版 trigger 拦恢复——先摘再恢复再重装。
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_immutable')
+      db.prepare('UPDATE supplement_orders SET partner_id = ? WHERE id = ?')
+        .run(fixture.nextBinding.partnerId, supplement.id)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+  })
+
+  it('rejects close when a diff key is injected after completion (guard fires before hash compare)', () => {
+    // 复核者剧本的完整复刻：complete 后摘 trigger 改 diff 键再装回——
+    // artifact decisions 已含键、守卫先于 hash 兜底 fail-closed。
+    const fixture = seedSupersededWithSurvivingDiff('r6-post-complete-close')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001')
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable')
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+    db.prepare('UPDATE reconcile_diffs SET service_month = ? WHERE id = ?')
+      .run('1999-12', fixture.nextDiff.id)
+    try {
+      expectCode(
+        () => lifecycle.closeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      db.prepare('UPDATE reconcile_diffs SET service_month = ? WHERE id = ?')
+        .run(fixture.nextBinding.settlementMonth, fixture.nextDiff.id)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+  })
+
+  it('fails startup validation on partner/month key mismatches (extended boot probe)', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r6-boot-probe')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const supplement = db.prepare(
+      'SELECT id FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string }
+    // 探针 A：supplement 键漂移（摘 binding update trigger 注入）。
+    const probeAPath = join(testDirectory, `r6-probe-a-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probeAPath)
+    const probeA = new DatabaseSync(probeAPath)
+    try {
+      probeA.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
+      probeA.prepare('UPDATE supplement_orders SET partner_id = ? WHERE id = ?')
+        .run('partner-drifted', supplement.id)
+      expect(() => manager.upgradeAccountReconciliationSchema(probeA))
+        .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+    } finally {
+      probeA.close()
+    }
+    // 探针 B：diff 键漂移（摘 identity trigger 注入）。
+    const probeBPath = join(testDirectory, `r6-probe-b-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probeBPath)
+    const probeB = new DatabaseSync(probeBPath)
+    try {
+      probeB.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+      probeB.prepare('UPDATE reconcile_diffs SET service_month = ? WHERE id = ?')
+        .run('1999-12', fixture.nextDiff.id)
+      expect(() => manager.upgradeAccountReconciliationSchema(probeB))
+        .toThrow(/SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+    } finally {
+      probeB.close()
+    }
+  })
+
+  it('stores partner/month keys in artifact decisions as finalized identity facts', () => {
+    const fixture = seedSupersededWithSurvivingDiff('r6-artifact-decisions-keys')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001')
+    const completed = db.prepare(`
+      SELECT completion_artifact_json FROM account_reconcile_generations
+      WHERE reconcile_generation_id = ?
+    `).get(fixture.nextBinding.reconcileGenerationId) as { completion_artifact_json: string }
+    const artifact = JSON.parse(completed.completion_artifact_json) as {
+      decisions: Array<{ id: string, partnerId?: string, serviceMonth?: string }>
+    }
+    const decision = artifact.decisions.find(entry => entry.id === fixture.nextDiff.id)
+    expect(decision?.partnerId).toBe(fixture.nextBinding.partnerId)
+    expect(decision?.serviceMonth).toBe(fixture.nextBinding.settlementMonth)
+  })
+
+  it('keeps generation rows undeletable (P3 control: comment correction matches the live schema)', () => {
+    // P3：R5 注释误称 generations 表无 BEFORE DELETE trigger——
+    // trg_account_reconcile_no_delete（init-only，:3188）实际无条件拒删，本例钉死该行为。
+    const fixture = seedSupersededWithSurvivingDiff('r6-generation-delete-control')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('DELETE FROM account_reconcile_generations WHERE reconcile_generation_id = ?')
+        .run(fixture.binding.reconcileGenerationId)
+    }, /IMMUTABLE_RECONCILIATION_FACT/)
   })
 })

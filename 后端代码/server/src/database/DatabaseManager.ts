@@ -1007,11 +1007,14 @@ function ensureSupplementGenerationForeignKeys(database: DatabaseSync): void {
   if (invalidSource?.id) {
     throw new Error(`SUPPLEMENT_SOURCE_GENERATION_BACKFILL_REQUIRED:${invalidSource.id}`)
   }
-  // R4 谱系等值启动校验：supplement 的 source_diff 必须属于 supplement 自己的代。
+  // R4 谱系等值启动校验 + R6 身份等值启动校验：supplement 的 source_diff 必须属于
+  // supplement 自己的代，且 supplement/diff/generation 的 partner·月键必须一致。
   // binding trigger 是写入侧第一道闸；本探针是开机 fail-closed 第二道——经直接 SQL、
-  // 未来写路径或回填工具缺陷产生的跨代行（含悬空 source_diff，LEFT JOIN 下 diff 列为
-  // NULL、IS NOT 成立而被捕获）在启动时拒绝服务并给出可诊断的 supplement id，
+  // 未来写路径或回填工具缺陷产生的跨代/键漂移行（含悬空 source_diff，LEFT JOIN 下
+  // diff 列为 NULL、IS NOT 成立而被捕获）在启动时拒绝服务并给出可诊断的 supplement id，
   // 按受治理修复流程处置，绝不静默放行或自动改写。
+  // generation 侧键检查以 generation 行在场为前提（缺行情形已由上方 BACKFILL_REQUIRED
+  // 探针先行拦截）；(NULL,NULL) 遗留形状不在本探针范围（source_diff_id IS NOT NULL 前提）。
   const diffColumns = database.prepare('PRAGMA table_info(reconcile_diffs)').all() as Array<{ name: string }>
   const diffHasGenerationColumn = diffColumns.some(column => column.name === 'reconcile_generation_id')
   if (hasGenerationColumn && diffHasGenerationColumn) {
@@ -1019,8 +1022,15 @@ function ensureSupplementGenerationForeignKeys(database: DatabaseSync): void {
       SELECT supplement.id
         FROM supplement_orders supplement
         LEFT JOIN reconcile_diffs diff ON diff.id = supplement.source_diff_id
+        LEFT JOIN account_reconcile_generations generation
+          ON generation.reconcile_generation_id = supplement.reconcile_generation_id
        WHERE supplement.source_diff_id IS NOT NULL
-         AND diff.reconcile_generation_id IS NOT supplement.reconcile_generation_id
+         AND (diff.reconcile_generation_id IS NOT supplement.reconcile_generation_id
+              OR diff.partner_id IS NOT supplement.partner_id
+              OR diff.service_month IS NOT supplement.service_month
+              OR (generation.reconcile_generation_id IS NOT NULL
+                  AND (generation.partner_id IS NOT supplement.partner_id
+                       OR generation.settlement_month IS NOT supplement.service_month)))
        LIMIT 1
     `).get() as { id?: string } | undefined
     if (lineageMismatch?.id) {
@@ -1157,6 +1167,7 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_no_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_no_delete')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_immutable')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_no_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_no_delete')
@@ -1378,6 +1389,22 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
     END
   `)
+  // R6 身份冻结：diff 的 partner_id/service_month/hospital_month_id/reconcile_generation_id
+  // 为写一次身份列——全部合法写者已核实：verdict CAS 只动判定列（lifecycle :1074），
+  // compute 走 DELETE+INSERT 整月重出，迁移回填 UPDATE 排在升级函数 DROP 段之后执行。
+  // pending 窗口的任何身份列改写（直接 SQL 键漂移注入）一律 fail-closed；
+  // 守卫/探针层在其上独立兜底（DDL 级攻击者摘本 trigger 后仍被 complete/close 守卫拒）。
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_diff_identity_immutable
+    BEFORE UPDATE ON reconcile_diffs
+    WHEN OLD.partner_id IS NOT NEW.partner_id
+      OR OLD.service_month IS NOT NEW.service_month
+      OR OLD.hospital_month_id IS NOT NEW.hospital_month_id
+      OR OLD.reconcile_generation_id IS NOT NEW.reconcile_generation_id
+    BEGIN
+      SELECT RAISE(ABORT, 'RECONCILE_DIFF_IDENTITY_IMMUTABLE');
+    END
+  `)
   database.exec(`
     CREATE TRIGGER trg_reconcile_supplement_generation_insert
     BEFORE INSERT ON supplement_orders
@@ -1394,6 +1421,10 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
             AND generation.is_current = 1
             AND generation.status = 'pending'
             AND generation.reconcile_generation_id = NEW.reconcile_generation_id
+            AND diff.partner_id = NEW.partner_id
+            AND diff.service_month = NEW.service_month
+            AND generation.partner_id = NEW.partner_id
+            AND generation.settlement_month = NEW.service_month
         )
       )
     BEGIN
@@ -1416,6 +1447,10 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
              AND diff.reconcile_generation_id = OLD.reconcile_generation_id
              AND generation.reconcile_generation_id = OLD.reconcile_generation_id
              AND generation.is_current = 1
+             AND diff.partner_id = OLD.partner_id
+             AND diff.service_month = OLD.service_month
+             AND generation.partner_id = OLD.partner_id
+             AND generation.settlement_month = OLD.service_month
         )
       )
       OR (
@@ -1429,6 +1464,10 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
            AND diff.reconcile_generation_id = NEW.reconcile_generation_id
            AND generation.reconcile_generation_id = NEW.reconcile_generation_id
            AND generation.is_current = 1
+           AND diff.partner_id = NEW.partner_id
+           AND diff.service_month = NEW.service_month
+           AND generation.partner_id = NEW.partner_id
+           AND generation.settlement_month = NEW.service_month
         )
       )
     BEGIN
@@ -1475,11 +1514,15 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       SELECT RAISE(ABORT, 'FINAL_RECONCILIATION_DECISIONS_IMMUTABLE');
     END
   `)
-  // no_delete 双分支并集：①月级分支——source_diff 所在月已有 complete/closed 代时禁删（保留原口径，
-  // generations 表没有 BEFORE DELETE trigger，若只剩行级分支，直接 SQL 删掉 generation 行即可静默绕过）；
-  // ②行级分支（R5 补）——按 OLD.reconcile_generation_id 查本行所属代，is_current=0（supersede 窗口，
-  // 旧代仍 pending 但已被取代）或 complete/closed 即禁删，补上 supersede→successor-complete 窗口的审计链缺口。
-  // 合法口径不受影响：verdict 的 scoped DELETE（当前 pending 代、其月无 complete/closed 代）两分支均不命中。
+  // no_delete 双分支并集：①月级分支——source_diff 所在月已有 complete/closed 代时禁删；
+  // ②行级分支（R5 补）——按 OLD.reconcile_generation_id 查本行所属代，is_current=0（supersede
+  // 窗口，旧代仍 pending 但已被取代）或 complete/closed 即禁删。
+  // 月级分支保留的理由（R6 更正，替换 R5 误述）：a) 覆盖 reconcile_generation_id 为 NULL 的
+  // 遗留补收单（行级分支按 NULL 代查不到任何 generation 行）；b) 纵深防御——
+  // trg_account_reconcile_no_delete（init-only，不在本函数重装集合内，见 #87）虽在运行态
+  // 无条件拒删 generation 行，本族 trigger 的正确性不押在重装集合之外的 trigger 上。
+  // 合法口径不受影响：verdict 的 scoped DELETE（当前 pending 代、其月无 complete/closed 代）
+  // 两分支均不命中。
   database.exec(`
     CREATE TRIGGER trg_reconcile_supplement_final_no_delete
     BEFORE DELETE ON supplement_orders
