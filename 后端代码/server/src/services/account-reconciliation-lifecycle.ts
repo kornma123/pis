@@ -572,11 +572,12 @@ function buildCompletionArtifact(
     }
   })
   // R4 纵深收口 + R5 方向收口 + R6 身份收口：complete/close 前显式校验补收单谱系与本代事实集一致。
-  // 候选集双向——本代补收单 ∪ 引用本代 diff 的补收单；违例五态——
+  // 候选集双向——本代补收单 ∪ 引用本代 diff 的补收单；违例六态——
   //   悬空 source_diff / diff 代次不等于补收单代次（正/反向，pending 窗口直接 SQL 可达）/
   //   diff 医院月不属于本代事实集（跨月搬移）/ diff 或补收单的 partner·月键不等于本代 generation
   //   的 partner_id·settlement_month（身份漂移——R6 起 diff 身份列另有 identity trigger 冻结，
-  //   此处守卫独立兜底，DDL 级攻击者摘 trigger 后仍 fail-closed）。
+  //   此处守卫独立兜底，DDL 级攻击者摘 trigger 后仍 fail-closed）/ diff 与补收单病例号不等
+  //   （面板修订：case_no 进 artifact supplements，pending 窗口漂移会被定版）。
   // 一致旧代对（旧单→旧 diff）不属本代事实集，不候选、不误伤。
   // binding trigger（写入闸）与启动校验（开机闸）之外，这里在 artifact 生成前最后收口，
   // 绝不产出 decisions 与 supplements 内部不一致或静默缺行的定版 artifact
@@ -592,7 +593,8 @@ function buildCompletionArtifact(
             OR decision.partner_id IS NOT ?
             OR decision.service_month IS NOT ?
             OR supplement.partner_id IS NOT ?
-            OR supplement.service_month IS NOT ?)
+            OR supplement.service_month IS NOT ?
+            OR decision.case_no IS NOT supplement.case_no)
      LIMIT 1
   `).get(
     binding.reconcileGenerationId,
@@ -610,21 +612,23 @@ function buildCompletionArtifact(
       409,
     )
   }
-  // R6 身份断言（补收单谱系之外）：本代事实集内每一条 diff 的 partner·月键都必须等于
-  // 本代 generation——覆盖「无补收单引用的 diff 键漂移」形状（守卫候选集锚不到它，
-  // 但它照样进 decisions 进 artifact；月键谓词同理钉住，防静默排除）。
+  // R6 身份断言（补收单谱系之外）：本代每一条 diff 的身份列都必须等于本代
+  // generation——覆盖「无补收单引用的 diff 键漂移」形状（守卫候选集锚不到它，
+  // 但它照样进 decisions 进 artifact）。
+  // 面板修订（completeness #1）：扫描只按代次单键过滤，hospital_month_id 列入
+  // 被检谓词——若先按 hospital_month_id 过滤，漂移行会同时躲过本断言与
+  // artifact 查询（静默丢行）。
   const decisionIdentityMismatch = db.prepare(`
     SELECT id
       FROM reconcile_diffs
-     WHERE hospital_month_id = ?
-       AND reconcile_generation_id = ?
-       AND (partner_id IS NOT ? OR service_month IS NOT ?)
+     WHERE reconcile_generation_id = ?
+       AND (partner_id IS NOT ? OR service_month IS NOT ? OR hospital_month_id IS NOT ?)
      LIMIT 1
   `).get(
-    row.hospital_month_id,
     binding.reconcileGenerationId,
     row.partner_id,
     row.settlement_month,
+    row.hospital_month_id,
   ) as { id?: string } | undefined
   if (decisionIdentityMismatch?.id) {
     fail(

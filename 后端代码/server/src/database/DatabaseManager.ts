@@ -1390,10 +1390,12 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
     END
   `)
   // R6 身份冻结：diff 的 partner_id/service_month/hospital_month_id/reconcile_generation_id
-  // 为写一次身份列——全部合法写者已核实：verdict CAS 只动判定列（lifecycle :1074），
+  // 与 case_no/line_type（面板修订：同为身份/归因维度，进 artifact 定版）为写一次身份列——
+  // 全部合法写者已核实：verdict CAS 只动判定列（lifecycle :1109-1133），
   // compute 走 DELETE+INSERT 整月重出，迁移回填 UPDATE 排在升级函数 DROP 段之后执行。
   // pending 窗口的任何身份列改写（直接 SQL 键漂移注入）一律 fail-closed；
   // 守卫/探针层在其上独立兜底（DDL 级攻击者摘本 trigger 后仍被 complete/close 守卫拒）。
+  // 未来迁移若需 UPDATE 上述列，须先 DROP 本 trigger（升级函数 DROP 清单已含其名）。
   database.exec(`
     CREATE TRIGGER trg_reconcile_diff_identity_immutable
     BEFORE UPDATE ON reconcile_diffs
@@ -1401,6 +1403,8 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       OR OLD.service_month IS NOT NEW.service_month
       OR OLD.hospital_month_id IS NOT NEW.hospital_month_id
       OR OLD.reconcile_generation_id IS NOT NEW.reconcile_generation_id
+      OR OLD.case_no IS NOT NEW.case_no
+      OR OLD.line_type IS NOT NEW.line_type
     BEGIN
       SELECT RAISE(ABORT, 'RECONCILE_DIFF_IDENTITY_IMMUTABLE');
     END
@@ -1425,6 +1429,7 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
             AND diff.service_month = NEW.service_month
             AND generation.partner_id = NEW.partner_id
             AND generation.settlement_month = NEW.service_month
+            AND diff.case_no = NEW.case_no
         )
       )
     BEGIN
@@ -1451,6 +1456,7 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
              AND diff.service_month = OLD.service_month
              AND generation.partner_id = OLD.partner_id
              AND generation.settlement_month = OLD.service_month
+             AND diff.case_no = OLD.case_no
         )
       )
       OR (
@@ -1468,6 +1474,7 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
            AND diff.service_month = NEW.service_month
            AND generation.partner_id = NEW.partner_id
            AND generation.settlement_month = NEW.service_month
+           AND diff.case_no = NEW.case_no
         )
       )
     BEGIN

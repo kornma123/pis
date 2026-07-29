@@ -1897,6 +1897,16 @@ describe('LOC-005 R6 partner/month identity closure', () => {
       db.prepare('UPDATE reconcile_diffs SET service_month = ? WHERE id = ?')
         .run('1999-12', fixture.nextDiff.id)
     }, /RECONCILE_DIFF_IDENTITY_IMMUTABLE/)
+    // 面板修订（completeness #2 / refuter 遗漏形状）：case_no/line_type 同为身份列，
+    // pending 窗口漂移会被 artifact 定版错误归因——identity trigger 一并冻结。
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('UPDATE reconcile_diffs SET case_no = ? WHERE id = ?')
+        .run('CASE-DRIFTED-R6', fixture.nextDiff.id)
+    }, /RECONCILE_DIFF_IDENTITY_IMMUTABLE/)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('UPDATE reconcile_diffs SET line_type = ? WHERE id = ?')
+        .run('line-type-drifted', fixture.nextDiff.id)
+    }, /RECONCILE_DIFF_IDENTITY_IMMUTABLE/)
   })
 
   it('rejects complete when a fact-set diff partner/month key is drifted (guard layer)', () => {
@@ -1925,6 +1935,31 @@ describe('LOC-005 R6 partner/month identity closure', () => {
     }
   })
 
+  it('rejects complete when a fact-set diff hospital-month is drifted (guard layer)', () => {
+    // 面板 completeness #1：hospital_month_id 漂移的无补收单 diff 会同时躲过
+    // 「按 hospital_month_id 过滤」的断言与 artifact 查询（静默丢行）——
+    // 断言必须按代次单键扫描、把 hospital_month_id 列为被检谓词，独立兜底。
+    const fixture = seedSupersededWithSurvivingDiff('r6-diff-hm-drift-guard')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_identity_immutable')
+    db.prepare('UPDATE reconcile_diffs SET hospital_month_id = ? WHERE id = ?')
+      .run('HM-GHOST-R6', fixture.nextDiff.id)
+    try {
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      // 同上级联防御：RED 态 complete 竟成功则终版 trigger 拦恢复——先摘再恢复再重装。
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_final_immutable')
+      db.prepare('UPDATE reconcile_diffs SET hospital_month_id = ? WHERE id = ?')
+        .run(fixture.hospitalMonthId, fixture.nextDiff.id)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+  })
+
   it('rejects supplement partner/month key drift at the DB layer (extended binding trigger)', () => {
     const fixture = seedSupersededWithSurvivingDiff('r6-supplement-key-binding')
     lifecycle.setAccountReconciliationVerdict(
@@ -1940,6 +1975,12 @@ describe('LOC-005 R6 partner/month identity closure', () => {
     expectDatabaseMutationBlocked(db, () => {
       db.prepare('UPDATE supplement_orders SET service_month = ? WHERE id = ?')
         .run('1999-12', supplement.id)
+    }, /SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
+    // 面板修订（refuter 遗漏形状）：supplement.case_no 进 artifact supplements 数组，
+    // binding trigger 补 diff↔supplement 病例号等值，pending 窗口漂移一并拒。
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare('UPDATE supplement_orders SET case_no = ? WHERE id = ?')
+        .run('CASE-DRIFTED-R6', supplement.id)
     }, /SUPPLEMENT_GENERATION_BINDING_MISMATCH/)
   })
 
@@ -1964,6 +2005,33 @@ describe('LOC-005 R6 partner/month identity closure', () => {
       db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_immutable')
       db.prepare('UPDATE supplement_orders SET partner_id = ? WHERE id = ?')
         .run(fixture.nextBinding.partnerId, supplement.id)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+  })
+
+  it('rejects complete when a supplement case_no is drifted past a dropped binding trigger (guard layer)', () => {
+    // 面板修订（refuter 遗漏形状 / completeness #2 同族）：摘 binding trigger 后
+    // supplement.case_no 漂移会被 artifact supplements 定版——守卫补 case_no 谓词兜底。
+    const fixture = seedSupersededWithSurvivingDiff('r6-supplement-caseno-guard')
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const supplement = db.prepare(
+      'SELECT id, case_no FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string, case_no: string }
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
+    db.prepare('UPDATE supplement_orders SET case_no = ? WHERE id = ?')
+      .run('CASE-DRIFTED-R6', supplement.id)
+    try {
+      expectCode(
+        () => lifecycle.completeAccountReconciliation(db, fixture.nextBinding, 'USER-001'),
+        'RECONCILIATION_LINEAGE_MISMATCH',
+      )
+    } finally {
+      // 同上级联防御：RED 态 complete 竟成功则终版 trigger 拦恢复——先摘再恢复再重装。
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_final_immutable')
+      db.prepare('UPDATE supplement_orders SET case_no = ? WHERE id = ?')
+        .run(supplement.case_no, supplement.id)
       manager.upgradeAccountReconciliationSchema(db)
     }
   })
