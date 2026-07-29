@@ -797,19 +797,53 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
     ),
     [128],
   );
-  for (const [blockName, blockLines] of [
-    ['root fenced block', ['```md', 'independent=42', '```']],
-    ['root type-1 HTML block', ['<pre>', 'independent=42', '</pre>']],
-    ['root encoded product HTML block', ['&lt;div&gt;', 'independent=42', '&lt;/div&gt;']],
+  for (const [indentName, contentIndent] of [
+    ['two-space content', '  '],
+    ['raw-Tab content', '\t'],
   ]) {
-    expectPass(
-      `${endingName}/${blockName}: tight root exit remains independent`,
-      validBody.replace(
-        leastConfidenceLine,
-        `${leastConfidenceLine}${lineEnding}${blockLines.join(lineEnding)}`,
-      ),
-      [128],
-    );
+    for (const [blockName, blockLines] of [
+      ['root backtick fence', ['```md', `${contentIndent}independent=42`, '```']],
+      ['root tilde fence', ['~~~md', `${contentIndent}independent=42`, '~~~']],
+      ['root type-1 HTML block', ['<pre>', `${contentIndent}independent=42`, '</pre>']],
+      ['root type-6 HTML block', ['<div>', `${contentIndent}independent=42`, '</div>', '', '']],
+      ['root encoded product HTML block', ['&lt;div&gt;', `${contentIndent}independent=42`, '&lt;/div&gt;', '', '']],
+    ]) {
+      expectPass(
+        `${endingName}/${indentName}/${blockName}: tight root exit remains independent`,
+        validBody.replace(
+          leastConfidenceLine,
+          `${leastConfidenceLine}${lineEnding}${blockLines.join(lineEnding)}`,
+        ),
+        [128],
+      );
+    }
+  }
+  for (const [gapName, rootGap] of [
+    ['tight exit', ''],
+    ['loose exit', lineEnding],
+  ]) {
+    for (const [followUpName, followUpLine] of [
+      ['two-space root heading', '  # independent root heading'],
+      ['raw-Tab root code', '\tindependent root code'],
+      ['space+Tab root code', ' \tindependent root code'],
+      ['two-space root peer', '  - **Supplemental**: evidence'],
+    ]) {
+      for (const [blockName, blockLines] of [
+        ['root fence', ['```md', 'independent=42', '```']],
+        ['root type-1 HTML block', ['<pre>', 'independent=42', '</pre>']],
+        ['root type-6 HTML block', ['<div>', 'independent=42', '</div>', '', '']],
+        ['root encoded product HTML block', ['&lt;div&gt;', 'independent=42', '&lt;/div&gt;', '', '']],
+      ]) {
+        expectPass(
+          `${endingName}/${gapName}/${blockName}/${followUpName}: root exit cannot reattach to the old reflection item`,
+          validBody.replace(
+            leastConfidenceLine,
+            `${leastConfidenceLine}${lineEnding}${rootGap}${blockLines.join(lineEnding)}${lineEnding}${followUpLine}`,
+          ),
+          [128],
+        );
+      }
+    }
   }
   // A real peer list item is a Markdown block boundary regardless of whether
   // its key resembles an inline mimic or a malformed custom/empty-key field.

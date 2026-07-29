@@ -607,6 +607,8 @@ function lineOpensParagraph(syntaxLine, previousParagraphOpen) {
   return true;
 }
 
+const ROOT_IGNORED_BLOCK_BOUNDARY = '- coreone-internal-root-ignored-block-boundary';
+
 function stripIgnoredMarkdown(body) {
   let fence = null;
   let htmlBlock = null;
@@ -721,8 +723,19 @@ function stripIgnoredMarkdown(body) {
 
       const openingFence = parseFenceOpening(syntaxLine);
       if (openingFence) {
+        const opensRootIgnoredBlock = container.frame.kind === 'root';
+        const exitsActiveReflection = Boolean(
+          Number.isInteger(activeReflectionContentIndent) &&
+          opensRootIgnoredBlock
+        );
+        if (exitsActiveReflection) {
+          activeReflectionContentIndent = null;
+          activeReflectionSawBlank = false;
+        }
         fence = { ...openingFence, container: container.frame };
-        visibleLines.push('');
+        visibleLines.push(
+          opensRootIgnoredBlock ? ROOT_IGNORED_BLOCK_BOUNDARY : '',
+        );
         paragraphOpen = false;
         paragraphContainer = null;
         handled = true;
@@ -749,10 +762,21 @@ function stripIgnoredMarkdown(body) {
         continuesParagraphIntoLine,
       );
       if (htmlStart) {
+        const opensRootIgnoredBlock = container.frame.kind === 'root';
+        const exitsActiveReflection = Boolean(
+          Number.isInteger(activeReflectionContentIndent) &&
+          opensRootIgnoredBlock
+        );
+        if (exitsActiveReflection) {
+          activeReflectionContentIndent = null;
+          activeReflectionSawBlank = false;
+        }
         htmlBlock = htmlStart.state
           ? { ...htmlStart.state, container: container.frame }
           : null;
-        visibleLines.push('');
+        visibleLines.push(
+          opensRootIgnoredBlock ? ROOT_IGNORED_BLOCK_BOUNDARY : '',
+        );
         paragraphOpen = false;
         paragraphContainer = null;
         handled = true;
