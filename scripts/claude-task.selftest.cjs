@@ -623,11 +623,16 @@ ${' '.repeat(indentation)}${prStrongLeastConfidenceLine}
       );
     const handoffOk = handoffFieldErrors(handoffBody).length === 0;
     const prOk = validatePrBody(prBody).ok;
-    const expectedOk = indentation < 4;
-    if (handoffOk !== expectedOk || prOk !== expectedOk || handoffOk !== prOk) {
+    // The plain field opens a root paragraph, so the surviving four-space
+    // closing-looking line is content. The PR field opens list content, where
+    // the same raw indentation is a real 0–3-space fence after container strip.
+    const expectedHandoffOk = false;
+    const expectedPrOk = indentation < 4;
+    if (handoffOk !== expectedHandoffOk || prOk !== expectedPrOk) {
       reflectionRegressionFailures.push(
         `${marker} tab-list fence ${indentation}-space indent mismatch ` +
-        `(expected=${expectedOk}, handoff=${handoffOk}, pr=${prOk})`,
+        `(expected-handoff=${expectedHandoffOk}, handoff=${handoffOk}, ` +
+        `expected-pr=${expectedPrOk}, pr=${prOk})`,
       );
     }
   }
@@ -654,11 +659,15 @@ ${' '.repeat(indentation)}${prStrongLeastConfidenceLine}
       );
     const handoffOk = handoffFieldErrors(handoffBody).length === 0;
     const prOk = validatePrBody(prBody).ok;
-    const expectedOk = indentation < 4;
-    if (handoffOk !== expectedOk || prOk !== expectedOk || handoffOk !== prOk) {
+    // Container exit leaves a root hanging indent in plain handoff format,
+    // while the authored PR bullet retains its independent list-fence shape.
+    const expectedHandoffOk = false;
+    const expectedPrOk = indentation < 4;
+    if (handoffOk !== expectedHandoffOk || prOk !== expectedPrOk) {
       reflectionRegressionFailures.push(
         `${name} ${indentation}-space indent mismatch ` +
-        `(expected=${expectedOk}, handoff=${handoffOk}, pr=${prOk})`,
+        `(expected-handoff=${expectedHandoffOk}, handoff=${handoffOk}, ` +
+        `expected-pr=${expectedPrOk}, pr=${prOk})`,
       );
     }
   }
@@ -735,9 +744,30 @@ const ambiguousUnknownContinuationPayloads = [
   ['Windows path', 'C:\\proof\\artifact.txt'],
   ['equation', 'x=42'],
 ];
+const unknownBoundaryMimicPayloads = [
+  ['space-before-delimiter equation', 'x = 42', '- **x** = 42'],
+  ['space-padded equation', 'x= 42', '- **x**= 42'],
+  ['Tab-padded equation', 'x=\t42', '- **x**=\t42'],
+  ['entity-delimited equation', 'x&#61; 42', '- **x**&#61; 42'],
+  ['nested-entity-delimited equation', 'x&amp;#61; 42', '- **x**&amp;#61; 42'],
+  ['spaced URL scheme', 'https: //example.test/proof', '- **https**: //example.test/proof'],
+  ['spaced mailto scheme', 'mailto: security@example.test', '- **mailto**: security@example.test'],
+  ['unpadded custom namespace', 'custom-note:value', '- **custom-note**:value'],
+  ['empty custom namespace value', 'custom-note: ', '- **custom-note**: '],
+];
 const hangingContinuationPayloads = [
   ['four-space hanging indent', '    lazy&amp;#9;continuation'],
   ['raw-Tab hanging indent', '\tlazy&amp;#9;continuation'],
+];
+const rootFenceLikeHangingContinuationPayloads = [
+  ['four-space backtick fence-shaped continuation', '    ```md'],
+  ['raw-Tab backtick fence-shaped continuation', '\t```md'],
+  ['four-space tilde fence-shaped continuation', '    ~~~md'],
+  ['raw-Tab tilde fence-shaped continuation', '\t~~~md'],
+];
+const prFenceLikeHangingContinuationPayloads = [
+  ['backtick fence-shaped list continuation', '    ```md', '      ```md'],
+  ['tilde fence-shaped list continuation', '    ~~~md', '      ~~~md'],
 ];
 for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
   for (const [payloadName, payload] of lazyContinuationPayloads) {
@@ -788,6 +818,37 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       );
     }
   }
+  for (const [payloadName, handoffPayload, prPayload] of unknownBoundaryMimicPayloads) {
+    const direct = parseReflectionContract(
+      `${strongLeastConfidence}${lineEnding}${handoffPayload}`,
+    );
+    const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${handoffPayload}`,
+      );
+    const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        prStrongLeastConfidenceLine,
+        `${prStrongLeastConfidenceLine}${lineEnding}${prPayload}`,
+      );
+    const handoffFields = collectHandoffFields(handoffBody);
+    const handoffErrors = handoffFieldErrors(handoffBody);
+    const handoffRaw = handoffFields.rawValues.get('least-confidence');
+    const prResult = validatePrBody(prBody);
+    if (
+      direct.ok ||
+      parseReflectionContract(handoffRaw || '').ok ||
+      !handoffErrors.includes('least-confidence') ||
+      prResult.ok
+    ) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName}: non-custom field-shaped continuation truncated raw ` +
+        `(direct=${direct.ok}, raw=${JSON.stringify(handoffRaw)}, ` +
+        `handoff-errors=${handoffErrors.join('|')}, pr=${prResult.ok})`,
+      );
+    }
+  }
   for (const [payloadName, payload] of hangingContinuationPayloads) {
     const direct = parseReflectionContract(
       `${strongLeastConfidence}${lineEnding}${payload}`,
@@ -811,11 +872,56 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       );
     }
   }
+  for (const [payloadName, handoffPayload] of rootFenceLikeHangingContinuationPayloads) {
+    const direct = parseReflectionContract(
+      `${strongLeastConfidence}${lineEnding}${handoffPayload}`,
+    );
+    const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${handoffPayload}`,
+      );
+    const handoffFields = collectHandoffFields(handoffBody);
+    const handoffErrors = handoffFieldErrors(handoffBody);
+    const handoffRaw = handoffFields.rawValues.get('least-confidence');
+    if (
+      direct.ok ||
+      parseReflectionContract(handoffRaw || '').ok ||
+      !handoffErrors.includes('least-confidence')
+    ) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName}: surviving fence-shaped indent escaped raw ` +
+        `(direct=${direct.ok}, raw=${JSON.stringify(handoffRaw)}, ` +
+        `handoff-errors=${handoffErrors.join('|')})`,
+      );
+    }
+  }
+  for (
+    const [payloadName, directPayload, prPayload]
+    of prFenceLikeHangingContinuationPayloads
+  ) {
+    const direct = parseReflectionContract(
+      `${strongLeastConfidence}${lineEnding}${directPayload}`,
+    );
+    const prBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing)
+      .replace(
+        prStrongLeastConfidenceLine,
+        `${prStrongLeastConfidenceLine}${lineEnding}${prPayload}`,
+      );
+    const prResult = validatePrBody(prBody);
+    if (direct.ok || prResult.ok) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName}: list-content indent escaped PR reflection ` +
+        `(direct=${direct.ok}, pr=${prResult.ok})`,
+      );
+    }
+  }
 }
 for (const [name, handoffUnknownField, prUnknownField] of [
   ['colon unknown boundary', 'custom-note: value', '- **custom-note**: value'],
   ['equals unknown boundary', 'custom_note= value', '- **custom_note**= value'],
   ['raw-Tab padded unknown boundary', 'custom-tab:\tvalue', '- **custom-tab**:\tvalue'],
+  ['internal underscore custom boundary', 'custom-leas_t: value', '- **custom-leas_t**: value'],
 ]) {
   const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)
     .replace(
@@ -1664,12 +1770,21 @@ biggest-missing: risk-v1; anchor=name:upstream schema owner; uncertainty=depende
 if (!handoffFieldErrors(completeHandoff.replace('result:', 'res_ult:')).includes('result')) {
   reflectionRegressionFailures.push('internal underscore in res_ult was accepted as result');
 }
+if (!handoffFieldErrors(`${reflectionHandoff(
+  'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
+  'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
+)}
+res_ult: unrelated informational field`).includes('biggest-missing')) {
+  reflectionRegressionFailures.push(
+    'non-custom internal underscore line escaped the active reflection',
+  );
+}
 if (handoffFieldErrors(`${reflectionHandoff(
   'risk-v1; anchor=name:transaction isolation; uncertainty=untested:additional runtimes',
   'risk-v1; anchor=name:upstream schema owner; uncertainty=dependency:contract stability',
 )}
-res_ult: unrelated informational field`).length !== 0) {
-  reflectionRegressionFailures.push('internal underscore in res_ult collided with result');
+custom_res_ult: unrelated informational field`).length !== 0) {
+  reflectionRegressionFailures.push('custom namespace with internal underscore collided with result');
 }
 assert.deepEqual(
   handoffFieldErrors(reflectionHandoff(
@@ -2591,6 +2706,34 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       );
     }
   }
+  for (const [payloadName, payload] of [
+    ...unknownBoundaryMimicPayloads.map(([name, handoffPayload]) => [name, handoffPayload]),
+    ...rootFenceLikeHangingContinuationPayloads,
+  ]) {
+    const lifecycle = runIsolatedHandoff(
+      strongLeastConfidence,
+      (body) => body.replace(
+        handoffStrongLeastConfidenceLine,
+        `${handoffStrongLeastConfidenceLine}${lineEnding}${payload}`,
+      ),
+    );
+    if (lifecycle.status !== 1) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} lifecycle expected exit=1, actual=${lifecycle.status}`,
+      );
+    }
+    if (!lifecycle.stateExists) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} lifecycle deleted active task state`,
+      );
+    }
+    if (!/least-confidence/.test(lifecycle.stderr)) {
+      reflectionRegressionFailures.push(
+        `${endingName}/${payloadName} lifecycle missed least-confidence error: ` +
+        lifecycle.stderr,
+      );
+    }
+  }
 }
 const observationNoFindingHandoff = runIsolatedHandoff('暂未观察到异常');
 if (observationNoFindingHandoff.status !== 1) {
@@ -2717,15 +2860,21 @@ const tabListFenceVisibleHandoff = runIsolatedHandoff(
     \`\`\``,
   ),
 );
-if (tabListFenceVisibleHandoff.status !== 0) {
+if (tabListFenceVisibleHandoff.status !== 1) {
   reflectionRegressionFailures.push(
-    `tab-list visible handoff expected exit=0, actual=${tabListFenceVisibleHandoff.status}: ` +
+    `tab-list hanging-indent handoff expected exit=1, actual=${tabListFenceVisibleHandoff.status}: ` +
     tabListFenceVisibleHandoff.stderr,
   );
 }
-if (tabListFenceVisibleHandoff.stateExists) {
+if (!tabListFenceVisibleHandoff.stateExists) {
   reflectionRegressionFailures.push(
-    'tab-list visible handoff retained the active task state file',
+    'tab-list hanging-indent handoff deleted the active task state file',
+  );
+}
+if (!/least-confidence/.test(tabListFenceVisibleHandoff.stderr)) {
+  reflectionRegressionFailures.push(
+    `tab-list hanging-indent handoff missed least-confidence error: ` +
+    tabListFenceVisibleHandoff.stderr,
   );
 }
 const tabListFenceHiddenHandoff = runIsolatedHandoff(

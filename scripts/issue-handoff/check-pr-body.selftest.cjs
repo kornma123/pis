@@ -560,9 +560,24 @@ const ambiguousUnknownContinuationPayloads = [
   ['Windows path', 'C:\\proof\\artifact.txt'],
   ['equation', 'x=42'],
 ];
+const unknownBoundaryMimicPayloads = [
+  ['space-before-delimiter equation', 'x = 42', '- **x** = 42'],
+  ['space-padded equation', 'x= 42', '- **x**= 42'],
+  ['Tab-padded equation', 'x=\t42', '- **x**=\t42'],
+  ['entity-delimited equation', 'x&#61; 42', '- **x**&#61; 42'],
+  ['nested-entity-delimited equation', 'x&amp;#61; 42', '- **x**&amp;#61; 42'],
+  ['spaced URL scheme', 'https: //example.test/proof', '- **https**: //example.test/proof'],
+  ['spaced mailto scheme', 'mailto: security@example.test', '- **mailto**: security@example.test'],
+  ['unpadded custom namespace', 'custom-note:value', '- **custom-note**:value'],
+  ['empty custom namespace value', 'custom-note: ', '- **custom-note**: '],
+];
 const hangingContinuationPayloads = [
   ['four-space hanging indent', '    lazy&amp;#9;continuation'],
   ['raw-Tab hanging indent', '\tlazy&amp;#9;continuation'],
+];
+const prFenceLikeHangingContinuationPayloads = [
+  ['backtick fence-shaped continuation', '    ```md', '      ```md'],
+  ['tilde fence-shaped continuation', '    ~~~md', '      ~~~md'],
 ];
 for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
   for (const [payloadName, payload] of lazyContinuationPayloads) {
@@ -605,6 +620,21 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       /我现在最没把握的是什么|Least confidence/,
     );
   }
+  for (const [payloadName, plainPayload, prPayload] of unknownBoundaryMimicPayloads) {
+    assert.equal(
+      parseReflectionContract(`${typedRisk}${lineEnding}${plainPayload}`).ok,
+      false,
+      `${endingName}/${payloadName}: direct parser rejects a field-shaped continuation`,
+    );
+    expectFail(
+      `${endingName}/${payloadName}: PR collector rejects a non-custom bullet boundary`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}${prPayload}`,
+      ),
+      /我现在最没把握的是什么|Least confidence/,
+    );
+  }
   for (const [payloadName, payload] of hangingContinuationPayloads) {
     assert.equal(
       parseReflectionContract(`${typedRisk}${lineEnding}${payload}`).ok,
@@ -620,11 +650,30 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       /我现在最没把握的是什么|Least confidence/,
     );
   }
+  for (
+    const [payloadName, directPayload, prPayload]
+    of prFenceLikeHangingContinuationPayloads
+  ) {
+    assert.equal(
+      parseReflectionContract(`${typedRisk}${lineEnding}${directPayload}`).ok,
+      false,
+      `${endingName}/${payloadName}: direct parser rejects a fence-shaped continuation`,
+    );
+    expectFail(
+      `${endingName}/${payloadName}: surviving list-content indent stays in the PR reflection`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}${prPayload}`,
+      ),
+      /我现在最没把握的是什么|Least confidence/,
+    );
+  }
 }
 for (const [name, unknownFieldLine] of [
   ['colon unknown boundary', '- **custom-note**: value'],
   ['equals unknown boundary', '- **custom_note**= value'],
   ['raw-Tab padded unknown boundary', '- **custom-tab**:\tvalue'],
+  ['internal underscore custom boundary', '- **custom-leas_t**: value'],
 ]) {
   const body = validBody.replace(
     leastConfidenceLine,
@@ -1464,14 +1513,14 @@ for (const [name, encodedDelimiter] of [
     /字段|重复/,
   );
 }
-expectPass(
-  'internal underscore does not collide with required key',
+expectFail(
+  'non-custom internal underscore line remains reflection content',
   validBody.replace(
     leastConfidenceLine,
     `${leastConfidenceLine}\n` +
       '- **我现在最没把握的是什么？ / Leas_t confidence**: TODO later fill this',
   ),
-  [128],
+  /我现在最没把握的是什么|Least confidence/,
 );
 expectPass(
   'NFKC-equivalent required key is recognized',

@@ -723,17 +723,16 @@ function continuesVisibleReflectionParagraph(line) {
   // stripIgnoredMarkdown already removes an indented code block when no
   // paragraph is open. A surviving four-space / Tab line therefore inherits
   // the open paragraph and must remain part of the reflection's raw value.
-  if (/^(?: {4,}|\t)/u.test(value)) {
-    return !parseFenceOpening(value.replace(/^[ \t]+/u, ''));
-  }
+  if (/^(?: {4,}|\t)/u.test(value)) return true;
   return !startsNonParagraphBlock(value);
 }
 
 function isUnambiguousUnknownFieldBoundary(parsed) {
   return Boolean(
     parsed?.key &&
-    /^[a-z][a-z0-9_-]*$/iu.test(parsed.key) &&
-    /^[ \t]+$/u.test(parsed.rawValuePadding || ''),
+    /^custom[-_][a-z0-9_-]+$/u.test(parsed.key) &&
+    /^[ \t]+$/u.test(parsed.rawValuePadding || '') &&
+    parsed.rawValue,
   );
 }
 
@@ -767,10 +766,13 @@ function collectVisibleFields(body, parseOptions = {}) {
       if (
         unknownBoundaryCandidate &&
         !unknownBoundaryCandidate.malformed &&
-        !candidateIsKnownBoundary &&
-        isUnambiguousUnknownFieldBoundary(unknownBoundaryCandidate)
+        !candidateIsKnownBoundary
       ) {
-        activeReflectionKey = null;
+        if (isUnambiguousUnknownFieldBoundary(unknownBoundaryCandidate)) {
+          activeReflectionKey = null;
+        } else {
+          appendReflectionContinuation(line);
+        }
         continue;
       }
       if (
@@ -801,8 +803,7 @@ function collectVisibleFields(body, parseOptions = {}) {
       parsed.key &&
       continuationBoundaryKeys instanceof Set &&
       !isKnownFieldBoundary &&
-      !isUnknownFieldBoundary &&
-      continuesVisibleReflectionParagraph(line)
+      !isUnknownFieldBoundary
     ) {
       appendReflectionContinuation(line);
       continue;
