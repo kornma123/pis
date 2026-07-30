@@ -23,6 +23,7 @@ type Binding = {
 
 let manager: typeof import('../src/database/DatabaseManager.js')
 let lifecycle: typeof import('../src/services/account-reconciliation-lifecycle.js')
+let VERDICT_REASONS: readonly string[]
 let db: any
 let sequence = 0
 
@@ -187,6 +188,7 @@ function seedSupersededWithSurvivingDiff(name: string) {
 beforeAll(async () => {
   manager = await import('../src/database/DatabaseManager.js')
   lifecycle = await import('../src/services/account-reconciliation-lifecycle.js')
+  VERDICT_REASONS = (await import('../src/utils/reconcile-account.js')).VERDICT_REASONS
   manager.initializeDatabase()
   db = manager.getDatabase()
 })
@@ -1071,11 +1073,15 @@ describe('LOC-005 R2 verdict generation transaction and lineage', () => {
 describe('LOC-005 R2 legacy binding and decision freeze', () => {
   it('keeps an unbound legacy closed hospital-month immutable across restart', () => {
     const binding = seedSource({ name: 'legacy-closed' })
+    // #93-A 起终态直插只能经 trigger 被摘窗口构造（生产等价：闸落地后唯一注入路径；
+    // 本夹具模拟的就是 predecessor 遗留的无绑定终态行，测试意图不变）。
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_pending_insert_shape')
     db.prepare(`
       INSERT INTO reconcile_hospital_months
         (id, partner_id, partner_name, service_month, status, closed_at, closed_by)
       VALUES ('HM-LEGACY-CLOSED', ?, 'Legacy partner', ?, 'legacy-closed', CURRENT_TIMESTAMP, 'legacy-user')
     `).run(binding.partnerId, binding.settlementMonth)
+    manager.upgradeAccountReconciliationSchema(db)
 
     expectCode(
       () => lifecycle.computeAccountReconciliation(db, binding, 'USER-001'),
@@ -1216,7 +1222,7 @@ describe('LOC-005 R2 legacy binding and decision freeze', () => {
     ).get(snapshot.hospitalMonthId) as any
     db.prepare(`
       UPDATE reconcile_diffs
-      SET verdict = '漏收，需要补收', verdict_reason = 'R2 reviewed',
+      SET verdict = '漏收，需补收', verdict_reason = 'R2 reviewed',
           verdict_by = 'USER-001', verdict_at = CURRENT_TIMESTAMP, follow_up = 'supplement'
       WHERE id = ?
     `).run(diff.id)
@@ -3113,6 +3119,7 @@ describe('LOC-005 FUP #87 trigger single authority, pending state machines, bind
       'trg_reconcile_hospital_month_complete_finality',
       'trg_reconcile_hospital_month_pending_guard',
       'trg_reconcile_hospital_month_pending_identity_freeze',
+      'trg_reconcile_hospital_month_pending_insert_shape',
     ],
     account_reconcile_hospital_month_bindings: [
       'trg_reconcile_binding_final_immutable',
@@ -3121,6 +3128,11 @@ describe('LOC-005 FUP #87 trigger single authority, pending state machines, bind
       'trg_reconcile_binding_month_immutable',
       'trg_reconcile_binding_generation_relation_insert',
       'trg_reconcile_binding_generation_relation_update',
+    ],
+    account_reconcile_completion_legacy_provenance: [
+      'trg_reconcile_legacy_provenance_no_insert',
+      'trg_reconcile_legacy_provenance_no_update',
+      'trg_reconcile_legacy_provenance_no_delete',
     ],
   }
   const RECONCILE_GUARD_TABLES = Object.keys(AUTHORITATIVE_TRIGGER_SET)
@@ -3512,6 +3524,80 @@ describe('LOC-005 FUP #87 trigger single authority, pending state machines, bind
       partner_id: binding.partnerId,
       service_month: binding.settlementMonth,
     })
+  })
+
+  // ── c3) #93-A 终态 hospital-month INSERT 闸与启动终态一致性扫描 ────────────
+
+  it('rejects terminal-state hospital month INSERT (zero write; fresh schema and real restart)', () => {
+    // A/P1：完成/关账/#92 身份闸均为 BEFORE UPDATE，INSERT 此前只查非空 id——直接
+    // SQL 可插入 status='已关账'+confirmed_lab_revenue=999999+completed_*/closed_*=
+    // attacker 的伪造终态行，重启放行且 overview 纳入确认实收。新 BEFORE INSERT 闸
+    // 只放行严格 pending 形状（lifecycle/reconcile-compute 两个合法 INSERT 均为该
+    // 形状：status='待复核'、终态四字段 NULL、revenue NULL、reopen 两字段 NULL）。
+    // 修复前三种伪造形状全部真实落库（助手 SAVEPOINT 回滚保证零残留）→ RED。
+    const forgedId = `HM-93-FORGED-${++sequence}`
+    const forgedPartner = `PT-93-FORGED-${sequence}`
+    const terminalShapes = [
+      `INSERT INTO reconcile_hospital_months
+         (id, partner_id, partner_name, service_month, status, confirmed_lab_revenue,
+          completed_at, completed_by, closed_at, closed_by)
+       VALUES ('${forgedId}-closed', '${forgedPartner}', 'Forged closed', '2099-01', '已关账',
+               999999, CURRENT_TIMESTAMP, 'attacker', CURRENT_TIMESTAMP, 'attacker')`,
+      `INSERT INTO reconcile_hospital_months
+         (id, partner_id, partner_name, service_month, status, confirmed_lab_revenue,
+          completed_at, completed_by)
+       VALUES ('${forgedId}-complete', '${forgedPartner}-2', 'Forged complete', '2099-01',
+               '复核完成', 888888, CURRENT_TIMESTAMP, 'attacker')`,
+      `INSERT INTO reconcile_hospital_months
+         (id, partner_id, partner_name, service_month, status, confirmed_lab_revenue)
+       VALUES ('${forgedId}-revenue', '${forgedPartner}-3', 'Forged revenue', '2099-01',
+               '待复核', 777777)`,
+    ]
+    const assertInsertsBlocked = (connection: DatabaseSync) => {
+      for (const sql of terminalShapes) {
+        expectDatabaseMutationBlocked(connection, () => {
+          connection.exec(sql)
+        }, /PENDING_HOSPITAL_MONTH_INSERT_SHAPE/)
+      }
+      expect(connection.prepare(`
+        SELECT COUNT(*) AS n FROM reconcile_hospital_months WHERE id LIKE ?
+      `).get(`${forgedId}-%`)).toMatchObject({ n: 0 })
+    }
+    assertInsertsBlocked(db)
+    manager.closeDatabase()
+    manager.initializeDatabase()
+    db = manager.getDatabase()
+    assertInsertsBlocked(db)
+  })
+
+  it('fails boot when a bound terminal month drifts from its generation (trigger-drop window; first and second boot)', () => {
+    // A/P1 启动扫描：有 binding 的终态月必须与所绑 current generation 同院/同月/
+    // 同终态（artifact 有效性由既有 completion-shape 扫描在同次 upgrade 内接力）。
+    // 漂移经 trigger 被摘窗口注入（complete_finality 冻结 service_month、hcm 侧
+    // identity trigger 也挡，均先摘），修复前无任何终态一致性扫描 → 开机放行
+    // （RED）；修复后 fail-closed 且同库二次启动一致（幂等）。探针隔离零共享污染。
+    const { binding, hospitalMonthId } = seedPendingMonth('93-terminal-scan')
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(hospitalMonthId) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db, binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+    const probe = vacuumProbe('93-terminal-scan')
+    try {
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_complete_finality')
+      probe.exec('DROP TRIGGER IF EXISTS trg_hcm_reconcile_identity_immutable')
+      probe.prepare(`
+        UPDATE reconcile_hospital_months SET service_month = '2099-01' WHERE id = ?
+      `).run(hospitalMonthId)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/RECONCILE_HOSPITAL_MONTH_TERMINAL_MISMATCH/)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/RECONCILE_HOSPITAL_MONTH_TERMINAL_MISMATCH/)
+    } finally {
+      probe.close()
+    }
   })
 
   // ── d) binding 行级关系闸 ─────────────────────────────────────────────────
@@ -4265,6 +4351,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
       seed.close()
     }
     // 首启：补列 + 写 sentinel（持久）→ 绿
+    let sentinelHash = ''
     const first = openRegisteredTestDatabase(probePath)
     try {
       expect(() => manager.upgradeAccountReconciliationSchema(first)).not.toThrow()
@@ -4278,6 +4365,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
       expect(String(sentinel.json)).toContain('legacy-missing-artifact')
       const expectedDigest = createHash('sha256').update(String(sentinel.json)).digest('hex')
       expect(String(sentinel.hash)).toBe(`sha256:${expectedDigest}`)
+      sentinelHash = String(sentinel.hash)
     } finally {
       first.close()
     }
@@ -4285,6 +4373,39 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     const second = openRegisteredTestDatabase(probePath)
     try {
       expect(() => manager.upgradeAccountReconciliationSchema(second)).not.toThrow()
+      // #93-C：provenance 与 sentinel 同迁移事务写入——存在、hash 与 stored artifact
+      // 一致、来源标记精确；三闸在场时任何 INSERT/UPDATE/DELETE 无条件 ABORT。
+      const provenance = second.prepare(`
+        SELECT artifact_hash AS artifactHash, provenance AS provenance
+          FROM account_reconcile_completion_legacy_provenance
+         WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as
+        | { artifactHash: string; provenance: string }
+        | undefined
+      expect(provenance).toEqual({
+        artifactHash: sentinelHash,
+        provenance: 'predecessor-missing-completion-artifact-columns',
+      })
+      expectDatabaseMutationBlocked(second, () => {
+        second.prepare(`
+          INSERT INTO account_reconcile_completion_legacy_provenance
+            (reconcile_generation_id, artifact_hash, provenance)
+          VALUES ('RECON-FORGED-PROVENANCE', 'sha256:forged', 'predecessor-missing-completion-artifact-columns')
+        `).run()
+      }, /LEGACY_SENTINEL_PROVENANCE_IMMUTABLE/)
+      expectDatabaseMutationBlocked(second, () => {
+        second.prepare(`
+          UPDATE account_reconcile_completion_legacy_provenance
+             SET artifact_hash = 'sha256:drifted'
+           WHERE reconcile_generation_id = ?
+        `).run(fixture.binding.reconcileGenerationId)
+      }, /LEGACY_SENTINEL_PROVENANCE_IMMUTABLE/)
+      expectDatabaseMutationBlocked(second, () => {
+        second.prepare(`
+          DELETE FROM account_reconcile_completion_legacy_provenance
+           WHERE reconcile_generation_id = ?
+        `).run(fixture.binding.reconcileGenerationId)
+      }, /LEGACY_SENTINEL_PROVENANCE_IMMUTABLE/)
     } finally {
       second.close()
     }
@@ -4329,6 +4450,19 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
                closed_at = NULL, closed_by = NULL,
                completion_artifact_json = NULL, completion_artifact_hash = NULL
          WHERE status IN ('complete', 'closed')
+      `)
+      // #93-A 终态一致性扫描读另一侧：只隔离 generation 会留下「hm 终态 + 所绑 gen
+      // pending」的真实矛盾（生产无任何合法路径产出该形状，正是新扫描的命中对象）。
+      // 同款意图扩展：hm 一并隔离回 pending 形状（不触碰 binding/current 标记）。
+      // hm 侧 reset 本身被 complete_finality/closed_immutable 拦截——同代次侧先摘
+      // 表上 trigger（探针隔离；upgrade 随后按权威集重装 reconcile 族）。
+      dropReferencingTriggers(probe, 'reconcile_hospital_months')
+      probe.exec(`
+        UPDATE reconcile_hospital_months
+           SET status = '待复核', completed_at = NULL, completed_by = NULL,
+               closed_at = NULL, closed_by = NULL, confirmed_lab_revenue = NULL
+         WHERE status IN ('复核完成', '已关账')
+            OR completed_at IS NOT NULL OR closed_at IS NOT NULL
       `)
       probe.exec('ALTER TABLE account_reconcile_generations DROP COLUMN statement_artifact_hash')
       expectGenerationsConstraintsIntact(probe)
@@ -4410,6 +4544,16 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
                closed_at = NULL, closed_by = NULL,
                completion_artifact_json = NULL, completion_artifact_hash = NULL
          WHERE status IN ('complete', 'closed')
+      `)
+      // #93-A：同 p1c-null-drift——hm 一并隔离回 pending 形状（否则新终态一致性扫描
+      // 正确命中「hm 终态 + 所绑 gen pending」矛盾，与本例「合法 predecessor」语义无关）。
+      dropReferencingTriggers(probe, 'reconcile_hospital_months')
+      probe.exec(`
+        UPDATE reconcile_hospital_months
+           SET status = '待复核', completed_at = NULL, completed_by = NULL,
+               closed_at = NULL, closed_by = NULL, confirmed_lab_revenue = NULL
+         WHERE status IN ('复核完成', '已关账')
+            OR completed_at IS NOT NULL OR closed_at IS NOT NULL
       `)
       probe.exec('ALTER TABLE account_reconcile_generations DROP COLUMN statement_artifact_hash')
       expectGenerationsConstraintsIntact(probe)
@@ -5254,6 +5398,115 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     })
   })
 
+  // ── #93-C sentinel durable provenance（主控派单 C）─────────────────────────────
+  // 漏洞：sentinel 的 schemaVersion/marker/reason 四个字面量与键集全公开，hash 可对自造
+  // JSON 自算——trigger-drop 窗口把真 artifact 换成「精确 sentinel + 自洽 hash」，
+  // allowLegacy 开机扫描无法区分「迁移事务真回填」与「当前形状伪造」，首启次启均放行。
+  // 修复：sentinel 只能在 completion artifact 两列真实缺失的 predecessor 迁移事务中产生，
+  // 同事务写 account_reconcile_completion_legacy_provenance（durable、不可改写/删除、
+  // 与正常完成互不混用）；后续 startup 只认可带该来源的 sentinel。
+
+  it('rejects a current-shape exact self-consistent sentinel without migration provenance at first boot and a real restart', () => {
+    // 伪造上限：四键精确、reason 逐字、reconcileGenerationId 绑定本行、hash 对精确字节
+    // 自洽——除「无迁移来源」外与真 sentinel 逐字节同形，只有 provenance 闸能拒。
+    expectArtifactBootForgeryRejected('p1x-sentinel-no-provenance', context => {
+      const json = JSON.stringify({
+        schemaVersion: 'account-reconciliation-completion/legacy-sentinel-v1',
+        marker: 'legacy-missing-artifact',
+        reconcileGenerationId: context.binding.reconcileGenerationId,
+        reason: 'predecessor schema had no completion artifact columns; original artifact is unrecoverable',
+      })
+      return { json, hash: prefixedSha256Of(json) }
+    })
+  })
+
+  it('rejects migration provenance mixed with a normal completion artifact (never attachable to real evidence; naive write blocked, trigger-drop write caught at boot)', () => {
+    // 「不可和正常完成混用」双层证据：①正常连接（三闸在场）直接 INSERT provenance
+    // 无条件 ABORT；②攻击者上限（摘 no_insert 闸）把 provenance 挂到真 lifecycle
+    // 完成行上、hash 与真 artifact 一致（最强一致形状）——开机扫描仍 fail-closed
+    // （真实 artifact 绝不许挂 provenance），首启次启同码。
+    const fixture = seedFactRichMonthP1('p1x-provenance-mixed-with-real')
+    const probe = vacuumProbeP1('p1x-provenance-mixed-with-real')
+    try {
+      manager.upgradeAccountReconciliationSchema(probe)
+      lifecycle.completeAccountReconciliation(probe as any, fixture.binding, 'USER-001')
+      const completed = probe.prepare(`
+        SELECT completion_artifact_hash AS hash
+          FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+      `).get(fixture.binding.reconcileGenerationId) as { hash: string }
+      expectDatabaseMutationBlocked(probe, () => {
+        probe.prepare(`
+          INSERT INTO account_reconcile_completion_legacy_provenance
+            (reconcile_generation_id, artifact_hash, provenance)
+          VALUES (?, ?, 'predecessor-missing-completion-artifact-columns')
+        `).run(fixture.binding.reconcileGenerationId, completed.hash)
+      }, /LEGACY_SENTINEL_PROVENANCE_IMMUTABLE/)
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_legacy_provenance_no_insert')
+      probe.prepare(`
+        INSERT INTO account_reconcile_completion_legacy_provenance
+          (reconcile_generation_id, artifact_hash, provenance)
+        VALUES (?, ?, 'predecessor-missing-completion-artifact-columns')
+      `).run(fixture.binding.reconcileGenerationId, completed.hash)
+      const expected = new RegExp(
+        `RECONCILE_GENERATION_COMPLETION_MALFORMED:${fixture.binding.reconcileGenerationId}`,
+      )
+      expect(() => manager.upgradeAccountReconciliationSchema(probe)).toThrow(expected)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe)).toThrow(expected)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('rejects a sentinel whose provenance hash drifts from the stored artifact hash at first boot and a real restart', () => {
+    // provenance 与 sentinel 同迁移事务写入——artifact 自洽（exact sentinel + 正确 hash）
+    // 但 provenance.artifact_hash 漂移 = 伪造/事后改写残留，开机扫描双向钉带出。
+    const fixture = seedPendingMonthP1('p1x-provenance-hash-drift')
+    const probePath = join(testDirectory, `p1x-provenance-hash-drift-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      const sentinelJson = JSON.stringify({
+        schemaVersion: 'account-reconciliation-completion/legacy-sentinel-v1',
+        marker: 'legacy-missing-artifact',
+        reconcileGenerationId: fixture.binding.reconcileGenerationId,
+        reason: 'predecessor schema had no completion artifact columns; original artifact is unrecoverable',
+      })
+      dropReferencingTriggers(seed, 'account_reconcile_generations')
+      // 攻击者上限：provenance no_insert 闸一并摘除（开机扫描是最后一道）。
+      seed.exec('DROP TRIGGER IF EXISTS trg_reconcile_legacy_provenance_no_insert')
+      seed.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001',
+               completion_artifact_json = ?, completion_artifact_hash = ?
+         WHERE reconcile_generation_id = ?
+      `).run(
+        sentinelJson, prefixedSha256Of(sentinelJson), fixture.binding.reconcileGenerationId,
+      )
+      seed.prepare(`
+        INSERT INTO account_reconcile_completion_legacy_provenance
+          (reconcile_generation_id, artifact_hash, provenance)
+        VALUES (?, ?, 'predecessor-missing-completion-artifact-columns')
+      `).run(fixture.binding.reconcileGenerationId, prefixedSha256Of('drifted-artifact-bytes'))
+    } finally {
+      seed.close()
+    }
+    const expected = new RegExp(
+      `RECONCILE_GENERATION_COMPLETION_MALFORMED:${fixture.binding.reconcileGenerationId}`,
+    )
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first)).toThrow(expected)
+    } finally {
+      first.close()
+    }
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second)).toThrow(expected)
+    } finally {
+      second.close()
+    }
+  })
+
   // ── P1 partial schema 判别 ─────────────────────────────────────────────────────
   // 受支持 predecessor 仅允许两列都原本不存在；只预存 json 或只预存 hash 都是
   // current/partial schema drift——两个方向首启+真实重启 fail-closed 稳定精确码，
@@ -5332,5 +5585,262 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     } finally {
       second.close()
     }
+  })
+
+  // ── #93-B artifact 业务语义（主控派单 B）────────────────────────────────────────
+  // 漏洞：事实集比对（deepFactEqual）只钉「artifact == 数据库当前事实」——raw SQL 在 pending
+  // 窗口先把 diff 认定列写成语义伪造形状，再原样镜像进 artifact，结构/绑定/hash/事实四关
+  // 全过：verdict 不在权威 6 枚举 / followUp ≠ verdictFollowUp(verdict) / verdictBy·At 缺失 /
+  // 「漏收，需补收」零张（或多张）补收单 / 其他 verdict 挂补收单。三通道必须同拒且零写：
+  //   ① lifecycle completion 409（prime 一并回滚）；
+  //   ② pending→complete trigger（UDF 共用同一语义实现）；
+  //   ③ startup scan（列先存库 fail-closed，真 predecessor sentinel 短路不受影响）。
+  // 语义唯一权威源 = utils/reconcile-account.ts 的 VERDICT_REASONS/verdictFollowUp/
+  // drivesSupplement（非 owned，本文件只读引用其字面量钉版）。金额/数量/revenue 的
+  // canonical 边界沿用既有 isFiniteNumber/isNonNegativeSafeInteger 与 lifecycle
+  // canonicalAmount/canonicalCount，本族不放宽。
+  interface SemanticForgeShape {
+    label: string
+    verdict: string
+    followUp: string
+    by: string | null
+    at: string | null
+    supplement: boolean
+  }
+  const SEMANTIC_FORGERY_SHAPES: SemanticForgeShape[] = [
+    // 单变量①：verdict 越出权威枚举（其余字段全合法形状）。
+    {
+      label: 'verdict-outside-enum',
+      verdict: '伪造结论', followUp: 'settled', by: 'USER-001', at: '2026-08-01 00:00:00',
+      supplement: false,
+    },
+    // 单变量②：枚举内 verdict 但 followUp ≠ verdictFollowUp(verdict)。
+    {
+      label: 'followup-mapping-drift',
+      verdict: '核对无误', followUp: 'supplement', by: 'USER-001', at: '2026-08-01 00:00:00',
+      supplement: false,
+    },
+    // 单变量③：认定人/认定时间缺失（映射正确）。
+    {
+      label: 'verdict-actor-missing',
+      verdict: '核对无误', followUp: 'settled', by: null, at: null,
+      supplement: false,
+    },
+    // 单变量④：「漏收，需补收」映射正确但零张补收单（恰一张的基数违例）。
+    {
+      label: 'supplement-missing-for-recovery',
+      verdict: '漏收，需补收', followUp: 'supplement', by: 'USER-001', at: '2026-08-01 00:00:00',
+      supplement: false,
+    },
+    // 单变量⑤：非漏收 verdict（映射正确）却挂一张谱系合法的补收单（零张的基数违例）。
+    {
+      label: 'supplement-attached-to-settled',
+      verdict: '核对无误', followUp: 'settled', by: 'USER-001', at: '2026-08-01 00:00:00',
+      supplement: true,
+    },
+  ]
+
+  // 语义伪造 fixture：1 diff 的 pending 月，raw SQL 把认定列写成指定形状（pending 窗口
+  // 合法可达——final_immutable 只管 complete/closed 代、identity 闸只管身份列，认定列
+  // 直接 SQL 可写正是攻击面）；shape.supplement 时补一张谱系合法（同代同院同月同 case_no、
+  // generation current+pending）的补收单，使违例只剩「基数」单变量。primeRevenue 用于
+  // 镜像攻击（trigger/boot 通道）：月值预置后 artifact 镜像可过 revenue 闸，保证拒绝只能
+  // 归因业务语义；lifecycle 通道不预置（prime 回滚本身是被断言的零写证据）。
+  function seedSemanticForgeMonthP1(
+    name: string,
+    shape: SemanticForgeShape,
+    options: { primeRevenue?: boolean } = {},
+  ) {
+    const fixture = seedPendingMonthP1(name)
+    const diffs = db.prepare(`
+      SELECT id, case_no FROM reconcile_diffs
+       WHERE hospital_month_id = ? AND reconcile_generation_id = ?
+    `).all(fixture.hospitalMonthId, fixture.binding.reconcileGenerationId) as Array<{
+      id: string
+      case_no: string
+    }>
+    expect(diffs).toHaveLength(1)
+    const diff = diffs[0]
+    db.prepare(`
+      UPDATE reconcile_diffs
+         SET verdict = ?, verdict_reason = NULL, verdict_by = ?, verdict_at = ?, follow_up = ?
+       WHERE id = ?
+    `).run(shape.verdict, shape.by, shape.at, shape.followUp, diff.id)
+    if (shape.supplement) {
+      db.prepare(`
+        INSERT INTO supplement_orders
+          (id, partner_id, service_month, source_diff_id, reconcile_generation_id,
+           case_no, amount, case_count, submitted_by)
+        VALUES (?, ?, ?, ?, ?, ?, 100, 1, 'USER-001')
+      `).run(
+        `SO-SEM-${name}`,
+        fixture.binding.partnerId,
+        fixture.binding.settlementMonth,
+        diff.id,
+        fixture.binding.reconcileGenerationId,
+        diff.case_no,
+      )
+    }
+    if (options.primeRevenue) {
+      db.prepare('UPDATE reconcile_hospital_months SET confirmed_lab_revenue = ? WHERE id = ?')
+        .run(100, fixture.hospitalMonthId)
+    }
+    return fixture
+  }
+
+  it('rejects semantically forged verdict facts at lifecycle completion (409 zero write; five single-variable shapes)', () => {
+    for (const shape of SEMANTIC_FORGERY_SHAPES) {
+      const fixture = seedSemanticForgeMonthP1(`p1b-lifecycle-${shape.label}`, shape)
+      expectLifecycle409(
+        () => lifecycle.completeAccountReconciliation(db, fixture.binding, 'USER-001'),
+        'RECONCILIATION_VERDICT_SEMANTICS',
+      )
+      // 零写：generation 仍 pending（终态字段/artifact 全 NULL）；月行仍 待复核 +
+      // confirmed_lab_revenue NULL——revenue prime 随事务整体回滚，不存在
+      // pending+revenue 中间态（形状与 p1f-revenue-prime-rollback 同款）。
+      expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'pending',
+        completed_at: null,
+        completed_by: null,
+        completion_artifact_json: null,
+        completion_artifact_hash: null,
+      })
+      expect(db.prepare(`
+        SELECT status, confirmed_lab_revenue FROM reconcile_hospital_months WHERE id = ?
+      `).get(fixture.hospitalMonthId)).toEqual({ status: '待复核', confirmed_lab_revenue: null })
+    }
+  })
+
+  it('rejects a fact-mirrored but semantically invalid pending→complete write (zero write; five single-variable shapes)', () => {
+    for (const shape of SEMANTIC_FORGERY_SHAPES) {
+      const label = `p1b-trigger-${shape.label}`
+      const fixture = seedSemanticForgeMonthP1(label, shape, { primeRevenue: true })
+      const probe = vacuumProbeP1(label)
+      try {
+        manager.upgradeAccountReconciliationSchema(probe) // 注册 UDF + 重装权威 trigger
+        const context = artifactForgeContext(probe, fixture)
+        // 镜像攻击上限：artifact 逐项等于数据库当前事实（含伪造认定），结构/绑定/hash/
+        // 事实/revenue 五关全绿——只有业务语义闸能拒。
+        const json = factBoundArtifactJson(context, context.facts)
+        expectDatabaseMutationBlocked(probe, () => {
+          probe.prepare(`
+            UPDATE account_reconcile_generations
+               SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001',
+                   completion_artifact_json = ?, completion_artifact_hash = ?
+             WHERE reconcile_generation_id = ?
+          `).run(json, prefixedSha256Of(json), fixture.binding.reconcileGenerationId)
+        }, /PENDING_RECONCILIATION_COMPLETION_MALFORMED/)
+        expect(bindingGenerationRow(probe, fixture.binding.reconcileGenerationId)).toMatchObject({
+          status: 'pending',
+          completed_at: null,
+          completed_by: null,
+          completion_artifact_json: null,
+          completion_artifact_hash: null,
+        })
+      } finally {
+        probe.close()
+      }
+    }
+  })
+
+  it('fails boot on a fact-mirrored but semantically invalid complete generation (first boot and real restart; five single-variable shapes)', () => {
+    for (const shape of SEMANTIC_FORGERY_SHAPES) {
+      expectArtifactBootForgeryRejected(
+        `p1b-boot-${shape.label}`,
+        context => {
+          const json = factBoundArtifactJson(context, context.facts)
+          return { json, hash: prefixedSha256Of(json) }
+        },
+        label => seedSemanticForgeMonthP1(label, shape, { primeRevenue: true }),
+      )
+    }
+  })
+
+  it('accepts a lifecycle completion spanning all six verdicts with exact supplement cardinality (fresh and real restart)', () => {
+    // 正向多 verdict 全链：同院同月 6 病例各一条 diff（bill 1 vs lis 2），依次认定
+    // 权威 6 枚举——仅「漏收，需补收」驱动恰一张补收单，其余五 verdict 零张；
+    // completion artifact 封存 6 决定 1 补收，首启与真实重启均绿（新语义闸对合法
+    // 形状零误伤——fail-closed 新闸先对齐既有合法形状的反面，再谈拦截）。
+    const month = '2026-08'
+    const suffix = `p1b-six-verdicts-${++sequence}`
+    const partnerId = `PT-LOC005-R2-${suffix}`
+    const statementGenerationId = `STMT-LOC005-R2-${suffix}`
+    const reconcileGenerationId = `RECON-LOC005-R2-${suffix}`
+    const batchId = `BATCH-LOC005-R2-${suffix}`
+    const caseNos = VERDICT_REASONS.map((_, index) => `CASE-LOC005-R2-${suffix}-V${index}`)
+    db.prepare('INSERT INTO partners (id, code, name, status) VALUES (?, ?, ?, 1)')
+      .run(partnerId, `CODE-${suffix}`, `Partner ${suffix}`)
+    db.prepare(`
+      INSERT INTO statement_import_batches
+        (id, partner_id, source_hash, template_family, parser_revision, config_revision,
+         settlement_month, generation_id, is_current, raw_row_count, normalized_line_count, status)
+      VALUES (?, ?, ?, 'loc005-r2-test', 'r1', 'c1', ?, ?, 1, 6, 6, 'posted')
+    `).run(batchId, partnerId, `HASH-${suffix}`, month, statementGenerationId)
+    const insertRaw = db.prepare(`
+      INSERT INTO statement_raw_rows
+        (id, batch_id, generation_id, source_sheet, source_row, row_json)
+      VALUES (?, ?, ?, 'sheet', ?, ?)
+    `)
+    const insertLine = db.prepare(`
+      INSERT INTO statement_normalized_lines
+        (id, batch_id, generation_id, partner_id, settlement_month, ledger_settlement_month,
+         case_no, item_name, source_sheet, source_row, source_column, source_label,
+         template_family, row_kind, line_grain, business_line, amount_role, amount,
+         classification_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sheet', ?, 'amount', ?,
+              'loc005-r2-test', 'detail', 'case', 'IN', 'gross', ?, 'classified')
+    `)
+    const insertLis = db.prepare(`
+      INSERT INTO lis_cases
+        (id, case_no, partner_id, ihc_count, special_stain_count, operate_time)
+      VALUES (?, ?, ?, ?, 0, ?)
+    `)
+    const insertRevenue = db.prepare(`
+      INSERT INTO case_revenue
+        (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'statement')
+    `)
+    caseNos.forEach((caseNo, index) => {
+      insertRaw.run(`RAW-${suffix}-V${index}`, batchId, statementGenerationId, index + 1,
+        JSON.stringify({ caseNo, amount: 100 }))
+      insertLine.run(`LINE-${suffix}-V${index}`, batchId, statementGenerationId, partnerId,
+        month, month, caseNo, '免疫组化染色*1', index + 1, '免疫组化染色*1', 100)
+      insertLis.run(`LIS-${suffix}-V${index}`, caseNo, partnerId, 2, `${month}-15`)
+      insertRevenue.run(`REV-${suffix}-V${index}`, caseNo, partnerId, month, 100, 100, 100)
+    })
+    const binding: Binding = { partnerId, settlementMonth: month, statementGenerationId, reconcileGenerationId }
+    const snapshot = lifecycle.computeAccountReconciliation(db, binding, 'USER-001') as any
+    const hospitalMonthId = String(snapshot.hospitalMonthId)
+    const diffs = db.prepare(`
+      SELECT id FROM reconcile_diffs
+       WHERE hospital_month_id = ? AND reconcile_generation_id = ?
+       ORDER BY case_no, line_type, id
+    `).all(hospitalMonthId, reconcileGenerationId) as Array<{ id: string }>
+    expect(diffs).toHaveLength(VERDICT_REASONS.length)
+    diffs.forEach((diff, index) => {
+      lifecycle.setAccountReconciliationVerdict(
+        db, binding, diff.id, VERDICT_REASONS[index], null, 'USER-001', 'admin',
+      )
+    })
+    lifecycle.completeAccountReconciliation(db, binding, 'USER-001')
+    const stored = db.prepare(`
+      SELECT completion_artifact_json AS json, completion_artifact_hash AS hash
+        FROM account_reconcile_generations WHERE reconcile_generation_id = ?
+    `).get(reconcileGenerationId) as { json: string; hash: string }
+    expect(stored.hash).toBe(prefixedSha256Of(stored.json))
+    const artifact = JSON.parse(stored.json) as {
+      decisions: Array<Record<string, unknown>>
+      supplements: Array<Record<string, unknown>>
+    }
+    expect(artifact.decisions).toHaveLength(VERDICT_REASONS.length)
+    expect(artifact.supplements).toHaveLength(1)
+    const recoveryDiff = diffs[0]
+    expect(String((artifact.supplements[0] as { sourceDiffId: unknown }).sourceDiffId))
+      .toBe(recoveryDiff.id)
+    // 首启 + 真实重启：权威扫描对合法全枚举完成零误伤。
+    expect(() => manager.upgradeAccountReconciliationSchema(db)).not.toThrow()
+    manager.closeDatabase()
+    manager.initializeDatabase()
+    db = manager.getDatabase()
   })
 })

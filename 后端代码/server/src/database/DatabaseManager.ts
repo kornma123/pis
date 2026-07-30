@@ -16,6 +16,12 @@ import { NGS_PRODUCT_SEED, ngsProductToRow } from '../utils/ngs-catalog.js'
 import { ANTIBODY_LEDGER_SEED, DETECTION_LEDGER_SEED, ANTIBODY_LEDGER_SOURCE } from '../utils/antibody-catalog.js'
 import { DEFAULT_IHC_COST_PARAMS } from '../utils/antibody-cost.js'
 import { ANTIBODY_SYNONYM_SEED, ANTIBODY_MISSING_PRICE_SEED } from '../utils/antibody-name-map.js'
+import {
+  VERDICT_REASONS,
+  drivesSupplement,
+  verdictFollowUp,
+  type VerdictReason,
+} from '../utils/reconcile-account.js'
 import { ensureHospitalCmAccountRosterSchema } from '../utils/hospital-cm-account-roster.js'
 import { ensureHospitalCmReadinessSchema } from '../utils/hospital-cm-readiness-runtime.js'
 import { ensureHospitalCmPeriodEvidenceSchema } from '../utils/hospital-cm-period-evidence.js'
@@ -1342,6 +1348,46 @@ function ensureReconcileHospitalMonthBindings(database: DatabaseSync): void {
   }
 }
 
+// #93-A：终态 hospital-month 一致性开机扫描（裁决 A 保守口径）。
+// 有 binding 的终态月（status ∈ {复核完成,已关账} 或 completed_at/closed_at 非空）必须与
+// 所绑 current generation 同院/同月/同行/同终态且 current：同终态 =「复核完成↔complete、
+// 已关账↔closed」，字段优先于状态文本（completed_at 非空且 closed 空 ↔ complete；
+// closed_at 非空 ↔ closed）。任一不一致 = trigger 被摘窗口的历史写入 → fail-closed。
+// 无 binding 的终态月（历史无绑定遗留与窗口伪造数据级不可区分）不在此炸启动——
+// derived quarantine：保留历史可见性与看板状态计数，但 overview 确认实收一律不计入
+// （路由侧同一 quarantine 谓词），也不迁成正常完成态。artifact 有效性由
+// ensureReconcileGenerationCompletionShape 在同次 upgrade 内接力（complete/closed 代
+// 全覆盖）。本扫描只跟 binding 走：stale 旧代/无绑定代不参与判定；bindings 四扫描
+// 先行保证 binding 不悬空、指向当前代（本扫描的 is_current 谓词为独立兜底）。
+function ensureReconcileTerminalHospitalMonthIntegrity(database: DatabaseSync): void {
+  const mismatch = database.prepare(`
+    SELECT hm.id AS id
+      FROM reconcile_hospital_months hm
+      JOIN account_reconcile_hospital_month_bindings binding
+        ON binding.hospital_month_id = hm.id
+      LEFT JOIN account_reconcile_generations generation
+        ON generation.reconcile_generation_id = binding.reconcile_generation_id
+     WHERE (hm.status IN ('复核完成', '已关账')
+            OR hm.completed_at IS NOT NULL
+            OR hm.closed_at IS NOT NULL)
+       AND (generation.reconcile_generation_id IS NULL
+            OR generation.partner_id IS NOT hm.partner_id
+            OR generation.settlement_month IS NOT hm.service_month
+            OR generation.hospital_month_id IS NOT hm.id
+            OR generation.is_current IS NOT 1
+            OR (hm.status = '复核完成' AND generation.status IS NOT 'complete')
+            OR (hm.status = '已关账' AND generation.status IS NOT 'closed')
+            OR (hm.completed_at IS NOT NULL AND hm.closed_at IS NULL
+                AND generation.status IS NOT 'complete')
+            OR (hm.closed_at IS NOT NULL AND generation.status IS NOT 'closed'))
+     ORDER BY hm.id
+     LIMIT 1
+  `).get() as { id?: string | null } | undefined
+  if (mismatch) {
+    throw new Error(`RECONCILE_HOSPITAL_MONTH_TERMINAL_MISMATCH:${String(mismatch.id ?? '<null>')}`)
+  }
+}
+
 // ── P1 artifact 真有效性：唯一权威 validator（startup scan 与 SQLite UDF 同一实现）──────
 // 合同（主控 hostile 探针收口）：有效性 = stored JSON 精确字节的 sha256 自洽
 // （hash 必须精确等于 sha256:<digest(stored exact JSON bytes)>）+ 结构与行绑定 +
@@ -1364,6 +1410,10 @@ const LEGACY_SENTINEL_SCHEMA = 'account-reconciliation-completion/legacy-sentine
 const LEGACY_SENTINEL_MARKER = 'legacy-missing-artifact'
 const LEGACY_SENTINEL_REASON =
   'predecessor schema had no completion artifact columns; original artifact is unrecoverable'
+// #93-C：sentinel durable provenance 唯一合法来源标记——只能由「completion artifact 两列
+// 真实缺失的 predecessor 迁移事务」写入 account_reconcile_completion_legacy_provenance；
+// 后续 startup 只认可带该来源且 hash 一致的 sentinel，与正常完成（真实 artifact）互不混用。
+const LEGACY_SENTINEL_PROVENANCE = 'predecessor-missing-completion-artifact-columns'
 
 interface CompletionArtifactRowShape {
   partnerId: unknown
@@ -1416,6 +1466,71 @@ const COMPLETION_DECISION_KEYS = [
   'delta', 'amountImpact', 'verdict', 'verdictReason', 'verdictBy', 'verdictAt', 'followUp',
 ] as const
 
+// #93-B 业务语义原子（主控派单 B：service/UDF 共用纯语义 validator）——verdict 权威
+// 枚举 + followUp===verdictFollowUp(verdict) + verdictBy/verdictAt 完整。语义唯一权威源
+// = utils/reconcile-account.ts（VERDICT_REASONS/verdictFollowUp/drivesSupplement，本模块
+// 只读引用）；pending→complete trigger UDF、direct-close 闸、startup 扫描与 lifecycle
+// completion 共用以下同一实现，一处收紧三通道同时生效，零漂移。金额/数量/confirmed
+// revenue 的 canonical 边界沿用既有 isFiniteNumber/isNonNegativeSafeInteger（不放宽）。
+function isVerdictSemanticallyComplete(
+  verdict: unknown,
+  followUp: unknown,
+  verdictBy: unknown,
+  verdictAt: unknown,
+): boolean {
+  if (typeof verdict !== 'string'
+      || !(VERDICT_REASONS as readonly string[]).includes(verdict)) return false
+  if (followUp !== verdictFollowUp(verdict as VerdictReason)) return false
+  if (!isNonEmptyString(verdictBy) || !isNonEmptyString(verdictAt)) return false
+  return true
+}
+
+// 补收基数原子：每条「漏收，需补收」恰一张补收单，其他 verdict 零张（drivesSupplement
+// 单一权威）。同代/同院/同月由行绑定校验与事实集比对另行钉住，本原子只数基数。
+function expectedSupplementCountForVerdict(verdict: unknown): number {
+  return typeof verdict === 'string' && drivesSupplement(verdict as VerdictReason) ? 1 : 0
+}
+
+function hasValidCompletionSupplementCardinality(
+  decisions: ReadonlyArray<Record<string, unknown>>,
+  supplements: ReadonlyArray<Record<string, unknown>>,
+): boolean {
+  const supplementCountByDiff = new Map<string, number>()
+  for (const supplement of supplements) {
+    if (typeof supplement.sourceDiffId !== 'string') return false
+    supplementCountByDiff.set(
+      supplement.sourceDiffId,
+      (supplementCountByDiff.get(supplement.sourceDiffId) ?? 0) + 1,
+    )
+  }
+  for (const decision of decisions) {
+    if (typeof decision.id !== 'string') return false
+    if ((supplementCountByDiff.get(decision.id) ?? 0)
+        !== expectedSupplementCountForVerdict(decision.verdict)) return false
+  }
+  return true
+}
+
+// lifecycle completion 与 artifact 校验共用的语义闸：返回首个违例描述，合法返回 null。
+// decisions/supplements 形状 = artifact v1 事实集（lifecycle builder 产物或解析后的
+// artifact 数组）；调用方负责结构校验（键集/类型/行绑定），本闸只管业务语义。
+export function findCompletionFactSemanticsError(
+  decisions: ReadonlyArray<Record<string, unknown>>,
+  supplements: ReadonlyArray<Record<string, unknown>>,
+): string | null {
+  for (const decision of decisions) {
+    if (!isVerdictSemanticallyComplete(
+      decision.verdict, decision.followUp, decision.verdictBy, decision.verdictAt,
+    )) {
+      return `decision ${String(decision.id)} verdict semantics invalid`
+    }
+  }
+  if (!hasValidCompletionSupplementCardinality(decisions, supplements)) {
+    return 'supplement cardinality does not match verdicts'
+  }
+  return null
+}
+
 function isValidCompletionDecision(
   decision: unknown,
   expected: CompletionArtifactRowShape,
@@ -1429,9 +1544,12 @@ function isValidCompletionDecision(
   if (!isNonNegativeSafeInteger(decision.billCount)) return false
   if (!isNonNegativeSafeInteger(decision.lisCount)) return false
   if (!isFiniteNumber(decision.delta) || !isFiniteNumber(decision.amountImpact)) return false
-  if (!isNonEmptyString(decision.verdict)) return false
-  if (!isNullableString(decision.verdictReason) || !isNullableString(decision.verdictBy)
-      || !isNullableString(decision.verdictAt) || !isNullableString(decision.followUp)) return false
+  // #93-B：语义原子进 per-entry 校验——旧版只查 verdict 非空串、followUp/By/At 可空串，
+  // 伪造枚举（'伪造结论'）、错位映射（核对无误+supplement）、缺认定人/时间全部放行。
+  if (!isVerdictSemanticallyComplete(
+    decision.verdict, decision.followUp, decision.verdictBy, decision.verdictAt,
+  )) return false
+  if (!isNullableString(decision.verdictReason)) return false
   decisionIds.add(decision.id)
   return true
 }
@@ -1596,6 +1714,10 @@ function isValidCompletionArtifact(
   for (const supplement of parsed.supplements) {
     if (!isValidCompletionSupplement(supplement, expected, supplementIds, decisionIds)) return false
   }
+  // #93-B 补收基数（artifact 内部纯语义）：每条「漏收，需补收」恰一张、其他 verdict 零张；
+  // 同代同院同月由上方行绑定与下方事实集比对钉住。镜像攻击（raw SQL 先污染 diff 认定再
+  // 镜像进 artifact，事实比对必过）在此收口。
+  if (!hasValidCompletionSupplementCardinality(parsed.decisions, parsed.supplements)) return false
   // 事实集封存：结构/绑定/hash 全部自洽后，confirmedLabRevenue/decisions/supplements
   // 还必须与数据库当前事实集（expectedCompletionFactsSql 生成的 canonical JSON）逐项
   // 语义相等——「空证据」（结构完整、绑定/hash 正确但 decisions:[]）等伪凭证在此收口。
@@ -1677,9 +1799,11 @@ export function registerCoreoneSqlFunctions(connection: DatabaseSync): void {
 // 与 trigger 重装同事务，throw 即整体 ROLLBACK）。两段判定：①四件套在场——completed_at、
 // completed_by（trim 非空）、completion_artifact_json/hash 任一缺失即 malformed，closed
 // 另须 closed_at/closed_by；②真有效性——artifact 须过 isValidCompletionArtifact
-// （allowLegacy=true：仅精确 well-formed sentinel 例外放行）。真 predecessor
-//（artifact 列原本不存在）的既存终态行已由上方 sentinel 回填持久修复，天然绿；
-// 列先存（当前形状）库的 NULL/伪造/半截 artifact 是损坏行，绝不静默修。
+// （allowLegacy=true：仅精确 well-formed sentinel 例外放行，且 #93-C 起 sentinel 还须
+// 持 hash 一致的 durable provenance——唯一来源 = completion artifact 两列真实缺失的
+// predecessor 迁移事务；真实 artifact 行挂 provenance 同属 malformed）。真 predecessor
+//（artifact 列原本不存在）的既存终态行已由上方 sentinel+provenance 回填持久修复，
+// 天然绿；列先存（当前形状）库的 NULL/伪造/半截 artifact 是损坏行，绝不静默修。
 function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void {
   const rows = database.prepare(`
     SELECT reconcile_generation_id AS id, status,
@@ -1715,6 +1839,17 @@ function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void 
   const completionFacts = database.prepare(`
     SELECT ${expectedCompletionFactsSql('?', '?')} AS facts
   `)
+  // #93-C：sentinel⇔provenance 双向钉。sentinel 四键字面量全公开、hash 可自算——
+  // 没有来源记录的「精确 sentinel」与真迁移产物逐字节同形；故 sentinel 形状行必须
+  // 带 hash 一致、来源标记精确的 provenance（缺/漂移=当前形状伪造），真实 artifact 行
+  // 绝不允许挂 provenance（混用=伪造）。失败统一 RECONCILE_GENERATION_COMPLETION_
+  // MALFORMED:<id>（开机 fail-closed 单签名，与形状违例同码，不静默修）。
+  const provenanceRows = database.prepare(`
+    SELECT reconcile_generation_id AS id, artifact_hash AS artifactHash,
+           provenance AS provenance
+      FROM account_reconcile_completion_legacy_provenance
+  `).all() as Array<{ id: string; artifactHash: unknown; provenance: unknown }>
+  const provenanceByGeneration = new Map(provenanceRows.map(row => [row.id, row]))
   for (const row of rows) {
     const presenceMalformed = row.completedAt === null
       || typeof row.completedBy !== 'string'
@@ -1733,7 +1868,23 @@ function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void 
       row.id,
       row.hospitalMonthId,
     ) as { facts: unknown } | undefined
-    if (presenceMalformed
+    let sentinelShaped = false
+    if (typeof row.json === 'string') {
+      try {
+        const parsedJson: unknown = JSON.parse(row.json)
+        sentinelShaped = isPlainRecord(parsedJson)
+          && parsedJson.schemaVersion === LEGACY_SENTINEL_SCHEMA
+      } catch {
+        sentinelShaped = false
+      }
+    }
+    const provenance = provenanceByGeneration.get(row.id)
+    const provenanceMalformed = sentinelShaped
+      ? (provenance === undefined
+          || provenance.artifactHash !== row.hash
+          || provenance.provenance !== LEGACY_SENTINEL_PROVENANCE)
+      : provenance !== undefined
+    if (presenceMalformed || provenanceMalformed
         || !isValidCompletionArtifact(
           row.json,
           row.hash,
@@ -1751,6 +1902,22 @@ function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void 
         )) {
       throw new Error(`RECONCILE_GENERATION_COMPLETION_MALFORMED:${String(row.id ?? '<null>')}`)
     }
+  }
+  // #93-C 反向扫：上方循环只覆盖 complete/closed 行——挂在 pending/缺失 generation 上的
+  // provenance（触发器被摘窗口的伪造残留）由本段带出；provenance 永不与正常完成混用。
+  const legacyProvenanceOrphan = database.prepare(`
+    SELECT provenance.reconcile_generation_id AS id
+      FROM account_reconcile_completion_legacy_provenance provenance
+      LEFT JOIN account_reconcile_generations generation
+        ON generation.reconcile_generation_id = provenance.reconcile_generation_id
+     WHERE generation.reconcile_generation_id IS NULL
+        OR generation.status NOT IN ('complete', 'closed')
+     LIMIT 1
+  `).get() as { id?: string | null } | undefined
+  if (legacyProvenanceOrphan) {
+    throw new Error(
+      `RECONCILE_GENERATION_COMPLETION_MALFORMED:${String(legacyProvenanceOrphan.id ?? '<null>')}`,
+    )
   }
 }
 
@@ -1843,6 +2010,24 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
     `)
   }
 
+  // #93-C sentinel durable provenance 表：每行证明「该 generation 的 sentinel 由真
+  // predecessor 迁移事务（completion artifact 两列真实缺失）回填」——durable（三只
+  // 无条件 ABORT trigger 禁一切 INSERT/UPDATE/DELETE；迁移写入排在 trigger 重装段之前，
+  // 见下方 sentinel 回填段）、与正常完成互不混用（开机扫描双向钉：sentinel⇒provenance
+  // 且 hash 一致；provenance⇒exact sentinel 且终态）。当前形状库的正常完成行永远
+  // 没有 provenance；任何「真 artifact + provenance」或「sentinel 无 provenance」
+  // 组合开机 fail-closed。
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS account_reconcile_completion_legacy_provenance (
+      reconcile_generation_id TEXT PRIMARY KEY,
+      artifact_hash TEXT NOT NULL,
+      provenance TEXT NOT NULL CHECK(provenance = 'predecessor-missing-completion-artifact-columns'),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(reconcile_generation_id)
+        REFERENCES account_reconcile_generations(reconcile_generation_id)
+    );
+  `)
+
   database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_immutable_fact')
   database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_completion_immutable')
   database.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_complete_finality')
@@ -1880,10 +2065,16 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   // #92：pending 医院月身份冻结（partner_id/service_month 两键）——纳入本域重装权威，
   // 不寄生 hcm 周期证据模块的侧挂 trigger（trg_hcm_reconcile_identity_immutable）。
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_pending_identity_freeze')
+  // #93-A：终态 INSERT 闸（严格 pending 形状）。
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_pending_insert_shape')
   // #87 d)：binding 行级关系闸。
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_month_immutable')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_generation_relation_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_binding_generation_relation_update')
+  // #93-C：sentinel provenance 三闸（无条件 ABORT）——纳入同一 DROP+CREATE 权威集。
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_legacy_provenance_no_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_legacy_provenance_no_update')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_legacy_provenance_no_delete')
 
   // P1-B durable predecessor 兼容（勘误 comment-5121977091 A）：真 predecessor 库
   //（completion artifact 两列原本不存在、由上方 ensure 刚补）里既存 complete/closed 行的
@@ -1909,6 +2100,14 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
          SET completion_artifact_json = ?, completion_artifact_hash = ?
        WHERE reconcile_generation_id = ?
     `)
+    // #93-C：sentinel 与 provenance 同一迁移事务写入——只有本分支（两列真实缺失的真
+    // predecessor）能产生 provenance；写入点排在 provenance 三闸 CREATE 之前，
+    // 不受无条件 ABORT 影响。
+    const writeProvenance = database.prepare(`
+      INSERT INTO account_reconcile_completion_legacy_provenance
+        (reconcile_generation_id, artifact_hash, provenance)
+      VALUES (?, ?, '${LEGACY_SENTINEL_PROVENANCE}')
+    `)
     for (const row of legacyRows) {
       const json = typeof row.json === 'string'
         ? row.json
@@ -1922,6 +2121,12 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
         ? row.hash
         : `sha256:${createHash('sha256').update(json).digest('hex')}`
       writeSentinel.run(json, hash, row.id)
+      // 仅当本行产物确为 sentinel（json 原本缺失、由上方回填）才记 provenance——
+      // 列刚补的前代库两列恒 NULL，正常路径逐行皆 sentinel；防御：json 先存串的
+      // 半截行不记 provenance，由开机扫描按「sentinel⇔provenance」双向钉死带出。
+      if (typeof row.json !== 'string') {
+        writeProvenance.run(row.id, hash)
+      }
     }
   }
 
@@ -1989,6 +2194,9 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   // 不等值/stale 代指向各自独立命中（谓词正交性见函数头注释）；仅真 predecessor 的首次
   // backfill 产物由 SELECT 构造保证等值且指向当前代，天然绿。
   ensureReconcileHospitalMonthBindings(database)
+  // #93-A：终态月↔所绑 current generation 一致性（排在 bindings 四扫描之后、
+  // completion-shape 之前；无绑定终态 = derived quarantine 不炸启动，口径见函数头）。
+  ensureReconcileTerminalHospitalMonthIntegrity(database)
   // P1-B：current-shape malformed complete/closed 开机 fail-closed（真 predecessor 的
   // sentinel 回填已在上方 trigger DROP 段后完成，本扫描命中的只能是列先存库的损坏行）。
   ensureReconcileGenerationCompletionShape(database)
@@ -2069,6 +2277,26 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
        WHERE NEW.id IS NULL OR NEW.id = '';
       SELECT RAISE(ABORT, 'RECONCILE_ROW_ID_IMMUTABLE:reconcile_hospital_months')
        WHERE NEW.id IS NOT OLD.id;
+    END
+  `)
+  // #93-A：终态 INSERT 闸。此前完成/关账/#92 身份闸均为 BEFORE UPDATE，INSERT 只查
+  // 非空 id——可直接插入伪造终态行（status='已关账'+confirmed_lab_revenue=999999+
+  // completed_*/closed_*=attacker），重启放行且 overview 纳入确认实收。新行只允许
+  // 严格 pending 形状（lifecycle :907 与 reconcile-compute :283 两个合法 INSERT 均
+  // 为该形状）：status='待复核'、终态四字段/revenue/reopen 两字段全 NULL。
+  // predecessor 库既存终态行不受影响（BEFORE INSERT 只管新写）；trigger 被摘窗口
+  // 写入的伪造终态由 ensureReconcileTerminalHospitalMonthIntegrity 开机扫描 +
+  // overview derived quarantine 两道收口。
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_hospital_month_pending_insert_shape
+    BEFORE INSERT ON reconcile_hospital_months
+    WHEN NEW.status IS NOT '待复核'
+      OR NEW.confirmed_lab_revenue IS NOT NULL
+      OR NEW.completed_at IS NOT NULL OR NEW.completed_by IS NOT NULL
+      OR NEW.closed_at IS NOT NULL OR NEW.closed_by IS NOT NULL
+      OR NEW.reopened_at IS NOT NULL OR NEW.reopen_reason IS NOT NULL
+    BEGIN
+      SELECT RAISE(ABORT, 'PENDING_HOSPITAL_MONTH_INSERT_SHAPE');
     END
   `)
   database.exec(`
@@ -2407,6 +2635,31 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
           WHERE generation.reconcile_generation_id = NEW.reconcile_generation_id
             AND generation.is_current = 1
        );
+    END
+  `)
+  // #93-C：sentinel provenance 三闸——无条件 ABORT，任何 INSERT/UPDATE/DELETE 一律拒
+  // （durable：合法写入只发生在上方 predecessor 迁移事务内，彼时本族 trigger 尚未
+  // 重装；正常运行期本表写一次后永远冻结）。触发器被摘窗口的伪造残留由开机扫描的
+  // sentinel⇔provenance 双向钉 + 反向孤儿扫带出。
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_legacy_provenance_no_insert
+    BEFORE INSERT ON account_reconcile_completion_legacy_provenance
+    BEGIN
+      SELECT RAISE(ABORT, 'LEGACY_SENTINEL_PROVENANCE_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_legacy_provenance_no_update
+    BEFORE UPDATE ON account_reconcile_completion_legacy_provenance
+    BEGIN
+      SELECT RAISE(ABORT, 'LEGACY_SENTINEL_PROVENANCE_IMMUTABLE');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_legacy_provenance_no_delete
+    BEFORE DELETE ON account_reconcile_completion_legacy_provenance
+    BEGIN
+      SELECT RAISE(ABORT, 'LEGACY_SENTINEL_PROVENANCE_IMMUTABLE');
     END
   `)
   database.exec(`

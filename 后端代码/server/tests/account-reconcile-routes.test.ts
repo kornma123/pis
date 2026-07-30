@@ -793,6 +793,66 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
     })
   })
 
+  it('GET /overview 不把无 binding 的终态月计入确认实收（derived quarantine；历史可见+状态计数保留；合法终态照常计入）', async () => {
+    // 裁决 A 保守口径：无有效 binding 的终态 hospital-month（trigger 被摘窗口伪造的、
+    // 或历史无绑定遗留）保留历史可见性与看板状态计数，但 confirmedLabRevenue 一律
+    // 不计入确认实收，也不迁成正常完成态。夹具直插只能走「摘掉新 INSERT 闸 → 写入 →
+    // 重装」窗口（修复前该 DROP 为 no-op、直插本就放行 → 本例 RED：确认实收被污染）。
+    const db = await getDb()
+    const manager = await import('../src/database/DatabaseManager.js')
+    const Q_PARTNER = 'PT-RECON-QUAR'
+    const Q_MONTH = '2027-02'
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-QUAR', '隔离终态院', 1)`).run(Q_PARTNER)
+    db.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_pending_insert_shape')
+    db.prepare(`
+      INSERT INTO reconcile_hospital_months
+        (id, partner_id, partner_name, service_month, status, confirmed_lab_revenue,
+         completed_at, completed_by, closed_at, closed_by)
+      VALUES ('HM-QUAR-1', ?, '隔离终态院', ?, '已关账', 999999,
+              CURRENT_TIMESTAMP, 'attacker', CURRENT_TIMESTAMP, 'attacker')
+    `).run(Q_PARTNER, Q_MONTH)
+    manager.upgradeAccountReconciliationSchema(db)
+    const res = await auth(request(app).get('/api/v1/account-reconcile/overview').query({ settlementMonth: Q_MONTH }))
+    expect(res.status).toBe(200)
+    const items = res.body.data.items as Array<Record<string, unknown>>
+    const forged = items.find(item => item.partnerId === Q_PARTNER)
+    // 历史可见性 + 状态计数保留（行在、状态在、看板已关账计数在）——不抹历史。
+    expect(forged).toMatchObject({ status: '已关账', confirmedLabRevenue: 999999 })
+    expect(res.body.data.board.已关账).toBeGreaterThanOrEqual(1)
+    // 但钱不进确认实收：该月无其他终态、无补收实收，隔离口径下恰为 0（修复前=999999 必 RED）。
+    expect(res.body.data.board.确认实收).toBe(0)
+    // 正控（自包含，不依赖兄弟测试产生的 FB 状态）：有 binding + 同终态 current
+    // generation + 有效 artifact 的合法已关账月确认实收照常计入，绝不误伤。
+    const L_PARTNER = 'PT-RECON-LEGAL'
+    const L_MONTH = '2027-03'
+    const L_STMT = 'stmt-recon-legal-v1'
+    const L_RECON = 'recon-legal-v1'
+    const lBinding = {
+      partnerId: L_PARTNER,
+      settlementMonth: L_MONTH,
+      statementGenerationId: L_STMT,
+      reconcileGenerationId: L_RECON,
+    }
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-LEGAL', '合法终态院', 1)`).run(L_PARTNER)
+    seedStatementGeneration(db, L_PARTNER, L_MONTH, L_STMT, [
+      { caseNo: 'D1-legal', item: '免疫组化染色*3', amount: 300 },
+    ])
+    db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run('l-legal-d1', 'D1-legal', L_PARTNER, '免疫组化染色', 3, 100, L_MONTH)
+    db.prepare(`INSERT OR IGNORE INTO lis_cases (id, case_no, partner_id, ihc_count, special_stain_count, operate_time) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('lc-legal-d1', 'D1-legal', L_PARTNER, 3, 0, `${L_MONTH}-10`)
+    db.prepare(`INSERT OR IGNORE INTO case_revenue (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source) VALUES (?, ?, ?, ?, ?, ?, ?, 'statement')`)
+      .run('cr-legal-1', 'D1-legal', L_PARTNER, L_MONTH, 1000, 830, 830)
+    expect((await auth(request(app).post('/api/v1/account-reconcile/compute').send(lBinding))).status).toBe(200)
+    const lWb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(lBinding))
+    const lHmId = lWb.body.data.snapshot.hospitalMonthId
+    expect((await auth(request(app).post(`/api/v1/account-reconcile/hospital-months/${lHmId}/complete`).send(lBinding))).status).toBe(200)
+    expect((await auth(request(app).post('/api/v1/account-reconcile/close').send({ items: [lBinding] }))).status).toBe(200)
+    const legal = await auth(request(app).get('/api/v1/account-reconcile/overview').query({ settlementMonth: L_MONTH }))
+    expect(legal.status).toBe(200)
+    expect(legal.body.data.board.确认实收).toBe(830)
+  })
+
   it('collect 非法 collectedMonth 稳定 400：零业务写、零 supplement_collect 成功审计；4xx 拒绝审计仍按 operation_logs 逐条合同完整计入（R7 严格月校验），合法值照旧入账', async () => {
     // R7 P1-2：collectedMonth 复用严格 YYYY-(01..12) 校验。准确口径——零业务写、
     // 零 supplement_collect 成功审计；4xx 拒绝审计仍按 operation_logs 的逐条/聚合合同

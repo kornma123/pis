@@ -207,8 +207,31 @@ router.get('/overview', (req, res) => {
       (db.prepare(`SELECT COALESCE(SUM(collected_revenue),0) s FROM supplement_orders WHERE collected_month = ? AND status = '已补收'`)
         .get(settlementMonth) as { s: number }).s * 100,
     ) / 100
+    // #93-A 裁决 A 保守口径（derived quarantine）：确认实收只认「有 binding + 所绑
+    // current generation 同院/同月/同行/同终态」的终态月；无 binding 终态（历史无绑定
+    // 遗留与 trigger 被摘窗口伪造在数据级不可区分）保留历史可见性与看板状态计数，
+    // 但 confirmedLabRevenue 一律不计入，也不迁成正常完成态。与启动扫描
+    // ensureReconcileTerminalHospitalMonthIntegrity 同一 quarantine 谓词。
+    const provenancedTerminal = new Set(
+      (db.prepare(`
+        SELECT hm.id AS id
+          FROM reconcile_hospital_months hm
+          JOIN account_reconcile_hospital_month_bindings binding
+            ON binding.hospital_month_id = hm.id
+          JOIN account_reconcile_generations generation
+            ON generation.reconcile_generation_id = binding.reconcile_generation_id
+         WHERE hm.service_month = ?
+           AND generation.is_current = 1
+           AND generation.partner_id = hm.partner_id
+           AND generation.settlement_month = hm.service_month
+           AND generation.hospital_month_id = hm.id
+           AND ((hm.status = '复核完成' AND generation.status = 'complete')
+                OR (hm.status = '已关账' AND generation.status = 'closed'))
+      `).all(settlementMonth) as Array<{ id: string }>).map(row => String(row.id)),
+    )
     const base确认实收 = computed
-      .filter((item) => item.status === '复核完成' || item.status === '已关账')
+      .filter((item) => (item.status === '复核完成' || item.status === '已关账')
+        && item.id !== null && provenancedTerminal.has(String(item.id)))
       .reduce((sum, item) => sum + (Number(item.confirmedLabRevenue) || 0), 0)
     const board = {
       total: computed.length,

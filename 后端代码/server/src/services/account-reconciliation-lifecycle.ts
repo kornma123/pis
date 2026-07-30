@@ -13,6 +13,7 @@ import {
   type VerdictReason,
 } from '../utils/reconcile-account.js'
 import { buildCaseMarkers, parseSlideCount } from '../utils/reconcile-compute.js'
+import { findCompletionFactSemanticsError } from '../database/DatabaseManager.js'
 import {
   buildCanonicalStatementArtifact,
   canonicalJson,
@@ -676,6 +677,20 @@ function buildCompletionArtifact(
     confirmedLabRevenue,
     decisions,
     supplements,
+  }
+  // #93-B 业务语义闸（主控派单 B）：与 pending→complete trigger UDF、direct-close 闸、
+  // startup 扫描共用 DatabaseManager 同一纯语义实现——verdict 权威枚举、
+  // followUp===verdictFollowUp(verdict)、verdictBy/At 完整、补收基数（漏收恰一、其他零）。
+  // raw SQL 在 pending 窗口污染的认定事实（含「漏收零补收单」「非漏收挂单」）在此
+  // 409 零写拒绝：本函数先于 generation 写入，异常随事务整体回滚（revenue prime
+  // 不留中间态）。
+  const semanticsError = findCompletionFactSemanticsError(artifact.decisions, artifact.supplements)
+  if (semanticsError) {
+    fail(
+      `completion facts are semantically invalid: ${semanticsError}`,
+      'RECONCILIATION_VERDICT_SEMANTICS',
+      409,
+    )
   }
   const json = stableJson(artifact)
   return { artifact, json, hash: prefixedSha256(json) }

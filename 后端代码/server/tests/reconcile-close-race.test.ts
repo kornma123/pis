@@ -154,11 +154,20 @@ describe('runReconcile 关账窗口竞态（预检通过 → 另一连接关账 
 
   it('窗口内行被另一连接创建并关账（预检时行还不存在）→ 同样 PERIOD_CLOSED，而非 UNIQUE 冲突/覆写', () => {
     seedPartnerMonth(victim, P2, [{ caseNo: 'CX', bill: 2, lis: 3 }])
-    // 预检读不到行 → 旧代码走 INSERT 路径；窗口内 rival 已建同院月「已关账」行
+    // 预检读不到行 → 旧代码走 INSERT 路径；窗口内 rival 已建同院月「已关账」行。
+    // #93-A 终态 INSERT 闸落地后，裸写终态行会被 trg_reconcile_hospital_month_pending_insert_shape
+    // 拒绝——rival 改为走合法三步到达已关账（与真实 /complete→/close 路径同形状）：
+    // ① 严格 pending INSERT（status='待复核'，终态/revenue/reopen 全 NULL，同下方 :190 形状）
+    // ② /complete 同字段 UPDATE（复核完成 + completed_at/completed_by）
+    // ③ /close 同一条 CLOSE_SQL。match_rate=0.987/diff_count=7 由 ① 携带，供下方断言覆写可检出。
     const raced = raceWindow(victim, () => {
       rival
-        .prepare(`INSERT INTO reconcile_hospital_months (id, partner_id, partner_name, service_month, status, match_rate, diff_count, closed_by) VALUES ('HM-RIVAL-2', ?, '竞态测试院-PT-RACE-2', ?, '已关账', 0.987, 7, 'rival-closer')`)
+        .prepare(`INSERT INTO reconcile_hospital_months (id, partner_id, partner_name, service_month, status, match_rate, diff_count) VALUES ('HM-RIVAL-2', ?, '竞态测试院-PT-RACE-2', ?, '待复核', 0.987, 7)`)
         .run(P2, MONTH)
+      rival
+        .prepare(`UPDATE reconcile_hospital_months SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = 'rival-closer', updated_at = CURRENT_TIMESTAMP WHERE id = 'HM-RIVAL-2'`)
+        .run()
+      rival.prepare(CLOSE_SQL).run('rival-closer', 'HM-RIVAL-2')
     })
     let err: any = null
     try {
