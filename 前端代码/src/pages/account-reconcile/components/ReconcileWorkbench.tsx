@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { accountReconcileApi } from '@/api/account-reconcile'
 import { VERDICT_REASONS, type ReconcileBinding, type ReconcileDiff, type ReconcileSnapshot, type HmStatus, type VerdictReason, type CaseHint } from '@/types/account-reconcile'
+import { isReconcileBindingStale } from '../hooks/useAccountReconcile'
 import { HmPill, matchStatusMeta, wan, yuan, cnMonth, btnPri, btnGhost, cardCls, selectCls } from '../ui'
 
 interface Props {
@@ -25,6 +26,7 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
   const [diffs, setDiffs] = useState<ReconcileDiff[]>([])
   const [caseHints, setCaseHints] = useState<Record<string, CaseHint[]>>({})
   const [loading, setLoading] = useState(true)
+  const [bindingStale, setBindingStale] = useState(false)
   const [showUnmatched, setShowUnmatched] = useState(false)
   const [savingId, setSavingId] = useState<string | null>(null)
 
@@ -40,6 +42,17 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
         setSnap(null)
         setDiffs([])
         setCaseHints({})
+        setBindingStale(false)
+        return
+      }
+      // 第二层 fail-closed：账单已重出、对账仍绑旧 statement 代时，
+      // 绝不拼错配四元组请求工作台（后端必 409 RECONCILE_GENERATION_MISMATCH），引导回总览重算。
+      if (isReconcileBindingStale(item)) {
+        setBinding(null)
+        setSnap(null)
+        setDiffs([])
+        setCaseHints({})
+        setBindingStale(true)
         return
       }
       const nb: ReconcileBinding = {
@@ -48,6 +61,7 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
         statementGenerationId: item.statementGenerationId,
         reconcileGenerationId: item.reconcileGenerationId,
       }
+      setBindingStale(false)
       setBinding(nb)
       const res = await accountReconcileApi.workbench(nb)
       setSnap(res.snapshot || null)
@@ -85,7 +99,17 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
     setSavingId(diff.id)
     try {
       const r = await accountReconcileApi.verdict(diff.id, binding, reason)
-      setDiffs((prev) => prev.map((d) => (d.id === diff.id ? { ...d, verdict: reason, followUp: r.followUp as ReconcileDiff['followUp'], verdictBy: '我' } : d)))
+      // 后端认定响应不携带权威 actor：成功后重读权威 workbench，用返回的真实 verdictBy 更新（绝不写死「我」）。
+      try {
+        const fresh = await accountReconcileApi.workbench(binding)
+        setSnap(fresh.snapshot || null)
+        setDiffs(fresh.diffs || [])
+        setCaseHints(fresh.caseHints || {})
+      } catch {
+        // 重读失败时降级为只更新认定结论；verdictBy 显式清空——改认定场景下旧 actor 不得
+        // 残留并错误挂到新结论上，也绝不虚构「我」。刷新后以服务端真实 actor 为准。
+        setDiffs((prev) => prev.map((d) => (d.id === diff.id ? { ...d, verdict: reason, followUp: r.followUp as ReconcileDiff['followUp'], verdictBy: null } : d)))
+      }
       if (reason === '漏收，需补收') toast.success('已认定漏收，已生成补收单（去「补收追踪」催收）')
       else toast.success(`已认定：${reason}`)
     } catch {
@@ -122,7 +146,9 @@ export function ReconcileWorkbench({ partnerId, partnerName, month, canWrite, on
       {loading ? (
         <div className="mt-8 text-center text-sm text-gray-400">加载中…</div>
       ) : !hm ? (
-        <div className="mt-8 rounded-lg border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">该院该月还没有核对记录，请先在总览计算。</div>
+        <div className="mt-8 rounded-lg border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-sm text-gray-500">
+          {bindingStale ? '账单已更新，本次核对仍绑定旧账单，请回总览重算。' : '该院该月还没有核对记录，请先在总览计算。'}
+        </div>
       ) : (
         <>
           {/* source header */}

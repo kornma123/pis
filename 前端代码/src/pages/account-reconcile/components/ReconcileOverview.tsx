@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { useAccountReconcile } from '../hooks/useAccountReconcile'
+import { isReconcileBindingStale, type useAccountReconcile } from '../hooks/useAccountReconcile'
 import type { BoardItem } from '@/types/account-reconcile'
 import { HmPill, matchStatusMeta, wan, cnMonth, btnCls, btnGhost, cardCls, selectCls } from '../ui'
 
@@ -36,7 +36,10 @@ function DiffCell({ h }: { h: BoardItem }) {
 
 function Row({ h, ctx }: { h: BoardItem; ctx: Ctx }) {
   // 进工作台需要完整四元组 binding（数据齐 + 已有对账代次）；否则引导先计算/重算。
-  const canOpen = h.statementReady && h.lisReady && !!h.reconcileGenerationId
+  // 失配（账单已重出、对账仍绑旧 statement 代）只给「账单已更新，请重算」，
+  // 重算铸新对账代后才重新开放去核对——绝不放行进工作台拼错配 binding（后端必 409）。
+  const stale = isReconcileBindingStale(h)
+  const canOpen = h.statementReady && h.lisReady && !!h.reconcileGenerationId && !stale
   return (
     <tr className={canOpen ? 'hover:bg-blue-50/60' : ''}>
       <td className="px-4 py-3">
@@ -50,7 +53,16 @@ function Row({ h, ctx }: { h: BoardItem; ctx: Ctx }) {
       </td>
       <td className="px-4 py-3">{h.status ? <HmPill status={h.status} /> : <span className="text-gray-400">—</span>}</td>
       <td className="px-4 py-3 text-right">
-        {canOpen ? (
+        {stale ? (
+          <div className="inline-flex items-center gap-2">
+            <span className="text-xs font-medium text-amber-700">账单已更新，请重算</span>
+            {ctx.canWrite && (
+              <button className={btnGhost} disabled={ctx.busy} onClick={() => ctx.computePartner(h.partnerId)}>
+                重算
+              </button>
+            )}
+          </div>
+        ) : canOpen ? (
           <button className={btnGhost} onClick={() => ctx.openWorkbench(h.partnerId, h.partnerName || h.partnerId)}>
             {h.status === '待复核' ? '去核对 →' : '看明细'}
           </button>

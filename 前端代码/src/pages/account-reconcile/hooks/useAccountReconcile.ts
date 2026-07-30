@@ -15,6 +15,18 @@ function newReconcileGenerationId(): string {
   return crypto.randomUUID()
 }
 
+/**
+ * 对账代绑定的 statement 代已不是当前账单代（账单重出）= 绑定失配（LOC-005 错配 finding）。
+ * fail-closed：只有两个 statement generation id 都非空且完全相等，绑定才可信；
+ * 未对账（无 reconcileGenerationId）不是失配，走「计算」入口。
+ */
+export function isReconcileBindingStale(item: BoardItem): boolean {
+  if (!item.reconcileGenerationId) return false
+  return !item.statementGenerationId
+    || !item.reconcileStatementGenerationId
+    || item.reconcileStatementGenerationId !== item.statementGenerationId
+}
+
 /** 账实核对页顶层状态：月份 + 页签 + board 数据 + 计算/关账 + 进工作台。
  *  所有读/写调用经 board 解析四元组 binding（LOC-005 权威代次合同）。 */
 export function useAccountReconcile() {
@@ -32,9 +44,12 @@ export function useAccountReconcile() {
   // 总览列表只展示已计算的院·月（有 hospitalMonthId）；未计算院仅存于 items 供 binding 解析。
   const list = items.filter((h) => h.hospitalMonthId !== null)
 
+  // 第二层 fail-closed：失配（账单已重出、对账仍绑旧代）绝不返回 binding，
+  // 防把 v2 statement + v1 reconcile 静默拼成四元组去打 workbench（后端必 409）。
   const bindingFor = useCallback((partnerId: string): ReconcileBinding | null => {
     const item = items.find((i) => i.partnerId === partnerId)
     if (!item?.statementGenerationId || !item.reconcileGenerationId) return null
+    if (isReconcileBindingStale(item)) return null
     return {
       partnerId,
       settlementMonth: month,
@@ -161,6 +176,12 @@ export function useAccountReconcile() {
   )
 
   const openWorkbench = useCallback((partnerId: string, partnerName: string) => {
+    // 失配给出可行动提示（重算铸新对账代），与「还没算过」的引导分开。
+    const item = items.find((i) => i.partnerId === partnerId)
+    if (item && isReconcileBindingStale(item)) {
+      toast.error('账单已更新，当前核对结果仍绑定旧账单，请先重算')
+      return
+    }
     const binding = bindingFor(partnerId)
     if (!binding) {
       toast.error('该院本月还没有可用的对账代次，请先计算')
@@ -168,7 +189,7 @@ export function useAccountReconcile() {
     }
     setSelected({ partnerId, partnerName, binding })
     setTab('workbench')
-  }, [bindingFor])
+  }, [bindingFor, items])
 
   const backToOverview = useCallback(() => {
     setSelected(null)
