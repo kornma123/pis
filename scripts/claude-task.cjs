@@ -22,6 +22,7 @@ const HANDOFF_STATUSES = new Set([
 ]);
 const STATE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const LIVE_RECHECK_MS = 10 * 60 * 1000;
+const TASK_STATE_CLOCK_SKEW_MS = 120_000;
 const TASK_STATE_VERSION = 2;
 const GITHUB_WRITE_INTERVAL_MS = 1_000;
 const LOCAL_LOCK_STALE_MS = 20 * 60 * 1_000;
@@ -314,9 +315,7 @@ function run(command, args, options = {}) {
 }
 
 function githubWriteControlDirectory(root) {
-  const common = git(['rev-parse', '--git-common-dir'], root).stdout;
-  const absolute = path.isAbsolute(common) ? common : path.resolve(root, common);
-  return path.join(absolute, 'coreone');
+  return path.join(physicalGitDirectory(root, { common: true }), 'coreone');
 }
 
 function waitMilliseconds(milliseconds) {
@@ -336,7 +335,7 @@ function isLocalProcessAlive(pid) {
 }
 
 function acquireExclusiveLocalLock(lockFile, label, timeoutMs = 30_000) {
-  fs.mkdirSync(path.dirname(lockFile), { recursive: true });
+  ensurePrivateDirectory(path.dirname(lockFile));
   const deadline = Date.now() + timeoutMs;
   let descriptor = null;
   while (descriptor === null) {
@@ -349,7 +348,8 @@ function acquireExclusiveLocalLock(lockFile, label, timeoutMs = 30_000) {
       let existing = null;
       try {
         existing = loadJsonFile(lockFile);
-      } catch {
+      } catch (loadError) {
+        if (loadError.code === 'COREONE_UNSAFE_PRIVATE_PATH') throw loadError;
         // The lock owner may have created the inode but not finished writing
         // its metadata yet. Treat that short window as live and keep waiting.
       }
@@ -438,7 +438,7 @@ function runOfflineGithubGovernance(root) {
 
 function runSerializedRemoteWrite(root, command, args, options = {}) {
   const controlDirectory = githubWriteControlDirectory(root);
-  fs.mkdirSync(controlDirectory, { recursive: true });
+  ensurePrivateDirectory(controlDirectory);
   const executionLock = path.join(controlDirectory, 'github-write-execution.lock');
   const release = acquireExclusiveLocalLock(
     executionLock,
@@ -466,29 +466,318 @@ function git(args, cwd, options = {}) {
 }
 
 function repoRoot(cwd = process.cwd()) {
-  return path.resolve(git(['rev-parse', '--show-toplevel'], cwd).stdout);
+  return fs.realpathSync.native(
+    path.resolve(git(['rev-parse', '--show-toplevel'], cwd).stdout),
+  );
+}
+
+function physicalGitDirectory(root, options = {}) {
+  const args = options.common
+    ? ['rev-parse', '--path-format=absolute', '--git-common-dir']
+    : ['rev-parse', '--absolute-git-dir'];
+  const raw = git(args, root).stdout;
+  const absolute = path.isAbsolute(raw) ? raw : path.resolve(root, raw);
+  const physical = fs.realpathSync.native(absolute);
+  const stat = fs.lstatSync(physical);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error('Git metadata 根目录不是可信的物理目录。');
+  }
+  return physical;
 }
 
 function stateFile(root) {
-  const value = git(
-    ['rev-parse', '--path-format=absolute', '--git-path', 'coreone/claude-task-state.json'],
-    root,
-  ).stdout;
-  return path.resolve(value);
+  // Never ask `git rev-parse --git-path` for the final state path: Git follows
+  // a malicious terminal symlink before returning it. Anchor the fixed name
+  // under the physical per-worktree gitdir instead.
+  return path.join(
+    physicalGitDirectory(root),
+    'coreone',
+    'claude-task-state.json',
+  );
+}
+
+function unsafePrivatePath(message) {
+  const error = new Error(message);
+  error.code = 'COREONE_UNSAFE_PRIVATE_PATH';
+  return error;
+}
+
+function privateFileIdentity(file, options = {}) {
+  const directory = path.dirname(file);
+  let directoryStat;
+  try {
+    directoryStat = fs.lstatSync(directory);
+  } catch (error) {
+    if (error.code === 'ENOENT' && options.allowMissing) return null;
+    throw error;
+  }
+  if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+    throw unsafePrivatePath(`私有治理目录 ${directory} 必须是物理目录，拒绝 symlink。`);
+  }
+  if (fs.realpathSync.native(directory) !== path.resolve(directory)) {
+    throw unsafePrivatePath(`私有治理目录 ${directory} 发生物理路径逃逸。`);
+  }
+  let stat;
+  try {
+    stat = fs.lstatSync(file);
+  } catch (error) {
+    if (error.code === 'ENOENT' && options.allowMissing) return null;
+    throw error;
+  }
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) {
+    throw unsafePrivatePath(
+      `私有治理文件 ${file} 必须是 link-count=1 的普通文件；拒绝 symlink/hardlink。`,
+    );
+  }
+  return { dev: stat.dev, ino: stat.ino, nlink: stat.nlink };
+}
+
+function ensurePrivateDirectory(directory) {
+  const parent = path.dirname(directory);
+  const parentPhysical = fs.realpathSync.native(parent);
+  const expected = path.join(parentPhysical, path.basename(directory));
+  if (path.resolve(directory) !== path.resolve(expected)) {
+    throw unsafePrivatePath(`私有治理目录 ${directory} 未锚定在物理 Git metadata 目录。`);
+  }
+  try {
+    fs.mkdirSync(directory, { mode: 0o700 });
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+  }
+  const stat = fs.lstatSync(directory);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw unsafePrivatePath(`私有治理目录 ${directory} 必须是物理目录，拒绝 symlink。`);
+  }
+  if (fs.realpathSync.native(directory) !== path.resolve(directory)) {
+    throw unsafePrivatePath(`私有治理目录 ${directory} 发生物理路径逃逸。`);
+  }
+  try {
+    fs.chmodSync(directory, 0o700);
+  } catch {
+    // Some filesystems cannot narrow mode bits. Directory identity checks above
+    // remain the authorization boundary.
+  }
+  return directory;
+}
+
+function readPrivateText(file) {
+  const expected = privateFileIdentity(file, { allowMissing: true });
+  if (!expected) return null;
+  const noFollow = fs.constants.O_NOFOLLOW || 0;
+  let descriptor;
+  try {
+    descriptor = fs.openSync(file, fs.constants.O_RDONLY | noFollow);
+    const opened = fs.fstatSync(descriptor);
+    if (
+      !opened.isFile() ||
+      opened.nlink !== 1 ||
+      opened.dev !== expected.dev ||
+      opened.ino !== expected.ino
+    ) {
+      throw unsafePrivatePath(`私有治理文件 ${file} 在读取期间被替换。`);
+    }
+    return fs.readFileSync(descriptor, 'utf8');
+  } catch (error) {
+    if (error.code === 'ELOOP') {
+      throw unsafePrivatePath(`私有治理文件 ${file} 是 symlink。`);
+    }
+    throw error;
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
 }
 
 function loadJsonFile(file) {
-  if (!fs.existsSync(file)) return null;
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
+  const text = readPrivateText(file);
+  return text === null ? null : JSON.parse(text);
+}
+
+function taskStateShapeError(state) {
+  if (!state || Array.isArray(state) || typeof state !== 'object') {
+    return 'state root 必须是对象';
+  }
+  if (!Number.isInteger(state.version) || state.version < 1 || state.version > TASK_STATE_VERSION) {
+    return `state version 必须在 1..${TASK_STATE_VERSION}`;
+  }
+  if (!['r0', 'governed'].includes(state.mode)) return 'state mode 非法';
+  if (typeof state.branch !== 'string' || !state.branch.trim()) return 'state branch 缺失';
+  if (!/^[0-9a-f]{40}$/i.test(String(state.baseSha || ''))) return 'state baseSha 非法';
+  if (!/^[0-9a-f]{40}$/i.test(String(state.startedHead || ''))) return 'state startedHead 非法';
+  if (!Array.isArray(state.owned) || state.owned.length === 0 ||
+      state.owned.some((value) => typeof value !== 'string' || !value)) {
+    return 'state owned scope 非法';
+  }
+  try {
+    normalizeTaskOwnedScope(state.owned);
+  } catch (error) {
+    return error.message;
+  }
+  if (!Array.isArray(state.excluded) ||
+      state.excluded.some((value) => typeof value !== 'string')) {
+    return 'state excluded scope 非法';
+  }
+  if (!Number.isFinite(Date.parse(state.startedAt))) return 'state startedAt 非法';
+  if (state.verifiedAt && !Number.isFinite(Date.parse(state.verifiedAt))) {
+    return 'state verifiedAt 非法';
+  }
+  if (state.mode === 'r0') {
+    if (state.stage !== 'r0' || state.risk !== 'R0') return 'R0 state 合同非法';
+    if (
+      typeof state.reason !== 'string' ||
+      state.reason.trim() !== state.reason ||
+      state.reason.length < 6
+    ) {
+      return 'R0 state reason 非法';
+    }
+    return null;
+  }
+  if (!Number.isInteger(state.issue) || state.issue <= 0) return 'governed state issue 非法';
+  if (
+    typeof state.issueUrl !== 'string' ||
+    !/^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/issues\/[1-9]\d*$/i.test(state.issueUrl)
+  ) {
+    return 'governed state issueUrl 非法';
+  }
+  if (typeof state.issueTitle !== 'string' || !state.issueTitle.trim()) {
+    return 'governed state issueTitle 缺失';
+  }
+  if (!MODIFY_STAGES.has(state.stage)) return 'governed state stage 非法';
+  if (typeof state.owner !== 'string' || !state.owner.trim()) return 'governed state owner 缺失';
+  if (!/^R[0-3]$/.test(String(state.risk || ''))) return 'governed state risk 非法';
+  if (!/^[0-9a-f]{64}$/i.test(String(state.issueBodyHash || ''))) {
+    return 'governed state issueBodyHash 非法';
+  }
+  if (state.version >= 2) {
+    const rating = validateIssueImplementationLabels([
+      state.issuePriority,
+      state.issueReleaseImpact,
+    ]);
+    if (!rating.ok) return `governed state rating 非法：${rating.errors.join(' ')}`;
+  }
+  return null;
+}
+
+function inspectTaskState(root) {
+  const file = stateFile(root);
+  let state;
+  try {
+    const raw = readPrivateText(file);
+    if (raw === null) return { kind: 'missing', file, state: null };
+    state = JSON.parse(raw);
+  } catch (error) {
+    return { kind: 'malformed', file, state: null, detail: error.message };
+  }
+  const shapeError = taskStateShapeError(state);
+  if (shapeError) return { kind: 'malformed', file, state, detail: shapeError };
+  const now = Date.now();
+  const startedAt = Date.parse(state.startedAt);
+  const verifiedAt = Date.parse(state.verifiedAt || state.startedAt);
+  if (
+    startedAt > now + TASK_STATE_CLOCK_SKEW_MS ||
+    verifiedAt > now + TASK_STATE_CLOCK_SKEW_MS ||
+    verifiedAt < startedAt
+  ) {
+    return {
+      kind: 'malformed',
+      file,
+      state,
+      detail: 'state timestamp 顺序或未来时钟非法',
+    };
+  }
+  const age = now - startedAt;
+  if (age > STATE_MAX_AGE_MS) return { kind: 'expired', file, state };
+  const branch = git(['branch', '--show-current'], root).stdout;
+  if (branch !== state.branch) {
+    return { kind: 'branch-mismatch', file, state, branch };
+  }
+  try {
+    git(['cat-file', '-e', `${state.baseSha}^{commit}`], root);
+    git(['cat-file', '-e', `${state.startedHead}^{commit}`], root);
+    git(['merge-base', '--is-ancestor', state.startedHead, 'HEAD'], root);
+    git(['merge-base', '--is-ancestor', state.baseSha, 'HEAD'], root);
+  } catch (error) {
+    return {
+      kind: 'malformed',
+      file,
+      state,
+      detail: `state Git baseline 非法：${error.message}`,
+    };
+  }
+  return { kind: 'valid', file, state, branch };
+}
+
+function inactiveTaskStateMessage(snapshot) {
+  if (snapshot.kind === 'missing') return 'no local task state';
+  if (snapshot.kind === 'expired') {
+    return 'task state expired (>12h) and is an inactive historical record';
+  }
+  if (snapshot.kind === 'branch-mismatch') {
+    return `task state branch mismatch / branch 已变化 (${snapshot.state?.branch || '<missing>'} -> ` +
+      `${snapshot.branch || 'DETACHED'}) and is an inactive historical record`;
+  }
+  return `task state is malformed (${snapshot.detail || 'invalid structure'}) and is an inactive historical record`;
 }
 
 function writePrivateJson(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  const directory = ensurePrivateDirectory(path.dirname(file));
+  const previous = privateFileIdentity(file, { allowMissing: true });
+  const temporary = path.join(
+    directory,
+    `.${path.basename(file)}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`,
+  );
+  let descriptor;
+  try {
+    descriptor = fs.openSync(
+      temporary,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        (fs.constants.O_NOFOLLOW || 0),
+      0o600,
+    );
+    fs.writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+
+    const current = privateFileIdentity(file, { allowMissing: true });
+    if (
+      (previous === null) !== (current === null) ||
+      (
+        previous &&
+        (previous.dev !== current.dev || previous.ino !== current.ino)
+      )
+    ) {
+      throw unsafePrivatePath(`私有治理文件 ${file} 在原子替换前被并发替换。`);
+    }
+    fs.renameSync(temporary, file);
+    fs.chmodSync(file, 0o600);
+    privateFileIdentity(file);
+    let directoryDescriptor;
+    try {
+      directoryDescriptor = fs.openSync(directory, fs.constants.O_RDONLY);
+      fs.fsyncSync(directoryDescriptor);
+    } finally {
+      if (directoryDescriptor !== undefined) fs.closeSync(directoryDescriptor);
+    }
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+    try {
+      fs.unlinkSync(temporary);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
 }
 
 function removePrivateFile(file) {
-  if (fs.existsSync(file)) fs.unlinkSync(file);
+  const identity = privateFileIdentity(file, { allowMissing: true });
+  if (!identity) return;
+  const current = privateFileIdentity(file);
+  if (identity.dev !== current.dev || identity.ino !== current.ino) {
+    throw unsafePrivatePath(`私有治理文件 ${file} 在删除前被替换。`);
+  }
+  fs.unlinkSync(file);
 }
 
 function parseFlags(argv) {
@@ -509,6 +798,62 @@ function parseFlags(argv) {
 
 function toPosix(value) {
   return value.replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function gitMetadataSegmentEquals(value) {
+  const normalized = String(value || '').normalize('NFKC');
+  return process.platform === 'win32' || process.platform === 'darwin'
+    ? normalized.toLowerCase() === '.git'
+    : normalized === '.git';
+}
+
+function hasGitMetadataPathSegment(value) {
+  return toPosix(String(value || ''))
+    .split('/')
+    .filter(Boolean)
+    .some(gitMetadataSegmentEquals);
+}
+
+function normalizeTaskOwnedScope(patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) {
+    throw new Error('owned scope 至少需要一个 repo-relative 路径或有限 glob。');
+  }
+  return patterns.map((value) => {
+    if (typeof value !== 'string' || !value || value !== value.trim() || value.includes('\0')) {
+      throw new Error('owned scope 只能包含无首尾空白/NUL 的非空路径。');
+    }
+    const posix = toPosix(value);
+    if (
+      path.posix.isAbsolute(posix) ||
+      path.win32.isAbsolute(value) ||
+      posix.startsWith('~')
+    ) {
+      throw new Error(`owned scope ${value} 位于仓库外；必须使用 repo-relative 路径。`);
+    }
+    const rawSegments = posix.split('/');
+    if (rawSegments.includes('..')) {
+      throw new Error(`owned scope ${value} 包含路径逃逸段 ../。`);
+    }
+    const normalized = path.posix.normalize(posix);
+    if (!normalized || normalized === '.' || normalized.startsWith('../')) {
+      throw new Error(`owned scope ${value} 是过宽全仓范围或仓库外路径。`);
+    }
+    const segments = normalized.split('/').filter(Boolean);
+    if (
+      segments.length === 0 ||
+      segments.every((segment) => /^[*?]+$/.test(segment))
+    ) {
+      throw new Error(`owned scope ${value} 是过宽全仓 glob。`);
+    }
+    const firstSegment = segments[0];
+    if (
+      firstSegment === '**' ||
+      globToRegExp(firstSegment).test('.git')
+    ) {
+      throw new Error(`owned scope ${value} 可覆盖 Git metadata / task state，禁止授权。`);
+    }
+    return normalized;
+  });
 }
 
 function globToRegExp(glob) {
@@ -533,7 +878,10 @@ function globToRegExp(glob) {
     }
   }
   pattern += '$';
-  return new RegExp(pattern, process.platform === 'win32' ? 'i' : '');
+  return new RegExp(
+    pattern,
+    process.platform === 'win32' || process.platform === 'darwin' ? 'i' : '',
+  );
 }
 
 function matchesAny(relativePath, patterns) {
@@ -913,10 +1261,15 @@ function readHookInput() {
 }
 
 function loadState(root) {
-  const file = stateFile(root);
-  const state = loadJsonFile(file);
-  if (!state) return null;
-  return { file, state };
+  const snapshot = inspectTaskState(root);
+  if (snapshot.kind === 'missing') return null;
+  if (snapshot.kind !== 'valid') {
+    throw new Error(
+      `${inactiveTaskStateMessage(snapshot)}; it has no authorization effect. ` +
+      'Run a new task start to replace it after safe inspection.',
+    );
+  }
+  return { file: snapshot.file, state: snapshot.state };
 }
 
 function commandContext() {
@@ -925,12 +1278,16 @@ function commandContext() {
   const head = git(['rev-parse', '--short=12', 'HEAD'], root).stdout;
   const base = git(['rev-parse', '--short=12', 'origin/master'], root, { allowFailure: true });
   const dirty = git(['status', '--short'], root).stdout;
-  const active = loadState(root)?.state;
+  const snapshot = inspectTaskState(root);
+  const active = snapshot.kind === 'valid' ? snapshot.state : null;
   const stateSummary = active
     ? active.mode === 'r0'
       ? `active task: local R0 / reason=${active.reason}`
       : `active task: #${active.issue} / ${active.stage} / owner=${active.owner}`
-    : 'active task: none; writes require start-r0 (no Issue) or governed task start';
+    : snapshot.kind === 'missing'
+      ? 'active task: none; writes require start-r0 (no Issue) or governed task start'
+      : `inactive historical task state: ${inactiveTaskStateMessage(snapshot)}; ` +
+        '不具备授权效力，安全检查后重新运行 task start';
 
   process.stdout.write([
     '[COREONE SESSION ROUTER]',
@@ -1071,7 +1428,8 @@ function commandStart(argv) {
   if (!owner || /^unassigned$/i.test(owner)) throw new Error('--owner 必须与 Issue body 当前 owner 一致。');
   if (!/^R[0-3]$/.test(risk)) throw new Error('--risk 必须是 R0 / R1 / R2 / R3。');
   if (flags.owned.length === 0) throw new Error('至少提供一个 --owned=<path/glob>。');
-  if (loadState(root)) {
+  flags.owned = normalizeTaskOwnedScope(flags.owned);
+  if (inspectTaskState(root).kind === 'valid') {
     throw new Error('已有活动 task state；先完成 finish-r0 或 GitHub handoff，不能用新的 start 覆盖。');
   }
   if (git(['status', '--short'], root).stdout) {
@@ -1429,7 +1787,8 @@ function resolveIssueCreationManifestPath(
 function commandCreateIssues(argv) {
   const flags = parseFlags(argv);
   const root = repoRoot();
-  if (loadState(root)) {
+  const taskSnapshot = inspectTaskState(root);
+  if (taskSnapshot.kind === 'valid') {
     throw new Error('已有活动 task state；必须先完成 handoff，再串行创建获准的新需求 Issues。');
   }
   const manifestPath = resolveIssueCreationManifestPath(flags.manifest, root);
@@ -1604,7 +1963,8 @@ function commandStartR0(argv) {
   const reason = String(flags.reason || '').trim();
   if (reason.length < 6) throw new Error('--reason 必须说明本项为何属于 R0 琐碎、可逆修改。');
   if (flags.owned.length === 0) throw new Error('R0 也至少提供一个 --owned=<path/glob>。');
-  if (loadState(root)) {
+  flags.owned = normalizeTaskOwnedScope(flags.owned);
+  if (inspectTaskState(root).kind === 'valid') {
     throw new Error('已有活动 task state；先完成 finish-r0 或 GitHub handoff，不能用 R0 覆盖。');
   }
   const branch = git(['branch', '--show-current'], root).stdout;
@@ -1655,8 +2015,17 @@ function resolveHookPath(input) {
 
 function assertActiveState(root, active, options = {}) {
   const { state } = active;
-  const age = Date.now() - Date.parse(state.startedAt);
-  if (!Number.isFinite(age) || age > STATE_MAX_AGE_MS) {
+  const now = Date.now();
+  const startedAt = Date.parse(state.startedAt);
+  const verifiedAt = Date.parse(state.verifiedAt || state.startedAt);
+  const age = now - startedAt;
+  if (
+    !Number.isFinite(age) ||
+    age > STATE_MAX_AGE_MS ||
+    startedAt > now + TASK_STATE_CLOCK_SKEW_MS ||
+    verifiedAt > now + TASK_STATE_CLOCK_SKEW_MS ||
+    verifiedAt < startedAt
+  ) {
     throw new Error('task contract 已过期（>12h）；重新读取 GitHub 并运行 task start。');
   }
   const branch = git(['branch', '--show-current'], root).stdout;
@@ -1668,7 +2037,7 @@ function assertActiveState(root, active, options = {}) {
   if (state.mode === 'r0') return;
   git(['merge-base', '--is-ancestor', state.baseSha, 'HEAD'], root);
 
-  const sinceVerify = Date.now() - Date.parse(state.verifiedAt || state.startedAt);
+  const sinceVerify = now - verifiedAt;
   if (!options.force && Number.isFinite(sinceVerify) && sinceVerify < LIVE_RECHECK_MS) return null;
 
   const remoteLine = git(['ls-remote', 'origin', 'refs/heads/master'], root).stdout.split(/\s+/)[0];
@@ -1816,7 +2185,10 @@ function listChangedPaths(root, state) {
 }
 
 function findScopeViolations(paths, state) {
-  return paths.filter((file) => matchesAny(file, state.excluded) || !matchesAny(file, state.owned));
+  return paths.filter((file) =>
+    hasGitMetadataPathSegment(file) ||
+    matchesAny(file, state.excluded) ||
+    !matchesAny(file, state.owned));
 }
 
 function assertOwnedChanges(root, state) {
@@ -1963,37 +2335,81 @@ function splitShellCommandSegments(command) {
 }
 
 function commandTokens(segment) {
-  const tokens = shellTokens(segment);
-  let index = 0;
-  while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index])) {
-    index += 1;
-  }
-  return tokens.slice(index);
+  return shellTokens(segment);
 }
 
-function unwrapCommandTokens(tokens) {
+function assertSafeEnvironmentAssignment(value) {
+  const match = String(value || '').match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s);
+  if (!match) throw new Error(`环境前缀 ${value} 无法静态验证。`);
+  const [, name] = match;
+  const upper = name.toUpperCase();
+  const changesExecutableOrRuntimeLoading =
+    upper === 'PATH' ||
+    upper === 'BASH_ENV' ||
+    upper === 'ENV' ||
+    upper === 'ZDOTDIR' ||
+    upper === 'NODE_OPTIONS' ||
+    upper === 'PYTHONPATH' ||
+    upper === 'PYTHONSTARTUP' ||
+    upper === 'PERL5OPT' ||
+    upper === 'RUBYOPT' ||
+    upper === 'LD_PRELOAD' ||
+    upper.startsWith('DYLD_');
+  const changesGitOrToolHelpers =
+    upper.startsWith('GIT_') ||
+    upper === 'PAGER' ||
+    upper === 'EDITOR' ||
+    upper === 'VISUAL' ||
+    upper.startsWith('NPM_CONFIG_');
+  if (changesExecutableOrRuntimeLoading || changesGitOrToolHelpers) {
+    throw new Error(
+      `环境覆写 ${name} 会改变 executable、runtime loader、Git scope 或 helper；无 task state 时禁止。`,
+    );
+  }
+}
+
+function unwrapCommandTokens(tokens, options = {}) {
   let current = [...tokens];
-  for (let depth = 0; depth < 4 && current.length > 0; depth += 1) {
+  for (let depth = 0; depth < 6 && current.length > 0; depth += 1) {
+    while (
+      current.length > 0 &&
+      /^[A-Za-z_][A-Za-z0-9_]*=/.test(String(current[0]))
+    ) {
+      assertSafeEnvironmentAssignment(current[0]);
+      current = current.slice(1);
+    }
+    if (current.length === 0) return current;
     const executable = path.basename(String(current[0] || '')).toLowerCase();
-    if (['command', 'nohup'].includes(executable)) {
-      const next = current.slice(1).findIndex((value) => !String(value).startsWith('-'));
-      if (next < 0) return current;
-      current = current.slice(next + 1);
+    if (executable === 'command') {
+      if (['-v', '-V'].includes(String(current[1] || ''))) return current;
+      let index = 1;
+      if (current[index] === '--') index += 1;
+      if (index >= current.length || String(current[index]).startsWith('-')) {
+        throw new Error('command wrapper 只允许不改变 executable 解析语义的形式。');
+      }
+      current = current.slice(index);
       continue;
     }
     if (executable === 'env') {
       let index = 1;
-      while (
-        index < current.length &&
-        (
-          String(current[index]).startsWith('-') ||
-          /^[A-Za-z_][A-Za-z0-9_]*=/.test(String(current[index]))
-        )
-      ) {
+      if (current[index] === '--') index += 1;
+      while (index < current.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(String(current[index]))) {
+        assertSafeEnvironmentAssignment(current[index]);
         index += 1;
       }
-      if (index >= current.length) return current;
+      if (index >= current.length || String(current[index]).startsWith('-')) {
+        throw new Error('env 只允许显式安全变量后跟一个可审计命令。');
+      }
       current = current.slice(index);
+      continue;
+    }
+    if (['sudo', 'nohup'].includes(executable) && !options.hasActiveState) {
+      throw new Error(`${executable} 会改变权限/环境或留下后台输出，无 task state 时禁止。`);
+    }
+    if (executable === 'nohup') {
+      const index = current.slice(1).findIndex((value) => !String(value).startsWith('-'));
+      if (index < 0) return current;
+      current = current.slice(index + 1);
       continue;
     }
     if (executable === 'sudo') {
@@ -2014,57 +2430,170 @@ function unwrapCommandTokens(tokens) {
   return current;
 }
 
+function resolvePhysicalPath(base, value) {
+  const absolute = path.resolve(base, String(value));
+  const suffix = [];
+  let existing = absolute;
+  while (true) {
+    try {
+      return path.join(fs.realpathSync.native(existing), ...suffix);
+    } catch (error) {
+      if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error;
+      const parent = path.dirname(existing);
+      if (parent === existing) return absolute;
+      suffix.unshift(path.basename(existing));
+      existing = parent;
+    }
+  }
+}
+
+function isNullDeviceTarget(value) {
+  const raw = String(value || '').trim().replace(/^['"]|['"]$/g, '');
+  if (process.platform === 'win32') {
+    return /^(?:nul|\\\\\.\\nul)$/i.test(raw);
+  }
+  return path.resolve(raw) === '/dev/null';
+}
+
+function temporaryPhysicalRoots() {
+  const candidates = process.platform === 'win32'
+    ? [os.tmpdir()]
+    : [os.tmpdir(), '/tmp', '/private/tmp', '/var/tmp', '/private/var/tmp'];
+  const roots = new Set();
+  for (const candidate of candidates) {
+    const absolute = path.resolve(candidate);
+    roots.add(absolute);
+    try {
+      roots.add(fs.realpathSync.native(absolute));
+    } catch {
+      // A platform without a listed alias is covered by the roots that exist.
+    }
+  }
+  return roots;
+}
+
+function assertNotGitMetadataTarget(root, raw, target) {
+  if (hasGitMetadataPathSegment(raw) || hasGitMetadataPathSegment(target)) {
+    throw new Error(`文件写目标 ${raw} 指向 Git metadata；任何 task scope 都不得授权。`);
+  }
+  for (const directory of [
+    physicalGitDirectory(root),
+    physicalGitDirectory(root, { common: true }),
+  ]) {
+    if (target === directory || isPathInside(directory, target)) {
+      throw new Error(`文件写目标 ${raw} 指向 Git metadata；任何 task scope 都不得授权。`);
+    }
+  }
+}
+
 function assertTaskWriteTarget(value, state = {}) {
   const raw = String(value || '').trim().replace(/^['"]|['"]$/g, '');
-  if (!raw || raw === '/dev/null' || raw.toLowerCase() === 'nul') return;
+  if (!raw || isNullDeviceTarget(raw)) return;
   if (/[$%*?\[\]{}]/.test(raw) || raw.startsWith('~')) {
     throw new Error(`文件写目标 ${raw} 无法静态解析；请改用明确的 owned 路径或临时目录。`);
   }
-  const root = path.resolve(state.root || process.cwd());
-  const cwd = path.resolve(state.cwd || root);
-  const target = path.resolve(cwd, raw);
-  const temporaryRoots = new Set([
-    path.resolve(os.tmpdir()),
-    fs.realpathSync.native(os.tmpdir()),
-  ]);
-  if (process.platform !== 'win32') {
-    temporaryRoots.add(path.resolve('/tmp'));
-    try {
-      temporaryRoots.add(fs.realpathSync.native('/tmp'));
-    } catch {
-      // A platform without /tmp is already covered by os.tmpdir().
+  const root = resolvePhysicalPath(process.cwd(), state.root || process.cwd());
+  const cwd = resolvePhysicalPath(root, state.cwd || root);
+  const target = resolvePhysicalPath(cwd, raw);
+  assertNotGitMetadataTarget(root, raw, target);
+  if (isPathInside(root, target)) {
+    const relative = toPosix(path.relative(root, target));
+    if (
+      !Array.isArray(state.owned) ||
+      matchesAny(relative, state.excluded || []) ||
+      !matchesAny(relative, state.owned)
+    ) {
+      throw new Error(`文件写目标 ${relative} 不在当前 task owned scope。`);
     }
+    return;
   }
-  if ([...temporaryRoots].some((temporaryRoot) =>
+  if ([...temporaryPhysicalRoots()].some((temporaryRoot) =>
     isPathInside(temporaryRoot, target, { allowSame: true }))) return;
-  if (!isPathInside(root, target)) {
-    if (isHarnessMemoryPath(target)) return;
-    throw new Error(`文件写目标 ${raw} 位于当前仓库和临时目录之外。`);
+  if (isHarnessMemoryPath(target)) return;
+  throw new Error(`文件写目标 ${raw} 位于当前仓库和临时目录之外。`);
+}
+
+function gitConfigOverrideKey(raw, source) {
+  const value = String(raw || '');
+  const separator = value.indexOf('=');
+  if (separator === 0 || (separator < 0 && source !== '-c')) {
+    throw new Error(`git ${source} 缺少 key=value。`);
   }
-  const relative = toPosix(path.relative(root, target));
-  if (
-    !Array.isArray(state.owned) ||
-    matchesAny(relative, state.excluded || []) ||
-    !matchesAny(relative, state.owned)
-  ) {
-    throw new Error(`文件写目标 ${relative} 不在当前 task owned scope。`);
+  const key = (separator < 0 ? value : value.slice(0, separator)).trim().toLowerCase();
+  if (!/^[a-z][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+$/i.test(key)) {
+    throw new Error(`git ${source} config key ${key || '<missing>'} 无法验证。`);
   }
+  return key;
+}
+
+function assertSafeGitConfigOverride(raw, source) {
+  const key = gitConfigOverrideKey(raw, source);
+  const executesOrRedirects = [
+    /^alias\./,
+    /^filter\./,
+    /^credential(?:\.|$)/,
+    /^include(?:if)?\./,
+    /^remote\./,
+    /^url\./,
+    /^http\./,
+    /^protocol\./,
+    /^pager\./,
+    /^difftool\./,
+    /^mergetool\./,
+    /^gpg\./,
+    /^core\.(?:hookspath|fsmonitor|pager|editor|sshcommand|askpass|attributesfile|excludesfile|worktree|gitproxy)$/,
+    /^diff\.(?:external|[^.]+\.textconv|[^.]+\.command)$/,
+    /^merge\.[^.]+\.driver$/,
+    /^interactive\.difffilter$/,
+    /^sequence\.editor$/,
+  ];
+  if (executesOrRedirects.some((pattern) => pattern.test(key))) {
+    throw new Error(
+      `git ${source} ${key} 可改写 helper、凭据、远端或仓库边界，已拒绝。`,
+    );
+  }
+  return key;
 }
 
 function gitSubcommand(tokens) {
   let index = 1;
   const globals = [];
+  const configOverrides = [];
   while (index < tokens.length && tokens[index].startsWith('-')) {
-    const current = tokens[index];
+    const current = String(tokens[index]);
     globals.push(current);
-    if (['-C', '-c', '--git-dir', '--work-tree', '--namespace'].includes(current)) {
+    if (current === '-c') {
+      const config = String(tokens[index + 1] || '');
+      globals.push(config);
+      configOverrides.push({ source: '-c', value: config });
+      index += 2;
+    } else if (/^-c.+/.test(current)) {
+      configOverrides.push({ source: '-c', value: current.slice(2) });
+      index += 1;
+    } else if (current === '--config-env') {
+      const config = String(tokens[index + 1] || '');
+      globals.push(config);
+      configOverrides.push({ source: '--config-env', value: config });
+      index += 2;
+    } else if (current.startsWith('--config-env=')) {
+      configOverrides.push({
+        source: '--config-env',
+        value: current.slice('--config-env='.length),
+      });
+      index += 1;
+    } else if (['-C', '--git-dir', '--work-tree', '--namespace'].includes(current)) {
       globals.push(tokens[index + 1] || '');
       index += 2;
     } else {
       index += 1;
     }
   }
-  return { globals, command: String(tokens[index] || '').toLowerCase(), args: tokens.slice(index + 1) };
+  return {
+    globals,
+    configOverrides,
+    command: String(tokens[index] || '').toLowerCase(),
+    args: tokens.slice(index + 1),
+  };
 }
 
 function assertSafeWorktreeAdd(args, options = {}) {
@@ -2094,8 +2623,792 @@ function assertSafeWorktreeAdd(args, options = {}) {
   }
 }
 
+function gitArgumentHas(args, names) {
+  return args.some((value) => names.some((name) =>
+    value === name || value.startsWith(`${name}=`)));
+}
+
+function assertNoGitExecutionOrOutputFlags(command, args) {
+  const blocked = [
+    '--ext-diff',
+    '--textconv',
+    '--output',
+    '--output-directory',
+    '-o',
+    '--exec',
+    '--remote',
+    '--upload-pack',
+  ];
+  if (gitArgumentHas(args, blocked)) {
+    throw new Error(`git ${command} 包含 helper/output override，无 task state 时禁止。`);
+  }
+}
+
+function parseNoStateGitInvocation(tokens, root, cwd) {
+  assertTrustedExecutablePath(tokens[0], cwd);
+  let currentDirectory = resolvePhysicalPath(root, cwd);
+  let index = 1;
+  let pagerDisabled = false;
+  const globals = [];
+  while (index < tokens.length && String(tokens[index]).startsWith('-')) {
+    const value = String(tokens[index]);
+    if (value === '--') {
+      index += 1;
+      break;
+    }
+    if (['--no-pager', '-P'].includes(value)) {
+      globals.push(value);
+      pagerDisabled = true;
+      index += 1;
+      continue;
+    }
+    if ([
+      '--paginate',
+      '-p',
+      '--literal-pathspecs',
+      '--glob-pathspecs',
+      '--noglob-pathspecs',
+      '--icase-pathspecs',
+      '--no-optional-locks',
+      '--no-replace-objects',
+      '--version',
+      '--help',
+    ].includes(value)) {
+      globals.push(value);
+      index += 1;
+      continue;
+    }
+    if (value === '-c' || (value.startsWith('-c') && value.length > 2)) {
+      const config = value === '-c'
+        ? String(tokens[index + 1] || '')
+        : value.slice(2);
+      assertSafeGitConfigOverride(config, '-c');
+      globals.push(...(value === '-c' ? [value, config] : [value]));
+      index += value === '-c' ? 2 : 1;
+      continue;
+    }
+    if (value === '--config-env' || value.startsWith('--config-env=')) {
+      const config = value === '--config-env'
+        ? String(tokens[index + 1] || '')
+        : value.slice('--config-env='.length);
+      assertSafeGitConfigOverride(config, '--config-env');
+      globals.push(...(value === '--config-env' ? [value, config] : [value]));
+      index += value === '--config-env' ? 2 : 1;
+      continue;
+    }
+    let directory = null;
+    if (value === '-C') {
+      directory = String(tokens[index + 1] || '');
+      globals.push(value, directory);
+      index += 2;
+    } else if (value.startsWith('-C') && value.length > 2) {
+      directory = value.slice(2);
+      globals.push(value);
+      index += 1;
+    } else {
+      throw new Error(`git global override ${value} 无 task state 时禁止。`);
+    }
+    if (!directory) throw new Error('git -C 缺少目录。');
+    const target = resolvePhysicalPath(currentDirectory, directory);
+    if (!isPathInside(root, target, { allowSame: true })) {
+      throw new Error('git -C 必须保持在当前 repo/worktree 物理边界内。');
+    }
+    const targetRoot = repoRoot(target);
+    if (targetRoot !== resolvePhysicalPath(process.cwd(), root)) {
+      throw new Error('git -C 不得切换到嵌套或其他仓库。');
+    }
+    currentDirectory = target;
+  }
+  const command = String(tokens[index] || '').toLowerCase();
+  return {
+    command,
+    args: tokens.slice(index + 1).map(String),
+    cwd: currentDirectory,
+    globals,
+    pagerDisabled,
+  };
+}
+
+function isReadOnlyBranchArgs(args) {
+  if (args.length === 0) return true;
+  if (args.length === 1 && args[0] === '--show-current') return true;
+  if (args.some((value) =>
+    /^(?:-[dDmMcCfuU]|--(?:delete|move|copy|force|set-upstream-to|unset-upstream|edit-description|create-reflog|track|no-track))(?:=|$)/
+      .test(value))) {
+    return false;
+  }
+  if (args.some((value) =>
+    /^(?:-a|-r|-l|-v|-vv|--(?:all|remotes|list|contains|no-contains|merged|no-merged|points-at|format|sort|column|color|ignore-case|omit-empty|abbrev|no-abbrev))(?:=|$)/
+      .test(value))) {
+    return true;
+  }
+  return args.some((value) => value.startsWith('-'));
+}
+
+function isReadOnlyTagArgs(args) {
+  if (args.length === 0) return true;
+  if (args.some((value) =>
+    /^(?:-[adfsu]|--(?:annotate|delete|force|sign|local-user|cleanup|create-reflog))(?:=|$)/
+      .test(value))) {
+    return false;
+  }
+  if (args.some((value) =>
+    /^(?:-l|-n\d*|--(?:list|contains|no-contains|merged|no-merged|points-at|format|sort|column|color|ignore-case))(?:=|$)/
+      .test(value))) {
+    return true;
+  }
+  return args.some((value) => value.startsWith('-'));
+}
+
+const GIT_CONFIG_OPTIONS_WITH_VALUE = new Set([
+  '--file',
+  '-f',
+  '--blob',
+  '--type',
+  '-t',
+  '--default',
+  '--comment',
+  '--value',
+  '--url',
+]);
+
+function tokenizeGitConfigArgs(args) {
+  const options = [];
+  const positionals = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const value = String(args[index]);
+    if (value === '--') {
+      positionals.push(...args.slice(index + 1).map(String));
+      break;
+    }
+    if (value.startsWith('--')) {
+      const equalsIndex = value.indexOf('=');
+      const name = (equalsIndex < 0 ? value : value.slice(0, equalsIndex)).toLowerCase();
+      const inlineValue = equalsIndex < 0 ? null : value.slice(equalsIndex + 1);
+      if (GIT_CONFIG_OPTIONS_WITH_VALUE.has(name)) {
+        options.push({
+          name,
+          value: inlineValue === null ? String(args[index + 1] || '') : inlineValue,
+        });
+        if (inlineValue === null) index += 1;
+      } else {
+        options.push({ name, value: inlineValue });
+      }
+      continue;
+    }
+    if (value.startsWith('-') && value !== '-') {
+      const name = value.slice(0, 2).toLowerCase();
+      if (GIT_CONFIG_OPTIONS_WITH_VALUE.has(name)) {
+        const attached = value.slice(2).replace(/^=/, '');
+        options.push({
+          name,
+          value: attached || String(args[index + 1] || ''),
+        });
+        if (!attached) index += 1;
+      } else {
+        options.push({ name: value.toLowerCase(), value: null });
+      }
+      continue;
+    }
+    positionals.push(value);
+  }
+  return { options, positionals };
+}
+
+function isReadOnlyConfigArgs(args) {
+  const parsed = tokenizeGitConfigArgs(args);
+  const optionNames = new Set(parsed.options.map((option) => option.name));
+  if ([
+    '--add',
+    '--replace-all',
+    '--unset',
+    '--unset-all',
+    '--rename-section',
+    '--remove-section',
+    '--edit',
+    '--config-env',
+    '-e',
+  ].some((name) => optionNames.has(name))) {
+    return false;
+  }
+  const { positionals } = parsed;
+  const subcommand = String(positionals[0] || '').toLowerCase();
+  if ([
+    'set',
+    'unset',
+    'rename-section',
+    'remove-section',
+    'edit',
+  ].includes(subcommand)) {
+    return false;
+  }
+  if (['get', 'list', 'get-color', 'get-colorbool'].includes(subcommand)) return true;
+  if ([
+    '--get',
+    '--get-all',
+    '--get-regexp',
+    '--get-urlmatch',
+    '--list',
+    '--get-color',
+    '--get-colorbool',
+    '-l',
+  ].some((name) => optionNames.has(name))) {
+    return true;
+  }
+  if (positionals.length <= 1) return true;
+  return false;
+}
+
+function effectiveGitConfigEntries(cwd, pattern) {
+  const result = git(
+    ['config', '--null', '--get-regexp', pattern],
+    cwd,
+    { allowFailure: true },
+  );
+  if (result.status === 1) return [];
+  if (result.status !== 0) {
+    throw new Error(`无法检查有效 Git config：${result.stderr || result.stdout || result.status}`);
+  }
+  return result.stdout
+    .split('\0')
+    .filter(Boolean)
+    .map((record) => {
+      const separator = record.indexOf('\n');
+      return separator < 0
+        ? { key: record, value: '' }
+        : { key: record.slice(0, separator), value: record.slice(separator + 1) };
+    });
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function repositoryAttributeSources(root, cwd) {
+  const sources = new Set();
+  const attributePathspec = ['.gitattributes', ':(glob)**/.gitattributes'];
+  for (const args of [
+    [
+      'ls-files',
+      '-z',
+      '--full-name',
+      '--cached',
+      '--others',
+      '--exclude-standard',
+      '--',
+      ...attributePathspec,
+    ],
+    [
+      'ls-files',
+      '-z',
+      '--full-name',
+      '--others',
+      '--ignored',
+      '--exclude-standard',
+      '--',
+      ...attributePathspec,
+    ],
+  ]) {
+    const listed = git(args, cwd, { allowFailure: true });
+    if (listed.status !== 0) {
+      throw new Error(
+        `无法枚举有效 Git attributes：${listed.stderr || listed.stdout || listed.status}`,
+      );
+    }
+    for (const relative of listed.stdout.split('\0').filter(Boolean)) {
+      sources.add(path.resolve(root, relative));
+    }
+  }
+  for (const gitDirectory of [
+    physicalGitDirectory(root),
+    physicalGitDirectory(root, { common: true }),
+  ]) {
+    sources.add(path.join(gitDirectory, 'info', 'attributes'));
+  }
+  const configuredAttributes = effectiveGitConfigEntries(cwd, '^core\\.attributesfile$');
+  for (const entry of configuredAttributes) {
+    const raw = String(entry.value || '').trim();
+    if (!raw) continue;
+    sources.add(raw.startsWith('~/')
+      ? path.join(os.homedir(), raw.slice(2))
+      : path.resolve(cwd, raw));
+  }
+  if (configuredAttributes.length === 0) {
+    sources.add(path.join(
+      process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'),
+      'git',
+      'attributes',
+    ));
+  }
+  if (process.platform !== 'win32') {
+    sources.add('/etc/gitattributes');
+    const execPath = git(['--exec-path'], cwd, { allowFailure: true });
+    if (execPath.status === 0 && execPath.stdout) {
+      sources.add(path.resolve(execPath.stdout, '..', '..', 'etc', 'gitattributes'));
+    }
+  }
+  return [...sources];
+}
+
+function configuredTextconvDrivers(root, cwd) {
+  const drivers = [];
+  for (const entry of effectiveGitConfigEntries(cwd, '^diff\\..*\\.textconv$')) {
+    const match = entry.key.match(/^diff\.(.+)\.textconv$/i);
+    if (match && String(entry.value || '').trim()) drivers.push(match[1]);
+  }
+  if (drivers.length === 0) return [];
+  const attributeTexts = [];
+  for (const source of repositoryAttributeSources(root, cwd)) {
+    try {
+      const stat = fs.statSync(source);
+      if (stat.isFile()) attributeTexts.push(fs.readFileSync(source, 'utf8'));
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw new Error(`无法检查 Git attributes ${source}：${error.message}`);
+      }
+    }
+  }
+  return drivers.filter((driver) => {
+    const marker = new RegExp(
+      `(?:^|[\\t ])diff=${escapeRegExp(driver)}(?=$|[\\t ])`,
+      'mi',
+    );
+    return attributeTexts.some((text) => marker.test(text));
+  });
+}
+
+function configuredFsmonitorHelper(cwd) {
+  const values = effectiveGitConfigEntries(cwd, '^core\\.fsmonitor$')
+    .map((entry) => String(entry.value || '').trim())
+    .filter(Boolean);
+  return values.find((value) => !/^(?:true|false)$/i.test(value)) || null;
+}
+
+function configuredPagerHelper(command, cwd) {
+  const entries = effectiveGitConfigEntries(
+    cwd,
+    `^(core\\.pager|pager\\.${escapeRegExp(command)})$`,
+  );
+  for (const entry of entries) {
+    const value = String(entry.value || '').trim();
+    if (!value || /^false$/i.test(value)) continue;
+    if (hasShellControl(value)) return value;
+    const first = shellTokens(value)[0] || '';
+    if (['cat', 'less', 'more'].includes(executableBasename(first))) {
+      if (!executableHasExplicitPath(first)) continue;
+      try {
+        assertTrustedExecutablePath(first, cwd);
+        continue;
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+  return null;
+}
+
+function configuredGitAlias(command, cwd) {
+  const entries = effectiveGitConfigEntries(
+    cwd,
+    `^alias\\.${escapeRegExp(command)}$`,
+  );
+  return entries[0]?.value || null;
+}
+
+// Git resolves builtins before searching git-<subcommand> in exec-path/PATH.
+// Keep the Git 2.50 builtin inventory explicit so an absent/unknown command may
+// remain observable while a physically executable external helper is blocked.
+const GIT_250_BUILTINS = new Set((
+  'add am annotate apply archive backfill bisect blame branch bugreport bundle cat-file ' +
+  'check-attr check-ignore check-mailmap check-ref-format checkout checkout--worker ' +
+  'checkout-index cherry cherry-pick clean clone column commit commit-graph commit-tree ' +
+  'config count-objects credential credential-cache credential-cache--daemon credential-store ' +
+  'describe diagnose diff diff-files diff-index diff-pairs diff-tree difftool fast-export ' +
+  'fast-import fetch fetch-pack fmt-merge-msg for-each-ref for-each-repo format-patch fsck ' +
+  'fsck-objects fsmonitor--daemon gc get-tar-commit-id grep hash-object help hook index-pack ' +
+  'init init-db interpret-trailers log ls-files ls-remote ls-tree mailinfo mailsplit maintenance ' +
+  'merge merge-base merge-file merge-index merge-ours merge-recursive merge-recursive-ours ' +
+  'merge-recursive-theirs merge-subtree merge-tree mktag mktree multi-pack-index mv name-rev ' +
+  'notes pack-objects pack-redundant pack-refs patch-id pickaxe prune prune-packed pull push ' +
+  'range-diff read-tree rebase receive-pack reflog refs remote remote-ext remote-fd repack ' +
+  'replace replay rerere reset restore rev-list rev-parse revert rm send-pack shortlog show ' +
+  'show-branch show-index show-ref sparse-checkout stage stash status stripspace ' +
+  'submodule--helper switch symbolic-ref tag unpack-file unpack-objects update-index update-ref ' +
+  'update-server-info upload-archive upload-archive--writer upload-pack var verify-commit ' +
+  'verify-pack verify-tag version whatchanged worktree write-tree'
+).split(/\s+/));
+
+function externalGitSubcommandHelper(command, cwd) {
+  if (!command || !/^[a-z0-9][a-z0-9-]*$/i.test(command)) return null;
+  if (GIT_250_BUILTINS.has(command)) return null;
+  const directories = [];
+  const execPath = git(['--exec-path'], cwd, { allowFailure: true });
+  if (execPath.status === 0 && execPath.stdout) directories.push(execPath.stdout);
+  directories.push(...String(process.env.PATH || '').split(path.delimiter).filter(Boolean));
+  for (const directory of new Set(directories)) {
+    for (const name of executableCandidates(`git-${command}`)) {
+      const candidate = path.join(directory, name);
+      try {
+        const stat = fs.statSync(candidate);
+        if (!stat.isFile()) continue;
+        if (process.platform !== 'win32') fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch {
+        // The real Git invocation cannot execute this candidate.
+      }
+    }
+  }
+  return null;
+}
+
+function assertNoImplicitGitHelper(command, args, options) {
+  const usesTextconv =
+    command === 'diff' ||
+    (
+      command === 'show' &&
+      !args.some((value) => ['--no-patch', '-s'].includes(value))
+    ) ||
+    (
+      command === 'log' &&
+      gitArgumentHas(args, ['-p', '--patch', '--stat', '--numstat', '--shortstat'])
+    );
+  if (
+    usesTextconv &&
+    !gitArgumentHas(args, ['--no-textconv']) &&
+    configuredTextconvDrivers(options.root, options.cwd).length > 0
+  ) {
+    throw new Error(
+      `git ${command} 会按有效 attributes/config 执行 textconv helper；无 task state 时禁止。`,
+    );
+  }
+  if (
+    usesTextconv &&
+    !gitArgumentHas(args, ['--no-ext-diff']) &&
+    effectiveGitConfigEntries(options.cwd, '^diff\\.external$')
+      .some((entry) => String(entry.value || '').trim())
+  ) {
+    throw new Error(
+      `git ${command} 会按有效 diff.external config 执行 helper；请显式使用 --no-ext-diff。`,
+    );
+  }
+  if (
+    new Set(['status', 'diff', 'show', 'log']).has(command) &&
+    configuredFsmonitorHelper(options.cwd)
+  ) {
+    throw new Error(
+      `git ${command} 会执行有效 core.fsmonitor helper；无 task state 时禁止。`,
+    );
+  }
+  if (
+    !options.pagerDisabled &&
+    new Set(['log', 'show', 'diff', 'blame']).has(command) &&
+    configuredPagerHelper(command, options.cwd)
+  ) {
+    throw new Error(
+      `git ${command} 配置了可执行 pager helper；请用 git -P/--no-pager 运行诊断。`,
+    );
+  }
+}
+
+function assertNoKnownGitMutation(command, args) {
+  const alwaysMutating = new Set([
+    'add',
+    'am',
+    'apply',
+    'bisect',
+    'checkout',
+    'cherry-pick',
+    'clean',
+    'clone',
+    'commit',
+    'commit-tree',
+    'credential',
+    'daemon',
+    'fast-import',
+    'fetch',
+    'filter-branch',
+    'filter-repo',
+    'gc',
+    'index-pack',
+    'init',
+    'maintenance',
+    'merge',
+    'mergetool',
+    'mktag',
+    'mktree',
+    'mv',
+    'pack-objects',
+    'pack-refs',
+    'prune',
+    'pull',
+    'push',
+    'read-tree',
+    'rebase',
+    'receive-pack',
+    'reflog',
+    'repack',
+    'reset',
+    'restore',
+    'revert',
+    'rm',
+    'send-pack',
+    'switch',
+    'update-index',
+    'update-ref',
+    'update-server-info',
+    'write-tree',
+  ]);
+  if (alwaysMutating.has(command)) {
+    throw new Error(`git ${command} 会写本地状态、对象、远端或执行 helper；需先建立 task contract。`);
+  }
+  if (command === 'fsck' && gitArgumentHas(args, ['--lost-found'])) {
+    throw new Error('git fsck --lost-found 会写 Git metadata；需先建立 task contract。');
+  }
+  if (command === 'grep' && gitArgumentHas(args, ['--open-files-in-pager'])) {
+    throw new Error('git grep pager helper mode 无 task state 时禁止。');
+  }
+  if (['difftool', 'gui', 'citool', 'instaweb'].includes(command)) {
+    throw new Error(`git ${command} 会启动外部 helper；无 task state 时禁止。`);
+  }
+}
+
+function gitBuiltinAction(args) {
+  const optionsWithValue = new Set(['--object-dir']);
+  for (let index = 0; index < args.length; index += 1) {
+    const value = String(args[index] || '');
+    if (optionsWithValue.has(value)) {
+      index += 1;
+      continue;
+    }
+    if (!value.startsWith('-')) return value.toLowerCase();
+  }
+  return '';
+}
+
+function assertNoGitBuiltinSideEffect(command, args, options = {}) {
+  const action = gitBuiltinAction(args);
+  if (command === 'hook' && action === 'run') {
+    throw new Error('git hook run 会执行仓库 hook helper，已拒绝。');
+  }
+  if (command === 'checkout-index') {
+    throw new Error('git checkout-index 会直接写 worktree、prefix 或临时输出，已拒绝。');
+  }
+  if (command === 'commit-graph' && action === 'write') {
+    throw new Error('git commit-graph write 会写 Git object metadata，已拒绝。');
+  }
+  if (command === 'multi-pack-index' && ['write', 'repack', 'expire'].includes(action)) {
+    throw new Error(`git multi-pack-index ${action} 会写 Git object metadata，已拒绝。`);
+  }
+  if (options.hasActiveState && command === 'worktree' && action !== 'list') {
+    throw new Error('活动 task 内禁止新增、移动、删除或修复嵌套 worktree/ref。');
+  }
+  if (
+    !options.hasActiveState &&
+    new Set([
+      'backfill',
+      'checkout--worker',
+      'credential-cache--daemon',
+      'fsmonitor--daemon',
+      'prune-packed',
+      'replay',
+      'rerere',
+      'unpack-file',
+      'unpack-objects',
+    ]).has(command)
+  ) {
+    throw new Error(`git ${command} 会写 Git metadata、worktree 或启动 helper；需先建立 task contract。`);
+  }
+  if (
+    !options.hasActiveState &&
+    command === 'refs' &&
+    ['migrate', 'pack-refs'].includes(action)
+  ) {
+    throw new Error(`git refs ${action} 会写 ref metadata；需先建立 task contract。`);
+  }
+}
+
+function isReadOnlyRemoteArgs(args) {
+  if (args.length === 0) return true;
+  if (args.length === 1 && ['-v', '--verbose'].includes(args[0])) return true;
+  if (args[0] !== 'get-url') return false;
+  const positionals = args.slice(1).filter((value) => !value.startsWith('-'));
+  return (
+    positionals.length === 1 &&
+    args.slice(1).every((value) =>
+      !value.startsWith('-') || ['--all', '--push'].includes(value))
+  );
+}
+
+function isReadOnlySymbolicRefArgs(args) {
+  const positionals = args.filter((value) => !value.startsWith('-'));
+  return (
+    positionals.length === 1 &&
+    args.every((value) =>
+      !value.startsWith('-') ||
+      ['-q', '--quiet', '--short', '--no-recurse', '--recurse'].includes(value))
+  );
+}
+
+function assertSafeGitReadCommand(tokens, options = {}) {
+  const root = resolvePhysicalPath(process.cwd(), options.root || process.cwd());
+  const cwd = resolvePhysicalPath(root, options.cwd || root);
+  const {
+    command,
+    args,
+    globals,
+    pagerDisabled,
+  } = parseNoStateGitInvocation(tokens, root, cwd);
+  if (!command && globals.some((value) => ['--version', '--help'].includes(value))) {
+    return { command, args };
+  }
+  assertNoGitBuiltinSideEffect(command, args);
+  assertNoGitExecutionOrOutputFlags(command, args);
+  assertNoKnownGitMutation(command, args);
+  assertNoImplicitGitHelper(command, args, {
+    root,
+    cwd,
+    pagerDisabled,
+  });
+  if (
+    ['diff', 'show', 'log', 'diff-tree', 'blame'].includes(command) &&
+    gitArgumentHas(args, ['--ext-diff', '--textconv', '--output', '-o'])
+  ) {
+    throw new Error(`git ${command} helper/output mode 无 task state 时禁止。`);
+  }
+  if (command === 'cat-file') {
+    if (gitArgumentHas(args, ['--filters', '--textconv'])) {
+      throw new Error('git cat-file filters/textconv 可执行 helper，无 task state 时禁止。');
+    }
+    return { command, args };
+  }
+  if (command === 'branch') {
+    if (isReadOnlyBranchArgs(args)) return { command, args };
+    throw new Error('git branch mutation 需先建立 task contract。');
+  }
+  if (command === 'tag') {
+    if (isReadOnlyTagArgs(args)) return { command, args };
+    throw new Error('git tag mutation 需先建立 task contract。');
+  }
+  if (command === 'worktree') {
+    if (
+      args[0] === 'list' &&
+      args.slice(1).every((value) =>
+        ['--porcelain', '-v', '--verbose', '-z'].includes(value) ||
+        value.startsWith('--expire='))
+    ) {
+      return { command, args };
+    }
+    throw new Error('git worktree mutation 需先建立 task contract。');
+  }
+  if (command === 'config') {
+    if (isReadOnlyConfigArgs(args)) return { command, args };
+    throw new Error('git config write/edit 需先建立 task contract。');
+  }
+  if (command === 'remote') {
+    if (isReadOnlyRemoteArgs(args)) return { command, args };
+    throw new Error('git remote mutation 需先建立 task contract。');
+  }
+  if (command === 'symbolic-ref') {
+    if (isReadOnlySymbolicRefArgs(args)) return { command, args };
+    throw new Error('git symbolic-ref mutation 需先建立 task contract。');
+  }
+  if (command === 'notes') {
+    if (
+      ['list', 'show', 'get-ref'].includes(String(args[0] || '')) &&
+      !gitArgumentHas(args, ['--ext-diff', '--textconv'])
+    ) {
+      return { command, args };
+    }
+    throw new Error('git notes mutation/helper mode 需先建立 task contract。');
+  }
+  if (command === 'replace') {
+    if (
+      args.length === 0 ||
+      args[0] === '-l' ||
+      args[0] === '--list' ||
+      args[0]?.startsWith('--list=')
+    ) {
+      return { command, args };
+    }
+    throw new Error('git replace mutation 需先建立 task contract。');
+  }
+  if (command === 'sparse-checkout') {
+    if (args[0] === 'list' && args.length === 1) return { command, args };
+    throw new Error('git sparse-checkout mutation 需先建立 task contract。');
+  }
+  if (command === 'submodule') {
+    if (args[0] === 'status') return { command, args };
+    throw new Error('git submodule mutation/helper mode 需先建立 task contract。');
+  }
+  if (command === 'stash') {
+    if (
+      ['list', 'show'].includes(String(args[0] || '')) &&
+      !gitArgumentHas(args, ['--ext-diff', '--textconv'])
+    ) {
+      return { command, args };
+    }
+    throw new Error('git stash mutation 需先建立 task contract。');
+  }
+  if (command === 'hash-object') {
+    if (gitArgumentHas(args, ['-w', '--path', '--filters'])) {
+      throw new Error('git hash-object write/filter mode 无 task state 时禁止。');
+    }
+    return { command, args };
+  }
+  if (command === 'merge-tree') {
+    if (args[0] === '--trivial-merge' && args.length === 4) {
+      return { command, args };
+    }
+    throw new Error('git merge-tree 默认 write-tree 语义会写 object store；仅允许显式 --trivial-merge 三树模式。');
+  }
+  if (
+    command === 'format-patch' &&
+    args.includes('--stdout') &&
+    !gitArgumentHas(args, ['--output-directory', '-o'])
+  ) {
+    return { command, args };
+  }
+  if (command === 'format-patch') {
+    throw new Error('git format-patch 必须显式 --stdout，禁止生成文件。');
+  }
+  if (
+    command === 'archive' &&
+    !gitArgumentHas(args, ['--output', '-o', '--remote', '--exec', '--format'])
+  ) {
+    return { command, args };
+  }
+  if (command === 'archive') {
+    throw new Error('git archive output/remote/custom-helper mode 需先建立 task contract。');
+  }
+  if (command === 'bundle' && ['list-heads', 'verify'].includes(String(args[0] || ''))) {
+    return { command, args };
+  }
+  if (command === 'bundle') {
+    throw new Error('git bundle create/unbundle 会写文件或 refs；需先建立 task contract。');
+  }
+  const alias = command ? configuredGitAlias(command, cwd) : null;
+  if (alias) {
+    throw new Error(`git ${command} 由有效 alias 配置执行（${alias}）；无 task state 时禁止。`);
+  }
+  const externalHelper = externalGitSubcommandHelper(command, cwd);
+  if (externalHelper) {
+    throw new Error(
+      `git ${command} 会执行外部 subcommand helper ${externalHelper}；无 task state 时禁止。`,
+    );
+  }
+  return { command, args };
+}
+
 function assertSafeGitCommand(tokens, state) {
-  const { globals, command, args } = gitSubcommand(tokens);
+  const { globals, configOverrides, command, args } = gitSubcommand(tokens);
+  for (const override of configOverrides) {
+    assertSafeGitConfigOverride(override.value, override.source);
+  }
+  assertNoGitBuiltinSideEffect(command, args, { hasActiveState: true });
+  if (command === 'config' && !isReadOnlyConfigArgs(args)) {
+    throw new Error('活动 task 只允许只读 git config 查询；配置写入或 editor 执行已拒绝。');
+  }
   const scopeOverride = globals.find((value) =>
     /^(?:--git-dir|--work-tree|--namespace)(?:=|$)/i.test(value));
   const loweredArgs = args.map((value) => String(value).toLowerCase());
@@ -2121,6 +3434,12 @@ function assertSafeGitCommand(tokens, state) {
       value === '--exec' || value.startsWith('--exec=')));
   if (destructive) {
     throw new Error(`git ${command} 请求会丢弃、删除或重写本地状态，已拒绝。`);
+  }
+  if (
+    command === 'hash-object' &&
+    gitArgumentHas(args, ['-w', '--path', '--filters'])
+  ) {
+    throw new Error('git hash-object write/filter mode 会写 object store 或执行 attribute helper，已拒绝。');
   }
   const changesWorktree = new Set([
     'am', 'apply', 'checkout', 'cherry-pick', 'merge', 'mv',
@@ -2149,11 +3468,6 @@ function assertSafeGitCommand(tokens, state) {
     const outputTarget = inlineOutput?.slice('--output='.length) ||
       (outputIndex >= 0 ? args[outputIndex + 1] : null);
     if (outputTarget) assertTaskWriteTarget(outputTarget, state);
-  }
-  if (command === 'worktree' && loweredArgs[0] === 'add') {
-    const positional = args.slice(1).filter((value) => !String(value).startsWith('-'));
-    const target = positional.length >= 2 ? positional[positional.length - 2] : null;
-    if (target) assertTaskWriteTarget(target, state);
   }
   if ([
     'add', 'am', 'apply', 'branch', 'checkout', 'cherry-pick', 'commit',
@@ -2242,29 +3556,532 @@ function isPathInside(parent, candidate, options = {}) {
   return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
-function assertSafeNodeCommand(tokens, root = process.cwd(), cwd = root) {
-  void root;
-  void cwd;
+function executableBasename(value) {
+  const raw = String(value || '');
+  return (raw.includes('\\') ? path.win32.basename(raw) : path.basename(raw)).toLowerCase();
+}
+
+function executableHasExplicitPath(value) {
+  const raw = String(value || '');
+  return path.isAbsolute(raw) || path.win32.isAbsolute(raw) || /[\\/]/.test(raw);
+}
+
+function executableCandidates(name) {
+  if (process.platform !== 'win32') return [name];
+  if (/\.[a-z0-9]+$/i.test(name)) return [name];
+  const extensions = String(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
+    .split(';')
+    .filter(Boolean);
+  return [name, ...extensions.map((extension) => `${name}${extension.toLowerCase()}`)];
+}
+
+function pathExecutableIdentity(name) {
+  for (const directory of String(process.env.PATH || '').split(path.delimiter)) {
+    if (!directory) continue;
+    for (const candidateName of executableCandidates(name)) {
+      const candidate = path.join(directory, candidateName);
+      try {
+        const stat = fs.statSync(candidate);
+        if (stat.isFile()) return { dev: stat.dev, ino: stat.ino, path: candidate };
+      } catch {
+        // Continue through PATH exactly as the shell would.
+      }
+    }
+  }
+  return null;
+}
+
+function assertTrustedExecutablePath(value, cwd = process.cwd()) {
+  const raw = String(value || '');
+  if (!executableHasExplicitPath(raw)) return;
+  if (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(raw) && process.platform !== 'win32') {
+    throw new Error(`显式 executable ${raw} 不是当前平台可验证路径。`);
+  }
+  const explicit = path.resolve(cwd, raw);
+  let explicitStat;
+  try {
+    explicitStat = fs.statSync(explicit);
+  } catch {
+    throw new Error(`显式 executable ${raw} 不存在或不可验证。`);
+  }
+  const pathEntry = pathExecutableIdentity(executableBasename(raw));
+  if (
+    !explicitStat.isFile() ||
+    !pathEntry ||
+    explicitStat.dev !== pathEntry.dev ||
+    explicitStat.ino !== pathEntry.ino
+  ) {
+    throw new Error(
+      `显式 executable ${raw} 与当前 PATH 同名入口不是同一物理对象，拒绝 basename 冒充。`,
+    );
+  }
+}
+
+const TRUSTED_NODE_SCRIPTS = new Set([
+  'scripts/agent-preflight.cjs',
+  'scripts/agent-preflight.selftest.cjs',
+  'scripts/build-discipline/run-all.cjs',
+  'scripts/build-discipline/selftest.cjs',
+  'scripts/check-document-drift.cjs',
+  'scripts/check-document-drift.selftest.cjs',
+  'scripts/check-no-secrets.cjs',
+  'scripts/check-no-secrets.selftest.cjs',
+  'scripts/claude-task.cjs',
+  'scripts/claude-task.selftest.cjs',
+  'scripts/gc-worktrees.selftest.cjs',
+  'scripts/issue-handoff/check-pr-body.cjs',
+  'scripts/issue-handoff/check-pr-body.selftest.cjs',
+  'scripts/offline-github-governance.cjs',
+  'scripts/offline-github-governance.selftest.cjs',
+]);
+
+function repositoryRelativePhysicalFile(root, cwd, value) {
+  const physicalRoot = resolvePhysicalPath(process.cwd(), root);
+  const physicalCwd = resolvePhysicalPath(physicalRoot, cwd);
+  const target = resolvePhysicalPath(physicalCwd, value);
+  if (!isPathInside(physicalRoot, target)) {
+    throw new Error(`运行入口 ${value} 位于当前仓库之外。`);
+  }
+  assertNotGitMetadataTarget(physicalRoot, value, target);
+  let stat;
+  try {
+    stat = fs.statSync(target);
+  } catch {
+    throw new Error(`运行入口 ${value} 不存在。`);
+  }
+  if (!stat.isFile()) throw new Error(`运行入口 ${value} 不是普通文件。`);
   return {
-    kind: 'unrestricted',
-    entries: [],
+    target,
+    relative: toPosix(path.relative(physicalRoot, target)),
+    root: physicalRoot,
+    cwd: physicalCwd,
+  };
+}
+
+function assertSafeNodeCommand(tokens, root = process.cwd(), cwd = root, options = {}) {
+  assertTrustedExecutablePath(tokens[0], cwd);
+  const args = tokens.slice(1).map(String);
+  if (args.length === 1 && ['--version', '-v'].includes(args[0])) {
+    return { kind: 'version', executable: String(tokens[0] || '') };
+  }
+  if (args.length === 1 && ['--help', '-h'].includes(args[0])) {
+    return { kind: 'help', executable: String(tokens[0] || '') };
+  }
+  if (['--check', '-c'].includes(args[0])) {
+    if (args.length !== 2 || args[1].startsWith('-')) {
+      throw new Error('node --check 只允许一个仓库内明确文件。');
+    }
+    const entry = repositoryRelativePhysicalFile(root, cwd, args[1]);
+    return { kind: 'check', entries: [entry.relative], executable: String(tokens[0] || '') };
+  }
+  if (
+    ['-e', '--eval', '-p', '--print'].includes(args[0]) ||
+    /^-[ep]+$/.test(args[0])
+  ) {
+    const code = String(args[1] || '');
+    if (
+      /(?:writeFile|appendFile|truncate|createWriteStream|copyFile|rename|unlink|rmSync|mkdir|child_process|execSync|spawnSync|process\.dlopen|fetch\s*\()/i
+        .test(code)
+    ) {
+      throw new Error('Node inline code 包含可证明的文件、进程、loader 或外部写入。');
+    }
+    return { kind: 'inline-diagnostic', executable: String(tokens[0] || '') };
+  }
+  if (args[0] === '--test') {
+    if (args.some((value) =>
+      /^(?:--require|--import|--loader|--test-reporter|--experimental-loader)(?:=|$)/i
+        .test(value))) {
+      throw new Error('Node test runtime loader/reporter override 无 task state 时禁止。');
+    }
+    for (const value of args.slice(1)) {
+      if (value.startsWith('-') || !/[\\/]/.test(value)) continue;
+      repositoryRelativePhysicalFile(root, cwd, value);
+    }
+    return { kind: 'test', executable: String(tokens[0] || '') };
+  }
+  if (
+    args.length === 0 ||
+    args[0].startsWith('-') ||
+    args.some((value, index) =>
+      index === 0 &&
+      /^(?:--require|-r|--import|--loader|--experimental-loader|--inspect|--inspect-brk|--debug|--watch)(?:=|$)|^-r.+/i
+        .test(value))
+  ) {
+    throw new Error('Node interactive/preload/debug/runtime loader flags 无 task state 时禁止。');
+  }
+  const entry = repositoryRelativePhysicalFile(root, cwd, args[0]);
+  if (
+    /(?:^|\/)(?:start|deploy|release|migrate|seed|reset)[^/]*(?:prod|production)[^/]*\.[cm]?[jt]s$/i
+      .test(entry.relative)
+  ) {
+    throw new Error(`Node 入口 ${entry.relative} 是显式生产/迁移生命周期脚本。`);
+  }
+  if (
+    entry.relative === 'scripts/claude-task.cjs' &&
+    String(args[1] || '').toLowerCase() === 'github-write' &&
+    !options.hasActiveState
+  ) {
+    throw new Error('github-write 必须由活动 task state 的完整 writer wrapper 验证。');
+  }
+  if (!TRUSTED_NODE_SCRIPTS.has(entry.relative)) {
+    throw new Error(
+      `Node 入口 ${entry.relative} 是未登记的可执行脚本；无 task state 时禁止执行 helper。`,
+    );
+  }
+  return {
+    kind: 'trusted-governance',
+    entries: [entry.relative],
     executable: String(tokens[0] || ''),
   };
 }
 
-function assertSafeNpmCommand(tokens) {
-  return { kind: 'unrestricted', executable: String(tokens[0] || '') };
+function npmLifecycleHasWriteCapability(name) {
+  const normalized = String(name || '').toLowerCase();
+  const withoutHookPrefix = normalized.replace(/^(?:pre|post)/, '');
+  const segments = withoutHookPrefix.split(/[:/_-]+/).filter(Boolean);
+  const riskySegments = new Set([
+    'deploy',
+    'migrate',
+    'migration',
+    'publish',
+    'release',
+    'reset',
+    'restart',
+    'seed',
+    'serve',
+    'start',
+    'stop',
+  ]);
+  return segments.some((segment) => riskySegments.has(segment));
 }
 
-function isGovernedWriteWrapper(command, action = 'github-write') {
-  if (hasShellControl(command)) return false;
-  const tokens = commandTokens(command);
-  const executable = path.basename(String(tokens[0] || '')).toLowerCase();
-  if (!['node', 'node.exe'].includes(executable)) return false;
-  const scriptIndex = tokens.findIndex((value) =>
-    toPosix(String(value)).endsWith('/scripts/claude-task.cjs') ||
-    toPosix(String(value)) === 'scripts/claude-task.cjs');
-  return scriptIndex >= 0 && String(tokens[scriptIndex + 1] || '').toLowerCase() === action;
+function canonicalNpmCommand(name) {
+  const normalized = String(name || '').toLowerCase();
+  if (normalized.length >= 3 && 'publish'.startsWith(normalized)) {
+    return 'publish';
+  }
+  const aliases = new Map([
+    ['run', 'run-script'],
+    ['rum', 'run-script'],
+    ['t', 'test'],
+    ['tst', 'test'],
+    ['urn', 'run-script'],
+  ]);
+  return aliases.get(normalized) || normalized;
+}
+
+const NPM_PATH_OPTIONS = new Set([
+  '--prefix',
+  '--config',
+  '--userconfig',
+  '--globalconfig',
+  '--cache',
+  '--cwd',
+  '--dir',
+  '--root',
+  '--project',
+  '--setupfiles',
+  '--globalsetup',
+  '--require',
+  '--import',
+  '--loader',
+]);
+
+const NPM_OPTIONS_WITH_VALUE = new Set([
+  ...NPM_PATH_OPTIONS,
+  '--workspace',
+  '-w',
+  '--registry',
+  '--loglevel',
+  '--otp',
+  '--scope',
+  '--tag',
+  '--location',
+]);
+
+function tokenizeNpmArgs(args) {
+  const options = [];
+  const positionals = [];
+  let afterSeparator = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const value = String(args[index]);
+    if (!afterSeparator && value === '--') {
+      afterSeparator = true;
+      continue;
+    }
+    if (value.startsWith('--')) {
+      const equalsIndex = value.indexOf('=');
+      const name = (equalsIndex < 0 ? value : value.slice(0, equalsIndex)).toLowerCase();
+      const inlineValue = equalsIndex < 0 ? null : value.slice(equalsIndex + 1);
+      if (NPM_OPTIONS_WITH_VALUE.has(name)) {
+        options.push({
+          afterSeparator,
+          name,
+          raw: value,
+          value: inlineValue === null ? String(args[index + 1] || '') : inlineValue,
+        });
+        if (inlineValue === null) index += 1;
+      } else {
+        options.push({ afterSeparator, name, raw: value, value: inlineValue });
+      }
+      continue;
+    }
+    if (value.startsWith('-') && value !== '-') {
+      const name = value.slice(0, 2).toLowerCase();
+      if (NPM_OPTIONS_WITH_VALUE.has(name)) {
+        const attached = value.slice(2).replace(/^=/, '');
+        options.push({
+          afterSeparator,
+          name,
+          raw: value,
+          value: attached || String(args[index + 1] || ''),
+        });
+        if (!attached) index += 1;
+      } else {
+        options.push({ afterSeparator, name: value.toLowerCase(), raw: value, value: null });
+      }
+      continue;
+    }
+    positionals.push({ afterSeparator, index, value });
+  }
+  return { options, positionals };
+}
+
+function assertSafeNpmCommand(tokens, root = process.cwd(), cwd = root, options = {}) {
+  assertTrustedExecutablePath(tokens[0], cwd);
+  const physicalRoot = resolvePhysicalPath(process.cwd(), root);
+  const physicalCwd = resolvePhysicalPath(physicalRoot, cwd);
+  if (!isPathInside(physicalRoot, physicalCwd, { allowSame: true })) {
+    throw new Error('npm 只能在当前仓库物理边界内运行。');
+  }
+  assertNotGitMetadataTarget(physicalRoot, cwd, physicalCwd);
+  const args = tokens.slice(1).map(String);
+  if (args.length === 1 && ['--version', '-v', '--help', '-h'].includes(args[0])) {
+    return { kind: 'diagnostic', executable: String(tokens[0] || '') };
+  }
+  const parsed = tokenizeNpmArgs(args);
+  const optionPath = (option) => {
+    const candidate = String(option.value || '');
+    const trimmed = candidate.trim();
+    if (
+      trimmed.length >= 2 &&
+      ['"', "'"].includes(trimmed[0]) &&
+      trimmed.at(-1) === trimmed[0]
+    ) {
+      return trimmed.slice(1, -1);
+    }
+    return trimmed;
+  };
+  for (const option of parsed.options) {
+    if (NPM_PATH_OPTIONS.has(option.name)) {
+      const candidate = optionPath(option);
+      if (!candidate || candidate.startsWith('-')) {
+        throw new Error(`npm option ${option.raw} 缺少可验证的仓库内路径。`);
+      }
+      if (/[$%*?\[\]{}]/.test(candidate) || candidate.startsWith('~')) {
+        throw new Error(`npm option ${option.raw} 使用动态或通配路径，无法验证物理边界。`);
+      }
+      const target = resolvePhysicalPath(physicalCwd, candidate);
+      assertNotGitMetadataTarget(physicalRoot, candidate, target);
+      if (!isPathInside(physicalRoot, target, { allowSame: true })) {
+        throw new Error(`npm option ${option.raw} 指向当前仓库之外。`);
+      }
+    }
+  }
+  const operands = parsed.positionals.map((entry) => entry.value);
+  const command = canonicalNpmCommand(operands[0]);
+  const commandOperands = operands.slice(1);
+  if (command === 'config') {
+    const action = String(commandOperands[0] || '').toLowerCase();
+    if (['get', 'list'].includes(action)) {
+      return { kind: 'config-read', executable: String(tokens[0] || '') };
+    }
+    throw new Error(`npm config ${action || '<missing>'} 会修改 npm 配置；需先建立 task contract。`);
+  }
+  const lifecycle = command === 'run-script'
+    ? String(commandOperands[0] || '').toLowerCase()
+    : command;
+  if (npmLifecycleHasWriteCapability(lifecycle)) {
+    throw new Error(`npm lifecycle ${lifecycle} 是明确的部署、迁移、发布、重置或服务启动动作，已拒绝。`);
+  }
+  const externalCommands = new Set([
+    'access',
+    'deprecate',
+    'dist-tag',
+    'login',
+    'logout',
+    'org',
+    'owner',
+    'profile',
+    'publish',
+    'team',
+    'token',
+    'unpublish',
+  ]);
+  if (externalCommands.has(command)) {
+    throw new Error(`npm ${command} 会修改 registry、account 或发布状态，已拒绝。`);
+  }
+  const localMutatingCommands = new Set([
+    'add',
+    'ci',
+    'dedupe',
+    'exec',
+    'init',
+    'install',
+    'link',
+    'pack',
+    'prune',
+    'rebuild',
+    'shrinkwrap',
+    'uninstall',
+    'unlink',
+    'update',
+    'version',
+  ]);
+  if (!options.hasActiveState && localMutatingCommands.has(command)) {
+    throw new Error(`npm ${command} 会写依赖、配置、缓存、包或外部 registry；需先建立 task contract。`);
+  }
+  return {
+    kind: command || 'diagnostic',
+    executable: String(tokens[0] || ''),
+    forceLiveCheck: options.hasActiveState && localMutatingCommands.has(command),
+  };
+}
+
+function assertSafeGeneralReadCommand(tokens, cwd = process.cwd()) {
+  assertTrustedExecutablePath(tokens[0], cwd);
+  const executable = executableBasename(tokens[0]);
+  const args = tokens.slice(1).map(String);
+  const alwaysRead = new Set([
+    'pwd',
+    'ls',
+    'ls.exe',
+    'grep',
+    'grep.exe',
+    'head',
+    'tail',
+    'wc',
+    'stat',
+    'shasum',
+    'sha256sum',
+    'sha1sum',
+    'jq',
+    'diff',
+    'cmp',
+    'uniq',
+    'cut',
+    'tr',
+    'date',
+    'uname',
+    'which',
+    'where',
+    'basename',
+    'dirname',
+    'realpath',
+    'readlink',
+    'printf',
+    'echo',
+    'true',
+    'false',
+    'test',
+    '[',
+    'ps',
+  ]);
+  if (alwaysRead.has(executable)) return { kind: 'read', executable };
+  if (executable === 'command' && ['-v', '-V'].includes(args[0]) && args.length >= 2) {
+    return { kind: 'read', executable };
+  }
+  if (['rg', 'rg.exe', 'ripgrep'].includes(executable)) {
+    if (args.some((value) =>
+      /^(?:--pre|--pre-glob|--hostname-bin)(?:=|$)/.test(value))) {
+      throw new Error('rg helper execution flags 无 task state 时禁止。');
+    }
+    return { kind: 'read', executable };
+  }
+  if (['sed', 'sed.exe'].includes(executable)) {
+    if (args.some((value) =>
+      /^--in-place(?:=|$)/.test(value) ||
+      /^-[^-]*i[^-]*$/.test(value))) {
+      throw new Error('sed in-place 会写文件，无 task state 时禁止。');
+    }
+    return { kind: 'read', executable };
+  }
+  if (['sort', 'sort.exe'].includes(executable)) {
+    if (args.some((value) =>
+      /^(?:-o|--output|--compress-program)(?:=|$)/.test(value) ||
+      /^-o.+/.test(value))) {
+      throw new Error('sort output/helper flags 无 task state 时禁止。');
+    }
+    return { kind: 'read', executable };
+  }
+  if (['find', 'find.exe'].includes(executable)) {
+    if (args.some((value) =>
+      /^-(?:exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/i.test(value))) {
+      throw new Error('find execution/deletion/file-output actions 无 task state 时禁止。');
+    }
+    return { kind: 'read', executable };
+  }
+  const inlineCodeIndex = args.findIndex((value) =>
+    ['-c', '-e', '--eval'].includes(String(value)));
+  if (inlineCodeIndex >= 0) {
+    const code = String(args[inlineCodeIndex + 1] || '');
+    if (
+      /(?:open\s*\([^)]*,\s*['"][wa+]|File\.write|writeFile|appendFile|system\s*\(|subprocess|os\.system|exec\s*\(|spawn\s*\(|unlink|remove\s*\(|mkdir|touch\b)/i
+        .test(code) ||
+      (['perl', 'perl.exe'].includes(executable) && /\bopen\b[\s\S]*>/i.test(code))
+    ) {
+      throw new Error(`${executable} inline code 包含可证明的文件或子进程写入。`);
+    }
+  }
+  if (
+    ['awk', 'gawk', 'mawk'].includes(executable) &&
+    args.some((value) => /\bsystem\s*\(/i.test(String(value)))
+  ) {
+    throw new Error(`${executable} program 包含显式 system helper。`);
+  }
+  if (['npx', 'npx.cmd', 'npx.exe'].includes(executable)) {
+    throw new Error('npx 会解析/下载包并写 npm cache 或依赖；需先建立 task contract。');
+  }
+  if (['xargs', 'xargs.exe'].includes(executable)) {
+    const nestedExecutable = executableBasename(
+      args.find((value) => !String(value).startsWith('-')) || '',
+    );
+    if ([
+      'touch',
+      'mkdir',
+      'rm',
+      'mv',
+      'cp',
+      'install',
+      'git',
+      'gh',
+    ].includes(nestedExecutable)) {
+      throw new Error(`xargs ${nestedExecutable} 是显式批量写入/外部操作。`);
+    }
+  }
+  if (['make', 'gmake'].includes(executable)) {
+    const fileIndex = args.findIndex((value) => ['-f', '--file', '--makefile'].includes(value));
+    const inlineFile = args.find((value) =>
+      /^(?:--file|--makefile)=/.test(String(value)));
+    const makefile = inlineFile?.slice(inlineFile.indexOf('=') + 1) ||
+      (fileIndex >= 0 ? args[fileIndex + 1] : null);
+    if (makefile) {
+      const target = resolvePhysicalPath(cwd, makefile);
+      const root = repoRoot(cwd);
+      if (!isPathInside(root, target)) {
+        throw new Error(`makefile ${makefile} 位于当前仓库之外。`);
+      }
+    }
+  }
+  return { kind: 'local-command', executable };
+}
+
+function nodeRequestsGovernedAction(tokens) {
+  return tokens.some((value, index) =>
+    executableBasename(value) === 'claude-task.cjs' &&
+    ['create-issues', 'github-write'].includes(
+      String(tokens[index + 1] || '').toLowerCase(),
+    ));
 }
 
 function shellMutationTargets(tokens) {
@@ -2301,6 +4118,40 @@ function shellMutationTargets(tokens) {
 function shellRedirectionTargets(segment) {
   const source = String(segment || '');
   const targets = [];
+  const readWord = (start) => {
+    let index = start;
+    while (/\s/.test(source[index] || '')) index += 1;
+    let value = '';
+    let quote = null;
+    let escaped = false;
+    for (; index < source.length; index += 1) {
+      const character = source[index];
+      if (escaped) {
+        value += character;
+        escaped = false;
+        continue;
+      }
+      if (character === '\\' && quote !== "'") {
+        escaped = true;
+        continue;
+      }
+      if (quote) {
+        if (character === quote) {
+          quote = null;
+        } else {
+          value += character;
+        }
+        continue;
+      }
+      if (character === "'" || character === '"') {
+        quote = character;
+        continue;
+      }
+      if (/[\s;&|]/.test(character)) break;
+      value += character;
+    }
+    return { value, index };
+  };
   let quote = null;
   let escaped = false;
   for (let index = 0; index < source.length; index += 1) {
@@ -2325,19 +4176,14 @@ function shellRedirectionTargets(segment) {
     let targetIndex = index + 1;
     if (source[targetIndex] === '>' || source[targetIndex] === '|') targetIndex += 1;
     while (/\s/.test(source[targetIndex] || '')) targetIndex += 1;
-    if (source[targetIndex] === '&' && /^\d/.test(source[targetIndex + 1] || '')) continue;
-    if (targetIndex >= source.length) continue;
-    let target = '';
-    const targetQuote =
-      source[targetIndex] === "'" || source[targetIndex] === '"'
-        ? source[targetIndex++]
-        : null;
-    for (; targetIndex < source.length; targetIndex += 1) {
-      const targetCharacter = source[targetIndex];
-      if (targetQuote ? targetCharacter === targetQuote : /[\s;&|]/.test(targetCharacter)) break;
-      target += targetCharacter;
+    const descriptorForm = source[targetIndex] === '&';
+    if (descriptorForm) {
+      targetIndex += 1;
     }
-    if (target) targets.push(target);
+    const target = readWord(targetIndex).value;
+    if (!target) continue;
+    if (descriptorForm && (/^\d+$/.test(target) || target === '-')) continue;
+    targets.push(target);
   }
   return targets;
 }
@@ -2378,9 +4224,6 @@ function assertNoRawGitHubWrite(tokens) {
 }
 
 function assertShellCommandSafety(command, state = null, root = process.cwd(), cwd = root) {
-  if (isGovernedWriteWrapper(command) || isGovernedWriteWrapper(command, 'create-issues')) {
-    return { forceLiveCheck: Boolean(state), githubWrite: false };
-  }
   const check = {
     ...(state || {}),
     root,
@@ -2391,13 +4234,33 @@ function assertShellCommandSafety(command, state = null, root = process.cwd(), c
   const segments = splitShellCommandSegments(command);
   if (segments.length === 0) throw new Error('命令为空。');
   for (const segment of segments) {
-    const tokens = unwrapCommandTokens(commandTokens(segment));
+    const tokens = unwrapCommandTokens(
+      commandTokens(segment),
+      { hasActiveState: Boolean(state) },
+    );
     if (tokens.length === 0) continue;
-    const executable = path.basename(String(tokens[0] || '')).toLowerCase();
+    const executable = executableBasename(tokens[0]);
+    const targets = [
+      ...new Set([
+        ...shellMutationTargets(tokens),
+        ...shellRedirectionTargets(segment),
+      ].filter((target) => !isNullDeviceTarget(target))),
+    ];
+    if (!state && targets.length > 0) {
+      throw new Error(`${executable} 会修改文件，需先建立 task contract。`);
+    }
+    for (const target of targets) assertTaskWriteTarget(target, check);
+    if (targets.length > 0) check.forceLiveCheck = true;
+    if (!state) assertTrustedExecutablePath(tokens[0], cwd);
+
     if (['bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'powershell', 'pwsh'].includes(executable)) {
+      assertTrustedExecutablePath(tokens[0], cwd);
       const commandIndex = tokens.findIndex((value) =>
         /^(?:-c|--command)$/i.test(String(value)));
       if (commandIndex >= 0 && tokens[commandIndex + 1]) {
+        if (!state && commandIndex !== 1) {
+          throw new Error(`${executable} 只允许精确 -c/--command 递归分类。`);
+        }
         const nested = assertShellCommandSafety(
           String(tokens[commandIndex + 1]),
           state,
@@ -2406,47 +4269,39 @@ function assertShellCommandSafety(command, state = null, root = process.cwd(), c
         );
         check.forceLiveCheck ||= nested.forceLiveCheck;
         check.githubWrite ||= nested.githubWrite;
+        continue;
       }
+      if (!state) throw new Error(`${executable} 脚本/交互模式无 task state 时禁止。`);
     }
     assertNoSystemDestruction(tokens);
     assertNoRawGitHubWrite(tokens);
     if (['git', 'git.exe'].includes(executable)) {
       const parsed = gitSubcommand(tokens);
       if (!state && parsed.command === 'worktree' && parsed.args[0] === 'add') {
+        assertTrustedExecutablePath(tokens[0], cwd);
         assertSafeWorktreeAdd(parsed.args, { root, cwd });
       } else if (!state) {
-        const mutating = new Set([
-          'add', 'am', 'apply', 'checkout', 'cherry-pick',
-          'merge', 'mv', 'rebase', 'reset', 'restore', 'revert', 'switch',
-        ]);
-        const probe = { root, cwd, owned: [], excluded: [], branch: null };
-        assertSafeGitCommand(tokens, probe);
-        if (probe.githubWrite || mutating.has(parsed.command)) {
-          throw new Error(`git ${parsed.command} 会修改本地或远端状态，需先建立 task contract。`);
-        }
+        assertSafeGitReadCommand(tokens, { root, cwd });
       } else {
         assertSafeGitCommand(tokens, check);
       }
     } else if (['gh', 'gh.exe'].includes(executable)) {
       if (!state && isSafeGhRead(tokens)) continue;
       assertSafeGhCommand(tokens, check);
-    } else {
-      const targets = [
-        ...new Set([
-          ...shellMutationTargets(tokens),
-          ...shellRedirectionTargets(segment),
-        ]),
-      ];
-      if (!state && targets.length > 0) {
-        throw new Error(`${executable} 会修改文件，需先建立 task contract。`);
+    } else if (['node', 'node.exe'].includes(executable)) {
+      if (!state || nodeRequestsGovernedAction(tokens)) {
+        assertSafeNodeCommand(tokens, root, cwd, { hasActiveState: Boolean(state) });
       }
-      for (const target of targets) assertTaskWriteTarget(target, check);
-      if (targets.length > 0) check.forceLiveCheck = true;
-      if (['node', 'node.exe'].includes(executable)) {
-        assertSafeNodeCommand(tokens, root, cwd);
-      } else if (['npm', 'npm.cmd', 'npm.exe'].includes(executable)) {
-        assertSafeNpmCommand(tokens);
-      }
+    } else if (['npm', 'npm.cmd', 'npm.exe'].includes(executable)) {
+      const npmCheck = assertSafeNpmCommand(
+        tokens,
+        root,
+        cwd,
+        { hasActiveState: Boolean(state) },
+      );
+      check.forceLiveCheck ||= Boolean(npmCheck.forceLiveCheck);
+    } else if (!state) {
+      assertSafeGeneralReadCommand(tokens, cwd);
     }
   }
   return check;
@@ -2461,21 +4316,38 @@ function isSafeBeforeStartShell(command, root = process.cwd(), cwd = root) {
   }
 }
 
+function shellRequestsWorktreeAdd(command) {
+  try {
+    return splitShellCommandSegments(command).some((segment) => {
+      const tokens = unwrapCommandTokens(commandTokens(segment));
+      if (!['git', 'git.exe'].includes(executableBasename(tokens[0]))) return false;
+      const parsed = gitSubcommand(tokens);
+      return parsed.command === 'worktree' && parsed.args[0] === 'add';
+    });
+  } catch {
+    return false;
+  }
+}
+
 function commandShellGuard() {
   const input = readHookInput();
   const root = repoRoot(input.cwd || process.cwd());
   const command = String(input.tool_input?.command || '').trim();
-  const active = loadState(root);
+  const safeBeforeStart = isSafeBeforeStartShell(command, root, input.cwd || root);
+  if (safeBeforeStart && !shellRequestsWorktreeAdd(command)) return;
+  const snapshot = inspectTaskState(root);
 
-  if (!active) {
-    if (isSafeBeforeStartShell(command, root, input.cwd || root)) return;
+  if (snapshot.kind !== 'valid') {
+    if (safeBeforeStart) return;
     process.stderr.write(
-      'COREONE shell blocked: this command is a GitHub write, an explicit file mutation, or a destructive action and no active task contract exists.',
+      'COREONE shell blocked: this command is a live-check, Git/GitHub write, explicit file mutation, ' +
+      `external side effect, or destructive action, and ${inactiveTaskStateMessage(snapshot)}.`,
     );
     process.exitCode = 2;
     return;
   }
 
+  const active = { file: snapshot.file, state: snapshot.state };
   try {
     const check = assertShellCommandSafety(
       command,
@@ -2526,26 +4398,85 @@ function commandGitHubWrite(argv) {
   if (result.stderr) process.stderr.write(`${result.stderr}\n`);
 }
 
-function commandMcpGuard() {
-  const input = readHookInput();
+function classifyMcpOperation(input) {
   const tool = String(input.tool_name || '');
   const operation = tool.split('__').pop() || '';
   const readOnlyName = /^(?:get|list|read|search|find|query|view|explore|status|fetch)(?:_|$)/i;
   const writeSignal = /(?:^|_)(?:write|create|update|delete|remove|add|set|post|put|patch|merge|close|comment)(?:_|$)/i;
-  if (!/github/i.test(tool)) return;
-  if (readOnlyName.test(operation) && !writeSignal.test(operation)) return;
-  process.stderr.write(
-    `COREONE MCP blocked: ${tool || 'unknown tool'} may write GitHub. Use the serialized GitHub writer so offline governance, spacing, and the real mutation share one lock.`,
-  );
-  process.exitCode = 2;
+  const readOnly = readOnlyName.test(operation) && !writeSignal.test(operation);
+  return {
+    tool,
+    readOnly,
+    writeSignal: writeSignal.test(operation),
+    githubWrite: /github/i.test(tool) && !readOnly,
+  };
+}
+
+function commandMcpGuard() {
+  const input = readHookInput();
+  const classification = classifyMcpOperation(input);
+  if (classification.githubWrite) {
+    process.stderr.write(
+      `COREONE MCP blocked: ${classification.tool || 'unknown tool'} may write GitHub. ` +
+      'Use the serialized GitHub writer so offline governance, spacing, and the real mutation share one lock.',
+    );
+    process.exitCode = 2;
+    return;
+  }
+  if (!classification.writeSignal) return;
+  const root = repoRoot(input.cwd || process.cwd());
+  const snapshot = inspectTaskState(root);
+  if (snapshot.kind !== 'valid') {
+    process.stderr.write(
+      `COREONE MCP blocked: ${classification.tool || 'unknown tool'} is a structured external write, ` +
+      `and ${inactiveTaskStateMessage(snapshot)}.`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  try {
+    assertActiveState(root, { file: snapshot.file, state: snapshot.state }, { force: true });
+  } catch (error) {
+    process.stderr.write(`COREONE MCP blocked: ${error.message}`);
+    process.exitCode = 2;
+  }
+}
+
+function assertHookSafeWithoutActiveState(input, root) {
+  const tool = String(input.tool_name || '');
+  if (/^(?:Bash|PowerShell)$/i.test(tool) || input.tool_input?.command !== undefined) {
+    assertShellCommandSafety(
+      String(input.tool_input?.command || '').trim(),
+      null,
+      root,
+      input.cwd || root,
+    );
+    return;
+  }
+  const classification = classifyMcpOperation(input);
+  if (classification.githubWrite || classification.writeSignal) {
+    throw new Error(
+      `${classification.tool || 'unknown MCP tool'} is a structured external write`,
+    );
+  }
 }
 
 function commandAudit() {
   const input = readHookInput();
   const root = repoRoot(input.cwd || process.cwd());
-  const active = loadState(root);
-  if (!active) return;
+  const snapshot = inspectTaskState(root);
   try {
+    try {
+      assertHookSafeWithoutActiveState(input, root);
+      if (snapshot.kind === 'valid') assertOwnedChanges(root, snapshot.state);
+      return;
+    } catch {
+      // The operation needs live task authorization; validate it below.
+    }
+    if (snapshot.kind !== 'valid') {
+      throw new Error(inactiveTaskStateMessage(snapshot));
+    }
+    const active = { file: snapshot.file, state: snapshot.state };
     assertActiveState(root, active);
     assertOwnedChanges(root, active.state);
   } catch (error) {
@@ -2558,19 +4489,21 @@ function commandGuard() {
   const input = readHookInput();
   const requested = resolveHookPath(input);
   if (requested) {
-    const target = path.resolve(input.cwd || process.cwd(), requested);
+    const target = resolvePhysicalPath(input.cwd || process.cwd(), requested);
     if (isHarnessMemoryPath(target)) return;
   }
   const root = repoRoot(input.cwd || process.cwd());
-  const active = loadState(root);
-  if (!active) {
+  const snapshot = inspectTaskState(root);
+  if (snapshot.kind !== 'valid') {
     process.stderr.write(
-      'COREONE write blocked: no local task state. R0 uses start-r0 without an Issue; PRD/feature work uses governed task start.',
+      `COREONE write blocked: ${inactiveTaskStateMessage(snapshot)}. ` +
+      'R0 uses start-r0 without an Issue; PRD/feature work uses governed task start.',
     );
     process.exitCode = 2;
     return;
   }
 
+  const active = { file: snapshot.file, state: snapshot.state };
   const { state } = active;
   try {
     assertActiveState(root, active);
@@ -2585,20 +4518,14 @@ function commandGuard() {
     process.exitCode = 2;
     return;
   }
-  const absolute = path.resolve(input.cwd || root, requested);
-  const relative = toPosix(path.relative(root, absolute));
-  if (relative.startsWith('../') || path.isAbsolute(relative)) {
-    process.stderr.write(`COREONE write blocked: target is outside the task repository (${requested}).`);
-    process.exitCode = 2;
-    return;
-  }
-  if (matchesAny(relative, state.excluded)) {
-    process.stderr.write(`COREONE write blocked: ${relative} matches excluded files.`);
-    process.exitCode = 2;
-    return;
-  }
-  if (!matchesAny(relative, state.owned)) {
-    process.stderr.write(`COREONE write blocked: ${relative} is not covered by owned files.`);
+  try {
+    assertTaskWriteTarget(requested, {
+      ...state,
+      root,
+      cwd: input.cwd || root,
+    });
+  } catch (error) {
+    process.stderr.write(`COREONE write blocked: ${error.message}`);
     process.exitCode = 2;
   }
 }
@@ -2610,8 +4537,16 @@ function shouldBlockStop(input) {
 function commandStop() {
   const input = readHookInput();
   const root = repoRoot(input.cwd || process.cwd());
-  const active = loadState(root);
-  if (!active) return;
+  const snapshot = inspectTaskState(root);
+  if (snapshot.kind === 'missing') return;
+  if (snapshot.kind !== 'valid') {
+    process.stderr.write(
+      `COREONE stop notice: ${inactiveTaskStateMessage(snapshot)}; ` +
+      'it remains on disk for diagnosis but cannot block this session or authorize work.',
+    );
+    return;
+  }
+  const active = { file: snapshot.file, state: snapshot.state };
   try {
     assertActiveState(root, active, { force: true });
     assertOwnedChanges(root, active.state);
