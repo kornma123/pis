@@ -3345,6 +3345,11 @@ function runInactiveNpmCamelCaseRegression(stateKind) {
       acceptedCamelHelp,
       camelSideEffects,
       distTagGuard: runShellGuard(
+        'npm distTag add coreone-npm-camel-probe@1.0.0 latest',
+        repo,
+        { env: npmEnvironment },
+      ),
+      distTagListGuard: runShellGuard(
         'npm distTag ls coreone-npm-camel-probe',
         repo,
         { env: npmEnvironment },
@@ -3401,6 +3406,7 @@ assert.deepEqual(
           runScript: blockedNpmCamelSideEffect,
         },
         distTagGuard: 2,
+        distTagListGuard: 0,
         kebabControl: blockedNpmCamelSideEffect,
         statePreserved: true,
         unknownGuard: 2,
@@ -3408,6 +3414,526 @@ assert.deepEqual(
     ]),
   ),
   'npm camelCase commands must mirror npm dereferencing without inactive-state side effects',
+);
+
+const npmCapabilityTargetedCommands = [
+  'npm access set status=public @scope/package',
+  'npm adduser --registry=http://127.0.0.1:9',
+  'npm audit fix',
+  'npm cache add ./local-dep',
+  'npm cache clean --force',
+  'npm cache verify',
+  'npm config set fund=false',
+  'npm deprecate package@1.0.0 deprecated',
+  'npm dist-tag add package@1.0.0 latest',
+  'npm doctor',
+  'npm edit local-dep --editor=true',
+  'npm hook add package https://example.invalid/hook secret',
+  'npm org add organization user',
+  'npm owner add user package',
+  'npm pkg delete issue99ReviewerProof',
+  'npm pkg fix',
+  'npm pkg set issue99ReviewerProof=changed',
+  'npm profile set fullname reviewer',
+  'npm publish --ignore-scripts',
+  'npm set fund=false --location=project',
+  'npm star package',
+  'npm team create @scope:team',
+  'npm token create',
+  'npm unpublish package@1.0.0',
+  'npm unstar package',
+];
+
+const npmCapabilityReadCommands = [
+  'npm access get status @scope/package',
+  'npm audit signatures',
+  'npm cache ls',
+  'npm config get fund',
+  'npm dist-tag ls package',
+  'npm hook ls',
+  'npm org ls organization',
+  'npm owner ls package',
+  'npm pkg get name',
+  'npm profile get',
+  'npm team ls @scope',
+  'npm token list',
+];
+
+function runInactiveNpmCapabilityRegression(stateKind) {
+  const sandbox = fs.mkdtempSync(
+    path.join(os.tmpdir(), `coreone-inactive-${stateKind}-npm-capability-`),
+  );
+  const repo = path.join(sandbox, 'repo');
+  const editorMarker = path.join(sandbox, 'editor.marker');
+  const registryReady = path.join(sandbox, 'registry-ready.json');
+  const registryLog = path.join(sandbox, 'registry-requests.jsonl');
+  const registryScript = path.join(sandbox, 'registry.cjs');
+  let registryServer = null;
+  const pause = (milliseconds) =>
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+  const runGit = (args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(
+      result.status,
+      0,
+      `git ${args.join(' ')} failed: ${result.stderr || result.stdout}`,
+    );
+    return String(result.stdout || '').trim();
+  };
+  const registryRequests = () => {
+    if (!fs.existsSync(registryLog)) return [];
+    return fs.readFileSync(registryLog, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  };
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    runGit(['init', '--initial-branch=npm-capability-probe']);
+    runGit(['config', 'user.name', 'Inactive npm Capability Test']);
+    runGit(['config', 'user.email', 'inactive-npm-capability@example.invalid']);
+    fs.writeFileSync(
+      path.join(repo, '.gitignore'),
+      '.npm-cache/\n.npmrc\nnode_modules/\n',
+      'utf8',
+    );
+    fs.mkdirSync(path.join(repo, 'local-dep'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repo, 'local-dep', 'package.json'),
+      `${JSON.stringify({
+        name: 'local-dep',
+        version: '1.0.0',
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${JSON.stringify({
+        name: 'coreone-npm-capability-probe',
+        version: '1.0.0',
+        private: true,
+        dependencies: {
+          'local-dep': 'file:./local-dep',
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.mkdirSync(path.join(repo, 'node_modules', 'local-dep'), { recursive: true });
+    fs.copyFileSync(
+      path.join(repo, 'local-dep', 'package.json'),
+      path.join(repo, 'node_modules', 'local-dep', 'package.json'),
+    );
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed inactive npm capability fixture']);
+    const head = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', head]);
+
+    const statePath = path.join(
+      runGit(['rev-parse', '--absolute-git-dir']),
+      'coreone',
+      'claude-task-state.json',
+    );
+    let stateBefore = null;
+    if (stateKind === 'expired') {
+      const startedAt = new Date(Date.now() - 13 * 60 * 60 * 1_000);
+      const verifiedAt = new Date(startedAt.getTime() + 1_000);
+      stateBefore = Buffer.from(`${JSON.stringify({
+        version: 2,
+        mode: 'r0',
+        stage: 'r0',
+        risk: 'R0',
+        reason: 'expired npm capability regression fixture',
+        branch: 'npm-capability-probe',
+        baseSha: head,
+        startedHead: head,
+        startedAt: startedAt.toISOString(),
+        verifiedAt: verifiedAt.toISOString(),
+        owned: ['src/**'],
+        excluded: [],
+      }, null, 2)}\n`);
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, stateBefore);
+    }
+    const stateShaBefore = stateBefore === null
+      ? null
+      : crypto.createHash('sha256').update(stateBefore).digest('hex');
+
+    const editor = path.join(sandbox, 'marker-editor.sh');
+    fs.writeFileSync(
+      editor,
+      `#!/bin/sh\nprintf 'npm-edit-side-effect\\n' > ${JSON.stringify(editorMarker)}\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    fs.writeFileSync(
+      registryScript,
+      `'use strict';\n` +
+        `const fs=require('node:fs');\n` +
+        `const http=require('node:http');\n` +
+        `const server=http.createServer((request,response)=>{\n` +
+        `  const chunks=[];\n` +
+        `  request.on('data',(chunk)=>chunks.push(chunk));\n` +
+        `  request.on('end',()=>{\n` +
+        `    const body=Buffer.concat(chunks);\n` +
+        `    fs.appendFileSync(${JSON.stringify(registryLog)},JSON.stringify({\n` +
+        `      method:request.method,url:request.url,bytes:body.length,body:body.toString('utf8')\n` +
+        `    })+'\\n');\n` +
+        `    response.writeHead(201,{'content-type':'application/json'});\n` +
+        `    response.end(JSON.stringify({ok:true}));\n` +
+        `  });\n` +
+        `});\n` +
+        `server.listen(0,'127.0.0.1',()=>{\n` +
+        `  fs.writeFileSync(${JSON.stringify(registryReady)},JSON.stringify({port:server.address().port}));\n` +
+        `});\n` +
+        `process.on('SIGTERM',()=>{\n` +
+        `  if(typeof server.closeAllConnections==='function')server.closeAllConnections();\n` +
+        `  server.close(()=>process.exit(0));\n` +
+        `  setTimeout(()=>process.exit(0),100).unref();\n` +
+        `});\n`,
+      'utf8',
+    );
+    registryServer = spawn(process.execPath, [registryScript], {
+      cwd: sandbox,
+      stdio: 'ignore',
+    });
+    registryServer.unref();
+    const deadline = Date.now() + 5_000;
+    while (
+      !fs.existsSync(registryReady) &&
+      registryServer.exitCode === null &&
+      Date.now() < deadline
+    ) {
+      pause(20);
+    }
+    assert.equal(fs.existsSync(registryReady), true, 'npm capability registry did not start');
+    const { port } = JSON.parse(fs.readFileSync(registryReady, 'utf8'));
+    const registry = `http://127.0.0.1:${port}`;
+    const environment = {
+      ...process.env,
+      npm_config_cache: path.join(repo, '.npm-cache'),
+      npm_config_update_notifier: 'false',
+    };
+    const executeWhenAllowed = (command) => {
+      const guard = runShellGuard(command, repo, { env: environment });
+      const execution = guard === 0
+        ? spawnSync('/bin/bash', ['-c', command], {
+          cwd: repo,
+          encoding: 'utf8',
+          env: environment,
+          timeout: 20_000,
+        })
+        : null;
+      return { execution, guard };
+    };
+
+    const packagePath = path.join(repo, 'package.json');
+    const packageBefore = fs.readFileSync(packagePath);
+    const pkgSetProbe = executeWhenAllowed(
+      'npm pkg set issue99ReviewerProof=changed',
+    );
+    const pkgSet = {
+      executionStatus: pkgSetProbe.execution?.status ?? null,
+      guard: pkgSetProbe.guard,
+      packageChanged: !fs.readFileSync(packagePath).equals(packageBefore),
+    };
+    fs.writeFileSync(packagePath, packageBefore);
+
+    const npmrcPath = path.join(repo, '.npmrc');
+    fs.rmSync(npmrcPath, { force: true });
+    const setProbe = executeWhenAllowed(
+      'npm set fund=false --location=project',
+    );
+    const npmSet = {
+      executionStatus: setProbe.execution?.status ?? null,
+      guard: setProbe.guard,
+      npmrcCreated: fs.existsSync(npmrcPath),
+    };
+    fs.rmSync(npmrcPath, { force: true });
+
+    fs.rmSync(editorMarker, { force: true });
+    const editProbe = executeWhenAllowed(
+      `npm edit local-dep --editor=${JSON.stringify(editor)}`,
+    );
+    const npmEdit = {
+      executionStatus: editProbe.execution?.status ?? null,
+      guard: editProbe.guard,
+      marker: fs.existsSync(editorMarker),
+    };
+
+    const requestsBefore = registryRequests().length;
+    const addUserProbe = executeWhenAllowed(
+      `npm addUser --registry=${registry}`,
+    );
+    pause(50);
+    const addUserRequests = registryRequests().slice(requestsBefore);
+    const addUser = {
+      executionStatus: addUserProbe.execution?.status ?? null,
+      guard: addUserProbe.guard,
+      requests: addUserRequests,
+    };
+    const stateShaAfter = fs.existsSync(statePath)
+      ? crypto.createHash('sha256').update(fs.readFileSync(statePath)).digest('hex')
+      : null;
+    return {
+      addUser,
+      npmEdit,
+      npmSet,
+      pkgGetGuard: runShellGuard('npm pkg get name', repo, { env: environment }),
+      pkgSet,
+      readGuards: Object.fromEntries(
+        npmCapabilityReadCommands.map((command) => [
+          command,
+          runShellGuard(command, repo, { env: environment }),
+        ]),
+      ),
+      statePreserved: stateShaAfter === stateShaBefore &&
+        (stateBefore === null
+          ? !fs.existsSync(statePath)
+          : fs.readFileSync(statePath).equals(stateBefore)),
+      targetedGuards: Object.fromEntries(
+        npmCapabilityTargetedCommands.map((command) => [
+          command,
+          runShellGuard(command, repo, { env: environment }),
+        ]),
+      ),
+    };
+  } finally {
+    if (registryServer && registryServer.exitCode === null) {
+      registryServer.kill('SIGTERM');
+      const deadline = Date.now() + 2_000;
+      while (registryServer.exitCode === null && Date.now() < deadline) pause(20);
+      if (registryServer.exitCode === null) registryServer.kill('SIGKILL');
+    }
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+const inactiveNpmCapabilitySideEffects = Object.fromEntries(
+  ['missing', 'expired'].map((stateKind) => [
+    stateKind,
+    runInactiveNpmCapabilityRegression(stateKind),
+  ]),
+);
+
+assert.deepEqual(
+  inactiveNpmCapabilitySideEffects,
+  Object.fromEntries(
+    ['missing', 'expired'].map((stateKind) => [
+      stateKind,
+      {
+        addUser: {
+          executionStatus: null,
+          guard: 2,
+          requests: [],
+        },
+        npmEdit: {
+          executionStatus: null,
+          guard: 2,
+          marker: false,
+        },
+        npmSet: {
+          executionStatus: null,
+          guard: 2,
+          npmrcCreated: false,
+        },
+        pkgGetGuard: 0,
+        pkgSet: {
+          executionStatus: null,
+          guard: 2,
+          packageChanged: false,
+        },
+        readGuards: Object.fromEntries(
+          npmCapabilityReadCommands.map((command) => [command, 0]),
+        ),
+        statePreserved: true,
+        targetedGuards: Object.fromEntries(
+          npmCapabilityTargetedCommands.map((command) => [command, 2]),
+        ),
+      },
+    ]),
+  ),
+  'all npm canonical commands need explicit capabilities before inactive-state execution',
+);
+
+function runActiveNpmCapabilityRegression() {
+  const sandbox = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'coreone-active-npm-capability-'),
+  );
+  const repo = path.join(sandbox, 'repo');
+  const taskScript = path.join(__dirname, 'claude-task.cjs');
+  const runGit = (args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(
+      result.status,
+      0,
+      `git ${args.join(' ')} failed: ${result.stderr || result.stdout}`,
+    );
+    return String(result.stdout || '').trim();
+  };
+  const runHook = (hook, command) => spawnSync(
+    process.execPath,
+    [taskScript, hook],
+    {
+      cwd: repo,
+      encoding: 'utf8',
+      input: JSON.stringify({
+        cwd: repo,
+        tool_name: 'Bash',
+        tool_input: { command },
+      }),
+    },
+  ).status;
+  const shellGuard = (command) => runHook('shell-guard', command);
+  const shellAudit = (command) => runHook('audit', command);
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    runGit(['init', '--initial-branch=active-npm-capability']);
+    runGit(['config', 'user.name', 'Active npm Capability Test']);
+    runGit(['config', 'user.email', 'active-npm-capability@example.invalid']);
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(repo, 'local-dep'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src', 'owned.txt'), 'owned\n', 'utf8');
+    fs.writeFileSync(
+      path.join(repo, 'local-dep', 'package.json'),
+      `${JSON.stringify({
+        name: 'local-dep',
+        version: '1.0.0',
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${JSON.stringify({
+        name: 'active-npm-capability-probe',
+        version: '1.0.0',
+        private: true,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed active npm capability fixture']);
+    const head = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', head]);
+    const statePath = path.join(
+      runGit(['rev-parse', '--absolute-git-dir']),
+      'coreone',
+      'claude-task-state.json',
+    );
+    const writeState = (owned) => {
+      const startedAt = new Date(Date.now() - 2_000);
+      const verifiedAt = new Date(startedAt.getTime() + 1_000);
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(
+        statePath,
+        `${JSON.stringify({
+          version: 2,
+          mode: 'r0',
+          stage: 'r0',
+          risk: 'R0',
+          reason: 'active npm capability regression fixture',
+          branch: 'active-npm-capability',
+          baseSha: head,
+          startedHead: head,
+          startedAt: startedAt.toISOString(),
+          verifiedAt: verifiedAt.toISOString(),
+          owned,
+          excluded: [],
+        }, null, 2)}\n`,
+        'utf8',
+      );
+    };
+
+    writeState(['package.json']);
+    const ownedCommand = 'npm pkg set issue99ActiveProof=changed';
+    const ownedGuard = shellGuard(ownedCommand);
+    const ownedExecution = ownedGuard === 0
+      ? spawnSync('/bin/bash', ['-c', ownedCommand], {
+        cwd: repo,
+        encoding: 'utf8',
+      })
+      : null;
+    const ownedAudit = shellAudit(ownedCommand);
+    const ownedPackageChanged = fs.readFileSync(
+      path.join(repo, 'package.json'),
+      'utf8',
+    ).includes('issue99ActiveProof');
+    runGit(['reset', '--hard', 'HEAD']);
+
+    const externalGuards = Object.fromEntries([
+      'npm addUser --registry=http://127.0.0.1:9',
+      'npm star active-npm-capability-probe',
+      'npm unstar active-npm-capability-probe',
+      'npm publish --ignore-scripts',
+      'npm dist-tag add active-npm-capability-probe@1.0.0 latest',
+    ].map((command) => [command, shellGuard(command)]));
+    const readGuards = Object.fromEntries([
+      'npm pkg get name',
+      'npm cache ls',
+      'npm dist-tag ls active-npm-capability-probe',
+      'npm token list',
+    ].map((command) => [command, shellGuard(command)]));
+
+    writeState(['src/**']);
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${fs.readFileSync(path.join(repo, 'package.json'), 'utf8')}\n`,
+      'utf8',
+    );
+    const liveCheckGuards = Object.fromEntries([
+      'npm pkg set issue99OutOfScope=changed',
+      'npm set fund=false --location=project',
+      'npm edit local-dep --editor=true',
+      'npm cache verify',
+      'npm doctor',
+      'npm explore local-dep -- true',
+    ].map((command) => [command, shellGuard(command)]));
+    runGit(['reset', '--hard', 'HEAD']);
+
+    return {
+      externalGuards,
+      liveCheckGuards,
+      ownedAudit,
+      ownedExecutionStatus: ownedExecution?.status ?? null,
+      ownedGuard,
+      ownedPackageChanged,
+      readGuards,
+    };
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+assert.deepEqual(
+  runActiveNpmCapabilityRegression(),
+  {
+    externalGuards: {
+      'npm addUser --registry=http://127.0.0.1:9': 2,
+      'npm dist-tag add active-npm-capability-probe@1.0.0 latest': 2,
+      'npm publish --ignore-scripts': 2,
+      'npm star active-npm-capability-probe': 2,
+      'npm unstar active-npm-capability-probe': 2,
+    },
+    liveCheckGuards: {
+      'npm cache verify': 2,
+      'npm doctor': 2,
+      'npm edit local-dep --editor=true': 2,
+      'npm explore local-dep -- true': 2,
+      'npm pkg set issue99OutOfScope=changed': 2,
+      'npm set fund=false --location=project': 2,
+    },
+    ownedAudit: 0,
+    ownedExecutionStatus: 0,
+    ownedGuard: 0,
+    ownedPackageChanged: true,
+    readGuards: {
+      'npm cache ls': 0,
+      'npm dist-tag ls active-npm-capability-probe': 0,
+      'npm pkg get name': 0,
+      'npm token list': 0,
+    },
+  },
+  'active npm local writes need live scope audit while external writes stay blocked',
 );
 
 function runNoStateFindingRegressionMatrix() {

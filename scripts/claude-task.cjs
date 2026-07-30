@@ -4034,6 +4034,183 @@ function canonicalNpmCommand(name) {
   return NPM_COMMAND_SET.has(resolved) ? resolved : null;
 }
 
+const NPM_COMMAND_CAPABILITY_ENTRIES = [
+  ['access', 'action-sensitive'],
+  ['adduser', 'external-write'],
+  ['audit', 'action-sensitive'],
+  ['bugs', 'read'],
+  ['cache', 'action-sensitive'],
+  ['ci', 'local-write'],
+  ['completion', 'read'],
+  ['config', 'action-sensitive'],
+  ['dedupe', 'local-write'],
+  ['deprecate', 'external-write'],
+  ['diff', 'read'],
+  ['dist-tag', 'action-sensitive'],
+  ['docs', 'read'],
+  ['doctor', 'local-write'],
+  ['edit', 'local-write'],
+  ['exec', 'local-write'],
+  ['explain', 'read'],
+  ['explore', 'local-write'],
+  ['find-dupes', 'read'],
+  ['fund', 'read'],
+  ['get', 'read'],
+  ['help', 'read'],
+  ['help-search', 'read'],
+  ['hook', 'action-sensitive'],
+  ['init', 'local-write'],
+  ['install', 'local-write'],
+  ['install-ci-test', 'local-write'],
+  ['install-test', 'local-write'],
+  ['link', 'local-write'],
+  ['ll', 'read'],
+  ['login', 'external-write'],
+  ['logout', 'external-write'],
+  ['ls', 'read'],
+  ['org', 'action-sensitive'],
+  ['outdated', 'read'],
+  ['owner', 'action-sensitive'],
+  ['pack', 'local-write'],
+  ['ping', 'read'],
+  ['pkg', 'action-sensitive'],
+  ['prefix', 'read'],
+  ['profile', 'action-sensitive'],
+  ['prune', 'local-write'],
+  ['publish', 'external-write'],
+  ['query', 'read'],
+  ['rebuild', 'local-write'],
+  ['repo', 'read'],
+  ['restart', 'lifecycle'],
+  ['root', 'read'],
+  ['run-script', 'lifecycle'],
+  ['sbom', 'read'],
+  ['search', 'read'],
+  ['set', 'local-write'],
+  ['shrinkwrap', 'local-write'],
+  ['star', 'external-write'],
+  ['stars', 'read'],
+  ['start', 'lifecycle'],
+  ['stop', 'lifecycle'],
+  ['team', 'action-sensitive'],
+  ['test', 'lifecycle'],
+  ['token', 'action-sensitive'],
+  ['uninstall', 'local-write'],
+  ['unpublish', 'external-write'],
+  ['unstar', 'external-write'],
+  ['update', 'local-write'],
+  ['version', 'local-write'],
+  ['view', 'read'],
+  ['whoami', 'read'],
+];
+
+const NPM_COMMAND_CAPABILITIES = new Map(NPM_COMMAND_CAPABILITY_ENTRIES);
+const npmPolicyNames = NPM_COMMAND_CAPABILITY_ENTRIES.map(([name]) => name);
+const npmPolicyMissing = NPM_COMMANDS.filter(
+  (name) => !NPM_COMMAND_CAPABILITIES.has(name),
+);
+const npmPolicyExtra = npmPolicyNames.filter(
+  (name) => !NPM_COMMAND_SET.has(name),
+);
+if (
+  npmPolicyNames.length !== NPM_COMMANDS.length ||
+  new Set(npmPolicyNames).size !== npmPolicyNames.length ||
+  npmPolicyMissing.length > 0 ||
+  npmPolicyExtra.length > 0
+) {
+  throw new Error(
+    'npm command capability policy must cover every canonical command exactly once: ' +
+    `missing=${npmPolicyMissing.join(',') || '<none>'}; ` +
+    `extra=${npmPolicyExtra.join(',') || '<none>'}`,
+  );
+}
+
+const NPM_ACTION_CAPABILITIES = new Map([
+  ['access', {
+    read: new Set(['get', 'list', 'ls']),
+    'external-write': new Set(['grant', 'revoke', 'set']),
+  }],
+  ['audit', {
+    read: new Set(['', 'signatures']),
+    'local-write': new Set(['fix']),
+  }],
+  ['cache', {
+    read: new Set(['ls']),
+    'local-write': new Set(['add', 'check', 'clean', 'clear', 'rm', 'verify']),
+  }],
+  ['config', {
+    read: new Set(['get', 'list', 'ls']),
+    'local-write': new Set(['delete', 'del', 'edit', 'fix', 'rm', 'set']),
+  }],
+  ['dist-tag', {
+    read: new Set(['', 'list', 'ls']),
+    'external-write': new Set(['add', 'remove', 'rm']),
+  }],
+  ['hook', {
+    read: new Set(['list', 'ls']),
+    'external-write': new Set(['add', 'remove', 'rm', 'up', 'update']),
+  }],
+  ['org', {
+    read: new Set(['list', 'ls']),
+    'external-write': new Set(['add', 'remove', 'rm', 'set']),
+  }],
+  ['owner', {
+    read: new Set(['list', 'ls']),
+    'external-write': new Set(['add', 'remove', 'rm']),
+  }],
+  ['pkg', {
+    read: new Set(['get']),
+    'local-write': new Set(['delete', 'fix', 'set']),
+  }],
+  ['profile', {
+    read: new Set(['get']),
+    'external-write': new Set([
+      'disable-2fa',
+      'disable-tfa',
+      'disable2fa',
+      'disabletfa',
+      'enable-2fa',
+      'enable-tfa',
+      'enable2fa',
+      'enabletfa',
+      'set',
+    ]),
+  }],
+  ['team', {
+    read: new Set(['list', 'ls']),
+    'external-write': new Set(['add', 'create', 'destroy', 'remove', 'rm']),
+  }],
+  ['token', {
+    read: new Set(['', 'list', 'ls']),
+    'external-write': new Set(['create', 'delete', 'remove', 'revoke', 'rm']),
+  }],
+]);
+
+const npmActionPolicyMissing = NPM_COMMAND_CAPABILITY_ENTRIES
+  .filter(([, capability]) => capability === 'action-sensitive')
+  .map(([name]) => name)
+  .filter((name) => !NPM_ACTION_CAPABILITIES.has(name));
+const npmActionPolicyExtra = [...NPM_ACTION_CAPABILITIES.keys()]
+  .filter((name) => NPM_COMMAND_CAPABILITIES.get(name) !== 'action-sensitive');
+if (npmActionPolicyMissing.length > 0 || npmActionPolicyExtra.length > 0) {
+  throw new Error(
+    'npm action capability policy must match action-sensitive commands: ' +
+    `missing=${npmActionPolicyMissing.join(',') || '<none>'}; ` +
+    `extra=${npmActionPolicyExtra.join(',') || '<none>'}`,
+  );
+}
+
+function npmActionCapability(command, commandOperands, optionNames) {
+  if (command === 'audit' && optionNames.has('--fix')) return 'local-write';
+  const action = String(commandOperands[0] || '').toLowerCase();
+  const capabilities = NPM_ACTION_CAPABILITIES.get(command);
+  if (!capabilities) return null;
+  for (const capability of ['read', 'local-write', 'external-write']) {
+    if (capabilities[capability]?.has(action)) return capability;
+  }
+  return null;
+}
+
 const NPM_PATH_OPTIONS = new Set([
   '--prefix',
   '--config',
@@ -4156,67 +4333,42 @@ function assertSafeNpmCommand(tokens, root = process.cwd(), cwd = root, options 
   const operands = parsed.positionals.map((entry) => entry.value);
   const command = canonicalNpmCommand(operands[0]);
   const commandOperands = operands.slice(1);
+  const optionNames = new Set(parsed.options.map((option) => option.name));
   if (operands[0] && !command) {
     throw new Error(
       `npm command ${operands[0]} 不是当前 npm 可验证的命令、别名或唯一缩写。`,
     );
   }
-  if (command === 'config') {
-    const action = String(commandOperands[0] || '').toLowerCase();
-    if (['get', 'list'].includes(action)) {
-      return { kind: 'config-read', executable: String(tokens[0] || '') };
+  let capability = NPM_COMMAND_CAPABILITIES.get(command);
+  if (capability === 'action-sensitive') {
+    capability = npmActionCapability(command, commandOperands, optionNames);
+    if (!capability) {
+      throw new Error(
+        `npm ${command} ${commandOperands[0] || '<missing>'} 没有可验证的副作用分类。`,
+      );
     }
-    throw new Error(`npm config ${action || '<missing>'} 会修改 npm 配置；需先建立 task contract。`);
+  } else if (!capability && command) {
+    throw new Error(`npm ${command} 缺少显式 capability policy。`);
   }
   const lifecycle = command === 'run-script'
     ? String(commandOperands[0] || '').toLowerCase()
     : command;
-  if (npmLifecycleHasWriteCapability(lifecycle)) {
+  if (
+    capability === 'lifecycle' &&
+    npmLifecycleHasWriteCapability(lifecycle)
+  ) {
     throw new Error(`npm lifecycle ${lifecycle} 是明确的部署、迁移、发布、重置或服务启动动作，已拒绝。`);
   }
-  const externalCommands = new Set([
-    'access',
-    'deprecate',
-    'dist-tag',
-    'login',
-    'logout',
-    'org',
-    'owner',
-    'profile',
-    'publish',
-    'team',
-    'token',
-    'unpublish',
-  ]);
-  if (externalCommands.has(command)) {
+  if (capability === 'external-write') {
     throw new Error(`npm ${command} 会修改 registry、account 或发布状态，已拒绝。`);
   }
-  const localMutatingCommands = new Set([
-    'add',
-    'ci',
-    'dedupe',
-    'exec',
-    'init',
-    'install',
-    'install-ci-test',
-    'install-test',
-    'link',
-    'pack',
-    'prune',
-    'rebuild',
-    'shrinkwrap',
-    'uninstall',
-    'unlink',
-    'update',
-    'version',
-  ]);
-  if (!options.hasActiveState && localMutatingCommands.has(command)) {
+  if (!options.hasActiveState && capability === 'local-write') {
     throw new Error(`npm ${command} 会写依赖、配置、缓存、包或外部 registry；需先建立 task contract。`);
   }
   return {
     kind: command || 'diagnostic',
     executable: String(tokens[0] || ''),
-    forceLiveCheck: options.hasActiveState && localMutatingCommands.has(command),
+    forceLiveCheck: options.hasActiveState && capability === 'local-write',
   };
 }
 
