@@ -61,6 +61,8 @@ preflight 默认只读：不会 fetch、merge、rebase、prune、删除 worktree
 ## 4. 所有权、scope 与 ABC 影响
 
 - 一项文件同时只能有一个实现 owner；handoff 中列出 `owned files` 与 `excluded files`。另一模型负责独立复核，不在同一文件上代写。
+- 新任务按领域固定异构分工：前端实现 owner = Claude Code CLI/K3；Codex 负责 fixed-SHA 复核。后端实现 owner = Codex；Claude Code CLI/K3 负责 fixed-SHA 独立复核。规则生效前已经在执行的任务保持原 owner 到收口，不为套用新规中途换手；具体例外只记录在对应实时 handoff，不写进本稳定合同。
+- Issue 正式评级与标签写入 / 回读 owner = Codex。新需求讨论 Issue 由 Claude Code 创建后，必须串行交给 Codex 做去重、事实、范围、AC 复核与正式评级；评级完成前不得进入实现。GitHub writer 始终串行，任何时刻只有一个写入 owner。
 - 每个代理同一时间最多维护一个实现 PR。审查可以并行，但不得顺手接管被审文件。
 - 不切换、清理、覆盖或提交其他 worktree 的内容。只暂存本任务明确拥有的路径。
 - 动手前做 scope 判断：若改动会影响库存、出库、BOM、成本、收入、权限或审计等共享事实链，必须说明 ABC/上游影响并补相应回归；无影响也要在 PR 中明确写出理由。
@@ -72,6 +74,7 @@ preflight 默认只读：不会 fetch、merge、rebase、prune、删除 worktree
 - 先写能失败的 BDD/验收场景或 TDD 断言，再实现，再重构。修机制脚本同样先写自测。
 - 碰钱、口径、数据模型或关键业务链时，使用真实或可审计的脱敏数据产出手核答案，并用独立守恒或对照证明；已登记 golden 必须保持机器断言有效。
 - 纯文档或机制改动不伪造业务测试价值，但必须运行对应自测、漂移检查和 `git diff --check`。
+- **治理闸效率优先，跨工具一视同仁**：本条对 Codex、Claude Code/K3 与其他遵循本契约的 Agent 一视同仁；任何适配入口都不得另建更严的命令形状闸。闸的第一目标是让正常工作更快、更少返工，只拦有具体证据的真实风险。普通读取、搜索、构建、测试、诊断、管道、重定向和工具参数默认放行；不得按命令名、未知子命令、参数形状或“理论上可能执行代码”建立默认拒绝白名单。硬阻断只保留三类：明确破坏性动作、能解析并证明越出 owned/excluded 边界的文件修改、GitHub 写入。暂时不能证明危险的本地命令交给现有 sandbox、文件写入 hook 与 PostToolUse scope audit 观察，不能为了提高拦截数或报告分数牺牲任务可用性、重复消耗 token。
 
 ## 6. 独立复核、完成定义与面向用户交付
 
@@ -81,14 +84,30 @@ preflight 默认只读：不会 fetch、merge、rebase、prune、删除 worktree
 
 ### 6.1 所有用户交付会话的产品化结尾（强制）
 
-每个直接向最终用户交付结果的 COREONE **交互式根任务会话**，无论是实现、审查、诊断、规划、状态报告还是阻塞报告，都必须把以下四项作为**最后一个用户可读收口区块**，用产品大白话依次写清：
+每个直接向最终用户交付结果的 COREONE **交互式根任务会话**，无论是实现、审查、诊断、规划、状态报告还是阻塞报告，都必须把以下六项作为**最后一个用户可读收口区块**，用产品大白话依次写清：
 
 1. **做了什么**：只写实际完成的结果；未完成、未验证或仅计划的内容不得写成已完成。
 2. **意味着什么**：说明对用户或业务的影响，并明确区分 mockup、合同定稿、代码合并、部署与生产上线，禁止把前一阶段成果冒充后一阶段能力。
 3. **下一步应该做什么**：有后续时，给出一个明确的下一动作、责任角色和准入条件；确实无需后续时，明确写“无需后续动作”及原因，并把责任角色 / 准入条件标为“不适用”。禁止只写“后续继续”“可以推进”等没有 owner 与触发条件的表述。
 4. **当前禁止事项 / 边界**：写清尚未授权的阶段、不得扩大的批准范围，以及当前不能执行的动作；若本轮没有新增边界，也要明确写“无新增禁止事项”，同时复述与本轮相关的既有禁止边界，不得用该句替代具体边界。
+5. **我现在最没把握的是什么？（What are you least confident about right now?）**：指出当前结论中证据最弱、假设最重或最容易被新事实推翻的一点，并说明缺什么证据才能提高把握。
+6. **关于当前局面，我可能遗漏的最大问题是什么？（What's the biggest thing I may be missing about the situation?）**：主动说明可能未进入当前 scope、调用链、角色视角或环境证据的最大盲区，以及它一旦成立会改变什么判断。
 
-技术日志、SHA、checks 和测试数量可以作为前文证据，但不能替代这四项。纯咨询或本轮没有改动系统时，也必须明确写出“本轮未改动系统”，并按上述两种合法形态说明下一步。结尾中的“下一步”只描述产品路径，不自动授予任何状态变更权限，包括但不限于修改文件或数据、Git/GitHub 写入、提交、推送、部署、合并或启动下一阶段。
+技术日志、SHA、checks 和测试数量可以作为前文证据，但不能替代这六项。第 5、6 项必须是具体风险、假设或未知；不能留空，也不能只写“无”“没有”“不知道”。确实未发现额外问题时，写“未发现”并列出已检查范围及仍未检查的范围。纯咨询或本轮没有改动系统时，也必须明确写出“本轮未改动系统”，并按上述两种合法形态说明下一步。结尾中的“下一步”只描述产品路径，不自动授予任何状态变更权限，包括但不限于修改文件或数据、Git/GitHub 写入、提交、推送、部署、合并或启动下一阶段。
+
+上面第 5、6 项面向最终用户时继续使用产品大白话；写入 PR body 或 Issue `[HANDOFF]` 评论这类机器入口时，两项都必须改写为以下无兼容 fallback 的 `v1` typed wire grammar（字段顺序可交换）：
+
+```text
+risk-v1; anchor=<type>:<value>; uncertainty=<kind>:<detail>
+no-finding-v1; checked=<type>:<value>; unchecked=<type>:<value>
+```
+
+- 解析顺序固定为：字段分隔符后的首尾普通 space/tab 只算排版 padding；再对**原始 wire contract**执行 UTF-8 `<=4096 bytes`，迭代解码受支持的 numeric / 基础 named entity，拒绝控制字符、非普通空格与 default-ignorable，再做 NFKC + 首尾普通空格裁剪；随后按 canonical grammar 分段、逐 token 重检未解析 / incomplete entity，最后对 canonical contract 再执行 UTF-8 `<=4096 bytes` 并校验 grammar。原始 U+0009 只允许作为结构 padding：mode / segment 边界、key 与 `=` 周围、以及 `=` 后 field value 的外层；anchor、kind、detail 或 typed value 内部的 U+0009 一律拒绝。entity 解码新生成的 U+0009（包括 `&Tab;`、`&#9;` 及 nested 形式）不继承 raw-tab 权限，必须 fail-closed。canonical mode 后的首个 `;` 固定为分隔；其余 `;` 仅当后面是 optional space/tab + ASCII field-key + optional space/tab + `=` 时才是字段分隔，不能靠 value 的大小写猜测，也不得回拼进前一 value。解码后的 `rock&roll` / `Rock&Roll` 等裸 `&` 文本均保持可见；例如 `anchor=name:scope&amp;bogus; uncertainty=...` 的末个 `;` 是 grammar delimiter，value 是裸 `scope&bogus`；真正保留未知完整 entity 的非末字段必须写成 `anchor=name:scope&amp;bogus;; uncertainty=...`（entity terminator + grammar delimiter），并由 token-level 检查 fail-closed。NFKC 后新出现的 `&bogus;` 等 entity 形态同样须 fail-closed。这里的“ASCII mode / key / `id` 语法”指 entity decode + NFKC 后的 canonical 形态；raw fullwidth 等 NFKC 等价值是允许输入，不得在 canonicalize 前误拒。反盲区合同只能由该 parser 解码一次，PR body / Issue handoff 的字段扫描不得先解码 value。
+- `type` 仅允许 `id|ref|name|path`。canonical `id` 为 `[A-Za-z_][A-Za-z0-9_.-]*`；`ref` 为 `Issue#N` / `Issue #N`、`PR#N`、ticket/bug 正整数字符串或 7–40 位 fixed SHA，编号禁止前导零且始终保留十进制 digit string，不转 JavaScript `Number`；`path` 是仓库相对路径/文件名或 `/api/...` 应用 route；`name` 是操作者显式声明的产品/领域名称，至少包含两个字母或数字。
+- `kind` 仅允许 `unverified|untested|unmeasured|unknown|assumption|dependency|risk`；`detail` 必须是非占位、可见的纯文本。anchor typed value 与完整 uncertainty typed value 的 UTF-8 上限分别为 512、2048 bytes；合同内只允许 parser 声明的字母/数字/普通空格和有限可见标点。完整支持的 entity 解码后或直接书写的裸 `&` 可作为 `R&D+`、`A&B` 这类普通可见文本的一部分；entity 名 token 只按 ASCII letter + ASCII alphanumeric 向后取最大串，后续任意其他 Unicode / 标点即结束该 token，不再维护另一份“允许哪些边界字符”的白名单。无分号的受支持 entity 名或至少两个字符的名称前缀 fail-closed，仍拒绝 Markdown/HTML 包装、反斜线、未解析 entity 与分隔符注入。
+- placeholder 判定只为比较而移除连续句末普通空格、中英文句号/逗号/分号/冒号/感叹号/问号/ellipsis 等终止标点，以及 `/ _ + - &` 终止填充；不会改写返回的合法 anchor/detail，也不会把 `C++`、`snake_case`、`R&D+`、`A&B` 或路径中的内部字符当作填充。entity decode + NFKC 后大小写不敏感的 `n(?:[./_+-])?a` 全族、`unknown` 与 `無` 同其他明显占位词一样严格拒绝；缺键、重复键、未知键/类型/kind、空值也一律拒绝。
+- `no-finding-v1` 的 checked / unchecked 在规范化后必须是不同 identity；ref 的大小写与 `#` 前单个空格不构成差异，`id:auth` 与 `name:auth` 也不构成差异。
+- checker 只证明 wire shape 与 lexical anchor 可审计；不能证明 anchor 真实存在或可达、类型声明真实、detail 确属未知、checked / unchecked 真已执行，亦不能证明回答诚实。这些仍由异构 reviewer / PM 人审。
 
 要求只返回 schema JSON/XML 等严格机器格式的自动化输出，以及工具响应、内部 subagent 消息和结构化平台制品，均不属于“直接向最终用户交付结果的交互式根任务会话最终回复”；不得为满足本节而破坏其机器合同。承接这些产物并最终回复用户的根会话仍必须按本节收口。
 
@@ -112,7 +131,7 @@ preflight 默认只读：不会 fetch、merge、rebase、prune、删除 worktree
 - 同一时刻只有一个 GitHub 写入 owner。Codex、K3 与其他代理不得并发创建或修改 Issue、评论、PR、标签或 ref；一项任务通常只保留一次固定对象交接和一次最终复核结论，不发布过程性刷屏评论。
 - 不自动轮询 GitHub。只在 PM 明确请求、人工交接到达或已配置的事件通知触发时读取实时状态；批量读取优先合并查询或使用条件请求。
 - 异构 AI 复核、PR body 合同校验和 findings 消费全部在线下完成：复核者读取固定 SHA/本地 bundle，输出完整文档，由 PM 粘贴交接；PR body 草稿用 `node scripts/issue-handoff/check-pr-body.cjs --body-file <path>` 校验。不得用 GitHub Actions 调外部 AI，不得由 workflow 自动写 review、评论或 commit status。
-- 每次 GitHub 写入前先在本地运行 `node scripts/offline-github-governance.cjs`。活动 workflow 必须显式声明顶层只读权限，禁止 `pull_request_target`、任何 `*: write`/`write-all` 权限、外部 AI secret/endpoint 和自动 POST status/review/comment；常规只读 CI、测试、构建与 secret scan 可以保留。
+- 每次 GitHub 写入前先在本地运行 `node scripts/offline-github-governance.cjs`。Claude Code 的 Issue/PR 写入必须经过 `scripts/claude-task.cjs` 的 writer slot；claim 的 body 更新与评论同样逐次执行治理和间隔，获准的新 Issue 只走哈希绑定的 `create-issues` 事务。活动 workflow 必须显式声明顶层只读权限，禁止 `pull_request_target`、任何 `*: write`/`write-all` 权限、外部 AI secret/endpoint 和自动 POST status/review/comment；常规只读 CI、测试、构建与 secret scan 可以保留。
 - GitHub 写入只允许 Git 客户端将当前命名任务分支显式推送至 `origin`、已正常登录的官方 `gh`，或经 PM 授权且最小权限的 GitHub App；禁止直接推送默认/受保护分支。禁止从 Git Credential Manager、系统钥匙串或其他凭据存储中提取 token 交给临时脚本；禁止因一个客户端无权限而私自切换另一身份或令牌绕过。
 - 多个 `POST`、`PATCH`、`PUT`、`DELETE` 必须串行且相邻请求至少间隔一秒。首次遇到 `403`、`429`、secondary rate limit 或重复验证错误立即停止，保留原始状态与响应头，遵守 `Retry-After`/reset；不得换 token、并发重试或忽略错误继续写。
 - 向公开仓库推送前，PM 必须明确批准目标仓库、ref、固定 commit 和精确文件范围；不得附带仓库外 `.env`、私钥、token、浏览器/系统 session secret。force-push、合并、发布和部署仍分别需要明确授权。
