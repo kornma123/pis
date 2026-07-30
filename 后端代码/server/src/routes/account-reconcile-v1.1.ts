@@ -207,7 +207,7 @@ router.get('/overview', (req, res) => {
       (db.prepare(`SELECT COALESCE(SUM(collected_revenue),0) s FROM supplement_orders WHERE collected_month = ? AND status = '已补收'`)
         .get(settlementMonth) as { s: number }).s * 100,
     ) / 100
-    // #93-A 裁决 A 保守口径（derived quarantine）+ #94-P1-1 严格形状：确认实收只认
+    // #93-A 裁决 A 保守口径（derived quarantine）+ fresh-R2 P1-1 严格形状：确认实收只认
     // 完整命中 TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL 的终态月——与启动扫描
     // ensureReconcileTerminalHospitalMonthIntegrity 同一 SQL 片段（binding + 同院/同月/
     // 同行/current generation 之外，复核完成须 completed_at canonical + completed_by

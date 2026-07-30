@@ -854,7 +854,7 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
   })
 
   it('GET /overview 不把字段残缺/矛盾的绑定终态月计入确认实收（strict shape 与启动扫描同一谓词；合法 complete/closed 正控照常计入）', async () => {
-    // 派单 P1-1：可信实收谓词从「binding + 状态文本↔generation 状态」升级为完整终态
+    // fresh-R2 P1-1：可信实收谓词从「binding + 状态文本↔generation 状态」升级为完整终态
     // 形状（与 ensureReconcileTerminalHospitalMonthIntegrity 同一 SQL 片段，零漂移）：
     // 复核完成须 completed_at canonical + completed_by trim 非空 + closed 字段全空；
     // 已关账须 completed/closed 两组 canonical + 两操作者 trim 非空。残缺行只能经
@@ -931,7 +931,7 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
   })
 
   it('GET /overview 不把日历不可能终态时间的绑定终态月计入确认实收（2026-02-31/2025-02-29/2026-04-31 负控；2024-02-29 闰日正控照计）', async () => {
-    // 派单 fresh-P1（2026-07-29）：可信实收谓词的 canonical 时间与启动扫描同一 SQL
+    // fresh-R2 P1-3（2026-07-29 review finding）：可信实收谓词的 canonical 时间与启动扫描同一 SQL
     // 片段，从「形状 + 段范围」收紧到 Gregorian 真实日历日（含闰年）——CURRENT_TIMESTAMP
     // 永不产出 2026-02-31（SQLite 会归一化为 2026-03-03），该形状只能经 trigger 被摘
     // 窗口落入 → derived quarantine：看板可见性/计数保留，钱不计入确认实收；合法闰日
@@ -1006,6 +1006,121 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
     } finally {
       db.prepare('UPDATE reconcile_hospital_months SET closed_at = ? WHERE id = ?')
         .run(closedRow.closed_at, cHmId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+    expect((await overviewOf()).board.确认实收).toBe(830)
+  })
+
+  it('GET /overview 不把 generation 终态字段伪造/actor 漂移的绑定终态月计入确认实收（fresh-R3 P1-A/B：2026-02-31 completed_at/closed_at、NBSP-only/NUL-junk actor quarantine；合法正控照计）', async () => {
+    // fresh-R3 P1-A/P1-B（fixed-SHA 复核 2026-07-29）：可信实收谓词的 generation 侧
+    // 此前只钉状态/身份——generation.completed_at/closed_at 日历无效、completed_by
+    // NBSP-only（SQLite trim 只剥空格）照计 830 → RED。修复后与启动扫描同一谓词
+    // （片段 + coreone_canonical_actor UDF + BLOB instr(x'00') 原始字节闸）：
+    // quarantine 不计入、看板计数保留，恢复合法形状照常计入。hm 侧 NBSP actor 同钉
+    //（片段 actor UDF 消费证明）。fresh blocker 补钉：'USER-001\0junk' 经 node:sqlite
+    // 截断在 UDF 单侧冒充合法——gen/hm 两侧 actor NUL-junk 负测只能归因 BLOB 字节闸。
+    const db = await getDb()
+    const manager = await import('../src/database/DatabaseManager.js')
+    const G_PARTNER = 'PT-RECON-GTERM'
+    const G_MONTH = '2027-06'
+    const G_STMT = 'stmt-recon-gterm-v1'
+    const G_RECON = 'recon-gterm-v1'
+    const gBinding = {
+      partnerId: G_PARTNER,
+      settlementMonth: G_MONTH,
+      statementGenerationId: G_STMT,
+      reconcileGenerationId: G_RECON,
+    }
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-GTERM', '代次终态闸测试院', 1)`).run(G_PARTNER)
+    seedStatementGeneration(db, G_PARTNER, G_MONTH, G_STMT, [
+      { caseNo: 'D1-gterm', item: '免疫组化染色*3', amount: 300 },
+    ])
+    db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run('l-gterm-d1', 'D1-gterm', G_PARTNER, '免疫组化染色', 3, 100, G_MONTH)
+    db.prepare(`INSERT OR IGNORE INTO lis_cases (id, case_no, partner_id, ihc_count, special_stain_count, operate_time) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('lc-gterm-d1', 'D1-gterm', G_PARTNER, 3, 0, `${G_MONTH}-10`)
+    db.prepare(`INSERT OR IGNORE INTO case_revenue (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source) VALUES (?, ?, ?, ?, ?, ?, ?, 'statement')`)
+      .run('cr-gterm-1', 'D1-gterm', G_PARTNER, G_MONTH, 1000, 830, 830)
+    expect((await auth(request(app).post('/api/v1/account-reconcile/compute').send(gBinding))).status).toBe(200)
+    const gWb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(gBinding))
+    const gHmId = gWb.body.data.snapshot.hospitalMonthId as string
+    expect((await auth(request(app).post(`/api/v1/account-reconcile/hospital-months/${gHmId}/complete`).send(gBinding))).status).toBe(200)
+    const overviewOf = async () => {
+      const res = await auth(request(app).get('/api/v1/account-reconcile/overview').query({ settlementMonth: G_MONTH }))
+      expect(res.status).toBe(200)
+      return res.body.data as { board: Record<string, number> }
+    }
+    const genRow = () => db.prepare(`
+      SELECT completed_at, completed_by, closed_at FROM account_reconcile_generations
+       WHERE reconcile_generation_id = ?
+    `).get(G_RECON) as { completed_at: string | null; completed_by: string | null; closed_at: string | null }
+    const hmRow = () => db.prepare(`
+      SELECT completed_by FROM reconcile_hospital_months WHERE id = ?
+    `).get(gHmId) as { completed_by: string | null }
+    // 正控①：合法复核完成照计 830。
+    expect((await overviewOf()).board.确认实收).toBe(830)
+    const genBefore = genRow()
+    const hmBefore = hmRow()
+    try {
+      db.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_complete_finality')
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_complete_finality')
+      // 负测①：generation.completed_at = 2026-02-31（日历不存在日）。
+      db.prepare('UPDATE account_reconcile_generations SET completed_at = ? WHERE reconcile_generation_id = ?')
+        .run('2026-02-31 09:00:00', G_RECON)
+      expect((await overviewOf()).board.确认实收).toBe(0)
+      // 负测②：恢复 completed_at 后单变量伪造 generation.completed_by = NBSP-only
+      //（SQL trim 冒充非空）——拒绝只能归因 actor 谓词。
+      db.prepare('UPDATE account_reconcile_generations SET completed_at = ?, completed_by = ? WHERE reconcile_generation_id = ?')
+        .run(genBefore.completed_at, String.fromCodePoint(0x00a0), G_RECON)
+      expect((await overviewOf()).board.确认实收).toBe(0)
+      // 负测③：恢复 generation 后单变量伪造 hm.completed_by = NBSP-only（片段 actor
+      // UDF 消费钉）。
+      db.prepare('UPDATE account_reconcile_generations SET completed_by = ? WHERE reconcile_generation_id = ?')
+        .run(genBefore.completed_by, G_RECON)
+      db.prepare('UPDATE reconcile_hospital_months SET completed_by = ? WHERE id = ?')
+        .run(String.fromCodePoint(0x00a0), gHmId)
+      const malformed = await overviewOf()
+      expect(malformed.board.确认实收).toBe(0)
+      expect(malformed.board.复核完成).toBeGreaterThanOrEqual(1) // 历史可见性/状态计数保留
+      // 负测④：恢复 hm 后单变量伪造 generation.completed_by = 'USER-001\0junk'
+      //（fresh blocker：node:sqlite 截断使 UDF 只见 'USER-001'——拒绝只能归因
+      // 片段内 BLOB instr(x'00') 原始字节闸）。
+      db.prepare('UPDATE reconcile_hospital_months SET completed_by = ? WHERE id = ?')
+        .run(hmBefore.completed_by, gHmId)
+      db.prepare('UPDATE account_reconcile_generations SET completed_by = ? WHERE reconcile_generation_id = ?')
+        .run('USER-001\0junk', G_RECON)
+      expect((await overviewOf()).board.确认实收).toBe(0)
+      // 负测⑤：恢复 generation 后单变量伪造 hm.completed_by = 'USER-001\0junk'
+      //（hm 侧同一字节闸消费钉）。
+      db.prepare('UPDATE account_reconcile_generations SET completed_by = ? WHERE reconcile_generation_id = ?')
+        .run(genBefore.completed_by, G_RECON)
+      db.prepare('UPDATE reconcile_hospital_months SET completed_by = ? WHERE id = ?')
+        .run('USER-001\0junk', gHmId)
+      const malformedNulHm = await overviewOf()
+      expect(malformedNulHm.board.确认实收).toBe(0)
+      expect(malformedNulHm.board.复核完成).toBeGreaterThanOrEqual(1)
+    } finally {
+      db.prepare('UPDATE account_reconcile_generations SET completed_at = ?, completed_by = ? WHERE reconcile_generation_id = ?')
+        .run(genBefore.completed_at, genBefore.completed_by, G_RECON)
+      db.prepare('UPDATE reconcile_hospital_months SET completed_by = ? WHERE id = ?')
+        .run(hmBefore.completed_by, gHmId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+    expect((await overviewOf()).board.确认实收).toBe(830)
+    // closed 侧：合法关账照计 830；generation.closed_at = 2026-02-31 → quarantine；恢复后复计。
+    expect((await auth(request(app).post('/api/v1/account-reconcile/close').send({ items: [gBinding] }))).status).toBe(200)
+    expect((await overviewOf()).board.确认实收).toBe(830)
+    const genClosedBefore = genRow()
+    try {
+      db.exec('DROP TRIGGER IF EXISTS trg_account_reconcile_closed_immutable')
+      db.prepare('UPDATE account_reconcile_generations SET closed_at = ? WHERE reconcile_generation_id = ?')
+        .run('2026-02-31 09:00:00', G_RECON)
+      const malformed = await overviewOf()
+      expect(malformed.board.确认实收).toBe(0)
+      expect(malformed.board.已关账).toBeGreaterThanOrEqual(1)
+    } finally {
+      db.prepare('UPDATE account_reconcile_generations SET closed_at = ? WHERE reconcile_generation_id = ?')
+        .run(genClosedBefore.closed_at, G_RECON)
       manager.upgradeAccountReconciliationSchema(db)
     }
     expect((await overviewOf()).board.确认实收).toBe(830)

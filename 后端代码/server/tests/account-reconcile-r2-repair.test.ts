@@ -5638,14 +5638,14 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
       verdict: '核对无误', followUp: 'settled', by: 'USER-001', at: '2026-08-01 00:00:00',
       supplement: true,
     },
-    // 单变量⑥（派单 P1-2）：认定人为纯空白串——isNonEmptyString 只挡 ''，'   ' 漏过；
+    // 单变量⑥（fresh-R2 P1-2）：认定人为纯空白串——isNonEmptyString 只挡 ''，'   ' 漏过；
     // 审计字段必须 trim 后非空（空串/纯空白同拒）。
     {
       label: 'verdict-actor-whitespace',
       verdict: '核对无误', followUp: 'settled', by: '   ', at: '2026-08-01 00:00:00',
       supplement: false,
     },
-    // 单变量⑦（派单 P1-2）：认定时间非 canonical SQLite 时间戳——ISO-8601 T/Z 形状
+    // 单变量⑦（fresh-R2 P1-2）：认定时间非 canonical SQLite 时间戳——ISO-8601 T/Z 形状
     // Date.parse 会放行；仓库既有时间合同 = CURRENT_TIMESTAMP 'YYYY-MM-DD HH:MM:SS'
     // 严格形状（与 isStrictSettlementMonth 同风格锚定正则+范围）。
     {
@@ -5653,13 +5653,37 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
       verdict: '核对无误', followUp: 'settled', by: 'USER-001', at: '2026-08-01T00:00:00.000Z',
       supplement: false,
     },
-    // 单变量⑧（派单 fresh-P1 日历闸）：认定时间形状/段范围合法但 Gregorian 日历不存在
+    // 单变量⑧（fresh-R2 P1-3 日历闸）：认定时间形状/段范围合法但 Gregorian 日历不存在
     // ——SQLite CURRENT_TIMESTAMP 永不产出 '2026-02-31'（主控独立复现：SQLite date 函数
     // 会把它归一化为 '2026-03-03'）。必须与仓库既有日历严格校验（lis-cases-v1.1.ts
     // parseStrictDate：日按月大小 + 闰年）同语义拒收。
     {
       label: 'verdict-at-calendar-invalid',
       verdict: '核对无误', followUp: 'settled', by: 'USER-001', at: '2026-02-31 00:00:00',
+      supplement: false,
+    },
+    // 单变量⑨-⑫（fresh-R3 P1-B）：actor canonical 谓词——SQLite trim 只剥 U+0020，
+    // tab/newline/NBSP-only 在 SQL 侧冒充非空；JS trim 不剥 NUL，纯控制串在 JS 侧也
+    // 冒充非空。唯一权威 isCanonicalActor（JS）+ coreone_canonical_actor（UDF）同拒。
+    // （⑨⑩⑪ 在 verdict JS 通道修复前已被 isNonBlankString 拦截=回归钉；⑫ 为真 RED。）
+    {
+      label: 'verdict-actor-tab-only',
+      verdict: '核对无误', followUp: 'settled', by: '\t\t', at: '2026-08-01 00:00:00',
+      supplement: false,
+    },
+    {
+      label: 'verdict-actor-newline-only',
+      verdict: '核对无误', followUp: 'settled', by: '\n', at: '2026-08-01 00:00:00',
+      supplement: false,
+    },
+    {
+      label: 'verdict-actor-nbsp-only',
+      verdict: '核对无误', followUp: 'settled', by: String.fromCodePoint(0x00a0, 0x00a0), at: '2026-08-01 00:00:00',
+      supplement: false,
+    },
+    {
+      label: 'verdict-actor-nul-only',
+      verdict: '核对无误', followUp: 'settled', by: '\0', at: '2026-08-01 00:00:00',
       supplement: false,
     },
   ]
@@ -5712,7 +5736,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     return fixture
   }
 
-  it('rejects semantically forged verdict facts at lifecycle completion (409 zero write; eight single-variable shapes)', () => {
+  it('rejects semantically forged verdict facts at lifecycle completion (409 zero write; twelve single-variable shapes)', () => {
     for (const shape of SEMANTIC_FORGERY_SHAPES) {
       const fixture = seedSemanticForgeMonthP1(`p1b-lifecycle-${shape.label}`, shape)
       expectLifecycle409(
@@ -5735,7 +5759,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     }
   })
 
-  it('rejects a fact-mirrored but semantically invalid pending→complete write (zero write; eight single-variable shapes)', () => {
+  it('rejects a fact-mirrored but semantically invalid pending→complete write (zero write; twelve single-variable shapes)', () => {
     for (const shape of SEMANTIC_FORGERY_SHAPES) {
       const label = `p1b-trigger-${shape.label}`
       const fixture = seedSemanticForgeMonthP1(label, shape, { primeRevenue: true })
@@ -5767,7 +5791,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     }
   })
 
-  it('fails boot on a fact-mirrored but semantically invalid complete generation (first boot and real restart; eight single-variable shapes)', () => {
+  it('fails boot on a fact-mirrored but semantically invalid complete generation (first boot and real restart; twelve single-variable shapes)', () => {
     for (const shape of SEMANTIC_FORGERY_SHAPES) {
       expectArtifactBootForgeryRejected(
         `p1b-boot-${shape.label}`,
@@ -5781,7 +5805,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
   })
 
   it('calendar-day precision on verdict_at (lifecycle channel): rejects 2026-02-31 / 2025-02-29 / 2026-04-31 with zero write, accepts legal leap day 2024-02-29', () => {
-    // 派单 fresh-P1（2026-07-29）：canonical 时间合同从「形状 + 段范围」收紧到
+    // fresh-R2 P1-3（2026-07-29 review finding）：canonical 时间合同从「形状 + 段范围」收紧到
     // 「Gregorian 真实日历日」（与 lis-cases-v1.1.ts parseStrictDate 同语义：日按月
     // 大小 + 闰年）。负控三日 CURRENT_TIMESTAMP 永不产出 → completion 必须 409 零写；
     // 正控合法闰日 2024-02-29 镜像进 artifact 后照常完成、首启扫描零误伤。
@@ -5903,7 +5927,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     db = manager.getDatabase()
   })
 
-  // ── #94-P1-1 终态 hospital-month 严格形状（派单 2026-07-29：startup scan 与
+  // ── fresh-R2 P1-1 终态 hospital-month 严格形状（2026-07-29 review finding：startup scan 与
   //    overview 可信实收谓词共用同一完整形状，避免漂移）────────────────────────────
   // 漏洞：#93-A 扫描只钉「状态文本↔generation 状态 + 字段优先级粗配对」——有 binding
   // 的终态行字段残缺/矛盾全部放行：复核完成 completed_at=NULL、completed_by 纯空白、
@@ -5916,6 +5940,9 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
   //   其它状态夹带任何终态字段 = malformed。
   // 合法写者（lifecycle/路由）形状不变；以下伪造只能经 trigger 被摘窗口落入 →
   // 首次 upgrade（首启）与真实重启（关闭重开同一文件）均 fail-closed，伪造行零持久修复。
+  // （形状口径已升级：completed_by/closed_by 从「trim 非空」收紧为 actor canonical——
+  // fresh-R3 P1-B 起 coreone_canonical_actor UDF、fresh blocker 起片段内原始 BLOB
+  // instr(x'00') 闸，见 TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL。）
   function expectTerminalShapeForgeryRejected(
     label: string,
     setup: 'complete' | 'closed' | 'pending',
@@ -5994,6 +6021,19 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     )
   })
 
+  it('fails boot when a bound complete month carries a NUL-junk completed_by (trigger-drop window; first boot and real restart)', () => {
+    // fresh blocker（2026-07-29 root 复核）hm 侧钉：'USER-001\0junk' 经 node:sqlite
+    // 截断在 UDF/JS 单侧冒充 'USER-001'——拒绝只能归因片段内 BLOB instr(x'00')
+    // 原始字节闸（与 overview 负测⑤同一谓词的消费方对调：此处钉 startup 扫描侧）。
+    expectTerminalShapeForgeryRejected(
+      'p1t-complete-by-nul-junk', 'complete', 'trg_reconcile_hospital_month_complete_finality',
+      (probe, hmId) => {
+        probe.prepare('UPDATE reconcile_hospital_months SET completed_by = ? WHERE id = ?')
+          .run('USER-001\0junk', hmId)
+      },
+    )
+  })
+
   it('fails boot when a bound complete month carries closed fields (trigger-drop window; first boot and real restart)', () => {
     expectTerminalShapeForgeryRejected(
       'p1t-complete-closed-fields', 'complete', 'trg_reconcile_hospital_month_complete_finality',
@@ -6040,7 +6080,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
   })
 
   it('fails boot when a bound terminal month carries a calendar-impossible timestamp (2026-02-31 / 2025-02-29 / 2026-04-31 on completed_at and closed_at; first boot and real restart)', () => {
-    // 派单 fresh-P1：completed_at/closed_at 的 canonical 合同与 verdict_at 同收紧到真实
+    // fresh-R2 P1-3：completed_at/closed_at 的 canonical 合同与 verdict_at 同收紧到真实
     // 日历日。三枚不可能日 × complete.completed_at（complete_finality 被摘窗口）与
     // closed.closed_at（closed_immutable 被摘窗口）——首启与真实重启均 fail-closed，
     // 伪造行零持久修复。
@@ -6105,5 +6145,551 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     } finally {
       second.close()
     }
+  })
+
+  // ── fresh-R3 P1-A/P1-B（fixed-SHA 复核 2026-07-29）generation 终态证据
+  //    canonical 合同 + actor 谓词单源 ──────────────────────────────────────────
+  // P1-A（generation 终态证据漏检）：generation.completed_at/completed_by/closed_at/
+  //   closed_by 此前只钉 NULL/粗 trim——BLOB/INTEGER/NUL-junk/日历不存在日
+  //   （2026-02-31、2026-04-31、2025-02-29、2100-02-29 世纪非闰）全被放行；complete
+  //   代夹带 closed 字段无人拦。TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL（开机扫描
+  //   + overview 可信实收谓词）、ensureReconcileGenerationCompletionShape、
+  //   pending→complete/complete→closed trigger 四面必须与 hospital-month 同一
+  //   canonical 合同。
+  // P1-B（SQL trim 与 JS trim 漂移）：SQLite trim 只剥 U+0020，JS trim 剥全
+  //   WhiteSpace 但不剥控制符——tab/newline/NBSP-only actor 在 SQL 侧、
+  //   NUL/control-only 在两侧都冒充非空。唯一权威 isCanonicalActor（JS）+
+  //   coreone_canonical_actor（deterministic UDF），startup/trigger/overview/JS
+  //   单点消费；未注册连接命中引用 UDF 的 trigger 即 no such function 零写
+  //   fail-closed（与 artifact UDF 同姿态）。
+  type SqlScalar = string | number | Uint8Array | null
+  const VALID_SEMANTIC_SHAPE: SemanticForgeShape = {
+    label: 'valid', verdict: '核对无误', followUp: 'settled',
+    by: 'USER-001', at: '2026-08-01 00:00:00', supplement: false,
+  }
+  const BAD_CANONICAL_TIMESTAMPS: ReadonlyArray<readonly [string, SqlScalar]> = [
+    ['null', null], // 修复前已拦（回归钉）
+    ['blob', new Uint8Array([0x32, 0x30, 0x32, 0x36])],
+    ['integer', 20260231],
+    ['nul-junk', '2026-08-01 00:00:00\0junk'],
+    ['feb31', '2026-02-31 00:00:00'],
+    ['apr31', '2026-04-31 00:00:00'],
+    ['feb29-nonleap', '2025-02-29 00:00:00'],
+    ['feb29-century-nonleap', '2100-02-29 00:00:00'],
+  ]
+  const BAD_CANONICAL_ACTORS: ReadonlyArray<readonly [string, string]> = [
+    ['tab-only', '\t\t'],
+    ['newline-only', '\n'],
+    ['nbsp-only', String.fromCodePoint(0x00a0, 0x00a0)],
+    ['nul-only', '\0'],
+    // fresh blocker（2026-07-29 root 复核）：node:sqlite 把 TEXT 截到首个 NUL——
+    // 'USER-001\0junk' 落库 14 字节、JS 扫描与 UDF 入参都只见 'USER-001' 被误判
+    // 合法（真 RED，违反「拒绝一切 C0 控制字符」明示合同）；修复 = SQL 权威谓词加
+    // 原始存储层 BLOB instr(x'00') 闸 + startup JS 扫描读取同一原始字节证据。
+    ['nul-junk', 'USER-001\0junk'],
+  ]
+  const LEAP_DAY_TIMESTAMPS: ReadonlyArray<readonly [string, string]> = [
+    ['leap-2000', '2000-02-29 00:00:00'], // 世纪闰（%400）
+    ['leap-2024', '2024-02-29 00:00:00'],
+  ]
+
+  interface GenerationTerminalRow {
+    status: string
+    completed_at: SqlScalar
+    completed_by: SqlScalar
+    closed_at: SqlScalar
+    closed_by: SqlScalar
+    completion_artifact_json: string
+    completion_artifact_hash: string
+  }
+
+  const generationTerminalSelect = `
+    SELECT status, completed_at, completed_by, closed_at, closed_by
+      FROM account_reconcile_generations WHERE reconcile_generation_id = ?`
+
+  // Pattern F（fragment 通道）：合法 lifecycle complete(+close) 使 hm 终态且绑定，
+  // 摘 generation 触发器后伪造终态字段——终态月扫描（片段，与 overview 同一谓词）
+  // 排在 generation 扫描之前，命中 RECONCILE_HOSPITAL_MONTH_TERMINAL_MISMATCH:<hmId>；
+  // 真实重启同码，伪造行零持久修复。
+  function expectGenerationFieldForgeryRejectedFragment(
+    label: string,
+    setup: 'complete' | 'closed',
+    forge: (probe: DatabaseSync, generationId: string) => void,
+  ): void {
+    const fixture = seedPendingMonthP1(label)
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(fixture.hospitalMonthId) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, fixture.binding, 'USER-001')
+    if (setup === 'closed') {
+      lifecycle.closeAccountReconciliation(db, fixture.binding, 'USER-001')
+    }
+    const probePath = join(testDirectory, `${label}-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    let forgedRow: Record<string, unknown> | undefined
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      dropReferencingTriggers(seed, 'account_reconcile_generations')
+      forge(seed, fixture.binding.reconcileGenerationId)
+      forgedRow = seed.prepare(generationTerminalSelect)
+        .get(fixture.binding.reconcileGenerationId) as Record<string, unknown>
+    } finally {
+      seed.close()
+    }
+    const expected = new RegExp(
+      `RECONCILE_HOSPITAL_MONTH_TERMINAL_MISMATCH:${fixture.hospitalMonthId}`,
+    )
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first)).toThrow(expected)
+    } finally {
+      first.close()
+    }
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second)).toThrow(expected)
+      expect(second.prepare(generationTerminalSelect)
+        .get(fixture.binding.reconcileGenerationId)).toEqual(forgedRow)
+    } finally {
+      second.close()
+    }
+  }
+
+  // Pattern G（generation 扫描通道）：hm 保持 待复核（终态月扫描外层 WHERE 不命中），
+  // valid 镜像 artifact + 单变量终态字段直接落库——只有
+  // ensureReconcileGenerationCompletionShape 的 canonical 子句能命中
+  // RECONCILE_GENERATION_COMPLETION_MALFORMED:<genId>；真实重启同码零修复。
+  function expectGenerationFieldForgeryRejectedScan(
+    label: string,
+    setup: 'complete' | 'closed',
+    forge: (row: GenerationTerminalRow) => void,
+  ): void {
+    const fixture = seedSemanticForgeMonthP1(label, VALID_SEMANTIC_SHAPE, { primeRevenue: true })
+    const probePath = join(testDirectory, `${label}-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    let forgedRow: Record<string, unknown> | undefined
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      dropReferencingTriggers(seed, 'account_reconcile_generations')
+      const context = artifactForgeContext(seed, fixture)
+      const json = factBoundArtifactJson(context, context.facts)
+      const row: GenerationTerminalRow = {
+        status: 'complete',
+        completed_at: '2026-08-01 09:00:00',
+        completed_by: 'USER-001',
+        closed_at: null,
+        closed_by: null,
+        completion_artifact_json: json,
+        completion_artifact_hash: prefixedSha256Of(json),
+      }
+      if (setup === 'closed') {
+        row.status = 'closed'
+        row.closed_at = '2026-08-01 10:00:00'
+        row.closed_by = 'USER-001'
+      }
+      forge(row)
+      seed.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = ?, completed_at = ?, completed_by = ?, closed_at = ?, closed_by = ?,
+               completion_artifact_json = ?, completion_artifact_hash = ?
+         WHERE reconcile_generation_id = ?
+      `).run(
+        row.status, row.completed_at, row.completed_by, row.closed_at, row.closed_by,
+        row.completion_artifact_json, row.completion_artifact_hash,
+        fixture.binding.reconcileGenerationId,
+      )
+      forgedRow = seed.prepare(generationTerminalSelect)
+        .get(fixture.binding.reconcileGenerationId) as Record<string, unknown>
+    } finally {
+      seed.close()
+    }
+    const expected = new RegExp(
+      `RECONCILE_GENERATION_COMPLETION_MALFORMED:${fixture.binding.reconcileGenerationId}`,
+    )
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first)).toThrow(expected)
+    } finally {
+      first.close()
+    }
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second)).toThrow(expected)
+      expect(second.prepare(generationTerminalSelect)
+        .get(fixture.binding.reconcileGenerationId)).toEqual(forgedRow)
+    } finally {
+      second.close()
+    }
+  }
+
+  it('direct pending→complete trigger applies the canonical contract to generation.completed_at/completed_by (zero write; 13 negatives + 2 leap-day positives + Unicode actor positive)', () => {
+    // fresh-R3 P1-A/P1-B trigger 通道①：valid 镜像 artifact + 单变量终态字段。
+    // 修复前仅 NULL completed_at 与空 actor 被拦（回归钉）；BLOB/INTEGER/NUL-junk/
+    // 日历不存在日与 tab/newline/NBSP/NUL actor 全放行（真 RED）；
+    // 'USER-001\0junk' 经 node:sqlite 截断冒充合法（fresh blocker 真 RED）。
+    for (const [tag, badAt] of BAD_CANONICAL_TIMESTAMPS) {
+      const fixture = seedSemanticForgeMonthP1(`p1g-tc-at-${tag}`, VALID_SEMANTIC_SHAPE, { primeRevenue: true })
+      const context = artifactForgeContext(db, fixture)
+      const json = factBoundArtifactJson(context, context.facts)
+      expectDatabaseMutationBlocked(db, () => {
+        db.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'complete', completed_at = ?, completed_by = 'USER-001',
+                 completion_artifact_json = ?, completion_artifact_hash = ?
+           WHERE reconcile_generation_id = ?
+        `).run(badAt, json, prefixedSha256Of(json), fixture.binding.reconcileGenerationId)
+      }, /PENDING_RECONCILIATION_COMPLETION_MALFORMED/)
+      expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'pending', completed_at: null, completed_by: null,
+        completion_artifact_json: null, completion_artifact_hash: null,
+      })
+    }
+    for (const [tag, badBy] of BAD_CANONICAL_ACTORS) {
+      const fixture = seedSemanticForgeMonthP1(`p1g-tc-by-${tag}`, VALID_SEMANTIC_SHAPE, { primeRevenue: true })
+      const context = artifactForgeContext(db, fixture)
+      const json = factBoundArtifactJson(context, context.facts)
+      expectDatabaseMutationBlocked(db, () => {
+        db.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = ?,
+                 completion_artifact_json = ?, completion_artifact_hash = ?
+           WHERE reconcile_generation_id = ?
+        `).run(badBy, json, prefixedSha256Of(json), fixture.binding.reconcileGenerationId)
+      }, /PENDING_RECONCILIATION_COMPLETION_MALFORMED/)
+      expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'pending', completed_at: null, completed_by: null,
+        completion_artifact_json: null, completion_artifact_hash: null,
+      })
+    }
+    // 正控：2000-02-29（世纪闰）/2024-02-29 真实存在——raw complete 合法落库，
+    // 末段开机扫描（generation 扫描 + 片段）对闰日零误伤。
+    for (const [tag, goodAt] of LEAP_DAY_TIMESTAMPS) {
+      const fixture = seedSemanticForgeMonthP1(`p1g-tc-at-${tag}`, VALID_SEMANTIC_SHAPE, { primeRevenue: true })
+      const context = artifactForgeContext(db, fixture)
+      const json = factBoundArtifactJson(context, context.facts)
+      db.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = ?, completed_by = 'USER-001',
+               completion_artifact_json = ?, completion_artifact_hash = ?
+         WHERE reconcile_generation_id = ?
+      `).run(goodAt, json, prefixedSha256Of(json), fixture.binding.reconcileGenerationId)
+      expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId))
+        .toMatchObject({ status: 'complete', completed_at: goodAt, closed_at: null, closed_by: null })
+    }
+    // Unicode 正控：合法 CJK 操作者 id（'张医生' UTF-8 多字节序列不含 0x00）——
+    // raw complete 合法落库；下方末段开机扫描（trigger 闸 + generation 扫描 + 片段
+    // BLOB instr 闸）对合法 Unicode actor 必须零误伤。
+    const unicodeFixture = seedSemanticForgeMonthP1('p1g-tc-by-unicode-cjk', VALID_SEMANTIC_SHAPE, { primeRevenue: true })
+    const unicodeContext = artifactForgeContext(db, unicodeFixture)
+    const unicodeJson = factBoundArtifactJson(unicodeContext, unicodeContext.facts)
+    db.prepare(`
+      UPDATE account_reconcile_generations
+         SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = ?,
+             completion_artifact_json = ?, completion_artifact_hash = ?
+       WHERE reconcile_generation_id = ?
+    `).run('张医生', unicodeJson, prefixedSha256Of(unicodeJson), unicodeFixture.binding.reconcileGenerationId)
+    expect(bindingGenerationRow(db, unicodeFixture.binding.reconcileGenerationId))
+      .toMatchObject({ status: 'complete', completed_by: '张医生' })
+    expect(() => manager.upgradeAccountReconciliationSchema(db)).not.toThrow()
+  })
+
+  it('direct complete→closed trigger applies the canonical contract to generation.closed_at/closed_by (zero write; 13 negatives + 2 leap-day positives)', () => {
+    // fresh-R3 P1-A/P1-B trigger 通道②：先合法 raw complete（valid 镜像 artifact +
+    // CURRENT_TIMESTAMP），再单变量 close。修复前仅 NULL closed_at 被拦（回归钉）；
+    // 'USER-001\0junk' closed_by 经 node:sqlite 截断冒充合法（fresh blocker 真 RED）。
+    const seedClosable = (label: string) => {
+      const fixture = seedSemanticForgeMonthP1(label, VALID_SEMANTIC_SHAPE, { primeRevenue: true })
+      const context = artifactForgeContext(db, fixture)
+      const json = factBoundArtifactJson(context, context.facts)
+      db.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001',
+               completion_artifact_json = ?, completion_artifact_hash = ?
+         WHERE reconcile_generation_id = ?
+      `).run(json, prefixedSha256Of(json), fixture.binding.reconcileGenerationId)
+      return fixture
+    }
+    for (const [tag, badAt] of BAD_CANONICAL_TIMESTAMPS) {
+      const fixture = seedClosable(`p1g-tl-at-${tag}`)
+      expectDatabaseMutationBlocked(db, () => {
+        db.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'closed', closed_at = ?, closed_by = 'USER-001'
+           WHERE reconcile_generation_id = ?
+        `).run(badAt, fixture.binding.reconcileGenerationId)
+      }, /COMPLETE_RECONCILIATION_FINAL/)
+      expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'complete', closed_at: null, closed_by: null,
+      })
+    }
+    for (const [tag, badBy] of BAD_CANONICAL_ACTORS) {
+      const fixture = seedClosable(`p1g-tl-by-${tag}`)
+      expectDatabaseMutationBlocked(db, () => {
+        db.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = ?
+           WHERE reconcile_generation_id = ?
+        `).run(badBy, fixture.binding.reconcileGenerationId)
+      }, /COMPLETE_RECONCILIATION_FINAL/)
+      expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'complete', closed_at: null, closed_by: null,
+      })
+    }
+    // 正控：闰日 close 合法落库；hm 同步合法 complete→close 保持终态 fragment 一致，
+    // 末段开机扫描零误伤。
+    for (const [tag, goodAt] of LEAP_DAY_TIMESTAMPS) {
+      const fixture = seedClosable(`p1g-tl-at-${tag}`)
+      db.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'closed', closed_at = ?, closed_by = 'USER-001'
+         WHERE reconcile_generation_id = ?
+      `).run(goodAt, fixture.binding.reconcileGenerationId)
+      db.prepare(`
+        UPDATE reconcile_hospital_months
+           SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = 'USER-001',
+               updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+      `).run(fixture.hospitalMonthId)
+      db.prepare(`
+        UPDATE reconcile_hospital_months
+           SET status = '已关账', closed_at = CURRENT_TIMESTAMP, closed_by = 'USER-001',
+               updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+      `).run(fixture.hospitalMonthId)
+      expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId))
+        .toMatchObject({ status: 'closed', closed_at: goodAt })
+    }
+    expect(() => manager.upgradeAccountReconciliationSchema(db)).not.toThrow()
+  })
+
+  it('fails boot when a bound complete generation carries a non-canonical completed_at (fragment channel; first boot and real restart; 8-value table)', () => {
+    // fresh-R3 P1-A：终态月扫描（片段）此前不查 generation.completed_at——伪造只能
+    // 经 trigger 被摘窗口落入。NULL 修复前由 generation 扫描兜底（码不同=RED 同现）；
+    // 其余 7 值修复前全通道放行（真 RED）。
+    for (const [tag, badAt] of BAD_CANONICAL_TIMESTAMPS) {
+      expectGenerationFieldForgeryRejectedFragment(
+        `p1g-f-complete-at-${tag}`, 'complete',
+        (probe, generationId) => {
+          probe.prepare(`
+            UPDATE account_reconcile_generations SET completed_at = ?
+             WHERE reconcile_generation_id = ?
+          `).run(badAt, generationId)
+        },
+      )
+    }
+  })
+
+  it('fails boot when a bound closed generation carries a non-canonical closed_at (fragment channel; first boot and real restart; 8-value table)', () => {
+    for (const [tag, badAt] of BAD_CANONICAL_TIMESTAMPS) {
+      expectGenerationFieldForgeryRejectedFragment(
+        `p1g-f-closed-at-${tag}`, 'closed',
+        (probe, generationId) => {
+          probe.prepare(`
+            UPDATE account_reconcile_generations SET closed_at = ?
+             WHERE reconcile_generation_id = ?
+          `).run(badAt, generationId)
+        },
+      )
+    }
+  })
+
+  it('fails boot when a bound terminal generation carries a drifted actor or a complete generation carries closed fields (fragment channel; first boot and real restart)', () => {
+    // fresh-R3 P1-B：tab/newline/NBSP/NUL-only actor 在 SQLite trim 下冒充非空——
+    // 片段修复前照单全收（真 RED）。complete 代夹带 closed 字段此前无人拦（真 RED）。
+    // 'USER-001\0junk' 经 node:sqlite 截断在片段 UDF 单侧冒充合法（fresh blocker 真
+    // RED）——修复后由片段内 BLOB instr(x'00') 原始字节闸命中。
+    for (const [tag, badBy] of BAD_CANONICAL_ACTORS) {
+      expectGenerationFieldForgeryRejectedFragment(
+        `p1g-f-complete-by-${tag}`, 'complete',
+        (probe, generationId) => {
+          probe.prepare(`
+            UPDATE account_reconcile_generations SET completed_by = ?
+             WHERE reconcile_generation_id = ?
+          `).run(badBy, generationId)
+        },
+      )
+      expectGenerationFieldForgeryRejectedFragment(
+        `p1g-f-closed-by-${tag}`, 'closed',
+        (probe, generationId) => {
+          probe.prepare(`
+            UPDATE account_reconcile_generations SET closed_by = ?
+             WHERE reconcile_generation_id = ?
+          `).run(badBy, generationId)
+        },
+      )
+    }
+    expectGenerationFieldForgeryRejectedFragment(
+      'p1g-f-complete-closed-at', 'complete',
+      (probe, generationId) => {
+        probe.prepare(`
+          UPDATE account_reconcile_generations SET closed_at = '2026-08-01 10:00:00'
+           WHERE reconcile_generation_id = ?
+        `).run(generationId)
+      },
+    )
+    expectGenerationFieldForgeryRejectedFragment(
+      'p1g-f-complete-closed-by', 'complete',
+      (probe, generationId) => {
+        probe.prepare(`
+          UPDATE account_reconcile_generations SET closed_by = 'closer'
+           WHERE reconcile_generation_id = ?
+        `).run(generationId)
+      },
+    )
+  })
+
+  it('fails boot on a non-canonical generation.completed_at/closed_at while the hospital month stays pending (generation-scan channel; first boot and real restart)', () => {
+    // fresh-R3 P1-A：hm 保持 待复核 → 终态月扫描外层 WHERE 不命中——直接钉
+    // ensureReconcileGenerationCompletionShape 的 canonical 子句。代表值 5 枚
+    // （全 8 值由 trigger 通道与 fragment 通道两份钉死）；NULL 修复前已拦（回归钉）。
+    const REPRESENTATIVE = BAD_CANONICAL_TIMESTAMPS.filter(([tag]) =>
+      ['null', 'blob', 'integer', 'nul-junk', 'feb31'].includes(tag))
+    for (const [tag, badAt] of REPRESENTATIVE) {
+      expectGenerationFieldForgeryRejectedScan(
+        `p1g-s-complete-at-${tag}`, 'complete',
+        row => { row.completed_at = badAt },
+      )
+      expectGenerationFieldForgeryRejectedScan(
+        `p1g-s-closed-at-${tag}`, 'closed',
+        row => { row.closed_at = badAt },
+      )
+    }
+  })
+
+  it('fails boot on a drifted generation actor or a complete generation carrying closed fields while the hospital month stays pending (generation-scan channel; first boot and real restart)', () => {
+    // fresh-R3 P1-B：tab/newline/NBSP-only 修复前已被 JS trim 拦截（回归钉）；
+    // NUL-only 两侧均放行（真 RED）。complete 代夹带 closed 字段（真 RED）。
+    // 'USER-001\0junk' 修复前 JS 扫描读到截断前缀误判合法（fresh blocker 真 RED）——
+    // 修复后由扫描的 instr(CAST AS BLOB), x'00') 原始字节证据列命中。
+    for (const [tag, badBy] of BAD_CANONICAL_ACTORS) {
+      expectGenerationFieldForgeryRejectedScan(
+        `p1g-s-complete-by-${tag}`, 'complete',
+        row => { row.completed_by = badBy },
+      )
+      expectGenerationFieldForgeryRejectedScan(
+        `p1g-s-closed-by-${tag}`, 'closed',
+        row => { row.closed_by = badBy },
+      )
+    }
+    expectGenerationFieldForgeryRejectedScan(
+      'p1g-s-complete-closed-at', 'complete',
+      row => { row.closed_at = '2026-08-01 10:00:00' },
+    )
+    expectGenerationFieldForgeryRejectedScan(
+      'p1g-s-complete-closed-by', 'complete',
+      row => { row.closed_by = 'closer' },
+    )
+  })
+
+  it('boots clean when bound terminal generations carry legal leap days 2000-02-29/2024-02-29 (fragment + generation scan; first boot and real restart; no false positive)', () => {
+    // 正控：世纪闰 2000-02-29 与 2024-02-29 真实存在——trigger 被摘窗口把
+    // completed_at/closed_at 改为闰日后，首启与真实重启均零误炸。
+    const proveLeapClean = (
+      label: string,
+      setup: 'complete' | 'closed',
+      rewrite: Record<string, string>,
+    ) => {
+      const fixture = seedPendingMonthP1(label)
+      const diff = db.prepare(
+        'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+      ).get(fixture.hospitalMonthId) as { id: string }
+      lifecycle.setAccountReconciliationVerdict(
+        db, fixture.binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+      )
+      lifecycle.completeAccountReconciliation(db, fixture.binding, 'USER-001')
+      if (setup === 'closed') {
+        lifecycle.closeAccountReconciliation(db, fixture.binding, 'USER-001')
+      }
+      const probePath = join(testDirectory, `${label}-${++sequence}.sqlite`)
+      db.prepare('VACUUM INTO ?').run(probePath)
+      const seed = openRegisteredTestDatabase(probePath)
+      try {
+        dropReferencingTriggers(seed, 'account_reconcile_generations')
+        const columns = Object.keys(rewrite)
+        seed.prepare(`
+          UPDATE account_reconcile_generations
+             SET ${columns.map(column => `${column} = ?`).join(', ')}
+           WHERE reconcile_generation_id = ?
+        `).run(...columns.map(column => rewrite[column]), fixture.binding.reconcileGenerationId)
+      } finally {
+        seed.close()
+      }
+      const first = openRegisteredTestDatabase(probePath)
+      try {
+        expect(() => manager.upgradeAccountReconciliationSchema(first)).not.toThrow()
+      } finally {
+        first.close()
+      }
+      const second = openRegisteredTestDatabase(probePath)
+      try {
+        expect(() => manager.upgradeAccountReconciliationSchema(second)).not.toThrow()
+      } finally {
+        second.close()
+      }
+    }
+    proveLeapClean(`p1g-leap-complete-${++sequence}`, 'complete', {
+      completed_at: '2000-02-29 09:30:00',
+    })
+    proveLeapClean(`p1g-leap-closed-${++sequence}`, 'closed', {
+      completed_at: '2000-02-29 09:30:00',
+      closed_at: '2024-02-29 10:00:00',
+    })
+  })
+
+  it('boots clean when bound terminal rows carry a legal Unicode (CJK) actor (fragment + generation scan; first boot and real restart; no false positive)', () => {
+    // 合法 Unicode actor 正控（fresh blocker BLOB instr 闸的零误伤钉）：'张医生' 的
+    // UTF-8 字节序列不含 0x00——BLOB instr(x'00') 闸、coreone_canonical_actor UDF、
+    // JS isCanonicalActor 三层都必须放行。raw 形状与 T2 闰日正控同款（trigger 在位
+    // 即放行的合法字段形状）：complete/closed 两侧 generation 与 hm 四 actor 全 CJK，
+    // probe 首启与真实重启零误炸。
+    const proveUnicodeActorClean = (label: string, setup: 'complete' | 'closed') => {
+      const fixture = seedSemanticForgeMonthP1(label, VALID_SEMANTIC_SHAPE, { primeRevenue: true })
+      const context = artifactForgeContext(db, fixture)
+      const json = factBoundArtifactJson(context, context.facts)
+      db.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = '张医生',
+               completion_artifact_json = ?, completion_artifact_hash = ?
+         WHERE reconcile_generation_id = ?
+      `).run(json, prefixedSha256Of(json), fixture.binding.reconcileGenerationId)
+      db.prepare(`
+        UPDATE reconcile_hospital_months
+           SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = '张医生',
+               updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?
+      `).run(fixture.hospitalMonthId)
+      if (setup === 'closed') {
+        db.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = '张医生'
+           WHERE reconcile_generation_id = ?
+        `).run(fixture.binding.reconcileGenerationId)
+        db.prepare(`
+          UPDATE reconcile_hospital_months
+             SET status = '已关账', closed_at = CURRENT_TIMESTAMP, closed_by = '张医生',
+                 updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?
+        `).run(fixture.hospitalMonthId)
+      }
+      const probePath = join(testDirectory, `${label}-${++sequence}.sqlite`)
+      db.prepare('VACUUM INTO ?').run(probePath)
+      const first = openRegisteredTestDatabase(probePath)
+      try {
+        expect(() => manager.upgradeAccountReconciliationSchema(first)).not.toThrow()
+      } finally {
+        first.close()
+      }
+      const second = openRegisteredTestDatabase(probePath)
+      try {
+        expect(() => manager.upgradeAccountReconciliationSchema(second)).not.toThrow()
+      } finally {
+        second.close()
+      }
+    }
+    proveUnicodeActorClean('p1g-unicode-complete', 'complete')
+    proveUnicodeActorClean('p1g-unicode-closed', 'closed')
   })
 })

@@ -1348,21 +1348,28 @@ function ensureReconcileHospitalMonthBindings(database: DatabaseSync): void {
   }
 }
 
-// #94-P1-1（派单 2026-07-29）：终态 hospital-month 可信严格形状唯一权威 SQL 片段。
-// startup 扫描（ensureReconcileTerminalHospitalMonthIntegrity，NOT(形状)=违例）与
-// overview 可信实收谓词（account-reconcile-v1.1.ts，AND 形状=白名单）引用同一片段，
-// 一处收紧两侧同步零漂移。别名约定：hm=reconcile_hospital_months、
-// generation=account_reconcile_generations（扫描侧 LEFT JOIN 可整行 NULL）。
-//   复核完成：completed_at canonical + completed_by trim 非空 + closed_at/by 均 NULL
-//             + 绑定 current generation=complete；
-//   已关账：completed/closed 两组 canonical 时间 + 两操作者 trim 非空
-//             + generation=closed；
+// fresh-R2 P1-1（2026-07-29 review finding）：终态 hospital-month 可信严格形状唯一
+// 权威 SQL 片段。startup 扫描（ensureReconcileTerminalHospitalMonthIntegrity，
+// NOT(形状)=违例）与 overview 可信实收谓词（account-reconcile-v1.1.ts，AND 形状=
+// 白名单）引用同一片段，一处收紧两侧同步零漂移。别名约定：
+// hm=reconcile_hospital_months、generation=account_reconcile_generations
+// （扫描侧 LEFT JOIN 可整行 NULL）。
+//   复核完成：hm 与 generation 两侧 completed_at canonical + completed_by actor
+//             canonical + closed 两字段均 NULL + 绑定 current generation=complete；
+//   已关账：hm 与 generation 两侧 completed/closed 两组 canonical 时间
+//             + 两操作者 actor canonical + generation=closed；
 //   其它状态夹带任何终态字段 → 形状不成立（扫描外层 WHERE 捞到即违例 fail-closed）。
+// fresh-R3 P1-A：generation 终态四字段纳入同一片段（此前只钉 generation 状态/身份，
+// BLOB/INTEGER/NUL-junk/日历不存在日/complete 夹带 closed 全漏）；fresh-R3 P1-B：
+// actor 闸从近似 trim SQL 换成 coreone_canonical_actor UDF（与 JS isCanonicalActor
+// 同实现，SQLite trim 只剥 U+0020 的漂移收口；UDF 恒返 0/1，NULL 输入 = 0 → 二值）；
+// fresh blocker：actor 谓词再叠原始 BLOB instr(x'00') 闸（canonicalActorSql 单源）——
+// node:sqlite 截断使 UDF 看不见 NUL-junk 尾巴。
 // canonical 时间 = SQLite CURRENT_TIMESTAMP 产出的 'YYYY-MM-DD HH:MM:SS' 严格形状：
 // typeof='text' + CAST BLOB 字节长恰 19 + GLOB + 各段范围——同 R8 collected_month
 // 四件套（length/GLOB 均在首个 NUL 截断，BLOB 计全字节防 NUL-junk；BLOB/INTEGER
-// typeof 一并拒）。#94-P1-3（派单 2026-07-29 fresh-P1）日历日收紧：段范围之上再钉
-// Gregorian 真实月日（大月 29-31 / 小月 29-30 / 二月 29 仅闰年 %4·%100·%400）——
+// typeof 一并拒）。fresh-R2 P1-3（2026-07-29 review finding）日历日收紧：段范围之上
+// 再钉 Gregorian 真实月日（大月 29-31 / 小月 29-30 / 二月 29 仅闰年 %4·%100·%400）——
 // CURRENT_TIMESTAMP 永不产出 '2026-02-31'（SQLite date 函数归一化为 '2026-03-03'），
 // 与 JS isCanonicalSqliteTimestamp / lis-cases parseStrictDate 同语义。全部子句经
 // typeof 哨兵与 IS/IS NOT 二值化：NULL 输入恒产出 FALSE 而非 NULL——NOT(片段) 在
@@ -1388,24 +1395,41 @@ const canonicalTimestampSql = (column: string): string => `(
         AND substr(${column}, 15, 2) BETWEEN '00' AND '59'
         AND substr(${column}, 18, 2) BETWEEN '00' AND '59')`
 
-const nonBlankTextSql = (column: string): string =>
-  `(typeof(${column}) = 'text' AND trim(${column}) <> '')`
+// fresh blocker（2026-07-29 root 复核）：node:sqlite 把 TEXT 截到首个 NUL——
+// 'admin\0junk' 落库 10 字节、UDF 入参与 JS 读出都只剩 'admin'，单看
+// coreone_canonical_actor 会把 NUL-junk actor 误判合法（违反「拒绝一切 C0 控制
+// 字符」合同）。故 actor 权威 SQL 谓词 = UDF（trim/控制符语义唯一实现，恒 0/1）
+// AND 原始存储层 BLOB instr(x'00')=0（不依赖 UDF 看到 NUL；UTF-8 多字节序列
+// 天然不含 0x00，合法 Unicode/CJK actor 零误伤）。二值保持：NULL 输入 UDF=0 →
+// 首项 FALSE → AND 恒 FALSE（FALSE AND NULL = FALSE），NOT(谓词) 在三值逻辑下
+// 仍正确判违例。trigger/片段/扫描消费同一 helper，不在多处各写近似 SQL。
+const canonicalActorSql = (column: string): string => `(
+        coreone_canonical_actor(${column}) = 1
+        AND instr(CAST(${column} AS BLOB), x'00') = 0)`
 
 export const TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL = `(
     (
       hm.status IS '复核完成'
       AND generation.status IS 'complete'
       AND ${canonicalTimestampSql('hm.completed_at')}
-      AND ${nonBlankTextSql('hm.completed_by')}
+      AND ${canonicalActorSql('hm.completed_by')}
       AND hm.closed_at IS NULL
       AND hm.closed_by IS NULL
+      AND ${canonicalTimestampSql('generation.completed_at')}
+      AND ${canonicalActorSql('generation.completed_by')}
+      AND generation.closed_at IS NULL
+      AND generation.closed_by IS NULL
     ) OR (
       hm.status IS '已关账'
       AND generation.status IS 'closed'
       AND ${canonicalTimestampSql('hm.completed_at')}
-      AND ${nonBlankTextSql('hm.completed_by')}
+      AND ${canonicalActorSql('hm.completed_by')}
       AND ${canonicalTimestampSql('hm.closed_at')}
-      AND ${nonBlankTextSql('hm.closed_by')}
+      AND ${canonicalActorSql('hm.closed_by')}
+      AND ${canonicalTimestampSql('generation.completed_at')}
+      AND ${canonicalActorSql('generation.completed_by')}
+      AND ${canonicalTimestampSql('generation.closed_at')}
+      AND ${canonicalActorSql('generation.closed_by')}
     )
   )
   AND generation.partner_id IS hm.partner_id
@@ -1414,13 +1438,14 @@ export const TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL = `(
   AND generation.is_current IS 1`
 
 // #93-A：终态 hospital-month 一致性开机扫描（裁决 A 保守口径）。
-// #94-P1-1：终态形状升级为严格互证（与 overview 可信实收谓词同一片段）——
+// fresh-R2 P1-1：终态形状升级为严格互证（与 overview 可信实收谓词同一片段）——
 // 有 binding 的终态月（status ∈ {复核完成,已关账} 或任何 completed/closed 字段非空）
 // 必须完整命中 TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL：同院/同月/同行/current
-// generation 之外，复核完成须 completed_at canonical + completed_by trim 非空 +
-// closed 两字段 NULL + generation=complete；已关账须 completed/closed 两组
-// canonical + 两操作者 trim 非空 + generation=closed；其它状态夹带终态字段同样
-// 违例。缺字段/纯空白操作者/非 canonical 时间 = trigger 被摘窗口的历史写入 →
+// generation 之外，hm 与 generation 两侧终态字段均须 canonical（fresh-R3 P1-A：
+// generation.completed_at/completed_by/closed_at/closed_by 与 hospital-month 同一
+// 合同，complete 代 closed 两字段 NULL；fresh-R3 P1-B：actor 经
+// coreone_canonical_actor UDF 与 JS 同实现）。缺字段/纯空白或纯控制串操作者/
+// 非 canonical 时间 = trigger 被摘窗口的历史写入 →
 // fail-closed。无 binding 的终态月（历史无绑定遗留与窗口伪造数据级不可区分）不在
 // 此炸启动——derived quarantine：保留历史可见性与看板状态计数，但 overview 确认
 // 实收一律不计入（路由侧同一 quarantine 谓词），也不迁成正常完成态。artifact
@@ -1526,16 +1551,24 @@ const COMPLETION_DECISION_KEYS = [
   'delta', 'amountImpact', 'verdict', 'verdictReason', 'verdictBy', 'verdictAt', 'followUp',
 ] as const
 
-// #94-P1-2（派单 2026-07-29）审计字段 canonical 合同原子：
-// - 操作者（verdict_by/completed_by/closed_by）：trim 后非空——isNonEmptyString 只挡
-//   ''，纯空白串（'   '）会冒充有效认定人/关账人混过审计。
+// fresh-R2 P1-2（2026-07-29 review finding）审计字段 canonical 合同原子：
+// - 操作者（verdict_by/completed_by/closed_by）：见下方 isCanonicalActor——
+//   isNonEmptyString 只挡 ''，纯空白串（'   '）会冒充有效认定人/关账人混过审计。
 // - 时间戳（verdict_at/completed_at/closed_at）：仓库既有 canonical 时间合同 =
 //   SQLite CURRENT_TIMESTAMP 产出的 'YYYY-MM-DD HH:MM:SS'（UTC）严格形状，与
 //   isStrictSettlementMonth 同风格（锚定正则 + 各段范围），绝不发明宽松 Date.parse
-//   （ISO-T/Z、'2026-8-1'、garbage 全会被它救赎）。#94-P1-3 起再钉 Gregorian 真实
-//   日历日（含闰年，见函数体内注释）。UDF/扫描/lifecycle 三通道共用。
-function isNonBlankString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0
+//   （ISO-T/Z、'2026-8-1'、garbage 全会被它救赎）。fresh-R2 P1-3 起再钉 Gregorian
+//   真实日历日（含闰年，见函数体内注释）。UDF/扫描/lifecycle 三通道共用。
+// fresh-R3 P1-B（2026-07-29 fixed-SHA review finding）actor 谓词唯一权威：
+// JS trim 剥全 WhiteSpace（tab/newline/NBSP-only 在 SQLite trim 下冒充非空——
+// SQLite trim() 只剥 U+0020）但不剥控制符（NUL/control-only 在两侧都冒充非空）。
+// 合同 = typeof string 且 JS trim 后非空 且不含 C0/DEL/C1 控制字符。本 JS 实现与
+// deterministic UDF coreone_canonical_actor 同体（注册见 registerCoreoneSqlFunctions），
+// startup 扫描/trigger/overview 谓词/JS 四处单点消费，不在多处各写近似 SQL。
+function isCanonicalActor(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.trim().length > 0
+    && !/[\x00-\x1F\x7F-\x9F]/.test(value)
 }
 
 const CANONICAL_SQLITE_TIMESTAMP =
@@ -1543,7 +1576,7 @@ const CANONICAL_SQLITE_TIMESTAMP =
 
 function isCanonicalSqliteTimestamp(value: unknown): value is string {
   if (typeof value !== 'string' || !CANONICAL_SQLITE_TIMESTAMP.test(value)) return false
-  // #94-P1-3（派单 2026-07-29 fresh-P1）：形状/段范围之外再钉 Gregorian 真实日历日
+  // fresh-R2 P1-3（2026-07-29 fixed-SHA review finding）：形状/段范围之外再钉 Gregorian 真实日历日
   // ——SQLite CURRENT_TIMESTAMP 永不产出 '2026-02-31'（主控独立复现：SQLite date 函数
   // 会把它归一化为 '2026-03-03'）。闰年式与月长表同仓库既有 lis-cases-v1.1.ts
   // parseStrictDate（日按月大小 + 闰年）；SQL 侧 canonicalTimestampSql 同语义零漂移。
@@ -1570,9 +1603,10 @@ function isVerdictSemanticallyComplete(
   if (typeof verdict !== 'string'
       || !(VERDICT_REASONS as readonly string[]).includes(verdict)) return false
   if (followUp !== verdictFollowUp(verdict as VerdictReason)) return false
-  // #94-P1-2：认定人 trim 后非空（纯空白冒充认定人），认定时间必须是 canonical
+  // fresh-R2 P1-2 + fresh-R3 P1-B：认定人走 actor canonical 谓词（纯空白/纯控制串
+  // 冒充认定人同拒），认定时间必须是 canonical
   // SQLite 时间戳（非 canonical 形状的审计时间无法与库内 CURRENT_TIMESTAMP 留痕对齐）。
-  if (!isNonBlankString(verdictBy) || !isCanonicalSqliteTimestamp(verdictAt)) return false
+  if (!isCanonicalActor(verdictBy) || !isCanonicalSqliteTimestamp(verdictAt)) return false
   return true
 }
 
@@ -1837,11 +1871,18 @@ function isValidCompletionArtifact(
  * 由 trigger SQL 内嵌的 expectedCompletionFactsSql 子查询在同语句内求值传入
  * （canonical JSON：confirmedLabRevenue + 有序 decisions/supplements）——UDF 回调
  * 不做任何数据库查询（非重入），对同一组参数仍纯函数，deterministic 标记成立。
+ * fresh-R3 P1-B：coreone_canonical_actor(value) → 1/0，与 startup 扫描/overview
+ * 谓词/JS 共用同一 isCanonicalActor 实现（纯函数零查询，deterministic）——
+ * generation trigger 与终态片段的 actor 闸单一权威，不在多处各写近似 trim SQL。
+ * fresh blocker：UDF 入参经 node:sqlite 截到首个 NUL（'admin\0junk' 只见
+ * 'admin'）——NUL-junk 拒绝不依赖本 UDF，由 canonicalActorSql 在同一 SQL 谓词内
+ * 叠原始 BLOB instr(x'00')=0 完成；本 UDF 继续承担 trim/控制符语义判定。
  * 生命周期与爆炸半径：UDF 是连接级状态（不入库、不随事务回滚）——本函数在
  * openManagedDatabase 与 upgradeAccountReconciliationSchema 头部各调用一次
  * （SQLite 同名重注册=幂等替换，多次 boot 安全）；trigger 体按名解析 UDF，CREATE
  * 时不校验存在性。任何未注册连接触发引用 UDF 的 trigger 一律报
- * "no such function: coreone_completion_artifact_valid"、语句整体失败零写入
+ * "no such function: coreone_completion_artifact_valid"（或 coreone_canonical_actor）、
+ * 语句整体失败零写入
  * （fail-closed 是预期姿态：该连接不得做任何 guarded 写入，含合法写）；
  * 只读/开机扫描不受影响（扫描走 JS 同实现，不经 UDF）。
  */
@@ -1884,12 +1925,23 @@ export function registerCoreoneSqlFunctions(connection: DatabaseSync): void {
       allowLegacy === 1,
     ) ? 1 : 0),
   )
+  registrable.function(
+    'coreone_canonical_actor',
+    { deterministic: true },
+    (value: unknown) => (isCanonicalActor(value) ? 1 : 0),
+  )
 }
 
 // P1-B：current-shape malformed complete/closed 开机扫描（首启与同库重启一致 fail-closed，
-// 与 trigger 重装同事务，throw 即整体 ROLLBACK）。两段判定：①四件套在场——completed_at、
-// completed_by（trim 非空）、completion_artifact_json/hash 任一缺失即 malformed，closed
-// 另须 closed_at/closed_by；②真有效性——artifact 须过 isValidCompletionArtifact
+// 与 trigger 重装同事务，throw 即整体 ROLLBACK）。两段判定：①四件套在场且 canonical——
+// completed_at 须 canonical 时间戳、completed_by 须 canonical actor、
+// completion_artifact_json/hash 任一缺失即 malformed，closed 另须 closed_at/closed_by
+// 同合同，complete 代 closed 两字段必须 NULL（fresh-R3 P1-A/P1-B：与 hospital-month
+// 及 UDF 同一 canonical 合同——NULL/BLOB/INTEGER/NUL-junk/日历不存在日/纯控制串
+// actor/complete 夹带 closed 一并收口；fresh blocker：JS 读路径被 node:sqlite 截到
+// 首个 NUL，故时间戳与 actor 都另读 SQL 侧原始字节证据——BLOB 长度 19 / BLOB
+// instr(x'00')=0——与 canonicalTimestampSql/canonicalActorSql 同语义）；②真有效性——artifact 须过
+// isValidCompletionArtifact
 // （allowLegacy=true：仅精确 well-formed sentinel 例外放行，且 #93-C 起 sentinel 还须
 // 持 hash 一致的 durable provenance——唯一来源 = completion artifact 两列真实缺失的
 // predecessor 迁移事务；真实 artifact 行挂 provenance 同属 malformed）。真 predecessor
@@ -1905,7 +1957,11 @@ function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void 
            statement_artifact_hash AS statementArtifactHash,
            completion_artifact_json AS json, completion_artifact_hash AS hash,
            completed_at AS completedAt, completed_by AS completedBy,
-           closed_at AS closedAt, closed_by AS closedBy
+           closed_at AS closedAt, closed_by AS closedBy,
+           length(CAST(completed_at AS BLOB)) AS completedAtBytes,
+           length(CAST(closed_at AS BLOB)) AS closedAtBytes,
+           instr(CAST(completed_by AS BLOB), x'00') AS completedByNul,
+           instr(CAST(closed_by AS BLOB), x'00') AS closedByNul
       FROM account_reconcile_generations
      WHERE status IN ('complete', 'closed')
      ORDER BY reconcile_generation_id
@@ -1924,6 +1980,10 @@ function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void 
     completedBy: unknown
     closedAt: unknown
     closedBy: unknown
+    completedAtBytes: unknown
+    closedAtBytes: unknown
+    completedByNul: unknown
+    closedByNul: unknown
   }>
   // 期望事实与 trigger 共用同一 expectedCompletionFactsSql 文本；位置参数序 =
   // 文本内 ? 出现序（decisions hm/gen → supplements hm/gen/gen → 外层 hm）。
@@ -1942,15 +2002,32 @@ function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void 
   `).all() as Array<{ id: string; artifactHash: unknown; provenance: unknown }>
   const provenanceByGeneration = new Map(provenanceRows.map(row => [row.id, row]))
   for (const row of rows) {
-    const presenceMalformed = row.completedAt === null
-      || typeof row.completedBy !== 'string'
-      || row.completedBy.trim() === ''
+    // fresh-R3 P1-A/P1-B：在场判定升级为 hospital-month 同款 canonical 合同——
+    // completed_at NULL/BLOB/INTEGER/NUL-junk/日历不存在日、completed_by 纯空白或
+    // 纯控制串（与 coreone_canonical_actor 同实现）、complete 代夹带 closed 字段、
+    // closed 代 closed_at/closed_by 非同合同，一并 malformed。
+    // 字节闸（fresh-R3 实测钉）：node:sqlite 读路径把 TEXT 截到首个 NUL
+    // （'2026-08-01 00:00:00\0junk' 落库 24 字节、JS 读出 canonical 前缀 19 字符，
+    // 纯 JS 判定被救赎成合法）——canonical 时间戳恒为 19 个 ASCII 字节，故与
+    // canonicalTimestampSql 同款的 length(CAST AS BLOB))=19 在此以 JS 侧字节复核
+    // 堵读截断；NULL 的 length 为 NULL（!==19 恒真），BLOB/INTEGER 同理必命中。
+    // fresh blocker：actor 同病——'USER-001\0junk' JS 读出 'USER-001' 被判合法，
+    // 故与 canonicalActorSql 同款 instr(CAST AS BLOB), x'00') 原始字节证据列在此
+    // 复核（!==0 即 malformed；NULL actor 的 instr 为 NULL 恒命中，与 UDF 判定同向；
+    // 合法 Unicode actor UTF-8 序列不含 0x00，零误伤）。
+    const presenceMalformed = !isCanonicalSqliteTimestamp(row.completedAt)
+      || row.completedAtBytes !== 19
+      || !isCanonicalActor(row.completedBy)
+      || row.completedByNul !== 0
       || row.json === null
       || row.hash === null
+      || (row.status === 'complete'
+          && (row.closedAt !== null || row.closedBy !== null))
       || (row.status === 'closed'
-          && (row.closedAt === null
-              || typeof row.closedBy !== 'string'
-              || row.closedBy.trim() === ''))
+          && (!isCanonicalSqliteTimestamp(row.closedAt)
+              || row.closedAtBytes !== 19
+              || !isCanonicalActor(row.closedBy)
+              || row.closedByNul !== 0))
     const factsRow = completionFacts.get(
       row.hospitalMonthId,
       row.id,
@@ -2427,15 +2504,19 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   // hash 自洽）第一段同样命中：UDF 段 allowLegacy=0，sentinel 与伪造 artifact 一样
   // 不得经 direct SQL 进入 close（真实 lifecycle close 在 SQL 前已 409
   // DECISION_SET_CHANGED）。真有效性段与 startup 扫描共用同一 validator 实现。
+  // fresh-R3 P1-A/P1-B：完成/关账字段闸从「NULL + 粗 trim」升级为 hospital-month
+  // 同款 canonical 合同——completed_at/closed_at 走 canonicalTimestampSql 四件套 +
+  // 日历日（NULL/BLOB/INTEGER/NUL-junk/2026-02-31 等同拒），completed_by/closed_by
+  // 走 canonicalActorSql（UDF + 原始 BLOB instr(x'00') 闸；未注册连接 no such
+  // function 零写 fail-closed）。
   database.exec(`
     CREATE TRIGGER trg_account_reconcile_complete_finality
     BEFORE UPDATE ON account_reconcile_generations
     WHEN OLD.status = 'complete'
     BEGIN
       SELECT RAISE(ABORT, 'COMPLETE_RECONCILIATION_CLOSE_MALFORMED')
-       WHERE OLD.completed_at IS NULL
-          OR OLD.completed_by IS NULL
-          OR trim(OLD.completed_by) = ''
+       WHERE NOT ${canonicalTimestampSql('OLD.completed_at')}
+          OR NOT ${canonicalActorSql('OLD.completed_by')}
           OR OLD.completion_artifact_json IS NULL
           OR OLD.completion_artifact_hash IS NULL
           OR coreone_completion_artifact_valid(
@@ -2449,9 +2530,8 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
        WHERE OLD.is_current IS NOT 1
           OR NEW.is_current IS NOT 1
           OR NEW.status IS NOT 'closed'
-          OR NEW.closed_at IS NULL
-          OR NEW.closed_by IS NULL
-          OR trim(NEW.closed_by) = ''
+          OR NOT ${canonicalTimestampSql('NEW.closed_at')}
+          OR NOT ${canonicalActorSql('NEW.closed_by')}
           OR OLD.reconcile_generation_id IS NOT NEW.reconcile_generation_id
           OR OLD.partner_id IS NOT NEW.partner_id
           OR OLD.settlement_month IS NOT NEW.settlement_month
@@ -2493,8 +2573,12 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   // completed_* / completion artifact 或夹带 close 字段——裸 SET status='complete' 与
   // stale 代直完；P1 真有效性段：伪造非空 artifact（'{}'+正确 hash、错绑定/错行 hash 的
   // 自洽伪凭证、sentinel——UDF allowLegacy=0）同样零写拒绝，validator 与 startup 扫描
-  // 同一实现）在此收口。合法形状全放行：supersede 退役(pending 1→0，六字段全 NULL)、
-  // complete(pending→complete，is_current=1 + completed_* 完整 + 真实 service artifact +
+  // 同一实现；fresh-R3 P1-A/P1-B：completed_at 走 canonicalTimestampSql 四件套 + 日历日
+  //（NULL/BLOB/INTEGER/NUL-junk/2026-02-31 等同拒），completed_by 走
+  // canonicalActorSql（coreone_canonical_actor UDF + 原始 BLOB instr(x'00') 闸——
+  // SQL trim 只剥 U+0020，tab/newline/NBSP/NUL/control-only 与 node:sqlite 截断
+  // 冒充的 NUL-junk 认定人与 JS 端同一判定）在此收口。合法形状全放行：supersede 退役(pending 1→0，六字段全 NULL)、
+  // complete(pending→complete，is_current=1 + completed_* canonical + 真实 service artifact +
   // close 字段空)、close 走 complete_finality 窗口（OLD.status='complete'，本 guard
   // WHEN 不命中）。四段同体顺序 SELECT RAISE：先枚举/转移（#87 原码归属不变），
   // 再复活，再两段形状（新码 PENDING_RECONCILIATION_COMPLETION_MALFORMED）。
@@ -2518,9 +2602,8 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       SELECT RAISE(ABORT, 'PENDING_RECONCILIATION_COMPLETION_MALFORMED')
        WHERE NEW.status = 'complete'
          AND (NEW.is_current IS NOT 1
-              OR NEW.completed_at IS NULL
-              OR NEW.completed_by IS NULL
-              OR trim(NEW.completed_by) = ''
+              OR NOT ${canonicalTimestampSql('NEW.completed_at')}
+              OR NOT ${canonicalActorSql('NEW.completed_by')}
               OR NEW.completion_artifact_json IS NULL
               OR NEW.completion_artifact_hash IS NULL
               OR NEW.closed_at IS NOT NULL
