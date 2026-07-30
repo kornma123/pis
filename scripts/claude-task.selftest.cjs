@@ -605,6 +605,43 @@ ${prField}
     );
   }
 }
+{
+  const deepHandoffLabel = reflectionHandoff(
+    strongLeastConfidence,
+    strongBiggestMissing,
+  ).replace(
+    `trigger: API fix merged
+${handoffStrongLeastConfidenceLine}
+${handoffStrongBiggestMissingLine}`,
+    `
+[
+extra-label-line
+${handoffStrongLeastConfidenceLine}
+${handoffStrongBiggestMissingLine}
+trigger: API fix merged
+]: /hidden-reflection`,
+  );
+  const deepPrLabel = reflectionPrBody(
+    strongLeastConfidence,
+    strongBiggestMissing,
+  ).replace(
+    `${prStrongLeastConfidenceLine}
+${prStrongBiggestMissingLine}`,
+    `[
+extra-label-line
+${prStrongLeastConfidenceLine}
+${prStrongBiggestMissingLine}
+- **padding-field**: absorbs-terminator
+]: /hidden-reflection`,
+  );
+  const handoffOk = handoffFieldErrors(deepHandoffLabel).length === 0;
+  const prOk = validatePrBody(deepPrLabel).ok;
+  if (handoffOk || !prOk) {
+    reflectionRegressionFailures.push(
+      `deep multiline label block semantics diverged (handoff=${handoffOk}, pr=${prOk})`,
+    );
+  }
+}
 for (const marker of ['-', '1.']) {
   for (const indentation of [1, 2, 3, 4]) {
     const handoffBody = reflectionHandoff(strongLeastConfidence, strongBiggestMissing)

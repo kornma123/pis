@@ -510,15 +510,26 @@ function scanLinkReferenceLabel(lines, startIndex) {
   if (!opening) return null;
 
   const firstRemainder = opening[1];
-  const maxEndIndex = startIndex + (firstRemainder ? 1 : 2);
   let label = '';
   let escaped = false;
-  for (let index = startIndex; index <= maxEndIndex && index < lines.length; index += 1) {
+  // CommonMark 0.31.2 bounds a link label by 999 Unicode code points, not by
+  // line count. A fixed continuation count lets a deeper valid definition
+  // expose its otherwise invisible contents to the field collector.
+  for (let index = startIndex; index < lines.length; index += 1) {
     const text = index === startIndex
       ? firstRemainder
       : linkReferenceSyntaxLine(lines, index, first.frame)?.value;
     if (text === undefined || text === null) return null;
-    if (index > startIndex) label += '\n';
+    if (index > startIndex) {
+      if (/^[ \t]*$/u.test(text)) return null;
+      // A label may span physical lines, but it is still parsed through the
+      // block layer first. A list/heading/blockquote/thematic-break line
+      // interrupts the paragraph, so GitHub renders it instead of treating it
+      // as part of the otherwise invisible link-reference definition.
+      if (interruptsOpenParagraph(text)) return null;
+      label += '\n';
+      escaped = false;
+    }
 
     for (let cursor = 0; cursor < text.length; cursor += 1) {
       const character = text[cursor];
@@ -535,6 +546,7 @@ function scanLinkReferenceLabel(lines, startIndex) {
       if (character === '[') return null;
       if (character !== ']') {
         label += character;
+        if ([...label].length > 999) return null;
         continue;
       }
       const after = text.slice(cursor + 1);

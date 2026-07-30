@@ -356,12 +356,12 @@ const biggestMissingLine =
   `- **关于当前局面，我可能遗漏的最大问题是什么？ / Biggest missing**: ${VALID_BIGGEST_MISSING}`;
 for (const [name, fieldLine, destination] of [
   [
-    'multiline link-reference label hides least-confidence',
+    'list marker interrupts multiline label before least-confidence',
     leastConfidenceLine,
     '/least',
   ],
   [
-    'multiline link-reference label hides biggest-missing',
+    'list marker interrupts multiline label before biggest-missing',
     biggestMissingLine,
     '/biggest',
   ],
@@ -372,7 +372,50 @@ for (const [name, fieldLine, destination] of [
 [
 ${fieldLine}
 ]: ${destination}`),
-    /(?:字段未填写|反盲区字段缺少).*(?:我现在最没把握的是什么|我可能遗漏的最大问题是什么)/,
+    /反盲区字段.*(?:我现在最没把握的是什么|我可能遗漏的最大问题是什么)/,
+  );
+}
+const deepPrPseudoLabel = validBody.replace(
+  `${leastConfidenceLine}
+${biggestMissingLine}`,
+  `[
+extra-label-line
+${leastConfidenceLine}
+${biggestMissingLine}
+- **padding-field**: absorbs-terminator
+]: /hidden-reflection`,
+);
+expectPass(
+  'list marker interrupts deep multiline label and keeps PR reflections visible',
+  deepPrPseudoLabel,
+  [128],
+);
+expectVisibleMarkdown(
+  'GitHub-visible PR list markers are not stripped as a link definition',
+  deepPrPseudoLabel,
+  [/Least confidence/, /Biggest missing/],
+  [],
+);
+{
+  const maxLabelContent =
+    `hidden-max-label-${'a'.repeat(998 - 'hidden-max-label-'.length)}`;
+  expectVisibleMarkdown(
+    '999-code-point multiline link-reference label remains hidden',
+    `[${maxLabelContent}
+]: /hidden
+visible-after-max-label`,
+    [/visible-after-max-label/],
+    [/hidden-max-label-/],
+  );
+
+  const overLimitContent =
+    `visible-over-limit-label-${'a'.repeat(999 - 'visible-over-limit-label-'.length)}`;
+  expectVisibleMarkdown(
+    '1000-code-point multiline label is not a link-reference definition',
+    `[${overLimitContent}
+]: /not-a-definition`,
+    [/visible-over-limit-label-/],
+    [],
   );
 }
 for (const marker of ['-', '1.']) {
