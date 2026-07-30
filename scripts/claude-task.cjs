@@ -24,6 +24,7 @@ const STATE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const LIVE_RECHECK_MS = 10 * 60 * 1000;
 const TASK_STATE_VERSION = 2;
 const GITHUB_WRITE_INTERVAL_MS = 1_000;
+const LOCAL_LOCK_STALE_MS = 20 * 60 * 1_000;
 const ISSUE_CREATION_MANIFEST_VERSION = 1;
 const MAX_ISSUES_PER_CREATION = 5;
 const ISSUE_PRIORITY_LABELS = new Set(['P0', 'P1', 'P2', 'P3']);
@@ -149,7 +150,8 @@ function ownershipScopeDigest(owned) {
 }
 
 function inspectClaudeImplementationOwnership(stage, owned) {
-  if (String(stage || '').toLowerCase() !== 'implementation') {
+  const normalizedStage = String(stage || '').toLowerCase();
+  if (!['implementation', 'acceptance'].includes(normalizedStage)) {
     return { requiresException: false, reason: null };
   }
   const patterns = (Array.isArray(owned) ? owned : []).map(toPosix);
@@ -259,8 +261,26 @@ function validateIssueCreationManifest(raw) {
     if (keys.join(',') !== 'body,title') {
       throw new Error(`Issue candidate #${index + 1} 只允许 title/body；评级标签由 Codex 后续写入。`);
     }
-    const title = String(item.title || '').trim();
-    const body = String(item.body || '').replace(/\r\n/g, '\n').trim();
+    if (typeof item.title !== 'string' || typeof item.body !== 'string') {
+      throw new Error(`Issue candidate #${index + 1} title/body 必须是字符串。`);
+    }
+    const title = item.title;
+    const body = item.body;
+    if (
+      title !== title.trim() ||
+      body !== body.trim() ||
+      title.includes('\0') ||
+      title.includes('\n') ||
+      title.includes('\r') ||
+      body.includes('\0') ||
+      body.includes('\r')
+    ) {
+      throw new Error(
+        `Issue candidate #${index + 1} title/body 必须已是最终 canonical bytes：` +
+        '标题必须单行，正文只用 LF；禁止首尾空白、CR/CRLF 或 NUL；' +
+        '不得在授权后静默 trim/换行规范化。',
+      );
+    }
     if (Buffer.byteLength(title, 'utf8') < 12 || Buffer.byteLength(title, 'utf8') > 240) {
       throw new Error(`Issue candidate #${index + 1} title 必须为 12..240 UTF-8 bytes。`);
     }
@@ -303,23 +323,94 @@ function waitMilliseconds(milliseconds) {
   Atomics.wait(new Int32Array(buffer), 0, 0, milliseconds);
 }
 
-function acquireGitHubWriteSlot(root) {
-  const directory = githubWriteControlDirectory(root);
-  const lockFile = path.join(directory, 'github-write.lock');
-  const statePath = path.join(directory, 'github-write-state.json');
-  fs.mkdirSync(directory, { recursive: true });
-  const deadline = Date.now() + 30_000;
+function isLocalProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== 'ESRCH';
+  }
+}
+
+function acquireExclusiveLocalLock(lockFile, label, timeoutMs = 30_000) {
+  fs.mkdirSync(path.dirname(lockFile), { recursive: true });
+  const deadline = Date.now() + timeoutMs;
   let descriptor = null;
   while (descriptor === null) {
     try {
       descriptor = fs.openSync(lockFile, 'wx', 0o600);
     } catch (error) {
-      if (error.code !== 'EEXIST' || Date.now() >= deadline) {
-        throw new Error('GitHub writer 串行锁不可用；停止写入。');
+      if (error.code !== 'EEXIST') {
+        throw new Error(`${label}不可用；停止写入。`);
+      }
+      let existing = null;
+      try {
+        existing = loadJsonFile(lockFile);
+      } catch {
+        // The lock owner may have created the inode but not finished writing
+        // its metadata yet. Treat that short window as live and keep waiting.
+      }
+      const acquiredAtMs = Number(existing?.acquiredAtMs || 0);
+      if (
+        acquiredAtMs > 0 &&
+        (
+          !isLocalProcessAlive(Number(existing?.pid)) ||
+          Date.now() - acquiredAtMs >= LOCAL_LOCK_STALE_MS
+        )
+      ) {
+        try {
+          fs.unlinkSync(lockFile);
+        } catch (unlinkError) {
+          if (unlinkError.code !== 'ENOENT') {
+            throw new Error(`${label}陈旧锁无法安全回收；停止写入。`);
+          }
+        }
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(`${label}正在被另一事务占用；停止写入。`);
       }
       waitMilliseconds(50);
     }
   }
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify({
+      pid: process.pid,
+      acquiredAtMs: Date.now(),
+      acquiredAt: new Date().toISOString(),
+    })}\n`, 'utf8');
+  } catch {
+    fs.closeSync(descriptor);
+    try {
+      fs.unlinkSync(lockFile);
+    } catch {
+      // The original initialization error remains the authoritative failure.
+    }
+    throw new Error(`${label}无法初始化；停止写入。`);
+  }
+  const identity = fs.fstatSync(descriptor);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    fs.closeSync(descriptor);
+    try {
+      const current = fs.statSync(lockFile);
+      if (current.dev === identity.dev && current.ino === identity.ino) {
+        fs.unlinkSync(lockFile);
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  };
+}
+
+function acquireGitHubWriteSlot(root) {
+  const directory = githubWriteControlDirectory(root);
+  const lockFile = path.join(directory, 'github-write.lock');
+  const statePath = path.join(directory, 'github-write-state.json');
+  const release = acquireExclusiveLocalLock(lockFile, 'GitHub writer 串行锁');
   try {
     const previous = loadJsonFile(statePath);
     const lastGrantedAtMs = Number(previous?.lastGrantedAtMs || 0);
@@ -331,8 +422,7 @@ function acquireGitHubWriteSlot(root) {
       pid: process.pid,
     });
   } finally {
-    fs.closeSync(descriptor);
-    fs.unlinkSync(lockFile);
+    release();
   }
 }
 
@@ -344,33 +434,28 @@ function runOfflineGithubGovernance(root) {
   );
 }
 
-function runGitHubWrite(root, args, options = {}) {
-  runOfflineGithubGovernance(root);
+function runSerializedRemoteWrite(root, command, args, options = {}) {
   const controlDirectory = githubWriteControlDirectory(root);
   fs.mkdirSync(controlDirectory, { recursive: true });
   const executionLock = path.join(controlDirectory, 'github-write-execution.lock');
-  const deadline = Date.now() + 30_000;
-  let descriptor = null;
-  while (descriptor === null) {
-    try {
-      descriptor = fs.openSync(executionLock, 'wx', 0o600);
-    } catch (error) {
-      if (error.code !== 'EEXIST' || Date.now() >= deadline) {
-        throw new Error('GitHub writer 正在被另一写事务占用；停止写入。');
-      }
-      waitMilliseconds(50);
-    }
-  }
+  const release = acquireExclusiveLocalLock(
+    executionLock,
+    'GitHub writer 执行锁',
+  );
   try {
+    runOfflineGithubGovernance(root);
     acquireGitHubWriteSlot(root);
-    return run('gh', args, {
+    return run(command, args, {
       cwd: root,
       timeout: options.timeout || 30_000,
     });
   } finally {
-    fs.closeSync(descriptor);
-    fs.unlinkSync(executionLock);
+    release();
   }
+}
+
+function runGitHubWrite(root, args, options = {}) {
+  return runSerializedRemoteWrite(root, 'gh', args, options);
 }
 
 function git(args, cwd, options = {}) {
@@ -1158,15 +1243,142 @@ function issueCreationLedgerFile(root) {
   return path.join(githubWriteControlDirectory(root), 'issue-creation-ledger.json');
 }
 
-function resolveIssueCreationManifestPath(value) {
-  const target = path.resolve(String(value || ''));
-  if (!isHarnessMemoryPath(target)) {
+function beginIssueCreationLedger(root, manifestSha256, approvalUrl) {
+  const controlDirectory = githubWriteControlDirectory(root);
+  // The reservation is shared by every linked worktree and stays held through
+  // all remote creates/readbacks. Two sessions therefore cannot both observe
+  // the same authorized manifest as unconsumed before either starts writing.
+  const release = acquireExclusiveLocalLock(
+    path.join(controlDirectory, 'issue-creation-ledger.lock'),
+    'Issue candidate 防重放锁',
+  );
+  try {
+    const ledgerPath = issueCreationLedgerFile(root);
+    const ledger = loadJsonFile(ledgerPath) || { version: 1, consumed: {} };
+    ledger.version = 1;
+    ledger.consumed ||= {};
+    const previous = ledger.consumed[manifestSha256];
+    if (previous?.status === 'completed') {
+      throw new Error(`Issue candidate manifest ${manifestSha256} 已消费；禁止重放创建。`);
+    }
+    if (previous) {
+      if (previous.approval !== approvalUrl) {
+        throw new Error(`Issue candidate manifest ${manifestSha256} 的恢复授权与原事务不一致。`);
+      }
+      if (!['in-progress', 'failed'].includes(previous.status)) {
+        throw new Error(
+          `Issue candidate manifest ${manifestSha256} 的账本状态 ${previous.status || '<missing>'} 不可恢复。`,
+        );
+      }
+      if (previous.status === 'in-progress' && isLocalProcessAlive(Number(previous.pid))) {
+        throw new Error(`Issue candidate manifest ${manifestSha256} 仍由活动进程处理；禁止并发接管。`);
+      }
+      previous.status = 'in-progress';
+      previous.resumedAt = new Date().toISOString();
+      previous.pid = process.pid;
+      previous.issues ||= [];
+    } else {
+      ledger.consumed[manifestSha256] = {
+        approval: approvalUrl,
+        startedAt: new Date().toISOString(),
+        status: 'in-progress',
+        pid: process.pid,
+        issues: [],
+      };
+    }
+    writePrivateJson(ledgerPath, ledger);
+    return {
+      created: ledger.consumed[manifestSha256].issues,
+      ledger,
+      ledgerPath,
+      release,
+    };
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
+
+function recoverCreatedIssue(root, candidate, attemptStartedAt) {
+  if (!attemptStartedAt) return null;
+  const actor = run('gh', ['api', 'user', '--jq', '.login'], {
+    cwd: root,
+    timeout: 10_000,
+  }).stdout.trim();
+  if (!actor) throw new Error('无法确认当前 GitHub actor；停止恢复远端创建结果。');
+  const rows = JSON.parse(
+    run(
+      'gh',
+      [
+        'issue',
+        'list',
+        '--state',
+        'all',
+        '--limit',
+        '100',
+        '--json',
+        'number,state,url,title,body,createdAt,author',
+      ],
+      { cwd: root, timeout: 10_000 },
+    ).stdout,
+  );
+  const lowerBound = Date.parse(attemptStartedAt) - 5_000;
+  const matches = (Array.isArray(rows) ? rows : []).filter((row) =>
+    Number.isInteger(Number(row.number)) &&
+    row.title === candidate.title &&
+    String(row.body || '') === candidate.body &&
+    String(row.author?.login || '').toLowerCase() === actor.toLowerCase() &&
+    Number.isFinite(Date.parse(row.createdAt)) &&
+    Date.parse(row.createdAt) >= lowerBound);
+  if (matches.length > 1) {
     throw new Error(
-      'Issue candidate manifest 必须位于当前 Claude project 的 memory 目录；' +
-      '不得从仓库 dirty 文件或任意外部路径创建。',
+      `远端恢复发现 ${matches.length} 个同内容 Issue；停止自动选择，须由 Codex 去重处置。`,
     );
   }
-  return target;
+  return matches[0] || null;
+}
+
+function resolveIssueCreationManifestPath(
+  value,
+  root = repoRoot(),
+  projectsRoot = null,
+) {
+  const raw = String(value || '');
+  if (!path.isAbsolute(raw)) {
+    throw new Error('Issue candidate manifest 必须使用当前 Claude project memory 下的绝对路径。');
+  }
+  const target = path.resolve(raw);
+  const configDirectory = process.env.CLAUDE_CONFIG_DIR
+    ? path.resolve(process.env.CLAUDE_CONFIG_DIR)
+    : path.resolve(os.homedir(), '.claude');
+  const resolvedProjectsRoot = projectsRoot
+    ? path.resolve(projectsRoot)
+    : path.join(configDirectory, 'projects');
+  const projectSlug = path.resolve(root).replace(/[^a-zA-Z0-9]/g, '-');
+  const expectedMemoryRoot = path.join(resolvedProjectsRoot, projectSlug, 'memory');
+  let canonicalMemoryRoot;
+  let canonicalTarget;
+  try {
+    const memoryRootStat = fs.lstatSync(expectedMemoryRoot);
+    if (!memoryRootStat.isDirectory() || memoryRootStat.isSymbolicLink()) {
+      throw new Error('当前 Claude project memory 目录不是可信的真实目录（疑似符号链接逃逸）。');
+    }
+    canonicalMemoryRoot = fs.realpathSync.native(expectedMemoryRoot);
+    canonicalTarget = fs.realpathSync.native(target);
+  } catch (error) {
+    throw new Error(`Issue candidate manifest 路径无法验证：${error.message}`);
+  }
+  if (
+    path.extname(canonicalTarget).toLowerCase() !== '.json' ||
+    !fs.statSync(canonicalTarget).isFile() ||
+    !isPathInside(canonicalMemoryRoot, canonicalTarget)
+  ) {
+    throw new Error(
+      'Issue candidate manifest 必须位于当前 Claude project 的 memory 目录；' +
+      '不得借用其他 project、符号链接逃逸、仓库 dirty 文件或任意外部路径创建。',
+    );
+  }
+  return canonicalTarget;
 }
 
 function commandCreateIssues(argv) {
@@ -1175,7 +1387,7 @@ function commandCreateIssues(argv) {
   if (loadState(root)) {
     throw new Error('已有活动 task state；必须先完成 handoff，再串行创建获准的新需求 Issues。');
   }
-  const manifestPath = resolveIssueCreationManifestPath(flags.manifest);
+  const manifestPath = resolveIssueCreationManifestPath(flags.manifest, root);
   const rawManifest = fs.readFileSync(manifestPath, 'utf8');
   const manifest = validateIssueCreationManifest(rawManifest);
   const approvalUrl = String(flags.approval || '').trim();
@@ -1196,84 +1408,134 @@ function commandCreateIssues(argv) {
       `Issue 创建授权与候选 manifest 不一致：expected ${manifest.sha256}/${manifest.issues.length}。`,
     );
   }
-  const ledgerPath = issueCreationLedgerFile(root);
-  const ledger = loadJsonFile(ledgerPath) || { version: 1, consumed: {} };
-  if (ledger.consumed?.[manifest.sha256]) {
-    throw new Error(`Issue candidate manifest ${manifest.sha256} 已消费；禁止重放创建。`);
-  }
-
-  const created = [];
-  ledger.version = 1;
-  ledger.consumed ||= {};
-  ledger.consumed[manifest.sha256] = {
-    approval: approvalUrl,
-    startedAt: new Date().toISOString(),
-    status: 'in-progress',
-    issues: created,
-  };
-  writePrivateJson(ledgerPath, ledger);
-  for (const candidate of manifest.issues) {
-    try {
-      const createResult = runGitHubWrite(
-        root,
-        ['issue', 'create', '--title', candidate.title, '--body', candidate.body],
-        { timeout: 30_000 },
-      );
-      const url = createResult.stdout
-        .split(/\r?\n/)
-        .find((line) => /^https:\/\/github\.com\//.test(line));
-      const parsed = parseGitHubArtifactUrl(url);
-      if (!parsed || parsed.kind !== 'issue') {
-        throw new Error(`gh issue create 未返回可验证的 Issue URL：${createResult.stdout || '<empty>'}`);
+  const reservation = beginIssueCreationLedger(root, manifest.sha256, approvalUrl);
+  const { created, ledger, ledgerPath } = reservation;
+  const transaction = ledger.consumed[manifest.sha256];
+  try {
+    for (let index = 0; index < manifest.issues.length; index += 1) {
+      const candidate = manifest.issues[index];
+      let createdIssue = created.find((item) => Number(item.index) === index);
+      if (!createdIssue && created[index] && created[index].title === candidate.title) {
+        createdIssue = created[index];
+        createdIssue.index = index;
       }
-      const createdIssue = {
-        number: parsed.number,
-        url,
-        title: candidate.title,
-        readbackVerified: false,
-      };
-      created.push(createdIssue);
-      writePrivateJson(ledgerPath, ledger);
-      const readback = JSON.parse(
-        run(
-          'gh',
-          ['issue', 'view', String(parsed.number), '--json', 'number,state,url,title,body,labels'],
-          { cwd: root, timeout: 10_000 },
-        ).stdout,
-      );
-      const labels = (readback.labels || []).map((label) => label?.name || label);
+      if (!createdIssue) {
+        createdIssue = {
+          index,
+          title: candidate.title,
+          bodySha256: sha256(candidate.body),
+          status: 'pending',
+          readbackVerified: false,
+        };
+        created.push(createdIssue);
+        writePrivateJson(ledgerPath, ledger);
+      }
       if (
-        readback.state !== 'OPEN' ||
-        readback.url !== url ||
-        readback.title !== candidate.title ||
-        String(readback.body || '').trim() !== candidate.body ||
-        labels.some((label) => ISSUE_PRIORITY_LABELS.has(label) || ISSUE_RELEASE_LABELS.has(label))
+        createdIssue.title !== candidate.title ||
+        (createdIssue.bodySha256 && createdIssue.bodySha256 !== sha256(candidate.body))
       ) {
-        throw new Error(`Issue #${parsed.number} 创建后回读不符合 question-only 候选合同。`);
+        throw new Error(`Issue candidate #${index + 1} 与恢复账本不一致；停止写入。`);
       }
-      createdIssue.readbackVerified = true;
-      writePrivateJson(ledgerPath, ledger);
-    } catch (error) {
-      ledger.consumed[manifest.sha256].status = 'failed';
-      ledger.consumed[manifest.sha256].failedAt = new Date().toISOString();
-      ledger.consumed[manifest.sha256].error = error.message;
-      writePrivateJson(ledgerPath, ledger);
-      throw new Error(
-        `Issue candidate 串行创建停止：${error.message}` +
-        (created.length ? `；此前已创建 ${created.map((item) => item.url).join(', ')}` : ''),
-      );
+      createdIssue.bodySha256 = sha256(candidate.body);
+      if (createdIssue.readbackVerified === true) continue;
+      try {
+        if (!createdIssue.url && createdIssue.attemptStartedAt) {
+          const recovered = recoverCreatedIssue(
+            root,
+            candidate,
+            createdIssue.attemptStartedAt,
+          );
+          if (recovered) {
+            createdIssue.number = Number(recovered.number);
+            createdIssue.url = recovered.url;
+            createdIssue.status = 'recovered';
+            createdIssue.recoveredAt = new Date().toISOString();
+            writePrivateJson(ledgerPath, ledger);
+          }
+        }
+        if (!createdIssue.url) {
+          createdIssue.status = 'creating';
+          createdIssue.attemptStartedAt = new Date().toISOString();
+          createdIssue.error = null;
+          writePrivateJson(ledgerPath, ledger);
+          const createResult = runGitHubWrite(
+            root,
+            ['issue', 'create', '--title', candidate.title, '--body', candidate.body],
+            { timeout: 30_000 },
+          );
+          const url = createResult.stdout
+            .split(/\r?\n/)
+            .find((line) => /^https:\/\/github\.com\//.test(line));
+          const parsed = parseGitHubArtifactUrl(url);
+          if (!parsed || parsed.kind !== 'issue') {
+            throw new Error(`gh issue create 未返回可验证的 Issue URL：${createResult.stdout || '<empty>'}`);
+          }
+          createdIssue.number = parsed.number;
+          createdIssue.url = url;
+          createdIssue.status = 'created';
+          writePrivateJson(ledgerPath, ledger);
+        }
+        const readback = JSON.parse(
+          run(
+            'gh',
+            [
+              'issue',
+              'view',
+              String(createdIssue.number),
+              '--json',
+              'number,state,url,title,body,labels',
+            ],
+            { cwd: root, timeout: 10_000 },
+          ).stdout,
+        );
+        const labels = (readback.labels || []).map((label) => label?.name || label);
+        if (
+          readback.state !== 'OPEN' ||
+          readback.url !== createdIssue.url ||
+          readback.title !== candidate.title ||
+          String(readback.body || '') !== candidate.body ||
+          labels.some((label) => ISSUE_PRIORITY_LABELS.has(label) || ISSUE_RELEASE_LABELS.has(label))
+        ) {
+          throw new Error(`Issue #${createdIssue.number} 创建后回读不符合 question-only 候选合同。`);
+        }
+        createdIssue.readbackVerified = true;
+        createdIssue.status = 'verified';
+        createdIssue.verifiedAt = new Date().toISOString();
+        writePrivateJson(ledgerPath, ledger);
+      } catch (error) {
+        createdIssue.status = 'failed';
+        createdIssue.error = error.message;
+        transaction.status = 'failed';
+        transaction.pid = null;
+        transaction.failedAt = new Date().toISOString();
+        transaction.error = error.message;
+        writePrivateJson(ledgerPath, ledger);
+        throw new Error(
+          `Issue candidate 串行创建停止：${error.message}` +
+          (created.some((item) => item.url)
+            ? `；此前已创建 ${created.filter((item) => item.url).map((item) => item.url).join(', ')}`
+            : ''),
+        );
+      }
     }
-  }
 
-  ledger.consumed[manifest.sha256].status = 'completed';
-  ledger.consumed[manifest.sha256].completedAt = new Date().toISOString();
-  writePrivateJson(ledgerPath, ledger);
-  process.stdout.write([
-    `COREONE authorized Issue creation: PASS (${created.length}/${manifest.issues.length})`,
-    `manifest-sha256=${manifest.sha256}`,
-    ...created.map((item) => `Issue #${item.number}: ${item.url}`),
-    'Writer ownership relinquished. Codex must now deduplicate, review scope/AC, rate, write labels, and read them back before implementation.',
-  ].join('\n'));
+    transaction.status = 'completed';
+    transaction.pid = null;
+    transaction.error = null;
+    transaction.completedAt = new Date().toISOString();
+    writePrivateJson(ledgerPath, ledger);
+    process.stdout.write([
+      `COREONE authorized Issue creation: PASS (` +
+        `${created.filter((item) => item.readbackVerified).length}/${manifest.issues.length})`,
+      `manifest-sha256=${manifest.sha256}`,
+      ...created
+        .filter((item) => item.readbackVerified)
+        .map((item) => `Issue #${item.number}: ${item.url}`),
+      'Writer ownership relinquished. Codex must now deduplicate, review scope/AC, rate, write labels, and read them back before implementation.',
+    ].join('\n'));
+  } finally {
+    reservation.release();
+  }
 }
 
 function sha256(value) {
@@ -1934,13 +2196,44 @@ function commandShellGuard() {
     assertActiveState(root, active, { force: check.forceLiveCheck });
     if (check.forceLiveCheck) assertOwnedChanges(root, active.state);
     if (check.githubWrite) {
-      runOfflineGithubGovernance(root);
-      acquireGitHubWriteSlot(root);
+      throw new Error(
+        'GitHub 写入必须把真实命令放进完整执行锁：' +
+        'node scripts/claude-task.cjs github-write -- <原 git/gh 命令>；' +
+        '禁止由 PreToolUse 只取得 slot 后再脱锁执行。',
+      );
     }
   } catch (error) {
     process.stderr.write(`COREONE shell blocked: ${error.message}`);
     process.exitCode = 2;
   }
+}
+
+function commandGitHubWrite(argv) {
+  const tokens = argv[0] === '--' ? argv.slice(1) : argv;
+  const executable = String(tokens[0] || '').toLowerCase();
+  if (!['git', 'git.exe', 'gh', 'gh.exe'].includes(executable)) {
+    throw new Error('github-write 只接受经过任务合同验证的 git push 或 gh 写命令。');
+  }
+  const root = repoRoot();
+  const active = loadState(root);
+  if (!active) throw new Error('没有活动 task state；禁止远端写入。');
+  const check = { ...active.state, forceLiveCheck: false, githubWrite: false };
+  if (executable === 'git' || executable === 'git.exe') {
+    assertSafeGitCommand(['git', ...tokens.slice(1)], check);
+  } else {
+    assertSafeGhCommand(['gh', ...tokens.slice(1)], check);
+  }
+  if (!check.githubWrite) {
+    throw new Error('github-write 只能执行被治理规则识别为写入的 git/gh 命令。');
+  }
+  assertActiveState(root, active, { force: check.forceLiveCheck });
+  assertOwnedChanges(root, active.state);
+  const command = executable.startsWith('git') ? 'git' : 'gh';
+  const result = runSerializedRemoteWrite(root, command, tokens.slice(1), {
+    timeout: 120_000,
+  });
+  if (result.stdout) process.stdout.write(`${result.stdout}\n`);
+  if (result.stderr) process.stderr.write(`${result.stderr}\n`);
 }
 
 function commandMcpGuard() {
@@ -2102,6 +2395,7 @@ function usage() {
     '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=path@SHA --approval=PM_COMMENT_URL --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--ownership-exception=PM_COMMENT_URL] [--dry-run]',
     '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=N/A --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--ownership-exception=PM_COMMENT_URL] [--dry-run]  # non-PRD Issue fields must both be N/A',
     '  node scripts/claude-task.cjs shell-guard              # Bash/PowerShell PreToolUse hook stdin JSON',
+    '  node scripts/claude-task.cjs github-write -- <git push|gh issue comment|gh pr create>  # holds the writer lock through the real command',
     '  node scripts/claude-task.cjs mcp-guard                # MCP PreToolUse hook stdin JSON',
     '  node scripts/claude-task.cjs audit                    # shell/MCP PostToolUse hook stdin JSON',
     '  node scripts/claude-task.cjs rebaseline-rating --evidence=<fresh [ISSUE-RATING] comment URL>',
@@ -2124,6 +2418,7 @@ function main() {
     else if (command === 'finish-r0') commandFinishR0(argv);
     else if (command === 'guard') commandGuard();
     else if (command === 'shell-guard') commandShellGuard();
+    else if (command === 'github-write') commandGitHubWrite(argv);
     else if (command === 'mcp-guard') commandMcpGuard();
     else if (command === 'audit') commandAudit();
     else if (command === 'stop') commandStop();
@@ -2141,6 +2436,7 @@ if (require.main === module) main();
 
 module.exports = {
   assertClaudeImplementationOwnership,
+  beginIssueCreationLedger,
   assertSafeGhCommand,
   assertSafeGitCommand,
   assertSafeNodeCommand,
@@ -2163,6 +2459,7 @@ module.exports = {
   parseOwnerBlock,
   parsePrdRef,
   parseRequirementAcceptanceMap,
+  resolveIssueCreationManifestPath,
   shouldBlockStop,
   shellTokens,
   toPosix,

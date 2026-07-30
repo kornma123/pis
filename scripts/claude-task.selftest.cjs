@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
+  beginIssueCreationLedger,
   assertClaudeImplementationOwnership,
   assertSafeGhCommand,
   assertSafeGitCommand,
@@ -29,6 +30,7 @@ const {
   parsePmApprovalMarker,
   parsePrdRef,
   parseRequirementAcceptanceMap,
+  resolveIssueCreationManifestPath,
   shouldBlockStop,
   shellTokens,
   toPosix,
@@ -134,6 +136,16 @@ assert.doesNotMatch(
   'Issue management loop must point to, not duplicate, the rating contract',
 );
 assert.match(issueLoopText, /release disposition/);
+assert.match(issueLoopText, /当前工作目录所对应的 Claude project/);
+assert.match(issueLoopText, /canonical bytes/);
+assert.match(issueLoopText, /标题单行/);
+assert.match(issueLoopText, /acceptance.*ownership exception/);
+assert.match(issueLoopText, /actor、attempt 时间窗、精确 title\/body/);
+assert.match(issueLoopText, /execution lock.*offline governance 开始/s);
+assert.match(
+  issueLoopText,
+  /node scripts\/claude-task\.cjs github-write -- <原 git\/gh 命令>/,
+);
 const qualityLoopContractText = fs.readFileSync(
   path.join(repositoryRoot, 'docs/COREONE-质量Loop契约-2026-07-12.md'),
   'utf8',
@@ -208,6 +220,9 @@ assert.equal(matchesAny('src/nested/a.ts', ['src/**/*.ts']), true);
 assert.doesNotThrow(() =>
   assertClaudeImplementationOwnership('implementation', ['前端代码/**']),
 );
+assert.doesNotThrow(() =>
+  assertClaudeImplementationOwnership('acceptance', ['前端代码/e2e/**']),
+);
 for (const [name, owned] of [
   ['backend', ['后端代码/**']],
   ['mixed', ['前端代码/**', '后端代码/**']],
@@ -226,9 +241,21 @@ assert.doesNotThrow(() =>
     issue: 81,
   }),
 );
-assert.doesNotThrow(() =>
-  assertClaudeImplementationOwnership('acceptance', ['后端代码/**']),
+assert.throws(
+  () => assertClaudeImplementationOwnership('acceptance', ['后端代码/**']),
+  /Claude Code.*实现|ownership exception|所有权例外/,
+  'acceptance cannot be used as a writable backend ownership bypass',
 );
+for (const [name, owned] of [
+  ['mixed', ['前端代码/e2e/**', '后端代码/server/src/**']],
+  ['broad', ['**']],
+]) {
+  assert.throws(
+    () => assertClaudeImplementationOwnership('acceptance', owned),
+    /Claude Code.*实现|ownership exception|所有权例外/,
+    `acceptance ${name} scope requires the same ownership exception`,
+  );
+}
 
 const ownerBody = `
 <!-- coreone-owner:start -->
@@ -354,6 +381,134 @@ assert.throws(() => validateIssueCreationManifest(JSON.stringify({
   version: 1,
   issues: [{ title: 'x', body: 'too short' }],
 })));
+for (const [label, candidate] of [
+  ['title type coercion', {
+    title: 123456789012,
+    body: '### 问题\n\n当前异常提示缺少可定位证据。\n\n### 下一步\n\n等待复核。',
+  }],
+  ['title trim', {
+    title: ' 需求讨论：禁止授权后静默改标题',
+    body: '### 问题\n\n当前异常提示缺少可定位证据。\n\n### 下一步\n\n等待复核。',
+  }],
+  ['title embedded LF', {
+    title: '需求讨论：禁止标题\n换行被 GitHub 规范化',
+    body: '### 问题\n\n当前异常提示缺少可定位证据。\n\n### 下一步\n\n等待复核。',
+  }],
+  ['title embedded CR', {
+    title: '需求讨论：禁止标题\r回车被 GitHub 规范化',
+    body: '### 问题\n\n当前异常提示缺少可定位证据。\n\n### 下一步\n\n等待复核。',
+  }],
+  ['body CRLF normalization', {
+    title: '需求讨论：禁止授权后静默改正文',
+    body: '### 问题\r\n\r\n当前异常提示缺少可定位证据。\r\n\r\n### 下一步\r\n\r\n等待复核。',
+  }],
+  ['body trim', {
+    title: '需求讨论：禁止授权后静默裁剪正文',
+    body: '### 问题\n\n当前异常提示缺少可定位证据。\n\n### 下一步\n\n等待复核。\n',
+  }],
+]) {
+  assert.throws(
+    () => validateIssueCreationManifest(JSON.stringify({
+      version: 1,
+      issues: [candidate],
+    })),
+    /字符串|canonical bytes/,
+    label,
+  );
+}
+
+const issueLedgerSandbox = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'coreone-issue-ledger-reservation-'),
+);
+try {
+  const initLedgerRepo = spawnSync(
+    'git',
+    ['init', '--initial-branch=issue-ledger-test'],
+    { cwd: issueLedgerSandbox, encoding: 'utf8' },
+  );
+  assert.equal(initLedgerRepo.status, 0, initLedgerRepo.stderr);
+  const reservation = beginIssueCreationLedger(
+    issueLedgerSandbox,
+    issueManifest.sha256,
+    'https://github.com/acme/coreone/issues/1#issuecomment-2',
+  );
+  assert.equal(
+    reservation.ledger.consumed[issueManifest.sha256].status,
+    'in-progress',
+  );
+  reservation.release();
+  assert.throws(
+    () => beginIssueCreationLedger(
+      issueLedgerSandbox,
+      issueManifest.sha256,
+      'https://github.com/acme/coreone/issues/1#issuecomment-2',
+    ),
+    /仍由活动进程/,
+    'an in-progress manifest cannot be taken over while its reserving process is alive',
+  );
+
+  const concurrentSha = 'a'.repeat(64);
+  const concurrentOutcomes = path.join(issueLedgerSandbox, 'concurrent-outcomes.jsonl');
+  const workerPath = path.join(issueLedgerSandbox, 'reservation-worker.cjs');
+  const launcherPath = path.join(issueLedgerSandbox, 'reservation-launcher.cjs');
+  fs.writeFileSync(workerPath, `'use strict';
+const fs = require('node:fs');
+const { beginIssueCreationLedger } = require(${JSON.stringify(path.join(__dirname, 'claude-task.cjs'))});
+const [root, sha, outcomes] = process.argv.slice(2);
+try {
+  const reservation = beginIssueCreationLedger(root, sha, 'https://github.com/acme/coreone/issues/1#issuecomment-2');
+  fs.appendFileSync(outcomes, JSON.stringify({ status: 'reserved', pid: process.pid }) + '\\n');
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+  reservation.release();
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+} catch (error) {
+  fs.appendFileSync(outcomes, JSON.stringify({ status: 'rejected', message: error.message }) + '\\n');
+  process.exitCode = 1;
+}
+`, 'utf8');
+  fs.writeFileSync(launcherPath, `'use strict';
+const fs = require('node:fs');
+const { spawn } = require('node:child_process');
+const [worker, root, sha, outcomes, resultPath] = process.argv.slice(2);
+const run = () => new Promise((resolve) => {
+  const child = spawn(process.execPath, [worker, root, sha, outcomes], { stdio: 'ignore' });
+  child.on('close', (code) => resolve(code));
+});
+Promise.all([run(), run()]).then((codes) => {
+  fs.writeFileSync(resultPath, JSON.stringify(codes));
+});
+`, 'utf8');
+  const concurrentResultPath = path.join(issueLedgerSandbox, 'concurrent-result.json');
+  const concurrentRun = spawnSync(
+    process.execPath,
+    [
+      launcherPath,
+      workerPath,
+      issueLedgerSandbox,
+      concurrentSha,
+      concurrentOutcomes,
+      concurrentResultPath,
+    ],
+    { cwd: issueLedgerSandbox, encoding: 'utf8', timeout: 10_000 },
+  );
+  assert.equal(concurrentRun.status, 0, concurrentRun.stderr);
+  const concurrentCodes = JSON.parse(
+    fs.readFileSync(concurrentResultPath, 'utf8'),
+  ).sort();
+  assert.deepEqual(concurrentCodes, [0, 1]);
+  const outcomes = fs.readFileSync(concurrentOutcomes, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  assert.equal(outcomes.filter((item) => item.status === 'reserved').length, 1);
+  assert.equal(outcomes.filter((item) => item.status === 'rejected').length, 1);
+  assert.match(
+    outcomes.find((item) => item.status === 'rejected').message,
+    /仍由活动进程|已消费/,
+  );
+} finally {
+  fs.rmSync(issueLedgerSandbox, { recursive: true, force: true });
+}
 
 assert.deepEqual(parsePrdRef('docs/prd/PRD-12.md@abcdef123456'), {
   file: 'docs/prd/PRD-12.md',
@@ -2756,6 +2911,75 @@ assert.equal(isHarnessMemoryPath(path.join(os.homedir(), 'secret.txt')), false);
 assert.equal(isHarnessMemoryPath('/x/.claude/projects/a/memory/b.md', '/x/.claude/projects'), true);
 assert.equal(isHarnessMemoryPath('/x/.claude/projects/a/elsewhere/b.md', '/x/.claude/projects'), false);
 
+const manifestProjectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-manifest-project-'));
+const manifestProjectsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-manifest-projects-'));
+const manifestProjectSlug = path.resolve(manifestProjectRoot).replace(/[^a-zA-Z0-9]/g, '-');
+const manifestCurrentMemory = path.join(manifestProjectsRoot, manifestProjectSlug, 'memory');
+const manifestOtherMemory = path.join(
+  manifestProjectsRoot,
+  `${manifestProjectSlug}-other`,
+  'memory',
+);
+const manifestEscapedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-manifest-escaped-'));
+try {
+  fs.mkdirSync(manifestCurrentMemory, { recursive: true });
+  fs.mkdirSync(manifestOtherMemory, { recursive: true });
+  const currentManifest = path.join(manifestCurrentMemory, 'candidates.json');
+  const otherManifest = path.join(manifestOtherMemory, 'candidates.json');
+  const escapedManifest = path.join(manifestEscapedRoot, 'candidates.json');
+  fs.writeFileSync(currentManifest, '{"version":1,"issues":[]}\n', 'utf8');
+  fs.writeFileSync(otherManifest, '{"version":1,"issues":[]}\n', 'utf8');
+  fs.writeFileSync(escapedManifest, '{"version":1,"issues":[]}\n', 'utf8');
+  assert.equal(
+    resolveIssueCreationManifestPath(
+      currentManifest,
+      manifestProjectRoot,
+      manifestProjectsRoot,
+    ),
+    fs.realpathSync.native(currentManifest),
+  );
+  assert.throws(
+    () => resolveIssueCreationManifestPath(
+      otherManifest,
+      manifestProjectRoot,
+      manifestProjectsRoot,
+    ),
+    /当前 Claude project/,
+  );
+  const escapedLink = path.join(manifestCurrentMemory, 'escaped.json');
+  fs.symlinkSync(escapedManifest, escapedLink);
+  assert.throws(
+    () => resolveIssueCreationManifestPath(
+      escapedLink,
+      manifestProjectRoot,
+      manifestProjectsRoot,
+    ),
+    /符号链接逃逸|当前 Claude project/,
+  );
+  const linkedProjectRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'coreone-manifest-linked-project-'),
+  );
+  const linkedProjectSlug = path.resolve(linkedProjectRoot)
+    .replace(/[^a-zA-Z0-9]/g, '-');
+  const linkedProjectDirectory = path.join(manifestProjectsRoot, linkedProjectSlug);
+  fs.mkdirSync(linkedProjectDirectory, { recursive: true });
+  fs.symlinkSync(manifestEscapedRoot, path.join(linkedProjectDirectory, 'memory'));
+  assert.throws(
+    () => resolveIssueCreationManifestPath(
+      escapedManifest,
+      linkedProjectRoot,
+      manifestProjectsRoot,
+    ),
+    /符号链接逃逸|当前 Claude project/,
+    'the current project memory directory itself must not be a symlink escape',
+  );
+  fs.rmSync(linkedProjectRoot, { recursive: true, force: true });
+} finally {
+  fs.rmSync(manifestProjectRoot, { recursive: true, force: true });
+  fs.rmSync(manifestProjectsRoot, { recursive: true, force: true });
+  fs.rmSync(manifestEscapedRoot, { recursive: true, force: true });
+}
+
 // guard 子进程端到端：记忆目录路径 exit 0（无需任务合同），其他仓库外路径与未拥有仓内路径 exit 2。
 function runGuard(filePath, cwd) {
   const result = spawnSync(process.execPath, [path.join(__dirname, 'claude-task.cjs'), 'guard'], {
@@ -2791,15 +3015,161 @@ assert.equal(
   2,
 );
 
-function runIsolatedAuthorizedIssueCreation() {
+function runIsolatedSerializedGitHubWrite() {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-serialized-writer-'));
+  const repo = path.join(sandbox, 'repo');
+  const remote = path.join(sandbox, 'origin.git');
+  const governanceLog = path.join(sandbox, 'governance.jsonl');
+  const taskScript = path.join(__dirname, 'claude-task.cjs');
+  const runGit = (args, cwd = repo) => {
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    assert.equal(result.status, 0, `git ${args.join(' ')}: ${result.stderr || result.stdout}`);
+    return String(result.stdout || '').trim();
+  };
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    fs.mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+    fs.writeFileSync(governanceLog, '', 'utf8');
+    fs.writeFileSync(path.join(repo, 'seed.txt'), 'seed\n', 'utf8');
+    fs.writeFileSync(
+      path.join(repo, 'scripts', 'offline-github-governance.cjs'),
+      `const fs=require('node:fs');const p=${JSON.stringify(governanceLog)};` +
+      `const wait=(ms)=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,ms);` +
+      `fs.appendFileSync(p,JSON.stringify({event:'start',pid:process.pid,at:Date.now()})+'\\n');` +
+      `wait(500);` +
+      `fs.appendFileSync(p,JSON.stringify({event:'end',pid:process.pid,at:Date.now()})+'\\n');` +
+      `console.log('offline GitHub governance: PASS');\n`,
+      'utf8',
+    );
+    runGit(['init', '--initial-branch=writer-test']);
+    runGit(['config', 'user.name', 'Serialized Writer Test']);
+    runGit(['config', 'user.email', 'writer@example.invalid']);
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed serialized writer fixture']);
+    const initRemote = spawnSync('git', ['init', '--bare', remote], { encoding: 'utf8' });
+    assert.equal(initRemote.status, 0, initRemote.stderr);
+    runGit(['remote', 'add', 'origin', remote]);
+    const head = runGit(['rev-parse', 'HEAD']);
+    const stateDirectory = path.join(repo, '.git', 'coreone');
+    fs.mkdirSync(stateDirectory, { recursive: true });
+    fs.writeFileSync(
+      path.join(stateDirectory, 'claude-task-state.json'),
+      `${JSON.stringify({
+        version: 2,
+        mode: 'r0',
+        reason: 'serialized writer selftest',
+        branch: 'writer-test',
+        baseSha: head,
+        startedHead: head,
+        startedAt: new Date().toISOString(),
+        verifiedAt: new Date().toISOString(),
+        owned: ['seed.txt', 'scripts/offline-github-governance.cjs'],
+        excluded: [],
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    const command = 'git push --dry-run origin writer-test';
+    const direct = spawnSync(process.execPath, [taskScript, 'shell-guard'], {
+      cwd: repo,
+      input: JSON.stringify({ tool_input: { command }, cwd: repo }),
+      encoding: 'utf8',
+    });
+    const wrapped = spawnSync(
+      process.execPath,
+      [
+        taskScript,
+        'github-write',
+        '--',
+        'git',
+        'push',
+        '--dry-run',
+        'origin',
+        'writer-test',
+      ],
+      { cwd: repo, encoding: 'utf8' },
+    );
+    fs.writeFileSync(governanceLog, '', 'utf8');
+    const launcherPath = path.join(sandbox, 'serialized-writer-launcher.cjs');
+    const concurrentResultPath = path.join(sandbox, 'serialized-writer-results.json');
+    fs.writeFileSync(launcherPath, `'use strict';
+const fs = require('node:fs');
+const { spawn } = require('node:child_process');
+const [node, taskScript, cwd, resultPath] = process.argv.slice(2);
+const args = [
+  taskScript,
+  'github-write',
+  '--',
+  'git',
+  'push',
+  '--dry-run',
+  'origin',
+  'writer-test',
+];
+const run = () => new Promise((resolve) => {
+  const child = spawn(node, args, { cwd, stdio: 'ignore' });
+  child.on('close', (code) => resolve(code));
+});
+Promise.all([run(), run()]).then((codes) => {
+  fs.writeFileSync(resultPath, JSON.stringify(codes));
+});
+`, 'utf8');
+    const concurrent = spawnSync(
+      process.execPath,
+      [
+        launcherPath,
+        process.execPath,
+        taskScript,
+        repo,
+        concurrentResultPath,
+      ],
+      { cwd: repo, encoding: 'utf8', timeout: 15_000 },
+    );
+    assert.equal(concurrent.status, 0, concurrent.stderr || concurrent.stdout);
+    return {
+      direct,
+      wrapped,
+      concurrentCodes: JSON.parse(fs.readFileSync(concurrentResultPath, 'utf8')),
+      governanceEvents: fs.readFileSync(governanceLog, 'utf8')
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line)),
+    };
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+const serializedGitHubWrite = runIsolatedSerializedGitHubWrite();
+assert.equal(serializedGitHubWrite.direct.status, 2);
+assert.match(serializedGitHubWrite.direct.stderr, /github-write|完整远端操作|真实命令/);
+assert.equal(
+  serializedGitHubWrite.wrapped.status,
+  0,
+  serializedGitHubWrite.wrapped.stderr || serializedGitHubWrite.wrapped.stdout,
+);
+assert.deepEqual(serializedGitHubWrite.concurrentCodes, [0, 0]);
+assert.deepEqual(
+  serializedGitHubWrite.governanceEvents.map((event) => event.event),
+  ['start', 'end', 'start', 'end'],
+  'offline governance and the real remote command must share one execution lock',
+);
+
+function runIsolatedAuthorizedIssueCreation(options = {}) {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-issue-create-'));
   const repo = path.join(sandbox, 'repo');
   const fakeBin = path.join(sandbox, 'bin');
+  const harnessHome = path.join(sandbox, 'home');
   const writeLog = path.join(sandbox, 'writes.json');
   const governanceLog = path.join(sandbox, 'governance.json');
-  fs.mkdirSync(harnessProjectsRoot, { recursive: true });
-  const projectMemoryRoot = fs.mkdtempSync(
-    path.join(harnessProjectsRoot, 'coreone-issue-create-selftest-'),
+  const simulatedFailureMarker = path.join(sandbox, 'remote-created-before-local-ledger');
+  fs.mkdirSync(repo, { recursive: true });
+  const projectSlug = fs.realpathSync.native(repo).replace(/[^a-zA-Z0-9]/g, '-');
+  const projectMemoryRoot = path.join(
+    harnessHome,
+    '.claude',
+    'projects',
+    projectSlug,
   );
   const memoryDirectory = path.join(projectMemoryRoot, 'memory');
   const manifestPath = path.join(memoryDirectory, 'candidates.json');
@@ -2827,7 +3197,6 @@ function runIsolatedAuthorizedIssueCreation() {
   }
 
   try {
-    fs.mkdirSync(repo, { recursive: true });
     fs.mkdirSync(fakeBin, { recursive: true });
     fs.mkdirSync(memoryDirectory, { recursive: true });
     fs.mkdirSync(path.join(repo, 'scripts'), { recursive: true });
@@ -2854,6 +3223,8 @@ function runIsolatedAuthorizedIssueCreation() {
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 const logPath = ${JSON.stringify(writeLog)};
+const failureMarker = ${JSON.stringify(simulatedFailureMarker)};
+const failAfterFirstRemoteCreate = ${JSON.stringify(options.failAfterFirstRemoteCreate === true)};
 const observedAt = ${JSON.stringify(observedAt)};
 const approvalBody = ${JSON.stringify(approvalBody)};
 const rows = JSON.parse(fs.readFileSync(logPath, 'utf8'));
@@ -2868,6 +3239,16 @@ if (args[0] === 'repo' && args[1] === 'view') {
   }));
 } else if (args[0] === 'api' && args[1] === 'user') {
   console.log('acme');
+} else if (args[0] === 'issue' && args[1] === 'list') {
+  console.log(JSON.stringify(rows.map((item) => ({
+    number: item.number,
+    state: 'OPEN',
+    url: 'https://github.com/acme/coreone/issues/' + item.number,
+    title: item.title,
+    body: item.body,
+    createdAt: item.createdAt,
+    author: { login: 'acme' },
+  }))));
 } else if (args[0] === 'issue' && args[1] === 'create') {
   const titleIndex = args.indexOf('--title');
   const bodyIndex = args.indexOf('--body');
@@ -2875,11 +3256,18 @@ if (args[0] === 'repo' && args[1] === 'view') {
   rows.push({
     number,
     at: Date.now(),
+    createdAt: new Date().toISOString(),
     title: args[titleIndex + 1],
     body: args[bodyIndex + 1],
   });
   fs.writeFileSync(logPath, JSON.stringify(rows));
-  console.log('https://github.com/acme/coreone/issues/' + number);
+  if (failAfterFirstRemoteCreate && !fs.existsSync(failureMarker)) {
+    fs.writeFileSync(failureMarker, String(number));
+    console.error('simulated transport loss after remote create');
+    process.exitCode = 17;
+  } else {
+    console.log('https://github.com/acme/coreone/issues/' + number);
+  }
 } else if (args[0] === 'issue' && args[1] === 'view' && args[2] === '1') {
   console.log(JSON.stringify({
     number: 1,
@@ -2910,35 +3298,50 @@ if (args[0] === 'repo' && args[1] === 'view') {
       `--manifest=${manifestPath}`,
       '--approval=https://github.com/acme/coreone/issues/1#issuecomment-222',
     ];
-    const env = { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH || ''}` };
+    const env = {
+      ...process.env,
+      HOME: harnessHome,
+      CLAUDE_CONFIG_DIR: path.join(harnessHome, '.claude'),
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH || ''}`,
+    };
     const first = spawnSync(process.execPath, command, { cwd: repo, encoding: 'utf8', env });
-    const writes = JSON.parse(fs.readFileSync(writeLog, 'utf8'));
-    const governanceRuns = JSON.parse(fs.readFileSync(governanceLog, 'utf8'));
+    const firstWrites = JSON.parse(fs.readFileSync(writeLog, 'utf8'));
     const second = spawnSync(process.execPath, command, { cwd: repo, encoding: 'utf8', env });
-    const replayWrites = JSON.parse(fs.readFileSync(writeLog, 'utf8'));
+    const secondWrites = JSON.parse(fs.readFileSync(writeLog, 'utf8'));
+    const third = options.failAfterFirstRemoteCreate
+      ? spawnSync(process.execPath, command, { cwd: repo, encoding: 'utf8', env })
+      : null;
+    const finalWrites = JSON.parse(fs.readFileSync(writeLog, 'utf8'));
+    const governanceRuns = JSON.parse(fs.readFileSync(governanceLog, 'utf8'));
     const ledgerPath = path.join(repo, '.git', 'coreone', 'issue-creation-ledger.json');
+    assert.equal(
+      fs.existsSync(ledgerPath),
+      true,
+      `issue creation did not reach ledger initialization: ${first.stderr || first.stdout}`,
+    );
     return {
       first,
       second,
-      writes,
+      third,
+      firstWrites,
+      secondWrites,
+      finalWrites,
       governanceRuns,
-      replayWrites,
       ledger: JSON.parse(fs.readFileSync(ledgerPath, 'utf8')),
       manifest,
     };
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
-    fs.rmSync(projectMemoryRoot, { recursive: true, force: true });
   }
 }
 
 const authorizedIssueCreation = runIsolatedAuthorizedIssueCreation();
 assert.equal(authorizedIssueCreation.first.status, 0, authorizedIssueCreation.first.stderr);
 assert.match(authorizedIssueCreation.first.stdout, /2\/2/);
-assert.equal(authorizedIssueCreation.writes.length, 2);
+assert.equal(authorizedIssueCreation.firstWrites.length, 2);
 assert.equal(authorizedIssueCreation.governanceRuns.length, 2);
 assert(
-  authorizedIssueCreation.writes[1].at - authorizedIssueCreation.writes[0].at >= 950,
+  authorizedIssueCreation.firstWrites[1].at - authorizedIssueCreation.firstWrites[0].at >= 950,
   'adjacent GitHub mutations must be spaced by at least one second (allowing clock granularity)',
 );
 assert.equal(
@@ -2951,7 +3354,38 @@ assert(
 );
 assert.equal(authorizedIssueCreation.second.status, 1);
 assert.match(authorizedIssueCreation.second.stderr, /禁止重放/);
-assert.equal(authorizedIssueCreation.replayWrites.length, 2);
+assert.equal(authorizedIssueCreation.finalWrites.length, 2);
+
+const recoveredIssueCreation = runIsolatedAuthorizedIssueCreation({
+  failAfterFirstRemoteCreate: true,
+});
+assert.equal(recoveredIssueCreation.first.status, 1);
+assert.match(recoveredIssueCreation.first.stderr, /simulated transport loss|串行创建停止/);
+assert.equal(recoveredIssueCreation.firstWrites.length, 1);
+assert.equal(
+  recoveredIssueCreation.second.status,
+  0,
+  recoveredIssueCreation.second.stderr || recoveredIssueCreation.second.stdout,
+);
+assert.match(recoveredIssueCreation.second.stdout, /2\/2/);
+assert.equal(recoveredIssueCreation.secondWrites.length, 2);
+assert.equal(
+  recoveredIssueCreation.secondWrites.filter((item) =>
+    item.title === recoveredIssueCreation.manifest.issues[0].title).length,
+  1,
+  'recovery must adopt the exact remote Issue instead of creating a duplicate',
+);
+assert.equal(
+  recoveredIssueCreation.ledger.consumed[recoveredIssueCreation.manifest.sha256].status,
+  'completed',
+);
+assert(
+  recoveredIssueCreation.ledger.consumed[recoveredIssueCreation.manifest.sha256]
+    .issues.every((item) => item.readbackVerified === true),
+);
+assert.equal(recoveredIssueCreation.third.status, 1);
+assert.match(recoveredIssueCreation.third.stderr, /禁止重放/);
+assert.equal(recoveredIssueCreation.finalWrites.length, 2);
 
 function runIsolatedHandoff(leastConfidence, transformBody = (body) => body) {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-handoff-lifecycle-'));
