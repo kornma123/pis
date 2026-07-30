@@ -2781,6 +2781,20 @@ assert.equal(
   false,
   'inline HTTP methods must not bypass the GitHub writer boundary',
 );
+assert.equal(
+  isSafeBeforeStartShell(
+    "curl --json '{\"title\":\"bypass\"}' https://api.github.com/repos/acme/core/issues",
+  ),
+  false,
+  'curl --json must not bypass the GitHub writer boundary',
+);
+assert.equal(
+  isSafeBeforeStartShell(
+    'curl --upload-file payload.json https://api.github.com/repos/acme/core/contents/path',
+  ),
+  false,
+  'curl upload semantics must not bypass the GitHub writer boundary',
+);
 const efficiencyFirstShellState = {
   mode: 'governed',
   issue: 81,
@@ -2944,6 +2958,29 @@ assert.equal(
 assert.doesNotThrow(() => assertSafeGitCommand(shellTokens('git status --short'), { mode: 'governed' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git.exe reset --hard'), { mode: 'governed' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git -C . reset --hard'), { mode: 'governed' }));
+assert.throws(
+  () => assertSafeGitCommand(shellTokens('git restore docs/out-of-scope.md'), { mode: 'governed' }),
+  /丢弃、删除或重写本地状态/,
+);
+assert.throws(
+  () => assertSafeGitCommand(shellTokens('git checkout -- docs/out-of-scope.md'), { mode: 'governed' }),
+  /丢弃、删除或重写本地状态/,
+);
+assert.throws(
+  () => assertSafeGitCommand(shellTokens('git reset --merge'), { mode: 'governed' }),
+  /丢弃、删除或重写本地状态/,
+);
+assert.throws(
+  () => assertSafeGitCommand(shellTokens('git reset --keep'), { mode: 'governed' }),
+  /丢弃、删除或重写本地状态/,
+);
+assert.doesNotThrow(
+  () => assertSafeGitCommand(
+    shellTokens('git restore --staged scripts/claude-task.cjs'),
+    { mode: 'governed' },
+  ),
+  'unstaging an owned local file must not be confused with discarding worktree content',
+);
 assert.throws(() => assertSafeGitCommand(shellTokens('git rebase --exec evil origin/master'), { mode: 'governed', branch: 'task' }));
 assert.doesNotThrow(() =>
   assertSafeGitCommand(
