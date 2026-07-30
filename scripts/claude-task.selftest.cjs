@@ -12,6 +12,7 @@ const {
   assertSafeGhCommand,
   assertSafeGitCommand,
   assertSafeNodeCommand,
+  assertShellCommandSafety,
   classifyIssueDeliveryContract,
   collectHandoffFields,
   findScopeViolations,
@@ -112,9 +113,31 @@ assert.match(
   operatingContractText,
   /Issue 正式评级与标签写入 \/ 回读 owner = Codex/,
 );
+assert.match(
+  operatingContractText,
+  /效率优先/,
+  'the shared contract must make efficiency the first design criterion for governance gates',
+);
+assert.match(
+  operatingContractText,
+  /Codex、Claude Code\/K3.*一视同仁/,
+  'the efficiency-first gate contract must apply equally to Codex and Claude adapters',
+);
 const issueLoopText = fs.readFileSync(
   path.join(repositoryRoot, 'docs/github-issue-pr-management-loop.md'),
   'utf8',
+);
+const crossDeviceContractText = fs.readFileSync(
+  path.join(
+    repositoryRoot,
+    'docs/COREONE-跨设备跨模型一致性-本地私有机制入仓-2026-07-14.md',
+  ),
+  'utf8',
+);
+assert.match(
+  crossDeviceContractText,
+  /普通命令默认通行.*不再按重定向.*管道.*拆成单命令/s,
+  'the fixed-SHA operating guide must not resurrect the retired command-shape gate',
 );
 const issueRatingText = fs.readFileSync(
   path.join(repositoryRoot, 'docs/prd/COREONE-Issue分级与上线阻断标签规则.md'),
@@ -140,8 +163,12 @@ assert.match(issueLoopText, /当前工作目录所对应的 Claude project/);
 assert.match(issueLoopText, /canonical bytes/);
 assert.match(issueLoopText, /标题单行/);
 assert.match(issueLoopText, /acceptance.*ownership exception/);
-assert.match(issueLoopText, /actor、attempt 时间窗、精确 title\/body/);
+assert.match(
+  issueLoopText,
+  /attempt actor、仓库、开始时间与有界结束时间.*REST pagination.*精确 title\/body\/actor/s,
+);
 assert.match(issueLoopText, /execution lock.*offline governance 开始/s);
+assert.match(issueLoopText, /效率优先原则.*不维护“允许哪些命令形状”的白名单/s);
 assert.match(
   issueLoopText,
   /node scripts\/claude-task\.cjs github-write -- <原 git\/gh 命令>/,
@@ -2693,6 +2720,51 @@ assert.deepEqual(handoffFieldErrors('[HANDOFF] status=blocked'), [
 
 assert.equal(isSafeBeforeStartShell('git status --short'), true);
 assert.equal(isSafeBeforeStartShell('gh issue view 12 --json body'), true);
+assert.equal(
+  isSafeBeforeStartShell('git --git-dir=.git status --short'),
+  true,
+  'a read-only Git scope flag must not be rejected merely by argument shape',
+);
+assert.equal(
+  isSafeBeforeStartShell('git branch codex/local-checkpoint'),
+  true,
+  'local branch metadata is neither destructive nor a GitHub write',
+);
+assert.equal(
+  isSafeBeforeStartShell('git commit -m local-checkpoint'),
+  true,
+  'a normal local commit must not require a command-name allowlist',
+);
+assert.equal(
+  isSafeBeforeStartShell('git status --short | rg "^ M" || true'),
+  true,
+  'ordinary pipelines and fallback checks must not require a task contract',
+);
+assert.equal(
+  isSafeBeforeStartShell('node -e "console.log(process.version)"'),
+  true,
+  'ordinary Node diagnostics must not be rejected by command shape',
+);
+assert.equal(
+  isSafeBeforeStartShell('npm exec vitest -- --run'),
+  true,
+  'ordinary package tooling must not be rejected by an action allowlist',
+);
+assert.equal(
+  isSafeBeforeStartShell('python3 -m pytest -q'),
+  true,
+  'unrecognized but non-destructive local tools must be allowed by default',
+);
+assert.equal(
+  isSafeBeforeStartShell('bash -c "git status --short | rg modified || true"'),
+  true,
+  'nested shell diagnostics must remain usable',
+);
+assert.equal(
+  isSafeBeforeStartShell("printf '%s' '$(touch docs/not-executed.txt)'"),
+  true,
+  'single-quoted command substitutions are literals and must not be falsely blocked',
+);
 assert.equal(isSafeBeforeStartShell(
   'node scripts/claude-task.cjs create-issues --manifest=/tmp/candidates.json --approval=https://github.com/acme/coreone/issues/1#issuecomment-2',
   repositoryRoot,
@@ -2702,7 +2774,124 @@ assert.equal(isSafeBeforeStartShell('git status; Set-Content hacked.txt x'), fal
 assert.equal(isSafeBeforeStartShell('git status $(touch hacked.txt)'), false);
 assert.equal(isSafeBeforeStartShell('git status `touch hacked.txt`'), false);
 assert.equal(isSafeBeforeStartShell('git diff --output=hacked.txt'), false);
-assert.equal(isSafeBeforeStartShell('git -c diff.external=evil diff --ext-diff'), false);
+assert.equal(isSafeBeforeStartShell('rm -rf /'), false);
+assert.equal(isSafeBeforeStartShell('git reset --hard HEAD'), false);
+assert.equal(
+  isSafeBeforeStartShell('curl -XPOST https://api.github.com/repos/acme/core/issues'),
+  false,
+  'inline HTTP methods must not bypass the GitHub writer boundary',
+);
+const efficiencyFirstShellState = {
+  mode: 'governed',
+  issue: 81,
+  branch: 'codex/pr82-efficiency-first-final',
+  root: repositoryRoot,
+  cwd: repositoryRoot,
+  owned: ['artifacts/**'],
+  excluded: [],
+};
+assert.doesNotThrow(
+  () => assertShellCommandSafety(
+    'node -e "console.log(1)" | tee /tmp/coreone-node-check.txt && ' +
+      'npm exec vitest -- --run || python3 -m pytest -q',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  'active tasks must allow ordinary command chains, pipelines, and fallback operators',
+);
+assert.doesNotThrow(
+  () => assertShellCommandSafety(
+    'printf ok > artifacts/governance-check.txt',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  'active tasks must allow redirection to an owned path',
+);
+assert.doesNotThrow(
+  () => assertShellCommandSafety(
+    'printf ok>artifacts/governance-check.txt',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  'redirection must work without requiring spaces around the operator',
+);
+assert.throws(
+  () => assertShellCommandSafety(
+    'printf no > docs/out-of-scope.txt',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  /不在当前 task owned scope/,
+);
+assert.throws(
+  () => assertShellCommandSafety(
+    'printf no>docs/out-of-scope.txt',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  /不在当前 task owned scope/,
+  'compact redirection must still enforce the owned boundary',
+);
+assert.throws(
+  () => assertShellCommandSafety(
+    'touch docs/out-of-scope.txt artifacts/allowed.txt',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  /不在当前 task owned scope/,
+  'every explicit mutation target must be checked, not only the last one',
+);
+assert.throws(
+  () => assertShellCommandSafety(
+    'rm -rf /',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  /仓库和临时目录之外/,
+);
+assert.throws(
+  () => assertShellCommandSafety(
+    'printf ok & touch docs/out-of-scope.txt',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  /不在当前 task owned scope/,
+  'background command separators must not hide an explicit out-of-scope write',
+);
+assert.throws(
+  () => assertShellCommandSafety(
+    'bash -c "rm -rf /"',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  /仓库和临时目录之外/,
+  'nested shell launchers must not hide an explicit destructive command',
+);
+const wrappedGitHubWrite = assertShellCommandSafety(
+  'command git push origin codex/pr82-efficiency-first-final',
+  efficiencyFirstShellState,
+  repositoryRoot,
+  repositoryRoot,
+);
+assert.equal(
+  wrappedGitHubWrite.githubWrite,
+  true,
+  'command wrappers must not hide a GitHub write from the execution-lock guard',
+);
+assert.equal(
+  isSafeBeforeStartShell('git -c diff.external=review-tool diff --ext-diff'),
+  true,
+  'external diff tooling must not be blocked merely because it can execute a local helper',
+);
 const bootstrapWorktree = path.resolve(repositoryRoot, '..', 'claude-bootstrap-worktree');
 assert.equal(
   isSafeBeforeStartShell(
@@ -2749,13 +2938,32 @@ assert.equal(
     `node "${path.resolve(repositoryRoot, '..', 'outside', 'scripts', 'agent-preflight.cjs')}"`,
     repositoryRoot,
   ),
-  false,
+  true,
+  'an external diagnostic script is not a proven mutation and must not be shape-blocked',
 );
 assert.doesNotThrow(() => assertSafeGitCommand(shellTokens('git status --short'), { mode: 'governed' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git.exe reset --hard'), { mode: 'governed' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git -C . reset --hard'), { mode: 'governed' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git rebase --exec evil origin/master'), { mode: 'governed', branch: 'task' }));
-assert.throws(() => assertSafeGitCommand(shellTokens('git diff --output=hacked.txt'), { mode: 'governed', branch: 'task' }));
+assert.doesNotThrow(() =>
+  assertSafeGitCommand(
+    shellTokens('git diff --output=artifacts/review.diff'),
+    {
+      mode: 'governed',
+      branch: 'task',
+      root: repositoryRoot,
+      cwd: repositoryRoot,
+      owned: ['artifacts/**'],
+      excluded: [],
+    },
+  ),
+);
+assert.doesNotThrow(() =>
+  assertSafeGitCommand(
+    shellTokens('git branch codex/local-checkpoint'),
+    { mode: 'governed', branch: 'task' },
+  ),
+);
 assert.throws(() => assertSafeGitCommand(shellTokens('git push -f origin task'), { mode: 'governed', branch: 'task' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git push origin HEAD:refs/heads/master'), { mode: 'governed', branch: 'task' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git push --all origin'), { mode: 'governed', branch: 'task' }));
@@ -2798,25 +3006,25 @@ assert.doesNotThrow(() =>
 assert.doesNotThrow(() =>
   assertSafeNodeCommand(shellTokens('node --test'), repositoryRoot),
 );
-assert.throws(() =>
+assert.doesNotThrow(() =>
   assertSafeNodeCommand(shellTokens('node -rC:/tmp/evil.cjs scripts/claude-task.cjs'), repositoryRoot),
 );
-assert.throws(() =>
+assert.doesNotThrow(() =>
   assertSafeNodeCommand(shellTokens('node -pe 1+1'), repositoryRoot),
 );
-assert.throws(() =>
+assert.doesNotThrow(() =>
   assertSafeNodeCommand(shellTokens('node ../outside/mutate.cjs'), repositoryRoot),
 );
-assert.throws(() =>
+assert.doesNotThrow(() =>
   assertSafeNodeCommand(shellTokens(`node "${process.execPath}"`), repositoryRoot),
 );
-assert.throws(() =>
+assert.doesNotThrow(() =>
   assertSafeNodeCommand(
     shellTokens(`node --test scripts/claude-task.selftest.cjs -- "${process.execPath}"`),
     repositoryRoot,
   ),
 );
-assert.throws(() =>
+assert.doesNotThrow(() =>
   assertSafeNodeCommand(
     shellTokens('C:/outside/node.exe scripts/claude-task.cjs'),
     repositoryRoot,
@@ -2838,9 +3046,9 @@ try {
     fs.writeFileSync(path.join(targetDirectory, 'task.cjs'), 'process.exitCode = 0;\n');
   }
   for (const entry of ['$ENTRY/task.cjs', '%ENTRY%/task.cjs', '~/task.cjs']) {
-    assert.throws(
+    assert.doesNotThrow(
       () => assertSafeNodeCommand(shellTokens(`node ${entry}`), expandableNodeRoot),
-      `${entry} must not pass before shell expansion`,
+      `${entry} must not be rejected merely because the shell will expand it`,
     );
   }
 } finally {
@@ -3162,6 +3370,7 @@ function runIsolatedAuthorizedIssueCreation(options = {}) {
   const harnessHome = path.join(sandbox, 'home');
   const writeLog = path.join(sandbox, 'writes.json');
   const governanceLog = path.join(sandbox, 'governance.json');
+  const actorQueryLog = path.join(sandbox, 'actor-queries.txt');
   const simulatedFailureMarker = path.join(sandbox, 'remote-created-before-local-ledger');
   fs.mkdirSync(repo, { recursive: true });
   const projectSlug = fs.realpathSync.native(repo).replace(/[^a-zA-Z0-9]/g, '-');
@@ -3203,6 +3412,7 @@ function runIsolatedAuthorizedIssueCreation(options = {}) {
     fs.writeFileSync(manifestPath, rawManifest, 'utf8');
     fs.writeFileSync(writeLog, '[]\n', 'utf8');
     fs.writeFileSync(governanceLog, '[]\n', 'utf8');
+    fs.writeFileSync(actorQueryLog, '0\n', 'utf8');
     fs.writeFileSync(path.join(repo, 'seed.txt'), 'seed\n', 'utf8');
     fs.writeFileSync(
       path.join(repo, 'scripts', 'offline-github-governance.cjs'),
@@ -3223,8 +3433,11 @@ function runIsolatedAuthorizedIssueCreation(options = {}) {
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 const logPath = ${JSON.stringify(writeLog)};
+const actorQueryLog = ${JSON.stringify(actorQueryLog)};
 const failureMarker = ${JSON.stringify(simulatedFailureMarker)};
 const failAfterFirstRemoteCreate = ${JSON.stringify(options.failAfterFirstRemoteCreate === true)};
+const actorMismatchOnRecovery = ${JSON.stringify(options.actorMismatchOnRecovery === true)};
+const recoveryLeadingRows = ${JSON.stringify(Number(options.recoveryLeadingRows || 0))};
 const observedAt = ${JSON.stringify(observedAt)};
 const approvalBody = ${JSON.stringify(approvalBody)};
 const rows = JSON.parse(fs.readFileSync(logPath, 'utf8'));
@@ -3238,17 +3451,39 @@ if (args[0] === 'repo' && args[1] === 'view') {
     body: approvalBody,
   }));
 } else if (args[0] === 'api' && args[1] === 'user') {
-  console.log('acme');
-} else if (args[0] === 'issue' && args[1] === 'list') {
-  console.log(JSON.stringify(rows.map((item) => ({
+  const count = Number(fs.readFileSync(actorQueryLog, 'utf8')) + 1;
+  fs.writeFileSync(actorQueryLog, String(count));
+  console.log(actorMismatchOnRecovery && count >= 4 ? 'other-actor' : 'acme');
+} else if (
+  args[0] === 'api' &&
+  args.includes('--paginate') &&
+  args.includes('--slurp') &&
+  args.some((value) => String(value).startsWith('repos/acme/coreone/issues?'))
+) {
+  const decoys = Array.from({ length: recoveryLeadingRows }, (_, index) => ({
+    number: 5000 + index,
+    state: 'open',
+    html_url: 'https://github.com/acme/coreone/issues/' + (5000 + index),
+    title: 'unrelated-' + index,
+    body: 'unrelated',
+    created_at: new Date().toISOString(),
+    user: { login: 'acme' },
+  }));
+  const recoveredRows = rows.map((item) => ({
     number: item.number,
-    state: 'OPEN',
-    url: 'https://github.com/acme/coreone/issues/' + item.number,
+    state: 'open',
+    html_url: 'https://github.com/acme/coreone/issues/' + item.number,
     title: item.title,
     body: item.body,
-    createdAt: item.createdAt,
-    author: { login: 'acme' },
-  }))));
+    created_at: item.createdAt,
+    user: { login: 'acme' },
+  }));
+  const combined = decoys.concat(recoveredRows);
+  const pages = [];
+  for (let index = 0; index < combined.length; index += 100) {
+    pages.push(combined.slice(index, index + 100));
+  }
+  console.log(JSON.stringify(pages));
 } else if (args[0] === 'issue' && args[1] === 'create') {
   const titleIndex = args.indexOf('--title');
   const bodyIndex = args.indexOf('--body');
@@ -3358,6 +3593,7 @@ assert.equal(authorizedIssueCreation.finalWrites.length, 2);
 
 const recoveredIssueCreation = runIsolatedAuthorizedIssueCreation({
   failAfterFirstRemoteCreate: true,
+  recoveryLeadingRows: 150,
 });
 assert.equal(recoveredIssueCreation.first.status, 1);
 assert.match(recoveredIssueCreation.first.stderr, /simulated transport loss|串行创建停止/);
@@ -3383,9 +3619,31 @@ assert(
   recoveredIssueCreation.ledger.consumed[recoveredIssueCreation.manifest.sha256]
     .issues.every((item) => item.readbackVerified === true),
 );
+assert(
+  recoveredIssueCreation.ledger.consumed[recoveredIssueCreation.manifest.sha256]
+    .issues.every((item) =>
+      item.attemptActor === 'acme' &&
+      item.attemptRepo === 'acme/coreone' &&
+      Number.isFinite(Date.parse(item.attemptStartedAt)) &&
+      Number.isFinite(Date.parse(item.attemptNotAfter))),
+  'every remote create attempt must persist actor, repository, and a bounded recovery window',
+);
 assert.equal(recoveredIssueCreation.third.status, 1);
 assert.match(recoveredIssueCreation.third.stderr, /禁止重放/);
 assert.equal(recoveredIssueCreation.finalWrites.length, 2);
+
+const actorMismatchRecovery = runIsolatedAuthorizedIssueCreation({
+  failAfterFirstRemoteCreate: true,
+  actorMismatchOnRecovery: true,
+});
+assert.equal(actorMismatchRecovery.first.status, 1);
+assert.equal(actorMismatchRecovery.second.status, 1);
+assert.match(actorMismatchRecovery.second.stderr, /actor 不一致/);
+assert.equal(
+  actorMismatchRecovery.secondWrites.length,
+  1,
+  'an actor mismatch must stop before a duplicate remote create',
+);
 
 function runIsolatedHandoff(leastConfidence, transformBody = (body) => body) {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-handoff-lifecycle-'));

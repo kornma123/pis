@@ -140,9 +140,11 @@ node scripts/offline-github-governance.cjs
 3. **起草，不直接开**（默认 **draft-then-confirm**）：Claude Code 对去重后的真新项，各起草标题 + 单一分类（§2 六选一）+ 对应 `kind/*` 或 `bug`/`documentation` label + 结构化 body（业务影响 / 现状证据带 `file:line` 或 `PR#` / 建议范围 / 非范围 / 验收 / 来源），先交 PM 过目。
 4. **PM 拍板后串行开、复核、评级并回报**：Claude Code 把 1–5 个候选存入**当前工作目录所对应的 Claude project** 的真实 `memory/` 目录中的 JSON manifest；其他 project 的 memory、相对路径、`memory/` 本身或其文件的符号链接逃逸、仓库 dirty 文件一律拒绝。`title/body` 必须已经是将发送到 GitHub 的最终 canonical bytes（字符串；标题单行；正文只用 LF；无首尾空白、CR 或 NUL），校验器不得在 PM 授权后静默 `trim`、换行规范化或类型转换。仓库 owner 的普通评论用 `[PM-ISSUE-CREATION] decision=approved manifest-sha256=<64hex> count=<1..5>` 精确绑定后，只运行 `node scripts/claude-task.cjs create-issues --manifest=<绝对路径> --approval=<评论 URL>`。
 
-   事务先在所有 linked worktree 共用的 Git common dir 原子预占该 manifest，并持锁到全部创建 / **精确内容回读**完成或失败；因此两个本地会话不能同时把同一授权判成“未消费”。每个候选在发起远端调用前先落盘 attempt；若 GitHub 已创建但进程在保存 URL 前断线 / 崩溃，下次使用同一 manifest 与同一批准恢复时，必须以 actor、attempt 时间窗、精确 title/body 唯一回收已有 Issue，零匹配才重试创建，多匹配则 fail-closed 交给 Codex 去重，禁止猜选或重复创建。完成后的 manifest 永久拒绝重放。
+   事务先在所有 linked worktree 共用的 Git common dir 原子预占该 manifest，并持锁到全部创建 / **精确内容回读**完成或失败；因此两个本地会话不能同时把同一授权判成“未消费”。每个候选必须在同一 GitHub execution lock 内、真实 create 之前落盘 attempt actor、仓库、开始时间与有界结束时间；若 GitHub 已创建但进程在保存 URL 前断线 / 崩溃，下次使用同一 manifest 与同一批准恢复时，当前 actor / 仓库必须与 attempt 一致，并通过无固定 100 条截断的 REST pagination，在该有界时间窗内按精确 title/body/actor 唯一回收已有 Issue。零匹配才重试创建，多匹配则 fail-closed 交给 Codex 去重，禁止猜选或重复创建。完成后的 manifest 永久拒绝重放。
 
    每项写前跑 offline governance、取得全仓 writer slot、与上一写入至少间隔一秒，且**全仓 execution lock 必须从 offline governance 开始一直持有到真实 `git`/`gh` 命令退出**。受治理会话不得直接运行 `git push`、`gh issue comment` 或 `gh pr create`；统一使用 `node scripts/claude-task.cjs github-write -- <原 git/gh 命令>`，防止 PreToolUse 先取锁、真实命令却在脱锁后执行，也防止两个 writer 并行完成检查后使用过期结果写入。`create-issues` 和 task 生命周期内部写入也使用同一执行锁。
+
+   本地 shell/MCP 闸遵循共用契约 §5 的效率优先原则：正常读取、搜索、构建、测试、诊断、管道、重定向和未识别本地工具默认通行，不维护“允许哪些命令形状”的白名单。只有明确破坏性动作、已解析出的越权文件写目标和 GitHub 写入可以 PreToolUse 硬拒绝；其余范围漂移由文件写入 hook 与 PostToolUse scope audit 取证。拦截数不是质量指标，正常任务可完成且少重试才是。
 
    Claude Code 完成后停止写入并交给 Codex；Codex 重做去重与事实检查，校准范围 / AC，按唯一标签规则源写入并回读正式评级。最终回报「开了哪些 / 跳过哪些（已覆盖，指向 `#N`）/ 如何评级」。不得直接运行 `gh issue create` 绕开事务；Codex 评级前不得派实现，也不得把不确定 / 有歧义的项硬塞成实现队列。
 

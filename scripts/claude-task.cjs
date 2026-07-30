@@ -27,6 +27,8 @@ const GITHUB_WRITE_INTERVAL_MS = 1_000;
 const LOCAL_LOCK_STALE_MS = 20 * 60 * 1_000;
 const ISSUE_CREATION_MANIFEST_VERSION = 1;
 const MAX_ISSUES_PER_CREATION = 5;
+const ISSUE_CREATION_RECOVERY_CLOCK_SKEW_MS = 120_000;
+const ISSUE_CREATION_RECOVERY_REMOTE_WINDOW_MS = 180_000;
 const ISSUE_PRIORITY_LABELS = new Set(['P0', 'P1', 'P2', 'P3']);
 const ISSUE_RELEASE_LABELS = new Set(['阻断上线', '非阻断上线']);
 const HANDOFF_CONTINUATION_BOUNDARY_KEYS = new Set([
@@ -445,6 +447,7 @@ function runSerializedRemoteWrite(root, command, args, options = {}) {
   try {
     runOfflineGithubGovernance(root);
     acquireGitHubWriteSlot(root);
+    if (typeof options.beforeWrite === 'function') options.beforeWrite();
     return run(command, args, {
       cwd: root,
       timeout: options.timeout || 30_000,
@@ -1299,43 +1302,85 @@ function beginIssueCreationLedger(root, manifestSha256, approvalUrl) {
   }
 }
 
-function recoverCreatedIssue(root, candidate, attemptStartedAt) {
-  if (!attemptStartedAt) return null;
+function currentGitHubActor(root) {
   const actor = run('gh', ['api', 'user', '--jq', '.login'], {
     cwd: root,
     timeout: 10_000,
   }).stdout.trim();
-  if (!actor) throw new Error('无法确认当前 GitHub actor；停止恢复远端创建结果。');
-  const rows = JSON.parse(
+  if (!actor) throw new Error('无法确认当前 GitHub actor；停止 GitHub 写入。');
+  return actor;
+}
+
+function recoverCreatedIssue(root, candidate, attempt) {
+  if (!attempt?.attemptStartedAt) return null;
+  const actor = currentGitHubActor(root);
+  if (
+    !attempt.attemptActor ||
+    actor.toLowerCase() !== String(attempt.attemptActor).toLowerCase()
+  ) {
+    throw new Error(
+      `Issue 创建恢复 actor 不一致（attempt=${attempt.attemptActor || '<missing>'}, ` +
+      `current=${actor}）；停止自动恢复和重试。`,
+    );
+  }
+  const identity = repoIdentity(root);
+  if (
+    !attempt.attemptRepo ||
+    identity.nameWithOwner.toLowerCase() !== String(attempt.attemptRepo).toLowerCase()
+  ) {
+    throw new Error(
+      `Issue 创建恢复仓库不一致（attempt=${attempt.attemptRepo || '<missing>'}, ` +
+      `current=${identity.nameWithOwner}）；停止自动恢复和重试。`,
+    );
+  }
+  const startedAtMs = Date.parse(attempt.attemptStartedAt);
+  const notAfterMs = Date.parse(attempt.attemptNotAfter);
+  if (
+    !Number.isFinite(startedAtMs) ||
+    !Number.isFinite(notAfterMs) ||
+    notAfterMs <= startedAtMs ||
+    notAfterMs - startedAtMs > ISSUE_CREATION_RECOVERY_REMOTE_WINDOW_MS
+  ) {
+    throw new Error('Issue 创建恢复 attempt 时间窗缺失或非法；停止自动恢复和重试。');
+  }
+  const lowerBound = startedAtMs - ISSUE_CREATION_RECOVERY_CLOCK_SKEW_MS;
+  const upperBound = notAfterMs + ISSUE_CREATION_RECOVERY_CLOCK_SKEW_MS;
+  const endpoint =
+    `repos/${identity.nameWithOwner}/issues?state=all&` +
+    `since=${encodeURIComponent(new Date(lowerBound).toISOString())}&per_page=100`;
+  const pages = JSON.parse(
     run(
       'gh',
       [
-        'issue',
-        'list',
-        '--state',
-        'all',
-        '--limit',
-        '100',
-        '--json',
-        'number,state,url,title,body,createdAt,author',
+        'api',
+        '--paginate',
+        '--slurp',
+        endpoint,
       ],
       { cwd: root, timeout: 10_000 },
     ).stdout,
   );
-  const lowerBound = Date.parse(attemptStartedAt) - 5_000;
+  const rows = (Array.isArray(pages) ? pages : [])
+    .flatMap((page) => Array.isArray(page) ? page : [page]);
   const matches = (Array.isArray(rows) ? rows : []).filter((row) =>
+    !row.pull_request &&
     Number.isInteger(Number(row.number)) &&
     row.title === candidate.title &&
     String(row.body || '') === candidate.body &&
-    String(row.author?.login || '').toLowerCase() === actor.toLowerCase() &&
-    Number.isFinite(Date.parse(row.createdAt)) &&
-    Date.parse(row.createdAt) >= lowerBound);
+    String(row.user?.login || '').toLowerCase() === actor.toLowerCase() &&
+    Number.isFinite(Date.parse(row.created_at)) &&
+    Date.parse(row.created_at) >= lowerBound &&
+    Date.parse(row.created_at) <= upperBound);
   if (matches.length > 1) {
     throw new Error(
       `远端恢复发现 ${matches.length} 个同内容 Issue；停止自动选择，须由 Codex 去重处置。`,
     );
   }
-  return matches[0] || null;
+  if (!matches[0]) return null;
+  return {
+    number: Number(matches[0].number),
+    url: matches[0].html_url,
+  };
 }
 
 function resolveIssueCreationManifestPath(
@@ -1443,7 +1488,7 @@ function commandCreateIssues(argv) {
           const recovered = recoverCreatedIssue(
             root,
             candidate,
-            createdIssue.attemptStartedAt,
+            createdIssue,
           );
           if (recovered) {
             createdIssue.number = Number(recovered.number);
@@ -1454,14 +1499,25 @@ function commandCreateIssues(argv) {
           }
         }
         if (!createdIssue.url) {
-          createdIssue.status = 'creating';
-          createdIssue.attemptStartedAt = new Date().toISOString();
-          createdIssue.error = null;
-          writePrivateJson(ledgerPath, ledger);
           const createResult = runGitHubWrite(
             root,
             ['issue', 'create', '--title', candidate.title, '--body', candidate.body],
-            { timeout: 30_000 },
+            {
+              timeout: 30_000,
+              beforeWrite: () => {
+                const identity = repoIdentity(root);
+                const attemptStartedAtMs = Date.now();
+                createdIssue.status = 'creating';
+                createdIssue.attemptStartedAt = new Date(attemptStartedAtMs).toISOString();
+                createdIssue.attemptNotAfter = new Date(
+                  attemptStartedAtMs + ISSUE_CREATION_RECOVERY_REMOTE_WINDOW_MS,
+                ).toISOString();
+                createdIssue.attemptActor = currentGitHubActor(root);
+                createdIssue.attemptRepo = identity.nameWithOwner;
+                createdIssue.error = null;
+                writePrivateJson(ledgerPath, ledger);
+              },
+            },
           );
           const url = createResult.stdout
             .split(/\r?\n/)
@@ -1783,6 +1839,218 @@ function shellTokens(command) {
   });
 }
 
+function shellClosingParenthesis(source, openIndex) {
+  let depth = 1;
+  let quote = null;
+  let escaped = false;
+  for (let index = openIndex + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === '\\' && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    if (character === '(') depth += 1;
+    if (character === ')' && --depth === 0) return index;
+  }
+  return -1;
+}
+
+function splitShellCommandSegments(command) {
+  const source = String(command || '');
+  const segments = [];
+  const nestedSegments = [];
+  let current = '';
+  let quote = null;
+  let escaped = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (escaped) {
+      current += character;
+      escaped = false;
+      continue;
+    }
+    if (character === '\\' && quote !== "'") {
+      current += character;
+      escaped = true;
+      continue;
+    }
+    const startsCommandSubstitution =
+      quote !== "'" &&
+      character === '$' &&
+      source[index + 1] === '(';
+    const startsProcessSubstitution =
+      !quote &&
+      (character === '<' || character === '>') &&
+      source[index + 1] === '(';
+    if (startsCommandSubstitution || startsProcessSubstitution) {
+      const closing = shellClosingParenthesis(source, index + 1);
+      if (closing >= 0) {
+        const nested = source.slice(index + 2, closing);
+        if (nested.trim()) nestedSegments.push(...splitShellCommandSegments(nested));
+        current += source.slice(index, closing + 1);
+        index = closing;
+        continue;
+      }
+    }
+    if (quote !== "'" && character === '`') {
+      let closing = index + 1;
+      let nestedEscaped = false;
+      for (; closing < source.length; closing += 1) {
+        if (nestedEscaped) {
+          nestedEscaped = false;
+          continue;
+        }
+        if (source[closing] === '\\') {
+          nestedEscaped = true;
+          continue;
+        }
+        if (source[closing] === '`') break;
+      }
+      if (closing < source.length) {
+        const nested = source.slice(index + 1, closing);
+        if (nested.trim()) nestedSegments.push(...splitShellCommandSegments(nested));
+        current += source.slice(index, closing + 1);
+        index = closing;
+        continue;
+      }
+    }
+    if (quote) {
+      current += character;
+      if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      current += character;
+      continue;
+    }
+    const ampersandSeparatesCommands =
+      character === '&' &&
+      source[index - 1] !== '>' &&
+      source[index + 1] !== '>';
+    if (
+      character === ';' ||
+      character === '\n' ||
+      character === '|' ||
+      ampersandSeparatesCommands
+    ) {
+      if (current.trim()) segments.push(current.trim());
+      current = '';
+      if (
+        (character === '|' && source[index + 1] === '|') ||
+        (character === '&' && source[index + 1] === '&')
+      ) {
+        index += 1;
+      }
+      continue;
+    }
+    current += character;
+  }
+  if (current.trim()) segments.push(current.trim());
+  return segments.concat(nestedSegments);
+}
+
+function commandTokens(segment) {
+  const tokens = shellTokens(segment);
+  let index = 0;
+  while (index < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[index])) {
+    index += 1;
+  }
+  return tokens.slice(index);
+}
+
+function unwrapCommandTokens(tokens) {
+  let current = [...tokens];
+  for (let depth = 0; depth < 4 && current.length > 0; depth += 1) {
+    const executable = path.basename(String(current[0] || '')).toLowerCase();
+    if (['command', 'nohup'].includes(executable)) {
+      const next = current.slice(1).findIndex((value) => !String(value).startsWith('-'));
+      if (next < 0) return current;
+      current = current.slice(next + 1);
+      continue;
+    }
+    if (executable === 'env') {
+      let index = 1;
+      while (
+        index < current.length &&
+        (
+          String(current[index]).startsWith('-') ||
+          /^[A-Za-z_][A-Za-z0-9_]*=/.test(String(current[index]))
+        )
+      ) {
+        index += 1;
+      }
+      if (index >= current.length) return current;
+      current = current.slice(index);
+      continue;
+    }
+    if (executable === 'sudo') {
+      let index = 1;
+      while (index < current.length && String(current[index]).startsWith('-')) {
+        const option = String(current[index]);
+        index += 1;
+        if (['-u', '--user', '-g', '--group', '-h', '--host', '-p', '--prompt'].includes(option)) {
+          index += 1;
+        }
+      }
+      if (index >= current.length) return current;
+      current = current.slice(index);
+      continue;
+    }
+    break;
+  }
+  return current;
+}
+
+function assertTaskWriteTarget(value, state = {}) {
+  const raw = String(value || '').trim().replace(/^['"]|['"]$/g, '');
+  if (!raw || raw === '/dev/null' || raw.toLowerCase() === 'nul') return;
+  if (/[$%*?\[\]{}]/.test(raw) || raw.startsWith('~')) {
+    throw new Error(`文件写目标 ${raw} 无法静态解析；请改用明确的 owned 路径或临时目录。`);
+  }
+  const root = path.resolve(state.root || process.cwd());
+  const cwd = path.resolve(state.cwd || root);
+  const target = path.resolve(cwd, raw);
+  const temporaryRoots = new Set([
+    path.resolve(os.tmpdir()),
+    fs.realpathSync.native(os.tmpdir()),
+  ]);
+  if (process.platform !== 'win32') {
+    temporaryRoots.add(path.resolve('/tmp'));
+    try {
+      temporaryRoots.add(fs.realpathSync.native('/tmp'));
+    } catch {
+      // A platform without /tmp is already covered by os.tmpdir().
+    }
+  }
+  if ([...temporaryRoots].some((temporaryRoot) =>
+    isPathInside(temporaryRoot, target, { allowSame: true }))) return;
+  if (!isPathInside(root, target)) {
+    if (isHarnessMemoryPath(target)) return;
+    throw new Error(`文件写目标 ${raw} 位于当前仓库和临时目录之外。`);
+  }
+  const relative = toPosix(path.relative(root, target));
+  if (
+    !Array.isArray(state.owned) ||
+    matchesAny(relative, state.excluded || []) ||
+    !matchesAny(relative, state.owned)
+  ) {
+    throw new Error(`文件写目标 ${relative} 不在当前 task owned scope。`);
+  }
+}
+
 function gitSubcommand(tokens) {
   let index = 1;
   const globals = [];
@@ -1797,18 +2065,6 @@ function gitSubcommand(tokens) {
     }
   }
   return { globals, command: String(tokens[index] || '').toLowerCase(), args: tokens.slice(index + 1) };
-}
-
-function assertSafeGitGlobals(globals) {
-  if (globals.some((value) => value !== '--no-pager')) {
-    throw new Error(`git 全局参数不允许：${globals.join(' ')}`);
-  }
-}
-
-function assertNoExecutableGitFlags(args) {
-  const forbidden = /^(?:--output(?:=|$)|--ext-diff$|--textconv$|--exec(?:=|$)|-x$|--upload-pack(?:=|$)|--receive-pack(?:=|$))/i;
-  const hit = args.find((arg) => forbidden.test(arg));
-  if (hit) throw new Error(`git 参数 ${hit} 可能写文件或执行外部命令，已拒绝。`);
 }
 
 function assertSafeWorktreeAdd(args, options = {}) {
@@ -1838,64 +2094,31 @@ function assertSafeWorktreeAdd(args, options = {}) {
   }
 }
 
-function assertSafeGitRead(command, args, options = {}) {
-  const reads = new Set(['status', 'diff', 'log', 'show', 'rev-parse', 'merge-base', 'ls-files', 'ls-remote']);
-  assertNoExecutableGitFlags(args);
-  if (reads.has(command)) return;
-  if (command === 'branch') {
-    const shape = args.join(' ');
-    if (!['', '--show-current', '--list', '-a', '--all'].includes(shape)) {
-      throw new Error('git branch 在合同中只允许查看当前分支或列表。');
-    }
-    return;
-  }
-  if (command === 'worktree') {
-    if (String(args[0] || '').toLowerCase() === 'list') {
-      if (args.slice(1).some((arg) => !['--porcelain', '-z', '-v'].includes(arg))) {
-        throw new Error('git worktree list 只允许 --porcelain/-z/-v。');
-      }
-      return;
-    }
-    if (options.allowWorktreeAdd) {
-      assertSafeWorktreeAdd(args, options);
-      return;
-    }
-    throw new Error('活动 task 不允许再创建或修改其他 worktree。');
-  }
-  if (command === 'remote') {
-    if (String(args[0] || '').toLowerCase() !== 'get-url') {
-      throw new Error('只允许 git remote get-url。');
-    }
-    return;
-  }
-  if (options.allowFetch && command === 'fetch') {
-    const allowedOptions = new Set(['--prune', '--no-tags', '--tags']);
-    const positional = args.filter((arg) => !arg.startsWith('-'));
-    if (positional.length !== 1 || positional[0] !== 'origin' || args.some((arg) => arg.startsWith('-') && !allowedOptions.has(arg))) {
-      throw new Error('git fetch 只允许显式读取 origin，并使用 --prune/--no-tags/--tags。');
-    }
-    return;
-  }
-  throw new Error(`git ${command || '<missing>'} 不是允许的只读命令。`);
-}
-
 function assertSafeGitCommand(tokens, state) {
   const { globals, command, args } = gitSubcommand(tokens);
-  assertSafeGitGlobals(globals);
-  try {
-    assertSafeGitRead(command, args, { allowFetch: true });
-    return;
-  } catch (error) {
-    if (!['add', 'commit', 'push'].includes(command)) throw error;
+  const scopeOverride = globals.find((value) =>
+    /^(?:--git-dir|--work-tree|--namespace)(?:=|$)/i.test(value));
+  const loweredArgs = args.map((value) => String(value).toLowerCase());
+  const destructive =
+    (command === 'reset' && loweredArgs.includes('--hard')) ||
+    command === 'clean' ||
+    (command === 'checkout' && (loweredArgs.includes('-f') || loweredArgs.includes('--force'))) ||
+    (command === 'restore' && loweredArgs.includes('--worktree')) ||
+    (command === 'branch' && loweredArgs.some((value) => value === '-d')) ||
+    (command === 'worktree' && ['remove', 'prune'].includes(loweredArgs[0])) ||
+    (command === 'stash' && ['drop', 'clear'].includes(loweredArgs[0])) ||
+    (command === 'reflog' && loweredArgs[0] === 'expire') ||
+    (command === 'rebase' && loweredArgs.some((value) =>
+      value === '--exec' || value.startsWith('--exec=')));
+  if (destructive) {
+    throw new Error(`git ${command} 请求会丢弃、删除或重写本地状态，已拒绝。`);
   }
-  assertNoExecutableGitFlags(args);
-  if (command === 'commit') {
-    if (args.some((arg) => /^(?:--amend|--no-verify|-n|--fixup(?:=|$)|--squash(?:=|$))$/i.test(arg))) {
-      throw new Error('禁止 amend、跳过 hooks、fixup 或 squash commit。');
-    }
-    if (!args.some((arg) => arg === '-m' || /^--message=/.test(arg) || /^-[a-zA-Z]*m[a-zA-Z]*$/.test(arg))) {
-      throw new Error('git commit 必须显式使用 -m/--message，禁止启动外部编辑器。');
-    }
+  const changesWorktree = new Set([
+    'am', 'apply', 'checkout', 'cherry-pick', 'merge', 'mv',
+    'rebase', 'reset', 'restore', 'revert', 'switch', 'worktree',
+  ]);
+  if (scopeOverride && (command === 'push' || changesWorktree.has(command))) {
+    throw new Error(`git ${scopeOverride} 与文件修改/GitHub 写入组合会绕过当前 worktree scope，已拒绝。`);
   }
   if (command === 'push') {
     const allowedOptions = new Set(['-u', '--set-upstream', '--porcelain', '--dry-run']);
@@ -1911,7 +2134,24 @@ function assertSafeGitCommand(tokens, state) {
     }
     state.githubWrite = true;
   }
-  if (['commit', 'push'].includes(command)) state.forceLiveCheck = true;
+  if (command === 'diff') {
+    const outputIndex = args.findIndex((value) => value === '--output');
+    const inlineOutput = args.find((value) => value.startsWith('--output='));
+    const outputTarget = inlineOutput?.slice('--output='.length) ||
+      (outputIndex >= 0 ? args[outputIndex + 1] : null);
+    if (outputTarget) assertTaskWriteTarget(outputTarget, state);
+  }
+  if (command === 'worktree' && loweredArgs[0] === 'add') {
+    const positional = args.slice(1).filter((value) => !String(value).startsWith('-'));
+    const target = positional.length >= 2 ? positional[positional.length - 2] : null;
+    if (target) assertTaskWriteTarget(target, state);
+  }
+  if ([
+    'add', 'am', 'apply', 'branch', 'checkout', 'cherry-pick', 'commit',
+    'fetch', 'merge', 'mv', 'rebase', 'revert', 'switch', 'tag', 'worktree',
+  ].includes(command) || command === 'push') {
+    state.forceLiveCheck = true;
+  }
 }
 
 function assertNoRepoOverride(tokens) {
@@ -1993,168 +2233,216 @@ function isPathInside(parent, candidate, options = {}) {
   return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
-function canonicalRepoNodeEntry(root, cwd, value) {
-  const literalEntry = String(value || '');
-  if (literalEntry.startsWith('~') || /[$%]/.test(literalEntry) || /![^!]+!/.test(literalEntry)) {
-    throw new Error(`node 入口 ${value || '<missing>'} 必须是字面路径，不能依赖 shell 变量或 home 展开。`);
-  }
-  let canonicalRoot;
-  let canonicalCwd;
-  try {
-    canonicalRoot = fs.realpathSync.native(path.resolve(root));
-    canonicalCwd = fs.realpathSync.native(path.resolve(cwd || root));
-  } catch (error) {
-    throw new Error(`node 工作目录无法验证：${error.message}`);
-  }
-  if (!isPathInside(canonicalRoot, canonicalCwd, { allowSame: true })) {
-    throw new Error('node 工作目录必须位于当前仓库 worktree 内。');
-  }
-
-  const candidate = path.resolve(canonicalCwd, String(value || ''));
-  if (!isPathInside(canonicalRoot, candidate)) {
-    throw new Error(`node 入口 ${value || '<missing>'} 必须位于当前仓库 worktree 内。`);
-  }
-  if (!fs.existsSync(candidate)) {
-    throw new Error(`node 入口 ${value} 不存在。`);
-  }
-
-  let canonicalEntry;
-  try {
-    canonicalEntry = fs.realpathSync.native(candidate);
-  } catch (error) {
-    throw new Error(`node 入口 ${value} 无法验证：${error.message}`);
-  }
-  if (!isPathInside(canonicalRoot, canonicalEntry) || !fs.statSync(canonicalEntry).isFile()) {
-    throw new Error(`node 入口 ${value} 必须是当前仓库 worktree 内的真实文件，不能经符号链接越界。`);
-  }
-  return toPosix(path.relative(canonicalRoot, canonicalEntry));
-}
-
-function assertSafeNodeRuntimeFlag(flag) {
-  const allowed = new Set([
-    '--check', '-c', '--test', '--test-only', '--experimental-sqlite',
-    '--enable-source-maps', '--no-warnings', '--trace-warnings', '--trace-deprecation',
-    '--throw-deprecation', '--use-strict',
-  ]);
-  const withValue = /^(?:--conditions|--unhandled-rejections|--test-concurrency|--test-name-pattern|--test-shard|--test-timeout)=\S+$/;
-  if (!allowed.has(flag) && !withValue.test(flag)) {
-    throw new Error(`node 运行参数 ${flag} 不在仓库脚本/检查允许列表。`);
-  }
-}
-
 function assertSafeNodeCommand(tokens, root = process.cwd(), cwd = root) {
-  if (!['node', 'node.exe'].includes(String(tokens[0] || '').toLowerCase())) {
-    throw new Error('node 命令必须使用 PATH 中的裸 node/node.exe，不能改用外部同名可执行文件。');
-  }
-  const args = tokens.slice(1);
-  const forbidden = /^(?:-e|--eval|-p|--print|-r|--require|--import|--loader|--experimental-loader)(?:=|$)/i;
-  const hit = args.find((arg) => forbidden.test(arg));
-  if (hit) throw new Error(`node 参数 ${hit} 可加载内联/外部代码，已拒绝。`);
-  if (args.length === 0 || args.includes('-')) throw new Error('node 必须显式执行仓库脚本或检查，不能进入 REPL/stdin。');
-  if (args.length === 1 && ['--version', '-v', '--help', '-h'].includes(args[0])) {
-    return { kind: 'metadata', entries: [] };
-  }
-
-  let testMode = false;
-  let entryIndex = -1;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === '--') {
-      entryIndex = index + 1;
-      break;
-    }
-    if (!arg.startsWith('-')) {
-      entryIndex = index;
-      break;
-    }
-    assertSafeNodeRuntimeFlag(arg);
-    if (arg === '--test') testMode = true;
-  }
-
-  if (entryIndex < 0 || entryIndex >= args.length) {
-    if (testMode) return { kind: 'test', entries: [] };
-    throw new Error('node 必须显式执行仓库内入口文件，或使用 node --test 运行仓库测试发现。');
-  }
-
-  const entries = [{
-    argIndex: entryIndex,
-    relativePath: canonicalRepoNodeEntry(root, cwd, args[entryIndex]),
-  }];
-  if (testMode) {
-    let positionalOnly = false;
-    for (let index = entryIndex + 1; index < args.length; index += 1) {
-      const arg = args[index];
-      if (arg === '--') {
-        positionalOnly = true;
-        continue;
-      }
-      if (!positionalOnly && arg.startsWith('-')) {
-        assertSafeNodeRuntimeFlag(arg);
-        continue;
-      }
-      entries.push({
-        argIndex: index,
-        relativePath: canonicalRepoNodeEntry(root, cwd, arg),
-      });
-    }
-  }
-  return { kind: testMode ? 'test' : 'script', entries };
+  void root;
+  void cwd;
+  return {
+    kind: 'unrestricted',
+    entries: [],
+    executable: String(tokens[0] || ''),
+  };
 }
 
 function assertSafeNpmCommand(tokens) {
-  const action = String(tokens[1] || '').toLowerCase();
-  if (!['run', 'run-script', 'test', 'ci', 'install', '--version', '-v', 'help'].includes(action)) {
-    throw new Error(`npm ${action || '<missing>'} 不在任务允许列表；项目检查请走 package scripts。`);
+  return { kind: 'unrestricted', executable: String(tokens[0] || '') };
+}
+
+function isGovernedWriteWrapper(command, action = 'github-write') {
+  if (hasShellControl(command)) return false;
+  const tokens = commandTokens(command);
+  const executable = path.basename(String(tokens[0] || '')).toLowerCase();
+  if (!['node', 'node.exe'].includes(executable)) return false;
+  const scriptIndex = tokens.findIndex((value) =>
+    toPosix(String(value)).endsWith('/scripts/claude-task.cjs') ||
+    toPosix(String(value)) === 'scripts/claude-task.cjs');
+  return scriptIndex >= 0 && String(tokens[scriptIndex + 1] || '').toLowerCase() === action;
+}
+
+function shellMutationTargets(tokens) {
+  const executable = path.basename(String(tokens[0] || '')).toLowerCase();
+  const args = tokens.slice(1);
+  const positional = args.filter((value) => !String(value).startsWith('-'));
+  if (['touch', 'mkdir'].includes(executable)) {
+    return positional;
+  }
+  if (['new-item', 'set-content', 'out-file'].includes(executable)) {
+    return positional.slice(0, 1);
+  }
+  if (['rm', 'rmdir', 'unlink', 'del', 'erase', 'remove-item'].includes(executable)) {
+    return positional;
+  }
+  if (['mv', 'move'].includes(executable)) {
+    return positional;
+  }
+  if (['cp', 'copy', 'install'].includes(executable)) {
+    return positional.slice(-1);
+  }
+  if (['tee', 'tee.exe'].includes(executable)) {
+    return positional;
+  }
+  const targets = [];
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    if (/^(?:\d*|&)>>?$/.test(tokens[index]) && !/^&\d$/.test(tokens[index + 1])) {
+      targets.push(tokens[index + 1]);
+    }
+  }
+  return targets;
+}
+
+function shellRedirectionTargets(segment) {
+  const source = String(segment || '');
+  const targets = [];
+  let quote = null;
+  let escaped = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === '\\' && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+    if (character !== '>' || source[index + 1] === '(') continue;
+    let targetIndex = index + 1;
+    if (source[targetIndex] === '>' || source[targetIndex] === '|') targetIndex += 1;
+    while (/\s/.test(source[targetIndex] || '')) targetIndex += 1;
+    if (source[targetIndex] === '&' && /^\d/.test(source[targetIndex + 1] || '')) continue;
+    if (targetIndex >= source.length) continue;
+    let target = '';
+    const targetQuote =
+      source[targetIndex] === "'" || source[targetIndex] === '"'
+        ? source[targetIndex++]
+        : null;
+    for (; targetIndex < source.length; targetIndex += 1) {
+      const targetCharacter = source[targetIndex];
+      if (targetQuote ? targetCharacter === targetQuote : /[\s;&|]/.test(targetCharacter)) break;
+      target += targetCharacter;
+    }
+    if (target) targets.push(target);
+  }
+  return targets;
+}
+
+function assertNoSystemDestruction(tokens) {
+  const executable = path.basename(String(tokens[0] || '')).toLowerCase();
+  if ([
+    'shutdown', 'reboot', 'halt', 'poweroff', 'mkfs', 'diskutil',
+    'format', 'format.com',
+  ].includes(executable)) {
+    throw new Error(`${executable} 是明确的系统破坏性动作，已拒绝。`);
+  }
+  if (executable === 'dd' && tokens.slice(1).some((value) => /^of=/.test(value))) {
+    throw new Error('dd 写设备/文件是明确的破坏性动作，已拒绝。');
   }
 }
 
-function isReadOnlyShellCommand(tokens) {
+function assertNoRawGitHubWrite(tokens) {
   const executable = path.basename(String(tokens[0] || '')).toLowerCase();
-  const allowed = new Set([
-    'pwd', 'ls', 'dir', 'cat', 'head', 'tail', 'wc', 'which', 'where', 'where.exe',
-    'get-location', 'get-childitem', 'get-content', 'select-string', 'test-path', 'resolve-path',
-    'get-command', 'rg', 'rg.exe',
-  ]);
-  if (!allowed.has(executable)) return false;
-  if (['rg', 'rg.exe'].includes(executable) && tokens.slice(1).some((arg) => /^--pre(?:=|$|-glob)/i.test(arg))) {
-    throw new Error('rg --pre/--pre-glob 可执行外部命令，已拒绝。');
+  if (!['curl', 'curl.exe'].includes(executable)) return;
+  const hasGitHubTarget = tokens.some((value) =>
+    /https?:\/\/(?:api\.)?github\.com\//i.test(String(value)));
+  const hasWriteSignal = tokens.some((value) =>
+    /^(?:-d|--data|--data-raw|--data-binary|-f|--form)(?:=|$)/i.test(String(value))) ||
+    tokens.some((value) =>
+      /^(?:-x(?:post|put|patch|delete)|--request=(?:post|put|patch|delete))$/i
+        .test(String(value))) ||
+    tokens.some((value, index) =>
+      /^(?:-x|--request)$/i.test(String(value)) &&
+      /^(?:post|put|patch|delete)$/i.test(String(tokens[index + 1] || '')));
+  if (hasGitHubTarget && hasWriteSignal) {
+    throw new Error('GitHub HTTP 写入必须走受治理的 gh writer，不得用 curl 绕过。');
   }
-  return true;
+}
+
+function assertShellCommandSafety(command, state = null, root = process.cwd(), cwd = root) {
+  if (isGovernedWriteWrapper(command) || isGovernedWriteWrapper(command, 'create-issues')) {
+    return { forceLiveCheck: Boolean(state), githubWrite: false };
+  }
+  const check = {
+    ...(state || {}),
+    root,
+    cwd,
+    forceLiveCheck: false,
+    githubWrite: false,
+  };
+  const segments = splitShellCommandSegments(command);
+  if (segments.length === 0) throw new Error('命令为空。');
+  for (const segment of segments) {
+    const tokens = unwrapCommandTokens(commandTokens(segment));
+    if (tokens.length === 0) continue;
+    const executable = path.basename(String(tokens[0] || '')).toLowerCase();
+    if (['bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'powershell', 'pwsh'].includes(executable)) {
+      const commandIndex = tokens.findIndex((value) =>
+        /^(?:-c|--command)$/i.test(String(value)));
+      if (commandIndex >= 0 && tokens[commandIndex + 1]) {
+        const nested = assertShellCommandSafety(
+          String(tokens[commandIndex + 1]),
+          state,
+          root,
+          cwd,
+        );
+        check.forceLiveCheck ||= nested.forceLiveCheck;
+        check.githubWrite ||= nested.githubWrite;
+      }
+    }
+    assertNoSystemDestruction(tokens);
+    assertNoRawGitHubWrite(tokens);
+    if (['git', 'git.exe'].includes(executable)) {
+      const parsed = gitSubcommand(tokens);
+      if (!state && parsed.command === 'worktree' && parsed.args[0] === 'add') {
+        assertSafeWorktreeAdd(parsed.args, { root, cwd });
+      } else if (!state) {
+        const mutating = new Set([
+          'add', 'am', 'apply', 'checkout', 'cherry-pick',
+          'merge', 'mv', 'rebase', 'reset', 'restore', 'revert', 'switch',
+        ]);
+        const probe = { root, cwd, owned: [], excluded: [], branch: null };
+        assertSafeGitCommand(tokens, probe);
+        if (probe.githubWrite || mutating.has(parsed.command)) {
+          throw new Error(`git ${parsed.command} 会修改本地或远端状态，需先建立 task contract。`);
+        }
+      } else {
+        assertSafeGitCommand(tokens, check);
+      }
+    } else if (['gh', 'gh.exe'].includes(executable)) {
+      if (!state && isSafeGhRead(tokens)) continue;
+      assertSafeGhCommand(tokens, check);
+    } else {
+      const targets = [
+        ...new Set([
+          ...shellMutationTargets(tokens),
+          ...shellRedirectionTargets(segment),
+        ]),
+      ];
+      if (!state && targets.length > 0) {
+        throw new Error(`${executable} 会修改文件，需先建立 task contract。`);
+      }
+      for (const target of targets) assertTaskWriteTarget(target, check);
+      if (targets.length > 0) check.forceLiveCheck = true;
+      if (['node', 'node.exe'].includes(executable)) {
+        assertSafeNodeCommand(tokens, root, cwd);
+      } else if (['npm', 'npm.cmd', 'npm.exe'].includes(executable)) {
+        assertSafeNpmCommand(tokens);
+      }
+    }
+  }
+  return check;
 }
 
 function isSafeBeforeStartShell(command, root = process.cwd(), cwd = root) {
-  if (hasShellControl(command)) return false;
-  const tokens = shellTokens(command);
-  const executable = path.basename(String(tokens[0] || '')).toLowerCase();
   try {
-    if (['git', 'git.exe'].includes(executable)) {
-      const { globals, command: subcommand, args } = gitSubcommand(tokens);
-      assertSafeGitGlobals(globals);
-      assertSafeGitRead(subcommand, args, {
-        allowFetch: true,
-        allowWorktreeAdd: true,
-        root,
-        cwd,
-      });
-      return true;
-    }
-    if (['gh', 'gh.exe'].includes(executable)) return isSafeGhRead(tokens);
-    if (isReadOnlyShellCommand(tokens)) return true;
-    if (['node', 'node.exe'].includes(executable)) {
-      const node = assertSafeNodeCommand(tokens, root, cwd);
-      if (node.kind === 'metadata') return true;
-      if (node.entries.length !== 1) return false;
-      const entry = node.entries[0];
-      const relativePath = process.platform === 'win32'
-        ? entry.relativePath.toLowerCase()
-        : entry.relativePath;
-      if (relativePath === 'scripts/agent-preflight.cjs') return true;
-      const action = String(tokens[entry.argIndex + 2] || '').toLowerCase();
-      return relativePath === 'scripts/claude-task.cjs' &&
-        ['context', 'start', 'start-r0', 'create-issues'].includes(action);
-    }
-    if (['npm', 'npm.cmd', 'npm.exe'].includes(executable) && ['--version', '-v'].includes(tokens[1])) return true;
-    return false;
+    assertShellCommandSafety(command, null, root, cwd);
+    return true;
   } catch {
     return false;
   }
@@ -2169,30 +2457,19 @@ function commandShellGuard() {
   if (!active) {
     if (isSafeBeforeStartShell(command, root, input.cwd || root)) return;
     process.stderr.write(
-      'COREONE shell blocked: this governed prompt has no active task contract. Only live-state reads, worktree setup, preflight, and claude-task start are allowed.',
+      'COREONE shell blocked: this command is a GitHub write, an explicit file mutation, or a destructive action and no active task contract exists.',
     );
     process.exitCode = 2;
     return;
   }
 
   try {
-    if (hasShellControl(command)) {
-      throw new Error('受治理任务禁止在一个 Bash 调用中串联、管道或重定向；请拆成单一命令，便于逐步审计。');
-    }
-    const tokens = shellTokens(command);
-    const executable = path.basename(String(tokens[0] || '')).toLowerCase();
-    const check = { ...active.state, forceLiveCheck: false };
-    if (['git', 'git.exe'].includes(executable)) {
-      assertSafeGitCommand(tokens, check);
-    } else if (['gh', 'gh.exe'].includes(executable)) {
-      assertSafeGhCommand(tokens, check);
-    } else if (['node', 'node.exe'].includes(executable)) {
-      assertSafeNodeCommand(tokens, root, input.cwd || root);
-    } else if (['npm', 'npm.cmd', 'npm.exe'].includes(executable)) {
-      assertSafeNpmCommand(tokens);
-    } else if (!isReadOnlyShellCommand(tokens)) {
-      throw new Error(`${executable || '<missing>'} 不在任务 shell 允许列表；文件修改使用 Edit/Write，项目检查使用 node/npm scripts。`);
-    }
+    const check = assertShellCommandSafety(
+      command,
+      active.state,
+      root,
+      input.cwd || root,
+    );
     assertActiveState(root, active, { force: check.forceLiveCheck });
     if (check.forceLiveCheck) assertOwnedChanges(root, active.state);
     if (check.githubWrite) {
@@ -2242,9 +2519,10 @@ function commandMcpGuard() {
   const operation = tool.split('__').pop() || '';
   const readOnlyName = /^(?:get|list|read|search|find|query|view|explore|status|fetch)(?:_|$)/i;
   const writeSignal = /(?:^|_)(?:write|create|update|delete|remove|add|set|post|put|patch|merge|close|comment)(?:_|$)/i;
+  if (!/github/i.test(tool)) return;
   if (readOnlyName.test(operation) && !writeSignal.test(operation)) return;
   process.stderr.write(
-    `COREONE MCP blocked: ${tool || 'unknown tool'} is not provably read-only. Use repository-native Edit/Write or audited gh commands for writes.`,
+    `COREONE MCP blocked: ${tool || 'unknown tool'} may write GitHub. Use the serialized GitHub writer so offline governance, spacing, and the real mutation share one lock.`,
   );
   process.exitCode = 2;
 }
@@ -2440,6 +2718,7 @@ module.exports = {
   assertSafeGhCommand,
   assertSafeGitCommand,
   assertSafeNodeCommand,
+  assertShellCommandSafety,
   classifyIssueDeliveryContract,
   collectHandoffFields,
   findScopeViolations,
