@@ -2772,9 +2772,86 @@ const GIT_CONFIG_OPTIONS_WITH_VALUE = new Set([
   '--url',
 ]);
 
+const GIT_CONFIG_LONG_OPTIONS = new Set([
+  '--add',
+  '--all',
+  '--append',
+  '--blob',
+  '--bool',
+  '--bool-or-int',
+  '--bool-or-str',
+  '--comment',
+  '--config-env',
+  '--default',
+  '--edit',
+  '--expiry-date',
+  '--file',
+  '--fixed-value',
+  '--get',
+  '--get-all',
+  '--get-color',
+  '--get-colorbool',
+  '--get-regexp',
+  '--get-urlmatch',
+  '--global',
+  '--help',
+  '--includes',
+  '--int',
+  '--list',
+  '--local',
+  '--name-only',
+  '--null',
+  '--path',
+  '--regexp',
+  '--remove-section',
+  '--rename-section',
+  '--replace-all',
+  '--show-names',
+  '--show-origin',
+  '--show-scope',
+  '--system',
+  '--type',
+  '--unset',
+  '--unset-all',
+  '--url',
+  '--value',
+  '--worktree',
+  ...[
+    'all',
+    'append',
+    'blob',
+    'comment',
+    'default',
+    'file',
+    'fixed-value',
+    'global',
+    'includes',
+    'local',
+    'name-only',
+    'null',
+    'regexp',
+    'show-names',
+    'show-origin',
+    'show-scope',
+    'system',
+    'type',
+    'url',
+    'value',
+    'worktree',
+  ].map((name) => `--no-${name}`),
+]);
+
+function resolveGitConfigLongOption(name) {
+  if (GIT_CONFIG_LONG_OPTIONS.has(name)) return name;
+  const matches = [...GIT_CONFIG_LONG_OPTIONS].filter((candidate) =>
+    candidate.startsWith(name));
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function tokenizeGitConfigArgs(args) {
   const options = [];
   const positionals = [];
+  const unknownOptions = [];
   for (let index = 0; index < args.length; index += 1) {
     const value = String(args[index]);
     if (value === '--') {
@@ -2783,8 +2860,13 @@ function tokenizeGitConfigArgs(args) {
     }
     if (value.startsWith('--')) {
       const equalsIndex = value.indexOf('=');
-      const name = (equalsIndex < 0 ? value : value.slice(0, equalsIndex)).toLowerCase();
+      const rawName = (equalsIndex < 0 ? value : value.slice(0, equalsIndex)).toLowerCase();
+      const name = resolveGitConfigLongOption(rawName);
       const inlineValue = equalsIndex < 0 ? null : value.slice(equalsIndex + 1);
+      if (!name) {
+        unknownOptions.push(value);
+        continue;
+      }
       if (GIT_CONFIG_OPTIONS_WITH_VALUE.has(name)) {
         options.push({
           name,
@@ -2797,6 +2879,10 @@ function tokenizeGitConfigArgs(args) {
       continue;
     }
     if (value.startsWith('-') && value !== '-') {
+      if (value.startsWith('-e')) {
+        options.push({ name: '-e', value: value.slice(2) || null });
+        continue;
+      }
       const name = value.slice(0, 2).toLowerCase();
       if (GIT_CONFIG_OPTIONS_WITH_VALUE.has(name)) {
         const attached = value.slice(2).replace(/^=/, '');
@@ -2805,21 +2891,25 @@ function tokenizeGitConfigArgs(args) {
           value: attached || String(args[index + 1] || ''),
         });
         if (!attached) index += 1;
+      } else if (value === '-h' || value === '-l' || value === '-z') {
+        options.push({ name, value: null });
       } else {
-        options.push({ name: value.toLowerCase(), value: null });
+        unknownOptions.push(value);
       }
       continue;
     }
     positionals.push(value);
   }
-  return { options, positionals };
+  return { options, positionals, unknownOptions };
 }
 
 function isReadOnlyConfigArgs(args) {
   const parsed = tokenizeGitConfigArgs(args);
+  if (parsed.unknownOptions.length > 0) return false;
   const optionNames = new Set(parsed.options.map((option) => option.name));
   if ([
     '--add',
+    '--append',
     '--replace-all',
     '--unset',
     '--unset-all',
@@ -3755,19 +3845,45 @@ function npmLifecycleHasWriteCapability(name) {
   return segments.some((segment) => riskySegments.has(segment));
 }
 
+// Mirrors npm 10.9.8 cmd-list dereferencing for command spellings that resolve
+// to local mutations; capability checks below remain keyed by canonical command.
+const NPM_COMMAND_ALIASES = new Map([
+  ['run', 'run-script'],
+  ['rum', 'run-script'],
+  ['t', 'test'],
+  ['tst', 'test'],
+  ['urn', 'run-script'],
+  ...[
+    ['ci', 'ci clean-install ic install-cl install-cle install-clea install-clean ' +
+      'isntall- isntall-c isntall-cl isntall-cle isntall-clea isntall-clean'],
+    ['dedupe', 'dd ddp ded dedu dedup dedupe'],
+    ['exec', 'exe exec x'],
+    ['init', 'cr cre crea creat create ini init inn inni innit'],
+    ['install', 'add i in ins inst insta instal install isnt isnta isntal isntall'],
+    ['install-ci-test', 'cit clean-install- clean-install-t clean-install-te ' +
+      'clean-install-tes clean-install-test install-ci install-ci- install-ci-t ' +
+      'install-ci-te install-ci-tes install-ci-test si sit'],
+    ['install-test', 'install-t install-te install-tes install-test it'],
+    ['link', 'lin link ln'],
+    ['pack', 'pa pac pack'],
+    ['prune', 'pru prun prune'],
+    ['rebuild', 'rb reb rebu rebui rebuil rebuild'],
+    ['shrinkwrap', 'shr shri shrin shrink shrinkw shrinkwr shrinkwra shrinkwrap'],
+    ['uninstall', 'r rem remo remov remove rm un uni unin unins uninst uninsta ' +
+      'uninstal uninstall unl unli unlin unlink'],
+    ['update', 'ud udp udpa udpat udpate up upd upda updat update upg upgr upgra ' +
+      'upgrad upgrade'],
+    ['version', 'veri veris veriso verison vers versi versio version'],
+  ].flatMap(([canonical, spellings]) =>
+    spellings.split(/\s+/).map((spelling) => [spelling, canonical])),
+]);
+
 function canonicalNpmCommand(name) {
   const normalized = String(name || '').toLowerCase();
   if (normalized.length >= 3 && 'publish'.startsWith(normalized)) {
     return 'publish';
   }
-  const aliases = new Map([
-    ['run', 'run-script'],
-    ['rum', 'run-script'],
-    ['t', 'test'],
-    ['tst', 'test'],
-    ['urn', 'run-script'],
-  ]);
-  return aliases.get(normalized) || normalized;
+  return NPM_COMMAND_ALIASES.get(normalized) || normalized;
 }
 
 const NPM_PATH_OPTIONS = new Set([
@@ -3785,6 +3901,7 @@ const NPM_PATH_OPTIONS = new Set([
   '--require',
   '--import',
   '--loader',
+  '-c',
 ]);
 
 const NPM_OPTIONS_WITH_VALUE = new Set([
@@ -3928,6 +4045,8 @@ function assertSafeNpmCommand(tokens, root = process.cwd(), cwd = root, options 
     'exec',
     'init',
     'install',
+    'install-ci-test',
+    'install-test',
     'link',
     'pack',
     'prune',

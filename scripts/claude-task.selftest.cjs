@@ -2806,6 +2806,373 @@ const blockedNpmLifecycleOptionCommands = Object.fromEntries(
   ]),
 );
 
+const npmMutatingCommandSpellings = `
+  ci clean-install ic install-cl install-cle install-clea install-clean
+  isntall- isntall-c isntall-cl isntall-cle isntall-clea isntall-clean
+  dd ddp ded dedu dedup dedupe
+  exe exec x
+  cr cre crea creat create ini init inn inni innit
+  add i in ins inst insta instal install isnt isnta isntal isntall
+  cit clean-install- clean-install-t clean-install-te clean-install-tes
+  clean-install-test install-ci install-ci- install-ci-t install-ci-te
+  install-ci-tes install-ci-test si sit
+  install-t install-te install-tes install-test it
+  lin link ln
+  pa pac pack
+  pru prun prune
+  rb reb rebu rebui rebuil rebuild
+  shr shri shrin shrink shrinkw shrinkwr shrinkwra shrinkwrap
+  r rem remo remov remove rm un uni unin unins uninst uninsta uninstal
+  uninstall unl unli unlin unlink
+  ud udp udpa udpat udpate up upd upda updat update upg upgr upgra
+  upgrad upgrade
+  veri veris veriso verison vers versi versio version
+`.trim().split(/\s+/);
+
+function runInactiveOptionAritySideEffectRegression(stateKind) {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), `coreone-inactive-${stateKind}-arity-`));
+  const repo = path.join(sandbox, 'repo');
+  const taskScript = path.join(__dirname, 'claude-task.cjs');
+  const npmMarker = path.join(sandbox, 'npm-side-effect.marker');
+  const vitestConfigMarker = path.join(sandbox, 'vitest-config.marker');
+  const quote = (value) => JSON.stringify(String(value));
+  const markerScript = (marker) =>
+    `node -e 'require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran\\n")'`;
+  const runGit = (args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(result.status, 0, `git ${args.join(' ')}: ${result.stderr || result.stdout}`);
+    return String(result.stdout || '').trim();
+  };
+  const guard = (command, env = process.env) =>
+    runShellGuard(command, repo, { env });
+  const executeShellWhenAllowed = (command, env = process.env) => {
+    const status = guard(command, env);
+    const execution = status === 0
+      ? spawnSync('/bin/bash', ['-c', command], {
+        cwd: repo,
+        encoding: 'utf8',
+        env,
+      })
+      : null;
+    return { execution, status };
+  };
+  const packageFiles = [
+    'package.json',
+    'package-lock.json',
+    'packages/fixture/package.json',
+  ];
+  const snapshotPackageFiles = () => Object.fromEntries(
+    packageFiles.map((relative) => {
+      const target = path.join(repo, relative);
+      return [relative, fs.existsSync(target) ? fs.readFileSync(target) : null];
+    }),
+  );
+  const snapshotNodeModules = () => {
+    const roots = [
+      path.join(repo, 'node_modules'),
+      path.join(repo, 'packages', 'fixture', 'node_modules'),
+    ];
+    const records = [];
+    const visit = (target, relative) => {
+      const stat = fs.lstatSync(target);
+      if (stat.isSymbolicLink()) {
+        records.push(`${relative}:link:${fs.readlinkSync(target)}`);
+        return;
+      }
+      if (stat.isDirectory()) {
+        records.push(`${relative}:dir`);
+        for (const entry of fs.readdirSync(target).sort()) {
+          visit(path.join(target, entry), `${relative}/${entry}`);
+        }
+        return;
+      }
+      records.push(
+        `${relative}:file:${crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex')}`,
+      );
+    };
+    for (const root of roots) {
+      if (fs.existsSync(root)) visit(root, path.relative(repo, root));
+      else records.push(`${path.relative(repo, root)}:missing`);
+    }
+    return records;
+  };
+  const restorePackageFixture = (packageBefore, nodeModulesFixture) => {
+    for (const [relative, bytes] of Object.entries(packageBefore)) {
+      const target = path.join(repo, relative);
+      if (bytes === null) fs.rmSync(target, { force: true });
+      else fs.writeFileSync(target, bytes);
+    }
+    fs.rmSync(path.join(repo, 'node_modules'), { recursive: true, force: true });
+    fs.rmSync(
+      path.join(repo, 'packages', 'fixture', 'node_modules'),
+      { recursive: true, force: true },
+    );
+    fs.cpSync(nodeModulesFixture, path.join(repo, 'node_modules'), { recursive: true });
+    fs.rmSync(npmMarker, { force: true });
+  };
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    runGit(['init', '--initial-branch=inactive-probe']);
+    runGit(['config', 'user.name', 'Inactive Arity Test']);
+    runGit(['config', 'user.email', 'inactive-arity@example.invalid']);
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(repo, 'local-dep'), { recursive: true });
+    fs.mkdirSync(path.join(repo, 'removable-dep'), { recursive: true });
+    fs.mkdirSync(path.join(repo, 'packages', 'fixture'), { recursive: true });
+    fs.writeFileSync(path.join(repo, '.gitignore'), 'node_modules/\npackage-lock.json\n', 'utf8');
+    fs.writeFileSync(path.join(repo, 'src', 'owned.txt'), 'owned\n', 'utf8');
+    fs.writeFileSync(
+      path.join(repo, 'local-dep', 'package.json'),
+      `${JSON.stringify({
+        name: 'local-dep',
+        version: '1.0.0',
+        scripts: { install: markerScript(npmMarker) },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'removable-dep', 'package.json'),
+      `${JSON.stringify({
+        name: 'removable-dep',
+        version: '1.0.0',
+        scripts: {
+          install: markerScript(npmMarker),
+          uninstall: markerScript(npmMarker),
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'vitest-config-probe.mjs'),
+      [
+        "import { pathToFileURL } from 'node:url';",
+        'const args = process.argv.slice(2);',
+        "const index = args.findIndex((value) => value === '-c' || value === '--config');",
+        'if (index >= 0 && args[index + 1]) await import(pathToFileURL(args[index + 1]).href);',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${JSON.stringify({
+        name: 'inactive-arity-root',
+        version: '1.0.0',
+        private: true,
+        workspaces: ['packages/*'],
+        dependencies: {
+          'removable-dep': 'file:./removable-dep',
+        },
+        scripts: {
+          test: 'node vitest-config-probe.mjs',
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'packages', 'fixture', 'package.json'),
+      `${JSON.stringify({
+        name: 'fixture',
+        version: '1.0.0',
+        private: true,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.mkdirSync(path.join(repo, 'node_modules', 'removable-dep'), { recursive: true });
+    fs.copyFileSync(
+      path.join(repo, 'removable-dep', 'package.json'),
+      path.join(repo, 'node_modules', 'removable-dep', 'package.json'),
+    );
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed inactive option arity fixture']);
+    const head = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', head]);
+
+    const statePath = path.join(
+      runGit(['rev-parse', '--absolute-git-dir']),
+      'coreone',
+      'claude-task-state.json',
+    );
+    let stateBefore = null;
+    if (stateKind === 'expired') {
+      const startedAt = new Date(Date.now() - 13 * 60 * 60 * 1_000);
+      const verifiedAt = new Date(startedAt.getTime() + 1_000);
+      stateBefore = Buffer.from(`${JSON.stringify({
+        version: 2,
+        mode: 'r0',
+        stage: 'r0',
+        risk: 'R0',
+        reason: 'expired option arity regression fixture',
+        branch: 'inactive-probe',
+        baseSha: head,
+        startedHead: head,
+        startedAt: startedAt.toISOString(),
+        verifiedAt: verifiedAt.toISOString(),
+        owned: ['src/**'],
+        excluded: [],
+      }, null, 2)}\n`);
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, stateBefore);
+    }
+
+    const configPath = path.join(runGit(['rev-parse', '--absolute-git-dir']), 'config');
+    const configBefore = fs.readFileSync(configPath);
+    const editor = path.join(sandbox, 'git-editor.sh');
+    const editorMarker = path.join(sandbox, 'git-editor.marker');
+    fs.writeFileSync(
+      editor,
+      `#!/bin/sh\nprintf 'ran\\n' > ${quote(editorMarker)}\nexit 0\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    const gitConfigEditors = Object.fromEntries([
+      '--ed',
+      '--edi',
+      '-efoo',
+    ].map((option) => {
+      fs.rmSync(editorMarker, { force: true });
+      const probe = executeShellWhenAllowed(
+        `git config ${option}`,
+        { ...process.env, GIT_EDITOR: editor },
+      );
+      return [option, {
+        configChanged: !fs.readFileSync(configPath).equals(configBefore),
+        executionStatus: probe.execution?.status ?? null,
+        guard: probe.status,
+        marker: fs.existsSync(editorMarker),
+      }];
+    }));
+
+    const nodeModulesFixture = path.join(sandbox, 'node-modules-fixture');
+    fs.cpSync(path.join(repo, 'node_modules'), nodeModulesFixture, { recursive: true });
+    const packageBefore = snapshotPackageFiles();
+    const nodeModulesBefore = snapshotNodeModules();
+    const npmCommands = {
+      installPrefix: 'npm --prefix . i ./local-dep',
+      installWorkspace: 'npm -w fixture i ./local-dep',
+      uninstallAlias: 'npm r removable-dep',
+      updateAlias: 'npm up',
+      rebuildAlias: 'npm rb',
+      execAlias:
+        `npm x -- node -e 'require("node:fs").writeFileSync(${JSON.stringify(npmMarker)}, "ran\\n")'`,
+    };
+    const npmSideEffects = Object.fromEntries(
+      Object.entries(npmCommands).map(([name, command]) => {
+        restorePackageFixture(packageBefore, nodeModulesFixture);
+        const probe = executeShellWhenAllowed(command, {
+          ...process.env,
+          npm_config_audit: 'false',
+          npm_config_cache: path.join(sandbox, 'npm-cache'),
+          npm_config_fund: 'false',
+          npm_config_update_notifier: 'false',
+        });
+        return [name, {
+          executionStatus: probe.execution?.status ?? null,
+          guard: probe.status,
+          marker: fs.existsSync(npmMarker),
+          nodeModulesChanged: JSON.stringify(snapshotNodeModules()) !==
+            JSON.stringify(nodeModulesBefore),
+          packageFilesChanged: Object.entries(snapshotPackageFiles()).some(
+            ([relative, bytes]) => {
+              const before = packageBefore[relative];
+              return bytes === null || before === null
+                ? bytes !== before
+                : !bytes.equals(before);
+            },
+          ),
+        }];
+      }),
+    );
+    restorePackageFixture(packageBefore, nodeModulesFixture);
+
+    const externalVitestConfig = path.join(sandbox, 'external-vitest.config.mjs');
+    fs.writeFileSync(
+      externalVitestConfig,
+      `import { writeFileSync } from 'node:fs';\n` +
+        `writeFileSync(${JSON.stringify(vitestConfigMarker)}, 'loaded\\n');\n` +
+        'export default {};\n',
+      'utf8',
+    );
+    const vitestConfig = executeShellWhenAllowed(
+      `npm test -- -c ${quote(externalVitestConfig)} --passWithNoTests`,
+    );
+
+    return {
+      gitConfigEditors,
+      npmSideEffects,
+      statePreserved: stateBefore === null
+        ? !fs.existsSync(statePath)
+        : fs.existsSync(statePath) && fs.readFileSync(statePath).equals(stateBefore),
+      vitestConfig: {
+        executionStatus: vitestConfig.execution?.status ?? null,
+        guard: vitestConfig.status,
+        marker: fs.existsSync(vitestConfigMarker),
+      },
+    };
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+const blockedGitConfigEditorOptions = Object.fromEntries([
+  '--ed',
+  '--edi',
+  '-efoo',
+].map((option) => [
+  option,
+  {
+    configChanged: false,
+    executionStatus: null,
+    guard: 2,
+    marker: false,
+  },
+]));
+
+const blockedNpmMutatingSideEffects = Object.fromEntries([
+  'installPrefix',
+  'installWorkspace',
+  'uninstallAlias',
+  'updateAlias',
+  'rebuildAlias',
+  'execAlias',
+].map((name) => [
+  name,
+  {
+    executionStatus: null,
+    guard: 2,
+    marker: false,
+    nodeModulesChanged: false,
+    packageFilesChanged: false,
+  },
+]));
+
+const inactiveOptionAritySideEffects = Object.fromEntries(
+  ['missing', 'expired'].map((stateKind) => [
+    stateKind,
+    runInactiveOptionAritySideEffectRegression(stateKind),
+  ]),
+);
+
+assert.deepEqual(
+  inactiveOptionAritySideEffects,
+  Object.fromEntries(
+    ['missing', 'expired'].map((stateKind) => [
+      stateKind,
+      {
+        gitConfigEditors: blockedGitConfigEditorOptions,
+        npmSideEffects: blockedNpmMutatingSideEffects,
+        statePreserved: true,
+        vitestConfig: {
+          executionStatus: null,
+          guard: 2,
+          marker: false,
+        },
+      },
+    ]),
+  ),
+  'missing/expired option arity bypasses must not execute or alter inactive-state fixtures',
+);
+
 function runNoStateFindingRegressionMatrix() {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-no-state-findings-'));
   const repo = path.join(sandbox, 'repo');
@@ -3631,6 +3998,13 @@ assert.equal(
   false,
   'npm exec can resolve and execute arbitrary packages',
 );
+for (const spelling of npmMutatingCommandSpellings) {
+  assert.equal(
+    isSafeBeforeStartShell(`npm ${spelling}`, repositoryRoot),
+    false,
+    `npm 10.9.8 mutating command spelling escaped inactive-state guard: ${spelling}`,
+  );
+}
 assert.equal(
   isSafeBeforeStartShell('python3 -m pytest -q'),
   true,
@@ -3976,7 +4350,9 @@ for (const command of [
   'git config --get user.name',
   'git config get user.name',
   'git config get --all user.name',
+  'git config -h',
   'git config list',
+  'git config --gl list',
   'git config --file /tmp/read-only.config get user.name',
   'git -P status --short',
   'git blame scripts/claude-task.cjs',
@@ -4025,6 +4401,10 @@ for (const command of [
   'git config set user.name evil',
   'git config unset user.name',
   'git config edit',
+  'git config --ed',
+  'git config --edi',
+  'git config -efoo',
+  'git config --definitely-unknown',
   'git config --local edit',
   'git config --file /tmp/write.config set user.name evil',
   'git config -t bool probe.local true',
@@ -4109,6 +4489,7 @@ for (const command of [
   'npm --loglevel silent config get registry',
   'npm run lint',
   'npm test -- --runInBand',
+  'npm test -- -c ./vitest.config.mjs --passWithNoTests',
   'npm run build',
   'npm run build -- --workspace fixture',
   'npm run -w fixture build',
@@ -4146,6 +4527,7 @@ for (const command of [
   'npm --prefix=.git test',
   'npm --config=.git/config test',
   'npm test -- --config=/tmp/evil.mjs',
+  'npm test -- -c /tmp/external-vitest.config.mjs --passWithNoTests',
   'npm run build -- --config=/tmp/evil.mjs',
   'npm install',
   'npm ci',
