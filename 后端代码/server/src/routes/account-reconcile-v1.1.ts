@@ -7,7 +7,7 @@
  * 碰钱/口径的写经 writeAuditLog→abc_audit_logs；全站写另由 auditWrite 自动落 operation_logs。
  */
 import { Router } from 'express'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { getDatabase, TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
 import {
@@ -207,11 +207,13 @@ router.get('/overview', (req, res) => {
       (db.prepare(`SELECT COALESCE(SUM(collected_revenue),0) s FROM supplement_orders WHERE collected_month = ? AND status = '已补收'`)
         .get(settlementMonth) as { s: number }).s * 100,
     ) / 100
-    // #93-A 裁决 A 保守口径（derived quarantine）：确认实收只认「有 binding + 所绑
-    // current generation 同院/同月/同行/同终态」的终态月；无 binding 终态（历史无绑定
-    // 遗留与 trigger 被摘窗口伪造在数据级不可区分）保留历史可见性与看板状态计数，
-    // 但 confirmedLabRevenue 一律不计入，也不迁成正常完成态。与启动扫描
-    // ensureReconcileTerminalHospitalMonthIntegrity 同一 quarantine 谓词。
+    // #93-A 裁决 A 保守口径（derived quarantine）+ #94-P1-1 严格形状：确认实收只认
+    // 完整命中 TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL 的终态月——与启动扫描
+    // ensureReconcileTerminalHospitalMonthIntegrity 同一 SQL 片段（binding + 同院/同月/
+    // 同行/current generation 之外，复核完成须 completed_at canonical + completed_by
+    // trim 非空 + closed 字段全空；已关账须两组 canonical 时间 + 两操作者 trim 非空）。
+    // 无 binding 或字段残缺/矛盾的终态（历史遗留与 trigger 被摘窗口伪造数据级不可区分）
+    // 保留历史可见性与看板状态计数，但 confirmedLabRevenue 一律不计入，也不迁成正常完成态。
     const provenancedTerminal = new Set(
       (db.prepare(`
         SELECT hm.id AS id
@@ -221,12 +223,7 @@ router.get('/overview', (req, res) => {
           JOIN account_reconcile_generations generation
             ON generation.reconcile_generation_id = binding.reconcile_generation_id
          WHERE hm.service_month = ?
-           AND generation.is_current = 1
-           AND generation.partner_id = hm.partner_id
-           AND generation.settlement_month = hm.service_month
-           AND generation.hospital_month_id = hm.id
-           AND ((hm.status = '复核完成' AND generation.status = 'complete')
-                OR (hm.status = '已关账' AND generation.status = 'closed'))
+           AND (${TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL})
       `).all(settlementMonth) as Array<{ id: string }>).map(row => String(row.id)),
     )
     const base确认实收 = computed

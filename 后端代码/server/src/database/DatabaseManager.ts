@@ -1348,17 +1348,84 @@ function ensureReconcileHospitalMonthBindings(database: DatabaseSync): void {
   }
 }
 
+// #94-P1-1（派单 2026-07-29）：终态 hospital-month 可信严格形状唯一权威 SQL 片段。
+// startup 扫描（ensureReconcileTerminalHospitalMonthIntegrity，NOT(形状)=违例）与
+// overview 可信实收谓词（account-reconcile-v1.1.ts，AND 形状=白名单）引用同一片段，
+// 一处收紧两侧同步零漂移。别名约定：hm=reconcile_hospital_months、
+// generation=account_reconcile_generations（扫描侧 LEFT JOIN 可整行 NULL）。
+//   复核完成：completed_at canonical + completed_by trim 非空 + closed_at/by 均 NULL
+//             + 绑定 current generation=complete；
+//   已关账：completed/closed 两组 canonical 时间 + 两操作者 trim 非空
+//             + generation=closed；
+//   其它状态夹带任何终态字段 → 形状不成立（扫描外层 WHERE 捞到即违例 fail-closed）。
+// canonical 时间 = SQLite CURRENT_TIMESTAMP 产出的 'YYYY-MM-DD HH:MM:SS' 严格形状：
+// typeof='text' + CAST BLOB 字节长恰 19 + GLOB + 各段范围——同 R8 collected_month
+// 四件套（length/GLOB 均在首个 NUL 截断，BLOB 计全字节防 NUL-junk；BLOB/INTEGER
+// typeof 一并拒）。#94-P1-3（派单 2026-07-29 fresh-P1）日历日收紧：段范围之上再钉
+// Gregorian 真实月日（大月 29-31 / 小月 29-30 / 二月 29 仅闰年 %4·%100·%400）——
+// CURRENT_TIMESTAMP 永不产出 '2026-02-31'（SQLite date 函数归一化为 '2026-03-03'），
+// 与 JS isCanonicalSqliteTimestamp / lis-cases parseStrictDate 同语义。全部子句经
+// typeof 哨兵与 IS/IS NOT 二值化：NULL 输入恒产出 FALSE 而非 NULL——NOT(片段) 在
+// LEFT JOIN 缺代/字段缺失时仍正确判违例，不会被 SQLite 三值逻辑吞掉。
+const canonicalTimestampSql = (column: string): string => `(
+        typeof(${column}) = 'text'
+        AND length(CAST(${column} AS BLOB)) = 19
+        AND ${column} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]'
+        AND substr(${column}, 6, 2) BETWEEN '01' AND '12'
+        AND (
+          substr(${column}, 9, 2) BETWEEN '01' AND '28'
+          OR (substr(${column}, 6, 2) IN ('01', '03', '05', '07', '08', '10', '12')
+              AND substr(${column}, 9, 2) IN ('29', '30', '31'))
+          OR (substr(${column}, 6, 2) IN ('04', '06', '09', '11')
+              AND substr(${column}, 9, 2) IN ('29', '30'))
+          OR (substr(${column}, 6, 2) IS '02'
+              AND substr(${column}, 9, 2) IS '29'
+              AND CAST(substr(${column}, 1, 4) AS INTEGER) % 4 = 0
+              AND (CAST(substr(${column}, 1, 4) AS INTEGER) % 100 <> 0
+                   OR CAST(substr(${column}, 1, 4) AS INTEGER) % 400 = 0))
+        )
+        AND substr(${column}, 12, 2) BETWEEN '00' AND '23'
+        AND substr(${column}, 15, 2) BETWEEN '00' AND '59'
+        AND substr(${column}, 18, 2) BETWEEN '00' AND '59')`
+
+const nonBlankTextSql = (column: string): string =>
+  `(typeof(${column}) = 'text' AND trim(${column}) <> '')`
+
+export const TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL = `(
+    (
+      hm.status IS '复核完成'
+      AND generation.status IS 'complete'
+      AND ${canonicalTimestampSql('hm.completed_at')}
+      AND ${nonBlankTextSql('hm.completed_by')}
+      AND hm.closed_at IS NULL
+      AND hm.closed_by IS NULL
+    ) OR (
+      hm.status IS '已关账'
+      AND generation.status IS 'closed'
+      AND ${canonicalTimestampSql('hm.completed_at')}
+      AND ${nonBlankTextSql('hm.completed_by')}
+      AND ${canonicalTimestampSql('hm.closed_at')}
+      AND ${nonBlankTextSql('hm.closed_by')}
+    )
+  )
+  AND generation.partner_id IS hm.partner_id
+  AND generation.settlement_month IS hm.service_month
+  AND generation.hospital_month_id IS hm.id
+  AND generation.is_current IS 1`
+
 // #93-A：终态 hospital-month 一致性开机扫描（裁决 A 保守口径）。
-// 有 binding 的终态月（status ∈ {复核完成,已关账} 或 completed_at/closed_at 非空）必须与
-// 所绑 current generation 同院/同月/同行/同终态且 current：同终态 =「复核完成↔complete、
-// 已关账↔closed」，字段优先于状态文本（completed_at 非空且 closed 空 ↔ complete；
-// closed_at 非空 ↔ closed）。任一不一致 = trigger 被摘窗口的历史写入 → fail-closed。
-// 无 binding 的终态月（历史无绑定遗留与窗口伪造数据级不可区分）不在此炸启动——
-// derived quarantine：保留历史可见性与看板状态计数，但 overview 确认实收一律不计入
-// （路由侧同一 quarantine 谓词），也不迁成正常完成态。artifact 有效性由
-// ensureReconcileGenerationCompletionShape 在同次 upgrade 内接力（complete/closed 代
-// 全覆盖）。本扫描只跟 binding 走：stale 旧代/无绑定代不参与判定；bindings 四扫描
-// 先行保证 binding 不悬空、指向当前代（本扫描的 is_current 谓词为独立兜底）。
+// #94-P1-1：终态形状升级为严格互证（与 overview 可信实收谓词同一片段）——
+// 有 binding 的终态月（status ∈ {复核完成,已关账} 或任何 completed/closed 字段非空）
+// 必须完整命中 TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL：同院/同月/同行/current
+// generation 之外，复核完成须 completed_at canonical + completed_by trim 非空 +
+// closed 两字段 NULL + generation=complete；已关账须 completed/closed 两组
+// canonical + 两操作者 trim 非空 + generation=closed；其它状态夹带终态字段同样
+// 违例。缺字段/纯空白操作者/非 canonical 时间 = trigger 被摘窗口的历史写入 →
+// fail-closed。无 binding 的终态月（历史无绑定遗留与窗口伪造数据级不可区分）不在
+// 此炸启动——derived quarantine：保留历史可见性与看板状态计数，但 overview 确认
+// 实收一律不计入（路由侧同一 quarantine 谓词），也不迁成正常完成态。artifact
+// 有效性由 ensureReconcileGenerationCompletionShape 在同次 upgrade 内接力
+// （complete/closed 代全覆盖）。bindings 四扫描先行保证 binding 不悬空、指向当前代。
 function ensureReconcileTerminalHospitalMonthIntegrity(database: DatabaseSync): void {
   const mismatch = database.prepare(`
     SELECT hm.id AS id
@@ -1369,17 +1436,10 @@ function ensureReconcileTerminalHospitalMonthIntegrity(database: DatabaseSync): 
         ON generation.reconcile_generation_id = binding.reconcile_generation_id
      WHERE (hm.status IN ('复核完成', '已关账')
             OR hm.completed_at IS NOT NULL
-            OR hm.closed_at IS NOT NULL)
-       AND (generation.reconcile_generation_id IS NULL
-            OR generation.partner_id IS NOT hm.partner_id
-            OR generation.settlement_month IS NOT hm.service_month
-            OR generation.hospital_month_id IS NOT hm.id
-            OR generation.is_current IS NOT 1
-            OR (hm.status = '复核完成' AND generation.status IS NOT 'complete')
-            OR (hm.status = '已关账' AND generation.status IS NOT 'closed')
-            OR (hm.completed_at IS NOT NULL AND hm.closed_at IS NULL
-                AND generation.status IS NOT 'complete')
-            OR (hm.closed_at IS NOT NULL AND generation.status IS NOT 'closed'))
+            OR hm.completed_by IS NOT NULL
+            OR hm.closed_at IS NOT NULL
+            OR hm.closed_by IS NOT NULL)
+       AND NOT (${TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL})
      ORDER BY hm.id
      LIMIT 1
   `).get() as { id?: string | null } | undefined
@@ -1466,6 +1526,35 @@ const COMPLETION_DECISION_KEYS = [
   'delta', 'amountImpact', 'verdict', 'verdictReason', 'verdictBy', 'verdictAt', 'followUp',
 ] as const
 
+// #94-P1-2（派单 2026-07-29）审计字段 canonical 合同原子：
+// - 操作者（verdict_by/completed_by/closed_by）：trim 后非空——isNonEmptyString 只挡
+//   ''，纯空白串（'   '）会冒充有效认定人/关账人混过审计。
+// - 时间戳（verdict_at/completed_at/closed_at）：仓库既有 canonical 时间合同 =
+//   SQLite CURRENT_TIMESTAMP 产出的 'YYYY-MM-DD HH:MM:SS'（UTC）严格形状，与
+//   isStrictSettlementMonth 同风格（锚定正则 + 各段范围），绝不发明宽松 Date.parse
+//   （ISO-T/Z、'2026-8-1'、garbage 全会被它救赎）。#94-P1-3 起再钉 Gregorian 真实
+//   日历日（含闰年，见函数体内注释）。UDF/扫描/lifecycle 三通道共用。
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+const CANONICAL_SQLITE_TIMESTAMP =
+  /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/
+
+function isCanonicalSqliteTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string' || !CANONICAL_SQLITE_TIMESTAMP.test(value)) return false
+  // #94-P1-3（派单 2026-07-29 fresh-P1）：形状/段范围之外再钉 Gregorian 真实日历日
+  // ——SQLite CURRENT_TIMESTAMP 永不产出 '2026-02-31'（主控独立复现：SQLite date 函数
+  // 会把它归一化为 '2026-03-03'）。闰年式与月长表同仓库既有 lis-cases-v1.1.ts
+  // parseStrictDate（日按月大小 + 闰年）；SQL 侧 canonicalTimestampSql 同语义零漂移。
+  const year = Number(value.slice(0, 4))
+  const month = Number(value.slice(5, 7))
+  const day = Number(value.slice(8, 10))
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
+  return day <= daysInMonth
+}
+
 // #93-B 业务语义原子（主控派单 B：service/UDF 共用纯语义 validator）——verdict 权威
 // 枚举 + followUp===verdictFollowUp(verdict) + verdictBy/verdictAt 完整。语义唯一权威源
 // = utils/reconcile-account.ts（VERDICT_REASONS/verdictFollowUp/drivesSupplement，本模块
@@ -1481,7 +1570,9 @@ function isVerdictSemanticallyComplete(
   if (typeof verdict !== 'string'
       || !(VERDICT_REASONS as readonly string[]).includes(verdict)) return false
   if (followUp !== verdictFollowUp(verdict as VerdictReason)) return false
-  if (!isNonEmptyString(verdictBy) || !isNonEmptyString(verdictAt)) return false
+  // #94-P1-2：认定人 trim 后非空（纯空白冒充认定人），认定时间必须是 canonical
+  // SQLite 时间戳（非 canonical 形状的审计时间无法与库内 CURRENT_TIMESTAMP 留痕对齐）。
+  if (!isNonBlankString(verdictBy) || !isCanonicalSqliteTimestamp(verdictAt)) return false
   return true
 }
 

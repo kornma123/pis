@@ -5638,6 +5638,30 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
       verdict: '核对无误', followUp: 'settled', by: 'USER-001', at: '2026-08-01 00:00:00',
       supplement: true,
     },
+    // 单变量⑥（派单 P1-2）：认定人为纯空白串——isNonEmptyString 只挡 ''，'   ' 漏过；
+    // 审计字段必须 trim 后非空（空串/纯空白同拒）。
+    {
+      label: 'verdict-actor-whitespace',
+      verdict: '核对无误', followUp: 'settled', by: '   ', at: '2026-08-01 00:00:00',
+      supplement: false,
+    },
+    // 单变量⑦（派单 P1-2）：认定时间非 canonical SQLite 时间戳——ISO-8601 T/Z 形状
+    // Date.parse 会放行；仓库既有时间合同 = CURRENT_TIMESTAMP 'YYYY-MM-DD HH:MM:SS'
+    // 严格形状（与 isStrictSettlementMonth 同风格锚定正则+范围）。
+    {
+      label: 'verdict-at-noncanonical',
+      verdict: '核对无误', followUp: 'settled', by: 'USER-001', at: '2026-08-01T00:00:00.000Z',
+      supplement: false,
+    },
+    // 单变量⑧（派单 fresh-P1 日历闸）：认定时间形状/段范围合法但 Gregorian 日历不存在
+    // ——SQLite CURRENT_TIMESTAMP 永不产出 '2026-02-31'（主控独立复现：SQLite date 函数
+    // 会把它归一化为 '2026-03-03'）。必须与仓库既有日历严格校验（lis-cases-v1.1.ts
+    // parseStrictDate：日按月大小 + 闰年）同语义拒收。
+    {
+      label: 'verdict-at-calendar-invalid',
+      verdict: '核对无误', followUp: 'settled', by: 'USER-001', at: '2026-02-31 00:00:00',
+      supplement: false,
+    },
   ]
 
   // 语义伪造 fixture：1 diff 的 pending 月，raw SQL 把认定列写成指定形状（pending 窗口
@@ -5688,7 +5712,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     return fixture
   }
 
-  it('rejects semantically forged verdict facts at lifecycle completion (409 zero write; five single-variable shapes)', () => {
+  it('rejects semantically forged verdict facts at lifecycle completion (409 zero write; eight single-variable shapes)', () => {
     for (const shape of SEMANTIC_FORGERY_SHAPES) {
       const fixture = seedSemanticForgeMonthP1(`p1b-lifecycle-${shape.label}`, shape)
       expectLifecycle409(
@@ -5711,7 +5735,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     }
   })
 
-  it('rejects a fact-mirrored but semantically invalid pending→complete write (zero write; five single-variable shapes)', () => {
+  it('rejects a fact-mirrored but semantically invalid pending→complete write (zero write; eight single-variable shapes)', () => {
     for (const shape of SEMANTIC_FORGERY_SHAPES) {
       const label = `p1b-trigger-${shape.label}`
       const fixture = seedSemanticForgeMonthP1(label, shape, { primeRevenue: true })
@@ -5743,7 +5767,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     }
   })
 
-  it('fails boot on a fact-mirrored but semantically invalid complete generation (first boot and real restart; five single-variable shapes)', () => {
+  it('fails boot on a fact-mirrored but semantically invalid complete generation (first boot and real restart; eight single-variable shapes)', () => {
     for (const shape of SEMANTIC_FORGERY_SHAPES) {
       expectArtifactBootForgeryRejected(
         `p1b-boot-${shape.label}`,
@@ -5754,6 +5778,41 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
         label => seedSemanticForgeMonthP1(label, shape, { primeRevenue: true }),
       )
     }
+  })
+
+  it('calendar-day precision on verdict_at (lifecycle channel): rejects 2026-02-31 / 2025-02-29 / 2026-04-31 with zero write, accepts legal leap day 2024-02-29', () => {
+    // 派单 fresh-P1（2026-07-29）：canonical 时间合同从「形状 + 段范围」收紧到
+    // 「Gregorian 真实日历日」（与 lis-cases-v1.1.ts parseStrictDate 同语义：日按月
+    // 大小 + 闰年）。负控三日 CURRENT_TIMESTAMP 永不产出 → completion 必须 409 零写；
+    // 正控合法闰日 2024-02-29 镜像进 artifact 后照常完成、首启扫描零误伤。
+    // （trigger/boot 三通道的 2026-02-31 由 SEMANTIC_FORGERY_SHAPES ⑧ 自动覆盖。）
+    const base = { verdict: '核对无误', followUp: 'settled', by: 'USER-001', supplement: false }
+    for (const [tag, at] of [
+      ['feb31', '2026-02-31 00:00:00'],
+      ['feb29-nonleap', '2025-02-29 00:00:00'],
+      ['apr31', '2026-04-31 00:00:00'],
+    ] as const) {
+      const fixture = seedSemanticForgeMonthP1(`p1c-cal-${tag}`, { label: `cal-${tag}`, ...base, at })
+      expectLifecycle409(
+        () => lifecycle.completeAccountReconciliation(db, fixture.binding, 'USER-001'),
+        'RECONCILIATION_VERDICT_SEMANTICS',
+      )
+      expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'pending',
+        completed_at: null,
+        completed_by: null,
+        completion_artifact_json: null,
+        completion_artifact_hash: null,
+      })
+    }
+    // 正控：2024 为闰年，02-29 真实存在——completion 成功且权威扫描不炸。
+    const ok = seedSemanticForgeMonthP1('p1c-cal-leap-ok', {
+      label: 'cal-leap-ok', ...base, at: '2024-02-29 00:00:00',
+    })
+    lifecycle.completeAccountReconciliation(db, ok.binding, 'USER-001')
+    expect(bindingGenerationRow(db, ok.binding.reconcileGenerationId))
+      .toMatchObject({ status: 'complete' })
+    expect(() => manager.upgradeAccountReconciliationSchema(db)).not.toThrow()
   })
 
   it('accepts a lifecycle completion spanning all six verdicts with exact supplement cardinality (fresh and real restart)', () => {
@@ -5842,5 +5901,209 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     manager.closeDatabase()
     manager.initializeDatabase()
     db = manager.getDatabase()
+  })
+
+  // ── #94-P1-1 终态 hospital-month 严格形状（派单 2026-07-29：startup scan 与
+  //    overview 可信实收谓词共用同一完整形状，避免漂移）────────────────────────────
+  // 漏洞：#93-A 扫描只钉「状态文本↔generation 状态 + 字段优先级粗配对」——有 binding
+  // 的终态行字段残缺/矛盾全部放行：复核完成 completed_at=NULL、completed_by 纯空白、
+  // 夹带 closed 字段；已关账缺 completed/closed 组或操作者空白；待复核夹带终态字段。
+  // 开机不炸且 overview 照样计入确认实收。严格形状与所绑 current generation 严格互证：
+  //   复核完成 = completed_at canonical + completed_by trim 非空 + closed_at/by 均 NULL
+  //             + generation=complete；
+  //   已关账   = completed/closed 两组 canonical 时间 + 两操作者 trim 非空
+  //             + generation=closed；
+  //   其它状态夹带任何终态字段 = malformed。
+  // 合法写者（lifecycle/路由）形状不变；以下伪造只能经 trigger 被摘窗口落入 →
+  // 首次 upgrade（首启）与真实重启（关闭重开同一文件）均 fail-closed，伪造行零持久修复。
+  function expectTerminalShapeForgeryRejected(
+    label: string,
+    setup: 'complete' | 'closed' | 'pending',
+    dropTrigger: string,
+    forge: (probe: DatabaseSync, hospitalMonthId: string) => void,
+  ): void {
+    const fixture = seedPendingMonthP1(label)
+    if (setup !== 'pending') {
+      const diff = db.prepare(
+        'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+      ).get(fixture.hospitalMonthId) as { id: string }
+      lifecycle.setAccountReconciliationVerdict(
+        db, fixture.binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+      )
+      lifecycle.completeAccountReconciliation(db, fixture.binding, 'USER-001')
+      if (setup === 'closed') {
+        lifecycle.closeAccountReconciliation(db, fixture.binding, 'USER-001')
+      }
+    }
+    const probePath = join(testDirectory, `${label}-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    let forgedRow: Record<string, unknown> | undefined
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      seed.exec(`DROP TRIGGER IF EXISTS ${dropTrigger}`)
+      forge(seed, fixture.hospitalMonthId)
+      forgedRow = seed.prepare(`
+        SELECT status, completed_at, completed_by, closed_at, closed_by
+          FROM reconcile_hospital_months WHERE id = ?
+      `).get(fixture.hospitalMonthId) as Record<string, unknown>
+    } finally {
+      seed.close()
+    }
+    const expected = new RegExp(
+      `RECONCILE_HOSPITAL_MONTH_TERMINAL_MISMATCH:${fixture.hospitalMonthId}`,
+    )
+    // 首次 upgrade（首启）即 fail-closed。
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first)).toThrow(expected)
+    } finally {
+      first.close()
+    }
+    // 真实重启：关闭重开同一未修库仍同码 fail-closed，且伪造行零持久修复。
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second)).toThrow(expected)
+      const persisted = second.prepare(`
+        SELECT status, completed_at, completed_by, closed_at, closed_by
+          FROM reconcile_hospital_months WHERE id = ?
+      `).get(fixture.hospitalMonthId)
+      expect(persisted).toEqual(forgedRow)
+    } finally {
+      second.close()
+    }
+  }
+
+  it('fails boot when a bound complete month loses completed_at (trigger-drop window; first boot and real restart)', () => {
+    expectTerminalShapeForgeryRejected(
+      'p1t-complete-at-cleared', 'complete', 'trg_reconcile_hospital_month_complete_finality',
+      (probe, hmId) => {
+        probe.prepare(
+          'UPDATE reconcile_hospital_months SET completed_at = NULL WHERE id = ?',
+        ).run(hmId)
+      },
+    )
+  })
+
+  it('fails boot when a bound complete month carries a whitespace completed_by (trigger-drop window; first boot and real restart)', () => {
+    expectTerminalShapeForgeryRejected(
+      'p1t-complete-by-blank', 'complete', 'trg_reconcile_hospital_month_complete_finality',
+      (probe, hmId) => {
+        probe.prepare(`UPDATE reconcile_hospital_months SET completed_by = '   ' WHERE id = ?`)
+          .run(hmId)
+      },
+    )
+  })
+
+  it('fails boot when a bound complete month carries closed fields (trigger-drop window; first boot and real restart)', () => {
+    expectTerminalShapeForgeryRejected(
+      'p1t-complete-closed-fields', 'complete', 'trg_reconcile_hospital_month_complete_finality',
+      (probe, hmId) => {
+        probe.prepare(`
+          UPDATE reconcile_hospital_months
+             SET closed_at = CURRENT_TIMESTAMP, closed_by = 'attacker' WHERE id = ?
+        `).run(hmId)
+      },
+    )
+  })
+
+  it('fails boot when a bound closed month loses completed_at (trigger-drop window; first boot and real restart)', () => {
+    expectTerminalShapeForgeryRejected(
+      'p1t-closed-completed-cleared', 'closed', 'trg_reconcile_hospital_month_closed_immutable',
+      (probe, hmId) => {
+        probe.prepare(
+          'UPDATE reconcile_hospital_months SET completed_at = NULL WHERE id = ?',
+        ).run(hmId)
+      },
+    )
+  })
+
+  it('fails boot when a bound closed month carries a whitespace closed_by (trigger-drop window; first boot and real restart)', () => {
+    expectTerminalShapeForgeryRejected(
+      'p1t-closed-by-blank', 'closed', 'trg_reconcile_hospital_month_closed_immutable',
+      (probe, hmId) => {
+        probe.prepare(`UPDATE reconcile_hospital_months SET closed_by = ' ' WHERE id = ?`)
+          .run(hmId)
+      },
+    )
+  })
+
+  it('fails boot when a bound pending month carries terminal fields (trigger-drop window; first boot and real restart)', () => {
+    expectTerminalShapeForgeryRejected(
+      'p1t-pending-terminal-fields', 'pending', 'trg_reconcile_hospital_month_pending_guard',
+      (probe, hmId) => {
+        probe.prepare(`
+          UPDATE reconcile_hospital_months
+             SET completed_at = CURRENT_TIMESTAMP, completed_by = 'attacker' WHERE id = ?
+        `).run(hmId)
+      },
+    )
+  })
+
+  it('fails boot when a bound terminal month carries a calendar-impossible timestamp (2026-02-31 / 2025-02-29 / 2026-04-31 on completed_at and closed_at; first boot and real restart)', () => {
+    // 派单 fresh-P1：completed_at/closed_at 的 canonical 合同与 verdict_at 同收紧到真实
+    // 日历日。三枚不可能日 × complete.completed_at（complete_finality 被摘窗口）与
+    // closed.closed_at（closed_immutable 被摘窗口）——首启与真实重启均 fail-closed，
+    // 伪造行零持久修复。
+    for (const [tag, at] of [
+      ['feb31', '2026-02-31 10:00:00'],
+      ['feb29-nonleap', '2025-02-29 10:00:00'],
+      ['apr31', '2026-04-31 10:00:00'],
+    ] as const) {
+      expectTerminalShapeForgeryRejected(
+        `p1c-complete-at-${tag}`, 'complete', 'trg_reconcile_hospital_month_complete_finality',
+        (probe, hmId) => {
+          probe.prepare('UPDATE reconcile_hospital_months SET completed_at = ? WHERE id = ?')
+            .run(at, hmId)
+        },
+      )
+      expectTerminalShapeForgeryRejected(
+        `p1c-closed-at-${tag}`, 'closed', 'trg_reconcile_hospital_month_closed_immutable',
+        (probe, hmId) => {
+          probe.prepare('UPDATE reconcile_hospital_months SET closed_at = ? WHERE id = ?')
+            .run(at, hmId)
+        },
+      )
+    }
+  })
+
+  it('boots clean when a bound closed month carries the legal leap day 2024-02-29 (trigger-drop window rewrite; first boot and real restart; no false positive)', () => {
+    // 正控：2024-02-29 真实存在——completed_at/closed_at 改为该闰日后首启扫描与真实
+    // 重启均不得误炸（日历闸对合法形状零误伤的直接证据；与 lis-cases 严格校验同款
+    // 「严格≠误拒真实日期」钉版）。
+    const fixture = seedPendingMonthP1(`p1c-leap-ok-${++sequence}`)
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(fixture.hospitalMonthId) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.binding, diff.id, '核对无误', null, 'USER-001', 'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, fixture.binding, 'USER-001')
+    lifecycle.closeAccountReconciliation(db, fixture.binding, 'USER-001')
+    const probePath = join(testDirectory, `p1c-leap-ok-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const seed = openRegisteredTestDatabase(probePath)
+    try {
+      seed.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_closed_immutable')
+      seed.prepare(`
+        UPDATE reconcile_hospital_months
+           SET completed_at = '2024-02-29 09:30:00', closed_at = '2024-02-29 10:00:00'
+         WHERE id = ?
+      `).run(fixture.hospitalMonthId)
+    } finally {
+      seed.close()
+    }
+    const first = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(first)).not.toThrow()
+    } finally {
+      first.close()
+    }
+    // 真实重启（关闭重开同一文件）同样零误炸。
+    const second = openRegisteredTestDatabase(probePath)
+    try {
+      expect(() => manager.upgradeAccountReconciliationSchema(second)).not.toThrow()
+    } finally {
+      second.close()
+    }
   })
 })

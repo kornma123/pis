@@ -853,6 +853,164 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
     expect(legal.body.data.board.确认实收).toBe(830)
   })
 
+  it('GET /overview 不把字段残缺/矛盾的绑定终态月计入确认实收（strict shape 与启动扫描同一谓词；合法 complete/closed 正控照常计入）', async () => {
+    // 派单 P1-1：可信实收谓词从「binding + 状态文本↔generation 状态」升级为完整终态
+    // 形状（与 ensureReconcileTerminalHospitalMonthIntegrity 同一 SQL 片段，零漂移）：
+    // 复核完成须 completed_at canonical + completed_by trim 非空 + closed 字段全空；
+    // 已关账须 completed/closed 两组 canonical + 两操作者 trim 非空。残缺行只能经
+    // trigger 被摘窗口产生——读侧隔离：历史可见性/状态计数保留，钱不进确认实收；
+    // 恢复合法形状后照常计入（零误伤正控）。修复前谓词不查字段 → 残缺行照计 830 → RED。
+    const db = await getDb()
+    const manager = await import('../src/database/DatabaseManager.js')
+    const S_PARTNER = 'PT-RECON-STRICT'
+    const S_MONTH = '2027-04'
+    const S_STMT = 'stmt-recon-strict-v1'
+    const S_RECON = 'recon-strict-v1'
+    const sBinding = {
+      partnerId: S_PARTNER,
+      settlementMonth: S_MONTH,
+      statementGenerationId: S_STMT,
+      reconcileGenerationId: S_RECON,
+    }
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-STRICT', '严格形状院', 1)`).run(S_PARTNER)
+    seedStatementGeneration(db, S_PARTNER, S_MONTH, S_STMT, [
+      { caseNo: 'D1-strict', item: '免疫组化染色*3', amount: 300 },
+    ])
+    db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run('l-strict-d1', 'D1-strict', S_PARTNER, '免疫组化染色', 3, 100, S_MONTH)
+    db.prepare(`INSERT OR IGNORE INTO lis_cases (id, case_no, partner_id, ihc_count, special_stain_count, operate_time) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('lc-strict-d1', 'D1-strict', S_PARTNER, 3, 0, `${S_MONTH}-10`)
+    db.prepare(`INSERT OR IGNORE INTO case_revenue (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source) VALUES (?, ?, ?, ?, ?, ?, ?, 'statement')`)
+      .run('cr-strict-1', 'D1-strict', S_PARTNER, S_MONTH, 1000, 830, 830)
+    expect((await auth(request(app).post('/api/v1/account-reconcile/compute').send(sBinding))).status).toBe(200)
+    const sWb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(sBinding))
+    const sHmId = sWb.body.data.snapshot.hospitalMonthId as string
+    expect((await auth(request(app).post(`/api/v1/account-reconcile/hospital-months/${sHmId}/complete`).send(sBinding))).status).toBe(200)
+    const overviewOf = async () => {
+      const res = await auth(request(app).get('/api/v1/account-reconcile/overview').query({ settlementMonth: S_MONTH }))
+      expect(res.status).toBe(200)
+      return res.body.data as { board: Record<string, number> }
+    }
+    const hmRow = () => db.prepare(`
+      SELECT completed_at, closed_by FROM reconcile_hospital_months WHERE id = ?
+    `).get(sHmId) as { completed_at: string | null; closed_by: string | null }
+    // 正控①：合法复核完成照计 830。
+    expect((await overviewOf()).board.确认实收).toBe(830)
+    // 负测①（complete 清 completed_at）：只能摘 complete_finality 落入——不计入；
+    // 恢复合法形状 + 重装权威 trigger（upgrade 顺带跑启动扫描验证已恢复）→ 再计入。
+    const completeRow = hmRow()
+    try {
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_complete_finality')
+      db.prepare('UPDATE reconcile_hospital_months SET completed_at = NULL WHERE id = ?').run(sHmId)
+      const malformed = await overviewOf()
+      expect(malformed.board.确认实收).toBe(0)
+      expect(malformed.board.复核完成).toBeGreaterThanOrEqual(1) // 历史可见性/状态计数保留
+    } finally {
+      db.prepare('UPDATE reconcile_hospital_months SET completed_at = ? WHERE id = ?')
+        .run(completeRow.completed_at, sHmId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+    expect((await overviewOf()).board.确认实收).toBe(830)
+    // 正控②：合法关账照计 830。
+    expect((await auth(request(app).post('/api/v1/account-reconcile/close').send({ items: [sBinding] }))).status).toBe(200)
+    expect((await overviewOf()).board.确认实收).toBe(830)
+    // 负测②（closed 空白 closed_by）：摘 closed_immutable 伪写 → 不计入；恢复 + 重装。
+    const closedRow = hmRow()
+    try {
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_closed_immutable')
+      db.prepare(`UPDATE reconcile_hospital_months SET closed_by = '  ' WHERE id = ?`).run(sHmId)
+      const malformed = await overviewOf()
+      expect(malformed.board.确认实收).toBe(0)
+      expect(malformed.board.已关账).toBeGreaterThanOrEqual(1)
+    } finally {
+      db.prepare('UPDATE reconcile_hospital_months SET closed_by = ? WHERE id = ?')
+        .run(closedRow.closed_by, sHmId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+    expect((await overviewOf()).board.确认实收).toBe(830)
+  })
+
+  it('GET /overview 不把日历不可能终态时间的绑定终态月计入确认实收（2026-02-31/2025-02-29/2026-04-31 负控；2024-02-29 闰日正控照计）', async () => {
+    // 派单 fresh-P1（2026-07-29）：可信实收谓词的 canonical 时间与启动扫描同一 SQL
+    // 片段，从「形状 + 段范围」收紧到 Gregorian 真实日历日（含闰年）——CURRENT_TIMESTAMP
+    // 永不产出 2026-02-31（SQLite 会归一化为 2026-03-03），该形状只能经 trigger 被摘
+    // 窗口落入 → derived quarantine：看板可见性/计数保留，钱不计入确认实收；合法闰日
+    // 2024-02-29 与恢复合法形状后照常计入（零误伤正控）。
+    const db = await getDb()
+    const manager = await import('../src/database/DatabaseManager.js')
+    const C_PARTNER = 'PT-RECON-CAL'
+    const C_MONTH = '2027-05'
+    const C_STMT = 'stmt-recon-cal-v1'
+    const C_RECON = 'recon-cal-v1'
+    const cBinding = {
+      partnerId: C_PARTNER,
+      settlementMonth: C_MONTH,
+      statementGenerationId: C_STMT,
+      reconcileGenerationId: C_RECON,
+    }
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-CAL', '日历闸测试院', 1)`).run(C_PARTNER)
+    seedStatementGeneration(db, C_PARTNER, C_MONTH, C_STMT, [
+      { caseNo: 'D1-cal', item: '免疫组化染色*3', amount: 300 },
+    ])
+    db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run('l-cal-d1', 'D1-cal', C_PARTNER, '免疫组化染色', 3, 100, C_MONTH)
+    db.prepare(`INSERT OR IGNORE INTO lis_cases (id, case_no, partner_id, ihc_count, special_stain_count, operate_time) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('lc-cal-d1', 'D1-cal', C_PARTNER, 3, 0, `${C_MONTH}-10`)
+    db.prepare(`INSERT OR IGNORE INTO case_revenue (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source) VALUES (?, ?, ?, ?, ?, ?, ?, 'statement')`)
+      .run('cr-cal-1', 'D1-cal', C_PARTNER, C_MONTH, 1000, 830, 830)
+    expect((await auth(request(app).post('/api/v1/account-reconcile/compute').send(cBinding))).status).toBe(200)
+    const cWb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(cBinding))
+    const cHmId = cWb.body.data.snapshot.hospitalMonthId as string
+    expect((await auth(request(app).post(`/api/v1/account-reconcile/hospital-months/${cHmId}/complete`).send(cBinding))).status).toBe(200)
+    const overviewOf = async () => {
+      const res = await auth(request(app).get('/api/v1/account-reconcile/overview').query({ settlementMonth: C_MONTH }))
+      expect(res.status).toBe(200)
+      return res.body.data as { board: Record<string, number> }
+    }
+    const hmRow = () => db.prepare(`
+      SELECT completed_at, closed_at FROM reconcile_hospital_months WHERE id = ?
+    `).get(cHmId) as { completed_at: string | null; closed_at: string | null }
+    // 正控①：合法复核完成照计 830。
+    expect((await overviewOf()).board.确认实收).toBe(830)
+    const completeRow = hmRow()
+    try {
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_complete_finality')
+      // 正控②：completed_at 改为合法闰日 2024-02-29 —— 严格 ≠ 误拒真实日期，照计 830。
+      db.prepare('UPDATE reconcile_hospital_months SET completed_at = ? WHERE id = ?')
+        .run('2024-02-29 09:00:00', cHmId)
+      expect((await overviewOf()).board.确认实收).toBe(830)
+      // 负测：三枚日历不可能日（平年 2/29、4/31、2/31）—— quarantine 不计入。
+      for (const bad of ['2025-02-29 09:00:00', '2026-04-31 09:00:00', '2026-02-31 09:00:00']) {
+        db.prepare('UPDATE reconcile_hospital_months SET completed_at = ? WHERE id = ?').run(bad, cHmId)
+        const malformed = await overviewOf()
+        expect(malformed.board.确认实收).toBe(0)
+        expect(malformed.board.复核完成).toBeGreaterThanOrEqual(1) // 历史可见性/状态计数保留
+      }
+    } finally {
+      db.prepare('UPDATE reconcile_hospital_months SET completed_at = ? WHERE id = ?')
+        .run(completeRow.completed_at, cHmId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+    expect((await overviewOf()).board.确认实收).toBe(830)
+    // closed 侧：合法关账照计 830；closed_at 伪写 2026-02-31 → quarantine；恢复后复计。
+    expect((await auth(request(app).post('/api/v1/account-reconcile/close').send({ items: [cBinding] }))).status).toBe(200)
+    expect((await overviewOf()).board.确认实收).toBe(830)
+    const closedRow = hmRow()
+    try {
+      db.exec('DROP TRIGGER IF EXISTS trg_reconcile_hospital_month_closed_immutable')
+      db.prepare('UPDATE reconcile_hospital_months SET closed_at = ? WHERE id = ?')
+        .run('2026-02-31 09:00:00', cHmId)
+      const malformed = await overviewOf()
+      expect(malformed.board.确认实收).toBe(0)
+      expect(malformed.board.已关账).toBeGreaterThanOrEqual(1)
+    } finally {
+      db.prepare('UPDATE reconcile_hospital_months SET closed_at = ? WHERE id = ?')
+        .run(closedRow.closed_at, cHmId)
+      manager.upgradeAccountReconciliationSchema(db)
+    }
+    expect((await overviewOf()).board.确认实收).toBe(830)
+  })
+
   it('collect 非法 collectedMonth 稳定 400：零业务写、零 supplement_collect 成功审计；4xx 拒绝审计仍按 operation_logs 逐条合同完整计入（R7 严格月校验），合法值照旧入账', async () => {
     // R7 P1-2：collectedMonth 复用严格 YYYY-(01..12) 校验。准确口径——零业务写、
     // 零 supplement_collect 成功审计；4xx 拒绝审计仍按 operation_logs 的逐条/聚合合同
