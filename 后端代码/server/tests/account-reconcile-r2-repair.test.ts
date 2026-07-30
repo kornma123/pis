@@ -6204,7 +6204,12 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
   }
 
   const generationTerminalSelect = `
-    SELECT status, completed_at, completed_by, closed_at, closed_by
+    SELECT status, completed_at, completed_by, closed_at, closed_by,
+           completion_artifact_json, completion_artifact_hash,
+           length(CAST(completion_artifact_json AS BLOB)) AS completion_artifact_json_bytes,
+           instr(CAST(completion_artifact_json AS BLOB), x'00') AS completion_artifact_json_nul,
+           length(CAST(completion_artifact_hash AS BLOB)) AS completion_artifact_hash_bytes,
+           instr(CAST(completion_artifact_hash AS BLOB), x'00') AS completion_artifact_hash_nul
       FROM account_reconcile_generations WHERE reconcile_generation_id = ?`
 
   // Pattern F（fragment 通道）：合法 lifecycle complete(+close) 使 hm 终态且绑定，
@@ -6396,6 +6401,108 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     expect(() => manager.upgradeAccountReconciliationSchema(db)).not.toThrow()
   })
 
+  it('direct pending→complete rejects completion artifact bytes hidden after a NUL (JSON and hash; zero write)', () => {
+    for (const target of ['json', 'hash'] as const) {
+      const fixture = seedSemanticForgeMonthP1(
+        `p1g-artifact-trigger-${target}`,
+        VALID_SEMANTIC_SHAPE,
+        { primeRevenue: true },
+      )
+      const context = artifactForgeContext(db, fixture)
+      const validJson = factBoundArtifactJson(context, context.facts)
+      const validHash = prefixedSha256Of(validJson)
+      const forgedJson = target === 'json' ? `${validJson}\0UNHASHED-TAIL` : validJson
+      const forgedHash = target === 'hash' ? `${validHash}\0UNVERIFIED-TAIL` : validHash
+      expectDatabaseMutationBlocked(db, () => {
+        db.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'complete', completed_at = CURRENT_TIMESTAMP,
+                 completed_by = 'USER-001',
+                 completion_artifact_json = ?, completion_artifact_hash = ?
+           WHERE reconcile_generation_id = ?
+        `).run(forgedJson, forgedHash, fixture.binding.reconcileGenerationId)
+      }, /PENDING_RECONCILIATION_COMPLETION_MALFORMED/)
+      expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'pending',
+        completed_at: null,
+        completed_by: null,
+        completion_artifact_json: null,
+        completion_artifact_hash: null,
+      })
+    }
+  })
+
+  it('direct complete→closed rejects a pre-existing completion artifact with hidden NUL-tail bytes (JSON and hash; zero write)', () => {
+    const triggerSqls = db.prepare(`
+      SELECT sql FROM sqlite_master
+       WHERE type = 'trigger'
+         AND name IN (
+           'trg_account_reconcile_completion_immutable',
+           'trg_account_reconcile_complete_finality'
+         )
+       ORDER BY name
+    `).all() as Array<{ sql: string }>
+    expect(triggerSqls).toHaveLength(2)
+    for (const target of ['json', 'hash'] as const) {
+      const fixture = seedSemanticForgeMonthP1(
+        `p1g-artifact-close-${target}`,
+        VALID_SEMANTIC_SHAPE,
+        { primeRevenue: true },
+      )
+      const context = artifactForgeContext(db, fixture)
+      const validJson = factBoundArtifactJson(context, context.facts)
+      const validHash = prefixedSha256Of(validJson)
+      db.prepare(`
+        UPDATE account_reconcile_generations
+           SET status = 'complete', completed_at = CURRENT_TIMESTAMP,
+               completed_by = 'USER-001',
+               completion_artifact_json = ?, completion_artifact_hash = ?
+         WHERE reconcile_generation_id = ?
+      `).run(validJson, validHash, fixture.binding.reconcileGenerationId)
+      db.exec(`
+        DROP TRIGGER trg_account_reconcile_completion_immutable;
+        DROP TRIGGER trg_account_reconcile_complete_finality;
+      `)
+      if (target === 'json') {
+        db.prepare(`
+          UPDATE account_reconcile_generations
+             SET completion_artifact_json = ?
+           WHERE reconcile_generation_id = ?
+        `).run(`${validJson}\0UNHASHED-TAIL`, fixture.binding.reconcileGenerationId)
+      } else {
+        db.prepare(`
+          UPDATE account_reconcile_generations
+             SET completion_artifact_hash = ?
+           WHERE reconcile_generation_id = ?
+        `).run(`${validHash}\0UNVERIFIED-TAIL`, fixture.binding.reconcileGenerationId)
+      }
+      for (const { sql } of triggerSqls) db.exec(sql)
+      expectDatabaseMutationBlocked(db, () => {
+        db.prepare(`
+          UPDATE account_reconcile_generations
+             SET status = 'closed', closed_at = CURRENT_TIMESTAMP, closed_by = 'USER-001'
+           WHERE reconcile_generation_id = ?
+        `).run(fixture.binding.reconcileGenerationId)
+      }, /COMPLETE_RECONCILIATION_CLOSE_MALFORMED/)
+      expect(bindingGenerationRow(db, fixture.binding.reconcileGenerationId)).toMatchObject({
+        status: 'complete',
+        closed_at: null,
+        closed_by: null,
+      })
+      // 夹具清理：坏 artifact 只用于 close trigger 探针，恢复主测试库后再进入下一轮。
+      db.exec(`
+        DROP TRIGGER trg_account_reconcile_completion_immutable;
+        DROP TRIGGER trg_account_reconcile_complete_finality;
+      `)
+      db.prepare(`
+        UPDATE account_reconcile_generations
+           SET completion_artifact_json = ?, completion_artifact_hash = ?
+         WHERE reconcile_generation_id = ?
+      `).run(validJson, validHash, fixture.binding.reconcileGenerationId)
+      for (const { sql } of triggerSqls) db.exec(sql)
+    }
+  })
+
   it('direct complete→closed trigger applies the canonical contract to generation.closed_at/closed_by (zero write; 13 negatives + 2 leap-day positives)', () => {
     // fresh-R3 P1-A/P1-B trigger 通道②：先合法 raw complete（valid 镜像 artifact +
     // CURRENT_TIMESTAMP），再单变量 close。修复前仅 NULL closed_at 被拦（回归钉）；
@@ -6463,6 +6570,72 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
         .toMatchObject({ status: 'closed', closed_at: goodAt })
     }
     expect(() => manager.upgradeAccountReconciliationSchema(db)).not.toThrow()
+  })
+
+  it('fails startup and real restart when completion artifact JSON or hash stores hidden NUL-tail bytes', () => {
+    expectGenerationFieldForgeryRejectedScan(
+      'p1g-s-artifact-json-nul-tail',
+      'complete',
+      row => {
+        row.completion_artifact_json = `${row.completion_artifact_json}\0UNHASHED-TAIL`
+      },
+    )
+    expectGenerationFieldForgeryRejectedScan(
+      'p1g-s-artifact-hash-nul-tail',
+      'complete',
+      row => {
+        row.completion_artifact_hash = `${row.completion_artifact_hash}\0UNVERIFIED-TAIL`
+      },
+    )
+  })
+
+  it('hospital-month terminal triggers reject NUL-tail actors before they can create contradictory terminal state (zero write)', () => {
+    const pending = seedPendingMonthP1('p1hm-trigger-complete-actor-nul-tail')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE reconcile_hospital_months
+           SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = ?
+         WHERE id = ?
+      `).run('USER-001\0UNVERIFIED-TAIL', pending.hospitalMonthId)
+    }, /PENDING_HOSPITAL_MONTH_COMPLETION_MALFORMED/)
+    expect(db.prepare(`
+      SELECT status, completed_at, completed_by
+        FROM reconcile_hospital_months WHERE id = ?
+    `).get(pending.hospitalMonthId)).toMatchObject({
+      status: '待复核',
+      completed_at: null,
+      completed_by: null,
+    })
+
+    const completed = seedPendingMonthP1('p1hm-trigger-close-actor-nul-tail')
+    const diff = db.prepare(
+      'SELECT id FROM reconcile_diffs WHERE hospital_month_id = ?',
+    ).get(completed.hospitalMonthId) as { id: string }
+    lifecycle.setAccountReconciliationVerdict(
+      db,
+      completed.binding,
+      diff.id,
+      '核对无误',
+      null,
+      'USER-001',
+      'admin',
+    )
+    lifecycle.completeAccountReconciliation(db, completed.binding, 'USER-001')
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        UPDATE reconcile_hospital_months
+           SET status = '已关账', closed_at = CURRENT_TIMESTAMP, closed_by = ?
+         WHERE id = ?
+      `).run('USER-001\0UNVERIFIED-TAIL', completed.hospitalMonthId)
+    }, /COMPLETE_HOSPITAL_MONTH_FINAL/)
+    expect(db.prepare(`
+      SELECT status, closed_at, closed_by
+        FROM reconcile_hospital_months WHERE id = ?
+    `).get(completed.hospitalMonthId)).toMatchObject({
+      status: '复核完成',
+      closed_at: null,
+      closed_by: null,
+    })
   })
 
   it('fails boot when a bound complete generation carries a non-canonical completed_at (fragment channel; first boot and real restart; 8-value table)', () => {

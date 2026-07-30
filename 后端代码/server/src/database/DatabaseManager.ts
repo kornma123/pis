@@ -1402,10 +1402,46 @@ const canonicalTimestampSql = (column: string): string => `(
 // AND 原始存储层 BLOB instr(x'00')=0（不依赖 UDF 看到 NUL；UTF-8 多字节序列
 // 天然不含 0x00，合法 Unicode/CJK actor 零误伤）。二值保持：NULL 输入 UDF=0 →
 // 首项 FALSE → AND 恒 FALSE（FALSE AND NULL = FALSE），NOT(谓词) 在三值逻辑下
-// 仍正确判违例。trigger/片段/扫描消费同一 helper，不在多处各写近似 SQL。
+// 仍正确判违例。generation trigger/片段/扫描消费同一完整 helper；hospital-month
+// trigger 的无 UDF 多连接边界见下方纯 SQLite 子集。
+const canonicalActorRawStorageSql = (column: string): string => `(
+        typeof(${column}) = 'text'
+        AND length(CAST(${column} AS BLOB)) > 0
+        AND instr(CAST(${column} AS BLOB), x'00') = 0)`
+
 const canonicalActorSql = (column: string): string => `(
         coreone_canonical_actor(${column}) = 1
-        AND instr(CAST(${column} AS BLOB), x'00') = 0)`
+        AND ${canonicalActorRawStorageSql(column)})`
+
+// hospital-month 的 terminal triggers 会被竞态测试所代表的第二 SQLite 连接直接
+// 触发；该连接按产品合同不注册应用 UDF。这里必须保持纯 SQLite，才能在竞态路径返回
+// PERIOD_CLOSED / COMPLETE_HOSPITAL_MONTH_FINAL，而不是泄漏 no such function。
+// 完整 Unicode whitespace/C0 语义仍由托管连接上的 canonicalActorSql 在 generation
+// trigger、terminal fragment、overview 与 startup 扫描统一承担；本纯 SQL 子集专门
+// 在最早写入点拒绝 NULL/非 TEXT/空串/普通空格串及原始 NUL-tail。
+const canonicalHospitalMonthTriggerActorSql = (column: string): string => `(
+        ${canonicalActorRawStorageSql(column)}
+        AND trim(${column}) <> '')`
+
+// fresh fixed-SHA P1（2026-07-29）：node:sqlite 对 TEXT 同样在首个 NUL 截断，
+// coreone_completion_artifact_valid(json, hash, ...) 因而只能看到 NUL 前缀。
+// 若 JSON 存为 valid-prefix || NUL || un-hashed-tail，且 hash 仍覆盖 valid-prefix，
+// UDF、JS startup 读取与 JSON.parse 都会误判为“完整字节已哈希”；hash 列自身也可用
+// canonical-hash || NUL || tail 冒充 71-byte 值。权威存储谓词必须在 SQLite 原始
+// BLOB 层先拒 NUL，并把 hash 钉为精确 71 ASCII bytes、sha256: + 64 小写十六进制。
+// trigger 与 startup scan 只消费此 helper，不各写近似检查。
+const canonicalCompletionArtifactStorageSql = (
+  jsonColumn: string,
+  hashColumn: string,
+): string => `(
+        typeof(${jsonColumn}) = 'text'
+        AND instr(CAST(${jsonColumn} AS BLOB), x'00') = 0
+        AND typeof(${hashColumn}) = 'text'
+        AND length(CAST(${hashColumn} AS BLOB)) = 71
+        AND instr(CAST(${hashColumn} AS BLOB), x'00') = 0
+        AND substr(${hashColumn}, 1, 7) = 'sha256:'
+        AND substr(${hashColumn}, 8) <> ''
+        AND substr(${hashColumn}, 8) NOT GLOB '*[^0-9a-f]*')`
 
 export const TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL = `(
     (
@@ -1961,7 +1997,11 @@ function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void 
            length(CAST(completed_at AS BLOB)) AS completedAtBytes,
            length(CAST(closed_at AS BLOB)) AS closedAtBytes,
            instr(CAST(completed_by AS BLOB), x'00') AS completedByNul,
-           instr(CAST(closed_by AS BLOB), x'00') AS closedByNul
+           instr(CAST(closed_by AS BLOB), x'00') AS closedByNul,
+           CASE WHEN ${canonicalCompletionArtifactStorageSql(
+             'completion_artifact_json',
+             'completion_artifact_hash',
+           )} THEN 1 ELSE 0 END AS artifactStorageCanonical
       FROM account_reconcile_generations
      WHERE status IN ('complete', 'closed')
      ORDER BY reconcile_generation_id
@@ -1984,6 +2024,7 @@ function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void 
     closedAtBytes: unknown
     completedByNul: unknown
     closedByNul: unknown
+    artifactStorageCanonical: unknown
   }>
   // 期望事实与 trigger 共用同一 expectedCompletionFactsSql 文本；位置参数序 =
   // 文本内 ? 出现序（decisions hm/gen → supplements hm/gen/gen → 外层 hm）。
@@ -2021,6 +2062,7 @@ function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void 
       || row.completedByNul !== 0
       || row.json === null
       || row.hash === null
+      || row.artifactStorageCanonical !== 1
       || (row.status === 'complete'
           && (row.closedAt !== null || row.closedBy !== null))
       || (row.status === 'closed'
@@ -2519,6 +2561,10 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
           OR NOT ${canonicalActorSql('OLD.completed_by')}
           OR OLD.completion_artifact_json IS NULL
           OR OLD.completion_artifact_hash IS NULL
+          OR NOT ${canonicalCompletionArtifactStorageSql(
+            'OLD.completion_artifact_json',
+            'OLD.completion_artifact_hash',
+          )}
           OR coreone_completion_artifact_valid(
                OLD.completion_artifact_json, OLD.completion_artifact_hash,
                OLD.partner_id, OLD.settlement_month, OLD.statement_generation_id,
@@ -2606,6 +2652,10 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
               OR NOT ${canonicalActorSql('NEW.completed_by')}
               OR NEW.completion_artifact_json IS NULL
               OR NEW.completion_artifact_hash IS NULL
+              OR NOT ${canonicalCompletionArtifactStorageSql(
+                'NEW.completion_artifact_json',
+                'NEW.completion_artifact_hash',
+              )}
               OR NEW.closed_at IS NOT NULL
               OR NEW.closed_by IS NOT NULL
               OR coreone_completion_artifact_valid(
@@ -2632,9 +2682,10 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       AND OLD.closed_at IS NULL
       AND (
         NEW.status IS NOT '已关账'
-        OR NEW.closed_at IS NULL
-        OR NEW.closed_by IS NULL
-        OR trim(NEW.closed_by) = ''
+        OR NOT ${canonicalTimestampSql('OLD.completed_at')}
+        OR NOT ${canonicalHospitalMonthTriggerActorSql('OLD.completed_by')}
+        OR NOT ${canonicalTimestampSql('NEW.closed_at')}
+        OR NOT ${canonicalHospitalMonthTriggerActorSql('NEW.closed_by')}
         OR OLD.id IS NOT NEW.id
         OR OLD.partner_id IS NOT NEW.partner_id
         OR OLD.partner_name IS NOT NEW.partner_name
@@ -2680,7 +2731,8 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
        WHERE NEW.status NOT IN ('待复核', '复核完成');
       SELECT RAISE(ABORT, 'PENDING_HOSPITAL_MONTH_COMPLETION_MALFORMED')
        WHERE NEW.status = '复核完成'
-         AND (NEW.completed_at IS NULL OR NEW.completed_by IS NULL OR trim(NEW.completed_by) = '');
+         AND (NOT ${canonicalTimestampSql('NEW.completed_at')}
+              OR NOT ${canonicalHospitalMonthTriggerActorSql('NEW.completed_by')});
       SELECT RAISE(ABORT, 'PENDING_HOSPITAL_MONTH_COMPLETION_MALFORMED')
        WHERE NEW.status = '待复核'
          AND (NEW.completed_at IS NOT NULL OR NEW.completed_by IS NOT NULL);
