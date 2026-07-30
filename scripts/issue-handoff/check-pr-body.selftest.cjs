@@ -845,6 +845,41 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       }
     }
   }
+  for (const [gapName, peerGap] of [
+    ['tight peer exit', ''],
+    ['loose peer exit', lineEnding],
+  ]) {
+    for (const [containerName, wrapBlock] of [
+      [
+        'peer list',
+        (blockLines) => blockLines
+          .map((blockLine, index) => `${index === 0 ? '- ' : '  '}${blockLine}`)
+          .join(lineEnding),
+      ],
+      [
+        'peer blockquote',
+        (blockLines) => blockLines
+          .map((blockLine) => `> ${blockLine}`)
+          .join(lineEnding),
+      ],
+    ]) {
+      for (const [blockName, blockLines] of [
+        ['fence', ['```md', 'independent=42', '```']],
+        ['type-1 HTML block', ['<pre>', 'independent=42', '</pre>']],
+        ['type-6 HTML block', ['<div>', 'independent=42', '</div>']],
+        ['encoded product HTML block', ['&lt;div&gt;', 'independent=42', '&lt;/div&gt;']],
+      ]) {
+        expectPass(
+          `${endingName}/${gapName}/${containerName}/${blockName}: ignored peer block cannot reattach to the old reflection item`,
+          validBody.replace(
+            leastConfidenceLine,
+            `${leastConfidenceLine}${lineEnding}${peerGap}${wrapBlock(blockLines)}`,
+          ),
+          [128],
+        );
+      }
+    }
+  }
   // A real peer list item is a Markdown block boundary regardless of whether
   // its key resembles an inline mimic or a malformed custom/empty-key field.
   for (const [blockName, peerBlock] of prPeerBlockBoundaries) {

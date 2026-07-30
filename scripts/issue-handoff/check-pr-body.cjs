@@ -724,17 +724,21 @@ function stripIgnoredMarkdown(body) {
       const openingFence = parseFenceOpening(syntaxLine);
       if (openingFence) {
         const opensRootIgnoredBlock = container.frame.kind === 'root';
-        const exitsActiveReflection = Boolean(
-          Number.isInteger(activeReflectionContentIndent) &&
-          opensRootIgnoredBlock
-        );
+        // A real child opener was already consumed by the active-item branch
+        // above. Therefore any ignored opener that reaches this point while a
+        // reflection is active has exited that item, whether the new block is
+        // root-, peer-list-, or blockquote-contained.
+        const exitsActiveReflection =
+          Number.isInteger(activeReflectionContentIndent);
         if (exitsActiveReflection) {
           activeReflectionContentIndent = null;
           activeReflectionSawBlank = false;
         }
         fence = { ...openingFence, container: container.frame };
         visibleLines.push(
-          opensRootIgnoredBlock ? ROOT_IGNORED_BLOCK_BOUNDARY : '',
+          opensRootIgnoredBlock || exitsActiveReflection
+            ? ROOT_IGNORED_BLOCK_BOUNDARY
+            : '',
         );
         paragraphOpen = false;
         paragraphContainer = null;
@@ -763,10 +767,8 @@ function stripIgnoredMarkdown(body) {
       );
       if (htmlStart) {
         const opensRootIgnoredBlock = container.frame.kind === 'root';
-        const exitsActiveReflection = Boolean(
-          Number.isInteger(activeReflectionContentIndent) &&
-          opensRootIgnoredBlock
-        );
+        const exitsActiveReflection =
+          Number.isInteger(activeReflectionContentIndent);
         if (exitsActiveReflection) {
           activeReflectionContentIndent = null;
           activeReflectionSawBlank = false;
@@ -775,7 +777,9 @@ function stripIgnoredMarkdown(body) {
           ? { ...htmlStart.state, container: container.frame }
           : null;
         visibleLines.push(
-          opensRootIgnoredBlock ? ROOT_IGNORED_BLOCK_BOUNDARY : '',
+          opensRootIgnoredBlock || exitsActiveReflection
+            ? ROOT_IGNORED_BLOCK_BOUNDARY
+            : '',
         );
         paragraphOpen = false;
         paragraphContainer = null;
