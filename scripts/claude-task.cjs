@@ -2099,11 +2099,20 @@ function assertSafeGitCommand(tokens, state) {
   const scopeOverride = globals.find((value) =>
     /^(?:--git-dir|--work-tree|--namespace)(?:=|$)/i.test(value));
   const loweredArgs = args.map((value) => String(value).toLowerCase());
+  const restoreStagesOnly =
+    command === 'restore' &&
+    args.some((value) => value === '--staged' || value === '-S') &&
+    !args.some((value) => value === '--worktree' || value === '-W');
   const destructive =
-    (command === 'reset' && loweredArgs.includes('--hard')) ||
+    (command === 'reset' && loweredArgs.some((value) =>
+      ['--hard', '--merge', '--keep'].includes(value))) ||
     command === 'clean' ||
-    (command === 'checkout' && (loweredArgs.includes('-f') || loweredArgs.includes('--force'))) ||
-    (command === 'restore' && loweredArgs.includes('--worktree')) ||
+    (command === 'checkout' && (
+      loweredArgs.includes('-f') ||
+      loweredArgs.includes('--force') ||
+      loweredArgs.includes('--')
+    )) ||
+    (command === 'restore' && !restoreStagesOnly) ||
     (command === 'branch' && loweredArgs.some((value) => value === '-d')) ||
     (command === 'worktree' && ['remove', 'prune'].includes(loweredArgs[0])) ||
     (command === 'stash' && ['drop', 'clear'].includes(loweredArgs[0])) ||
@@ -2352,7 +2361,11 @@ function assertNoRawGitHubWrite(tokens) {
   const hasGitHubTarget = tokens.some((value) =>
     /https?:\/\/(?:api\.)?github\.com\//i.test(String(value)));
   const hasWriteSignal = tokens.some((value) =>
-    /^(?:-d|--data|--data-raw|--data-binary|-f|--form)(?:=|$)/i.test(String(value))) ||
+    /^(?:-d|--data|--data-raw|--data-binary|--data-ascii|--data-urlencode|-f|--form|--form-string|--json)(?:=|$)/i
+      .test(String(value))) ||
+    tokens.some((value) =>
+      /^-T(?:.+)?$/.test(String(value)) ||
+      /^--upload-file(?:=|$)/i.test(String(value))) ||
     tokens.some((value) =>
       /^(?:-x(?:post|put|patch|delete)|--request=(?:post|put|patch|delete))$/i
         .test(String(value))) ||
