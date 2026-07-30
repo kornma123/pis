@@ -15,17 +15,17 @@
 3. [`docs/COREONE-质量Loop总览-2026-07-12.md`](COREONE-质量Loop总览-2026-07-12.md) 路由到的 [PRD 质量 Loop](COREONE-PRD质量Loop-2026-07-12.md)；
 4. [`docs/github-issue-pr-management-loop.md`](github-issue-pr-management-loop.md) 与 [PR 治理规范](../.claude/rules/pr-governance.md)。
 
-本页只规定三件事：Claude Code 怎样处理 PRD、PRD 在 GitHub 上怎样流转、同一个 Claude Code 怎样从 PRD 阶段切换到实现阶段。流程不绑定具体模型版本。
+本页只规定三件事：Claude Code 怎样处理 PRD、PRD 在 GitHub 上怎样流转、PRD 定稿后怎样按共用契约 §4 把前端 / 后端实现与异构复核路由给正确 owner。流程不绑定具体模型版本。
 
 ## 1. 一句话结论
 
-**Claude Code 在 PRD 阶段是草稿作者，不是产品决策者，也不是定稿门。** 它把一个 GitHub PRD Issue 整理成可审的 `DRAFT`。PM 明确说“定稿”只结束 PRD 内容闸；还要完成 PRD 合并、工程 Issue 去重与 PM 确认，并由同一个 Claude Code 重新认领和通过 preflight，才获得实现授权。
+**Claude Code 在 PRD 阶段是草稿作者，不是产品决策者，也不是定稿门。** 它把一个 GitHub PRD Issue 整理成可审的 `DRAFT`。PM 明确说“定稿”只结束 PRD 内容闸；还要完成 PRD 合并、工程 Issue 去重与 PM 确认、Codex 正式评级，以及新一轮 ownership / preflight，才可能进入实现。具体实现 owner 继续按共用契约 §4 分域，不因 Claude Code 写过 PRD 就自动归 Claude。
 
 | 角色 | 负责 | 不得冒充 |
 |---|---|---|
 | PM | 目标、优先级、范围、业务口径、PRD 定稿 | 技术实现 owner、GitHub 正式审批或生产 operator |
-| Claude Code | 在 PRD 阶段查事实、起草/修订和准备拍板包；下游门禁齐全后按新工程 Issue 进入实现与验证 | PM 决策、自己的独立 reviewer、未经授权扩大范围、自动合并 |
-| Codex / 其他 Agent | 独立复核，或在有明确 ownership/handoff 时承接专项实现 | 没有 handoff 时改写同一 owner 文件 |
+| Claude Code | 在 PRD 阶段查事实、起草/修订和准备拍板包；获具体授权后创建新需求讨论 Issue；实现前端、复核 Codex 的后端 fixed SHA | PM 决策、Issue 最终评级、自己的独立 reviewer、后端实现 owner、未经授权扩大范围、自动合并 |
+| Codex | 去重并复核新 Issue、统一正式评级与标签回读；实现后端、复核 Claude Code 的前端 fixed SHA | 没有 handoff 时改写同一 owner 文件、替 PM 作产品拍板、自动合并 |
 | 独立 reviewer | 对具体版本给结论、证据、未覆盖边界和下一动作 | 同一轮作者、正式 APPROVE（除非本人确有权限并执行） |
 
 同一个 AI 如果参与了该轮 PRD 改写，就不能再把自己的第二遍阅读称为独立复核。R2/R3 需求优先让未参与改写、且证据轴不同的模型或人员复核。
@@ -60,9 +60,9 @@ COREONE 是公开仓库，PRD 默认产出 **PUBLIC 脱敏版**。具体数据�
   → PRD Draft PR（Refs #N）
   → 独立复核 + PM 拍板评论
   → PRD 定稿 PR（Closes #N）
-  → 合并后再去重、起草实现 Issues
-  → PM 确认候选后创建工程 Issues
-  → Claude Code 按新 Issue 切换到实现阶段
+  → 合并后由 Claude Code 去重、起草需求 / 工程 Issue 候选
+  → PM 明确授权后由 Claude Code 创建，Codex 复核去重并正式评级
+  → 按前端 Claude 实现 / Codex 复核，后端 Codex 实现 / Claude 复核分域
   → 真跑验收与 PM 验收
 ```
 
@@ -71,10 +71,10 @@ COREONE 是公开仓库，PRD 默认产出 **PUBLIC 脱敏版**。具体数据�
 | 1. 需求入队 | 一个 `[PRD]` Issue | 使用 `PRD 输入 / 定稿` Issue Form；PM 只需写六项业务输入与数据安全声明 | 输入足以让 Agent 开始核查，不要求 PM 先准备 SHA、路径或去重结果 |
 | 2. 作者认领 | 主 Issue body 的 `coreone-owner` 受控块 + 认领评论 | Issue 初始为 `unassigned`；Agent 现场去重、preflight 后用 `claude-task start --claim=true` 原子更新 owner 主源与认领评论 | 没有重复项、重复 owner 或文件冲突；无 body 写权限时仍为未认领 |
 | 3. 草稿 | `docs/prd/` 文件 + PR body | 文件头保持 `DRAFT`；PR 使用 `Refs #N`；不改业务代码 | 草稿、自检、假设和拍板项可供复核 |
-| 4. 复核与拍板 | 每个 PR 自己的评论 | reviewer 留可追踪评论；仓库 owner 定稿时使用 `[PM-APPROVAL] decision=approved artifact=<PRD path@实际审阅head>`，要改/未通过不得使用 approved 标记 | PRD Loop 的退出条件满足，且批准内容与最终合并文件 blob 一致 |
+| 4. 复核与拍板 | 线下 fixed-SHA 复核文档 + PM 普通评论 | reviewer 产出可追踪线下文档；仓库 owner 定稿时使用 `[PM-APPROVAL] decision=approved artifact=<PRD path@实际审阅head>`，要改/未通过不得使用 approved 标记 | PRD Loop 的退出条件满足，且批准内容与最终合并文件 blob 一致 |
 | 5. 定稿交付 | 同一 PR | 把 PRD 状态改成 `PM_APPROVED`，补 PM 评论链接；PR 主 Issue 改为 `Closes #N` | checks、复核和 PM 合并批准齐全后由有权角色合并 |
-| 6. 实现入队 | 新的/既有工程 Issues | 先去重、起草候选，再由 PM 确认；不同 owner/风险/交付物才拆票 | 每个 Issue 可独立实施和验收 |
-| 7. 实现与验收 | 工程 PR + 主 Issue | Claude Code 按新的工程 Issue、既有 PR 模板、handoff 和检查工作 | “已实现/已验证/已评审/PM 验收/合并/发布”分别取证 |
+| 6. 实现入队 | 新的/既有工程 Issues | Claude Code 先去重并起草；PM 授权创建后交 Codex 再去重、复核事实/范围/AC、正式评级；不同 owner/风险/交付物才拆票 | 每个 Issue 可独立实施和验收，且正式双轴评级完成 |
+| 7. 实现与验收 | 工程 PR + 主 Issue | 前端由 Claude Code 实现、Codex 复核；后端由 Codex 实现、Claude Code 复核；混合任务先拆票或取得实时例外 | “已实现/已验证/已评审/PM 验收/合并/发布”分别取证 |
 
 稳定规则：
 
@@ -83,7 +83,7 @@ COREONE 是公开仓库，PRD 默认产出 **PUBLIC 脱敏版**。具体数据�
 - PM 定稿不等于 PR 已合并；PRD 合并不等于功能已实现；功能合并不等于已发布。
 - PM 定稿本身不授权写码；实现授权必须同时具备合并后的 PRD 基线、PM 确认的工程 Issue，以及新一轮 ownership / preflight。
 - 草稿阶段用 `Refs #N`，只有 PRD 的验收已完整满足时才改成 `Closes #N`。
-- Claude Code 在 PRD 阶段只能起草实现 Issue 候选；未得到 PM 确认，不批量创建正式 Issue。
+- Claude Code 在 PRD 阶段只能起草实现 Issue 候选；未得到 PM 对具体创建范围的明确授权，不批量创建正式 Issue。创建后立即把 GitHub writer 交回 Codex，正式评级前不得开工。
 
 ## 5. Claude Code PRD 输入合同
 
@@ -134,8 +134,8 @@ Claude Code 在 PRD 阶段交付时同时提供：
 |---|---|---|
 | 业务目标、剩余工作、owner、验收 | 主 Issue | 聊天记录或长期状态文档 |
 | 本次交付的动态 handoff | PR body | 多人共同追加的 session log |
-| 某次决定、复核或阻塞事件 | 对应 Issue/PR 评论 | 只留在 Claude Code 对话里 |
-| 可复现的行级问题 | PR inline comment；另有总结评论 | 只有一个孤立截图 |
+| 某次决定或阻塞事件 | 对应 Issue/PR 普通评论 | 只留在 Claude Code 对话里 |
+| fixed-SHA 复核原文与可复现行级问题 | 线下完整复核文档；GitHub 只在 PM 明确授权时发布最终摘要 | 模型聊天、默认 PR review/comment/status |
 | 稳定产品结论 | 已合并 PRD / ADR / golden / PM 决策索引 | 另建第二份实时 backlog |
 | checks、SHA、mergeability | GitHub/Git 现场 | 长期规则正文 |
 
@@ -201,9 +201,9 @@ Claude Code 在 PRD 阶段交付时同时提供：
 
 没有合并后的 PRD 基线、PM 确认的工程 Issue、明确 ownership 和通过的 develop preflight 时，Claude Code 不得把 PM 定稿或 DRAFT 当成写码授权。R0 琐碎可逆修改不建 Issue，但仍用本地 `start-r0` / `finish-r0` 约束 owned files 与目标检查，不能借 R0 绕过正式功能流程。
 
-### 7.4 通用状态与 PR 复核评论
+### 7.4 通用状态与线下 PR 复核
 
-实现进度、阻塞和 PR 复核不使用模型专属模板；统一使用 [`docs/github-issue-pr-management-loop.md` §9](github-issue-pr-management-loop.md#9-agent-与-github-的评论合同) 的稳定合同。这样 Claude Code 换模型后仍使用同一套字段，也不会让本页这个试运行适配层变成全局规则源。
+实现状态、阻塞和 fixed-SHA PR 复核不使用模型专属模板；统一使用 [`docs/github-issue-pr-management-loop.md` §9](github-issue-pr-management-loop.md#9-线下复核交接与-github-最小发布合同) 的线下稳定合同。复核者默认不向 GitHub 发布 review/comment/status；只有 PM 明确授权具体对象、fixed SHA、文本范围和动作时，唯一 GitHub writer 才发布低频最终摘要。
 
 ## 8. 失败与偏差处理
 
@@ -229,8 +229,8 @@ Claude Code 在 PRD 阶段交付时同时提供：
 ```
 
 5. 仓库 owner 在主 Issue / PR 留结构化 `[PM-APPROVAL]` 评论后，只结束 PRD 内容闸；按现有门禁完成复核并合并 PRD。
-6. 在已拉取最新仓库配置的 Claude Code 中运行 `/coreone-deliver-prd <合并PRD路径> issues`；它先去重并起草工程 Issue 候选，PM 确认后才创建或采用工程 Issue。
-7. 针对一个工程 Issue 运行 `/coreone-deliver-prd #N implement`。工程 Issue 必须用工作项表单填写 `PRD 固定基线`、`RQ → AC 映射`与 Mockup 闸点；Claude Code 再重新认领、声明 owned/excluded files 并通过 develop preflight。完成这些条件后才进入实现，不能沿用 PRD 阶段的隐含权限。
+6. 在已拉取最新仓库配置的 Claude Code 中运行 `/coreone-deliver-prd <合并PRD路径> issues`；它先去重并起草工程 Issue 候选。PM 对具体创建范围明确授权后才由 Claude Code 串行创建，随后交 Codex 再去重、复核事实/范围/AC、正式评级并回读标签。
+7. 针对已完成 Codex 正式评级的工程 Issue 运行 `/coreone-deliver-prd #N implement`。命令先按 owned files / 用户结果分域：前端由 Claude Code 重新认领、声明 owned/excluded files 并通过 develop preflight；后端不得由 Claude Code 认领或代写，交 Codex 实现，Claude Code 等 fixed SHA 后复核；混合任务先拆票，不能拆时需 PM 在实时 handoff 明确例外。
 8. 实现 PR 合并后运行 `/coreone-deliver-prd #N accept`，逐 AC 真跑并交 PM 验收；实现 PR 默认用 `Refs #N`，Issue 在 PM 明确验收通过后手工关闭。
 
 根目录 `CLAUDE.md` 会把 Claude Code 路由到同一共用契约和本页，不需要另设第二个 Agent。
@@ -278,9 +278,9 @@ claude
 
 - 一个主 Issue 能完整驱动 Claude Code 生成 DRAFT；
 - PRD 中没有隐藏方向级假设或敏感原始数据；
-- reviewer 在对应 PR 留下可追踪评论；
+- reviewer 产出锚定 fixed SHA 的可追踪线下复核文档；
 - PM 的定稿评论能被 Claude Code 在下一会话准确找到；
-- Claude Code 没有在定稿前写码，定稿后能从合并 PRD 拆出不重复的工程任务；
+- Claude Code 没有在定稿前写码，定稿后能从合并 PRD 拆出不重复的工程任务，并把创建后的 Issue 交 Codex 正式评级；
 - GitHub Issue、PR body、评论和稳定文档之间没有两套互相漂移的实时状态。
 
 ## 外部能力依据
@@ -293,4 +293,4 @@ claude
 
 ## PM 大白话
 
-你使用的是同一个 Claude Code。它先在 PRD 阶段把想法写成“能审的需求草稿”；GitHub 留下单号、版本、决定和阶段交接。你明确定稿只代表需求内容通过；PRD 合并、工程 Issue 经你确认、Claude Code 重新认领并通过 preflight 后，它才换到实现阶段。不同设备都从同一仓库和 GitHub 现场恢复，不依赖旧设备的聊天或个人配置。
+Claude Code 先把想法写成“能审的需求草稿”，获你对具体范围授权后创建需求 / 工程 Issue；Codex 再查重、校准范围与 AC、统一评级。需求定稿不自动授权任何人写码：前端由 Claude Code 实现、Codex 复核，后端由 Codex 实现、Claude Code 复核。不同设备都从同一仓库和 GitHub 现场恢复，不依赖旧设备的聊天或个人配置。

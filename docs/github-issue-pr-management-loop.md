@@ -25,9 +25,9 @@ Issue 记录“整项工作还剩什么”；PR body 记录“这一次交付由
 <!-- coreone-owner:end -->
 ```
 
-Agent 认领前先核对该块、GitHub assignee、开放 PR 和 worktree。新表单保持 `unassigned`；Claude Code 用 `node scripts/claude-task.cjs start ... --claim=true`，只在 preflight 通过后原子更新该块并发认领评论。已有其他 owner 时拒绝覆盖。没有 Issue body 写权限时只能提出认领，不得把自己视为 current owner；由有权角色回填后才生效。GitHub assignee 可以镜像 owner，但与正文冲突时先停下并校准，不能选择性取用。
+Agent 认领前先核对该块、GitHub assignee、开放 PR 和 worktree。新表单保持 `unassigned`；Claude Code 仅在它按共用契约 §4 担任实现 owner（前端，或实时 handoff 记录的明确例外）时，才用 `node scripts/claude-task.cjs start ... --claim=true`，并只在 preflight 通过后原子更新该块、发布认领事件。后端实现由 Codex 建立自己的任务合同与 preflight，Claude Code 保持 reviewer 身份。已有其他 owner 时拒绝覆盖。没有 Issue body 写权限时只能提出认领，不得把自己视为 current owner；由有权角色回填后才生效。GitHub assignee 可以镜像 owner，但与正文冲突时先停下并校准，不能选择性取用。
 
-新任务的实现 / 复核轴遵循共用契约 §4：前端由 Claude Code CLI/K3 实现、Codex 做 fixed-SHA 复核；后端由 Codex 实现、Claude Code CLI/K3 做 fixed-SHA 独立复核。Issue 正式评级与标签写入 / 回读仅由 Codex 串行执行。规则生效前已经在执行的任务保持既有 owner 到收口；具体例外只记在对应实时 handoff，不写进长期规则。
+新任务的实现 / 复核轴遵循共用契约 §4：前端由 Claude Code CLI/K3 实现、Codex 做 fixed-SHA 复核；后端由 Codex 实现、Claude Code CLI/K3 做 fixed-SHA 独立复核。混合任务优先按可独立验收边界拆票；不能拆时必须由 PM 在实时 handoff 明确单一实现 owner 和异构 reviewer。Issue 正式评级与标签写入 / 回读仅由 Codex 串行执行。规则生效前已经在执行的任务保持既有 owner 到收口；具体例外只记在对应实时 handoff，不写进长期规则。
 
 旧文档中的待办不能原样搬进 GitHub。创建 Issue 前必须实时核对开放 / 关闭 Issues、开放 PR、近期合并 PR、labels 和 milestones，并判断旧材料是否已经失效。
 
@@ -48,10 +48,9 @@ Issue 必须包含：业务影响、来源链接、现状证据、范围、非�
 
 ### 实现准入标签合同
 
-- 优先级表示业务损失与处置紧迫度；上线影响表示是否必须阻断当前发布。两条轴相关但不等价，必须分别给证据。
-- 可实施 Issue 必须恰好有一个 `P0` / `P1` / `P2` / `P3`，以及恰好一个 `阻断上线` / `非阻断上线`。`P0 + 非阻断上线`、`P3 + 阻断上线` 是非法组合；P1 / P2 可配任一上线影响，但 Issue 中必须写清可达路径、影响与 release disposition 理由。
-- 只有提问、尚待澄清的 question-only 讨论 Issue 可以暂时仅有 `question`、不带两条实现轴；它不是可实施项，Codex 完成去重、事实、范围、AC 复核和正式评级前不得认领或开工。
-- 评级升降必须在 Issue 留下审计证据、触发条件和变更理由。`claude-task start` 与存续任务现场回读都会拉取 labels 并 fail closed：缺失、重复、非法组合或开工后评级漂移时一律停止。
+<!-- issue-rating-source: docs/prd/COREONE-Issue分级与上线阻断标签规则.md -->
+
+双轴定义、合法组合、`question-only` 例外、Codex 评级 owner、finding 的 release disposition 和活动 state 的评级迁移，唯一详规见 [`docs/prd/COREONE-Issue分级与上线阻断标签规则.md`](prd/COREONE-Issue分级与上线阻断标签规则.md)。本闭环只负责把它接到“讨论 → 创建 → 复核评级 → 实现”顺序；不得在此复制第二套标签规则。
 
 ## 3. PM 决策怎么走
 
@@ -139,7 +138,7 @@ node scripts/offline-github-governance.cjs
 1. **浮现**：把这一轮里未实现的需求 + 发现的问题收拢成候选清单。
 2. **去重**（开 Issue 前的硬前置，见 §1 / §2）：现场读 `gh issue list --state all`、`docs/PM待拍板.md` 决策索引和近期 PR，判定哪些已被现有 Issue / 决策覆盖。**已覆盖的不重开**，只在汇报里说明它跟踪在哪（`#N` 或 `PM待拍板:ID`）。已在 `PM待拍板` / 别处跟踪的决策，除非 PM 要求，不复制成第二个 Issue 队列。
 3. **起草，不直接开**（默认 **draft-then-confirm**）：Claude Code 对去重后的真新项，各起草标题 + 单一分类（§2 六选一）+ 对应 `kind/*` 或 `bug`/`documentation` label + 结构化 body（业务影响 / 现状证据带 `file:line` 或 `PR#` / 建议范围 / 非范围 / 验收 / 来源），先交 PM 过目。
-4. **PM 拍板后串行开、复核、评级并回报**：Claude Code 在授权范围内创建 Issue 后停止写入并交给 Codex；Codex 重做去重与事实检查，校准范围 / AC，按 §2 写入并回读两条正式标签。最终回报「开了哪些 / 跳过哪些（已覆盖，指向 `#N`）/ 如何评级」。执行方不得跳过 PM 确认直接批量开，Codex 评级前不得派实现，也不得把不确定 / 有歧义的项硬塞成实现队列。
+4. **PM 拍板后串行开、复核、评级并回报**：Claude Code 在授权范围内创建 Issue 后停止写入并交给 Codex；Codex 重做去重与事实检查，校准范围 / AC，按唯一标签规则源写入并回读正式评级。最终回报「开了哪些 / 跳过哪些（已覆盖，指向 `#N`）/ 如何评级」。执行方不得跳过 PM 确认直接批量开，Codex 评级前不得派实现，也不得把不确定 / 有歧义的项硬塞成实现队列。
 
 Claude Code 本地入口：`/coreone-deliver-prd <PRD或Issue> issues`。默认路径按本节直接用 `gh` 去重并起草，止步于草稿；只有 PM 对具体 Issue 创建范围明确授权后，Claude Code 才作为串行 GitHub writer 创建，随即停止写入并交给 Codex 复核与正式评级。`.claude/workflows/surface-to-issues.js` 只供支持 `phase/agent/pipeline` DSL 的 workflow harness 使用，不是普通 Claude Code 会话的原生命令。
 

@@ -110,10 +110,64 @@ const issueLoopText = fs.readFileSync(
   path.join(repositoryRoot, 'docs/github-issue-pr-management-loop.md'),
   'utf8',
 );
-assert.match(issueLoopText, /question-only/);
-assert.match(issueLoopText, /P0 \+ 非阻断上线/);
-assert.match(issueLoopText, /P3 \+ 阻断上线/);
+const issueRatingText = fs.readFileSync(
+  path.join(repositoryRoot, 'docs/prd/COREONE-Issue分级与上线阻断标签规则.md'),
+  'utf8',
+);
+assert.match(issueRatingText, /issue-rating-contract-id: coreone-issue-rating\/v1/);
+assert.match(issueRatingText, /question-only/);
+assert.match(issueRatingText, /P0 \+ 非阻断上线/);
+assert.match(issueRatingText, /P3 \+ 阻断上线/);
+assert.match(issueRatingText, /Codex.*正式双轴评级/s);
+assert.match(issueRatingText, /\[ISSUE-RATING\] owner=Codex/);
+assert.match(
+  issueLoopText,
+  /issue-rating-source: docs\/prd\/COREONE-Issue分级与上线阻断标签规则\.md/,
+);
+assert.doesNotMatch(
+  issueLoopText,
+  /P0 \+ 非阻断上线|P3 \+ 阻断上线/,
+  'Issue management loop must point to, not duplicate, the rating contract',
+);
 assert.match(issueLoopText, /release disposition/);
+
+const activeClaudeRoutes = new Map([
+  [
+    '.claude/commands/coreone-deliver-prd.md',
+    fs.readFileSync(
+      path.join(repositoryRoot, '.claude/commands/coreone-deliver-prd.md'),
+      'utf8',
+    ),
+  ],
+  [
+    '.claude/skills/coreone/SKILL.md',
+    fs.readFileSync(path.join(repositoryRoot, '.claude/skills/coreone/SKILL.md'), 'utf8'),
+  ],
+  [
+    'docs/Claude-Code-PRD-GitHub协作范式.md',
+    fs.readFileSync(
+      path.join(repositoryRoot, 'docs/Claude-Code-PRD-GitHub协作范式.md'),
+      'utf8',
+    ),
+  ],
+]);
+for (const [file, text] of activeClaudeRoutes) {
+  assert.match(text, /agent-operating-contract\.md.*§4|共用契约 §4/s, `${file}: routing source`);
+  assert.match(text, /前端.*Claude Code.*Codex.*复核/s, `${file}: frontend route`);
+  assert.match(text, /后端.*Codex.*Claude Code.*复核/s, `${file}: backend route`);
+  assert.match(
+    text,
+    /线下.*(?:fixed[- ]SHA|固定 SHA)|(?:fixed[- ]SHA|固定 SHA).*线下/s,
+    `${file}: offline review route`,
+  );
+  assert.doesNotMatch(
+    text,
+    /独立 reviewer 在目标 PR 留普通评论|reviewer 留可追踪评论|reviewer 在对应 PR 留下可追踪评论/,
+    `${file}: retired GitHub review route`,
+  );
+}
+assert.match(activeClaudeRoutes.get('.claude/commands/coreone-deliver-prd.md'), /Codex 正式评级/);
+assert.match(activeClaudeRoutes.get('.claude/skills/coreone/SKILL.md'), /\[ISSUE-RATING\]/);
 
 assert.equal(toPosix('.\\前端代码\\src\\App.tsx'), '前端代码/src/App.tsx');
 assert.equal(matchesAny('前端代码/src/App.tsx', ['前端代码/src/**']), true);
@@ -2751,6 +2805,227 @@ if (args[0] === 'repo' && args[1] === 'view') {
   }
 }
 
+function runIsolatedRatingRebaseline(options = {}) {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-rating-rebaseline-'));
+  const repo = path.join(sandbox, 'repo');
+  const remote = path.join(sandbox, 'origin.git');
+  const fakeBin = path.join(sandbox, 'bin');
+  const liveOwner = options.liveOwner || 'Test Owner';
+  const stateOwner = options.stateOwner || 'Test Owner';
+  const issueBody = `<!-- coreone-owner:start -->
+- **current owner**: ${liveOwner}
+<!-- coreone-owner:end -->`;
+  const startedAt = new Date(Date.now() - 2_000).toISOString();
+  const observedAt = new Date().toISOString();
+  const livePriority = options.livePriority || 'P2';
+  const liveReleaseImpact = options.liveReleaseImpact || '非阻断上线';
+  const statePriority = Object.hasOwn(options, 'statePriority') ? options.statePriority : 'P1';
+  const stateReleaseImpact = Object.hasOwn(options, 'stateReleaseImpact')
+    ? options.stateReleaseImpact
+    : '阻断上线';
+  const previous = statePriority && stateReleaseImpact
+    ? `${statePriority}/${stateReleaseImpact}`
+    : 'UNRECORDED/UNRECORDED';
+  const ratingBody = options.ratingBody || (
+    `[ISSUE-RATING] owner=Codex previous=${previous} ` +
+    `current=${livePriority}/${liveReleaseImpact} reason=复核证据改变了当前发布处置`
+  );
+  const handoffBody = `[HANDOFF] status=blocked
+result: isolated rating drift proof
+evidence: local fake GitHub fixture
+risk: release remains blocked
+next-owner: reviewer
+trigger: rating baseline restored
+least-confidence: risk-v1; anchor=name:rating lifecycle; uncertainty=unverified:rebaseline path
+biggest-missing: no-finding-v1; checked=path:scripts/claude-task.cjs; unchecked=ref:Issue#81`;
+
+  function runGit(args, cwd = repo) {
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    assert.equal(result.status, 0, `git ${args.join(' ')}: ${result.stderr || result.stdout}`);
+    return String(result.stdout || '').trim();
+  }
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    fs.mkdirSync(fakeBin, { recursive: true });
+    runGit(['init', '--bare', remote], sandbox);
+    runGit(['init', '--initial-branch=task-rating-test'], repo);
+    runGit(['config', 'user.name', 'Rating Test'], repo);
+    runGit(['config', 'user.email', 'rating-test@example.invalid'], repo);
+    fs.writeFileSync(path.join(repo, 'seed.txt'), 'seed\n', 'utf8');
+    runGit(['add', 'seed.txt'], repo);
+    runGit(['commit', '-m', 'test: seed isolated rating repo'], repo);
+    runGit(['remote', 'add', 'origin', remote], repo);
+    runGit(['push', 'origin', 'HEAD:refs/heads/master'], repo);
+
+    const head = runGit(['rev-parse', 'HEAD'], repo);
+    const statePath = runGit(
+      ['rev-parse', '--path-format=absolute', '--git-path', 'coreone/claude-task-state.json'],
+      repo,
+    );
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    const state = {
+      version: options.stateVersion ?? 2,
+      mode: 'governed',
+      issue: 81,
+      issueUrl: 'https://github.com/acme/coreone/issues/81',
+      issueTitle: 'Rating lifecycle regression',
+      issueBodyHash: crypto.createHash('sha256')
+        .update(options.bodyDrift ? `${issueBody}\nstale` : issueBody, 'utf8')
+        .digest('hex'),
+      stage: 'implementation',
+      owner: stateOwner,
+      risk: 'R1',
+      branch: 'task-rating-test',
+      baseSha: options.baseDrift ? '0000000000000000000000000000000000000000' : head,
+      startedHead: head,
+      startedAt,
+      verifiedAt: startedAt,
+      owned: ['scripts/**'],
+      excluded: [],
+    };
+    if (statePriority !== undefined) state.issuePriority = statePriority;
+    if (stateReleaseImpact !== undefined) state.issueReleaseImpact = stateReleaseImpact;
+    fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+
+    const fakeGh = path.join(fakeBin, 'gh');
+    fs.writeFileSync(fakeGh, `#!/usr/bin/env node
+'use strict';
+const args = process.argv.slice(2);
+const issueBody = ${JSON.stringify(issueBody)};
+const observedAt = ${JSON.stringify(observedAt)};
+const ratingBody = ${JSON.stringify(ratingBody)};
+const handoffBody = ${JSON.stringify(handoffBody)};
+const commentIssue = ${JSON.stringify(options.commentIssue || 81)};
+const commentActor = ${JSON.stringify(options.commentActor || 'test-actor')};
+const currentActor = ${JSON.stringify(options.currentActor || 'test-actor')};
+if (args[0] === 'repo' && args[1] === 'view') {
+  console.log(JSON.stringify({ nameWithOwner: 'acme/coreone', url: 'https://github.com/acme/coreone' }));
+} else if (args[0] === 'issue' && args[1] === 'view') {
+  console.log(JSON.stringify({
+    number: Number(args[2]),
+    state: 'OPEN',
+    url: 'https://github.com/acme/coreone/issues/' + args[2],
+    body: issueBody,
+    labels: [{ name: ${JSON.stringify(livePriority)} }, { name: ${JSON.stringify(liveReleaseImpact)} }],
+    updatedAt: observedAt,
+  }));
+} else if (args[0] === 'api' && args[1] === 'repos/acme/coreone/issues/comments/456') {
+  console.log(JSON.stringify({
+    issue_url: 'https://api.github.com/repos/acme/coreone/issues/' + commentIssue,
+    created_at: observedAt,
+    user: { login: commentActor },
+    body: ratingBody,
+  }));
+} else if (args[0] === 'api' && args[1] === 'repos/acme/coreone/issues/comments/123') {
+  console.log(JSON.stringify({
+    issue_url: 'https://api.github.com/repos/acme/coreone/issues/81',
+    created_at: observedAt,
+    user: { login: currentActor },
+    body: handoffBody,
+  }));
+} else if (args[0] === 'api' && args[1] === 'user') {
+  console.log(currentActor);
+} else {
+  console.error('unexpected fake gh invocation: ' + args.join(' '));
+  process.exitCode = 9;
+}
+`, { encoding: 'utf8', mode: 0o755 });
+
+    const commandArgs = options.handoffBefore
+      ? [
+          path.join(__dirname, 'claude-task.cjs'),
+          'handoff',
+          '--status=blocked',
+          '--evidence=https://github.com/acme/coreone/issues/81#issuecomment-123',
+        ]
+      : [
+          path.join(__dirname, 'claude-task.cjs'),
+          'rebaseline-rating',
+          `--evidence=https://github.com/acme/coreone/issues/${options.evidenceIssue || 81}#issuecomment-456`,
+        ];
+    const result = spawnSync(process.execPath, commandArgs, {
+      cwd: repo,
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH || ''}` },
+    });
+    return {
+      status: result.status,
+      stdout: String(result.stdout || ''),
+      stderr: String(result.stderr || ''),
+      stateExists: fs.existsSync(statePath),
+      state: fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : null,
+    };
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+const blockedBeforeRatingAck = runIsolatedRatingRebaseline({ handoffBefore: true });
+assert.equal(blockedBeforeRatingAck.status, 1);
+assert.equal(blockedBeforeRatingAck.stateExists, true);
+assert.match(blockedBeforeRatingAck.stderr, /rebaseline-rating/);
+
+for (const [name, options, pattern] of [
+  ['wrong Issue', { evidenceIssue: 82, commentIssue: 82 }, /活动 Issue/],
+  ['wrong actor', { commentActor: 'other-actor' }, /操作者/],
+  [
+    'non-canonical rating owner',
+    {
+      ratingBody:
+        '[ISSUE-RATING] owner=codex previous=P1/阻断上线 ' +
+        'current=P2/非阻断上线 reason=评级 owner 大小写故意不规范',
+    },
+    /评级证据评论/,
+  ],
+  [
+    'mismatched current marker',
+    {
+      ratingBody:
+        '[ISSUE-RATING] owner=Codex previous=P1/阻断上线 ' +
+        'current=P1/非阻断上线 reason=评论与实时标签故意不一致',
+    },
+    /current=.*实时标签/,
+  ],
+  [
+    'mismatched previous marker',
+    {
+      ratingBody:
+        '[ISSUE-RATING] owner=Codex previous=P2/阻断上线 ' +
+        'current=P2/非阻断上线 reason=评论与旧基线故意不一致',
+    },
+    /previous=.*本地 state/,
+  ],
+  ['Issue body drift', { bodyDrift: true }, /body 已变化/],
+  ['Issue owner drift', { stateOwner: 'Original Owner', liveOwner: 'Changed Owner' }, /owner 已变化/],
+  ['base drift', { baseDrift: true }, /failed|origin\/master|merge-base/],
+]) {
+  const result = runIsolatedRatingRebaseline(options);
+  assert.equal(result.status, 1, `${name}: expected rebaseline failure`);
+  assert.equal(result.stateExists, true, `${name}: state must survive failed rebaseline`);
+  assert.match(result.stderr, pattern, name);
+}
+
+const validRatingRebaseline = runIsolatedRatingRebaseline();
+assert.equal(validRatingRebaseline.status, 0, validRatingRebaseline.stderr);
+assert.equal(validRatingRebaseline.state.version, 2);
+assert.equal(validRatingRebaseline.state.issuePriority, 'P2');
+assert.equal(validRatingRebaseline.state.issueReleaseImpact, '非阻断上线');
+assert.match(validRatingRebaseline.state.ratingEvidenceUrl, /issuecomment-456/);
+
+const validLegacyRatingMigration = runIsolatedRatingRebaseline({
+  stateVersion: 1,
+  statePriority: undefined,
+  stateReleaseImpact: undefined,
+  ratingBody:
+    '[ISSUE-RATING] owner=Codex previous=UNRECORDED/UNRECORDED ' +
+    'current=P2/非阻断上线 reason=旧版任务状态缺少评级字段需要迁移',
+});
+assert.equal(validLegacyRatingMigration.status, 0, validLegacyRatingMigration.stderr);
+assert.equal(validLegacyRatingMigration.state.version, 2);
+assert.equal(validLegacyRatingMigration.state.issuePriority, 'P2');
+assert.equal(validLegacyRatingMigration.state.issueReleaseImpact, '非阻断上线');
+
 const invalidHandoff = runIsolatedHandoff('LGTM');
 if (invalidHandoff.status !== 1) {
   reflectionRegressionFailures.push(
@@ -2764,6 +3039,32 @@ if (!/least-confidence/.test(invalidHandoff.stderr)) {
   reflectionRegressionFailures.push(
     `invalid handoff end-to-end did not report least-confidence: ${invalidHandoff.stderr}`,
   );
+}
+for (const pseudoDeclaration of ['<!z>', '<!doctype html>']) {
+  const hiddenLowercaseTypeFourHandoff = runIsolatedHandoff(
+    strongLeastConfidence,
+    (body) => body.replace(
+      /^least-confidence:[^\n]*\nbiggest-missing:[^\n]*$/m,
+      `
+[
+${pseudoDeclaration}
+least-confidence: ${strongLeastConfidence}
+biggest-missing: ${strongBiggestMissing}
+custom-note: terminates-field-continuation
+]: /hidden-reflection`,
+    ),
+  );
+  assert.equal(
+    hiddenLowercaseTypeFourHandoff.status,
+    1,
+    `${pseudoDeclaration} hidden handoff must fail`,
+  );
+  assert.equal(
+    hiddenLowercaseTypeFourHandoff.stateExists,
+    true,
+    `${pseudoDeclaration} hidden handoff must retain task state`,
+  );
+  assert.match(hiddenLowercaseTypeFourHandoff.stderr, /least-confidence|biggest-missing/);
 }
 const invalidTypedHandoff = runIsolatedHandoff(
   'no-finding-v1; checked=id:auth; unchecked=name:auth',

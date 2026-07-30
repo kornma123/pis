@@ -3,16 +3,18 @@ description: 消费已定稿 COREONE PRD：自动判断当前应拆工程 Issues
 argument-hint: "<PRD 路径/URL 或 #工程Issue> [issues|implement|accept]"
 ---
 
-按项目 Skill `.claude/skills/coreone/SKILL.md` 的“PRD 到交付主链”处理 `$ARGUMENTS`。不得把“继续”直接解释成写码授权。
+按项目 Skill `.claude/skills/coreone/SKILL.md` 的“PRD 到交付主链”处理 `$ARGUMENTS`。不得把“继续”直接解释成写码授权；实现 / 复核分工唯一来源是 `docs/agent-operating-contract.md` §4。
 
 先输出 `LOCAL TASK CONTRACT`，再根据 GitHub/Git 现场选择唯一阶段：
 
 1. **PRD 仍是 DRAFT / 未合并**：停在 PRD 阶段，列出缺失闸点；不拆正式工程 Issue、不做 mockup、不写码。
-2. **PRD 已定稿并合并，但没有 PM 确认的工程 Issue**：提取 Requirement / AC，判断 Mockup 路由，现场去重，只起草纵向工程 Issue 候选；等 PM 确认后再创建。
-3. **已有工程 Issue，但未 READY**：补齐 `PRD path@merged SHA`、AC、范围/非范围、Mockup、风险、依赖、验收和 `coreone-owner`；未满足硬门时不写码。
-4. **工程 Issue READY，动作是 `implement` 或现场明确应实现**：只认领一个 Issue，建立独立 worktree，运行 develop preflight，建立 AC 追踪矩阵，按写码 Loop 做 TDD、验证和 PR handoff。
+2. **PRD 已定稿并合并，但没有 PM 确认的工程 Issue**：提取 Requirement / AC，判断 Mockup 路由，现场去重，只起草纵向工程 Issue 候选；PM 对具体创建范围明确授权后，由 Claude Code 串行创建并立即停止 GitHub 写入，交 Codex 重新去重、复核事实/范围/AC、正式评级和标签回读。
+3. **已有工程 Issue，但未 READY**：补齐 `PRD path@merged SHA`、AC、范围/非范围、Mockup、风险、依赖、验收和 `coreone-owner`；Codex 正式评级未完成或其他硬门未满足时不认领、不写码。
+4. **工程 Issue READY，动作是 `implement` 或现场明确应实现**：先按 owned files / 用户结果分域。前端任务由 Claude Code CLI/K3 认领一个 Issue、建立独立 worktree、运行 develop preflight、建立 AC 追踪矩阵并按写码 Loop 实现；后端任务不得由 Claude Code 认领或代写，改为把可实施合同交给 Codex 实现，等待 Codex 固定 SHA 后由 Claude Code CLI/K3 做线下独立复核；混合任务优先拆成可独立验收的前端 / 后端票，不能拆时必须先取得 PM 在实时 handoff 中的明确例外与单一 owner。
 5. **实现已合并，动作是 `accept` 或 Issue 等待验收**：按真跑验收 Loop 逐 AC、逐角色、逐边界运行并留证；PM 明确验收通过后才关闭 Issue。
 
 默认关闭语义：PRD 驱动的实现 PR 使用 `Refs #N`，因为合并后仍需真跑和 PM 验收；只有主 Issue 的全部验收确实已在合并前满足时才使用 `Closes #N`。
+
+独立复核只输出锚定 fixed SHA 的线下完整文档，不默认向 PR 发布 review/comment/status。活动 task 的正式评级发生变化时，只接受 Codex 在同一 Issue 留下的 `[ISSUE-RATING]` 普通评论，再运行 `node scripts/claude-task.cjs rebaseline-rating --evidence=<comment URL>`；Issue body、owner、branch 或 base 变化仍须正式 handoff / 重新认领。
 
 跨设备交接只依赖已推送的分支、GitHub Issue/PR、合并 PRD 与固定 commit。不要依赖本机聊天历史、个人 memory 或未推送文件。结束前由当前 GitHub 操作者在活动 Issue 留一条本轮新普通评论，正文包含 `[HANDOFF] status=<状态>` 以及非占位的 `result:`、`evidence:`、`risk:`、`next-owner:`、`trigger:`、`least-confidence:`、`biggest-missing:`，并把该评论 URL 交给 `claude-task.cjs handoff` 校验。后两项只接受共用契约 §6.1 的 strict typed wire grammar：风险用 `risk-v1; anchor=<type>:<value>; uncertainty=<kind>:<detail>`；无发现用 `no-finding-v1; checked=<type>:<value>; unchecked=<type>:<value>`，不保留旧 free-form fallback，也不要加入 Markdown/HTML 包装。ASCII mode/key/id 是 entity decode + NFKC 后的 canonical 形态；raw/canonical contract 均 `<=4096` UTF-8 bytes，ref 编号不转 Number。raw U+0009 只可作 mode/segment 边界、key/`=` 周围或 value 外层 padding；value 内 Tab 和 `&Tab;` / `&#9;` / nested entity 解码生成的 Tab 必须拒绝。canonical mode 后首个 `;` 固定分段；其余 `;` 仅在后继 optional space/tab + ASCII field-key + optional space/tab + `=` 时才是字段分隔，再逐 token 重检 entity，不能按 value 大小写猜测；NFKC 后新出现的 unresolved entity 也 fail-closed。`scope&amp;bogus; uncertainty=...` 表示裸 `scope&bogus` 后接 grammar delimiter；`scope&amp;bogus;; uncertainty=...` 才保留未知完整 entity 并须拒绝。placeholder 比较忽略连续句末标点及 `/ _ + - &` 终止填充，并拒绝 canonical `n(?:[./_+-])?a` 等价族；内部的 `C++`、`snake_case`、`R&D+`、`A&B`、`rock&roll` 与路径保持不变。完整支持的 entity 可解码，裸 `&` 可作可见文本。entity 名边界按 ASCII 名 token 推导，无分号的受支持 entity 名/前缀 fail-closed。checker 只校验 wire shape / lexical anchor，内容真实性和检查是否实际执行仍须人审；最终直接面向用户的收口继续用产品大白话。

@@ -470,6 +470,7 @@ for (const [name, blockLines, visiblePattern] of [
   ['HTML type 2', ['<!--', 'hidden-html', '-->'], /visible-after-html/],
   ['HTML type 3', ['<?hidden', 'hidden-html', '?>'], /visible-after-html/],
   ['HTML type 4', ['<!DOCTYPE hidden', '>'], /visible-after-html/],
+  ['HTML type 4 uppercase custom declaration', ['<!Z hidden', '>'], /visible-after-html/],
   ['HTML type 5', ['<![CDATA[', 'hidden-html', ']]>'], /visible-after-html/],
   ['HTML type 6', ['<div>', 'hidden-html', '</div>', ''], /visible-after-html/],
 ]) {
@@ -486,6 +487,21 @@ ${suffix}
 ]: /not-a-definition`,
     [visiblePattern],
     [],
+  );
+}
+for (const [name, pseudoDeclaration] of [
+  ['lowercase pseudo declaration', '<!z>'],
+  ['lowercase doctype pseudo declaration', '<!doctype html>'],
+]) {
+  expectVisibleMarkdown(
+    `${name} cannot interrupt an open link label`,
+    `[
+${pseudoDeclaration}
+hidden-lowercase-type-four
+]: /hidden
+visible-after-lowercase-type-four`,
+    [/visible-after-lowercase-type-four/],
+    [/hidden-lowercase-type-four/],
   );
 }
 expectVisibleMarkdown(

@@ -22,6 +22,7 @@ const HANDOFF_STATUSES = new Set([
 ]);
 const STATE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const LIVE_RECHECK_MS = 10 * 60 * 1000;
+const TASK_STATE_VERSION = 2;
 const ISSUE_PRIORITY_LABELS = new Set(['P0', 'P1', 'P2', 'P3']);
 const ISSUE_RELEASE_LABELS = new Set(['阻断上线', '非阻断上线']);
 const HANDOFF_CONTINUATION_BOUNDARY_KEYS = new Set([
@@ -82,6 +83,57 @@ function assertIssueImplementationLabels(labels, issueNumber) {
     );
   }
   return result;
+}
+
+function parseIssueRatingMarker(body) {
+  const matches = [...String(body || '').matchAll(
+    /^\[ISSUE-RATING\]\s+owner=Codex\s+previous=(P[0-3]|UNRECORDED)\/(阻断上线|非阻断上线|UNRECORDED)\s+current=(P[0-3])\/(阻断上线|非阻断上线)\s+reason=(\S.*)\s*$/gm,
+  )];
+  if (matches.length !== 1) {
+    throw new Error(
+      '评级证据评论必须且只能包含一条 ' +
+      '[ISSUE-RATING] owner=Codex previous=<P?/上线影响|UNRECORDED/UNRECORDED> ' +
+      'current=<P?/上线影响> reason=<具体理由>。',
+    );
+  }
+  const [, previousPriority, previousReleaseImpact, currentPriority, currentReleaseImpact, rawReason] =
+    matches[0];
+  if (
+    (previousPriority === 'UNRECORDED') !==
+    (previousReleaseImpact === 'UNRECORDED')
+  ) {
+    throw new Error('评级证据的 previous 必须是完整双轴，或精确写 UNRECORDED/UNRECORDED。');
+  }
+  if (previousPriority !== 'UNRECORDED') {
+    const previous = validateIssueImplementationLabels([
+      previousPriority,
+      previousReleaseImpact,
+    ]);
+    if (!previous.ok) {
+      throw new Error(`评级证据的 previous 双轴非法：${previous.errors.join(' ')}`);
+    }
+  }
+  const current = validateIssueImplementationLabels([
+    currentPriority,
+    currentReleaseImpact,
+  ]);
+  if (!current.ok) {
+    throw new Error(`评级证据的 current 双轴非法：${current.errors.join(' ')}`);
+  }
+  const reason = rawReason.trim();
+  if (
+    reason.length < 8 ||
+    /^(?:todo|tbd|n\/?a|none|无|待补|调整|重评|变化|\.\.\.)$/i.test(reason)
+  ) {
+    throw new Error('评级证据的 reason 必须说明升降级或旧 state 迁移依据，不能使用占位词。');
+  }
+  return {
+    previousPriority,
+    previousReleaseImpact,
+    currentPriority,
+    currentReleaseImpact,
+    reason,
+  };
 }
 
 function run(command, args, options = {}) {
@@ -792,7 +844,7 @@ function commandStart(argv) {
   }
 
   const state = {
-    version: 1,
+    version: TASK_STATE_VERSION,
     mode: 'governed',
     issue,
     issueUrl: issueData.url,
@@ -861,7 +913,7 @@ function commandStartR0(argv) {
     throw new Error('start-r0 前工作树必须 clean，避免把既有改动误算进本任务。');
   }
   const state = {
-    version: 1,
+    version: TASK_STATE_VERSION,
     mode: 'r0',
     stage: 'r0',
     risk: 'R0',
@@ -915,7 +967,7 @@ function assertActiveState(root, active, options = {}) {
   git(['merge-base', '--is-ancestor', state.baseSha, 'HEAD'], root);
 
   const sinceVerify = Date.now() - Date.parse(state.verifiedAt || state.startedAt);
-  if (!options.force && Number.isFinite(sinceVerify) && sinceVerify < LIVE_RECHECK_MS) return;
+  if (!options.force && Number.isFinite(sinceVerify) && sinceVerify < LIVE_RECHECK_MS) return null;
 
   const remoteLine = git(['ls-remote', 'origin', 'refs/heads/master'], root).stdout.split(/\s+/)[0];
   if (!remoteLine || remoteLine !== state.baseSha) {
@@ -933,10 +985,14 @@ function assertActiveState(root, active, options = {}) {
     liveRating.priority !== state.issuePriority ||
     liveRating.releaseImpact !== state.issueReleaseImpact
   ) {
-    throw new Error(
-      `Issue #${state.issue} 评级已变化（${state.issuePriority}/${state.issueReleaseImpact} -> ` +
-      `${liveRating.priority}/${liveRating.releaseImpact}）；重新读取升降级证据并运行 task start。`,
-    );
+    if (!options.allowRatingDrift) {
+      throw new Error(
+        `Issue #${state.issue} 评级已变化（${state.issuePriority ?? 'UNRECORDED'}/` +
+        `${state.issueReleaseImpact ?? 'UNRECORDED'} -> ` +
+        `${liveRating.priority}/${liveRating.releaseImpact}）；由 Codex 留下正式评级评论后运行 ` +
+        'rebaseline-rating --evidence=<comment URL>。',
+      );
+    }
   }
   if (sha256(issue.body) !== state.issueBodyHash) {
     throw new Error(`Issue #${state.issue} body 已变化；重新读取范围/RQ/AC 并运行 task start。`);
@@ -956,8 +1012,90 @@ function assertActiveState(root, active, options = {}) {
       activeIssue: state.mockup?.mode === 'NOT_APPLICABLE' ? state.issue : null,
     });
   }
-  state.verifiedAt = new Date().toISOString();
+  if (options.persistVerification !== false) {
+    state.verifiedAt = new Date().toISOString();
+    writePrivateJson(active.file, state);
+  }
+  return { issue, liveRating };
+}
+
+function commandRebaselineRating(argv) {
+  const flags = parseFlags(argv);
+  const root = repoRoot();
+  const active = loadState(root);
+  if (!active || active.state.mode !== 'governed') {
+    throw new Error('没有可重定评级基线的活动 governed task state。');
+  }
+  const { state } = active;
+  if (Number(state.version) > TASK_STATE_VERSION) {
+    throw new Error(`task state version=${state.version} 高于当前支持版本 ${TASK_STATE_VERSION}。`);
+  }
+  const evidence = String(flags.evidence || '').trim();
+  if (!evidence) throw new Error('--evidence 必须是活动 Issue 上的正式评级普通评论 URL。');
+
+  const live = assertActiveState(root, active, {
+    force: true,
+    allowRatingDrift: true,
+    persistVerification: false,
+  });
+  const recorded = validateIssueImplementationLabels([
+    state.issuePriority,
+    state.issueReleaseImpact,
+  ]);
+  const previousPriority = recorded.ok ? recorded.priority : 'UNRECORDED';
+  const previousReleaseImpact = recorded.ok ? recorded.releaseImpact : 'UNRECORDED';
+  const ratingChanged =
+    live.liveRating.priority !== state.issuePriority ||
+    live.liveRating.releaseImpact !== state.issueReleaseImpact;
+  const schemaChanged = state.version !== TASK_STATE_VERSION;
+  if (!ratingChanged && !schemaChanged) {
+    throw new Error('活动 task state 的评级与 schema 已是当前基线，无需重定。');
+  }
+
+  const ratingEvidence = verifyGitHubEvidence(root, evidence, {
+    label: 'Issue 正式评级证据',
+    requireComment: true,
+    activeIssue: state.issue,
+    since: state.startedAt,
+    requireCurrentActor: true,
+  });
+  if (ratingEvidence.parsed.kind !== 'issue') {
+    throw new Error(`评级证据必须是活动 Issue #${state.issue} 的普通评论。`);
+  }
+  const marker = parseIssueRatingMarker(ratingEvidence.body);
+  if (
+    marker.previousPriority !== previousPriority ||
+    marker.previousReleaseImpact !== previousReleaseImpact
+  ) {
+    throw new Error(
+      `评级证据 previous=${marker.previousPriority}/${marker.previousReleaseImpact} ` +
+      `与本地 state=${previousPriority}/${previousReleaseImpact} 不一致。`,
+    );
+  }
+  if (
+    marker.currentPriority !== live.liveRating.priority ||
+    marker.currentReleaseImpact !== live.liveRating.releaseImpact
+  ) {
+    throw new Error(
+      `评级证据 current=${marker.currentPriority}/${marker.currentReleaseImpact} ` +
+      `与 Issue 实时标签=${live.liveRating.priority}/${live.liveRating.releaseImpact} 不一致。`,
+    );
+  }
+
+  Object.assign(state, {
+    version: TASK_STATE_VERSION,
+    issuePriority: live.liveRating.priority,
+    issueReleaseImpact: live.liveRating.releaseImpact,
+    ratingEvidenceUrl: evidence,
+    ratingRebaselinedAt: new Date().toISOString(),
+    verifiedAt: new Date().toISOString(),
+  });
   writePrivateJson(active.file, state);
+  process.stdout.write(
+    `COREONE rating rebaseline: PASS\nIssue #${state.issue}: ` +
+    `${previousPriority}/${previousReleaseImpact} -> ` +
+    `${state.issuePriority}/${state.issueReleaseImpact}\nevidence=${evidence}`,
+  );
 }
 
 function listChangedPaths(root, state) {
@@ -1574,6 +1712,7 @@ function usage() {
     '  node scripts/claude-task.cjs shell-guard              # Bash/PowerShell PreToolUse hook stdin JSON',
     '  node scripts/claude-task.cjs mcp-guard                # MCP PreToolUse hook stdin JSON',
     '  node scripts/claude-task.cjs audit                    # shell/MCP PostToolUse hook stdin JSON',
+    '  node scripts/claude-task.cjs rebaseline-rating --evidence=<fresh [ISSUE-RATING] comment URL>',
     '  node scripts/claude-task.cjs handoff --status=waiting-pm --evidence=<fresh [HANDOFF] comment URL>',
   ].join('\n');
 }
@@ -1595,6 +1734,7 @@ function main() {
     else if (command === 'mcp-guard') commandMcpGuard();
     else if (command === 'audit') commandAudit();
     else if (command === 'stop') commandStop();
+    else if (command === 'rebaseline-rating') commandRebaselineRating(argv);
     else if (command === 'handoff') commandHandoff(argv);
     else throw new Error(`未知命令：${command}\n${usage()}`);
   } catch (error) {

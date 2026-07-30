@@ -21,10 +21,12 @@ description: COREONE 仓库的本地工作路由。处理任何 PRD、功能、B
 | 已定稿并合并的 PRD，要拆单或实现 | 本 Skill 的“PRD 到交付”主链；可显式运行 `/coreone-deliver-prd` |
 | 改页面结构或关键交互 | 先过 Mockup 质量 Loop，再进入写码 |
 | Bug | 工程 Issue + 可复现路径，进入写码 Loop；不伪造 PRD |
-| 独立复核 | review preflight + GitHub 复核评论合同；默认不代写 |
+| 独立复核 | review preflight + fixed-SHA 线下复核文档；默认不代写、不发布 GitHub review/comment/status |
 | DB / E2E 专项 | 先完成本 Skill 的任务认领，再调用专项命令 |
 
 `/feature-development` 只是兼容入口，不能绕过本 Skill 直接写码。
+
+实现 / 复核按 `docs/agent-operating-contract.md` §4 分域：前端（`前端代码/**` 及 UI/交互制品）由 Claude Code CLI/K3 实现、Codex fixed-SHA 复核；后端（`后端代码/**` 及 API/数据库/认证/服务端）由 Codex 实现、Claude Code CLI/K3 fixed-SHA 复核。混合任务优先按可独立验收边界拆票；不能拆时，须由 PM 在实时 handoff 明确单一实现 owner 与异构 reviewer。规则生效前的在途例外只保存在对应 handoff，不进入本稳定 Skill。
 
 ## 2. 受治理交付任务第一次修改前交付本地任务合同
 
@@ -77,14 +79,16 @@ PM “定稿”只结束 PRD 内容闸，不自动满足以上实现条件。
 - BDD / 失败路径 / 真跑验收证据；
 - 与已有 Issue/PR 的去重结论。
 
-按 `docs/github-issue-pr-management-loop.md` 直接用 `gh` 现场核对开放/关闭 Issues、开放 PR 和近期合并 PR，再起草候选；PM 确认后才创建新 Issues。已有 Issue 已完整覆盖时只链接，不重开。`.claude/workflows/surface-to-issues.js` 只供支持该 DSL 的 workflow harness 使用，不是 Claude Code 本地可自动调用入口。
+按 `docs/github-issue-pr-management-loop.md` 直接用 `gh` 现场核对开放/关闭 Issues、开放 PR 和近期合并 PR，再起草候选；PM 对具体创建范围明确授权后，Claude Code 才作为串行 GitHub writer 创建新需求讨论 / 工程 Issue，随后立即停止写入并交 Codex 重新去重、复核事实/范围/AC、正式评级与标签回读。Codex 评级前 Issue 不得进入实现。已有 Issue 已完整覆盖时只链接，不重开。`.claude/workflows/surface-to-issues.js` 只供支持该 DSL 的 workflow harness 使用，不是 Claude Code 本地可自动调用入口。
 
 ### C. 认领一个工程 Issue
 
-1. 一次只认领一个可独立验收的工程 Issue。
+1. 先确认 Codex 已完成正式评级，再按共用契约 §4 分域。Claude Code 一次只认领一个可独立验收的**前端**工程 Issue；后端 Issue 交 Codex 实现，Claude Code 保持 reviewer，不创建实现分支、不代写后端文件。
 2. 新建 Issue 保持 owner=`unassigned`；用 `claude-task.cjs start --claim=true ...` 在 preflight 通过后原子更新 `coreone-owner` 块并发认领评论。若已有其他 owner 或无 body 写权限，保持未认领。
 3. fetch、建立独立 worktree/branch，声明 owned/excluded files；运行同一 `start` 建立 worktree 私有任务状态。
 4. 重新核对 PRD 固定版本、依赖 PR、活代码与现状；功能已经存在或前提已变化时停下并报告证据。
+
+本节命令形态只适用于 Claude Code 确实是实现 owner 的任务。混合任务未拆票且没有 PM 明确例外时，不得用这些命令把后端范围一并认领。
 
 实现阶段使用以下形态；PRD / Mockup 阶段省略不适用的 `--prd/--approval/--mockup/--mockup-approval`：
 
@@ -135,8 +139,8 @@ AC-01  | ...          | ...      | ...          | ...          | ...      | pend
 1. 逐行更新验收追踪矩阵；保留失败证据、最终测试、构建、golden、真数据/手核和未覆盖边界。
 2. 运行任务相关检查、`node scripts/build-discipline/run-all.cjs`、preflight/drift check 和 `git diff --check`；复原被跑脏的 tracked dev DB。
 3. 使用仓库 PR 模板；主关系用 `Closes #N` 或 `Refs #N`，并运行 `scripts/issue-handoff/check-pr-body.cjs` 校验实际 PR body。
-4. PR body 记录实时 handoff；Issue body 记录整项工作剩余项；评论只记录状态变化、决定、阻塞与复核事件。
-5. 独立 reviewer 在目标 PR 留普通评论，锚定 head SHA，写 Verdict、findings、证据、未覆盖边界和下一动作。默认不 APPROVE、REQUEST CHANGES 或 MERGE。
+4. PR body 记录实时 handoff；Issue body 记录整项工作剩余项；GitHub 只保留经授权的低频正式状态、决定与阻塞事件。
+5. 独立 reviewer 在隔离 checkout / bundle 上核对 fixed SHA、tree、parent、base、full range 与 predecessor delta，输出线下完整复核文档，写 Verdict、findings、证据、未覆盖边界和下一动作。默认不向 GitHub 发布 review/comment/status，也不 APPROVE、REQUEST CHANGES 或 MERGE。前端实现由 Codex 复核；后端实现由 Claude Code CLI/K3 复核。
 
 ### G. 合并后真跑验收
 
@@ -156,6 +160,10 @@ AC-01  | ...          | ...      | ...          | ...          | ...      | pend
 5. 请求 PM 合并、验收或跨设备接手前。
 
 跨设备接手只依赖 GitHub Issue、PR body/checks、合并 PRD 和固定 commit；不得依赖另一台设备的聊天历史、个人 memory、未推送分支或本地 session-log。停止前由当前 GitHub 操作者在活动 Issue 留本轮新普通评论，使用以下非占位字段，再运行 `node scripts/claude-task.cjs handoff --status=<同一状态> --evidence=<本轮新评论URL>`。共享 Stop hook 首次提醒未交接，task state 在证据校验成功前不会清除。
+
+活动任务只发生正式双轴评级变化或需要迁移旧版 state 时，由 Codex 在同一 Issue 留一条
+`[ISSUE-RATING] owner=Codex previous=<P?/上线影响|UNRECORDED/UNRECORDED> current=<P?/上线影响> reason=<具体依据>`
+普通评论；实现 owner 核对后运行 `node scripts/claude-task.cjs rebaseline-rating --evidence=<comment URL>`。命令只重定评级字段，不接受 Issue body、owner、branch 或 base 漂移；这些变化仍须正式 handoff / 重新认领。
 
 ```text
 [HANDOFF] status=<in-progress|blocked|ready-for-review|waiting-pm|waiting-acceptance|accepted>

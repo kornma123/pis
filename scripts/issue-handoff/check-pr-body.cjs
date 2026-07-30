@@ -290,7 +290,10 @@ function beginHtmlBlock(sourceLine, paragraphOpen) {
   if (/^ {0,3}<\?/u.test(line)) {
     return { state: line.includes('?>') ? null : { kind: 'delimited', end: /\?>/u, type: 3 } };
   }
-  if (/^ {0,3}<![A-Za-z]/u.test(line)) {
+  // CommonMark HTML block type 4 requires an ASCII uppercase letter after
+  // `<!`. Lowercase pseudo-declarations such as `<!z>` remain paragraph/link
+  // label text in GitHub GFM and must not be allowed to interrupt a label.
+  if (/^ {0,3}<![A-Z]/u.test(line)) {
     return { state: line.includes('>') ? null : { kind: 'delimited', end: />/u, type: 4 } };
   }
   if (/^ {0,3}<!\[CDATA\[/u.test(line)) {
