@@ -3173,6 +3173,243 @@ assert.deepEqual(
   'missing/expired option arity bypasses must not execute or alter inactive-state fixtures',
 );
 
+function runInactiveNpmCamelCaseRegression(stateKind) {
+  const sandbox = fs.mkdtempSync(
+    path.join(os.tmpdir(), `coreone-inactive-${stateKind}-npm-camel-`),
+  );
+  const repo = path.join(sandbox, 'repo');
+  const cachePath = path.join(repo, '.npm-cache');
+  const markerPath = path.join(repo, 'marker.txt');
+  const runScriptMarkerPath = path.join(repo, 'run-script-marker.txt');
+  const preexistingPath = path.join(repo, 'node_modules', 'preexisting.txt');
+  const hiddenLockPath = path.join(repo, 'node_modules', '.package-lock.json');
+  const runGit = (args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(
+      result.status,
+      0,
+      `git ${args.join(' ')} failed: ${result.stderr || result.stdout}`,
+    );
+    return String(result.stdout || '').trim();
+  };
+  const resetFixture = () => {
+    fs.rmSync(markerPath, { force: true });
+    fs.rmSync(runScriptMarkerPath, { force: true });
+    fs.rmSync(path.join(repo, 'node_modules'), { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(preexistingPath), { recursive: true });
+    fs.writeFileSync(preexistingPath, 'preexisting\n', 'utf8');
+  };
+  const npmEnvironment = {
+    ...process.env,
+    npm_config_audit: 'false',
+    npm_config_cache: cachePath,
+    npm_config_fund: 'false',
+    npm_config_update_notifier: 'false',
+  };
+  const executeWhenAllowed = (command) => {
+    resetFixture();
+    const guard = runShellGuard(command, repo, { env: npmEnvironment });
+    const execution = guard === 0
+      ? spawnSync('/bin/bash', ['-c', command], {
+        cwd: repo,
+        encoding: 'utf8',
+        env: npmEnvironment,
+      })
+      : null;
+    return {
+      executionStatus: execution?.status ?? null,
+      guard,
+      hiddenLock: fs.existsSync(hiddenLockPath),
+      marker: fs.existsSync(markerPath)
+        ? fs.readFileSync(markerPath, 'utf8')
+        : null,
+      preexisting: fs.existsSync(preexistingPath),
+      runScriptMarker: fs.existsSync(runScriptMarkerPath),
+    };
+  };
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    runGit(['init', '--initial-branch=npm-camel-probe']);
+    runGit(['config', 'user.name', 'Inactive npm Camel Test']);
+    runGit(['config', 'user.email', 'inactive-npm-camel@example.invalid']);
+    fs.writeFileSync(
+      path.join(repo, '.gitignore'),
+      '.npm-cache/\nmarker.txt\nnode_modules/\nrun-script-marker.txt\n',
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${JSON.stringify({
+        name: 'coreone-npm-camel-probe',
+        version: '1.0.0',
+        private: true,
+        scripts: {
+          deploy:
+            'node -e "require(\'node:fs\').writeFileSync(\'run-script-marker.txt\',\'ran\')"',
+          test:
+            'node -e "require(\'node:fs\').writeFileSync(\'marker.txt\',' +
+            '\'npm-camelcase-side-effect\')"',
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'package-lock.json'),
+      `${JSON.stringify({
+        name: 'coreone-npm-camel-probe',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          '': {
+            name: 'coreone-npm-camel-probe',
+            version: '1.0.0',
+          },
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    resetFixture();
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed inactive npm camel fixture']);
+    const head = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', head]);
+
+    const statePath = path.join(
+      runGit(['rev-parse', '--absolute-git-dir']),
+      'coreone',
+      'claude-task-state.json',
+    );
+    let stateBefore = null;
+    if (stateKind === 'expired') {
+      const startedAt = new Date(Date.now() - 13 * 60 * 60 * 1_000);
+      const verifiedAt = new Date(startedAt.getTime() + 1_000);
+      stateBefore = Buffer.from(`${JSON.stringify({
+        version: 2,
+        mode: 'r0',
+        stage: 'r0',
+        risk: 'R0',
+        reason: 'expired npm camel regression fixture',
+        branch: 'npm-camel-probe',
+        baseSha: head,
+        startedHead: head,
+        startedAt: startedAt.toISOString(),
+        verifiedAt: verifiedAt.toISOString(),
+        owned: ['src/**'],
+        excluded: [],
+      }, null, 2)}\n`);
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, stateBefore);
+    }
+    const stateShaBefore = stateBefore === null
+      ? null
+      : crypto.createHash('sha256').update(stateBefore).digest('hex');
+    const exactOptions =
+      '--offline --no-audit --no-fund --cache .npm-cache';
+    const camelCommands = {
+      installCiAbbreviation: `npm installCi ${exactOptions}`,
+      installCiTest: `npm installCiTest ${exactOptions}`,
+      installTest: `npm installTest ${exactOptions}`,
+      runScript: 'npm runScript deploy',
+    };
+    const kebabControl = executeWhenAllowed(
+      `npm install-ci-test ${exactOptions}`,
+    );
+    const camelSideEffects = Object.fromEntries(
+      Object.entries(camelCommands).map(([name, command]) => [
+        name,
+        executeWhenAllowed(command),
+      ]),
+    );
+    const acceptedCamelHelp = Object.fromEntries(
+      [
+        'installCi',
+        'installCiTest',
+        'installTest',
+        'runScript',
+        'distTag',
+      ].map((command) => {
+        const result = spawnSync('npm', [command, '--help'], {
+          cwd: repo,
+          encoding: 'utf8',
+          env: npmEnvironment,
+        });
+        return [command, result.status];
+      }),
+    );
+    const stateShaAfter = fs.existsSync(statePath)
+      ? crypto.createHash('sha256').update(fs.readFileSync(statePath)).digest('hex')
+      : null;
+    return {
+      acceptedCamelHelp,
+      camelSideEffects,
+      distTagGuard: runShellGuard(
+        'npm distTag ls coreone-npm-camel-probe',
+        repo,
+        { env: npmEnvironment },
+      ),
+      kebabControl,
+      statePreserved: stateShaAfter === stateShaBefore &&
+        (stateBefore === null
+          ? !fs.existsSync(statePath)
+          : fs.readFileSync(statePath).equals(stateBefore)),
+      unknownGuard: runShellGuard(
+        'npm definitelyUnknownCamelCommand --help',
+        repo,
+        { env: npmEnvironment },
+      ),
+    };
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+const blockedNpmCamelSideEffect = {
+  executionStatus: null,
+  guard: 2,
+  hiddenLock: false,
+  marker: null,
+  preexisting: true,
+  runScriptMarker: false,
+};
+
+const inactiveNpmCamelCaseSideEffects = Object.fromEntries(
+  ['missing', 'expired'].map((stateKind) => [
+    stateKind,
+    runInactiveNpmCamelCaseRegression(stateKind),
+  ]),
+);
+
+assert.deepEqual(
+  inactiveNpmCamelCaseSideEffects,
+  Object.fromEntries(
+    ['missing', 'expired'].map((stateKind) => [
+      stateKind,
+      {
+        acceptedCamelHelp: {
+          distTag: 0,
+          installCi: 0,
+          installCiTest: 0,
+          installTest: 0,
+          runScript: 0,
+        },
+        camelSideEffects: {
+          installCiAbbreviation: blockedNpmCamelSideEffect,
+          installCiTest: blockedNpmCamelSideEffect,
+          installTest: blockedNpmCamelSideEffect,
+          runScript: blockedNpmCamelSideEffect,
+        },
+        distTagGuard: 2,
+        kebabControl: blockedNpmCamelSideEffect,
+        statePreserved: true,
+        unknownGuard: 2,
+      },
+    ]),
+  ),
+  'npm camelCase commands must mirror npm dereferencing without inactive-state side effects',
+);
+
 function runNoStateFindingRegressionMatrix() {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-no-state-findings-'));
   const repo = path.join(sandbox, 'repo');

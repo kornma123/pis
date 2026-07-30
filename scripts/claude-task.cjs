@@ -3845,45 +3845,193 @@ function npmLifecycleHasWriteCapability(name) {
   return segments.some((segment) => riskySegments.has(segment));
 }
 
-// Mirrors npm 10.9.8 cmd-list dereferencing for command spellings that resolve
-// to local mutations; capability checks below remain keyed by canonical command.
+// Mirrors npm 10.9.8 lib/utils/cmd-list.js: camelCase conversion, exact
+// commands, direct aliases, unique abbreviations, then alias dereferencing.
+const NPM_COMMANDS = [
+  'access',
+  'adduser',
+  'audit',
+  'bugs',
+  'cache',
+  'ci',
+  'completion',
+  'config',
+  'dedupe',
+  'deprecate',
+  'diff',
+  'dist-tag',
+  'docs',
+  'doctor',
+  'edit',
+  'exec',
+  'explain',
+  'explore',
+  'find-dupes',
+  'fund',
+  'get',
+  'help',
+  'help-search',
+  'hook',
+  'init',
+  'install',
+  'install-ci-test',
+  'install-test',
+  'link',
+  'll',
+  'login',
+  'logout',
+  'ls',
+  'org',
+  'outdated',
+  'owner',
+  'pack',
+  'ping',
+  'pkg',
+  'prefix',
+  'profile',
+  'prune',
+  'publish',
+  'query',
+  'rebuild',
+  'repo',
+  'restart',
+  'root',
+  'run-script',
+  'sbom',
+  'search',
+  'set',
+  'shrinkwrap',
+  'star',
+  'stars',
+  'start',
+  'stop',
+  'team',
+  'test',
+  'token',
+  'uninstall',
+  'unpublish',
+  'unstar',
+  'update',
+  'version',
+  'view',
+  'whoami',
+];
+const NPM_COMMAND_SET = new Set(NPM_COMMANDS);
 const NPM_COMMAND_ALIASES = new Map([
-  ['run', 'run-script'],
-  ['rum', 'run-script'],
-  ['t', 'test'],
+  ['author', 'owner'],
+  ['home', 'docs'],
+  ['issues', 'bugs'],
+  ['info', 'view'],
+  ['show', 'view'],
+  ['find', 'search'],
+  ['add', 'install'],
+  ['unlink', 'uninstall'],
+  ['remove', 'uninstall'],
+  ['rm', 'uninstall'],
+  ['r', 'uninstall'],
+  ['un', 'uninstall'],
+  ['rb', 'rebuild'],
+  ['list', 'ls'],
+  ['ln', 'link'],
+  ['create', 'init'],
+  ['i', 'install'],
+  ['it', 'install-test'],
+  ['cit', 'install-ci-test'],
+  ['up', 'update'],
+  ['c', 'config'],
+  ['s', 'search'],
+  ['se', 'search'],
   ['tst', 'test'],
+  ['t', 'test'],
+  ['ddp', 'dedupe'],
+  ['v', 'view'],
+  ['run', 'run-script'],
+  ['clean-install', 'ci'],
+  ['clean-install-test', 'install-ci-test'],
+  ['x', 'exec'],
+  ['why', 'explain'],
+  ['la', 'll'],
+  ['verison', 'version'],
+  ['ic', 'ci'],
+  ['innit', 'init'],
+  ['in', 'install'],
+  ['ins', 'install'],
+  ['inst', 'install'],
+  ['insta', 'install'],
+  ['instal', 'install'],
+  ['isnt', 'install'],
+  ['isnta', 'install'],
+  ['isntal', 'install'],
+  ['isntall', 'install'],
+  ['install-clean', 'ci'],
+  ['isntall-clean', 'ci'],
+  ['hlep', 'help'],
+  ['dist-tags', 'dist-tag'],
+  ['upgrade', 'update'],
+  ['udpate', 'update'],
+  ['rum', 'run-script'],
+  ['sit', 'install-ci-test'],
   ['urn', 'run-script'],
-  ...[
-    ['ci', 'ci clean-install ic install-cl install-cle install-clea install-clean ' +
-      'isntall- isntall-c isntall-cl isntall-cle isntall-clea isntall-clean'],
-    ['dedupe', 'dd ddp ded dedu dedup dedupe'],
-    ['exec', 'exe exec x'],
-    ['init', 'cr cre crea creat create ini init inn inni innit'],
-    ['install', 'add i in ins inst insta instal install isnt isnta isntal isntall'],
-    ['install-ci-test', 'cit clean-install- clean-install-t clean-install-te ' +
-      'clean-install-tes clean-install-test install-ci install-ci- install-ci-t ' +
-      'install-ci-te install-ci-tes install-ci-test si sit'],
-    ['install-test', 'install-t install-te install-tes install-test it'],
-    ['link', 'lin link ln'],
-    ['pack', 'pa pac pack'],
-    ['prune', 'pru prun prune'],
-    ['rebuild', 'rb reb rebu rebui rebuil rebuild'],
-    ['shrinkwrap', 'shr shri shrin shrink shrinkw shrinkwr shrinkwra shrinkwrap'],
-    ['uninstall', 'r rem remo remov remove rm un uni unin unins uninst uninsta ' +
-      'uninstal uninstall unl unli unlin unlink'],
-    ['update', 'ud udp udpa udpat udpate up upd upda updat update upg upgr upgra ' +
-      'upgrad upgrade'],
-    ['version', 'veri veris veriso verison vers versi versio version'],
-  ].flatMap(([canonical, spellings]) =>
-    spellings.split(/\s+/).map((spelling) => [spelling, canonical])),
+  ['ogr', 'org'],
+  ['add-user', 'adduser'],
+]);
+
+function buildNpmCommandAbbreviations(values) {
+  const sorted = [...values].map(String).sort();
+  const abbreviations = new Map();
+  let previous = '';
+  for (let index = 0; index < sorted.length; index += 1) {
+    const current = sorted[index];
+    const next = sorted[index + 1] || '';
+    if (current === next) continue;
+    let nextMatches = true;
+    let previousMatches = true;
+    let length = 0;
+    for (; length < current.length; length += 1) {
+      const character = current.charAt(length);
+      nextMatches = nextMatches && character === next.charAt(length);
+      previousMatches = previousMatches && character === previous.charAt(length);
+      if (!nextMatches && !previousMatches) {
+        length += 1;
+        break;
+      }
+    }
+    previous = current;
+    if (length === current.length) {
+      abbreviations.set(current, current);
+      continue;
+    }
+    for (
+      let abbreviation = current.slice(0, length);
+      length <= current.length;
+      length += 1
+    ) {
+      abbreviations.set(abbreviation, current);
+      abbreviation += current.charAt(length);
+    }
+  }
+  return abbreviations;
+}
+
+const NPM_COMMAND_ABBREVIATIONS = buildNpmCommandAbbreviations([
+  ...NPM_COMMANDS,
+  ...NPM_COMMAND_ALIASES.keys(),
 ]);
 
 function canonicalNpmCommand(name) {
-  const normalized = String(name || '').toLowerCase();
-  if (normalized.length >= 3 && 'publish'.startsWith(normalized)) {
-    return 'publish';
+  const normalized = String(name || '')
+    .replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)
+    .toLowerCase();
+  if (!normalized) return null;
+  if (NPM_COMMAND_SET.has(normalized)) return normalized;
+  let resolved = NPM_COMMAND_ALIASES.get(normalized) ||
+    NPM_COMMAND_ABBREVIATIONS.get(normalized);
+  const seen = new Set();
+  while (resolved && NPM_COMMAND_ALIASES.has(resolved) && !seen.has(resolved)) {
+    seen.add(resolved);
+    resolved = NPM_COMMAND_ALIASES.get(resolved);
   }
-  return NPM_COMMAND_ALIASES.get(normalized) || normalized;
+  return NPM_COMMAND_SET.has(resolved) ? resolved : null;
 }
 
 const NPM_PATH_OPTIONS = new Set([
@@ -4008,6 +4156,11 @@ function assertSafeNpmCommand(tokens, root = process.cwd(), cwd = root, options 
   const operands = parsed.positionals.map((entry) => entry.value);
   const command = canonicalNpmCommand(operands[0]);
   const commandOperands = operands.slice(1);
+  if (operands[0] && !command) {
+    throw new Error(
+      `npm command ${operands[0]} 不是当前 npm 可验证的命令、别名或唯一缩写。`,
+    );
+  }
   if (command === 'config') {
     const action = String(commandOperands[0] || '').toLowerCase();
     if (['get', 'list'].includes(action)) {
