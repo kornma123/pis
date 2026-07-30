@@ -203,68 +203,58 @@ for (const [name, wrap] of [
   ['contract hidden in nested-list fenced block', (body) => wrapListFence(body, '- - ```md', '    ')],
   ['contract hidden in blockquote fenced block', wrapBlockquoteFence],
   ['contract hidden in proper blockquote-list fenced block', wrapBlockquoteListFence],
-  ['contract hidden in encoded raw HTML pre block', (body) => wrapRawHtmlBlock('pre', body)],
-  ['contract hidden in encoded raw HTML code block', (body) => wrapRawHtmlBlock('code', body)],
-  ['contract hidden in encoded raw HTML div block', (body) => wrapRawHtmlBlock('div', body)],
-  ['contract hidden in multiline pre opener', (body) => wrapMultilineRawHtmlBlock('pre', body)],
-  ['contract hidden in multiline script opener', (body) => wrapMultilineRawHtmlBlock('script', body)],
-  ['contract hidden in multiline style opener', (body) => wrapMultilineRawHtmlBlock('style', body)],
-  ['contract hidden in multiline textarea opener', (body) => wrapMultilineRawHtmlBlock('textarea', body)],
-  [
-    'contract hidden in encoded HTML comment block',
-    (body) => wrapDelimitedRawHtmlBlock('&lt;!--', '--&gt;', body),
-  ],
-  [
-    'contract hidden in processing instruction block',
-    (body) => wrapDelimitedRawHtmlBlock('&lt;?hidden', '?&gt;', body),
-  ],
-  [
-    'contract hidden in declaration block',
-    (body) => wrapDelimitedRawHtmlBlock('&lt;!DOCTYPE hidden', '&gt;', body),
-  ],
-  [
-    'contract hidden in CDATA block',
-    (body) => wrapDelimitedRawHtmlBlock('&lt;![CDATA[', ']]&gt;', body),
-  ],
-  ['contract hidden after unclosed pre opener', (body) => `&lt;pre\n data-mode="hidden"\n${body}`],
-  ['contract hidden in encoded xmp product container', (body) => wrapRawHtmlBlock('xmp', body)],
-  [
-    'contract hidden in multiline encoded div product opener',
-    (body) => wrapMultilineRawHtmlBlock('DiV', body),
-  ],
-  [
-    'contract hidden after unclosed multiline encoded xmp product opener',
-    (body) => `&lt;XmP\n data-mode="hidden"\n${body}`,
-  ],
-  [
-    'contract hidden in nested encoded product containers',
-    (body) => `&lt;DiV data-mode="hidden"&gt;
-&lt;code&gt;
-${body}
-&lt;/code&gt;
-&lt;/DiV&gt;`,
-  ],
   ['contract hidden in blockquote Type6 block', wrapBlockquoteType6],
-  ['contract hidden in list Type6 block', wrapListType6],
   ['contract hidden in proper blockquote-list Type6 block', wrapBlockquoteListType6],
 ]) {
   expectFail(name, wrap(validBody), /Issue \/ 会话交接/);
 }
+for (const [name, wrap] of [
+  ['encoded pre stays visible inline text', (body) => wrapRawHtmlBlock('pre', body)],
+  ['encoded code stays visible inline text', (body) => wrapRawHtmlBlock('code', body)],
+  ['encoded div stays visible inline text', (body) => wrapRawHtmlBlock('div', body)],
+  ['encoded table text in a visible list stays visible', wrapListType6],
+  ['multiline encoded pre stays visible', (body) => wrapMultilineRawHtmlBlock('pre', body)],
+  ['multiline encoded script stays visible', (body) => wrapMultilineRawHtmlBlock('script', body)],
+  ['multiline encoded style stays visible', (body) => wrapMultilineRawHtmlBlock('style', body)],
+  ['multiline encoded textarea stays visible', (body) => wrapMultilineRawHtmlBlock('textarea', body)],
+  [
+    'encoded HTML comment stays visible inline text',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;!--', '--&gt;', body),
+  ],
+  [
+    'encoded processing instruction stays visible inline text',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;?hidden', '?&gt;', body),
+  ],
+  [
+    'encoded declaration stays visible inline text',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;!DOCTYPE hidden', '&gt;', body),
+  ],
+  [
+    'encoded CDATA stays visible inline text',
+    (body) => wrapDelimitedRawHtmlBlock('&lt;![CDATA[', ']]&gt;', body),
+  ],
+  ['unclosed encoded pre stays visible', (body) => `&lt;pre\n data-mode="visible"\n${body}`],
+  ['encoded xmp stays visible inline text', (body) => wrapRawHtmlBlock('xmp', body)],
+  ['multiline encoded div stays visible', (body) => wrapMultilineRawHtmlBlock('DiV', body)],
+  ['unclosed multiline encoded xmp stays visible', (body) => `&lt;XmP\n data-mode="visible"\n${body}`],
+]) {
+  expectPass(name, wrap(validBody), [128]);
+}
 for (const [name, prefix] of [
-  ['Setext equals leaf allows following Type7 block to hide contract', 'Leaf heading\n===\n&lt;custom-element&gt;'],
-  ['Setext dash leaf allows following Type7 block to hide contract', 'Leaf heading\n---\n&lt;custom-element&gt;'],
-  ['link-reference leaf allows following Type7 block to hide contract', '[leaf]: /url\n&lt;custom-element&gt;'],
+  ['Setext equals leaf allows following Type7 block to hide contract', 'Leaf heading\n===\n<custom-element>'],
+  ['Setext dash leaf allows following Type7 block to hide contract', 'Leaf heading\n---\n<custom-element>'],
+  ['link-reference leaf allows following Type7 block to hide contract', '[leaf]: /url\n<custom-element>'],
   [
     'link-reference leaf with title allows following Type7 block to hide contract',
-    '[leaf]: &lt;https://example.invalid&gt; "title"\n&lt;custom-element&gt;',
+    '[leaf]: &lt;https://example.invalid&gt; "title"\n<custom-element>',
   ],
   [
     'multiline link-reference title allows following Type7 block to hide contract',
-    '[leaf]: /url\n  "title"\n&lt;custom-element&gt;',
+    '[leaf]: /url\n  "title"\n<custom-element>',
   ],
   [
     'multiline link-reference destination and title allow following Type7 block to hide contract',
-    '[leaf]:\n  /url\n  "title"\n&lt;custom-element&gt;',
+    '[leaf]:\n  /url\n  "title"\n<custom-element>',
   ],
 ]) {
   expectFail(name, prependWithoutBlank(prefix, validBody), /Issue \/ 会话交接/);
@@ -305,11 +295,11 @@ hidden-before-blank
 ${validBody.trimStart()}`,
   [128],
 );
-expectFail(
-  'self-closing pre hides a contract before its terminating blank',
+expectPass(
+  'encoded self-closing pre stays inline before a contract',
   `&lt;pre/&gt;
 ${validBody.trimStart()}`,
-  /Issue \/ 会话交接/,
+  [128],
 );
 expectPass(
   'invalid link-reference syntax remains paragraph text so Type7 cannot interrupt it',
@@ -323,27 +313,27 @@ expectFail(
 );
 expectVisibleMarkdown(
   'CommonMark type 6 ends at the first blank line',
-  '&lt;table&gt;\nhidden-type-6\n\nvisible-after-type-6',
+  '<table>\nhidden-type-6\n\nvisible-after-type-6',
   [/visible-after-type-6/],
   [/hidden-type-6/],
 );
 expectVisibleMarkdown(
   'CommonMark type 7 complete tag ends at the first blank line',
-  '&lt;custom-element data-mode="hidden"&gt;\nhidden-type-7\n\nvisible-after-type-7',
+  '<custom-element data-mode="hidden">\nhidden-type-7\n\nvisible-after-type-7',
   [/visible-after-type-7/],
   [/hidden-type-7/],
 );
 expectVisibleMarkdown(
   'CommonMark type 7 cannot interrupt a paragraph',
-  'paragraph text\n&lt;custom-element&gt;\nvisible-paragraph-continuation',
+  'paragraph text\n<custom-element>\nvisible-paragraph-continuation',
   [/paragraph text/, /custom-element/, /visible-paragraph-continuation/],
   [],
 );
 expectVisibleMarkdown(
-  'encoded div product container remains hidden across blank lines',
+  'encoded div remains visible inline text across blank lines',
   '&lt;DiV data-mode="hidden"&gt;\nhidden-div-before\n\nhidden-div-after\n&lt;/dIv&gt;\nvisible-after-div',
-  [/visible-after-div/],
-  [/hidden-div-before/, /hidden-div-after/],
+  [/hidden-div-before/, /hidden-div-after/, /visible-after-div/],
+  [],
 );
 expectPass('visible list contract is accepted', wrapVisibleList(validBody), [128]);
 expectFail('visible blockquote contract is rejected', wrapBlockquote(validBody), /Issue \/ 会话交接/);
@@ -396,27 +386,162 @@ expectVisibleMarkdown(
   [/Least confidence/, /Biggest missing/],
   [],
 );
-{
-  const maxLabelContent =
-    `hidden-max-label-${'a'.repeat(998 - 'hidden-max-label-'.length)}`;
+for (const [name, marker] of [
+  ['encoded heading marker', '&#35; note'],
+  ['encoded list marker', '&#45; note'],
+  ['encoded blockquote marker', '&#62; note'],
+]) {
   expectVisibleMarkdown(
-    '999-code-point multiline link-reference label remains hidden',
-    `[${maxLabelContent}
+    `${name} remains inline label payload`,
+    `[
+${marker}
+hidden-entity-structure
 ]: /hidden
-visible-after-max-label`,
-    [/visible-after-max-label/],
-    [/hidden-max-label-/],
+visible-after-entity-structure`,
+    [/visible-after-entity-structure/],
+    [/hidden-entity-structure/],
   );
-
-  const overLimitContent =
-    `visible-over-limit-label-${'a'.repeat(999 - 'visible-over-limit-label-'.length)}`;
+}
+for (const [name, source, visible, hidden] of [
+  [
+    'encoded opening bracket cannot start a definition',
+    '&#91;visible-encoded-opening]: /not-a-definition',
+    [/visible-encoded-opening/],
+    [],
+  ],
+  [
+    'encoded closing bracket remains label payload until a raw close',
+    '[hidden-encoded-close &#93; payload]: /hidden',
+    [],
+    [/hidden-encoded-close/],
+  ],
+  [
+    'encoded backslash cannot escape a raw closing bracket',
+    '[hidden-encoded-backslash &#92;]: /hidden',
+    [],
+    [/hidden-encoded-backslash/],
+  ],
+  [
+    'encoded colon cannot complete a definition',
+    '[visible-encoded-colon]&colon; /not-a-definition',
+    [/visible-encoded-colon/],
+    [],
+  ],
+]) {
+  expectVisibleMarkdown(name, source, visible, hidden);
+}
+for (const [name, opener] of [
+  ['blockquote lazy continuation', '> ['],
+  ['list lazy continuation', '- ['],
+]) {
   expectVisibleMarkdown(
-    '1000-code-point multiline label is not a link-reference definition',
-    `[${overLimitContent}
+    `${name} stays inside a hidden link definition`,
+    `${opener}
+hidden-lazy-label
+]: /hidden
+visible-after-lazy-label`,
+    [/visible-after-lazy-label/],
+    [/hidden-lazy-label/],
+  );
+  expectVisibleMarkdown(
+    `${name} ends at a blank line`,
+    `${opener}
+
+visible-after-lazy-blank
 ]: /not-a-definition`,
-    [/visible-over-limit-label-/],
+    [/visible-after-lazy-blank/],
     [],
   );
+  expectVisibleMarkdown(
+    `${name} ends at a real heading block`,
+    `${opener}
+# visible-lazy-heading
+]: /not-a-definition`,
+    [/visible-lazy-heading/],
+    [],
+  );
+}
+for (const [name, blockLines, visiblePattern] of [
+  ['Setext equals', ['==='], /visible-after-setext/],
+  ['Setext dash', ['---'], /visible-after-setext/],
+  ['backtick fence', ['```md', 'hidden-code', '```'], /visible-after-fence/],
+  ['tilde fence', ['~~~md', 'hidden-code', '~~~'], /visible-after-fence/],
+  ['HTML type 1', ['<pre>', 'hidden-html', '</pre>'], /visible-after-html/],
+  ['HTML type 2', ['<!--', 'hidden-html', '-->'], /visible-after-html/],
+  ['HTML type 3', ['<?hidden', 'hidden-html', '?>'], /visible-after-html/],
+  ['HTML type 4', ['<!DOCTYPE hidden', '>'], /visible-after-html/],
+  ['HTML type 5', ['<![CDATA[', 'hidden-html', ']]>'], /visible-after-html/],
+  ['HTML type 6', ['<div>', 'hidden-html', '</div>', ''], /visible-after-html/],
+]) {
+  const suffix = name.startsWith('Setext')
+    ? 'visible-after-setext'
+    : name.includes('fence')
+      ? 'visible-after-fence'
+      : 'visible-after-html';
+  expectVisibleMarkdown(
+    `${name} interrupts an open link label`,
+    `[
+${blockLines.join('\n')}
+${suffix}
+]: /not-a-definition`,
+    [visiblePattern],
+    [],
+  );
+}
+expectVisibleMarkdown(
+  'HTML type 7 cannot interrupt an open link label',
+  `[
+<custom-element>
+hidden-type-seven-label
+]: /hidden
+visible-after-type-seven`,
+  [/visible-after-type-seven/],
+  [/hidden-type-seven-label/],
+);
+{
+  function labelAtUtf8Bytes(byteLength, multiline, fillCharacter) {
+    const marker = 'label-boundary-marker';
+    const newlineBytes = multiline ? 1 : 0;
+    let remaining = byteLength - Buffer.byteLength(marker, 'utf8') - newlineBytes;
+    assert.ok(remaining >= 0);
+    let payload = '';
+    const fillBytes = Buffer.byteLength(fillCharacter, 'utf8');
+    while (remaining >= fillBytes) {
+      payload += fillCharacter;
+      remaining -= fillBytes;
+    }
+    payload += 'a'.repeat(remaining);
+    const payloadCodePoints = Array.from(payload);
+    const splitAt = Math.floor(payloadCodePoints.length / 2);
+    const label = multiline
+      ? `${marker}${payloadCodePoints.slice(0, splitAt).join('')}
+${payloadCodePoints.slice(splitAt).join('')}`
+      : `${marker}${payload}`;
+    assert.equal(Buffer.byteLength(label, 'utf8'), byteLength);
+    return label;
+  }
+
+  for (const [characterName, fillCharacter] of [
+    ['BMP', 'a'],
+    ['non-BMP', '😀'],
+  ]) {
+    for (const multiline of [false, true]) {
+      for (const byteLength of [999, 1_000, 1_001]) {
+        const label = labelAtUtf8Bytes(byteLength, multiline, fillCharacter);
+        const shouldHide = byteLength <= 1_000;
+        expectVisibleMarkdown(
+          `${characterName} ${multiline ? 'multiline' : 'single-line'} ` +
+            `${byteLength}-byte link label follows GitHub renderer`,
+          `[${label}]: /hidden
+visible-after-label-boundary`,
+          shouldHide
+            ? [/visible-after-label-boundary/]
+            : [/label-boundary-marker/, /visible-after-label-boundary/],
+          shouldHide ? [/label-boundary-marker/] : [],
+        );
+      }
+    }
+  }
 }
 for (const marker of ['-', '1.']) {
   for (const indentation of [1, 2, 3]) {
@@ -849,7 +974,6 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
       ['root tilde fence', ['~~~md', `${contentIndent}independent=42`, '~~~']],
       ['root type-1 HTML block', ['<pre>', `${contentIndent}independent=42`, '</pre>']],
       ['root type-6 HTML block', ['<div>', `${contentIndent}independent=42`, '</div>', '', '']],
-      ['root encoded product HTML block', ['&lt;div&gt;', `${contentIndent}independent=42`, '&lt;/div&gt;', '', '']],
     ]) {
       expectPass(
         `${endingName}/${indentName}/${blockName}: tight root exit remains independent`,
@@ -860,6 +984,15 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
         [128],
       );
     }
+    expectFail(
+      `${endingName}/${indentName}: encoded HTML stays in the lazy reflection paragraph`,
+      validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}&lt;div&gt;${lineEnding}` +
+          `${contentIndent}independent=42${lineEnding}&lt;/div&gt;`,
+      ),
+      /我现在最没把握的是什么|Least confidence/,
+    );
   }
   for (const [gapName, rootGap] of [
     ['tight exit', ''],
@@ -875,7 +1008,6 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
         ['root fence', ['```md', 'independent=42', '```']],
         ['root type-1 HTML block', ['<pre>', 'independent=42', '</pre>']],
         ['root type-6 HTML block', ['<div>', 'independent=42', '</div>', '', '']],
-        ['root encoded product HTML block', ['&lt;div&gt;', 'independent=42', '&lt;/div&gt;', '', '']],
       ]) {
         expectPass(
           `${endingName}/${gapName}/${blockName}/${followUpName}: root exit cannot reattach to the old reflection item`,
@@ -884,6 +1016,25 @@ for (const [endingName, lineEnding] of lazyContinuationLineEndings) {
             `${leastConfidenceLine}${lineEnding}${rootGap}${blockLines.join(lineEnding)}${lineEnding}${followUpLine}`,
           ),
           [128],
+        );
+      }
+      const encodedRootBody = validBody.replace(
+        leastConfidenceLine,
+        `${leastConfidenceLine}${lineEnding}${rootGap}` +
+          `&lt;div&gt;${lineEnding}independent=42${lineEnding}&lt;/div&gt;` +
+          `${lineEnding}${followUpLine}`,
+      );
+      if (rootGap) {
+        expectPass(
+          `${endingName}/${gapName}/encoded HTML/${followUpName}: blank exits the reflection`,
+          encodedRootBody,
+          [128],
+        );
+      } else {
+        expectFail(
+          `${endingName}/${gapName}/encoded HTML/${followUpName}: raw text remains lazy content`,
+          encodedRootBody,
+          /我现在最没把握的是什么|Least confidence/,
         );
       }
     }

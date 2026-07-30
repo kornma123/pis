@@ -119,7 +119,6 @@ const COMMONMARK_TYPE_7_PATTERN = new RegExp(
     `|</${COMMONMARK_TYPE_7_TAG_NAME}[\\t ]*>` +
   `)[\\t ]*$`,
 );
-const PRODUCT_ENCODED_CONTAINER_TAGS = new Set(['code', 'div', 'xmp']);
 const REFLECTION_SCHEMAS = new Map([
   ['risk-v1', new Set(['anchor', 'uncertainty'])],
   ['no-finding-v1', new Set(['checked', 'unchecked'])],
@@ -273,109 +272,34 @@ function continuesMarkdownContainer(line, frame) {
   return true;
 }
 
-function encodedHtmlSyntax(sourceLine, decodedLine) {
-  const source = String(sourceLine || '').replace(/^ {0,3}/u, '');
-  const decoded = String(decodedLine || '').replace(/^ {0,3}/u, '');
-  return !source.startsWith('<') && decoded.startsWith('<') && source !== decoded;
-}
-
-function scanProductContainerTokens(line) {
-  const tokens = [];
-  const input = String(line || '');
-
-  for (let index = 0; index < input.length; index += 1) {
-    if (input[index] !== '<') continue;
-    let cursor = index + 1;
-    let closing = false;
-    if (input[cursor] === '/') {
-      closing = true;
-      cursor += 1;
-    }
-    const nameMatch = input.slice(cursor).match(/^[A-Za-z][A-Za-z0-9-]*/u);
-    if (!nameMatch) continue;
-    const tag = nameMatch[0].toLowerCase();
-    cursor += nameMatch[0].length;
-    const boundary = input.slice(cursor);
-    if (
-      !PRODUCT_ENCODED_CONTAINER_TAGS.has(tag) ||
-      !/^(?:[\t ]|>|\/>|$)/u.test(boundary)
-    ) {
-      continue;
-    }
-
-    let quote = null;
-    let end = -1;
-    for (; cursor < input.length; cursor += 1) {
-      const char = input[cursor];
-      if (quote) {
-        if (char === quote) quote = null;
-      } else if (char === '"' || char === "'") {
-        quote = char;
-      } else if (char === '>') {
-        end = cursor;
-        break;
-      }
-    }
-    if (end < 0) continue;
-    const raw = input.slice(index, end + 1);
-    tokens.push({
-      closing,
-      selfClosing: !closing && /\/[ \t]*>$/u.test(raw),
-      tag,
-    });
-    index = end;
-  }
-
-  return tokens;
-}
-
-function updateProductContainerStack(stack, line, initialTag = null) {
-  const tokens = scanProductContainerTokens(line);
-  if (tokens.length === 0 && initialTag) return [initialTag];
-  const next = [...stack];
-
-  for (const token of tokens) {
-    if (!token.closing) {
-      if (!token.selfClosing) next.push(token.tag);
-      continue;
-    }
-    if (next[next.length - 1] === token.tag) next.pop();
-  }
-
-  return next;
-}
-
-function beginHtmlBlock(sourceLine, decodedLine, paragraphOpen) {
+function beginHtmlBlock(sourceLine, paragraphOpen) {
   // Visible-Markdown state table:
   // 1–5: delimited blocks end only at their specified token; EOF is fail-closed.
   // 6–7: CommonMark block tags / complete tags end at a blank line; type 7 cannot interrupt a paragraph.
-  // product: encoded code/div/xmp containers are nesting-aware and end only at matching close tags.
-  const product = decodedLine.match(/^ {0,3}<(code|div|xmp)(?=[\t >]|\/>|$)/iu);
-  if (product && encodedHtmlSyntax(sourceLine, decodedLine)) {
-    const stack = updateProductContainerStack([], decodedLine, product[1].toLowerCase());
-    return { state: stack.length > 0 ? { kind: 'product', stack } : null };
-  }
-
-  if (/^ {0,3}<(?:pre|script|style|textarea)(?=[\t >]|$)/iu.test(decodedLine)) {
+  // Markdown block structure is recognized from raw source. Entity-decoded
+  // `<div>` / `<pre>` text stays inline text in GitHub GFM and cannot open or
+  // close a raw HTML block.
+  const line = String(sourceLine || '');
+  if (/^ {0,3}<(?:pre|script|style|textarea)(?=[\t >]|$)/iu.test(line)) {
     const end = /<\/(?:pre|script|style|textarea)>/iu;
-    return { state: end.test(decodedLine) ? null : { kind: 'delimited', end, type: 1 } };
+    return { state: end.test(line) ? null : { kind: 'delimited', end, type: 1 } };
   }
-  if (/^ {0,3}<!--/u.test(decodedLine)) {
-    return { state: decodedLine.includes('-->') ? null : { kind: 'delimited', end: /-->/u, type: 2 } };
+  if (/^ {0,3}<!--/u.test(line)) {
+    return { state: line.includes('-->') ? null : { kind: 'delimited', end: /-->/u, type: 2 } };
   }
-  if (/^ {0,3}<\?/u.test(decodedLine)) {
-    return { state: decodedLine.includes('?>') ? null : { kind: 'delimited', end: /\?>/u, type: 3 } };
+  if (/^ {0,3}<\?/u.test(line)) {
+    return { state: line.includes('?>') ? null : { kind: 'delimited', end: /\?>/u, type: 3 } };
   }
-  if (/^ {0,3}<![A-Za-z]/u.test(decodedLine)) {
-    return { state: decodedLine.includes('>') ? null : { kind: 'delimited', end: />/u, type: 4 } };
+  if (/^ {0,3}<![A-Za-z]/u.test(line)) {
+    return { state: line.includes('>') ? null : { kind: 'delimited', end: />/u, type: 4 } };
   }
-  if (/^ {0,3}<!\[CDATA\[/u.test(decodedLine)) {
-    return { state: decodedLine.includes(']]>') ? null : { kind: 'delimited', end: /\]\]>/u, type: 5 } };
+  if (/^ {0,3}<!\[CDATA\[/u.test(line)) {
+    return { state: line.includes(']]>') ? null : { kind: 'delimited', end: /\]\]>/u, type: 5 } };
   }
-  if (COMMONMARK_TYPE_6_PATTERN.test(decodedLine)) {
+  if (COMMONMARK_TYPE_6_PATTERN.test(line)) {
     return { state: { kind: 'blank', type: 6 } };
   }
-  if (!paragraphOpen && COMMONMARK_TYPE_7_PATTERN.test(decodedLine)) {
+  if (!paragraphOpen && COMMONMARK_TYPE_7_PATTERN.test(line)) {
     return { state: { kind: 'blank', type: 7 } };
   }
   return null;
@@ -428,13 +352,9 @@ function isClosingFence(line, fence) {
   );
 }
 
-function advanceHtmlBlock(state, decodedLine, syntaxLine) {
-  if (state.kind === 'product') {
-    const stack = updateProductContainerStack(state.stack, decodedLine);
-    return stack.length > 0 ? { ...state, stack } : null;
-  }
+function advanceHtmlBlock(state, syntaxLine) {
   if (state.kind === 'delimited') {
-    return state.end.test(decodedLine) ? null : state;
+    return state.end.test(syntaxLine) ? null : state;
   }
   if (state.kind === 'blank' && /^[ \t]*$/u.test(syntaxLine)) return null;
   return state;
@@ -449,13 +369,26 @@ function isLinkReferenceDefinition(line) {
 function linkReferenceSyntaxLine(lines, index, frame = null) {
   if (index >= lines.length) return null;
   const line = lines[index];
-  if (frame && !continuesMarkdownContainer(line, frame)) return null;
-  const syntaxLine = frame
-    ? stripMarkdownContainerIndent(line, frame)
-    : parseMarkdownContainer(line).content;
+  let syntaxLine;
+  let resolvedFrame = frame;
+  if (!frame) {
+    const parsed = parseMarkdownContainer(line);
+    syntaxLine = parsed.content;
+    resolvedFrame = parsed.frame;
+  } else if (continuesMarkdownContainer(line, frame)) {
+    syntaxLine = stripMarkdownContainerIndent(line, frame);
+  } else if (frame.kind !== 'root') {
+    // CommonMark permits a blockquote/list paragraph to continue lazily even
+    // when the next physical line omits the container marker/content indent.
+    // The caller still evaluates the raw lazy line for a genuine block
+    // interruption before accepting it as label text.
+    syntaxLine = line;
+  } else {
+    return null;
+  }
   return {
-    frame: frame || parseMarkdownContainer(line).frame,
-    value: decodeHtmlEntitiesDetailed(syntaxLine).value,
+    frame: resolvedFrame,
+    rawValue: syntaxLine,
   };
 }
 
@@ -499,61 +432,81 @@ function consumeLinkTitle(lines, startIndex, initialText, frame) {
 
     index += 1;
     const next = linkReferenceSyntaxLine(lines, index, frame);
-    if (next === null || /^[ \t]*$/u.test(next.value)) return null;
-    text = next.value;
+    if (next === null || /^[ \t]*$/u.test(next.rawValue)) return null;
+    text = next.rawValue;
   }
+}
+
+function interruptsLinkReferenceLabel(line) {
+  const raw = String(line || '');
+  return (
+    interruptsOpenParagraph(raw) ||
+    /^ {0,3}(?:=+|-+)[ \t]*$/u.test(raw) ||
+    Boolean(parseFenceOpening(raw)) ||
+    Boolean(beginHtmlBlock(raw, true))
+  );
 }
 
 function scanLinkReferenceLabel(lines, startIndex) {
   const first = linkReferenceSyntaxLine(lines, startIndex);
-  const opening = first?.value.match(/^ {0,3}\[([\s\S]*)$/u);
+  const opening = first?.rawValue.match(/^ {0,3}\[([\s\S]*)$/u);
   if (!opening) return null;
 
   const firstRemainder = opening[1];
   let label = '';
+  let labelBytes = 0;
   let escaped = false;
-  // CommonMark 0.31.2 bounds a link label by 999 Unicode code points, not by
-  // line count. A fixed continuation count lets a deeper valid definition
-  // expose its otherwise invisible contents to the field collector.
+  // GitHub's current GFM consumer accepts at most 1000 UTF-8 source bytes
+  // inside the brackets. Physical line endings consume one byte after this
+  // file's CR/LF normalization. Count raw source so entities cannot create
+  // Markdown brackets, escapes or the definition colon.
   for (let index = startIndex; index < lines.length; index += 1) {
     const text = index === startIndex
       ? firstRemainder
-      : linkReferenceSyntaxLine(lines, index, first.frame)?.value;
+      : linkReferenceSyntaxLine(lines, index, first.frame)?.rawValue;
     if (text === undefined || text === null) return null;
     if (index > startIndex) {
       if (/^[ \t]*$/u.test(text)) return null;
-      // A label may span physical lines, but it is still parsed through the
-      // block layer first. A list/heading/blockquote/thematic-break line
-      // interrupts the paragraph, so GitHub renders it instead of treating it
-      // as part of the otherwise invisible link-reference definition.
-      if (interruptsOpenParagraph(text)) return null;
+      if (interruptsLinkReferenceLabel(text)) return null;
       label += '\n';
+      labelBytes += 1;
+      if (labelBytes > 1_000) return null;
       escaped = false;
     }
 
-    for (let cursor = 0; cursor < text.length; cursor += 1) {
-      const character = text[cursor];
+    for (let cursor = 0; cursor < text.length;) {
+      const character = String.fromCodePoint(text.codePointAt(cursor));
+      const characterWidth = character.length;
       if (escaped) {
         label += character;
+        labelBytes += Buffer.byteLength(character, 'utf8');
+        if (labelBytes > 1_000) return null;
         escaped = false;
+        cursor += characterWidth;
         continue;
       }
       if (character === '\\') {
         label += character;
+        labelBytes += 1;
+        if (labelBytes > 1_000) return null;
         escaped = true;
+        cursor += characterWidth;
         continue;
       }
       if (character === '[') return null;
       if (character !== ']') {
         label += character;
-        if ([...label].length > 999) return null;
+        labelBytes += Buffer.byteLength(character, 'utf8');
+        if (labelBytes > 1_000) return null;
+        cursor += characterWidth;
         continue;
       }
-      const after = text.slice(cursor + 1);
+      const after = text.slice(cursor + characterWidth);
       if (!after.startsWith(':')) return null;
+      const decodedLabel = decodeHtmlEntitiesDetailed(label).value;
       if (
-        [...label].length > 999 ||
-        !/[^\t \n]/u.test(label)
+        labelBytes > 1_000 ||
+        !/[^\t \n]/u.test(decodedLabel)
       ) {
         return null;
       }
@@ -578,8 +531,8 @@ function scanLinkReferenceDefinition(lines, startIndex) {
   if (!state.remainder) {
     state.endIndex += 1;
     const destinationLine = linkReferenceSyntaxLine(lines, state.endIndex, label.frame);
-    if (destinationLine === null || /^[ \t]*$/u.test(destinationLine.value)) return 0;
-    state.remainder = destinationLine.value;
+    if (destinationLine === null || /^[ \t]*$/u.test(destinationLine.rawValue)) return 0;
+    state.remainder = destinationLine.rawValue;
   }
 
   const destination = consumeLinkDestination(state.remainder);
@@ -592,11 +545,11 @@ function scanLinkReferenceDefinition(lines, startIndex) {
 
   const possibleTitleIndex = state.endIndex + 1;
   const possibleTitle = linkReferenceSyntaxLine(lines, possibleTitleIndex, label.frame);
-  if (possibleTitle && /^[ \t]*["'(]/u.test(possibleTitle.value)) {
+  if (possibleTitle && /^[ \t]*["'(]/u.test(possibleTitle.rawValue)) {
     const title = consumeLinkTitle(
       lines,
       possibleTitleIndex,
-      possibleTitle.value,
+      possibleTitle.rawValue,
       label.frame,
     );
     if (title) return title.endIndex - startIndex + 1;
@@ -652,7 +605,6 @@ function stripIgnoredMarkdown(body) {
           }
         : parsedContainer;
       const syntaxLine = container.content;
-      const decodedSyntaxLine = decodeHtmlEntitiesDetailed(syntaxLine).value;
       if (
         activeReflectionSawBlank &&
         Number.isInteger(activeReflectionContentIndent) &&
@@ -695,7 +647,7 @@ function stripIgnoredMarkdown(body) {
             !interruptsOpenParagraph(line)
           )
         ) &&
-        lineOpensParagraph(decodedSyntaxLine, true),
+        lineOpensParagraph(syntaxLine, true),
       );
 
       if (
@@ -725,7 +677,11 @@ function stripIgnoredMarkdown(body) {
       }
 
       if (htmlBlock) {
-        htmlBlock = advanceHtmlBlock(htmlBlock, decodedSyntaxLine, syntaxLine);
+        const htmlSyntaxLine = stripMarkdownContainerIndent(
+          line,
+          htmlBlock.container,
+        );
+        htmlBlock = advanceHtmlBlock(htmlBlock, htmlSyntaxLine);
         visibleLines.push('');
         paragraphOpen = false;
         paragraphContainer = null;
@@ -772,11 +728,7 @@ function stripIgnoredMarkdown(body) {
         }
       }
 
-      const htmlStart = beginHtmlBlock(
-        syntaxLine,
-        decodedSyntaxLine,
-        continuesParagraphIntoLine,
-      );
+      const htmlStart = beginHtmlBlock(syntaxLine, continuesParagraphIntoLine);
       if (htmlStart) {
         const opensRootIgnoredBlock = container.frame.kind === 'root';
         const exitsActiveReflection =
@@ -844,7 +796,7 @@ function stripIgnoredMarkdown(body) {
         activeReflectionContentIndent = null;
         activeReflectionSawBlank = false;
       }
-      paragraphOpen = lineOpensParagraph(decodedSyntaxLine, paragraphOpen);
+      paragraphOpen = lineOpensParagraph(syntaxLine, paragraphOpen);
       paragraphContainer = paragraphOpen
         ? continuesParagraphIntoLine
           ? paragraphContainer

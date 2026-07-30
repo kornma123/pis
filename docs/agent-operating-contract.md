@@ -61,6 +61,8 @@ preflight 默认只读：不会 fetch、merge、rebase、prune、删除 worktree
 ## 4. 所有权、scope 与 ABC 影响
 
 - 一项文件同时只能有一个实现 owner；handoff 中列出 `owned files` 与 `excluded files`。另一模型负责独立复核，不在同一文件上代写。
+- 新任务按领域固定异构分工：前端实现 owner = Claude Code CLI/K3；Codex 负责 fixed-SHA 复核。后端实现 owner = Codex；Claude Code CLI/K3 负责 fixed-SHA 独立复核。规则生效前已经在执行的任务保持原 owner 到收口，不为套用新规中途换手；具体例外只记录在对应实时 handoff，不写进本稳定合同。
+- Issue 正式评级与标签写入 / 回读 owner = Codex。新需求讨论 Issue 由 Claude Code 创建后，必须串行交给 Codex 做去重、事实、范围、AC 复核与正式评级；评级完成前不得进入实现。GitHub writer 始终串行，任何时刻只有一个写入 owner。
 - 每个代理同一时间最多维护一个实现 PR。审查可以并行，但不得顺手接管被审文件。
 - 不切换、清理、覆盖或提交其他 worktree 的内容。只暂存本任务明确拥有的路径。
 - 动手前做 scope 判断：若改动会影响库存、出库、BOM、成本、收入、权限或审计等共享事实链，必须说明 ABC/上游影响并补相应回归；无影响也要在 PR 中明确写出理由。

@@ -29,6 +29,7 @@ const {
   shouldBlockStop,
   shellTokens,
   toPosix,
+  validateIssueImplementationLabels,
 } = require('./claude-task.cjs');
 const {
   collectFields,
@@ -45,6 +46,74 @@ assert.deepEqual(parseFlags(['--issue=12', '--owned=src/**', '--owned=test/**', 
   dryRun: true,
   issue: '12',
 });
+
+function issueLabels(...names) {
+  return names.map((name) => ({ name }));
+}
+
+for (const [name, labels, pattern] of [
+  ['missing both axes', issueLabels('question'), /优先级.*上线影响/],
+  ['duplicate priority', issueLabels('P1', 'P2', '非阻断上线'), /优先级标签.*恰好一个/],
+  ['duplicate release impact', issueLabels('P1', '阻断上线', '非阻断上线'), /上线影响标签.*恰好一个/],
+  ['P0 cannot be nonblocking', issueLabels('P0', '非阻断上线'), /P0.*非阻断上线/],
+  ['P3 cannot block release', issueLabels('P3', '阻断上线'), /P3.*阻断上线/],
+]) {
+  const result = validateIssueImplementationLabels(labels);
+  assert.equal(result.ok, false, `${name}: expected invalid implementation labels`);
+  assert.match(result.errors.join('\n'), pattern, name);
+}
+for (const [name, labels, expected] of [
+  ['P0 blocking', issueLabels('P0', '阻断上线'), ['P0', '阻断上线']],
+  ['P1 blocking', issueLabels('P1', '阻断上线'), ['P1', '阻断上线']],
+  ['P1 nonblocking', issueLabels('P1', '非阻断上线'), ['P1', '非阻断上线']],
+  ['P2 blocking', issueLabels('P2', '阻断上线'), ['P2', '阻断上线']],
+  ['P2 nonblocking', issueLabels('P2', '非阻断上线'), ['P2', '非阻断上线']],
+  ['P3 nonblocking', issueLabels('P3', '非阻断上线'), ['P3', '非阻断上线']],
+]) {
+  const result = validateIssueImplementationLabels(labels);
+  assert.equal(result.ok, true, `${name}: ${result.errors.join('; ')}`);
+  assert.deepEqual([result.priority, result.releaseImpact], expected, name);
+}
+
+for (const file of [
+  'docs/COREONE-质量Loop总览-2026-07-12.md',
+  'docs/COREONE-质量Loop契约-2026-07-12.md',
+  'docs/COREONE-PRD质量Loop-2026-07-12.md',
+  'docs/COREONE-前端Mockup质量Loop-2026-07-12.md',
+  'docs/COREONE-写码质量Loop-2026-07-12.md',
+  'docs/COREONE-真跑验收质量Loop-2026-07-12.md',
+  'docs/COREONE-报告结论质量Loop-2026-07-12.md',
+]) {
+  assert.match(
+    fs.readFileSync(path.join(repositoryRoot, file), 'utf8'),
+    /已于 2026-07-29 经 PM 定稿/,
+    `${file} must reflect the PM-finalized v1.0 family`,
+  );
+}
+const operatingContractText = fs.readFileSync(
+  path.join(repositoryRoot, 'docs/agent-operating-contract.md'),
+  'utf8',
+);
+assert.match(
+  operatingContractText,
+  /前端实现 owner = Claude Code CLI\/K3；Codex 负责 fixed-SHA 复核/,
+);
+assert.match(
+  operatingContractText,
+  /后端实现 owner = Codex；Claude Code CLI\/K3 负责 fixed-SHA 独立复核/,
+);
+assert.match(
+  operatingContractText,
+  /Issue 正式评级与标签写入 \/ 回读 owner = Codex/,
+);
+const issueLoopText = fs.readFileSync(
+  path.join(repositoryRoot, 'docs/github-issue-pr-management-loop.md'),
+  'utf8',
+);
+assert.match(issueLoopText, /question-only/);
+assert.match(issueLoopText, /P0 \+ 非阻断上线/);
+assert.match(issueLoopText, /P3 \+ 阻断上线/);
+assert.match(issueLoopText, /release disposition/);
 
 assert.equal(toPosix('.\\前端代码\\src\\App.tsx'), '前端代码/src/App.tsx');
 assert.equal(matchesAny('前端代码/src/App.tsx', ['前端代码/src/**']), true);
@@ -250,16 +319,16 @@ ${body.split('\n').map((line) => `>   ${line}`).join('\n')}
 }
 
 function wrapRawHtmlBlock(tag, body) {
-  return `&lt;${tag}&gt;
-${body}
-&lt;/${tag}&gt;`;
+  return `<${tag}>
+${compactMarkdown(body)}
+</${tag}>`;
 }
 
 function wrapMultilineRawHtmlBlock(tag, body) {
-  return `&lt;${tag}
- data-mode="hidden"&gt;
-${body}
-&lt;/${tag}&gt;`;
+  return `<${tag}
+ data-mode="hidden">
+${compactMarkdown(body)}
+</${tag}>`;
 }
 
 function wrapDelimitedRawHtmlBlock(opening, closing, body) {
@@ -278,17 +347,17 @@ function compactMarkdown(body) {
 }
 
 function wrapBlockquoteType6(body) {
-  return `> &lt;table&gt;
+  return `> <table>
 ${compactMarkdown(body).split('\n').map((line) => `> ${line}`).join('\n')}`;
 }
 
 function wrapListType6(body) {
-  return `- &lt;table&gt;
+  return `- <table>
 ${compactMarkdown(body).split('\n').map((line) => `  ${line}`).join('\n')}`;
 }
 
 function wrapBlockquoteListType6(body) {
-  return `> - &lt;table&gt;
+  return `> - <table>
 ${compactMarkdown(body).split('\n').map((line) => `>   ${line}`).join('\n')}`;
 }
 
@@ -358,80 +427,80 @@ for (const [name, wrap] of [
   ['nested-list fenced contract is hidden', (body) => wrapListFence(body, '- - ```md', '    ')],
   ['blockquote fenced contract is hidden', wrapBlockquoteFence],
   ['proper blockquote-list fenced contract is hidden', wrapBlockquoteListFence],
-  ['encoded raw pre contract is hidden', (body) => wrapRawHtmlBlock('pre', body)],
-  ['encoded raw code contract is hidden', (body) => wrapRawHtmlBlock('code', body)],
-  ['encoded raw div contract is hidden', (body) => wrapRawHtmlBlock('div', body)],
+  ['raw pre contract is hidden', (body) => wrapRawHtmlBlock('pre', body)],
+  ['raw code contract is hidden', (body) => wrapRawHtmlBlock('code', body)],
+  ['raw div contract is hidden', (body) => wrapRawHtmlBlock('div', body)],
   ['multiline pre opener contract is hidden', (body) => wrapMultilineRawHtmlBlock('pre', body)],
   ['multiline script opener contract is hidden', (body) => wrapMultilineRawHtmlBlock('script', body)],
   ['multiline style opener contract is hidden', (body) => wrapMultilineRawHtmlBlock('style', body)],
   ['multiline textarea opener contract is hidden', (body) => wrapMultilineRawHtmlBlock('textarea', body)],
   [
-    'encoded HTML comment contract is hidden',
-    (body) => wrapDelimitedRawHtmlBlock('&lt;!--', '--&gt;', body),
+    'raw HTML comment contract is hidden',
+    (body) => wrapDelimitedRawHtmlBlock('<!--', '-->', body),
   ],
   [
     'processing instruction contract is hidden',
-    (body) => wrapDelimitedRawHtmlBlock('&lt;?hidden', '?&gt;', body),
+    (body) => wrapDelimitedRawHtmlBlock('<?hidden', '?>', body),
   ],
   [
     'declaration contract is hidden',
-    (body) => wrapDelimitedRawHtmlBlock('&lt;!DOCTYPE hidden', '&gt;', body),
+    (body) => wrapDelimitedRawHtmlBlock('<!DOCTYPE hidden', '>', body),
   ],
   [
     'CDATA contract is hidden',
-    (body) => wrapDelimitedRawHtmlBlock('&lt;![CDATA[', ']]&gt;', body),
+    (body) => wrapDelimitedRawHtmlBlock('<![CDATA[', ']]>', body),
   ],
-  ['unclosed pre contract is hidden to EOF', (body) => `&lt;pre\n data-mode="hidden"\n${body}`],
-  ['encoded xmp product container is hidden', (body) => wrapRawHtmlBlock('xmp', body)],
+  ['unclosed pre contract is hidden to EOF', (body) => `<pre\n data-mode="hidden"\n${body}`],
+  ['raw xmp container is hidden', (body) => wrapRawHtmlBlock('xmp', body)],
   [
-    'multiline encoded div product opener contract is hidden',
+    'multiline raw div opener contract is hidden',
     (body) => wrapMultilineRawHtmlBlock('DiV', body),
   ],
   [
-    'unclosed multiline encoded xmp product opener hides to EOF',
-    (body) => `&lt;XmP\n data-mode="hidden"\n${body}`,
+    'unclosed raw xmp block hides to EOF',
+    (body) => `<XmP data-mode="hidden">\n${compactMarkdown(body)}`,
   ],
   [
-    'nested encoded product containers are hidden',
-    (body) => `&lt;DiV data-mode="hidden"&gt;
-&lt;code&gt;
-${body}
-&lt;/code&gt;
-&lt;/DiV&gt;`,
+    'nested raw HTML containers are hidden',
+    (body) => `<DiV data-mode="hidden">
+<code>
+${compactMarkdown(body)}
+</code>
+</DiV>`,
   ],
   ['blockquote Type6 contract is hidden', wrapBlockquoteType6],
   ['list Type6 contract is hidden', wrapListType6],
   ['proper blockquote-list Type6 contract is hidden', wrapBlockquoteListType6],
   [
     'Setext equals leaf permits a following Type7 block',
-    (body) => prependWithoutBlank('Leaf heading\n===\n&lt;custom-element&gt;', body),
+    (body) => prependWithoutBlank('Leaf heading\n===\n<custom-element>', body),
   ],
   [
     'Setext dash leaf permits a following Type7 block',
-    (body) => prependWithoutBlank('Leaf heading\n---\n&lt;custom-element&gt;', body),
+    (body) => prependWithoutBlank('Leaf heading\n---\n<custom-element>', body),
   ],
   [
     'link-reference leaf permits a following Type7 block',
-    (body) => prependWithoutBlank('[leaf]: /url\n&lt;custom-element&gt;', body),
+    (body) => prependWithoutBlank('[leaf]: /url\n<custom-element>', body),
   ],
   [
     'link-reference leaf with a title permits a following Type7 block',
     (body) => prependWithoutBlank(
-      '[leaf]: &lt;https://example.invalid&gt; "title"\n&lt;custom-element&gt;',
+      '[leaf]: &lt;https://example.invalid&gt; "title"\n<custom-element>',
       body,
     ),
   ],
   [
     'multiline link-reference title permits a following Type7 block',
     (body) => prependWithoutBlank(
-      '[leaf]: /url\n  "title"\n&lt;custom-element&gt;',
+      '[leaf]: /url\n  "title"\n<custom-element>',
       body,
     ),
   ],
   [
     'multiline link-reference destination and title permit a following Type7 block',
     (body) => prependWithoutBlank(
-      '[leaf]:\n  /url\n  "title"\n&lt;custom-element&gt;',
+      '[leaf]:\n  /url\n  "title"\n<custom-element>',
       body,
     ),
   ],
@@ -442,7 +511,7 @@ ${body.trim().split('\n').map((line) => `     ${line}`).join('\n')}`,
   ],
   [
     'self-closing pre hides content until a blank line',
-    (body) => `&lt;pre/&gt;
+    (body) => `<pre/>
 ${body.trimStart()}`,
   ],
 ]) {
@@ -460,7 +529,7 @@ for (const [name, wrap, expectedOk] of [
   ],
   [
     'blockquote product HTML ends when its container exits',
-    (body) => prependWithoutBlank('> &lt;div&gt;', body),
+    (body) => prependWithoutBlank('> <div>', body),
     true,
   ],
   [
@@ -470,7 +539,7 @@ for (const [name, wrap, expectedOk] of [
   ],
   [
     'list product HTML ends when its container exits',
-    (body) => prependWithoutBlank('- &lt;div&gt;', body),
+    (body) => prependWithoutBlank('- <div>', body),
     true,
   ],
   [
@@ -485,18 +554,18 @@ for (const [name, wrap, expectedOk] of [
   ],
   [
     'Type6 opening tag rejects a non-tag slash suffix',
-    (body) => prependWithoutBlank('&lt;div/not-a-tag', body),
+    (body) => prependWithoutBlank('<div/not-a-tag', body),
     true,
   ],
   [
     'Type6 closing tag rejects a non-tag slash suffix',
-    (body) => prependWithoutBlank('&lt;/table/not-a-tag', body),
+    (body) => prependWithoutBlank('</table/not-a-tag', body),
     true,
   ],
   [
     'paragraph hanging indent remains paragraph content',
     (body) => prependWithoutBlank(
-      'paragraph text\n    hanging continuation\n&lt;custom-element&gt;',
+      'paragraph text\n    hanging continuation\n<custom-element>',
       body,
     ),
     true,
@@ -509,7 +578,7 @@ ${body.trim().split('\n').map((line) => `  ${line}`).join('\n')}`,
   ],
   [
     'self-closing pre ends at a blank line',
-    (body) => `&lt;pre/&gt;
+    (body) => `<pre/>
 hidden-before-blank
 
 ${body.trimStart()}`,
@@ -518,7 +587,7 @@ ${body.trimStart()}`,
   [
     'invalid link-reference syntax remains paragraph content',
     (body) => prependWithoutBlank(
-      '[leaf]: /url "title" trailing\n&lt;custom-element&gt;',
+      '[leaf]: /url "title" trailing\n<custom-element>',
       body,
     ),
     true,
@@ -535,27 +604,27 @@ checkVisibilitySemantics(
 for (const [name, input, visible, hidden] of [
   [
     'CommonMark type 6 ends at a blank line',
-    '&lt;table&gt;\nhidden-type-6\n\nvisible-after-type-6',
+    '<table>\nhidden-type-6\n\nvisible-after-type-6',
     ['visible-after-type-6'],
     ['hidden-type-6'],
   ],
   [
     'CommonMark type 7 ends at a blank line',
-    '&lt;custom-element data-mode="hidden"&gt;\nhidden-type-7\n\nvisible-after-type-7',
+    '<custom-element data-mode="hidden">\nhidden-type-7\n\nvisible-after-type-7',
     ['visible-after-type-7'],
     ['hidden-type-7'],
   ],
   [
     'CommonMark type 7 does not interrupt a paragraph',
-    'paragraph text\n&lt;custom-element&gt;\nvisible-paragraph-continuation',
+    'paragraph text\n<custom-element>\nvisible-paragraph-continuation',
     ['paragraph text', 'custom-element', 'visible-paragraph-continuation'],
     [],
   ],
   [
-    'encoded div product container spans blank lines',
+    'encoded div remains visible inline text across blank lines',
     '&lt;DiV data-mode="hidden"&gt;\nhidden-div-before\n\nhidden-div-after\n&lt;/dIv&gt;\nvisible-after-div',
-    ['visible-after-div'],
-    ['hidden-div-before', 'hidden-div-after'],
+    ['hidden-div-before', 'hidden-div-after', 'visible-after-div'],
+    [],
   ],
 ]) {
   const output = stripIgnoredMarkdown(input);
@@ -2610,6 +2679,8 @@ biggest-missing: risk-v1; anchor=name:external caller inventory; uncertainty=unk
       issueUrl: 'https://github.com/acme/coreone/issues/81',
       issueTitle: 'Reflection regression',
       issueBodyHash: crypto.createHash('sha256').update(issueBody, 'utf8').digest('hex'),
+      issuePriority: 'P1',
+      issueReleaseImpact: '阻断上线',
       stage: 'implementation',
       owner: 'Test Owner',
       risk: 'R1',
@@ -2637,6 +2708,7 @@ if (args[0] === 'repo' && args[1] === 'view') {
     state: 'OPEN',
     url: 'https://github.com/acme/coreone/issues/81',
     body: issueBody,
+    labels: [{ name: 'P1' }, { name: '阻断上线' }],
     updatedAt: observedAt,
   }));
 } else if (args[0] === 'api' && args[1] === 'repos/acme/coreone/issues/comments/123') {
@@ -2977,7 +3049,7 @@ const leafHiddenHandoff = runIsolatedHandoff(
   'risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
   (body) => `Leaf heading
 ===
-&lt;custom-element&gt;
+<custom-element>
 ${body}`,
 );
 if (leafHiddenHandoff.status !== 1) {
@@ -2997,7 +3069,7 @@ const multilineLinkHiddenHandoff = runIsolatedHandoff(
   'risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
   (body) => `[leaf]: /url
   "title"
-&lt;custom-element&gt;
+<custom-element>
 ${body}`,
 );
 if (multilineLinkHiddenHandoff.status !== 1) {
@@ -3015,11 +3087,71 @@ if (!/result|least-confidence/.test(multilineLinkHiddenHandoff.stderr)) {
     `multiline-link/Type7 hidden handoff did not report hidden fields: ${multilineLinkHiddenHandoff.stderr}`,
   );
 }
+for (const [name, labelPrefix] of [
+  ['encoded heading marker', '&#35; note'],
+  ['encoded list marker', '&#45; note'],
+  ['encoded blockquote marker', '&#62; note'],
+]) {
+  const lifecycle = runIsolatedHandoff(
+    strongLeastConfidence,
+    (body) => body.replace(
+      handoffStrongLeastConfidenceLine,
+      `[
+${labelPrefix}
+${handoffStrongLeastConfidenceLine}
+]: /hidden`,
+    ),
+  );
+  if (lifecycle.status !== 1) {
+    reflectionRegressionFailures.push(
+      `${name} hidden-label lifecycle expected exit=1, actual=${lifecycle.status}`,
+    );
+  }
+  if (!lifecycle.stateExists) {
+    reflectionRegressionFailures.push(
+      `${name} hidden-label lifecycle removed the active task state file`,
+    );
+  }
+  if (!/least-confidence/.test(lifecycle.stderr)) {
+    reflectionRegressionFailures.push(
+      `${name} hidden-label lifecycle did not report least-confidence: ${lifecycle.stderr}`,
+    );
+  }
+}
+for (const [name, opener] of [
+  ['blockquote lazy continuation', '> ['],
+  ['list lazy continuation', '- ['],
+]) {
+  const lifecycle = runIsolatedHandoff(
+    strongLeastConfidence,
+    (body) => body.replace(
+      handoffStrongLeastConfidenceLine,
+      `${opener}
+${handoffStrongLeastConfidenceLine}
+]: /hidden`,
+    ),
+  );
+  if (lifecycle.status !== 1) {
+    reflectionRegressionFailures.push(
+      `${name} hidden-label lifecycle expected exit=1, actual=${lifecycle.status}`,
+    );
+  }
+  if (!lifecycle.stateExists) {
+    reflectionRegressionFailures.push(
+      `${name} hidden-label lifecycle removed the active task state file`,
+    );
+  }
+  if (!/least-confidence/.test(lifecycle.stderr)) {
+    reflectionRegressionFailures.push(
+      `${name} hidden-label lifecycle did not report least-confidence: ${lifecycle.stderr}`,
+    );
+  }
+}
 const hangingParagraphHandoff = runIsolatedHandoff(
   'risk-v1; anchor=name:production timeout behavior; uncertainty=unmeasured:target environment',
   (body) => `paragraph text
     hanging continuation
-&lt;custom-element&gt;
+<custom-element>
 ${body}`,
 );
 if (hangingParagraphHandoff.status !== 0) {

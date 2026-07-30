@@ -27,6 +27,8 @@ Issue 记录“整项工作还剩什么”；PR body 记录“这一次交付由
 
 Agent 认领前先核对该块、GitHub assignee、开放 PR 和 worktree。新表单保持 `unassigned`；Claude Code 用 `node scripts/claude-task.cjs start ... --claim=true`，只在 preflight 通过后原子更新该块并发认领评论。已有其他 owner 时拒绝覆盖。没有 Issue body 写权限时只能提出认领，不得把自己视为 current owner；由有权角色回填后才生效。GitHub assignee 可以镜像 owner，但与正文冲突时先停下并校准，不能选择性取用。
 
+新任务的实现 / 复核轴遵循共用契约 §4：前端由 Claude Code CLI/K3 实现、Codex 做 fixed-SHA 复核；后端由 Codex 实现、Claude Code CLI/K3 做 fixed-SHA 独立复核。Issue 正式评级与标签写入 / 回读仅由 Codex 串行执行。规则生效前已经在执行的任务保持既有 owner 到收口；具体例外只记在对应实时 handoff，不写进长期规则。
+
 旧文档中的待办不能原样搬进 GitHub。创建 Issue 前必须实时核对开放 / 关闭 Issues、开放 PR、近期合并 PR、labels 和 milestones，并判断旧材料是否已经失效。
 
 ## 2. 单一分类与去重
@@ -43,6 +45,13 @@ Agent 认领前先核对该块、GitHub assignee、开放 PR 和 worktree。新�
 第 6 类通常不再创建实现 Issue；确需跨任务看总状态时，只建一个父级 tracking，并链接真正的实施源。相关小项优先用一个 umbrella + checklist；风险、owner 或交付物不同才拆分。
 
 Issue 必须包含：业务影响、来源链接、现状证据、范围、非范围、验收标准、依赖、优先级、建议 owner、截止时间或触发条件、与现有 PR / Issue 的关系。PRD 驱动的工程 Issue 还必须使用工作项表单填写 `PRD 固定基线`（master first-parent merge SHA）、`RQ → AC 映射`和 Mockup 闸点；本地 `claude-task start` 会把每一对 RQ/AC 与固定 PRD 的同一验收表行、PM 批准评论逐项核对。
+
+### 实现准入标签合同
+
+- 优先级表示业务损失与处置紧迫度；上线影响表示是否必须阻断当前发布。两条轴相关但不等价，必须分别给证据。
+- 可实施 Issue 必须恰好有一个 `P0` / `P1` / `P2` / `P3`，以及恰好一个 `阻断上线` / `非阻断上线`。`P0 + 非阻断上线`、`P3 + 阻断上线` 是非法组合；P1 / P2 可配任一上线影响，但 Issue 中必须写清可达路径、影响与 release disposition 理由。
+- 只有提问、尚待澄清的 question-only 讨论 Issue 可以暂时仅有 `question`、不带两条实现轴；它不是可实施项，Codex 完成去重、事实、范围、AC 复核和正式评级前不得认领或开工。
+- 评级升降必须在 Issue 留下审计证据、触发条件和变更理由。`claude-task start` 与存续任务现场回读都会拉取 labels 并 fail closed：缺失、重复、非法组合或开工后评级漂移时一律停止。
 
 ## 3. PM 决策怎么走
 
@@ -125,14 +134,14 @@ node scripts/offline-github-governance.cjs
 
 > PM 2026-07-12 立规：审查、讨论、复核里浮现的**未实现需求**和**发现的问题**不许只留在聊天 / PR body / 文档里，必须走这条入队闭环，成为 Issue 主队列的一员。这是 §7「follow-up sweep」的具体做法。
 
-任何一轮审查 / 讨论 / 复核结束时，执行方（Codex / Claude / 其他模型）固定做四步：
+任何一轮审查 / 讨论 / 复核结束时，执行方固定做四步。新需求讨论 Issue 由 Claude Code 创建候选并执行获准的创建动作，随后交给 Codex 串行做去重、事实、范围、AC 复核与正式评级；评级前不得实现，GitHub 写入始终只有一个 owner：
 
 1. **浮现**：把这一轮里未实现的需求 + 发现的问题收拢成候选清单。
 2. **去重**（开 Issue 前的硬前置，见 §1 / §2）：现场读 `gh issue list --state all`、`docs/PM待拍板.md` 决策索引和近期 PR，判定哪些已被现有 Issue / 决策覆盖。**已覆盖的不重开**，只在汇报里说明它跟踪在哪（`#N` 或 `PM待拍板:ID`）。已在 `PM待拍板` / 别处跟踪的决策，除非 PM 要求，不复制成第二个 Issue 队列。
-3. **起草，不直接开**（默认 **draft-then-confirm**）：对去重后的真新项，各起草标题 + 单一分类（§2 六选一）+ 对应 `kind/*` 或 `bug`/`documentation` label + 结构化 body（业务影响 / 现状证据带 `file:line` 或 `PR#` / 建议范围 / 非范围 / 验收 / 来源），先交 PM 过目。
-4. **PM 拍板后开并回报**：PM 点头后批量 `gh issue create`，事后给「开了哪些 / 跳过哪些（已覆盖，指向 `#N`）」的清单。执行方不得跳过 PM 确认直接批量开，也不得把不确定 / 有歧义的项硬塞成 Issue。
+3. **起草，不直接开**（默认 **draft-then-confirm**）：Claude Code 对去重后的真新项，各起草标题 + 单一分类（§2 六选一）+ 对应 `kind/*` 或 `bug`/`documentation` label + 结构化 body（业务影响 / 现状证据带 `file:line` 或 `PR#` / 建议范围 / 非范围 / 验收 / 来源），先交 PM 过目。
+4. **PM 拍板后串行开、复核、评级并回报**：Claude Code 在授权范围内创建 Issue 后停止写入并交给 Codex；Codex 重做去重与事实检查，校准范围 / AC，按 §2 写入并回读两条正式标签。最终回报「开了哪些 / 跳过哪些（已覆盖，指向 `#N`）/ 如何评级」。执行方不得跳过 PM 确认直接批量开，Codex 评级前不得派实现，也不得把不确定 / 有歧义的项硬塞成实现队列。
 
-Claude Code 本地入口：`/coreone-deliver-prd <PRD或Issue> issues`。它按本节直接用 `gh` 去重并起草，止步于草稿、不自动开 Issue。`.claude/workflows/surface-to-issues.js` 只供支持 `phase/agent/pipeline` DSL 的 workflow harness 使用，不是普通 Claude Code 会话的原生命令。
+Claude Code 本地入口：`/coreone-deliver-prd <PRD或Issue> issues`。默认路径按本节直接用 `gh` 去重并起草，止步于草稿；只有 PM 对具体 Issue 创建范围明确授权后，Claude Code 才作为串行 GitHub writer 创建，随即停止写入并交给 Codex 复核与正式评级。`.claude/workflows/surface-to-issues.js` 只供支持 `phase/agent/pipeline` DSL 的 workflow harness 使用，不是普通 Claude Code 会话的原生命令。
 
 ## 9. 线下复核交接与 GitHub 最小发布合同
 
@@ -176,6 +185,8 @@ Claude Code 本地入口：`/coreone-deliver-prd <PRD或Issue> issues`。它按�
 ```
 
 每次 PR 复核都必须留下与固定 SHA 绑定的可追踪线下原文，但**不得默认在对应 PR 发布评论**。审查多个候选时逐个出文档，不能只留一份汇总。目标 head SHA 改变后，旧复核是否仍有效必须重新判断；线下文档中的“可合并”不替代 PR body、required checks、正式审批或 PM 合并授权。GitHub 如需记录，只发布 PM 批准的最终决定摘要，不发布模型对话、过程进度或轮询结果。
+
+每条 finding 还必须完成 `evidence triage + release disposition`：当前修复、反证驳回或去重转 follow-up，与阻断 / 非阻断当前上线分别判定。只有真实路径可合理到达且违反当前 AC / 明示 threat contract，或会造成高影响安全、资金、数据完整性损失时才阻断当前发布；人工改库、移除 trigger、异常历史脏数据、极低频怪异输入若影响已被证据证明可控，可转为非阻断 follow-up，但 Issue 必须有恰好一条优先级与上线影响标签，并写清证据、触发、owner、验收。明示 AC / threat contract 不得仅因低频而降级。reviewer 的 P0/P1 只是输入证据，不自动等于当前 PR `NO_GO`。
 
 ## 10. PM 大白话
 

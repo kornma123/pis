@@ -22,6 +22,8 @@ const HANDOFF_STATUSES = new Set([
 ]);
 const STATE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const LIVE_RECHECK_MS = 10 * 60 * 1000;
+const ISSUE_PRIORITY_LABELS = new Set(['P0', 'P1', 'P2', 'P3']);
+const ISSUE_RELEASE_LABELS = new Set(['阻断上线', '非阻断上线']);
 const HANDOFF_CONTINUATION_BOUNDARY_KEYS = new Set([
   'result',
   'evidence',
@@ -31,6 +33,56 @@ const HANDOFF_CONTINUATION_BOUNDARY_KEYS = new Set([
   'least-confidence',
   'biggest-missing',
 ]);
+
+function validateIssueImplementationLabels(labels) {
+  const names = (Array.isArray(labels) ? labels : [])
+    .map((label) => typeof label === 'string' ? label : label?.name)
+    .filter((name) => typeof name === 'string');
+  const priorities = names.filter((name) => ISSUE_PRIORITY_LABELS.has(name));
+  const releaseImpacts = names.filter((name) => ISSUE_RELEASE_LABELS.has(name));
+  const errors = [];
+
+  if (priorities.length === 0 && releaseImpacts.length === 0) {
+    errors.push(
+      '缺少 Codex 正式评级：优先级标签须恰好一个 P0/P1/P2/P3，' +
+      '上线影响标签须恰好一个 阻断上线/非阻断上线。',
+    );
+  } else {
+    if (priorities.length !== 1) {
+      errors.push(`优先级标签必须恰好一个（当前 ${priorities.length} 个）。`);
+    }
+    if (releaseImpacts.length !== 1) {
+      errors.push(`上线影响标签必须恰好一个（当前 ${releaseImpacts.length} 个）。`);
+    }
+  }
+
+  const priority = priorities.length === 1 ? priorities[0] : null;
+  const releaseImpact = releaseImpacts.length === 1 ? releaseImpacts[0] : null;
+  if (priority === 'P0' && releaseImpact === '非阻断上线') {
+    errors.push('P0 + 非阻断上线 默认非法；请修正评级或在 Issue 留下升降级证据后重评。');
+  }
+  if (priority === 'P3' && releaseImpact === '阻断上线') {
+    errors.push('P3 + 阻断上线 默认非法；请修正评级或在 Issue 留下升降级证据后重评。');
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    priority,
+    releaseImpact,
+  };
+}
+
+function assertIssueImplementationLabels(labels, issueNumber) {
+  const result = validateIssueImplementationLabels(labels);
+  if (!result.ok) {
+    throw new Error(
+      `Issue #${issueNumber} 尚未达到实现准入标签合同：${result.errors.join(' ')}` +
+      ' question-only 需求讨论票可以暂存，但须经 Codex 去重/事实/范围/AC 复核和正式评级后才能 start。',
+    );
+  }
+  return result;
+}
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -647,11 +699,12 @@ function commandStart(argv) {
 
   const issueResult = run(
     'gh',
-    ['issue', 'view', String(issue), '--json', 'state,body,url,title'],
+    ['issue', 'view', String(issue), '--json', 'state,body,url,title,labels'],
     { cwd: root, timeout: 10_000 },
   );
   const issueData = JSON.parse(issueResult.stdout);
   if (issueData.state !== 'OPEN') throw new Error(`Issue #${issue} 不是 OPEN。`);
+  const issueRating = assertIssueImplementationLabels(issueData.labels, issue);
   const issueOwner = parseOwnerBlock(issueData.body);
   if (!issueOwner) throw new Error(`Issue #${issue} 缺少 coreone-owner 受控块。`);
   const wantsClaim = String(flags.claim || '').toLowerCase() === 'true';
@@ -721,12 +774,18 @@ function commandStart(argv) {
     );
     run('gh', ['issue', 'edit', String(issue), '--body', claimedBody], { cwd: root, timeout: 15_000 });
     const claimedIssue = JSON.parse(
-      run('gh', ['issue', 'view', String(issue), '--json', 'state,body,url,title'], {
+      run('gh', ['issue', 'view', String(issue), '--json', 'state,body,url,title,labels'], {
         cwd: root,
         timeout: 10_000,
       }).stdout,
     );
-    if (claimedIssue.state !== 'OPEN' || parseOwnerBlock(claimedIssue.body) !== owner) {
+    const claimedRating = assertIssueImplementationLabels(claimedIssue.labels, issue);
+    if (
+      claimedIssue.state !== 'OPEN' ||
+      parseOwnerBlock(claimedIssue.body) !== owner ||
+      claimedRating.priority !== issueRating.priority ||
+      claimedRating.releaseImpact !== issueRating.releaseImpact
+    ) {
       throw new Error(`Issue #${issue} 认领后复核失败；停止建立本地 task state。`);
     }
     Object.assign(issueData, claimedIssue);
@@ -739,6 +798,8 @@ function commandStart(argv) {
     issueUrl: issueData.url,
     issueTitle: issueData.title,
     issueBodyHash: sha256(issueData.body),
+    issuePriority: issueRating.priority,
+    issueReleaseImpact: issueRating.releaseImpact,
     stage,
     owner,
     risk,
@@ -861,12 +922,22 @@ function assertActiveState(root, active, options = {}) {
     throw new Error('origin/master 已变化；先 fetch/rebase，再重新运行 task start。');
   }
   const issue = JSON.parse(
-    run('gh', ['issue', 'view', String(state.issue), '--json', 'state,body,url'], {
+    run('gh', ['issue', 'view', String(state.issue), '--json', 'state,body,url,labels'], {
       cwd: root,
       timeout: 10_000,
     }).stdout,
   );
   if (issue.state !== 'OPEN') throw new Error(`活动 Issue #${state.issue} 已不是 OPEN。`);
+  const liveRating = assertIssueImplementationLabels(issue.labels, state.issue);
+  if (
+    liveRating.priority !== state.issuePriority ||
+    liveRating.releaseImpact !== state.issueReleaseImpact
+  ) {
+    throw new Error(
+      `Issue #${state.issue} 评级已变化（${state.issuePriority}/${state.issueReleaseImpact} -> ` +
+      `${liveRating.priority}/${liveRating.releaseImpact}）；重新读取升降级证据并运行 task start。`,
+    );
+  }
   if (sha256(issue.body) !== state.issueBodyHash) {
     throw new Error(`Issue #${state.issue} body 已变化；重新读取范围/RQ/AC 并运行 task start。`);
   }
@@ -1559,4 +1630,5 @@ module.exports = {
   shouldBlockStop,
   shellTokens,
   toPosix,
+  validateIssueImplementationLabels,
 };
