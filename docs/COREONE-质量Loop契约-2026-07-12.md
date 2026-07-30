@@ -86,7 +86,7 @@ docs/COREONE-质量Loop总览-…      ← 纯路由：哪个阶段走哪个入�
 **L0 = 固定 SHA 的线下异构复核（K3 / Codex / 其他与实现者不同的模型）**
 - **入口**：复核者必须拿到完整固定对象或本地 bundle，核对 commit/tree/parent/exact delta/clean；不得只读 PR 摘要或实现者自述。复核会话不得参与同一候选的实现。
 - **交接**：复核者输出 finding-first 完整文档（目标 SHA、独立性、P0/P1/P2、静态/运行证据、未覆盖边界、Verdict）；由 PM 原文粘贴给负责 Codex 会话。原文不自动发布到 GitHub，也不自动取得修复、推送、评论、合并或发布权限。
-- **消费义务 = evidence triage + release disposition**：写码交付必须逐条把 L0 finding 分为「当前修复 / 反证驳回 / 去重后转 follow-up」，并另行给出「阻断上线 / 非阻断上线」处置；reviewer 给出的 P0/P1 严重度本身不自动等于当前 PR `NO_GO`。只有该问题在真实产品路径上可合理到达，且违反当前 AC / 明示 threat contract，或可能造成高影响的安全、资金、数据完整性损失时，才阻断当前发布。人工直接改库、移除 trigger、异常历史脏数据、极低频怪异输入形态，在影响已被证据证明可控时，可以去重后转成非阻断 follow-up；该 Issue 必须带恰好一个优先级标签和恰好一个上线影响标签，并写清证据、触发条件、owner 与验收标准。明示 AC / threat contract 不得只因低频而降为非阻断。运行证据 `BLOCKED` 时，凡当前 AC 所需证据仍缺失则保持阻断；与当前 AC 无关的环境缺口须明确登记边界，不得冒充已验证。缺复核原文 = 未做，不能用 GitHub 绿灯、模型自审或口头摘要替代。
+- **消费义务 = evidence triage + release disposition**：写码交付必须逐条把 L0 finding 分为「当前修复 / 反证驳回 / 去重后转 follow-up」，并另行给出「阻断上线 / 非阻断上线」处置；reviewer 给出的 P0/P1 严重度本身不自动等于当前 PR `NO_GO`。可达性、当前 AC / threat contract、高影响损失与低频残余的唯一判定式只在 [`COREONE-Issue分级与上线阻断标签规则`](prd/COREONE-Issue分级与上线阻断标签规则.md) 维护，本契约不复制。运行证据 `BLOCKED` 时，凡当前 AC 所需证据仍缺失则保持阻断；与当前 AC 无关的环境缺口须明确登记边界，不得冒充已验证。缺复核原文 = 未做，不能用 GitHub 绿灯、模型自审或口头摘要替代。
 - **运行边界**：静态 PASS 不是运行 PASS。复核者只能声明实际执行的 Node/依赖/测试证据；环境缺失就写 BLOCKED。
 - **它不是碰钱档的对抗面板，永远不许折抵 L1。**
 

@@ -229,8 +229,8 @@ Claude Code 在 PRD 阶段交付时同时提供：
 ```
 
 5. 仓库 owner 在主 Issue / PR 留结构化 `[PM-APPROVAL]` 评论后，只结束 PRD 内容闸；按现有门禁完成复核并合并 PRD。
-6. 在已拉取最新仓库配置的 Claude Code 中运行 `/coreone-deliver-prd <合并PRD路径> issues`；它先去重并起草工程 Issue 候选。PM 对具体创建范围明确授权后才由 Claude Code 串行创建，随后交 Codex 再去重、复核事实/范围/AC、正式评级并回读标签。
-7. 针对已完成 Codex 正式评级的工程 Issue 运行 `/coreone-deliver-prd #N implement`。命令先按 owned files / 用户结果分域：前端由 Claude Code 重新认领、声明 owned/excluded files 并通过 develop preflight；后端不得由 Claude Code 认领或代写，交 Codex 实现，Claude Code 等 fixed SHA 后复核；混合任务先拆票，不能拆时需 PM 在实时 handoff 明确例外。
+6. 在已拉取最新仓库配置的 Claude Code 中运行 `/coreone-deliver-prd <合并PRD路径> issues`；它先去重并把 1–5 个候选起草为 Claude project `memory/` manifest。PM 用 `[PM-ISSUE-CREATION]` 普通评论精确批准 manifest SHA-256/数量后，Claude Code 只通过 `node scripts/claude-task.cjs create-issues ...` 串行创建，随后交 Codex 再去重、复核事实/范围/AC、正式评级并回读标签。
+7. 针对已完成 Codex 正式评级的工程 Issue 运行 `/coreone-deliver-prd #N implement`。命令先按 owned files / 用户结果分域：前端由 Claude Code 重新认领、声明 owned/excluded files 并通过 develop preflight；后端不得由 Claude Code 认领或代写，交 Codex 实现，Claude Code 等 fixed SHA 后复核；机器闸拒绝后端/全仓/混合/不可判定 implementation scope，混合任务先拆票，不能拆时需 PM 用绑定 Issue 与 owned-scope SHA-256 的 `[PM-OWNERSHIP-EXCEPTION]` 普通评论明确例外。
 8. 实现 PR 合并后运行 `/coreone-deliver-prd #N accept`，逐 AC 真跑并交 PM 验收；实现 PR 默认用 `Refs #N`，Issue 在 PM 明确验收通过后手工关闭。
 
 根目录 `CLAUDE.md` 会把 Claude Code 路由到同一共用契约和本页，不需要另设第二个 Agent。

@@ -138,9 +138,9 @@ node scripts/offline-github-governance.cjs
 1. **浮现**：把这一轮里未实现的需求 + 发现的问题收拢成候选清单。
 2. **去重**（开 Issue 前的硬前置，见 §1 / §2）：现场读 `gh issue list --state all`、`docs/PM待拍板.md` 决策索引和近期 PR，判定哪些已被现有 Issue / 决策覆盖。**已覆盖的不重开**，只在汇报里说明它跟踪在哪（`#N` 或 `PM待拍板:ID`）。已在 `PM待拍板` / 别处跟踪的决策，除非 PM 要求，不复制成第二个 Issue 队列。
 3. **起草，不直接开**（默认 **draft-then-confirm**）：Claude Code 对去重后的真新项，各起草标题 + 单一分类（§2 六选一）+ 对应 `kind/*` 或 `bug`/`documentation` label + 结构化 body（业务影响 / 现状证据带 `file:line` 或 `PR#` / 建议范围 / 非范围 / 验收 / 来源），先交 PM 过目。
-4. **PM 拍板后串行开、复核、评级并回报**：Claude Code 在授权范围内创建 Issue 后停止写入并交给 Codex；Codex 重做去重与事实检查，校准范围 / AC，按唯一标签规则源写入并回读正式评级。最终回报「开了哪些 / 跳过哪些（已覆盖，指向 `#N`）/ 如何评级」。执行方不得跳过 PM 确认直接批量开，Codex 评级前不得派实现，也不得把不确定 / 有歧义的项硬塞成实现队列。
+4. **PM 拍板后串行开、复核、评级并回报**：Claude Code 把 1–5 个候选存入当前 Claude project 的 `memory/` JSON manifest；仓库 owner 的普通评论用 `[PM-ISSUE-CREATION] decision=approved manifest-sha256=<64hex> count=<1..5>` 精确绑定后，只运行 `node scripts/claude-task.cjs create-issues --manifest=<绝对路径> --approval=<评论 URL>`。事务对每项写前跑 offline governance、取得全仓 writer slot、与上一写入至少间隔一秒、创建后回读，并把 manifest 标为已消费以拒绝重放；失败即停，不继续后项。Claude Code 完成后停止写入并交给 Codex；Codex 重做去重与事实检查，校准范围 / AC，按唯一标签规则源写入并回读正式评级。最终回报「开了哪些 / 跳过哪些（已覆盖，指向 `#N`）/ 如何评级」。不得直接运行 `gh issue create` 绕开事务；Codex 评级前不得派实现，也不得把不确定 / 有歧义的项硬塞成实现队列。
 
-Claude Code 本地入口：`/coreone-deliver-prd <PRD或Issue> issues`。默认路径按本节直接用 `gh` 去重并起草，止步于草稿；只有 PM 对具体 Issue 创建范围明确授权后，Claude Code 才作为串行 GitHub writer 创建，随即停止写入并交给 Codex 复核与正式评级。`.claude/workflows/surface-to-issues.js` 只供支持 `phase/agent/pipeline` DSL 的 workflow harness 使用，不是普通 Claude Code 会话的原生命令。
+Claude Code 本地入口：`/coreone-deliver-prd <PRD或Issue> issues`。默认路径按本节只读 `gh` 去重并起草，止步于 manifest；只有 PM 对 manifest hash/count 明确授权后，Claude Code 才通过 `claude-task.cjs create-issues` 作为串行 GitHub writer 创建，随即停止写入并交给 Codex 复核与正式评级。`.claude/workflows/surface-to-issues.js` 只供支持 `phase/agent/pipeline` DSL 的 workflow harness 使用，不是普通 Claude Code 会话的原生命令。
 
 ## 9. 线下复核交接与 GitHub 最小发布合同
 
@@ -185,7 +185,7 @@ Claude Code 本地入口：`/coreone-deliver-prd <PRD或Issue> issues`。默认�
 
 每次 PR 复核都必须留下与固定 SHA 绑定的可追踪线下原文，但**不得默认在对应 PR 发布评论**。审查多个候选时逐个出文档，不能只留一份汇总。目标 head SHA 改变后，旧复核是否仍有效必须重新判断；线下文档中的“可合并”不替代 PR body、required checks、正式审批或 PM 合并授权。GitHub 如需记录，只发布 PM 批准的最终决定摘要，不发布模型对话、过程进度或轮询结果。
 
-每条 finding 还必须完成 `evidence triage + release disposition`：当前修复、反证驳回或去重转 follow-up，与阻断 / 非阻断当前上线分别判定。只有真实路径可合理到达且违反当前 AC / 明示 threat contract，或会造成高影响安全、资金、数据完整性损失时才阻断当前发布；人工改库、移除 trigger、异常历史脏数据、极低频怪异输入若影响已被证据证明可控，可转为非阻断 follow-up，但 Issue 必须有恰好一条优先级与上线影响标签，并写清证据、触发、owner、验收。明示 AC / threat contract 不得仅因低频而降级。reviewer 的 P0/P1 只是输入证据，不自动等于当前 PR `NO_GO`。
+每条 finding 还必须完成 `evidence triage + release disposition`：当前修复、反证驳回或去重转 follow-up，与阻断 / 非阻断当前上线分别判定。可达性、当前 AC / threat contract、高影响损失与低频残余的唯一判定式只引用 [`COREONE-Issue分级与上线阻断标签规则`](prd/COREONE-Issue分级与上线阻断标签规则.md)，本流程不复制；reviewer 的 P0/P1 只是输入证据，不自动等于当前 PR `NO_GO`。
 
 ## 10. PM 大白话
 

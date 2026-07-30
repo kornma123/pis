@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
+  assertClaudeImplementationOwnership,
   assertSafeGhCommand,
   assertSafeGitCommand,
   assertSafeNodeCommand,
@@ -22,6 +23,8 @@ const {
   matchesAny,
   parseGitHubArtifactUrl,
   parseFlags,
+  parseIssueCreationApprovalMarker,
+  parseIssueRatingMarker,
   parseOwnerBlock,
   parsePmApprovalMarker,
   parsePrdRef,
@@ -29,6 +32,7 @@ const {
   shouldBlockStop,
   shellTokens,
   toPosix,
+  validateIssueCreationManifest,
   validateIssueImplementationLabels,
 } = require('./claude-task.cjs');
 const {
@@ -130,6 +134,31 @@ assert.doesNotMatch(
   'Issue management loop must point to, not duplicate, the rating contract',
 );
 assert.match(issueLoopText, /release disposition/);
+const qualityLoopContractText = fs.readFileSync(
+  path.join(repositoryRoot, 'docs/COREONE-质量Loop契约-2026-07-12.md'),
+  'utf8',
+);
+const releaseDispositionNorm = /唯一判定式是/g;
+assert.equal(
+  [issueRatingText, issueLoopText, qualityLoopContractText]
+    .reduce((count, text) => count + [...text.matchAll(releaseDispositionNorm)].length, 0),
+  1,
+  'release-disposition predicate must exist only in the unique Issue rating authority',
+);
+assert.match(
+  issueRatingText,
+  /当前支持的真实产品路径上可合理到达且违反当前 AC \/ 明示 threat contract[\s\S]*才阻断当前发布/,
+);
+for (const [file, text] of [
+  ['docs/COREONE-质量Loop契约-2026-07-12.md', qualityLoopContractText],
+  ['docs/github-issue-pr-management-loop.md', issueLoopText],
+]) {
+  assert.doesNotMatch(
+    text,
+    /人工改库、移除 trigger|极低频怪异输入|才阻断当前发布/,
+    `${file} must link to, not duplicate, the release-disposition predicate`,
+  );
+}
 
 const activeClaudeRoutes = new Map([
   [
@@ -176,6 +205,30 @@ assert.equal(matchesAny('docs/a.md', ['docs/*.md']), true);
 assert.equal(matchesAny('docs/nested/a.md', ['docs/*.md']), false);
 assert.equal(matchesAny('src/a.ts', ['src/**/*.ts']), true);
 assert.equal(matchesAny('src/nested/a.ts', ['src/**/*.ts']), true);
+assert.doesNotThrow(() =>
+  assertClaudeImplementationOwnership('implementation', ['前端代码/**']),
+);
+for (const [name, owned] of [
+  ['backend', ['后端代码/**']],
+  ['mixed', ['前端代码/**', '后端代码/**']],
+  ['broad', ['**']],
+  ['unclassified governance', ['scripts/**']],
+]) {
+  assert.throws(
+    () => assertClaudeImplementationOwnership('implementation', owned),
+    /Claude Code.*实现|ownership exception|所有权例外/,
+    name,
+  );
+}
+assert.doesNotThrow(() =>
+  assertClaudeImplementationOwnership('implementation', ['后端代码/**'], {
+    verified: true,
+    issue: 81,
+  }),
+);
+assert.doesNotThrow(() =>
+  assertClaudeImplementationOwnership('acceptance', ['后端代码/**']),
+);
 
 const ownerBody = `
 <!-- coreone-owner:start -->
@@ -266,6 +319,41 @@ assert.equal(
 );
 assert.equal(parsePmApprovalMarker('[PM-APPROVAL] decision=rejected artifact=docs/prd/a.md@abcdef1'), null);
 assert.equal(parsePmApprovalMarker('NOT PM_APPROVED'), null);
+const canonicalRatingMarker =
+  '[ISSUE-RATING] owner=Codex previous=P1/阻断上线 ' +
+  'current=P2/非阻断上线 reason=固定 SHA 复核证明当前上线影响已经改变';
+assert.equal(parseIssueRatingMarker(canonicalRatingMarker).currentPriority, 'P2');
+for (const hiddenRatingMarker of [
+  `<!--\n${canonicalRatingMarker}\n-->`,
+  `\`\`\`text\n${canonicalRatingMarker}\n\`\`\``,
+]) {
+  assert.throws(
+    () => parseIssueRatingMarker(hiddenRatingMarker),
+    /评级证据评论/,
+    'hidden rating marker must not be accepted as visible audit evidence',
+  );
+}
+
+const issueManifest = validateIssueCreationManifest(JSON.stringify({
+  version: 1,
+  issues: [{
+    title: '需求讨论：新增可审计的出库异常提示',
+    body: '### 问题\\n\\n当前异常提示缺少可定位证据。\\n\\n### 下一步\\n\\n等待 Codex 去重、范围与 AC 复核后评级。',
+  }],
+}));
+assert.equal(issueManifest.issues.length, 1);
+assert.deepEqual(
+  parseIssueCreationApprovalMarker(
+    '[PM-ISSUE-CREATION] decision=approved ' +
+    `manifest-sha256=${issueManifest.sha256} count=1`,
+  ),
+  { sha256: issueManifest.sha256, count: 1 },
+);
+assert.throws(() => validateIssueCreationManifest(JSON.stringify({ version: 1, issues: [] })));
+assert.throws(() => validateIssueCreationManifest(JSON.stringify({
+  version: 1,
+  issues: [{ title: 'x', body: 'too short' }],
+})));
 
 assert.deepEqual(parsePrdRef('docs/prd/PRD-12.md@abcdef123456'), {
   file: 'docs/prd/PRD-12.md',
@@ -2450,6 +2538,11 @@ assert.deepEqual(handoffFieldErrors('[HANDOFF] status=blocked'), [
 
 assert.equal(isSafeBeforeStartShell('git status --short'), true);
 assert.equal(isSafeBeforeStartShell('gh issue view 12 --json body'), true);
+assert.equal(isSafeBeforeStartShell(
+  'node scripts/claude-task.cjs create-issues --manifest=/tmp/candidates.json --approval=https://github.com/acme/coreone/issues/1#issuecomment-2',
+  repositoryRoot,
+), true);
+assert.equal(isSafeBeforeStartShell('gh issue create --title x --body y'), false);
 assert.equal(isSafeBeforeStartShell('git status; Set-Content hacked.txt x'), false);
 assert.equal(isSafeBeforeStartShell('git status $(touch hacked.txt)'), false);
 assert.equal(isSafeBeforeStartShell('git status `touch hacked.txt`'), false);
@@ -2511,7 +2604,11 @@ assert.throws(() => assertSafeGitCommand(shellTokens('git diff --output=hacked.t
 assert.throws(() => assertSafeGitCommand(shellTokens('git push -f origin task'), { mode: 'governed', branch: 'task' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git push origin HEAD:refs/heads/master'), { mode: 'governed', branch: 'task' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git push --all origin'), { mode: 'governed', branch: 'task' }));
-assert.doesNotThrow(() => assertSafeGitCommand(shellTokens('git push -u origin task'), { mode: 'governed', branch: 'task' }));
+const gitPushWriteState = { mode: 'governed', branch: 'task' };
+assert.doesNotThrow(() =>
+  assertSafeGitCommand(shellTokens('git push -u origin task'), gitPushWriteState),
+);
+assert.equal(gitPushWriteState.githubWrite, true);
 assert.throws(() =>
   assertSafeGitCommand(
     shellTokens(`git worktree add -b claude/nested-task "${bootstrapWorktree}" origin/master`),
@@ -2519,7 +2616,19 @@ assert.throws(() =>
   ),
 );
 assert.doesNotThrow(() => assertSafeGhCommand(shellTokens('gh issue view 12'), { mode: 'governed', issue: 12 }));
-assert.doesNotThrow(() => assertSafeGhCommand(shellTokens('gh issue comment 12 --body ok'), { mode: 'governed', issue: 12 }));
+const issueCommentWriteState = { mode: 'governed', issue: 12 };
+assert.doesNotThrow(() =>
+  assertSafeGhCommand(shellTokens('gh issue comment 12 --body ok'), issueCommentWriteState),
+);
+assert.equal(issueCommentWriteState.githubWrite, true);
+const prCreateWriteState = { mode: 'governed', issue: 12, branch: 'claude/frontend-task' };
+assert.doesNotThrow(() =>
+  assertSafeGhCommand(
+    shellTokens('gh pr create --head claude/frontend-task --base master --title x --body y'),
+    prCreateWriteState,
+  ),
+);
+assert.equal(prCreateWriteState.githubWrite, true);
 assert.throws(() => assertSafeGhCommand(shellTokens('gh issue close 12'), { mode: 'governed', issue: 12 }));
 assert.throws(() => assertSafeGhCommand(shellTokens('gh issue edit 12 --body changed'), { mode: 'governed', issue: 12 }));
 assert.throws(() => assertSafeGhCommand(shellTokens('gh issue comment 12 --repo other/repo --body ok'), { mode: 'governed', issue: 12 }));
@@ -2681,6 +2790,168 @@ assert.equal(
   ),
   2,
 );
+
+function runIsolatedAuthorizedIssueCreation() {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-issue-create-'));
+  const repo = path.join(sandbox, 'repo');
+  const fakeBin = path.join(sandbox, 'bin');
+  const writeLog = path.join(sandbox, 'writes.json');
+  const governanceLog = path.join(sandbox, 'governance.json');
+  fs.mkdirSync(harnessProjectsRoot, { recursive: true });
+  const projectMemoryRoot = fs.mkdtempSync(
+    path.join(harnessProjectsRoot, 'coreone-issue-create-selftest-'),
+  );
+  const memoryDirectory = path.join(projectMemoryRoot, 'memory');
+  const manifestPath = path.join(memoryDirectory, 'candidates.json');
+  const rawManifest = `${JSON.stringify({
+    version: 1,
+    issues: [
+      {
+        title: '需求讨论：补齐前端异常提示证据',
+        body: '### 问题\n\n当前前端异常提示缺少可定位证据。\n\n### 下一步\n\n等待 Codex 去重、范围与 AC 复核后正式评级。',
+      },
+      {
+        title: '需求讨论：统一前端空状态说明',
+        body: '### 问题\n\n当前前端空状态说明存在不一致。\n\n### 下一步\n\n等待 Codex 去重、范围与 AC 复核后正式评级。',
+      },
+    ],
+  }, null, 2)}\n`;
+  const manifest = validateIssueCreationManifest(rawManifest);
+  const observedAt = new Date().toISOString();
+  const approvalBody =
+    `[PM-ISSUE-CREATION] decision=approved manifest-sha256=${manifest.sha256} count=2`;
+
+  function runGit(args) {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(result.status, 0, `git ${args.join(' ')}: ${result.stderr || result.stdout}`);
+  }
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    fs.mkdirSync(fakeBin, { recursive: true });
+    fs.mkdirSync(memoryDirectory, { recursive: true });
+    fs.mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+    fs.writeFileSync(manifestPath, rawManifest, 'utf8');
+    fs.writeFileSync(writeLog, '[]\n', 'utf8');
+    fs.writeFileSync(governanceLog, '[]\n', 'utf8');
+    fs.writeFileSync(path.join(repo, 'seed.txt'), 'seed\n', 'utf8');
+    fs.writeFileSync(
+      path.join(repo, 'scripts', 'offline-github-governance.cjs'),
+      `const fs=require('node:fs');const p=${JSON.stringify(governanceLog)};` +
+      `const rows=JSON.parse(fs.readFileSync(p,'utf8'));rows.push(Date.now());` +
+      `fs.writeFileSync(p,JSON.stringify(rows));console.log('offline GitHub governance: PASS');\n`,
+      'utf8',
+    );
+    runGit(['init', '--initial-branch=issue-create-test']);
+    runGit(['config', 'user.name', 'Issue Create Test']);
+    runGit(['config', 'user.email', 'issue-create@example.invalid']);
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed issue creation fixture']);
+
+    const fakeGh = path.join(fakeBin, 'gh');
+    fs.writeFileSync(fakeGh, `#!/usr/bin/env node
+'use strict';
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const logPath = ${JSON.stringify(writeLog)};
+const observedAt = ${JSON.stringify(observedAt)};
+const approvalBody = ${JSON.stringify(approvalBody)};
+const rows = JSON.parse(fs.readFileSync(logPath, 'utf8'));
+if (args[0] === 'repo' && args[1] === 'view') {
+  console.log(JSON.stringify({ nameWithOwner: 'acme/coreone', url: 'https://github.com/acme/coreone' }));
+} else if (args[0] === 'api' && args[1] === 'repos/acme/coreone/issues/comments/222') {
+  console.log(JSON.stringify({
+    issue_url: 'https://api.github.com/repos/acme/coreone/issues/1',
+    created_at: observedAt,
+    user: { login: 'acme' },
+    body: approvalBody,
+  }));
+} else if (args[0] === 'api' && args[1] === 'user') {
+  console.log('acme');
+} else if (args[0] === 'issue' && args[1] === 'create') {
+  const titleIndex = args.indexOf('--title');
+  const bodyIndex = args.indexOf('--body');
+  const number = 101 + rows.length;
+  rows.push({
+    number,
+    at: Date.now(),
+    title: args[titleIndex + 1],
+    body: args[bodyIndex + 1],
+  });
+  fs.writeFileSync(logPath, JSON.stringify(rows));
+  console.log('https://github.com/acme/coreone/issues/' + number);
+} else if (args[0] === 'issue' && args[1] === 'view' && args[2] === '1') {
+  console.log(JSON.stringify({
+    number: 1,
+    state: 'OPEN',
+    url: 'https://github.com/acme/coreone/issues/1',
+    updatedAt: observedAt,
+  }));
+} else if (args[0] === 'issue' && args[1] === 'view') {
+  const found = rows.find((item) => item.number === Number(args[2]));
+  if (!found) process.exitCode = 9;
+  else console.log(JSON.stringify({
+    number: found.number,
+    state: 'OPEN',
+    url: 'https://github.com/acme/coreone/issues/' + found.number,
+    title: found.title,
+    body: found.body,
+    labels: [],
+  }));
+} else {
+  console.error('unexpected fake gh invocation: ' + args.join(' '));
+  process.exitCode = 9;
+}
+`, { encoding: 'utf8', mode: 0o755 });
+
+    const command = [
+      path.join(__dirname, 'claude-task.cjs'),
+      'create-issues',
+      `--manifest=${manifestPath}`,
+      '--approval=https://github.com/acme/coreone/issues/1#issuecomment-222',
+    ];
+    const env = { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH || ''}` };
+    const first = spawnSync(process.execPath, command, { cwd: repo, encoding: 'utf8', env });
+    const writes = JSON.parse(fs.readFileSync(writeLog, 'utf8'));
+    const governanceRuns = JSON.parse(fs.readFileSync(governanceLog, 'utf8'));
+    const second = spawnSync(process.execPath, command, { cwd: repo, encoding: 'utf8', env });
+    const replayWrites = JSON.parse(fs.readFileSync(writeLog, 'utf8'));
+    const ledgerPath = path.join(repo, '.git', 'coreone', 'issue-creation-ledger.json');
+    return {
+      first,
+      second,
+      writes,
+      governanceRuns,
+      replayWrites,
+      ledger: JSON.parse(fs.readFileSync(ledgerPath, 'utf8')),
+      manifest,
+    };
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+    fs.rmSync(projectMemoryRoot, { recursive: true, force: true });
+  }
+}
+
+const authorizedIssueCreation = runIsolatedAuthorizedIssueCreation();
+assert.equal(authorizedIssueCreation.first.status, 0, authorizedIssueCreation.first.stderr);
+assert.match(authorizedIssueCreation.first.stdout, /2\/2/);
+assert.equal(authorizedIssueCreation.writes.length, 2);
+assert.equal(authorizedIssueCreation.governanceRuns.length, 2);
+assert(
+  authorizedIssueCreation.writes[1].at - authorizedIssueCreation.writes[0].at >= 950,
+  'adjacent GitHub mutations must be spaced by at least one second (allowing clock granularity)',
+);
+assert.equal(
+  authorizedIssueCreation.ledger.consumed[authorizedIssueCreation.manifest.sha256].status,
+  'completed',
+);
+assert(
+  authorizedIssueCreation.ledger.consumed[authorizedIssueCreation.manifest.sha256]
+    .issues.every((item) => item.readbackVerified === true),
+);
+assert.equal(authorizedIssueCreation.second.status, 1);
+assert.match(authorizedIssueCreation.second.stderr, /禁止重放/);
+assert.equal(authorizedIssueCreation.replayWrites.length, 2);
 
 function runIsolatedHandoff(leastConfidence, transformBody = (body) => body) {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-handoff-lifecycle-'));
@@ -2876,7 +3147,7 @@ biggest-missing: no-finding-v1; checked=path:scripts/claude-task.cjs; unchecked=
       stage: 'implementation',
       owner: stateOwner,
       risk: 'R1',
-      branch: 'task-rating-test',
+      branch: options.stateBranch || 'task-rating-test',
       baseSha: options.baseDrift ? '0000000000000000000000000000000000000000' : head,
       startedHead: head,
       startedAt,
@@ -2949,11 +3220,31 @@ if (args[0] === 'repo' && args[1] === 'view') {
       encoding: 'utf8',
       env: { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH || ''}` },
     });
+    const finalResult = options.handoffAfter && result.status === 0
+      ? spawnSync(
+          process.execPath,
+          [
+            path.join(__dirname, 'claude-task.cjs'),
+            'handoff',
+            '--status=blocked',
+            '--evidence=https://github.com/acme/coreone/issues/81#issuecomment-123',
+          ],
+          {
+            cwd: repo,
+            encoding: 'utf8',
+            env: { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH || ''}` },
+          },
+        )
+      : result;
     return {
-      status: result.status,
-      stdout: String(result.stdout || ''),
-      stderr: String(result.stderr || ''),
+      status: finalResult.status,
+      stdout: String(finalResult.stdout || ''),
+      stderr: String(finalResult.stderr || ''),
+      rebaselineStatus: result.status,
+      rebaselineStderr: String(result.stderr || ''),
       stateExists: fs.existsSync(statePath),
+      initialStateRaw: `${JSON.stringify(state, null, 2)}\n`,
+      stateRaw: fs.existsSync(statePath) ? fs.readFileSync(statePath, 'utf8') : null,
       state: fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : null,
     };
   } finally {
@@ -2996,13 +3287,25 @@ for (const [name, options, pattern] of [
     },
     /previous=.*本地 state/,
   ],
+  [
+    'HTML-hidden marker',
+    { ratingBody: `<!--\n${canonicalRatingMarker}\n-->` },
+    /评级证据评论/,
+  ],
+  [
+    'fenced marker',
+    { ratingBody: `\`\`\`text\n${canonicalRatingMarker}\n\`\`\`` },
+    /评级证据评论/,
+  ],
   ['Issue body drift', { bodyDrift: true }, /body 已变化/],
   ['Issue owner drift', { stateOwner: 'Original Owner', liveOwner: 'Changed Owner' }, /owner 已变化/],
+  ['branch drift', { stateBranch: 'other-branch' }, /branch 已变化/],
   ['base drift', { baseDrift: true }, /failed|origin\/master|merge-base/],
 ]) {
   const result = runIsolatedRatingRebaseline(options);
   assert.equal(result.status, 1, `${name}: expected rebaseline failure`);
   assert.equal(result.stateExists, true, `${name}: state must survive failed rebaseline`);
+  assert.equal(result.stateRaw, result.initialStateRaw, `${name}: failed rebaseline must preserve state bytes`);
   assert.match(result.stderr, pattern, name);
 }
 
@@ -3012,6 +3315,29 @@ assert.equal(validRatingRebaseline.state.version, 2);
 assert.equal(validRatingRebaseline.state.issuePriority, 'P2');
 assert.equal(validRatingRebaseline.state.issueReleaseImpact, '非阻断上线');
 assert.match(validRatingRebaseline.state.ratingEvidenceUrl, /issuecomment-456/);
+
+const validRatingUpgrade = runIsolatedRatingRebaseline({
+  statePriority: 'P2',
+  stateReleaseImpact: '非阻断上线',
+  livePriority: 'P1',
+  liveReleaseImpact: '阻断上线',
+});
+assert.equal(validRatingUpgrade.status, 0, validRatingUpgrade.stderr);
+assert.equal(validRatingUpgrade.state.issuePriority, 'P1');
+assert.equal(validRatingUpgrade.state.issueReleaseImpact, '阻断上线');
+
+const validSchemaOnlyRatingMigration = runIsolatedRatingRebaseline({
+  stateVersion: 1,
+  statePriority: 'P2',
+  stateReleaseImpact: '非阻断上线',
+  livePriority: 'P2',
+  liveReleaseImpact: '非阻断上线',
+  ratingBody:
+    '[ISSUE-RATING] owner=Codex previous=P2/非阻断上线 ' +
+    'current=P2/非阻断上线 reason=旧版任务状态仅升级 schema 并保留既有双轴',
+});
+assert.equal(validSchemaOnlyRatingMigration.status, 0, validSchemaOnlyRatingMigration.stderr);
+assert.equal(validSchemaOnlyRatingMigration.state.version, 2);
 
 const validLegacyRatingMigration = runIsolatedRatingRebaseline({
   stateVersion: 1,
@@ -3025,6 +3351,11 @@ assert.equal(validLegacyRatingMigration.status, 0, validLegacyRatingMigration.st
 assert.equal(validLegacyRatingMigration.state.version, 2);
 assert.equal(validLegacyRatingMigration.state.issuePriority, 'P2');
 assert.equal(validLegacyRatingMigration.state.issueReleaseImpact, '非阻断上线');
+
+const validRatingThenHandoff = runIsolatedRatingRebaseline({ handoffAfter: true });
+assert.equal(validRatingThenHandoff.rebaselineStatus, 0, validRatingThenHandoff.rebaselineStderr);
+assert.equal(validRatingThenHandoff.status, 0, validRatingThenHandoff.stderr);
+assert.equal(validRatingThenHandoff.stateExists, false);
 
 const invalidHandoff = runIsolatedHandoff('LGTM');
 if (invalidHandoff.status !== 1) {

@@ -8,9 +8,9 @@ argument-hint: "<PRD 路径/URL 或 #工程Issue> [issues|implement|accept]"
 先输出 `LOCAL TASK CONTRACT`，再根据 GitHub/Git 现场选择唯一阶段：
 
 1. **PRD 仍是 DRAFT / 未合并**：停在 PRD 阶段，列出缺失闸点；不拆正式工程 Issue、不做 mockup、不写码。
-2. **PRD 已定稿并合并，但没有 PM 确认的工程 Issue**：提取 Requirement / AC，判断 Mockup 路由，现场去重，只起草纵向工程 Issue 候选；PM 对具体创建范围明确授权后，由 Claude Code 串行创建并立即停止 GitHub 写入，交 Codex 重新去重、复核事实/范围/AC、正式评级和标签回读。
+2. **PRD 已定稿并合并，但没有 PM 确认的工程 Issue**：提取 Requirement / AC，判断 Mockup 路由，现场去重，只起草纵向工程 Issue 候选；把 1–5 项候选存入当前 Claude project 的 `memory/` manifest，取得绑定 manifest SHA-256/数量的 `[PM-ISSUE-CREATION]` 普通评论后，只能用 `node scripts/claude-task.cjs create-issues ...` 串行创建并立即停止 GitHub 写入，交 Codex 重新去重、复核事实/范围/AC、正式评级和标签回读。
 3. **已有工程 Issue，但未 READY**：补齐 `PRD path@merged SHA`、AC、范围/非范围、Mockup、风险、依赖、验收和 `coreone-owner`；Codex 正式评级未完成或其他硬门未满足时不认领、不写码。
-4. **工程 Issue READY，动作是 `implement` 或现场明确应实现**：先按 owned files / 用户结果分域。前端任务由 Claude Code CLI/K3 认领一个 Issue、建立独立 worktree、运行 develop preflight、建立 AC 追踪矩阵并按写码 Loop 实现；后端任务不得由 Claude Code 认领或代写，改为把可实施合同交给 Codex 实现，等待 Codex 固定 SHA 后由 Claude Code CLI/K3 做线下独立复核；混合任务优先拆成可独立验收的前端 / 后端票，不能拆时必须先取得 PM 在实时 handoff 中的明确例外与单一 owner。
+4. **工程 Issue READY，动作是 `implement` 或现场明确应实现**：先按 owned files / 用户结果分域。前端任务由 Claude Code CLI/K3 认领一个 Issue、建立独立 worktree、运行 develop preflight、建立 AC 追踪矩阵并按写码 Loop 实现；后端任务不得由 Claude Code 认领或代写，改为把可实施合同交给 Codex 实现，等待 Codex 固定 SHA 后由 Claude Code CLI/K3 做线下独立复核；`claude-task start` 会机器拒绝后端/全仓/混合/不可判定 scope，不能拆时必须先取得绑定活动 Issue 与 owned-scope digest 的 PM `[PM-OWNERSHIP-EXCEPTION]` 普通评论。
 5. **实现已合并，动作是 `accept` 或 Issue 等待验收**：按真跑验收 Loop 逐 AC、逐角色、逐边界运行并留证；PM 明确验收通过后才关闭 Issue。
 
 默认关闭语义：PRD 驱动的实现 PR 使用 `Refs #N`，因为合并后仍需真跑和 PM 验收；只有主 Issue 的全部验收确实已在合并前满足时才使用 `Closes #N`。

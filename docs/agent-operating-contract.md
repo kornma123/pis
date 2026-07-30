@@ -130,7 +130,7 @@ no-finding-v1; checked=<type>:<value>; unchecked=<type>:<value>
 - 同一时刻只有一个 GitHub 写入 owner。Codex、K3 与其他代理不得并发创建或修改 Issue、评论、PR、标签或 ref；一项任务通常只保留一次固定对象交接和一次最终复核结论，不发布过程性刷屏评论。
 - 不自动轮询 GitHub。只在 PM 明确请求、人工交接到达或已配置的事件通知触发时读取实时状态；批量读取优先合并查询或使用条件请求。
 - 异构 AI 复核、PR body 合同校验和 findings 消费全部在线下完成：复核者读取固定 SHA/本地 bundle，输出完整文档，由 PM 粘贴交接；PR body 草稿用 `node scripts/issue-handoff/check-pr-body.cjs --body-file <path>` 校验。不得用 GitHub Actions 调外部 AI，不得由 workflow 自动写 review、评论或 commit status。
-- 每次 GitHub 写入前先在本地运行 `node scripts/offline-github-governance.cjs`。活动 workflow 必须显式声明顶层只读权限，禁止 `pull_request_target`、任何 `*: write`/`write-all` 权限、外部 AI secret/endpoint 和自动 POST status/review/comment；常规只读 CI、测试、构建与 secret scan 可以保留。
+- 每次 GitHub 写入前先在本地运行 `node scripts/offline-github-governance.cjs`。Claude Code 的 Issue/PR 写入必须经过 `scripts/claude-task.cjs` 的 writer slot；claim 的 body 更新与评论同样逐次执行治理和间隔，获准的新 Issue 只走哈希绑定的 `create-issues` 事务。活动 workflow 必须显式声明顶层只读权限，禁止 `pull_request_target`、任何 `*: write`/`write-all` 权限、外部 AI secret/endpoint 和自动 POST status/review/comment；常规只读 CI、测试、构建与 secret scan 可以保留。
 - GitHub 写入只允许 Git 客户端将当前命名任务分支显式推送至 `origin`、已正常登录的官方 `gh`，或经 PM 授权且最小权限的 GitHub App；禁止直接推送默认/受保护分支。禁止从 Git Credential Manager、系统钥匙串或其他凭据存储中提取 token 交给临时脚本；禁止因一个客户端无权限而私自切换另一身份或令牌绕过。
 - 多个 `POST`、`PATCH`、`PUT`、`DELETE` 必须串行且相邻请求至少间隔一秒。首次遇到 `403`、`429`、secondary rate limit 或重复验证错误立即停止，保留原始状态与响应头，遵守 `Retry-After`/reset；不得换 token、并发重试或忽略错误继续写。
 - 向公开仓库推送前，PM 必须明确批准目标仓库、ref、固定 commit 和精确文件范围；不得附带仓库外 `.env`、私钥、token、浏览器/系统 session secret。force-push、合并、发布和部署仍分别需要明确授权。

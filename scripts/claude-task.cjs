@@ -23,6 +23,9 @@ const HANDOFF_STATUSES = new Set([
 const STATE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const LIVE_RECHECK_MS = 10 * 60 * 1000;
 const TASK_STATE_VERSION = 2;
+const GITHUB_WRITE_INTERVAL_MS = 1_000;
+const ISSUE_CREATION_MANIFEST_VERSION = 1;
+const MAX_ISSUES_PER_CREATION = 5;
 const ISSUE_PRIORITY_LABELS = new Set(['P0', 'P1', 'P2', 'P3']);
 const ISSUE_RELEASE_LABELS = new Set(['阻断上线', '非阻断上线']);
 const HANDOFF_CONTINUATION_BOUNDARY_KEYS = new Set([
@@ -86,7 +89,8 @@ function assertIssueImplementationLabels(labels, issueNumber) {
 }
 
 function parseIssueRatingMarker(body) {
-  const matches = [...String(body || '').matchAll(
+  const visibleBody = stripIgnoredMarkdown(String(body || ''));
+  const matches = [...visibleBody.matchAll(
     /^\[ISSUE-RATING\]\s+owner=Codex\s+previous=(P[0-3]|UNRECORDED)\/(阻断上线|非阻断上线|UNRECORDED)\s+current=(P[0-3])\/(阻断上线|非阻断上线)\s+reason=(\S.*)\s*$/gm,
   )];
   if (matches.length !== 1) {
@@ -136,6 +140,140 @@ function parseIssueRatingMarker(body) {
   };
 }
 
+function ownershipScopeDigest(owned) {
+  return sha256(
+    [...new Set((Array.isArray(owned) ? owned : []).map(toPosix))]
+      .sort()
+      .join('\n'),
+  );
+}
+
+function inspectClaudeImplementationOwnership(stage, owned) {
+  if (String(stage || '').toLowerCase() !== 'implementation') {
+    return { requiresException: false, reason: null };
+  }
+  const patterns = (Array.isArray(owned) ? owned : []).map(toPosix);
+  const hasFrontend = patterns.some((pattern) =>
+    pattern === '前端代码' || pattern.startsWith('前端代码/'));
+  const hasBackend = patterns.some((pattern) =>
+    pattern === '后端代码' || pattern.startsWith('后端代码/'));
+  const hasBroad = patterns.some((pattern) =>
+    !pattern ||
+    ['.', '*', '**', '**/*', '*/**'].includes(pattern) ||
+    pattern.startsWith('../') ||
+    pattern.startsWith('/'));
+  if (hasBackend) {
+    return {
+      requiresException: true,
+      reason: hasFrontend ? '前后端混合实现范围' : '后端实现范围',
+    };
+  }
+  if (hasBroad) {
+    return { requiresException: true, reason: '全仓或不可判定的宽范围' };
+  }
+  if (!hasFrontend) {
+    return {
+      requiresException: true,
+      reason: '未包含可判定的前端实现范围',
+    };
+  }
+  return { requiresException: false, reason: null };
+}
+
+function assertClaudeImplementationOwnership(stage, owned, exception = null) {
+  const inspection = inspectClaudeImplementationOwnership(stage, owned);
+  if (!inspection.requiresException) {
+    if (exception) {
+      throw new Error('前端实现范围不需要所有权例外；请移除 --ownership-exception。');
+    }
+    return inspection;
+  }
+  if (exception?.verified === true) return inspection;
+  throw new Error(
+    `Claude Code 不得直接认领${inspection.reason}；后端实现 owner=Codex。` +
+    '无法拆分的在途混合/例外任务必须提供绑定活动 Issue 与 owned scope 的 PM ownership exception。',
+  );
+}
+
+function parseOwnershipExceptionMarker(body) {
+  const visibleBody = stripIgnoredMarkdown(String(body || ''));
+  const matches = [...visibleBody.matchAll(
+    /^\[PM-OWNERSHIP-EXCEPTION\]\s+decision=approved\s+owner=Claude-Code\s+issue=(\d+)\s+scope-sha256=([0-9a-f]{64})\s+reason=(\S.*)\s*$/gm,
+  )];
+  if (matches.length !== 1) {
+    throw new Error(
+      '所有权例外证据必须且只能包含一条可见的 ' +
+      '[PM-OWNERSHIP-EXCEPTION] decision=approved owner=Claude-Code ' +
+      'issue=<N> scope-sha256=<64hex> reason=<具体理由>。',
+    );
+  }
+  const issue = Number(matches[0][1]);
+  const reason = matches[0][3].trim();
+  if (reason.length < 8 || /^(?:todo|tbd|none|无|例外|同意)$/i.test(reason)) {
+    throw new Error('所有权例外 reason 必须说明为何不能拆分以及 reviewer 安排。');
+  }
+  return { issue, scopeSha256: matches[0][2], reason };
+}
+
+function parseIssueCreationApprovalMarker(body) {
+  const visibleBody = stripIgnoredMarkdown(String(body || ''));
+  const matches = [...visibleBody.matchAll(
+    /^\[PM-ISSUE-CREATION\]\s+decision=approved\s+manifest-sha256=([0-9a-f]{64})\s+count=([1-5])\s*$/gm,
+  )];
+  if (matches.length !== 1) {
+    throw new Error(
+      'Issue 创建授权必须且只能包含一条可见的 ' +
+      '[PM-ISSUE-CREATION] decision=approved manifest-sha256=<64hex> count=<1..5>。',
+    );
+  }
+  return { sha256: matches[0][1], count: Number(matches[0][2]) };
+}
+
+function validateIssueCreationManifest(raw) {
+  const source = String(raw || '');
+  let manifest;
+  try {
+    manifest = JSON.parse(source);
+  } catch {
+    throw new Error('Issue candidate manifest 必须是有效 JSON。');
+  }
+  if (
+    !manifest ||
+    Array.isArray(manifest) ||
+    manifest.version !== ISSUE_CREATION_MANIFEST_VERSION ||
+    !Array.isArray(manifest.issues) ||
+    manifest.issues.length < 1 ||
+    manifest.issues.length > MAX_ISSUES_PER_CREATION
+  ) {
+    throw new Error(
+      `Issue candidate manifest 必须是 version=${ISSUE_CREATION_MANIFEST_VERSION}，` +
+      `并包含 1..${MAX_ISSUES_PER_CREATION} 个 issues。`,
+    );
+  }
+  const seenTitles = new Set();
+  const issues = manifest.issues.map((item, index) => {
+    if (!item || Array.isArray(item) || typeof item !== 'object') {
+      throw new Error(`Issue candidate #${index + 1} 必须是对象。`);
+    }
+    const keys = Object.keys(item).sort();
+    if (keys.join(',') !== 'body,title') {
+      throw new Error(`Issue candidate #${index + 1} 只允许 title/body；评级标签由 Codex 后续写入。`);
+    }
+    const title = String(item.title || '').trim();
+    const body = String(item.body || '').replace(/\r\n/g, '\n').trim();
+    if (Buffer.byteLength(title, 'utf8') < 12 || Buffer.byteLength(title, 'utf8') > 240) {
+      throw new Error(`Issue candidate #${index + 1} title 必须为 12..240 UTF-8 bytes。`);
+    }
+    if (Buffer.byteLength(body, 'utf8') < 40 || Buffer.byteLength(body, 'utf8') > 60_000) {
+      throw new Error(`Issue candidate #${index + 1} body 必须为 40..60000 UTF-8 bytes。`);
+    }
+    if (seenTitles.has(title)) throw new Error(`Issue candidate title 重复：${title}`);
+    seenTitles.add(title);
+    return { title, body };
+  });
+  return { version: manifest.version, issues, sha256: sha256(source) };
+}
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
@@ -151,6 +289,88 @@ function run(command, args, options = {}) {
     throw new Error(`${command} ${args.join(' ')} failed: ${detail}`);
   }
   return { status: result.status, stdout, stderr, error: result.error };
+}
+
+function githubWriteControlDirectory(root) {
+  const common = git(['rev-parse', '--git-common-dir'], root).stdout;
+  const absolute = path.isAbsolute(common) ? common : path.resolve(root, common);
+  return path.join(absolute, 'coreone');
+}
+
+function waitMilliseconds(milliseconds) {
+  if (milliseconds <= 0) return;
+  const buffer = new SharedArrayBuffer(4);
+  Atomics.wait(new Int32Array(buffer), 0, 0, milliseconds);
+}
+
+function acquireGitHubWriteSlot(root) {
+  const directory = githubWriteControlDirectory(root);
+  const lockFile = path.join(directory, 'github-write.lock');
+  const statePath = path.join(directory, 'github-write-state.json');
+  fs.mkdirSync(directory, { recursive: true });
+  const deadline = Date.now() + 30_000;
+  let descriptor = null;
+  while (descriptor === null) {
+    try {
+      descriptor = fs.openSync(lockFile, 'wx', 0o600);
+    } catch (error) {
+      if (error.code !== 'EEXIST' || Date.now() >= deadline) {
+        throw new Error('GitHub writer 串行锁不可用；停止写入。');
+      }
+      waitMilliseconds(50);
+    }
+  }
+  try {
+    const previous = loadJsonFile(statePath);
+    const lastGrantedAtMs = Number(previous?.lastGrantedAtMs || 0);
+    waitMilliseconds(Math.max(0, GITHUB_WRITE_INTERVAL_MS - (Date.now() - lastGrantedAtMs)));
+    const grantedAtMs = Date.now();
+    writePrivateJson(statePath, {
+      lastGrantedAtMs: grantedAtMs,
+      lastGrantedAt: new Date(grantedAtMs).toISOString(),
+      pid: process.pid,
+    });
+  } finally {
+    fs.closeSync(descriptor);
+    fs.unlinkSync(lockFile);
+  }
+}
+
+function runOfflineGithubGovernance(root) {
+  return run(
+    process.execPath,
+    [path.join(root, 'scripts', 'offline-github-governance.cjs')],
+    { cwd: root, timeout: 120_000 },
+  );
+}
+
+function runGitHubWrite(root, args, options = {}) {
+  runOfflineGithubGovernance(root);
+  const controlDirectory = githubWriteControlDirectory(root);
+  fs.mkdirSync(controlDirectory, { recursive: true });
+  const executionLock = path.join(controlDirectory, 'github-write-execution.lock');
+  const deadline = Date.now() + 30_000;
+  let descriptor = null;
+  while (descriptor === null) {
+    try {
+      descriptor = fs.openSync(executionLock, 'wx', 0o600);
+    } catch (error) {
+      if (error.code !== 'EEXIST' || Date.now() >= deadline) {
+        throw new Error('GitHub writer 正在被另一写事务占用；停止写入。');
+      }
+      waitMilliseconds(50);
+    }
+  }
+  try {
+    acquireGitHubWriteSlot(root);
+    return run('gh', args, {
+      cwd: root,
+      timeout: options.timeout || 30_000,
+    });
+  } finally {
+    fs.closeSync(descriptor);
+    fs.unlinkSync(executionLock);
+  }
 }
 
 function git(args, cwd, options = {}) {
@@ -683,6 +903,35 @@ function assertPmApproval(root, evidenceUrl, options) {
   return { url: evidenceUrl, author: evidence.author, artifact, approvedCommit };
 }
 
+function assertOwnershipException(root, evidenceUrl, options) {
+  const evidence = verifyGitHubEvidence(root, evidenceUrl, {
+    label: 'Claude 实现所有权例外',
+    requireComment: true,
+    activeIssue: options.issue,
+    requireCurrentActor: true,
+  });
+  if (evidence.author?.toLowerCase() !== evidence.repoOwner.toLowerCase()) {
+    throw new Error(
+      `所有权例外必须由仓库 PM owner ${evidence.repoOwner} 发布（当前：${evidence.author || '未知'}）。`,
+    );
+  }
+  const marker = parseOwnershipExceptionMarker(evidence.body);
+  const expectedScope = ownershipScopeDigest(options.owned);
+  if (marker.issue !== options.issue || marker.scopeSha256 !== expectedScope) {
+    throw new Error(
+      `所有权例外必须绑定 Issue #${options.issue} 与当前 owned scope ${expectedScope}。`,
+    );
+  }
+  return {
+    verified: true,
+    issue: options.issue,
+    url: evidenceUrl,
+    author: evidence.author,
+    scopeSha256: expectedScope,
+    reason: marker.reason,
+  };
+}
+
 function assertPrdBaseline(root, prdValue) {
   const parsed = parsePrdRef(prdValue);
   if (!parsed) throw new Error('实现/验收阶段的 --prd 必须是 repo-relative/path.md@<merged commit SHA>。');
@@ -765,6 +1014,16 @@ function commandStart(argv) {
     throw new Error(`Issue #${issue} 当前 owner=${issueOwner}，与 --owner=${owner} 不一致。`);
   }
 
+  const ownershipInspection = inspectClaudeImplementationOwnership(stage, flags.owned);
+  let ownershipException = null;
+  if (ownershipInspection.requiresException && flags['ownership-exception']) {
+    ownershipException = assertOwnershipException(root, flags['ownership-exception'], {
+      issue,
+      owned: flags.owned,
+    });
+  }
+  assertClaudeImplementationOwnership(stage, flags.owned, ownershipException);
+
   let prd = null;
   let mockup = null;
   let approval = null;
@@ -824,7 +1083,9 @@ function commandStart(argv) {
       /(-\s*\*\*current owner\*\*\s*[:：]\s*)(.+)/i,
       `$1${owner}`,
     );
-    run('gh', ['issue', 'edit', String(issue), '--body', claimedBody], { cwd: root, timeout: 15_000 });
+    runGitHubWrite(root, ['issue', 'edit', String(issue), '--body', claimedBody], {
+      timeout: 15_000,
+    });
     const claimedIssue = JSON.parse(
       run('gh', ['issue', 'view', String(issue), '--json', 'state,body,url,title,labels'], {
         cwd: root,
@@ -868,16 +1129,17 @@ function commandStart(argv) {
     mockupApproval,
     deliveryContract,
     sourceMode,
+    ownershipException,
   };
 
   if (!flags.dryRun) {
     const file = stateFile(root);
     writePrivateJson(file, state);
     if (canClaim) {
-      run(
-        'gh',
+      runGitHubWrite(
+        root,
         ['issue', 'comment', String(issue), '--body', `[CLAIM] owner=${owner}\nstage=${stage}\nbranch=${branch}`],
-        { cwd: root, timeout: 15_000 },
+        { timeout: 15_000 },
       );
     }
   }
@@ -890,6 +1152,128 @@ function commandStart(argv) {
     `owned=${state.owned.join(', ')}`,
     preflight.stdout,
   ].filter(Boolean).join('\n'));
+}
+
+function issueCreationLedgerFile(root) {
+  return path.join(githubWriteControlDirectory(root), 'issue-creation-ledger.json');
+}
+
+function resolveIssueCreationManifestPath(value) {
+  const target = path.resolve(String(value || ''));
+  if (!isHarnessMemoryPath(target)) {
+    throw new Error(
+      'Issue candidate manifest 必须位于当前 Claude project 的 memory 目录；' +
+      '不得从仓库 dirty 文件或任意外部路径创建。',
+    );
+  }
+  return target;
+}
+
+function commandCreateIssues(argv) {
+  const flags = parseFlags(argv);
+  const root = repoRoot();
+  if (loadState(root)) {
+    throw new Error('已有活动 task state；必须先完成 handoff，再串行创建获准的新需求 Issues。');
+  }
+  const manifestPath = resolveIssueCreationManifestPath(flags.manifest);
+  const rawManifest = fs.readFileSync(manifestPath, 'utf8');
+  const manifest = validateIssueCreationManifest(rawManifest);
+  const approvalUrl = String(flags.approval || '').trim();
+  if (!approvalUrl) throw new Error('--approval 必须是 PM 对该 manifest hash 的普通评论 URL。');
+  const evidence = verifyGitHubEvidence(root, approvalUrl, {
+    label: 'Issue 创建授权',
+    requireComment: true,
+    requireCurrentActor: true,
+  });
+  if (evidence.author?.toLowerCase() !== evidence.repoOwner.toLowerCase()) {
+    throw new Error(
+      `Issue 创建授权必须由仓库 PM owner ${evidence.repoOwner} 发布（当前：${evidence.author || '未知'}）。`,
+    );
+  }
+  const marker = parseIssueCreationApprovalMarker(evidence.body);
+  if (marker.sha256 !== manifest.sha256 || marker.count !== manifest.issues.length) {
+    throw new Error(
+      `Issue 创建授权与候选 manifest 不一致：expected ${manifest.sha256}/${manifest.issues.length}。`,
+    );
+  }
+  const ledgerPath = issueCreationLedgerFile(root);
+  const ledger = loadJsonFile(ledgerPath) || { version: 1, consumed: {} };
+  if (ledger.consumed?.[manifest.sha256]) {
+    throw new Error(`Issue candidate manifest ${manifest.sha256} 已消费；禁止重放创建。`);
+  }
+
+  const created = [];
+  ledger.version = 1;
+  ledger.consumed ||= {};
+  ledger.consumed[manifest.sha256] = {
+    approval: approvalUrl,
+    startedAt: new Date().toISOString(),
+    status: 'in-progress',
+    issues: created,
+  };
+  writePrivateJson(ledgerPath, ledger);
+  for (const candidate of manifest.issues) {
+    try {
+      const createResult = runGitHubWrite(
+        root,
+        ['issue', 'create', '--title', candidate.title, '--body', candidate.body],
+        { timeout: 30_000 },
+      );
+      const url = createResult.stdout
+        .split(/\r?\n/)
+        .find((line) => /^https:\/\/github\.com\//.test(line));
+      const parsed = parseGitHubArtifactUrl(url);
+      if (!parsed || parsed.kind !== 'issue') {
+        throw new Error(`gh issue create 未返回可验证的 Issue URL：${createResult.stdout || '<empty>'}`);
+      }
+      const createdIssue = {
+        number: parsed.number,
+        url,
+        title: candidate.title,
+        readbackVerified: false,
+      };
+      created.push(createdIssue);
+      writePrivateJson(ledgerPath, ledger);
+      const readback = JSON.parse(
+        run(
+          'gh',
+          ['issue', 'view', String(parsed.number), '--json', 'number,state,url,title,body,labels'],
+          { cwd: root, timeout: 10_000 },
+        ).stdout,
+      );
+      const labels = (readback.labels || []).map((label) => label?.name || label);
+      if (
+        readback.state !== 'OPEN' ||
+        readback.url !== url ||
+        readback.title !== candidate.title ||
+        String(readback.body || '').trim() !== candidate.body ||
+        labels.some((label) => ISSUE_PRIORITY_LABELS.has(label) || ISSUE_RELEASE_LABELS.has(label))
+      ) {
+        throw new Error(`Issue #${parsed.number} 创建后回读不符合 question-only 候选合同。`);
+      }
+      createdIssue.readbackVerified = true;
+      writePrivateJson(ledgerPath, ledger);
+    } catch (error) {
+      ledger.consumed[manifest.sha256].status = 'failed';
+      ledger.consumed[manifest.sha256].failedAt = new Date().toISOString();
+      ledger.consumed[manifest.sha256].error = error.message;
+      writePrivateJson(ledgerPath, ledger);
+      throw new Error(
+        `Issue candidate 串行创建停止：${error.message}` +
+        (created.length ? `；此前已创建 ${created.map((item) => item.url).join(', ')}` : ''),
+      );
+    }
+  }
+
+  ledger.consumed[manifest.sha256].status = 'completed';
+  ledger.consumed[manifest.sha256].completedAt = new Date().toISOString();
+  writePrivateJson(ledgerPath, ledger);
+  process.stdout.write([
+    `COREONE authorized Issue creation: PASS (${created.length}/${manifest.issues.length})`,
+    `manifest-sha256=${manifest.sha256}`,
+    ...created.map((item) => `Issue #${item.number}: ${item.url}`),
+    'Writer ownership relinquished. Codex must now deduplicate, review scope/AC, rate, write labels, and read them back before implementation.',
+  ].join('\n'));
 }
 
 function sha256(value) {
@@ -1263,6 +1647,7 @@ function assertSafeGitCommand(tokens, state) {
     ) {
       throw new Error(`push 必须显式使用 git push [-u] origin ${state.branch}，且不得使用 refspec/force/delete/all/tags。`);
     }
+    state.githubWrite = true;
   }
   if (['commit', 'push'].includes(command)) state.forceLiveCheck = true;
 }
@@ -1315,6 +1700,7 @@ function assertSafeGhCommand(tokens, state) {
       throw new Error('活动任务只允许新增 Issue 评论，不允许编辑/删除既有评论。');
     }
     state.forceLiveCheck = true;
+    state.githubWrite = true;
     return;
   }
   if (area === 'pr') {
@@ -1327,6 +1713,7 @@ function assertSafeGhCommand(tokens, state) {
       if (head && head !== state.branch) throw new Error(`PR --head 必须是活动分支 ${state.branch}。`);
       if (base && !/^(?:master|main)$/.test(base)) throw new Error('PR --base 必须是 master/main。');
       state.forceLiveCheck = true;
+      state.githubWrite = true;
       return;
     }
     throw new Error(`gh pr ${action || '<missing>'} 不允许；PR 状态变更须走独立授权。`);
@@ -1502,7 +1889,7 @@ function isSafeBeforeStartShell(command, root = process.cwd(), cwd = root) {
       if (relativePath === 'scripts/agent-preflight.cjs') return true;
       const action = String(tokens[entry.argIndex + 2] || '').toLowerCase();
       return relativePath === 'scripts/claude-task.cjs' &&
-        ['context', 'start', 'start-r0'].includes(action);
+        ['context', 'start', 'start-r0', 'create-issues'].includes(action);
     }
     if (['npm', 'npm.cmd', 'npm.exe'].includes(executable) && ['--version', '-v'].includes(tokens[1])) return true;
     return false;
@@ -1546,6 +1933,10 @@ function commandShellGuard() {
     }
     assertActiveState(root, active, { force: check.forceLiveCheck });
     if (check.forceLiveCheck) assertOwnedChanges(root, active.state);
+    if (check.githubWrite) {
+      runOfflineGithubGovernance(root);
+      acquireGitHubWriteSlot(root);
+    }
   } catch (error) {
     process.stderr.write(`COREONE shell blocked: ${error.message}`);
     process.exitCode = 2;
@@ -1703,12 +2094,13 @@ function usage() {
     'Usage:',
     '  node scripts/claude-task.cjs context',
     '  node scripts/claude-task.cjs prompt                    # hook stdin JSON',
+    '  node scripts/claude-task.cjs create-issues --manifest=<Claude memory JSON> --approval=<fresh PM manifest-hash comment URL>',
     '  node scripts/claude-task.cjs guard                     # hook stdin JSON',
     '  node scripts/claude-task.cjs stop                      # hook stdin JSON',
     '  node scripts/claude-task.cjs start-r0 --reason=<trivial reversible> --owned=path [--excluded=path]',
     '  node scripts/claude-task.cjs finish-r0 --evidence=<actual target check>',
-    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=path@SHA --approval=PM_COMMENT_URL --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--dry-run]',
-    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=N/A --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--dry-run]  # non-PRD Issue fields must both be N/A',
+    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=path@SHA --approval=PM_COMMENT_URL --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--ownership-exception=PM_COMMENT_URL] [--dry-run]',
+    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=N/A --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--ownership-exception=PM_COMMENT_URL] [--dry-run]  # non-PRD Issue fields must both be N/A',
     '  node scripts/claude-task.cjs shell-guard              # Bash/PowerShell PreToolUse hook stdin JSON',
     '  node scripts/claude-task.cjs mcp-guard                # MCP PreToolUse hook stdin JSON',
     '  node scripts/claude-task.cjs audit                    # shell/MCP PostToolUse hook stdin JSON',
@@ -1726,6 +2118,7 @@ function main() {
     }
     if (command === 'context') commandContext();
     else if (command === 'prompt') commandPrompt();
+    else if (command === 'create-issues') commandCreateIssues(argv);
     else if (command === 'start') commandStart(argv);
     else if (command === 'start-r0') commandStartR0(argv);
     else if (command === 'finish-r0') commandFinishR0(argv);
@@ -1747,6 +2140,7 @@ function main() {
 if (require.main === module) main();
 
 module.exports = {
+  assertClaudeImplementationOwnership,
   assertSafeGhCommand,
   assertSafeGitCommand,
   assertSafeNodeCommand,
@@ -1763,6 +2157,8 @@ module.exports = {
   matchesAny,
   parseGitHubArtifactUrl,
   parseFlags,
+  parseIssueCreationApprovalMarker,
+  parseIssueRatingMarker,
   parsePmApprovalMarker,
   parseOwnerBlock,
   parsePrdRef,
@@ -1770,5 +2166,6 @@ module.exports = {
   shouldBlockStop,
   shellTokens,
   toPosix,
+  validateIssueCreationManifest,
   validateIssueImplementationLabels,
 };

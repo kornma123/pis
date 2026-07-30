@@ -79,7 +79,7 @@ PM “定稿”只结束 PRD 内容闸，不自动满足以上实现条件。
 - BDD / 失败路径 / 真跑验收证据；
 - 与已有 Issue/PR 的去重结论。
 
-按 `docs/github-issue-pr-management-loop.md` 直接用 `gh` 现场核对开放/关闭 Issues、开放 PR 和近期合并 PR，再起草候选；PM 对具体创建范围明确授权后，Claude Code 才作为串行 GitHub writer 创建新需求讨论 / 工程 Issue，随后立即停止写入并交 Codex 重新去重、复核事实/范围/AC、正式评级与标签回读。Codex 评级前 Issue 不得进入实现。已有 Issue 已完整覆盖时只链接，不重开。`.claude/workflows/surface-to-issues.js` 只供支持该 DSL 的 workflow harness 使用，不是 Claude Code 本地可自动调用入口。
+按 `docs/github-issue-pr-management-loop.md` 直接用只读 `gh` 现场核对开放/关闭 Issues、开放 PR 和近期合并 PR，再把 1–5 个去重候选写入当前 Claude project 的 `memory/` JSON manifest（`version=1`，每项只含 `title/body`）。把原始文件 SHA-256 和数量交 PM；只有仓库 owner 的新普通评论精确包含 `[PM-ISSUE-CREATION] decision=approved manifest-sha256=<64hex> count=<1..5>` 后，才运行 `node scripts/claude-task.cjs create-issues --manifest=<绝对路径> --approval=<评论 URL>`。该事务逐项执行 offline governance、串行写入、至少间隔一秒、逐项回读并防重放；结束即停止写入，交 Codex 重新去重、复核事实/范围/AC、正式评级与标签回读。不得直接运行 `gh issue create` 绕开事务。Codex 评级前 Issue 不得进入实现。已有 Issue 已完整覆盖时只链接，不重开。`.claude/workflows/surface-to-issues.js` 只供支持该 DSL 的 workflow harness 使用，不是 Claude Code 本地可自动调用入口。
 
 ### C. 认领一个工程 Issue
 
@@ -88,7 +88,7 @@ PM “定稿”只结束 PRD 内容闸，不自动满足以上实现条件。
 3. fetch、建立独立 worktree/branch，声明 owned/excluded files；运行同一 `start` 建立 worktree 私有任务状态。
 4. 重新核对 PRD 固定版本、依赖 PR、活代码与现状；功能已经存在或前提已变化时停下并报告证据。
 
-本节命令形态只适用于 Claude Code 确实是实现 owner 的任务。混合任务未拆票且没有 PM 明确例外时，不得用这些命令把后端范围一并认领。
+本节命令形态只适用于 Claude Code 确实是实现 owner 的任务。`claude-task start` 会拒绝后端、全仓、混合或无法判定为前端的 implementation scope。混合任务确实无法拆票时，PM 普通评论必须精确包含 `[PM-OWNERSHIP-EXCEPTION] decision=approved owner=Claude-Code issue=<N> scope-sha256=<排序去重 owned scope 的 SHA-256> reason=<不能拆分与 reviewer 安排>`，并用 `--ownership-exception=<评论 URL>` 绑定；稳定后端主链不得用例外常态化改派。
 
 实现阶段使用以下形态；PRD / Mockup 阶段省略不适用的 `--prd/--approval/--mockup/--mockup-approval`：
 
