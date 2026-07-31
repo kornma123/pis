@@ -58,7 +58,7 @@ vi.mock('../src/services/account-reconciliation-lifecycle.js', async (importOrig
 
 const SUPPLEMENT_ID = 'so-issue106-sanitize'
 
-let app: any
+let app: Awaited<ReturnType<typeof buildTestApp>>
 let adminToken = ''
 
 beforeAll(async () => {
@@ -86,7 +86,7 @@ beforeAll(async () => {
   adminToken = await loginAdmin(app)
 })
 
-const auth = (r: any) => r.set('Authorization', `Bearer ${adminToken}`)
+const auth = (r: request.Test) => r.set('Authorization', `Bearer ${adminToken}`)
 
 const assertSanitized500 = (res: request.Response) => {
   expect(res.status).toBe(500)

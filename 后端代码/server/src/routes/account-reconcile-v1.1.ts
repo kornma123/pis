@@ -57,14 +57,20 @@ function rejectUnknownBodyKeys(res: any, value: unknown, allowed: readonly strin
   return true
 }
 
+// Issue 106：未知错误的统一脱敏 500——不依赖 utils/response.ts 的 NODE_ENV 掩码，
+// 路由层直接不把 err.message 交给响应（API 错误消息不暴露内部实现细节红线）。
+function internalServerError(res: any): void {
+  error(res, '服务器内部错误，请稍后重试', 'INTERNAL_ERROR', 500)
+}
+
 // R3-3：被取代旧代的补收单彻底冻结是既定口径（trigger 层 RAISE(ABORT,...) 硬冻结），
-// 但该稳定信号不能透成被掩码的裸 500——映射为可诊断的 409 稳定码；其余未知错误仍走 500。
+// 但该稳定信号不能透成被掩码的裸 500——映射为可诊断的 409 稳定码；其余未知错误走脱敏 500。
 function errorSupplementLifecycle(res: any, err: any): void {
   if (String(err?.message ?? '').includes('SUPPLEMENT_GENERATION_BINDING_MISMATCH')) {
     error(res, '该补收单属于已被取代的旧对账代次，已彻底冻结', 'SUPPLEMENT_GENERATION_BINDING_MISMATCH', 409)
     return
   }
-  error(res, err.message)
+  internalServerError(res)
 }
 
 function lifecycleAuditMetadata(
@@ -94,7 +100,7 @@ const lifecycleError = (res: any, err: unknown): void => {
     error(res, err.message, err.code, err.status)
     return
   }
-  error(res, err instanceof Error ? err.message : 'account reconciliation failed')
+  internalServerError(res)
 }
 
 // LOC-005 authoritative generation-bound lifecycle. These handlers are registered
@@ -239,8 +245,8 @@ router.get('/overview', (req, res) => {
       确认实收: Math.round((base确认实收 + 补收实收) * 100) / 100,
     }
     success(res, { settlementMonth, items, board, caliberRatification: splitCaliberRatification() })
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    internalServerError(res)
   }
 })
 
@@ -623,8 +629,8 @@ router.get('/supplements', (req, res) => {
       补收率: (() => { const done = sum('已补收'); const tot = done + sum('待补收'); return tot > 0 ? done / tot : 0 })(),
     }
     successList(res, list, 1, list.length || 1, list.length, { board })
-  } catch (err: any) {
-    error(res, err.message)
+  } catch {
+    internalServerError(res)
   }
 })
 
