@@ -279,7 +279,7 @@ test.describe('critical roles API contract', () => {
     }
   })
 
-  test('technician POST, PUT, and DELETE remain 403 with zero role writes', async ({ request }) => {
+  test('technician GET, POST, PUT, and DELETE remain 403 with zero role writes', async ({ request }) => {
     const targetCode = uniqueRoleCode('target')
     const deniedCreateCode = uniqueRoleCode('denied')
     const cleanupCodes = new Set([targetCode, deniedCreateCode])
@@ -295,6 +295,15 @@ test.describe('critical roles API contract', () => {
         description: 'unauthorized mutation target',
       })
       const before = await listRoles(request, adminToken)
+
+      const deniedGet = await request.get(`${apiBaseUrl()}/roles?page=1&pageSize=1000`, {
+        headers: authorization(technicianToken),
+      })
+      expect(deniedGet.status()).toBe(403)
+      expect(await deniedGet.json() as ErrorEnvelope).toMatchObject({
+        success: false,
+        error: { code: 'FORBIDDEN' },
+      })
 
       const deniedPost = await request.post(`${apiBaseUrl()}/roles`, {
         headers: authorization(technicianToken),
@@ -341,5 +350,13 @@ test.describe('critical roles API contract', () => {
     } finally {
       if (adminToken) await cleanupRolesByCode(request, adminToken, cleanupCodes)
     }
+  })
+
+  test('technician direct navigation to roles redirects home without rendering role management', async ({ page }) => {
+    await loginThroughUi(page, 'technician')
+    await page.goto('/roles')
+
+    await expect(page).toHaveURL((url) => url.pathname === '/')
+    await expect(page.getByRole('heading', { name: '角色管理', exact: true })).toHaveCount(0)
   })
 })
