@@ -5184,7 +5184,7 @@ describe('LOC-005 FUP P1 binding currentness, generation completion shape and NU
     let caught: unknown
     try {
       lifecycle.completeAccountReconciliation(
-        db, fixture.binding, 'USER-001', { at: 'afterRevenuePrime' },
+        db, fixture.binding, 'USER-001', 'USER-001', { at: 'afterRevenuePrime' },
       )
     } catch (error) {
       caught = error

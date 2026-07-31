@@ -290,7 +290,12 @@ router.post('/hospital-months/:id/complete', requirePermission('account_reconcil
     if (current.hospitalMonthId !== req.params.id) {
       return error(res, 'hospital-month binding mismatch', 'RECONCILE_GENERATION_MISMATCH', 409)
     }
-    const result = completeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req))
+    const result = completeAccountReconciliation(
+      getDatabase(),
+      binding,
+      actorUserIdOf(req),
+      operatorOf(req),
+    )
     setSuccessAuditMetadata(res, lifecycleAuditMetadata('complete', binding, {
       hospitalMonthId: req.params.id,
     }))
@@ -318,7 +323,12 @@ router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) =>
     const closed = rawItems.map((item: any) => {
       const binding = bindingFrom(item)
       assertReconcileBinding(binding)
-      return closeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req))
+      return closeAccountReconciliation(
+        getDatabase(),
+        binding,
+        actorUserIdOf(req),
+        operatorOf(req),
+      )
     })
     const binding = bindingFrom(rawItems[0])
     setSuccessAuditMetadata(res, lifecycleAuditMetadata('close', binding))

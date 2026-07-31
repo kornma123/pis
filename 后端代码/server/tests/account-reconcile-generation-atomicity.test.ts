@@ -208,7 +208,7 @@ describe('LOC-005 transaction rollback mutations', () => {
     ])
     const target = binding(source, '2026-10', 'RECON-COMPLETE-FAULT')
     const computed = computeAccountReconciliation(db, target, 'USER-001') as any
-    expect(() => completeAccountReconciliation(db, target, 'USER-001', { at: 'afterAudit' })).toThrow(
+    expect(() => completeAccountReconciliation(db, target, 'USER-001', 'USER-001', { at: 'afterAudit' })).toThrow(
       'INJECTED_RECONCILIATION_FAULT:afterAudit',
     )
     expect(readAccountReconciliation(db, target).status).toBe('pending')

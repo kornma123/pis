@@ -1522,3 +1522,92 @@ describe('账实核对路由 · workbench verdictBy DTO（P2：认定者回填 +
     }
   })
 })
+
+describe('Issue #105 · complete/close 与 verdict 的操作者身份同口径（username）', () => {
+  // 验收：同一对账生命周期内 verdict_by / completed_by / closed_by 与对应
+  // abc_audit_logs.operator 全部等于登录用户 username（admin），而非 userId（USER-001）。
+  const A105_MONTH = '2026-11'
+  const A105_PARTNER = 'PT-RECON-105'
+  const A105_STMT = 'stmt-recon-105-v1'
+  const A105_RECON = 'recon-105-v1'
+  const A105_BINDING = {
+    partnerId: A105_PARTNER,
+    settlementMonth: A105_MONTH,
+    statementGenerationId: A105_STMT,
+    reconcileGenerationId: A105_RECON,
+  }
+
+  const seedIssue105 = (db: any) => {
+    db.prepare(`INSERT OR IGNORE INTO partners (id, code, name, status) VALUES (?, 'RC-105', 'Issue105医院', 1)`)
+      .run(A105_PARTNER)
+    seedStatementGeneration(db, A105_PARTNER, A105_MONTH, A105_STMT, [
+      { caseNo: 'A105', item: '免疫组化染色*3', amount: 300 },
+    ])
+    db.prepare(`INSERT INTO case_revenue_lines (id, case_no, partner_id, charge_item, qty, unit_price, service_month) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run('l-105-a', 'A105', A105_PARTNER, '免疫组化染色', 3, 100, A105_MONTH)
+    db.prepare(`INSERT OR IGNORE INTO lis_cases (id, case_no, partner_id, ihc_count, special_stain_count, operate_time) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run('lc-105-a', 'A105', A105_PARTNER, 5, 0, `${A105_MONTH}-10`)
+    db.prepare(`INSERT OR IGNORE INTO case_revenue (id, case_no, partner_id, service_month, gross_amount, net_amount, lab_revenue, revenue_source) VALUES (?, ?, ?, ?, ?, ?, ?, 'statement')`)
+      .run('cr-105', 'A105', A105_PARTNER, A105_MONTH, 1000, 830, 830)
+  }
+
+  it('complete/close 落库身份与 verdict_by 及对应审计 operator 同为登录用户名', async () => {
+    const db = await getDb()
+    seedIssue105(db)
+    expect((await auth(request(app).post('/api/v1/account-reconcile/compute').send(A105_BINDING))).status).toBe(200)
+
+    const wb = await auth(request(app).get('/api/v1/account-reconcile/workbench').query(A105_BINDING))
+    expect(wb.status).toBe(200)
+    const hmId = wb.body.data.snapshot.hospitalMonthId as string
+    const diffs = wb.body.data.diffs as Array<{ id: string }>
+    expect(diffs.length).toBe(1)
+    for (const diff of diffs) {
+      const v = await auth(request(app)
+        .post(`/api/v1/account-reconcile/diffs/${diff.id}/verdict`)
+        .send({ ...A105_BINDING, reason: '核对无误' }))
+      expect(v.status).toBe(200)
+    }
+
+    const completed = await auth(request(app)
+      .post(`/api/v1/account-reconcile/hospital-months/${hmId}/complete`)
+      .send(A105_BINDING))
+    expect(completed.status).toBe(200)
+    expect(completed.body.data.confirmedLabRevenue).toBe(830)
+
+    const closed = await auth(request(app)
+      .post('/api/v1/account-reconcile/close')
+      .send({ items: [A105_BINDING] }))
+    expect(closed.status).toBe(200)
+
+    const generation = db.prepare(
+      'SELECT completed_by, closed_by, status FROM account_reconcile_generations WHERE reconcile_generation_id = ?',
+    ).get(A105_RECON) as { completed_by: string | null; closed_by: string | null; status: string }
+    const hospitalMonth = db.prepare(
+      'SELECT completed_by, closed_by, status, confirmed_lab_revenue FROM reconcile_hospital_months WHERE id = ?',
+    ).get(hmId) as { completed_by: string | null; closed_by: string | null; status: string; confirmed_lab_revenue: number }
+    const verdictDiff = db.prepare('SELECT verdict_by FROM reconcile_diffs WHERE id = ?').get(diffs[0].id) as { verdict_by: string | null }
+
+    expect(generation.status).toBe('closed')
+    expect(generation.completed_by).toBe('admin')
+    expect(generation.closed_by).toBe('admin')
+    expect(hospitalMonth.status).toBe('已关账')
+    expect(hospitalMonth.completed_by).toBe('admin')
+    expect(hospitalMonth.closed_by).toBe('admin')
+    expect(hospitalMonth.confirmed_lab_revenue).toBe(830)
+    expect(verdictDiff.verdict_by).toBe('admin')
+
+    const auditRows = db.prepare(`
+      SELECT action, target_id, operator FROM abc_audit_logs
+       WHERE module = 'account_reconcile'
+         AND action IN ('verdict', 'complete_generation', 'close_generation')
+         AND (target_id = ? OR target_id = ?)
+       ORDER BY rowid
+    `).all(diffs[0].id, A105_RECON) as Array<{ action: string; target_id: string; operator: string }>
+    expect(auditRows).toHaveLength(3)
+    expect(auditRows.map((r) => `${r.action}:${r.target_id}:${r.operator}`)).toEqual([
+      `verdict:${diffs[0].id}:admin`,
+      `complete_generation:${A105_RECON}:admin`,
+      `close_generation:${A105_RECON}:admin`,
+    ])
+  })
+})

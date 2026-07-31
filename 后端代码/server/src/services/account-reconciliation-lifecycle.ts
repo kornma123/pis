@@ -1249,11 +1249,12 @@ export function setAccountReconciliationVerdict(
 export function completeAccountReconciliation(
   db: any,
   binding: ReconcileBinding,
-  operator: string,
+  actorUserId: string,
+  operator: string = actorUserId,
   faults?: ReconcileFaults,
 ): Record<string, unknown> {
   assertReconcileBinding(binding)
-  return withImmediateTransaction(db, faults, 'complete_generation', binding, operator, () => {
+  return withImmediateTransaction(db, faults, 'complete_generation', binding, actorUserId, () => {
     const row = assertExactGeneration(db, binding)
     if (row.status !== 'pending') fail('only pending reconciliation can complete', 'CAS_CONFLICT', 409)
     assertHospitalMonthBinding(db, binding, row.hospital_month_id)
@@ -1330,11 +1331,12 @@ export function completeAccountReconciliation(
 export function closeAccountReconciliation(
   db: any,
   binding: ReconcileBinding,
-  operator: string,
+  actorUserId: string,
+  operator: string = actorUserId,
   faults?: ReconcileFaults,
 ): Record<string, unknown> {
   assertReconcileBinding(binding)
-  return withImmediateTransaction(db, faults, 'close_generation', binding, operator, () => {
+  return withImmediateTransaction(db, faults, 'close_generation', binding, actorUserId, () => {
     const row = assertExactGeneration(db, binding)
     if (row.status !== 'complete') fail('only complete reconciliation can close', 'CAS_CONFLICT', 409)
     assertHospitalMonthBinding(db, binding, row.hospital_month_id)
