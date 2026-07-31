@@ -37,6 +37,9 @@ import {
   DENIAL_ALERT_DISTINCT,
 } from '../src/middleware/audit-log.js'
 import { computeStatementSourceHash } from '../src/services/statement-normalized-lines.js'
+import { createLegacyAbcCompatibilityApp } from './helpers/legacy-abc-compatibility-app.js'
+
+const legacyAbcApp = createLegacyAbcCompatibilityApp({ auditWrites: true })
 
 const countLogs = (db: any) =>
   (db.prepare('SELECT COUNT(*) AS c FROM operation_logs').get() as any).c as number
@@ -337,7 +340,7 @@ describe('审计中间件：全站写操作留痕（集成，admin）', () => {
   it('成本域双轨：POST /abc/periods 既进 abc_audit_logs 又进 operation_logs', async () => {
     const beforeOps = countLogs(db)
     const yearMonth = '2097-05'
-    const res = await request(app)
+    const res = await request(legacyAbcApp)
       .post('/api/v1/abc/periods')
       .set('Authorization', `Bearer ${token}`)
       .send({ yearMonth, remark: '双轨验证' })

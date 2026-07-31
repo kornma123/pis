@@ -14,8 +14,10 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import request from 'supertest'
-import app from '../src/app.js'
 import { getDatabase } from '../src/database/DatabaseManager.js'
+import { createLegacyAbcCompatibilityApp } from './helpers/legacy-abc-compatibility-app.js'
+
+const app = createLegacyAbcCompatibilityApp({ auditWrites: true })
 
 describe('审计留痕：admin 敏感财务写落 abc_audit_logs（operator=admin）', () => {
   let token: string
