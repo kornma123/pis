@@ -9,7 +9,7 @@ Codex 和其他遵循 `AGENTS.md` 的工具，开始任何工作前必须完整�
 ## Codex 适配
 
 - 先用 `node scripts/agent-preflight.cjs` 选择 `develop` 或 `review` 模式；新开发先由操作者执行 `git fetch origin`。
-- Codex 启动、续接、监督或向本地 Claude Code CLI 派单前，必须完整读取 [Claude Code CLI 监督协议](docs/claude-code-cli-supervision.md)，在当前用户可见终端使用同一前台 PTY 会话，并按协议处理轮询、提问中断与派单前复核。
+- Codex 启动、续接、监督或向本地 Claude Code CLI 派单前，必须完整读取 [Claude Code CLI 监督协议](docs/claude-code-cli-supervision.md)；只有同一桌面终端的写入 canary 能被当前任务应用侧回读才可启动，工具侧 `tty:true` 不算可见性证明。
 - Codex 作为 Claude Code 之外的异构复核轴时，默认只读目标 ref，并把文件、行号、触发条件和修法写入复核结论。
 - 当前环境实际可用的工具、技能和协作能力以会话清单为准；不要从历史文档推断能力。
 - 直接面向用户的最终回复按共用契约 §6.1「所有用户交付会话的产品化结尾」收口；本入口不复制字段。

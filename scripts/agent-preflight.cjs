@@ -16,8 +16,9 @@ const { execFileSync, spawnSync } = require('node:child_process')
 const CONTRACT_PATH = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
 const CLAUDE_CLI_SUPERVISION_PATH = 'docs/claude-code-cli-supervision.md'
-const CLAUDE_CLI_SUPERVISION_ID = 'coreone-claude-code-cli-supervision/v1'
-const CLAUDE_CLI_SUPERVISION_DEFAULTS = 'effort=ultracode poll-seconds=300 visible-pty=true background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
+const CLAUDE_CLI_SUPERVISION_ID = 'coreone-claude-code-cli-supervision/v2'
+const CLAUDE_CLI_SUPERVISION_DEFAULTS = 'effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
+const CLAUDE_CLI_TERMINAL_PROOF = 'canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed'
 const CLAUDE_COREONE_SKILL_PATH = '.claude/skills/coreone/SKILL.md'
 const PM_DECISIONS_PATH = 'docs/PM待拍板.md'
 const ENTRYPOINTS = ['AGENTS.md', 'CLAUDE.md']
@@ -2117,12 +2118,16 @@ function inspectAuthority(root, args, checks) {
   const supervisionFindings = []
   const supervisionIdMatch = supervision.match(/<!--\s*protocol-id:\s*([^\s]+)\s*-->/)
   const supervisionDefaultsMatch = supervision.match(/<!--\s*supervisor-defaults:\s*([\s\S]*?)\s*-->/)
+  const supervisionTerminalProofMatch = supervision.match(/<!--\s*terminal-proof:\s*([\s\S]*?)\s*-->/)
   if (!supervision) supervisionFindings.push(`${CLAUDE_CLI_SUPERVISION_PATH}: missing`)
   if ((supervisionIdMatch && supervisionIdMatch[1]) !== CLAUDE_CLI_SUPERVISION_ID) {
     supervisionFindings.push(`protocol id mismatch; expected ${CLAUDE_CLI_SUPERVISION_ID}`)
   }
   if ((supervisionDefaultsMatch && supervisionDefaultsMatch[1].trim()) !== CLAUDE_CLI_SUPERVISION_DEFAULTS) {
     supervisionFindings.push('defaults marker mismatch')
+  }
+  if ((supervisionTerminalProofMatch && supervisionTerminalProofMatch[1].trim()) !== CLAUDE_CLI_TERMINAL_PROOF) {
+    supervisionFindings.push('terminal proof marker mismatch')
   }
   for (const file of [...ENTRYPOINTS, CONTRACT_PATH, CLAUDE_COREONE_SKILL_PATH]) {
     const text = contents[file] || ''
@@ -2136,7 +2141,7 @@ function inspectAuthority(root, args, checks) {
       checks,
       'authority.claude-cli-supervision',
       'PASS',
-      `Claude Code CLI supervision defaults: ${CLAUDE_CLI_SUPERVISION_DEFAULTS}`,
+      `Claude Code CLI supervision defaults: ${CLAUDE_CLI_SUPERVISION_DEFAULTS}; terminal proof: ${CLAUDE_CLI_TERMINAL_PROOF}`,
     )
   }
 
@@ -2279,6 +2284,7 @@ function inspectAuthority(root, args, checks) {
       path: CLAUDE_CLI_SUPERVISION_PATH,
       protocolId: supervisionIdMatch ? supervisionIdMatch[1] : null,
       defaults: supervisionDefaultsMatch ? supervisionDefaultsMatch[1].trim() : null,
+      terminalProof: supervisionTerminalProofMatch ? supervisionTerminalProofMatch[1].trim() : null,
     },
     requiredFiles: AUTHORITY_FILES,
     missingFiles: missing,
@@ -2385,6 +2391,7 @@ module.exports = {
   CLAUDE_CLI_SUPERVISION_PATH,
   CLAUDE_CLI_SUPERVISION_ID,
   CLAUDE_CLI_SUPERVISION_DEFAULTS,
+  CLAUDE_CLI_TERMINAL_PROOF,
   PM_DECISIONS_PATH,
   AUTHORITY_FILES,
 }

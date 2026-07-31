@@ -11,7 +11,7 @@ description: COREONE 仓库的本地工作路由。处理任何 PRD、功能、B
 
 ## 1. 每次任务先路由
 
-1. 完整读取 `CLAUDE.md` 和 `docs/agent-operating-contract.md`；若由 Codex 或 PM 启动、续接或监督本地 CLI，同时完整读取 `docs/claude-code-cli-supervision.md`，再按权威链读取相关工作模型、guardrails、golden、ADR/spec。
+1. 完整读取 `CLAUDE.md` 和 `docs/agent-operating-contract.md`；若由 Codex 或 PM 启动、续接或监督本地 CLI，同时完整读取 `docs/claude-code-cli-supervision.md`，并在同一桌面终端的写入 canary 被应用侧回读前保持 fail-closed，再按权威链读取相关工作模型、guardrails、golden、ADR/spec。
 2. 现场读取 `git status`、当前分支、`origin/master`、相关 Issue/PR/checks；不使用聊天记忆或仓库快照冒充实时状态。
 3. 判定入口：
 
