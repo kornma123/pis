@@ -1,7 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import axios from 'axios'
+import { toast } from 'sonner'
 
 vi.mock('axios')
+vi.mock('sonner', () => ({
+  toast: {
+    error: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+    info: vi.fn(),
+  },
+}))
 
 describe('request', () => {
   let requestInterceptor: any
@@ -171,5 +180,65 @@ describe('request', () => {
   it('should reject with network error message', async () => {
     const error = { message: 'Network Error' }
     await expect(responseRejected(error)).rejects.toThrow('Network Error')
+  })
+  it('Issue71: redacts Bearer and sensitive keys from business error display and rejection', async () => {
+    const response = {
+      data: {
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'invalid Bearer abc.def.ghi token="t0k3n" password=pw123',
+        },
+      },
+    }
+
+    await expect(responseFulfilled(response)).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+      message: expect.stringContaining('[REDACTED]'),
+    })
+    const shown = vi.mocked(toast.error).mock.calls[0][0] as string
+    expect(shown).toContain('[REDACTED]')
+    expect(shown).not.toContain('abc.def.ghi')
+    expect(shown).not.toContain('t0k3n')
+    expect(shown).not.toContain('pw123')
+  })
+
+  it('Issue71: redacts sensitive markers from HTTP error response message and toast', async () => {
+    const error: any = {
+      message: 'Request failed with status code 401',
+      config: { url: '/boms', headers: {} },
+      response: {
+        status: 400,
+        data: { error: { code: 'UNAUTHORIZED', message: 'token=Bearer abc.def' } },
+      },
+    }
+
+    await expect(responseRejected(error)).rejects.toEqual(error)
+    expect(error.response.data.error.message).toContain('[REDACTED]')
+    expect(error.response.data.error.message).not.toContain('abc.def')
+    const shown = vi.mocked(toast.error).mock.calls[0][0] as string
+    expect(shown).not.toContain('abc.def')
+  })
+
+  it('Issue71: redacts nested sensitive values inside JSON-shaped messages', async () => {
+    const error: any = {
+      message: 'Bad request',
+      config: { url: '/boms', headers: {} },
+      response: {
+        status: 400,
+        data: {
+          error: {
+            code: 'INVALID',
+            message: '{"authorization":"Bearer zzz","nested":{"password":"p@ss"}}',
+          },
+        },
+      },
+    }
+
+    await expect(responseRejected(error)).rejects.toEqual(error)
+    const shown = vi.mocked(toast.error).mock.calls[0][0] as string
+    expect(shown).toContain('[REDACTED]')
+    expect(shown).not.toContain('zzz')
+    expect(shown).not.toContain('p@ss')
   })
 })
