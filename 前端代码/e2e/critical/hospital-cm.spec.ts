@@ -29,7 +29,7 @@ test.describe('critical hospital contribution-margin truth', () => {
     await expect(page.getByRole('heading', { name: '院级贡献毛利看板' })).toBeVisible()
   })
 
-  test('ABC, labor, and equipment product surfaces are absent and old deep links are dead', async ({ page }) => {
+  test('retired ABC cost surfaces stay absent in the UI and sealed at the API', async ({ page, request }) => {
     await loginThroughUi(page, 'admin')
 
     for (const label of ['ABC成本看板', '设备管理', '标准工时库', '间接成本中心']) {
@@ -39,6 +39,19 @@ test.describe('critical hospital contribution-margin truth', () => {
     for (const path of ['/abc/dashboard', '/equipment', '/labor-times', '/indirect-costs']) {
       await page.goto(path)
       await expect(page.getByRole('heading', { name: '404' })).toBeVisible()
+    }
+
+    const token = await apiLogin(request, 'admin')
+    for (const path of ['/equipment', '/equipment-types', '/labor-times', '/indirect-costs']) {
+      const retiredApi = await apiGet(request, token, path)
+      expect(retiredApi.status(), `${path} must remain retired`).toBe(410)
+      expect(await retiredApi.json()).toEqual({
+        success: false,
+        error: {
+          code: 'FEATURE_RETIRED',
+          message: '该产品能力已退役',
+        },
+      })
     }
   })
 })
