@@ -10,8 +10,9 @@ const SCRIPT = path.join(__dirname, 'agent-preflight.cjs')
 const CONTRACT = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
 const CLAUDE_CLI_SUPERVISION = 'docs/claude-code-cli-supervision.md'
-const CLAUDE_CLI_PROTOCOL_ID = 'coreone-claude-code-cli-supervision/v1'
-const CLAUDE_CLI_DEFAULTS = 'effort=ultracode poll-seconds=300 visible-pty=true background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
+const CLAUDE_CLI_PROTOCOL_ID = 'coreone-claude-code-cli-supervision/v2'
+const CLAUDE_CLI_DEFAULTS = 'effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
+const CLAUDE_CLI_TERMINAL_PROOF = 'canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed'
 const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
   'docs/工作模型-COREONE项目版-2026-06-30.md',
@@ -87,8 +88,10 @@ function installAuthorityFixture(root) {
     '',
     `<!-- protocol-id: ${CLAUDE_CLI_PROTOCOL_ID} -->`,
     `<!-- supervisor-defaults: ${CLAUDE_CLI_DEFAULTS} -->`,
+    `<!-- terminal-proof: ${CLAUDE_CLI_TERMINAL_PROOF} -->`,
     '',
-    'Use a visible foreground PTY and keep the same session id.',
+    'A backend tool PTY is not proof of a user-visible desktop terminal.',
+    'Write a canary through the intended handle and read it back from the attached app terminal before launch.',
     '',
   ].join('\n'))
   write(root, '.claude/skills/coreone/SKILL.md', [
@@ -205,6 +208,40 @@ check('Claude CLI supervision: effort drift from ultracode fails closed', () => 
     assert.ok(checkResult, 'missing check authority.claude-cli-supervision')
     assert.equal(checkResult.status, 'FAIL')
     assert.ok(checkResult.details.includes('defaults marker mismatch'))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('Claude CLI supervision: backend tool PTY cannot claim desktop visibility', () => {
+  const repo = setupRepo()
+  try {
+    const target = path.join(repo.work, CLAUDE_CLI_SUPERVISION)
+    const original = fs.readFileSync(target, 'utf8')
+    fs.writeFileSync(target, original.replace('backend-tool-pty=not-visible', 'backend-tool-pty=visible'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const checkResult = result.json.checks.find((item) => item.id === 'authority.claude-cli-supervision')
+    assert.ok(checkResult, 'missing check authority.claude-cli-supervision')
+    assert.equal(checkResult.status, 'FAIL')
+    assert.ok(checkResult.details.includes('defaults marker mismatch'))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('Claude CLI supervision: missing same-handle app readback proof fails closed', () => {
+  const repo = setupRepo()
+  try {
+    const target = path.join(repo.work, CLAUDE_CLI_SUPERVISION)
+    const original = fs.readFileSync(target, 'utf8')
+    fs.writeFileSync(target, original.replace('same-handle=true', 'same-handle=false'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const checkResult = result.json.checks.find((item) => item.id === 'authority.claude-cli-supervision')
+    assert.ok(checkResult, 'missing check authority.claude-cli-supervision')
+    assert.equal(checkResult.status, 'FAIL')
+    assert.ok(checkResult.details.includes('terminal proof marker mismatch'))
   } finally {
     fs.rmSync(repo.tmp, { recursive: true, force: true })
   }

@@ -1,7 +1,8 @@
 # COREONE Claude Code CLI 监督协议
 
-<!-- protocol-id: coreone-claude-code-cli-supervision/v1 -->
-<!-- supervisor-defaults: effort=ultracode poll-seconds=300 visible-pty=true background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true -->
+<!-- protocol-id: coreone-claude-code-cli-supervision/v2 -->
+<!-- supervisor-defaults: effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true -->
+<!-- terminal-proof: canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed -->
 <!-- stable-rules-only -->
 
 本协议用于 Codex 或 PM 在本机启动、续接、监督 Claude Code CLI/K3 并与其双向协作。它解决的是会话可见、问题及时回答、输出不遗漏和派单前复核，不新增命令白名单，也不替代 `docs/agent-operating-contract.md` 的权限、ownership、GitHub 写入或效率规则。
@@ -11,12 +12,20 @@
 ## 1. 单一控制面
 
 - 当前用户可见的 Codex 根任务或 PM 是唯一控制者；一个 owned task 同时只保留一个受监督 Claude CLI 会话。
-- 控制者保存任务名、仓库绝对路径、Claude session id、PTY handle 和最后已消费输出位置。不得把 token、环境变量值、凭据或私密数据写进会话名、命令、评论或日志。
+- “用户可见终端”必须同时满足：它出现在当前 Codex Desktop 任务的终端界面中；应用侧能回读其输出；控制者能通过同一个执行句柄向它写入。`exec_command(..., tty:true)`、shell 的 TTY、工具调用返回的 PTY/session id 或进程仍存活，都只证明后端有伪终端，**不能**证明用户在桌面端看得到。
+- 只有应用侧只读回读、没有同一终端的写入能力，也不构成可监督会话：控制者无法及时回答 Claude 的提问。宿主不提供“同一终端可写 + 应用侧可回读”能力时，必须 fail-closed，不得用隐藏工具 PTY 代替。
+- 控制者保存任务名、仓库绝对路径、Claude session id、桌面终端执行句柄、最后已消费输出位置和启动 canary 证明。不得把 token、环境变量值、凭据或私密数据写进会话名、命令、评论或日志。
 - Claude 负责在同一会话中明确报告 `ACTIVE`、`WAITING_CONTROLLER`、`VERIFYING`、`COMPLETE` 或 `BLOCKED`；控制者负责读取、判断和回写，不把无人应答造成的停顿算作 Claude 的阻塞。
 
 ## 2. 启动和续接
 
-启动前在目标 worktree 做只读探针：
+执行任何 Claude 命令前，先完成桌面终端证明：
+
+1. 用宿主应用的终端回读能力确认当前任务已附着终端；明确返回“未附着”时，记录 `BLOCKED: DESKTOP_TERMINAL_NOT_ATTACHED` 并停止。
+2. 通过准备承载 Claude 的**同一个执行句柄**写入一次不含秘密的随机 canary（例如 `COREONE_TERMINAL_PROBE_<uuid>`），再由宿主应用回读当前任务终端；只有读回完全相同的 canary 才算证明通过。
+3. canary 写入与应用回读任一能力不存在、失败或来自不同句柄时，记录 `BLOCKED: DESKTOP_TERMINAL_CONTROL_UNAVAILABLE` 并停止。不得转用工具侧 PTY、后台进程、日志文件或另一个终端继续。
+
+证明通过后，才在该同一桌面终端执行目标 worktree 的只读探针：
 
 ```bash
 command -v claude
@@ -33,12 +42,12 @@ claude --effort ultracode --name '<可识别任务名>' --resume '<原 session i
 
 - `--effort ultracode` 是默认且必须显式传入的启动参数。模型沿用当时有效配置；只有用户或固定 handoff 明确指定模型时才传 `--model`，不得把会过期的模型名写成长期默认。
 - 只有用户明确指定其他 effort 时才可覆盖默认值。CLI 不支持 `ultracode`、启动后显示降级或实际 effort 无法确认时，停止派单并如实报告；不得静默退回 `xhigh`、`high` 或其他级别。
-- 必须在当前用户可见的 Codex 任务终端以交互式前台 PTY 启动。不得使用 `--bg`、`nohup`、shell 后台符号、输出重定向或隐藏的子任务代替这个会话；`--tmux` 仅在用户明确要求且当前任务同时给出可见 attach 入口时使用。
-- 启动成功后，控制者立即在当前任务回报任务名、cwd、session id、Claude 版本、实际 effort 和“终端可见”状态。若其中任何一项未核实，不得声称会话已接通。
+- 必须在已经通过 canary 证明的同一 Codex Desktop 任务终端以前台交互方式启动。不得使用工具调用分配的 PTY、`--bg`、`nohup`、shell 后台符号、输出重定向或隐藏子任务代替；`--tmux` 仅在用户明确要求、桌面端可见 attach 入口已验证且控制者仍能同句柄读写时使用。
+- 启动成功后，控制者立即在当前任务回报任务名、cwd、session id、Claude 版本、实际 effort，以及 canary 写入与应用回读均成功的“桌面终端已附着”状态。若其中任何一项未核实，不得声称会话已接通或终端可见。
 
 ## 3. 输出消费与五分钟节奏
 
-- 始终复用同一个 PTY handle 增量读取，不用重复启动 Claude，也不从旧日志推断当前状态。
+- 始终复用已通过 canary 证明的同一桌面终端执行句柄和应用回读入口增量读取，不用重复启动 Claude，也不从工具 PTY、旧日志或另一终端推断当前状态。
 - Claude 正在执行且没有新输出时，控制者至少每 `300` 秒消费一次新增输出。优先使用“有输出立即唤醒、无输出最多等待五分钟”的宿主等待原语；不得用 `sleep 300` 阻塞控制面。宿主单次等待上限更短时，可以内部短轮询，但对外仍按五分钟无输出节奏管理。
 - 一旦出现新输出立即消费，不等五分钟整点。只处理上次 cursor 之后的增量，并持续读到当前提示符或稳定尾部，防止问题被截在半段。
 - 无变化的轮询不向用户刷屏；有新事实、问题、风险、验证结果或状态变化时才给简短进度。
@@ -63,7 +72,7 @@ claude --effort ultracode --name '<可识别任务名>' --resume '<原 session i
 
 ## 6. 恢复、完成与停止
 
-- 终端暂时断开但 session 仍存在时，先用原 session id 恢复；不得因“看不到输出”就新开重复会话。恢复后先消费断开期间全部新增输出，再处理问题。
+- 桌面终端附着或同句柄写入能力丢失时，立即暂停派单并回到 canary 证明；不得因“看不到输出”就改用隐藏工具 PTY 或新开重复会话。证明恢复后才用原 session id 续接，并先消费断开期间全部新增输出。
 - Claude 进程异常退出时，保存退出状态和最后输出；确认没有另一个同任务进程后，才用原 session id 续接。
 - 只有 Claude 已给出终态、输出经过两次稳定读取、控制者完成事实闸、没有未答问题，并且当前目标确实无安全的范围内下一步时，才停止监督并向用户交付。
 - `COMPLETE` 只表示本会话目标完成，不自动授权提交、push、开 PR、标记 Ready、合并、部署、发布或关闭 Issue；这些动作继续按共用契约分别取证和授权。
@@ -72,7 +81,7 @@ claude --effort ultracode --name '<可识别任务名>' --resume '<原 session i
 
 | 当前状态 | 控制者动作 | 下一状态 |
 |---|---|---|
-| `STARTING` | 探针、显式 `ultracode`、可见 PTY、记录 session id | `ACTIVE` |
+| `STARTING` | 同句柄 canary 写入 + 应用回读、探针、显式 `ultracode`、记录 session id | `ACTIVE` / `BLOCKED` |
 | `ACTIVE` | 输出唤醒优先，最长五分钟消费增量 | `ACTIVE` / `WAITING_CONTROLLER` / `VERIFYING` |
 | `WAITING_CONTROLLER` | 立即回答原 CLI；需新增权限时才问用户 | `ACTIVE` / `BLOCKED` |
 | `VERIFYING` | 两次稳定读取 + 独立事实闸 | `ACTIVE` / `COMPLETE` / `BLOCKED` |
