@@ -3273,6 +3273,10 @@ describe('LOC-005 FUP #87 trigger single authority, pending state machines, bind
     supplement_orders: [
       'trg_reconcile_supplement_row_id_insert',
       'trg_reconcile_supplement_row_id_update',
+      'trg_reconcile_supplement_collected_revenue_insert',
+      'trg_reconcile_supplement_collected_revenue_update',
+      'trg_reconcile_supplement_collected_pair_insert',
+      'trg_reconcile_supplement_collected_pair_update',
       'trg_reconcile_supplement_generation_insert',
       'trg_reconcile_supplement_generation_update',
       'trg_reconcile_supplement_final_immutable',

@@ -21,6 +21,7 @@ import { buildReconcileInputs, runReconcile, partnerMonthLabRate, tryCloseHospit
 import { computeReconcile, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
 import {
   assertReconcileBinding,
+  canonicalReconciliationAmount,
   closeAccountReconciliation,
   completeAccountReconciliation,
   computeAccountReconciliation,
@@ -62,6 +63,12 @@ function rejectUnknownBodyKeys(res: any, value: unknown, allowed: readonly strin
 function errorSupplementLifecycle(res: any, err: any): void {
   if (String(err?.message ?? '').includes('SUPPLEMENT_GENERATION_BINDING_MISMATCH')) {
     error(res, '该补收单属于已被取代的旧对账代次，已彻底冻结', 'SUPPLEMENT_GENERATION_BINDING_MISMATCH', 409)
+    return
+  }
+  // Issue #94：canonical 金额/扣率/计算结果校验抛出的 ReconcileLifecycleError 稳定映射为
+  // 409 + 专用错误码（不再落入 500 INTERNAL_ERROR），供 fail-closed 契约与测试断言使用。
+  if (err instanceof ReconcileLifecycleError) {
+    error(res, err.message, err.code, err.status)
     return
   }
   error(res, err.message)
@@ -680,12 +687,47 @@ router.post('/supplements/:id/collect', requirePermission('account_reconcile', '
     if (so.status === '已补收') return error(res, '已是已补收', 'CONFLICT', 409)
     // 人闸（项D 止血）：未经独立签发（approve）的补收单不可收款——防「认定人一步直发真金追加收费单」。
     if (so.review_status !== 'approved') return error(res, '补收单未经独立复核签发，不可收款', 'NOT_APPROVED', 409)
+    // Issue #94：写入前分别验证源 amount、扣率与计算结果；异常稳定 fail-closed——
+    // 任何一项不满足 canonical 合同都在业务 UPDATE 与 writeAuditLog 之前抛出，
+    // 保证零业务写、零业务审计写。上限复用 canonicalReconciliationAmount 既有权威
+    // （直接 Number 需 abs < 2^39 且 ≤4 位小数，scaled safe-integer 以内），不另造上限。
+    const sourceAmount = canonicalReconciliationAmount(
+      so.amount,
+      'SUPPLEMENT_SOURCE_AMOUNT_INVALID',
+      '补收单金额',
+    )
+    if (sourceAmount < 0) {
+      throw new ReconcileLifecycleError(
+        '补收单金额必须为非负 canonical DECIMAL(18,4) 数值',
+        'SUPPLEMENT_SOURCE_AMOUNT_INVALID',
+        409,
+      )
+    }
+    const rate = partnerMonthLabRate(db, so.partner_id, so.service_month)
+    if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 1) {
+      throw new ReconcileLifecycleError(
+        '补收扣率必须为 0~1 的有限数',
+        'SUPPLEMENT_RATE_INVALID',
+        409,
+      )
+    }
     // 折实收：账单口径 amount ×（原漏收月的**实验室工序行扣率**）；计入 collectedMonth 的实收。
     //   只读 case_revenue_lines 算扣率、**不写收入侧**（保护 golden）。
     //   不变量（防重复计）：漏收的补收只经补收单进实收，**绝不把这笔钱回填 case_revenue**——
     //   否则复核完成快照(Σlab_revenue)会与补收实收同时含它、双计。计费用错类走「待外部更正」另路，不驱动补收。
-    const rate = partnerMonthLabRate(db, so.partner_id, so.service_month)
-    const collectedRevenue = Math.round(Number(so.amount) * rate * 100) / 100
+    const rawCollectedRevenue = Math.round(sourceAmount * rate * 100) / 100
+    const collectedRevenue = canonicalReconciliationAmount(
+      rawCollectedRevenue,
+      'SUPPLEMENT_COLLECTED_REVENUE_INVALID',
+      '补收实收',
+    )
+    if (collectedRevenue < 0) {
+      throw new ReconcileLifecycleError(
+        '补收实收必须为非负 canonical DECIMAL(18,4) 数值',
+        'SUPPLEMENT_COLLECTED_REVENUE_INVALID',
+        409,
+      )
+    }
     db.prepare(`UPDATE supplement_orders SET status = '已补收', collected_at = CURRENT_TIMESTAMP, collected_month = ?, collected_revenue = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(collectedMonth, collectedRevenue, so.id)
     writeAuditLog(db, 'account_reconcile', 'supplement_collect', so.id, { amount: so.amount, collectedMonth, collectedRevenue, rate }, operatorOf(req))

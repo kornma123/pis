@@ -1263,6 +1263,58 @@ function ensureSupplementCollectedMonthIntegrity(database: DatabaseSync): void {
   }
 }
 
+// Issue #94：collected_revenue 数值合同（SQL 侧，复用仓库既有 canonical amount 权威）——
+// 必须 typeof integer/real（拒 text 'NaN'/'Infinity'、BLOB）、有限、非负，精度 ≤ DECIMAL(18,4)，
+// 上界 = lifecycle canonicalScaledUnits 的 scaled safe-integer 边界（900719925474.0991），
+// 不另造上限。NaN 由 x >= 0 恒 FALSE 拒绝；±Infinity/超界由 scaled 上界拒绝；
+// 精度沿用仓库既有金额判定 idiom：abs(x*10000 - round(x*10000)) < 0.000001。
+const canonicalSupplementCollectedRevenueSql = (column: string): string => `(
+        typeof(${column}) IN ('integer', 'real')
+        AND ${column} IS NOT NULL
+        AND ${column} >= 0
+        AND abs(${column} * 10000 - round(${column} * 10000)) < 0.000001
+        AND ${column} * 10000 <= 9007199254740991)`
+
+// Issue #94：collected_revenue 状态配对合同——status='已补收' 必须 collected_month +
+// collected_revenue 双字段齐全；非已补收状态不得残留任一字段（giveup/reopen 清理链满足）。
+// SQLite trigger 的 WHEN 子句不解析裸列名，必须显式前缀（触发器中传 'NEW.'，启动扫描传 ''）。
+const supplementCollectedPairSql = (prefix: string): string => `(
+        (${prefix}status IS '已补收'
+         AND ${prefix}collected_month IS NOT NULL
+         AND ${prefix}collected_revenue IS NOT NULL)
+        OR (${prefix}status IS NOT '已补收'
+            AND ${prefix}collected_month IS NULL
+            AND ${prefix}collected_revenue IS NULL))`
+
+// Issue #94：collected_revenue 历史脏数据启动扫描（第三道）——路由严格校验是第一道、
+// trg_reconcile_supplement_collected_revenue_* / ..._pair_* trigger 是第二道（写入侧）。
+// 本扫描在 trigger 重装前拦截历史遗留/直接 SQL 落入的异常金额与状态残留，fail-closed 拒启，
+// 绝不静默改写金额。行存在性判定与 R8 P1-1 同口径（{id:NULL} 脏行不得因真值判断不可见）。
+function ensureSupplementCollectedRevenueIntegrity(database: DatabaseSync): void {
+  const columns = database.prepare('PRAGMA table_info(supplement_orders)').all() as Array<{ name: string }>
+  const names = new Set(columns.map(column => column.name))
+  if (!names.has('collected_revenue') || !names.has('collected_month') || !names.has('status')) return
+  const badValue = database.prepare(`
+    SELECT id
+      FROM supplement_orders
+     WHERE collected_revenue IS NOT NULL
+       AND NOT ${canonicalSupplementCollectedRevenueSql('collected_revenue')}
+     LIMIT 1
+  `).get() as { id?: string | null } | undefined
+  if (badValue) {
+    throw new Error(`SUPPLEMENT_COLLECTED_REVENUE_INVALID:${String(badValue.id ?? '<null>')}`)
+  }
+  const badPair = database.prepare(`
+    SELECT id
+      FROM supplement_orders
+     WHERE NOT ${supplementCollectedPairSql('')}
+     LIMIT 1
+  `).get() as { id?: string | null } | undefined
+  if (badPair) {
+    throw new Error(`SUPPLEMENT_COLLECTED_REVENUE_PAIR_INVALID:${String(badPair.id ?? '<null>')}`)
+  }
+}
+
 // R8 P1-1 纵深：身份表主键 NULL/'' 开机扫描。SQLite 普通表 TEXT PRIMARY KEY 不强制
 // NOT NULL/非空——此类行只能经直接 SQL 产生（全部应用写者用 uuid），开机 fail-closed。
 // 不采 DDL CHECK/NOT NULL 重建表的理由：逐表重建对 predecessor 升级面过大，且 R3 教训
@@ -2258,6 +2310,11 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_generation_update')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_update')
+  // Issue #94：collected_revenue 数值 + 状态配对 trigger 纳入同一 DROP+CREATE 部署权威。
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_revenue_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_revenue_update')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_pair_insert')
+  database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_pair_update')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_insert')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_diff_row_id_update')
   database.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_row_id_insert')
@@ -2398,6 +2455,9 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   // 违例 throw 即整体 ROLLBACK，开机 fail-closed（详见两函数头注释）。
   ensureReconcileDiffGenerationIdentity(database)
   ensureSupplementCollectedMonthIntegrity(database)
+  // Issue #94：collected_revenue 数值 + 状态配对 legacy 扫描排在 trigger 重装段之前，
+  // 违例 throw 即整体 ROLLBACK、开机 fail-closed（与 collected_month 扫描同口径）。
+  ensureSupplementCollectedRevenueIntegrity(database)
   // R8 P1-1 纵深：身份表主键 NULL/'' 开机扫描（排在漂移扫描之后，纯主键空值收口）。
   ensureReconcileIdentityRowIds(database)
   // #87 e)+P1-A：binding 关系开机四扫描——当前形状库缺 binding/悬空 generation/医院月
@@ -2942,6 +3002,48 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       OR OLD.line_type IS NOT NEW.line_type
     BEGIN
       SELECT RAISE(ABORT, 'RECONCILE_DIFF_IDENTITY_IMMUTABLE');
+    END
+  `)
+  // Issue #94：collected_revenue 数值硬闸 + 状态配对硬闸（第二道，写入侧）——
+  // 路由层 canonical 校验是第一道、启动 legacy 扫描是第三道。WHEN 只拦 collected_revenue
+  // 非空且不满足数值合同的写入；空值语义由配对 trigger 单独收口（status='已补收' 必须
+  // 双字段齐全，非已补收必须双字段为空）。
+  // SQLite 同事件多个 BEFORE trigger 按创建逆序触发（后建者先触发），故本族必须建在
+  // generation/binding 与 collected_month trigger 之前：代次 binding 错误仍由
+  // trg_reconcile_supplement_generation_* 先行带出（R4/R2 断言不变），月份格式错误仍由
+  // trg_reconcile_supplement_collected_month_* 先行带出（R7/R8 断言不变）。
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_collected_revenue_insert
+    BEFORE INSERT ON supplement_orders
+    WHEN NEW.collected_revenue IS NOT NULL
+      AND NOT ${canonicalSupplementCollectedRevenueSql('NEW.collected_revenue')}
+    BEGIN
+      SELECT RAISE(ABORT, 'SUPPLEMENT_COLLECTED_REVENUE_INVALID');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_collected_revenue_update
+    BEFORE UPDATE ON supplement_orders
+    WHEN NEW.collected_revenue IS NOT NULL
+      AND NOT ${canonicalSupplementCollectedRevenueSql('NEW.collected_revenue')}
+    BEGIN
+      SELECT RAISE(ABORT, 'SUPPLEMENT_COLLECTED_REVENUE_INVALID');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_collected_pair_insert
+    BEFORE INSERT ON supplement_orders
+    WHEN NOT ${supplementCollectedPairSql('NEW.')}
+    BEGIN
+      SELECT RAISE(ABORT, 'SUPPLEMENT_COLLECTED_REVENUE_PAIR_INVALID');
+    END
+  `)
+  database.exec(`
+    CREATE TRIGGER trg_reconcile_supplement_collected_pair_update
+    BEFORE UPDATE ON supplement_orders
+    WHEN NOT ${supplementCollectedPairSql('NEW.')}
+    BEGIN
+      SELECT RAISE(ABORT, 'SUPPLEMENT_COLLECTED_REVENUE_PAIR_INVALID');
     END
   `)
   database.exec(`
