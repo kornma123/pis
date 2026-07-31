@@ -10,9 +10,59 @@ const SCRIPT = path.join(__dirname, 'agent-preflight.cjs')
 const CONTRACT = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
 const CLAUDE_CLI_SUPERVISION = 'docs/claude-code-cli-supervision.md'
-const CLAUDE_CLI_PROTOCOL_ID = 'coreone-claude-code-cli-supervision/v2'
+const CLAUDE_CLI_PROTOCOL_ID = 'coreone-claude-code-cli-supervision/v3'
 const CLAUDE_CLI_DEFAULTS = 'effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
 const CLAUDE_CLI_TERMINAL_PROOF = 'canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed'
+const CLAUDE_CLI_SUPERVISOR = 'scripts/claude-cli-supervisor.cjs'
+const CLAUDE_CLI_SUPERVISOR_SELFTEST = 'scripts/claude-cli-supervisor.selftest.cjs'
+const CLAUDE_CLI_SUPERVISOR_TEST_HARNESS = 'scripts/claude-cli-supervisor.test-harness.cjs'
+const CLAUDE_CLI_SUPERVISOR_DEPENDENCY = 'scripts/agent-preflight.cjs'
+const CLAUDE_CLI_SUPERVISOR_RUNTIME = `script=${CLAUDE_CLI_SUPERVISOR} selftest=${CLAUDE_CLI_SUPERVISOR_SELFTEST} test-harness=${CLAUDE_CLI_SUPERVISOR_TEST_HARNESS} production-test-exports=forbidden review-target-execution=materialized adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN`
+const CLAUDE_CLI_SUPERVISOR_SCENARIOS = Object.freeze([
+  'queued terminal is not visible proof',
+  'different app terminal handle fails closed',
+  'different terminal generation fails closed',
+  'terminal create must acknowledge the task and session idempotency key',
+  'production module does not export fake-adapter test entrypoints',
+  'wrong cwd or worktree fails before Claude launch',
+  'missing Claude CLI fails before prompt injection',
+  'old Claude CLI version fails closed',
+  'prerelease Claude CLI does not satisfy the matching stable minimum',
+  'SemVer comparison is symmetric for integers beyond Number safe range',
+  'unsupported ultracode effort cannot silently downgrade',
+  'prompt injection must be positively acknowledged',
+  'terminal detachment stops supervision',
+  'unanswered question becomes a timed stall, never COMPLETE',
+  'authority questions are latched and cannot be auto-answered',
+  'authority receipts bind the full terminal session context and time window',
+  'stop requests stay latched across restart until explicit ack-stop',
+  'simultaneous question and stop are atomically latched with stop priority',
+  'unstable EOF cannot pass the output gate',
+  'adapter tail hash cannot hide changing terminal readback',
+  'stable EOF without a clean structured same-session exit is abnormal',
+  'clean structured exit with a latched FATAL output is abnormal',
+  'concurrent run holds one task lease and creates only one terminal',
+  'stale dead-process task lease is recovered after application restart',
+  'state CAS rejects a concurrent state mutation',
+  'application restart reuses session and handle without reinjecting prompt',
+  'application restart during EOF verification reads again without resuming Claude',
+  'COMPLETE is revalidated and becomes stale after Git facts change',
+  'COMPLETE cannot silently rebind to another Codex thread',
+  'COMPLETE rechecks terminal attachment instead of returning stale success',
+  'status command never reports persisted COMPLETE as fresh success',
+  'controller answer returns through the same proven terminal handle',
+  'executable CLI has no hidden PTY fallback without a host adapter',
+  'production CLI rejects a file adapter that fabricates visibility and completion',
+  'fact gate independently rejects foreign and excluded paths',
+  'fact gate rejects excluded paths that were added then removed in history',
+  'fact gate inspects all parents of merge commits',
+  'fact gate is bound to the initial branch and gitdir',
+  'R0 fact gate requires live matching task state',
+  'R0 malformed or unsafe state cannot masquerade as finish-r0',
+  'R0 fact gate does not accept an active contract as finished',
+  'R0 fact gate accepts a verified start state followed by finish-r0 removal',
+])
+const CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256 = '516d59e66e9bb5f18196f3b01b71dd4d723c77e30fb27878ad5b422623889799'
 const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
   'docs/工作模型-COREONE项目版-2026-06-30.md',
@@ -89,9 +139,88 @@ function installAuthorityFixture(root) {
     `<!-- protocol-id: ${CLAUDE_CLI_PROTOCOL_ID} -->`,
     `<!-- supervisor-defaults: ${CLAUDE_CLI_DEFAULTS} -->`,
     `<!-- terminal-proof: ${CLAUDE_CLI_TERMINAL_PROOF} -->`,
+    `<!-- supervisor-runtime: ${CLAUDE_CLI_SUPERVISOR_RUNTIME} -->`,
     '',
     'A backend tool PTY is not proof of a user-visible desktop terminal.',
     'Write a canary through the intended handle and read it back from the attached app terminal before launch.',
+    '',
+  ].join('\n'))
+  write(root, CLAUDE_CLI_SUPERVISOR, `#!/usr/bin/env node
+'use strict';
+const FAILURE = { TERMINAL_VISIBILITY_UNPROVEN: 'TERMINAL_VISIBILITY_UNPROVEN' };
+function parseVersion(value) {
+  const match = String(value || '').match(/(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?/);
+  return match ? { major: match[1], minor: match[2], patch: match[3], prerelease: match[4] ? match[4].split('.') : [] } : null;
+}
+function compareNumeric(left, right) {
+  const a = String(left).replace(/^0+(?=\\d)/, '');
+  const b = String(right).replace(/^0+(?=\\d)/, '');
+  if (a.length !== b.length) return a.length > b.length ? 1 : -1;
+  return a === b ? 0 : a > b ? 1 : -1;
+}
+function compareVersions(left, right) {
+  const a = parseVersion(left);
+  const b = parseVersion(right);
+  if (!a || !b) return null;
+  for (const key of ['major', 'minor', 'patch']) {
+    const compared = compareNumeric(a[key], b[key]);
+    if (compared !== 0) return compared;
+  }
+  if (!a.prerelease.length && b.prerelease.length) return 1;
+  if (a.prerelease.length && !b.prerelease.length) return -1;
+  return 0;
+}
+async function runSupervisor(input) {
+  return { status: 'BLOCKED', reason: FAILURE.TERMINAL_VISIBILITY_UNPROVEN, taskId: input.taskId, promptInjected: false };
+}
+async function answerSupervisor() { return runSupervisor({ taskId: 'answer' }); }
+async function ackStopSupervisor() { return runSupervisor({ taskId: 'ack' }); }
+async function runFactGate() { return { ok: false }; }
+function readState() { return null; }
+function supervisorStateFile() { return 'state.json'; }
+function validateRequest(input) { return input; }
+module.exports = {
+  ADAPTER_API_VERSION: 2,
+  DEFAULT_EFFORT: 'ultracode',
+  DEFAULT_POLL_MS: 300000,
+  FAILURE,
+  REQUIRED_STABLE_EOF_READS: 2,
+  ackStopSupervisor,
+  answerSupervisor,
+  compareVersions,
+  parseVersion,
+  readState,
+  runFactGate,
+  runSupervisor,
+  supervisorStateFile,
+  validateRequest,
+};
+`)
+  write(root, CLAUDE_CLI_SUPERVISOR_TEST_HARNESS, `#!/usr/bin/env node
+'use strict';
+async function runSupervisorWithTestAdapter() { return { status: 'BLOCKED' }; }
+async function answerSupervisorWithTestAdapter() { return { status: 'BLOCKED' }; }
+async function ackStopSupervisorWithTestAdapter() { return { status: 'BLOCKED' }; }
+module.exports = {
+  ackStopSupervisorWithTestAdapter,
+  answerSupervisorWithTestAdapter,
+  runSupervisorWithTestAdapter,
+};
+`)
+  write(root, CLAUDE_CLI_SUPERVISOR_DEPENDENCY, `'use strict';
+function matchesAny() { return false; }
+module.exports = { matchesAny };
+`)
+  write(root, CLAUDE_CLI_SUPERVISOR_SELFTEST, [
+    '#!/usr/bin/env node',
+    "'use strict';",
+    'async function check() {}',
+    '(async () => {',
+    ...CLAUDE_CLI_SUPERVISOR_SCENARIOS.map(
+      (name) => `  await check('${name}', async () => {});`,
+    ),
+    `  console.log("claude-cli-supervisor selftest: PASS (${CLAUDE_CLI_SUPERVISOR_SCENARIOS.length} scenarios; manifest-sha256=${CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256})");`,
+    '})();',
     '',
   ].join('\n'))
   write(root, '.claude/skills/coreone/SKILL.md', [
@@ -196,6 +325,96 @@ check('Claude CLI supervision: canonical protocol and routes pass', () => {
   }
 })
 
+check('Claude CLI supervision: detached review preserves the no-adapter visibility failure', () => {
+  const repo = setupRepo()
+  try {
+    for (const [relativePath, sourcePath] of [
+      [CLAUDE_CLI_SUPERVISOR, path.join(__dirname, 'claude-cli-supervisor.cjs')],
+      [
+        CLAUDE_CLI_SUPERVISOR_SELFTEST,
+        path.join(__dirname, 'claude-cli-supervisor.selftest.cjs'),
+      ],
+      [
+        CLAUDE_CLI_SUPERVISOR_TEST_HARNESS,
+        path.join(__dirname, 'claude-cli-supervisor.test-harness.cjs'),
+      ],
+      [CLAUDE_CLI_SUPERVISOR_DEPENDENCY, SCRIPT],
+    ]) {
+      write(repo.work, relativePath, fs.readFileSync(sourcePath, 'utf8'))
+    }
+    git(repo.work, [
+      'add',
+      CLAUDE_CLI_SUPERVISOR,
+      CLAUDE_CLI_SUPERVISOR_SELFTEST,
+      CLAUDE_CLI_SUPERVISOR_TEST_HARNESS,
+      CLAUDE_CLI_SUPERVISOR_DEPENDENCY,
+    ])
+    git(repo.work, ['commit', '-q', '-m', 'materialize detached supervisor target'])
+    git(repo.work, ['switch', '-q', '--detach', 'HEAD'])
+
+    const result = run(repo.work, [
+      '--mode=review',
+      '--target-ref=HEAD',
+      '--rules-only',
+    ])
+    expectVerdict(result, 'PASS', 0)
+    const target = result.json.checks.find(
+      (item) => item.id === 'authority.claude-cli-supervision',
+    )
+    assert.ok(target, 'missing check authority.claude-cli-supervision')
+    assert.equal(target.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('Claude CLI supervision: executable runtime regression suite passes', () => {
+  const result = spawnSync(
+    process.execPath,
+    [path.join(__dirname, 'claude-cli-supervisor.selftest.cjs')],
+    {
+      cwd: path.resolve(__dirname, '..'),
+      encoding: 'utf8',
+    },
+  )
+  assert.equal(result.status, 0, result.stderr || result.stdout)
+  assert.equal(
+    result.stdout.trim(),
+    `claude-cli-supervisor selftest: PASS (` +
+    `${CLAUDE_CLI_SUPERVISOR_SCENARIOS.length} scenarios; ` +
+    `manifest-sha256=${CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256})`,
+  )
+})
+
+check('Claude CLI supervision: comment-only runtime plus printed PASS fails closed', () => {
+  const repo = setupRepo()
+  try {
+    write(
+      repo.work,
+      CLAUDE_CLI_SUPERVISOR,
+      '#!/usr/bin/env node\n\n// intentionally empty supervisor\n',
+    )
+    write(
+      repo.work,
+      CLAUDE_CLI_SUPERVISOR_SELFTEST,
+      '#!/usr/bin/env node\n\nconsole.log("claude-cli-supervisor selftest: PASS (999 scenarios)")\n',
+    )
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find(
+      (item) => item.id === 'authority.claude-cli-supervision',
+    )
+    assert.ok(target, 'missing check authority.claude-cli-supervision')
+    assert.equal(target.status, 'FAIL')
+    assert.ok(
+      target.details.some((item) => /syntax|import|required export|negative probe|scenario/i.test(item)),
+      JSON.stringify(target.details),
+    )
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
 check('Claude CLI supervision: effort drift from ultracode fails closed', () => {
   const repo = setupRepo()
   try {
@@ -264,6 +483,21 @@ check('Claude CLI supervision: a missing automatic route fails closed', () => {
   }
 })
 
+check('Claude CLI supervision: missing executable supervisor fails closed', () => {
+  const repo = setupRepo()
+  try {
+    fs.rmSync(path.join(repo.work, CLAUDE_CLI_SUPERVISOR))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const checkResult = result.json.checks.find((item) => item.id === 'authority.claude-cli-supervision')
+    assert.ok(checkResult, 'missing check authority.claude-cli-supervision')
+    assert.equal(checkResult.status, 'FAIL')
+    assert.ok(checkResult.details.includes(`${CLAUDE_CLI_SUPERVISOR}: missing executable governance asset`))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
 check('behind master: develop mode fails', () => {
   const repo = setupRepo()
   try {
@@ -325,6 +559,54 @@ check('review old ref: warns, reads authority from target ref, and does not fail
     assert.equal(result.json.authority.source, repo.baseSha)
     assert.equal(result.json.authority.contractId, CONTRACT_ID)
     assert.equal(result.json.ownership.foreignDirty.length, 1)
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('review target executes its materialized supervisor runtime and selftest', () => {
+  const repo = setupRepo()
+  try {
+    const runtime = fs.readFileSync(
+      path.join(__dirname, 'claude-cli-supervisor.cjs'),
+      'utf8',
+    )
+    const selftest = fs.readFileSync(
+      path.join(__dirname, 'claude-cli-supervisor.selftest.cjs'),
+      'utf8',
+    ).replace(
+      "'use strict';",
+      "'use strict';\nthrow new Error('target-only supervisor suite damage');",
+    )
+    const harness = fs.readFileSync(
+      path.join(__dirname, 'claude-cli-supervisor.test-harness.cjs'),
+      'utf8',
+    )
+    const dependency = fs.readFileSync(SCRIPT, 'utf8')
+    write(repo.work, CLAUDE_CLI_SUPERVISOR, runtime)
+    write(repo.work, CLAUDE_CLI_SUPERVISOR_SELFTEST, selftest)
+    write(repo.work, CLAUDE_CLI_SUPERVISOR_TEST_HARNESS, harness)
+    write(repo.work, CLAUDE_CLI_SUPERVISOR_DEPENDENCY, dependency)
+    git(repo.work, [
+      'add',
+      CLAUDE_CLI_SUPERVISOR,
+      CLAUDE_CLI_SUPERVISOR_SELFTEST,
+      CLAUDE_CLI_SUPERVISOR_TEST_HARNESS,
+      CLAUDE_CLI_SUPERVISOR_DEPENDENCY,
+    ])
+    git(repo.work, ['commit', '-q', '-m', 'damage target supervisor suite'])
+    const targetSha = git(repo.work, ['rev-parse', 'HEAD'])
+    const result = run(repo.work, ['--mode=review', `--target-ref=${targetSha}`])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find(
+      (item) => item.id === 'authority.claude-cli-supervision',
+    )
+    assert.ok(target)
+    assert.equal(target.status, 'FAIL')
+    assert.ok(
+      target.details.some((item) => /materialized|suite|target-only/i.test(item)),
+      JSON.stringify(target.details),
+    )
   } finally {
     fs.rmSync(repo.tmp, { recursive: true, force: true })
   }
