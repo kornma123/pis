@@ -47,6 +47,7 @@
    ```
 
 4. 落后 base、无共同历史、detached HEAD、禁止域有改动或出现任务外 dirty 文件时，不得继续实现。先换到合格 worktree，或把边界问题交回 owner。
+5. 带脏树 reclaim 只能显式使用 `claude-task.cjs start --adopt-dirty`：逐一核验每个既有 dirty 路径 ∈ 声明 `--owned` 且 ∉ `--excluded` 后才允许建立合同；无 flag 时保持 fail-closed（树必须 clean）。通过后 state 记录 adopted 基线，后续 scope audit 据此区分合同前 adopted 改动与合同后新 drift（二者都必须始终满足 owned/excluded）。不放宽 GitHub 写授权或 `[HANDOFF]` 合同，也不提供 `handoff --keep-state` 路径。
 
 ### 只读审查模式
 

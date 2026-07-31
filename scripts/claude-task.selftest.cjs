@@ -51,6 +51,7 @@ assert.deepEqual(parseFlags(['--issue=12', '--owned=src/**', '--owned=test/**', 
   owned: ['src/**', 'test/**'],
   excluded: [],
   dryRun: true,
+  adoptDirty: false,
   issue: '12',
 });
 

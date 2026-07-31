@@ -616,6 +616,20 @@ function taskStateShapeError(state) {
       state.excluded.some((value) => typeof value !== 'string')) {
     return 'state excluded scope 非法';
   }
+  if (
+    state.adoptedDirty !== undefined &&
+    (
+      !Array.isArray(state.adoptedDirty) ||
+      state.adoptedDirty.some((value) => typeof value !== 'string' || !value)
+    )
+  ) {
+    return 'state adoptedDirty 非法';
+  }
+  for (const file of state.adoptedDirty || []) {
+    if (hasGitMetadataPathSegment(file) || matchesAny(file, state.excluded) || !matchesAny(file, state.owned)) {
+      return `state adoptedDirty 含越界路径：${file}`;
+    }
+  }
   if (!Number.isFinite(Date.parse(state.startedAt))) return 'state startedAt 非法';
   if (state.verifiedAt && !Number.isFinite(Date.parse(state.verifiedAt))) {
     return 'state verifiedAt 非法';
@@ -756,7 +770,9 @@ function writePrivateJson(file, value) {
     let directoryDescriptor;
     try {
       directoryDescriptor = fs.openSync(directory, fs.constants.O_RDONLY);
-      fs.fsyncSync(directoryDescriptor);
+      // Windows cannot FlushFileBuffers a directory handle (EPERM)；
+      // 文件级 fsync + 原子 rename 仍是持久化边界，目录 fsync 仅在非 win32 保留。
+      if (process.platform !== 'win32') fs.fsyncSync(directoryDescriptor);
     } finally {
       if (directoryDescriptor !== undefined) fs.closeSync(directoryDescriptor);
     }
@@ -781,16 +797,26 @@ function removePrivateFile(file) {
 }
 
 function parseFlags(argv) {
-  const flags = { owned: [], excluded: [], dryRun: false };
+  const flags = { owned: [], excluded: [], dryRun: false, adoptDirty: false };
   for (const arg of argv) {
     if (arg === '--dry-run') {
       flags.dryRun = true;
+      continue;
+    }
+    if (arg === '--adopt-dirty') {
+      flags.adoptDirty = true;
       continue;
     }
     const match = arg.match(/^--([^=]+)=(.*)$/s);
     if (!match) throw new Error(`参数必须使用 --key=value：${arg}`);
     const [, key, value] = match;
     if (key === 'owned' || key === 'excluded') flags[key].push(value);
+    else if (key === 'adopt-dirty') {
+      if (value !== 'true' && value !== 'false') {
+        throw new Error('--adopt-dirty 只接受 true / false 或裸开关。');
+      }
+      flags.adoptDirty = value === 'true';
+    }
     else flags[key] = value;
   }
   return flags;
@@ -1432,8 +1458,18 @@ function commandStart(argv) {
   if (inspectTaskState(root).kind === 'valid') {
     throw new Error('已有活动 task state；先完成 finish-r0 或 GitHub handoff，不能用新的 start 覆盖。');
   }
-  if (git(['status', '--short'], root).stdout) {
+  const dirtyPaths = listDirtyPaths(root);
+  if (dirtyPaths.length > 0 && !flags.adoptDirty) {
     throw new Error('task start 前工作树必须 clean，避免把合同建立前的改动并入本任务。');
+  }
+  if (flags.adoptDirty && dirtyPaths.length > 0) {
+    const adoptScope = { owned: flags.owned, excluded: flags.excluded };
+    const violations = findScopeViolations(dirtyPaths, adoptScope);
+    if (violations.length > 0) {
+      throw new Error(
+        `--adopt-dirty 拒绝：以下既有 dirty 路径不在 --owned 内或命中 --excluded：${violations.join(', ')}`,
+      );
+    }
   }
 
   git(['fetch', 'origin', '--prune'], root, { timeout: 120_000 });
@@ -1569,6 +1605,7 @@ function commandStart(argv) {
     verifiedAt: new Date().toISOString(),
     owned: flags.owned.map(toPosix),
     excluded: flags.excluded.map(toPosix),
+    adoptedDirty: flags.adoptDirty ? dirtyPaths : [],
     prd,
     mockup,
     approval,
@@ -1960,6 +1997,9 @@ function sha256(value) {
 function commandStartR0(argv) {
   const flags = parseFlags(argv);
   const root = repoRoot();
+  if (flags.adoptDirty) {
+    throw new Error('start-r0 不支持 --adopt-dirty；R0 仍要求 clean 工作树。');
+  }
   const reason = String(flags.reason || '').trim();
   if (reason.length < 6) throw new Error('--reason 必须说明本项为何属于 R0 琐碎、可逆修改。');
   if (flags.owned.length === 0) throw new Error('R0 也至少提供一个 --owned=<path/glob>。');
@@ -2169,9 +2209,8 @@ function commandRebaselineRating(argv) {
   );
 }
 
-function listChangedPaths(root, state) {
+function listDirtyPaths(root) {
   const commands = [
-    ['diff', '--no-renames', '--name-only', '-z', `${state.startedHead}..HEAD`],
     ['diff', '--no-renames', '--name-only', '-z'],
     ['diff', '--cached', '--no-renames', '--name-only', '-z'],
     ['ls-files', '--others', '--exclude-standard', '-z'],
@@ -2184,6 +2223,13 @@ function listChangedPaths(root, state) {
   return [...paths];
 }
 
+function listChangedPaths(root, state) {
+  const paths = new Set(listDirtyPaths(root));
+  const committed = git(['diff', '--no-renames', '--name-only', '-z', `${state.startedHead}..HEAD`], root);
+  for (const file of committed.stdout.split('\0').filter(Boolean)) paths.add(toPosix(file));
+  return [...paths];
+}
+
 function findScopeViolations(paths, state) {
   return paths.filter((file) =>
     hasGitMetadataPathSegment(file) ||
@@ -2191,10 +2237,20 @@ function findScopeViolations(paths, state) {
     !matchesAny(file, state.owned));
 }
 
+function findDriftViolations(paths, state) {
+  // 合同前 adopted 路径（state.adoptedDirty）在 start 时已逐一核验并记录基线；
+  // 合同后新路径按同一 owned/excluded 约束实时复检。即使 state 被篡改，
+  // adopted 路径也按同一约束复检，不能豁免越界路径。
+  return findScopeViolations(paths, state);
+}
+
 function assertOwnedChanges(root, state) {
-  const violations = findScopeViolations(listChangedPaths(root, state), state);
+  const violations = findDriftViolations(listChangedPaths(root, state), state);
   if (violations.length > 0) {
-    throw new Error(`检测到 owned/excluded 范围外改动：${violations.join(', ')}`);
+    const adopted = Array.isArray(state.adoptedDirty) && state.adoptedDirty.length > 0;
+    throw new Error(
+      `${adopted ? 'adopted 基线后新增越界 drift' : '检测到 owned/excluded 范围外改动'}：${violations.join(', ')}`,
+    );
   }
 }
 
@@ -5003,6 +5059,9 @@ function commandStop() {
 function commandHandoff(argv) {
   const flags = parseFlags(argv);
   const root = repoRoot();
+  if (Object.prototype.hasOwnProperty.call(flags, 'keep-state')) {
+    throw new Error('handoff --keep-state 不在本任务冻结方向；handoff 仍清除本地 task state。');
+  }
   const active = loadState(root);
   if (!active) throw new Error('没有活动 task state。');
   if (active.state.mode === 'r0') throw new Error('R0 使用 finish-r0，不使用 GitHub handoff。');
@@ -5042,8 +5101,8 @@ function usage() {
     '  node scripts/claude-task.cjs stop                      # hook stdin JSON',
     '  node scripts/claude-task.cjs start-r0 --reason=<trivial reversible> --owned=path [--excluded=path]',
     '  node scripts/claude-task.cjs finish-r0 --evidence=<actual target check>',
-    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=path@SHA --approval=PM_COMMENT_URL --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--ownership-exception=PM_COMMENT_URL] [--dry-run]',
-    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=N/A --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--ownership-exception=PM_COMMENT_URL] [--dry-run]  # non-PRD Issue fields must both be N/A',
+    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=path@SHA --approval=PM_COMMENT_URL --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--adopt-dirty] [--ownership-exception=PM_COMMENT_URL] [--dry-run]',
+    '  node scripts/claude-task.cjs start --issue=N --stage=implementation --owner=NAME [--claim=true] --risk=R1 --prd=N/A --mockup=path@SHA|NOT_APPLICABLE:reason --mockup-approval=PM_COMMENT_URL --owned=glob [--excluded=glob] [--adopt-dirty] [--ownership-exception=PM_COMMENT_URL] [--dry-run]  # non-PRD Issue fields must both be N/A',
     '  node scripts/claude-task.cjs shell-guard              # Bash/PowerShell PreToolUse hook stdin JSON',
     '  node scripts/claude-task.cjs github-write -- <git push|gh issue comment|gh pr create>  # holds the writer lock through the real command',
     '  node scripts/claude-task.cjs mcp-guard                # MCP PreToolUse hook stdin JSON',
@@ -5093,6 +5152,7 @@ module.exports = {
   assertShellCommandSafety,
   classifyIssueDeliveryContract,
   collectHandoffFields,
+  findDriftViolations,
   findScopeViolations,
   globToRegExp,
   handoffFieldErrors,
@@ -5101,6 +5161,7 @@ module.exports = {
   isPmApprovedStatus,
   isSafeBeforeStartShell,
   issueFormField,
+  listDirtyPaths,
   matchesAny,
   parseGitHubArtifactUrl,
   parseFlags,
