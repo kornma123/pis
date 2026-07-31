@@ -10,12 +10,51 @@ const SCRIPT = path.join(__dirname, 'agent-preflight.cjs')
 const CONTRACT = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
 const CLAUDE_CLI_SUPERVISION = 'docs/claude-code-cli-supervision.md'
-const CLAUDE_CLI_PROTOCOL_ID = 'coreone-claude-code-cli-supervision/v2'
+const CLAUDE_CLI_PROTOCOL_ID = 'coreone-claude-code-cli-supervision/v3'
 const CLAUDE_CLI_DEFAULTS = 'effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
 const CLAUDE_CLI_TERMINAL_PROOF = 'canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed'
 const CLAUDE_CLI_SUPERVISOR = 'scripts/claude-cli-supervisor.cjs'
 const CLAUDE_CLI_SUPERVISOR_SELFTEST = 'scripts/claude-cli-supervisor.selftest.cjs'
-const CLAUDE_CLI_SUPERVISOR_RUNTIME = `script=${CLAUDE_CLI_SUPERVISOR} selftest=${CLAUDE_CLI_SUPERVISOR_SELFTEST} adapter-api=1 canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN`
+const CLAUDE_CLI_SUPERVISOR_RUNTIME = `script=${CLAUDE_CLI_SUPERVISOR} selftest=${CLAUDE_CLI_SUPERVISOR_SELFTEST} adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN`
+const CLAUDE_CLI_SUPERVISOR_SCENARIOS = Object.freeze([
+  'queued terminal is not visible proof',
+  'different app terminal handle fails closed',
+  'different terminal generation fails closed',
+  'terminal create must acknowledge the task and session idempotency key',
+  'wrong cwd or worktree fails before Claude launch',
+  'missing Claude CLI fails before prompt injection',
+  'old Claude CLI version fails closed',
+  'prerelease Claude CLI does not satisfy the matching stable minimum',
+  'unsupported ultracode effort cannot silently downgrade',
+  'prompt injection must be positively acknowledged',
+  'terminal detachment stops supervision',
+  'unanswered question becomes a timed stall, never COMPLETE',
+  'authority questions are latched and cannot be auto-answered',
+  'stop requests stay latched across restart until explicit ack-stop',
+  'unstable EOF cannot pass the output gate',
+  'adapter tail hash cannot hide changing terminal readback',
+  'stable EOF without a clean structured same-session exit is abnormal',
+  'concurrent run holds one task lease and creates only one terminal',
+  'stale dead-process task lease is recovered after application restart',
+  'state CAS rejects a concurrent state mutation',
+  'application restart reuses session and handle without reinjecting prompt',
+  'application restart during EOF verification reads again without resuming Claude',
+  'COMPLETE is revalidated and becomes stale after Git facts change',
+  'COMPLETE cannot silently rebind to another Codex thread',
+  'COMPLETE rechecks terminal attachment instead of returning stale success',
+  'status command never reports persisted COMPLETE as fresh success',
+  'controller answer returns through the same proven terminal handle',
+  'executable CLI has no hidden PTY fallback without a host adapter',
+  'production CLI rejects a file adapter that fabricates visibility and completion',
+  'fact gate independently rejects foreign and excluded paths',
+  'fact gate rejects excluded paths that were added then removed in history',
+  'fact gate inspects all parents of merge commits',
+  'fact gate is bound to the initial branch and gitdir',
+  'R0 fact gate requires live matching task state',
+  'R0 fact gate does not accept an active contract as finished',
+  'R0 fact gate accepts a verified start state followed by finish-r0 removal',
+])
+const CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256 = 'c6d12401726a7a2722e5b16a2a0d878fb39897d563ed774f9055902a9fa8703c'
 const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
   'docs/工作模型-COREONE项目版-2026-06-30.md',
@@ -98,8 +137,68 @@ function installAuthorityFixture(root) {
     'Write a canary through the intended handle and read it back from the attached app terminal before launch.',
     '',
   ].join('\n'))
-  write(root, CLAUDE_CLI_SUPERVISOR, '#!/usr/bin/env node\n\nmodule.exports = { runSupervisor() {} }\n')
-  write(root, CLAUDE_CLI_SUPERVISOR_SELFTEST, '#!/usr/bin/env node\n\nconsole.log("PASS")\n')
+  write(root, CLAUDE_CLI_SUPERVISOR, `#!/usr/bin/env node
+'use strict';
+const FAILURE = { TERMINAL_VISIBILITY_UNPROVEN: 'TERMINAL_VISIBILITY_UNPROVEN' };
+function parseVersion(value) {
+  const match = String(value || '').match(/(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?/);
+  return match ? { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease: match[4] ? match[4].split('.') : [] } : null;
+}
+function compareVersions(left, right) {
+  const a = parseVersion(left);
+  const b = parseVersion(right);
+  if (!a || !b) return null;
+  for (const key of ['major', 'minor', 'patch']) {
+    if (a[key] !== b[key]) return a[key] > b[key] ? 1 : -1;
+  }
+  if (!a.prerelease.length && b.prerelease.length) return 1;
+  if (a.prerelease.length && !b.prerelease.length) return -1;
+  return 0;
+}
+async function runSupervisor(input) {
+  return { status: 'BLOCKED', reason: FAILURE.TERMINAL_VISIBILITY_UNPROVEN, taskId: input.taskId, promptInjected: false };
+}
+async function answerSupervisor() { return runSupervisor({ taskId: 'answer' }); }
+async function ackStopSupervisor() { return runSupervisor({ taskId: 'ack' }); }
+const runSupervisorForSelftest = runSupervisor;
+const answerSupervisorForSelftest = answerSupervisor;
+const ackStopSupervisorForSelftest = ackStopSupervisor;
+async function runFactGate() { return { ok: false }; }
+function readState() { return null; }
+function supervisorStateFile() { return 'state.json'; }
+function validateRequest(input) { return input; }
+module.exports = {
+  ADAPTER_API_VERSION: 2,
+  DEFAULT_EFFORT: 'ultracode',
+  DEFAULT_POLL_MS: 300000,
+  FAILURE,
+  REQUIRED_STABLE_EOF_READS: 2,
+  ackStopSupervisor,
+  ackStopSupervisorForSelftest,
+  answerSupervisor,
+  answerSupervisorForSelftest,
+  compareVersions,
+  parseVersion,
+  readState,
+  runFactGate,
+  runSupervisor,
+  runSupervisorForSelftest,
+  supervisorStateFile,
+  validateRequest,
+};
+`)
+  write(root, CLAUDE_CLI_SUPERVISOR_SELFTEST, [
+    '#!/usr/bin/env node',
+    "'use strict';",
+    'async function check() {}',
+    '(async () => {',
+    ...CLAUDE_CLI_SUPERVISOR_SCENARIOS.map(
+      (name) => `  await check('${name}', async () => {});`,
+    ),
+    `  console.log("claude-cli-supervisor selftest: PASS (${CLAUDE_CLI_SUPERVISOR_SCENARIOS.length} scenarios; manifest-sha256=${CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256})");`,
+    '})();',
+    '',
+  ].join('\n'))
   write(root, '.claude/skills/coreone/SKILL.md', [
     '---',
     'name: coreone-conventions',
@@ -212,7 +311,41 @@ check('Claude CLI supervision: executable runtime regression suite passes', () =
     },
   )
   assert.equal(result.status, 0, result.stderr || result.stdout)
-  assert.match(result.stdout, /claude-cli-supervisor selftest: PASS/)
+  assert.equal(
+    result.stdout.trim(),
+    `claude-cli-supervisor selftest: PASS (` +
+    `${CLAUDE_CLI_SUPERVISOR_SCENARIOS.length} scenarios; ` +
+    `manifest-sha256=${CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256})`,
+  )
+})
+
+check('Claude CLI supervision: comment-only runtime plus printed PASS fails closed', () => {
+  const repo = setupRepo()
+  try {
+    write(
+      repo.work,
+      CLAUDE_CLI_SUPERVISOR,
+      '#!/usr/bin/env node\n\n// intentionally empty supervisor\n',
+    )
+    write(
+      repo.work,
+      CLAUDE_CLI_SUPERVISOR_SELFTEST,
+      '#!/usr/bin/env node\n\nconsole.log("claude-cli-supervisor selftest: PASS (999 scenarios)")\n',
+    )
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find(
+      (item) => item.id === 'authority.claude-cli-supervision',
+    )
+    assert.ok(target, 'missing check authority.claude-cli-supervision')
+    assert.equal(target.status, 'FAIL')
+    assert.ok(
+      target.details.some((item) => /syntax|import|required export|negative probe|scenario/i.test(item)),
+      JSON.stringify(target.details),
+    )
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
 })
 
 check('Claude CLI supervision: effort drift from ultracode fails closed', () => {

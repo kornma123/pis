@@ -10,18 +10,41 @@
 
 const crypto = require('node:crypto')
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
+const vm = require('node:vm')
 const { execFileSync, spawnSync } = require('node:child_process')
 
 const CONTRACT_PATH = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
 const CLAUDE_CLI_SUPERVISION_PATH = 'docs/claude-code-cli-supervision.md'
-const CLAUDE_CLI_SUPERVISION_ID = 'coreone-claude-code-cli-supervision/v2'
+const CLAUDE_CLI_SUPERVISION_ID = 'coreone-claude-code-cli-supervision/v3'
 const CLAUDE_CLI_SUPERVISION_DEFAULTS = 'effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
 const CLAUDE_CLI_TERMINAL_PROOF = 'canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed'
 const CLAUDE_CLI_SUPERVISOR_PATH = 'scripts/claude-cli-supervisor.cjs'
 const CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH = 'scripts/claude-cli-supervisor.selftest.cjs'
-const CLAUDE_CLI_SUPERVISOR_RUNTIME = `script=${CLAUDE_CLI_SUPERVISOR_PATH} selftest=${CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH} adapter-api=1 canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN`
+const CLAUDE_CLI_SUPERVISOR_RUNTIME = `script=${CLAUDE_CLI_SUPERVISOR_PATH} selftest=${CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH} adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN`
+const CLAUDE_CLI_SUPERVISOR_EXPORTS = Object.freeze([
+  'ADAPTER_API_VERSION',
+  'DEFAULT_EFFORT',
+  'DEFAULT_POLL_MS',
+  'FAILURE',
+  'REQUIRED_STABLE_EOF_READS',
+  'ackStopSupervisor',
+  'ackStopSupervisorForSelftest',
+  'answerSupervisor',
+  'answerSupervisorForSelftest',
+  'compareVersions',
+  'parseVersion',
+  'readState',
+  'runFactGate',
+  'runSupervisor',
+  'runSupervisorForSelftest',
+  'supervisorStateFile',
+  'validateRequest',
+])
+const CLAUDE_CLI_SUPERVISOR_SCENARIO_COUNT = 36
+const CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256 = 'c6d12401726a7a2722e5b16a2a0d878fb39897d563ed774f9055902a9fa8703c'
 const CLAUDE_COREONE_SKILL_PATH = '.claude/skills/coreone/SKILL.md'
 const PM_DECISIONS_PATH = 'docs/PM待拍板.md'
 const ENTRYPOINTS = ['AGENTS.md', 'CLAUDE.md']
@@ -235,6 +258,123 @@ function readSource(root, relativePath, source) {
 function existsAtSource(root, relativePath, source) {
   if (source === 'working-tree') return fs.existsSync(path.join(root, relativePath))
   return tryGit(root, ['cat-file', '-e', `${source}:${relativePath}`]).ok
+}
+
+function checkJavaScriptSyntax(sourceText, filename) {
+  try {
+    const withoutShebang = String(sourceText || '').replace(/^#![^\r\n]*(?:\r?\n|$)/, '')
+    new vm.Script(withoutShebang, { filename })
+    return null
+  } catch (error) {
+    return `${filename}: syntax check failed: ${error.message}`
+  }
+}
+
+function inspectClaudeSupervisorAssets(root, source, contents) {
+  const findings = []
+  const runtimeSource = contents[CLAUDE_CLI_SUPERVISOR_PATH] || ''
+  const selftestSource = contents[CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH] || ''
+  for (const [file, text] of [
+    [CLAUDE_CLI_SUPERVISOR_PATH, runtimeSource],
+    [CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH, selftestSource],
+  ]) {
+    const syntaxFinding = checkJavaScriptSyntax(text, file)
+    if (syntaxFinding) findings.push(syntaxFinding)
+  }
+
+  const exportBlock = runtimeSource.match(/module\.exports\s*=\s*\{([\s\S]*?)\}\s*;?\s*$/)
+  for (const name of CLAUDE_CLI_SUPERVISOR_EXPORTS) {
+    if (!exportBlock || !new RegExp(`(?:^|[,\\s])${name}(?:\\s*[:,}]|\\s*,)`).test(exportBlock[1])) {
+      findings.push(`${CLAUDE_CLI_SUPERVISOR_PATH}: missing required export ${name}`)
+    }
+  }
+  const scenarioNames = [
+    ...selftestSource.matchAll(/await\s+check\(\s*'([^']+)'/g),
+  ].map((match) => match[1])
+  const scenarioSha256 = crypto
+    .createHash('sha256')
+    .update(scenarioNames.join('\0'), 'utf8')
+    .digest('hex')
+  if (
+    scenarioNames.length !== CLAUDE_CLI_SUPERVISOR_SCENARIO_COUNT ||
+    scenarioSha256 !== CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256
+  ) {
+    findings.push(
+      `${CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH}: deterministic scenario manifest drift; ` +
+      `count=${scenarioNames.length} sha256=${scenarioSha256}`,
+    )
+  }
+  if (source !== 'working-tree' || findings.length > 0) return findings
+
+  const runtimePath = path.join(root, CLAUDE_CLI_SUPERVISOR_PATH)
+  const selftestPath = path.join(root, CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH)
+  const probeDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-supervisor-preflight-'))
+  try {
+    const stateFile = path.join(probeDirectory, 'state.json')
+    const probeScript = `
+'use strict';
+(async () => {
+  const [runtimePath, stateFile, cwd] = process.argv.slice(1);
+  const runtime = require(runtimePath);
+  const required = ${JSON.stringify(CLAUDE_CLI_SUPERVISOR_EXPORTS)};
+  const missing = required.filter((name) => runtime[name] === undefined);
+  if (missing.length) throw new Error('required exports missing: ' + missing.join(','));
+  if (runtime.ADAPTER_API_VERSION !== 2) throw new Error('adapter API version is not 2');
+  if (runtime.compareVersions('2.0.0-beta.1', '2.0.0') >= 0) {
+    throw new Error('strict SemVer prerelease ordering failed');
+  }
+  const result = await runtime.runSupervisor({
+    taskId: 'preflight-negative-probe',
+    taskName: 'Preflight no adapter negative probe',
+    threadId: 'preflight-current-thread',
+    cwd,
+    prompt: 'Do not launch Claude; prove fail-closed behavior only.',
+    minimumClaudeVersion: '2.0.0',
+    owned: ['scripts/**'],
+    excluded: ['前端代码/**', '后端代码/**'],
+    risk: 'R1',
+    questionTimeoutMs: 1000
+  }, null, { stateFile, maxCycles: 1 });
+  if (result.status !== 'BLOCKED' || result.reason !== 'TERMINAL_VISIBILITY_UNPROVEN') {
+    throw new Error('real no-adapter negative probe did not fail closed: ' + JSON.stringify(result));
+  }
+})().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exit(1);
+});`
+    const probe = spawnSync(
+      process.execPath,
+      ['-e', probeScript, runtimePath, stateFile, root],
+      { cwd: root, encoding: 'utf8', timeout: 30_000 },
+    )
+    if (probe.status !== 0) {
+      findings.push(
+        `${CLAUDE_CLI_SUPERVISOR_PATH}: import/required exports/real negative probe failed: ` +
+        `${String(probe.stderr || probe.stdout || '').trim() || `exit ${probe.status}`}`,
+      )
+    }
+
+    const suite = spawnSync(process.execPath, [selftestPath], {
+      cwd: root,
+      encoding: 'utf8',
+      timeout: 60_000,
+    })
+    const expected =
+      `claude-cli-supervisor selftest: PASS (` +
+      `${CLAUDE_CLI_SUPERVISOR_SCENARIO_COUNT} scenarios; ` +
+      `manifest-sha256=${CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256})`
+    if (suite.status !== 0 || String(suite.stdout || '').trim() !== expected) {
+      findings.push(
+        `${CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH}: deterministic scenario suite failed; ` +
+        `expected count=${CLAUDE_CLI_SUPERVISOR_SCENARIO_COUNT} ` +
+        `manifest=${CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256}; ` +
+        `exit=${suite.status} stdout=${JSON.stringify(String(suite.stdout || '').trim())}`,
+      )
+    }
+  } finally {
+    fs.rmSync(probeDirectory, { recursive: true, force: true })
+  }
+  return findings
 }
 
 function sha256(text) {
@@ -2144,6 +2284,9 @@ function inspectAuthority(root, args, checks) {
   for (const file of [CLAUDE_CLI_SUPERVISOR_PATH, CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH]) {
     if (!contents[file]) supervisionFindings.push(`${file}: missing executable governance asset`)
   }
+  supervisionFindings.push(
+    ...inspectClaudeSupervisorAssets(root, source, contents),
+  )
   for (const file of [...ENTRYPOINTS, CONTRACT_PATH, CLAUDE_COREONE_SKILL_PATH]) {
     const text = contents[file] || ''
     const routes = text.split(CLAUDE_CLI_SUPERVISION_PATH).length - 1

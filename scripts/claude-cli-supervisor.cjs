@@ -18,12 +18,13 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { matchesAny } = require('./agent-preflight.cjs');
 
-const ADAPTER_API_VERSION = 1;
+const ADAPTER_API_VERSION = 2;
 const DEFAULT_EFFORT = 'ultracode';
 const DEFAULT_POLL_MS = 300_000;
 const REQUIRED_STABLE_EOF_READS = 2;
-const STATE_SCHEMA_VERSION = 1;
+const STATE_SCHEMA_VERSION = 2;
 const MAX_PROMPT_BYTES = 256 * 1024;
+const TEST_ONLY_ADAPTER_CAPABILITY = Symbol('coreone-test-only-terminal-adapter');
 
 const FAILURE = Object.freeze({
   TERMINAL_VISIBILITY_UNPROVEN: 'TERMINAL_VISIBILITY_UNPROVEN',
@@ -37,6 +38,11 @@ const FAILURE = Object.freeze({
   CLAUDE_RESUME_UNPROVEN: 'CLAUDE_RESUME_UNPROVEN',
   QUESTION_STALLED: 'QUESTION_STALLED',
   EOF_UNSTABLE: 'EOF_UNSTABLE',
+  CLAUDE_EXIT_ABNORMAL: 'CLAUDE_EXIT_ABNORMAL',
+  AUTHORITY_RECEIPT_REQUIRED: 'AUTHORITY_RECEIPT_REQUIRED',
+  SUPERVISOR_LEASE_HELD: 'SUPERVISOR_LEASE_HELD',
+  STATE_CAS_MISMATCH: 'STATE_CAS_MISMATCH',
+  STALE_COMPLETION: 'STALE_COMPLETION',
   SCOPE_VIOLATION: 'SCOPE_VIOLATION',
   R0_CONTRACT_UNPROVEN: 'R0_CONTRACT_UNPROVEN',
   STATE_BINDING_MISMATCH: 'STATE_BINDING_MISMATCH',
@@ -172,18 +178,44 @@ function validateRequest(input) {
 }
 
 function parseVersion(value) {
-  const match = String(value || '').match(/(?:^|[^0-9])(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?/);
+  const match = String(value || '').match(
+    /(?:^|[^0-9A-Za-z])v?((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)(?![0-9A-Za-z.-])/,
+  );
   if (!match) return null;
-  return match.slice(1, 4).map(Number);
+  return {
+    raw: match[1],
+    major: Number(match[2]),
+    minor: Number(match[3]),
+    patch: Number(match[4]),
+    prerelease: match[5] ? match[5].split('.') : [],
+  };
 }
 
 function compareVersions(left, right) {
   const parsedLeft = parseVersion(left);
   const parsedRight = parseVersion(right);
   if (!parsedLeft || !parsedRight) return null;
-  for (let index = 0; index < 3; index += 1) {
-    if (parsedLeft[index] > parsedRight[index]) return 1;
-    if (parsedLeft[index] < parsedRight[index]) return -1;
+  for (const key of ['major', 'minor', 'patch']) {
+    if (parsedLeft[key] > parsedRight[key]) return 1;
+    if (parsedLeft[key] < parsedRight[key]) return -1;
+  }
+  if (parsedLeft.prerelease.length === 0 && parsedRight.prerelease.length > 0) return 1;
+  if (parsedLeft.prerelease.length > 0 && parsedRight.prerelease.length === 0) return -1;
+  for (
+    let index = 0;
+    index < Math.max(parsedLeft.prerelease.length, parsedRight.prerelease.length);
+    index += 1
+  ) {
+    const leftPart = parsedLeft.prerelease[index];
+    const rightPart = parsedRight.prerelease[index];
+    if (leftPart === undefined) return -1;
+    if (rightPart === undefined) return 1;
+    if (leftPart === rightPart) continue;
+    const leftNumeric = /^\d+$/.test(leftPart);
+    const rightNumeric = /^\d+$/.test(rightPart);
+    if (leftNumeric && rightNumeric) return Number(leftPart) > Number(rightPart) ? 1 : -1;
+    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+    return leftPart > rightPart ? 1 : -1;
   }
   return 0;
 }
@@ -210,7 +242,27 @@ function assertSameHandle(expected, actual, phase) {
   }
 }
 
-function validateAdapter(adapter) {
+function assertTerminalGeneration(expected, actual, phase) {
+  const normalizedActual = validateHandle(actual, `${phase}.terminalGeneration`);
+  if (normalizedActual !== expected) {
+    throw new SupervisorFailure(
+      FAILURE.TERMINAL_HANDLE_MISMATCH,
+      `${phase} returned a different terminal generation`,
+      { expected, actual: normalizedActual, phase },
+    );
+  }
+}
+
+function assertTerminalBinding(state, result, phase) {
+  assertSameHandle(state.terminalHandle, result?.terminalHandle, phase);
+  assertTerminalGeneration(
+    state.terminalGeneration,
+    result?.terminalGeneration,
+    phase,
+  );
+}
+
+function validateAdapter(adapter, options = {}) {
   const requiredMethods = [
     'createTerminal',
     'attachTerminal',
@@ -221,6 +273,17 @@ function validateAdapter(adapter) {
     'resumeClaude',
   ];
   const missing = requiredMethods.filter((name) => typeof adapter?.[name] !== 'function');
+  if (options.adapterCapability !== TEST_ONLY_ADAPTER_CAPABILITY) {
+    throw new SupervisorFailure(
+      FAILURE.TERMINAL_VISIBILITY_UNPROVEN,
+      'no native Codex Desktop terminal capability verifier is integrated',
+      {
+        requiredTrust: 'host-native-unforgeable-capability',
+        adapterFileAccepted: false,
+        currentBridgeIntegrated: false,
+      },
+    );
+  }
   if (
     !adapter ||
     adapter.apiVersion !== ADAPTER_API_VERSION ||
@@ -276,22 +339,41 @@ function writeState(file, state) {
       'refusing to replace symlinked supervisor state',
     );
   }
+  const expectedRevision = Number(state.stateRevision || 0);
+  const current = fs.existsSync(file) ? readState(file) : null;
+  const currentRevision = Number(current?.stateRevision || 0);
+  if (
+    (current && currentRevision !== expectedRevision) ||
+    (!current && expectedRevision !== 0)
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_CAS_MISMATCH,
+      'supervisor state changed while this controller was running',
+      { expectedRevision, currentRevision: current ? currentRevision : null },
+    );
+  }
+  const nextState = {
+    ...state,
+    stateRevision: expectedRevision + 1,
+  };
   const temporary = path.join(
     directory,
     `.${path.basename(file)}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`,
   );
-  fs.writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, {
+  fs.writeFileSync(temporary, `${JSON.stringify(nextState, null, 2)}\n`, {
     encoding: 'utf8',
     flag: 'wx',
     mode: 0o600,
   });
   fs.renameSync(temporary, file);
+  state.stateRevision = nextState.stateRevision;
 }
 
 function stateBinding(request) {
   return {
     taskId: request.taskId,
     taskName: request.taskName,
+    threadId: request.threadId,
     cwd: request.cwd,
     promptSha256: sha256(request.prompt),
     minimumClaudeVersion: request.minimumClaudeVersion,
@@ -309,10 +391,14 @@ function createState(request, options) {
   const binding = stateBinding(request);
   return {
     schemaVersion: STATE_SCHEMA_VERSION,
+    stateRevision: 0,
     ...binding,
-    threadId: request.threadId,
     sessionId,
     sessionName: `${request.taskName.slice(0, 120)} [${request.taskId}:${sessionId.slice(0, 8)}]`,
+    terminalGeneration: validateHandle(
+      String((options.randomUUID || crypto.randomUUID)()),
+      'terminalGeneration',
+    ),
     terminalHandle: null,
     status: 'STARTING',
     blockedReason: null,
@@ -324,7 +410,14 @@ function createState(request, options) {
     stableEofReads: 0,
     lastTailSha256: null,
     pendingQuestion: null,
-    initialHead: captureInitialHead(request.cwd),
+    stopRequest: null,
+    authorityReceipts: [],
+    initialHead: null,
+    initialBranch: null,
+    initialGitDir: null,
+    initialTree: null,
+    initialR0Evidence: null,
+    completionSnapshot: null,
     createdAtMs: options.clock(),
     updatedAtMs: options.clock(),
   };
@@ -336,6 +429,7 @@ function validateStateBinding(state, request) {
   for (const key of [
     'taskId',
     'taskName',
+    'threadId',
     'cwd',
     'promptSha256',
     'minimumClaudeVersion',
@@ -354,14 +448,37 @@ function validateStateBinding(state, request) {
   }
 }
 
-function captureInitialHead(cwd) {
-  const result = spawnSync('git', ['rev-parse', 'HEAD'], {
-    cwd,
-    encoding: 'utf8',
-  });
-  return result.status === 0 && /^[0-9a-f]{40}$/i.test(result.stdout.trim())
-    ? result.stdout.trim()
-    : null;
+function captureInitialGitState(cwd) {
+  const values = {};
+  for (const [key, args] of [
+    ['head', ['rev-parse', 'HEAD']],
+    ['branch', ['branch', '--show-current']],
+    ['gitDir', ['rev-parse', '--absolute-git-dir']],
+    ['tree', ['rev-parse', 'HEAD^{tree}']],
+  ]) {
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    if (result.status !== 0 || !String(result.stdout || '').trim()) {
+      throw new SupervisorFailure(
+        FAILURE.FACT_GATE_FAILED,
+        `could not capture initial Git ${key}`,
+        { stderr: String(result.stderr || '').trim() },
+      );
+    }
+    values[key] = result.stdout.trim();
+  }
+  values.gitDir = canonicalPath(values.gitDir);
+  if (
+    !/^[0-9a-f]{40}$/i.test(values.head) ||
+    !/^[0-9a-f]{40}$/i.test(values.tree) ||
+    !values.branch
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.FACT_GATE_FAILED,
+      'initial Git state is incomplete or detached',
+      values,
+    );
+  }
+  return values;
 }
 
 function persist(stateFile, state, clock) {
@@ -378,6 +495,7 @@ function publicResult(state, overrides = {}) {
     sessionId: state.sessionId,
     sessionName: state.sessionName,
     terminalHandle: state.terminalHandle,
+    terminalGeneration: state.terminalGeneration,
     cwd: state.cwd,
     promptInjected: state.promptInjected,
     cursor: state.cursor,
@@ -389,6 +507,12 @@ function publicResult(state, overrides = {}) {
           textSha256: state.pendingQuestion.textSha256,
           requiresAuthority: state.pendingQuestion.requiresAuthority,
           firstSeenAtMs: state.pendingQuestion.firstSeenAtMs,
+        }
+      : null,
+    stopRequest: state.stopRequest
+      ? {
+          id: state.stopRequest.id,
+          firstSeenAtMs: state.stopRequest.firstSeenAtMs,
         }
       : null,
     probe: state.probe,
@@ -411,30 +535,42 @@ function block(stateFile, state, failure, clock) {
 
 async function proveTerminalVisibility(adapter, request, state, options) {
   const existingHandle = state.terminalHandle;
+  const idempotencyKey = sha256(
+    `${request.taskId}\0${state.sessionId}\0${state.terminalGeneration}\0terminal`,
+  );
   const attachResult = existingHandle
     ? await adapter.attachTerminal({
         threadId: request.threadId,
         terminalHandle: existingHandle,
+        terminalGeneration: state.terminalGeneration,
         cwd: request.cwd,
+        taskId: request.taskId,
+        sessionId: state.sessionId,
+        idempotencyKey,
       })
     : await adapter.createTerminal({
         threadId: request.threadId,
         cwd: request.cwd,
         taskId: request.taskId,
         taskName: request.taskName,
+        sessionId: state.sessionId,
+        terminalGeneration: state.terminalGeneration,
+        idempotencyKey,
       });
 
   if (
     !attachResult ||
     attachResult.status !== 'attached' ||
-    attachResult.visible !== true
+    attachResult.visible !== true ||
+    attachResult.idempotencyKey !== idempotencyKey
   ) {
     throw new SupervisorFailure(
       FAILURE.TERMINAL_VISIBILITY_UNPROVEN,
-      'terminal was not synchronously attached and visible in the current Codex task',
+      'terminal was not synchronously and idempotently attached in the current Codex task',
       {
         status: attachResult?.status ?? null,
         visible: attachResult?.visible === true,
+        idempotencyAcknowledged: attachResult?.idempotencyKey === idempotencyKey,
         returnedHandle: attachResult?.terminalHandle ?? null,
       },
     );
@@ -442,19 +578,35 @@ async function proveTerminalVisibility(adapter, request, state, options) {
 
   const terminalHandle = validateHandle(attachResult.terminalHandle);
   if (existingHandle) assertSameHandle(existingHandle, terminalHandle, 'attachTerminal');
+  assertTerminalGeneration(
+    state.terminalGeneration,
+    attachResult.terminalGeneration,
+    existingHandle ? 'attachTerminal' : 'createTerminal',
+  );
+  if (attachResult.threadId !== request.threadId) {
+    throw new SupervisorFailure(
+      FAILURE.TERMINAL_VISIBILITY_UNPROVEN,
+      'terminal attachment is not bound to the current Codex thread',
+      {
+        expectedThreadId: request.threadId,
+        actualThreadId: attachResult.threadId ?? null,
+      },
+    );
+  }
   state.terminalHandle = terminalHandle;
-  state.threadId = request.threadId;
 
   const canary = `COREONE_TERMINAL_PROBE_${String(
     (options.randomUUID || crypto.randomUUID)(),
   ).replace(/[^A-Za-z0-9]/g, '_')}`;
   const writeResult = await adapter.writeTerminal({
     terminalHandle,
+    terminalGeneration: state.terminalGeneration,
+    threadId: request.threadId,
     input: canary,
     purpose: 'visibility-proof',
     delivery: 'out-of-band-marker',
   });
-  assertSameHandle(terminalHandle, writeResult?.terminalHandle, 'writeTerminal');
+  assertTerminalBinding(state, writeResult, 'writeTerminal');
   if (writeResult?.accepted !== true) {
     throw new SupervisorFailure(
       FAILURE.TERMINAL_VISIBILITY_UNPROVEN,
@@ -465,15 +617,17 @@ async function proveTerminalVisibility(adapter, request, state, options) {
   const readResult = await adapter.readTerminal({
     threadId: request.threadId,
     terminalHandle,
+    terminalGeneration: state.terminalGeneration,
     cursor: state.cursor,
     purpose: 'visibility-proof',
     canary,
     maxWaitMs: Math.min(DEFAULT_POLL_MS, 30_000),
   });
-  assertSameHandle(terminalHandle, readResult?.terminalHandle, 'readTerminal');
+  assertTerminalBinding(state, readResult, 'readTerminal');
   if (
     readResult?.attached !== true ||
     readResult?.visible !== true ||
+    readResult?.threadId !== request.threadId ||
     !String(readResult?.output || '').includes(canary)
   ) {
     throw new SupervisorFailure(
@@ -482,6 +636,7 @@ async function proveTerminalVisibility(adapter, request, state, options) {
       {
         attached: readResult?.attached === true,
         visible: readResult?.visible === true,
+        threadId: readResult?.threadId ?? null,
         canaryObserved: String(readResult?.output || '').includes(canary),
       },
     );
@@ -489,6 +644,7 @@ async function proveTerminalVisibility(adapter, request, state, options) {
   state.cursor = readResult.cursor ?? state.cursor;
   state.terminalProof = {
     terminalHandle,
+    terminalGeneration: state.terminalGeneration,
     canarySha256: sha256(canary),
     verifiedAtMs: options.clock(),
   };
@@ -497,6 +653,10 @@ async function proveTerminalVisibility(adapter, request, state, options) {
 async function probeClaude(adapter, request, state) {
   const probe = await adapter.probeTerminal({
     terminalHandle: state.terminalHandle,
+    terminalGeneration: state.terminalGeneration,
+    threadId: request.threadId,
+    taskId: request.taskId,
+    sessionId: state.sessionId,
     cwd: request.cwd,
     effort: DEFAULT_EFFORT,
     resume: state.started,
@@ -508,7 +668,7 @@ async function probeClaude(adapter, request, state) {
       `claude --effort ${DEFAULT_EFFORT} --version`,
     ],
   });
-  assertSameHandle(state.terminalHandle, probe?.terminalHandle, 'probeTerminal');
+  assertTerminalBinding(state, probe, 'probeTerminal');
   const expectedCwd = canonicalPath(request.cwd);
   const actualCwd = probe?.cwd ? canonicalPath(probe.cwd) : null;
   const actualWorktree = probe?.worktreeRoot ? canonicalPath(probe.worktreeRoot) : null;
@@ -563,19 +723,27 @@ async function probeClaude(adapter, request, state) {
 }
 
 async function launchOrResume(adapter, request, state) {
+  const idempotencyKey = sha256(
+    `${request.taskId}\0${state.sessionId}\0${state.terminalGeneration}\0claude`,
+  );
   if (state.started) {
     const result = await adapter.resumeClaude({
       terminalHandle: state.terminalHandle,
+      terminalGeneration: state.terminalGeneration,
+      threadId: request.threadId,
+      taskId: request.taskId,
       cwd: request.cwd,
       sessionId: state.sessionId,
       sessionName: state.sessionName,
       effort: DEFAULT_EFFORT,
+      idempotencyKey,
     });
-    assertSameHandle(state.terminalHandle, result?.terminalHandle, 'resumeClaude');
+    assertTerminalBinding(state, result, 'resumeClaude');
     if (
       (result?.resumed !== true && result?.alreadyRunning !== true) ||
       result?.sessionId !== state.sessionId ||
-      result?.actualEffort !== DEFAULT_EFFORT
+      result?.actualEffort !== DEFAULT_EFFORT ||
+      result?.idempotencyKey !== idempotencyKey
     ) {
       throw new SupervisorFailure(
         FAILURE.CLAUDE_RESUME_UNPROVEN,
@@ -588,18 +756,23 @@ async function launchOrResume(adapter, request, state) {
   const promptSha256 = sha256(request.prompt);
   const result = await adapter.launchClaude({
     terminalHandle: state.terminalHandle,
+    terminalGeneration: state.terminalGeneration,
+    threadId: request.threadId,
+    taskId: request.taskId,
     cwd: request.cwd,
     sessionId: state.sessionId,
     sessionName: state.sessionName,
     effort: DEFAULT_EFFORT,
     prompt: request.prompt,
     promptSha256,
+    idempotencyKey,
   });
-  assertSameHandle(state.terminalHandle, result?.terminalHandle, 'launchClaude');
+  assertTerminalBinding(state, result, 'launchClaude');
   if (
     result?.started !== true ||
     result?.sessionId !== state.sessionId ||
-    result?.actualEffort !== DEFAULT_EFFORT
+    result?.actualEffort !== DEFAULT_EFFORT ||
+    result?.idempotencyKey !== idempotencyKey
   ) {
     throw new SupervisorFailure(
       FAILURE.PROMPT_INJECTION_UNPROVEN,
@@ -665,6 +838,11 @@ async function handleQuestion(adapter, request, state, question, options) {
     state.blockedReason = 'QUESTION_RESPONSE_REQUIRED';
     return publicResult(state, { question: normalized });
   }
+  if (normalized.requiresAuthority) {
+    state.status = 'WAITING_CONTROLLER';
+    state.blockedReason = 'QUESTION_RESPONSE_REQUIRED';
+    return publicResult(state, { question: normalized });
+  }
 
   const decision = await options.onQuestion({
     taskId: state.taskId,
@@ -680,11 +858,13 @@ async function handleQuestion(adapter, request, state, question, options) {
   const answer = String(decision.text).trim();
   const writeResult = await adapter.writeTerminal({
     terminalHandle: state.terminalHandle,
+    terminalGeneration: state.terminalGeneration,
+    threadId: request.threadId,
     input: `${answer}\n`,
     purpose: 'controller-answer',
     questionId: normalized.id,
   });
-  assertSameHandle(state.terminalHandle, writeResult?.terminalHandle, 'writeTerminal');
+  assertTerminalBinding(state, writeResult, 'writeTerminal');
   if (writeResult?.accepted !== true) {
     throw new SupervisorFailure(
       FAILURE.TERMINAL_DETACHED,
@@ -720,6 +900,7 @@ function git(cwd, args) {
   const result = spawnSync('git', args, {
     cwd,
     encoding: 'utf8',
+    maxBuffer: 128 * 1024 * 1024,
   });
   if (result.status !== 0) {
     throw new SupervisorFailure(
@@ -746,6 +927,71 @@ function readR0State(cwd) {
   }
 }
 
+function r0EvidenceForRequest(cwd, request) {
+  if (request.risk !== 'R0') return null;
+  const taskState = readR0State(cwd);
+  const branch = git(cwd, ['branch', '--show-current']).trim();
+  const exactScope =
+    taskState &&
+    sameStringArray(taskState.owned, request.owned || []) &&
+    sameStringArray(taskState.excluded, request.excluded || []);
+  if (
+    !taskState ||
+    taskState.mode !== 'r0' ||
+    taskState.stage !== 'r0' ||
+    taskState.risk !== 'R0' ||
+    taskState.branch !== branch ||
+    !exactScope
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.R0_CONTRACT_UNPROVEN,
+      'R0 supervisor start requires a live matching R0 task contract',
+      { statePresent: Boolean(taskState), branch, exactScope },
+    );
+  }
+  return {
+    contractSha256: sha256(JSON.stringify(taskState)),
+    state: taskState,
+    verifiedBeforeFinish: true,
+  };
+}
+
+function historyChangedPaths(cwd, initialHead, currentHead) {
+  if (!initialHead || initialHead === currentHead) return [];
+  const commits = git(
+    cwd,
+    ['rev-list', '--reverse', '--topo-order', `${initialHead}..${currentHead}`],
+  ).trim().split('\n').filter(Boolean);
+  const paths = [];
+  for (const commit of commits) {
+    const record = git(cwd, ['rev-list', '--parents', '-n', '1', commit])
+      .trim()
+      .split(/\s+/);
+    for (const parent of record.slice(1)) {
+      const delta = git(
+        cwd,
+        [
+          'diff-tree',
+          '--no-commit-id',
+          '--name-only',
+          '--no-renames',
+          '-r',
+          '-z',
+          parent,
+          commit,
+        ],
+      );
+      paths.push(
+        ...delta
+          .split('\0')
+          .filter(Boolean)
+          .map(normalizePath),
+      );
+    }
+  }
+  return [...new Set(paths)].sort();
+}
+
 async function runFactGate(input) {
   const cwd = canonicalPath(input.cwd);
   try {
@@ -767,7 +1013,30 @@ async function runFactGate(input) {
         details: { message: 'detached HEAD at completion' },
       };
     }
+    const currentGitDir = canonicalPath(
+      git(cwd, ['rev-parse', '--absolute-git-dir']).trim(),
+    );
+    if (
+      (input.initialBranch && branch !== input.initialBranch) ||
+      (input.initialGitDir && currentGitDir !== canonicalPath(input.initialGitDir))
+    ) {
+      return {
+        ok: false,
+        reason: FAILURE.FACT_GATE_FAILED,
+        checks: ['git-root'],
+        details: {
+          message: 'branch or per-worktree gitdir changed during supervision',
+          expectedBranch: input.initialBranch || null,
+          actualBranch: branch,
+          expectedGitDir: input.initialGitDir
+            ? canonicalPath(input.initialGitDir)
+            : null,
+          actualGitDir: currentGitDir,
+        },
+      };
+    }
     const currentHead = git(cwd, ['rev-parse', 'HEAD']).trim();
+    const currentTree = git(cwd, ['rev-parse', 'HEAD^{tree}']).trim();
     if (input.initialHead) {
       const ancestry = spawnSync(
         'git',
@@ -788,14 +1057,13 @@ async function runFactGate(input) {
       }
     }
 
-    const statusPaths = parseStatusPaths(
-      git(cwd, ['status', '--porcelain=v1', '-z', '--untracked-files=all']),
+    const statusOutput = git(
+      cwd,
+      ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
     );
+    const statusPaths = [...new Set(parseStatusPaths(statusOutput))].sort();
     const committedPaths = input.initialHead
-      ? git(cwd, ['diff', '--name-only', '-z', `${input.initialHead}..HEAD`])
-          .split('\0')
-          .filter(Boolean)
-          .map(normalizePath)
+      ? historyChangedPaths(cwd, input.initialHead, currentHead)
       : [];
     const changedPaths = [...new Set([...statusPaths, ...committedPaths])].sort();
     const excluded = changedPaths.filter((file) => matchesAny(file, input.excluded || []));
@@ -815,16 +1083,22 @@ async function runFactGate(input) {
 
     if (input.risk === 'R0') {
       const taskState = readR0State(cwd);
+      const evidence = input.initialR0Evidence;
+      const evidenceState = evidence?.state;
+      const evidenceHashMatches =
+        evidence?.verifiedBeforeFinish === true &&
+        /^[0-9a-f]{64}$/i.test(String(evidence?.contractSha256 || '')) &&
+        evidence.contractSha256 === sha256(JSON.stringify(evidenceState));
       const exactScope =
-        taskState &&
-        sameStringArray(taskState.owned, input.owned || []) &&
-        sameStringArray(taskState.excluded, input.excluded || []);
+        evidenceState &&
+        sameStringArray(evidenceState.owned, input.owned || []) &&
+        sameStringArray(evidenceState.excluded, input.excluded || []);
       if (
-        !taskState ||
-        taskState.mode !== 'r0' ||
-        taskState.stage !== 'r0' ||
-        taskState.risk !== 'R0' ||
-        taskState.branch !== branch ||
+        !evidenceHashMatches ||
+        evidenceState.mode !== 'r0' ||
+        evidenceState.stage !== 'r0' ||
+        evidenceState.risk !== 'R0' ||
+        evidenceState.branch !== branch ||
         !exactScope
       ) {
         return {
@@ -833,18 +1107,72 @@ async function runFactGate(input) {
           checks: ['git-root', 'branch', 'ancestry', 'scope'],
           details: {
             statePresent: Boolean(taskState),
+            evidenceHashMatches,
             exactScope,
+            branch,
+          },
+        };
+      }
+      if (taskState) {
+        return {
+          ok: false,
+          reason: FAILURE.R0_CONTRACT_UNPROVEN,
+          checks: ['git-root', 'branch', 'ancestry', 'scope'],
+          details: {
+            message: 'R0 task state is still active; finish-r0 evidence is missing',
+            statePresent: true,
             branch,
           },
         };
       }
     }
 
+    const trackedWorktreeDiffSha256 = sha256(
+      git(cwd, ['diff', '--binary', '--no-ext-diff', '--no-renames', '--']),
+    );
+    const indexDiffSha256 = sha256(
+      git(cwd, ['diff', '--cached', '--binary', '--no-ext-diff', '--no-renames', '--']),
+    );
+    const untrackedPaths = git(
+      cwd,
+      ['ls-files', '--others', '--exclude-standard', '-z'],
+    )
+      .split('\0')
+      .filter(Boolean)
+      .map(normalizePath)
+      .sort();
+    const untrackedBlobs = untrackedPaths.map((file) => [
+      file,
+      git(cwd, ['hash-object', '--no-filters', '--', file]).trim(),
+    ]);
+    const statusSha256 = sha256(statusOutput);
+    const worktreeContentSha256 = sha256(JSON.stringify({
+      trackedWorktreeDiffSha256,
+      indexDiffSha256,
+      untrackedBlobs,
+    }));
     return {
       ok: true,
       reason: null,
-      checks: ['git-root', 'branch', 'ancestry', 'scope', 'r0'],
-      details: { branch, currentHead, changedPaths },
+      checks: ['git-root', 'gitdir', 'branch', 'ancestry', 'history-scope', 'status-scope', 'r0'],
+      details: {
+        branch,
+        gitDir: currentGitDir,
+        currentHead,
+        currentTree,
+        statusPaths,
+        statusSha256,
+        worktreeContentSha256,
+        historyPaths: committedPaths,
+        changedPaths,
+        changedPathsSha256: sha256(JSON.stringify(changedPaths)),
+        ...(input.risk === 'R0'
+          ? {
+              r0Transition: 'finished',
+              r0EvidenceSha256: input.initialR0Evidence.contractSha256,
+            }
+          : {}),
+      },
     };
   } catch (error) {
     return {
@@ -859,13 +1187,179 @@ async function runFactGate(input) {
   }
 }
 
-async function runSupervisor(input, adapterInput, optionOverrides = {}) {
+function assertCleanSessionExit(read, state) {
+  const session = read?.session;
+  if (
+    !session ||
+    session.sessionId !== state.sessionId ||
+    session.status !== 'exited' ||
+    session.exitCode !== 0 ||
+    session.signal !== null ||
+    session.pendingQuestion !== false ||
+    session.runningTool !== false ||
+    read.runningTool === true ||
+    state.pendingQuestion ||
+    state.stopRequest
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.CLAUDE_EXIT_ABNORMAL,
+      'EOF lacks a clean structured exit for the supervised Claude session',
+      {
+        expectedSessionId: state.sessionId,
+        session: session || null,
+        pendingQuestion: Boolean(state.pendingQuestion),
+        stopRequested: Boolean(state.stopRequest),
+      },
+    );
+  }
+}
+
+function completionSnapshot(factGate, readbackSha256) {
+  const details = factGate?.details || {};
+  return {
+    branch: details.branch || null,
+    gitDir: details.gitDir || null,
+    head: details.currentHead || null,
+    tree: details.currentTree || null,
+    statusSha256: details.statusSha256 || null,
+    worktreeContentSha256: details.worktreeContentSha256 || null,
+    changedPathsSha256: details.changedPathsSha256 || null,
+    readbackSha256,
+  };
+}
+
+function sameCompletionSnapshot(left, right) {
+  if (!left || !right) return false;
+  return [
+    'branch',
+    'gitDir',
+    'head',
+    'tree',
+    'statusSha256',
+    'worktreeContentSha256',
+    'changedPathsSha256',
+  ].every((key) => left[key] === right[key]);
+}
+
+function factGateInput(request, state) {
+  return {
+    cwd: request.cwd,
+    initialHead: state.initialHead,
+    initialBranch: state.initialBranch,
+    initialGitDir: state.initialGitDir,
+    initialR0Evidence: state.initialR0Evidence,
+    owned: request.owned,
+    excluded: request.excluded,
+    risk: request.risk,
+  };
+}
+
+function acquireLease(stateFile, request, clock) {
+  if (!stateFile) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'a Git-external state file is required for task-exclusive supervision',
+    );
+  }
+  const leasePath = `${stateFile}.lease`;
+  fs.mkdirSync(path.dirname(leasePath), { recursive: true, mode: 0o700 });
+  let acquired = false;
+  for (let attempt = 0; attempt < 2 && !acquired; attempt += 1) {
+    try {
+      fs.mkdirSync(leasePath, { mode: 0o700 });
+      acquired = true;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      const ownerFile = path.join(leasePath, 'owner.json');
+      let owner;
+      try {
+        owner = JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
+      } catch {
+        return null;
+      }
+      const ownerPid = Number(owner?.pid);
+      if (!Number.isInteger(ownerPid) || ownerPid < 1) return null;
+      try {
+        process.kill(ownerPid, 0);
+        return null;
+      } catch (probeError) {
+        if (probeError.code !== 'ESRCH') return null;
+      }
+      try {
+        fs.unlinkSync(ownerFile);
+        fs.rmdirSync(leasePath);
+      } catch {
+        return null;
+      }
+    }
+  }
+  if (!acquired) return null;
+  const ownerFile = path.join(leasePath, 'owner.json');
+  fs.writeFileSync(
+    ownerFile,
+    `${JSON.stringify({
+      pid: process.pid,
+      taskId: request.taskId,
+      threadId: request.threadId,
+      acquiredAtMs: clock(),
+    })}\n`,
+    { encoding: 'utf8', flag: 'wx', mode: 0o600 },
+  );
+  return {
+    release() {
+      try {
+        fs.unlinkSync(ownerFile);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      try {
+        fs.rmdirSync(leasePath);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    },
+  };
+}
+
+function leaseBlockedResult(input, stateFile) {
+  let state = null;
+  try {
+    state = readState(stateFile);
+  } catch {
+    // A held lease means this controller must not repair or overwrite state.
+  }
+  return {
+    status: 'BLOCKED',
+    reason: FAILURE.SUPERVISOR_LEASE_HELD,
+    taskId: state?.taskId || String(input?.taskId || 'unknown'),
+    threadId: state?.threadId || String(input?.threadId || 'unknown'),
+    sessionId: state?.sessionId || null,
+    sessionName: state?.sessionName || null,
+    terminalHandle: state?.terminalHandle || null,
+    terminalGeneration: state?.terminalGeneration || null,
+    cwd: state?.cwd || canonicalPath(input?.cwd || process.cwd()),
+    promptInjected: state?.promptInjected === true,
+    cursor: state?.cursor || null,
+    stableEofReads: Number(state?.stableEofReads || 0),
+    pendingQuestion: state?.pendingQuestion || null,
+    stopRequest: state?.stopRequest || null,
+    probe: state?.probe || null,
+    factGate: state?.factGate || null,
+    failure: {
+      message: 'another controller holds the task-exclusive supervisor lease',
+      details: {},
+    },
+  };
+}
+
+async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) {
   const options = {
     stateFile: null,
     maxCycles: Number.POSITIVE_INFINITY,
     clock: () => Date.now(),
     randomUUID: crypto.randomUUID,
     factGate: runFactGate,
+    captureInitialGitState,
     onQuestion: null,
     ...optionOverrides,
   };
@@ -876,20 +1370,92 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
     state = readState(options.stateFile);
     if (state) {
       validateStateBinding(state, request);
-      if (state.status === 'COMPLETE') return publicResult(state);
     } else {
       state = createState(request, options);
+      const initialGit = options.captureInitialGitState(request.cwd);
+      state.initialHead = initialGit.head;
+      state.initialBranch = initialGit.branch;
+      state.initialGitDir = initialGit.gitDir;
+      state.initialTree = initialGit.tree;
+      state.initialR0Evidence = r0EvidenceForRequest(request.cwd, request);
       persist(options.stateFile, state, options.clock);
     }
-    const adapter = validateAdapter(adapterInput);
+    const adapter = validateAdapter(adapterInput, options);
 
+    if (state.status === 'STOPPED') {
+      await proveTerminalVisibility(adapter, request, state, options);
+      await probeClaude(adapter, request, state);
+      persist(options.stateFile, state, options.clock);
+      return publicResult(state);
+    }
+    if (state.status === 'COMPLETE') {
+      await proveTerminalVisibility(adapter, request, state, options);
+      await probeClaude(adapter, request, state);
+      const freshFactGate = await options.factGate(factGateInput(request, state));
+      if (!freshFactGate?.ok) {
+        throw new SupervisorFailure(
+          FAILURE.STALE_COMPLETION,
+          'completed supervision no longer passes the current fact gate',
+          freshFactGate?.details || {},
+        );
+      }
+      const freshSnapshot = completionSnapshot(
+        freshFactGate,
+        state.completionSnapshot?.readbackSha256 || null,
+      );
+      if (!sameCompletionSnapshot(state.completionSnapshot, freshSnapshot)) {
+        throw new SupervisorFailure(
+          FAILURE.STALE_COMPLETION,
+          'completed supervision facts changed after completion',
+          {
+            previous: state.completionSnapshot,
+            current: freshSnapshot,
+          },
+        );
+      }
+      state.factGate = freshFactGate;
+      persist(options.stateFile, state, options.clock);
+      return publicResult(state);
+    }
+
+    const awaitingSecondEofRead =
+      state.status === 'VERIFYING' &&
+      state.started === true &&
+      state.stableEofReads > 0 &&
+      state.stableEofReads < REQUIRED_STABLE_EOF_READS;
     state.status = 'STARTING';
     state.blockedReason = null;
     state.failure = null;
     await proveTerminalVisibility(adapter, request, state, options);
     await probeClaude(adapter, request, state);
-    await launchOrResume(adapter, request, state);
-    state.status = 'ACTIVE';
+    if (state.stopRequest) {
+      state.status = 'WAITING_CONTROLLER';
+      state.blockedReason = 'CLAUDE_STOP_REQUESTED';
+      persist(options.stateFile, state, options.clock);
+      return publicResult(state);
+    }
+    if (state.pendingQuestion) {
+      const waitedMs = options.clock() - state.pendingQuestion.firstSeenAtMs;
+      if (waitedMs >= request.questionTimeoutMs) {
+        throw new SupervisorFailure(
+          FAILURE.QUESTION_STALLED,
+          'Claude question remained unanswered past the supervision deadline',
+          {
+            questionId: state.pendingQuestion.id,
+            kind: state.pendingQuestion.kind,
+            waitedMs,
+          },
+        );
+      }
+      state.status = 'WAITING_CONTROLLER';
+      state.blockedReason = 'QUESTION_RESPONSE_REQUIRED';
+      persist(options.stateFile, state, options.clock);
+      return publicResult(state);
+    }
+    if (!awaitingSecondEofRead) {
+      await launchOrResume(adapter, request, state);
+    }
+    state.status = awaitingSecondEofRead ? 'VERIFYING' : 'ACTIVE';
     state.blockedReason = null;
     persist(options.stateFile, state, options.clock);
 
@@ -899,12 +1465,17 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
       const read = await adapter.readTerminal({
         threadId: request.threadId,
         terminalHandle: state.terminalHandle,
+        terminalGeneration: state.terminalGeneration,
         cursor: state.cursor,
         purpose: 'supervision-output',
         maxWaitMs: DEFAULT_POLL_MS,
       });
-      assertSameHandle(state.terminalHandle, read?.terminalHandle, 'readTerminal');
-      if (read?.attached !== true || read?.visible !== true) {
+      assertTerminalBinding(state, read, 'readTerminal');
+      if (
+        read?.attached !== true ||
+        read?.visible !== true ||
+        read?.threadId !== request.threadId
+      ) {
         throw new SupervisorFailure(
           FAILURE.TERMINAL_DETACHED,
           'the supervised terminal is no longer attached and visible',
@@ -924,8 +1495,13 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
         return questionResult;
       }
       if (read.question) persist(options.stateFile, state, options.clock);
-      if (!read.question && state.pendingQuestion) state.pendingQuestion = null;
       if (read.stopRequested === true) {
+        state.stopRequest = {
+          id: String(read.stopId || sha256(
+            `${state.sessionId}\0${read.cursor || ''}\0${options.clock()}`,
+          ).slice(0, 24)),
+          firstSeenAtMs: state.stopRequest?.firstSeenAtMs || options.clock(),
+        };
         state.status = 'WAITING_CONTROLLER';
         state.blockedReason = 'CLAUDE_STOP_REQUESTED';
         persist(options.stateFile, state, options.clock);
@@ -937,7 +1513,8 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
         read.running !== true &&
         read.runningTool !== true
       ) {
-        const tailHash = read.tailSha256 || sha256(read.tail ?? read.output ?? '');
+        assertCleanSessionExit(read, state);
+        const tailHash = sha256(String(read.tail ?? read.output ?? ''));
         if (tailHash === state.lastTailSha256) state.stableEofReads += 1;
         else {
           state.lastTailSha256 = tailHash;
@@ -946,13 +1523,7 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
         state.status = 'VERIFYING';
         persist(options.stateFile, state, options.clock);
         if (state.stableEofReads >= REQUIRED_STABLE_EOF_READS) {
-          const factGate = await options.factGate({
-            cwd: request.cwd,
-            initialHead: state.initialHead,
-            owned: request.owned,
-            excluded: request.excluded,
-            risk: request.risk,
-          });
+          const factGate = await options.factGate(factGateInput(request, state));
           state.factGate = factGate;
           if (!factGate?.ok) {
             throw new SupervisorFailure(
@@ -963,6 +1534,7 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
           }
           state.status = 'COMPLETE';
           state.blockedReason = null;
+          state.completionSnapshot = completionSnapshot(factGate, tailHash);
           persist(options.stateFile, state, options.clock);
           return publicResult(state);
         }
@@ -1006,10 +1578,11 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
       };
       state = {
         schemaVersion: STATE_SCHEMA_VERSION,
+        stateRevision: 0,
         ...stateBinding(fallbackRequest),
-        threadId: fallbackRequest.threadId,
         sessionId: null,
         sessionName: null,
+        terminalGeneration: null,
         terminalHandle: null,
         status: 'BLOCKED',
         blockedReason: failure.reason,
@@ -1021,7 +1594,14 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
         stableEofReads: 0,
         lastTailSha256: null,
         pendingQuestion: null,
+        stopRequest: null,
+        authorityReceipts: [],
         initialHead: null,
+        initialBranch: null,
+        initialGitDir: null,
+        initialTree: null,
+        initialR0Evidence: null,
+        completionSnapshot: null,
         createdAtMs: options.clock(),
         updatedAtMs: options.clock(),
       };
@@ -1030,7 +1610,85 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
   }
 }
 
-async function answerSupervisor(input, adapterInput, answerInput, optionOverrides = {}) {
+async function runSupervisor(input, adapterInput, optionOverrides = {}) {
+  let request;
+  let lease;
+  const clock = optionOverrides.clock || (() => Date.now());
+  try {
+    request = validateRequest(input);
+    lease = acquireLease(optionOverrides.stateFile, request, clock);
+    if (!lease) return leaseBlockedResult(request, optionOverrides.stateFile);
+    return await runSupervisorUnlocked(request, adapterInput, optionOverrides);
+  } catch (error) {
+    if (error instanceof SupervisorFailure) {
+      return {
+        status: 'BLOCKED',
+        reason: error.reason,
+        taskId: request?.taskId || String(input?.taskId || 'unknown'),
+        threadId: request?.threadId || String(input?.threadId || 'unknown'),
+        sessionId: null,
+        sessionName: null,
+        terminalHandle: null,
+        terminalGeneration: null,
+        cwd: request?.cwd || canonicalPath(input?.cwd || process.cwd()),
+        promptInjected: false,
+        cursor: null,
+        stableEofReads: 0,
+        pendingQuestion: null,
+        stopRequest: null,
+        probe: null,
+        factGate: null,
+        failure: { message: error.message, details: error.details || {} },
+      };
+    }
+    throw error;
+  } finally {
+    if (lease) lease.release();
+  }
+}
+
+function runSupervisorForSelftest(input, adapterInput, optionOverrides = {}) {
+  return runSupervisor(input, adapterInput, {
+    ...optionOverrides,
+    adapterCapability: TEST_ONLY_ADAPTER_CAPABILITY,
+  });
+}
+
+function normalizeAuthorityReceipt(receipt, pendingQuestion) {
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) {
+    throw new SupervisorFailure(
+      FAILURE.AUTHORITY_RECEIPT_REQUIRED,
+      'authority questions require an explicit auditable authorization receipt',
+    );
+  }
+  const normalized = {
+    decisionId: String(receipt.decisionId || '').trim(),
+    authorizedBy: String(receipt.authorizedBy || '').trim(),
+    authorizedAt: String(receipt.authorizedAt || '').trim(),
+    scope: String(receipt.scope || '').trim(),
+    questionId: String(receipt.questionId || '').trim(),
+  };
+  if (
+    !/^[A-Za-z0-9._-]{3,128}$/.test(normalized.decisionId) ||
+    normalized.authorizedBy.length < 2 ||
+    normalized.authorizedBy.length > 160 ||
+    !Number.isFinite(Date.parse(normalized.authorizedAt)) ||
+    !normalized.scope ||
+    Buffer.byteLength(normalized.scope, 'utf8') > 2048 ||
+    normalized.questionId !== pendingQuestion.id ||
+    /[\r\n\0]/.test(normalized.authorizedBy) ||
+    /[\0]/.test(normalized.scope)
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.AUTHORITY_RECEIPT_REQUIRED,
+      'authorization receipt is incomplete or not bound to the pending question',
+      { questionId: pendingQuestion.id },
+    );
+  }
+  return normalized;
+}
+
+async function answerSupervisorUnlocked(input, adapterInput, answerInput, optionOverrides = {}) {
   const options = {
     stateFile: null,
     clock: () => Date.now(),
@@ -1049,35 +1707,54 @@ async function answerSupervisor(input, adapterInput, answerInput, optionOverride
       );
     }
     validateStateBinding(state, request);
-    const adapter = validateAdapter(adapterInput);
+    const adapter = validateAdapter(adapterInput, options);
     if (!state.started || !state.pendingQuestion) {
       throw new SupervisorFailure(
         FAILURE.STATE_BINDING_MISMATCH,
         'supervisor is not waiting on a Claude question',
       );
     }
-    const answer = String(answerInput || '').trim();
+    const answerPayload =
+      answerInput && typeof answerInput === 'object' && !Array.isArray(answerInput)
+        ? answerInput
+        : { text: answerInput };
+    const answer = String(answerPayload.text || '').trim();
     if (!answer || Buffer.byteLength(answer, 'utf8') > 16 * 1024) {
       throw new SupervisorFailure(
         FAILURE.STATE_BINDING_MISMATCH,
         'controller answer must be non-empty and no larger than 16 KiB',
       );
     }
+    const authorityReceipt = state.pendingQuestion.requiresAuthority
+      ? normalizeAuthorityReceipt(
+          answerPayload.authorizationReceipt,
+          state.pendingQuestion,
+        )
+      : null;
     await proveTerminalVisibility(adapter, request, state, options);
     await probeClaude(adapter, request, state);
     await launchOrResume(adapter, request, state);
     const writeResult = await adapter.writeTerminal({
       terminalHandle: state.terminalHandle,
+      terminalGeneration: state.terminalGeneration,
+      threadId: request.threadId,
       input: `${answer}\n`,
       purpose: 'controller-answer',
       questionId: state.pendingQuestion.id,
     });
-    assertSameHandle(state.terminalHandle, writeResult?.terminalHandle, 'writeTerminal');
+    assertTerminalBinding(state, writeResult, 'writeTerminal');
     if (writeResult?.accepted !== true) {
       throw new SupervisorFailure(
         FAILURE.TERMINAL_DETACHED,
         'controller answer could not be written to the proven terminal',
       );
+    }
+    if (authorityReceipt) {
+      state.authorityReceipts.push({
+        ...authorityReceipt,
+        receiptSha256: sha256(JSON.stringify(authorityReceipt)),
+        recordedAtMs: options.clock(),
+      });
     }
     state.pendingQuestion = null;
     state.status = 'ACTIVE';
@@ -1097,6 +1774,154 @@ async function answerSupervisor(input, adapterInput, answerInput, optionOverride
   }
 }
 
+async function answerSupervisor(input, adapterInput, answerInput, optionOverrides = {}) {
+  const request = validateRequest(input);
+  const clock = optionOverrides.clock || (() => Date.now());
+  const lease = acquireLease(optionOverrides.stateFile, request, clock);
+  if (!lease) return leaseBlockedResult(request, optionOverrides.stateFile);
+  try {
+    return await answerSupervisorUnlocked(
+      request,
+      adapterInput,
+      answerInput,
+      optionOverrides,
+    );
+  } finally {
+    lease.release();
+  }
+}
+
+function answerSupervisorForSelftest(
+  input,
+  adapterInput,
+  answerInput,
+  optionOverrides = {},
+) {
+  return answerSupervisor(input, adapterInput, answerInput, {
+    ...optionOverrides,
+    adapterCapability: TEST_ONLY_ADAPTER_CAPABILITY,
+  });
+}
+
+function normalizeStopReceipt(receipt, stopRequest) {
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'ack-stop requires an explicit acknowledgement receipt',
+    );
+  }
+  const normalized = {
+    stopId: String(receipt.stopId || '').trim(),
+    acknowledgedBy: String(receipt.acknowledgedBy || '').trim(),
+    acknowledgedAt: String(receipt.acknowledgedAt || '').trim(),
+    note: String(receipt.note || '').trim(),
+  };
+  if (
+    normalized.stopId !== stopRequest.id ||
+    normalized.acknowledgedBy.length < 2 ||
+    normalized.acknowledgedBy.length > 160 ||
+    !Number.isFinite(Date.parse(normalized.acknowledgedAt)) ||
+    !normalized.note ||
+    Buffer.byteLength(normalized.note, 'utf8') > 2048 ||
+    /[\r\n\0]/.test(normalized.acknowledgedBy) ||
+    /\0/.test(normalized.note)
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'ack-stop receipt is incomplete or not bound to the latched stop request',
+      { stopId: stopRequest.id },
+    );
+  }
+  return normalized;
+}
+
+async function ackStopSupervisorUnlocked(
+  input,
+  adapterInput,
+  receiptInput,
+  optionOverrides = {},
+) {
+  const options = {
+    stateFile: null,
+    clock: () => Date.now(),
+    randomUUID: crypto.randomUUID,
+    ...optionOverrides,
+  };
+  let request;
+  let state;
+  try {
+    request = validateRequest(input);
+    state = readState(options.stateFile);
+    if (!state) {
+      throw new SupervisorFailure(
+        FAILURE.STATE_BINDING_MISMATCH,
+        'no persisted supervisor state exists for this task',
+      );
+    }
+    validateStateBinding(state, request);
+    if (!state.started || !state.stopRequest) {
+      throw new SupervisorFailure(
+        FAILURE.STATE_BINDING_MISMATCH,
+        'supervisor has no latched Claude stop request',
+      );
+    }
+    const receipt = normalizeStopReceipt(receiptInput, state.stopRequest);
+    const adapter = validateAdapter(adapterInput, options);
+    await proveTerminalVisibility(adapter, request, state, options);
+    await probeClaude(adapter, request, state);
+    state.stopAcknowledgement = {
+      ...receipt,
+      receiptSha256: sha256(JSON.stringify(receipt)),
+      recordedAtMs: options.clock(),
+    };
+    state.stopRequest = null;
+    state.status = 'STOPPED';
+    state.blockedReason = null;
+    state.failure = null;
+    persist(options.stateFile, state, options.clock);
+    return publicResult(state);
+  } catch (error) {
+    const failure =
+      error instanceof SupervisorFailure
+        ? error
+        : new SupervisorFailure(
+            FAILURE.FACT_GATE_FAILED,
+            error.message || String(error),
+          );
+    if (!state) throw failure;
+    return block(options.stateFile, state, failure, options.clock);
+  }
+}
+
+async function ackStopSupervisor(input, adapterInput, receiptInput, optionOverrides = {}) {
+  const request = validateRequest(input);
+  const clock = optionOverrides.clock || (() => Date.now());
+  const lease = acquireLease(optionOverrides.stateFile, request, clock);
+  if (!lease) return leaseBlockedResult(request, optionOverrides.stateFile);
+  try {
+    return await ackStopSupervisorUnlocked(
+      request,
+      adapterInput,
+      receiptInput,
+      optionOverrides,
+    );
+  } finally {
+    lease.release();
+  }
+}
+
+function ackStopSupervisorForSelftest(
+  input,
+  adapterInput,
+  receiptInput,
+  optionOverrides = {},
+) {
+  return ackStopSupervisor(input, adapterInput, receiptInput, {
+    ...optionOverrides,
+    adapterCapability: TEST_ONLY_ADAPTER_CAPABILITY,
+  });
+}
+
 function parseCliArgs(argv) {
   const [command = 'run', ...rest] = argv.slice(2);
   const args = {
@@ -1104,6 +1929,8 @@ function parseCliArgs(argv) {
     requestFile: null,
     adapterFile: null,
     answerFile: null,
+    authorizationReceiptFile: null,
+    ackFile: null,
     maxCycles: Number.POSITIVE_INFINITY,
   };
   for (const raw of rest) {
@@ -1111,11 +1938,14 @@ function parseCliArgs(argv) {
     else if (raw.startsWith('--request=')) args.requestFile = raw.slice(10);
     else if (raw.startsWith('--adapter=')) args.adapterFile = raw.slice(10);
     else if (raw.startsWith('--answer-file=')) args.answerFile = raw.slice(14);
+    else if (raw.startsWith('--authorization-receipt=')) {
+      args.authorizationReceiptFile = raw.slice('--authorization-receipt='.length);
+    } else if (raw.startsWith('--ack-file=')) args.ackFile = raw.slice(11);
     else if (raw.startsWith('--max-cycles=')) args.maxCycles = Number(raw.slice(13));
     else throw new Error(`unknown argument: ${raw}`);
   }
-  if (!['answer', 'run', 'status'].includes(args.command)) {
-    throw new Error('command must be answer, run, or status');
+  if (!['ack-stop', 'answer', 'run', 'status'].includes(args.command)) {
+    throw new Error('command must be ack-stop, answer, run, or status');
   }
   if (
     args.maxCycles !== Number.POSITIVE_INFINITY &&
@@ -1128,17 +1958,20 @@ function parseCliArgs(argv) {
 
 function help() {
   console.log(`Usage:
-  node scripts/claude-cli-supervisor.cjs run --request=<json> [--adapter=<module>] [--max-cycles=N]
-  node scripts/claude-cli-supervisor.cjs answer --request=<json> --adapter=<module> --answer-file=<text>
+  node scripts/claude-cli-supervisor.cjs run --request=<json> [--max-cycles=N]
+  node scripts/claude-cli-supervisor.cjs answer --request=<json> --answer-file=<text> [--authorization-receipt=<json>]
+  node scripts/claude-cli-supervisor.cjs ack-stop --request=<json> --ack-file=<json>
   node scripts/claude-cli-supervisor.cjs status --request=<json>
 
 Request JSON:
   taskId, taskName, threadId, cwd, promptFile, minimumClaudeVersion,
   owned[], excluded[], risk=R0|R1|R2|R3, questionTimeoutMs
 
-The adapter must implement API v1 for a Codex Desktop terminal with same-handle
-create/attach, write, app readback, probe, launch, and resume. Without that
-adapter this command fails closed with TERMINAL_VISIBILITY_UNPROVEN.`);
+Production CLI does not load adapter modules from files. API v2 requires a
+native, host-unforgeable Codex Desktop capability bound to taskId, threadId,
+sessionId, and terminalGeneration. That bridge is not integrated yet, so run,
+answer, and ack-stop fail closed with TERMINAL_VISIBILITY_UNPROVEN. File-backed
+adapters are accepted only by the in-process selftest harness.`);
 }
 
 function readRegularFile(file, label) {
@@ -1195,17 +2028,12 @@ function unavailableAdapter() {
   };
 }
 
-function loadAdapter(file, request) {
-  if (!file) return unavailableAdapter();
-  const absolute = path.resolve(file);
-  const stat = fs.lstatSync(absolute);
-  if (!stat.isFile() || stat.isSymbolicLink()) {
-    throw new Error('--adapter must be a regular non-symlink module');
+function loadAdapter(file) {
+  if (file) {
+    // Deliberately do not resolve, stat, or require the caller-controlled path.
+    // A file module cannot carry an unforgeable Codex Desktop host capability.
   }
-  const loaded = require(absolute);
-  return typeof loaded.createAdapter === 'function'
-    ? loaded.createAdapter({ request })
-    : loaded;
+  return unavailableAdapter();
 }
 
 async function main() {
@@ -1220,24 +2048,52 @@ async function main() {
     const stateFile = supervisorStateFile(request);
     if (args.command === 'status') {
       const state = readState(stateFile);
+      const result = state ? publicResult(state) : {
+        status: 'NOT_STARTED',
+        taskId: request.taskId,
+      };
+      if (result.status === 'COMPLETE') {
+        result.persistedStatus = 'COMPLETE';
+        result.status = 'BLOCKED';
+        result.reason = FAILURE.TERMINAL_VISIBILITY_UNPROVEN;
+        result.failure = {
+          message: 'persisted COMPLETE requires a fresh terminal and fact revalidation through run',
+          details: {},
+        };
+        process.exitCode = 1;
+      }
       process.stdout.write(
-        `${JSON.stringify(state ? publicResult(state) : {
-          status: 'NOT_STARTED',
-          taskId: request.taskId,
-        }, null, 2)}\n`,
+        `${JSON.stringify(result, null, 2)}\n`,
       );
       return;
     }
-    const adapter = loadAdapter(args.adapterFile, request);
+    const adapter = loadAdapter(args.adapterFile);
     if (args.command === 'answer') {
       if (!args.answerFile) throw new Error('--answer-file is required for answer');
       const answer = readRegularFile(args.answerFile, 'answer');
-      const result = await answerSupervisor(request, adapter, answer, {
+      const authorizationReceipt = args.authorizationReceiptFile
+        ? JSON.parse(readRegularFile(args.authorizationReceiptFile, 'authorization receipt'))
+        : null;
+      const result = await answerSupervisor(request, adapter, {
+        text: answer,
+        authorizationReceipt,
+      }, {
         stateFile,
       });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       if (result.status === 'BLOCKED') process.exitCode = 1;
       else if (result.status !== 'ACTIVE') process.exitCode = 3;
+      return;
+    }
+    if (args.command === 'ack-stop') {
+      if (!args.ackFile) throw new Error('--ack-file is required for ack-stop');
+      const receipt = JSON.parse(readRegularFile(args.ackFile, 'ack-stop receipt'));
+      const result = await ackStopSupervisor(request, adapter, receipt, {
+        stateFile,
+      });
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      if (result.status === 'BLOCKED') process.exitCode = 1;
+      else if (result.status !== 'STOPPED') process.exitCode = 3;
       return;
     }
     const result = await runSupervisor(request, adapter, {
@@ -1263,12 +2119,16 @@ module.exports = {
   DEFAULT_POLL_MS,
   FAILURE,
   REQUIRED_STABLE_EOF_READS,
+  ackStopSupervisor,
+  ackStopSupervisorForSelftest,
   answerSupervisor,
+  answerSupervisorForSelftest,
   compareVersions,
   parseVersion,
   readState,
   runFactGate,
   runSupervisor,
+  runSupervisorForSelftest,
   supervisorStateFile,
   validateRequest,
 };
