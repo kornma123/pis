@@ -13,7 +13,14 @@ import { getDatabase } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { requirePermission } from '../middleware/permissions.js'
-import { buildHospitalCmByPartner, buildHospitalCmTrend, buildHospitalCmTrendByPartner } from '../utils/hospital-cm-service.js'
+import {
+  buildHospitalCmByPartner,
+  buildHospitalCmTrend,
+  buildHospitalCmTrendByPartner,
+  type HospitalCmWithEvidence,
+  type HospitalCmTrendPointWithEvidence,
+} from '../utils/hospital-cm-service.js'
+import { toEvidenceWireState } from '../utils/evidence-fact.js'
 import { HOSPITAL_CM_FORMULA_VERSION } from '../utils/hospital-cm.js'
 import {
   buildPortfolioHealth,
@@ -93,6 +100,49 @@ function shadowNoteFor(ready: boolean): string | undefined {
 }
 
 /**
+ * LOC-015 具名不可用 wire 映射：
+ * 证据不可信 -> 金额/计数/率一律 null + `evidence.status='unavailable'`，
+ * 绝不把 unknown 折成 0 或成功金额发布；合法显式 0 仍走数值。
+ */
+function trendPointWire(p: HospitalCmTrendPointWithEvidence): Record<string, unknown> {
+  if (p.evidenceUnavailable) {
+    return {
+      serviceMonth: p.serviceMonth,
+      hospitalCm: null,
+      labRevenueInRate: null,
+      cmRate: null,
+      revenueCaseCount: null,
+      caliber: p.caliber,
+      evidence: toEvidenceWireState(p.evidenceUnavailable.issues),
+    }
+  }
+  return {
+    serviceMonth: p.serviceMonth,
+    hospitalCm: p.hospitalCm,
+    labRevenueInRate: p.labRevenueInRate,
+    cmRate: p.cmRate,
+    revenueCaseCount: p.revenueCaseCount,
+    caliber: p.caliber,
+    evidence: { status: 'ok' },
+  }
+}
+
+function unavailableHospitalRow(h: HospitalCmWithEvidence, trendPoints: Record<string, unknown>[]): Record<string, unknown> {
+  return {
+    partnerId: h.partnerId,
+    partnerName: h.partnerName ?? null,
+    cm: null,
+    cmRate: null,
+    fixedCoverageShare: null,
+    trend: null,
+    measurable: false,
+    evidence: toEvidenceWireState(h.evidenceUnavailable!.issues),
+    detail: null,
+    trendPoints,
+  }
+}
+
+/**
  * GET /health —— 第 1 层组合体检（不点名任何账户）。
  * query: serviceMonth?, fixedPool?（固定成本池·财务给·非 P0 数据源·缺则覆盖倍数不可算标 null）
  */
@@ -102,9 +152,30 @@ router.get('/health', authenticateToken, requireCostRead, (req, res) => {
     const fixedPoolRaw = Number((req.query as any).fixedPool)
     const fixedPool = Number.isFinite(fixedPoolRaw) && fixedPoolRaw > 0 ? fixedPoolRaw : 0
     const hospitals = buildHospitalCmByPartner(getDatabase(), { serviceMonth })
-    const summaries = hospitals.map((h) => toAccountSummary(h))
+    const unavailable = hospitals.filter((h) => h.evidenceUnavailable)
+    const summaries = hospitals.filter((h) => !h.evidenceUnavailable).map((h) => toAccountSummary(h))
     const health = buildPortfolioHealth(summaries, { fixedPool })
-    success(res, { ...health, serviceMonth: serviceMonth ?? null, shadowNote: shadowNoteFor(false), fixedPoolProvided: fixedPool > 0, hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION, caliberRatification: splitCaliberRatification() }, '组合体检（第 1 层·只看趋势）')
+    const evidence = toEvidenceWireState(
+      unavailable.length > 0 ? unavailable.flatMap((h) => h.evidenceUnavailable!.issues) : undefined,
+      { affectedPartners: unavailable.map((h) => h.partnerId) },
+    )
+    success(res, {
+      ...health,
+      ...(evidence.status === 'unavailable' ? {
+        totalCm: null,
+        coverageMultiple: null,
+        measurableAccountCount: null,
+        unmeasuredRevenueShare: null,
+        revivalCap: null,
+        revivalUnmeasuredShareLine: null,
+      } : {}),
+      evidence,
+      serviceMonth: serviceMonth ?? null,
+      shadowNote: shadowNoteFor(false),
+      fixedPoolProvided: fixedPool > 0,
+      hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION,
+      caliberRatification: splitCaliberRatification(),
+    }, '组合体检（第 1 层·只看趋势）')
   } catch (e: any) {
     error(res, e.message)
   }
@@ -119,18 +190,26 @@ router.get('/', authenticateToken, requireCostRead, (req, res) => {
     const { serviceMonth } = req.query as any
     const db = getDatabase()
     const hospitals = buildHospitalCmByPartner(db, { serviceMonth })
-    const summaries = hospitals.map((h) => toAccountSummary(h))
+    const available = hospitals.filter((h) => !h.evidenceUnavailable)
+    const unavailable = hospitals.filter((h) => h.evidenceUnavailable)
+    const summaries = available.map((h) => toAccountSummary(h))
     const rows = buildComparisonTable(summaries) // 默认按绝对贡献降序
     // 附院级明细（状态/口径/三诚实字段）+ 同账户月度趋势（含逐月口径·供 ⑨ 口径变更竖标），对齐 comparison row 顺序。
     // 趋势**批量一次装载**（buildHospitalCmTrendByPartner·避免逐院 N+1 重建价格账本/同义词索引）。
-    const byId = new Map(hospitals.map((h) => [h.partnerId, h]))
+    const byId = new Map(available.map((h) => [h.partnerId, h]))
     const trendsByPartner = buildHospitalCmTrendByPartner(db)
+    const trendWire = (pid: string) => (trendsByPartner.get(pid) ?? []).map(trendPointWire)
     const enriched = rows.map((r) => ({
       ...r,
+      evidence: { status: 'ok' },
       detail: byId.get(r.partnerId) ?? null,
-      trendPoints: trendsByPartner.get(r.partnerId) ?? [], // 同账户历史（③）·跨月口径变更可标（⑨）
+      trendPoints: trendWire(r.partnerId), // 同账户历史（③）·跨月口径变更可标（⑨）
     }))
-    successList(res, enriched, 1, enriched.length || 1, enriched.length, { hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION, caliberRatification: splitCaliberRatification() })
+    const withUnavailable = [
+      ...enriched,
+      ...unavailable.map((h) => unavailableHospitalRow(h, trendWire(h.partnerId))),
+    ]
+    successList(res, withUnavailable, 1, withUnavailable.length || 1, withUnavailable.length, { hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION, caliberRatification: splitCaliberRatification() })
   } catch (e: any) {
     error(res, e.message)
   }
@@ -142,7 +221,7 @@ router.get('/trend', authenticateToken, requireCostRead, (req, res) => {
     const { partnerId } = req.query as any
     if (!partnerId) { error(res, 'partnerId 必填', 'INVALID_PARAMETER', 400); return }
     // /trend 返回裸时序数组（形状不改·防破坏消费者）；水印在同页 overview/`/` 响应上已带，与趋势图同视线。
-    success(res, buildHospitalCmTrend(getDatabase(), partnerId))
+    success(res, buildHospitalCmTrend(getDatabase(), partnerId).map(trendPointWire))
   } catch (e: any) {
     error(res, e.message)
   }
@@ -366,7 +445,8 @@ router.get('/full-health', authenticateToken, requireCostRead, (req, res) => {
       return
     }
     const hospitals = buildHospitalCmByPartner(getDatabase(), { serviceMonth })
-    const summaries = hospitals.map((h) => toAccountSummary(h))
+    const unavailable = hospitals.filter((h) => h.evidenceUnavailable)
+    const summaries = hospitals.filter((h) => !h.evidenceUnavailable).map((h) => toAccountSummary(h))
     const health = buildPortfolioHealth(summaries, { fixedPool: fixedPool.value, gatesVerified: readiness.ready })
     if (currentHospitalCmReadinessSourceFingerprint(getDatabase() as HospitalCmReadinessDb, serviceMonth) !== readiness.sourceStateFingerprint) {
       error(res, '完整体检计算期间数据源发生变化，本次不返回数值；请重试', 'READINESS_SOURCE_CHANGED_DURING_READ', 409)
@@ -374,7 +454,26 @@ router.get('/full-health', authenticateToken, requireCostRead, (req, res) => {
     }
     success(
       res,
-      { ...health, fullState: true, readiness, serviceMonth: serviceMonth ?? null, hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION, caliberRatification: splitCaliberRatification() },
+      {
+        ...health,
+        ...(unavailable.length > 0 ? {
+          totalCm: null,
+          coverageMultiple: null,
+          measurableAccountCount: null,
+          unmeasuredRevenueShare: null,
+          revivalCap: null,
+          revivalUnmeasuredShareLine: null,
+          evidence: toEvidenceWireState(
+            unavailable.flatMap((h) => h.evidenceUnavailable!.issues),
+            { affectedPartners: unavailable.map((h) => h.partnerId) },
+          ),
+        } : { evidence: { status: 'ok' } }),
+        fullState: true,
+        readiness,
+        serviceMonth: serviceMonth ?? null,
+        hospitalCmFormulaVersion: HOSPITAL_CM_FORMULA_VERSION,
+        caliberRatification: splitCaliberRatification(),
+      },
       '完整体检态（第 1 层·覆盖倍数绝对判断已启用）',
     )
   } catch (e: any) {

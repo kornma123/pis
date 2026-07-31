@@ -85,14 +85,16 @@ export function exportComparisonCsv(
   const header = [...CELL_HEADERS.map((h) => h.label), ...EXPORT_DECLARATION_COLUMNS.map((c) => DECL_LABELS[c])]
   const lines = [header.map(csvCell).join(',')]
   for (const r of rows) {
+    // LOC-015：证据不可信的行不得以 0/成功金额导出（导出旁路同样扣留）
+    const unavailable = r.evidence?.status === 'unavailable'
     const cells = [
       r.partnerName || r.partnerId,
-      r.cm,
-      r.cmRate,
-      r.fixedCoverageShare,
+      unavailable ? '数据不可用' : r.cm,
+      unavailable ? '数据不可用' : r.cmRate,
+      unavailable ? '数据不可用' : r.fixedCoverageShare,
       r.detail?.caliber ?? '',
-      r.detail?.state ?? '',
-      r.measurable ? '可测量' : 'UNMEASURED（代送/会诊/外送·未测量）',
+      unavailable ? '数据不可用（已扣留）' : (r.detail?.state ?? ''),
+      unavailable ? '数据不可用（已扣留）' : (r.measurable ? '可测量' : 'UNMEASURED（代送/会诊/外送·未测量）'),
     ]
     const declCells = EXPORT_DECLARATION_COLUMNS.map((c) => decl[c])
     lines.push([...cells, ...declCells].map(csvCell).join(','))

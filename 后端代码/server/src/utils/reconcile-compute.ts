@@ -14,6 +14,11 @@ import {
   type LisCase,
   type MarkerRow,
 } from './reconcile-account.js'
+import {
+  EvidenceUnavailableError,
+  readEvidenceAmount,
+  readEvidenceCount,
+} from './evidence-fact.js'
 
 export interface ReconcileInputs {
   bills: BillCase[]
@@ -22,6 +27,25 @@ export interface ReconcileInputs {
   lisReady: boolean
   /** 账单件数解析不可靠的 case+线（聚合行 floor-to-1、抽不出真实件数）→ 其差异落库时标 low_confidence，分流待人工。 */
   billCountLowConf: Map<string, { ihc: boolean; ss: boolean }>
+}
+
+function requireAmount(value: unknown, field: string, caseNo?: string, opts?: { allowMissingAsZero?: boolean }): number {
+  const fact = readEvidenceAmount(value, { scale: 4 })
+  if (fact.status === 'unavailable') {
+    // 对账单单价/金额列缺失是既有派生口径（单价缺→gross/片数 反推；金额缺→单价×片数），
+    // 仅对“缺失”保留派生；损坏值（text/Infinity/blank/unsafe/负/超精度）一律 fail-closed。
+    if (opts?.allowMissingAsZero && fact.reason === 'missing') return 0
+    throw new EvidenceUnavailableError([{ caseNo, field, reason: fact.reason }])
+  }
+  return fact.value
+}
+
+function requireCount(value: unknown, field: string, caseNo?: string): number {
+  const fact = readEvidenceCount(value)
+  if (fact.status === 'unavailable') {
+    throw new EvidenceUnavailableError([{ caseNo, field, reason: fact.reason }])
+  }
+  return fact.value
 }
 
 /**
@@ -87,8 +111,8 @@ export function partnerMonthDiscountRate(db: any, partnerId: string, serviceMont
   const r = db
     .prepare('SELECT COALESCE(SUM(gross_amount),0) g, COALESCE(SUM(net_amount),0) n FROM case_revenue WHERE partner_id = ? AND service_month = ?')
     .get(partnerId, serviceMonth) as { g: number; n: number }
-  const g = Number(r?.g) || 0
-  const n = Number(r?.n) || 0
+  const g = requireAmount(r?.g, 'g')
+  const n = requireAmount(r?.n, 'n')
   return g > 0 ? n / g : 1
 }
 
@@ -109,8 +133,8 @@ export function partnerMonthLabRate(db: any, partnerId: string, serviceMonth: st
   for (const r of rows) {
     const t = classifyChargeItem(r.charge_item)
     if (t === '免疫组化' || t === '特染') {
-      g += Number(r.gross_amount) || 0
-      n += Number(r.net_amount) || 0
+      g += requireAmount(r.gross_amount, 'gross_amount')
+      n += requireAmount(r.net_amount, 'net_amount')
     }
   }
   if (g > 0) return n / g
@@ -138,8 +162,9 @@ export function buildReconcileInputs(db: any, partnerId: string, serviceMonth: s
     const key = r.case_no
     if (!key) continue
     const { count: slides, confident } = parseSlideCount(r.charge_item, r.qty)
-    const unit = Number(r.unit_price) || 0
-    const gross = Number(r.gross_amount) || (unit > 0 ? unit * slides : 0)
+    const unit = requireAmount(r.unit_price, 'unit_price', key, { allowMissingAsZero: true })
+    const grossRaw = requireAmount(r.gross_amount, 'gross_amount', key, { allowMissingAsZero: true })
+    const gross = grossRaw === 0 && unit > 0 ? unit * slides : grossRaw
     const cur = agg.get(key) ?? { ihc: 0, ss: 0, ihcGross: 0, ssGross: 0, ihcLowConf: false, ssLowConf: false }
     if (lineType === '免疫组化') { cur.ihc += slides; cur.ihcGross += gross; if (!confident) cur.ihcLowConf = true }
     else { cur.ss += slides; cur.ssGross += gross; if (!confident) cur.ssLowConf = true }
@@ -171,8 +196,8 @@ export function buildReconcileInputs(db: any, partnerId: string, serviceMonth: s
   for (const r of lisRows) {
     if (!r.case_no) continue
     const cur = lisByCase.get(r.case_no) ?? { caseNo: r.case_no, ihc: 0, ss: 0 }
-    cur.ihc += Number(r.ihc_count) || 0
-    cur.ss += Number(r.special_stain_count) || 0
+    cur.ihc += requireCount(r.ihc_count, 'ihc_count', r.case_no)
+    cur.ss += requireCount(r.special_stain_count, 'special_stain_count', r.case_no)
     lisByCase.set(r.case_no, cur)
   }
 

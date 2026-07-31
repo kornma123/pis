@@ -31,6 +31,10 @@ import {
   type CaseCmParams,
   type HospitalCm,
 } from './hospital-cm.js'
+import {
+  readEvidenceCount,
+  type EvidenceIssue,
+} from './evidence-fact.js'
 
 interface DbLike {
   prepare: (sql: string) => { get: (...a: unknown[]) => unknown; run: (...a: unknown[]) => { changes?: number }; all: (...a: unknown[]) => unknown[] }
@@ -193,12 +197,51 @@ interface RevenueRow {
   ihc_count: number | null
 }
 
+/** 因证据不可信被扣留的 case（不参与任何成本/毛利发布）。 */
+export interface WithheldEvidenceCase {
+  caseNo: string
+  partnerId: string
+  serviceMonth: string | null
+  issues: EvidenceIssue[]
+}
+
+/** 院级结果附加具名证据状态：有扣留 case 时整月结果不可发布为成功金额。 */
+export interface HospitalCmWithEvidence extends HospitalCm {
+  evidenceUnavailable?: { caseCount: number; issues: EvidenceIssue[] }
+}
+
+export interface HospitalCmTrendPointWithEvidence extends HospitalCmTrendPoint {
+  evidenceUnavailable?: { caseCount: number; issues: EvidenceIssue[] }
+}
+
+function countEvidenceIssues(row: RevenueRow): EvidenceIssue[] {
+  const issues: EvidenceIssue[] = []
+  for (const field of ['special_stain_count', 'block_count', 'ihc_count'] as const) {
+    const fact = readEvidenceCount(row[field])
+    if (fact.status === 'unavailable') {
+      issues.push({ caseNo: row.case_no, field, reason: fact.reason })
+    }
+  }
+  return issues
+}
+
+/** 兼容入口：只返回干净 case（污染 case 由 loadHospitalCmCaseEvidence 扣留并具名）。 */
+export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): P0CaseCm[] {
+  return loadHospitalCmCaseEvidence(db, opts).clean
+}
+
 /**
- * 装载并计算每 case 贡献毛利（§10.A 契约）。
+ * 装载并计算每 case 贡献毛利（§10.A 契约），同时返回被证据扣留的 case。
  * 加载 revenue_source∈(statement,corrected) 且 lab_revenue IS NOT NULL 的 case（含 lab_revenue=0 供诊断桶计数）；
  * 引擎按同源闸/准入闸分桶。marker 先按 (partner_id,case_no) 分组（防标量扇出）。
+ *
+ * LOC-015：LIS 计数（special_stain_count/block_count/ihc_count）必须类型正确、有限、
+ * 安全、非负整数；不可信计数 -> 该 case 扣留（withheld），绝不 `Number(x) || 0` 折零发布。
  */
-export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): P0CaseCm[] {
+export function loadHospitalCmCaseEvidence(db: DbLike, opts: LoadHospitalCmOpts = {}): {
+  clean: P0CaseCm[]
+  withheld: WithheldEvidenceCase[]
+} {
   let where = "cr.revenue_source IN ('statement','corrected')"
   const params: unknown[] = []
   if (opts.partnerId) { where += ' AND cr.partner_id = ?'; params.push(opts.partnerId) }
@@ -212,10 +255,32 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
     WHERE ${where}
   `).all(...params) as RevenueRow[]
 
-  if (revRows.length === 0) return []
+  if (revRows.length === 0) return { clean: [], withheld: [] }
   // 必须先验证同身份的全部结算月，再做 serviceMonth 输出过滤；TEXT/NaN/Infinity/unsafe/负数/超精度均拒绝发布。
   const factsByRow = new Map<RevenueRow, LabRevenueFact>()
   for (const row of revRows) factsByRow.set(row, readLabRevenueFact(row.lab_revenue))
+  const countsByRow = new Map<RevenueRow, { specialStainCount: number; blockCount: number; ihcCount: number }>()
+  const withheldByRow = new Map<RevenueRow, WithheldEvidenceCase>()
+  for (const row of revRows) {
+    // lab_revenue<=0 的诊断/废弃桶不消费计数证据（既有 P0 契约：单月合法零保留诊断桶语义）；
+    // 只有 lab_revenue>0 的染色候选才要求计数严格有效，缺失/损坏不得折 0 发布成功 CM。
+    if (factsByRow.get(row)!.value <= 0) continue
+    const issues = countEvidenceIssues(row)
+    if (issues.length > 0) {
+      withheldByRow.set(row, {
+        caseNo: row.case_no,
+        partnerId: row.partner_id ?? '',
+        serviceMonth: row.service_month ?? null,
+        issues,
+      })
+      continue
+    }
+    countsByRow.set(row, {
+      specialStainCount: row.special_stain_count as number,
+      blockCount: row.block_count as number,
+      ihcCount: row.ihc_count as number,
+    })
+  }
 
   // marker 按 (partner_id, case_no) 分组（等价 CTE·防扇出）。markers 无 service_month，按 partner 过滤（给了 partnerId 时）。
   const markerKey = (pid: string | null, caseNo: string): string => `${pid ?? ''}||${caseNo}`
@@ -251,6 +316,7 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
 
   const inputFor = (r: RevenueRow): P0CaseInput => {
     const markers = markersByCase.get(markerKey(r.partner_id, r.case_no)) ?? []
+    const counts = countsByRow.get(r) ?? { specialStainCount: 0, blockCount: 0, ihcCount: 0 }
     return {
       caseNo: r.case_no,
       partnerId: r.partner_id ?? '',
@@ -259,9 +325,9 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
       labRevenue: factsByRow.get(r)!.value,
       revenueSource: r.revenue_source,
       markers,
-      specialStainCount: Number(r.special_stain_count) || 0,
-      blockCount: Number(r.block_count) || 0,
-      ihcCount: Number(r.ihc_count) || 0,
+      specialStainCount: counts.specialStainCount,
+      blockCount: counts.blockCount,
+      ihcCount: counts.ihcCount,
       tissueProcessing: loadPartnerTissueDefault(db, r.partner_id ?? ''),
     }
   }
@@ -275,10 +341,15 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
   }
 
   const calculated: P0CaseCm[] = []
+  const withheld: WithheldEvidenceCase[] = []
   for (const rows of rowsByIdentity.values()) {
     const months = new Set(rows.map((row) => row.service_month))
     if (months.size <= 1) {
-      calculated.push(...rows.map((row) => computeCaseCm(inputFor(row), resolvePrice, params2)))
+      for (const row of rows) {
+        const wh = withheldByRow.get(row)
+        if (wh) { withheld.push(wh); continue }
+        calculated.push(computeCaseCm(inputFor(row), resolvePrice, params2))
+      }
       continue
     }
     if (rows.some((row) => row.service_month == null || !VALID_SERVICE_MONTH.test(row.service_month))) {
@@ -288,6 +359,21 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
     const weighted = rows.map((row, index) => ({ row, fact: factsByRow.get(row)!, index }))
     const denominator = sumLabRevenueUnits(weighted.map((item) => item.fact))
     if (denominator === 0n) throw new HospitalCmSourceDataError()
+    // 跨月分摊组：组内任一染色候选行的计数证据不可信 -> 整组扣留（不能用组内其它行推算该行成本）
+    const groupWithheld: WithheldEvidenceCase[] = []
+    for (const row of rows) {
+      const wh = withheldByRow.get(row)
+      if (wh) { groupWithheld.push(wh); continue }
+      if (countsByRow.has(row)) continue
+      const issues = countEvidenceIssues(row) // lab=0 的行此刻也要严格校验（可能参与加权分摊计算）
+      if (issues.length > 0) {
+        groupWithheld.push({ caseNo: row.case_no, partnerId: row.partner_id ?? '', serviceMonth: row.service_month ?? null, issues })
+      }
+    }
+    if (groupWithheld.length > 0) {
+      withheld.push(...groupWithheld)
+      continue
+    }
     const totalLabRevenue = Number(denominator) / LAB_REVENUE_SCALE
     const original = computeCaseCm({ ...inputFor(rows[0]), labRevenue: totalLabRevenue }, resolvePrice, params2)
     if (original.bucket !== 'staining') {
@@ -320,19 +406,27 @@ export function loadHospitalCmCases(db: DbLike, opts: LoadHospitalCmOpts = {}): 
     }
   }
 
-  return opts.serviceMonth == null ? calculated : calculated.filter((row) => row.serviceMonth === opts.serviceMonth)
+  const clean = opts.serviceMonth == null ? calculated : calculated.filter((row) => row.serviceMonth === opts.serviceMonth)
+  const withheldFiltered = opts.serviceMonth == null ? withheld : withheld.filter((row) => row.serviceMonth === opts.serviceMonth)
+  return { clean, withheld: withheldFiltered }
 }
 
 /** 按 partner 上卷院级贡献毛利（每 partner 一行·同月）。 */
-export function buildHospitalCmByPartner(db: DbLike, opts: LoadHospitalCmOpts = {}): HospitalCm[] {
-  const cases = loadHospitalCmCases(db, opts)
+export function buildHospitalCmByPartner(db: DbLike, opts: LoadHospitalCmOpts = {}): HospitalCmWithEvidence[] {
+  const { clean, withheld } = loadHospitalCmCaseEvidence(db, opts)
   const byPartner = new Map<string, P0CaseCm[]>()
   const names = new Map<string, string | null>()
   // partner 名从 revenue 行带回来不方便（cases 已丢名）→ 再查一次 partners 名（少量·院数有限）
-  for (const c of cases) {
+  for (const c of clean) {
     const arr = byPartner.get(c.partnerId) ?? []
     arr.push(c)
     byPartner.set(c.partnerId, arr)
+  }
+  const withheldByPartner = new Map<string, WithheldEvidenceCase[]>()
+  for (const w of withheld) {
+    const arr = withheldByPartner.get(w.partnerId) ?? []
+    arr.push(w)
+    withheldByPartner.set(w.partnerId, arr)
   }
   try {
     const rows = db.prepare('SELECT id, name FROM partners').all() as Array<{ id: string; name: string | null }>
@@ -340,9 +434,20 @@ export function buildHospitalCmByPartner(db: DbLike, opts: LoadHospitalCmOpts = 
   } catch {
     /* ignore */
   }
-  const out: HospitalCm[] = []
-  for (const [pid, arr] of byPartner) {
-    out.push(rollupHospitalCm(arr, { partnerName: names.get(pid) ?? null, serviceMonth: opts.serviceMonth ?? null, settled: opts.settled }))
+  const out: HospitalCmWithEvidence[] = []
+  const partnerIds = new Set([...byPartner.keys(), ...withheldByPartner.keys()])
+  for (const pid of partnerIds) {
+    const arr = byPartner.get(pid) ?? []
+    const h = rollupHospitalCm(arr, { partnerName: names.get(pid) ?? null, serviceMonth: opts.serviceMonth ?? null, settled: opts.settled })
+    if (h.partnerId === '' && pid) h.partnerId = pid
+    const wh = withheldByPartner.get(pid)
+    if (wh && wh.length > 0) {
+      ;(h as HospitalCmWithEvidence).evidenceUnavailable = {
+        caseCount: wh.length,
+        issues: wh.flatMap((w) => w.issues),
+      }
+    }
+    out.push(h as HospitalCmWithEvidence)
   }
   return out
 }
@@ -358,20 +463,36 @@ export interface HospitalCmTrendPoint {
 }
 
 /** 某院月度趋势（按 service_month 时序·同账户历史·供第 2 层对照表的 trend 列）。 */
-export function buildHospitalCmTrend(db: DbLike, partnerId: string): HospitalCmTrendPoint[] {
-  const cases = loadHospitalCmCases(db, { partnerId })
+export function buildHospitalCmTrend(db: DbLike, partnerId: string): HospitalCmTrendPointWithEvidence[] {
+  const { clean, withheld } = loadHospitalCmCaseEvidence(db, { partnerId })
   const byMonth = new Map<string, P0CaseCm[]>()
-  for (const c of cases) {
+  for (const c of clean) {
     const m = c.serviceMonth
     if (!m) continue
     const arr = byMonth.get(m) ?? []
     arr.push(c)
     byMonth.set(m, arr)
   }
-  const points: HospitalCmTrendPoint[] = []
-  for (const [m, arr] of byMonth) {
+  const withheldByMonth = new Map<string, WithheldEvidenceCase[]>()
+  for (const w of withheld) {
+    if (!w.serviceMonth) continue
+    const arr = withheldByMonth.get(w.serviceMonth) ?? []
+    arr.push(w)
+    withheldByMonth.set(w.serviceMonth, arr)
+  }
+  const points: HospitalCmTrendPointWithEvidence[] = []
+  const months = new Set([...byMonth.keys(), ...withheldByMonth.keys()])
+  for (const m of months) {
+    const arr = byMonth.get(m) ?? []
     const h = rollupHospitalCm(arr, { serviceMonth: m })
-    points.push({ serviceMonth: m, hospitalCm: h.hospitalCm, labRevenueInRate: h.labRevenueInRate, cmRate: h.cmRate, revenueCaseCount: h.revenueCaseCount, caliber: h.caliber })
+    const point: HospitalCmTrendPointWithEvidence = {
+      serviceMonth: m, hospitalCm: h.hospitalCm, labRevenueInRate: h.labRevenueInRate, cmRate: h.cmRate, revenueCaseCount: h.revenueCaseCount, caliber: h.caliber,
+    }
+    const wh = withheldByMonth.get(m)
+    if (wh && wh.length > 0) {
+      point.evidenceUnavailable = { caseCount: wh.length, issues: wh.flatMap((w) => w.issues) }
+    }
+    points.push(point)
   }
   return points.sort((a, b) => a.serviceMonth.localeCompare(b.serviceMonth))
 }
@@ -382,10 +503,10 @@ export function buildHospitalCmTrend(db: DbLike, partnerId: string): HospitalCmT
  * 但索引/同义词只建一次、case+marker 只全扫一次 → 对照表 N 家医院一次成型（而非 N 次重建）。
  * 返回 Map<partnerId, 时序（升序）>。
  */
-export function buildHospitalCmTrendByPartner(db: DbLike): Map<string, HospitalCmTrendPoint[]> {
-  const cases = loadHospitalCmCases(db, {}) // 全院全月一次装载（索引/同义词建一次）
+export function buildHospitalCmTrendByPartner(db: DbLike): Map<string, HospitalCmTrendPointWithEvidence[]> {
+  const { clean, withheld } = loadHospitalCmCaseEvidence(db, {}) // 全院全月一次装载（索引/同义词建一次）
   const byPartnerMonth = new Map<string, Map<string, P0CaseCm[]>>()
-  for (const c of cases) {
+  for (const c of clean) {
     if (!c.serviceMonth) continue
     const months = byPartnerMonth.get(c.partnerId) ?? new Map<string, P0CaseCm[]>()
     const arr = months.get(c.serviceMonth) ?? []
@@ -393,12 +514,33 @@ export function buildHospitalCmTrendByPartner(db: DbLike): Map<string, HospitalC
     months.set(c.serviceMonth, arr)
     byPartnerMonth.set(c.partnerId, months)
   }
-  const out = new Map<string, HospitalCmTrendPoint[]>()
-  for (const [pid, months] of byPartnerMonth) {
-    const points: HospitalCmTrendPoint[] = []
-    for (const [m, arr] of months) {
+  const withheldByPartnerMonth = new Map<string, Map<string, WithheldEvidenceCase[]>>()
+  for (const w of withheld) {
+    if (!w.serviceMonth) continue
+    const months = withheldByPartnerMonth.get(w.partnerId) ?? new Map<string, WithheldEvidenceCase[]>()
+    const arr = months.get(w.serviceMonth) ?? []
+    arr.push(w)
+    months.set(w.serviceMonth, arr)
+    withheldByPartnerMonth.set(w.partnerId, months)
+  }
+  const out = new Map<string, HospitalCmTrendPointWithEvidence[]>()
+  const partnerIds = new Set([...byPartnerMonth.keys(), ...withheldByPartnerMonth.keys()])
+  for (const pid of partnerIds) {
+    const months = byPartnerMonth.get(pid) ?? new Map<string, P0CaseCm[]>()
+    const withheldMonths = withheldByPartnerMonth.get(pid) ?? new Map<string, WithheldEvidenceCase[]>()
+    const points: HospitalCmTrendPointWithEvidence[] = []
+    const allMonths = new Set([...months.keys(), ...withheldMonths.keys()])
+    for (const m of allMonths) {
+      const arr = months.get(m) ?? []
       const h = rollupHospitalCm(arr, { serviceMonth: m })
-      points.push({ serviceMonth: m, hospitalCm: h.hospitalCm, labRevenueInRate: h.labRevenueInRate, cmRate: h.cmRate, revenueCaseCount: h.revenueCaseCount, caliber: h.caliber })
+      const point: HospitalCmTrendPointWithEvidence = {
+        serviceMonth: m, hospitalCm: h.hospitalCm, labRevenueInRate: h.labRevenueInRate, cmRate: h.cmRate, revenueCaseCount: h.revenueCaseCount, caliber: h.caliber,
+      }
+      const wh = withheldMonths.get(m)
+      if (wh && wh.length > 0) {
+        point.evidenceUnavailable = { caseCount: wh.length, issues: wh.flatMap((w) => w.issues) }
+      }
+      points.push(point)
     }
     points.sort((a, b) => a.serviceMonth.localeCompare(b.serviceMonth))
     out.set(pid, points)

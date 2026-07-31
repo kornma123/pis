@@ -6,7 +6,7 @@ import { TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PortfolioHealth } from '@/types/hospital-cm'
 
-const yuan = (n: number) => '¥' + (Number(n) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+const yuan = (n: number | null) => '¥' + (Number(n) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
 function Metric({ children }: { children: React.ReactNode }) {
   return <div className="rounded-lg bg-gray-50 px-4 py-3">{children}</div>
@@ -14,6 +14,25 @@ function Metric({ children }: { children: React.ReactNode }) {
 
 export default function PortfolioHero({ health }: { health: PortfolioHealth }) {
   const poolConfigured = health.fixedPoolProvided === true && health.fixedPool > 0
+  const evidenceUnavailable = health.evidence?.status === 'unavailable'
+
+  // LOC-015：整盘证据不可信 -> 只显示「数据不可用」，绝不显示 0/成功金额
+  if (evidenceUnavailable) {
+    const ev = health.evidence
+    const issues = ev && ev.status === 'unavailable' ? ev.issues : []
+    const fields = issues.map((i) => `${i.field}(${i.reason})`).join('、')
+    return (
+      <div data-testid="portfolio-hero" className="rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
+        <div data-testid="health-evidence-unavailable" className="text-[15px] font-semibold text-amber-900">
+          数据不可用
+        </div>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-amber-800">
+          本月部分医院存在缺失或不可信的金额/计数证据，已扣留污染结果；整盘贡献毛利与覆盖倍数不发布。
+          {fields ? <span className="ml-1">（{fields}）</span> : null}
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div data-testid="portfolio-hero" className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -47,7 +66,7 @@ export default function PortfolioHero({ health }: { health: PortfolioHealth }) {
           </div>
           {poolConfigured ? (
             <>
-              <div className="mt-1.5 text-[20px] font-semibold text-[#0a2540] tabular-nums">{health.coverageMultiple.toFixed(2)}×</div>
+              <div className="mt-1.5 text-[20px] font-semibold text-[#0a2540] tabular-nums">{health.coverageMultiple == null ? '—' : health.coverageMultiple.toFixed(2)}×</div>
               <div className="mt-1 text-[11px] leading-relaxed text-gray-500">
                 = 贡献毛利合计 ÷ 固定开销池。绝对值待校准，当前只看方向。
               </div>
@@ -86,8 +105,8 @@ export default function PortfolioHero({ health }: { health: PortfolioHealth }) {
           </div>
           <div className="mt-1 text-[11px] leading-relaxed text-gray-500">
             看不清的钱占{' '}
-            <b className={cn(health.unmeasuredRevenueShare > health.revivalUnmeasuredShareLine ? 'text-amber-700' : 'text-gray-600')}>
-              {(health.unmeasuredRevenueShare * 100).toFixed(0)}%
+            <b className={cn((health.unmeasuredRevenueShare ?? 0) > (health.revivalUnmeasuredShareLine ?? 0) ? 'text-amber-700' : 'text-gray-600')}>
+              {((health.unmeasuredRevenueShare ?? 0) * 100).toFixed(0)}%
             </b>
             。两个数任一越线才重新考虑要不要自动排队。
           </div>

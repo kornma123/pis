@@ -14,35 +14,36 @@ import { cn } from '@/lib/utils'
 import type { ComparisonRow, CaliberRatification, TrendPoint } from '@/types/hospital-cm'
 import { exportComparisonCsv } from './exportComparison'
 
-const yuan = (n: number) => '¥' + (Number(n) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-const pct = (r: number) => (r * 100).toFixed(1) + '%'
+const yuan = (n: number | null) => '¥' + (Number(n) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+const pct = (r: number | null) => (r == null ? '—' : (r * 100).toFixed(1) + '%')
 
 type SortKey = 'cm' | 'cmRate' | 'fixedCoverageShare' | 'partnerName'
 const MIN_TREND_POINTS = 3 // 与就绪 N=3 一致：分辨趋势方向 vs 噪声至少 3 点
 
 /** 迷你趋势（同账户历史·③）；口径变更月画点（⑨·LEG-3）。<3 点 → 趋势积累中。 */
 function Sparkline({ points }: { points?: TrendPoint[] | null }) {
-  if (!points || points.length < MIN_TREND_POINTS) {
-    const need = Math.max(0, MIN_TREND_POINTS - (points?.length ?? 0))
+  const usable = (points ?? []).filter((p) => p.hospitalCm != null && p.evidence?.status !== 'unavailable') as Array<TrendPoint & { hospitalCm: number }>
+  if (usable.length < MIN_TREND_POINTS) {
+    const need = Math.max(0, MIN_TREND_POINTS - usable.length)
     return <span className="text-[11px] text-gray-400">趋势积累中<br />还需 {need} 个月</span>
   }
-  const ys = points.map((p) => p.hospitalCm)
+  const ys = usable.map((p) => p.hospitalCm)
   const min = Math.min(...ys)
   const max = Math.max(...ys)
   const span = max - min || 1
   const W = 56
   const H = 16
-  const step = W / (points.length - 1)
-  const coords = points.map((p, i) => [i * step, H - 2 - ((p.hospitalCm - min) / span) * (H - 4)] as const)
+  const step = W / (usable.length - 1)
+  const coords = usable.map((p, i) => [i * step, H - 2 - ((p.hospitalCm - min) / span) * (H - 4)] as const)
   const line = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')
   // 口径变更月：与上一月 caliber 不同 → 竖标点（⑨）。
-  const changeIdx = points.map((p, i) => (i > 0 && points[i - 1].caliber !== p.caliber ? i : -1)).filter((i) => i >= 0)
+  const changeIdx = usable.map((p, i) => (i > 0 && usable[i - 1].caliber !== p.caliber ? i : -1)).filter((i) => i >= 0)
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="同院月度趋势">
       <polyline points={line} fill="none" stroke="#3b82f6" strokeWidth={1.6} />
       {changeIdx.map((i) => (
         <circle key={i} cx={coords[i][0]} cy={coords[i][1]} r={2} fill="#b45309">
-          <title>口径变更月（{points[i].serviceMonth}·{points[i - 1].caliber}→{points[i].caliber}）</title>
+          <title>口径变更月（{usable[i].serviceMonth}·{usable[i - 1].caliber}→{usable[i].caliber}）</title>
         </circle>
       ))}
     </svg>
@@ -79,6 +80,11 @@ function isObserving(r: ComparisonRow): boolean {
   return d.quality?.needsData === true || d.confidence === 'low' || /观察|需补/.test(d.state || '')
 }
 
+/** LOC-015：证据不可信的行必须渲染「数据不可用」，绝不显示 0/成功金额。 */
+function isUnavailable(r: ComparisonRow): boolean {
+  return r.evidence?.status === 'unavailable'
+}
+
 export default function ComparisonTable({
   rows,
   caliber,
@@ -95,6 +101,9 @@ export default function ComparisonTable({
   const sorted = useMemo(() => {
     const arr = rows.slice()
     arr.sort((a, b) => {
+      const aBad = isUnavailable(a)
+      const bBad = isUnavailable(b)
+      if (aBad !== bBad) return aBad ? 1 : -1 // 污染行恒排最后
       let d = 0
       if (sort.key === 'partnerName') d = (a.partnerName || a.partnerId).localeCompare(b.partnerName || b.partnerId, 'zh')
       else d = (a[sort.key] as number) - (b[sort.key] as number)
@@ -158,6 +167,25 @@ export default function ComparisonTable({
           </thead>
           <tbody>
             {sorted.map((r) => {
+              if (isUnavailable(r)) {
+                const ev = r.evidence
+                const issues = ev && ev.status === 'unavailable' ? ev.issues : []
+                const fields = issues.map((i) => `${i.field}(${i.reason})`).join('、')
+                return (
+                  <tr key={r.partnerId} data-testid="evidence-unavailable-row" className="border-b border-gray-100 bg-amber-50/40 text-right">
+                    <td className="px-3 py-3 text-left font-medium text-gray-900">{r.partnerName || r.partnerId}</td>
+                    <td className="px-3 py-3" colSpan={5}>
+                      <span
+                        data-testid="evidence-unavailable-badge"
+                        className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[12px] font-medium text-amber-900"
+                      >
+                        数据不可用
+                      </span>
+                      <span className="ml-2 text-[11px] text-amber-800">证据不可信已扣留{fields ? `：${fields}` : ''}</span>
+                    </td>
+                  </tr>
+                )
+              }
               const observing = r.measurable && isObserving(r)
               if (!r.measurable) {
                 // ⑧ UNMEASURED：灰行 + 原因（缺席=被读成不存在·盲区消失）

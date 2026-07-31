@@ -4,6 +4,10 @@
  * 收入侧：case_revenue 实收 + lis_cases 数量 + partner service_scope → computeCasePnl（独立，不碰成本引擎）。
  * 成本侧：outbound_abc_details 既有 ABC 成本，按 partner_id 上卷（W6 已回填）。
  * 院级毛利 = Σ实验室收入 − Σ成本。完整度沿用 quality 计数（HE=0/无数量 标注未校正）。
+ *
+ * LOC-015：金额（net_amount/lab_revenue/out_revenue/diagnosis_revenue/NGS 聚合）与
+ * LIS 计数（he/block/ihc/special/eber/pdl1）一律经 evidence-fact 严格读取；
+ * 不可信事实 -> case 扣留、院行带 `evidenceUnavailable`，API 层不得发布 0/成功金额。
  */
 
 import { computeCasePnl, statementCasePnl, rollupPartnerRevenue, type CasePnl, type CasePnlInput, type RevenueQuality, type RevenueSource } from './partner-pnl.js'
@@ -12,6 +16,11 @@ import { loadChargeCatalog } from './charge-catalog.js'
 import type { ChargeCodeDef } from './charge-engine.js'
 import type { ServiceScope } from './partner-upsert.js'
 import type { LisCaseQty, SpecimenType } from './case-charge-mapping.js'
+import {
+  readEvidenceAmount,
+  readEvidenceCount,
+  type EvidenceIssue,
+} from './evidence-fact.js'
 
 interface DbLike {
   prepare: (sql: string) => { get: (...a: unknown[]) => unknown; run: (...a: unknown[]) => { changes?: number }; all: (...a: unknown[]) => unknown[] }
@@ -43,8 +52,69 @@ interface RevenueRow {
   specimen_type: string | null
 }
 
-/** 逐 case 收入拆分（join case_revenue + lis_cases + partner）。 */
+/** 因证据不可信被扣留的 case（不参与任何 P&L 发布）。 */
+export interface WithheldEvidenceCase {
+  caseNo: string
+  partnerId: string
+  serviceMonth: string | null
+  issues: EvidenceIssue[]
+}
+
+export interface CasePnlEvidenceResult {
+  clean: CasePnl[]
+  withheld: WithheldEvidenceCase[]
+}
+
+/** 院级行附加具名证据状态：有扣留 case / NGS 聚合不可信时不得发布为成功金额。 */
+export interface PartnerPnlWithEvidence extends PartnerPnl {
+  evidenceUnavailable?: { caseCount: number; issues: EvidenceIssue[] }
+}
+
+export interface PnlTrendPointWithEvidence extends PnlTrendPoint {
+  evidenceUnavailable?: { caseCount: number; issues: EvidenceIssue[] }
+}
+
+function amountIssues(r: RevenueRow, fields: Array<{ name: keyof RevenueRow; column: string }>): EvidenceIssue[] {
+  const issues: EvidenceIssue[] = []
+  for (const { name, column } of fields) {
+    const fact = readEvidenceAmount(r[name], { scale: 4 })
+    if (fact.status === 'unavailable') {
+      issues.push({ caseNo: r.case_no, field: column, reason: fact.reason })
+    }
+  }
+  return issues
+}
+
+function countIssues(r: RevenueRow, columns: Array<{ name: keyof RevenueRow; column: string }>): EvidenceIssue[] {
+  const issues: EvidenceIssue[] = []
+  for (const { name, column } of columns) {
+    const fact = readEvidenceCount(r[name])
+    if (fact.status === 'unavailable') {
+      issues.push({ caseNo: r.case_no, field: column, reason: fact.reason })
+    }
+  }
+  return issues
+}
+
+const COUNT_COLUMNS: Array<{ name: keyof RevenueRow; column: string }> = [
+  { name: 'he_slide_count', column: 'he_slide_count' },
+  { name: 'block_count', column: 'block_count' },
+  { name: 'ihc_count', column: 'ihc_count' },
+  { name: 'special_stain_count', column: 'special_stain_count' },
+  { name: 'eber_count', column: 'eber_count' },
+  { name: 'pdl1_count', column: 'pdl1_count' },
+]
+
+/** 兼容入口：只返回干净 case（污染 case 由 loadCasePnlEvidence 扣留并具名）。 */
 export function loadCasePnls(db: DbLike, catalog: Map<string, ChargeCodeDef>, opts: { serviceMonth?: string; partnerId?: string } = {}): CasePnl[] {
+  return loadCasePnlEvidence(db, catalog, opts).clean
+}
+
+/**
+ * 逐 case 收入拆分（join case_revenue + lis_cases + partner）。
+ * LOC-015：金额与计数严格读取；任一事实不可信 -> 该 case 扣留，绝不 `Number(x) || 0` 折零发布。
+ */
+export function loadCasePnlEvidence(db: DbLike, catalog: Map<string, ChargeCodeDef>, opts: { serviceMonth?: string; partnerId?: string } = {}): CasePnlEvidenceResult {
   let where = '1=1'
   const params: unknown[] = []
   if (opts.serviceMonth) { where += ' AND cr.service_month = ?'; params.push(opts.serviceMonth) }
@@ -59,34 +129,60 @@ export function loadCasePnls(db: DbLike, catalog: Map<string, ChargeCodeDef>, op
     WHERE ${where}
   `).all(...params) as RevenueRow[]
 
-  return rows.map((r) => {
+  const clean: CasePnl[] = []
+  const withheld: WithheldEvidenceCase[] = []
+  for (const r of rows) {
     // 已对账（配置驱动 /commit 落库了 lab_revenue）→ 用对账单 Σ(IN结算) 权威值，不走估算占比。
     if (r.lab_revenue != null) {
+      const issues = amountIssues(r, [
+        { name: 'net_amount', column: 'net_amount' },
+        { name: 'lab_revenue', column: 'lab_revenue' },
+        { name: 'out_revenue', column: 'out_revenue' },
+        { name: 'diagnosis_revenue', column: 'diagnosis_revenue' },
+      ])
+      if (issues.length > 0) {
+        withheld.push({ caseNo: r.case_no, partnerId: r.partner_id, serviceMonth: r.service_month ?? null, issues })
+        continue
+      }
       const src = (r.revenue_source === 'corrected' ? 'corrected' : 'statement') as Extract<RevenueSource, 'statement' | 'corrected'>
-      return statementCasePnl({
+      clean.push(statementCasePnl({
         caseNo: r.case_no, partnerId: r.partner_id, partnerName: r.partner_name || undefined,
         serviceScope: (r.service_scope as ServiceScope) || 'technical_only',
-        netRevenue: Number(r.net_amount) || 0, serviceMonth: r.service_month || undefined,
-        labRevenue: Number(r.lab_revenue) || 0, outRevenue: Number(r.out_revenue) || 0,
-        diagnosisRevenue: Number(r.diagnosis_revenue) || 0,
-      }, src)
+        netRevenue: r.net_amount as number, serviceMonth: r.service_month || undefined,
+        labRevenue: r.lab_revenue as number, outRevenue: r.out_revenue as number,
+        diagnosisRevenue: r.diagnosis_revenue as number,
+      }, src))
+      continue
+    }
+    const netIssue = amountIssues(r, [{ name: 'net_amount', column: 'net_amount' }])
+    if (netIssue.length > 0) {
+      withheld.push({ caseNo: r.case_no, partnerId: r.partner_id, serviceMonth: r.service_month ?? null, issues: netIssue })
+      continue
     }
     const hasLis = r.he_slide_count != null || r.block_count != null
+    if (hasLis) {
+      const issues = countIssues(r, COUNT_COLUMNS)
+      if (issues.length > 0) {
+        withheld.push({ caseNo: r.case_no, partnerId: r.partner_id, serviceMonth: r.service_month ?? null, issues })
+        continue
+      }
+    }
     const qty: LisCaseQty | null = hasLis
       ? {
-          heSlideCount: Number(r.he_slide_count) || 0, blockCount: Number(r.block_count) || 0,
-          ihcCount: Number(r.ihc_count) || 0, specialStainCount: Number(r.special_stain_count) || 0,
-          eberCount: Number(r.eber_count) || 0, pdl1Count: Number(r.pdl1_count) || 0,
+          heSlideCount: r.he_slide_count as number, blockCount: r.block_count as number,
+          ihcCount: r.ihc_count as number, specialStainCount: r.special_stain_count as number,
+          eberCount: r.eber_count as number, pdl1Count: r.pdl1_count as number,
           specimenType: normalizeSpecimen(r.specimen_type),
         }
       : null
     const input: CasePnlInput = {
       caseNo: r.case_no, partnerId: r.partner_id, partnerName: r.partner_name || undefined,
       serviceScope: (r.service_scope as ServiceScope) || 'technical_only',
-      netRevenue: Number(r.net_amount) || 0, serviceMonth: r.service_month || undefined, qty,
+      netRevenue: r.net_amount as number, serviceMonth: r.service_month || undefined, qty,
     }
-    return computeCasePnl(input, catalog)
-  })
+    clean.push(computeCasePnl(input, catalog))
+  }
+  return { clean, withheld }
 }
 
 /** case 级毛利下钻（收入 − 该 case 成本）。供 CM 筛查（flagged=负毛利）。 */
@@ -97,21 +193,30 @@ export interface CasePnlWithCost extends CasePnl {
   flagged: boolean // 负毛利
 }
 
-/** case 级 P&L：在收入拆分上挂 ABC per-case 成本。 */
+/** 兼容入口：只返回干净 case 级 P&L。 */
 export function loadCasePnlsWithCost(db: DbLike, opts: { serviceMonth?: string; partnerId?: string } = {}): CasePnlWithCost[] {
+  return loadCasePnlsWithCostEvidence(db, opts).rows
+}
+
+/** case 级 P&L：在收入拆分上挂 ABC per-case 成本，同时返回被扣留 case。 */
+export function loadCasePnlsWithCostEvidence(db: DbLike, opts: { serviceMonth?: string; partnerId?: string } = {}): {
+  rows: CasePnlWithCost[]
+  withheld: WithheldEvidenceCase[]
+} {
   const catalog = loadChargeCatalog(db)
-  const cases = loadCasePnls(db, catalog, opts)
+  const { clean, withheld } = loadCasePnlEvidence(db, catalog, opts)
   const costMap = getCaseCostRollup(db, { serviceMonth: opts.serviceMonth })
-  return cases.map((c) => {
+  const rows = clean.map((c) => {
     const costTotal = costMap.get(caseCostKey(c.partnerId, c.caseNo)) || 0 // T1.5 复合键：不取他院同号成本
     const grossMargin = r2(c.labRevenue - costTotal)
     return { ...c, costTotal, grossMargin, marginRate: c.labRevenue > 0 ? r4(grossMargin / c.labRevenue) : 0, flagged: grossMargin < 0 }
   })
+  return { rows, withheld }
 }
 
 export interface PartnerPnl {
   partnerId: string
-  partnerName?: string
+  partnerName?: string | null
   caseCount: number
   netRevenueTotal: number // 财务实收合计
   labRevenueTotal: number // 实验室收入合计
@@ -141,6 +246,8 @@ interface NgsPartnerAgg {
   partnerName: string; revenue: number; cost: number; margin: number; orderCount: number
   // T3：未核外包成本（cost_confirmed=0）单独计，不进 revenue/cost/margin，避免按 0 成本把毛利高估为售价污染院级利润。
   unconfirmedRevenue: number; unconfirmedCount: number
+  // LOC-015：任一 NGS 聚合事实不可信 -> 具名 unavailable（API 层 null 发布）
+  evidenceUnavailable?: { issues: EvidenceIssue[] }
 }
 
 /** 按 partner_id 上卷 NGS 外购转销（SQL SUM 聚合，避免装载全部订单）。已核成本(cost_confirmed=1)进正常毛利；未核单单列。 */
@@ -163,9 +270,23 @@ export function loadNgsByPartner(db: DbLike, opts: { serviceMonth?: string; part
   const map = new Map<string, NgsPartnerAgg>()
   for (const r of rows) {
     if (!r.pid) continue
+    const issues: EvidenceIssue[] = []
+    const moneyFields: Array<[keyof typeof r, string]> = [
+      ['rev', 'ngs_revenue'], ['cost', 'ngs_cost'], ['margin', 'ngs_margin'], ['uRev', 'ngs_unconfirmed_revenue'],
+    ]
+    for (const [key, field] of moneyFields) {
+      const fact = readEvidenceAmount(r[key], { scale: 4 })
+      if (fact.status === 'unavailable') issues.push({ field, reason: fact.reason })
+    }
+    for (const [key, field] of [['n', 'ngs_order_count'], ['uN', 'ngs_unconfirmed_count']] as Array<[keyof typeof r, string]>) {
+      const fact = readEvidenceCount(r[key])
+      if (fact.status === 'unavailable') issues.push({ field, reason: fact.reason })
+    }
     map.set(r.pid, {
-      partnerName: r.pname, revenue: r2(Number(r.rev) || 0), cost: r2(Number(r.cost) || 0), margin: r2(Number(r.margin) || 0), orderCount: Number(r.n) || 0,
+      partnerName: r.pname,
+      revenue: r2(Number(r.rev) || 0), cost: r2(Number(r.cost) || 0), margin: r2(Number(r.margin) || 0), orderCount: Number(r.n) || 0,
       unconfirmedRevenue: r2(Number(r.uRev) || 0), unconfirmedCount: Number(r.uN) || 0,
+      ...(issues.length > 0 ? { evidenceUnavailable: { issues } } : {}),
     })
   }
   return map
@@ -174,24 +295,31 @@ export function loadNgsByPartner(db: DbLike, opts: { serviceMonth?: string; part
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 const r4 = (n: number) => Math.round((n + Number.EPSILON) * 10000) / 10000
 
-/** 院级 P&L = 收入上卷 − 成本上卷。 */
-export function buildPartnerPnl(db: DbLike, opts: { serviceMonth?: string; partnerId?: string } = {}): PartnerPnl[] {
+/** 院级 P&L = 收入上卷 − 成本上卷；污染 case/NGS 聚合 -> 院行带 evidenceUnavailable。 */
+export function buildPartnerPnl(db: DbLike, opts: { serviceMonth?: string; partnerId?: string } = {}): PartnerPnlWithEvidence[] {
   const catalog = loadChargeCatalog(db)
-  const cases = loadCasePnls(db, catalog, opts)
-  const revenue = rollupPartnerRevenue(cases)
+  const { clean, withheld } = loadCasePnlEvidence(db, catalog, opts)
+  const revenue = rollupPartnerRevenue(clean)
   // 单月视图：成本经 case_no 关联 case_revenue.service_month 对齐到服务月（与收入同轴），避免跨月 case 单月毛利错期。
   const costMonthAxis: 'service_month' | 'all' = opts.serviceMonth ? 'service_month' : 'all'
   const costMap = getPartnerCostRollup(db, { serviceMonth: opts.serviceMonth })
   const ngsMap = loadNgsByPartner(db, opts)
+  const withheldByPartner = new Map<string, WithheldEvidenceCase[]>()
+  for (const w of withheld) {
+    if (opts.serviceMonth && w.serviceMonth !== opts.serviceMonth) continue
+    const arr = withheldByPartner.get(w.partnerId) ?? []
+    arr.push(w)
+    withheldByPartner.set(w.partnerId, arr)
+  }
 
-  const rows: PartnerPnl[] = revenue.map((rev) => {
+  const rows: PartnerPnlWithEvidence[] = revenue.map((rev) => {
     const cost = costMap.get(rev.partnerId)
     const costTotal = cost?.costTotal || 0
     const grossMargin = r2(rev.labRevenueTotal - costTotal)
     const ngs = ngsMap.get(rev.partnerId)
     const ngsMargin = ngs?.margin || 0
     const n = rev.caseCount || 1
-    return {
+    const row: PartnerPnlWithEvidence = {
       partnerId: rev.partnerId,
       partnerName: rev.partnerName,
       caseCount: rev.caseCount,
@@ -217,13 +345,40 @@ export function buildPartnerPnl(db: DbLike, opts: { serviceMonth?: string; partn
       ngsUnconfirmedCount: ngs?.unconfirmedCount || 0,
       totalMargin: r2(grossMargin + ngsMargin),
     }
+    const wh = withheldByPartner.get(rev.partnerId)
+    const ngsEv = ngs?.evidenceUnavailable
+    const issues = [...(wh?.flatMap((w) => w.issues) ?? []), ...(ngsEv?.issues ?? [])]
+    if (issues.length > 0) {
+      row.evidenceUnavailable = { caseCount: wh?.length ?? 0, issues }
+    }
+    return row
   })
 
-  // NGS-only 医院（有 NGS 外购转销但本期无院内 case_revenue）→ 补行，避免漏掉纯转销客户
+  // 只有被扣留 case（无干净收入）的医院：仍必须出现，且行级 evidence unavailable
   const seen = new Set(rows.map((r) => r.partnerId))
-  for (const [pid, ngs] of ngsMap) {
+  for (const [pid, wh] of withheldByPartner) {
     if (seen.has(pid)) continue
     rows.push({
+      partnerId: pid,
+      partnerName: null,
+      caseCount: 0,
+      netRevenueTotal: 0, labRevenueTotal: 0, diagnosisRevenueTotal: 0, costTotal: 0, grossMargin: 0, marginRate: 0,
+      avgLabRevenuePerCase: 0, avgCostPerCase: 0, avgMarginPerCase: 0,
+      qualityCounts: { ok: 0, partial_quantities: 0, no_quantities: 0 },
+      sourceCounts: { statement: 0, estimated: 0, corrected: 0 },
+      costMatched: false, costMonthAxis, benchmarkCorrected: false,
+      ngsRevenue: 0, ngsCost: 0, ngsMargin: 0, ngsOrderCount: 0,
+      ngsUnconfirmedRevenue: 0, ngsUnconfirmedCount: 0,
+      totalMargin: 0,
+      evidenceUnavailable: { caseCount: wh.length, issues: wh.flatMap((w) => w.issues) },
+    })
+    seen.add(pid)
+  }
+
+  // NGS-only 医院（有 NGS 外购转销但本期无院内 case_revenue）→ 补行，避免漏掉纯转销客户
+  for (const [pid, ngs] of ngsMap) {
+    if (seen.has(pid)) continue
+    const row: PartnerPnlWithEvidence = {
       partnerId: pid, partnerName: ngs.partnerName, caseCount: 0,
       netRevenueTotal: 0, labRevenueTotal: 0, diagnosisRevenueTotal: 0, costTotal: 0, grossMargin: 0, marginRate: 0,
       avgLabRevenuePerCase: 0, avgCostPerCase: 0, avgMarginPerCase: 0,
@@ -233,7 +388,11 @@ export function buildPartnerPnl(db: DbLike, opts: { serviceMonth?: string; partn
       ngsRevenue: ngs.revenue, ngsCost: ngs.cost, ngsMargin: ngs.margin, ngsOrderCount: ngs.orderCount,
       ngsUnconfirmedRevenue: ngs.unconfirmedRevenue, ngsUnconfirmedCount: ngs.unconfirmedCount,
       totalMargin: ngs.margin,
-    })
+    }
+    if (ngs.evidenceUnavailable) {
+      row.evidenceUnavailable = { caseCount: 0, issues: ngs.evidenceUnavailable.issues }
+    }
+    rows.push(row)
   }
   return rows
 }
@@ -251,9 +410,9 @@ export interface PnlTrendPoint {
  * 某医院的月度趋势（按 service_month 时序）。单次装载目录+收入+成本。
  * 成本按【cost_month】归集（getPartnerCostByMonth），避免按 case lifetime 把同一份成本串到每个收入月重复计。
  */
-export function buildPartnerTrend(db: DbLike, partnerId: string): PnlTrendPoint[] {
+export function buildPartnerTrend(db: DbLike, partnerId: string): PnlTrendPointWithEvidence[] {
   const catalog = loadChargeCatalog(db) // 一次
-  const cases = loadCasePnls(db, catalog, { partnerId }) // 一次（全月份）
+  const { clean, withheld } = loadCasePnlEvidence(db, catalog, { partnerId }) // 一次（全月份）
   const costByMonth = getPartnerCostByMonth(db, partnerId) // 一次（按成本月）
   const byMonth = new Map<string, PnlTrendPoint>()
   const ensure = (m: string) => {
@@ -261,7 +420,7 @@ export function buildPartnerTrend(db: DbLike, partnerId: string): PnlTrendPoint[
     if (!p) { p = { serviceMonth: m, netRevenueTotal: 0, labRevenueTotal: 0, costTotal: 0, grossMargin: 0, caseCount: 0 }; byMonth.set(m, p) }
     return p
   }
-  for (const c of cases) {
+  for (const c of clean) {
     if (!c.serviceMonth) continue
     const p = ensure(c.serviceMonth)
     p.netRevenueTotal = r2(p.netRevenueTotal + c.netRevenue)
@@ -270,7 +429,24 @@ export function buildPartnerTrend(db: DbLike, partnerId: string): PnlTrendPoint[
   }
   // 成本归到自己的成本月（即使该月暂无收入也呈现，便于发现成本/收入错期）
   for (const [m, cost] of costByMonth) ensure(m).costTotal = cost
-  const points = [...byMonth.values()].sort((a, b) => a.serviceMonth.localeCompare(b.serviceMonth))
-  points.forEach((p) => { p.grossMargin = r2(p.labRevenueTotal - p.costTotal) })
-  return points
+  const withheldByMonth = new Map<string, WithheldEvidenceCase[]>()
+  for (const w of withheld) {
+    if (!w.serviceMonth) continue
+    const arr = withheldByMonth.get(w.serviceMonth) ?? []
+    arr.push(w)
+    withheldByMonth.set(w.serviceMonth, arr)
+  }
+  const months = new Set([...byMonth.keys(), ...withheldByMonth.keys()])
+  const points: PnlTrendPointWithEvidence[] = []
+  for (const m of months) {
+    const p = byMonth.get(m) ?? ensure(m)
+    p.grossMargin = r2(p.labRevenueTotal - p.costTotal)
+    const point: PnlTrendPointWithEvidence = { ...p }
+    const wh = withheldByMonth.get(m)
+    if (wh && wh.length > 0) {
+      point.evidenceUnavailable = { caseCount: wh.length, issues: wh.flatMap((w) => w.issues) }
+    }
+    points.push(point)
+  }
+  return points.sort((a, b) => a.serviceMonth.localeCompare(b.serviceMonth))
 }

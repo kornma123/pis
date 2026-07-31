@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ShieldCheck } from 'lucide-react'
 import { hospitalCmApi } from '@/api/hospital-cm'
 
-const yuan = (n: number) => '¥' + (Number(n) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+const yuan = (n: number | null) => '¥' + (Number(n) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
 export default function FullPhysicalExam({ serviceMonth }: { serviceMonth?: string }) {
   const { data, isLoading, isError } = useQuery({
@@ -29,6 +29,20 @@ export default function FullPhysicalExam({ serviceMonth }: { serviceMonth?: stri
     )
   }
 
+  // LOC-015：就绪但证据不可信 -> 完整体检数字不发布
+  if (data.evidence?.status === 'unavailable') {
+    const fields = (data.evidence?.issues ?? []).map((i) => `${i.field}(${i.reason})`).join('、')
+    return (
+      <div data-testid="full-physical-exam" className="rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
+        <div className="text-[15px] font-semibold text-amber-900">数据不可用</div>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-amber-800">
+          本月存在缺失或不可信的金额/计数证据，已扣留污染结果；完整体检态不发布绝对数值。
+          {fields ? <span className="ml-1">（{fields}）</span> : null}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div data-testid="full-physical-exam" className="rounded-xl border border-emerald-200 bg-white p-5 shadow-sm">
       <div className="mb-1 flex items-center gap-2">
@@ -43,7 +57,7 @@ export default function FullPhysicalExam({ serviceMonth }: { serviceMonth?: stri
         </div>
         <div>
           <div className="text-[12px] text-gray-500">够盖几倍固定开销（绝对值）</div>
-          <div className="text-[28px] font-semibold text-emerald-600 tabular-nums">{data.coverageMultiple.toFixed(2)}×</div>
+          <div className="text-[28px] font-semibold text-emerald-600 tabular-nums">{data.coverageMultiple == null ? '—' : data.coverageMultiple.toFixed(2)}×</div>
         </div>
       </div>
     </div>

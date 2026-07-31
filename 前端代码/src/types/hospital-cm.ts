@@ -19,6 +19,26 @@ export interface CaliberRatification {
   ratifiedAt: string | null
 }
 
+/** LOC-015 具名证据不可用状态（镜像后端 evidence-fact.ts 的 wire 形状）。 */
+export type EvidenceUnavailableReason =
+  | 'missing'
+  | 'blank'
+  | 'malformed'
+  | 'non_finite'
+  | 'unsafe'
+  | 'out_of_range'
+  | 'precision'
+
+export interface EvidenceIssue {
+  caseNo?: string
+  field: string
+  reason: EvidenceUnavailableReason
+}
+
+export type EvidenceState =
+  | { status: 'ok' }
+  | { status: 'unavailable'; issues: EvidenceIssue[]; affectedPartners?: string[] }
+
 /** 就绪四条件键（穷举·闭合枚举）。 */
 export type ReadinessConditionKey = 'foundation' | 'denominator' | 'history' | 'first_period'
 export type ReadinessOwnerRole = 'tech' | 'business' | 'pm'
@@ -57,11 +77,12 @@ export interface Readiness {
 /** 逐月趋势点（同账户历史·元素③；caliber 供口径变更竖标·元素⑨）。 */
 export interface TrendPoint {
   serviceMonth: string
-  hospitalCm: number
-  labRevenueInRate: number
-  cmRate: number
-  revenueCaseCount: number
+  hospitalCm: number | null
+  labRevenueInRate: number | null
+  cmRate: number | null
+  revenueCaseCount: number | null
   caliber: '完整' | '仅染色' | '混合'
+  evidence?: EvidenceState
 }
 
 /** 院级数据质量（元素⑩「观察中」判据）。 */
@@ -99,30 +120,32 @@ export interface HospitalCmDetail {
 export interface ComparisonRow {
   partnerId: string
   partnerName?: string | null
-  cm: number // 绝对贡献（默认排序键·降序）
-  cmRate: number // 率（元素②·表里一列·非默认排序）
-  fixedCoverageShare: number // 率旁并列：占全组固定成本覆盖份额（元素②）
+  cm: number | null // 绝对贡献（默认排序键·降序；证据不可信时为 null）
+  cmRate: number | null // 率（元素②·表里一列·非默认排序；证据不可信时为 null）
+  fixedCoverageShare: number | null // 率旁并列：占全组固定成本覆盖份额（元素②；证据不可信时为 null）
   trend: number[] | null
   measurable: boolean // false = UNMEASURED（元素⑧·灰行）
+  evidence?: EvidenceState // LOC-015：'unavailable' -> 渲染「数据不可用」，绝不显示 0/成功金额
   detail?: HospitalCmDetail | null
   trendPoints?: TrendPoint[] // 同账户历史（元素③/⑨）
 }
 
 /** GET /health 的 data 层（第 1 层体检·趋势-only 校准态）。 */
 export interface PortfolioHealth {
-  totalCm: number
+  totalCm: number | null
   fixedPool: number
-  coverageMultiple: number
+  coverageMultiple: number | null
   coverageMultipleTrendOnly: true
   capacityUtilization: number | null
-  measurableAccountCount: number
-  unmeasuredRevenueShare: number
+  measurableAccountCount: number | null
+  unmeasuredRevenueShare: number | null
   reopenAutomationQuestion: boolean
-  revivalCap: number
-  revivalUnmeasuredShareLine: number
+  revivalCap: number | null
+  revivalUnmeasuredShareLine: number | null
   shadowMode: boolean
   gatesVerified: boolean
   disclaimer: string
+  evidence?: EvidenceState // LOC-015：'unavailable' -> 整盘数字不发布
   serviceMonth?: string | null
   fixedPoolProvided?: boolean
   shadowNote?: string
