@@ -50,16 +50,22 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { key: 'logs', label: '操作日志' },
 ]
 
+const CURRENT_PERMISSION_KEYS = new Set(PERMISSION_MODULES.map(({ key }) => key))
+
 // 规范化角色权限为对象矩阵（兼容后端对象形态 / 旧扁平数组）
 export function normalizeRolePerms(raw: any): Record<string, PermLevel> {
   if (raw && !Array.isArray(raw) && typeof raw === 'object') {
     const out: Record<string, PermLevel> = {}
-    for (const [k, v] of Object.entries(raw)) if (v === 'R' || v === 'W') out[k] = v
+    for (const [k, v] of Object.entries(raw)) {
+      if (CURRENT_PERMISSION_KEYS.has(k) && (v === 'R' || v === 'W')) out[k] = v
+    }
     return out
   }
   if (Array.isArray(raw)) {
     const out: Record<string, PermLevel> = {}
-    for (const code of raw) if (typeof code === 'string' && PERMISSION_MODULES.some(m => m.key === code)) out[code] = 'W'
+    for (const code of raw) {
+      if (typeof code === 'string' && CURRENT_PERMISSION_KEYS.has(code)) out[code] = 'W'
+    }
     return out
   }
   return {}

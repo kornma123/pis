@@ -1,10 +1,57 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, renderHook, screen, within } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Role } from '@/types'
 import { RoleFormModal } from './components/RoleFormModal'
 import { RoleDetailModal } from './components/RoleDetailModal'
 import { RolesGrid } from './components/RolesGrid'
-import type { FormData } from './hooks/useRolesPage'
+import {
+  normalizeRolePerms,
+  useRolesPage,
+  type FormData,
+} from './hooks/useRolesPage'
+
+const mocks = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  requestPut: vi.fn(),
+  setMultiple: vi.fn(),
+  toastSuccess: vi.fn(),
+}))
+
+vi.mock('@/api/request', () => ({
+  default: {
+    delete: vi.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
+    put: mocks.requestPut,
+  },
+}))
+
+vi.mock('@/hooks/usePagination', () => ({
+  usePagination: () => ({
+    data: [],
+    loading: false,
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    setPage: vi.fn(),
+    setPageSize: vi.fn(),
+    refresh: mocks.refresh,
+  }),
+}))
+
+vi.mock('@/hooks/useUrlParams', () => ({
+  useUrlParams: () => ({
+    getNumber: (_key: string, fallback: number) => fallback,
+    setMultiple: mocks.setMultiple,
+  }),
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: vi.fn(),
+    success: mocks.toastSuccess,
+  },
+}))
 
 const RETIRED_PERMISSION_LABELS = [
   'ABC 成本看板',
@@ -23,6 +70,7 @@ const legacyPermissions: Record<string, 'R' | 'W'> = {
   equipment: 'W',
   labor_times: 'W',
   antibody_cost: 'W',
+  inventory: 'R',
 }
 
 const form: FormData = {
@@ -51,7 +99,52 @@ function expectOnlyMaterialCompatibilityPermission() {
   expect(screen.getByText('逐抗体成本')).toBeInTheDocument()
 }
 
+beforeEach(() => {
+  vi.clearAllMocks()
+  mocks.requestPut.mockResolvedValue(undefined)
+})
+
 describe('retired role permission product surfaces', () => {
+  it('normalizes object permissions against the current module allowlist', () => {
+    expect(normalizeRolePerms(legacyPermissions)).toEqual({
+      antibody_cost: 'W',
+      inventory: 'R',
+    })
+  })
+
+  it('scrubs retired object permissions from an edited role before PUT', async () => {
+    const { result } = renderHook(() => useRolesPage())
+
+    act(() => {
+      result.current.openEdit(legacyRole)
+    })
+    expect(result.current.form.permissions).toEqual({
+      antibody_cost: 'W',
+      inventory: 'R',
+    })
+
+    act(() => {
+      result.current.setForm((current) => ({
+        ...current,
+        name: '成本复核（已编辑）',
+      }))
+    })
+    await act(async () => {
+      await result.current.handleSubmit()
+    })
+
+    expect(mocks.requestPut).toHaveBeenCalledWith(
+      `/roles/${legacyRole.id}`,
+      expect.objectContaining({
+        name: '成本复核（已编辑）',
+        permissions: {
+          antibody_cost: 'W',
+          inventory: 'R',
+        },
+      }),
+    )
+  })
+
   it.each(['create', 'edit'] as const)(
     'keeps retired modules out of the %s form while antibody material compatibility remains assignable',
     (type) => {

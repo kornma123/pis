@@ -19,6 +19,7 @@ const LEGACY_COST_PERMISSIONS = {
   equipment: 'W',
   labor_times: 'W',
   antibody_cost: 'W',
+  inventory: 'R',
 } as const
 
 interface RoleRecord {
@@ -216,6 +217,22 @@ test.describe('critical roles API contract', () => {
       await editModal.getByRole('button', { name: '保存', exact: true }).click()
       expect((await updateResponse).status(), 'role edit must persist through the real UI/API chain').toBe(200)
       await expect(page.getByText(renamed, { exact: true })).toBeVisible()
+
+      const persistedAfterEdit = (await listRoles(request, adminToken)).list
+        .find((role) => role.id === roleId)
+      expect(persistedAfterEdit).toMatchObject({
+        id: roleId,
+        code,
+        name: renamed,
+        permissions: {
+          antibody_cost: 'W',
+          inventory: 'R',
+        },
+      })
+      expect(persistedAfterEdit?.permissions).toEqual({
+        antibody_cost: 'W',
+        inventory: 'R',
+      })
 
       await page.getByRole('button', { name: '新建角色', exact: true }).click()
       const createHeading = page.getByRole('heading', { name: '新建角色', exact: true })
