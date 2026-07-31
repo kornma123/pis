@@ -293,7 +293,7 @@ export function BOMTable({
                       )}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {row.serviceName || '-'}
+                      {row.serviceId || '-'}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {row.version || '-'}

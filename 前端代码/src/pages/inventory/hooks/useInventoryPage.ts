@@ -190,8 +190,8 @@ export function useInventoryPage() {
         name: m.name,
         spec: m.spec || '-',
         unit: m.unit || '-',
-        stock: m.stock || 0,
-        usagePerSample: m.usagePerSample || 0,
+        stock: m.stock,
+        usagePerSample: m.usagePerSample,
       }))
       setBomMaterials(materials)
     } catch (e) {
@@ -409,7 +409,7 @@ export function useInventoryPage() {
       name: m.name,
       spec: m.spec || '-',
       unit: m.unit || '-',
-      stock: m.stock || 0,
+      stock: m.stock,
     }))
     setSelectedMaterials(prev => [...prev, ...mapped])
     setCheckedMaterialIds(new Set())

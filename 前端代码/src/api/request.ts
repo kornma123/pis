@@ -52,6 +52,41 @@ function logoutAndRedirect() {
   window.location.href = '/login'
 }
 
+// ===== 展示层脱敏（Issue71）=====
+const SENSITIVE_FIELD_NAMES =
+  '(?:token|refreshToken|accessToken|password|passwd|secret|apiKey|apikey|authorization|auth|privateKey)'
+const BEARER_PATTERN = /(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi
+const SENSITIVE_ASSIGN_PATTERN = new RegExp(
+  `("?)(${SENSITIVE_FIELD_NAMES})\\1\\s*[:=]\\s*(?:"([^"]*)"|([^,\\s}]+))`,
+  'gi'
+)
+
+/** 对展示/日志可见文本做 Bearer 与敏感键值脱敏，不修改业务数据本身。 */
+export function redactSensitiveText(input: string): string {
+  const afterBearer = input.replace(BEARER_PATTERN, '$1[REDACTED]')
+  return afterBearer.replace(
+    SENSITIVE_ASSIGN_PATTERN,
+    (_match: string, quote: string, key: string) =>
+      `${quote}${key}${quote}${quote ? ':' : '='}${quote ? '"' : ''}[REDACTED]${quote ? '"' : ''}`
+  )
+}
+
+function extractMessage(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (typeof value === 'object' && value !== null) {
+    const message = (value as { message?: unknown }).message
+    if (typeof message === 'string') return message
+  }
+  return undefined
+}
+
+function toSafeDisplayMessage(value: unknown, fallback: string): string {
+  const raw = extractMessage(value)
+  if (!raw || !raw.trim()) return fallback
+  const redacted = redactSensitiveText(raw).trim()
+  return redacted || fallback
+}
+
 // ===== Token 续期：单飞锁 + 失败请求重放队列 =====
 let isRefreshing = false
 let pendingQueue: Array<(token: string | null) => void> = []
@@ -99,12 +134,36 @@ request.interceptors.response.use(
   (response) => {
     const { data } = response
     if (!data.success) {
-      toast.error(data.error?.message || '操作失败')
-      return Promise.reject(data.error)
+      const rawError =
+        typeof data.error === 'object' && data.error !== null ? data.error : {}
+      const safeMessage = toSafeDisplayMessage(
+        (rawError as { message?: unknown }).message,
+        '操作失败'
+      )
+      toast.error(safeMessage)
+      return Promise.reject({ ...rawError, message: safeMessage })
     }
     return data.data
   },
   async (error: AxiosError) => {
+    const responseError = (error.response?.data as
+      | { error?: { message?: unknown } }
+      | undefined)?.error
+    const rawBackendMessage =
+      responseError && typeof responseError.message === 'string' && responseError.message.trim()
+        ? responseError.message
+        : undefined
+    const safeBackendMessage = rawBackendMessage
+      ? redactSensitiveText(rawBackendMessage).trim()
+      : undefined
+    if (responseError && safeBackendMessage && typeof responseError.message === 'string') {
+      responseError.message = safeBackendMessage
+    }
+    const safeErrorMessage = toSafeDisplayMessage(error.message, '')
+    if (typeof error.message === 'string' && safeErrorMessage && error.message !== safeErrorMessage) {
+      ;(error as { message?: string }).message = safeErrorMessage
+    }
+
     const status = error.response?.status
     const originalConfig = error.config as
       | (AxiosRequestConfig & { _retried?: boolean; url?: string })
@@ -158,10 +217,9 @@ request.interceptors.response.use(
       }
     }
 
-    const msg = error.response?.data
-      ? (error.response.data as any)?.error?.message
-      : undefined
-    toast.error(msg || error.message || '网络错误')
+    const displayMessage =
+      safeBackendMessage || toSafeDisplayMessage(error.message, '网络错误')
+    toast.error(displayMessage)
     return Promise.reject(error)
   }
 )

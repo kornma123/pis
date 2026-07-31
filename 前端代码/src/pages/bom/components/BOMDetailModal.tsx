@@ -82,13 +82,13 @@ export function BOMDetailModal({ open, bom, tab, onClose, onChangeTab, onEdit }:
                 <div>
                   <div className="text-xs text-gray-500 mb-1">关联检测服务</div>
                   <div className="text-sm text-gray-900">
-                    {bom.serviceName || '-'}
+                    {bom.serviceId || '-'}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-gray-500 mb-1">物料数量</div>
                   <div className="text-sm text-gray-900">
-                    {bom.materialCount ?? 0} 项
+                    {bom.materialCount ?? bom.materials?.length ?? 0} 项
                   </div>
                 </div>
                 <div>
@@ -191,7 +191,7 @@ export function BOMDetailModal({ open, bom, tab, onClose, onChangeTab, onEdit }:
                           colSpan={6}
                           className="px-4 py-2.5 text-right text-sm text-gray-600"
                         >
-                          共 {bom.materialCount ?? 0} 项物料
+                          共 {bom.materialCount ?? bom.materials?.length ?? 0} 项物料
                           {bom.unitCost > 0 &&
                             ` | 单样本成本 ¥${bom.unitCost.toFixed(2)}`}
                         </td>

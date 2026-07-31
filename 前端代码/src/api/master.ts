@@ -1,4 +1,13 @@
 import request from './request'
+import {
+  parseBomDetailResponse,
+  parseBomListResponse,
+  parseMaterialDetailResponse,
+  parseMaterialListResponse,
+  parseNextCodeResponse,
+  parseProjectDetailResponse,
+  parseProjectListResponse,
+} from './master-parsers'
 import type { PaginationData, Category, Material, Supplier, Location, Project, BOM, PageParams, Equipment, EquipmentType, EquipmentUsage, DepreciationStat, StandardLaborTime, IndirectCostCenter, IndirectCostAllocation, CostAdjustment } from '@/types'
 
 export const categoryApi = {
@@ -10,10 +19,11 @@ export const categoryApi = {
 }
 
 export const materialApi = {
-  getList: (params?: PageParams & { categoryId?: string; supplierId?: string; status?: string }) =>
-    request.get<PaginationData<Material>>('/materials', { params }),
-  getDetail: (id: string) => request.get<Material>(`/materials/${id}`),
-  getNextCode: (categoryId: string) => request.get<{ code: string }>('/materials/next-code', { params: { categoryId } }),
+  getList: async (params?: PageParams & { categoryId?: string; supplierId?: string; status?: string }) =>
+    parseMaterialListResponse(await request.get('/materials', { params })),
+  getDetail: async (id: string) => parseMaterialDetailResponse(await request.get(`/materials/${id}`)),
+  getNextCode: async (categoryId: string) =>
+    parseNextCodeResponse(await request.get('/materials/next-code', { params: { categoryId } })),
   create: (data: Partial<Material>) => request.post('/materials', data),
   update: (id: string, data: Partial<Material>) => request.put(`/materials/${id}`, data),
   delete: (id: string) => request.delete(`/materials/${id}`),
@@ -38,18 +48,18 @@ export const locationApi = {
 }
 
 export const projectApi = {
-  getList: (params?: PageParams & { type?: string; status?: string; bomFilter?: string }) =>
-    request.get<PaginationData<Project>>('/projects', { params }),
-  getDetail: (id: string) => request.get<Project>(`/projects/${id}`),
+  getList: async (params?: PageParams & { type?: string; status?: string; bomFilter?: string }) =>
+    parseProjectListResponse(await request.get('/projects', { params })),
+  getDetail: async (id: string) => parseProjectDetailResponse(await request.get(`/projects/${id}`)),
   create: (data: Partial<Project>) => request.post('/projects', data),
   update: (id: string, data: Partial<Project>) => request.put(`/projects/${id}`, data),
   delete: (id: string) => request.delete(`/projects/${id}`),
 }
 
 export const bomApi = {
-  getList: (params?: PageParams & { type?: string; status?: string }) =>
-    request.get<PaginationData<BOM>>('/boms', { params }),
-  getDetail: (id: string) => request.get<BOM>(`/boms/${id}`),
+  getList: async (params?: PageParams & { type?: string; status?: string }) =>
+    parseBomListResponse(await request.get('/boms', { params })),
+  getDetail: async (id: string) => parseBomDetailResponse(await request.get(`/boms/${id}`)),
   create: (data: Partial<BOM>) => request.post('/boms', data),
   update: (id: string, data: Partial<BOM>) => request.put(`/boms/${id}`, data),
   delete: (id: string) => request.delete(`/boms/${id}`),

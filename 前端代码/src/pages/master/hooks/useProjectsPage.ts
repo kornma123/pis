@@ -49,15 +49,18 @@ export function useProjectsPage() {
     setPageSize,
     refresh,
   } = usePagination<Project>({
-    fetchFn: ({ page, pageSize }) =>
-      projectApi.getList({
+    fetchFn: async ({ page, pageSize }) => {
+      const res = await projectApi.getList({
         page,
         pageSize,
         keyword: keyword || undefined,
         type: typeFilter || undefined,
         status: statusFilter || undefined,
         bomFilter: bomFilter || undefined,
-      }),
+      })
+      // 页面层沿用旧 Project 类型；运行时行已由 projectApi 的 endpoint parser 校验（Issue71）。
+      return { list: res.list as unknown as Project[], pagination: res.pagination }
+    },
     deps: [keyword, typeFilter, statusFilter, bomFilter],
   })
 

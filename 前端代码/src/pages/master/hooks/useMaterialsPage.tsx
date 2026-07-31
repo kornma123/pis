@@ -137,8 +137,8 @@ export function useMaterialsPage() {
     if (!categoryId) return
     try {
       const res: any = await materialApi.getNextCode(categoryId)
-      if (res.data?.code) {
-        setForm(prev => ({ ...prev, code: res.data.code }))
+      if (res.code) {
+        setForm(prev => ({ ...prev, code: res.code }))
       }
     } catch (e) { /* ignore */ }
   }, [])
