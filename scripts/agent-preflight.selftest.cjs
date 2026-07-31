@@ -13,6 +13,9 @@ const CLAUDE_CLI_SUPERVISION = 'docs/claude-code-cli-supervision.md'
 const CLAUDE_CLI_PROTOCOL_ID = 'coreone-claude-code-cli-supervision/v2'
 const CLAUDE_CLI_DEFAULTS = 'effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
 const CLAUDE_CLI_TERMINAL_PROOF = 'canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed'
+const CLAUDE_CLI_SUPERVISOR = 'scripts/claude-cli-supervisor.cjs'
+const CLAUDE_CLI_SUPERVISOR_SELFTEST = 'scripts/claude-cli-supervisor.selftest.cjs'
+const CLAUDE_CLI_SUPERVISOR_RUNTIME = `script=${CLAUDE_CLI_SUPERVISOR} selftest=${CLAUDE_CLI_SUPERVISOR_SELFTEST} adapter-api=1 canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN`
 const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
   'docs/工作模型-COREONE项目版-2026-06-30.md',
@@ -89,11 +92,14 @@ function installAuthorityFixture(root) {
     `<!-- protocol-id: ${CLAUDE_CLI_PROTOCOL_ID} -->`,
     `<!-- supervisor-defaults: ${CLAUDE_CLI_DEFAULTS} -->`,
     `<!-- terminal-proof: ${CLAUDE_CLI_TERMINAL_PROOF} -->`,
+    `<!-- supervisor-runtime: ${CLAUDE_CLI_SUPERVISOR_RUNTIME} -->`,
     '',
     'A backend tool PTY is not proof of a user-visible desktop terminal.',
     'Write a canary through the intended handle and read it back from the attached app terminal before launch.',
     '',
   ].join('\n'))
+  write(root, CLAUDE_CLI_SUPERVISOR, '#!/usr/bin/env node\n\nmodule.exports = { runSupervisor() {} }\n')
+  write(root, CLAUDE_CLI_SUPERVISOR_SELFTEST, '#!/usr/bin/env node\n\nconsole.log("PASS")\n')
   write(root, '.claude/skills/coreone/SKILL.md', [
     '---',
     'name: coreone-conventions',
@@ -196,6 +202,19 @@ check('Claude CLI supervision: canonical protocol and routes pass', () => {
   }
 })
 
+check('Claude CLI supervision: executable runtime regression suite passes', () => {
+  const result = spawnSync(
+    process.execPath,
+    [path.join(__dirname, 'claude-cli-supervisor.selftest.cjs')],
+    {
+      cwd: path.resolve(__dirname, '..'),
+      encoding: 'utf8',
+    },
+  )
+  assert.equal(result.status, 0, result.stderr || result.stdout)
+  assert.match(result.stdout, /claude-cli-supervisor selftest: PASS/)
+})
+
 check('Claude CLI supervision: effort drift from ultracode fails closed', () => {
   const repo = setupRepo()
   try {
@@ -259,6 +278,21 @@ check('Claude CLI supervision: a missing automatic route fails closed', () => {
     assert.ok(checkResult, 'missing check authority.claude-cli-supervision')
     assert.equal(checkResult.status, 'FAIL')
     assert.ok(checkResult.details.includes(`AGENTS.md: expected exactly one ${CLAUDE_CLI_SUPERVISION} route; found 0`))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('Claude CLI supervision: missing executable supervisor fails closed', () => {
+  const repo = setupRepo()
+  try {
+    fs.rmSync(path.join(repo.work, CLAUDE_CLI_SUPERVISOR))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const checkResult = result.json.checks.find((item) => item.id === 'authority.claude-cli-supervision')
+    assert.ok(checkResult, 'missing check authority.claude-cli-supervision')
+    assert.equal(checkResult.status, 'FAIL')
+    assert.ok(checkResult.details.includes(`${CLAUDE_CLI_SUPERVISOR}: missing executable governance asset`))
   } finally {
     fs.rmSync(repo.tmp, { recursive: true, force: true })
   }

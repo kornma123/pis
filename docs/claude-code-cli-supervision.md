@@ -3,11 +3,72 @@
 <!-- protocol-id: coreone-claude-code-cli-supervision/v2 -->
 <!-- supervisor-defaults: effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true -->
 <!-- terminal-proof: canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed -->
+<!-- supervisor-runtime: script=scripts/claude-cli-supervisor.cjs selftest=scripts/claude-cli-supervisor.selftest.cjs adapter-api=1 canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN -->
 <!-- stable-rules-only -->
 
 本协议用于 Codex 或 PM 在本机启动、续接、监督 Claude Code CLI/K3 并与其双向协作。它解决的是会话可见、问题及时回答、输出不遗漏和派单前复核，不新增命令白名单，也不替代 `docs/agent-operating-contract.md` 的权限、ownership、GitHub 写入或效率规则。
 
 本地终端输出轮询不是 GitHub 轮询。GitHub 仍只按共用契约 §9 的低频、串行、经授权路径读写。
+
+## 0. 可执行入口与宿主 adapter
+
+仓库内唯一可执行监督入口是 `scripts/claude-cli-supervisor.cjs`，回归入口是 `scripts/claude-cli-supervisor.selftest.cjs`。监督器拥有状态机、同句柄校验、Claude 探针、session/prompt 绑定、增量读取、问题中断、双读 EOF、独立 Git/scope/R0 事实闸和 Git 外恢复状态；它不拥有 Codex Desktop 前端终端。
+
+宿主以 adapter API v1 接入。缺 adapter 时没有任何 PTY fallback，`run` 必须非零退出并报告 `TERMINAL_VISIBILITY_UNPROVEN`：
+
+```bash
+node scripts/claude-cli-supervisor.cjs run \
+  --request='<任务 request JSON>' \
+  --adapter='<Codex Desktop terminal adapter 模块>'
+```
+
+request JSON 只保存调度合同，不内嵌 prompt 正文：
+
+```json
+{
+  "taskId": "stable-task-id",
+  "taskName": "可识别且唯一的任务名",
+  "threadId": "当前 Codex task id",
+  "cwd": "/absolute/verified/worktree",
+  "promptFile": "/absolute/private/prompt.txt",
+  "minimumClaudeVersion": "2.0.0",
+  "owned": ["scripts/example.cjs"],
+  "excluded": ["前端代码/**", "后端代码/**"],
+  "risk": "R1",
+  "questionTimeoutMs": 300000
+}
+```
+
+`minimumClaudeVersion` 是任务启动时由操作者/宿主按已批准版本策略注入的动态下限，不写死在稳定协议。prompt 文件必须是普通非 symlink 文件；监督状态只保存 prompt SHA-256，不保存正文。
+
+adapter 元数据必须声明 `apiVersion=1`、`surface=codex-desktop-terminal`、`sameHandleReadWrite=true`、`canaryDelivery=out-of-band-marker` 与 `structuredProbe=true`，并实现以下同一 `terminalHandle` 合同；每个返回值都必须回传该 handle，任何 handle 漂移立即失败关闭：
+
+| 方法 | 必须证明 |
+|---|---|
+| `createTerminal` | 在当前 `threadId` 中同步创建并打开前端终端；返回 `status=attached`、`visible=true` 与稳定 handle；`queued` 不合格 |
+| `attachTerminal` | Codex app/task 重启后，把已保存的同一 handle 重新附着到当前任务；不能改用另一个终端 |
+| `writeTerminal` | 向同一 handle 写 canary、控制者回答和前台 CLI 输入；visibility canary 必须走不会注入 Claude 前台输入的宿主 marker 通道；返回 `accepted=true` |
+| `readTerminal` | 应用侧按 cursor 增量回读同一 handle，返回 `attached`、`visible`、输出、尾部/EOF、运行工具和结构化 question/stop 信号 |
+| `probeTerminal` | 新启动前在同一终端运行 `pwd`、worktree root、Claude 路径/版本和 `--effort ultracode` 支持探针；恢复时必须用宿主进程/会话查询等不向仍活着的 Claude 注入命令的方式复核，返回结构化结果 |
+| `launchClaude` | 在该 handle 的前台使用唯一 name/session id 和精确 `--effort ultracode` 启动，并以 prompt hash 回执证明已注入 |
+| `resumeClaude` | 复用原 session id；进程仍在时回报 `alreadyRunning`，否则用原 id `--resume`，不得新建重复会话 |
+
+调度者收到 `WAITING_CONTROLLER` 后，在权限与 scope 不扩大的问题上可通过库 API 的 `onQuestion` 立即回答，或调用：
+
+```bash
+node scripts/claude-cli-supervisor.cjs answer \
+  --request='<同一 request JSON>' \
+  --adapter='<同一宿主 adapter>' \
+  --answer-file='<控制者答案文本>'
+```
+
+answer 路径会重新做同句柄 canary，再把答案写回原终端；不得要求 PM 点击、切换、粘贴或输入。需要新增权限、ownership、产品方向或 GitHub 写入时保持 `WAITING_CONTROLLER`，由调度者把最小决策交给用户。
+
+恢复状态保存在 `git rev-parse --git-path coreone/claude-cli-supervisor/<task-hash>.json`，位于 Git 外且按 worktree 隔离。Codex app/task 重启后用同一 request 重跑 `run`：监督器校验 task/prompt/scope 绑定，重新证明原 terminal handle，再以原 Claude session id 续接；raw prompt、token、终端原文和凭据都不落状态文件。
+
+以下已知失败形态全部属于回归负例：打开动作只返回 `queued`；应用回读显示未附着；回读的是主 checkout 的人工终端而非目标 handle；工具 PTY 能完成但前端不可见。它们只能报告 `TERMINAL_VISIBILITY_UNPROVEN` 或 `TERMINAL_HANDLE_MISMATCH`，不得声称 Claude 已启动，更不得把点击/输入步骤转交 PM。
+
+**前端集成 owner / trigger**：owner 是 Codex Desktop terminal bridge 的宿主集成维护者；当宿主同时提供“当前 task 同步创建/附着前端终端、稳定 handle、同 handle 写入、应用侧带 handle 回读”四项 API 时触发接线。接线验收必须先让 `node scripts/claude-cli-supervisor.selftest.cjs` 全绿，再用无秘密 canary 做真实同 handle smoke；只有该 smoke 通过才允许受控 Claude 启动。仓库治理 owner 维护本脚本、状态机、测试和协议，不得用仓库代码伪造宿主可见性。
 
 ## 1. 单一控制面
 

@@ -19,6 +19,9 @@ const CLAUDE_CLI_SUPERVISION_PATH = 'docs/claude-code-cli-supervision.md'
 const CLAUDE_CLI_SUPERVISION_ID = 'coreone-claude-code-cli-supervision/v2'
 const CLAUDE_CLI_SUPERVISION_DEFAULTS = 'effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
 const CLAUDE_CLI_TERMINAL_PROOF = 'canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed'
+const CLAUDE_CLI_SUPERVISOR_PATH = 'scripts/claude-cli-supervisor.cjs'
+const CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH = 'scripts/claude-cli-supervisor.selftest.cjs'
+const CLAUDE_CLI_SUPERVISOR_RUNTIME = `script=${CLAUDE_CLI_SUPERVISOR_PATH} selftest=${CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH} adapter-api=1 canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN`
 const CLAUDE_COREONE_SKILL_PATH = '.claude/skills/coreone/SKILL.md'
 const PM_DECISIONS_PATH = 'docs/PM待拍板.md'
 const ENTRYPOINTS = ['AGENTS.md', 'CLAUDE.md']
@@ -2090,7 +2093,12 @@ function inspectAuthority(root, args, checks) {
   for (const file of LEGACY_GUIDES) {
     if (existsAtSource(root, file, source)) contents[file] = readSource(root, file, source)
   }
-  for (const file of [CLAUDE_CLI_SUPERVISION_PATH, CLAUDE_COREONE_SKILL_PATH]) {
+  for (const file of [
+    CLAUDE_CLI_SUPERVISION_PATH,
+    CLAUDE_CLI_SUPERVISOR_PATH,
+    CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH,
+    CLAUDE_COREONE_SKILL_PATH,
+  ]) {
     if (existsAtSource(root, file, source)) contents[file] = readSource(root, file, source)
   }
   if (existsAtSource(root, 'README.md', source)) contents['README.md'] = readSource(root, 'README.md', source)
@@ -2119,6 +2127,7 @@ function inspectAuthority(root, args, checks) {
   const supervisionIdMatch = supervision.match(/<!--\s*protocol-id:\s*([^\s]+)\s*-->/)
   const supervisionDefaultsMatch = supervision.match(/<!--\s*supervisor-defaults:\s*([\s\S]*?)\s*-->/)
   const supervisionTerminalProofMatch = supervision.match(/<!--\s*terminal-proof:\s*([\s\S]*?)\s*-->/)
+  const supervisionRuntimeMatch = supervision.match(/<!--\s*supervisor-runtime:\s*([\s\S]*?)\s*-->/)
   if (!supervision) supervisionFindings.push(`${CLAUDE_CLI_SUPERVISION_PATH}: missing`)
   if ((supervisionIdMatch && supervisionIdMatch[1]) !== CLAUDE_CLI_SUPERVISION_ID) {
     supervisionFindings.push(`protocol id mismatch; expected ${CLAUDE_CLI_SUPERVISION_ID}`)
@@ -2128,6 +2137,12 @@ function inspectAuthority(root, args, checks) {
   }
   if ((supervisionTerminalProofMatch && supervisionTerminalProofMatch[1].trim()) !== CLAUDE_CLI_TERMINAL_PROOF) {
     supervisionFindings.push('terminal proof marker mismatch')
+  }
+  if ((supervisionRuntimeMatch && supervisionRuntimeMatch[1].trim()) !== CLAUDE_CLI_SUPERVISOR_RUNTIME) {
+    supervisionFindings.push('supervisor runtime marker mismatch')
+  }
+  for (const file of [CLAUDE_CLI_SUPERVISOR_PATH, CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH]) {
+    if (!contents[file]) supervisionFindings.push(`${file}: missing executable governance asset`)
   }
   for (const file of [...ENTRYPOINTS, CONTRACT_PATH, CLAUDE_COREONE_SKILL_PATH]) {
     const text = contents[file] || ''
@@ -2141,7 +2156,7 @@ function inspectAuthority(root, args, checks) {
       checks,
       'authority.claude-cli-supervision',
       'PASS',
-      `Claude Code CLI supervision defaults: ${CLAUDE_CLI_SUPERVISION_DEFAULTS}; terminal proof: ${CLAUDE_CLI_TERMINAL_PROOF}`,
+      `Claude Code CLI supervision defaults: ${CLAUDE_CLI_SUPERVISION_DEFAULTS}; terminal proof: ${CLAUDE_CLI_TERMINAL_PROOF}; runtime: ${CLAUDE_CLI_SUPERVISOR_RUNTIME}`,
     )
   }
 
@@ -2285,6 +2300,7 @@ function inspectAuthority(root, args, checks) {
       protocolId: supervisionIdMatch ? supervisionIdMatch[1] : null,
       defaults: supervisionDefaultsMatch ? supervisionDefaultsMatch[1].trim() : null,
       terminalProof: supervisionTerminalProofMatch ? supervisionTerminalProofMatch[1].trim() : null,
+      runtime: supervisionRuntimeMatch ? supervisionRuntimeMatch[1].trim() : null,
     },
     requiredFiles: AUTHORITY_FILES,
     missingFiles: missing,
@@ -2392,6 +2408,9 @@ module.exports = {
   CLAUDE_CLI_SUPERVISION_ID,
   CLAUDE_CLI_SUPERVISION_DEFAULTS,
   CLAUDE_CLI_TERMINAL_PROOF,
+  CLAUDE_CLI_SUPERVISOR_PATH,
+  CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH,
+  CLAUDE_CLI_SUPERVISOR_RUNTIME,
   PM_DECISIONS_PATH,
   AUTHORITY_FILES,
 }
