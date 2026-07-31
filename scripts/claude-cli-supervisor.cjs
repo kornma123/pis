@@ -1717,10 +1717,14 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
   try {
     request = validateRequest(input);
     state = readState(options.stateFile);
+    const createdState = !state;
     if (state) {
       validateStateBinding(state, request);
     } else {
       state = createState(request, options);
+    }
+    const adapter = validateAdapter(adapterInput, options);
+    if (createdState) {
       const initialGit = options.captureInitialGitState(request.cwd);
       state.initialHead = initialGit.head;
       state.initialBranch = initialGit.branch;
@@ -1729,7 +1733,6 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
       state.initialR0Evidence = r0EvidenceForRequest(request.cwd, request);
       persist(options.stateFile, state, options.clock);
     }
-    const adapter = validateAdapter(adapterInput, options);
 
     if (state.status === 'STOPPED') {
       await proveTerminalVisibility(adapter, request, state, options);

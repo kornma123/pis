@@ -325,6 +325,49 @@ check('Claude CLI supervision: canonical protocol and routes pass', () => {
   }
 })
 
+check('Claude CLI supervision: detached review preserves the no-adapter visibility failure', () => {
+  const repo = setupRepo()
+  try {
+    for (const [relativePath, sourcePath] of [
+      [CLAUDE_CLI_SUPERVISOR, path.join(__dirname, 'claude-cli-supervisor.cjs')],
+      [
+        CLAUDE_CLI_SUPERVISOR_SELFTEST,
+        path.join(__dirname, 'claude-cli-supervisor.selftest.cjs'),
+      ],
+      [
+        CLAUDE_CLI_SUPERVISOR_TEST_HARNESS,
+        path.join(__dirname, 'claude-cli-supervisor.test-harness.cjs'),
+      ],
+      [CLAUDE_CLI_SUPERVISOR_DEPENDENCY, SCRIPT],
+    ]) {
+      write(repo.work, relativePath, fs.readFileSync(sourcePath, 'utf8'))
+    }
+    git(repo.work, [
+      'add',
+      CLAUDE_CLI_SUPERVISOR,
+      CLAUDE_CLI_SUPERVISOR_SELFTEST,
+      CLAUDE_CLI_SUPERVISOR_TEST_HARNESS,
+      CLAUDE_CLI_SUPERVISOR_DEPENDENCY,
+    ])
+    git(repo.work, ['commit', '-q', '-m', 'materialize detached supervisor target'])
+    git(repo.work, ['switch', '-q', '--detach', 'HEAD'])
+
+    const result = run(repo.work, [
+      '--mode=review',
+      '--target-ref=HEAD',
+      '--rules-only',
+    ])
+    expectVerdict(result, 'PASS', 0)
+    const target = result.json.checks.find(
+      (item) => item.id === 'authority.claude-cli-supervision',
+    )
+    assert.ok(target, 'missing check authority.claude-cli-supervision')
+    assert.equal(target.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
 check('Claude CLI supervision: executable runtime regression suite passes', () => {
   const result = spawnSync(
     process.execPath,
