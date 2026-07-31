@@ -114,8 +114,7 @@ describe('runReconcile 关账窗口竞态（预检通过 → 另一连接关账 
 
     // 推进到「复核完成」（关账前置态，与 /complete 同字段），并挂一张待补收单
     victim.prepare(`UPDATE reconcile_hospital_months SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = 'op-setup', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(hmId)
-    const diffId = diffIds(victim, hmId)[0]
-    victim.prepare(`INSERT INTO supplement_orders (id, partner_id, service_month, source_diff_id, case_no, amount, case_count, operator) VALUES ('SUP-RACE-1', ?, ?, ?, 'CB', 200, 2, 'op-setup')`).run(P1, MONTH, diffId)
+    victim.prepare(`INSERT INTO supplement_orders (id, partner_id, service_month, case_no, amount, case_count, operator) VALUES ('SUP-RACE-1', ?, ?, 'CB', 200, 2, 'op-setup')`).run(P1, MONTH)
 
     // 改变输入（新增 CC 1 vs 4 差异）：若定版被覆写，diff_count/差异集必然变化 → 覆写可被无歧义检出
     seedPartnerMonth(victim, P1, [{ caseNo: 'CC', bill: 1, lis: 4 }])
@@ -155,11 +154,20 @@ describe('runReconcile 关账窗口竞态（预检通过 → 另一连接关账 
 
   it('窗口内行被另一连接创建并关账（预检时行还不存在）→ 同样 PERIOD_CLOSED，而非 UNIQUE 冲突/覆写', () => {
     seedPartnerMonth(victim, P2, [{ caseNo: 'CX', bill: 2, lis: 3 }])
-    // 预检读不到行 → 旧代码走 INSERT 路径；窗口内 rival 已建同院月「已关账」行
+    // 预检读不到行 → 旧代码走 INSERT 路径；窗口内 rival 已建同院月「已关账」行。
+    // #93-A 终态 INSERT 闸落地后，裸写终态行会被 trg_reconcile_hospital_month_pending_insert_shape
+    // 拒绝——rival 改为走合法三步到达已关账（与真实 /complete→/close 路径同形状）：
+    // ① 严格 pending INSERT（status='待复核'，终态/revenue/reopen 全 NULL，同下方 :190 形状）
+    // ② /complete 同字段 UPDATE（复核完成 + completed_at/completed_by）
+    // ③ /close 同一条 CLOSE_SQL。match_rate=0.987/diff_count=7 由 ① 携带，供下方断言覆写可检出。
     const raced = raceWindow(victim, () => {
       rival
-        .prepare(`INSERT INTO reconcile_hospital_months (id, partner_id, partner_name, service_month, status, match_rate, diff_count, closed_by) VALUES ('HM-RIVAL-2', ?, '竞态测试院-PT-RACE-2', ?, '已关账', 0.987, 7, 'rival-closer')`)
+        .prepare(`INSERT INTO reconcile_hospital_months (id, partner_id, partner_name, service_month, status, match_rate, diff_count) VALUES ('HM-RIVAL-2', ?, '竞态测试院-PT-RACE-2', ?, '待复核', 0.987, 7)`)
         .run(P2, MONTH)
+      rival
+        .prepare(`UPDATE reconcile_hospital_months SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = 'rival-closer', updated_at = CURRENT_TIMESTAMP WHERE id = 'HM-RIVAL-2'`)
+        .run()
+      rival.prepare(CLOSE_SQL).run('rival-closer', 'HM-RIVAL-2')
     })
     let err: any = null
     try {
@@ -218,32 +226,26 @@ describe('runReconcile 关账窗口竞态（预检通过 → 另一连接关账 
     expect(plain.txn).toEqual({ begin: 0, commit: 0, rollback: 0 })
   })
 
-  it('反向窗口：关账预检通过后发生重算 → 旧关账请求不得覆盖新产生的待复核状态', () => {
+  it('完成态 hard gate：关账预检后旧重算不得复活已完成事实，close CAS 仍单胜者', () => {
     seedPartnerMonth(victim, P4, [{ caseNo: 'CW', bill: 2, lis: 5 }])
     const first = runReconcile(victim, P4, MONTH, 'op-setup')
     const hmId = first.hospitalMonthId
     victim.prepare(`UPDATE reconcile_hospital_months SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = 'op-setup', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(hmId)
 
-    // 模拟 /close 已完成事务外预检并持有旧 hm.id；随后另一请求拿锁重算，把状态退回「待复核」。
+    // 模拟 /close 已完成事务外预检并持有 hm.id；另一请求不得把完成事实重算回「待复核」。
     const staleCloseSnapshot = hmRow(victim, P4)
     expect(staleCloseSnapshot.status).toBe('复核完成')
+    const beforeDiffIds = diffIds(victim, hmId)
     seedPartnerMonth(victim, P4, [{ caseNo: 'CV', bill: 1, lis: 4 }])
-    runReconcile(rival, P4, MONTH, 'op-recompute')
-    const recomputed = hmRow(victim, P4)
-    expect(recomputed.status).toBe('待复核')
-    expect(recomputed.pending_count).toBeGreaterThan(0)
+    expect(() => runReconcile(rival, P4, MONTH, 'op-recompute'))
+      .toThrow(/COMPLETE_HOSPITAL_MONTH_FINAL/)
+    const afterRejectedRecompute = hmRow(victim, P4)
+    expect(afterRejectedRecompute.status).toBe('复核完成')
+    expect(afterRejectedRecompute.pending_count).toBe(staleCloseSnapshot.pending_count)
+    expect(diffIds(victim, hmId)).toEqual(beforeDiffIds)
 
-    // 关账动作必须以条件更新的 changes 为唯一成功判据；旧快照不能把新状态盖成「已关账」。
-    expect(tryCloseHospitalMonth(victim, staleCloseSnapshot.id, 'stale-closer')).toBe(false)
-    const afterRejectedClose = hmRow(victim, P4)
-    expect(afterRejectedClose.status).toBe('待复核')
-    expect(afterRejectedClose.closed_by).toBeNull()
-    expect(afterRejectedClose.pending_count).toBe(recomputed.pending_count)
-    expect(diffIds(victim, hmId)).toHaveLength(recomputed.diff_count)
-
-    // 正常路径也钉住：重新完成复核后，同一 CAS 只能成功一次。
-    victim.prepare(`UPDATE reconcile_hospital_months SET status = '复核完成', completed_at = CURRENT_TIMESTAMP, completed_by = 'op-review', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(hmId)
-    expect(tryCloseHospitalMonth(victim, hmId, 'fresh-closer')).toBe(true)
+    // 重算零写后，close CAS 对同一完成事实仍只能成功一次。
+    expect(tryCloseHospitalMonth(victim, staleCloseSnapshot.id, 'fresh-closer')).toBe(true)
     expect(tryCloseHospitalMonth(victim, hmId, 'duplicate-closer')).toBe(false)
     expect(hmRow(victim, P4)).toMatchObject({ status: '已关账', closed_by: 'fresh-closer' })
   })

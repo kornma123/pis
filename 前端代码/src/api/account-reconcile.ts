@@ -1,66 +1,57 @@
 import request from './request'
 import type {
-  OverviewResp,
+  BoardResp,
   WorkbenchResp,
   ComputeResp,
   SupplementResp,
+  ReconcileBinding,
   VerdictReason,
+  FollowUp,
 } from '@/types/account-reconcile'
 
-// 账实核对 API —— 对齐后端 /api/v1/account-reconcile。request 已 unwrap {success,data}，直接拿 data。
+// 账实核对 API —— 对齐后端 /api/v1/account-reconcile（LOC-005 权威代次合同）。
+// request 已 unwrap {success,data}，直接拿 data。所有读/写必须携带四元组 binding；
+// binding 由 GET /board（月份级代次发现）取得，前端不凭空构造 statementGenerationId。
 export const accountReconcileApi = {
-  // ① 复核总览：某月各院状态 + 看板
-  overview: (serviceMonth: string) =>
-    request.get('/account-reconcile/overview', { params: { serviceMonth } }) as unknown as Promise<OverviewResp>,
+  // 月份级代次发现 + 看板：每院的 statement/reconcile generation、院·月状态与汇总。
+  // （复核总览端点即代次发现入口——前端唯一取得四元组 binding 的地方）
+  board: (settlementMonth: string) =>
+    request.get('/account-reconcile/overview', { params: { settlementMonth } }) as unknown as Promise<BoardResp>,
 
-  // 计算某院某月账实核对（写）
-  compute: (partnerId: string, serviceMonth: string) =>
-    request.post('/account-reconcile/compute', { partnerId, serviceMonth }) as unknown as Promise<ComputeResp>,
+  // 计算某院某月账实核对（写）。reconcileGenerationId 由调用方决定：
+  // 同 statement 代沿用当前对账代（幂等重放），statement 代已变或首算时铸新 uuid（supersede）。
+  compute: (binding: ReconcileBinding) =>
+    request.post('/account-reconcile/compute', binding) as unknown as Promise<ComputeResp>,
 
-  // ② 复核工作台：某院某月差异 + 未匹配
-  workbench: (partnerId: string, serviceMonth: string) =>
-    request.get('/account-reconcile/workbench', { params: { partnerId, serviceMonth } }) as unknown as Promise<WorkbenchResp>,
+  // 复核工作台：snapshot + 当前代差异（含认定态）+ 逐抗体线索。
+  workbench: (binding: ReconcileBinding) =>
+    request.get('/account-reconcile/workbench', { params: { ...binding } }) as unknown as Promise<WorkbenchResp>,
 
-  // 认定一条差异
-  verdict: (diffId: string, reason: VerdictReason, note?: string) =>
-    request.post(`/account-reconcile/diffs/${diffId}/verdict`, { reason, note }) as unknown as Promise<{
+  // 认定一条差异（必须当前代差异；旧代差异 STALE_RECONCILIATION_DIFF）。
+  verdict: (diffId: string, binding: ReconcileBinding, reason: VerdictReason, note?: string) =>
+    request.post(`/account-reconcile/diffs/${diffId}/verdict`, { ...binding, reason, note }) as unknown as Promise<{
       id: string
       verdict: VerdictReason
-      followUp: string
+      followUp: FollowUp
       pendingCount: number
+      duplicate: boolean
     }>,
 
-  // 复核完成（前置=全认定）
-  complete: (hospitalMonthId: string) =>
-    request.post(`/account-reconcile/hospital-months/${hospitalMonthId}/complete`) as unknown as Promise<{
-      id: string
-      status: string
+  // 复核完成（前置=全认定；body 必须且只能四元组 binding）
+  complete: (hospitalMonthId: string, binding: ReconcileBinding) =>
+    request.post(`/account-reconcile/hospital-months/${hospitalMonthId}/complete`, binding) as unknown as Promise<ReconcileBinding & {
+      hospitalMonthId: string
+      status: 'complete'
       confirmedLabRevenue: number
     }>,
 
-  // 反向：复核完成 → 待复核（必填理由）
-  reopen: (hospitalMonthId: string, reason: string) =>
-    request.post(`/account-reconcile/hospital-months/${hospitalMonthId}/reopen`, { reason }) as unknown as Promise<{
-      id: string
-      status: string
+  // 关账（定版；每次只关一家，多家由调用方循环聚合）
+  close: (binding: ReconcileBinding) =>
+    request.post('/account-reconcile/close', { items: [binding] }) as unknown as Promise<{
+      closed: Array<ReconcileBinding & { hospitalMonthId: string; status: 'closed' }>
     }>,
 
-  // 关账（部分关账 + 挂起；前置=复核完成；定版）
-  close: (serviceMonth: string, partnerIds: string[]) =>
-    request.post('/account-reconcile/close', { serviceMonth, partnerIds }) as unknown as Promise<{
-      serviceMonth: string
-      closed: string[]
-      skipped: { partnerId: string; reason: string }[]
-    }>,
-
-  // 反关账（已关账 → 复核完成，必填理由）
-  reopenClose: (hospitalMonthId: string, reason: string) =>
-    request.post(`/account-reconcile/hospital-months/${hospitalMonthId}/reopen-close`, { reason }) as unknown as Promise<{
-      id: string
-      status: string
-    }>,
-
-  // ③ 补收追踪
+  // 补收追踪
   supplements: (serviceMonth: string, status?: string) =>
     request.get('/account-reconcile/supplements', { params: { serviceMonth, status } }) as unknown as Promise<SupplementResp>,
 
