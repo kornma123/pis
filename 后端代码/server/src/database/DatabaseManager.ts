@@ -1403,7 +1403,8 @@ const canonicalTimestampSql = (column: string): string => `(
 // 天然不含 0x00，合法 Unicode/CJK actor 零误伤）。二值保持：NULL 输入 UDF=0 →
 // 首项 FALSE → AND 恒 FALSE（FALSE AND NULL = FALSE），NOT(谓词) 在三值逻辑下
 // 仍正确判违例。generation trigger/片段/扫描消费同一完整 helper；hospital-month
-// trigger 的无 UDF 多连接边界见下方纯 SQLite 子集。
+// trigger 的无 UDF 多连接边界见下方 Issue #98 注释（未注册连接一律
+// no such function 零写 fail-closed，不再保留 trim() 降级子集）。
 const canonicalActorRawStorageSql = (column: string): string => `(
         typeof(${column}) = 'text'
         AND length(CAST(${column} AS BLOB)) > 0
@@ -1413,15 +1414,14 @@ const canonicalActorSql = (column: string): string => `(
         coreone_canonical_actor(${column}) = 1
         AND ${canonicalActorRawStorageSql(column)})`
 
-// hospital-month 的 terminal triggers 会被竞态测试所代表的第二 SQLite 连接直接
-// 触发；该连接按产品合同不注册应用 UDF。这里必须保持纯 SQLite，才能在竞态路径返回
-// PERIOD_CLOSED / COMPLETE_HOSPITAL_MONTH_FINAL，而不是泄漏 no such function。
-// 完整 Unicode whitespace/C0 语义仍由托管连接上的 canonicalActorSql 在 generation
-// trigger、terminal fragment、overview 与 startup 扫描统一承担；本纯 SQL 子集专门
-// 在最早写入点拒绝 NULL/非 TEXT/空串/普通空格串及原始 NUL-tail。
-const canonicalHospitalMonthTriggerActorSql = (column: string): string => `(
-        ${canonicalActorRawStorageSql(column)}
-        AND trim(${column}) <> '')`
+// Issue #98：hospital-month 的 terminal triggers 与 generation trigger 消费同一
+// canonicalActorSql（coreone_canonical_actor UDF + 原始 BLOB instr(x'00') 闸），
+// 单一权威语义，禁止回退到 SQLite 默认 trim() 子集——trim() 只剥 U+0020，
+// tab/newline/C0/C1/NBSP/em-space 会在第二连接冒充非空 actor。受支持写连接
+// （openManagedDatabase 与 upgradeAccountReconciliationSchema 头部）均注册该 UDF；
+// 未注册 UDF 的连接触发本 trigger 时以确定性 "no such function:
+// coreone_canonical_actor" 整句失败、零写入 fail-closed（与 generation artifact
+// UDF 同姿态），不再以纯 SQL 子集放行不合规 actor。
 
 // fresh fixed-SHA P1（2026-07-29）：node:sqlite 对 TEXT 同样在首个 NUL 截断，
 // coreone_completion_artifact_valid(json, hash, ...) 因而只能看到 NUL 前缀。
@@ -2683,9 +2683,9 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       AND (
         NEW.status IS NOT '已关账'
         OR NOT ${canonicalTimestampSql('OLD.completed_at')}
-        OR NOT ${canonicalHospitalMonthTriggerActorSql('OLD.completed_by')}
+        OR NOT ${canonicalActorSql('OLD.completed_by')}
         OR NOT ${canonicalTimestampSql('NEW.closed_at')}
-        OR NOT ${canonicalHospitalMonthTriggerActorSql('NEW.closed_by')}
+        OR NOT ${canonicalActorSql('NEW.closed_by')}
         OR OLD.id IS NOT NEW.id
         OR OLD.partner_id IS NOT NEW.partner_id
         OR OLD.partner_name IS NOT NEW.partner_name
@@ -2732,7 +2732,7 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
       SELECT RAISE(ABORT, 'PENDING_HOSPITAL_MONTH_COMPLETION_MALFORMED')
        WHERE NEW.status = '复核完成'
          AND (NOT ${canonicalTimestampSql('NEW.completed_at')}
-              OR NOT ${canonicalHospitalMonthTriggerActorSql('NEW.completed_by')});
+              OR NOT ${canonicalActorSql('NEW.completed_by')});
       SELECT RAISE(ABORT, 'PENDING_HOSPITAL_MONTH_COMPLETION_MALFORMED')
        WHERE NEW.status = '待复核'
          AND (NEW.completed_at IS NOT NULL OR NEW.completed_by IS NOT NULL);

@@ -89,6 +89,12 @@ beforeAll(async () => {
   runReconcile = reconcile.runReconcile
   tryCloseHospitalMonth = reconcile.tryCloseHospitalMonth
   rival = new DatabaseSync(DB_FILE)
+  // Issue #98：受支持写连接统一注册 canonical actor UDF（与
+  // openManagedDatabase / upgradeAccountReconciliationSchema 同入口）。
+  // rival 执行与 /close 同一条 guarded 写 SQL，属于受支持写连接，必须拿到
+  // 完整 canonical actor 语义；真正“未注册 UDF 的第二连接”负控见
+  // tests/account-reconcile-second-connection-canonical-actor.test.ts。
+  dm.registerCoreoneSqlFunctions(rival)
 }, 120_000)
 
 afterAll(() => {
