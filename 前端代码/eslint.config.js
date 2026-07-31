@@ -37,6 +37,9 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Legacy-debt exception: these three rules remain warnings only for the audited backlog.
+      // `npm run lint` ratchets the 915-warning total; this is not a recommended safety standard,
+      // and new warning-class debt must not be added.
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': 'warn',
       'react-refresh/only-export-components': [
