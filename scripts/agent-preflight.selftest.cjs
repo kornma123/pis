@@ -9,6 +9,9 @@ const { execFileSync, spawnSync } = require('node:child_process')
 const SCRIPT = path.join(__dirname, 'agent-preflight.cjs')
 const CONTRACT = 'docs/agent-operating-contract.md'
 const CONTRACT_ID = 'coreone-agent-operating-contract/v1'
+const CLAUDE_CLI_SUPERVISION = 'docs/claude-code-cli-supervision.md'
+const CLAUDE_CLI_PROTOCOL_ID = 'coreone-claude-code-cli-supervision/v1'
+const CLAUDE_CLI_DEFAULTS = 'effort=ultracode poll-seconds=300 visible-pty=true background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true'
 const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
   'docs/工作模型-COREONE项目版-2026-06-30.md',
@@ -58,7 +61,13 @@ function append(root, relativePath, content) {
 }
 
 function installAuthorityFixture(root) {
-  const adapter = (tool) => `# ${tool} adapter\n\nRead [the shared contract](${CONTRACT}) before acting.\n`
+  const adapter = (tool) => [
+    `# ${tool} adapter`,
+    '',
+    `Read [the shared contract](${CONTRACT}) before acting.`,
+    `When supervising Claude Code CLI, read [the supervision protocol](${CLAUDE_CLI_SUPERVISION}).`,
+    '',
+  ].join('\n')
   write(root, 'AGENTS.md', adapter('Codex'))
   write(root, 'CLAUDE.md', adapter('Claude Code'))
   write(root, CONTRACT, [
@@ -70,6 +79,25 @@ function installAuthorityFixture(root) {
     '## Authority',
     '',
     'Stable rules live here; runtime PR and SHA facts come from GitHub and Git.',
+    `Claude Code CLI supervision follows \`${CLAUDE_CLI_SUPERVISION}\`.`,
+    '',
+  ].join('\n'))
+  write(root, CLAUDE_CLI_SUPERVISION, [
+    '# Claude Code CLI supervision',
+    '',
+    `<!-- protocol-id: ${CLAUDE_CLI_PROTOCOL_ID} -->`,
+    `<!-- supervisor-defaults: ${CLAUDE_CLI_DEFAULTS} -->`,
+    '',
+    'Use a visible foreground PTY and keep the same session id.',
+    '',
+  ].join('\n'))
+  write(root, '.claude/skills/coreone/SKILL.md', [
+    '---',
+    'name: coreone-conventions',
+    'description: COREONE local route.',
+    '---',
+    '',
+    `Read \`${CLAUDE_CLI_SUPERVISION}\` when the CLI is supervised.`,
     '',
   ].join('\n'))
   write(root, 'docs/agent-handoffs/TEMPLATE.md', '# Task handoff\n')
@@ -147,6 +175,53 @@ check('fresh worktree: develop mode passes from origin/master ancestry', () => {
   const repo = setupRepo()
   try {
     expectVerdict(run(repo.work, ['--mode=develop']), 'PASS', 0)
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('Claude CLI supervision: canonical protocol and routes pass', () => {
+  const repo = setupRepo()
+  try {
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'PASS', 0)
+    const target = result.json.checks.find((item) => item.id === 'authority.claude-cli-supervision')
+    assert.ok(target, 'missing check authority.claude-cli-supervision')
+    assert.equal(target.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('Claude CLI supervision: effort drift from ultracode fails closed', () => {
+  const repo = setupRepo()
+  try {
+    const target = path.join(repo.work, CLAUDE_CLI_SUPERVISION)
+    const original = fs.readFileSync(target, 'utf8')
+    fs.writeFileSync(target, original.replace('effort=ultracode', 'effort=xhigh'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const checkResult = result.json.checks.find((item) => item.id === 'authority.claude-cli-supervision')
+    assert.ok(checkResult, 'missing check authority.claude-cli-supervision')
+    assert.equal(checkResult.status, 'FAIL')
+    assert.ok(checkResult.details.includes('defaults marker mismatch'))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('Claude CLI supervision: a missing automatic route fails closed', () => {
+  const repo = setupRepo()
+  try {
+    const target = path.join(repo.work, 'AGENTS.md')
+    const original = fs.readFileSync(target, 'utf8')
+    fs.writeFileSync(target, original.replace(`\nWhen supervising Claude Code CLI, read [the supervision protocol](${CLAUDE_CLI_SUPERVISION}).`, ''))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const checkResult = result.json.checks.find((item) => item.id === 'authority.claude-cli-supervision')
+    assert.ok(checkResult, 'missing check authority.claude-cli-supervision')
+    assert.equal(checkResult.status, 'FAIL')
+    assert.ok(checkResult.details.includes(`AGENTS.md: expected exactly one ${CLAUDE_CLI_SUPERVISION} route; found 0`))
   } finally {
     fs.rmSync(repo.tmp, { recursive: true, force: true })
   }
