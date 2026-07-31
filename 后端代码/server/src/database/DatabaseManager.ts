@@ -2131,6 +2131,33 @@ function ensureReconcileGenerationCompletionShape(database: DatabaseSync): void 
   }
 }
 
+// Issue #89 / LOC-005 follow-up：同代同 source_diff 的重复补收单 = 同笔漏收的双计收款面
+//（纯 DML 写者可绕过应用层唯一写路径）。DB 唯一索引是单一权威，但升级前已存重复行的
+// 存量库必须在建索引前 fail-closed：具名错误带出首条重复行 id 与 pair，绝不静默删除或
+// 合并重复行，由受治理人工处置后重启。NULL/legacy 形状（source_diff_id 或
+// reconcile_generation_id 为 NULL 的合法遗留行）不在同一性范围，与唯一索引的
+// NULL-distinct 语义一致。
+function ensureNoSupplementGenerationDiffDuplicates(database: DatabaseSync): void {
+  const duplicate = database.prepare(`
+    SELECT supplement.id, supplement.reconcile_generation_id, supplement.source_diff_id
+      FROM supplement_orders supplement
+     WHERE supplement.source_diff_id IS NOT NULL
+       AND supplement.reconcile_generation_id IS NOT NULL
+     GROUP BY supplement.reconcile_generation_id, supplement.source_diff_id
+    HAVING COUNT(*) > 1
+     LIMIT 1
+  `).get() as
+    | { id?: string | null; reconcile_generation_id?: string | null; source_diff_id?: string | null }
+    | undefined
+  if (duplicate) {
+    throw new Error(
+      `SUPPLEMENT_ORDERS_DUPLICATE_GENERATION_DIFF:${String(duplicate.id ?? '<null>')}`
+      + `:${String(duplicate.reconcile_generation_id ?? '<null>')}`
+      + `:${String(duplicate.source_diff_id ?? '<null>')}`,
+    )
+  }
+}
+
 /**
  * Forward-only LOC-005 upgrade. A legacy final hospital-month without an
  * existing current generation remains explicitly unbound and immutable.
@@ -2410,8 +2437,14 @@ export function upgradeAccountReconciliationSchema(database: DatabaseSync): void
   // P1-B：current-shape malformed complete/closed 开机 fail-closed（真 predecessor 的
   // sentinel 回填已在上方 trigger DROP 段后完成，本扫描命中的只能是列先存库的损坏行）。
   ensureReconcileGenerationCompletionShape(database)
+  // Issue #89 / LOC-005 follow-up：同代同 source_diff 唯一索引 = DB 单一权威。
+  // 先探针存量重复行（含 predecessor 重建后仍在的 legacy 重复）fail-closed，再幂等建索引；
+  // 唯一性只钉「同时存活」——verdict 的 scoped DELETE 后重签（同一事务 DELETE→INSERT）
+  // 合法保留；NULL/legacy 行（NULL-distinct）不受影响。同一事务内建索引失败 → ROLLBACK，
+  // 重复启动重复同一条具名错误，DB 零部分升级。
+  ensureNoSupplementGenerationDiffDuplicates(database)
   database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_supplement_generation
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_supplement_orders_generation_diff
       ON supplement_orders(reconcile_generation_id, source_diff_id)
   `)
 

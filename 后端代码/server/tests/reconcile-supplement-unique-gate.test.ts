@@ -173,12 +173,12 @@ describe('Issue #89 · 补收单同代同 diff DB 唯一硬闸', () => {
   })
 
   it('合法 scoped DELETE 后重签可再插入（改判重签语义保留）', () => {
-    insertSupplement(db, 'SUP-UNIQ-RESIGN-1')
+    // test 2 已留下一张唯一存活单（SUP-UNIQ-A）——改判流 = 先 scoped DELETE 旧单，再 INSERT 重签
     db.prepare(SCOPED_DELETE_SQL).run(DIFF, R)
-    insertSupplement(db, 'SUP-UNIQ-RESIGN-2')
+    insertSupplement(db, 'SUP-UNIQ-RESIGN-1')
     expect(countByDiff(DIFF)).toBe(1)
     expect((db.prepare('SELECT id FROM supplement_orders WHERE source_diff_id = ?').get(DIFF) as any)?.id)
-      .toBe('SUP-UNIQ-RESIGN-2')
+      .toBe('SUP-UNIQ-RESIGN-1')
   })
 
   it('NULL/legacy 行不受唯一索引影响（NULL-distinct，多行合法共存）', () => {
