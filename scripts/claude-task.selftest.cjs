@@ -6484,17 +6484,24 @@ function runIsolatedOwnedScopeStarts() {
   const fakeBin = path.join(governedSandbox, 'bin');
   const governed = { rejected: {}, legal: null, state: null };
   try {
-    const upstreamMasterResult = spawnSync(
-      'git',
-      ['rev-parse', 'origin/master'],
-      { cwd: repositoryRoot, encoding: 'utf8' },
+    let upstreamMaster = '';
+    const upstreamMasterErrors = [];
+    for (const candidate of ['origin/master', 'HEAD']) {
+      const result = spawnSync(
+        'git',
+        ['rev-parse', '--verify', `${candidate}^{commit}`],
+        { cwd: repositoryRoot, encoding: 'utf8' },
+      );
+      if (result.status === 0) {
+        upstreamMaster = String(result.stdout || '').trim();
+        break;
+      }
+      upstreamMasterErrors.push(String(result.stderr || result.stdout || '').trim());
+    }
+    assert.ok(
+      upstreamMaster,
+      upstreamMasterErrors.filter(Boolean).join('\n') || 'cannot resolve an isolated master fixture commit',
     );
-    assert.equal(
-      upstreamMasterResult.status,
-      0,
-      upstreamMasterResult.stderr || upstreamMasterResult.stdout,
-    );
-    const upstreamMaster = String(upstreamMasterResult.stdout || '').trim();
     const bareClone = spawnSync(
       'git',
       ['clone', '--bare', '--no-local', repositoryRoot, governedRemote],
