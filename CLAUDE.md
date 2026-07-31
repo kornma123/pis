@@ -17,6 +17,7 @@ Claude Code 会话开始任何工作前必须完整读取唯一共用契约：
 ## Claude Code 适配
 
 - 项目 hooks 要求 Claude Code `>= 2.1.139`；另一台设备先用 `claude --version` 核对，低于该版本不得把未触发的 hook 当作流程已生效。
+- 由 Codex 或 PM 启动、续接或监督的本地 CLI 会话，必须同时遵守 [Claude Code CLI 监督协议](docs/claude-code-cli-supervision.md)：保留可见前台会话，问题或等待状态显式交回当前控制者，不在后台静默卡住。
 - 先用 `node scripts/agent-preflight.cjs` 选择 `develop` 或 `review` 模式；新开发先由操作者执行 `git fetch origin`。
 - 只调用当前会话实际列出的内建能力、插件或技能；历史日志中的能力名称不构成可用性证明。
 - 子任务只有在文件所有权互斥且 handoff 自包含时才能并行；同一文件仍只有一个实现 owner。
