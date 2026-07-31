@@ -70,12 +70,12 @@ export default function InboundFormModal({
   onClose,
   onSubmit,
 }: InboundFormModalProps) {
-  if (!open) return null
-
   const selectedOrder = useMemo(() =>
     purchaseOrders.find(o => o.id === selectedOrderId),
     [purchaseOrders, selectedOrderId]
   )
+
+  if (!open) return null
 
   return (
     <Modal onClose={onClose} title={modalType === 'create' ? '新增入库' : '编辑入库'} size="xl">

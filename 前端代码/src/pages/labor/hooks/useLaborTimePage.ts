@@ -107,7 +107,7 @@ export function useLaborTimePage() {
     const filteredData = deletedLaborTimeIds.size
       ? data.filter(row => !deletedLaborTimeIds.has(row.id))
       : data
-    let nextTotal = Math.max(0, total - (data.length - filteredData.length))
+    const nextTotal = Math.max(0, total - (data.length - filteredData.length))
 
     if (
       createdLaborTimeFallback &&

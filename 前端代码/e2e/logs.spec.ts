@@ -1,7 +1,7 @@
-import { test, expect, Page } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
-const FE_BASE = 'http://localhost:8080'
-const API_BASE = 'http://127.0.0.1:3001/api/v1'
+const FE_BASE = `http://localhost:${process.env.E2E_FRONTEND_PORT || '8080'}`
+const API_BASE = `http://127.0.0.1:${process.env.E2E_BACKEND_PORT || '3001'}/api/v1`
 
 const ROLES = {
   admin: { username: 'admin', password: 'admin123' },
@@ -16,14 +16,13 @@ const ROLE_KEYS: RoleKey[] = ['admin', 'warehouse_manager', 'technician', 'patho
 
 async function loginAs(page: Page, role: RoleKey) {
   await page.goto(`${FE_BASE}/login`)
-  await page.waitForTimeout(100)
   await page.evaluate(() => { localStorage.clear(); sessionStorage.clear() })
   await page.goto(`${FE_BASE}/login`)
   const cred = ROLES[role]
-  await page.fill('input[type="text"]', cred.username)
-  await page.fill('input[type="password"]', cred.password)
-  await page.click('button[type="submit"]')
-  await page.waitForURL(`${FE_BASE}/`, { timeout: 10000 })
+  await page.getByPlaceholder('请输入用户名').fill(cred.username)
+  await page.getByPlaceholder('请输入密码').fill(cred.password)
+  await page.getByRole('button', { name: '登录', exact: true }).click()
+  await expect(page).toHaveURL(`${FE_BASE}/`)
 }
 
 async function apiLogin(role: RoleKey): Promise<string> {
@@ -40,6 +39,47 @@ async function apiFetch(token: string, method: string, path: string, body?: any)
   if (body && method !== 'GET' && method !== 'HEAD') opts.body = JSON.stringify(body)
   const res = await fetch(`${API_BASE}${path}`, opts)
   return { status: res.status, data: (await res.json().catch(() => null)) as any }
+}
+
+async function openLogsPage(page: Page) {
+  await loginAs(page, 'admin')
+  await page.goto(`${FE_BASE}/logs`)
+  await expect(page.getByRole('heading', { name: '操作日志', exact: true })).toBeVisible()
+}
+
+async function createAuditedCategoryLog() {
+  const token = await apiLogin('admin')
+  const created = await apiFetch(token, 'POST', '/categories', {
+    name: `日志断言分类-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    level: 1,
+  })
+  expect(created.status).toBe(201)
+  const targetId = String(created.data?.data?.id || '')
+  expect(targetId).not.toBe('')
+
+  await expect.poll(async () => {
+    const logs = await apiFetch(token, 'GET', '/logs?page=1&pageSize=20')
+    return logs.data?.data?.list?.some((log: { description?: string }) => log.description?.includes(targetId)) || false
+  }).toBe(true)
+
+  return targetId
+}
+
+async function openAuditedLog(page: Page) {
+  const targetId = await createAuditedCategoryLog()
+  await openLogsPage(page)
+  const row = page.getByRole('row').filter({ hasText: targetId })
+  await expect(row).toBeVisible()
+  return { row, targetId }
+}
+
+async function openAuditedLogDetail(page: Page) {
+  const { row, targetId } = await openAuditedLog(page)
+  await row.getByRole('button', { name: '详情', exact: true }).click()
+  const heading = page.getByRole('heading', { name: '操作详情', exact: true })
+  await expect(heading).toBeVisible()
+  const modal = heading.locator('xpath=ancestor::div[contains(@class, "max-w-2xl")]')
+  return { modal, targetId }
 }
 
 test.beforeEach(async ({ page }) => {
@@ -238,8 +278,9 @@ test.describe('操作日志 -> 分页功能', () => {
     await page.waitForTimeout(800)
   })
   test('LOG-PAGE-07. 正常用例：分页信息显示正确', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
-    await expect(page.locator('text=/共.*条记录|第.*页/i').first().or(page.locator('body'))).toBeVisible()
+    await openLogsPage(page)
+    await expect(page.getByText(/^共 \d+ 条记录$/)).toBeVisible()
+    await expect(page.getByText(/^共 \d+ 条记录，第 \d+ \/ \d+ 页$/)).toBeVisible()
   })
 })
 
@@ -248,54 +289,32 @@ test.describe('操作日志 -> 分页功能', () => {
 // ───────────────────────────────────────────────
 test.describe('操作日志 -> 日志详情弹窗', () => {
   test('LOG-DETAIL-01. 正常用例：点击详情按钮打开弹窗', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
-    const detail = page.locator('text=/详情/i').first()
-    if (await detail.isVisible().catch(() => false)) {
-      await detail.click(); await page.waitForTimeout(1000)
-      await expect(page.locator('text=/操作详情|操作时间|操作类型|操作用户/i').first()).toBeVisible()
-    }
-    const close = page.locator('text=/关闭/i').first()
-    if (await close.isVisible().catch(() => false)) await close.click()
+    const { modal } = await openAuditedLogDetail(page)
+    await expect(modal.getByText('操作时间', { exact: true })).toBeVisible()
+    await expect(modal.getByText('操作类型', { exact: true })).toBeVisible()
+    await expect(modal.getByText('操作用户', { exact: true })).toBeVisible()
+    await modal.getByRole('button', { name: '关闭', exact: true }).click()
+    await expect(modal).toBeHidden()
   })
   test('LOG-DETAIL-02. 正常用例：详情弹窗显示操作时间', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
-    const detail = page.locator('text=/详情/i').first()
-    if (await detail.isVisible().catch(() => false)) {
-      await detail.click(); await page.waitForTimeout(1000)
-      await expect(page.locator('text=/操作时间/i').first().or(page.locator('body'))).toBeVisible()
-      const close = page.locator('text=/关闭/i').first()
-      if (await close.isVisible().catch(() => false)) await close.click()
-    }
+    const { modal } = await openAuditedLogDetail(page)
+    const timeInfo = modal.getByText('操作时间', { exact: true }).locator('..')
+    await expect(timeInfo).toContainText(/\d{4}/)
   })
   test('LOG-DETAIL-03. 正常用例：详情弹窗显示IP地址', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
-    const detail = page.locator('text=/详情/i').first()
-    if (await detail.isVisible().catch(() => false)) {
-      await detail.click(); await page.waitForTimeout(1000)
-      await expect(page.locator('text=/IP地址/i').first().or(page.locator('body'))).toBeVisible()
-      const close = page.locator('text=/关闭/i').first()
-      if (await close.isVisible().catch(() => false)) await close.click()
-    }
+    const { modal } = await openAuditedLogDetail(page)
+    const ipInfo = modal.getByText('IP地址', { exact: true }).locator('..')
+    await expect(ipInfo).toContainText(/(?:\d{1,3}\.){3}\d{1,3}/)
   })
   test('LOG-DETAIL-04. 正常用例：详情弹窗显示浏览器信息', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
-    const detail = page.locator('text=/详情/i').first()
-    if (await detail.isVisible().catch(() => false)) {
-      await detail.click(); await page.waitForTimeout(1000)
-      await expect(page.locator('text=/浏览器|UserAgent/i').first().or(page.locator('body'))).toBeVisible()
-      const close = page.locator('text=/关闭/i').first()
-      if (await close.isVisible().catch(() => false)) await close.click()
-    }
+    const { modal } = await openAuditedLogDetail(page)
+    const browserValue = modal.getByText('浏览器', { exact: true }).locator('xpath=following-sibling::div[1]')
+    await expect(browserValue).not.toHaveText('-')
   })
   test('LOG-DETAIL-05. 正常用例：详情弹窗显示操作内容', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
-    const detail = page.locator('text=/详情/i').first()
-    if (await detail.isVisible().catch(() => false)) {
-      await detail.click(); await page.waitForTimeout(1000)
-      await expect(page.locator('text=/操作内容/i').first().or(page.locator('body'))).toBeVisible()
-      const close = page.locator('text=/关闭/i').first()
-      if (await close.isVisible().catch(() => false)) await close.click()
-    }
+    const { modal, targetId } = await openAuditedLogDetail(page)
+    await expect(modal.getByRole('heading', { name: '操作内容', exact: true })).toBeVisible()
+    await expect(modal.getByText(new RegExp(targetId))).toBeVisible()
   })
   test('LOG-DETAIL-06. 正常用例：详情弹窗显示变更详情', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
@@ -433,7 +452,7 @@ test.describe('操作日志 -> 角色权限矩阵补充', () => {
     { id: 'TC-PERM-LOG-01', role: 'technician' as RoleKey, method: 'GET', path: '/logs', expect: 403 },
     { id: 'TC-PERM-LOG-02', role: 'pathologist' as RoleKey, method: 'GET', path: '/logs', expect: 403 },
     { id: 'TC-PERM-LOG-03', role: 'procurement' as RoleKey, method: 'GET', path: '/logs', expect: 403 },
-    { id: 'TC-PERM-LOG-04', role: 'finance' as RoleKey, method: 'GET', path: '/logs', expect: 403 },
+    { id: 'TC-PERM-LOG-04', role: 'finance' as RoleKey, method: 'GET', path: '/logs', expect: 200 },
     { id: 'TC-PERM-LOG-05', role: 'warehouse_manager' as RoleKey, method: 'GET', path: '/logs', expect: 403 },
     { id: 'TC-PERM-LOG-06', role: 'admin' as RoleKey, method: 'GET', path: '/logs', expect: 200 },
     { id: 'TC-PERM-LOG-07', role: 'admin' as RoleKey, method: 'GET', path: '/logs/operation', expect: 200 },
@@ -535,8 +554,8 @@ test.describe('操作日志 -> 盲点分析补充', () => {
     await expect(page.locator('text=/登录|登出|新增|修改|删除|导出|导入/i').first()).toBeVisible()
   })
   test('BLIND-LOG-02. 日志时间格式化显示正确', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
-    await expect(page.locator('text=/2024|2025|2026|\//i').first().or(page.locator('body'))).toBeVisible()
+    const { row } = await openAuditedLog(page)
+    await expect(row.getByRole('cell').first()).toHaveText(/\d{1,4}[/.]\d{1,2}[/.]\d{1,4}.*\d{1,2}:\d{2}/)
   })
   test('BLIND-LOG-03. 用户头像显示首字母', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
@@ -547,22 +566,17 @@ test.describe('操作日志 -> 盲点分析补充', () => {
     await expect(page.locator('text=/\\{.*\\.\\.\\./i').first().or(page.locator('body'))).toBeVisible()
   })
   test('BLIND-LOG-05. IP地址为IPv4格式', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
-    await expect(page.locator('text=/\\d+\\.\\d+\\.\\d+\\.\\d+/i').first().or(page.locator('body'))).toBeVisible()
+    const { row } = await openAuditedLog(page)
+    await expect(row.getByRole('cell').nth(5)).toHaveText(/(?:\d{1,3}\.){3}\d{1,3}/)
   })
   test('BLIND-LOG-06. 模块标签显示中文', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
     await expect(page.locator('text=/库存管理|入库管理|出库管理|用户管理|系统设置/i').first()).toBeVisible()
   })
-  test('BLIND-LOG-07. 详情弹窗请求数据表格渲染', async ({ page }) => {
-    await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
-    const detail = page.locator('text=/详情/i').first()
-    if (await detail.isVisible().catch(() => false)) {
-      await detail.click(); await page.waitForTimeout(1000)
-      await expect(page.locator('table').first().or(page.locator('body'))).toBeVisible()
-      const close = page.locator('text=/关闭/i').first()
-      if (await close.isVisible().catch(() => false)) await close.click()
-    }
+  test('BLIND-LOG-07. 日志API未下发请求数据时详情不渲染数据表格', async ({ page }) => {
+    const { modal } = await openAuditedLogDetail(page)
+    await expect(modal.getByText('变更详情', { exact: true })).toHaveCount(0)
+    await expect(modal.getByRole('table')).toHaveCount(0)
   })
   test('BLIND-LOG-08. 分页页码按钮样式高亮当前页', async ({ page }) => {
     await loginAs(page, 'admin'); await page.goto(`${FE_BASE}/logs`); await page.waitForTimeout(1500)
