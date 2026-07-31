@@ -495,6 +495,36 @@ function captureInitialGitState(cwd) {
   return values;
 }
 
+function assertCompleteInitialGitBinding(state) {
+  const invalidFields = [];
+  if (!/^[0-9a-f]{40}$/i.test(String(state.initialHead || ''))) {
+    invalidFields.push('initialHead');
+  }
+  if (
+    typeof state.initialBranch !== 'string' ||
+    !state.initialBranch.trim() ||
+    /[\r\n\0]/.test(state.initialBranch)
+  ) {
+    invalidFields.push('initialBranch');
+  }
+  if (
+    typeof state.initialGitDir !== 'string' ||
+    !path.isAbsolute(state.initialGitDir)
+  ) {
+    invalidFields.push('initialGitDir');
+  }
+  if (!/^[0-9a-f]{40}$/i.test(String(state.initialTree || ''))) {
+    invalidFields.push('initialTree');
+  }
+  if (invalidFields.length > 0) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'persisted supervisor state lacks a complete initial Git binding',
+      { invalidFields },
+    );
+  }
+}
+
 function persist(stateFile, state, clock) {
   state.updatedAtMs = clock();
   writeState(stateFile, state);
@@ -1714,16 +1744,19 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
   };
   let request;
   let state;
+  let createdState = false;
+  let adapterValidated = false;
   try {
     request = validateRequest(input);
     state = readState(options.stateFile);
-    const createdState = !state;
+    createdState = !state;
     if (state) {
       validateStateBinding(state, request);
     } else {
       state = createState(request, options);
     }
     const adapter = validateAdapter(adapterInput, options);
+    adapterValidated = true;
     if (createdState) {
       const initialGit = options.captureInitialGitState(request.cwd);
       state.initialHead = initialGit.head;
@@ -1732,6 +1765,8 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
       state.initialTree = initialGit.tree;
       state.initialR0Evidence = r0EvidenceForRequest(request.cwd, request);
       persist(options.stateFile, state, options.clock);
+    } else {
+      assertCompleteInitialGitBinding(state);
     }
 
     if (state.status === 'STOPPED') {
@@ -1961,6 +1996,16 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
         createdAtMs: options.clock(),
         updatedAtMs: options.clock(),
       };
+    }
+    if (createdState && !adapterValidated) {
+      state.status = 'BLOCKED';
+      state.blockedReason = failure.reason || FAILURE.FACT_GATE_FAILED;
+      state.failure = {
+        message: failure.message,
+        details: failure.details || {},
+      };
+      state.updatedAtMs = options.clock();
+      return publicResult(state);
     }
     return block(options.stateFile, state, failure, options.clock);
   }

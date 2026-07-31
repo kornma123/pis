@@ -1632,6 +1632,7 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
           encoding: 'utf8',
         });
         assert.equal(result.status, 0, result.stderr);
+        return String(result.stdout || '').trim();
       };
       git('init', '--initial-branch=task-cli');
       git('config', 'user.name', 'COREONE Supervisor Selftest');
@@ -1676,6 +1677,108 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
       assert.equal(output.reason, FAILURE.TERMINAL_VISIBILITY_UNPROVEN);
       assert.equal(output.promptInjected, false);
       assert.match(output.sessionId, /^[0-9a-f-]{36}$/i);
+
+      const lifecycleRequest = request({
+        taskId: 'cli-no-adapter',
+        taskName: 'CLI no adapter regression',
+        cwd: fs.realpathSync(directory),
+        prompt: fs.readFileSync(promptFile, 'utf8'),
+        owned: ['seed.txt', 'prompt.txt', 'request.json', 'fake-adapter.cjs'],
+      });
+      const stateFile = supervisorStateFile(lifecycleRequest);
+      const stateAfterNoAdapter = fs.existsSync(stateFile)
+        ? JSON.parse(fs.readFileSync(stateFile, 'utf8'))
+        : null;
+      git('switch', '-c', 'task-cli-recovery');
+
+      const freshSessionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const freshGeneration = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const recoverySessionId = stateAfterNoAdapter?.sessionId || freshSessionId;
+      const cleanReads = ['eof-1', 'eof-2'].map((cursor) => ({
+        cursor,
+        output: 'COMPLETE stable recovery tail',
+        tail: 'COMPLETE stable recovery tail',
+        eof: true,
+        running: false,
+        runningTool: false,
+        session: {
+          sessionId: recoverySessionId,
+          status: 'exited',
+          exitCode: 0,
+          signal: null,
+          pendingQuestion: false,
+          runningTool: false,
+        },
+      }));
+      const recoveryAdapter = makeAdapter({ outputReads: cleanReads });
+      let recoveryCaptureCalls = 0;
+      const captureRecoveryGit = () => {
+        recoveryCaptureCalls += 1;
+        return {
+          head: git('rev-parse', 'HEAD'),
+          branch: git('branch', '--show-current'),
+          gitDir: fs.realpathSync(git('rev-parse', '--absolute-git-dir')),
+          tree: git('rev-parse', 'HEAD^{tree}'),
+        };
+      };
+      const freshIds = [freshSessionId, freshGeneration];
+      const recovery = await runSupervisor(lifecycleRequest, recoveryAdapter, {
+        stateFile,
+        maxCycles: 2,
+        captureInitialGitState: captureRecoveryGit,
+        randomUUID: () => freshIds.shift(),
+      });
+      const completedState = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+
+      const legacyIncompleteState = {
+        ...completedState,
+        initialHead: null,
+        initialBranch: null,
+        initialGitDir: null,
+        initialTree: null,
+      };
+      fs.writeFileSync(
+        stateFile,
+        `${JSON.stringify(legacyIncompleteState, null, 2)}\n`,
+      );
+      const legacyAdapter = makeAdapter();
+      let legacyCaptureCalls = 0;
+      const legacyRecovery = await runSupervisor(
+        lifecycleRequest,
+        legacyAdapter,
+        {
+          stateFile,
+          maxCycles: 1,
+          captureInitialGitState() {
+            legacyCaptureCalls += 1;
+            return captureRecoveryGit();
+          },
+        },
+      );
+
+      assert.equal(
+        recovery.status === 'COMPLETE' && recoveryCaptureCalls === 0,
+        false,
+        `trusted recovery completed without a Git baseline: ${JSON.stringify({
+          stateAfterNoAdapter,
+          recovery,
+          recoveryCaptureCalls,
+        })}`,
+      );
+      assert.equal(
+        stateAfterNoAdapter,
+        null,
+        'adapter trust failure must not persist a recoverable half-state',
+      );
+      assert.equal(recovery.status, 'COMPLETE');
+      assert.equal(recoveryCaptureCalls, 1);
+      assert.equal(completedState.initialBranch, 'task-cli-recovery');
+      assert.equal(recoveryAdapter.calls.launches.length, 1);
+      assert.equal(legacyRecovery.status, 'BLOCKED');
+      assert.equal(legacyRecovery.reason, FAILURE.STATE_BINDING_MISMATCH);
+      assert.equal(legacyCaptureCalls, 0);
+      assert.equal(legacyAdapter.calls.launches.length, 0);
+      assert.equal(legacyAdapter.calls.resumes.length, 0);
     } finally {
       fs.rmSync(directory, { recursive: true, force: true });
     }
