@@ -9,14 +9,18 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
+const productionRuntime = require('./claude-cli-supervisor.cjs');
+const {
+  ackStopSupervisorWithTestAdapter: ackStopSupervisor,
+  answerSupervisorWithTestAdapter: answerSupervisor,
+  runSupervisorWithTestAdapter: runSupervisorImplementation,
+} = require('./claude-cli-supervisor.test-harness.cjs');
 const {
   FAILURE,
-  ackStopSupervisorForSelftest: ackStopSupervisor,
-  answerSupervisorForSelftest: answerSupervisor,
+  compareVersions,
   runFactGate,
-  runSupervisorForSelftest: runSupervisorImplementation,
   supervisorStateFile,
-} = require('./claude-cli-supervisor.cjs');
+} = productionRuntime;
 
 let passed = 0;
 let failed = 0;
@@ -26,19 +30,24 @@ const EXPECTED_SCENARIOS = Object.freeze([
   'different app terminal handle fails closed',
   'different terminal generation fails closed',
   'terminal create must acknowledge the task and session idempotency key',
+  'production module does not export fake-adapter test entrypoints',
   'wrong cwd or worktree fails before Claude launch',
   'missing Claude CLI fails before prompt injection',
   'old Claude CLI version fails closed',
   'prerelease Claude CLI does not satisfy the matching stable minimum',
+  'SemVer comparison is symmetric for integers beyond Number safe range',
   'unsupported ultracode effort cannot silently downgrade',
   'prompt injection must be positively acknowledged',
   'terminal detachment stops supervision',
   'unanswered question becomes a timed stall, never COMPLETE',
   'authority questions are latched and cannot be auto-answered',
+  'authority receipts bind the full terminal session context and time window',
   'stop requests stay latched across restart until explicit ack-stop',
+  'simultaneous question and stop are atomically latched with stop priority',
   'unstable EOF cannot pass the output gate',
   'adapter tail hash cannot hide changing terminal readback',
   'stable EOF without a clean structured same-session exit is abnormal',
+  'clean structured exit with a latched FATAL output is abnormal',
   'concurrent run holds one task lease and creates only one terminal',
   'stale dead-process task lease is recovered after application restart',
   'state CAS rejects a concurrent state mutation',
@@ -56,6 +65,7 @@ const EXPECTED_SCENARIOS = Object.freeze([
   'fact gate inspects all parents of merge commits',
   'fact gate is bound to the initial branch and gitdir',
   'R0 fact gate requires live matching task state',
+  'R0 malformed or unsafe state cannot masquerade as finish-r0',
   'R0 fact gate does not accept an active contract as finished',
   'R0 fact gate accepts a verified start state followed by finish-r0 removal',
 ]);
@@ -362,6 +372,20 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
     assert.equal(adapter.calls.launches.length, 0);
   });
 
+  await check('production module does not export fake-adapter test entrypoints', async () => {
+    for (const name of [
+      'runSupervisorForSelftest',
+      'answerSupervisorForSelftest',
+      'ackStopSupervisorForSelftest',
+    ]) {
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(productionRuntime, name),
+        false,
+        `${name} must not be reachable through an ordinary production require`,
+      );
+    }
+  });
+
   await check('wrong cwd or worktree fails before Claude launch', async () => {
     const adapter = makeAdapter({
       probeResult: {
@@ -432,6 +456,18 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
     assert.equal(result.status, 'BLOCKED');
     assert.equal(result.reason, FAILURE.CLAUDE_CLI_VERSION_TOO_OLD);
     assert.equal(adapter.calls.launches.length, 0);
+  });
+
+  await check('SemVer comparison is symmetric for integers beyond Number safe range', async () => {
+    const lowerCore = '9007199254740992.0.0';
+    const higherCore = '9007199254740993.0.0';
+    assert.equal(compareVersions(lowerCore, higherCore), -1);
+    assert.equal(compareVersions(higherCore, lowerCore), 1);
+
+    const lowerPrerelease = '1.0.0-9007199254740992';
+    const higherPrerelease = '1.0.0-9007199254740993';
+    assert.equal(compareVersions(lowerPrerelease, higherPrerelease), -1);
+    assert.equal(compareVersions(higherPrerelease, lowerPrerelease), 1);
   });
 
   await check('unsupported ultracode effort cannot silently downgrade', async () => {
@@ -550,6 +586,7 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
 
   await check('authority questions are latched and cannot be auto-answered', async () => {
     const state = temporaryStateFile();
+    const now = Date.parse('2026-07-30T12:05:00.000Z');
     try {
       const firstAdapter = makeAdapter({
         outputReads: [{
@@ -571,6 +608,7 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
         factGate: passFactGate,
         maxCycles: 1,
         randomUUID: () => '51515151-5151-4515-8515-515151515151',
+        clock: () => now,
         testOnlyAdapter: true,
         onQuestion: async () => {
           autoAnswerCalls += 1;
@@ -597,6 +635,7 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
         stateFile: state.file,
         factGate: passFactGate,
         maxCycles: 1,
+        clock: () => now,
         testOnlyAdapter: true,
       });
       assert.equal(resumed.status, 'WAITING_CONTROLLER');
@@ -606,12 +645,13 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
         request(),
         makeAdapter(),
         'Approved.',
-        { stateFile: state.file, testOnlyAdapter: true },
+        { stateFile: state.file, clock: () => now, testOnlyAdapter: true },
       );
       assert.equal(rejectedAnswer.status, 'BLOCKED');
       assert.equal(rejectedAnswer.reason, 'AUTHORITY_RECEIPT_REQUIRED');
       assert.equal(rejectedAnswer.pendingQuestion.id, 'authority-scope');
 
+      const authorityState = JSON.parse(fs.readFileSync(state.file, 'utf8'));
       const authorized = await answerSupervisor(
         request(),
         makeAdapter(),
@@ -620,12 +660,17 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
           authorizationReceipt: {
             decisionId: 'decision-scope-1',
             authorizedBy: 'current-user',
-            authorizedAt: '2026-07-30T12:00:00.000Z',
+            authorizedAt: new Date(now).toISOString(),
             scope: 'Only the already presented exact scope expansion.',
+            threadId: authorityState.threadId,
+            sessionId: authorityState.sessionId,
+            terminalHandle: authorityState.terminalHandle,
+            terminalGeneration: authorityState.terminalGeneration,
             questionId: 'authority-scope',
+            questionTextSha256: authorityState.pendingQuestion.textSha256,
           },
         },
-        { stateFile: state.file, testOnlyAdapter: true },
+        { stateFile: state.file, clock: () => now, testOnlyAdapter: true },
       );
       assert.equal(authorized.status, 'ACTIVE');
       assert.equal(authorized.pendingQuestion, null);
@@ -634,6 +679,78 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
       assert.equal(persisted.authorityReceipts[0].decisionId, 'decision-scope-1');
     } finally {
       state.cleanup();
+    }
+  });
+
+  await check('authority receipts bind the full terminal session context and time window', async () => {
+    const now = Date.parse('2026-07-30T12:05:00.000Z');
+    const cases = [
+      ['threadId', 'wrong-thread'],
+      ['sessionId', '99999999-9999-4999-8999-999999999999'],
+      ['terminalHandle', 'wrong-terminal'],
+      ['terminalGeneration', 'wrong-generation'],
+      ['questionId', 'wrong-question'],
+      ['questionTextSha256', 'f'.repeat(64)],
+      ['authorizedAt', new Date(now - 11 * 60 * 1000).toISOString()],
+      ['authorizedAt', new Date(now + 61 * 1000).toISOString()],
+    ];
+    for (const [field, badValue] of cases) {
+      const state = temporaryStateFile();
+      try {
+        const adapter = makeAdapter({
+          outputReads: [{
+            cursor: `authority-context-${field}`,
+            output: 'May I widen scope?',
+            question: {
+              id: 'authority-context',
+              kind: 'scope',
+              text: 'May I widen scope?',
+              requiresAuthority: true,
+            },
+            eof: false,
+            running: true,
+          }],
+        });
+        const waiting = await runSupervisor(request(), adapter, {
+          stateFile: state.file,
+          factGate: passFactGate,
+          maxCycles: 1,
+          randomUUID: () => '61616161-6161-4616-8616-616161616161',
+          clock: () => now,
+          testOnlyAdapter: true,
+        });
+        assert.equal(waiting.status, 'WAITING_CONTROLLER');
+        const persisted = JSON.parse(fs.readFileSync(state.file, 'utf8'));
+        const receipt = {
+          decisionId: `decision-${field}`,
+          authorizedBy: 'current-user',
+          authorizedAt: new Date(now).toISOString(),
+          scope: 'Only the exact requested scope expansion.',
+          threadId: persisted.threadId,
+          sessionId: persisted.sessionId,
+          terminalHandle: persisted.terminalHandle,
+          terminalGeneration: persisted.terminalGeneration,
+          questionId: persisted.pendingQuestion.id,
+          questionTextSha256: persisted.pendingQuestion.textSha256,
+          [field]: badValue,
+        };
+        const answerAdapter = makeAdapter();
+        const rejected = await answerSupervisor(
+          request(),
+          answerAdapter,
+          {
+            text: 'Approved.',
+            authorizationReceipt: receipt,
+          },
+          { stateFile: state.file, clock: () => now, testOnlyAdapter: true },
+        );
+        assert.equal(rejected.status, 'BLOCKED', `${field} mismatch must block`);
+        assert.equal(rejected.reason, FAILURE.AUTHORITY_RECEIPT_REQUIRED);
+        assert.equal(rejected.pendingQuestion.id, 'authority-context');
+        assert.equal(answerAdapter.calls.resumes.length, 0);
+      } finally {
+        state.cleanup();
+      }
     }
   });
 
@@ -696,6 +813,62 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
       );
       assert.equal(acknowledged.status, 'STOPPED');
       assert.equal(acknowledged.stopRequest, null);
+    } finally {
+      state.cleanup();
+    }
+  });
+
+  await check('simultaneous question and stop are atomically latched with stop priority', async () => {
+    const state = temporaryStateFile();
+    let autoAnswerCalls = 0;
+    try {
+      const adapter = makeAdapter({
+        outputReads: [{
+          cursor: 'question-and-stop',
+          output: 'Should I continue? Please stop.',
+          question: {
+            id: 'question-before-stop',
+            kind: 'clarification',
+            text: 'Should I continue?',
+            requiresAuthority: false,
+          },
+          stopRequested: true,
+          stopId: 'stop-wins',
+          eof: false,
+          running: true,
+        }],
+      });
+      const interrupted = await runSupervisor(request(), adapter, {
+        stateFile: state.file,
+        factGate: passFactGate,
+        maxCycles: 1,
+        randomUUID: () => '63636363-6363-4636-8636-636363636363',
+        testOnlyAdapter: true,
+        onQuestion: async () => {
+          autoAnswerCalls += 1;
+          return { action: 'answer', text: 'Continue.' };
+        },
+      });
+      assert.equal(interrupted.status, 'WAITING_CONTROLLER');
+      assert.equal(interrupted.reason, 'CLAUDE_STOP_REQUESTED');
+      assert.equal(interrupted.pendingQuestion.id, 'question-before-stop');
+      assert.equal(interrupted.stopRequest.id, 'stop-wins');
+      assert.equal(autoAnswerCalls, 0);
+      assert.equal(
+        adapter.calls.writes.some((item) => item.purpose === 'controller-answer'),
+        false,
+      );
+
+      const answerAdapter = makeAdapter();
+      const rejectedAnswer = await answerSupervisor(
+        request(),
+        answerAdapter,
+        'Continue.',
+        { stateFile: state.file, testOnlyAdapter: true },
+      );
+      assert.equal(rejectedAnswer.status, 'BLOCKED');
+      assert.equal(rejectedAnswer.stopRequest.id, 'stop-wins');
+      assert.equal(answerAdapter.calls.resumes.length, 0);
     } finally {
       state.cleanup();
     }
@@ -799,6 +972,53 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
     const result = await blockedResult(adapter, {}, { testOnlyAdapter: true });
     assert.equal(result.status, 'BLOCKED');
     assert.equal(result.reason, 'CLAUDE_EXIT_ABNORMAL');
+  });
+
+  await check('clean structured exit with a latched FATAL output is abnormal', async () => {
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    const adapter = makeAdapter({
+      outputReads: [
+        {
+          cursor: 'fatal-clean-1',
+          output: 'FATAL: Claude protocol failed before completion',
+          eof: false,
+          running: true,
+        },
+        {
+          cursor: 'fatal-clean-2',
+          output: 'COMPLETE',
+          eof: true,
+          running: false,
+          runningTool: false,
+          session: {
+            sessionId,
+            status: 'exited',
+            exitCode: 0,
+            signal: null,
+            pendingQuestion: false,
+            runningTool: false,
+          },
+        },
+        {
+          cursor: 'fatal-clean-3',
+          output: 'COMPLETE',
+          eof: true,
+          running: false,
+          runningTool: false,
+          session: {
+            sessionId,
+            status: 'exited',
+            exitCode: 0,
+            signal: null,
+            pendingQuestion: false,
+            runningTool: false,
+          },
+        },
+      ],
+    });
+    const result = await blockedResult(adapter, {}, { maxCycles: 3 });
+    assert.equal(result.status, 'BLOCKED');
+    assert.equal(result.reason, FAILURE.CLAUDE_EXIT_ABNORMAL);
   });
 
   await check('concurrent run holds one task lease and creates only one terminal', async () => {
@@ -1733,6 +1953,84 @@ module.exports = {
     }
   });
 
+  await check('R0 malformed or unsafe state cannot masquerade as finish-r0', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-supervisor-r0-unsafe-'));
+    try {
+      const git = (...args) => {
+        const result = spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+        assert.equal(result.status, 0, result.stderr);
+        return result.stdout.trim();
+      };
+      git('init', '--initial-branch=task-r0');
+      git('config', 'user.name', 'COREONE Supervisor Selftest');
+      git('config', 'user.email', 'supervisor@example.invalid');
+      fs.writeFileSync(path.join(directory, 'owned.txt'), 'base\n');
+      git('add', 'owned.txt');
+      git('commit', '-m', 'test: seed unsafe R0 state gate');
+      const initialHead = git('rev-parse', 'HEAD');
+      const initialGitDir = git('rev-parse', '--absolute-git-dir');
+      const now = new Date().toISOString();
+      const taskState = {
+        version: 2,
+        mode: 'r0',
+        stage: 'r0',
+        risk: 'R0',
+        reason: 'bounded governance regression',
+        branch: 'task-r0',
+        baseSha: initialHead,
+        startedHead: initialHead,
+        startedAt: now,
+        verifiedAt: now,
+        owned: ['owned.txt'],
+        excluded: [],
+      };
+      const initialR0Evidence = {
+        contractSha256: digest(JSON.stringify(taskState)),
+        state: taskState,
+        verifiedBeforeFinish: true,
+      };
+      const statePath = path.join(
+        initialGitDir,
+        'coreone',
+        'claude-task-state.json',
+      );
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      const unsafeTarget = path.join(initialGitDir, 'unsafe-r0-target.json');
+      fs.writeFileSync(unsafeTarget, `${JSON.stringify(taskState)}\n`);
+      const cases = [
+        ['malformed', () => fs.writeFileSync(statePath, '{not-json\n')],
+        [
+          'malformed-schema',
+          () => fs.writeFileSync(
+            statePath,
+            `${JSON.stringify({ ...taskState, owned: ['**'] })}\n`,
+          ),
+        ],
+        ['symlink', () => fs.symlinkSync(unsafeTarget, statePath)],
+        ['hardlink', () => fs.linkSync(unsafeTarget, statePath)],
+        ['non-regular', () => fs.mkdirSync(statePath)],
+      ];
+      for (const [kind, install] of cases) {
+        fs.rmSync(statePath, { recursive: true, force: true });
+        install();
+        const result = await runFactGate({
+          cwd: directory,
+          initialHead,
+          initialBranch: 'task-r0',
+          initialGitDir,
+          initialR0Evidence,
+          owned: ['owned.txt'],
+          excluded: [],
+          risk: 'R0',
+        });
+        assert.equal(result.ok, false, `${kind} R0 state must not prove finish-r0`);
+        assert.equal(result.reason, FAILURE.R0_CONTRACT_UNPROVEN);
+      }
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   await check('R0 fact gate does not accept an active contract as finished', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-supervisor-r0-active-'));
     try {
@@ -1749,6 +2047,7 @@ module.exports = {
       git('commit', '-m', 'test: seed active R0 gate');
       const initialHead = git('rev-parse', 'HEAD');
       const initialGitDir = git('rev-parse', '--absolute-git-dir');
+      const now = new Date().toISOString();
       const taskState = {
         version: 2,
         mode: 'r0',
@@ -1758,8 +2057,8 @@ module.exports = {
         branch: 'task-r0',
         baseSha: initialHead,
         startedHead: initialHead,
-        startedAt: '2026-07-30T00:00:00.000Z',
-        verifiedAt: '2026-07-30T00:00:00.000Z',
+        startedAt: now,
+        verifiedAt: now,
         owned: ['owned.txt'],
         excluded: [],
       };
@@ -1809,6 +2108,7 @@ module.exports = {
       git('commit', '-m', 'test: seed completed R0 gate');
       const initialHead = git('rev-parse', 'HEAD');
       const initialGitDir = git('rev-parse', '--absolute-git-dir');
+      const now = new Date().toISOString();
       const taskState = {
         version: 2,
         mode: 'r0',
@@ -1818,8 +2118,8 @@ module.exports = {
         branch: 'task-r0',
         baseSha: initialHead,
         startedHead: initialHead,
-        startedAt: '2026-07-30T00:00:00.000Z',
-        verifiedAt: '2026-07-30T00:00:00.000Z',
+        startedAt: now,
+        verifiedAt: now,
         owned: ['owned.txt'],
         excluded: [],
       };

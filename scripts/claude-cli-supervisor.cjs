@@ -24,6 +24,11 @@ const DEFAULT_POLL_MS = 300_000;
 const REQUIRED_STABLE_EOF_READS = 2;
 const STATE_SCHEMA_VERSION = 2;
 const MAX_PROMPT_BYTES = 256 * 1024;
+const AUTHORITY_RECEIPT_MAX_AGE_MS = 10 * 60 * 1000;
+const AUTHORITY_RECEIPT_CLOCK_SKEW_MS = 60 * 1000;
+const CLAUDE_TASK_STATE_VERSION = 2;
+const CLAUDE_TASK_STATE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const CLAUDE_TASK_STATE_CLOCK_SKEW_MS = 120 * 1000;
 const TEST_ONLY_ADAPTER_CAPABILITY = Symbol('coreone-test-only-terminal-adapter');
 
 const FAILURE = Object.freeze({
@@ -184,11 +189,17 @@ function parseVersion(value) {
   if (!match) return null;
   return {
     raw: match[1],
-    major: Number(match[2]),
-    minor: Number(match[3]),
-    patch: Number(match[4]),
+    major: match[2],
+    minor: match[3],
+    patch: match[4],
     prerelease: match[5] ? match[5].split('.') : [],
   };
+}
+
+function compareNumericIdentifiers(left, right) {
+  if (left.length !== right.length) return left.length > right.length ? 1 : -1;
+  if (left === right) return 0;
+  return left > right ? 1 : -1;
 }
 
 function compareVersions(left, right) {
@@ -196,8 +207,8 @@ function compareVersions(left, right) {
   const parsedRight = parseVersion(right);
   if (!parsedLeft || !parsedRight) return null;
   for (const key of ['major', 'minor', 'patch']) {
-    if (parsedLeft[key] > parsedRight[key]) return 1;
-    if (parsedLeft[key] < parsedRight[key]) return -1;
+    const comparison = compareNumericIdentifiers(parsedLeft[key], parsedRight[key]);
+    if (comparison !== 0) return comparison;
   }
   if (parsedLeft.prerelease.length === 0 && parsedRight.prerelease.length > 0) return 1;
   if (parsedLeft.prerelease.length > 0 && parsedRight.prerelease.length === 0) return -1;
@@ -213,7 +224,9 @@ function compareVersions(left, right) {
     if (leftPart === rightPart) continue;
     const leftNumeric = /^\d+$/.test(leftPart);
     const rightNumeric = /^\d+$/.test(rightPart);
-    if (leftNumeric && rightNumeric) return Number(leftPart) > Number(rightPart) ? 1 : -1;
+    if (leftNumeric && rightNumeric) {
+      return compareNumericIdentifiers(leftPart, rightPart);
+    }
     if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
     return leftPart > rightPart ? 1 : -1;
   }
@@ -411,6 +424,7 @@ function createState(request, options) {
     lastTailSha256: null,
     pendingQuestion: null,
     stopRequest: null,
+    outputProtocolFailure: null,
     authorityReceipts: [],
     initialHead: null,
     initialBranch: null,
@@ -513,6 +527,13 @@ function publicResult(state, overrides = {}) {
       ? {
           id: state.stopRequest.id,
           firstSeenAtMs: state.stopRequest.firstSeenAtMs,
+        }
+      : null,
+    outputProtocolFailure: state.outputProtocolFailure
+      ? {
+          kind: state.outputProtocolFailure.kind,
+          evidenceSha256: state.outputProtocolFailure.evidenceSha256,
+          firstSeenAtMs: state.outputProtocolFailure.firstSeenAtMs,
         }
       : null,
     probe: state.probe,
@@ -807,8 +828,7 @@ function normalizeQuestion(question, now) {
   };
 }
 
-async function handleQuestion(adapter, request, state, question, options) {
-  const now = options.clock();
+function latchQuestion(state, question, now) {
   const normalized = normalizeQuestion(question, now);
   if (!normalized) return null;
   if (state.pendingQuestion?.id === normalized.id) {
@@ -821,6 +841,23 @@ async function handleQuestion(adapter, request, state, question, options) {
     requiresAuthority: normalized.requiresAuthority,
     firstSeenAtMs: normalized.firstSeenAtMs,
   };
+  return normalized;
+}
+
+function latchStopRequest(state, read, now) {
+  if (read?.stopRequested !== true) return;
+  state.stopRequest = {
+    id: String(
+      read.stopId ||
+        sha256(`${state.sessionId}\0${read.cursor || ''}\0${now}`).slice(0, 24),
+    ),
+    firstSeenAtMs: state.stopRequest?.firstSeenAtMs || now,
+  };
+}
+
+async function handleQuestion(adapter, request, state, normalized, options) {
+  if (!normalized) return null;
+  const now = options.clock();
   if (now - normalized.firstSeenAtMs >= request.questionTimeoutMs) {
     throw new SupervisorFailure(
       FAILURE.QUESTION_STALLED,
@@ -912,30 +949,292 @@ function git(cwd, args) {
   return result.stdout;
 }
 
-function readR0State(cwd) {
-  const statePath = git(
-    cwd,
-    ['rev-parse', '--path-format=absolute', '--git-path', 'coreone/claude-task-state.json'],
-  ).trim();
-  if (!statePath || !fs.existsSync(statePath)) return null;
-  const stat = fs.lstatSync(statePath);
-  if (!stat.isFile() || stat.isSymbolicLink()) return null;
-  try {
-    return JSON.parse(fs.readFileSync(statePath, 'utf8'));
-  } catch {
-    return null;
+function r0OwnedScopeShapeError(patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) {
+    return 'state owned scope must contain at least one bounded path';
   }
+  for (const value of patterns) {
+    if (
+      typeof value !== 'string' ||
+      !value ||
+      value !== value.trim() ||
+      value.includes('\0')
+    ) {
+      return 'state owned scope contains an empty, padded, or NUL path';
+    }
+    const posix = normalizePath(value);
+    if (
+      path.posix.isAbsolute(posix) ||
+      path.win32.isAbsolute(value) ||
+      posix.startsWith('~')
+    ) {
+      return 'state owned scope contains a repository-external path';
+    }
+    const rawSegments = posix.split('/');
+    if (rawSegments.includes('..')) {
+      return 'state owned scope contains a path traversal segment';
+    }
+    const normalized = path.posix.normalize(posix);
+    if (
+      !normalized ||
+      normalized === '.' ||
+      normalized.startsWith('../') ||
+      normalized !== posix
+    ) {
+      return 'state owned scope contains a broad or non-canonical path';
+    }
+    const segments = normalized.split('/').filter(Boolean);
+    if (
+      segments.length === 0 ||
+      segments.every((segment) => /^[*?]+$/.test(segment)) ||
+      segments[0] === '**' ||
+      matchesAny('.git', [segments[0]])
+    ) {
+      return 'state owned scope can cover the whole repository or Git metadata';
+    }
+  }
+  return null;
+}
+
+function r0TaskStateShapeError(state, now = Date.now()) {
+  if (!state || Array.isArray(state) || typeof state !== 'object') {
+    return 'state root must be an object';
+  }
+  if (
+    !Number.isInteger(state.version) ||
+    state.version < 1 ||
+    state.version > CLAUDE_TASK_STATE_VERSION
+  ) {
+    return `state version must be within 1..${CLAUDE_TASK_STATE_VERSION}`;
+  }
+  if (state.mode !== 'r0' || state.stage !== 'r0' || state.risk !== 'R0') {
+    return 'state is not a valid R0 contract';
+  }
+  if (typeof state.branch !== 'string' || !state.branch.trim()) {
+    return 'state branch is missing';
+  }
+  if (!/^[0-9a-f]{40}$/i.test(String(state.baseSha || ''))) {
+    return 'state baseSha is invalid';
+  }
+  if (!/^[0-9a-f]{40}$/i.test(String(state.startedHead || ''))) {
+    return 'state startedHead is invalid';
+  }
+  const ownedScopeError = r0OwnedScopeShapeError(state.owned);
+  if (ownedScopeError) return ownedScopeError;
+  if (
+    !Array.isArray(state.excluded) ||
+    state.excluded.some(
+      (value) =>
+        typeof value !== 'string' ||
+        value.startsWith('/') ||
+        value.includes('\0'),
+    )
+  ) {
+    return 'state excluded scope is invalid';
+  }
+  if (
+    typeof state.reason !== 'string' ||
+    state.reason.trim() !== state.reason ||
+    state.reason.length < 6
+  ) {
+    return 'state R0 reason is invalid';
+  }
+  const startedAt = Date.parse(state.startedAt);
+  const verifiedAt = Date.parse(state.verifiedAt || state.startedAt);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(verifiedAt)) {
+    return 'state timestamps are invalid';
+  }
+  if (
+    startedAt > now + CLAUDE_TASK_STATE_CLOCK_SKEW_MS ||
+    verifiedAt > now + CLAUDE_TASK_STATE_CLOCK_SKEW_MS ||
+    verifiedAt < startedAt ||
+    now - startedAt > CLAUDE_TASK_STATE_MAX_AGE_MS
+  ) {
+    return 'state timestamps are expired, future-dated, or out of order';
+  }
+  return null;
+}
+
+function inspectR0State(cwd) {
+  let gitDirectory;
+  try {
+    const rawGitDirectory = git(cwd, ['rev-parse', '--absolute-git-dir']).trim();
+    gitDirectory = fs.realpathSync.native(rawGitDirectory);
+    const gitDirectoryStat = fs.lstatSync(gitDirectory);
+    if (!gitDirectoryStat.isDirectory() || gitDirectoryStat.isSymbolicLink()) {
+      return {
+        kind: 'unsafe',
+        file: path.join(rawGitDirectory, 'coreone', 'claude-task-state.json'),
+        state: null,
+        detail: 'per-worktree Git metadata root is not a physical directory',
+      };
+    }
+  } catch (error) {
+    return {
+      kind: 'unsafe',
+      file: null,
+      state: null,
+      detail: `cannot establish physical per-worktree Git metadata root: ${error.message}`,
+    };
+  }
+  const statePath = path.join(
+    gitDirectory,
+    'coreone',
+    'claude-task-state.json',
+  );
+  const stateDirectory = path.dirname(statePath);
+  let directoryStat;
+  try {
+    directoryStat = fs.lstatSync(stateDirectory);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return { kind: 'missing', file: statePath, state: null };
+    }
+    return {
+      kind: 'unsafe',
+      file: statePath,
+      state: null,
+      detail: `cannot inspect R0 state directory: ${error.message}`,
+    };
+  }
+  if (
+    !directoryStat.isDirectory() ||
+    directoryStat.isSymbolicLink() ||
+    fs.realpathSync.native(stateDirectory) !== path.resolve(stateDirectory)
+  ) {
+    return {
+      kind: 'unsafe',
+      file: statePath,
+      state: null,
+      detail: 'R0 state directory is not a physical directory',
+    };
+  }
+  let expected;
+  try {
+    expected = fs.lstatSync(statePath);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return { kind: 'missing', file: statePath, state: null };
+    }
+    return {
+      kind: 'unsafe',
+      file: statePath,
+      state: null,
+      detail: `cannot inspect R0 state file: ${error.message}`,
+    };
+  }
+  if (
+    !expected.isFile() ||
+    expected.isSymbolicLink() ||
+    expected.nlink !== 1
+  ) {
+    return {
+      kind: 'unsafe',
+      file: statePath,
+      state: null,
+      detail: 'R0 state must be a link-count=1 regular non-symlink file',
+    };
+  }
+  let descriptor;
+  let text;
+  try {
+    descriptor = fs.openSync(
+      statePath,
+      fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0),
+    );
+    const opened = fs.fstatSync(descriptor);
+    if (
+      !opened.isFile() ||
+      opened.nlink !== 1 ||
+      opened.dev !== expected.dev ||
+      opened.ino !== expected.ino
+    ) {
+      return {
+        kind: 'unsafe',
+        file: statePath,
+        state: null,
+        detail: 'R0 state identity changed during read',
+      };
+    }
+    text = fs.readFileSync(descriptor, 'utf8');
+  } catch (error) {
+    return {
+      kind: 'unsafe',
+      file: statePath,
+      state: null,
+      detail: `cannot safely read R0 state: ${error.message}`,
+    };
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+  let state;
+  try {
+    state = JSON.parse(text);
+  } catch (error) {
+    return {
+      kind: 'malformed',
+      file: statePath,
+      state: null,
+      detail: `R0 state JSON is malformed: ${error.message}`,
+    };
+  }
+  const shapeError = r0TaskStateShapeError(state);
+  if (shapeError) {
+    return {
+      kind: 'malformed',
+      file: statePath,
+      state,
+      detail: shapeError,
+    };
+  }
+  try {
+    const branch = git(cwd, ['branch', '--show-current']).trim();
+    if (branch !== state.branch) {
+      return {
+        kind: 'malformed',
+        file: statePath,
+        state,
+        detail: `R0 state branch mismatch: ${state.branch} != ${branch || 'DETACHED'}`,
+      };
+    }
+    for (const commit of [state.baseSha, state.startedHead]) {
+      git(cwd, ['cat-file', '-e', `${commit}^{commit}`]);
+      const ancestry = spawnSync(
+        'git',
+        ['merge-base', '--is-ancestor', commit, 'HEAD'],
+        { cwd, encoding: 'utf8' },
+      );
+      if (ancestry.status !== 0) {
+        return {
+          kind: 'malformed',
+          file: statePath,
+          state,
+          detail: `R0 state commit ${commit} is not an ancestor of HEAD`,
+        };
+      }
+    }
+  } catch (error) {
+    return {
+      kind: 'malformed',
+      file: statePath,
+      state,
+      detail: `R0 state Git baseline is invalid: ${error.message}`,
+    };
+  }
+  return { kind: 'valid', file: statePath, state };
 }
 
 function r0EvidenceForRequest(cwd, request) {
   if (request.risk !== 'R0') return null;
-  const taskState = readR0State(cwd);
+  const snapshot = inspectR0State(cwd);
+  const taskState = snapshot.state;
   const branch = git(cwd, ['branch', '--show-current']).trim();
   const exactScope =
     taskState &&
     sameStringArray(taskState.owned, request.owned || []) &&
     sameStringArray(taskState.excluded, request.excluded || []);
   if (
+    snapshot.kind !== 'valid' ||
     !taskState ||
     taskState.mode !== 'r0' ||
     taskState.stage !== 'r0' ||
@@ -946,7 +1245,13 @@ function r0EvidenceForRequest(cwd, request) {
     throw new SupervisorFailure(
       FAILURE.R0_CONTRACT_UNPROVEN,
       'R0 supervisor start requires a live matching R0 task contract',
-      { statePresent: Boolean(taskState), branch, exactScope },
+      {
+        stateKind: snapshot.kind,
+        stateDetail: snapshot.detail || null,
+        statePresent: Boolean(taskState),
+        branch,
+        exactScope,
+      },
     );
   }
   return {
@@ -1082,13 +1387,16 @@ async function runFactGate(input) {
     }
 
     if (input.risk === 'R0') {
-      const taskState = readR0State(cwd);
+      const taskSnapshot = inspectR0State(cwd);
+      const taskState = taskSnapshot.state;
       const evidence = input.initialR0Evidence;
       const evidenceState = evidence?.state;
+      const evidenceShapeError = r0TaskStateShapeError(evidenceState);
       const evidenceHashMatches =
         evidence?.verifiedBeforeFinish === true &&
         /^[0-9a-f]{64}$/i.test(String(evidence?.contractSha256 || '')) &&
-        evidence.contractSha256 === sha256(JSON.stringify(evidenceState));
+        evidence.contractSha256 === sha256(JSON.stringify(evidenceState)) &&
+        evidenceShapeError === null;
       const exactScope =
         evidenceState &&
         sameStringArray(evidenceState.owned, input.owned || []) &&
@@ -1107,20 +1415,28 @@ async function runFactGate(input) {
           checks: ['git-root', 'branch', 'ancestry', 'scope'],
           details: {
             statePresent: Boolean(taskState),
+            stateKind: taskSnapshot.kind,
+            stateDetail: taskSnapshot.detail || null,
             evidenceHashMatches,
+            evidenceShapeError,
             exactScope,
             branch,
           },
         };
       }
-      if (taskState) {
+      if (taskSnapshot.kind !== 'missing') {
         return {
           ok: false,
           reason: FAILURE.R0_CONTRACT_UNPROVEN,
           checks: ['git-root', 'branch', 'ancestry', 'scope'],
           details: {
-            message: 'R0 task state is still active; finish-r0 evidence is missing',
-            statePresent: true,
+            message:
+              taskSnapshot.kind === 'valid'
+                ? 'R0 task state is still active; finish-r0 evidence is missing'
+                : 'R0 task state is malformed or unsafe; absence is not proven',
+            statePresent: Boolean(taskState),
+            stateKind: taskSnapshot.kind,
+            stateDetail: taskSnapshot.detail || null,
             branch,
           },
         };
@@ -1187,6 +1503,37 @@ async function runFactGate(input) {
   }
 }
 
+function latchOutputProtocolFailure(read, state, clock) {
+  if (state.outputProtocolFailure) return;
+  const actualReadback = [read?.output, read?.tail]
+    .filter((value) => value !== undefined && value !== null)
+    .map(String)
+    .join('\n');
+  let kind = null;
+  if (
+    read?.protocolFailure === true ||
+    (read?.protocolFailure &&
+      typeof read.protocolFailure === 'object' &&
+      read.protocolFailure.failed === true)
+  ) {
+    kind = 'structured-protocol-failure';
+  } else if (/(?:^|[\r\n])\s*FATAL\s*:/i.test(actualReadback)) {
+    kind = 'fatal-output';
+  } else if (
+    /(?:^|[\r\n])\s*(?:CLAUDE[_ -])?PROTOCOL[_ -](?:FAILURE|ERROR)\s*:/i.test(
+      actualReadback,
+    )
+  ) {
+    kind = 'protocol-failure-output';
+  }
+  if (!kind) return;
+  state.outputProtocolFailure = {
+    kind,
+    evidenceSha256: sha256(actualReadback),
+    firstSeenAtMs: clock(),
+  };
+}
+
 function assertCleanSessionExit(read, state) {
   const session = read?.session;
   if (
@@ -1199,7 +1546,8 @@ function assertCleanSessionExit(read, state) {
     session.runningTool !== false ||
     read.runningTool === true ||
     state.pendingQuestion ||
-    state.stopRequest
+    state.stopRequest ||
+    state.outputProtocolFailure
   ) {
     throw new SupervisorFailure(
       FAILURE.CLAUDE_EXIT_ABNORMAL,
@@ -1209,6 +1557,7 @@ function assertCleanSessionExit(read, state) {
         session: session || null,
         pendingQuestion: Boolean(state.pendingQuestion),
         stopRequested: Boolean(state.stopRequest),
+        outputProtocolFailure: state.outputProtocolFailure || null,
       },
     );
   }
@@ -1483,29 +1832,32 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
       }
       state.cursor = read.cursor ?? state.cursor;
 
+      latchOutputProtocolFailure(read, state, options.clock);
+      const interruptObservedAtMs = options.clock();
+      const normalizedQuestion = latchQuestion(
+        state,
+        read.question,
+        interruptObservedAtMs,
+      );
+      latchStopRequest(state, read, interruptObservedAtMs);
+      if (state.stopRequest) {
+        state.status = 'WAITING_CONTROLLER';
+        state.blockedReason = 'CLAUDE_STOP_REQUESTED';
+        persist(options.stateFile, state, options.clock);
+        return publicResult(state, {
+          question: normalizedQuestion || undefined,
+        });
+      }
       const questionResult = await handleQuestion(
         adapter,
         request,
         state,
-        read.question,
+        normalizedQuestion,
         options,
       );
       if (questionResult) {
         persist(options.stateFile, state, options.clock);
         return questionResult;
-      }
-      if (read.question) persist(options.stateFile, state, options.clock);
-      if (read.stopRequested === true) {
-        state.stopRequest = {
-          id: String(read.stopId || sha256(
-            `${state.sessionId}\0${read.cursor || ''}\0${options.clock()}`,
-          ).slice(0, 24)),
-          firstSeenAtMs: state.stopRequest?.firstSeenAtMs || options.clock(),
-        };
-        state.status = 'WAITING_CONTROLLER';
-        state.blockedReason = 'CLAUDE_STOP_REQUESTED';
-        persist(options.stateFile, state, options.clock);
-        return publicResult(state);
       }
 
       if (
@@ -1595,6 +1947,7 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
         lastTailSha256: null,
         pendingQuestion: null,
         stopRequest: null,
+        outputProtocolFailure: null,
         authorityReceipts: [],
         initialHead: null,
         initialBranch: null,
@@ -1647,14 +2000,7 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
   }
 }
 
-function runSupervisorForSelftest(input, adapterInput, optionOverrides = {}) {
-  return runSupervisor(input, adapterInput, {
-    ...optionOverrides,
-    adapterCapability: TEST_ONLY_ADAPTER_CAPABILITY,
-  });
-}
-
-function normalizeAuthorityReceipt(receipt, pendingQuestion) {
+function normalizeAuthorityReceipt(receipt, request, state, pendingQuestion, now) {
   if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) {
     throw new SupervisorFailure(
       FAILURE.AUTHORITY_RECEIPT_REQUIRED,
@@ -1666,23 +2012,47 @@ function normalizeAuthorityReceipt(receipt, pendingQuestion) {
     authorizedBy: String(receipt.authorizedBy || '').trim(),
     authorizedAt: String(receipt.authorizedAt || '').trim(),
     scope: String(receipt.scope || '').trim(),
+    threadId: String(receipt.threadId || '').trim(),
+    sessionId: String(receipt.sessionId || '').trim(),
+    terminalHandle: String(receipt.terminalHandle || '').trim(),
+    terminalGeneration: String(receipt.terminalGeneration || '').trim(),
     questionId: String(receipt.questionId || '').trim(),
+    questionTextSha256: String(receipt.questionTextSha256 || '').trim(),
   };
+  const authorizedAtMs = Date.parse(normalized.authorizedAt);
   if (
     !/^[A-Za-z0-9._-]{3,128}$/.test(normalized.decisionId) ||
     normalized.authorizedBy.length < 2 ||
     normalized.authorizedBy.length > 160 ||
-    !Number.isFinite(Date.parse(normalized.authorizedAt)) ||
+    !Number.isFinite(authorizedAtMs) ||
     !normalized.scope ||
     Buffer.byteLength(normalized.scope, 'utf8') > 2048 ||
+    normalized.threadId !== request.threadId ||
+    normalized.sessionId !== state.sessionId ||
+    normalized.terminalHandle !== state.terminalHandle ||
+    normalized.terminalGeneration !== state.terminalGeneration ||
     normalized.questionId !== pendingQuestion.id ||
+    normalized.questionTextSha256 !== pendingQuestion.textSha256 ||
+    !/^[0-9a-f]{64}$/i.test(normalized.questionTextSha256) ||
+    authorizedAtMs < pendingQuestion.firstSeenAtMs - AUTHORITY_RECEIPT_CLOCK_SKEW_MS ||
+    authorizedAtMs > now + AUTHORITY_RECEIPT_CLOCK_SKEW_MS ||
+    now - authorizedAtMs > AUTHORITY_RECEIPT_MAX_AGE_MS ||
     /[\r\n\0]/.test(normalized.authorizedBy) ||
     /[\0]/.test(normalized.scope)
   ) {
     throw new SupervisorFailure(
       FAILURE.AUTHORITY_RECEIPT_REQUIRED,
-      'authorization receipt is incomplete or not bound to the pending question',
-      { questionId: pendingQuestion.id },
+      'authorization receipt is incomplete, stale, or not bound to the current terminal session question',
+      {
+        threadId: request.threadId,
+        sessionId: state.sessionId,
+        terminalHandle: state.terminalHandle,
+        terminalGeneration: state.terminalGeneration,
+        questionId: pendingQuestion.id,
+        questionTextSha256: pendingQuestion.textSha256,
+        receiptMaxAgeMs: AUTHORITY_RECEIPT_MAX_AGE_MS,
+        receiptClockSkewMs: AUTHORITY_RECEIPT_CLOCK_SKEW_MS,
+      },
     );
   }
   return normalized;
@@ -1708,6 +2078,16 @@ async function answerSupervisorUnlocked(input, adapterInput, answerInput, option
     }
     validateStateBinding(state, request);
     const adapter = validateAdapter(adapterInput, options);
+    if (state.stopRequest || state.status === 'STOPPED') {
+      throw new SupervisorFailure(
+        FAILURE.STATE_BINDING_MISMATCH,
+        'a latched or acknowledged stop prevents answer and Claude resume',
+        {
+          stopId: state.stopRequest?.id || state.stopAcknowledgement?.stopId || null,
+          status: state.status,
+        },
+      );
+    }
     if (!state.started || !state.pendingQuestion) {
       throw new SupervisorFailure(
         FAILURE.STATE_BINDING_MISMATCH,
@@ -1728,7 +2108,10 @@ async function answerSupervisorUnlocked(input, adapterInput, answerInput, option
     const authorityReceipt = state.pendingQuestion.requiresAuthority
       ? normalizeAuthorityReceipt(
           answerPayload.authorizationReceipt,
+          request,
+          state,
           state.pendingQuestion,
+          options.clock(),
         )
       : null;
     await proveTerminalVisibility(adapter, request, state, options);
@@ -1789,18 +2172,6 @@ async function answerSupervisor(input, adapterInput, answerInput, optionOverride
   } finally {
     lease.release();
   }
-}
-
-function answerSupervisorForSelftest(
-  input,
-  adapterInput,
-  answerInput,
-  optionOverrides = {},
-) {
-  return answerSupervisor(input, adapterInput, answerInput, {
-    ...optionOverrides,
-    adapterCapability: TEST_ONLY_ADAPTER_CAPABILITY,
-  });
 }
 
 function normalizeStopReceipt(receipt, stopRequest) {
@@ -1908,18 +2279,6 @@ async function ackStopSupervisor(input, adapterInput, receiptInput, optionOverri
   } finally {
     lease.release();
   }
-}
-
-function ackStopSupervisorForSelftest(
-  input,
-  adapterInput,
-  receiptInput,
-  optionOverrides = {},
-) {
-  return ackStopSupervisor(input, adapterInput, receiptInput, {
-    ...optionOverrides,
-    adapterCapability: TEST_ONLY_ADAPTER_CAPABILITY,
-  });
 }
 
 function parseCliArgs(argv) {
@@ -2120,15 +2479,12 @@ module.exports = {
   FAILURE,
   REQUIRED_STABLE_EOF_READS,
   ackStopSupervisor,
-  ackStopSupervisorForSelftest,
   answerSupervisor,
-  answerSupervisorForSelftest,
   compareVersions,
   parseVersion,
   readState,
   runFactGate,
   runSupervisor,
-  runSupervisorForSelftest,
   supervisorStateFile,
   validateRequest,
 };

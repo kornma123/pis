@@ -15,25 +15,32 @@ const CLAUDE_CLI_DEFAULTS = 'effort=ultracode poll-seconds=300 desktop-terminal=
 const CLAUDE_CLI_TERMINAL_PROOF = 'canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed'
 const CLAUDE_CLI_SUPERVISOR = 'scripts/claude-cli-supervisor.cjs'
 const CLAUDE_CLI_SUPERVISOR_SELFTEST = 'scripts/claude-cli-supervisor.selftest.cjs'
-const CLAUDE_CLI_SUPERVISOR_RUNTIME = `script=${CLAUDE_CLI_SUPERVISOR} selftest=${CLAUDE_CLI_SUPERVISOR_SELFTEST} adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN`
+const CLAUDE_CLI_SUPERVISOR_TEST_HARNESS = 'scripts/claude-cli-supervisor.test-harness.cjs'
+const CLAUDE_CLI_SUPERVISOR_DEPENDENCY = 'scripts/agent-preflight.cjs'
+const CLAUDE_CLI_SUPERVISOR_RUNTIME = `script=${CLAUDE_CLI_SUPERVISOR} selftest=${CLAUDE_CLI_SUPERVISOR_SELFTEST} test-harness=${CLAUDE_CLI_SUPERVISOR_TEST_HARNESS} production-test-exports=forbidden review-target-execution=materialized adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN`
 const CLAUDE_CLI_SUPERVISOR_SCENARIOS = Object.freeze([
   'queued terminal is not visible proof',
   'different app terminal handle fails closed',
   'different terminal generation fails closed',
   'terminal create must acknowledge the task and session idempotency key',
+  'production module does not export fake-adapter test entrypoints',
   'wrong cwd or worktree fails before Claude launch',
   'missing Claude CLI fails before prompt injection',
   'old Claude CLI version fails closed',
   'prerelease Claude CLI does not satisfy the matching stable minimum',
+  'SemVer comparison is symmetric for integers beyond Number safe range',
   'unsupported ultracode effort cannot silently downgrade',
   'prompt injection must be positively acknowledged',
   'terminal detachment stops supervision',
   'unanswered question becomes a timed stall, never COMPLETE',
   'authority questions are latched and cannot be auto-answered',
+  'authority receipts bind the full terminal session context and time window',
   'stop requests stay latched across restart until explicit ack-stop',
+  'simultaneous question and stop are atomically latched with stop priority',
   'unstable EOF cannot pass the output gate',
   'adapter tail hash cannot hide changing terminal readback',
   'stable EOF without a clean structured same-session exit is abnormal',
+  'clean structured exit with a latched FATAL output is abnormal',
   'concurrent run holds one task lease and creates only one terminal',
   'stale dead-process task lease is recovered after application restart',
   'state CAS rejects a concurrent state mutation',
@@ -51,10 +58,11 @@ const CLAUDE_CLI_SUPERVISOR_SCENARIOS = Object.freeze([
   'fact gate inspects all parents of merge commits',
   'fact gate is bound to the initial branch and gitdir',
   'R0 fact gate requires live matching task state',
+  'R0 malformed or unsafe state cannot masquerade as finish-r0',
   'R0 fact gate does not accept an active contract as finished',
   'R0 fact gate accepts a verified start state followed by finish-r0 removal',
 ])
-const CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256 = 'c6d12401726a7a2722e5b16a2a0d878fb39897d563ed774f9055902a9fa8703c'
+const CLAUDE_CLI_SUPERVISOR_SCENARIO_SHA256 = '516d59e66e9bb5f18196f3b01b71dd4d723c77e30fb27878ad5b422623889799'
 const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
   'docs/工作模型-COREONE项目版-2026-06-30.md',
@@ -142,14 +150,21 @@ function installAuthorityFixture(root) {
 const FAILURE = { TERMINAL_VISIBILITY_UNPROVEN: 'TERMINAL_VISIBILITY_UNPROVEN' };
 function parseVersion(value) {
   const match = String(value || '').match(/(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?/);
-  return match ? { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease: match[4] ? match[4].split('.') : [] } : null;
+  return match ? { major: match[1], minor: match[2], patch: match[3], prerelease: match[4] ? match[4].split('.') : [] } : null;
+}
+function compareNumeric(left, right) {
+  const a = String(left).replace(/^0+(?=\\d)/, '');
+  const b = String(right).replace(/^0+(?=\\d)/, '');
+  if (a.length !== b.length) return a.length > b.length ? 1 : -1;
+  return a === b ? 0 : a > b ? 1 : -1;
 }
 function compareVersions(left, right) {
   const a = parseVersion(left);
   const b = parseVersion(right);
   if (!a || !b) return null;
   for (const key of ['major', 'minor', 'patch']) {
-    if (a[key] !== b[key]) return a[key] > b[key] ? 1 : -1;
+    const compared = compareNumeric(a[key], b[key]);
+    if (compared !== 0) return compared;
   }
   if (!a.prerelease.length && b.prerelease.length) return 1;
   if (a.prerelease.length && !b.prerelease.length) return -1;
@@ -160,9 +175,6 @@ async function runSupervisor(input) {
 }
 async function answerSupervisor() { return runSupervisor({ taskId: 'answer' }); }
 async function ackStopSupervisor() { return runSupervisor({ taskId: 'ack' }); }
-const runSupervisorForSelftest = runSupervisor;
-const answerSupervisorForSelftest = answerSupervisor;
-const ackStopSupervisorForSelftest = ackStopSupervisor;
 async function runFactGate() { return { ok: false }; }
 function readState() { return null; }
 function supervisorStateFile() { return 'state.json'; }
@@ -174,18 +186,30 @@ module.exports = {
   FAILURE,
   REQUIRED_STABLE_EOF_READS: 2,
   ackStopSupervisor,
-  ackStopSupervisorForSelftest,
   answerSupervisor,
-  answerSupervisorForSelftest,
   compareVersions,
   parseVersion,
   readState,
   runFactGate,
   runSupervisor,
-  runSupervisorForSelftest,
   supervisorStateFile,
   validateRequest,
 };
+`)
+  write(root, CLAUDE_CLI_SUPERVISOR_TEST_HARNESS, `#!/usr/bin/env node
+'use strict';
+async function runSupervisorWithTestAdapter() { return { status: 'BLOCKED' }; }
+async function answerSupervisorWithTestAdapter() { return { status: 'BLOCKED' }; }
+async function ackStopSupervisorWithTestAdapter() { return { status: 'BLOCKED' }; }
+module.exports = {
+  ackStopSupervisorWithTestAdapter,
+  answerSupervisorWithTestAdapter,
+  runSupervisorWithTestAdapter,
+};
+`)
+  write(root, CLAUDE_CLI_SUPERVISOR_DEPENDENCY, `'use strict';
+function matchesAny() { return false; }
+module.exports = { matchesAny };
 `)
   write(root, CLAUDE_CLI_SUPERVISOR_SELFTEST, [
     '#!/usr/bin/env node',
@@ -492,6 +516,54 @@ check('review old ref: warns, reads authority from target ref, and does not fail
     assert.equal(result.json.authority.source, repo.baseSha)
     assert.equal(result.json.authority.contractId, CONTRACT_ID)
     assert.equal(result.json.ownership.foreignDirty.length, 1)
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('review target executes its materialized supervisor runtime and selftest', () => {
+  const repo = setupRepo()
+  try {
+    const runtime = fs.readFileSync(
+      path.join(__dirname, 'claude-cli-supervisor.cjs'),
+      'utf8',
+    )
+    const selftest = fs.readFileSync(
+      path.join(__dirname, 'claude-cli-supervisor.selftest.cjs'),
+      'utf8',
+    ).replace(
+      "'use strict';",
+      "'use strict';\nthrow new Error('target-only supervisor suite damage');",
+    )
+    const harness = fs.readFileSync(
+      path.join(__dirname, 'claude-cli-supervisor.test-harness.cjs'),
+      'utf8',
+    )
+    const dependency = fs.readFileSync(SCRIPT, 'utf8')
+    write(repo.work, CLAUDE_CLI_SUPERVISOR, runtime)
+    write(repo.work, CLAUDE_CLI_SUPERVISOR_SELFTEST, selftest)
+    write(repo.work, CLAUDE_CLI_SUPERVISOR_TEST_HARNESS, harness)
+    write(repo.work, CLAUDE_CLI_SUPERVISOR_DEPENDENCY, dependency)
+    git(repo.work, [
+      'add',
+      CLAUDE_CLI_SUPERVISOR,
+      CLAUDE_CLI_SUPERVISOR_SELFTEST,
+      CLAUDE_CLI_SUPERVISOR_TEST_HARNESS,
+      CLAUDE_CLI_SUPERVISOR_DEPENDENCY,
+    ])
+    git(repo.work, ['commit', '-q', '-m', 'damage target supervisor suite'])
+    const targetSha = git(repo.work, ['rev-parse', 'HEAD'])
+    const result = run(repo.work, ['--mode=review', `--target-ref=${targetSha}`])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find(
+      (item) => item.id === 'authority.claude-cli-supervision',
+    )
+    assert.ok(target)
+    assert.equal(target.status, 'FAIL')
+    assert.ok(
+      target.details.some((item) => /materialized|suite|target-only/i.test(item)),
+      JSON.stringify(target.details),
+    )
   } finally {
     fs.rmSync(repo.tmp, { recursive: true, force: true })
   }

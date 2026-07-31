@@ -3,7 +3,7 @@
 <!-- protocol-id: coreone-claude-code-cli-supervision/v3 -->
 <!-- supervisor-defaults: effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true -->
 <!-- terminal-proof: canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed -->
-<!-- supervisor-runtime: script=scripts/claude-cli-supervisor.cjs selftest=scripts/claude-cli-supervisor.selftest.cjs adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN -->
+<!-- supervisor-runtime: script=scripts/claude-cli-supervisor.cjs selftest=scripts/claude-cli-supervisor.selftest.cjs test-harness=scripts/claude-cli-supervisor.test-harness.cjs production-test-exports=forbidden review-target-execution=materialized adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN -->
 <!-- stable-rules-only -->
 
 本协议用于 Codex 或 PM 在本机启动、续接、监督 Claude Code CLI/K3 并与其双向协作。它解决的是会话可见、问题及时回答、输出不遗漏和派单前复核，不新增命令白名单，也不替代 `docs/agent-operating-contract.md` 的权限、ownership、GitHub 写入或效率规则。
@@ -12,9 +12,9 @@
 
 ## 0. 可执行入口与宿主 adapter
 
-仓库内唯一可执行监督入口是 `scripts/claude-cli-supervisor.cjs`，回归入口是 `scripts/claude-cli-supervisor.selftest.cjs`。监督器拥有状态机、同句柄校验、Claude 探针、session/prompt 绑定、增量读取、问题中断、双读 EOF、独立 Git/scope/R0 事实闸和 Git 外恢复状态；它不拥有 Codex Desktop 前端终端。
+仓库内唯一生产监督入口是 `scripts/claude-cli-supervisor.cjs`，回归入口是 `scripts/claude-cli-supervisor.selftest.cjs`，测试专用装载器是 `scripts/claude-cli-supervisor.test-harness.cjs`。监督器拥有状态机、同句柄校验、Claude 探针、session/prompt 绑定、增量读取、问题中断、双读 EOF、独立 Git/scope/R0 事实闸和 Git 外恢复状态；它不拥有 Codex Desktop 前端终端。
 
-宿主以 adapter API v2 接入。**生产 CLI 不加载 `--adapter=<文件>`**：任意仓库外/仓库内 JavaScript 文件都能自报 `attached/visible`，因此文件 adapter 只能由 `scripts/claude-cli-supervisor.selftest.cjs` 通过具名 `*ForSelftest` 入口及模块内部测试 capability 注入。生产入口只接受 Codex Desktop 原生桥在同一进程内给出的、调用方文件/环境变量无法伪造且绑定 `taskId + threadId + sessionId + terminalGeneration` 的 capability；当前宿主尚未提供该 native binding，所以生产 `run` 必须始终非零退出并报告 `TERMINAL_VISIBILITY_UNPROVEN`：
+宿主以 adapter API v2 接入。**生产 CLI 不加载 `--adapter=<文件>`，生产模块也不导出任何 fake-adapter 测试入口**：任意仓库外/仓库内 JavaScript 文件都能自报 `attached/visible`。回归测试只能由测试进程显式加载专用 harness；生产 runtime 不得 import、命名或重新导出该 harness，不能用 `NODE_ENV`、环境变量或布尔值伪造信任边界。生产入口只接受 Codex Desktop 原生桥在同一进程内给出的、调用方文件/环境变量无法伪造且绑定 `taskId + threadId + sessionId + terminalGeneration` 的 capability；当前宿主尚未提供该 native binding，所以生产 `run` 必须始终非零退出并报告 `TERMINAL_VISIBILITY_UNPROVEN`：
 
 ```bash
 node scripts/claude-cli-supervisor.cjs run \
@@ -62,7 +62,7 @@ node scripts/claude-cli-supervisor.cjs answer \
   --answer-file='<控制者答案文本>'
 ```
 
-answer 路径会重新做同句柄 canary，再把答案写回原终端；不得要求 PM 点击、切换、粘贴或输入。需要新增权限、ownership、产品方向或 GitHub 写入的问题会持久锁存，禁止 `onQuestion` 自动回答；只有附带 `--authorization-receipt=<JSON>` 的显式回答才可解除，回执至少绑定 decision id、授权人、时间、范围和 question id。结构化 stop 同样跨重启锁存，只能由 `ack-stop --ack-file=<JSON>` 显式确认，确认后会话进入 `STOPPED`，不得自动 resume。
+answer 路径会重新做同句柄 canary，再把答案写回原终端；不得要求 PM 点击、切换、粘贴或输入。需要新增权限、ownership、产品方向或 GitHub 写入的问题会持久锁存，禁止 `onQuestion` 自动回答；只有附带 `--authorization-receipt=<JSON>` 的显式回答才可解除。回执必须精确绑定 `threadId + sessionId + terminalHandle + terminalGeneration + questionId + questionTextSha256`，另含 decision id、授权人、授权时间和范围；过期、过早、未来时间或任一上下文不一致均稳定拒绝。结构化 stop 同样跨重启锁存，只能由 `ack-stop --ack-file=<JSON>` 显式确认，确认后会话进入 `STOPPED`，不得自动 resume。
 
 恢复状态保存在 `git rev-parse --git-path coreone/claude-cli-supervisor/<task-hash>.json`，位于 Git 外且按 worktree 隔离。Codex app/task 重启后用同一 request 重跑 `run`：监督器校验 thread/task/prompt/scope、初始 branch 与 per-worktree gitdir 绑定，重新证明原 terminal handle/generation，再以原 Claude session id 续接；raw prompt、问题正文、token、终端原文和凭据都不落状态文件。线程迁移没有隐式 fallback；当前 runtime 未实现授权 handoff，所以 thread 变化一律 `STATE_BINDING_MISMATCH`。
 
@@ -103,6 +103,7 @@ claude --effort ultracode --name '<可识别任务名>' --resume '<原 session i
 
 - `--effort ultracode` 是默认且必须显式传入的启动参数。模型沿用当时有效配置；只有用户或固定 handoff 明确指定模型时才传 `--model`，不得把会过期的模型名写成长期默认。
 - Claude 版本按严格 SemVer 比较；prerelease 低于相同 core 的稳定版（例如 `2.0.0-beta.1 < 2.0.0`），不得只比较前三段数字后放行。
+- SemVer 的数字标识符按十进制数字串长度和字典序比较，不转为 JavaScript `Number`；超出安全整数范围的版本也必须保持双向对称顺序。
 - 只有用户明确指定其他 effort 时才可覆盖默认值。CLI 不支持 `ultracode`、启动后显示降级或实际 effort 无法确认时，停止派单并如实报告；不得静默退回 `xhigh`、`high` 或其他级别。
 - 必须在已经通过 canary 证明的同一 Codex Desktop 任务终端以前台交互方式启动。不得使用工具调用分配的 PTY、`--bg`、`nohup`、shell 后台符号、输出重定向或隐藏子任务代替；`--tmux` 仅在用户明确要求、桌面端可见 attach 入口已验证且控制者仍能同句柄读写时使用。
 - 启动成功后，控制者立即在当前任务回报任务名、cwd、session id、Claude 版本、实际 effort，以及 canary 写入与应用回读均成功的“桌面终端已附着”状态。若其中任何一项未核实，不得声称会话已接通或终端可见。
@@ -121,6 +122,7 @@ claude --effort ultracode --name '<可识别任务名>' --resume '<原 session i
 - 回答当前问题不受“连续两次稳定 EOF”或完整 diff 复核闸限制；先解除等待，再继续监督。这条优先级高于常规派单前硬闸。
 - 在既有任务范围、可逆且不新增外部权限时，控制者直接给出明确答案，不把可自行核实的问题转问用户。
 - question/stop 一旦出现即写入 Git 外状态并跨重启锁存；后续 read 没再重复该信号不得清除。普通 question 只由显式 answer 清除，stop 只由显式 ack-stop 清除。
+- 同一次 read 同时出现 question 与 stop 时必须先原子锁存两者，并以 stop 为最高优先级：不得调用 `onQuestion`、answer 或 resume，只有 `ack-stop` 能解除 stop；确认 stop 后仍不得把遗留 question 当作恢复许可。
 - 只有答案会扩大授权、执行破坏性动作、改变 ownership、进行未授权 GitHub 写入或改变产品方向时，才把最小必要决策交给用户；同时保持原 Claude 会话可见并说明正在等待什么。这类 `requiresAuthority` 问题禁止自动回答，显式 answer 还必须携带绑定该 question 的可审计用户授权回执。
 - Claude 提出多个 Issue、方案或后续候选时，控制者必须逐项消费并核对，不能只读取最后一段后直接派下一任务。
 
@@ -128,8 +130,8 @@ claude --effort ultracode --name '<可识别任务名>' --resume '<原 session i
 
 回答中断问题之外，在发送任何新的任务、纠偏、扩大检查或“继续下一项”之前，依次满足：
 
-1. **输出闸**：完整消费当前新增输出；只有宿主给出绑定同 `sessionId` 的结构化终态 `status=exited + exitCode=0 + signal=null + pendingQuestion=false + runningTool=false` 后，才对同一终端真实读回 tail 做连续两次相同 hash。监督器自己计算 hash，忽略 adapter 自报 `tailSha256`；FATAL 文本、缺终态、非零退出、signal、待答问题或运行工具一律 `CLAUDE_EXIT_ABNORMAL`。
-2. **事实闸**：控制者绑定启动时 branch 与 per-worktree gitdir，独立检查 `git status`、HEAD/tree、working tree/index/untracked 内容指纹、测试结果、commit 和 GitHub 写入。scope 检查枚举 `initialHead..HEAD` 每个 commit 的所有 parent delta，再与 working tree 路径取并集；中途 add/remove、merge 历史里的越界路径也不得被最终树掩盖。R0 在启动时先验证活动合同并保存 evidence hash，完成时必须证明 `finish-r0` 后 state 消失。
+1. **输出闸**：完整消费当前新增输出；只有宿主给出绑定同 `sessionId` 的结构化终态 `status=exited + exitCode=0 + signal=null + pendingQuestion=false + runningTool=false` 后，才对同一终端真实读回 tail 做连续两次相同 hash。监督器自己计算 hash，忽略 adapter 自报 `tailSha256`；从增量真实读回中发现的 `FATAL:` 或结构化协议失败会持久锁存，后续空 tail 或 clean exit 不能洗掉；缺终态、非零退出、signal、待答问题或运行工具也一律 `CLAUDE_EXIT_ABNORMAL`。
+2. **事实闸**：控制者绑定启动时 branch 与 per-worktree gitdir，独立检查 `git status`、HEAD/tree、working tree/index/untracked 内容指纹、测试结果、commit 和 GitHub 写入。scope 检查枚举 `initialHead..HEAD` 每个 commit 的所有 parent delta，再与 working tree 路径取并集；中途 add/remove、merge 历史里的越界路径也不得被最终树掩盖。R0 状态按 claude-task v2 schema、分支、时效、祖先关系和文件身份严格分类为 `missing/valid/malformed/unsafe`；启动时只能接受 `valid` 并保存 evidence hash，完成时只有先前有效 evidence 与当前确认 `missing` 才能证明 `finish-r0`，malformed、symlink、目录或其他非普通文件全部 `R0_CONTRACT_UNPROVEN`。
 
 任一闸未满足时不得派常规下一任务。发现声明与现场不一致时，在原会话给出具体证据和最小纠偏，不启动第二个重复会话。
 
@@ -140,6 +142,7 @@ claude --effort ultracode --name '<可识别任务名>' --resume '<原 session i
 - 只有 Claude 已给出终态、输出经过两次稳定读取、控制者完成事实闸、没有未答问题，并且当前目标确实无安全的范围内下一步时，才停止监督并向用户交付。
 - 持久化 `COMPLETE` 不是永久通行证：每次 `run` 都要重新核对 threadId、终端绑定、branch/gitdir、HEAD/tree、working status 与新鲜事实闸；任一变化转 `STALE_COMPLETION`/`BLOCKED`，不得直接早退。只读 `status` 不得复用旧成功，必须降级为等待新一次 `run` 复核的 `BLOCKED`。thread 变化只允许未来具备显式授权 handoff 的宿主路径；当前实现无该路径，故一律拒绝。
 - `COMPLETE` 只表示本会话目标完成，不自动授权提交、push、开 PR、标记 Ready、合并、部署、发布或关闭 Issue；这些动作继续按共用契约分别取证和授权。
+- `review` preflight 必须从目标 ref 物化 supervisor runtime、专用 harness、依赖与 selftest，并在该物化目标中真实执行 import、负例和确定场景 suite；目标资产缺失、语法损坏或 suite 失败必须显式 `FAIL`，不得因工作树版本可运行而把目标 ref 报成 PASS。
 
 ## 7. 状态机
 
