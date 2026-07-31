@@ -587,6 +587,7 @@ test.describe('critical supplement collection month authority UI contract', () =
     expect(listQueries.length).toBeGreaterThan(0)
     for (const query of listQueries) expect(query.get('serviceMonth')).toBe(UI_MONTH)
     await expect(row).toContainText('计入 2026年9月')
+    expect(collectRequests).toHaveLength(1)
   })
 })
 
