@@ -2,7 +2,7 @@
  * Phase 1 账实核对 —— 路由 + 状态机集成（设计基线 §1.4/§1.5/§4）。
  * 端到端：compute → 认定(6原因·补收gate) → 复核完成(前置=全认定) → 关账(定版) + 反向必填理由。
  */
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import request from 'supertest'
 import type { RequestHandler } from 'express'
 import { buildTestApp, getDb, loginAdmin, loginAs, seedReviewer } from './p0-harness.js'
@@ -1377,13 +1377,54 @@ describe('账实核对路由 · LOC-005 R2 respin（补收单生命周期 + 治�
       }
     }
 
-    // 缺席默认当月：字段完全不出现 → 200 入账当月
-    const defaulted = await auth(request(app)
-      .post(`/api/v1/account-reconcile/supplements/${supplements[0].id}/collect`)
-      .send({}))
+    // 缺席默认上海业务月：冻结在上海 9 月 1 日 00:30（UTC 仍为 8 月），
+    // 响应、业务事实和成功审计必须使用同一个 2026-09。
+    vi.setSystemTime(new Date('2026-08-31T16:30:00.000Z'))
+    let defaulted: any
+    try {
+      const fixedToken = await loginAdmin(app)
+      defaulted = await request(app)
+        .post(`/api/v1/account-reconcile/supplements/${supplements[0].id}/collect`)
+        .set('Authorization', `Bearer ${fixedToken}`)
+        .send({})
+    } finally {
+      vi.useRealTimers()
+    }
     expect(defaulted.status).toBe(200)
-    const defaultMonth = new Date().toISOString().slice(0, 7)
-    expect(snapshot(supplements[0].id)).toMatchObject({ status: '已补收', collected_month: defaultMonth })
+    expect(defaulted.body.data.collectedMonth).toBe('2026-09')
+    expect(snapshot(supplements[0].id)).toMatchObject({ status: '已补收', collected_month: '2026-09' })
+    const defaultAudit = db.prepare(`
+      SELECT detail
+        FROM abc_audit_logs
+       WHERE action = 'supplement_collect' AND target_id = ?
+       ORDER BY rowid DESC
+       LIMIT 1
+    `).get(supplements[0].id) as { detail: string }
+    expect(JSON.parse(defaultAudit.detail).collectedMonth).toBe('2026-09')
+    // 年界同样走缺省路径；先恢复真实时钟完成独立签发，再冻结收款时钟。
+    expect((await approve(supplements[2].id)).status).toBe(200)
+    vi.setSystemTime(new Date('2026-12-31T16:30:00.000Z'))
+    let yearBoundary: any
+    try {
+      const fixedToken = await loginAdmin(app)
+      yearBoundary = await request(app)
+        .post(`/api/v1/account-reconcile/supplements/${supplements[2].id}/collect`)
+        .set('Authorization', `Bearer ${fixedToken}`)
+        .send({})
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(yearBoundary.status).toBe(200)
+    expect(yearBoundary.body.data.collectedMonth).toBe('2027-01')
+    expect(snapshot(supplements[2].id)).toMatchObject({ status: '已补收', collected_month: '2027-01' })
+    const yearBoundaryAudit = db.prepare(`
+      SELECT detail
+        FROM abc_audit_logs
+       WHERE action = 'supplement_collect' AND target_id = ?
+       ORDER BY rowid DESC
+       LIMIT 1
+    `).get(supplements[2].id) as { detail: string }
+    expect(JSON.parse(yearBoundaryAudit.detail).collectedMonth).toBe('2027-01')
     // 边界合法值按既有合同保留：0000-01 / 9999-12
     expect((await approve(supplements[3].id)).status).toBe(200)
     const edgeLow = await auth(request(app)
