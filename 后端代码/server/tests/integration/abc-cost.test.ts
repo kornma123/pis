@@ -10,8 +10,10 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import request from 'supertest'
-import app from '../../src/app.js'
 import { getDatabase } from '../../src/database/DatabaseManager.js'
+import { createLegacyAbcCompatibilityApp } from '../helpers/legacy-abc-compatibility-app.js'
+
+const app = createLegacyAbcCompatibilityApp({ auditWrites: true })
 
 // 辅助函数：从响应中提取列表数据
 function getItems(res: any): any[] {
