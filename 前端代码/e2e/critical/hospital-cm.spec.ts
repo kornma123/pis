@@ -28,4 +28,17 @@ test.describe('critical hospital contribution-margin truth', () => {
     await expect(page).toHaveURL((url) => url.pathname === '/hospital-cm')
     await expect(page.getByRole('heading', { name: '院级贡献毛利看板' })).toBeVisible()
   })
+
+  test('ABC, labor, and equipment product surfaces are absent and old deep links are dead', async ({ page }) => {
+    await loginThroughUi(page, 'admin')
+
+    for (const label of ['ABC成本看板', '设备管理', '标准工时库', '间接成本中心']) {
+      await expect(page.getByRole('link', { name: label })).toHaveCount(0)
+    }
+
+    for (const path of ['/abc/dashboard', '/equipment', '/labor-times', '/indirect-costs']) {
+      await page.goto(path)
+      await expect(page.getByRole('heading', { name: '404' })).toBeVisible()
+    }
+  })
 })

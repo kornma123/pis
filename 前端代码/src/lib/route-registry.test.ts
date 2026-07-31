@@ -39,21 +39,6 @@ const GOLDEN_MAIN: Array<[string, string]> = [
   ['LIS 病例', '/lis-cases'],
   ['导入测试台', '/import-console'],
   ['财务月度导入', '/import-wizard'],
-  ['ABC成本看板', '/abc/dashboard'],
-  ['单片成本分析', '/abc/slide-cost'],
-  ['盈利分析', '/abc/profitability'],
-  ['成本异常台账', '/abc/alerts'],
-  ['成本审计追溯', '/abc/audit'],
-  ['ABC配置', '/abc/activity-centers'],
-  ['成本动因', '/abc/cost-drivers'],
-  ['成本池', '/abc/cost-pools'],
-  ['收费映射配置', '/abc/fee-mappings'],
-  ['成本预算', '/abc/budgets'],
-  ['质量成本', '/abc/quality-costs'],
-  ['季度成本调整', '/abc/quarterly-adjustment'],
-  ['设备管理', '/equipment'],
-  ['标准工时库', '/labor-times'],
-  ['间接成本中心', '/indirect-costs'],
 ]
 
 const GOLDEN_SYSTEM: Array<[string, string]> = [
@@ -120,6 +105,16 @@ describe('route-registry · 零行为变更快照锁', () => {
   })
 
   describe('注册表声明忠实性', () => {
+    it('已退役产品路径不再作为 active/headless/deprecated 前端能力登记', () => {
+      const retiredPrefixes = ['/abc/', '/equipment', '/labor-times', '/indirect-costs']
+      for (const entry of ROUTE_REGISTRY) {
+        expect(
+          retiredPrefixes.some((prefix) => entry.path === prefix || entry.path.startsWith(prefix)),
+          `退役路径仍在注册表：${entry.path}`,
+        ).toBe(false)
+      }
+    })
+
     it('permModule 与 permissions.NAV_PATH_MODULE 逐路径一致（声明不撒谎）', () => {
       const byPath = new Map(ROUTE_REGISTRY.map((e) => [e.path, e]))
       for (const [p, mod] of Object.entries(NAV_PATH_MODULE)) {

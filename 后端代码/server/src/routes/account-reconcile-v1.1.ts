@@ -32,6 +32,7 @@ import {
   type ReconcileBinding,
 } from '../services/account-reconciliation-lifecycle.js'
 import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：confirmedLabRevenue(拆分派生)输出自带「口径未认账」水印（LEG-2）
+import { shanghaiBusinessMonth } from '../utils/business-time.js'
 
 const router = Router()
 
@@ -672,7 +673,7 @@ router.post('/supplements/:id/collect', requirePermission('account_reconcile', '
       return error(res, '收款月份须为 YYYY-MM 格式（月份 01-12）', 'INVALID_COLLECTED_MONTH', 400)
     }
     const collectedMonth = rawCollectedMonth === undefined
-      ? new Date().toISOString().slice(0, 7)
+      ? shanghaiBusinessMonth()
       : rawCollectedMonth
     const db = getDatabase()
     const so = db.prepare('SELECT * FROM supplement_orders WHERE id = ?').get(req.params.id) as any

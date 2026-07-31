@@ -41,9 +41,13 @@ const GOLDEN = {
 }
 
 async function getApp() {
-  const { default: app } = await import('../../src/app.js')
+  const { createLegacyAbcCompatibilityApp } = await import('../helpers/legacy-abc-compatibility-app.js')
   const { getDatabase, initializeDatabase } = await import('../../src/database/DatabaseManager.js')
-  return { app, db: getDatabase(), initializeDatabase }
+  return {
+    app: createLegacyAbcCompatibilityApp(),
+    db: getDatabase(),
+    initializeDatabase,
+  }
 }
 
 async function loginAdmin(app: any): Promise<string> {

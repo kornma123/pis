@@ -10,9 +10,11 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import request from 'supertest'
-import app from '../src/app.js'
 import { getDatabase } from '../src/database/DatabaseManager.js'
 import { v4 as uuidv4 } from 'uuid'
+import { createLegacyAbcCompatibilityApp } from './helpers/legacy-abc-compatibility-app.js'
+
+const app = createLegacyAbcCompatibilityApp()
 
 describe('HON-3 成本差异分析：停返假标准成本/差异', () => {
   let token: string

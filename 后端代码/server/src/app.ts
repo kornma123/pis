@@ -84,6 +84,36 @@ app.use(auditWrite)
 // 初始化数据库
 initializeDatabase()
 
+// ABC-RETIRE-001：旧产品 API 保留稳定过渡语义，但在任何遗留 handler 前 fail-closed。
+// 兼容 helper/表/字段仍由 hospital-cm、LIS、对账、BOM 与审计主线复用，本闸只封 HTTP 产品面。
+const retiredProductApiPrefixes = [
+  '/api/v1/auth/cost-visibility',
+  '/api/v1/equipment',
+  '/api/v1/equipment-types',
+  '/api/v1/labor-times',
+  '/api/v1/indirect-costs',
+  '/api/v1/abc',
+  '/api/v1/cost-adjustments',
+  '/api/v1/partner-pnl',
+  // antibody-cost 宽泛 router 中只退役含人工/设备/场地的旧全成本子面；
+  // 抗体台账、名称解析、别名与检测系统仍作为材料标准成本兼容底座保留。
+  '/api/v1/antibody-cost/cost-preview',
+  '/api/v1/antibody-cost/cost-params',
+  '/api/v1/antibody-cost/special-stains',
+]
+const retiredProductApi = (_req: express.Request, res: express.Response) => {
+  res.status(410).json({
+    success: false,
+    error: {
+      code: 'FEATURE_RETIRED',
+      message: '该产品能力已退役',
+    },
+  })
+}
+for (const prefix of retiredProductApiPrefixes) {
+  app.use(prefix, authenticateToken, retiredProductApi)
+}
+
 // 路由注册 - 公开路由
 app.use('/api/v1/auth', authRoutes)
 

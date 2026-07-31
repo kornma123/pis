@@ -262,6 +262,7 @@ const UI_STMT_V2 = 'GEN-E2E-V2'
 const UI_RECON_V1 = 'RECON-E2E-1'
 const UI_HM_ID = 'HM-E2E-1'
 const UI_DIFF_ID = 'DIFF-E2E-1'
+const UI_SUPPLEMENT_ID = 'SUP-E2E-OMITTED-MONTH'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 interface BoardItemFixture {
@@ -498,6 +499,97 @@ async function openAccountReconcileMonth(page: Page) {
   await page.goto('/account-reconcile')
   await page.locator('input[type="month"]').fill(UI_MONTH)
 }
+
+test.describe('critical supplement collection month authority UI contract', () => {
+  test('finance collect request omits collectedMonth so the backend owns the Shanghai default', async ({ page }) => {
+    await loginThroughUi(page, 'finance')
+    await installReconcileUiRoutes(page, [])
+
+    let collected = false
+    const listQueries: URLSearchParams[] = []
+    const collectRequests: Array<{ method: string; body: Record<string, unknown> }> = []
+    const supplement = () => ({
+      id: UI_SUPPLEMENT_ID,
+      partnerId: 'PT-E2E-COLLECT',
+      serviceMonth: UI_MONTH,
+      sourceDiffId: UI_DIFF_ID,
+      caseNo: 'E2E-COLLECT-1',
+      amount: 1200,
+      caseCount: 1,
+      status: collected ? '已补收' : '待补收',
+      collectedAt: collected ? '2026-09-01T00:00:00.000Z' : null,
+      collectedMonth: collected ? '2026-09' : null,
+      collectedRevenue: collected ? 960 : null,
+      giveUpReason: null,
+      operator: collected ? 'caiwu' : null,
+      reviewStatus: 'approved',
+      submittedBy: 'jishuyuan1',
+      reviewedBy: 'shenheren',
+      reviewedAt: '2026-08-31T15:00:00.000Z',
+    })
+
+    await page.route(/\/api\/v1\/account-reconcile\/supplements(?:\?.*)?$/, (route) => {
+      const url = new URL(route.request().url())
+      listQueries.push(url.searchParams)
+      return route.fulfill({
+        json: {
+          success: true,
+          data: {
+            list: [supplement()],
+            board: {
+              待补收金额: collected ? 0 : 1200,
+              已补收金额: collected ? 1200 : 0,
+              已放弃金额: 0,
+              已补收实收: collected ? 960 : 0,
+              待补收数: collected ? 0 : 1,
+              待签发数: 0,
+              补收率: collected ? 1 : 0,
+            },
+          },
+        },
+      })
+    })
+    await page.route(
+      new RegExp(`/api/v1/account-reconcile/supplements/${UI_SUPPLEMENT_ID}/collect$`),
+      (route) => {
+        const rawBody = route.request().postData()
+        collectRequests.push({
+          method: route.request().method(),
+          body: rawBody ? JSON.parse(rawBody) as Record<string, unknown> : {},
+        })
+        collected = true
+        return route.fulfill({
+          json: {
+            success: true,
+            data: {
+              id: UI_SUPPLEMENT_ID,
+              status: '已补收',
+              collectedMonth: '2026-09',
+            },
+          },
+        })
+      },
+    )
+
+    await page.getByRole('link', { name: '账实核对', exact: true }).click()
+    await expect(page).toHaveURL((url) => url.pathname === '/account-reconcile')
+    await page.locator('input[type="month"]').fill(UI_MONTH)
+    await page.getByRole('tab', { name: '③ 补收追踪', exact: true }).click()
+
+    const row = page.getByRole('row', { name: /PT-E2E-COLLECT/ })
+    await expect(row).toBeVisible()
+    await row.getByRole('button', { name: '标记已补收', exact: true }).click()
+
+    await expect.poll(() => collectRequests.length).toBe(1)
+    expect(collectRequests[0].method).toBe('POST')
+    expect(collectRequests[0].body).toEqual({})
+    expect(Object.prototype.hasOwnProperty.call(collectRequests[0].body, 'collectedMonth')).toBe(false)
+    expect(listQueries.length).toBeGreaterThan(0)
+    for (const query of listQueries) expect(query.get('serviceMonth')).toBe(UI_MONTH)
+    await expect(row).toContainText('计入 2026年9月')
+    expect(collectRequests).toHaveLength(1)
+  })
+})
 
 test.describe('critical account-reconcile generation binding UI contract', () => {
   test('consistent v1/v1 binding opens the workbench carrying the exact four-field binding', async ({ page }) => {

@@ -1,6 +1,26 @@
 import { randomUUID } from 'node:crypto'
 import { expect, test, type APIRequestContext } from '@playwright/test'
-import { apiLogin } from './fixtures'
+import { apiLogin, loginThroughUi } from './fixtures'
+
+const RETIRED_PERMISSION_LABELS = [
+  'ABC 成本看板',
+  '单片成本',
+  '盈利分析',
+  'ABC 配置',
+  '设备管理',
+  '标准工时',
+] as const
+
+const LEGACY_COST_PERMISSIONS = {
+  abc_dashboard: 'W',
+  slide_cost: 'W',
+  profitability: 'W',
+  abc_config: 'W',
+  equipment: 'W',
+  labor_times: 'W',
+  antibody_cost: 'W',
+  inventory: 'R',
+} as const
 
 interface RoleRecord {
   id: string
@@ -63,13 +83,14 @@ async function createRole(
     code: string
     name: string
     description: string
+    permissions?: Record<string, 'R' | 'W'>
   },
 ): Promise<string> {
   const response = await request.post(`${apiBaseUrl()}/roles`, {
     headers: authorization(token),
     data: {
       ...role,
-      permissions: { inventory: 'R' },
+      permissions: role.permissions ?? { inventory: 'R' },
       status: 'active',
     },
   })
@@ -139,6 +160,98 @@ test.describe('critical roles API contract', () => {
     }
   })
 
+  test('admin UI keeps retired permissions out of grid, detail, edit, and create while antibody cost remains assignable', async ({ page, request }) => {
+    const code = uniqueRoleCode('retired_ui')
+    const cleanupCodes = new Set([code])
+    const name = `E2E legacy cost role ${code}`
+    const renamed = `${name} edited`
+    let adminToken: string | undefined
+
+    try {
+      adminToken = await apiLogin(request, 'admin')
+      const roleId = await createRole(request, adminToken, {
+        code,
+        name,
+        description: 'legacy permissions must not become current UI assignments',
+        permissions: LEGACY_COST_PERMISSIONS,
+      })
+
+      await loginThroughUi(page, 'admin')
+      await page.goto('/roles')
+      await expect(page.getByRole('heading', { name: '角色管理', exact: true })).toBeVisible()
+
+      const roleName = page.getByText(name, { exact: true })
+      await expect(roleName).toBeVisible()
+      const roleCard = roleName.locator('..').locator('..').locator('..')
+      await expect(roleCard.getByText('逐抗体成本', { exact: true })).toBeVisible()
+      for (const label of RETIRED_PERMISSION_LABELS) {
+        await expect(roleCard.getByText(label, { exact: true })).toHaveCount(0)
+      }
+
+      await roleCard.getByRole('button', { name: '查看详情', exact: true }).click()
+      const detailHeading = page.getByRole('heading', { name: '角色详情', exact: true })
+      await expect(detailHeading).toBeVisible()
+      const detailModal = detailHeading.locator('..').locator('..')
+      await expect(detailModal.getByText('逐抗体成本', { exact: true })).toBeVisible()
+      for (const label of RETIRED_PERMISSION_LABELS) {
+        await expect(detailModal.getByText(label, { exact: true })).toHaveCount(0)
+      }
+      await page.getByRole('button', { name: '关闭', exact: true }).click()
+
+      await roleCard.getByRole('button', { name: '编辑', exact: true }).click()
+      const editHeading = page.getByRole('heading', { name: '编辑角色', exact: true })
+      await expect(editHeading).toBeVisible()
+      const editModal = editHeading.locator('..').locator('..')
+      const editAntibodyRow = editModal.getByRole('row').filter({ hasText: '逐抗体成本' })
+      await expect(editAntibodyRow).toBeVisible()
+      await expect(editAntibodyRow.getByRole('button', { name: '读写', exact: true })).toHaveClass(/bg-blue-500/)
+      for (const label of RETIRED_PERMISSION_LABELS) {
+        await expect(editModal.getByText(label, { exact: true })).toHaveCount(0)
+      }
+
+      await editModal.getByPlaceholder('请输入角色名称').fill(renamed)
+      const updateResponse = page.waitForResponse((response) =>
+        response.url().endsWith(`/api/v1/roles/${roleId}`)
+        && response.request().method() === 'PUT',
+      )
+      await editModal.getByRole('button', { name: '保存', exact: true }).click()
+      expect((await updateResponse).status(), 'role edit must persist through the real UI/API chain').toBe(200)
+      await expect(page.getByText(renamed, { exact: true })).toBeVisible()
+
+      const persistedAfterEdit = (await listRoles(request, adminToken)).list
+        .find((role) => role.id === roleId)
+      expect(persistedAfterEdit).toMatchObject({
+        id: roleId,
+        code,
+        name: renamed,
+        permissions: {
+          antibody_cost: 'W',
+          inventory: 'R',
+        },
+      })
+      expect(persistedAfterEdit?.permissions).toEqual({
+        antibody_cost: 'W',
+        inventory: 'R',
+      })
+
+      await page.getByRole('button', { name: '新建角色', exact: true }).click()
+      const createHeading = page.getByRole('heading', { name: '新建角色', exact: true })
+      await expect(createHeading).toBeVisible()
+      const createModal = createHeading.locator('..').locator('..')
+      const createAntibodyRow = createModal.getByRole('row').filter({ hasText: '逐抗体成本' })
+      const createAntibodyWrite = createAntibodyRow.getByRole('button', { name: '读写', exact: true })
+      await expect(createAntibodyRow).toBeVisible()
+      for (const label of RETIRED_PERMISSION_LABELS) {
+        await expect(createModal.getByText(label, { exact: true })).toHaveCount(0)
+      }
+      await createAntibodyWrite.click()
+      await expect(createAntibodyWrite).toHaveClass(/bg-blue-500/)
+      await createModal.getByRole('button', { name: '取消', exact: true }).click()
+    } finally {
+      if (adminToken) await cleanupRolesByCode(request, adminToken, cleanupCodes)
+    }
+  })
+
   test('admin receives stable 400 responses for non-canonical role codes with zero role writes', async ({ request }) => {
     const canonical = uniqueRoleCode('invalid')
     const invalidCodes = [
@@ -183,7 +296,7 @@ test.describe('critical roles API contract', () => {
     }
   })
 
-  test('technician POST, PUT, and DELETE remain 403 with zero role writes', async ({ request }) => {
+  test('technician GET, POST, PUT, and DELETE remain 403 with zero role writes', async ({ request }) => {
     const targetCode = uniqueRoleCode('target')
     const deniedCreateCode = uniqueRoleCode('denied')
     const cleanupCodes = new Set([targetCode, deniedCreateCode])
@@ -199,6 +312,15 @@ test.describe('critical roles API contract', () => {
         description: 'unauthorized mutation target',
       })
       const before = await listRoles(request, adminToken)
+
+      const deniedGet = await request.get(`${apiBaseUrl()}/roles?page=1&pageSize=1000`, {
+        headers: authorization(technicianToken),
+      })
+      expect(deniedGet.status()).toBe(403)
+      expect(await deniedGet.json() as ErrorEnvelope).toMatchObject({
+        success: false,
+        error: { code: 'FORBIDDEN' },
+      })
 
       const deniedPost = await request.post(`${apiBaseUrl()}/roles`, {
         headers: authorization(technicianToken),
@@ -245,5 +367,13 @@ test.describe('critical roles API contract', () => {
     } finally {
       if (adminToken) await cleanupRolesByCode(request, adminToken, cleanupCodes)
     }
+  })
+
+  test('technician direct navigation to roles redirects home without rendering role management', async ({ page }) => {
+    await loginThroughUi(page, 'technician')
+    await page.goto('/roles')
+
+    await expect(page).toHaveURL((url) => url.pathname === '/')
+    await expect(page.getByRole('heading', { name: '角色管理', exact: true })).toHaveCount(0)
   })
 })
