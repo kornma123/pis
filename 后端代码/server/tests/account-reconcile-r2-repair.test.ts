@@ -2215,13 +2215,13 @@ describe('LOC-005 R7 diff-anchored boot scan and collected-month integrity', () 
       db.prepare('INSERT INTO supplement_orders (id, partner_id, service_month, collected_month) VALUES (?, ?, ?, ?)')
         .run(`SO-R7-DIRTY-${++sequence}`, fixture.nextBinding.partnerId, fixture.nextBinding.settlementMonth, '2026-1')
     }, /SUPPLEMENT_COLLECTED_MONTH_INVALID/)
-    // 合法值对照：直写放行，随后还原（不污染主库后续用例）。
-    db.prepare('UPDATE supplement_orders SET collected_month = ? WHERE id = ?')
+    // 合法值对照：Issue #94 状态配对合同下必须完整配对直写放行，随后还原（不污染主库后续用例）。
+    db.prepare(`UPDATE supplement_orders SET status = '已补收', collected_month = ?, collected_revenue = 100 WHERE id = ?`)
       .run('2026-10', supplement.id)
     const written = db.prepare('SELECT collected_month FROM supplement_orders WHERE id = ?')
       .get(supplement.id) as { collected_month: string }
     expect(written.collected_month).toBe('2026-10')
-    db.prepare('UPDATE supplement_orders SET collected_month = NULL WHERE id = ?')
+    db.prepare(`UPDATE supplement_orders SET status = '待补收', collected_month = NULL, collected_revenue = NULL WHERE id = ?`)
       .run(supplement.id)
 
     // legacy 扫描：拷贝库内摘 update trigger 注入历史脏行，开机扫描必须拒启并带出行 id。
@@ -2230,6 +2230,8 @@ describe('LOC-005 R7 diff-anchored boot scan and collected-month integrity', () 
     const probe = openRegisteredTestDatabase(probePath)
     try {
       probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_update')
+      // Issue #94 配对合同：legacy 注入必须同步摘除配对 trigger，才能让“脏月仍残留”的历史行到达启动扫描。
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_pair_update')
       probe.prepare('UPDATE supplement_orders SET collected_month = ? WHERE id = ?')
         .run('2026-13', supplement.id)
       expect(() => manager.upgradeAccountReconciliationSchema(probe))
@@ -2445,10 +2447,187 @@ describe('LOC-005 R8 row-presence guards, NULL-generation gate and strict collec
     const probe = openRegisteredTestDatabase(probePath)
     try {
       probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_month_update')
+      // Issue #94 配对合同：legacy 注入必须同步摘除配对 trigger，才能让“NUL 脏月仍残留”的历史行到达启动扫描。
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_pair_update')
       probe.prepare(`UPDATE supplement_orders SET collected_month = '2026-12' || char(0) || 'junk' WHERE id = ?`)
         .run(supplement.id)
       expect(() => manager.upgradeAccountReconciliationSchema(probe))
         .toThrow(/SUPPLEMENT_COLLECTED_MONTH_INVALID/)
+    } finally {
+      probe.close()
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Issue #94：collected_revenue 数值合同 + 状态配对（DB 第二道闸 + 启动 legacy 第三道闸）。
+// 数值合同复用仓库既有 canonical amount 权威：typeof integer/real、有限、非负、
+// 精度 ≤ DECIMAL(18,4)、scaled safe-integer 上界 900719925474.0991（与 lifecycle
+// canonicalScaledUnits 同界），文本/±Infinity/NaN/超精度/超上界一律 fail-closed。
+// 配对合同：status='已补收' 必须 collected_month + collected_revenue 双字段齐全；
+// 非已补收状态不得残留任一字段（giveup/reopen 清理链与现有合法写入均满足）。
+// ---------------------------------------------------------------------------
+describe('Issue #94 collected_revenue canonical contract (DB gates + startup scan)', () => {
+  const seedIssue94Supplement = (tag: string) => {
+    const fixture = seedSupersededWithSurvivingDiff(`i94-${tag}-${++sequence}`)
+    lifecycle.setAccountReconciliationVerdict(
+      db, fixture.nextBinding, fixture.nextDiff.id, '漏收，需补收', null, 'USER-001', 'admin',
+    )
+    const supplement = db.prepare(
+      'SELECT id, partner_id, service_month, status FROM supplement_orders WHERE source_diff_id = ?',
+    ).get(fixture.nextDiff.id) as { id: string; partner_id: string; service_month: string; status: string }
+    return { fixture, supplement }
+  }
+
+  const collectUpdate = (
+    connection: DatabaseSync,
+    id: string,
+    status: string,
+    month: unknown,
+    revenue: unknown,
+  ): void => {
+    connection.prepare(`
+      UPDATE supplement_orders
+         SET status = ?, collected_month = ?, collected_revenue = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `).run(status, month, revenue, id)
+  }
+
+  const collectedRow = (connection: DatabaseSync, id: string) => connection.prepare(
+    'SELECT status, collected_month, collected_revenue FROM supplement_orders WHERE id = ?',
+  ).get(id) as { status: string; collected_month: unknown; collected_revenue: unknown }
+
+  it('blocks non-canonical collected_revenue values at INSERT/UPDATE triggers; legal 0 and canonical max pass', () => {
+    const { supplement } = seedIssue94Supplement('values')
+    // 合法对照：0 与 DECIMAL(18,4) scaled safe-integer 上界均放行，且状态配对完整。
+    collectUpdate(db, supplement.id, '已补收', '2026-09', 0)
+    expect(collectedRow(db, supplement.id)).toMatchObject({
+      status: '已补收', collected_month: '2026-09', collected_revenue: 0,
+    })
+    collectUpdate(db, supplement.id, '已补收', '2026-09', 900719925474.0991)
+    expect(collectedRow(db, supplement.id)).toMatchObject({ collected_revenue: 900719925474.0991 })
+    collectUpdate(db, supplement.id, '待补收', null, null)
+
+    const badValues: unknown[] = [
+      -1,
+      'NaN',
+      'Infinity',
+      '1e999',
+      Infinity,
+      -Infinity,
+      1.00001,
+      900719925474.0992,
+    ]
+    for (const bad of badValues) {
+      expectDatabaseMutationBlocked(db, () => {
+        collectUpdate(db, supplement.id, '已补收', '2026-09', bad)
+      }, /SUPPLEMENT_COLLECTED_REVENUE_INVALID/)
+      expect(collectedRow(db, supplement.id)).toMatchObject({
+        status: '待补收', collected_month: null, collected_revenue: null,
+      })
+    }
+
+    // INSERT 侧同闸：数值非法一律 ABORT。
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        INSERT INTO supplement_orders
+          (id, partner_id, service_month, status, collected_month, collected_revenue)
+        VALUES (?, ?, ?, '已补收', '2026-09', ?)
+      `).run(`SO-I94-VALUE-${++sequence}`, supplement.partner_id, supplement.service_month, -5)
+    }, /SUPPLEMENT_COLLECTED_REVENUE_INVALID/)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        INSERT INTO supplement_orders
+          (id, partner_id, service_month, status, collected_month, collected_revenue)
+        VALUES (?, ?, ?, '已补收', '2026-09', ?)
+      `).run(`SO-I94-VALUE-${++sequence}`, supplement.partner_id, supplement.service_month, 'NaN')
+    }, /SUPPLEMENT_COLLECTED_REVENUE_INVALID/)
+  })
+
+  it('blocks status/collected fields pairing violations at INSERT/UPDATE triggers (Issue #94)', () => {
+    const { supplement } = seedIssue94Supplement('pair')
+    collectUpdate(db, supplement.id, '已补收', '2026-09', 100)
+    expect(collectedRow(db, supplement.id)).toMatchObject({
+      status: '已补收', collected_month: '2026-09', collected_revenue: 100,
+    })
+
+    const pairViolations: Array<{ status: string; month: unknown; revenue: unknown }> = [
+      { status: '已补收', month: null, revenue: 100 },
+      { status: '已补收', month: '2026-09', revenue: null },
+      { status: '待补收', month: '2026-09', revenue: null },
+      { status: '待补收', month: null, revenue: 100 },
+      { status: '已放弃', month: '2026-09', revenue: 100 },
+    ]
+    for (const violation of pairViolations) {
+      expectDatabaseMutationBlocked(db, () => {
+        collectUpdate(db, supplement.id, violation.status, violation.month, violation.revenue)
+      }, /SUPPLEMENT_COLLECTED_REVENUE_PAIR_INVALID/)
+      expect(collectedRow(db, supplement.id)).toMatchObject({
+        status: '已补收', collected_month: '2026-09', collected_revenue: 100,
+      })
+    }
+
+    // INSERT 侧：非已补收不得携带残留；已补收必须双字段齐全。
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        INSERT INTO supplement_orders (id, partner_id, service_month, collected_revenue)
+        VALUES (?, ?, ?, 100)
+      `).run(`SO-I94-PAIR-${++sequence}`, supplement.partner_id, supplement.service_month)
+    }, /SUPPLEMENT_COLLECTED_REVENUE_PAIR_INVALID/)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        INSERT INTO supplement_orders
+          (id, partner_id, service_month, status, collected_month, collected_revenue)
+        VALUES (?, ?, ?, '已补收', NULL, 100)
+      `).run(`SO-I94-PAIR-${++sequence}`, supplement.partner_id, supplement.service_month)
+    }, /SUPPLEMENT_COLLECTED_REVENUE_PAIR_INVALID/)
+    expectDatabaseMutationBlocked(db, () => {
+      db.prepare(`
+        INSERT INTO supplement_orders
+          (id, partner_id, service_month, status, collected_month, collected_revenue)
+        VALUES (?, ?, ?, '已补收', '2026-09', NULL)
+      `).run(`SO-I94-PAIR-${++sequence}`, supplement.partner_id, supplement.service_month)
+    }, /SUPPLEMENT_COLLECTED_REVENUE_PAIR_INVALID/)
+  })
+
+  it('rejects startup and restart on legacy dirty collected_revenue value rows (first boot + reboot)', () => {
+    const { supplement } = seedIssue94Supplement('startup-value')
+    const probePath = join(testDirectory, `i94-startup-value-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const probe = openRegisteredTestDatabase(probePath)
+    try {
+      // 模拟 trigger 部署前的历史脏行：摘除数值 UPDATE 闸后直写文本 'Infinity'。
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_revenue_update')
+      probe.prepare(`
+        UPDATE supplement_orders
+           SET status = '已补收', collected_month = '2026-09', collected_revenue = ?
+         WHERE id = ?
+      `).run('Infinity', supplement.id)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/SUPPLEMENT_COLLECTED_REVENUE_INVALID/)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/SUPPLEMENT_COLLECTED_REVENUE_INVALID/)
+    } finally {
+      probe.close()
+    }
+  })
+
+  it('rejects startup and restart on legacy dirty pairing rows (INSERT-side first boot + reboot)', () => {
+    const { supplement } = seedIssue94Supplement('startup-pair')
+    const probePath = join(testDirectory, `i94-startup-pair-${++sequence}.sqlite`)
+    db.prepare('VACUUM INTO ?').run(probePath)
+    const probe = openRegisteredTestDatabase(probePath)
+    try {
+      // 模拟 trigger 部署前的历史脏行：摘除配对 INSERT 闸后写入“待补收携带实收”残留。
+      probe.exec('DROP TRIGGER IF EXISTS trg_reconcile_supplement_collected_pair_insert')
+      probe.prepare(`
+        INSERT INTO supplement_orders (id, partner_id, service_month, collected_revenue)
+        VALUES (?, ?, ?, 100)
+      `).run(`SO-I94-STARTUP-PAIR-${++sequence}`, supplement.partner_id, supplement.service_month)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/SUPPLEMENT_COLLECTED_REVENUE_PAIR_INVALID/)
+      expect(() => manager.upgradeAccountReconciliationSchema(probe))
+        .toThrow(/SUPPLEMENT_COLLECTED_REVENUE_PAIR_INVALID/)
     } finally {
       probe.close()
     }
