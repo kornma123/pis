@@ -222,6 +222,15 @@
       ]
     },
     {
+      "id": "report-change-truth",
+      "tier": "critical",
+      "owner": "cost",
+      "sources": [
+        "前端代码/src/pages/report/**"
+      ],
+      "specs": ["e2e/critical/report-change-truth.spec.ts"]
+    },
+    {
       "id": "legacy-pages",
       "tier": "legacy",
       "owner": "feature-owner-required",
