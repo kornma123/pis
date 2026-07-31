@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const {
   beginIssueCreationLedger,
   assertClaudeImplementationOwnership,
@@ -463,6 +463,17 @@ try {
     reservation.ledger.consumed[issueManifest.sha256].status,
     'in-progress',
   );
+  const ledgerStat = fs.lstatSync(reservation.ledgerPath);
+  assert.equal(ledgerStat.isFile(), true);
+  assert.equal(ledgerStat.isSymbolicLink(), false);
+  assert.equal(ledgerStat.nlink, 1);
+  assert.equal(ledgerStat.mode & 0o777, 0o600);
+  assert.deepEqual(
+    fs.readdirSync(path.dirname(reservation.ledgerPath))
+      .filter((name) => name.includes('.tmp')),
+    [],
+    'atomic ledger write must not leave temporary siblings',
+  );
   reservation.release();
   assert.throws(
     () => beginIssueCreationLedger(
@@ -531,10 +542,58 @@ Promise.all([run(), run()]).then((codes) => {
   assert.equal(outcomes.filter((item) => item.status === 'rejected').length, 1);
   assert.match(
     outcomes.find((item) => item.status === 'rejected').message,
-    /仍由活动进程|已消费/,
+    /仍由活动进程|已消费|读取期间被替换/,
   );
 } finally {
   fs.rmSync(issueLedgerSandbox, { recursive: true, force: true });
+}
+
+function assertLinkedIssueLedgerRejected(kind) {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), `coreone-ledger-${kind}-`));
+  const repo = path.join(sandbox, 'repo');
+  const external = path.join(sandbox, 'external');
+  fs.mkdirSync(repo, { recursive: true });
+  fs.mkdirSync(external, { recursive: true });
+  try {
+    const initialized = spawnSync(
+      'git',
+      ['init', '--initial-branch=ledger-link-test'],
+      { cwd: repo, encoding: 'utf8' },
+    );
+    assert.equal(initialized.status, 0, initialized.stderr);
+    const gitDirectory = fs.realpathSync.native(path.join(repo, '.git'));
+    const controlDirectory = path.join(gitDirectory, 'coreone');
+    const externalLedger = path.join(external, 'issue-creation-ledger.json');
+    const original = '{"version":1,"consumed":{}}\n';
+    fs.writeFileSync(externalLedger, original, 'utf8');
+    if (kind === 'directory-symlink') {
+      fs.symlinkSync(external, controlDirectory);
+    } else {
+      fs.mkdirSync(controlDirectory);
+      const ledgerPath = path.join(controlDirectory, 'issue-creation-ledger.json');
+      if (kind === 'file-symlink') fs.symlinkSync(externalLedger, ledgerPath);
+      else fs.linkSync(externalLedger, ledgerPath);
+    }
+    assert.throws(
+      () => beginIssueCreationLedger(
+        repo,
+        'b'.repeat(64),
+        'https://github.com/acme/coreone/issues/1#issuecomment-2',
+      ),
+      /symlink|hardlink|link-count|物理目录|私有治理/i,
+      kind,
+    );
+    assert.equal(
+      fs.readFileSync(externalLedger, 'utf8'),
+      original,
+      `${kind}: external ledger target was followed or overwritten`,
+    );
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+for (const kind of ['directory-symlink', 'file-symlink', 'file-hardlink']) {
+  assertLinkedIssueLedgerRejected(kind);
 }
 
 assert.deepEqual(parsePrdRef('docs/prd/PRD-12.md@abcdef123456'), {
@@ -564,6 +623,14 @@ assert.deepEqual(findScopeViolations(['docs/private/a.md', 'src/a.ts'], scope), 
   'docs/private/a.md',
   'src/a.ts',
 ]);
+assert.deepEqual(
+  findScopeViolations(
+    ['src/.git/config', 'src/nested/.git/hooks/pre-commit'],
+    { owned: ['src/**'], excluded: [] },
+  ),
+  ['src/.git/config', 'src/nested/.git/hooks/pre-commit'],
+  'staging/scope audit must reject Git metadata at any path depth regardless of owned glob',
+);
 
 const completeHandoff = `[HANDOFF] status=blocked
 result: reproduced failure in staging
@@ -2718,22 +2785,1966 @@ assert.deepEqual(handoffFieldErrors('[HANDOFF] status=blocked'), [
   'least-confidence', 'biggest-missing',
 ]);
 
+const npmLifecycleOptionCommands = [
+  'npm run --prefix . deploy',
+  'npm --prefix . run deploy',
+  'npm rum --loglevel silent deploy',
+  'npm urn --loglevel silent deploy',
+  'npm --loglevel silent urn deploy',
+  'npm -- run deploy',
+  'npm run -- deploy',
+  'npm run --workspace fixture deploy',
+  'npm --workspace fixture rum deploy',
+  'npm rum -w fixture deploy',
+  'npm -w fixture run deploy',
+];
+
+const blockedNpmLifecycleOptionCommands = Object.fromEntries(
+  npmLifecycleOptionCommands.map((command) => [
+    command,
+    { executionStatus: null, guard: 2, marker: false },
+  ]),
+);
+
+const npmMutatingCommandSpellings = `
+  ci clean-install ic install-cl install-cle install-clea install-clean
+  isntall- isntall-c isntall-cl isntall-cle isntall-clea isntall-clean
+  dd ddp ded dedu dedup dedupe
+  exe exec x
+  cr cre crea creat create ini init inn inni innit
+  add i in ins inst insta instal install isnt isnta isntal isntall
+  cit clean-install- clean-install-t clean-install-te clean-install-tes
+  clean-install-test install-ci install-ci- install-ci-t install-ci-te
+  install-ci-tes install-ci-test si sit
+  install-t install-te install-tes install-test it
+  lin link ln
+  pa pac pack
+  pru prun prune
+  rb reb rebu rebui rebuil rebuild
+  shr shri shrin shrink shrinkw shrinkwr shrinkwra shrinkwrap
+  r rem remo remov remove rm un uni unin unins uninst uninsta uninstal
+  uninstall unl unli unlin unlink
+  ud udp udpa udpat udpate up upd upda updat update upg upgr upgra
+  upgrad upgrade
+  veri veris veriso verison vers versi versio version
+`.trim().split(/\s+/);
+
+function runInactiveOptionAritySideEffectRegression(stateKind) {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), `coreone-inactive-${stateKind}-arity-`));
+  const repo = path.join(sandbox, 'repo');
+  const taskScript = path.join(__dirname, 'claude-task.cjs');
+  const npmMarker = path.join(sandbox, 'npm-side-effect.marker');
+  const vitestConfigMarker = path.join(sandbox, 'vitest-config.marker');
+  const quote = (value) => JSON.stringify(String(value));
+  const markerScript = (marker) =>
+    `node -e 'require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran\\n")'`;
+  const runGit = (args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(result.status, 0, `git ${args.join(' ')}: ${result.stderr || result.stdout}`);
+    return String(result.stdout || '').trim();
+  };
+  const guard = (command, env = process.env) =>
+    runShellGuard(command, repo, { env });
+  const executeShellWhenAllowed = (command, env = process.env) => {
+    const status = guard(command, env);
+    const execution = status === 0
+      ? spawnSync('/bin/bash', ['-c', command], {
+        cwd: repo,
+        encoding: 'utf8',
+        env,
+      })
+      : null;
+    return { execution, status };
+  };
+  const packageFiles = [
+    'package.json',
+    'package-lock.json',
+    'packages/fixture/package.json',
+  ];
+  const snapshotPackageFiles = () => Object.fromEntries(
+    packageFiles.map((relative) => {
+      const target = path.join(repo, relative);
+      return [relative, fs.existsSync(target) ? fs.readFileSync(target) : null];
+    }),
+  );
+  const snapshotNodeModules = () => {
+    const roots = [
+      path.join(repo, 'node_modules'),
+      path.join(repo, 'packages', 'fixture', 'node_modules'),
+    ];
+    const records = [];
+    const visit = (target, relative) => {
+      const stat = fs.lstatSync(target);
+      if (stat.isSymbolicLink()) {
+        records.push(`${relative}:link:${fs.readlinkSync(target)}`);
+        return;
+      }
+      if (stat.isDirectory()) {
+        records.push(`${relative}:dir`);
+        for (const entry of fs.readdirSync(target).sort()) {
+          visit(path.join(target, entry), `${relative}/${entry}`);
+        }
+        return;
+      }
+      records.push(
+        `${relative}:file:${crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex')}`,
+      );
+    };
+    for (const root of roots) {
+      if (fs.existsSync(root)) visit(root, path.relative(repo, root));
+      else records.push(`${path.relative(repo, root)}:missing`);
+    }
+    return records;
+  };
+  const restorePackageFixture = (packageBefore, nodeModulesFixture) => {
+    for (const [relative, bytes] of Object.entries(packageBefore)) {
+      const target = path.join(repo, relative);
+      if (bytes === null) fs.rmSync(target, { force: true });
+      else fs.writeFileSync(target, bytes);
+    }
+    fs.rmSync(path.join(repo, 'node_modules'), { recursive: true, force: true });
+    fs.rmSync(
+      path.join(repo, 'packages', 'fixture', 'node_modules'),
+      { recursive: true, force: true },
+    );
+    fs.cpSync(nodeModulesFixture, path.join(repo, 'node_modules'), { recursive: true });
+    fs.rmSync(npmMarker, { force: true });
+  };
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    runGit(['init', '--initial-branch=inactive-probe']);
+    runGit(['config', 'user.name', 'Inactive Arity Test']);
+    runGit(['config', 'user.email', 'inactive-arity@example.invalid']);
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(repo, 'local-dep'), { recursive: true });
+    fs.mkdirSync(path.join(repo, 'removable-dep'), { recursive: true });
+    fs.mkdirSync(path.join(repo, 'packages', 'fixture'), { recursive: true });
+    fs.writeFileSync(path.join(repo, '.gitignore'), 'node_modules/\npackage-lock.json\n', 'utf8');
+    fs.writeFileSync(path.join(repo, 'src', 'owned.txt'), 'owned\n', 'utf8');
+    fs.writeFileSync(
+      path.join(repo, 'local-dep', 'package.json'),
+      `${JSON.stringify({
+        name: 'local-dep',
+        version: '1.0.0',
+        scripts: { install: markerScript(npmMarker) },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'removable-dep', 'package.json'),
+      `${JSON.stringify({
+        name: 'removable-dep',
+        version: '1.0.0',
+        scripts: {
+          install: markerScript(npmMarker),
+          uninstall: markerScript(npmMarker),
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'vitest-config-probe.mjs'),
+      [
+        "import { pathToFileURL } from 'node:url';",
+        'const args = process.argv.slice(2);',
+        "const index = args.findIndex((value) => value === '-c' || value === '--config');",
+        'if (index >= 0 && args[index + 1]) await import(pathToFileURL(args[index + 1]).href);',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${JSON.stringify({
+        name: 'inactive-arity-root',
+        version: '1.0.0',
+        private: true,
+        workspaces: ['packages/*'],
+        dependencies: {
+          'removable-dep': 'file:./removable-dep',
+        },
+        scripts: {
+          test: 'node vitest-config-probe.mjs',
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'packages', 'fixture', 'package.json'),
+      `${JSON.stringify({
+        name: 'fixture',
+        version: '1.0.0',
+        private: true,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.mkdirSync(path.join(repo, 'node_modules', 'removable-dep'), { recursive: true });
+    fs.copyFileSync(
+      path.join(repo, 'removable-dep', 'package.json'),
+      path.join(repo, 'node_modules', 'removable-dep', 'package.json'),
+    );
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed inactive option arity fixture']);
+    const head = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', head]);
+
+    const statePath = path.join(
+      runGit(['rev-parse', '--absolute-git-dir']),
+      'coreone',
+      'claude-task-state.json',
+    );
+    let stateBefore = null;
+    if (stateKind === 'expired') {
+      const startedAt = new Date(Date.now() - 13 * 60 * 60 * 1_000);
+      const verifiedAt = new Date(startedAt.getTime() + 1_000);
+      stateBefore = Buffer.from(`${JSON.stringify({
+        version: 2,
+        mode: 'r0',
+        stage: 'r0',
+        risk: 'R0',
+        reason: 'expired option arity regression fixture',
+        branch: 'inactive-probe',
+        baseSha: head,
+        startedHead: head,
+        startedAt: startedAt.toISOString(),
+        verifiedAt: verifiedAt.toISOString(),
+        owned: ['src/**'],
+        excluded: [],
+      }, null, 2)}\n`);
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, stateBefore);
+    }
+
+    const configPath = path.join(runGit(['rev-parse', '--absolute-git-dir']), 'config');
+    const configBefore = fs.readFileSync(configPath);
+    const editor = path.join(sandbox, 'git-editor.sh');
+    const editorMarker = path.join(sandbox, 'git-editor.marker');
+    fs.writeFileSync(
+      editor,
+      `#!/bin/sh\nprintf 'ran\\n' > ${quote(editorMarker)}\nexit 0\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    const gitConfigEditors = Object.fromEntries([
+      '--ed',
+      '--edi',
+      '-efoo',
+    ].map((option) => {
+      fs.rmSync(editorMarker, { force: true });
+      const probe = executeShellWhenAllowed(
+        `git config ${option}`,
+        { ...process.env, GIT_EDITOR: editor },
+      );
+      return [option, {
+        configChanged: !fs.readFileSync(configPath).equals(configBefore),
+        executionStatus: probe.execution?.status ?? null,
+        guard: probe.status,
+        marker: fs.existsSync(editorMarker),
+      }];
+    }));
+
+    const nodeModulesFixture = path.join(sandbox, 'node-modules-fixture');
+    fs.cpSync(path.join(repo, 'node_modules'), nodeModulesFixture, { recursive: true });
+    const packageBefore = snapshotPackageFiles();
+    const nodeModulesBefore = snapshotNodeModules();
+    const npmCommands = {
+      installPrefix: 'npm --prefix . i ./local-dep',
+      installWorkspace: 'npm -w fixture i ./local-dep',
+      uninstallAlias: 'npm r removable-dep',
+      updateAlias: 'npm up',
+      rebuildAlias: 'npm rb',
+      execAlias:
+        `npm x -- node -e 'require("node:fs").writeFileSync(${JSON.stringify(npmMarker)}, "ran\\n")'`,
+    };
+    const npmSideEffects = Object.fromEntries(
+      Object.entries(npmCommands).map(([name, command]) => {
+        restorePackageFixture(packageBefore, nodeModulesFixture);
+        const probe = executeShellWhenAllowed(command, {
+          ...process.env,
+          npm_config_audit: 'false',
+          npm_config_cache: path.join(sandbox, 'npm-cache'),
+          npm_config_fund: 'false',
+          npm_config_update_notifier: 'false',
+        });
+        return [name, {
+          executionStatus: probe.execution?.status ?? null,
+          guard: probe.status,
+          marker: fs.existsSync(npmMarker),
+          nodeModulesChanged: JSON.stringify(snapshotNodeModules()) !==
+            JSON.stringify(nodeModulesBefore),
+          packageFilesChanged: Object.entries(snapshotPackageFiles()).some(
+            ([relative, bytes]) => {
+              const before = packageBefore[relative];
+              return bytes === null || before === null
+                ? bytes !== before
+                : !bytes.equals(before);
+            },
+          ),
+        }];
+      }),
+    );
+    restorePackageFixture(packageBefore, nodeModulesFixture);
+
+    const externalVitestConfig = path.join(sandbox, 'external-vitest.config.mjs');
+    fs.writeFileSync(
+      externalVitestConfig,
+      `import { writeFileSync } from 'node:fs';\n` +
+        `writeFileSync(${JSON.stringify(vitestConfigMarker)}, 'loaded\\n');\n` +
+        'export default {};\n',
+      'utf8',
+    );
+    const vitestConfig = executeShellWhenAllowed(
+      `npm test -- -c ${quote(externalVitestConfig)} --passWithNoTests`,
+    );
+
+    return {
+      gitConfigEditors,
+      npmSideEffects,
+      statePreserved: stateBefore === null
+        ? !fs.existsSync(statePath)
+        : fs.existsSync(statePath) && fs.readFileSync(statePath).equals(stateBefore),
+      vitestConfig: {
+        executionStatus: vitestConfig.execution?.status ?? null,
+        guard: vitestConfig.status,
+        marker: fs.existsSync(vitestConfigMarker),
+      },
+    };
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+const blockedGitConfigEditorOptions = Object.fromEntries([
+  '--ed',
+  '--edi',
+  '-efoo',
+].map((option) => [
+  option,
+  {
+    configChanged: false,
+    executionStatus: null,
+    guard: 2,
+    marker: false,
+  },
+]));
+
+const blockedNpmMutatingSideEffects = Object.fromEntries([
+  'installPrefix',
+  'installWorkspace',
+  'uninstallAlias',
+  'updateAlias',
+  'rebuildAlias',
+  'execAlias',
+].map((name) => [
+  name,
+  {
+    executionStatus: null,
+    guard: 2,
+    marker: false,
+    nodeModulesChanged: false,
+    packageFilesChanged: false,
+  },
+]));
+
+const inactiveOptionAritySideEffects = Object.fromEntries(
+  ['missing', 'expired'].map((stateKind) => [
+    stateKind,
+    runInactiveOptionAritySideEffectRegression(stateKind),
+  ]),
+);
+
+assert.deepEqual(
+  inactiveOptionAritySideEffects,
+  Object.fromEntries(
+    ['missing', 'expired'].map((stateKind) => [
+      stateKind,
+      {
+        gitConfigEditors: blockedGitConfigEditorOptions,
+        npmSideEffects: blockedNpmMutatingSideEffects,
+        statePreserved: true,
+        vitestConfig: {
+          executionStatus: null,
+          guard: 2,
+          marker: false,
+        },
+      },
+    ]),
+  ),
+  'missing/expired option arity bypasses must not execute or alter inactive-state fixtures',
+);
+
+function runInactiveNpmCamelCaseRegression(stateKind) {
+  const sandbox = fs.mkdtempSync(
+    path.join(os.tmpdir(), `coreone-inactive-${stateKind}-npm-camel-`),
+  );
+  const repo = path.join(sandbox, 'repo');
+  const cachePath = path.join(repo, '.npm-cache');
+  const markerPath = path.join(repo, 'marker.txt');
+  const runScriptMarkerPath = path.join(repo, 'run-script-marker.txt');
+  const preexistingPath = path.join(repo, 'node_modules', 'preexisting.txt');
+  const hiddenLockPath = path.join(repo, 'node_modules', '.package-lock.json');
+  const runGit = (args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(
+      result.status,
+      0,
+      `git ${args.join(' ')} failed: ${result.stderr || result.stdout}`,
+    );
+    return String(result.stdout || '').trim();
+  };
+  const resetFixture = () => {
+    fs.rmSync(markerPath, { force: true });
+    fs.rmSync(runScriptMarkerPath, { force: true });
+    fs.rmSync(path.join(repo, 'node_modules'), { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(preexistingPath), { recursive: true });
+    fs.writeFileSync(preexistingPath, 'preexisting\n', 'utf8');
+  };
+  const npmEnvironment = {
+    ...process.env,
+    npm_config_audit: 'false',
+    npm_config_cache: cachePath,
+    npm_config_fund: 'false',
+    npm_config_update_notifier: 'false',
+  };
+  const executeWhenAllowed = (command) => {
+    resetFixture();
+    const guard = runShellGuard(command, repo, { env: npmEnvironment });
+    const execution = guard === 0
+      ? spawnSync('/bin/bash', ['-c', command], {
+        cwd: repo,
+        encoding: 'utf8',
+        env: npmEnvironment,
+      })
+      : null;
+    return {
+      executionStatus: execution?.status ?? null,
+      guard,
+      hiddenLock: fs.existsSync(hiddenLockPath),
+      marker: fs.existsSync(markerPath)
+        ? fs.readFileSync(markerPath, 'utf8')
+        : null,
+      preexisting: fs.existsSync(preexistingPath),
+      runScriptMarker: fs.existsSync(runScriptMarkerPath),
+    };
+  };
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    runGit(['init', '--initial-branch=npm-camel-probe']);
+    runGit(['config', 'user.name', 'Inactive npm Camel Test']);
+    runGit(['config', 'user.email', 'inactive-npm-camel@example.invalid']);
+    fs.writeFileSync(
+      path.join(repo, '.gitignore'),
+      '.npm-cache/\nmarker.txt\nnode_modules/\nrun-script-marker.txt\n',
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${JSON.stringify({
+        name: 'coreone-npm-camel-probe',
+        version: '1.0.0',
+        private: true,
+        scripts: {
+          deploy:
+            'node -e "require(\'node:fs\').writeFileSync(\'run-script-marker.txt\',\'ran\')"',
+          test:
+            'node -e "require(\'node:fs\').writeFileSync(\'marker.txt\',' +
+            '\'npm-camelcase-side-effect\')"',
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'package-lock.json'),
+      `${JSON.stringify({
+        name: 'coreone-npm-camel-probe',
+        version: '1.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          '': {
+            name: 'coreone-npm-camel-probe',
+            version: '1.0.0',
+          },
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    resetFixture();
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed inactive npm camel fixture']);
+    const head = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', head]);
+
+    const statePath = path.join(
+      runGit(['rev-parse', '--absolute-git-dir']),
+      'coreone',
+      'claude-task-state.json',
+    );
+    let stateBefore = null;
+    if (stateKind === 'expired') {
+      const startedAt = new Date(Date.now() - 13 * 60 * 60 * 1_000);
+      const verifiedAt = new Date(startedAt.getTime() + 1_000);
+      stateBefore = Buffer.from(`${JSON.stringify({
+        version: 2,
+        mode: 'r0',
+        stage: 'r0',
+        risk: 'R0',
+        reason: 'expired npm camel regression fixture',
+        branch: 'npm-camel-probe',
+        baseSha: head,
+        startedHead: head,
+        startedAt: startedAt.toISOString(),
+        verifiedAt: verifiedAt.toISOString(),
+        owned: ['src/**'],
+        excluded: [],
+      }, null, 2)}\n`);
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, stateBefore);
+    }
+    const stateShaBefore = stateBefore === null
+      ? null
+      : crypto.createHash('sha256').update(stateBefore).digest('hex');
+    const exactOptions =
+      '--offline --no-audit --no-fund --cache .npm-cache';
+    const camelCommands = {
+      installCiAbbreviation: `npm installCi ${exactOptions}`,
+      installCiTest: `npm installCiTest ${exactOptions}`,
+      installTest: `npm installTest ${exactOptions}`,
+      runScript: 'npm runScript deploy',
+    };
+    const kebabControl = executeWhenAllowed(
+      `npm install-ci-test ${exactOptions}`,
+    );
+    const camelSideEffects = Object.fromEntries(
+      Object.entries(camelCommands).map(([name, command]) => [
+        name,
+        executeWhenAllowed(command),
+      ]),
+    );
+    const acceptedCamelHelp = Object.fromEntries(
+      [
+        'installCi',
+        'installCiTest',
+        'installTest',
+        'runScript',
+        'distTag',
+      ].map((command) => {
+        const result = spawnSync('npm', [command, '--help'], {
+          cwd: repo,
+          encoding: 'utf8',
+          env: npmEnvironment,
+        });
+        return [command, result.status];
+      }),
+    );
+    const stateShaAfter = fs.existsSync(statePath)
+      ? crypto.createHash('sha256').update(fs.readFileSync(statePath)).digest('hex')
+      : null;
+    return {
+      acceptedCamelHelp,
+      camelSideEffects,
+      distTagGuard: runShellGuard(
+        'npm distTag add coreone-npm-camel-probe@1.0.0 latest',
+        repo,
+        { env: npmEnvironment },
+      ),
+      distTagListGuard: runShellGuard(
+        'npm distTag ls coreone-npm-camel-probe',
+        repo,
+        { env: npmEnvironment },
+      ),
+      kebabControl,
+      statePreserved: stateShaAfter === stateShaBefore &&
+        (stateBefore === null
+          ? !fs.existsSync(statePath)
+          : fs.readFileSync(statePath).equals(stateBefore)),
+      unknownGuard: runShellGuard(
+        'npm definitelyUnknownCamelCommand --help',
+        repo,
+        { env: npmEnvironment },
+      ),
+    };
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+const blockedNpmCamelSideEffect = {
+  executionStatus: null,
+  guard: 2,
+  hiddenLock: false,
+  marker: null,
+  preexisting: true,
+  runScriptMarker: false,
+};
+
+const inactiveNpmCamelCaseSideEffects = Object.fromEntries(
+  ['missing', 'expired'].map((stateKind) => [
+    stateKind,
+    runInactiveNpmCamelCaseRegression(stateKind),
+  ]),
+);
+
+assert.deepEqual(
+  inactiveNpmCamelCaseSideEffects,
+  Object.fromEntries(
+    ['missing', 'expired'].map((stateKind) => [
+      stateKind,
+      {
+        acceptedCamelHelp: {
+          distTag: 0,
+          installCi: 0,
+          installCiTest: 0,
+          installTest: 0,
+          runScript: 0,
+        },
+        camelSideEffects: {
+          installCiAbbreviation: blockedNpmCamelSideEffect,
+          installCiTest: blockedNpmCamelSideEffect,
+          installTest: blockedNpmCamelSideEffect,
+          runScript: blockedNpmCamelSideEffect,
+        },
+        distTagGuard: 2,
+        distTagListGuard: 0,
+        kebabControl: blockedNpmCamelSideEffect,
+        statePreserved: true,
+        unknownGuard: 2,
+      },
+    ]),
+  ),
+  'npm camelCase commands must mirror npm dereferencing without inactive-state side effects',
+);
+
+const npmCapabilityTargetedCommands = [
+  'npm access set status=public @scope/package',
+  'npm adduser --registry=http://127.0.0.1:9',
+  'npm audit fix',
+  'npm cache add ./local-dep',
+  'npm cache clean --force',
+  'npm cache verify',
+  'npm config set fund=false',
+  'npm deprecate package@1.0.0 deprecated',
+  'npm dist-tag add package@1.0.0 latest',
+  'npm doctor',
+  'npm edit local-dep --editor=true',
+  'npm hook add package https://example.invalid/hook secret',
+  'npm org add organization user',
+  'npm owner add user package',
+  'npm pkg delete issue99ReviewerProof',
+  'npm pkg fix',
+  'npm pkg set issue99ReviewerProof=changed',
+  'npm profile set fullname reviewer',
+  'npm publish --ignore-scripts',
+  'npm set fund=false --location=project',
+  'npm star package',
+  'npm team create @scope:team',
+  'npm token create',
+  'npm unpublish package@1.0.0',
+  'npm unstar package',
+];
+
+const npmCapabilityReadCommands = [
+  'npm access get status @scope/package',
+  'npm audit signatures',
+  'npm cache ls',
+  'npm config get fund',
+  'npm dist-tag ls package',
+  'npm hook ls',
+  'npm org ls organization',
+  'npm owner ls package',
+  'npm pkg get name',
+  'npm profile get',
+  'npm team ls @scope',
+  'npm token list',
+];
+
+function runInactiveNpmCapabilityRegression(stateKind) {
+  const sandbox = fs.mkdtempSync(
+    path.join(os.tmpdir(), `coreone-inactive-${stateKind}-npm-capability-`),
+  );
+  const repo = path.join(sandbox, 'repo');
+  const editorMarker = path.join(sandbox, 'editor.marker');
+  const registryReady = path.join(sandbox, 'registry-ready.json');
+  const registryLog = path.join(sandbox, 'registry-requests.jsonl');
+  const registryScript = path.join(sandbox, 'registry.cjs');
+  let registryServer = null;
+  const pause = (milliseconds) =>
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+  const runGit = (args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(
+      result.status,
+      0,
+      `git ${args.join(' ')} failed: ${result.stderr || result.stdout}`,
+    );
+    return String(result.stdout || '').trim();
+  };
+  const registryRequests = () => {
+    if (!fs.existsSync(registryLog)) return [];
+    return fs.readFileSync(registryLog, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  };
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    runGit(['init', '--initial-branch=npm-capability-probe']);
+    runGit(['config', 'user.name', 'Inactive npm Capability Test']);
+    runGit(['config', 'user.email', 'inactive-npm-capability@example.invalid']);
+    fs.writeFileSync(
+      path.join(repo, '.gitignore'),
+      '.npm-cache/\n.npmrc\nnode_modules/\n',
+      'utf8',
+    );
+    fs.mkdirSync(path.join(repo, 'local-dep'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repo, 'local-dep', 'package.json'),
+      `${JSON.stringify({
+        name: 'local-dep',
+        version: '1.0.0',
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${JSON.stringify({
+        name: 'coreone-npm-capability-probe',
+        version: '1.0.0',
+        private: true,
+        dependencies: {
+          'local-dep': 'file:./local-dep',
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.mkdirSync(path.join(repo, 'node_modules', 'local-dep'), { recursive: true });
+    fs.copyFileSync(
+      path.join(repo, 'local-dep', 'package.json'),
+      path.join(repo, 'node_modules', 'local-dep', 'package.json'),
+    );
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed inactive npm capability fixture']);
+    const head = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', head]);
+
+    const statePath = path.join(
+      runGit(['rev-parse', '--absolute-git-dir']),
+      'coreone',
+      'claude-task-state.json',
+    );
+    let stateBefore = null;
+    if (stateKind === 'expired') {
+      const startedAt = new Date(Date.now() - 13 * 60 * 60 * 1_000);
+      const verifiedAt = new Date(startedAt.getTime() + 1_000);
+      stateBefore = Buffer.from(`${JSON.stringify({
+        version: 2,
+        mode: 'r0',
+        stage: 'r0',
+        risk: 'R0',
+        reason: 'expired npm capability regression fixture',
+        branch: 'npm-capability-probe',
+        baseSha: head,
+        startedHead: head,
+        startedAt: startedAt.toISOString(),
+        verifiedAt: verifiedAt.toISOString(),
+        owned: ['src/**'],
+        excluded: [],
+      }, null, 2)}\n`);
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, stateBefore);
+    }
+    const stateShaBefore = stateBefore === null
+      ? null
+      : crypto.createHash('sha256').update(stateBefore).digest('hex');
+
+    const editor = path.join(sandbox, 'marker-editor.sh');
+    fs.writeFileSync(
+      editor,
+      `#!/bin/sh\nprintf 'npm-edit-side-effect\\n' > ${JSON.stringify(editorMarker)}\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    fs.writeFileSync(
+      registryScript,
+      `'use strict';\n` +
+        `const fs=require('node:fs');\n` +
+        `const http=require('node:http');\n` +
+        `const server=http.createServer((request,response)=>{\n` +
+        `  const chunks=[];\n` +
+        `  request.on('data',(chunk)=>chunks.push(chunk));\n` +
+        `  request.on('end',()=>{\n` +
+        `    const body=Buffer.concat(chunks);\n` +
+        `    fs.appendFileSync(${JSON.stringify(registryLog)},JSON.stringify({\n` +
+        `      method:request.method,url:request.url,bytes:body.length,body:body.toString('utf8')\n` +
+        `    })+'\\n');\n` +
+        `    response.writeHead(201,{'content-type':'application/json'});\n` +
+        `    response.end(JSON.stringify({ok:true}));\n` +
+        `  });\n` +
+        `});\n` +
+        `server.listen(0,'127.0.0.1',()=>{\n` +
+        `  fs.writeFileSync(${JSON.stringify(registryReady)},JSON.stringify({port:server.address().port}));\n` +
+        `});\n` +
+        `process.on('SIGTERM',()=>{\n` +
+        `  if(typeof server.closeAllConnections==='function')server.closeAllConnections();\n` +
+        `  server.close(()=>process.exit(0));\n` +
+        `  setTimeout(()=>process.exit(0),100).unref();\n` +
+        `});\n`,
+      'utf8',
+    );
+    registryServer = spawn(process.execPath, [registryScript], {
+      cwd: sandbox,
+      stdio: 'ignore',
+    });
+    registryServer.unref();
+    const deadline = Date.now() + 5_000;
+    while (
+      !fs.existsSync(registryReady) &&
+      registryServer.exitCode === null &&
+      Date.now() < deadline
+    ) {
+      pause(20);
+    }
+    assert.equal(fs.existsSync(registryReady), true, 'npm capability registry did not start');
+    const { port } = JSON.parse(fs.readFileSync(registryReady, 'utf8'));
+    const registry = `http://127.0.0.1:${port}`;
+    const environment = {
+      ...process.env,
+      npm_config_cache: path.join(repo, '.npm-cache'),
+      npm_config_update_notifier: 'false',
+    };
+    const executeWhenAllowed = (command) => {
+      const guard = runShellGuard(command, repo, { env: environment });
+      const execution = guard === 0
+        ? spawnSync('/bin/bash', ['-c', command], {
+          cwd: repo,
+          encoding: 'utf8',
+          env: environment,
+          timeout: 20_000,
+        })
+        : null;
+      return { execution, guard };
+    };
+
+    const packagePath = path.join(repo, 'package.json');
+    const packageBefore = fs.readFileSync(packagePath);
+    const pkgSetProbe = executeWhenAllowed(
+      'npm pkg set issue99ReviewerProof=changed',
+    );
+    const pkgSet = {
+      executionStatus: pkgSetProbe.execution?.status ?? null,
+      guard: pkgSetProbe.guard,
+      packageChanged: !fs.readFileSync(packagePath).equals(packageBefore),
+    };
+    fs.writeFileSync(packagePath, packageBefore);
+
+    const npmrcPath = path.join(repo, '.npmrc');
+    fs.rmSync(npmrcPath, { force: true });
+    const setProbe = executeWhenAllowed(
+      'npm set fund=false --location=project',
+    );
+    const npmSet = {
+      executionStatus: setProbe.execution?.status ?? null,
+      guard: setProbe.guard,
+      npmrcCreated: fs.existsSync(npmrcPath),
+    };
+    fs.rmSync(npmrcPath, { force: true });
+
+    fs.rmSync(editorMarker, { force: true });
+    const editProbe = executeWhenAllowed(
+      `npm edit local-dep --editor=${JSON.stringify(editor)}`,
+    );
+    const npmEdit = {
+      executionStatus: editProbe.execution?.status ?? null,
+      guard: editProbe.guard,
+      marker: fs.existsSync(editorMarker),
+    };
+
+    const requestsBefore = registryRequests().length;
+    const addUserProbe = executeWhenAllowed(
+      `npm addUser --registry=${registry}`,
+    );
+    pause(50);
+    const addUserRequests = registryRequests().slice(requestsBefore);
+    const addUser = {
+      executionStatus: addUserProbe.execution?.status ?? null,
+      guard: addUserProbe.guard,
+      requests: addUserRequests,
+    };
+    const stateShaAfter = fs.existsSync(statePath)
+      ? crypto.createHash('sha256').update(fs.readFileSync(statePath)).digest('hex')
+      : null;
+    return {
+      addUser,
+      npmEdit,
+      npmSet,
+      pkgGetGuard: runShellGuard('npm pkg get name', repo, { env: environment }),
+      pkgSet,
+      readGuards: Object.fromEntries(
+        npmCapabilityReadCommands.map((command) => [
+          command,
+          runShellGuard(command, repo, { env: environment }),
+        ]),
+      ),
+      statePreserved: stateShaAfter === stateShaBefore &&
+        (stateBefore === null
+          ? !fs.existsSync(statePath)
+          : fs.readFileSync(statePath).equals(stateBefore)),
+      targetedGuards: Object.fromEntries(
+        npmCapabilityTargetedCommands.map((command) => [
+          command,
+          runShellGuard(command, repo, { env: environment }),
+        ]),
+      ),
+    };
+  } finally {
+    if (registryServer && registryServer.exitCode === null) {
+      registryServer.kill('SIGTERM');
+      const deadline = Date.now() + 2_000;
+      while (registryServer.exitCode === null && Date.now() < deadline) pause(20);
+      if (registryServer.exitCode === null) registryServer.kill('SIGKILL');
+    }
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+const inactiveNpmCapabilitySideEffects = Object.fromEntries(
+  ['missing', 'expired'].map((stateKind) => [
+    stateKind,
+    runInactiveNpmCapabilityRegression(stateKind),
+  ]),
+);
+
+assert.deepEqual(
+  inactiveNpmCapabilitySideEffects,
+  Object.fromEntries(
+    ['missing', 'expired'].map((stateKind) => [
+      stateKind,
+      {
+        addUser: {
+          executionStatus: null,
+          guard: 2,
+          requests: [],
+        },
+        npmEdit: {
+          executionStatus: null,
+          guard: 2,
+          marker: false,
+        },
+        npmSet: {
+          executionStatus: null,
+          guard: 2,
+          npmrcCreated: false,
+        },
+        pkgGetGuard: 0,
+        pkgSet: {
+          executionStatus: null,
+          guard: 2,
+          packageChanged: false,
+        },
+        readGuards: Object.fromEntries(
+          npmCapabilityReadCommands.map((command) => [command, 0]),
+        ),
+        statePreserved: true,
+        targetedGuards: Object.fromEntries(
+          npmCapabilityTargetedCommands.map((command) => [command, 2]),
+        ),
+      },
+    ]),
+  ),
+  'all npm canonical commands need explicit capabilities before inactive-state execution',
+);
+
+function runActiveNpmCapabilityRegression() {
+  const sandbox = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'coreone-active-npm-capability-'),
+  );
+  const repo = path.join(sandbox, 'repo');
+  const taskScript = path.join(__dirname, 'claude-task.cjs');
+  const runGit = (args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(
+      result.status,
+      0,
+      `git ${args.join(' ')} failed: ${result.stderr || result.stdout}`,
+    );
+    return String(result.stdout || '').trim();
+  };
+  const runHook = (hook, command) => spawnSync(
+    process.execPath,
+    [taskScript, hook],
+    {
+      cwd: repo,
+      encoding: 'utf8',
+      input: JSON.stringify({
+        cwd: repo,
+        tool_name: 'Bash',
+        tool_input: { command },
+      }),
+    },
+  ).status;
+  const shellGuard = (command) => runHook('shell-guard', command);
+  const shellAudit = (command) => runHook('audit', command);
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    runGit(['init', '--initial-branch=active-npm-capability']);
+    runGit(['config', 'user.name', 'Active npm Capability Test']);
+    runGit(['config', 'user.email', 'active-npm-capability@example.invalid']);
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    fs.mkdirSync(path.join(repo, 'local-dep'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src', 'owned.txt'), 'owned\n', 'utf8');
+    fs.writeFileSync(
+      path.join(repo, 'local-dep', 'package.json'),
+      `${JSON.stringify({
+        name: 'local-dep',
+        version: '1.0.0',
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${JSON.stringify({
+        name: 'active-npm-capability-probe',
+        version: '1.0.0',
+        private: true,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed active npm capability fixture']);
+    const head = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', head]);
+    const statePath = path.join(
+      runGit(['rev-parse', '--absolute-git-dir']),
+      'coreone',
+      'claude-task-state.json',
+    );
+    const writeState = (owned) => {
+      const startedAt = new Date(Date.now() - 2_000);
+      const verifiedAt = new Date(startedAt.getTime() + 1_000);
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(
+        statePath,
+        `${JSON.stringify({
+          version: 2,
+          mode: 'r0',
+          stage: 'r0',
+          risk: 'R0',
+          reason: 'active npm capability regression fixture',
+          branch: 'active-npm-capability',
+          baseSha: head,
+          startedHead: head,
+          startedAt: startedAt.toISOString(),
+          verifiedAt: verifiedAt.toISOString(),
+          owned,
+          excluded: [],
+        }, null, 2)}\n`,
+        'utf8',
+      );
+    };
+
+    writeState(['package.json']);
+    const ownedCommand = 'npm pkg set issue99ActiveProof=changed';
+    const ownedGuard = shellGuard(ownedCommand);
+    const ownedExecution = ownedGuard === 0
+      ? spawnSync('/bin/bash', ['-c', ownedCommand], {
+        cwd: repo,
+        encoding: 'utf8',
+      })
+      : null;
+    const ownedAudit = shellAudit(ownedCommand);
+    const ownedPackageChanged = fs.readFileSync(
+      path.join(repo, 'package.json'),
+      'utf8',
+    ).includes('issue99ActiveProof');
+    runGit(['reset', '--hard', 'HEAD']);
+
+    const externalGuards = Object.fromEntries([
+      'npm addUser --registry=http://127.0.0.1:9',
+      'npm star active-npm-capability-probe',
+      'npm unstar active-npm-capability-probe',
+      'npm publish --ignore-scripts',
+      'npm dist-tag add active-npm-capability-probe@1.0.0 latest',
+    ].map((command) => [command, shellGuard(command)]));
+    const readGuards = Object.fromEntries([
+      'npm pkg get name',
+      'npm cache ls',
+      'npm dist-tag ls active-npm-capability-probe',
+      'npm token list',
+    ].map((command) => [command, shellGuard(command)]));
+
+    writeState(['src/**']);
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${fs.readFileSync(path.join(repo, 'package.json'), 'utf8')}\n`,
+      'utf8',
+    );
+    const liveCheckGuards = Object.fromEntries([
+      'npm pkg set issue99OutOfScope=changed',
+      'npm set fund=false --location=project',
+      'npm edit local-dep --editor=true',
+      'npm cache verify',
+      'npm doctor',
+      'npm explore local-dep -- true',
+    ].map((command) => [command, shellGuard(command)]));
+    runGit(['reset', '--hard', 'HEAD']);
+
+    return {
+      externalGuards,
+      liveCheckGuards,
+      ownedAudit,
+      ownedExecutionStatus: ownedExecution?.status ?? null,
+      ownedGuard,
+      ownedPackageChanged,
+      readGuards,
+    };
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+assert.deepEqual(
+  runActiveNpmCapabilityRegression(),
+  {
+    externalGuards: {
+      'npm addUser --registry=http://127.0.0.1:9': 2,
+      'npm dist-tag add active-npm-capability-probe@1.0.0 latest': 2,
+      'npm publish --ignore-scripts': 2,
+      'npm star active-npm-capability-probe': 2,
+      'npm unstar active-npm-capability-probe': 2,
+    },
+    liveCheckGuards: {
+      'npm cache verify': 2,
+      'npm doctor': 2,
+      'npm edit local-dep --editor=true': 2,
+      'npm explore local-dep -- true': 2,
+      'npm pkg set issue99OutOfScope=changed': 2,
+      'npm set fund=false --location=project': 2,
+    },
+    ownedAudit: 0,
+    ownedExecutionStatus: 0,
+    ownedGuard: 0,
+    ownedPackageChanged: true,
+    readGuards: {
+      'npm cache ls': 0,
+      'npm dist-tag ls active-npm-capability-probe': 0,
+      'npm pkg get name': 0,
+      'npm token list': 0,
+    },
+  },
+  'active npm local writes need live scope audit while external writes stay blocked',
+);
+
+function runNoStateFindingRegressionMatrix() {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-no-state-findings-'));
+  const repo = path.join(sandbox, 'repo');
+  const taskScript = path.join(__dirname, 'claude-task.cjs');
+  const result = {};
+  let registryServer = null;
+  const quote = (value) => JSON.stringify(String(value));
+  const synchronousPause = (milliseconds) =>
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+  const startRegistryProbe = () => {
+    const readyPath = path.join(sandbox, 'registry-ready.json');
+    const requestLogPath = path.join(sandbox, 'registry-requests.jsonl');
+    const serverScript = path.join(sandbox, 'registry-probe.cjs');
+    fs.writeFileSync(
+      serverScript,
+      `'use strict';\n` +
+        `const fs=require('node:fs');\n` +
+        `const http=require('node:http');\n` +
+        `const ready=${JSON.stringify(readyPath)};\n` +
+        `const log=${JSON.stringify(requestLogPath)};\n` +
+        `const server=http.createServer((request,response)=>{\n` +
+        `  let bytes=0;\n` +
+        `  request.on('data',(chunk)=>{bytes+=chunk.length;});\n` +
+        `  request.on('end',()=>{\n` +
+        `    fs.appendFileSync(log,JSON.stringify({method:request.method,url:request.url,bytes})+'\\n');\n` +
+        `    response.writeHead(201,{'content-type':'application/json'});\n` +
+        `    response.end(JSON.stringify({ok:true}));\n` +
+        `  });\n` +
+        `});\n` +
+        `server.listen(0,'127.0.0.1',()=>{\n` +
+        `  fs.writeFileSync(ready,JSON.stringify({port:server.address().port}));\n` +
+        `});\n` +
+        `process.on('SIGTERM',()=>{\n` +
+        `  if (typeof server.closeAllConnections==='function') server.closeAllConnections();\n` +
+        `  server.close(()=>process.exit(0));\n` +
+        `  setTimeout(()=>process.exit(0),100).unref();\n` +
+        `});\n`,
+      'utf8',
+    );
+    registryServer = spawn(process.execPath, [serverScript], {
+      cwd: sandbox,
+      stdio: 'ignore',
+    });
+    registryServer.unref();
+    const deadline = Date.now() + 5_000;
+    while (!fs.existsSync(readyPath) && registryServer.exitCode === null && Date.now() < deadline) {
+      synchronousPause(20);
+    }
+    assert.equal(
+      fs.existsSync(readyPath),
+      true,
+      `local npm registry probe did not start (exit=${registryServer.exitCode})`,
+    );
+    const { port } = JSON.parse(fs.readFileSync(readyPath, 'utf8'));
+    return {
+      port,
+      requestLogPath,
+      url: `http://127.0.0.1:${port}`,
+    };
+  };
+  const registryPutRequests = (requestLogPath) => {
+    if (!fs.existsSync(requestLogPath)) return [];
+    return fs.readFileSync(requestLogPath, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.method === 'PUT');
+  };
+  const runGit = (args, options = {}) => {
+    const execution = spawnSync('git', args, {
+      cwd: options.cwd || repo,
+      encoding: 'utf8',
+      env: options.env || process.env,
+    });
+    assert.equal(
+      execution.status,
+      0,
+      `git ${args.join(' ')} failed: ${execution.stderr || execution.stdout}`,
+    );
+    return String(execution.stdout || '').trim();
+  };
+  const guard = (command, options = {}) => runShellGuard(command, repo, options);
+  const executeShellWhenAllowed = (command, options = {}) => {
+    const status = guard(command, options);
+    let execution = null;
+    if (status === 0) {
+      execution = spawnSync('/bin/bash', ['-c', command], {
+        cwd: repo,
+        encoding: 'utf8',
+        env: options.env || process.env,
+      });
+    }
+    return { status, execution };
+  };
+  const looseObjectCount = () => {
+    const output = runGit(['count-objects', '-v']);
+    return Number(output.match(/^count:\s*(\d+)$/m)?.[1] || 0);
+  };
+  const lifecycleMarker = path.join(sandbox, 'npm-lifecycle-marker.txt');
+  const externalPrefixMarker = path.join(sandbox, 'npm-external-prefix-marker.txt');
+  const markerScript = (marker) =>
+    `node -e 'require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran\\n")'`;
+  const exerciseNpmLifecycleOptions = () => Object.fromEntries(
+    npmLifecycleOptionCommands.map((command) => {
+      fs.rmSync(lifecycleMarker, { force: true });
+      const probe = executeShellWhenAllowed(command);
+      return [
+        command,
+        {
+          executionStatus: probe.execution?.status ?? null,
+          guard: probe.status,
+          marker: fs.existsSync(lifecycleMarker),
+        },
+      ];
+    }),
+  );
+  const exerciseGitConfigWrite = (command, target, options = {}) => {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    const existed = fs.existsSync(target);
+    const before = existed ? fs.readFileSync(target) : null;
+    const probe = executeShellWhenAllowed(command, options);
+    const afterExists = fs.existsSync(target);
+    const changed = afterExists && (!existed || !fs.readFileSync(target).equals(before));
+    if (existed) fs.writeFileSync(target, before);
+    else fs.rmSync(target, { force: true });
+    return {
+      executionStatus: probe.execution?.status ?? null,
+      guard: probe.status,
+      targetWritten: changed,
+    };
+  };
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    runGit(['init', '--initial-branch=left']);
+    runGit(['config', 'user.name', 'No State Finding Test']);
+    runGit(['config', 'user.email', 'no-state@example.invalid']);
+    const repositoryTaskScript = path.join(repo, 'scripts', 'claude-task.cjs');
+    fs.mkdirSync(path.dirname(repositoryTaskScript), { recursive: true });
+    fs.writeFileSync(repositoryTaskScript, "'use strict';\n", 'utf8');
+    fs.mkdirSync(path.join(repo, 'nested'));
+    fs.writeFileSync(path.join(repo, '.gitignore'), 'nested/.gitattributes\n', 'utf8');
+    fs.writeFileSync(path.join(repo, '.gitattributes'), '*.probe diff=probe\n', 'utf8');
+    fs.writeFileSync(path.join(repo, 'sample.probe'), 'base\n', 'utf8');
+    fs.writeFileSync(path.join(repo, 'nested', 'sample.probe'), 'base\n', 'utf8');
+    fs.mkdirSync(path.join(repo, 'src'));
+    fs.writeFileSync(path.join(repo, 'src', 'owned.txt'), 'owned\n', 'utf8');
+    fs.writeFileSync(
+      path.join(repo, 'package.json'),
+      `${JSON.stringify({
+        name: 'coreone-r3-pub-probe',
+        version: '1.0.0',
+        private: false,
+        workspaces: ['packages/*'],
+        scripts: {
+          deploy: markerScript(lifecycleMarker),
+          test: 'node -e "process.exit(0)"',
+          build: 'node -e "process.exit(0)"',
+          lint: 'node -e "process.exit(0)"',
+          typecheck: 'node -e "process.exit(0)"',
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    fs.mkdirSync(path.join(repo, 'packages', 'fixture'), { recursive: true });
+    fs.writeFileSync(
+      path.join(repo, 'packages', 'fixture', 'package.json'),
+      `${JSON.stringify({
+        name: 'fixture',
+        version: '1.0.0',
+        private: true,
+        scripts: {
+          deploy: markerScript(lifecycleMarker),
+        },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: base no-state finding fixture']);
+    const base = runGit(['rev-parse', 'HEAD']);
+    fs.writeFileSync(path.join(repo, 'sample.probe'), 'left\n', 'utf8');
+    fs.writeFileSync(path.join(repo, 'nested', 'sample.probe'), 'left\n', 'utf8');
+    fs.writeFileSync(path.join(repo, 'left.txt'), 'left\n', 'utf8');
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: left fixture']);
+    const leftHead = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', leftHead]);
+    runGit(['switch', '-c', 'right', base]);
+    fs.writeFileSync(path.join(repo, 'right.txt'), 'right\n', 'utf8');
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: right fixture']);
+    runGit(['switch', 'left']);
+
+    const preloadMarker = path.join(sandbox, 'preload-marker.txt');
+    const preloadScript = path.join(sandbox, 'preload.cjs');
+    fs.writeFileSync(
+      preloadScript,
+      `'use strict';require('node:fs').writeFileSync(${JSON.stringify(preloadMarker)}, 'loaded\\n');\n`,
+      'utf8',
+    );
+    const preloadCommand = [
+      quote(process.execPath),
+      `--require=${quote(preloadScript)}`,
+      quote(repositoryTaskScript),
+      'create-issues',
+      `--manifest=${quote(path.join(sandbox, 'missing-manifest.json'))}`,
+      `--approval=${quote('https://github.com/acme/coreone/issues/1#issuecomment-2')}`,
+    ].join(' ');
+    result.createIssuesPreloadGuard = executeShellWhenAllowed(preloadCommand).status;
+    result.createIssuesPreloadMarker = fs.existsSync(preloadMarker);
+
+    const forgedDirectory = path.join(sandbox, 'forged', 'scripts');
+    const forgedScript = path.join(forgedDirectory, 'claude-task.cjs');
+    const forgedMarker = path.join(sandbox, 'forged-wrapper-marker.txt');
+    fs.mkdirSync(forgedDirectory, { recursive: true });
+    fs.writeFileSync(
+      forgedScript,
+      `'use strict';require('node:fs').writeFileSync(${JSON.stringify(forgedMarker)}, 'ran\\n');\n`,
+      'utf8',
+    );
+    const forgedCommand = [
+      quote(process.execPath),
+      quote(forgedScript),
+      'create-issues',
+      `--manifest=${quote(path.join(sandbox, 'missing-manifest.json'))}`,
+      `--approval=${quote('https://github.com/acme/coreone/issues/1#issuecomment-2')}`,
+    ].join(' ');
+    result.forgedCreateIssuesGuard = executeShellWhenAllowed(forgedCommand).status;
+    result.forgedCreateIssuesMarker = fs.existsSync(forgedMarker);
+
+    const redirectionMarker = path.join(sandbox, 'outer-redirection.txt');
+    const redirection = executeShellWhenAllowed(`git status >& ${quote(redirectionMarker)}`);
+    result.ampersandRedirectionGuard = redirection.status;
+    result.ampersandRedirectionMarker = fs.existsSync(redirectionMarker);
+    const nestedRedirectionMarker = path.join(sandbox, 'nested-redirection.txt');
+    const nestedRedirection = executeShellWhenAllowed(
+      `bash -c "git status" >&${quote(nestedRedirectionMarker)}`,
+    );
+    result.nestedAmpersandRedirectionGuard = nestedRedirection.status;
+    result.nestedAmpersandRedirectionMarker = fs.existsSync(nestedRedirectionMarker);
+    result.fdCopyGuard = guard('git status 2>&1');
+    result.fdCopySpacedGuard = guard('git status 2>& 1');
+    result.fdCloseGuard = guard('git status 2>&-');
+
+    const editor = path.join(sandbox, 'config-editor.sh');
+    fs.writeFileSync(
+      editor,
+      '#!/bin/sh\nprintf "\\n[probe]\\n\\tmutated = yes\\n" >> "$1"\n',
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    result.configGetGuard = guard('git config get user.name');
+    const configEditGuard = guard('git config edit');
+    result.configEditGuard = configEditGuard;
+    if (configEditGuard === 0) {
+      runGit(['config', 'edit'], {
+        env: { ...process.env, GIT_EDITOR: editor },
+      });
+    }
+    result.configEditMutated = (
+      spawnSync('git', ['config', 'get', 'probe.mutated'], {
+        cwd: repo,
+        encoding: 'utf8',
+      }).status === 0
+    );
+
+    const textconvMarker = path.join(sandbox, 'textconv-marker.txt');
+    const textconvHelper = path.join(sandbox, 'textconv.sh');
+    fs.writeFileSync(
+      textconvHelper,
+      `#!/bin/sh\nprintf 'hit\\n' >> ${quote(textconvMarker)}\ncat "$1"\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    runGit(['config', 'diff.probe.textconv', textconvHelper]);
+    const textconv = executeShellWhenAllowed('git diff HEAD^ HEAD');
+    result.implicitTextconvGuard = textconv.status;
+    result.implicitTextconvMarker = fs.existsSync(textconvMarker);
+    const noTextconv = executeShellWhenAllowed('git diff --no-textconv HEAD^ HEAD');
+    result.noTextconvDiffGuard = noTextconv.status;
+    result.noTextconvDiffMarker = fs.existsSync(textconvMarker);
+    runGit(['config', '--unset', 'diff.probe.textconv']);
+
+    const ignoredAttributesMarker = path.join(sandbox, 'ignored-attributes-marker.txt');
+    const ignoredAttributesHelper = path.join(sandbox, 'ignored-attributes.sh');
+    fs.writeFileSync(
+      ignoredAttributesHelper,
+      `#!/bin/sh\nprintf 'hit\\n' >> ${quote(ignoredAttributesMarker)}\ncat "$1"\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    fs.writeFileSync(
+      path.join(repo, 'nested', '.gitattributes'),
+      '*.probe diff=ignored\n',
+      'utf8',
+    );
+    runGit(['config', 'diff.ignored.textconv', ignoredAttributesHelper]);
+    const ignoredAttributes = executeShellWhenAllowed(
+      'git diff HEAD^ HEAD -- nested/sample.probe',
+    );
+    result.ignoredAttributesTextconvGuard = ignoredAttributes.status;
+    result.ignoredAttributesTextconvMarker = fs.existsSync(ignoredAttributesMarker);
+    runGit(['config', '--unset', 'diff.ignored.textconv']);
+
+    const externalDiffMarker = path.join(sandbox, 'external-diff-marker.txt');
+    const externalDiffHelper = path.join(sandbox, 'external-diff.sh');
+    fs.writeFileSync(
+      externalDiffHelper,
+      `#!/bin/sh\nprintf 'hit\\n' >> ${quote(externalDiffMarker)}\nexit 0\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    runGit(['config', 'diff.external', externalDiffHelper]);
+    const ordinaryExternalDiff = executeShellWhenAllowed('git diff HEAD^ HEAD');
+    result.configuredExternalDiffGuard = ordinaryExternalDiff.status;
+    result.configuredExternalDiffMarker = fs.existsSync(externalDiffMarker);
+    const noExternalDiff = executeShellWhenAllowed('git diff --no-ext-diff HEAD^ HEAD');
+    result.noExternalDiffGuard = noExternalDiff.status;
+    result.noExternalDiffMarker = fs.existsSync(externalDiffMarker);
+    result.explicitExternalDiffGuard = guard('git diff --ext-diff HEAD^ HEAD');
+    runGit(['config', '--unset', 'diff.external']);
+
+    const beforeMergeTree = looseObjectCount();
+    const mergeTree = executeShellWhenAllowed('git merge-tree left right');
+    result.twoArgMergeTreeGuard = mergeTree.status;
+    result.twoArgMergeTreeObjectDelta = looseObjectCount() - beforeMergeTree;
+    result.trivialMergeTreeGuard = guard(
+      `git merge-tree --trivial-merge ${base}^{tree} ${base}^{tree} ${base}^{tree}`,
+    );
+
+    const fsmonitorMarker = path.join(sandbox, 'fsmonitor-marker.txt');
+    const fsmonitorHelper = path.join(sandbox, 'fsmonitor.sh');
+    fs.writeFileSync(
+      fsmonitorHelper,
+      `#!/bin/sh\nprintf 'hit\\n' >> ${quote(fsmonitorMarker)}\nexit 0\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    runGit(['config', 'core.fsmonitor', fsmonitorHelper]);
+    const fsmonitor = executeShellWhenAllowed('git status --short');
+    result.fsmonitorGuard = fsmonitor.status;
+    result.fsmonitorMarker = fs.existsSync(fsmonitorMarker);
+    runGit(['config', '--unset', 'core.fsmonitor']);
+
+    const pagerHelper = path.join(sandbox, 'pager.sh');
+    fs.writeFileSync(pagerHelper, '#!/bin/sh\ncat\n', { encoding: 'utf8', mode: 0o755 });
+    runGit(['config', 'core.pager', pagerHelper]);
+    result.configuredPagerLogGuard = guard('git log -1');
+    result.noPagerLogGuard = guard('git -P log -1');
+    result.noPagerStatusGuard = guard('git -P status --short');
+    runGit(['config', '--unset', 'core.pager']);
+
+    const fakeBin = path.join(sandbox, 'bin');
+    const namedPagerMarker = path.join(sandbox, 'named-pager-marker.txt');
+    const namedPagerHelper = path.join(fakeBin, 'coreone-pager-probe');
+    fs.mkdirSync(fakeBin);
+    fs.writeFileSync(
+      namedPagerHelper,
+      `#!/bin/sh\nprintf 'hit\\n' >> ${quote(namedPagerMarker)}\ncat\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    runGit(['config', 'core.pager', 'coreone-pager-probe']);
+    const originalPath = process.env.PATH;
+    try {
+      process.env.PATH = `${fakeBin}${path.delimiter}${originalPath || ''}`;
+      const namedPager = executeShellWhenAllowed('git log -1', {
+        env: process.env,
+      });
+      result.namedPagerGuard = namedPager.status;
+      result.namedPagerMarker = fs.existsSync(namedPagerMarker);
+    } finally {
+      process.env.PATH = originalPath;
+      runGit(['config', '--unset', 'core.pager']);
+    }
+
+    const externalSubcommandMarker = path.join(sandbox, 'external-subcommand-marker.txt');
+    const externalSubcommand = path.join(fakeBin, 'git-coreone-sideeffect');
+    fs.writeFileSync(
+      externalSubcommand,
+      `#!/bin/sh\nprintf 'hit\\n' >> ${quote(externalSubcommandMarker)}\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    try {
+      process.env.PATH = `${fakeBin}${path.delimiter}${originalPath || ''}`;
+      const externalGitHelper = executeShellWhenAllowed('git coreone-sideeffect', {
+        env: process.env,
+      });
+      result.externalGitHelperGuard = externalGitHelper.status;
+      result.externalGitHelperMarker = fs.existsSync(externalSubcommandMarker);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+
+    const aliasMarker = path.join(sandbox, 'alias-marker.txt');
+    runGit(['config', 'alias.sideeffect', `!touch ${aliasMarker}`]);
+    const aliasExecution = executeShellWhenAllowed('git sideeffect');
+    result.configuredAliasGuard = aliasExecution.status;
+    result.configuredAliasMarker = fs.existsSync(aliasMarker);
+    runGit(['config', '--unset', 'alias.sideeffect']);
+    result.unknownGitSubcommandGuard = guard('git definitely-no-such-subcommand');
+
+    const gitDirectory = runGit(['rev-parse', '--absolute-git-dir']);
+    const hookMarker = path.join(sandbox, 'git-hook-marker.txt');
+    const hookPath = path.join(gitDirectory, 'hooks', 'pre-commit');
+    fs.writeFileSync(
+      hookPath,
+      `#!/bin/sh\nprintf 'ran\\n' > ${quote(hookMarker)}\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    const hookRun = executeShellWhenAllowed('git hook run pre-commit');
+    result.hookRunGuard = hookRun.status;
+    result.hookRunMarker = fs.existsSync(hookMarker);
+
+    const checkoutPrefix = path.join(sandbox, 'checkout-index-output');
+    fs.mkdirSync(checkoutPrefix);
+    const checkoutIndex = executeShellWhenAllowed(
+      `git checkout-index -a --prefix=${quote(`${checkoutPrefix}${path.sep}`)}`,
+    );
+    result.checkoutIndexGuard = checkoutIndex.status;
+    result.checkoutIndexMarker = fs.existsSync(path.join(checkoutPrefix, 'src', 'owned.txt'));
+
+    const commitGraphPath = path.join(gitDirectory, 'objects', 'info', 'commit-graph');
+    fs.rmSync(commitGraphPath, { force: true });
+    const commitGraph = executeShellWhenAllowed('git commit-graph write --reachable');
+    result.commitGraphWriteGuard = commitGraph.status;
+    result.commitGraphWritten = fs.existsSync(commitGraphPath);
+    result.commitGraphVerifyGuard = guard('git commit-graph verify');
+
+    result.safeColorConfigGuard = guard('git -c color.ui=false status --short');
+    result.repeatedSafeConfigGuard = guard(
+      'git -c color.ui=false -c color.status=never status --short',
+    );
+    result.safeConfigEnvGuard = guard(
+      'git --config-env=color.ui=COREONE_COLOR status --short',
+      { env: { ...process.env, COREONE_COLOR: 'false' } },
+    );
+    result.dangerousConfigGuard = guard(
+      `git -c color.ui=false -c core.hooksPath=${quote(path.join(sandbox, 'hooks'))} status --short`,
+    );
+    result.dangerousConfigEnvGuard = guard(
+      'git --config-env=core.hooksPath=COREONE_HOOKS status --short',
+      { env: { ...process.env, COREONE_HOOKS: path.join(sandbox, 'hooks') } },
+    );
+
+    fs.rmSync(lifecycleMarker, { force: true });
+    const noStateDeploy = executeShellWhenAllowed('npm run deploy');
+    result.noStateNpmDeployGuard = noStateDeploy.status;
+    result.noStateNpmDeployMarker = fs.existsSync(lifecycleMarker);
+    result.noStateNpmLifecycleOptions = exerciseNpmLifecycleOptions();
+    const registry = startRegistryProbe();
+    const npmHome = path.join(sandbox, 'npm-home');
+    const npmCache = path.join(sandbox, 'npm-cache');
+    const npmUserConfig = path.join(sandbox, 'npmrc');
+    fs.mkdirSync(npmHome);
+    fs.writeFileSync(
+      npmUserConfig,
+      `//127.0.0.1:${registry.port}/:_authToken=coreone-local-probe\n`,
+      'utf8',
+    );
+    const npmProbeEnv = {
+      ...process.env,
+      HOME: npmHome,
+      NO_PROXY: '127.0.0.1,localhost',
+      npm_config_cache: npmCache,
+      npm_config_userconfig: npmUserConfig,
+    };
+    const noStatePublish = executeShellWhenAllowed(
+      `npm publish --ignore-scripts --registry=${quote(registry.url)}`,
+      { env: npmProbeEnv },
+    );
+    result.noStateNpmPublishGuard = noStatePublish.status;
+    const noStatePub = executeShellWhenAllowed(
+      `npm pub --ignore-scripts --registry=${quote(registry.url)}`,
+      { env: npmProbeEnv },
+    );
+    result.noStateNpmPubGuard = noStatePub.status;
+    result.noStateNpmPubExecutionStatus = noStatePub.execution?.status ?? null;
+    result.noStateNpmRegistryPuts = registryPutRequests(registry.requestLogPath);
+    result.noStateSafeNpm = Object.fromEntries([
+      'npm test',
+      'npm run build',
+      'npm run lint',
+      'npm run typecheck',
+    ].map((command) => [command, guard(command)]));
+
+    result.safeDiagnostics = Object.fromEntries([
+      'git blame sample.probe',
+      'git check-ignore sample.probe',
+      'python3 --version',
+      'python3 -m pytest --version',
+      'npm --version',
+      'node --help',
+    ].map((command) => [command, guard(command)]));
+
+    const start = spawnSync(
+      process.execPath,
+      [
+        taskScript,
+        'start-r0',
+        '--reason=second-round active-state regression fixture',
+        '--owned=src/**',
+      ],
+      { cwd: repo, encoding: 'utf8' },
+    );
+    assert.equal(start.status, 0, start.stderr || start.stdout);
+
+    const gitConfigPath = path.join(gitDirectory, 'config');
+    const gitConfigBeforeActiveProbes = fs.readFileSync(gitConfigPath, 'utf8');
+    result.activeConfigGetGuard = guard('git config get user.name');
+    result.activeConfigListGuard = guard('git config list');
+    result.activeTypedConfigWrites = {
+      local: exerciseGitConfigWrite(
+        'git config -t bool probe.local true',
+        gitConfigPath,
+      ),
+      global: exerciseGitConfigWrite(
+        'git config --global -t bool probe.global true',
+        path.join(sandbox, 'typed-config-home', '.gitconfig'),
+        {
+          env: {
+            ...process.env,
+            GIT_CONFIG_NOSYSTEM: '1',
+            HOME: path.join(sandbox, 'typed-config-home'),
+            XDG_CONFIG_HOME: path.join(sandbox, 'typed-config-home', '.config'),
+          },
+        },
+      ),
+      system: exerciseGitConfigWrite(
+        'git config --system -t bool probe.system true',
+        path.join(sandbox, 'typed-system.config'),
+        {
+          env: {
+            ...process.env,
+            GIT_CONFIG_SYSTEM: path.join(sandbox, 'typed-system.config'),
+          },
+        },
+      ),
+      file: exerciseGitConfigWrite(
+        `git config -f ${quote(path.join(sandbox, 'typed-external.config'))} ` +
+          '-t bool probe.file true',
+        path.join(sandbox, 'typed-external.config'),
+      ),
+    };
+    const activeConfigSet = executeShellWhenAllowed('git config set probe.active yes');
+    result.activeConfigSetGuard = activeConfigSet.status;
+    result.activeConfigSetChanged =
+      fs.readFileSync(gitConfigPath, 'utf8') !== gitConfigBeforeActiveProbes;
+    fs.writeFileSync(gitConfigPath, gitConfigBeforeActiveProbes, 'utf8');
+
+    const activeLegacyConfigSet = executeShellWhenAllowed('git config probe.legacy yes');
+    result.activeLegacyConfigSetGuard = activeLegacyConfigSet.status;
+    result.activeLegacyConfigSetChanged =
+      fs.readFileSync(gitConfigPath, 'utf8') !== gitConfigBeforeActiveProbes;
+    fs.writeFileSync(gitConfigPath, gitConfigBeforeActiveProbes, 'utf8');
+
+    const activeEditorMarker = path.join(sandbox, 'active-config-editor-marker.txt');
+    const activeEditor = path.join(sandbox, 'active-config-editor.sh');
+    fs.writeFileSync(
+      activeEditor,
+      `#!/bin/sh\nprintf 'ran\\n' > ${quote(activeEditorMarker)}\n` +
+        `printf '\\n[probe]\\n\\tedited = yes\\n' >> "$1"\n`,
+      { encoding: 'utf8', mode: 0o755 },
+    );
+    const activeConfigEdit = executeShellWhenAllowed('git config edit', {
+      env: { ...process.env, GIT_EDITOR: activeEditor },
+    });
+    result.activeConfigEditGuard = activeConfigEdit.status;
+    result.activeConfigEditMarker = fs.existsSync(activeEditorMarker);
+    result.activeConfigEditChanged =
+      fs.readFileSync(gitConfigPath, 'utf8') !== gitConfigBeforeActiveProbes;
+    fs.writeFileSync(gitConfigPath, gitConfigBeforeActiveProbes, 'utf8');
+
+    const isolatedGitHome = path.join(sandbox, 'isolated-git-home');
+    const globalGitConfig = path.join(isolatedGitHome, '.gitconfig');
+    fs.mkdirSync(isolatedGitHome);
+    const activeGlobalConfig = executeShellWhenAllowed(
+      'git config --global probe.global yes',
+      {
+        env: {
+          ...process.env,
+          GIT_CONFIG_NOSYSTEM: '1',
+          HOME: isolatedGitHome,
+          XDG_CONFIG_HOME: path.join(isolatedGitHome, '.config'),
+        },
+      },
+    );
+    result.activeGlobalConfigGuard = activeGlobalConfig.status;
+    result.activeGlobalConfigWritten = fs.existsSync(globalGitConfig);
+
+    const externalGitConfig = path.join(sandbox, 'external-write.config');
+    const activeFileConfig = executeShellWhenAllowed(
+      `git config set --file ${quote(externalGitConfig)} probe.file yes`,
+    );
+    result.activeFileConfigGuard = activeFileConfig.status;
+    result.activeFileConfigWritten = fs.existsSync(externalGitConfig);
+
+    fs.rmSync(hookMarker, { force: true });
+    const activeHookRun = executeShellWhenAllowed('git hook run pre-commit');
+    result.activeHookRunGuard = activeHookRun.status;
+    result.activeHookRunMarker = fs.existsSync(hookMarker);
+
+    const ownedEscape = path.join(repo, 'docs', 'out');
+    fs.rmSync(path.join(repo, 'docs'), { recursive: true, force: true });
+    const activeCheckoutIndex = executeShellWhenAllowed(
+      `git checkout-index -a --prefix=${quote(`${ownedEscape}${path.sep}`)}`,
+    );
+    result.activeCheckoutIndexGuard = activeCheckoutIndex.status;
+    result.activeCheckoutIndexMarker =
+      fs.existsSync(path.join(ownedEscape, 'src', 'owned.txt'));
+
+    fs.rmSync(commitGraphPath, { force: true });
+    const activeCommitGraph = executeShellWhenAllowed('git commit-graph write --reachable');
+    result.activeCommitGraphWriteGuard = activeCommitGraph.status;
+    result.activeCommitGraphWritten = fs.existsSync(commitGraphPath);
+
+    const nestedWorktree = path.join(sandbox, 'nested-worktree');
+    const nestedBranch = 'claude/nested-active-worktree';
+    const activeWorktreeAdd = executeShellWhenAllowed(
+      `git worktree add -b ${nestedBranch} ${quote(nestedWorktree)} origin/master`,
+    );
+    result.activeWorktreeAddGuard = activeWorktreeAdd.status;
+    result.activeWorktreeCreated = fs.existsSync(path.join(nestedWorktree, '.git'));
+    result.activeWorktreeBranchCreated = (
+      spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${nestedBranch}`], {
+        cwd: repo,
+        encoding: 'utf8',
+      }).status === 0
+    );
+
+    fs.rmSync(lifecycleMarker, { force: true });
+    const activeDeploy = executeShellWhenAllowed('npm run deploy');
+    result.activeNpmDeployGuard = activeDeploy.status;
+    result.activeNpmDeployMarker = fs.existsSync(lifecycleMarker);
+    result.activeNpmLifecycleOptions = exerciseNpmLifecycleOptions();
+    result.activeNpmPublishGuard = guard('npm publish');
+    fs.writeFileSync(registry.requestLogPath, '', 'utf8');
+    const activePub = executeShellWhenAllowed(
+      `npm pub --ignore-scripts --registry=${quote(registry.url)}`,
+      { env: npmProbeEnv },
+    );
+    result.activeNpmPubGuard = activePub.status;
+    result.activeNpmPubExecutionStatus = activePub.execution?.status ?? null;
+    result.activeNpmRegistryPuts = registryPutRequests(registry.requestLogPath);
+
+    const externalPackage = path.join(sandbox, 'external-package');
+    fs.mkdirSync(externalPackage);
+    fs.writeFileSync(
+      path.join(externalPackage, 'package.json'),
+      `${JSON.stringify({
+        private: true,
+        scripts: { test: markerScript(externalPrefixMarker) },
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    const externalPrefixTest = executeShellWhenAllowed(
+      `npm --prefix=${quote(externalPackage)} test`,
+    );
+    result.activeExternalPrefixGuard = externalPrefixTest.status;
+    result.activeExternalPrefixMarker = fs.existsSync(externalPrefixMarker);
+    result.activeSafeNpm = Object.fromEntries([
+      'npm test',
+      'npm run build',
+      'npm run lint',
+      'npm run typecheck',
+    ].map((command) => [command, guard(command)]));
+
+    return result;
+  } finally {
+    if (registryServer && registryServer.exitCode === null) {
+      registryServer.kill('SIGTERM');
+    }
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+assert.deepEqual(
+  runNoStateFindingRegressionMatrix(),
+  {
+    createIssuesPreloadGuard: 2,
+    createIssuesPreloadMarker: false,
+    forgedCreateIssuesGuard: 2,
+    forgedCreateIssuesMarker: false,
+    ampersandRedirectionGuard: 2,
+    ampersandRedirectionMarker: false,
+    nestedAmpersandRedirectionGuard: 2,
+    nestedAmpersandRedirectionMarker: false,
+    fdCopyGuard: 0,
+    fdCopySpacedGuard: 0,
+    fdCloseGuard: 0,
+    configGetGuard: 0,
+    configEditGuard: 2,
+    configEditMutated: false,
+    implicitTextconvGuard: 2,
+    implicitTextconvMarker: false,
+    noTextconvDiffGuard: 0,
+    noTextconvDiffMarker: false,
+    ignoredAttributesTextconvGuard: 2,
+    ignoredAttributesTextconvMarker: false,
+    configuredExternalDiffGuard: 2,
+    configuredExternalDiffMarker: false,
+    noExternalDiffGuard: 0,
+    noExternalDiffMarker: false,
+    explicitExternalDiffGuard: 2,
+    twoArgMergeTreeGuard: 2,
+    twoArgMergeTreeObjectDelta: 0,
+    trivialMergeTreeGuard: 0,
+    fsmonitorGuard: 2,
+    fsmonitorMarker: false,
+    configuredPagerLogGuard: 2,
+    noPagerLogGuard: 0,
+    noPagerStatusGuard: 0,
+    namedPagerGuard: 2,
+    namedPagerMarker: false,
+    externalGitHelperGuard: 2,
+    externalGitHelperMarker: false,
+    configuredAliasGuard: 2,
+    configuredAliasMarker: false,
+    unknownGitSubcommandGuard: 0,
+    hookRunGuard: 2,
+    hookRunMarker: false,
+    checkoutIndexGuard: 2,
+    checkoutIndexMarker: false,
+    commitGraphWriteGuard: 2,
+    commitGraphWritten: false,
+    commitGraphVerifyGuard: 0,
+    safeColorConfigGuard: 0,
+    repeatedSafeConfigGuard: 0,
+    safeConfigEnvGuard: 0,
+    dangerousConfigGuard: 2,
+    dangerousConfigEnvGuard: 2,
+    noStateNpmDeployGuard: 2,
+    noStateNpmDeployMarker: false,
+    noStateNpmLifecycleOptions: blockedNpmLifecycleOptionCommands,
+    noStateNpmPublishGuard: 2,
+    noStateNpmPubGuard: 2,
+    noStateNpmPubExecutionStatus: null,
+    noStateNpmRegistryPuts: [],
+    noStateSafeNpm: {
+      'npm test': 0,
+      'npm run build': 0,
+      'npm run lint': 0,
+      'npm run typecheck': 0,
+    },
+    safeDiagnostics: {
+      'git blame sample.probe': 0,
+      'git check-ignore sample.probe': 0,
+      'python3 --version': 0,
+      'python3 -m pytest --version': 0,
+      'npm --version': 0,
+      'node --help': 0,
+    },
+    activeHookRunGuard: 2,
+    activeHookRunMarker: false,
+    activeCheckoutIndexGuard: 2,
+    activeCheckoutIndexMarker: false,
+    activeCommitGraphWriteGuard: 2,
+    activeCommitGraphWritten: false,
+    activeWorktreeAddGuard: 2,
+    activeWorktreeCreated: false,
+    activeWorktreeBranchCreated: false,
+    activeConfigGetGuard: 0,
+    activeConfigListGuard: 0,
+    activeTypedConfigWrites: {
+      local: { executionStatus: null, guard: 2, targetWritten: false },
+      global: { executionStatus: null, guard: 2, targetWritten: false },
+      system: { executionStatus: null, guard: 2, targetWritten: false },
+      file: { executionStatus: null, guard: 2, targetWritten: false },
+    },
+    activeConfigSetGuard: 2,
+    activeConfigSetChanged: false,
+    activeLegacyConfigSetGuard: 2,
+    activeLegacyConfigSetChanged: false,
+    activeConfigEditGuard: 2,
+    activeConfigEditMarker: false,
+    activeConfigEditChanged: false,
+    activeGlobalConfigGuard: 2,
+    activeGlobalConfigWritten: false,
+    activeFileConfigGuard: 2,
+    activeFileConfigWritten: false,
+    activeNpmDeployGuard: 2,
+    activeNpmDeployMarker: false,
+    activeNpmLifecycleOptions: blockedNpmLifecycleOptionCommands,
+    activeNpmPublishGuard: 2,
+    activeNpmPubGuard: 2,
+    activeNpmPubExecutionStatus: null,
+    activeNpmRegistryPuts: [],
+    activeExternalPrefixGuard: 2,
+    activeExternalPrefixMarker: false,
+    activeSafeNpm: {
+      'npm test': 0,
+      'npm run build': 0,
+      'npm run lint': 0,
+      'npm run typecheck': 0,
+    },
+  },
+  'no-state risk predicates must block proven writes/helpers while preserving diagnostics',
+);
+
 assert.equal(isSafeBeforeStartShell('git status --short'), true);
 assert.equal(isSafeBeforeStartShell('gh issue view 12 --json body'), true);
 assert.equal(
   isSafeBeforeStartShell('git --git-dir=.git status --short'),
-  true,
-  'a read-only Git scope flag must not be rejected merely by argument shape',
+  false,
+  'Git metadata scope overrides must fail closed without task state',
 );
 assert.equal(
   isSafeBeforeStartShell('git branch codex/local-checkpoint'),
-  true,
-  'local branch metadata is neither destructive nor a GitHub write',
+  false,
+  'creating local branch metadata is a live-check mutation that requires a task state',
 );
 assert.equal(
   isSafeBeforeStartShell('git commit -m local-checkpoint'),
-  true,
-  'a normal local commit must not require a command-name allowlist',
+  false,
+  'a local commit depends on the active owned scope and must not run without task state',
 );
 assert.equal(
   isSafeBeforeStartShell('git status --short | rg "^ M" || true'),
@@ -2743,17 +4754,24 @@ assert.equal(
 assert.equal(
   isSafeBeforeStartShell('node -e "console.log(process.version)"'),
   true,
-  'ordinary Node diagnostics must not be rejected by command shape',
+  'concrete-risk classification must not reject harmless Node diagnostics by flag shape alone',
 );
 assert.equal(
   isSafeBeforeStartShell('npm exec vitest -- --run'),
-  true,
-  'ordinary package tooling must not be rejected by an action allowlist',
+  false,
+  'npm exec can resolve and execute arbitrary packages',
 );
+for (const spelling of npmMutatingCommandSpellings) {
+  assert.equal(
+    isSafeBeforeStartShell(`npm ${spelling}`, repositoryRoot),
+    false,
+    `npm 10.9.8 mutating command spelling escaped inactive-state guard: ${spelling}`,
+  );
+}
 assert.equal(
   isSafeBeforeStartShell('python3 -m pytest -q'),
   true,
-  'unrecognized but non-destructive local tools must be allowed by default',
+  'ordinary repository tests must remain available without a task contract',
 );
 assert.equal(
   isSafeBeforeStartShell('bash -c "git status --short | rg modified || true"'),
@@ -2814,6 +4832,93 @@ assert.doesNotThrow(
   ),
   'active tasks must allow ordinary command chains, pipelines, and fallback operators',
 );
+assert.throws(
+  () => assertShellCommandSafety(
+    'node --require=/tmp/evil.cjs scripts/claude-task.cjs create-issues ' +
+      '--manifest=/tmp/candidates.json ' +
+      '--approval=https://github.com/acme/coreone/issues/1#issuecomment-2',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  /runtime|preload|loader/i,
+  'governed create-issues must reject preload flags even when another task state is active',
+);
+for (const command of [
+  'git -c color.ui=false status --short',
+  'git -c color.ui=false -c color.status=never status --short',
+  'git --config-env=color.ui=COREONE_COLOR status --short',
+  'git config get user.name',
+  'git config list',
+  'git config --global get user.name',
+  'git config --file /tmp/read-only.config get user.name',
+  'npm config --loglevel silent get registry',
+  'npm --loglevel silent config get registry',
+  'npm test',
+  'npm run build',
+  'npm run build -- --workspace fixture',
+  'npm run -w fixture build',
+  'npm run lint',
+  'npm run typecheck',
+]) {
+  assert.doesNotThrow(
+    () => assertShellCommandSafety(
+      command,
+      efficiencyFirstShellState,
+      repositoryRoot,
+      repositoryRoot,
+    ),
+    `active task safe diagnostic/test command rejected: ${command}`,
+  );
+}
+for (const command of [
+  'git -c core.hooksPath=/tmp/evil status --short',
+  'git --config-env=diff.external=COREONE_DIFF status --short',
+  'git config set probe.active yes',
+  'git config probe.legacy yes',
+  'git config unset probe.active',
+  'git config edit',
+  'git config --global probe.global yes',
+  'git config --system set probe.system yes',
+  'git config --file=/tmp/write.config set probe.file yes',
+  'git config -t bool probe.local true',
+  'git config --global -t bool probe.global true',
+  'git config --system -t bool probe.system true',
+  'git config -f /tmp/write.config -t bool probe.file true',
+  'npm publish',
+  'npm pub',
+  'npm publ',
+  'npm run deploy',
+  'npm rum deploy',
+  'npm urn release',
+  'npm run --prefix . deploy',
+  'npm --prefix . run deploy',
+  'npm rum --loglevel silent deploy',
+  'npm urn --loglevel silent deploy',
+  'npm --loglevel silent urn deploy',
+  'npm run --workspace fixture deploy',
+  'npm --workspace fixture rum deploy',
+  'npm run deploy -- --workspace fixture',
+  'npm rum -w fixture deploy',
+  'npm -w fixture run deploy',
+  'npm --prefix=/tmp/evil test',
+  'npm --prefix=$COREONE_EXTERNAL test',
+  'npm --prefix=.git test',
+  'npm --prefix=后端代码/server start',
+  'npm --prefix=后端代码/server run seed',
+  'npm --prefix=后端代码/server run reset-passwords',
+]) {
+  assert.throws(
+    () => assertShellCommandSafety(
+      command,
+      efficiencyFirstShellState,
+      repositoryRoot,
+      repositoryRoot,
+    ),
+    /Git metadata|config|helper|registry|lifecycle|仓库之外|无法验证|已拒绝/i,
+    `active task side-effect capability escaped: ${command}`,
+  );
+}
 assert.doesNotThrow(
   () => assertShellCommandSafety(
     'printf ok > artifacts/governance-check.txt',
@@ -2831,6 +4936,24 @@ assert.doesNotThrow(
     repositoryRoot,
   ),
   'redirection must work without requiring spaces around the operator',
+);
+assert.doesNotThrow(
+  () => assertShellCommandSafety(
+    'printf ok >& artifacts/governance-check.txt',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  'Bash/Zsh combined stdout/stderr redirection must honor an owned target',
+);
+assert.doesNotThrow(
+  () => assertShellCommandSafety(
+    'printf ok 2>&1',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  'numeric descriptor duplication is not a file target',
 );
 assert.throws(
   () => assertShellCommandSafety(
@@ -2850,6 +4973,26 @@ assert.throws(
   ),
   /不在当前 task owned scope/,
   'compact redirection must still enforce the owned boundary',
+);
+assert.throws(
+  () => assertShellCommandSafety(
+    'printf no >& "docs/out-of-scope.txt"',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  /不在当前 task owned scope/,
+  'quoted >& targets must enforce the owned boundary',
+);
+assert.throws(
+  () => assertShellCommandSafety(
+    'printf no 2>&docs/out-of-scope.txt',
+    efficiencyFirstShellState,
+    repositoryRoot,
+    repositoryRoot,
+  ),
+  /不在当前 task owned scope/,
+  'n>&word targets must enforce the owned boundary when word is not an fd',
 );
 assert.throws(
   () => assertShellCommandSafety(
@@ -2903,8 +5046,8 @@ assert.equal(
 );
 assert.equal(
   isSafeBeforeStartShell('git -c diff.external=review-tool diff --ext-diff'),
-  true,
-  'external diff tooling must not be blocked merely because it can execute a local helper',
+  false,
+  'Git config overrides and external diff helpers must fail closed without task state',
 );
 const bootstrapWorktree = path.resolve(repositoryRoot, '..', 'claude-bootstrap-worktree');
 assert.equal(
@@ -2952,9 +5095,291 @@ assert.equal(
     `node "${path.resolve(repositoryRoot, '..', 'outside', 'scripts', 'agent-preflight.cjs')}"`,
     repositoryRoot,
   ),
-  true,
-  'an external diagnostic script is not a proven mutation and must not be shape-blocked',
+  false,
+  'only repository-owned trusted governance scripts may execute without task state',
 );
+for (const command of [
+  'git -C . status --porcelain',
+  'git branch --show-current',
+  'git branch --list',
+  'git branch -a',
+  'git branch --contains HEAD --format="%(refname:short)"',
+  'git branch --points-at HEAD --list',
+  'git tag',
+  'git tag --list',
+  'git tag --contains HEAD --format="%(refname:short)"',
+  'git tag --points-at HEAD --list',
+  'git worktree list --porcelain',
+  'git config --get user.name',
+  'git config get user.name',
+  'git config get --all user.name',
+  'git config -h',
+  'git config list',
+  'git config --gl list',
+  'git config --file /tmp/read-only.config get user.name',
+  'git -P status --short',
+  'git blame scripts/claude-task.cjs',
+  'git check-ignore scripts/claude-task.cjs',
+  'git remote -v',
+  'git remote get-url origin',
+  'git symbolic-ref --short HEAD',
+  'git notes list',
+  'git replace --list',
+  'git sparse-checkout list',
+  'git submodule status',
+  'git stash list',
+  'git stash show',
+  'git hash-object README.md',
+  'git commit-graph verify',
+  'git multi-pack-index verify',
+  'git -c color.ui=false status --short',
+  'git -c color.ui status --short',
+  'git -ccolor.ui=false status --short',
+  'git -c color.ui=false -c color.status=never status --short',
+  'git format-patch --stdout -1 HEAD',
+  'git archive HEAD',
+]) {
+  assert.equal(
+    isSafeBeforeStartShell(command, repositoryRoot),
+    true,
+    `no-state safe Git read rejected: ${command}`,
+  );
+}
+for (const command of [
+  'git branch unsafe-new-branch',
+  'git branch -D unsafe-old-branch',
+  'git branch --move unsafe-old unsafe-new',
+  'git branch --copy unsafe-old unsafe-copy',
+  'git branch --set-upstream-to=origin/master unsafe',
+  'git branch --edit-description unsafe',
+  'git tag unsafe-tag',
+  'git tag -d unsafe-tag',
+  'git tag -s unsafe-signed HEAD',
+  'git tag -f unsafe-tag HEAD',
+  'git worktree remove /tmp/unsafe-worktree',
+  'git fetch --dry-run origin',
+  'git remote add evil /tmp/evil.git',
+  'git remote set-url origin /tmp/evil.git',
+  'git config user.name evil',
+  'git config set user.name evil',
+  'git config unset user.name',
+  'git config edit',
+  'git config --ed',
+  'git config --edi',
+  'git config -efoo',
+  'git config --definitely-unknown',
+  'git config --local edit',
+  'git config --file /tmp/write.config set user.name evil',
+  'git config -t bool probe.local true',
+  'git config --global -t bool probe.global true',
+  'git config --system -t bool probe.system true',
+  'git config -f /tmp/write.config -t bool probe.file true',
+  'git update-ref refs/heads/evil HEAD',
+  'git symbolic-ref HEAD refs/heads/evil',
+  'git notes add -m evil',
+  'git replace HEAD HEAD^',
+  'git sparse-checkout set scripts',
+  'git submodule add /tmp/evil.git evil',
+  'git maintenance run',
+  'git gc',
+  'git pack-refs --all',
+  'git hook run pre-commit',
+  'git checkout-index -a --prefix=/tmp/unsafe-checkout/',
+  'git commit-graph write --reachable',
+  'git commit-graph --object-dir=.git/objects write --reachable',
+  'git multi-pack-index write',
+  'git multi-pack-index --object-dir=.git/objects write',
+  'git multi-pack-index repack',
+  'git multi-pack-index expire',
+  'git hash-object -w README.md',
+  'git hash-object --path=README.md README.md',
+  'git hash-object --filters README.md',
+  'git commit-tree HEAD^{tree}',
+  'git merge-tree --write-tree HEAD HEAD',
+  'git merge-tree HEAD HEAD',
+  'git format-patch -1 HEAD',
+  'git archive -o /tmp/evil.tar HEAD',
+  'git bundle create /tmp/evil.bundle HEAD',
+  'git bisect start',
+  'git filter-repo --force',
+  'git stash',
+  'git stash pop',
+  'git read-tree HEAD',
+  "git -c alias.evil='!touch /tmp/x' evil",
+  'git --config-env=core.hooksPath=EVIL status',
+  'git --exec-path=/tmp evil',
+  'git --git-dir=.git status',
+  'git --work-tree=/tmp status',
+  'git --namespace=evil status',
+  'git -c core.hooksPath=/tmp status --porcelain',
+  'git diff --ext-diff',
+  'git show --textconv HEAD',
+]) {
+  assert.equal(
+    isSafeBeforeStartShell(command, repositoryRoot),
+    false,
+    `no-state mutating/helper Git command escaped: ${command}`,
+  );
+}
+for (const command of [
+  'pwd',
+  'ls -la',
+  'rg -n task scripts/claude-task.cjs',
+  'grep -n task scripts/claude-task.cjs',
+  "sed -n '1,5p' scripts/claude-task.cjs",
+  'head -n 2 scripts/claude-task.cjs',
+  'tail -n 2 scripts/claude-task.cjs',
+  'wc -l scripts/claude-task.cjs',
+  'stat scripts/claude-task.cjs',
+  'shasum scripts/claude-task.cjs',
+  "printf '{\"ok\":true}' | jq .ok",
+  'diff scripts/claude-task.cjs scripts/claude-task.cjs',
+  'cmp scripts/claude-task.cjs scripts/claude-task.cjs',
+  "printf 'b\\na\\n' | sort | uniq",
+  "printf 'a:b\\n' | cut -d: -f1 | tr a-z A-Z",
+  'date',
+  'uname -a',
+  'which git',
+  'git status --porcelain && git branch --show-current',
+  'git status --porcelain | sed -n "1,5p" || true',
+  'CI=true node --check scripts/claude-task.cjs',
+  'node scripts/claude-task.selftest.cjs --focus=task-state-hooks',
+  'node --help',
+  'npm --version',
+  'npm root',
+  'npm config get registry',
+  'npm config --loglevel silent get registry',
+  'npm --loglevel silent config get registry',
+  'npm run lint',
+  'npm test -- --runInBand',
+  'npm test -- -c ./vitest.config.mjs --passWithNoTests',
+  'npm run build',
+  'npm run build -- --workspace fixture',
+  'npm run -w fixture build',
+  'npm run typecheck',
+  'python3 --version',
+  'python3 -m pytest --version',
+  'git status >/dev/null',
+  'git status >&/dev/null',
+  'git status 2>&1',
+  'git status 2>& 1',
+  'git status 2>&-',
+  'git status 2>& -',
+]) {
+  assert.equal(
+    isSafeBeforeStartShell(command, repositoryRoot),
+    true,
+    `no-state daily safe command rejected: ${command}`,
+  );
+}
+for (const command of [
+  'python3 -c "open(\'/tmp/x\',\'w\').write(\'x\')"',
+  'perl -e "open F, q(>/tmp/x)"',
+  'ruby -e "File.write(\'/tmp/x\', \'x\')"',
+  'awk "BEGIN { system(\\"touch /tmp/x\\") }"',
+  'xargs touch',
+  'make -f /tmp/evil.mk all',
+  'node -e "require(\'fs\').writeFileSync(\'/tmp/x\',\'x\')"',
+  'node -p "require(\'fs\').writeFileSync(\'/tmp/x\',\'x\')"',
+  'node --require=/tmp/evil.cjs scripts/claude-task.cjs context',
+  'node --inspect scripts/claude-task.cjs context',
+  'node ../outside/mutate.cjs',
+  'npm --prefix=/tmp/evil test',
+  'npm --prefix=$COREONE_EXTERNAL test',
+  'npm --config=%COREONE_CONFIG% test',
+  'npm --prefix=.git test',
+  'npm --config=.git/config test',
+  'npm test -- --config=/tmp/evil.mjs',
+  'npm test -- -c /tmp/external-vitest.config.mjs --passWithNoTests',
+  'npm run build -- --config=/tmp/evil.mjs',
+  'npm install',
+  'npm ci',
+  'npm uninstall x',
+  'npm version patch',
+  'npm publish',
+  'npm pub',
+  'npm publ',
+  'npm run deploy',
+  'npm rum deploy',
+  'npm urn release',
+  'npm run --prefix . deploy',
+  'npm --prefix . run deploy',
+  'npm rum --loglevel silent deploy',
+  'npm urn --loglevel silent deploy',
+  'npm --loglevel silent urn deploy',
+  'npm run --workspace fixture deploy',
+  'npm --workspace fixture rum deploy',
+  'npm run deploy -- --workspace fixture',
+  'npm rum -w fixture deploy',
+  'npm -w fixture run deploy',
+  'npm --prefix=后端代码/server start',
+  'npm --prefix=后端代码/server run seed',
+  'npm --prefix=后端代码/server run reset-passwords',
+  'npm config set x y',
+  'npm exec evil',
+  'npx evil',
+  'find . -exec touch /tmp/x ;',
+  'find . -delete',
+  'rg --pre /tmp/evil scripts',
+  'sed -i.bak s/a/b/ scripts/claude-task.cjs',
+  'sort -o /tmp/x scripts/claude-task.cjs',
+  'PATH=/tmp:$PATH git status',
+  'BASH_ENV=/tmp/x sh -c "git status"',
+  'NODE_OPTIONS=--require=/tmp/x node --check scripts/claude-task.cjs',
+  'GIT_CONFIG_COUNT=1 git status',
+  'GIT_DIR=/tmp/evil git status',
+  'GIT_WORK_TREE=/tmp/evil git status',
+  'GIT_SSH_COMMAND=/tmp/evil git status',
+  'GIT_EXTERNAL_DIFF=/tmp/evil git diff',
+  'LD_PRELOAD=/tmp/evil.so git status',
+  'DYLD_INSERT_LIBRARIES=/tmp/evil.dylib git status',
+  'PAGER=/tmp/evil git log -1',
+  'GIT_PAGER=/tmp/evil git log -1',
+  'EDITOR=/tmp/evil git status',
+  'env PATH=/tmp git status',
+  'sudo git status',
+  'nohup git status',
+  'bash -c "git status" > /tmp/x',
+  'git status >&/tmp/x',
+  'git status >& "/tmp/x"',
+  'git status 2>&/tmp/x',
+  'git status 2>& /tmp/x',
+  'git status 2>&"/tmp/x"',
+  'bash -c "git status" >&/tmp/x',
+]) {
+  assert.equal(
+    isSafeBeforeStartShell(command, repositoryRoot),
+    false,
+    `no-state executable/env/write command escaped: ${command}`,
+  );
+}
+assert.equal(
+  isSafeBeforeStartShell('git status > NUL', repositoryRoot),
+  process.platform === 'win32',
+  'NUL is a null device only on Windows; POSIX must treat it as an ordinary file',
+);
+const explicitExecutableSandbox = fs.mkdtempSync(
+  path.join(os.tmpdir(), 'coreone-explicit-executable-'),
+);
+try {
+  const linkedNode = path.join(explicitExecutableSandbox, 'node');
+  const fakeGit = path.join(explicitExecutableSandbox, 'git');
+  const fakeLs = path.join(explicitExecutableSandbox, 'ls');
+  const pathNodeResult = spawnSync('which', ['node'], { encoding: 'utf8' });
+  assert.equal(pathNodeResult.status, 0, pathNodeResult.stderr);
+  fs.symlinkSync(String(pathNodeResult.stdout || '').trim(), linkedNode);
+  fs.writeFileSync(fakeGit, '#!/bin/sh\nexit 0\n', { encoding: 'utf8', mode: 0o755 });
+  fs.writeFileSync(fakeLs, '#!/bin/sh\nexit 0\n', { encoding: 'utf8', mode: 0o755 });
+  assert.equal(
+    isSafeBeforeStartShell(`${JSON.stringify(linkedNode)} --version`, repositoryRoot),
+    true,
+    'an explicit executable may pass only when it is the same physical PATH object',
+  );
+  assert.equal(isSafeBeforeStartShell(`${JSON.stringify(fakeGit)} status`, repositoryRoot), false);
+  assert.equal(isSafeBeforeStartShell(`${JSON.stringify(fakeLs)} -la`, repositoryRoot), false);
+} finally {
+  fs.rmSync(explicitExecutableSandbox, { recursive: true, force: true });
+}
 assert.doesNotThrow(() => assertSafeGitCommand(shellTokens('git status --short'), { mode: 'governed' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git.exe reset --hard'), { mode: 'governed' }));
 assert.throws(() => assertSafeGitCommand(shellTokens('git -C . reset --hard'), { mode: 'governed' }));
@@ -3043,31 +5468,31 @@ assert.doesNotThrow(() =>
 assert.doesNotThrow(() =>
   assertSafeNodeCommand(shellTokens('node --test'), repositoryRoot),
 );
-assert.doesNotThrow(() =>
+assert.throws(() =>
   assertSafeNodeCommand(shellTokens('node -rC:/tmp/evil.cjs scripts/claude-task.cjs'), repositoryRoot),
 );
 assert.doesNotThrow(() =>
   assertSafeNodeCommand(shellTokens('node -pe 1+1'), repositoryRoot),
 );
-assert.doesNotThrow(() =>
+assert.throws(() =>
   assertSafeNodeCommand(shellTokens('node ../outside/mutate.cjs'), repositoryRoot),
 );
-assert.doesNotThrow(() =>
+assert.throws(() =>
   assertSafeNodeCommand(shellTokens(`node "${process.execPath}"`), repositoryRoot),
 );
-assert.doesNotThrow(() =>
+assert.throws(() =>
   assertSafeNodeCommand(
     shellTokens(`node --test scripts/claude-task.selftest.cjs -- "${process.execPath}"`),
     repositoryRoot,
   ),
 );
-assert.doesNotThrow(() =>
+assert.throws(() =>
   assertSafeNodeCommand(
     shellTokens('C:/outside/node.exe scripts/claude-task.cjs'),
     repositoryRoot,
   ),
 );
-assert.doesNotThrow(() =>
+assert.throws(() =>
   assertSafeNodeCommand(
     shellTokens('node scripts/start-production.mjs'),
     repositoryRoot,
@@ -3083,9 +5508,9 @@ try {
     fs.writeFileSync(path.join(targetDirectory, 'task.cjs'), 'process.exitCode = 0;\n');
   }
   for (const entry of ['$ENTRY/task.cjs', '%ENTRY%/task.cjs', '~/task.cjs']) {
-    assert.doesNotThrow(
+    assert.throws(
       () => assertSafeNodeCommand(shellTokens(`node ${entry}`), expandableNodeRoot),
-      `${entry} must not be rejected merely because the shell will expand it`,
+      `${entry} must fail closed because the runtime entry is not physically auditable`,
     );
   }
 } finally {
@@ -3238,10 +5663,11 @@ assert.equal(runGuard(path.join(os.homedir(), 'secret.txt'), repositoryRoot), 2)
 assert.equal(runGuard(path.join(repositoryRoot, 'README.md'), repositoryRoot), 2);
 
 // shell-guard 子进程端到端：无 task state 时可以建立合规任务 worktree，危险变体继续拒绝。
-function runShellGuard(command, cwd) {
+function runShellGuard(command, cwd, options = {}) {
   const result = spawnSync(process.execPath, [path.join(__dirname, 'claude-task.cjs'), 'shell-guard'], {
     input: JSON.stringify({ tool_input: { command }, cwd }),
     encoding: 'utf8',
+    env: options.env || process.env,
   });
   return result.status ?? 2;
 }
@@ -3259,6 +5685,991 @@ assert.equal(
   ),
   2,
 );
+
+// 失效 task state 生命周期端到端：历史 state 不再有授权效力，但也不能让新会话
+// 在只读诊断、PostToolUse audit、Stop 或重新 start 上形成死锁。
+function runIsolatedTaskStateHookMatrix(stateKind) {
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-task-state-hooks-'));
+  const repo = path.join(sandbox, 'repo');
+  const taskScript = path.join(__dirname, 'claude-task.cjs');
+  const runGit = (args) => {
+    const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+    assert.equal(result.status, 0, `git ${args.join(' ')}: ${result.stderr || result.stdout}`);
+    return String(result.stdout || '').trim();
+  };
+  const runTask = (command, input = null, args = []) => {
+    const result = spawnSync(process.execPath, [taskScript, command, ...args], {
+      cwd: repo,
+      input: input === null ? undefined : JSON.stringify({ cwd: repo, ...input }),
+      encoding: 'utf8',
+    });
+    return {
+      status: result.status,
+      stdout: String(result.stdout || ''),
+      stderr: String(result.stderr || ''),
+    };
+  };
+  const shell = (command, hook = 'shell-guard') =>
+    runTask(hook, { tool_name: 'Bash', tool_input: { command } });
+  const mcp = (toolName, hook = 'mcp-guard') =>
+    runTask(hook, { tool_name: toolName, tool_input: {} });
+  const edit = (filePath) =>
+    runTask('guard', { tool_name: 'Edit', tool_input: { file_path: filePath } });
+
+  try {
+    fs.mkdirSync(repo, { recursive: true });
+    runGit(['init', '--initial-branch=state-test']);
+    runGit(['config', 'user.name', 'Task State Hook Test']);
+    runGit(['config', 'user.email', 'task-state@example.invalid']);
+    fs.writeFileSync(path.join(repo, 'seed.cjs'), "'use strict';\n", 'utf8');
+    fs.writeFileSync(path.join(repo, 'legacy-owned.txt'), 'legacy\n', 'utf8');
+    fs.writeFileSync(path.join(repo, 'fresh-owned.txt'), 'fresh\n', 'utf8');
+    fs.writeFileSync(path.join(repo, 'excluded.txt'), 'excluded\n', 'utf8');
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed task state hook fixture']);
+    const head = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', head]);
+    const statePath = runGit([
+      'rev-parse',
+      '--path-format=absolute',
+      '--git-path',
+      'coreone/claude-task-state.json',
+    ]);
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    const governedLiveStale = stateKind === 'governed-live-stale';
+    const governedFixture = governedLiveStale || stateKind === 'governed-forged';
+    const stateStartedAt = new Date(
+      Date.now() - (
+        stateKind === 'expired'
+          ? 13 * 60 * 60 * 1_000
+          : governedLiveStale
+            ? 12 * 60 * 1_000
+            : 2_000
+      ),
+    );
+    const stateVerifiedAt = new Date(
+      Date.now() - (governedLiveStale ? 11 * 60 * 1_000 : 1_000),
+    );
+    if (stateKind === 'future-started') {
+      stateStartedAt.setTime(Date.now() + 60 * 60 * 1_000);
+      stateVerifiedAt.setTime(stateStartedAt.getTime() + 1_000);
+    } else if (stateKind === 'clock-skew-valid') {
+      stateStartedAt.setTime(Date.now() + 60 * 1_000);
+      stateVerifiedAt.setTime(stateStartedAt.getTime() + 1_000);
+    } else if (stateKind === 'future-verified') {
+      stateVerifiedAt.setTime(Date.now() + 60 * 60 * 1_000);
+    } else if (stateKind === 'verified-before-started') {
+      stateVerifiedAt.setTime(stateStartedAt.getTime() - 1_000);
+    }
+    const baseState = {
+      version: 2,
+      mode: governedFixture ? 'governed' : 'r0',
+      stage: governedFixture ? 'implementation' : 'r0',
+      risk: governedFixture ? 'R1' : 'R0',
+      reason: 'isolated task state hook matrix',
+      branch: stateKind === 'branch-mismatch' ? 'other-task-branch' : 'state-test',
+      baseSha: head,
+      startedHead: stateKind === 'nonexistent-head' ? 'f'.repeat(40) : head,
+      startedAt: stateStartedAt.toISOString(),
+      verifiedAt: stateVerifiedAt.toISOString(),
+      owned: stateKind === 'unsafe-owned' ? ['.git/**'] : ['legacy-owned.txt'],
+      excluded: ['excluded.txt'],
+    };
+    if (governedFixture) {
+      Object.assign(baseState, {
+        issue: 81,
+        issueUrl: stateKind === 'governed-forged'
+          ? 'file:///tmp/forged'
+          : 'https://github.com/acme/coreone/issues/81',
+        issueTitle: 'Governed state fixture',
+        issueBodyHash: 'a'.repeat(64),
+        issuePriority: 'P1',
+        issueReleaseImpact: '阻断上线',
+        owner: 'Task State Hook Test',
+      });
+    }
+    if (stateKind === 'r0-missing-reason') delete baseState.reason;
+    if (stateKind === 'r0-short-reason') baseState.reason = 'tiny';
+    let linkedExternalState = null;
+    if (stateKind === 'malformed') {
+      fs.writeFileSync(statePath, '{"version":2,"mode":"r0",', 'utf8');
+    } else if (stateKind === 'state-symlink') {
+      linkedExternalState = path.join(sandbox, 'external-state.json');
+      fs.writeFileSync(linkedExternalState, `${JSON.stringify(baseState, null, 2)}\n`, 'utf8');
+      fs.symlinkSync(linkedExternalState, statePath);
+    } else if (stateKind === 'state-hardlink') {
+      linkedExternalState = path.join(sandbox, 'external-state.json');
+      fs.writeFileSync(linkedExternalState, `${JSON.stringify(baseState, null, 2)}\n`, 'utf8');
+      fs.linkSync(linkedExternalState, statePath);
+    } else if (stateKind === 'state-directory-symlink') {
+      const externalDirectory = path.join(sandbox, 'external-coreone');
+      fs.mkdirSync(externalDirectory);
+      linkedExternalState = path.join(externalDirectory, path.basename(statePath));
+      fs.writeFileSync(linkedExternalState, `${JSON.stringify(baseState, null, 2)}\n`, 'utf8');
+      fs.rmdirSync(path.dirname(statePath));
+      fs.symlinkSync(externalDirectory, path.dirname(statePath));
+    } else if (stateKind !== 'missing') {
+      fs.writeFileSync(statePath, `${JSON.stringify(baseState, null, 2)}\n`, 'utf8');
+    }
+    const stateBeforeHooks = fs.existsSync(statePath)
+      ? fs.readFileSync(statePath, 'utf8')
+      : null;
+    const linkedExternalBefore = linkedExternalState
+      ? fs.readFileSync(linkedExternalState, 'utf8')
+      : null;
+
+    const result = {
+      stateKind,
+      context: runTask('context'),
+      safeReadHead: shell('git rev-parse HEAD'),
+      safeReadStatus: shell('git status --porcelain'),
+      safeDiagnosticPipeline: shell(
+        'git status --porcelain | sed -n "1,5p" || true',
+      ),
+      safeTextPipeline: shell("printf 'abc\\n' | sed -n '1p'"),
+      safeNodeVersion: shell('node --version'),
+      safeBuild: shell('node --check seed.cjs && npm test -- --runInBand'),
+      safeGhRead: shell('gh issue view 81 --json state,body'),
+      repoMutation: shell('touch legacy-owned.txt'),
+      redirectionWrite: shell('printf no > legacy-owned.txt'),
+      gitAddNoArgs: shell('git add'),
+      gitAdd: shell('git add seed.cjs'),
+      gitCommit: shell('git commit -m stale-state-must-not-authorize'),
+      gitBranchMutation: shell('git branch stale-state-must-not-authorize'),
+      gitPush: shell('git push origin state-test'),
+      githubWrite: shell('gh issue comment 81 --body no'),
+      destructive: shell('rm -rf /'),
+      shellAudit: shell('git status --porcelain', 'audit'),
+      mcpRead: mcp('mcp__example__search_items'),
+      mcpReadAudit: mcp('mcp__example__search_items', 'audit'),
+      mcpWrite: mcp('mcp__example__create_item'),
+      githubMcpWrite: mcp('mcp__github__create_issue'),
+      editLegacyOwned: edit('legacy-owned.txt'),
+      editExcluded: edit('excluded.txt'),
+      memoryEditException: edit(
+        path.join(os.homedir(), '.claude', 'projects', 'hook-matrix', 'memory', 'note.md'),
+      ),
+      memoryNeighborEdit: edit(
+        path.join(os.homedir(), '.claude', 'projects', 'hook-matrix', 'memoryx', 'note.md'),
+      ),
+      stop: runTask('stop', { stop_hook_active: false }),
+    };
+    if (stateKind === 'missing') {
+      result.safeShellMatrix = Object.fromEntries([
+        'git branch --show-current',
+        'git branch --list',
+        'git branch -a',
+        'git tag',
+        'git tag --list',
+        'git worktree list --porcelain',
+        'git config --get user.name',
+        'git config get user.name',
+        'git config list',
+        'git -P status --short',
+        'git blame seed.cjs',
+        'git check-ignore seed.cjs',
+        'git remote -v',
+        'git symbolic-ref --short HEAD',
+        'git notes list',
+        'git replace --list',
+        'git sparse-checkout list',
+        'git submodule status',
+        'git stash list',
+        'git stash show',
+        'git hash-object seed.cjs',
+        'git format-patch --stdout -1 HEAD',
+        'git archive HEAD > /dev/null',
+        'pwd',
+        'ls -la',
+        'rg -n strict seed.cjs',
+        "sed -n '1p' seed.cjs",
+        'head -n 1 seed.cjs | wc -l',
+        'stat seed.cjs',
+        'shasum seed.cjs',
+        "printf '{\"ok\":true}' | jq .ok",
+        'cmp seed.cjs seed.cjs',
+        "printf 'b\\na\\n' | sort | uniq",
+        'node --check seed.cjs',
+        'node --help',
+        'npm --version',
+        'npm test -- --runInBand',
+        'npm run build',
+        'npm run typecheck',
+        'python3 --version',
+        'python3 -m pytest --version',
+        'bash -c "git status" > /dev/null',
+        'git status >&/dev/null',
+        'git status 2>&1',
+        'git status 2>& 1',
+        'git status 2>&-',
+      ].map((command) => [command, shell(command).status]));
+      result.unsafeShellMatrix = Object.fromEntries([
+        'git branch unsafe-new-branch',
+        'git tag unsafe-tag',
+        'git worktree remove /tmp/unsafe-worktree',
+        'git fetch --dry-run origin',
+        'git remote add evil /tmp/evil.git',
+        'git remote set-url origin /tmp/evil.git',
+        'git config user.name evil',
+        'git config set user.name evil',
+        'git config edit',
+        'git update-ref refs/heads/evil HEAD',
+        'git symbolic-ref HEAD refs/heads/evil',
+        'git notes add -m evil',
+        'git replace HEAD HEAD^',
+        'git sparse-checkout set scripts',
+        'git submodule add /tmp/evil.git evil',
+        'git maintenance run',
+        'git gc',
+        'git pack-refs --all',
+        'git hash-object -w seed.cjs',
+        'git hash-object --path=seed.cjs seed.cjs',
+        'git hash-object --filters seed.cjs',
+        'git commit-tree HEAD^{tree}',
+        'git merge-tree --write-tree HEAD HEAD',
+        'git merge-tree HEAD HEAD',
+        'git format-patch -1 HEAD',
+        'git archive -o /tmp/evil.tar HEAD',
+        'git bundle create /tmp/evil.bundle HEAD',
+        'git bisect start',
+        'git filter-repo --force',
+        'git stash',
+        'git stash pop',
+        'git read-tree HEAD',
+        "git -c alias.evil='!touch /tmp/x' evil",
+        'git --exec-path=/tmp evil',
+        'git -c core.hooksPath=/tmp status --porcelain',
+        'git diff --ext-diff',
+        'git show --textconv HEAD',
+        'python3 -c "open(\'/tmp/x\',\'w\').write(\'x\')"',
+        'perl -e "open F, q(>/tmp/x)"',
+        'ruby -e "File.write(\'/tmp/x\', \'x\')"',
+        'awk "BEGIN { system(\\"touch /tmp/x\\") }"',
+        'xargs touch',
+        'make -f /tmp/evil.mk all',
+        'node -e "require(\'fs\').writeFileSync(\'/tmp/x\',\'x\')"',
+        'node --require=/tmp/evil.cjs seed.cjs',
+        'node --inspect seed.cjs',
+        'npm --prefix=/tmp/evil test',
+        'npm test -- --config=/tmp/evil.mjs',
+        'npm run build -- --config=/tmp/evil.mjs',
+        'npm install',
+        'npm ci',
+        'npm exec evil',
+        'npx evil',
+        'find . -exec touch /tmp/x ;',
+        'find . -delete',
+        'rg --pre /tmp/evil seed.cjs',
+        'sed -i.bak s/a/b/ seed.cjs',
+        'PATH=/tmp:$PATH git status',
+        'BASH_ENV=/tmp/x sh -c "git status"',
+        'NODE_OPTIONS=--require=/tmp/x node --check seed.cjs',
+        'GIT_CONFIG_COUNT=1 git status',
+        'GIT_DIR=/tmp/evil git status',
+        'GIT_WORK_TREE=/tmp/evil git status',
+        'GIT_SSH_COMMAND=/tmp/evil git status',
+        'GIT_EXTERNAL_DIFF=/tmp/evil git diff',
+        'LD_PRELOAD=/tmp/evil.so git status',
+        'DYLD_INSERT_LIBRARIES=/tmp/evil.dylib git status',
+        'PAGER=/tmp/evil git log -1',
+        'GIT_PAGER=/tmp/evil git log -1',
+        'EDITOR=/tmp/evil git status',
+        'env PATH=/tmp git status',
+        'sudo git status',
+        'nohup git status',
+        'bash -c "git status" > /tmp/x',
+        'git status >&/tmp/x',
+        'git status >& "/tmp/x"',
+        'git status 2>&/tmp/x',
+        'git status 2>& /tmp/x',
+        'git status 2>&"/tmp/x"',
+        'bash -c "git status" >&/tmp/x',
+        '/tmp/git status',
+        '/tmp/node --version',
+        '/tmp/ls',
+      ].map((command) => [command, shell(command).status]));
+      result.platformNullRedirection = shell('git status > NUL').status;
+      result.namedMcpReads = Object.fromEntries([
+        'mcp__codegraph__codegraph_explore',
+        'mcp__example__read_item',
+        'mcp__example__search_items',
+        'mcp__example__query_items',
+      ].map((toolName) => [toolName, mcp(toolName).status]));
+      result.namedMcpWrites = Object.fromEntries([
+        'mcp__example__create_item',
+        'mcp__example__update_item',
+        'mcp__example__delete_item',
+        'mcp__example__comment_item',
+        'mcp__example__post_item',
+        'mcp__example__put_item',
+        'mcp__example__patch_item',
+        'mcp__example__merge_item',
+        'mcp__example__close_item',
+        'mcp__example__query_update_item',
+      ].map((toolName) => [toolName, mcp(toolName).status]));
+      result.ambiguousMcp = mcp('mcp__example__run_item').status;
+    }
+    if (stateKind === 'valid') {
+      fs.writeFileSync(path.join(repo, 'excluded.txt'), 'outside task scope\n', 'utf8');
+      result.gitAddOutsideScope = shell('git add excluded.txt');
+      runGit(['add', 'excluded.txt']);
+      result.postAuditOutsideScope = shell('git add excluded.txt', 'audit');
+      runGit(['reset', '--hard', 'HEAD']);
+    }
+    result.statePreservedBeforeRestart = stateBeforeHooks === (
+      fs.existsSync(statePath) ? fs.readFileSync(statePath, 'utf8') : null
+    );
+
+    result.restart = runTask(
+      'start-r0',
+      null,
+      [
+        '--reason=fresh explicit recovery contract',
+        '--owned=fresh-owned.txt',
+        '--excluded=excluded.txt',
+      ],
+    );
+    const stateAfterRestartRaw = fs.existsSync(statePath)
+      ? fs.readFileSync(statePath, 'utf8')
+      : null;
+    try {
+      result.stateAfterRestart = stateAfterRestartRaw
+        ? JSON.parse(stateAfterRestartRaw)
+        : null;
+    } catch {
+      result.stateAfterRestart = null;
+    }
+    result.oldScopeAfterRestart = shell('touch legacy-owned.txt');
+    result.freshScopeAfterRestart = shell('touch fresh-owned.txt');
+    result.excludedAfterRestart = shell('touch excluded.txt');
+    result.linkedExternalPreservedAfterRestart = linkedExternalState
+      ? fs.readFileSync(linkedExternalState, 'utf8') === linkedExternalBefore
+      : null;
+    return result;
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+const taskStateHookMatrix = new Map(
+  [
+    'missing',
+    'valid',
+    'clock-skew-valid',
+    'expired',
+    'malformed',
+    'branch-mismatch',
+    'unsafe-owned',
+    'future-started',
+    'future-verified',
+    'verified-before-started',
+    'nonexistent-head',
+    'r0-missing-reason',
+    'r0-short-reason',
+    'governed-forged',
+    'state-symlink',
+    'state-hardlink',
+    'state-directory-symlink',
+    'governed-live-stale',
+  ]
+    .map((stateKind) => [stateKind, runIsolatedTaskStateHookMatrix(stateKind)]),
+);
+for (const stateKind of [
+  'expired',
+  'malformed',
+  'branch-mismatch',
+  'unsafe-owned',
+  'future-started',
+  'future-verified',
+  'verified-before-started',
+  'nonexistent-head',
+  'r0-missing-reason',
+  'r0-short-reason',
+  'governed-forged',
+  'missing',
+]) {
+  const result = taskStateHookMatrix.get(stateKind);
+  assert.deepEqual(
+    {
+      context: result.context.status,
+      safeReadHead: result.safeReadHead.status,
+      safeReadStatus: result.safeReadStatus.status,
+      safeDiagnosticPipeline: result.safeDiagnosticPipeline.status,
+      safeTextPipeline: result.safeTextPipeline.status,
+      safeNodeVersion: result.safeNodeVersion.status,
+      safeBuild: result.safeBuild.status,
+      safeGhRead: result.safeGhRead.status,
+      shellAudit: result.shellAudit.status,
+      mcpRead: result.mcpRead.status,
+      mcpReadAudit: result.mcpReadAudit.status,
+      stop: result.stop.status,
+      restart: result.restart.status,
+    },
+    {
+      context: 0,
+      safeReadHead: 0,
+      safeReadStatus: 0,
+      safeDiagnosticPipeline: 0,
+      safeTextPipeline: 0,
+      safeNodeVersion: 0,
+      safeBuild: 0,
+      safeGhRead: 0,
+      shellAudit: 0,
+      mcpRead: 0,
+      mcpReadAudit: 0,
+      stop: 0,
+      restart: 0,
+    },
+    `${stateKind}: safe diagnostics, audit, Stop, and explicit restart must not deadlock`,
+  );
+  assert.deepEqual(
+    {
+      repoMutation: result.repoMutation.status,
+      redirectionWrite: result.redirectionWrite.status,
+      gitAddNoArgs: result.gitAddNoArgs.status,
+      gitAdd: result.gitAdd.status,
+      gitCommit: result.gitCommit.status,
+      gitBranchMutation: result.gitBranchMutation.status,
+      gitPush: result.gitPush.status,
+      githubWrite: result.githubWrite.status,
+      destructive: result.destructive.status,
+      mcpWrite: result.mcpWrite.status,
+      githubMcpWrite: result.githubMcpWrite.status,
+      editLegacyOwned: result.editLegacyOwned.status,
+      editExcluded: result.editExcluded.status,
+      memoryNeighborEdit: result.memoryNeighborEdit.status,
+    },
+    {
+      repoMutation: 2,
+      redirectionWrite: 2,
+      gitAddNoArgs: 2,
+      gitAdd: 2,
+      gitCommit: 2,
+      gitBranchMutation: 2,
+      gitPush: 2,
+      githubWrite: 2,
+      destructive: 2,
+      mcpWrite: 2,
+      githubMcpWrite: 2,
+      editLegacyOwned: 2,
+      editExcluded: 2,
+      memoryNeighborEdit: 2,
+    },
+    `${stateKind}: no historical scope or external side effect may remain authorized`,
+  );
+  assert.equal(
+    result.statePreservedBeforeRestart,
+    true,
+    `${stateKind}: hook checks must not delete or rewrite historical state`,
+  );
+  assert.deepEqual(
+    result.stateAfterRestart?.owned,
+    ['fresh-owned.txt'],
+    `${stateKind}: explicit restart must replace, not inherit, historical owned scope`,
+  );
+  assert.equal(
+    result.oldScopeAfterRestart.status,
+    2,
+    `${stateKind}: old owned scope survived restart: ` +
+      `${JSON.stringify({ hook: result.oldScopeAfterRestart, state: result.stateAfterRestart })}`,
+  );
+  assert.equal(result.freshScopeAfterRestart.status, 0, `${stateKind}: fresh owned scope was not active`);
+  assert.equal(result.excludedAfterRestart.status, 2, `${stateKind}: excluded gate regressed`);
+  assert.equal(
+    result.memoryEditException.status,
+    0,
+    `${stateKind}: the PM-approved Claude memory exception must remain narrowly available`,
+  );
+  if (stateKind !== 'missing') {
+    assert.match(
+      result.context.stdout,
+      /inactive historical task state|不具备授权效力/i,
+      `${stateKind}: SessionStart must identify historical state as non-authoritative`,
+    );
+  }
+}
+
+for (const stateKind of ['state-symlink', 'state-hardlink', 'state-directory-symlink']) {
+  const result = taskStateHookMatrix.get(stateKind);
+  assert.equal(result.context.status, 0, `${stateKind}: context must remain diagnostic`);
+  assert.equal(result.safeReadHead.status, 0, `${stateKind}: safe Git reads must remain usable`);
+  assert.equal(result.safeBuild.status, 0, `${stateKind}: trusted checks must remain usable`);
+  assert.equal(result.repoMutation.status, 2, `${stateKind}: linked state must not authorize writes`);
+  assert.equal(result.editLegacyOwned.status, 2, `${stateKind}: linked state scope must be ignored`);
+  assert.equal(result.restart.status, 1, `${stateKind}: atomic state write must reject linked target`);
+  assert.equal(result.statePreservedBeforeRestart, true, `${stateKind}: hook reads changed linked state`);
+  assert.equal(
+    result.linkedExternalPreservedAfterRestart,
+    true,
+    `${stateKind}: restart followed the linked state and overwrote its external peer`,
+  );
+  assert.equal(result.freshScopeAfterRestart.status, 2, `${stateKind}: failed restart granted scope`);
+  assert.match(result.restart.stderr, /symlink|hardlink|link-count|私有治理文件/i);
+}
+
+const validTaskStateHooks = taskStateHookMatrix.get('valid');
+assert.deepEqual(
+  {
+    safeReadHead: validTaskStateHooks.safeReadHead.status,
+    safeReadStatus: validTaskStateHooks.safeReadStatus.status,
+    safeBuild: validTaskStateHooks.safeBuild.status,
+    ownedWrite: validTaskStateHooks.repoMutation.status,
+    gitAdd: validTaskStateHooks.gitAdd.status,
+    gitCommit: validTaskStateHooks.gitCommit.status,
+    oldOwnedEdit: validTaskStateHooks.editLegacyOwned.status,
+    excludedWrite: validTaskStateHooks.editExcluded.status,
+    githubWrite: validTaskStateHooks.githubWrite.status,
+    destructive: validTaskStateHooks.destructive.status,
+    stop: validTaskStateHooks.stop.status,
+    restart: validTaskStateHooks.restart.status,
+    gitAddOutsideScope: validTaskStateHooks.gitAddOutsideScope.status,
+    postAuditOutsideScope: validTaskStateHooks.postAuditOutsideScope.status,
+  },
+  {
+    safeReadHead: 0,
+    safeReadStatus: 0,
+    safeBuild: 0,
+    ownedWrite: 0,
+    gitAdd: 0,
+    gitCommit: 0,
+    oldOwnedEdit: 0,
+    excludedWrite: 2,
+    githubWrite: 2,
+    destructive: 2,
+    stop: 2,
+    restart: 1,
+    gitAddOutsideScope: 2,
+    postAuditOutsideScope: 2,
+  },
+  'valid task state must retain existing owned, high-risk, Stop, and no-overwrite gates',
+);
+assert.equal(validTaskStateHooks.statePreservedBeforeRestart, true);
+const clockSkewValidHooks = taskStateHookMatrix.get('clock-skew-valid');
+assert.equal(clockSkewValidHooks.safeReadHead.status, 0);
+assert.equal(clockSkewValidHooks.repoMutation.status, 0);
+assert.equal(clockSkewValidHooks.editLegacyOwned.status, 0);
+assert.equal(clockSkewValidHooks.restart.status, 1);
+assert.deepEqual(
+  taskStateHookMatrix.get('missing').namedMcpReads,
+  {
+    mcp__codegraph__codegraph_explore: 0,
+    mcp__example__read_item: 0,
+    mcp__example__search_items: 0,
+    mcp__example__query_items: 0,
+  },
+  'known read/search/query/explore MCP tools must remain available without task state',
+);
+assert.deepEqual(
+  taskStateHookMatrix.get('missing').namedMcpWrites,
+  {
+    mcp__example__create_item: 2,
+    mcp__example__update_item: 2,
+    mcp__example__delete_item: 2,
+    mcp__example__comment_item: 2,
+    mcp__example__post_item: 2,
+    mcp__example__put_item: 2,
+    mcp__example__patch_item: 2,
+    mcp__example__merge_item: 2,
+    mcp__example__close_item: 2,
+    mcp__example__query_update_item: 2,
+  },
+  'structured MCP write names, including query_* writers, require active task state',
+);
+assert.equal(
+  taskStateHookMatrix.get('missing').ambiguousMcp,
+  0,
+  'contract §5 keeps ambiguous MCP names observable instead of default-denying them by name alone',
+);
+for (const [command, status] of Object.entries(
+  taskStateHookMatrix.get('missing').safeShellMatrix,
+)) {
+  assert.equal(status, 0, `real shell-guard blocked safe no-state command: ${command}`);
+}
+for (const [command, status] of Object.entries(
+  taskStateHookMatrix.get('missing').unsafeShellMatrix,
+)) {
+  assert.equal(status, 2, `real shell-guard allowed unsafe no-state command: ${command}`);
+}
+assert.equal(
+  taskStateHookMatrix.get('missing').platformNullRedirection,
+  process.platform === 'win32' ? 0 : 2,
+  'real shell-guard must recognize only the current platform null device',
+);
+
+const governedLiveStaleHooks = taskStateHookMatrix.get('governed-live-stale');
+assert.deepEqual(
+  {
+    context: governedLiveStaleHooks.context.status,
+    safeReadHead: governedLiveStaleHooks.safeReadHead.status,
+    safeTextPipeline: governedLiveStaleHooks.safeTextPipeline.status,
+    safeNodeVersion: governedLiveStaleHooks.safeNodeVersion.status,
+    safeBuild: governedLiveStaleHooks.safeBuild.status,
+    shellAudit: governedLiveStaleHooks.shellAudit.status,
+    mcpReadAudit: governedLiveStaleHooks.mcpReadAudit.status,
+    ownedWrite: governedLiveStaleHooks.repoMutation.status,
+    gitAdd: governedLiveStaleHooks.gitAdd.status,
+    mcpWrite: governedLiveStaleHooks.mcpWrite.status,
+    stop: governedLiveStaleHooks.stop.status,
+    restart: governedLiveStaleHooks.restart.status,
+  },
+  {
+    context: 0,
+    safeReadHead: 0,
+    safeTextPipeline: 0,
+    safeNodeVersion: 0,
+    safeBuild: 0,
+    shellAudit: 0,
+    mcpReadAudit: 0,
+    ownedWrite: 2,
+    gitAdd: 2,
+    mcpWrite: 2,
+    stop: 2,
+    restart: 1,
+  },
+  'stale live verification must not block safe diagnostics but must fail closed for writes',
+);
+assert.equal(
+  governedLiveStaleHooks.statePreservedBeforeRestart,
+  true,
+  'failed live rechecks must preserve the locally valid task state for diagnosis',
+);
+
+function runIsolatedOwnedScopeStarts() {
+  const taskScript = path.join(__dirname, 'claude-task.cjs');
+  const unsafeScopes = [
+    '**',
+    '*',
+    '**/*',
+    '*/**',
+    '.',
+    '.git/**',
+    '**/.git/**',
+    '.git/coreone/claude-task-state.json',
+    '.git/hooks/*',
+    '.git/refs/*',
+    '.git/info/*',
+    '*/hooks/*',
+    '**/hooks/*',
+    '.g?t/hooks/*',
+    '.git/hooks/pre-*',
+    '../escape.txt',
+    path.join(os.tmpdir(), 'absolute-owned.txt'),
+    'C:\\temp\\absolute-owned.txt',
+    'scripts/../.git/**',
+  ];
+
+  function initializeSmallRepo(prefix) {
+    const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    const repo = path.join(sandbox, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    const runGit = (args) => {
+      const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8' });
+      assert.equal(result.status, 0, `git ${args.join(' ')}: ${result.stderr || result.stdout}`);
+      return String(result.stdout || '').trim();
+    };
+    runGit(['init', '--initial-branch=owned-scope-test']);
+    runGit(['config', 'user.name', 'Owned Scope Test']);
+    runGit(['config', 'user.email', 'owned-scope@example.invalid']);
+    fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'src', 'exact.txt'), 'exact\n', 'utf8');
+    runGit(['add', '.']);
+    runGit(['commit', '-m', 'test: seed owned scope repo']);
+    const head = runGit(['rev-parse', 'HEAD']);
+    runGit(['update-ref', 'refs/remotes/origin/master', head]);
+    const statePath = runGit([
+      'rev-parse',
+      '--path-format=absolute',
+      '--git-path',
+      'coreone/claude-task-state.json',
+    ]);
+    return { sandbox, repo, statePath };
+  }
+
+  const r0Fixture = initializeSmallRepo('coreone-owned-scope-r0-');
+  const r0 = { rejected: {}, legal: null, state: null };
+  try {
+    for (const scope of unsafeScopes) {
+      const result = spawnSync(
+        process.execPath,
+        [
+          taskScript,
+          'start-r0',
+          '--reason=owned scope subprocess fixture',
+          `--owned=${scope}`,
+        ],
+        { cwd: r0Fixture.repo, encoding: 'utf8' },
+      );
+      r0.rejected[scope] = { status: result.status, stderr: String(result.stderr || '') };
+      if (fs.existsSync(r0Fixture.statePath)) fs.unlinkSync(r0Fixture.statePath);
+    }
+    r0.legal = spawnSync(
+      process.execPath,
+      [
+        taskScript,
+        'start-r0',
+        '--reason=legal owned scope subprocess fixture',
+        '--owned=src/exact.txt',
+        '--owned=src/*.txt',
+        '--owned=src/**',
+        '--owned=.gitignore',
+      ],
+      { cwd: r0Fixture.repo, encoding: 'utf8' },
+    );
+    r0.state = JSON.parse(fs.readFileSync(r0Fixture.statePath, 'utf8'));
+    const runR0Hook = (hook, input) => spawnSync(
+      process.execPath,
+      [taskScript, hook],
+      {
+        cwd: r0Fixture.repo,
+        input: JSON.stringify({ cwd: r0Fixture.repo, ...input }),
+        encoding: 'utf8',
+      },
+    );
+    r0.editGitMetadata = runR0Hook('guard', {
+      tool_name: 'Edit',
+      tool_input: { file_path: path.join(r0Fixture.repo, 'src', '.git', 'config') },
+    });
+    r0.shellGitMetadata = runR0Hook('shell-guard', {
+      tool_name: 'Bash',
+      tool_input: { command: 'printf no > src/nested/.git/hooks/pre-commit' },
+    });
+    r0.repoUnderTmpOutsideOwned = runR0Hook('shell-guard', {
+      tool_name: 'Bash',
+      tool_input: { command: 'touch outside-owned.txt' },
+    });
+    r0.tmpAliases = Object.fromEntries(
+      (
+        process.platform === 'win32'
+          ? [path.join(os.tmpdir(), 'coreone-active-temp.txt')]
+          : [
+              path.join(os.tmpdir(), 'coreone-active-temp.txt'),
+              '/tmp/coreone-active-temp.txt',
+              '/var/tmp/coreone-active-temp.txt',
+              '/private/var/tmp/coreone-active-temp.txt',
+            ]
+      ).map((target) => [
+        target,
+        runR0Hook('shell-guard', {
+          tool_name: 'Bash',
+          tool_input: { command: `printf ok > ${JSON.stringify(target)}` },
+        }).status,
+      ]),
+    );
+    if (process.platform !== 'win32') {
+      const logicalRepo = path.join(r0Fixture.sandbox, 'repo-logical-link');
+      fs.symlinkSync(r0Fixture.repo, logicalRepo);
+      const runLogicalGuard = (filePath) => spawnSync(
+        process.execPath,
+        [taskScript, 'guard'],
+        {
+          cwd: logicalRepo,
+          input: JSON.stringify({
+            cwd: logicalRepo,
+            tool_name: 'Edit',
+            tool_input: { file_path: filePath },
+          }),
+          encoding: 'utf8',
+        },
+      );
+      r0.logicalPhysicalOwned = runLogicalGuard('src/exact.txt');
+      r0.logicalPhysicalGitMetadata = runLogicalGuard('src/.git/config');
+    }
+  } finally {
+    fs.rmSync(r0Fixture.sandbox, { recursive: true, force: true });
+  }
+
+  const governedSandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-owned-scope-governed-'));
+  const governedRemote = path.join(governedSandbox, 'origin.git');
+  const governedRepo = path.join(governedSandbox, 'repo');
+  const fakeBin = path.join(governedSandbox, 'bin');
+  const governed = { rejected: {}, legal: null, state: null };
+  try {
+    let upstreamMaster = '';
+    const upstreamMasterErrors = [];
+    for (const candidate of ['origin/master', 'HEAD']) {
+      const result = spawnSync(
+        'git',
+        ['rev-parse', '--verify', `${candidate}^{commit}`],
+        { cwd: repositoryRoot, encoding: 'utf8' },
+      );
+      if (result.status === 0) {
+        upstreamMaster = String(result.stdout || '').trim();
+        break;
+      }
+      upstreamMasterErrors.push(String(result.stderr || result.stdout || '').trim());
+    }
+    assert.ok(
+      upstreamMaster,
+      upstreamMasterErrors.filter(Boolean).join('\n') || 'cannot resolve an isolated master fixture commit',
+    );
+    const bareClone = spawnSync(
+      'git',
+      ['clone', '--bare', '--no-local', repositoryRoot, governedRemote],
+      { encoding: 'utf8' },
+    );
+    assert.equal(bareClone.status, 0, bareClone.stderr || bareClone.stdout);
+    const publishMaster = spawnSync(
+      'git',
+      ['update-ref', 'refs/heads/master', upstreamMaster],
+      { cwd: governedRemote, encoding: 'utf8' },
+    );
+    assert.equal(publishMaster.status, 0, publishMaster.stderr || publishMaster.stdout);
+    const clone = spawnSync(
+      'git',
+      ['clone', '--no-local', governedRemote, governedRepo],
+      { encoding: 'utf8' },
+    );
+    assert.equal(clone.status, 0, clone.stderr || clone.stdout);
+    const runGit = (args) => {
+      const result = spawnSync('git', args, { cwd: governedRepo, encoding: 'utf8' });
+      assert.equal(result.status, 0, `git ${args.join(' ')}: ${result.stderr || result.stdout}`);
+      return String(result.stdout || '').trim();
+    };
+    runGit(['config', 'user.name', 'Governed Owned Scope Test']);
+    runGit(['config', 'user.email', 'governed-scope@example.invalid']);
+    runGit(['switch', '-c', 'governed-owned-scope-test']);
+    fs.mkdirSync(fakeBin, { recursive: true });
+    const fakeGh = path.join(fakeBin, 'gh');
+    fs.writeFileSync(fakeGh, `#!/usr/bin/env node
+'use strict';
+const args = process.argv.slice(2);
+if (args[0] === 'issue' && args[1] === 'view') {
+  console.log(JSON.stringify({
+    state: 'OPEN',
+    body: '<!-- coreone-owner:start -->\\n- **current owner**: Scope Owner\\n<!-- coreone-owner:end -->',
+    url: 'https://github.com/acme/coreone/issues/81',
+    title: 'Owned scope fixture',
+    labels: [{ name: 'P1' }, { name: '非阻断上线' }],
+  }));
+} else {
+  console.error('unexpected gh invocation: ' + args.join(' '));
+  process.exit(2);
+}
+`, 'utf8');
+    fs.chmodSync(fakeGh, 0o755);
+    const environment = {
+      ...process.env,
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH || ''}`,
+    };
+    const statePath = runGit([
+      'rev-parse',
+      '--path-format=absolute',
+      '--git-path',
+      'coreone/claude-task-state.json',
+    ]);
+    const startArgs = (scope) => [
+      taskScript,
+      'start',
+      '--issue=81',
+      '--stage=prd',
+      '--owner=Scope Owner',
+      '--risk=R1',
+      `--owned=${scope}`,
+    ];
+    for (const scope of unsafeScopes) {
+      const result = spawnSync(process.execPath, startArgs(scope), {
+        cwd: governedRepo,
+        encoding: 'utf8',
+        env: environment,
+      });
+      governed.rejected[scope] = {
+        status: result.status,
+        stderr: String(result.stderr || ''),
+      };
+      if (fs.existsSync(statePath)) fs.unlinkSync(statePath);
+    }
+    governed.legal = spawnSync(
+      process.execPath,
+      startArgs('scripts/*.cjs'),
+      { cwd: governedRepo, encoding: 'utf8', env: environment },
+    );
+    assert.equal(
+      governed.legal.status,
+      0,
+      governed.legal.stderr || governed.legal.stdout,
+    );
+    governed.state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  } finally {
+    fs.rmSync(governedSandbox, { recursive: true, force: true });
+  }
+  return { unsafeScopes, r0, governed };
+}
+
+const ownedScopeStarts = runIsolatedOwnedScopeStarts();
+for (const scope of ownedScopeStarts.unsafeScopes) {
+  for (const [mode, result] of [
+    ['start-r0', ownedScopeStarts.r0.rejected[scope]],
+    ['start', ownedScopeStarts.governed.rejected[scope]],
+  ]) {
+    assert.equal(result.status, 1, `${mode} accepted unsafe owned scope: ${scope}`);
+    assert.match(result.stderr, /owned scope|owned.*范围|Git metadata|过宽|仓库外/i);
+  }
+}
+assert.equal(ownedScopeStarts.r0.legal.status, 0, ownedScopeStarts.r0.legal.stderr);
+assert.deepEqual(
+  ownedScopeStarts.r0.state.owned,
+  ['src/exact.txt', 'src/*.txt', 'src/**', '.gitignore'],
+);
+assert.equal(ownedScopeStarts.r0.editGitMetadata.status, 2);
+assert.match(ownedScopeStarts.r0.editGitMetadata.stderr, /Git metadata/i);
+assert.equal(ownedScopeStarts.r0.shellGitMetadata.status, 2);
+assert.match(ownedScopeStarts.r0.shellGitMetadata.stderr, /Git metadata/i);
+assert.equal(
+  ownedScopeStarts.r0.repoUnderTmpOutsideOwned.status,
+  2,
+  'repo scope must win before the temporary-root exception when the repo itself is under tmp',
+);
+for (const [target, status] of Object.entries(ownedScopeStarts.r0.tmpAliases)) {
+  assert.equal(status, 0, `physical temporary alias rejected: ${target}`);
+}
+if (process.platform !== 'win32') {
+  assert.equal(ownedScopeStarts.r0.logicalPhysicalOwned.status, 0);
+  assert.equal(ownedScopeStarts.r0.logicalPhysicalGitMetadata.status, 2);
+}
+assert.equal(
+  ownedScopeStarts.governed.legal.status,
+  0,
+  ownedScopeStarts.governed.legal.stderr,
+);
+assert.deepEqual(ownedScopeStarts.governed.state.owned, ['scripts/*.cjs']);
+
+for (const stateKind of [
+  'expired',
+  'malformed',
+  'branch-mismatch',
+  'future-started',
+  'future-verified',
+  'verified-before-started',
+  'nonexistent-head',
+  'state-symlink',
+  'state-hardlink',
+]) {
+  const result = runIsolatedAuthorizedIssueCreation({ initialTaskStateKind: stateKind });
+  assert.equal(
+    result.first.status,
+    0,
+    `${stateKind}: historical state deadlocked authorized create-issues: ` +
+      `${result.first.stderr || result.first.stdout}`,
+  );
+  assert.equal(result.firstWrites.length, 2, `${stateKind}: authorized Issue writes were skipped`);
+  assert.equal(result.second.status, 1, `${stateKind}: manifest replay gate regressed`);
+  assert.match(result.second.stderr, /禁止重放/);
+  assert.equal(result.taskStatePreserved, true, `${stateKind}: create-issues rewrote historical state`);
+}
+const validStateIssueCreation = runIsolatedAuthorizedIssueCreation({
+  initialTaskStateKind: 'valid',
+  expectTaskStateBlock: true,
+});
+assert.equal(validStateIssueCreation.first.status, 1);
+assert.match(validStateIssueCreation.first.stderr, /已有活动 task state/);
+assert.equal(validStateIssueCreation.firstWrites.length, 0);
+assert.equal(validStateIssueCreation.governanceRuns.length, 0);
+assert.equal(validStateIssueCreation.taskStatePreserved, true);
+
+if (process.argv.includes('--focus=task-state-hooks')) {
+  process.stdout.write('claude-task focused task-state hook matrix: PASS\n');
+  process.exit(0);
+}
 
 function runIsolatedSerializedGitHubWrite() {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'coreone-serialized-writer-'));
@@ -3302,6 +6713,8 @@ function runIsolatedSerializedGitHubWrite() {
       `${JSON.stringify({
         version: 2,
         mode: 'r0',
+        stage: 'r0',
+        risk: 'R0',
         reason: 'serialized writer selftest',
         branch: 'writer-test',
         baseSha: head,
@@ -3463,6 +6876,65 @@ function runIsolatedAuthorizedIssueCreation(options = {}) {
     runGit(['config', 'user.email', 'issue-create@example.invalid']);
     runGit(['add', '.']);
     runGit(['commit', '-m', 'test: seed issue creation fixture']);
+    const taskStateKind = options.initialTaskStateKind || null;
+    const taskStatePath = path.join(
+      fs.realpathSync.native(path.join(repo, '.git')),
+      'coreone',
+      'claude-task-state.json',
+    );
+    let linkedTaskStatePath = null;
+    if (taskStateKind) {
+      fs.mkdirSync(path.dirname(taskStatePath), { recursive: true });
+      const headResult = spawnSync('git', ['rev-parse', 'HEAD'], {
+        cwd: repo,
+        encoding: 'utf8',
+      });
+      assert.equal(headResult.status, 0, headResult.stderr);
+      const head = String(headResult.stdout || '').trim();
+      const startedAt = new Date(Date.now() - 2_000);
+      const verifiedAt = new Date(Date.now() - 1_000);
+      if (taskStateKind === 'expired') {
+        startedAt.setTime(Date.now() - 13 * 60 * 60 * 1_000);
+      } else if (taskStateKind === 'future-started') {
+        startedAt.setTime(Date.now() + 60 * 60 * 1_000);
+        verifiedAt.setTime(startedAt.getTime() + 1_000);
+      } else if (taskStateKind === 'future-verified') {
+        verifiedAt.setTime(Date.now() + 60 * 60 * 1_000);
+      } else if (taskStateKind === 'verified-before-started') {
+        verifiedAt.setTime(startedAt.getTime() - 1_000);
+      }
+      const taskState = {
+        version: 2,
+        mode: 'r0',
+        stage: 'r0',
+        risk: 'R0',
+        reason: 'authorized issue creation historical state fixture',
+        branch: taskStateKind === 'branch-mismatch' ? 'other-branch' : 'issue-create-test',
+        baseSha: head,
+        startedHead: taskStateKind === 'nonexistent-head' ? 'f'.repeat(40) : head,
+        startedAt: startedAt.toISOString(),
+        verifiedAt: verifiedAt.toISOString(),
+        owned: ['seed.txt'],
+        excluded: [],
+      };
+      const serializedState = `${JSON.stringify(taskState, null, 2)}\n`;
+      if (taskStateKind === 'malformed') {
+        fs.writeFileSync(taskStatePath, '{"version":2,"mode":"r0",', 'utf8');
+      } else if (taskStateKind === 'state-symlink') {
+        linkedTaskStatePath = path.join(sandbox, 'external-task-state.json');
+        fs.writeFileSync(linkedTaskStatePath, serializedState, 'utf8');
+        fs.symlinkSync(linkedTaskStatePath, taskStatePath);
+      } else if (taskStateKind === 'state-hardlink') {
+        linkedTaskStatePath = path.join(sandbox, 'external-task-state.json');
+        fs.writeFileSync(linkedTaskStatePath, serializedState, 'utf8');
+        fs.linkSync(linkedTaskStatePath, taskStatePath);
+      } else {
+        fs.writeFileSync(taskStatePath, serializedState, 'utf8');
+      }
+    }
+    const taskStateBefore = taskStateKind
+      ? fs.readFileSync(taskStatePath, 'utf8')
+      : null;
 
     const fakeGh = path.join(fakeBin, 'gh');
     fs.writeFileSync(fakeGh, `#!/usr/bin/env node
@@ -3586,6 +7058,25 @@ if (args[0] === 'repo' && args[1] === 'view') {
     const finalWrites = JSON.parse(fs.readFileSync(writeLog, 'utf8'));
     const governanceRuns = JSON.parse(fs.readFileSync(governanceLog, 'utf8'));
     const ledgerPath = path.join(repo, '.git', 'coreone', 'issue-creation-ledger.json');
+    if (options.expectTaskStateBlock) {
+      return {
+        first,
+        second,
+        third,
+        firstWrites,
+        secondWrites,
+        finalWrites,
+        governanceRuns,
+        ledger: null,
+        manifest,
+        taskStatePreserved:
+          taskStateBefore === fs.readFileSync(taskStatePath, 'utf8') &&
+          (
+            !linkedTaskStatePath ||
+            taskStateBefore === fs.readFileSync(linkedTaskStatePath, 'utf8')
+          ),
+      };
+    }
     assert.equal(
       fs.existsSync(ledgerPath),
       true,
@@ -3601,6 +7092,15 @@ if (args[0] === 'repo' && args[1] === 'view') {
       governanceRuns,
       ledger: JSON.parse(fs.readFileSync(ledgerPath, 'utf8')),
       manifest,
+      taskStatePreserved: taskStateKind
+        ? (
+            taskStateBefore === fs.readFileSync(taskStatePath, 'utf8') &&
+            (
+              !linkedTaskStatePath ||
+              taskStateBefore === fs.readFileSync(linkedTaskStatePath, 'utf8')
+            )
+          )
+        : null,
     };
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
