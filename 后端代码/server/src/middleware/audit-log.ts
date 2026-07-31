@@ -55,6 +55,7 @@ interface AuthRequest extends Request {
 }
 
 const SUCCESS_AUDIT_METADATA = Symbol('coreone.success-audit-metadata')
+const SUCCESS_AUDIT_SUPPRESSED_REQUESTS = new WeakSet<Request>()
 
 export function setSuccessAuditMetadata(
   res: Response,
@@ -62,6 +63,15 @@ export function setSuccessAuditMetadata(
 ): void {
   ;(res as Response & { [SUCCESS_AUDIT_METADATA]?: unknown })[SUCCESS_AUDIT_METADATA] =
     scrubSensitive(metadata)
+}
+
+/**
+ * Suppress only this request's eventual 2xx operation-log row.
+ * The marker is server-owned object identity: body/query/header values cannot forge it.
+ * Denial/error handling remains unchanged because the success branch alone consumes it.
+ */
+export function suppressSuccessAuditForRequest(req: Request): void {
+  SUCCESS_AUDIT_SUPPRESSED_REQUESTS.add(req)
 }
 
 /** 递归打码敏感字段；非对象原样返回；深度/环保护 */
@@ -328,6 +338,7 @@ export function auditWrite(req: AuthRequest, res: Response, next: NextFunction):
 
       // ── 终态 (a)：成功 2xx —— 原行为不变（写脱敏 body）──────────────────────
       if (status >= 200 && status < 300) {
+        if (SUCCESS_AUDIT_SUPPRESSED_REQUESTS.delete(req)) return
         const targetId = req.params?.id || capturedBody?.data?.id || null
         insertLog(db, {
           userId: user.userId || null,

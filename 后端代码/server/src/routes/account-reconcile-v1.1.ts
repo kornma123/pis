@@ -7,23 +7,353 @@
  * 碰钱/口径的写经 writeAuditLog→abc_audit_logs；全站写另由 auditWrite 自动落 operation_logs。
  */
 import { Router } from 'express'
-import { v4 as uuidv4 } from 'uuid'
-import { getDatabase } from '../database/DatabaseManager.js'
+import { getDatabase, TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL } from '../database/DatabaseManager.js'
 import { success, successList, error } from '../utils/response.js'
 import { requirePermission } from '../middleware/permissions.js'
+import {
+  setSuccessAuditMetadata,
+  suppressSuccessAuditForRequest,
+} from '../middleware/audit-log.js'
 import { assertNotSelfReview } from '../middleware/authz-combinators.js'
 import { writeAuditLog } from '../utils/cost-runs.js'
 import { recordOverride } from '../utils/override-log.js'
 import { buildReconcileInputs, runReconcile, partnerMonthLabRate, tryCloseHospitalMonth } from '../utils/reconcile-compute.js'
-import { computeReconcile, verdictFollowUp, drivesSupplement, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
+import { computeReconcile, VERDICT_REASONS, type VerdictReason } from '../utils/reconcile-account.js'
+import {
+  assertReconcileBinding,
+  closeAccountReconciliation,
+  completeAccountReconciliation,
+  computeAccountReconciliation,
+  forbidAccountReconciliationReopen,
+  isStrictSettlementMonth,
+  readAccountReconciliation,
+  ReconcileLifecycleError,
+  setAccountReconciliationVerdict,
+  type ReconcileBinding,
+} from '../services/account-reconciliation-lifecycle.js'
 import { splitCaliberRatification } from '../utils/caliber-ratification.js' // 止损执法点：confirmedLabRevenue(拆分派生)输出自带「口径未认账」水印（LEG-2）
 
 const router = Router()
 
 const operatorOf = (req: any): string => req.user?.username ?? req.user?.userId ?? 'unknown'
+const actorUserIdOf = (req: any): string => String(req.user?.userId ?? '')
+const PRE_LOC005_ROUTES_ENABLED = false
+const BINDING_KEYS = [
+  'partnerId',
+  'settlementMonth',
+  'statementGenerationId',
+  'reconcileGenerationId',
+] as const
+
+function hasOnlyKeys(value: unknown, allowed: readonly string[]): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const allowedKeys = new Set(allowed)
+  return Object.keys(value).every(key => allowedKeys.has(key))
+}
+
+function rejectUnknownBodyKeys(res: any, value: unknown, allowed: readonly string[]): boolean {
+  if (hasOnlyKeys(value, allowed)) return false
+  error(res, 'request body contains unsupported fields', 'BAD_REQUEST', 400)
+  return true
+}
+
+// R3-3：被取代旧代的补收单彻底冻结是既定口径（trigger 层 RAISE(ABORT,...) 硬冻结），
+// 但该稳定信号不能透成被掩码的裸 500——映射为可诊断的 409 稳定码；其余未知错误仍走 500。
+function errorSupplementLifecycle(res: any, err: any): void {
+  if (String(err?.message ?? '').includes('SUPPLEMENT_GENERATION_BINDING_MISMATCH')) {
+    error(res, '该补收单属于已被取代的旧对账代次，已彻底冻结', 'SUPPLEMENT_GENERATION_BINDING_MISMATCH', 409)
+    return
+  }
+  error(res, err.message)
+}
+
+function lifecycleAuditMetadata(
+  action: string,
+  binding: ReconcileBinding,
+  extra: Record<string, string | boolean> = {},
+): Record<string, string | boolean> {
+  return {
+    action,
+    partnerId: binding.partnerId,
+    settlementMonth: binding.settlementMonth,
+    statementGenerationId: binding.statementGenerationId,
+    reconcileGenerationId: binding.reconcileGenerationId,
+    ...extra,
+  }
+}
+
+const bindingFrom = (source: any): ReconcileBinding => ({
+  partnerId: String(source?.partnerId ?? '').trim(),
+  settlementMonth: source?.settlementMonth,
+  statementGenerationId: String(source?.statementGenerationId ?? '').trim(),
+  reconcileGenerationId: String(source?.reconcileGenerationId ?? '').trim(),
+})
+
+const lifecycleError = (res: any, err: unknown): void => {
+  if (err instanceof ReconcileLifecycleError) {
+    error(res, err.message, err.code, err.status)
+    return
+  }
+  error(res, err instanceof Error ? err.message : 'account reconciliation failed')
+}
+
+// LOC-005 authoritative generation-bound lifecycle. These handlers are registered
+// before the predecessor endpoints below, so no legacy month-only write is reachable.
+router.post('/compute', requirePermission('account_reconcile', 'W'), (req, res) => {
+  try {
+    if (rejectUnknownBodyKeys(res, req.body, BINDING_KEYS)) return
+    const binding = bindingFrom(req.body)
+    assertReconcileBinding(binding)
+    const result = computeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req))
+    setSuccessAuditMetadata(res, lifecycleAuditMetadata('compute', binding))
+    success(res, result)
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+if (PRE_LOC005_ROUTES_ENABLED) router['get']('/generation', (req, res) => {
+  try {
+    const binding = bindingFrom(req.query)
+    assertReconcileBinding(binding)
+    success(res, readAccountReconciliation(getDatabase(), binding))
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+// GET /overview?settlementMonth= —— 月份级代次发现 + 看板：前端唯一取得四元组 binding 的入口。
+// 汇总三源（当前 statement 批 / 院·月行 / 当前对账代），每院给齐 binding 与展示字段。
+router.get('/overview', (req, res) => {
+  try {
+    const settlementMonth = req.query.settlementMonth
+    if (!isStrictSettlementMonth(settlementMonth)) {
+      return error(res, 'settlementMonth must be strict YYYY-(01..12)', 'INVALID_SETTLEMENT_MONTH', 400)
+    }
+    const db = getDatabase()
+    const batches = db.prepare(`
+      SELECT b.partner_id, p.name AS partner_name, b.generation_id, b.status AS batch_status
+        FROM statement_import_batches b
+        LEFT JOIN partners p ON p.id = b.partner_id
+       WHERE b.settlement_month = ? AND b.is_current = 1
+    `).all(settlementMonth) as any[]
+    const hospitalMonths = db.prepare(
+      'SELECT * FROM reconcile_hospital_months WHERE service_month = ? ORDER BY partner_name',
+    ).all(settlementMonth) as any[]
+    const generations = db.prepare(`
+      SELECT * FROM account_reconcile_generations
+       WHERE settlement_month = ? AND is_current = 1
+    `).all(settlementMonth) as any[]
+
+    const byPartner = new Map<string, any>()
+    const ensure = (partnerId: string) => {
+      if (!byPartner.has(partnerId)) byPartner.set(partnerId, { partnerId })
+      return byPartner.get(partnerId)
+    }
+    for (const batch of batches) {
+      const item = ensure(String(batch.partner_id))
+      item.partnerName = item.partnerName ?? batch.partner_name ?? null
+      item.statementGenerationId = batch.generation_id
+      item.statementBatchStatus = batch.batch_status
+    }
+    for (const generation of generations) {
+      const item = ensure(String(generation.partner_id))
+      item.reconcileGenerationId = generation.reconcile_generation_id
+      item.generationStatus = generation.status
+      item.hospitalMonthId = generation.hospital_month_id
+      item.reconcileStatementGenerationId = generation.statement_generation_id
+      item.statementGenerationId = item.statementGenerationId ?? generation.statement_generation_id
+    }
+    for (const hm of hospitalMonths) {
+      const item = ensure(String(hm.partner_id))
+      item.id = hm.id
+      item.partnerName = hm.partner_name
+      item.serviceMonth = hm.service_month
+      item.status = hm.status
+      item.matchRate = hm.match_rate
+      item.matchStatus = hm.match_status
+      item.statementReady = !!hm.statement_ready
+      item.lisReady = !!hm.lis_ready
+      item.diffCount = hm.diff_count
+      item.pendingCount = hm.pending_count
+      item.unmatchedCount = hm.unmatched_count
+      item.confirmedLabRevenue = hm.confirmed_lab_revenue
+      item.hospitalMonthId = item.hospitalMonthId ?? hm.id
+    }
+    const items = [...byPartner.values()].map((item) => ({
+      id: item.id ?? null,
+      partnerId: item.partnerId,
+      partnerName: item.partnerName ?? null,
+      serviceMonth: settlementMonth,
+      status: item.status ?? null,
+      matchRate: item.matchRate ?? null,
+      matchStatus: item.matchStatus ?? null,
+      statementReady: item.statementReady ?? false,
+      lisReady: item.lisReady ?? false,
+      diffCount: item.diffCount ?? 0,
+      pendingCount: item.pendingCount ?? 0,
+      unmatchedCount: item.unmatchedCount ?? 0,
+      confirmedLabRevenue: item.confirmedLabRevenue ?? null,
+      hospitalMonthId: item.hospitalMonthId ?? null,
+      statementGenerationId: item.statementGenerationId ?? null,
+      statementBatchStatus: item.statementBatchStatus ?? null,
+      reconcileGenerationId: item.reconcileGenerationId ?? null,
+      reconcileStatementGenerationId: item.reconcileStatementGenerationId ?? null,
+      generationStatus: item.generationStatus ?? null,
+    })).sort((a, b) => String(a.partnerName ?? a.partnerId).localeCompare(String(b.partnerName ?? b.partnerId)))
+
+    const computed = items.filter((item) => item.id !== null)
+    const 补收实收 = Math.round(
+      (db.prepare(`SELECT COALESCE(SUM(collected_revenue),0) s FROM supplement_orders WHERE collected_month = ? AND status = '已补收'`)
+        .get(settlementMonth) as { s: number }).s * 100,
+    ) / 100
+    // #93-A 裁决 A 保守口径（derived quarantine）+ fresh-R2 P1-1 严格形状：确认实收只认
+    // 完整命中 TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL 的终态月——与启动扫描
+    // ensureReconcileTerminalHospitalMonthIntegrity 同一 SQL 片段（binding + 同院/同月/
+    // 同行/current generation 之外，复核完成须 completed_at canonical + completed_by
+    // trim 非空 + closed 字段全空；已关账须两组 canonical 时间 + 两操作者 trim 非空）。
+    // 无 binding 或字段残缺/矛盾的终态（历史遗留与 trigger 被摘窗口伪造数据级不可区分）
+    // 保留历史可见性与看板状态计数，但 confirmedLabRevenue 一律不计入，也不迁成正常完成态。
+    const provenancedTerminal = new Set(
+      (db.prepare(`
+        SELECT hm.id AS id
+          FROM reconcile_hospital_months hm
+          JOIN account_reconcile_hospital_month_bindings binding
+            ON binding.hospital_month_id = hm.id
+          JOIN account_reconcile_generations generation
+            ON generation.reconcile_generation_id = binding.reconcile_generation_id
+         WHERE hm.service_month = ?
+           AND (${TRUSTED_TERMINAL_HOSPITAL_MONTH_SHAPE_SQL})
+      `).all(settlementMonth) as Array<{ id: string }>).map(row => String(row.id)),
+    )
+    const base确认实收 = computed
+      .filter((item) => (item.status === '复核完成' || item.status === '已关账')
+        && item.id !== null && provenancedTerminal.has(String(item.id)))
+      .reduce((sum, item) => sum + (Number(item.confirmedLabRevenue) || 0), 0)
+    const board = {
+      total: computed.length,
+      待复核: computed.filter((item) => item.status === '待复核').length,
+      复核完成: computed.filter((item) => item.status === '复核完成').length,
+      已关账: computed.filter((item) => item.status === '已关账').length,
+      补收实收,
+      确认实收: Math.round((base确认实收 + 补收实收) * 100) / 100,
+    }
+    success(res, { settlementMonth, items, board, caliberRatification: splitCaliberRatification() })
+  } catch (err: any) {
+    error(res, err.message)
+  }
+})
+
+router.get('/workbench', (req, res) => {
+  try {
+    const binding = bindingFrom(req.query)
+    assertReconcileBinding(binding)
+    const snapshot = readAccountReconciliation(getDatabase(), binding) as any
+    const diffs = (getDatabase().prepare(
+      `SELECT * FROM reconcile_diffs
+        WHERE hospital_month_id = ?
+          AND reconcile_generation_id = ?
+        ORDER BY case_no, line_type`,
+    ).all(snapshot.hospitalMonthId, binding.reconcileGenerationId) as any[]).map((row) => ({
+      id: row.id,
+      caseNo: row.case_no,
+      lineType: row.line_type,
+      billCount: row.bill_count,
+      lisCount: row.lis_count,
+      delta: row.delta,
+      amountImpact: row.amount_impact,
+      systemHint: row.system_hint,
+      lowConfidence: !!row.low_confidence,
+      verdict: row.verdict,
+      verdictReason: row.verdict_reason,
+      verdictBy: row.verdict_by,
+      followUp: row.follow_up,
+    }))
+    success(res, {
+      snapshot,
+      diffs,
+      caseHints: snapshot.caseHints ?? {},
+      caliberRatification: splitCaliberRatification(),
+    })
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+router.post('/hospital-months/:id/complete', requirePermission('account_reconcile', 'W'), (req, res) => {
+  try {
+    if (rejectUnknownBodyKeys(res, req.body, BINDING_KEYS)) return
+    const binding = bindingFrom(req.body)
+    assertReconcileBinding(binding)
+    const current = readAccountReconciliation(getDatabase(), binding) as any
+    if (current.hospitalMonthId !== req.params.id) {
+      return error(res, 'hospital-month binding mismatch', 'RECONCILE_GENERATION_MISMATCH', 409)
+    }
+    const result = completeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req))
+    setSuccessAuditMetadata(res, lifecycleAuditMetadata('complete', binding, {
+      hospitalMonthId: req.params.id,
+    }))
+    success(res, result)
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) => {
+  try {
+    if (rejectUnknownBodyKeys(res, req.body, ['items'])) return
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : []
+    if (rawItems.length !== 1) {
+      return error(
+        res,
+        'exactly one month-level generation binding is required',
+        'GENERATION_BINDING_REQUIRED',
+        400,
+      )
+    }
+    if (!rawItems.every((item: unknown) => hasOnlyKeys(item, BINDING_KEYS))) {
+      return error(res, 'close item contains unsupported fields', 'BAD_REQUEST', 400)
+    }
+    const closed = rawItems.map((item: any) => {
+      const binding = bindingFrom(item)
+      assertReconcileBinding(binding)
+      return closeAccountReconciliation(getDatabase(), binding, actorUserIdOf(req))
+    })
+    const binding = bindingFrom(rawItems[0])
+    setSuccessAuditMetadata(res, lifecycleAuditMetadata('close', binding))
+    success(res, { closed })
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+router.post('/hospital-months/:id/reopen', requirePermission('account_reconcile', 'W'), (_req, res) => {
+  try {
+    forbidAccountReconciliationReopen()
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
+
+router.post('/hospital-months/:id/reopen-close', requirePermission('account_reconcile', 'W'), (_req, res) => {
+  try {
+    forbidAccountReconciliationReopen()
+  } catch (err) {
+    lifecycleError(res, err)
+  }
+})
 
 // POST /compute —— 跑某院某月账实核对并落库（写）
-router.post('/compute', requirePermission('account_reconcile', 'W'), (req, res) => {
+router.use('/__pre_loc005', (_req, res) => {
+  error(
+    res,
+    'month-only reconciliation endpoints were removed by LOC-005',
+    'GENERATION_BINDING_REQUIRED',
+    410,
+  )
+})
+
+if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/compute', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
     const db = getDatabase()
     const partnerId = String(req.body?.partnerId ?? '').trim()
@@ -46,7 +376,7 @@ router.post('/compute', requirePermission('account_reconcile', 'W'), (req, res) 
 })
 
 // GET /overview?serviceMonth= —— ①复核总览：各院列表 + 状态 + 匹配率 + 差异数 + 看板汇总
-router.get('/overview', (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['get']('/__pre_loc005/overview', (req, res) => {
   try {
     const db = getDatabase()
     const serviceMonth = String(req.query.serviceMonth ?? '').trim()
@@ -91,7 +421,7 @@ router.get('/overview', (req, res) => {
 })
 
 // GET /workbench?partnerId=&serviceMonth= —— ②复核工作台：院·月头 + 逐差异(含认定态) + 未匹配单列
-router.get('/workbench', (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['get']('/__pre_loc005/workbench', (req, res) => {
   try {
     const db = getDatabase()
     const partnerId = String(req.query.partnerId ?? '').trim()
@@ -144,39 +474,43 @@ router.get('/workbench', (req, res) => {
 // POST /diffs/:id/verdict —— 认定（写）：填 6 认定原因之一 → 定下家；漏收驱动补收
 router.post('/diffs/:id/verdict', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
-    const db = getDatabase()
-    const diff = db.prepare('SELECT * FROM reconcile_diffs WHERE id = ?').get(req.params.id) as any
-    if (!diff) return error(res, '差异不存在', 'NOT_FOUND', 404)
-    const hm = db.prepare('SELECT * FROM reconcile_hospital_months WHERE id = ?').get(diff.hospital_month_id) as any
-    if (hm?.status === '已关账') return error(res, '已关账·定版不可改认定', 'PERIOD_CLOSED', 409)
+    if (rejectUnknownBodyKeys(res, req.body, [...BINDING_KEYS, 'reason', 'note'])) return
+    const binding = bindingFrom(req.body)
+    assertReconcileBinding(binding)
     const reason = String(req.body?.reason ?? '') as VerdictReason
     if (!VERDICT_REASONS.includes(reason)) return error(res, `认定原因须是：${VERDICT_REASONS.join(' / ')}`, 'BAD_REQUEST', 400)
     const note = req.body?.note != null ? String(req.body.note) : null
-    const followUp = verdictFollowUp(reason)
-    const operator = operatorOf(req)
-    db.prepare(`UPDATE reconcile_diffs SET verdict = ?, verdict_reason = ?, verdict_by = ?, verdict_at = CURRENT_TIMESTAMP, follow_up = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-      .run(reason, note, operator, followUp, diff.id)
-
-    // 补收 gate：只有「漏收，需补收」驱动补收。改判则先清此差异下的「待补收」单（已补收/已放弃保留）。
-    db.prepare("DELETE FROM supplement_orders WHERE source_diff_id = ? AND status = '待补收'").run(diff.id)
-    if (drivesSupplement(reason)) {
-      // maker-checker（项D 止血）：认定即提交「待复核」补收单（submitted_by=认定人），须独立 approve 后才可收款。
-      db.prepare(`INSERT INTO supplement_orders (id, partner_id, service_month, source_diff_id, case_no, amount, case_count, status, operator, review_status, submitted_by)
-                  VALUES (?, ?, ?, ?, ?, ?, 1, '待补收', ?, 'pending_review', ?)`)
-        .run(uuidv4(), diff.partner_id, diff.service_month, diff.id, diff.case_no, diff.amount_impact, operator, operator)
+    const result = setAccountReconciliationVerdict(
+        getDatabase(),
+        binding,
+        req.params.id,
+        reason,
+        note,
+        actorUserIdOf(req),
+        operatorOf(req),
+      )
+    if (result.duplicate === true) {
+      // An exact replay is a read-equivalent acknowledgement. Keep the trusted
+      // actor intact while suppressing only this request's duplicate success row.
+      suppressSuccessAuditForRequest(req)
+    } else {
+      setSuccessAuditMetadata(res, lifecycleAuditMetadata('verdict', binding, {
+        diffId: req.params.id,
+        duplicate: false,
+      }))
     }
-    // 刷新待认定计数
-    const pending = (db.prepare('SELECT COUNT(*) AS n FROM reconcile_diffs WHERE hospital_month_id = ? AND verdict IS NULL').get(hm.id) as { n: number }).n
-    db.prepare('UPDATE reconcile_hospital_months SET pending_count = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(pending, hm.id)
-    writeAuditLog(db, 'account_reconcile', 'verdict', diff.id, { reason, followUp, caseNo: diff.case_no, amountImpact: diff.amount_impact }, operator)
-    success(res, { id: diff.id, verdict: reason, followUp, pendingCount: pending }, '已认定')
-  } catch (err: any) {
-    error(res, err.message)
+    success(
+      res,
+      result,
+      '已认定',
+    )
+  } catch (err) {
+    lifecycleError(res, err)
   }
 })
 
 // POST /hospital-months/:id/complete —— 复核完成（写）：前置=差异全认定
-router.post('/hospital-months/:id/complete', requirePermission('account_reconcile', 'W'), (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/hospital-months/:id/complete', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
     const db = getDatabase()
     const hm = db.prepare('SELECT * FROM reconcile_hospital_months WHERE id = ?').get(req.params.id) as any
@@ -196,7 +530,7 @@ router.post('/hospital-months/:id/complete', requirePermission('account_reconcil
 })
 
 // POST /hospital-months/:id/reopen —— 反向：复核完成 → 待复核（写·必填理由+记经手人）
-router.post('/hospital-months/:id/reopen', requirePermission('account_reconcile', 'W'), (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/hospital-months/:id/reopen', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
     const db = getDatabase()
     const reason = String(req.body?.reason ?? '').trim()
@@ -214,7 +548,7 @@ router.post('/hospital-months/:id/reopen', requirePermission('account_reconcile'
 })
 
 // POST /close —— 关账（写）：部分关账+挂起；前置=复核完成；定版不可逆
-router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/close', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
     const db = getDatabase()
     const serviceMonth = String(req.body?.serviceMonth ?? '').trim()
@@ -243,7 +577,7 @@ router.post('/close', requirePermission('account_reconcile', 'W'), (req, res) =>
 })
 
 // POST /hospital-months/:id/reopen-close —— 反关账（写·慎用·必填理由）：已关账 → 复核完成
-router.post('/hospital-months/:id/reopen-close', requirePermission('account_reconcile', 'W'), (req, res) => {
+if (PRE_LOC005_ROUTES_ENABLED) router['post']('/__pre_loc005/hospital-months/:id/reopen-close', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
     const db = getDatabase()
     const reason = String(req.body?.reason ?? '').trim()
@@ -320,20 +654,32 @@ router.post('/supplements/:id/approve', requirePermission('account_reconcile', '
     })
     success(res, { id: so.id, reviewStatus: 'approved', reviewedBy: operator }, '已签发补收单')
   } catch (err: any) {
-    error(res, err.message)
+    errorSupplementLifecycle(res, err)
   }
 })
 
 // POST /supplements/:id/collect —— 已补收（写）：计入本月实收（默认取 collectedMonth）
 router.post('/supplements/:id/collect', requirePermission('account_reconcile', 'W'), (req, res) => {
   try {
+    // R8 P1-3：collectedMonth 真 strict——仅字段完全缺席才默认当月；字段存在时不做
+    // String()/trim() 救赎，原始值直接过 strict validator，且置于一切 DB/资源状态
+    // 查询之前——whitespace/array/object/null/'' 在各资源状态（不存在/已补收/未签发）
+    // 下均稳定 400 INVALID_COLLECTED_MONTH 且零业务/审计写。DB 层由
+    // trg_reconcile_supplement_collected_month_* trigger（typeof='text' 且字节长恰 7）
+    // 与启动 legacy 扫描兜底，防直接 SQL/历史脏数据使收入聚合静默漏计。
+    const rawCollectedMonth: unknown = req.body?.collectedMonth
+    if (rawCollectedMonth !== undefined && !isStrictSettlementMonth(rawCollectedMonth)) {
+      return error(res, '收款月份须为 YYYY-MM 格式（月份 01-12）', 'INVALID_COLLECTED_MONTH', 400)
+    }
+    const collectedMonth = rawCollectedMonth === undefined
+      ? new Date().toISOString().slice(0, 7)
+      : rawCollectedMonth
     const db = getDatabase()
     const so = db.prepare('SELECT * FROM supplement_orders WHERE id = ?').get(req.params.id) as any
     if (!so) return error(res, '补收单不存在', 'NOT_FOUND', 404)
     if (so.status === '已补收') return error(res, '已是已补收', 'CONFLICT', 409)
     // 人闸（项D 止血）：未经独立签发（approve）的补收单不可收款——防「认定人一步直发真金追加收费单」。
     if (so.review_status !== 'approved') return error(res, '补收单未经独立复核签发，不可收款', 'NOT_APPROVED', 409)
-    const collectedMonth = String(req.body?.collectedMonth ?? '').trim() || new Date().toISOString().slice(0, 7)
     // 折实收：账单口径 amount ×（原漏收月的**实验室工序行扣率**）；计入 collectedMonth 的实收。
     //   只读 case_revenue_lines 算扣率、**不写收入侧**（保护 golden）。
     //   不变量（防重复计）：漏收的补收只经补收单进实收，**绝不把这笔钱回填 case_revenue**——
@@ -345,7 +691,7 @@ router.post('/supplements/:id/collect', requirePermission('account_reconcile', '
     writeAuditLog(db, 'account_reconcile', 'supplement_collect', so.id, { amount: so.amount, collectedMonth, collectedRevenue, rate }, operatorOf(req))
     success(res, { id: so.id, status: '已补收', collectedMonth, collectedRevenue }, '已标记补收，计入本月实收')
   } catch (err: any) {
-    error(res, err.message)
+    errorSupplementLifecycle(res, err)
   }
 })
 
@@ -362,7 +708,7 @@ router.post('/supplements/:id/giveup', requirePermission('account_reconcile', 'W
     writeAuditLog(db, 'account_reconcile', 'supplement_giveup', so.id, { amount: so.amount, reason }, operatorOf(req))
     success(res, { id: so.id, status: '已放弃' }, '已放弃补收')
   } catch (err: any) {
-    error(res, err.message)
+    errorSupplementLifecycle(res, err)
   }
 })
 
@@ -380,7 +726,7 @@ router.post('/supplements/:id/reopen', requirePermission('account_reconcile', 'W
     writeAuditLog(db, 'account_reconcile', 'supplement_reopen', so.id, { reason, from: so.status }, operatorOf(req))
     success(res, { id: so.id, status: '待补收' }, '已恢复待补收')
   } catch (err: any) {
-    error(res, err.message)
+    errorSupplementLifecycle(res, err)
   }
 })
 

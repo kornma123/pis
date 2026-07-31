@@ -73,6 +73,20 @@
       "owner": "LOC-005 对账并表 owner",
       "deadline": "2026-10-06",
       "reason": "incubating — Phase1A backend incubation；覆盖 compute/read/complete/close，由 LOC-005 对账并表工程接线或退役，当前前端与 LOC-005 bridge 明确 excluded。"
+    },
+    {
+      "path": "/account-reconcile/hospital-months/:id/reopen",
+      "method": "POST",
+      "owner": "LOC-005 对账并表 owner",
+      "deadline": "2026-10-06",
+      "reason": "external — 恒 409 墓碑端点：LOC-005 起复核完成/关账永不反开，端点仅向 API 调用方返回稳定领域错误码 RECONCILIATION_REOPEN_FORBIDDEN（404 会丢合同语义），HTTP 钉测试 account-reconcile-routes.test.ts 守住；前端天然无调用。到期复审是否随旧客户端绝迹改退役。"
+    },
+    {
+      "path": "/account-reconcile/hospital-months/:id/reopen-close",
+      "method": "POST",
+      "owner": "LOC-005 对账并表 owner",
+      "deadline": "2026-10-06",
+      "reason": "external — 恒 409 墓碑端点：同上，反关账路径的稳定领域错误码墓碑；前端天然无调用。到期与 reopen 一并复审退役。"
     }
   ]
 }
