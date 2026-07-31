@@ -39,7 +39,7 @@ content = content.replace(
 
 // 4. Fix BLIND-DASH-06: [class*="activity"] strict mode
 content = content.replace(
-  /const activities = page\.locator\('\[class\*="activity"\], \[class\*="recent"\]'\)\.first\(\)\n    await expect\(activities\.or\(page\.locator\('body'\)\)\)\.toBeVisible\(\)/g,
+  /const activities = page\.locator\('\[class\*="activity"\], \[class\*="recent"\]'\)\.first\(\)\n {4}await expect\(activities\.or\(page\.locator\('body'\)\)\)\.toBeVisible\(\)/g,
   `const activities = page.locator('[class*="activity"], [class*="recent"]').first()
     if (await activities.isVisible().catch(() => false)) {
       await expect(activities).toBeVisible()
@@ -50,7 +50,7 @@ content = content.replace(
 
 // 5. Fix BLIND-DASH-07: svg, canvas strict mode
 content = content.replace(
-  /const chart = page\.locator\('svg, canvas, \[class\*="chart"\]'\)\.first\(\)\n    await expect\(chart\.or\(page\.locator\('body'\)\)\)\.toBeVisible\(\)/g,
+  /const chart = page\.locator\('svg, canvas, \[class\*="chart"\]'\)\.first\(\)\n {4}await expect\(chart\.or\(page\.locator\('body'\)\)\)\.toBeVisible\(\)/g,
   `const chart = page.locator('svg, canvas, [class*="chart"]').first()
     if (await chart.isVisible().catch(() => false)) {
       await expect(chart).toBeVisible()

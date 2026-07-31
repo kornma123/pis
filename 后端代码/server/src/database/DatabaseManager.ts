@@ -1601,10 +1601,17 @@ const COMPLETION_DECISION_KEYS = [
 // 合同 = typeof string 且 JS trim 后非空 且不含 C0/DEL/C1 控制字符。本 JS 实现与
 // deterministic UDF coreone_canonical_actor 同体（注册见 registerCoreoneSqlFunctions），
 // startup 扫描/trigger/overview 谓词/JS 四处单点消费，不在多处各写近似 SQL。
+function containsCanonicalActorControlCharacter(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return codePoint <= 0x1F || (codePoint >= 0x7F && codePoint <= 0x9F)
+  })
+}
+
 function isCanonicalActor(value: unknown): value is string {
   return typeof value === 'string'
     && value.trim().length > 0
-    && !/[\x00-\x1F\x7F-\x9F]/.test(value)
+    && !containsCanonicalActorControlCharacter(value)
 }
 
 const CANONICAL_SQLITE_TIMESTAMP =

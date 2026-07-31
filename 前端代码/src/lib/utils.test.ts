@@ -7,8 +7,11 @@ describe('utils', () => {
       expect(cn('px-2', 'px-4')).toBe('px-4')
     })
 
-    it('should handle conditional classes', () => {
-      expect(cn('base', false && 'hidden', 'block')).toBe('base block')
+    it.each([
+      { condition: true, expected: 'base hidden' },
+      { condition: false, expected: 'base' },
+    ])('should handle conditional classes when condition is $condition', ({ condition, expected }) => {
+      expect(cn('base', condition && 'hidden')).toBe(expected)
     })
 
     it('should handle empty input', () => {
