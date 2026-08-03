@@ -2625,7 +2625,12 @@ function inspectAuthority(root, args, checks) {
     }
     const listItem = line.match(/^ {0,3}(?:[*+-]|\d{1,9}[.)])[ \t]+/)
     if (listItem) line = line.slice(listItem[0].length)
-    return { payload: line, container: `quote:${blockquoteDepth}`, startsList: Boolean(listItem) }
+    return {
+      payload: line,
+      container: `quote:${blockquoteDepth}`,
+      blockquoteDepth,
+      startsList: Boolean(listItem),
+    }
   }
   function normalizeReferenceLabel(value) {
     let normalized = ''
@@ -2661,15 +2666,16 @@ function inspectAuthority(root, args, checks) {
     let fence = null
     let htmlComment = false
     let rawHtmlTag = null
-    let paragraphContainer = null
+    let paragraphQuoteDepth = null
     for (let index = 0; index < payloads.length; index += 1) {
       const line = payloads[index]
       const container = containerLines[index].container
+      const blockquoteDepth = containerLines[index].blockquoteDepth
       if (!line.trim()) {
-        paragraphContainer = null
+        paragraphQuoteDepth = null
         continue
       }
-      if (containerLines[index].startsList) paragraphContainer = null
+      if (containerLines[index].startsList) paragraphQuoteDepth = null
       if (fence) {
         const closing = line.match(/^ {0,3}([`~]+)[ \t]*$/)
         if (
@@ -2678,44 +2684,45 @@ function inspectAuthority(root, args, checks) {
           closing[1].length >= fence.length &&
           [...closing[1]].every((character) => character === fence.marker)
         ) fence = null
-        paragraphContainer = null
+        paragraphQuoteDepth = null
         continue
       }
       if (htmlComment) {
         if (line.includes('-->')) htmlComment = false
-        paragraphContainer = null
+        paragraphQuoteDepth = null
         continue
       }
       const commentStart = line.indexOf('<!--')
       if (commentStart >= 0) {
         if (line.indexOf('-->', commentStart + 4) < 0) htmlComment = true
-        paragraphContainer = null
+        paragraphQuoteDepth = null
         continue
       }
       if (rawHtmlTag) {
         if (new RegExp(`</${rawHtmlTag}[ \\t]*>`, 'i').test(line)) rawHtmlTag = null
-        paragraphContainer = null
+        paragraphQuoteDepth = null
         continue
       }
       const rawHtmlOpening = line.match(/^ {0,3}<(script|pre|style|template)(?=[ \t>])[^>]*>/i)
       if (rawHtmlOpening) {
         const tag = rawHtmlOpening[1].toLowerCase()
         if (!new RegExp(`</${tag}[ \\t]*>`, 'i').test(line)) rawHtmlTag = tag
-        paragraphContainer = null
+        paragraphQuoteDepth = null
         continue
       }
       const opening = line.match(/^ {0,3}(`{3,}|~{3,})([^\r\n]*)$/)
       if (opening && !(opening[1][0] === '`' && opening[2].includes('`'))) {
         fence = { marker: opening[1][0], length: opening[1].length }
-        paragraphContainer = null
+        paragraphQuoteDepth = null
         continue
       }
       const definition = line.match(/^ {0,3}\[((?:\\.|[^\]\\\r\n]){1,999})\]:[ \t]*(.*)$/)
-      if (!definition || paragraphContainer === container) {
+      const continuesParagraph = paragraphQuoteDepth !== null && blockquoteDepth <= paragraphQuoteDepth
+      if (!definition || continuesParagraph) {
         if (/^ {0,3}(?:#{1,6}(?:[ \t]+|$)|(?:\*[ \t]*){3,}[ \t]*$|(?:_[ \t]*){3,}[ \t]*$|(?:-[ \t]*){3,}[ \t]*$)/.test(line)) {
-          paragraphContainer = null
+          paragraphQuoteDepth = null
         } else {
-          paragraphContainer = container
+          paragraphQuoteDepth = blockquoteDepth
         }
         continue
       }
@@ -2731,11 +2738,11 @@ function inspectAuthority(root, args, checks) {
         labels.add(normalizeReferenceLabel(definition[1]))
         for (let lineIndex = index; lineIndex <= end; lineIndex += 1) lineIndexes.add(lineIndex)
         index = end
-        paragraphContainer = null
+        paragraphQuoteDepth = null
         parsed = true
         break
       }
-      if (!parsed) paragraphContainer = container
+      if (!parsed) paragraphQuoteDepth = blockquoteDepth
     }
     return { labels, lineIndexes }
   }

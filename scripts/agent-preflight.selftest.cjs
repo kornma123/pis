@@ -1997,6 +1997,59 @@ for (const mode of ['develop', 'review']) {
   }
 }
 
+for (const mode of ['develop', 'review']) {
+  for (const claim of [
+    '> Context\n[Current required checks on master: gate and vitest]: /checks',
+    '> > Context\n> [Current required checks on master: gate and vitest]: /checks',
+    '> > Context\n[Current required checks on master: gate and vitest]: /checks',
+  ]) {
+    check(`GOV-005 R19: lazy blockquote paragraph claim is rejected in ${mode}: ${claim}`, () => {
+      const repo = setupRepo()
+      try {
+        append(repo.work, '.claude/rules/coreone-guardrails.md', `\n${claim}\n`)
+        const args = ['--mode=develop', '--rules-only']
+        if (mode === 'review') {
+          git(repo.work, ['add', '.claude/rules/coreone-guardrails.md'])
+          git(repo.work, ['commit', '-q', '-m', 'add R19 lazy blockquote CI claim'])
+          args.splice(0, args.length, '--mode=review', '--target-ref=HEAD', '--rules-only')
+        }
+        expectDynamicFactDrift(
+          run(repo.work, args),
+          '.claude/rules/coreone-guardrails.md: current CI enforcement claim',
+        )
+      } finally {
+        fs.rmSync(repo.tmp, { recursive: true, force: true })
+      }
+    })
+  }
+}
+
+for (const mode of ['develop', 'review']) {
+  for (const rule of [
+    '> Context\n>\n[Current required checks on master: gate and vitest]: /checks',
+    '> > Context\n> >\n> [Current required checks on master: gate and vitest]: /checks',
+    '# Context\n[Current required checks on master: gate and vitest]: /checks',
+  ]) {
+    check(`GOV-005 R19: ended block permits genuine reference definition in ${mode}: ${rule}`, () => {
+      const repo = setupRepo()
+      try {
+        append(repo.work, '.claude/rules/coreone-guardrails.md', `\n${rule}\n`)
+        const args = ['--mode=develop', '--rules-only']
+        if (mode === 'review') {
+          git(repo.work, ['add', '.claude/rules/coreone-guardrails.md'])
+          git(repo.work, ['commit', '-q', '-m', 'add R19 ended block reference control'])
+          args.splice(0, args.length, '--mode=review', '--target-ref=HEAD', '--rules-only')
+        }
+        const result = run(repo.work, args)
+        expectVerdict(result, 'PASS', 0)
+        assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+      } finally {
+        fs.rmSync(repo.tmp, { recursive: true, force: true })
+      }
+    })
+  }
+}
+
 for (const rule of [
   '# gate is not a required status check; query GitHub live',
   '# gate is not currently a required status check; query GitHub live',
