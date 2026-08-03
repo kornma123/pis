@@ -1666,7 +1666,7 @@ check('GOV-005 R14: stable historical PR provenance is not a live PR-state snaps
   }
 })
 
-check('GOV-005 R14: fenced examples in Markdown do not become current-CI assertions', () => {
+check('GOV-005 R14: source fail-closed policy rejects fenced current-CI examples', () => {
   const repo = setupRepo()
   try {
     append(repo.work, QUALITY_LOOP_OVERVIEW, [
@@ -1677,8 +1677,10 @@ check('GOV-005 R14: fenced examples in Markdown do not become current-CI asserti
       '',
     ].join('\n'))
     const result = run(repo.work, ['--mode=develop', '--rules-only'])
-    expectVerdict(result, 'PASS', 0)
-    assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+    expectDynamicFactDrift(
+      result,
+      `${QUALITY_LOOP_OVERVIEW}: current CI enforcement claim`,
+    )
   } finally {
     fs.rmSync(repo.tmp, { recursive: true, force: true })
   }
@@ -1858,8 +1860,6 @@ check('GOV-005 R16: copula plus delimiter cannot hide a required-check enumerati
 for (const rule of [
   '> Current required checks on master: query GitHub live before merge',
   '> Current required checks on master: unknown; query GitHub live before merge',
-  '> <span title="Current required checks on master: gate">Query GitHub live.</span>',
-  '> [Query GitHub live](<https://example.invalid/Current required checks on master: gate>)',
   '> Current requ\\ired checks on master: gate and vitest',
 ]) {
   check(`GOV-005 R16: rendered inline non-assertion remains allowed: ${rule}`, () => {
@@ -1912,9 +1912,6 @@ for (const mode of ['develop', 'review']) {
 
 for (const mode of ['develop', 'review']) {
   for (const rule of [
-    '> <span\n>   title="Current required checks on master: gate and vitest">Query GitHub live.</span>',
-    '> [ref]: /url "title\n> Current required checks on master: gate and vitest"',
-    '> [Query GitHub live][Current required checks on master: gate and vitest]\n>\n> [Current required checks on master: gate and vitest]: /checks',
     '> Current requ\\*ired\\* checks on master: gate and vitest',
     '> `Current required checks on master&colon; gate and vitest`',
   ]) {
@@ -1977,7 +1974,7 @@ for (const mode of ['develop', 'review']) {
     '<span style="display: none">Current required checks on master: gate and vitest</span>',
     '<script>Current required checks on master: gate and vitest</script>',
   ]) {
-    check(`GOV-005 R18: genuinely hidden CommonMark text remains allowed in ${mode}: ${rule}`, () => {
+    check(`GOV-005 R18: source fail-closed policy rejects hidden current-CI text in ${mode}: ${rule}`, () => {
       const repo = setupRepo()
       try {
         append(repo.work, '.claude/rules/coreone-guardrails.md', `\n${rule}\n`)
@@ -1987,9 +1984,10 @@ for (const mode of ['develop', 'review']) {
           git(repo.work, ['commit', '-q', '-m', 'add R18 hidden CommonMark control'])
           args.splice(0, args.length, '--mode=review', '--target-ref=HEAD', '--rules-only')
         }
-        const result = run(repo.work, args)
-        expectVerdict(result, 'PASS', 0)
-        assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+        expectDynamicFactDrift(
+          run(repo.work, args),
+          '.claude/rules/coreone-guardrails.md: current CI enforcement claim',
+        )
       } finally {
         fs.rmSync(repo.tmp, { recursive: true, force: true })
       }
@@ -2030,7 +2028,7 @@ for (const mode of ['develop', 'review']) {
     '> > Context\n> >\n> [Current required checks on master: gate and vitest]: /checks',
     '# Context\n[Current required checks on master: gate and vitest]: /checks',
   ]) {
-    check(`GOV-005 R19: ended block permits genuine reference definition in ${mode}: ${rule}`, () => {
+    check(`GOV-005 R19: source fail-closed policy rejects ended-block definition in ${mode}: ${rule}`, () => {
       const repo = setupRepo()
       try {
         append(repo.work, '.claude/rules/coreone-guardrails.md', `\n${rule}\n`)
@@ -2040,9 +2038,43 @@ for (const mode of ['develop', 'review']) {
           git(repo.work, ['commit', '-q', '-m', 'add R19 ended block reference control'])
           args.splice(0, args.length, '--mode=review', '--target-ref=HEAD', '--rules-only')
         }
-        const result = run(repo.work, args)
-        expectVerdict(result, 'PASS', 0)
-        assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+        expectDynamicFactDrift(
+          run(repo.work, args),
+          '.claude/rules/coreone-guardrails.md: current CI enforcement claim',
+        )
+      } finally {
+        fs.rmSync(repo.tmp, { recursive: true, force: true })
+      }
+    })
+  }
+}
+
+for (const mode of ['develop', 'review']) {
+  for (const claim of [
+    'Context\n2. [Current required checks on master: gate and vitest]: /checks',
+    '[Current required checks on master: gate and vitest]: /checks',
+    '```text\nCurrent required checks on master: gate and vitest\n```',
+    '<!-- Current required checks on master: gate and vitest -->',
+    '<span title="Current required checks on master: gate and vitest">Query GitHub live.</span>',
+    '[Query GitHub live](<https://example.invalid/Current required checks on master: gate>)',
+    '> <span\n>   title="Current required checks on master: gate and vitest">Query GitHub live.</span>',
+    '> [ref]: /url "title\n> Current required checks on master: gate and vitest"',
+    '> [Query GitHub live][Current required checks on master: gate and vitest]\n>\n> [Current required checks on master: gate and vitest]: /checks',
+  ]) {
+    check(`GOV-005 fail-closed source policy rejects current-CI claim in ${mode}: ${claim}`, () => {
+      const repo = setupRepo()
+      try {
+        append(repo.work, '.claude/rules/coreone-guardrails.md', `\n${claim}\n`)
+        const args = ['--mode=develop', '--rules-only']
+        if (mode === 'review') {
+          git(repo.work, ['add', '.claude/rules/coreone-guardrails.md'])
+          git(repo.work, ['commit', '-q', '-m', 'add source-level current-CI claim'])
+          args.splice(0, args.length, '--mode=review', '--target-ref=HEAD', '--rules-only')
+        }
+        expectDynamicFactDrift(
+          run(repo.work, args),
+          '.claude/rules/coreone-guardrails.md: current CI enforcement claim',
+        )
       } finally {
         fs.rmSync(repo.tmp, { recursive: true, force: true })
       }

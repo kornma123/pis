@@ -3373,13 +3373,20 @@ function inspectAuthority(root, args, checks) {
     return clauses
   }
   for (const file of [...new Set([...currentCiStableFiles, ...CURRENT_CI_ENFORCEMENT_FILES])]) {
-    const lines = stableFactText(file).split(/\r?\n/)
-    for (const [index, line] of lines.entries()) {
-      const category = splitCurrentCiClauses(canonicalizeGovernanceLine(line))
+    const renderedLines = stableFactText(file).split(/\r?\n/)
+    const sourceLines = String(contents[file] || '').split(/\r?\n/)
+    const lineCount = Math.max(renderedLines.length, sourceLines.length)
+    for (let index = 0; index < lineCount; index += 1) {
+      const renderedCategory = splitCurrentCiClauses(canonicalizeGovernanceLine(renderedLines[index] || ''))
         .map((clause) => classifyCurrentCiClaim(clause))
         .find(Boolean)
+      const sourceCategory = renderedCategory ? null : splitCurrentCiClauses(canonicalizeGovernanceLine(sourceLines[index] || ''))
+        .map((clause) => classifyCurrentCiClaim(clause))
+        .find(Boolean)
+      const category = renderedCategory || sourceCategory
       if (category) {
-        dynamicFindings.push(`${file}: current CI enforcement claim at line ${index + 1} [${category}]`)
+        const evidence = renderedCategory ? category : `${category}; source-fail-closed`
+        dynamicFindings.push(`${file}: current CI enforcement claim at line ${index + 1} [${evidence}]`)
       }
     }
   }
