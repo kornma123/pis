@@ -53,6 +53,9 @@ module.exports = {
   claimDedicatedMacTerminalWithTestPrimitives(cwd, primitives) {
     return claimDedicatedMacTerminal(cwd, primitives);
   },
+  makeSupervisorFailureForTest(reason, message, details = {}) {
+    return new SupervisorFailure(reason, message, details);
+  },
 };
 `;
   const instrumented = new Module(`${RUNTIME_PATH}#test-harness`, module);

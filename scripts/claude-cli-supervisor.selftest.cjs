@@ -14,6 +14,7 @@ const {
   ackStopSupervisorWithTestAdapter: ackStopSupervisor,
   answerSupervisorWithTestAdapter: answerSupervisor,
   claimDedicatedMacTerminalWithTestPrimitives,
+  makeSupervisorFailureForTest,
   runSupervisorWithTestAdapter: runSupervisorImplementation,
   runExternalVisibleSupervisor,
   submitMacTerminalWithTestPrimitives,
@@ -85,6 +86,9 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external visible review cannot report COMPLETE without behavior acceptance',
   'external visible protocol extension marker is machine checked',
   'external visible shell probe does not treat version success as effort proof',
+  'external shell probe resolves Claude through the visible shell inherited PATH',
+  'external startup acceptance recovers one launched session without duplicate prompt',
+  'external supervision long-polls transcript updates instead of busy-spinning',
   'external visible COMPLETE revalidates the same transcript turn after restart',
   'external visible COMPLETE becomes stale after an unrelated later turn',
   'external visible prelaunch failure retries the shell without inventing a Claude session',
@@ -212,7 +216,17 @@ function makeExternalClaim(overrides = {}) {
 function makeExternalRuntime(options = {}) {
   let launched = false;
   let effortSupported = options.effortSupported !== false;
+  let startupAcceptanceFailures = Number(options.startupAcceptanceFailures || 0);
+  let failNextStartupAcceptance = false;
   const messages = [];
+  const stats = {
+    launchWrites: 0,
+    launchCommands: [],
+    reviewPromptWrites: 0,
+    shellProbeCommands: [],
+    transcriptTimeouts: [],
+    transcriptUpdateWaits: [],
+  };
   const target = options.reviewTargetSha || 'c'.repeat(40);
   const skillSha256 = options.skillSha256 || 'd'.repeat(64);
   const permissionMode = options.permissionMode || 'plan';
@@ -261,7 +275,14 @@ function makeExternalRuntime(options = {}) {
         assert.match(input, /^node -e /);
         assert.doesNotMatch(input, /\$\(/);
       }
-      if (purpose === 'launch-visible-claude') launched = true;
+      if (purpose === 'structured-shell-probe') {
+        stats.shellProbeCommands.push(input);
+      }
+      if (purpose === 'launch-visible-claude') {
+        stats.launchWrites += 1;
+        stats.launchCommands.push(input);
+        launched = true;
+      }
       if (purpose === 'visibility-proof' && launched) {
         const canary = input.match(/COREONE_TERMINAL_PROBE_[A-Za-z0-9_]+/)?.[0];
         assert.ok(canary, 'visible-session canary missing');
@@ -270,8 +291,10 @@ function makeExternalRuntime(options = {}) {
         transcriptSha256 = 'f'.repeat(64);
       }
       if (purpose === 'fixed-sha-review-prompt') {
+        stats.reviewPromptWrites += 1;
         const challenge = input.match(/COREONE_PROMPT_CHALLENGE_[0-9a-f]+/i)?.[0];
         assert.ok(challenge, 'review prompt challenge missing');
+        messages.push({ role: 'user', text: input });
         messages.push({ role: 'assistant', text: [
           `COREONE_PROMPT_ACK ${challenge.split('').reverse().join('')}`,
           `COREONE_SKILL_DISCOVERED sha256=${skillSha256}`,
@@ -279,6 +302,7 @@ function makeExternalRuntime(options = {}) {
             ? []
             : [`COREONE_REVIEW_COMPLETE target=${target} verdict=PASS`]),
         ].join('\n') });
+        failNextStartupAcceptance = startupAcceptanceFailures > 0;
       }
       return { accepted: true };
     },
@@ -328,10 +352,23 @@ function makeExternalRuntime(options = {}) {
       assert.equal(launched, true, 'Claude process requested before visible launch');
       return { pid: 4321, tty: 'ttys000', command: processCommand };
     },
-    async waitForTranscript(_sessionId, _path, predicate) {
+    async waitForTranscript(_sessionId, _path, predicate, timeoutMs) {
+      stats.transcriptTimeouts.push(timeoutMs ?? null);
       const value = snapshot();
+      if (failNextStartupAcceptance) {
+        failNextStartupAcceptance = false;
+        startupAcceptanceFailures -= 1;
+        throw makeSupervisorFailureForTest(
+          FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+          'simulated startup acceptance timeout after launch',
+        );
+      }
       assert.equal(predicate(value), true, 'requested transcript predicate was not met');
       return value;
+    },
+    async waitForTranscriptUpdate(_sessionId, _path, cursor, timeoutMs) {
+      stats.transcriptUpdateWaits.push({ cursor, timeoutMs });
+      return { snapshot: snapshot(), changed: snapshot().recordCount > Number(cursor || 0) };
     },
     async verifyStatic() {
       return {
@@ -349,6 +386,7 @@ function makeExternalRuntime(options = {}) {
   runtime.setEffortSupported = (value) => {
     effortSupported = value === true;
   };
+  runtime.stats = stats;
   return runtime;
 }
 
@@ -2669,6 +2707,101 @@ module.exports = {
     assert.equal(result.status, 'BLOCKED');
     assert.equal(result.reason, FAILURE.CLAUDE_EFFORT_UNSUPPORTED);
     assert.equal(result.evidenceLayers.STATIC_INSTALL.status, 'UNVERIFIED');
+  });
+
+  await checkExternal('external shell probe resolves Claude through the visible shell inherited PATH', async () => {
+    const state = temporaryStateFile();
+    const claim = makeExternalClaim();
+    const input = externalRequest({ externalVisibleTerminal: { claim } });
+    const runtime = makeExternalRuntime({ claim });
+    try {
+      const result = await runExternalVisibleSupervisor(input, runtime, {
+        stateFile: state.file,
+        factGate: passFactGate,
+        maxCycles: 2,
+        randomUUID: () => '22222222-2222-4222-8222-222222222222',
+        captureInitialGitState: () => ({
+          head: 'c'.repeat(40),
+          branch: 'task-external-review',
+          gitDir: '/repo/.git',
+          tree: 'b'.repeat(40),
+        }),
+      });
+      assert.equal(result.status, 'COMPLETE');
+      assert.equal(runtime.stats.shellProbeCommands.length, 1);
+      assert.match(runtime.stats.shellProbeCommands[0], /\/usr\/bin\/which/);
+      assert.doesNotMatch(
+        runtime.stats.shellProbeCommands[0],
+        /\/bin\/zsh.*command -v claude/,
+      );
+      assert.match(runtime.stats.launchCommands[0], /\/usr\/local\/bin\/claude/);
+    } finally {
+      state.cleanup();
+    }
+  });
+
+  await checkExternal('external startup acceptance recovers one launched session without duplicate prompt', async () => {
+    const state = temporaryStateFile();
+    const claim = makeExternalClaim();
+    const input = externalRequest({ externalVisibleTerminal: { claim } });
+    const runtime = makeExternalRuntime({ claim, startupAcceptanceFailures: 1 });
+    const options = {
+      stateFile: state.file,
+      factGate: passFactGate,
+      maxCycles: 2,
+      randomUUID: () => '22222222-2222-4222-8222-222222222222',
+      captureInitialGitState: () => ({
+        head: 'c'.repeat(40),
+        branch: 'task-external-review',
+        gitDir: '/repo/.git',
+        tree: 'b'.repeat(40),
+      }),
+    };
+    try {
+      const first = await runExternalVisibleSupervisor(input, runtime, options);
+      assert.equal(first.status, 'BLOCKED');
+      assert.equal(first.reason, FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE);
+      assert.equal(first.promptInjected, false);
+      const second = await runExternalVisibleSupervisor(input, runtime, options);
+      assert.equal(second.status, 'COMPLETE');
+      assert.equal(runtime.stats.launchWrites, 1);
+      assert.equal(runtime.stats.reviewPromptWrites, 1);
+      assert.ok(
+        runtime.stats.transcriptTimeouts.includes(300_000),
+        'startup acceptance did not inherit the five-minute task budget',
+      );
+    } finally {
+      state.cleanup();
+    }
+  });
+
+  await checkExternal('external supervision long-polls transcript updates instead of busy-spinning', async () => {
+    const state = temporaryStateFile();
+    const claim = makeExternalClaim();
+    const input = externalRequest({ externalVisibleTerminal: { claim } });
+    const runtime = makeExternalRuntime({ claim, completion: false });
+    try {
+      const result = await runExternalVisibleSupervisor(input, runtime, {
+        stateFile: state.file,
+        factGate: passFactGate,
+        maxCycles: 2,
+        randomUUID: () => '22222222-2222-4222-8222-222222222222',
+        captureInitialGitState: () => ({
+          head: 'c'.repeat(40),
+          branch: 'task-external-review',
+          gitDir: '/repo/.git',
+          tree: 'b'.repeat(40),
+        }),
+      });
+      assert.equal(result.status, 'ACTIVE');
+      assert.equal(runtime.stats.transcriptUpdateWaits.length, 2);
+      assert.deepEqual(
+        runtime.stats.transcriptUpdateWaits.map((item) => item.timeoutMs),
+        [300_000, 300_000],
+      );
+    } finally {
+      state.cleanup();
+    }
   });
 
   await checkExternal('external visible COMPLETE revalidates the same transcript turn after restart', async () => {

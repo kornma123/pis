@@ -21,6 +21,7 @@ const { matchesAny } = require('./agent-preflight.cjs');
 const ADAPTER_API_VERSION = 2;
 const DEFAULT_EFFORT = 'ultracode';
 const DEFAULT_POLL_MS = 300_000;
+const MAX_VISIBLE_WAIT_MS = 10 * 60 * 1000;
 const REQUIRED_STABLE_EOF_READS = 2;
 const STATE_SCHEMA_VERSION = 3;
 const MAX_PROMPT_BYTES = 256 * 1024;
@@ -3382,7 +3383,10 @@ function delay(milliseconds) {
 }
 
 async function waitFor(check, options = {}) {
-  const timeoutMs = Math.min(Number(options.timeoutMs || 30_000), 60_000);
+  const timeoutMs = Math.min(
+    Number(options.timeoutMs || 30_000),
+    MAX_VISIBLE_WAIT_MS,
+  );
   const intervalMs = Math.max(50, Number(options.intervalMs || 250));
   const started = Date.now();
   let lastError = null;
@@ -3636,6 +3640,38 @@ function defaultExternalVisibleRuntime() {
         return predicate(snapshot) ? snapshot : null;
       }, { timeoutMs, message: 'Claude transcript evidence did not appear before the deadline' });
     },
+    async waitForTranscriptUpdate(sessionId, transcriptPath, cursor, timeoutMs) {
+      const maximum = Math.min(Number(timeoutMs || DEFAULT_POLL_MS), MAX_VISIBLE_WAIT_MS);
+      const started = Date.now();
+      let latest = null;
+      while (Date.now() - started <= maximum) {
+        try {
+          latest = readClaudeTranscript(sessionId, transcriptPath);
+        } catch (error) {
+          if (
+            error.reason !== FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE &&
+            error.code !== 'ENOENT'
+          ) throw error;
+        }
+        if (latest) {
+          const tail = latestAssistantText(latest);
+          if (
+            latest.recordCount > Number(cursor || 0) ||
+            /COREONE_REVIEW_(?:COMPLETE|QUESTION)\b/.test(tail)
+          ) {
+            return { snapshot: latest, changed: true };
+          }
+        }
+        const remaining = maximum - (Date.now() - started);
+        if (remaining <= 0) break;
+        await delay(Math.min(250, remaining));
+      }
+      if (latest) return { snapshot: latest, changed: false };
+      throw new SupervisorFailure(
+        FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+        'Claude transcript was unavailable throughout the visible supervision poll',
+      );
+    },
   };
 }
 
@@ -3735,6 +3771,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
   let visibilityCursor = 0;
   let transcriptPath = binding.transcriptPath;
   let claudePid = binding.claudePid;
+  let claudeLaunchPath = null;
   let lastVisibilityCanary = null;
   let lastVisibilityResponse = null;
 
@@ -3756,11 +3793,11 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
     return inspected;
   }
 
-  async function inspectBoundClaude() {
+  async function inspectBoundClaude(preloadedSnapshot = null) {
     const processInfo = await runtime.waitForClaudeProcess(binding, claudePid);
     assertExternalClaudeCommand(processInfo, binding);
     claudePid = processInfo.pid;
-    const snapshot = await runtime.waitForTranscript(
+    const snapshot = preloadedSnapshot || await runtime.waitForTranscript(
       request.externalVisibleTerminal.claudeSessionId,
       transcriptPath,
       () => true,
@@ -3799,13 +3836,13 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       const existing = await runtime.claudeProcess(binding.tty);
       if (binding.startup === 'launch-in-dedicated-window') {
         assertDedicatedTerminalClaim(binding, inspected);
-      }
-      if (binding.startup === 'launch-in-dedicated-window' && existing) {
-        throw new SupervisorFailure(
-          FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
-          'the claimed dedicated Terminal window is busy with another Claude session',
-          { pid: existing.pid },
-        );
+        if (existing) {
+          throw new SupervisorFailure(
+            FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+            'the newly claimed dedicated Terminal window already contains a Claude process',
+            { pid: existing.pid },
+          );
+        }
       }
       if (binding.startup === 'attach-existing') {
         if (!existing || existing.pid !== binding.claudePid) {
@@ -3840,12 +3877,13 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       if (input.started === true) {
         await inspectBoundClaude();
       } else if (binding.startup === 'launch-in-dedicated-window') {
-        assertDedicatedTerminalClaim(binding, inspected);
-        if (await runtime.claudeProcess(binding.tty)) {
-          throw new SupervisorFailure(
-            FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
-            'a different Claude session occupied the dedicated window during prelaunch recovery',
-          );
+        const existing = await runtime.claudeProcess(binding.tty);
+        if (existing) {
+          assertExternalClaudeCommand(existing, binding);
+          claudePid = existing.pid;
+          await inspectBoundClaude();
+        } else {
+          assertDedicatedTerminalClaim(binding, inspected);
         }
       }
       return boundResult(input, {
@@ -3922,13 +3960,53 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
           running: true,
         });
       }
-      const { snapshot } = await inspectBoundClaude();
       const cursor = Number(input.cursor || 0);
+      let preloadedSnapshot = null;
+      if (typeof runtime.waitForTranscriptUpdate === 'function') {
+        const update = await runtime.waitForTranscriptUpdate(
+          binding.claudeSessionId,
+          transcriptPath,
+          cursor,
+          input.maxWaitMs,
+        );
+        preloadedSnapshot = update?.snapshot || update;
+      }
+      const { snapshot } = await inspectBoundClaude(preloadedSnapshot);
       const output = assistantTextAfter(snapshot, cursor);
       const tail = latestAssistantText(snapshot);
-      const completion = tail.match(
-        /COREONE_REVIEW_COMPLETE\s+target=([0-9a-f]{40})\s+verdict=(PASS|FAIL|BLOCKED)\b/i,
-      );
+      const completionCandidates = [];
+      for (const message of snapshot.messages) {
+        if (message.role !== 'assistant') continue;
+        const match = message.text.match(
+          /COREONE_REVIEW_COMPLETE\s+target=([0-9a-f]{40})\s+verdict=(PASS|FAIL|BLOCKED)\b/i,
+        );
+        if (match) completionCandidates.push({ message, match });
+      }
+      const completionCandidate = completionCandidates.at(-1) || null;
+      const laterMessages = completionCandidate
+        ? snapshot.messages.filter(
+          (message) => message.index > completionCandidate.message.index,
+        )
+        : [];
+      const laterMessagesAreVisibilityProof =
+        completionCandidate &&
+        lastVisibilityCanary &&
+        lastVisibilityResponse &&
+        laterMessages.length > 0 &&
+        laterMessages.every((message) =>
+          (message.role === 'user' && message.text.includes(lastVisibilityCanary)) ||
+          (message.role === 'assistant' && message.text.includes(lastVisibilityResponse)),
+        ) &&
+        laterMessages.some(
+          (message) =>
+            message.role === 'assistant' &&
+            message.text.includes(lastVisibilityResponse),
+        );
+      const completion = completionCandidate && (
+        laterMessages.length === 0 || laterMessagesAreVisibilityProof
+      )
+        ? completionCandidate.match
+        : null;
       const question = tail.match(
         /COREONE_REVIEW_QUESTION\s+id=([A-Za-z0-9._-]+)\s+kind=([A-Za-z0-9._-]+)\s+text=(.+)$/m,
       );
@@ -3938,7 +4016,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         visible: true,
         cursor: String(snapshot.recordCount),
         output,
-        tail,
+        tail: completion ? completionCandidate.message.text : tail,
         eof: complete,
         running: !complete,
         runningTool: false,
@@ -3978,7 +4056,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         const probeSource = [
           "const {execFileSync}=require('node:child_process')",
           "const run=(command,args=[])=>execFileSync(command,args,{encoding:'utf8'}).trim()",
-          "const claudePath=run('/bin/zsh',['-lc','command -v claude'])",
+          "const claudePath=run('/usr/bin/which',['claude'])",
           "const claudeVersion=run(claudePath,['--version'])",
           "const help=run(claudePath,['--help'])",
           `const data={cwd:process.cwd(),worktreeRoot:run('git',['rev-parse','--show-toplevel']),claudePath,claudeVersion,effortSupported:help.includes(${JSON.stringify(binding.expectedEffort)})}`,
@@ -4038,6 +4116,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
             },
           );
         }
+        claudeLaunchPath = canonicalPath(shellProbe.claudePath);
         return boundResult(input, {
           cwd: request.cwd,
           worktreeRoot: request.cwd,
@@ -4081,11 +4160,18 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       });
     },
     async launchClaude(input) {
+      let priorSnapshot = null;
       if (binding.startup === 'launch-in-dedicated-window' && !claudePid) {
+        if (!claudeLaunchPath || !path.isAbsolute(claudeLaunchPath)) {
+          throw new SupervisorFailure(
+            FAILURE.CLAUDE_CLI_MISSING,
+            'the exact visible-shell Claude executable was not retained from the prelaunch probe',
+          );
+        }
         const command = [
           `cd -- ${shellQuote(request.cwd)}`,
           '&&',
-          'claude',
+          shellQuote(claudeLaunchPath),
           '--effort',
           shellQuote(binding.expectedEffort),
           '--permission-mode',
@@ -4100,7 +4186,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         assertExternalClaudeCommand(processInfo, binding);
         claudePid = processInfo.pid;
       } else {
-        await inspectBoundClaude();
+        ({ snapshot: priorSnapshot } = await inspectBoundClaude());
       }
       const challenge = `COREONE_PROMPT_CHALLENGE_${sha256(input.prompt).slice(0, 16)}`;
       const expectedChallenge = challenge.split('').reverse().join('');
@@ -4116,15 +4202,28 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         'If controller input is required, output COREONE_REVIEW_QUESTION id=<id> kind=<kind> text=<single-line question>.',
         `When the review turn is fully finished, output COREONE_REVIEW_COMPLETE target=${binding.reviewTargetSha} verdict=<PASS|FAIL|BLOCKED>.`,
       ].join('\n');
-      await runtime.writeTerminal(binding, reviewPrompt, 'fixed-sha-review-prompt');
+      const promptAlreadyInjected = priorSnapshot?.messages.some(
+        (message) =>
+          message.role === 'user' &&
+          message.text.includes(challenge) &&
+          message.text.includes(binding.reviewTargetSha) &&
+          message.text.includes(binding.skillPath),
+      ) === true;
+      if (!promptAlreadyInjected) {
+        await runtime.writeTerminal(binding, reviewPrompt, 'fixed-sha-review-prompt');
+      }
       const snapshot = await runtime.waitForTranscript(
         binding.claudeSessionId,
         transcriptPath,
         (candidate) => {
-          const text = assistantTextAfter(candidate, visibilityCursor);
+          const text = assistantTextAfter(candidate, 0);
           return text.includes(`COREONE_PROMPT_ACK ${expectedChallenge}`) &&
             text.includes(`COREONE_SKILL_DISCOVERED sha256=${binding.skillSha256}`);
         },
+        Math.min(
+          Math.max(request.questionTimeoutMs, DEFAULT_POLL_MS),
+          MAX_VISIBLE_WAIT_MS,
+        ),
       );
       transcriptPath = snapshot.transcriptPath;
       const processInfo = await runtime.waitForClaudeProcess(binding, claudePid);
