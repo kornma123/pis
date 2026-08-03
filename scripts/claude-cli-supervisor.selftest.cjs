@@ -15,6 +15,7 @@ const {
   answerSupervisorWithTestAdapter: answerSupervisor,
   runSupervisorWithTestAdapter: runSupervisorImplementation,
   runExternalVisibleSupervisor,
+  submitMacTerminalWithTestPrimitives,
 } = require('./claude-cli-supervisor.test-harness.cjs');
 const {
   FAILURE,
@@ -86,6 +87,7 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external visible COMPLETE revalidates the same transcript turn after restart',
   'external visible COMPLETE becomes stale after an unrelated later turn',
   'external visible prelaunch failure retries the shell without inventing a Claude session',
+  'macOS Terminal TUI submit waits before the same-tab empty submit',
 ]);
 
 async function check(name, fn) {
@@ -2662,6 +2664,29 @@ module.exports = {
     } finally {
       state.cleanup();
     }
+  });
+
+  await checkExternal('macOS Terminal TUI submit waits before the same-tab empty submit', async () => {
+    const events = [];
+    const receipt = await submitMacTerminalWithTestPrimitives(
+      { windowId: 12081, tty: '/dev/ttys000' },
+      'review prompt',
+      {
+        terminalJxa(_source, args) {
+          events.push({ type: 'write', input: args[2] });
+          return { accepted: true, windowId: 12081, tty: '/dev/ttys000' };
+        },
+        async delay(milliseconds) {
+          events.push({ type: 'delay', milliseconds });
+        },
+      },
+    );
+    assert.equal(receipt.accepted, true);
+    assert.deepEqual(events, [
+      { type: 'write', input: 'review prompt' },
+      { type: 'delay', milliseconds: 350 },
+      { type: 'write', input: '' },
+    ]);
   });
 
   if (failed + externalFailed > 0) {

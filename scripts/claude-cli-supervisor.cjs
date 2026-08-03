@@ -3070,8 +3070,10 @@ function inspectMacTerminal(binding) {
   return terminalJxa(TERMINAL_INSPECT_JXA, [binding.windowId, binding.tty]);
 }
 
-function writeMacTerminal(binding, input) {
-  const receipt = terminalJxa(TERMINAL_WRITE_JXA, [
+async function writeMacTerminal(binding, input, primitives = {}) {
+  const jxa = primitives.terminalJxa || terminalJxa;
+  const pause = primitives.delay || delay;
+  const receipt = jxa(TERMINAL_WRITE_JXA, [
     binding.windowId,
     binding.tty,
     input,
@@ -3079,7 +3081,8 @@ function writeMacTerminal(binding, input) {
   // Terminal 2.14 can insert into a foreground TUI on the first do-script and
   // submit on a second empty do-script. This is an adapter detail; readback,
   // never the extra submit itself, decides whether delivery succeeded.
-  terminalJxa(TERMINAL_WRITE_JXA, [binding.windowId, binding.tty, '']);
+  await pause(350);
+  jxa(TERMINAL_WRITE_JXA, [binding.windowId, binding.tty, '']);
   return receipt;
 }
 

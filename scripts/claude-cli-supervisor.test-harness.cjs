@@ -47,6 +47,9 @@ module.exports = {
       adapterCapability: EXTERNAL_VISIBLE_ADAPTER_CAPABILITY,
     });
   },
+  submitMacTerminalWithTestPrimitives(binding, input, primitives) {
+    return writeMacTerminal(binding, input, primitives);
+  },
 };
 `;
   const instrumented = new Module(`${RUNTIME_PATH}#test-harness`, module);
