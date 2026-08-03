@@ -263,7 +263,7 @@ function makeExternalRuntime(options = {}) {
         claudeVersion: options.shellProbeVersion || '2.1.220',
         effortSupported,
       })).toString('base64');
-      return {
+      const receipt = {
         terminalApp: 'Terminal',
         frontmost: true,
         frontWindow: true,
@@ -274,6 +274,9 @@ function makeExternalRuntime(options = {}) {
         busy: launched,
         contents: `${marker}:${encoded}:${marker}_END`,
       };
+      assert.equal(pattern.test(receipt.contents), true);
+      assert.notEqual(pattern.lastIndex, 0, 'global regex state was not exercised');
+      return receipt;
     },
     async waitForClaudeProcess() {
       assert.equal(launched, true, 'Claude process requested before visible launch');

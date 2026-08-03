@@ -3642,6 +3642,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         const inspected = typeof runtime.waitForTerminalMatch === 'function'
           ? await runtime.waitForTerminalMatch(binding, pattern, 30_000)
           : await runtime.waitForTerminalText(binding, `${marker}_END`, 30_000);
+        pattern.lastIndex = 0;
         const matches = [...String(inspected.contents || '').matchAll(pattern)];
         let shellProbe = null;
         try {
