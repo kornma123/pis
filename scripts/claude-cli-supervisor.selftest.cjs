@@ -260,7 +260,7 @@ function makeExternalRuntime(options = {}) {
         cwd: '/repo',
         worktreeRoot: '/repo',
         claudePath: '/usr/local/bin/claude',
-        claudeVersion: options.shellProbeVersion || '2.1.220',
+          claudeVersion: options.shellProbeVersion || '2.1.220 (Claude Code)',
         effortSupported,
       })).toString('base64');
       const receipt = {

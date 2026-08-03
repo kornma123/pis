@@ -61,6 +61,7 @@ const FAILURE = Object.freeze({
   CWD_MISMATCH: 'CWD_MISMATCH',
   CLAUDE_CLI_MISSING: 'CLAUDE_CLI_MISSING',
   CLAUDE_CLI_VERSION_TOO_OLD: 'CLAUDE_CLI_VERSION_TOO_OLD',
+  CLAUDE_CLI_VERSION_MISMATCH: 'CLAUDE_CLI_VERSION_MISMATCH',
   CLAUDE_EFFORT_UNSUPPORTED: 'CLAUDE_EFFORT_UNSUPPORTED',
   PROMPT_INJECTION_UNPROVEN: 'PROMPT_INJECTION_UNPROVEN',
   CLAUDE_RESUME_UNPROVEN: 'CLAUDE_RESUME_UNPROVEN',
@@ -3652,18 +3653,31 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         } catch {
           // The structured validation below reports one stable failure class.
         }
+        const normalizedVisibleVersion = parseVersion(
+          shellProbe?.claudeVersion,
+        )?.raw || null;
+        const versionMatches =
+          normalizedVisibleVersion !== null &&
+          compareVersions(
+            normalizedVisibleVersion,
+            binding.expectedClaudeVersion,
+          ) === 0;
         if (
           canonicalPath(shellProbe?.cwd || '') !== request.cwd ||
           canonicalPath(shellProbe?.worktreeRoot || '') !== request.cwd ||
           !path.isAbsolute(String(shellProbe?.claudePath || '')) ||
-          shellProbe?.claudeVersion !== binding.expectedClaudeVersion ||
+          !versionMatches ||
           shellProbe?.effortSupported !== true
         ) {
-          throw new SupervisorFailure(
+          const cwdMismatch =
             canonicalPath(shellProbe?.cwd || '') !== request.cwd ||
-              canonicalPath(shellProbe?.worktreeRoot || '') !== request.cwd
+            canonicalPath(shellProbe?.worktreeRoot || '') !== request.cwd;
+          throw new SupervisorFailure(
+            cwdMismatch
               ? FAILURE.CWD_MISMATCH
-              : FAILURE.CLAUDE_EFFORT_UNSUPPORTED,
+              : !versionMatches
+                ? FAILURE.CLAUDE_CLI_VERSION_MISMATCH
+                : FAILURE.CLAUDE_EFFORT_UNSUPPORTED,
             'same-tab shell probe did not prove cwd, Claude version, and effort support',
             {
               cwd: shellProbe?.cwd || null,
@@ -3678,7 +3692,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
           cwd: request.cwd,
           worktreeRoot: request.cwd,
           claudePath: shellProbe.claudePath,
-          claudeVersion: shellProbe.claudeVersion,
+          claudeVersion: normalizedVisibleVersion,
           effortSupported: true,
           actualEffort: binding.expectedEffort,
           permissionMode: binding.expectedPermissionMode,
