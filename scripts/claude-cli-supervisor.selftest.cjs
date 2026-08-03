@@ -86,6 +86,7 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external visible review cannot report COMPLETE without behavior acceptance',
   'external visible protocol extension marker is machine checked',
   'external startup separates lightweight handshake from Skill review delivery',
+  'external startup refocuses the exact visible surface before review delivery',
   'external visible shell probe does not treat version success as effort proof',
   'external shell probe resolves Claude through the visible shell inherited PATH',
   'external startup acceptance recovers one launched session without duplicate prompt',
@@ -167,7 +168,7 @@ function externalRequest(overrides = {}) {
       startup: 'launch-in-dedicated-window',
       claudeSessionId: '11111111-1111-4111-8111-111111111111',
       expectedClaudeVersion: '2.1.220',
-      expectedEffort: 'xhigh',
+      expectedEffort: 'max',
       expectedPermissionMode: 'plan',
       repositoryFullName: 'kornma123/pis',
       reviewTargetSha: target,
@@ -216,6 +217,7 @@ function makeExternalClaim(overrides = {}) {
 
 function makeExternalRuntime(options = {}) {
   let launched = false;
+  let frontmost = true;
   let effortSupported = options.effortSupported !== false;
   let startupAcceptanceFailures = Number(options.startupAcceptanceFailures || 0);
   let failNextStartupAcceptance = false;
@@ -231,6 +233,7 @@ function makeExternalRuntime(options = {}) {
     writePurposes: [],
     handshakePrompts: [],
     reviewPrompts: [],
+    focusCalls: 0,
   };
   const target = options.reviewTargetSha || 'c'.repeat(40);
   const skillSha256 = options.skillSha256 || 'd'.repeat(64);
@@ -238,7 +241,7 @@ function makeExternalRuntime(options = {}) {
   const tty = options.tty || '/dev/ttys000';
   let transcriptSha256 = options.transcriptSha256 || 'e'.repeat(64);
   const processCommand = options.processCommand ||
-    '/usr/local/bin/claude.exe --effort xhigh --permission-mode plan --session-id 11111111-1111-4111-8111-111111111111';
+    '/usr/local/bin/claude.exe --effort max --permission-mode plan --session-id 11111111-1111-4111-8111-111111111111';
   const claim = options.claim || makeExternalClaim();
   const liveClaimProof = `${claim.proofMarker}:${claim.proofPayloadBase64}:${claim.proofMarker}_END`;
   const snapshot = () => ({
@@ -249,7 +252,7 @@ function makeExternalRuntime(options = {}) {
       sessionId: '11111111-1111-4111-8111-111111111111',
       claudeVersion: '2.1.220',
       cwd: '/repo',
-      effort: 'xhigh',
+      effort: 'max',
       permissionMode,
       model: 'k3',
     },
@@ -259,10 +262,14 @@ function makeExternalRuntime(options = {}) {
     })),
   });
   const runtime = {
+    async focusTerminal() {
+      stats.focusCalls += 1;
+      frontmost = true;
+    },
     async inspectTerminal() {
       return {
         terminalApp: 'Terminal',
-        frontmost: true,
+        frontmost,
         frontWindow: true,
         selected: true,
         windowId: 12081,
@@ -307,8 +314,18 @@ function makeExternalRuntime(options = {}) {
           `COREONE_SKILL_DISCOVERED sha256=${skillSha256}`,
         ].join('\n') });
         failNextStartupAcceptance = startupAcceptanceFailures > 0;
+        if (options.loseFrontmostAfterHandshake === true) {
+          frontmost = false;
+        }
       }
       if (purpose === 'fixed-sha-review-prompt') {
+        if (options.loseFrontmostAfterHandshake === true) {
+          assert.equal(
+            frontmost,
+            true,
+            'review delivery attempted without refocusing the bound Terminal window',
+          );
+        }
         stats.reviewPromptWrites += 1;
         stats.reviewPrompts.push(input);
         assert.match(input, /COREONE_REVIEW_REQUEST_[0-9a-f]+/i);
@@ -2623,7 +2640,8 @@ module.exports = {
     }
   });
 
-  await checkExternal('external visible review rejects an unbound or mutable target contract', async () => {
+  if (process.argv.includes('--external-summary')) {
+    await checkExternal('external visible review rejects an unbound or mutable target contract', async () => {
     assert.throws(
       () => validateRequest(request({
         supervisionMode: 'external-visible-readonly',
@@ -2736,6 +2754,20 @@ module.exports = {
     assert.match(runtime.stats.reviewPrompts[0], /COREONE_REVIEW_REQUEST_/);
   });
 
+  await checkExternal('external startup refocuses the exact visible surface before review delivery', async () => {
+    let runtime = null;
+    const result = await runExternalCase({
+      runtimeOptions: { loseFrontmostAfterHandshake: true },
+      captureRuntime(value) {
+        runtime = value;
+      },
+    });
+    assert.equal(result.status, 'COMPLETE');
+    assert.ok(runtime);
+    assert.equal(runtime.stats.reviewPromptWrites, 1);
+    assert.ok(runtime.stats.focusCalls >= 2);
+  });
+
   await checkExternal('external visible shell probe does not treat version success as effort proof', async () => {
     const result = await runExternalCase({
       runtimeOptions: { effortSupported: false },
@@ -2771,6 +2803,7 @@ module.exports = {
         /\/bin\/zsh.*command -v claude/,
       );
       assert.match(runtime.stats.launchCommands[0], /\/usr\/local\/bin\/claude/);
+      assert.match(runtime.stats.launchCommands[0], /--effort 'max'/);
     } finally {
       state.cleanup();
     }
@@ -2989,14 +3022,15 @@ module.exports = {
     ]);
   });
 
-  await checkExternal('external visible launch rejects a process that dropped plan mode or session flags', async () => {
-    const result = await runExternalCase({
-      runtimeOptions: { processCommand: 'claude printf accidental-shell-buffer' },
+    await checkExternal('external visible launch rejects a process that dropped plan mode or session flags', async () => {
+      const result = await runExternalCase({
+        runtimeOptions: { processCommand: 'claude printf accidental-shell-buffer' },
+      });
+      assert.equal(result.status, 'BLOCKED');
+      assert.equal(result.reason, FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION);
+      assert.equal(result.evidenceLayers.SKILL_DISCOVERY.status, 'UNVERIFIED');
     });
-    assert.equal(result.status, 'BLOCKED');
-    assert.equal(result.reason, FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION);
-    assert.equal(result.evidenceLayers.SKILL_DISCOVERY.status, 'UNVERIFIED');
-  });
+  }
 
   if (failed + externalFailed > 0) {
     process.stderr.write(

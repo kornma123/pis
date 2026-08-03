@@ -22,7 +22,7 @@
 
 “没有 Codex 内置终端句柄”不等于“无法控制用户现有可见终端”。外部模式承认后一种能力，但不会把它标成 host-native 或不可伪造；收据必须明确 `codexTaskBindingRequired=false`。
 
-仓库内唯一生产监督入口是 `scripts/claude-cli-supervisor.cjs`，回归入口是 `scripts/claude-cli-supervisor.selftest.cjs`，测试专用装载器是 `scripts/claude-cli-supervisor.test-harness.cjs`。监督器拥有状态机、同句柄校验、Claude 探针、session/prompt 绑定、增量读取、问题中断、双读 EOF、独立 Git/scope/R0 事实闸和 Git 外恢复状态；它不拥有 Codex Desktop 前端终端。
+仓库内唯一生产监督入口是 `scripts/claude-cli-supervisor.cjs`，回归入口是 `scripts/claude-cli-supervisor.selftest.cjs`，测试专用装载器是 `scripts/claude-cli-supervisor.test-harness.cjs`。默认回归只运行可在 review preflight 物化目标中独立执行的核心 suite；依赖完整仓库协议文档与 Git 现场的外部可见终端扩展必须显式运行 `node scripts/claude-cli-supervisor.selftest.cjs --external-summary`，两者都通过才可进入真实桌面验收。监督器拥有状态机、同句柄校验、Claude 探针、session/prompt 绑定、增量读取、问题中断、双读 EOF、独立 Git/scope/R0 事实闸和 Git 外恢复状态；它不拥有 Codex Desktop 前端终端。
 
 两种模式都以 adapter API v2 接入。**生产 CLI 不加载 `--adapter=<文件>`，生产模块也不导出任何 fake-adapter 测试入口**：任意仓库外/仓库内 JavaScript 文件都能伪报 `attached/visible`。回归测试只能由测试进程显式加载专用 harness；生产 runtime 不得 import、命名或重新导出该 harness，不能用 `NODE_ENV`、环境变量或布尔值伪造信任边界。
 
@@ -110,7 +110,7 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
 |---|---|
 | `createTerminal` | native 模式在当前 `threadId` 中按 `taskId+sessionId+generation` 幂等键同步创建并打开前端终端；外部自动启动模式只附着已由 `claim` 新建并现场回读的专用窗口。两者都返回 `status=attached`、`visible=true`、稳定 handle、同一 generation 与原样幂等键；`queued` 不合格 |
 | `attachTerminal` | native 模式在 Codex app/task 重启后按同一幂等键重新附着；外部模式重新核对同一 Terminal window id/TTY/Claude PID/session/transcript。两者都不能改用另一个终端 |
-| `writeTerminal` | 向同一 handle 写 canary、控制者回答和前台 CLI 输入；visibility canary 必须走不会注入 Claude 前台输入的宿主 marker 通道；返回 `accepted=true` |
+| `writeTerminal` | 向同一 handle 写 canary、控制者回答和前台 CLI 输入；每次写入前都重新聚焦并现场复核同一 app/window id/selected TTY，不能把前一阶段的前台状态跨等待复用；visibility canary 必须走不会注入 Claude 前台输入的宿主 marker 通道；返回 `accepted=true` |
 | `readTerminal` | 应用侧按 cursor 增量回读同一 handle；外部模式必须长轮询 transcript 变化或结构化问题/终态，无新记录时不得空转忙循环。返回绑定后的 `threadId/handle/generation`、`attached/visible`、真实输出、EOF、运行工具、结构化 question/stop，以及同 `sessionId` 的结构化进程终态 |
 | `probeTerminal` | 新启动前在同一终端运行 `pwd`、worktree root、Claude 路径/版本探针；Claude 路径必须从当前可见 shell 继承的 `PATH` 解析，不得另起 login shell 导致另一套 PATH。恢复时用进程与 transcript 元数据复核实际 executable、version、effort、permission mode、cwd/session。`claude --effort <值> --version` 只证明版本命令接受参数，**不能**证明实际会话采用该 effort |
 | `launchClaude` | 在该 handle 的前台使用唯一 name/session id 启动；native 使用其固定默认，外部使用 request 的精确 effort 与 `permission-mode=plan`。外部模式先发送不调用 Skill、不展开复核的轻量 digest/challenge 握手；收到同 session ACK 后再显式 `/<skill>` 投递带唯一 marker 的复核消息，并以 transcript 中的 user message 证明已注入。Skill/权威链的长读取属于后续复核，不得与启动握手合并后再用一分钟误杀 |
@@ -118,7 +118,7 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
 
 同一 task 的 `run/answer/ack-stop` 受 Git 外独占 lease 保护，状态文件每次写入做 revision CAS；并发控制者只能得到 `SUPERVISOR_LEASE_HELD`，不得第二次 create/launch。应用或任务异常退出后，仅在 owner PID 已确定不存在（`ESRCH`）时自动回收旧 lease；owner 仍存活或证据不可解析时继续失败关闭。
 
-外部自动启动是有副作用的三阶段操作：先出现精确 Claude 进程，再用轻量独立回合取得 Skill digest 与 prompt ACK，最后才显式调用 Skill 投递复核。若控制器在任一阶段之间退出，重试必须在已持久的同一 terminal handle 上核对精确 launch command、session id、runtime metadata 与 transcript；全部匹配时从最后一个已证明阶段续接，不得再启动进程、重复握手或重复投递复核。无已持久 handle、任一身份不匹配或 transcript 中出现无关后续回合时仍 fail-closed。
+外部自动启动是有副作用的三阶段操作：先出现精确 Claude 进程，再用轻量独立回合取得 Skill digest 与 prompt ACK，最后才显式调用 Skill 投递复核。阶段间等待可能使 Terminal 失去前台，因此启动命令、握手和正式复核三次写入都必须在写入前重新聚焦并现场复核同一 app/window id/selected TTY；仅凭先前 canary 或前一阶段的窗口状态不得继续。若控制器在任一阶段之间退出，重试必须在已持久的同一 terminal handle 上核对精确 launch command、session id、runtime metadata 与 transcript；全部匹配时从最后一个已证明阶段续接，不得再启动进程、重复握手或重复投递复核。无已持久 handle、任一身份不匹配或 transcript 中出现无关后续回合时仍 fail-closed。
 
 调度者收到 `WAITING_CONTROLLER` 后，在权限与 scope 不扩大的问题上可通过库 API 的 `onQuestion` 立即回答，或调用：
 
@@ -178,7 +178,7 @@ claude --effort '<该模式批准的精确 effort>' --name '<可识别任务名>
 claude --effort '<该模式批准的精确 effort>' --name '<可识别任务名>' --resume '<原 session id>'
 ```
 
-- `native-task-bound` 的既有默认仍是 `ultracode`，在 native bridge 接线前不得伪称可运行。`external-visible-readonly` 不继承这个未经实际 session 证明的默认：启动参数必须等于 request 的 `expectedEffort`，并从 transcript 元数据读回相同值；当前设备曾验证的 `xhigh` 只是动态证据，不是跨设备常量。
+- `native-task-bound` 的既有默认仍是 `ultracode`，在 native bridge 接线前不得伪称可运行。`external-visible-readonly` 不继承这个未经实际 session 证明的默认：启动参数必须等于 request 的 `expectedEffort`，并从 transcript 元数据读回相同值；任何任务现场批准的 effort 都只是动态证据，不是跨设备常量。
 - Claude 版本按严格 SemVer 比较；prerelease 低于相同 core 的稳定版（例如 `2.0.0-beta.1 < 2.0.0`），不得只比较前三段数字后放行。
 - SemVer 的数字标识符按十进制数字串长度和字典序比较，不转为 JavaScript `Number`；超出安全整数范围的版本也必须保持双向对称顺序。
 - effort 不在本机 `claude --help` 声明集合、启动后实际值不同或 transcript 无法确认时停止派单；不得因 `claude --effort <值> --version` 返回 0 就认定支持，也不得静默降级。

@@ -3798,6 +3798,19 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
     return inspected;
   }
 
+  async function writeBoundTerminal(input, purpose) {
+    await inspectBoundSurface();
+    const receipt = await runtime.writeTerminal(binding, input, purpose);
+    if (receipt?.accepted !== true) {
+      throw new SupervisorFailure(
+        FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+        'the exact visible Terminal surface did not acknowledge the write',
+        { purpose },
+      );
+    }
+    return receipt;
+  }
+
   async function inspectBoundClaude(preloadedSnapshot = null) {
     const processInfo = await runtime.waitForClaudeProcess(binding, claudePid);
     assertExternalClaudeCommand(processInfo, binding);
@@ -3905,7 +3918,6 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       });
     },
     async writeTerminal(input) {
-      await inspectBoundSurface();
       let delivered = input.input;
       if (input.purpose === 'visibility-proof') {
         lastVisibilityCanary = input.canary;
@@ -3922,10 +3934,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         ].join(';');
         delivered = `node -e ${shellQuote(canarySource)}`;
       }
-      const receipt = await runtime.writeTerminal(binding, delivered, input.purpose);
-      if (receipt?.accepted !== true) {
-        return boundResult(input, { accepted: false });
-      }
+      await writeBoundTerminal(delivered, input.purpose);
       return boundResult(input, { accepted: true });
     },
     async readTerminal(input) {
@@ -4068,7 +4077,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
           `process.stdout.write(${JSON.stringify(`${marker}:`)}+Buffer.from(JSON.stringify(data)).toString('base64')+${JSON.stringify(`:${marker}_END\\n`)})`,
         ].join(';');
         const script = `cd -- ${shellQuote(request.cwd)} && node -e ${shellQuote(probeSource)}`;
-        await runtime.writeTerminal(binding, script, 'structured-shell-probe');
+        await writeBoundTerminal(script, 'structured-shell-probe');
         const pattern = new RegExp(
           `${marker}:([A-Za-z0-9+/=]+):${marker}_END`,
           'g',
@@ -4186,7 +4195,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
           '--session-id',
           shellQuote(binding.claudeSessionId),
         ].join(' ');
-        await runtime.writeTerminal(binding, command, 'launch-visible-claude');
+        await writeBoundTerminal(command, 'launch-visible-claude');
         const processInfo = await runtime.waitForClaudeProcess(binding);
         assertExternalClaudeCommand(processInfo, binding);
         claudePid = processInfo.pid;
@@ -4234,8 +4243,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       ) === true;
       if (!handshakeAlreadyAccepted) {
         if (!handshakeAlreadyInjected) {
-          await runtime.writeTerminal(
-            binding,
+          await writeBoundTerminal(
             handshakePrompt,
             'startup-handshake-prompt',
           );
@@ -4265,7 +4273,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
           message.text.includes(binding.skillPath),
       ) === true;
       if (!reviewPromptAlreadyInjected) {
-        await runtime.writeTerminal(binding, reviewPrompt, 'fixed-sha-review-prompt');
+        await writeBoundTerminal(reviewPrompt, 'fixed-sha-review-prompt');
       }
       const snapshot = await runtime.waitForTranscript(
         binding.claudeSessionId,
