@@ -2482,6 +2482,146 @@ function inspectAuthority(root, args, checks) {
   function navigableMarkdown(value) {
     return visibleMarkdown(value, { includeBlockquotes: true })
   }
+  const MARKDOWN_TEXT_ENTITIES = Object.freeze({
+    AMP: '&',
+    amp: '&',
+    apos: "'",
+    ast: '*',
+    bsol: '\\',
+    colon: ':',
+    comma: ',',
+    equals: '=',
+    excl: '!',
+    GT: '>',
+    gt: '>',
+    lcub: '{',
+    lpar: '(',
+    LSQB: '[',
+    lsqb: '[',
+    LT: '<',
+    lt: '<',
+    nbsp: ' ',
+    NewLine: ' ',
+    num: '#',
+    period: '.',
+    plus: '+',
+    quest: '?',
+    QUOT: '"',
+    quot: '"',
+    rcub: '}',
+    rpar: ')',
+    RSQB: ']',
+    rsqb: ']',
+    semi: ';',
+    sol: '/',
+    Tab: ' ',
+    verbar: '|',
+  })
+  function decodeMarkdownTextEntity(source, index) {
+    const match = source.slice(index).match(/^&(?:#([0-9]+)|#[xX]([0-9A-Fa-f]+)|([A-Za-z][A-Za-z0-9]+));/)
+    if (!match) return null
+    if (match[1] || match[2]) {
+      const codePoint = Number.parseInt(match[1] || match[2], match[1] ? 10 : 16)
+      const invalid = !Number.isInteger(codePoint) || codePoint <= 0 || codePoint > 0x10ffff ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff)
+      return { length: match[0].length, text: invalid ? '\ufffd' : String.fromCodePoint(codePoint) }
+    }
+    const decoded = MARKDOWN_TEXT_ENTITIES[match[3]]
+    return decoded === undefined ? null : { length: match[0].length, text: decoded }
+  }
+  function matchingInlineDelimiter(source, start, opening, closing) {
+    let depth = 0
+    let quote = null
+    for (let index = start; index < source.length; index += 1) {
+      const character = source[index]
+      if (character === '\\') {
+        index += 1
+        continue
+      }
+      if (quote) {
+        if (character === quote) quote = null
+        continue
+      }
+      if ((opening === '(') && (character === '"' || character === "'")) {
+        quote = character
+        continue
+      }
+      if (character === opening) depth += 1
+      else if (character === closing) {
+        depth -= 1
+        if (depth === 0) return index
+      }
+    }
+    return -1
+  }
+  function inlineHtmlTagEnd(source, start) {
+    if (!/^<\/?[A-Za-z][A-Za-z0-9-]*(?=[ \t/>])/.test(source.slice(start))) return -1
+    let quote = null
+    for (let index = start + 1; index < source.length; index += 1) {
+      const character = source[index]
+      if (quote) {
+        if (character === quote) quote = null
+      } else if (character === '"' || character === "'") {
+        quote = character
+      } else if (character === '>') {
+        return index
+      }
+    }
+    return -1
+  }
+  function renderedMarkdownInlineText(source) {
+    let visible = ''
+    for (let index = 0; index < source.length;) {
+      const character = source[index]
+      if (
+        character === '\\' &&
+        index + 1 < source.length &&
+        /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(source[index + 1])
+      ) {
+        visible += source[index + 1]
+        index += 2
+        continue
+      }
+      const labelStart = character === '[' ? index : (character === '!' && source[index + 1] === '[' ? index + 1 : -1)
+      if (labelStart >= 0) {
+        const labelEnd = matchingInlineDelimiter(source, labelStart, '[', ']')
+        if (labelEnd >= 0) {
+          visible += renderedMarkdownInlineText(source.slice(labelStart + 1, labelEnd))
+          let next = labelEnd + 1
+          if (source[next] === '(') {
+            const destinationEnd = matchingInlineDelimiter(source, next, '(', ')')
+            if (destinationEnd >= 0) next = destinationEnd + 1
+          } else if (source[next] === '[') {
+            const referenceEnd = matchingInlineDelimiter(source, next, '[', ']')
+            if (referenceEnd >= 0) next = referenceEnd + 1
+          }
+          index = next
+          continue
+        }
+      }
+      if (character === '<') {
+        const tagEnd = inlineHtmlTagEnd(source, index)
+        if (tagEnd >= 0) {
+          index = tagEnd + 1
+          continue
+        }
+      }
+      if (character === '&') {
+        const entity = decodeMarkdownTextEntity(source, index)
+        if (entity) {
+          visible += entity.text
+          index += entity.length
+          continue
+        }
+      }
+      visible += character
+      index += 1
+    }
+    return visible
+  }
+  function renderedMarkdownText(value) {
+    return value.split(/\r?\n/).map(renderedMarkdownInlineText).join('\n')
+  }
   function normalizeAtxHeading(line) {
     return line.trim().replace(/[ \t]+#+[ \t]*$/, '')
   }
@@ -2779,13 +2919,17 @@ function inspectAuthority(root, args, checks) {
       .replace(/\p{Default_Ignorable_Code_Point}/gu, '')
       .replace(/\p{Z}/gu, ' ')
   }
-  function stableFactText(file) {
+  function stableFactText(file, options = {}) {
     const text = contents[file] || ''
-    return /(?:^|\/)(?:[^/]+\.md|AGENTS\.md|CLAUDE\.md)$/i.test(file) ? navigableMarkdown(text) : text
+    if (!/(?:^|\/)(?:[^/]+\.md|AGENTS\.md|CLAUDE\.md)$/i.test(file)) return text
+    const navigable = navigableMarkdown(text)
+    return options.renderInline === false ? navigable : renderedMarkdownText(navigable)
   }
   const dynamicFindings = []
   for (const file of stableFiles) {
-    const text = stableFactText(file)
+    // SHA/PR/test-result policy also classifies link destinations and source-level wrappers.
+    // Preserve that established syntax surface; only current-CI prose needs rendered inline text.
+    const text = stableFactText(file, { renderInline: false })
     // 动态事实必须在同一行形成完整语义；逐行检查避免 `## Tests\n\n1.` 被跨段拼成计数。
     const lines = text.split(/\r?\n/).map(canonicalizeGovernanceLine)
     const plainLines = lines.map((line) => line.replace(/[`*_]/g, ''))
@@ -2893,14 +3037,14 @@ function inspectAuthority(root, args, checks) {
       return scoped
     }
     const patterns = [
-      ['required-context-assignment', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b(?:(?!\b(?:is|are|remain|include|includes|contain|contains|listed|not|no|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject|must|should|may|can|could|would|if|whether|query|ask)\b)[^:=\r\n]){0,40}(?:=|:)[ \t]*(?!none\b|disabled\b|unverified\b)[A-Za-z0-9_.-]+\b/i],
+      ['required-context-assignment', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b(?:(?!\b(?:is|are|remain|include|includes|contain|contains|listed|not|no|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject|must|should|may|can|could|would|if|whether|query|ask)\b)[^:=\r\n]){0,40}(?:=|:)[ \t]*(?!(?:none|disabled|unknown|unverified|undetermined|unspecified|unset|dynamic|variable|runtime|live|subject|query|check|verify|ask|must|should|may|can|could|would|if|whether)\b)[A-Za-z0-9_.-]+\b/i],
       ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[ \t]+(?:is|are)[ \t]+(?:(?:currently|still)[ \t]+)?(?:an?[ \t]+)?required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
       ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[ \t]+(?:remains?|continues?[ \t]+to[ \t]+be)[ \t]+(?:an?[ \t]+)?required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
       ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[ \t]*(?:已是|已经是|当前是|现为|是|为)[ \t]*\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
       ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[^\r\n]{0,40}(?:已是|已经是|当前是|现为|[ \t](?:是|为)[ \t])[^\r\n]{0,40}\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
       ['required-context-stability', /\brequired(?:[ \t]+status)?[ \t]+contexts?\b[^\r\n]{0,40}(?:不变|unchanged|仍(?:为|是)|保持)/i],
       ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,20}\b(?:include|includes|contain|contains|are[ \t]+listed[ \t]+as)\b/i],
-      ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b(?:(?!\b(?:is|are|remain|include|includes|contain|contains|listed|not|no|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject|must|should|may|can|could|would|if|whether|query|ask)\b)[^:=\r\n]){0,40}\b(?:are|remain)[ \t]+(?!(?:not|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject)\b)[A-Za-z0-9_.-]+\b/i],
+      ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b(?:(?!\b(?:is|are|remain|include|includes|contain|contains|listed|not|no|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject|must|should|may|can|could|would|if|whether|query|ask)\b)[^:=\r\n]){0,40}\b(?:are|remain)[ \t]*(?:[:=][ \t]*)?(?!(?:not|none|unknown|unverified|queried|determined|undetermined|unspecified|unset|dynamic|variable|runtime|live|subject|query|check|verify|ask|must|should|may|can|could|would|if|whether)\b)[A-Za-z0-9_.-]+\b/i],
       ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[ \t]+(?:currently|still)[ \t]+(?:are|remain)[ \t]+(?!(?:not|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject)\b)[A-Za-z0-9_.-]+\b/i],
       ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,20}(?:包含|包括|列为)/i],
       ['current-required-context-list', /\b(?:current(?:ly)?|active)[ \t]+required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,40}\b(?:include|includes|contain|contains|are[ \t]+(?!(?:not|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject)\b)[A-Za-z0-9_.-]+\b)/i],

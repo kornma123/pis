@@ -1810,6 +1810,71 @@ for (const rule of [
   })
 }
 
+for (const mode of ['develop', 'review']) {
+  for (const claim of [
+    '> Current [required checks](https://example.invalid/checks) on master: gate and vitest',
+    '> Current required <em>checks</em> on master: gate and vitest',
+    '> Current required checks on master&colon; gate and vitest',
+    '> Current requ&#x69;red checks on master: gate and vitest',
+  ]) {
+    check(`GOV-005 R16: rendered inline current-CI claim is rejected in ${mode}: ${claim}`, () => {
+      const repo = setupRepo()
+      try {
+        append(repo.work, '.claude/rules/coreone-guardrails.md', `\n${claim}\n`)
+        const args = ['--mode=develop', '--rules-only']
+        if (mode === 'review') {
+          git(repo.work, ['add', '.claude/rules/coreone-guardrails.md'])
+          git(repo.work, ['commit', '-q', '-m', 'add rendered inline CI claim'])
+          args.splice(0, args.length, '--mode=review', '--target-ref=HEAD', '--rules-only')
+        }
+        expectDynamicFactDrift(
+          run(repo.work, args),
+          '.claude/rules/coreone-guardrails.md: current CI enforcement claim',
+        )
+      } finally {
+        fs.rmSync(repo.tmp, { recursive: true, force: true })
+      }
+    })
+  }
+}
+
+check('GOV-005 R16: copula plus delimiter cannot hide a required-check enumeration', () => {
+  const repo = setupRepo()
+  try {
+    append(
+      repo.work,
+      '.github/workflows/build-discipline.yml',
+      '\n# Current required checks on master are: gate and vitest\n',
+    )
+    expectDynamicFactDrift(
+      run(repo.work, ['--mode=develop', '--rules-only']),
+      '.github/workflows/build-discipline.yml: current CI enforcement claim',
+    )
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const rule of [
+  '> Current required checks on master: query GitHub live before merge',
+  '> Current required checks on master: unknown; query GitHub live before merge',
+  '> <span title="Current required checks on master: gate">Query GitHub live.</span>',
+  '> [Query GitHub live](<https://example.invalid/Current required checks on master: gate>)',
+  '> Current requ\\ired checks on master: gate and vitest',
+]) {
+  check(`GOV-005 R16: rendered inline non-assertion remains allowed: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.claude/rules/coreone-guardrails.md', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
 for (const rule of [
   '# gate is not a required status check; query GitHub live',
   '# gate is not currently a required status check; query GitHub live',
