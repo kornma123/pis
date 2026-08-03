@@ -6,7 +6,7 @@
 >
 > **规矩**：① 改任何收入/成本口径 → 必须更新本表对应行（或 PR 写"无口径变化"）。② 断言必须在 CI 跑、失败即挡合并。③ 新增黄金先在这里登记再实现。
 >
-> ✅ **CI 门禁已落地（2026-07-02，#17 合入 master）**：`.github/workflows/backend-tests.yml` 在 `pull_request→master`/`push master` 跑 `npm run test:node`（全后端 vitest，含下列 golden 断言）；master 分支保护 **required status check = `vitest`**（`enforce_admins=false`，solo admin 紧急可越）。故本表 ✅ 现在是**真 CI 强制**（非仅本地人肉）。此前"CI 挡合并"曾是纸面机制（全项目无 vitest CI + master 无分支保护），已修，见 `docs/COREONE-工作模型调研-…-2026-07-01.md` §〇.B。
+> ✅ **CI 断言已落地**：`.github/workflows/backend-tests.yml` 为 pull request 与默认分支 push 定义 `vitest` job，并运行 `npm run test:node`（全后端 vitest，含下列 golden 断言）。本表 ✅ 只表示断言已经接入可执行 CI，不表示 GitHub 当前一定把该 job 配成 required、strict 或不可 bypass；这些平台状态必须在每次合并前现场读取 ruleset、checks 与权限，GitHub 不可访问时保持 `UNVERIFIED`。
 
 ## 收入口径黄金
 
@@ -32,7 +32,7 @@
 ## 待登记（有真实数据 / 落 CI 后补）
 
 - 东安 IN 93,264.9 / OUT 27,752.0、赣州月度 2,570.4/7,534.8/30,114.0 等（配置驱动导入器路线图里 codex 算的验收锚）——目前在 `docs/dev/phase-1a-acceptance-tests.md`，**待有对应 vitest 断言后登记入表**。
-- 后端联合 **vitest 全绿** = 全局回归门（非单一黄金，但同属"机器约束"）。当前约 **757 测试 / 89 files**（2026-07-06；数字随每个 PR 增长——**别把某个定值当锚**，以最近一次 `backend-tests.yml` run 为准。原文写"507 全绿"已过时，2026-07-06 机制审查刷新）。
+- 后端联合 **vitest 全绿** = 全局回归门（非单一黄金，但同属"机器约束"）。测试数量与 files 数量随目标对象变化，不写成长期锚；交付时以目标 SHA 的 `backend-tests.yml` run 与本地复验输出为准，GitHub 不可访问时保持 `UNVERIFIED`。
 
 ---
 

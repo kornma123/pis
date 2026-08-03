@@ -67,6 +67,52 @@ const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
   'docs/工作模型-COREONE项目版-2026-06-30.md',
 ]
+const QUALITY_LOOP_OVERVIEW = 'docs/COREONE-质量Loop总览-2026-07-12.md'
+const QUALITY_LOOP_CONTRACT = 'docs/COREONE-质量Loop契约-2026-07-12.md'
+const QUALITY_LOOP_STAGE_ENTRIES = [
+  ['docs/COREONE-PRD质量Loop-2026-07-12.md', '# COREONE PRD 质量 Loop（薄入口 · 需求整理）'],
+  ['docs/COREONE-前端Mockup质量Loop-2026-07-12.md', '# COREONE 前端 Mockup 质量 Loop（薄入口）'],
+  ['docs/COREONE-写码质量Loop-2026-07-12.md', '# COREONE 写码质量 Loop（薄入口 · 实现阶段）'],
+  ['docs/COREONE-真跑验收质量Loop-2026-07-12.md', '# COREONE 真跑验收质量 Loop（薄入口）'],
+  ['docs/COREONE-报告结论质量Loop-2026-07-12.md', '# COREONE 报告/结论质量 Loop（薄入口 · 调研·审计·评估·复盘）'],
+]
+const QUALITY_LOOP_STAGE_SECTIONS = Object.freeze({
+  'docs/COREONE-PRD质量Loop-2026-07-12.md': [
+    '## 0. 位置',
+    '## 1. 本阶段增量（契约之外，PRD 特有）',
+    '## 2. PRD 特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+    '## 4. 会话注入块（开工贴给 AI）',
+    '## 5. 给 PM 的大白话',
+  ],
+  'docs/COREONE-前端Mockup质量Loop-2026-07-12.md': [
+    '## 0. 位置',
+    '## 1. 本阶段增量（契约之外，Mockup 特有）',
+    '## 2. Mockup 特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+    '## 4. 会话注入块（开工贴给 AI）',
+    '## 5. 给 PM 的大白话',
+  ],
+  'docs/COREONE-写码质量Loop-2026-07-12.md': [
+    '## 0. 位置 + 分档',
+    '## 1. 本阶段增量（契约之外，写码特有）',
+    '## 2. 写码特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+    '## 4. 会话注入块（开工贴给 AI）',
+    '## 5. 给 PM 的大白话',
+  ],
+  'docs/COREONE-真跑验收质量Loop-2026-07-12.md': [
+    '## 0. 位置',
+    '## 1. 本阶段增量（契约之外，验收特有）',
+    '## 2. 验收特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+    '## 4. 会话注入块（开工贴给 AI）',
+    '## 5. 给 PM 的大白话',
+  ],
+  'docs/COREONE-报告结论质量Loop-2026-07-12.md': [
+    '## 0. 位置与使命',
+    '## 1. 本阶段增量（契约之外，报告特有）',
+    '## 2. 报告特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+    '## 5. 会话注入块（开工贴给 AI）',
+    '## 6. 给 PM 的大白话',
+  ],
+})
 const PM_DECISIONS = 'docs/PM待拍板.md'
 const FROZEN_PM_DECISION_FIXTURES = [
   ['M-1', 'PR 门运行少量关键业务流程；夜间运行全量，失败须有具名 owner 并在 1 个工作日内分诊', '夜间运行全量'],
@@ -117,6 +163,7 @@ function installAuthorityFixture(root) {
     '',
     `Read [the shared contract](${CONTRACT}) before acting.`,
     `When supervising Claude Code CLI, read [the supervision protocol](${CLAUDE_CLI_SUPERVISION}).`,
+    `Route delivery stages through [the quality Loop overview](${QUALITY_LOOP_OVERVIEW}).`,
     '',
   ].join('\n')
   write(root, 'AGENTS.md', adapter('Codex'))
@@ -131,6 +178,7 @@ function installAuthorityFixture(root) {
     '',
     'Stable rules live here; runtime PR and SHA facts come from GitHub and Git.',
     `Claude Code CLI supervision follows \`${CLAUDE_CLI_SUPERVISION}\`.`,
+    `Delivery stages route through \`${QUALITY_LOOP_OVERVIEW}\`.`,
     '',
   ].join('\n'))
   write(root, CLAUDE_CLI_SUPERVISION, [
@@ -235,7 +283,81 @@ module.exports = { matchesAny };
   write(root, 'docs/agent-handoffs/TEMPLATE.md', '# Task handoff\n')
   write(root, 'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md', '# 通用工作模型\n')
   write(root, 'docs/工作模型-COREONE项目版-2026-06-30.md', '# COREONE 工作模型\n')
+  write(root, QUALITY_LOOP_OVERVIEW, [
+    '# COREONE 质量 Loop 总览（唯一路由入口）',
+    '',
+    '## 家族地图',
+    '',
+    `规则唯一源：\`${QUALITY_LOOP_CONTRACT}\`。`,
+    ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => `阶段入口：\`${file}\`。`),
+    '',
+    '## 主链',
+    '',
+    'PRD → Mockup → 写码 → 真跑验收。',
+    '',
+    '## 路由表',
+    '',
+    '| 任务 | 入口 |',
+    '|---|---|',
+    '| 实现 | 写码 |',
+    '',
+    '## 给 PM 的大白话',
+    '',
+    '这一页只负责把任务路由到规则唯一源与阶段入口。',
+    '',
+  ].join('\n'))
+  write(root, QUALITY_LOOP_CONTRACT, [
+    '# COREONE 质量 Loop 契约',
+    '',
+    '## 0. 家族地图（读这一段就知道去哪）',
+    '',
+    '总览、契约和五个薄入口组成质量 Loop 家族。',
+    '',
+    '## 1. 六步骨架（每一轮都走，多数由 AI 独自走）',
+    '',
+    '产出、自检、摊假设、自我质疑、写台账、到闸点清算。',
+    '',
+    '## 6. 复核堆栈 L0 / L1（替换旧草稿 5 处散写的「强制异构复核」）',
+    '',
+    '固定对象复核与定向对抗复核不能互相折抵。',
+    '',
+    '## 7. 共享护栏（防跑偏 / 空转 / 打转 / 偷改 / 漂移）',
+    '',
+    '稳定规则不得被动态现场事实替代。',
+    '',
+  ].join('\n'))
+  for (const [file, heading] of QUALITY_LOOP_STAGE_ENTRIES) {
+    const [positionHeading, deltaHeading, exitHeading, sessionHeading, pmHeading] = QUALITY_LOOP_STAGE_SECTIONS[file]
+    write(root, file, [
+      heading,
+      '',
+      `从属：\`${QUALITY_LOOP_CONTRACT}\`。`,
+      '',
+      positionHeading,
+      '',
+      '本入口位于对应交付阶段。',
+      '',
+      deltaHeading,
+      '',
+      '只记录本阶段增量，不复制共享契约。',
+      '',
+      exitHeading,
+      '',
+      '阶段退出项叠加共享契约。',
+      '',
+      sessionHeading,
+      '',
+      '按共享契约与本入口执行。',
+      '',
+      pmHeading,
+      '',
+      '本入口把本阶段特殊要求讲清楚。',
+      '',
+    ].join('\n'))
+  }
   write(root, 'docs/golden-registry.md', '# Golden registry\n')
+  write(root, '.github/workflows/build-discipline.yml', '# gate job definition; query live GitHub rulesets before merge\n')
+  write(root, '.github/workflows/backend-tests.yml', '# vitest job definition; query live GitHub rulesets before merge\n')
   write(root, '.claude/rules/coreone-guardrails.md', '# Guardrails\n')
   write(root, '.claude/rules/pr-governance.md', '# PR governance\n\nRuntime state: `gh pr list`.\n')
   write(root, '.claude/rules/codex-cli-usage.md', '# Codex usage\n')
@@ -297,8 +419,9 @@ function run(root, args = []) {
 }
 
 function expectVerdict(result, verdict, exitCode) {
-  assert.equal(result.status, exitCode, result.stderr)
-  assert.equal(result.json.verdict, verdict)
+  const diagnostics = `${result.stderr || ''}\n${JSON.stringify(result.json.checks || [], null, 2)}`
+  assert.equal(result.status, exitCode, diagnostics)
+  assert.equal(result.json.verdict, verdict, diagnostics)
 }
 
 console.log(`agent preflight · selftest${FILTER_LABEL}`)
@@ -307,6 +430,1432 @@ check('fresh worktree: develop mode passes from origin/master ancestry', () => {
   const repo = setupRepo()
   try {
     expectVerdict(run(repo.work, ['--mode=develop']), 'PASS', 0)
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+function expectDynamicFactDrift(result, expectedDetail) {
+  expectVerdict(result, 'FAIL', 1)
+  const target = result.json.checks.find((item) => item.id === 'drift.dynamic-facts')
+  assert.ok(target, 'missing check drift.dynamic-facts')
+  assert.equal(target.status, 'FAIL')
+  assert.ok(
+    target.details.some((item) => item === expectedDetail || item.startsWith(`${expectedDetail} at line `)),
+    `${expectedDetail} not found in ${JSON.stringify(target.details)}`,
+  )
+}
+
+function expectQualityLoopDrift(result) {
+  expectVerdict(result, 'FAIL', 1)
+  const target = result.json.checks.find((item) => item.id === 'authority.quality-loop-route')
+  assert.ok(target, 'missing check authority.quality-loop-route')
+  assert.equal(target.status, 'FAIL')
+}
+
+check('GOV-005 G2: develop fails when the quality Loop authority route is deleted', () => {
+  const repo = setupRepo()
+  try {
+    if (!fs.existsSync(path.join(repo.work, QUALITY_LOOP_OVERVIEW))) {
+      write(repo.work, QUALITY_LOOP_OVERVIEW, '# COREONE 质量 Loop 总览\n')
+      git(repo.work, ['add', QUALITY_LOOP_OVERVIEW])
+      git(repo.work, ['commit', '-q', '-m', 'add quality loop authority fixture'])
+    }
+    fs.rmSync(path.join(repo.work, QUALITY_LOOP_OVERVIEW))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find((item) => item.id === 'authority.files')
+    assert.ok(target.details.includes(QUALITY_LOOP_OVERVIEW), JSON.stringify(target))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 G2: fixed-ref review fails when the quality Loop authority route is renamed', () => {
+  const repo = setupRepo()
+  try {
+    if (!fs.existsSync(path.join(repo.work, QUALITY_LOOP_OVERVIEW))) {
+      write(repo.work, QUALITY_LOOP_OVERVIEW, '# COREONE 质量 Loop 总览\n')
+      git(repo.work, ['add', QUALITY_LOOP_OVERVIEW])
+      git(repo.work, ['commit', '-q', '-m', 'add quality loop authority fixture'])
+    }
+    git(repo.work, ['mv', QUALITY_LOOP_OVERVIEW, `${QUALITY_LOOP_OVERVIEW}.renamed`])
+    git(repo.work, ['commit', '-q', '-m', 'rename quality loop authority fixture'])
+    const result = run(repo.work, ['--mode=review', '--target-ref=HEAD', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find((item) => item.id === 'authority.files')
+    assert.ok(target.details.includes(QUALITY_LOOP_OVERVIEW), JSON.stringify(target))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const [file, claim] of [
+  ['docs/golden-registry.md', 'master branch protection required status check = vitest'],
+  ['.github/workflows/build-discipline.yml', '# gate is a required status check on master'],
+  ['.github/workflows/backend-tests.yml', '# vitest is a required status check on master'],
+  ['.claude/rules/coreone-guardrails.md', 'GitHub 现场的 master 当前无 branch protection / ruleset'],
+]) {
+  check(`GOV-005 G1: current CI enforcement claim is rejected in ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      if (fs.existsSync(path.join(repo.work, file))) append(repo.work, file, `\n${claim}\n`)
+      else write(repo.work, file, `${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        `${file}: current CI enforcement claim`,
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const [file, rule] of [
+  ['docs/golden-registry.md', 'Required-check enforcement must be queried live from GitHub; this registry records only executable assertions.'],
+  ['.github/workflows/build-discipline.yml', '# Job id gate is stable; query GitHub rulesets before merge and keep unavailable state UNVERIFIED.'],
+  ['.github/workflows/backend-tests.yml', '# Job id vitest is stable; query GitHub rulesets before merge and keep unavailable state UNVERIFIED.'],
+  ['.claude/rules/coreone-guardrails.md', '合并前现场查询 GitHub rulesets 与 checks；不可访问时标 UNVERIFIED。'],
+]) {
+  check(`GOV-005 G1: live-query rule is allowed in ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, file, `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts').status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const [file, claim] of [
+  ['.github/workflows/build-discipline.yml', '# job id 仍是 gate，required context 不变；PR 侧不加 paths-ignore。'],
+  ['docs/golden-registry.md', '- 当前约 757 测试 / 89 files（2026-07-06；数字随每个 PR 增长）。'],
+  ['.github/workflows/backend-tests.yml', '# backend-lint is a required status check on master'],
+]) {
+  check(`GOV-005 R2: stale CI fact is rejected in ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, file, `\n${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        `${file}: current CI enforcement claim`,
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const claim of [
+  '# gate is a required status check if branch protection targets master',
+  '# gate is a required status check whether the live query ran or not',
+  '# Current required checks include gate and vitest',
+  '# required checks currently include gate and vitest',
+  '# required checks include gate and vitest',
+  '# required checks are listed as gate and vitest',
+  '# gate is currently a required status check on master',
+  '# gate is still a required status check on master',
+  '# gate remains a required status check on master',
+]) {
+  check(`GOV-005 R3: embedded conditional or current required-check list is rejected: ${claim}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        '.github/workflows/build-discipline.yml: current CI enforcement claim',
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const claim of [
+  '# gate is not a required status check, vitest is a required status check on master',
+  '# gate is not a required status check and vitest is a required status check on master',
+  '# required checks do not include gate but required checks include vitest',
+  '# 当前 required checks 不包含 gate，但 required checks 包括 vitest',
+  '# gate 不是 required status check，但 vitest 是 required status check on master',
+  '# query whether gate is a required status check, but vitest is a required status check on master',
+]) {
+  check(`GOV-005 R4: mixed negative or question clause cannot hide a positive required-check assertion: ${claim}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        '.github/workflows/build-discipline.yml: current CI enforcement claim',
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const rule of [
+  '# gate is not a required status check and vitest is not a required status check; query GitHub live',
+  '# required checks do not include gate or vitest; query GitHub live',
+  '# gate 和 vitest 都不是 required status checks；合并前现场查询',
+  '# 当前 required checks 不包含 gate 或 vitest；合并前现场查询',
+]) {
+  check(`GOV-005 R4: all-negative compound required-check statement is allowed: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts').status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const claim of [
+  '# query whether gate is a required status check, vitest is a required status check on master',
+  '# ask whether gate is a required status check, and vitest is a required status check on master',
+  '# 是否将 gate 设为 required status check 需现场查询，vitest 是 required status check on master',
+  '# 当前 required checks 不包含 gate，required checks 包括 vitest',
+]) {
+  check(`GOV-005 R5: comma-separated question or negative clause cannot hide an independent positive assertion: ${claim}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        '.github/workflows/build-discipline.yml: current CI enforcement claim',
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const rule of [
+  '# if maintainers ask whether gate is required, vitest is a required status check on master',
+  '# query whether gate and vitest are required status checks before merge',
+  '# 是否将 gate 和 vitest 设为 required status checks 必须在合并前现场查询',
+]) {
+  check(`GOV-005 R5: conditional or grouped-question scope across punctuation is allowed: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts').status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const [file, claim] of [
+  ['.github/workflows/build-discipline.yml', '# required checks are gate and vitest'],
+  ['docs/golden-registry.md', '- Current test-case count is 999.'],
+  ['docs/golden-registry.md', '- 当前共 999 例测试。'],
+  ['docs/golden-registry.md', '- 当前共 999 套测试。'],
+  ['.claude/rules/coreone-guardrails.md', '# master currently has no branch protection or ruleset'],
+]) {
+  check(`GOV-005 R6: adjacent current-CI wording variant is rejected: ${claim}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, file, `\n${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        `${file}: current CI enforcement claim`,
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const rule of [
+  '# query whether required checks are gate and vitest before merge',
+  '# if master currently has no branch protection or ruleset, stop and query GitHub live',
+  '# test-case count must be queried live; no number is durable',
+]) {
+  check(`GOV-005 R6: conditional or non-numeric adjacent wording is allowed: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts').status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const [file, claim] of [
+  ['.github/workflows/build-discipline.yml', '# 查询 gate 是否为 required context，vitest 为 required context'],
+  ['.github/workflows/build-discipline.yml', '# required checks currently are gate and vitest'],
+  ['docs/golden-registry.md', '- Test cases currently total 999.'],
+  ['docs/golden-registry.md', '- 测试用例当前共有 999 条。'],
+]) {
+  check(`GOV-005 R8: reviewer wording variant is rejected: ${claim}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, file, `\n${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        `${file}: current CI enforcement claim`,
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const rule of [
+  '# required checks do not currently include gate or vitest; query GitHub live',
+  "# required checks don't include gate or vitest; query GitHub live",
+  '# current required checks are not gate or vitest; query GitHub live',
+]) {
+  check(`GOV-005 R8: complete all-negative predicate is allowed: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts').status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const claim of [
+  '# query whether gate is a required status check. vitest is a required status check on master',
+  '# query whether gate is a required status check: vitest is a required status check on master',
+  '# query whether gate is a required status check — vitest is a required status check on master',
+  '# if maintainers ask whether gate is required. vitest is a required status check on master',
+  '# 查询 gate 是否为 required context：vitest 为 required context',
+  '# 查询 gate 是否为 required context？vitest 为 required context',
+]) {
+  check(`GOV-005 R9: strong punctuation ends question scope before a positive assertion: ${claim}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        '.github/workflows/build-discipline.yml: current CI enforcement claim',
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const rule of [
+  '# query whether: gate is a required status check before merge',
+  '# query whether gate is a required status check before merge.',
+  '# 查询 gate 是否为 required context，合并前现场查询',
+  '# if maintainers ask whether gate is required, vitest is a required status check on master',
+]) {
+  check(`GOV-005 R9: punctuation inside one question or outer condition is allowed: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts').status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const claim of [
+  '# query whether gate is required while vitest remains a required status check on master',
+  '# query whether gate is required whereas vitest remains a required status check on master',
+  '# gate\u00a0is\u00a0a\u00a0required\u00a0status\u00a0check on master',
+  '# gate\u2009is\u2009a\u2009required\u2009status\u2009check on master',
+  '# gate is a requ\u200Bired status check on master',
+  '# gate is a requ\u00ADired status check on master',
+  '# gate is a requ\u202Eired status check on master',
+  '# Neither gate nor vitest is a required status check, e2e is a required status check on master',
+]) {
+  check(`GOV-005 R10: Unicode or conjunction cannot hide a positive assertion: ${claim}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        '.github/workflows/build-discipline.yml: current CI enforcement claim',
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const rule of [
+  '# Neither gate nor vitest is a required status check; query GitHub live',
+  '# Neither gate is a required status check nor vitest is a required status check; query GitHub live',
+  '# None of the required checks are gate or vitest; query GitHub live',
+  '# gate\u00a0is\u00a0not\u00a0a\u00a0required\u00a0status\u00a0check; query GitHub live',
+  '# required contexts remain dynamic and must be queried live from GitHub',
+]) {
+  check(`GOV-005 R10: complete Unicode or neither/none negation is allowed: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts').status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const rule of [
+  '# if branch protection targets master, gate is a required status check',
+  '# query whether gate is a required status check before merge',
+  '# 是否将 gate 设为 required status check 必须在合并前现场查询',
+  '# required checks do not include a durable context list; query GitHub live',
+  '# required checks 不包含静态 context 列表；合并前现场查询',
+]) {
+  check(`GOV-005 R3: leading conditional or live-query question is allowed: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts').status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const claim of [
+  '- 当前共 999 个测试，数字随 PR 增长。',
+  '- 当前共 999 项测试，数字随 PR 增长。',
+  '- 当前共 999 条测试，数字随 PR 增长。',
+  '- Currently 999 test cases are registered.',
+  '- Current test count is 999.',
+  '- 当前测试数量为 999。',
+]) {
+  check(`GOV-005 R3: current test-count classifier variant is rejected: ${claim}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, 'docs/golden-registry.md', `\n${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        'docs/golden-registry.md: current CI enforcement claim',
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const [file, heading] of QUALITY_LOOP_STAGE_ENTRIES) {
+  check(`GOV-005 R3: deleted quality Loop stage entry is rejected in develop: ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      fs.rmSync(path.join(repo.work, file))
+      git(repo.work, ['add', '-A'])
+      git(repo.work, ['commit', '-q', '-m', `delete ${path.basename(file)}`])
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      const target = result.json.checks.find((item) => item.id === 'authority.files')
+      assert.ok(target?.details.includes(file), JSON.stringify(result.json.checks))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+
+  check(`GOV-005 R3: deleted quality Loop stage entry is rejected in fixed-ref review: ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      fs.rmSync(path.join(repo.work, file))
+      git(repo.work, ['add', '-A'])
+      git(repo.work, ['commit', '-q', '-m', `delete ${path.basename(file)}`])
+      const result = run(repo.work, ['--mode=review', '--target-ref=HEAD', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      const target = result.json.checks.find((item) => item.id === 'authority.files')
+      assert.ok(target?.details.includes(file), JSON.stringify(result.json.checks))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+
+  check(`GOV-005 R3: renamed quality Loop stage entry is rejected in fixed-ref review: ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      git(repo.work, ['mv', file, `${file}.renamed`])
+      git(repo.work, ['commit', '-q', '-m', `rename ${path.basename(file)}`])
+      const result = run(repo.work, ['--mode=review', '--target-ref=HEAD', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      const target = result.json.checks.find((item) => item.id === 'authority.files')
+      assert.ok(target?.details.includes(file), JSON.stringify(result.json.checks))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+
+  check(`GOV-005 R3: quality Loop stage identity drift is rejected: ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      write(repo.work, file, `# Placeholder\n\n从属：\`${QUALITY_LOOP_CONTRACT}\`。\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      const target = result.json.checks.find((item) => item.id === 'authority.quality-loop-route')
+      assert.ok(target?.details.includes(`${file}: identity heading mismatch`), JSON.stringify(result.json.checks))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+
+  check(`GOV-005 R3: overview missing a quality Loop stage route is rejected: ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      const overviewPath = path.join(repo.work, QUALITY_LOOP_OVERVIEW)
+      const overview = fs.readFileSync(overviewPath, 'utf8')
+      const next = overview.replace(`阶段入口：\`${file}\`。\n`, '')
+      assert.notEqual(next, overview, `fixture route missing before mutation: ${file}`)
+      write(repo.work, QUALITY_LOOP_OVERVIEW, next)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      const target = result.json.checks.find((item) => item.id === 'authority.quality-loop-route')
+      assert.ok(target?.details.some((item) => item.startsWith(`${QUALITY_LOOP_OVERVIEW}: expected exactly one ${file} route`)), JSON.stringify(result.json.checks))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+
+  check(`GOV-005 R3: quality Loop stage contract backlink drift is rejected: ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      write(repo.work, file, `${heading}\n\n从属：\`docs/placeholder-contract.md\`。\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      const target = result.json.checks.find((item) => item.id === 'authority.quality-loop-route')
+      assert.ok(target?.details.includes(`${file}: expected exactly one ${QUALITY_LOOP_CONTRACT} route; found 0`), JSON.stringify(result.json.checks))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const [kind, wrapRoutes] of [
+  ['HTML comment', (routes) => `<!--\n${routes}\n-->`],
+  ['fenced block', (routes) => `\`\`\`text\n${routes}\n\`\`\``],
+]) {
+  check(`GOV-005 R7: quality Loop routes hidden in ${kind} are rejected`, () => {
+    const repo = setupRepo()
+    try {
+      const routes = [
+        `规则唯一源：\`${QUALITY_LOOP_CONTRACT}\`。`,
+        ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => `阶段入口：\`${file}\`。`),
+      ].join('\n')
+      write(repo.work, QUALITY_LOOP_OVERVIEW, [
+        '# COREONE 质量 Loop 总览（唯一路由入口）',
+        '',
+        wrapRoutes(routes),
+        '',
+        '## 家族地图',
+        '## 主链',
+        '## 路由表',
+        '## 给 PM 的大白话',
+        '',
+      ].join('\n'))
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+check('GOV-005 R7: overview path list without route structure is rejected', () => {
+  const repo = setupRepo()
+  try {
+    write(repo.work, QUALITY_LOOP_OVERVIEW, [
+      '# COREONE 质量 Loop 总览（唯一路由入口）',
+      '',
+      `规则唯一源：\`${QUALITY_LOOP_CONTRACT}\`。`,
+      ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => `阶段入口：\`${file}\`。`),
+      '',
+    ].join('\n'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R7: quality Loop contract heading-only placeholder is rejected', () => {
+  const repo = setupRepo()
+  try {
+    write(repo.work, QUALITY_LOOP_CONTRACT, '# COREONE 质量 Loop 契约\n\nTODO placeholder only\n')
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const [file, heading] of QUALITY_LOOP_STAGE_ENTRIES) {
+  for (const [kind, backlink] of [
+    ['comment-only backlink', `<!-- 从属：\`${QUALITY_LOOP_CONTRACT}\`。 -->`],
+    ['visible backlink', `从属：\`${QUALITY_LOOP_CONTRACT}\`。`],
+  ]) {
+    check(`GOV-005 R7: ${kind} cannot make a stage placeholder valid: ${file}`, () => {
+      const repo = setupRepo()
+      try {
+        write(repo.work, file, `${heading}\n\n${backlink}\n\nTODO placeholder only\n`)
+        const result = run(repo.work, ['--mode=develop', '--rules-only'])
+        expectVerdict(result, 'FAIL', 1)
+        assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+      } finally {
+        fs.rmSync(repo.tmp, { recursive: true, force: true })
+      }
+    })
+  }
+}
+
+check('GOV-005 R11: routes hidden in a four-backtick CommonMark fence are rejected', () => {
+  const repo = setupRepo()
+  try {
+    const routes = [
+      `规则唯一源：\`${QUALITY_LOOP_CONTRACT}\`。`,
+      ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => `阶段入口：\`${file}\`。`),
+    ].join('\n')
+    write(repo.work, QUALITY_LOOP_OVERVIEW, [
+      '# COREONE 质量 Loop 总览（唯一路由入口）',
+      '',
+      '````markdown',
+      routes,
+      '````',
+      '',
+      '## 家族地图',
+      '总览只路由到唯一规则源。',
+      '## 主链',
+      'PRD 到报告按阶段串联。',
+      '## 路由表',
+      '路由表必须在可见正文中。',
+      '## 给 PM 的大白话',
+      '隐藏在代码围栏里的路径不能算可用入口。',
+      '',
+    ].join('\n'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R11: routes hidden in an indented CommonMark code block are rejected', () => {
+  const repo = setupRepo()
+  try {
+    const routes = [
+      `规则唯一源：\`${QUALITY_LOOP_CONTRACT}\`。`,
+      ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => `阶段入口：\`${file}\`。`),
+    ].map((line) => `    ${line}`)
+    write(repo.work, QUALITY_LOOP_OVERVIEW, [
+      '# COREONE 质量 Loop 总览（唯一路由入口）',
+      '',
+      ...routes,
+      '',
+      '## 家族地图',
+      '总览只路由到唯一规则源。',
+      '## 主链',
+      'PRD 到报告按阶段串联。',
+      '## 路由表',
+      '路由表必须在可见正文中。',
+      '## 给 PM 的大白话',
+      '缩进代码块里的路径不能算可用入口。',
+      '',
+    ].join('\n'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R11: overview prefix-only fake headings are rejected', () => {
+  const repo = setupRepo()
+  try {
+    write(repo.work, QUALITY_LOOP_OVERVIEW, [
+      '# COREONE 质量 Loop 总览（唯一路由入口）',
+      '',
+      `规则唯一源：\`${QUALITY_LOOP_CONTRACT}\`。`,
+      ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => `阶段入口：\`${file}\`。`),
+      '',
+      '## 家族地图-fake',
+      '这不是规范家族地图标题。',
+      '## 主链-fake',
+      '这不是规范主链标题。',
+      '## 路由表-fake',
+      '这不是规范路由表标题。',
+      '## 给 PM 的大白话-fake',
+      '这不是规范 PM 摘要标题。',
+      '',
+    ].join('\n'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R11: contract prefix-only fake headings are rejected', () => {
+  const repo = setupRepo()
+  try {
+    write(repo.work, QUALITY_LOOP_CONTRACT, [
+      '# COREONE 质量 Loop 契约',
+      '',
+      '## 0. 家族地图-fake',
+      '这不是规范家族地图标题。',
+      '## 1. 六步骨架-fake',
+      '这不是规范六步骨架标题。',
+      '## 6. 复核堆栈-fake',
+      '这不是规范复核堆栈标题。',
+      '## 7. 共享护栏-fake',
+      '这不是规范共享护栏标题。',
+      '',
+    ].join('\n'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const [file, heading] of QUALITY_LOOP_STAGE_ENTRIES) {
+  check(`GOV-005 R11: exact stage headings without section bodies are rejected: ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      write(repo.work, file, [
+        heading,
+        '',
+        `从属：\`${QUALITY_LOOP_CONTRACT}\`。`,
+        '',
+        '## 0. 位置',
+        '## 1. 本阶段增量',
+        '## 2. 本阶段退出追加项',
+        '## 4. 会话注入块',
+        '## 5. 给 PM 的大白话',
+        '',
+      ].join('\n'))
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+
+  check(`GOV-005 R11: stage heading-prefix lookalikes are rejected: ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      write(repo.work, file, [
+        heading,
+        '',
+        `从属：\`${QUALITY_LOOP_CONTRACT}\`。`,
+        '',
+        '## 0.fake 位置',
+        '正文足够长但标题身份错误。',
+        '## 1. 本阶段增量-fake',
+        '正文足够长但标题身份错误。',
+        '## 2.fake 退出追加项',
+        '正文足够长但标题身份错误。',
+        '## 4.fake 会话注入块',
+        '正文足够长但标题身份错误。',
+        '## 5.fake 给 PM 的大白话',
+        '正文足够长但标题身份错误。',
+        '',
+      ].join('\n'))
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+check('GOV-005 R12: coordinated predicates and current-suite counts cannot hide dynamic facts in develop or fixed-ref review', () => {
+  const repo = setupRepo()
+  try {
+    const claims = [
+      '# Query whether gate is a required status check and vitest is a required status check on master.',
+      '# Query whether gate is a required status check or e2e remains a required status check on master.',
+      '- The current test suite has 999 cases.',
+    ]
+    append(repo.work, '.github/workflows/build-discipline.yml', `\n${claims.join('\n')}\n`)
+    const expectAllClaims = (result) => {
+      expectVerdict(result, 'FAIL', 1)
+      const target = result.json.checks.find((item) => item.id === 'drift.dynamic-facts')
+      assert.equal(target?.status, 'FAIL')
+      assert.equal(
+        target.details.filter((item) => item.startsWith('.github/workflows/build-discipline.yml: current CI enforcement claim at line ')).length,
+        claims.length,
+        JSON.stringify(target.details),
+      )
+    }
+    expectAllClaims(run(repo.work, ['--mode=develop', '--rules-only']))
+    git(repo.work, ['add', '.github/workflows/build-discipline.yml'])
+    git(repo.work, ['commit', '-q', '-m', 'add coordinated dynamic claims'])
+    const targetRef = git(repo.work, ['rev-parse', 'HEAD'])
+    expectAllClaims(run(repo.work, ['--mode=review', `--target-ref=${targetRef}`, '--rules-only']))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R12: grouped or conditional questions and unpinned suite wording remain allowed', () => {
+  const repo = setupRepo()
+  try {
+    append(repo.work, '.github/workflows/build-discipline.yml', [
+      '',
+      '# Query whether gate and vitest are required status checks before merge.',
+      '# If maintainers ask whether gate is a required status check and vitest is a required status check on master, query GitHub live.',
+      '# The current test suite has no durable case count; query GitHub live.',
+      '',
+    ].join('\n'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'PASS', 0)
+    assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R12: unrendered link-reference definitions cannot satisfy overview routes', () => {
+  const repo = setupRepo()
+  try {
+    write(repo.work, QUALITY_LOOP_OVERVIEW, [
+      '# COREONE 质量 Loop 总览（唯一路由入口）',
+      '',
+      `[hidden-contract]: ${QUALITY_LOOP_CONTRACT}`,
+      ...QUALITY_LOOP_STAGE_ENTRIES.map(([file], index) => `[hidden-stage-${index + 1}]: ${file}`),
+      '',
+      '## 家族地图',
+      '这里描述家族关系，但不提供可见路由。',
+      '## 主链',
+      '这里描述阶段顺序，但不提供可见路由。',
+      '## 路由表',
+      '这里说明路由责任，但不提供可见路由。',
+      '## 给 PM 的大白话',
+      '未引用定义不会渲染，不能作为可见入口。',
+      '',
+    ].join('\n'))
+    expectQualityLoopDrift(run(repo.work, ['--mode=develop', '--rules-only']))
+    git(repo.work, ['add', QUALITY_LOOP_OVERVIEW])
+    git(repo.work, ['commit', '-q', '-m', 'hide overview routes in definitions'])
+    const targetRef = git(repo.work, ['rev-parse', 'HEAD'])
+    expectQualityLoopDrift(run(repo.work, ['--mode=review', `--target-ref=${targetRef}`, '--rules-only']))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R12: unrendered definitions cannot satisfy stage backlinks or section bodies', () => {
+  const repo = setupRepo()
+  try {
+    for (const [file, heading] of QUALITY_LOOP_STAGE_ENTRIES) {
+      write(repo.work, file, [
+        heading,
+        '',
+        `[hidden-contract]: ${QUALITY_LOOP_CONTRACT}`,
+        '',
+        '## 0. 位置',
+        '[hidden-position-body]: /not-rendered-position-body',
+        '## 1. 本阶段增量',
+        '[hidden-delta-body]: /not-rendered-delta-body',
+        '## 2. 本阶段退出追加项',
+        '[hidden-exit-body]: /not-rendered-exit-body',
+        '## 4. 会话注入块',
+        '## 5. 给 PM 的大白话',
+        '[hidden-pm-body]: /not-rendered-pm-body',
+        '',
+      ].join('\n'))
+    }
+    expectQualityLoopDrift(run(repo.work, ['--mode=develop', '--rules-only']))
+    git(repo.work, ['add', ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => file)])
+    git(repo.work, ['commit', '-q', '-m', 'hide stage evidence in definitions'])
+    const targetRef = git(repo.work, ['rev-parse', 'HEAD'])
+    expectQualityLoopDrift(run(repo.work, ['--mode=review', `--target-ref=${targetRef}`, '--rules-only']))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R12: path-prefix lookalikes cannot satisfy authority routes', () => {
+  const repo = setupRepo()
+  try {
+    for (const file of ['AGENTS.md', 'CLAUDE.md']) {
+      const text = fs.readFileSync(path.join(repo.work, file), 'utf8')
+      write(repo.work, file, text
+        .replace(CONTRACT, `${CONTRACT}.bak`)
+        .replace(CLAUDE_CLI_SUPERVISION, `${CLAUDE_CLI_SUPERVISION}.bak`)
+        .replace(QUALITY_LOOP_OVERVIEW, `${QUALITY_LOOP_OVERVIEW}.bak`))
+    }
+    for (const file of [CONTRACT, '.claude/skills/coreone/SKILL.md']) {
+      const text = fs.readFileSync(path.join(repo.work, file), 'utf8')
+      write(repo.work, file, text
+        .replaceAll(CLAUDE_CLI_SUPERVISION, `${CLAUDE_CLI_SUPERVISION}.bak`)
+        .replaceAll(QUALITY_LOOP_OVERVIEW, `${QUALITY_LOOP_OVERVIEW}.bak`))
+    }
+    const overview = fs.readFileSync(path.join(repo.work, QUALITY_LOOP_OVERVIEW), 'utf8')
+    write(repo.work, QUALITY_LOOP_OVERVIEW, [QUALITY_LOOP_CONTRACT, ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => file)]
+      .reduce((text, route) => text.replaceAll(route, `${route}.bak`), overview))
+    for (const [file] of QUALITY_LOOP_STAGE_ENTRIES) {
+      const text = fs.readFileSync(path.join(repo.work, file), 'utf8')
+      write(repo.work, file, text.replaceAll(QUALITY_LOOP_CONTRACT, `${QUALITY_LOOP_CONTRACT}.bak`))
+    }
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    assert.equal(result.json.checks.find((item) => item.id === 'adapter.AGENTS.md')?.status, 'FAIL')
+    assert.equal(result.json.checks.find((item) => item.id === 'adapter.CLAUDE.md')?.status, 'FAIL')
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'FAIL')
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.claude-cli-supervision')?.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R13: every stable authority file uses one Unicode-normalized dynamic-fact classifier', () => {
+  const repo = setupRepo()
+  try {
+    append(repo.work, '.claude/rules/pr-governance.md', '\n# gate is a required status check on master\n')
+    const buildClaims = [
+      '# query whether gate is a required status check﹔ vitest is a required status check on master',
+      '# gate is a requ\u{E0100}ired status check on master',
+      '# gate 不是 required status check 而 vitest 是 required status check on master',
+    ]
+    append(repo.work, '.github/workflows/build-discipline.yml', `\n${buildClaims.join('\n')}\n`)
+    append(repo.work, 'docs/golden-registry.md', '\n- Current test count: ９９９.\n')
+
+    const expectAllClaims = (result) => {
+      expectVerdict(result, 'FAIL', 1)
+      const target = result.json.checks.find((item) => item.id === 'drift.dynamic-facts')
+      assert.equal(target?.status, 'FAIL')
+      assert.equal(
+        target.details.filter((item) => item.startsWith('.claude/rules/pr-governance.md: current CI enforcement claim at line ')).length,
+        1,
+        JSON.stringify(target.details),
+      )
+      assert.equal(
+        target.details.filter((item) => item.startsWith('.github/workflows/build-discipline.yml: current CI enforcement claim at line ')).length,
+        buildClaims.length,
+        JSON.stringify(target.details),
+      )
+      assert.equal(
+        target.details.filter((item) => item.startsWith('docs/golden-registry.md: current CI enforcement claim at line ')).length,
+        1,
+        JSON.stringify(target.details),
+      )
+    }
+
+    expectAllClaims(run(repo.work, ['--mode=develop', '--rules-only']))
+    git(repo.work, ['add', '.claude/rules/pr-governance.md', '.github/workflows/build-discipline.yml', 'docs/golden-registry.md'])
+    git(repo.work, ['commit', '-q', '-m', 'add canonicalization adversarial claims'])
+    const targetRef = git(repo.work, ['rev-parse', 'HEAD'])
+    expectAllClaims(run(repo.work, ['--mode=review', `--target-ref=${targetRef}`, '--rules-only']))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const [kind, wrapRoutes] of [
+  ['blockquote fence', (routes) => ['> ```markdown', ...routes.map((line) => `> ${line}`), '> ```']],
+  ['list-item fence', (routes) => ['- ```markdown', ...routes.map((line) => `  ${line}`), '  ```']],
+  ['unclosed HTML comment', (routes) => ['<!--', ...routes]],
+  ['raw script block', (routes) => ['<script type="text/plain">', ...routes, '</script>']],
+]) {
+  check(`GOV-005 R13: routes hidden in a ${kind} are not rendered authority`, () => {
+    const repo = setupRepo()
+    try {
+      const routes = [
+        `规则唯一源：\`${QUALITY_LOOP_CONTRACT}\`。`,
+        ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => `阶段入口：\`${file}\`。`),
+      ]
+      write(repo.work, QUALITY_LOOP_OVERVIEW, [
+        '# COREONE 质量 Loop 总览（唯一路由入口）',
+        '',
+        ...wrapRoutes(routes),
+        '',
+        '## 家族地图',
+        '总览只描述家族边界，不提供隐藏路由。',
+        '## 主链',
+        '主链只描述阶段顺序，不提供隐藏路由。',
+        '## 路由表',
+        '路由表必须存在于真正渲染的正文中。',
+        '## 给 PM 的大白话',
+        '代码、注释和原始 HTML 都不能冒充可点击入口。',
+        '',
+      ].join('\n'))
+      expectQualityLoopDrift(run(repo.work, ['--mode=develop', '--rules-only']))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const [kind, body] of [
+  ['placeholder prose', 'TBD details will be added later.'],
+  ['low-diversity filler', 'xxxxxxxx'],
+]) {
+  check(`GOV-005 R13: ${kind} cannot satisfy required stage section bodies`, () => {
+    const repo = setupRepo()
+    try {
+      const [file, heading] = QUALITY_LOOP_STAGE_ENTRIES[0]
+      write(repo.work, file, [
+        heading,
+        '',
+        `从属：\`${QUALITY_LOOP_CONTRACT}\`。`,
+        '',
+        '## 0. 位置',
+        body,
+        '## 1. 本阶段增量',
+        body,
+        '## 2. 本阶段退出追加项',
+        body,
+        '## 4. 会话注入块',
+        '会话注入内容由共享契约负责。',
+        '## 5. 给 PM 的大白话',
+        body,
+        '',
+      ].join('\n'))
+      expectQualityLoopDrift(run(repo.work, ['--mode=develop', '--rules-only']))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+check('GOV-005 R13: stage heading identity rejects arbitrary suffix text', () => {
+  const repo = setupRepo()
+  try {
+    const [file] = QUALITY_LOOP_STAGE_ENTRIES[0]
+    const original = fs.readFileSync(path.join(repo.work, file), 'utf8')
+    write(repo.work, file, original.replace('## 1. 本阶段增量', '## 1. 本阶段增量 totally-wrong-suffix'))
+    expectQualityLoopDrift(run(repo.work, ['--mode=develop', '--rules-only']))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R13: valid ATX closing hashes remain equivalent headings', () => {
+  const repo = setupRepo()
+  try {
+    for (const file of [QUALITY_LOOP_OVERVIEW, QUALITY_LOOP_CONTRACT, ...QUALITY_LOOP_STAGE_ENTRIES.map(([entry]) => entry)]) {
+      const original = fs.readFileSync(path.join(repo.work, file), 'utf8')
+      write(repo.work, file, original.replace(/^## ([^\r\n]+)$/gm, '## $1 ##'))
+    }
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'PASS', 0)
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R13: canonical stage-specific exit headings remain valid', () => {
+  const repo = setupRepo()
+  try {
+    const exitHeadings = [
+      '## 2. PRD 特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+      '## 2. Mockup 特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+      '## 2. 写码特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+      '## 2. 验收特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+      '## 2. 报告特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+    ]
+    for (const [[file], exitHeading] of QUALITY_LOOP_STAGE_ENTRIES.map((entry, index) => [entry, exitHeadings[index]])) {
+      const original = fs.readFileSync(path.join(repo.work, file), 'utf8')
+      write(repo.work, file, original.replace('## 2. 本阶段退出追加项', exitHeading))
+    }
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'PASS', 0)
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R13: a Chinese question particle keeps a current-CI predicate non-assertive', () => {
+  const repo = setupRepo()
+  try {
+    append(repo.work, '.github/workflows/build-discipline.yml', '\n# gate 是 required status check 吗？\n')
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'PASS', 0)
+    assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const [kind, wrap] of [
+  ['plain blockquote', (lines) => lines.map((line) => `> ${line}`)],
+  ['template subtree', (lines) => ['<template>', ...lines, '</template>']],
+  ['hidden HTML subtree', (lines) => ['<div hidden>', ...lines, '</div>']],
+  ['list-item indented code', (lines) => [`- ${lines[0]}`, ...lines.slice(1).map((line) => `      ${line}`)]],
+]) {
+  check(`GOV-005 R14: ${kind} cannot elevate an entire overview into top-level authority`, () => {
+    const repo = setupRepo()
+    try {
+      const original = fs.readFileSync(path.join(repo.work, QUALITY_LOOP_OVERVIEW), 'utf8').split(/\r?\n/)
+      write(repo.work, QUALITY_LOOP_OVERVIEW, `${wrap(original).join('\n')}\n`)
+      expectQualityLoopDrift(run(repo.work, ['--mode=develop', '--rules-only']))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+check('GOV-005 R14: a canonical path used only as a wrong inline-link label is not a route', () => {
+  const repo = setupRepo()
+  try {
+    const original = fs.readFileSync(path.join(repo.work, 'AGENTS.md'), 'utf8')
+    write(repo.work, 'AGENTS.md', original.replace(
+      `[the shared contract](${CONTRACT})`,
+      `[${CONTRACT}](docs/not-the-contract.md)`,
+    ))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    assert.equal(result.json.checks.find((item) => item.id === 'adapter.AGENTS.md')?.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R14: a visible blockquote backlink is navigable without becoming top-level structure', () => {
+  const repo = setupRepo()
+  try {
+    const [file] = QUALITY_LOOP_STAGE_ENTRIES[0]
+    const original = fs.readFileSync(path.join(repo.work, file), 'utf8')
+    write(repo.work, file, original.replace(
+      `从属：\`${QUALITY_LOOP_CONTRACT}\`。`,
+      `> **从属**：本文指回《\`${QUALITY_LOOP_CONTRACT}\`》。`,
+    ))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'PASS', 0)
+    assert.equal(result.json.checks.find((item) => item.id === 'authority.quality-loop-route')?.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const [kind, suffix] of [
+  ['default-ignorable suffix', '\u200B.bak'],
+  ['combining-mark suffix', '\u0301.bak'],
+  ['compatibility slash suffix', '／bak'],
+]) {
+  check(`GOV-005 R14: ${kind} cannot extend a canonical route`, () => {
+    const repo = setupRepo()
+    try {
+      const original = fs.readFileSync(path.join(repo.work, 'AGENTS.md'), 'utf8')
+      write(repo.work, 'AGENTS.md', original.replace(`(${CONTRACT})`, `(${CONTRACT}${suffix})`))
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      assert.equal(result.json.checks.find((item) => item.id === 'adapter.AGENTS.md')?.status, 'FAIL')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+check('GOV-005 R14: arbitrary contract parenthetical headings are rejected', () => {
+  const repo = setupRepo()
+  try {
+    const contract = fs.readFileSync(path.join(repo.work, QUALITY_LOOP_CONTRACT), 'utf8')
+    write(repo.work, QUALITY_LOOP_CONTRACT, contract
+      .replace('## 1. 六步骨架', '## 1. 六步骨架（totally-wrong）')
+      .replace('## 7. 共享护栏', '## 7. 共享护栏（totally-wrong）'))
+    expectQualityLoopDrift(run(repo.work, ['--mode=develop', '--rules-only']))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R14: arbitrary stage parenthetical headings are rejected', () => {
+  const repo = setupRepo()
+  try {
+    const [stage] = QUALITY_LOOP_STAGE_ENTRIES[0]
+    const stageText = fs.readFileSync(path.join(repo.work, stage), 'utf8')
+    write(repo.work, stage, stageText
+      .replace('## 1. 本阶段增量', '## 1. 本阶段增量（totally-wrong）')
+      .replace('## 2. 本阶段退出追加项', '## 2. 本阶段退出追加项（totally-wrong）'))
+    expectQualityLoopDrift(run(repo.work, ['--mode=develop', '--rules-only']))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const body of [
+  'coming soon; details will be completed later.',
+  '待完善，后续再补充完整内容。',
+]) {
+  check(`GOV-005 R14: placeholder family cannot satisfy every required section: ${body}`, () => {
+    const repo = setupRepo()
+    try {
+      const [file, heading] = QUALITY_LOOP_STAGE_ENTRIES[0]
+      write(repo.work, file, [
+        heading,
+        '',
+        `从属：\`${QUALITY_LOOP_CONTRACT}\`。`,
+        '',
+        '## 0. 位置',
+        body,
+        '## 1. 本阶段增量',
+        body,
+        '## 2. 本阶段退出追加项',
+        body,
+        '## 4. 会话注入块',
+        '会话注入内容由共享契约负责。',
+        '## 5. 给 PM 的大白话',
+        body,
+        '',
+      ].join('\n'))
+      expectQualityLoopDrift(run(repo.work, ['--mode=develop', '--rules-only']))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+check('GOV-005 R14: quality contract and all five stage entries are classified stable fact sources', () => {
+  const repo = setupRepo()
+  try {
+    const files = [QUALITY_LOOP_CONTRACT, ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => file)]
+    for (const file of files) append(repo.work, file, '\nGate is a required status check on master.\n')
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find((item) => item.id === 'drift.dynamic-facts')
+    assert.equal(target?.status, 'FAIL')
+    for (const file of files) {
+      assert.equal(
+        target.details.filter((item) => item.startsWith(`${file}: current CI enforcement claim at line `)).length,
+        1,
+        JSON.stringify(target.details),
+      )
+    }
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R14: stable historical PR provenance is not a live PR-state snapshot', () => {
+  const repo = setupRepo()
+  try {
+    append(repo.work, QUALITY_LOOP_CONTRACT, '\nThis guard was learned from PR#121; no live state is asserted here.\n')
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'PASS', 0)
+    assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R14: fenced examples in Markdown do not become current-CI assertions', () => {
+  const repo = setupRepo()
+  try {
+    append(repo.work, QUALITY_LOOP_OVERVIEW, [
+      '',
+      '```text',
+      'gate is a required status check on master',
+      '```',
+      '',
+    ].join('\n'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'PASS', 0)
+    assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R14: a blank line ends an empty link-reference definition', () => {
+  const repo = setupRepo()
+  try {
+    write(repo.work, 'AGENTS.md', [
+      '# Codex adapter',
+      '',
+      '[empty]:',
+      '',
+      CONTRACT,
+      `When supervising Claude Code CLI, read [the supervision protocol](${CLAUDE_CLI_SUPERVISION}).`,
+      `Route delivery stages through [the quality Loop overview](${QUALITY_LOOP_OVERVIEW}).`,
+      '',
+    ].join('\n'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'PASS', 0)
+    assert.equal(result.json.checks.find((item) => item.id === 'adapter.AGENTS.md')?.status, 'PASS')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R14: natural-order current suite count is rejected', () => {
+  const repo = setupRepo()
+  try {
+    append(repo.work, 'docs/golden-registry.md', '\nThere are currently 999 cases in the test suite.\n')
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const rule of [
+  '# gate is a required status check 吗，query GitHub live.',
+  '# gate 是 required status check 吗，query GitHub live.',
+  '# gate is a required status check? Query GitHub live.',
+  '# Is gate a required status check? Query GitHub live.',
+]) {
+  check(`GOV-005 R14: a complete question plus live-query tail remains non-assertive: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+check('GOV-005 R14: a question does not hide an independent affirmative sentence', () => {
+  const repo = setupRepo()
+  try {
+    append(repo.work, '.github/workflows/build-discipline.yml', '\n# gate is a required status check? vitest is a required status check on master.\n')
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const rule of [
+  '# gate is not a required status check; query GitHub live',
+  '# gate is not currently a required status check; query GitHub live',
+  '# gate is no longer a required status check; query GitHub live',
+]) {
+  check(`GOV-005 R2: explicit live-query negation is allowed: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts').status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+check('GOV-005 R2: quality Loop placeholder without routed identity is rejected', () => {
+  const repo = setupRepo()
+  try {
+    write(repo.work, QUALITY_LOOP_OVERVIEW, '# Placeholder\n\nNo quality-loop contract or downstream route is present.\n')
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find((item) => item.id === 'authority.quality-loop-route')
+    assert.ok(target, 'missing check authority.quality-loop-route')
+    assert.equal(target.status, 'FAIL')
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R2: missing AGENTS quality Loop route is rejected', () => {
+  const repo = setupRepo()
+  try {
+    const file = path.join(repo.work, 'AGENTS.md')
+    const content = fs.readFileSync(file, 'utf8')
+    write(repo.work, 'AGENTS.md', content.replace(/^Route delivery stages through .*\n/m, ''))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find((item) => item.id === 'authority.quality-loop-route')
+    assert.ok(target.details.some((item) => item.startsWith('AGENTS.md: expected exactly one')), JSON.stringify(target))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R2: placeholder quality Loop contract is rejected', () => {
+  const repo = setupRepo()
+  try {
+    write(repo.work, QUALITY_LOOP_CONTRACT, '# Placeholder\n')
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find((item) => item.id === 'authority.quality-loop-route')
+    assert.ok(target.details.includes(`${QUALITY_LOOP_CONTRACT}: identity heading mismatch`), JSON.stringify(target))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+for (const file of ['.github/workflows/build-discipline.yml', '.github/workflows/backend-tests.yml']) {
+  check(`GOV-005 R2: deleted enforcement workflow is rejected: ${file}`, () => {
+    const repo = setupRepo()
+    try {
+      fs.rmSync(path.join(repo.work, file))
+      git(repo.work, ['add', '-A'])
+      git(repo.work, ['commit', '-q', '-m', `delete ${path.basename(file)}`])
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'FAIL', 1)
+      const target = result.json.checks.find((item) => item.id === 'authority.files')
+      assert.ok(target.details.includes(file), JSON.stringify(target))
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+check('GOV-005 R2: fixed-ref review rejects a deleted enforcement workflow', () => {
+  const repo = setupRepo()
+  try {
+    const file = '.github/workflows/backend-tests.yml'
+    fs.rmSync(path.join(repo.work, file))
+    git(repo.work, ['add', '-A'])
+    git(repo.work, ['commit', '-q', '-m', 'delete backend enforcement workflow'])
+    const result = run(repo.work, ['--mode=review', '--target-ref=HEAD', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find((item) => item.id === 'authority.files')
+    assert.ok(target.details.includes(file), JSON.stringify(target))
+  } finally {
+    fs.rmSync(repo.tmp, { recursive: true, force: true })
+  }
+})
+
+check('GOV-005 R2: current-CI diagnostics retain one line-qualified detail per hit', () => {
+  const repo = setupRepo()
+  try {
+    append(repo.work, '.github/workflows/build-discipline.yml', [
+      '',
+      '# gate is a required status check on master',
+      '# required status check: vitest',
+      '',
+    ].join('\n'))
+    const result = run(repo.work, ['--mode=develop', '--rules-only'])
+    expectVerdict(result, 'FAIL', 1)
+    const target = result.json.checks.find((item) => item.id === 'drift.dynamic-facts')
+    const details = target.details.filter((item) => item.startsWith('.github/workflows/build-discipline.yml: current CI enforcement claim at line '))
+    assert.equal(details.length, 2, JSON.stringify(target.details))
+    assert.ok(details.every((item) => /at line \d+ \[[a-z-]+\]$/.test(item)), JSON.stringify(details))
   } finally {
     fs.rmSync(repo.tmp, { recursive: true, force: true })
   }

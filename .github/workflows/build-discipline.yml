@@ -14,9 +14,10 @@ name: Build Discipline Gate
 #     （与白名单/baseline 治理同类·无 baseline 棘轮，迁移时已声明干净零存量债）。
 #   - selftest 必过（工具本身坏了即红）。
 #
-# ⚠️ 本 workflow 的 `gate` job 已是 master 分支保护的 **required status check**。
-#    故 **pull_request 侧不能 paths-ignore**（否则纯文档 PR 跳过本 job → required 永不上报 → PR 卡 "Expected"）。
-#    push 侧仍 paths-ignore（合并后纯文档跳过重复跑，无 required 顾虑）。同 backend-tests.yml 的 vitest 处理。
+# ⚠️ 本 workflow 稳定定义 `gate` job；它是否被 GitHub 当前 ruleset 设为 required、strict 或可 bypass
+#    属于合并时现场事实，必须实时查询，不写死在 workflow 注释。pull_request 侧不加 paths-ignore，确保一旦平台
+#    选择将 `gate` 设为 required，纯文档 PR 也会上报同名 job，不会因整项跳过而长期停在 "Expected"。
+#    push 侧仍 paths-ignore，避免合并后的纯文档重复运行。同 backend-tests.yml 的 vitest 处理。
 
 on:
   push:
@@ -44,7 +45,7 @@ jobs:
         with:
           node-version: 22
       # 跨工具治理：先证明 preflight 自身有牙，再从本次 checkout 的 HEAD 读取两套薄入口和共用契约。
-      # job id 仍是 gate，required context 不变；PR 侧不加 paths-ignore，文档 PR 也会收到结果。
+      # job id `gate` 是本 workflow 的稳定接口；它是否为 required context 只从合并时的 GitHub ruleset/readback 判定。
       - name: Agent preflight selftest
         run: node scripts/agent-preflight.selftest.cjs
       - name: Agent contract drift check

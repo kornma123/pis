@@ -113,11 +113,11 @@ test(e2e): 补充入库流程 E2E 用例
 - Playwright 配置使用 `webServer` 自动启动前后端
 - CI 失败时下载 `e2e-report` artifact 排查
 
-> ⚠️ **E2E 现状（诚实口径，2026-07-22 现场核实）——别把某次 `e2e` 结论当全量回归**：
-> - GitHub 现场的 `master` 当前无 branch protection / ruleset，因此没有形式上的 required checks；`vitest`、`gate`、`e2e-required` 的运行结果是合并证据，不得写成已由平台强制拦门。这是动态事实，合并前仍须现查。
-> - PR/push 的 `e2e.yml` 已改为 impact planner，不再硬编码 3 个 spec：受保护业务源变更从 `impact-map.json` 的 core specs（当前 `auth` + `psi-read`）起步，再叠加命中的 critical domain specs；纯文档 / 治理脚本变更可计划为 0 spec，legacy 域变更在未补可信 critical spec 前 fail-closed。
-> - `e2e-full.yml` 保留每日 02:00 UTC 与手动入口，分 critical / legacy 两个 suite，并从 impact map 读取 triage owner 与 tracking Issue；新仓当前未查到可用的近期 `e2e-full` run，不得沿用旧仓的通过/失败数冒充现状。
-> - **含义**：验收时同时记录 planner 输出与实际 run 结果；未覆盖的链路仍本地真跑相关 spec，不用“3-spec 绿”、夜间旧快照或任何单次 CI 结论冒充全量回归。
+> ⚠️ **E2E 证据合同——别把某次 `e2e` 结论当全量回归**：
+> - branch protection、ruleset、required contexts、strict、bypass actor 与 checks 结论都是动态事实；合并前必须从 GitHub 现场读取。GitHub 不可访问时标 `UNVERIFIED`，不得用本文或旧输出推导平台当前门禁。
+> - PR/push 的 `e2e.yml` 使用 impact planner：受保护业务源变更从 `impact-map.json` 的 core specs 起步，再叠加命中的 critical domain specs；纯文档 / 治理脚本变更可计划为 0 spec，legacy 域变更在未补可信 critical spec 前 fail-closed。精确 spec 集以目标 ref 的配置和 planner 输出为准。
+> - `e2e-full.yml` 保留定时与手动入口，分 critical / legacy suite，并从 impact map 读取 triage owner 与 tracking Issue；最近运行与通过/失败数只从 GitHub Actions 现场读取，不把旧仓或旧轮次快照写回本规则。
+> - **含义**：验收时同时记录目标 SHA、planner 输出与实际 run；未覆盖链路仍本地真跑相关 spec，不用局部绿、夜间旧快照或任何单次 CI 结论冒充全量回归。
 
 ## 安全红线
 
