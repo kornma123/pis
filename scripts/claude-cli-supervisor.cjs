@@ -1351,20 +1351,25 @@ async function launchOrResume(adapter, request, state, options) {
     const contract = request.externalVisibleTerminal;
     if (
       result.skillDiscovered !== true ||
+      result.skillInvoked !== true ||
       result.skillSha256 !== contract.skillSha256 ||
       result.reviewTargetSha !== contract.reviewTargetSha ||
       result.permissionMode !== 'plan' ||
-      result.promptChallengeAccepted !== true
+      result.promptChallengeAccepted !== true ||
+      result.reviewPromptTranscriptBound !== true
     ) {
       throw new SupervisorFailure(
         FAILURE.EVIDENCE_LAYER_UNPROVEN,
         'Claude did not prove Skill discovery and prompt acceptance in the same visible session',
         {
           skillDiscovered: result.skillDiscovered === true,
+          skillInvoked: result.skillInvoked === true,
           skillSha256: result.skillSha256 || null,
           reviewTargetSha: result.reviewTargetSha || null,
           permissionMode: result.permissionMode || null,
           promptChallengeAccepted: result.promptChallengeAccepted === true,
+          reviewPromptTranscriptBound:
+            result.reviewPromptTranscriptBound === true,
         },
       );
     }
@@ -4190,40 +4195,89 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       }
       const challenge = `COREONE_PROMPT_CHALLENGE_${sha256(input.prompt).slice(0, 16)}`;
       const expectedChallenge = challenge.split('').reverse().join('');
+      const handshakePrompt = [
+        'COREONE_STARTUP_HANDSHAKE_ONLY.',
+        'Do not invoke a Skill, read the repository authority chain, begin the review, or modify anything yet.',
+        `Use one read-only command to compute the SHA-256 of ${binding.skillPath}.`,
+        `Reverse only the ASCII characters in ${challenge}.`,
+        'Return exactly these two evidence lines, then stop this turn:',
+        `COREONE_PROMPT_ACK ${expectedChallenge}`,
+        'COREONE_SKILL_DISCOVERED sha256=<computed-sha256>',
+      ].join('\n');
+      const reviewDeliveryMarker =
+        `COREONE_REVIEW_REQUEST_${sha256(`${input.promptSha256}\0${binding.reviewTargetSha}`).slice(0, 16)}`;
       const reviewPrompt = [
         `/${binding.skillName}`,
+        reviewDeliveryMarker,
         'COREONE external-visible-readonly fixed-SHA review.',
         'Do not edit files, change permissions or identity, write GitHub, comment, merge, publish, deploy, or send externally.',
-        `Read ${binding.skillPath} and independently compute its SHA-256.`,
-        `Output COREONE_SKILL_DISCOVERED sha256=<computed-sha256>.`,
-        `Reverse only the ASCII characters in ${challenge} and output COREONE_PROMPT_ACK <reversed-value>.`,
+        `The same session already proved Skill digest ${binding.skillSha256}; invoke and follow ${binding.skillPath}.`,
         `Review only repository ${binding.repositoryFullName} at exact candidate ${binding.reviewTargetSha}.`,
         input.prompt,
         'If controller input is required, output COREONE_REVIEW_QUESTION id=<id> kind=<kind> text=<single-line question>.',
         `When the review turn is fully finished, output COREONE_REVIEW_COMPLETE target=${binding.reviewTargetSha} verdict=<PASS|FAIL|BLOCKED>.`,
       ].join('\n');
-      const promptAlreadyInjected = priorSnapshot?.messages.some(
+      let acceptanceSnapshot = priorSnapshot;
+      const priorAssistantText = priorSnapshot
+        ? assistantTextAfter(priorSnapshot, 0)
+        : '';
+      const handshakeAlreadyAccepted =
+        priorAssistantText.includes(`COREONE_PROMPT_ACK ${expectedChallenge}`) &&
+        priorAssistantText.includes(
+          `COREONE_SKILL_DISCOVERED sha256=${binding.skillSha256}`,
+        );
+      const handshakeAlreadyInjected = priorSnapshot?.messages.some(
         (message) =>
           message.role === 'user' &&
           message.text.includes(challenge) &&
+          message.text.includes('COREONE_STARTUP_HANDSHAKE_ONLY'),
+      ) === true;
+      if (!handshakeAlreadyAccepted) {
+        if (!handshakeAlreadyInjected) {
+          await runtime.writeTerminal(
+            binding,
+            handshakePrompt,
+            'startup-handshake-prompt',
+          );
+        }
+        acceptanceSnapshot = await runtime.waitForTranscript(
+          binding.claudeSessionId,
+          transcriptPath,
+          (candidate) => {
+            const text = assistantTextAfter(candidate, 0);
+            return text.includes(`COREONE_PROMPT_ACK ${expectedChallenge}`) &&
+              text.includes(
+                `COREONE_SKILL_DISCOVERED sha256=${binding.skillSha256}`,
+              );
+          },
+          Math.min(
+            Math.max(request.questionTimeoutMs, DEFAULT_POLL_MS),
+            MAX_VISIBLE_WAIT_MS,
+          ),
+        );
+      }
+      transcriptPath = acceptanceSnapshot?.transcriptPath || transcriptPath;
+      const reviewPromptAlreadyInjected = acceptanceSnapshot?.messages.some(
+        (message) =>
+          message.role === 'user' &&
+          message.text.includes(reviewDeliveryMarker) &&
           message.text.includes(binding.reviewTargetSha) &&
           message.text.includes(binding.skillPath),
       ) === true;
-      if (!promptAlreadyInjected) {
+      if (!reviewPromptAlreadyInjected) {
         await runtime.writeTerminal(binding, reviewPrompt, 'fixed-sha-review-prompt');
       }
       const snapshot = await runtime.waitForTranscript(
         binding.claudeSessionId,
         transcriptPath,
-        (candidate) => {
-          const text = assistantTextAfter(candidate, 0);
-          return text.includes(`COREONE_PROMPT_ACK ${expectedChallenge}`) &&
-            text.includes(`COREONE_SKILL_DISCOVERED sha256=${binding.skillSha256}`);
-        },
-        Math.min(
-          Math.max(request.questionTimeoutMs, DEFAULT_POLL_MS),
-          MAX_VISIBLE_WAIT_MS,
+        (candidate) => candidate.messages.some(
+          (message) =>
+            message.role === 'user' &&
+            message.text.includes(reviewDeliveryMarker) &&
+            message.text.includes(binding.reviewTargetSha) &&
+            message.text.includes(binding.skillPath),
         ),
+        60_000,
       );
       transcriptPath = snapshot.transcriptPath;
       const processInfo = await runtime.waitForClaudeProcess(binding, claudePid);
@@ -4248,8 +4302,10 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         actualEffort: binding.expectedEffort,
         permissionMode: snapshot.metadata.permissionMode,
         skillDiscovered: true,
+        skillInvoked: true,
         skillSha256: binding.skillSha256,
         reviewTargetSha: binding.reviewTargetSha,
+        reviewPromptTranscriptBound: true,
         claudePid,
         claudeVersion: snapshot.metadata.claudeVersion,
         transcriptPath: snapshot.transcriptPath,

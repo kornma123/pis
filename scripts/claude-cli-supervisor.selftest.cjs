@@ -85,6 +85,7 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external visible review rejects a different Terminal TTY identity',
   'external visible review cannot report COMPLETE without behavior acceptance',
   'external visible protocol extension marker is machine checked',
+  'external startup separates lightweight handshake from Skill review delivery',
   'external visible shell probe does not treat version success as effort proof',
   'external shell probe resolves Claude through the visible shell inherited PATH',
   'external startup acceptance recovers one launched session without duplicate prompt',
@@ -222,10 +223,14 @@ function makeExternalRuntime(options = {}) {
   const stats = {
     launchWrites: 0,
     launchCommands: [],
+    handshakePromptWrites: 0,
     reviewPromptWrites: 0,
     shellProbeCommands: [],
     transcriptTimeouts: [],
     transcriptUpdateWaits: [],
+    writePurposes: [],
+    handshakePrompts: [],
+    reviewPrompts: [],
   };
   const target = options.reviewTargetSha || 'c'.repeat(40);
   const skillSha256 = options.skillSha256 || 'd'.repeat(64);
@@ -271,6 +276,7 @@ function makeExternalRuntime(options = {}) {
       return launched ? { pid: 4321, tty: 'ttys000', command: processCommand } : null;
     },
     async writeTerminal(_binding, input, purpose) {
+      stats.writePurposes.push(purpose);
       if (purpose === 'visibility-proof' && !launched) {
         assert.match(input, /^node -e /);
         assert.doesNotMatch(input, /\$\(/);
@@ -290,19 +296,29 @@ function makeExternalRuntime(options = {}) {
         messages.push({ role: 'assistant', text: canary.split('').reverse().join('') });
         transcriptSha256 = 'f'.repeat(64);
       }
-      if (purpose === 'fixed-sha-review-prompt') {
-        stats.reviewPromptWrites += 1;
+      if (purpose === 'startup-handshake-prompt') {
+        stats.handshakePromptWrites += 1;
+        stats.handshakePrompts.push(input);
         const challenge = input.match(/COREONE_PROMPT_CHALLENGE_[0-9a-f]+/i)?.[0];
-        assert.ok(challenge, 'review prompt challenge missing');
+        assert.ok(challenge, 'startup handshake challenge missing');
         messages.push({ role: 'user', text: input });
         messages.push({ role: 'assistant', text: [
           `COREONE_PROMPT_ACK ${challenge.split('').reverse().join('')}`,
           `COREONE_SKILL_DISCOVERED sha256=${skillSha256}`,
-          ...(options.completion === false
-            ? []
-            : [`COREONE_REVIEW_COMPLETE target=${target} verdict=PASS`]),
         ].join('\n') });
         failNextStartupAcceptance = startupAcceptanceFailures > 0;
+      }
+      if (purpose === 'fixed-sha-review-prompt') {
+        stats.reviewPromptWrites += 1;
+        stats.reviewPrompts.push(input);
+        assert.match(input, /COREONE_REVIEW_REQUEST_[0-9a-f]+/i);
+        messages.push({ role: 'user', text: input });
+        if (options.completion !== false) {
+          messages.push({
+            role: 'assistant',
+            text: `COREONE_REVIEW_COMPLETE target=${target} verdict=PASS`,
+          });
+        }
       }
       return { accepted: true };
     },
@@ -594,6 +610,12 @@ async function runExternalCase(options = {}) {
   const state = temporaryStateFile();
   const target = options.reviewTargetSha || 'c'.repeat(40);
   const claim = options.claim || makeExternalClaim();
+  const runtime = makeExternalRuntime({
+    reviewTargetSha: target,
+    claim,
+    ...(options.runtimeOptions || {}),
+  });
+  if (typeof options.captureRuntime === 'function') options.captureRuntime(runtime);
   try {
     return await runExternalVisibleSupervisor(
       externalRequest({
@@ -601,11 +623,7 @@ async function runExternalCase(options = {}) {
         externalVisibleTerminal: { claim },
         ...(options.requestOverrides || {}),
       }),
-      makeExternalRuntime({
-        reviewTargetSha: target,
-        claim,
-        ...(options.runtimeOptions || {}),
-      }),
+      runtime,
       {
         stateFile: state.file,
         factGate: passFactGate,
@@ -2700,6 +2718,24 @@ module.exports = {
     assert.match(helpResult.stdout, /permission-mode=plan/);
   });
 
+  await checkExternal('external startup separates lightweight handshake from Skill review delivery', async () => {
+    let runtime = null;
+    const result = await runExternalCase({
+      captureRuntime(value) {
+        runtime = value;
+      },
+    });
+    assert.equal(result.status, 'COMPLETE');
+    assert.ok(runtime);
+    const handshakeAt = runtime.stats.writePurposes.indexOf('startup-handshake-prompt');
+    const reviewAt = runtime.stats.writePurposes.indexOf('fixed-sha-review-prompt');
+    assert.ok(handshakeAt >= 0 && reviewAt > handshakeAt);
+    assert.doesNotMatch(runtime.stats.handshakePrompts[0], /^\/coreone/m);
+    assert.match(runtime.stats.handshakePrompts[0], /HANDSHAKE_ONLY/);
+    assert.match(runtime.stats.reviewPrompts[0], /^\/coreone/m);
+    assert.match(runtime.stats.reviewPrompts[0], /COREONE_REVIEW_REQUEST_/);
+  });
+
   await checkExternal('external visible shell probe does not treat version success as effort proof', async () => {
     const result = await runExternalCase({
       runtimeOptions: { effortSupported: false },
@@ -2765,6 +2801,7 @@ module.exports = {
       const second = await runExternalVisibleSupervisor(input, runtime, options);
       assert.equal(second.status, 'COMPLETE');
       assert.equal(runtime.stats.launchWrites, 1);
+      assert.equal(runtime.stats.handshakePromptWrites, 1);
       assert.equal(runtime.stats.reviewPromptWrites, 1);
       assert.ok(
         runtime.stats.transcriptTimeouts.includes(300_000),

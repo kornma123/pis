@@ -113,12 +113,12 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
 | `writeTerminal` | 向同一 handle 写 canary、控制者回答和前台 CLI 输入；visibility canary 必须走不会注入 Claude 前台输入的宿主 marker 通道；返回 `accepted=true` |
 | `readTerminal` | 应用侧按 cursor 增量回读同一 handle；外部模式必须长轮询 transcript 变化或结构化问题/终态，无新记录时不得空转忙循环。返回绑定后的 `threadId/handle/generation`、`attached/visible`、真实输出、EOF、运行工具、结构化 question/stop，以及同 `sessionId` 的结构化进程终态 |
 | `probeTerminal` | 新启动前在同一终端运行 `pwd`、worktree root、Claude 路径/版本探针；Claude 路径必须从当前可见 shell 继承的 `PATH` 解析，不得另起 login shell 导致另一套 PATH。恢复时用进程与 transcript 元数据复核实际 executable、version、effort、permission mode、cwd/session。`claude --effort <值> --version` 只证明版本命令接受参数，**不能**证明实际会话采用该 effort |
-| `launchClaude` | 在该 handle 的前台使用唯一 name/session id 启动；native 使用其固定默认，外部使用 request 的精确 effort 与 `permission-mode=plan`。prompt challenge、Skill digest 和 session/transcript 元数据共同证明已注入；Skill/权威链读取允许使用任务级启动验收预算，不得固定在一分钟内误杀 |
+| `launchClaude` | 在该 handle 的前台使用唯一 name/session id 启动；native 使用其固定默认，外部使用 request 的精确 effort 与 `permission-mode=plan`。外部模式先发送不调用 Skill、不展开复核的轻量 digest/challenge 握手；收到同 session ACK 后再显式 `/<skill>` 投递带唯一 marker 的复核消息，并以 transcript 中的 user message 证明已注入。Skill/权威链的长读取属于后续复核，不得与启动握手合并后再用一分钟误杀 |
 | `resumeClaude` | 复用原 session id 与同一幂等键；进程仍在时回报 `alreadyRunning`，否则用原 id `--resume`，不得新建重复会话 |
 
 同一 task 的 `run/answer/ack-stop` 受 Git 外独占 lease 保护，状态文件每次写入做 revision CAS；并发控制者只能得到 `SUPERVISOR_LEASE_HELD`，不得第二次 create/launch。应用或任务异常退出后，仅在 owner PID 已确定不存在（`ESRCH`）时自动回收旧 lease；owner 仍存活或证据不可解析时继续失败关闭。
 
-外部自动启动是有副作用的两阶段操作：先出现精确 Claude 进程，再等待 Skill digest 与 prompt ACK。若控制器在两阶段之间退出，重试必须在已持久的同一 terminal handle 上核对精确 launch command、session id、runtime metadata 与 transcript；全部匹配时继续等待原 prompt，不得再启动进程或重复注入。无已持久 handle、任一身份不匹配或 transcript 中出现无关后续回合时仍 fail-closed。
+外部自动启动是有副作用的三阶段操作：先出现精确 Claude 进程，再用轻量独立回合取得 Skill digest 与 prompt ACK，最后才显式调用 Skill 投递复核。若控制器在任一阶段之间退出，重试必须在已持久的同一 terminal handle 上核对精确 launch command、session id、runtime metadata 与 transcript；全部匹配时从最后一个已证明阶段续接，不得再启动进程、重复握手或重复投递复核。无已持久 handle、任一身份不匹配或 transcript 中出现无关后续回合时仍 fail-closed。
 
 调度者收到 `WAITING_CONTROLLER` 后，在权限与 scope 不扩大的问题上可通过库 API 的 `onQuestion` 立即回答，或调用：
 
