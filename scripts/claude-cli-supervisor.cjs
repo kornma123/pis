@@ -863,6 +863,7 @@ async function proveTerminalVisibility(adapter, request, state, options) {
         taskId: request.taskId,
         sessionId: state.sessionId,
         idempotencyKey,
+        started: state.started === true,
       })
     : await adapter.createTerminal({
         threadId: request.threadId,
@@ -872,6 +873,7 @@ async function proveTerminalVisibility(adapter, request, state, options) {
         sessionId: state.sessionId,
         terminalGeneration: state.terminalGeneration,
         idempotencyKey,
+        started: state.started === true,
       });
 
   if (
@@ -3304,6 +3306,16 @@ function defaultExternalVisibleRuntime() {
         message: 'same-tab Terminal readback did not contain the expected response',
       });
     },
+    async waitForTerminalMatch(binding, pattern, timeoutMs) {
+      return waitFor(() => {
+        const inspected = inspectMacTerminal(binding);
+        pattern.lastIndex = 0;
+        return pattern.test(inspected.contents) ? inspected : null;
+      }, {
+        timeoutMs,
+        message: 'same-tab Terminal readback did not contain the structured receipt',
+      });
+    },
     async waitForClaudeProcess(binding, expectedPid = null) {
       return waitFor(() => {
         const processInfo = visibleClaudeProcess(binding.tty);
@@ -3478,7 +3490,17 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         );
       }
       const inspected = await inspectBoundSurface();
-      await inspectBoundClaude();
+      if (input.started === true) {
+        await inspectBoundClaude();
+      } else if (
+        binding.startup === 'launch-in-idle-tab' &&
+        await runtime.claudeProcess(binding.tty)
+      ) {
+        throw new SupervisorFailure(
+          FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+          'a different Claude session occupied the tab during prelaunch recovery',
+        );
+      }
       return boundResult(input, {
         status: 'attached',
         visible: true,
@@ -3613,15 +3635,13 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         ].join(';');
         const script = `cd -- ${shellQuote(request.cwd)} && node -e ${shellQuote(probeSource)}`;
         await runtime.writeTerminal(binding, script, 'structured-shell-probe');
-        const inspected = await runtime.waitForTerminalText(
-          binding,
-          `${marker}_END`,
-          30_000,
-        );
         const pattern = new RegExp(
           `${marker}:([A-Za-z0-9+/=]+):${marker}_END`,
           'g',
         );
+        const inspected = typeof runtime.waitForTerminalMatch === 'function'
+          ? await runtime.waitForTerminalMatch(binding, pattern, 30_000)
+          : await runtime.waitForTerminalText(binding, `${marker}_END`, 30_000);
         const matches = [...String(inspected.contents || '').matchAll(pattern)];
         let shellProbe = null;
         try {

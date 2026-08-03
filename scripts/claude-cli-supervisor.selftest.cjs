@@ -85,6 +85,7 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external visible shell probe does not treat version success as effort proof',
   'external visible COMPLETE revalidates the same transcript turn after restart',
   'external visible COMPLETE becomes stale after an unrelated later turn',
+  'external visible prelaunch failure retries the shell without inventing a Claude session',
 ]);
 
 async function check(name, fn) {
@@ -172,6 +173,7 @@ function externalRequest(overrides = {}) {
 
 function makeExternalRuntime(options = {}) {
   let launched = false;
+  let effortSupported = options.effortSupported !== false;
   const messages = [];
   const target = options.reviewTargetSha || 'c'.repeat(40);
   const skillSha256 = options.skillSha256 || 'd'.repeat(64);
@@ -237,15 +239,7 @@ function makeExternalRuntime(options = {}) {
     async waitForTerminalText(_binding, expected) {
       let contents = `/repo\n${expected}`;
       if (/^COREONE_SHELL_PROBE_[0-9a-f]+_END$/.test(expected)) {
-        const marker = expected.replace(/_END$/, '');
-        const encoded = Buffer.from(JSON.stringify({
-          cwd: '/repo',
-          worktreeRoot: '/repo',
-          claudePath: '/usr/local/bin/claude',
-          claudeVersion: options.shellProbeVersion || '2.1.220',
-          effortSupported: options.effortSupported !== false,
-        })).toString('base64');
-        contents = `${marker}:${encoded}:${expected}`;
+        contents = `echoed command contains ${expected} before execution`;
       }
       return {
         terminalApp: 'Terminal',
@@ -257,6 +251,28 @@ function makeExternalRuntime(options = {}) {
         tty,
         busy: launched,
         contents,
+      };
+    },
+    async waitForTerminalMatch(_binding, pattern) {
+      const marker = pattern.source.match(/COREONE_SHELL_PROBE_[0-9a-f]+/)?.[0];
+      assert.ok(marker, 'structured shell probe marker missing');
+      const encoded = Buffer.from(JSON.stringify({
+        cwd: '/repo',
+        worktreeRoot: '/repo',
+        claudePath: '/usr/local/bin/claude',
+        claudeVersion: options.shellProbeVersion || '2.1.220',
+        effortSupported,
+      })).toString('base64');
+      return {
+        terminalApp: 'Terminal',
+        frontmost: true,
+        frontWindow: true,
+        selected: true,
+        windowId: 12081,
+        windowTitle: 'COREONE fixed SHA review',
+        tty,
+        busy: launched,
+        contents: `${marker}:${encoded}:${marker}_END`,
       };
     },
     async waitForClaudeProcess() {
@@ -280,6 +296,9 @@ function makeExternalRuntime(options = {}) {
     messages.push({ role: 'user', text: 'unrelated later request' });
     messages.push({ role: 'assistant', text: 'unrelated later response' });
     transcriptSha256 = 'a'.repeat(64);
+  };
+  runtime.setEffortSupported = (value) => {
+    effortSupported = value === true;
   };
   return runtime;
 }
@@ -2610,6 +2629,36 @@ module.exports = {
     const result = await runExternalRestartCase(true);
     assert.equal(result.status, 'BLOCKED');
     assert.equal(result.reason, FAILURE.STALE_COMPLETION);
+  });
+
+  await checkExternal('external visible prelaunch failure retries the shell without inventing a Claude session', async () => {
+    const state = temporaryStateFile();
+    const input = externalRequest();
+    const runtime = makeExternalRuntime({ effortSupported: false });
+    const options = {
+      stateFile: state.file,
+      factGate: passFactGate,
+      maxCycles: 2,
+      randomUUID: () => '22222222-2222-4222-8222-222222222222',
+      captureInitialGitState: () => ({
+        head: 'c'.repeat(40),
+        branch: 'task-external-review',
+        gitDir: '/repo/.git',
+        tree: 'b'.repeat(40),
+      }),
+    };
+    try {
+      const first = await runExternalVisibleSupervisor(input, runtime, options);
+      assert.equal(first.status, 'BLOCKED');
+      assert.equal(first.reason, FAILURE.CLAUDE_EFFORT_UNSUPPORTED);
+      assert.equal(first.promptInjected, false);
+      runtime.setEffortSupported(true);
+      const second = await runExternalVisibleSupervisor(input, runtime, options);
+      assert.equal(second.status, 'COMPLETE');
+      assert.equal(second.externalSession.claudePid, 4321);
+    } finally {
+      state.cleanup();
+    }
   });
 
   if (failed + externalFailed > 0) {
