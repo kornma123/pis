@@ -29,6 +29,9 @@ const AUTHORITY_RECEIPT_CLOCK_SKEW_MS = 60 * 1000;
 const CLAUDE_TASK_STATE_VERSION = 2;
 const CLAUDE_TASK_STATE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const CLAUDE_TASK_STATE_CLOCK_SKEW_MS = 120 * 1000;
+const EXTERNAL_TERMINAL_CLAIM_SCHEMA_VERSION = 1;
+const EXTERNAL_TERMINAL_CLAIM_TTL_MS = 5 * 60 * 1000;
+const EXTERNAL_TERMINAL_CLAIM_CLOCK_SKEW_MS = 30 * 1000;
 const TEST_ONLY_ADAPTER_CAPABILITY = Symbol('coreone-test-only-terminal-adapter');
 const EXTERNAL_VISIBLE_ADAPTER_CAPABILITY = Symbol(
   'coreone-external-visible-terminal-adapter',
@@ -150,6 +153,118 @@ function validateSingleLine(value, label, maximum = 512) {
   return normalized;
 }
 
+function reverseAscii(value) {
+  return String(value).split('').reverse().join('');
+}
+
+function externalTerminalClaimMarker(claimId) {
+  return `COREONE_TERMINAL_CLAIM_${String(claimId).replaceAll('-', '')}`;
+}
+
+function normalizeExternalTerminalClaim(input, requestCwd) {
+  if (!input || Array.isArray(input) || typeof input !== 'object') {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'a dedicated visible Terminal launch requires a machine-readable claim receipt',
+    );
+  }
+  const normalized = {
+    schemaVersion: Number(input.schemaVersion),
+    claimId: String(input.claimId || '').trim(),
+    claimedAt: String(input.claimedAt || '').trim(),
+    expiresAt: String(input.expiresAt || '').trim(),
+    cwd: canonicalPath(String(input.cwd || '')),
+    terminalApp: String(input.terminalApp || '').trim(),
+    windowId: Number(input.windowId),
+    windowTitle: validateSingleLine(
+      input.windowTitle,
+      'externalVisibleTerminal.claim.windowTitle',
+    ),
+    tty: String(input.tty || '').trim(),
+    challenge: validateSingleLine(
+      input.challenge,
+      'externalVisibleTerminal.claim.challenge',
+    ),
+    response: validateSingleLine(
+      input.response,
+      'externalVisibleTerminal.claim.response',
+    ),
+    proofMarker: validateSingleLine(
+      input.proofMarker,
+      'externalVisibleTerminal.claim.proofMarker',
+    ),
+    proofPayloadBase64: validateSingleLine(
+      input.proofPayloadBase64,
+      'externalVisibleTerminal.claim.proofPayloadBase64',
+      4096,
+    ),
+    proofSha256: validateSha256(
+      input.proofSha256,
+      'externalVisibleTerminal.claim.proofSha256',
+    ),
+  };
+  const failures = [];
+  const claimedAtMs = Date.parse(normalized.claimedAt);
+  const expiresAtMs = Date.parse(normalized.expiresAt);
+  if (normalized.schemaVersion !== EXTERNAL_TERMINAL_CLAIM_SCHEMA_VERSION) {
+    failures.push('schemaVersion');
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    normalized.claimId,
+  )) failures.push('claimId');
+  if (!Number.isFinite(claimedAtMs) || !Number.isFinite(expiresAtMs)) {
+    failures.push('claimTime');
+  } else if (
+    expiresAtMs <= claimedAtMs ||
+    expiresAtMs - claimedAtMs > EXTERNAL_TERMINAL_CLAIM_TTL_MS
+  ) {
+    failures.push('claimLifetime');
+  }
+  if (normalized.cwd !== requestCwd) failures.push('cwd');
+  if (normalized.terminalApp !== 'Terminal') failures.push('terminalApp');
+  if (!Number.isInteger(normalized.windowId) || normalized.windowId < 1) {
+    failures.push('windowId');
+  }
+  if (!/^\/dev\/ttys[0-9]+$/.test(normalized.tty)) failures.push('tty');
+  if (!/^COREONE_CLAIM_[0-9a-f]{32}$/i.test(normalized.challenge)) {
+    failures.push('challenge');
+  }
+  if (normalized.response !== reverseAscii(normalized.challenge)) failures.push('response');
+  if (normalized.proofMarker !== externalTerminalClaimMarker(normalized.claimId)) {
+    failures.push('proofMarker');
+  }
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized.proofPayloadBase64)) {
+    failures.push('proofPayloadBase64');
+  }
+  let proof = null;
+  let proofJson = '';
+  try {
+    proofJson = Buffer.from(normalized.proofPayloadBase64, 'base64').toString('utf8');
+    proof = JSON.parse(proofJson);
+  } catch {
+    failures.push('proofPayload');
+  }
+  if (sha256(proofJson) !== normalized.proofSha256) failures.push('proofSha256');
+  const expectedProof = {
+    schemaVersion: normalized.schemaVersion,
+    claimId: normalized.claimId,
+    claimedAt: normalized.claimedAt,
+    expiresAt: normalized.expiresAt,
+    cwd: normalized.cwd,
+    challenge: normalized.challenge,
+    response: normalized.response,
+  };
+  if (JSON.stringify(proof) !== JSON.stringify(expectedProof)) failures.push('proofBinding');
+  if (failures.length > 0) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'dedicated visible Terminal claim receipt is malformed or mutable',
+      { failures },
+    );
+  }
+  return normalized;
+}
+
 function normalizeExternalVisibleTerminal(input, requestCwd) {
   if (!input || Array.isArray(input) || typeof input !== 'object') {
     throw new SupervisorFailure(
@@ -166,6 +281,9 @@ function normalizeExternalVisibleTerminal(input, requestCwd) {
     ? canonicalPath(String(input.transcriptPath))
     : null;
   const skillPath = canonicalPath(String(input.skillPath || ''));
+  const claim = input.claim === undefined || input.claim === null
+    ? null
+    : normalizeExternalTerminalClaim(input.claim, requestCwd);
   const normalized = {
     action: String(input.action || '').trim(),
     terminalApp: String(input.terminalApp || '').trim(),
@@ -183,6 +301,7 @@ function normalizeExternalVisibleTerminal(input, requestCwd) {
     reviewTargetSha: validateCommitSha(input.reviewTargetSha),
     skillName: String(input.skillName || '').trim(),
     skillPath,
+    claim,
     skillSha256: validateSha256(
       input.skillSha256,
       'externalVisibleTerminal.skillSha256',
@@ -193,7 +312,9 @@ function normalizeExternalVisibleTerminal(input, requestCwd) {
   if (normalized.terminalApp !== 'Terminal') failures.push('terminalApp');
   if (!Number.isInteger(windowId) || windowId < 1) failures.push('windowId');
   if (!/^\/dev\/ttys[0-9]+$/.test(normalized.tty)) failures.push('tty');
-  if (!['attach-existing', 'launch-in-idle-tab'].includes(startup)) failures.push('startup');
+  if (!['attach-existing', 'launch-in-dedicated-window'].includes(startup)) {
+    failures.push('startup');
+  }
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     normalized.claudeSessionId,
   )) failures.push('claudeSessionId');
@@ -211,8 +332,16 @@ function normalizeExternalVisibleTerminal(input, requestCwd) {
   if (startup === 'attach-existing') {
     if (!Number.isInteger(claudePid) || claudePid < 1) failures.push('claudePid');
     if (!transcriptPath || !path.isAbsolute(transcriptPath)) failures.push('transcriptPath');
+    if (claim !== null) failures.push('attachExistingMustNotClaimLaunch');
   } else if (claudePid !== null || transcriptPath !== null) {
     failures.push('launchIdentityMustBeDiscovered');
+  } else if (!claim) {
+    failures.push('dedicatedWindowClaim');
+  } else {
+    if (claim.terminalApp !== normalized.terminalApp) failures.push('claimTerminalApp');
+    if (claim.windowId !== normalized.windowId) failures.push('claimWindowId');
+    if (claim.windowTitle !== normalized.windowTitle) failures.push('claimWindowTitle');
+    if (claim.tty !== normalized.tty) failures.push('claimTty');
   }
   if (failures.length > 0) {
     throw new SupervisorFailure(
@@ -1082,7 +1211,7 @@ async function probeClaude(adapter, request, state, options) {
       externalFailures.push('skillSha256');
     }
     const prelaunch =
-      contract.startup === 'launch-in-idle-tab' && probe.prelaunch === true;
+      contract.startup === 'launch-in-dedicated-window' && probe.prelaunch === true;
     if (
       probe.claudeSessionId !== state.sessionId ||
       (!prelaunch && (
@@ -2870,6 +2999,7 @@ function parseCliArgs(argv) {
     answerFile: null,
     authorizationReceiptFile: null,
     ackFile: null,
+    cwd: null,
     maxCycles: Number.POSITIVE_INFINITY,
   };
   for (const raw of rest) {
@@ -2880,12 +3010,15 @@ function parseCliArgs(argv) {
     else if (raw.startsWith('--authorization-receipt=')) {
       args.authorizationReceiptFile = raw.slice('--authorization-receipt='.length);
     } else if (raw.startsWith('--ack-file=')) args.ackFile = raw.slice(11);
+    else if (raw.startsWith('--cwd=')) args.cwd = raw.slice(6);
     else if (raw.startsWith('--max-cycles=')) args.maxCycles = Number(raw.slice(13));
     else throw new Error(`unknown argument: ${raw}`);
   }
-  if (!['ack-stop', 'answer', 'run', 'status'].includes(args.command)) {
-    throw new Error('command must be ack-stop, answer, run, or status');
+  if (!['ack-stop', 'answer', 'claim', 'run', 'status'].includes(args.command)) {
+    throw new Error('command must be ack-stop, answer, claim, run, or status');
   }
+  if (args.command === 'claim' && !args.cwd) throw new Error('--cwd is required for claim');
+  if (args.command !== 'claim' && args.cwd) throw new Error('--cwd is only valid for claim');
   if (
     args.maxCycles !== Number.POSITIVE_INFINITY &&
     (!Number.isInteger(args.maxCycles) || args.maxCycles < 1)
@@ -2897,6 +3030,7 @@ function parseCliArgs(argv) {
 
 function help() {
   console.log(`Usage:
+  node scripts/claude-cli-supervisor.cjs claim --cwd=<absolute-worktree-root>
   node scripts/claude-cli-supervisor.cjs run --request=<json> [--max-cycles=N]
   node scripts/claude-cli-supervisor.cjs answer --request=<json> --answer-file=<text> [--authorization-receipt=<json>]
   node scripts/claude-cli-supervisor.cjs ack-stop --request=<json> --ack-file=<json>
@@ -2912,10 +3046,13 @@ native, host-unforgeable Codex Desktop capability bound to taskId, threadId,
 sessionId, and terminalGeneration for native-task-bound mode. That bridge is not
 integrated yet, so native run/answer/ack-stop fail closed with
 TERMINAL_VISIBILITY_UNPROVEN. external-visible-readonly uses the built-in macOS
-Terminal same-tab adapter and requires a complete fixed-SHA request contract,
+Terminal visible-window adapter and requires a complete fixed-SHA request contract,
 permission-mode=plan, four independent evidence layers, and no GitHub/write/
-merge/release/deploy authority. File-backed adapters are accepted only by the
-in-process selftest harness.`);
+merge/release/deploy authority. Automatic launch requires a fresh claim from a
+new dedicated frontmost Terminal window; opaque existing tabs are never used as
+automatic launch targets. A user-prepared visible Claude session can instead use
+attach-existing. File-backed adapters are accepted only by the in-process
+selftest harness.`);
 }
 
 function readRegularFile(file, label) {
@@ -3066,6 +3203,40 @@ function run(argv) {
   return JSON.stringify({focused:true,windowId,tty:expectedTty});
 }`;
 
+const TERMINAL_CREATE_DEDICATED_JXA = `
+function run(argv) {
+  const terminal = Application('Terminal');
+  const command = String(argv[0]);
+  const beforeWindowIds = terminal.windows().map((item) => Number(item.id()));
+  const createdTab = terminal.doScript(command);
+  terminal.activate();
+  delay(0.25);
+  const windows = terminal.windows();
+  const afterWindowIds = windows.map((item) => Number(item.id()));
+  const addedWindowIds = afterWindowIds.filter(
+    (windowId) => !beforeWindowIds.includes(windowId),
+  );
+  if (addedWindowIds.length !== 1) throw new Error('dedicated-window-not-created');
+  const targetWindow = windows.find(
+    (item) => Number(item.id()) === addedWindowIds[0],
+  );
+  if (!targetWindow) throw new Error('dedicated-window-not-found');
+  const tty = String(createdTab.tty());
+  if (String(targetWindow.selectedTab().tty()) !== tty) {
+    throw new Error('dedicated-tty-not-selected');
+  }
+  targetWindow.index = 1;
+  return JSON.stringify({
+    terminalApp: 'Terminal',
+    beforeWindowIds,
+    afterWindowIds,
+    addedWindowIds,
+    windowId: Number(targetWindow.id()),
+    windowTitle: String(targetWindow.name()),
+    tty,
+  });
+}`;
+
 function inspectMacTerminal(binding) {
   return terminalJxa(TERMINAL_INSPECT_JXA, [binding.windowId, binding.tty]);
 }
@@ -3088,6 +3259,122 @@ async function writeMacTerminal(binding, input, primitives = {}) {
 
 function focusMacTerminal(binding) {
   return terminalJxa(TERMINAL_FOCUS_JXA, [binding.windowId, binding.tty]);
+}
+
+function externalTerminalClaimProof(claim) {
+  return `${claim.proofMarker}:${claim.proofPayloadBase64}:${claim.proofMarker}_END`;
+}
+
+async function claimDedicatedMacTerminal(cwd, primitives = {}) {
+  const jxa = primitives.terminalJxa || terminalJxa;
+  const inspect = primitives.inspectTerminal || inspectMacTerminal;
+  const focus = primitives.focusTerminal || focusMacTerminal;
+  const wait = primitives.waitFor || waitFor;
+  const clock = primitives.clock || Date.now;
+  const randomUUID = primitives.randomUUID || crypto.randomUUID;
+  const randomBytes = primitives.randomBytes || crypto.randomBytes;
+  const canonicalCwd = canonicalPath(cwd);
+  const stat = fs.lstatSync(canonicalCwd);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new SupervisorFailure(
+      FAILURE.CWD_MISMATCH,
+      'claim cwd must be a regular worktree directory',
+    );
+  }
+  const worktreeRoot = canonicalPath(
+    git(canonicalCwd, ['rev-parse', '--show-toplevel']).trim(),
+  );
+  if (worktreeRoot !== canonicalCwd) {
+    throw new SupervisorFailure(
+      FAILURE.CWD_MISMATCH,
+      'claim cwd must equal the Git worktree root',
+      { cwd: canonicalCwd, worktreeRoot },
+    );
+  }
+  const claimedAtMs = Number(clock());
+  const claimedAt = new Date(claimedAtMs).toISOString();
+  const expiresAt = new Date(claimedAtMs + EXTERNAL_TERMINAL_CLAIM_TTL_MS).toISOString();
+  const claimId = String(randomUUID());
+  const challenge = `COREONE_CLAIM_${randomBytes(16).toString('hex')}`;
+  const response = reverseAscii(challenge);
+  const proofMarker = externalTerminalClaimMarker(claimId);
+  const proof = {
+    schemaVersion: EXTERNAL_TERMINAL_CLAIM_SCHEMA_VERSION,
+    claimId,
+    claimedAt,
+    expiresAt,
+    cwd: canonicalCwd,
+    challenge,
+    response,
+  };
+  const proofJson = JSON.stringify(proof);
+  const proofPayloadBase64 = Buffer.from(proofJson, 'utf8').toString('base64');
+  const proofSha256 = sha256(proofJson);
+  const claimSource = [
+    "const [marker,claimId,claimedAt,expiresAt,challenge]=process.argv.slice(1)",
+    "const response=challenge.split('').reverse().join('')",
+    `const proof={schemaVersion:${EXTERNAL_TERMINAL_CLAIM_SCHEMA_VERSION},claimId,claimedAt,expiresAt,cwd:process.cwd(),challenge,response}`,
+    "process.stdout.write(marker+':'+Buffer.from(JSON.stringify(proof)).toString('base64')+':'+marker+'_END\\n')",
+  ].join(';');
+  const command = [
+    `cd -- ${shellQuote(canonicalCwd)}`,
+    '&&',
+    shellQuote(process.execPath),
+    '-e',
+    shellQuote(claimSource),
+    shellQuote(proofMarker),
+    shellQuote(claimId),
+    shellQuote(claimedAt),
+    shellQuote(expiresAt),
+    shellQuote(challenge),
+  ].join(' ');
+  const creation = jxa(TERMINAL_CREATE_DEDICATED_JXA, [command]);
+  if (
+    creation?.terminalApp !== 'Terminal' ||
+    !Number.isInteger(creation?.windowId) ||
+    !/^\/dev\/ttys[0-9]+$/.test(String(creation?.tty || '')) ||
+    !Array.isArray(creation?.addedWindowIds) ||
+    creation.addedWindowIds.length !== 1 ||
+    creation.addedWindowIds[0] !== creation.windowId ||
+    creation.beforeWindowIds?.includes(creation.windowId)
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+      'Terminal did not return one newly-created dedicated window',
+      { creation: creation || null },
+    );
+  }
+  const binding = {
+    terminalApp: 'Terminal',
+    windowId: creation.windowId,
+    tty: creation.tty,
+  };
+  await focus(binding);
+  const expectedProof = `${proofMarker}:${proofPayloadBase64}:${proofMarker}_END`;
+  const inspected = typeof primitives.waitForClaimProof === 'function'
+    ? await primitives.waitForClaimProof(binding, expectedProof)
+    : await wait(async () => {
+      const candidate = await inspect(binding);
+      return String(candidate?.contents || '').includes(expectedProof) ? candidate : null;
+    }, {
+      timeoutMs: 30_000,
+      message: 'dedicated Terminal claim proof was not read back from the new window',
+    });
+  const receipt = {
+    ...proof,
+    terminalApp: 'Terminal',
+    windowId: creation.windowId,
+    windowTitle: validateSingleLine(
+      inspected.windowTitle,
+      'dedicated Terminal window title',
+    ),
+    tty: creation.tty,
+    proofMarker,
+    proofPayloadBase64,
+    proofSha256,
+  };
+  assertExternalSurface(receipt, inspected, { initial: true });
+  return receipt;
 }
 
 function delay(milliseconds) {
@@ -3372,12 +3659,42 @@ function assertExternalSurface(binding, inspected, options = {}) {
   }
 }
 
+function assertDedicatedTerminalClaim(binding, inspected, now = Date.now()) {
+  if (binding.startup !== 'launch-in-dedicated-window') return;
+  const claim = binding.claim;
+  const claimedAtMs = Date.parse(claim.claimedAt);
+  const expiresAtMs = Date.parse(claim.expiresAt);
+  const failures = [];
+  if (now + EXTERNAL_TERMINAL_CLAIM_CLOCK_SKEW_MS < claimedAtMs) {
+    failures.push('claimFromFuture');
+  }
+  if (now > expiresAtMs) failures.push('claimExpired');
+  if (
+    claim.terminalApp !== binding.terminalApp ||
+    claim.windowId !== binding.windowId ||
+    claim.windowTitle !== binding.windowTitle ||
+    claim.tty !== binding.tty
+  ) {
+    failures.push('terminalIdentity');
+  }
+  if (!String(inspected?.contents || '').includes(externalTerminalClaimProof(claim))) {
+    failures.push('liveProofReadback');
+  }
+  if (failures.length > 0) {
+    throw new SupervisorFailure(
+      FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+      'dedicated Terminal claim is stale, different, or not visible in the claimed window',
+      { failures, claimId: claim.claimId },
+    );
+  }
+}
+
 function externalTerminalHandle(binding) {
   return `external:${binding.terminalApp}:${binding.windowId}:${binding.tty}`;
 }
 
 function assertExternalClaudeCommand(processInfo, binding) {
-  if (binding.startup !== 'launch-in-idle-tab') return;
+  if (binding.startup !== 'launch-in-dedicated-window') return;
   const command = String(processInfo?.command || '');
   const required = [
     `--effort ${binding.expectedEffort}`,
@@ -3480,10 +3797,13 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
     async createTerminal(input) {
       const inspected = await inspectBoundSurface({ initial: true });
       const existing = await runtime.claudeProcess(binding.tty);
-      if (binding.startup === 'launch-in-idle-tab' && existing) {
+      if (binding.startup === 'launch-in-dedicated-window') {
+        assertDedicatedTerminalClaim(binding, inspected);
+      }
+      if (binding.startup === 'launch-in-dedicated-window' && existing) {
         throw new SupervisorFailure(
           FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
-          'the claimed visible Terminal tab is busy with another Claude session',
+          'the claimed dedicated Terminal window is busy with another Claude session',
           { pid: existing.pid },
         );
       }
@@ -3519,14 +3839,14 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       const inspected = await inspectBoundSurface();
       if (input.started === true) {
         await inspectBoundClaude();
-      } else if (
-        binding.startup === 'launch-in-idle-tab' &&
-        await runtime.claudeProcess(binding.tty)
-      ) {
-        throw new SupervisorFailure(
-          FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
-          'a different Claude session occupied the tab during prelaunch recovery',
-        );
+      } else if (binding.startup === 'launch-in-dedicated-window') {
+        assertDedicatedTerminalClaim(binding, inspected);
+        if (await runtime.claudeProcess(binding.tty)) {
+          throw new SupervisorFailure(
+            FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+            'a different Claude session occupied the dedicated window during prelaunch recovery',
+          );
+        }
       }
       return boundResult(input, {
         status: 'attached',
@@ -3550,7 +3870,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       }
       if (
         input.purpose === 'visibility-proof' &&
-        binding.startup === 'launch-in-idle-tab' &&
+        binding.startup === 'launch-in-dedicated-window' &&
         !claudePid
       ) {
         const canarySource = [
@@ -3568,7 +3888,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
     async readTerminal(input) {
       await inspectBoundSurface();
       if (input.purpose === 'visibility-proof') {
-        if (binding.startup === 'launch-in-idle-tab' && !claudePid) {
+        if (binding.startup === 'launch-in-dedicated-window' && !claudePid) {
           await runtime.waitForTerminalText(
             binding,
             input.expectedCanaryResponse,
@@ -3653,7 +3973,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
     async probeTerminal(input) {
       await inspectBoundSurface();
       const staticEvidence = await runtime.verifyStatic(request);
-      if (binding.startup === 'launch-in-idle-tab' && !claudePid) {
+      if (binding.startup === 'launch-in-dedicated-window' && !claudePid) {
         const marker = `COREONE_SHELL_PROBE_${crypto.randomBytes(8).toString('hex')}`;
         const probeSource = [
           "const {execFileSync}=require('node:child_process')",
@@ -3761,7 +4081,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       });
     },
     async launchClaude(input) {
-      if (binding.startup === 'launch-in-idle-tab' && !claudePid) {
+      if (binding.startup === 'launch-in-dedicated-window' && !claudePid) {
         const command = [
           `cd -- ${shellQuote(request.cwd)}`,
           '&&',
@@ -3934,6 +4254,11 @@ async function main() {
     args = parseCliArgs(process.argv);
     if (args.help) {
       help();
+      return;
+    }
+    if (args.command === 'claim') {
+      const receipt = await claimDedicatedMacTerminal(args.cwd);
+      process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
       return;
     }
     const request = loadCliRequest(args.requestFile);

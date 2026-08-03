@@ -50,6 +50,9 @@ module.exports = {
   submitMacTerminalWithTestPrimitives(binding, input, primitives) {
     return writeMacTerminal(binding, input, primitives);
   },
+  claimDedicatedMacTerminalWithTestPrimitives(cwd, primitives) {
+    return claimDedicatedMacTerminal(cwd, primitives);
+  },
 };
 `;
   const instrumented = new Module(`${RUNTIME_PATH}#test-harness`, module);

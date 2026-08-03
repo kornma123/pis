@@ -13,6 +13,7 @@ const productionRuntime = require('./claude-cli-supervisor.cjs');
 const {
   ackStopSupervisorWithTestAdapter: ackStopSupervisor,
   answerSupervisorWithTestAdapter: answerSupervisor,
+  claimDedicatedMacTerminalWithTestPrimitives,
   runSupervisorWithTestAdapter: runSupervisorImplementation,
   runExternalVisibleSupervisor,
   submitMacTerminalWithTestPrimitives,
@@ -30,7 +31,7 @@ let failed = 0;
 let externalPassed = 0;
 let externalFailed = 0;
 const failedScenarios = [];
-const EXTERNAL_VISIBLE_RUNTIME_MARKER = '<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-same-tab codex-task-binding=false permission-mode=plan evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->';
+const EXTERNAL_VISIBLE_RUNTIME_MARKER = '<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-dedicated-window-or-existing startup-claim=required-for-automatic-launch codex-task-binding=false permission-mode=plan evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->';
 const EXPECTED_SCENARIOS = Object.freeze([
   'queued terminal is not visible proof',
   'different app terminal handle fails closed',
@@ -87,6 +88,9 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external visible COMPLETE revalidates the same transcript turn after restart',
   'external visible COMPLETE becomes stale after an unrelated later turn',
   'external visible prelaunch failure retries the shell without inventing a Claude session',
+  'external visible automatic launch rejects legacy opaque existing-tab startup',
+  'dedicated Terminal claim binds one new window to executed proof',
+  'dedicated visible launch rejects an expired or absent live claim proof',
   'macOS Terminal TUI submit waits before the same-tab empty submit',
   'external visible launch rejects a process that dropped plan mode or session flags',
 ]);
@@ -146,6 +150,7 @@ function request(overrides = {}) {
 function externalRequest(overrides = {}) {
   const target = overrides.reviewTargetSha || 'c'.repeat(40);
   const skillSha256 = overrides.skillSha256 || 'd'.repeat(64);
+  const claim = overrides.externalVisibleTerminal?.claim || makeExternalClaim();
   return request({
     supervisionMode: 'external-visible-readonly',
     externalVisibleTerminal: {
@@ -154,7 +159,7 @@ function externalRequest(overrides = {}) {
       windowId: 12081,
       windowTitle: 'COREONE fixed SHA review',
       tty: '/dev/ttys000',
-      startup: 'launch-in-idle-tab',
+      startup: 'launch-in-dedicated-window',
       claudeSessionId: '11111111-1111-4111-8111-111111111111',
       expectedClaudeVersion: '2.1.220',
       expectedEffort: 'xhigh',
@@ -164,6 +169,7 @@ function externalRequest(overrides = {}) {
       skillName: 'coreone',
       skillPath: '/repo/.claude/skills/coreone/SKILL.md',
       skillSha256,
+      claim,
       ...(overrides.externalVisibleTerminal || {}),
     },
     ...Object.fromEntries(
@@ -172,6 +178,35 @@ function externalRequest(overrides = {}) {
       ),
     ),
   });
+}
+
+function makeExternalClaim(overrides = {}) {
+  const claimedAt = overrides.claimedAt || new Date(Date.now() - 1_000).toISOString();
+  const expiresAt = overrides.expiresAt || new Date(Date.parse(claimedAt) + 300_000).toISOString();
+  const claimId = overrides.claimId || '33333333-3333-4333-8333-333333333333';
+  const challenge = overrides.challenge || `COREONE_CLAIM_${'4'.repeat(32)}`;
+  const response = challenge.split('').reverse().join('');
+  const proof = {
+    schemaVersion: 1,
+    claimId,
+    claimedAt,
+    expiresAt,
+    cwd: '/repo',
+    challenge,
+    response,
+  };
+  const proofJson = JSON.stringify(proof);
+  return {
+    ...proof,
+    terminalApp: 'Terminal',
+    windowId: 12081,
+    windowTitle: 'COREONE fixed SHA review',
+    tty: '/dev/ttys000',
+    proofMarker: `COREONE_TERMINAL_CLAIM_${claimId.replaceAll('-', '')}`,
+    proofPayloadBase64: Buffer.from(proofJson, 'utf8').toString('base64'),
+    proofSha256: digest(proofJson),
+    ...overrides,
+  };
 }
 
 function makeExternalRuntime(options = {}) {
@@ -185,6 +220,8 @@ function makeExternalRuntime(options = {}) {
   let transcriptSha256 = options.transcriptSha256 || 'e'.repeat(64);
   const processCommand = options.processCommand ||
     'claude --effort xhigh --permission-mode plan --session-id 11111111-1111-4111-8111-111111111111';
+  const claim = options.claim || makeExternalClaim();
+  const liveClaimProof = `${claim.proofMarker}:${claim.proofPayloadBase64}:${claim.proofMarker}_END`;
   const snapshot = () => ({
     transcriptPath: '/fake/11111111-1111-4111-8111-111111111111.jsonl',
     transcriptSha256,
@@ -213,7 +250,7 @@ function makeExternalRuntime(options = {}) {
         windowTitle: 'COREONE fixed SHA review',
         tty,
         busy: launched,
-        contents: '/repo',
+        contents: options.claimProofVisible === false ? '/repo' : `/repo\n${liveClaimProof}`,
       };
     },
     claudeProcess() {
@@ -518,14 +555,17 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
 async function runExternalCase(options = {}) {
   const state = temporaryStateFile();
   const target = options.reviewTargetSha || 'c'.repeat(40);
+  const claim = options.claim || makeExternalClaim();
   try {
     return await runExternalVisibleSupervisor(
       externalRequest({
         reviewTargetSha: target,
+        externalVisibleTerminal: { claim },
         ...(options.requestOverrides || {}),
       }),
       makeExternalRuntime({
         reviewTargetSha: target,
+        claim,
         ...(options.runtimeOptions || {}),
       }),
       {
@@ -548,8 +588,9 @@ async function runExternalCase(options = {}) {
 
 async function runExternalRestartCase(injectUnrelatedTurn = false) {
   const state = temporaryStateFile();
-  const input = externalRequest();
-  const runtime = makeExternalRuntime();
+  const claim = makeExternalClaim();
+  const input = externalRequest({ externalVisibleTerminal: { claim } });
+  const runtime = makeExternalRuntime({ claim });
   const options = {
     stateFile: state.file,
     factGate: passFactGate,
@@ -2645,8 +2686,9 @@ module.exports = {
 
   await checkExternal('external visible prelaunch failure retries the shell without inventing a Claude session', async () => {
     const state = temporaryStateFile();
-    const input = externalRequest();
-    const runtime = makeExternalRuntime({ effortSupported: false });
+    const claim = makeExternalClaim();
+    const input = externalRequest({ externalVisibleTerminal: { claim } });
+    const runtime = makeExternalRuntime({ effortSupported: false, claim });
     const options = {
       stateFile: state.file,
       factGate: passFactGate,
@@ -2671,6 +2713,87 @@ module.exports = {
     } finally {
       state.cleanup();
     }
+  });
+
+  await checkExternal('external visible automatic launch rejects legacy opaque existing-tab startup', async () => {
+    assert.throws(
+      () => validateRequest(externalRequest({
+        externalVisibleTerminal: { startup: 'launch-in-idle-tab' },
+      })),
+      (error) => {
+        assert.equal(error.reason, FAILURE.STATE_BINDING_MISMATCH);
+        assert.ok(error.details.failures.includes('startup'));
+        return true;
+      },
+    );
+  });
+
+  await checkExternal('dedicated Terminal claim binds one new window to executed proof', async () => {
+    const events = [];
+    const receipt = await claimDedicatedMacTerminalWithTestPrimitives(
+      path.join(__dirname, '..'),
+      {
+        clock: () => Date.parse('2026-08-03T07:00:00.000Z'),
+        randomUUID: () => '55555555-5555-4555-8555-555555555555',
+        randomBytes: () => Buffer.from('66'.repeat(16), 'hex'),
+        terminalJxa(_source, args) {
+          events.push({ type: 'create', command: args[0] });
+          return {
+            terminalApp: 'Terminal',
+            beforeWindowIds: [12081],
+            afterWindowIds: [13000, 12081],
+            addedWindowIds: [13000],
+            windowId: 13000,
+            windowTitle: 'temporary title',
+            tty: '/dev/ttys123',
+          };
+        },
+        async focusTerminal(binding) {
+          events.push({ type: 'focus', binding });
+          return { focused: true };
+        },
+        async waitForClaimProof(binding, expectedProof) {
+          events.push({ type: 'readback', expectedProof });
+          return {
+            terminalApp: 'Terminal',
+            frontmost: true,
+            frontWindow: true,
+            selected: true,
+            windowId: binding.windowId,
+            windowTitle: 'COREONE dedicated review',
+            tty: binding.tty,
+            contents: expectedProof,
+          };
+        },
+      },
+    );
+    assert.equal(receipt.windowId, 13000);
+    assert.equal(receipt.tty, '/dev/ttys123');
+    assert.equal(receipt.windowTitle, 'COREONE dedicated review');
+    assert.equal(receipt.response, receipt.challenge.split('').reverse().join(''));
+    assert.equal(events.map((event) => event.type).join(','), 'create,focus,readback');
+    assert.match(events[0].command, /node.*-e/);
+    assert.doesNotMatch(events[0].command, /\$\(/);
+    assert.equal(
+      events[2].expectedProof,
+      `${receipt.proofMarker}:${receipt.proofPayloadBase64}:${receipt.proofMarker}_END`,
+    );
+  });
+
+  await checkExternal('dedicated visible launch rejects an expired or absent live claim proof', async () => {
+    const expiredClaimedAt = new Date(Date.now() - 600_000).toISOString();
+    const expired = await runExternalCase({
+      claim: makeExternalClaim({ claimedAt: expiredClaimedAt }),
+    });
+    assert.equal(expired.status, 'BLOCKED');
+    assert.equal(expired.reason, FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE);
+    const claim = makeExternalClaim();
+    const absent = await runExternalCase({
+      claim,
+      runtimeOptions: { claim, claimProofVisible: false },
+    });
+    assert.equal(absent.status, 'BLOCKED');
+    assert.equal(absent.reason, FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE);
   });
 
   await checkExternal('macOS Terminal TUI submit waits before the same-tab empty submit', async () => {

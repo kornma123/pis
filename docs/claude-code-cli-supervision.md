@@ -4,7 +4,7 @@
 <!-- supervisor-defaults: effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true -->
 <!-- terminal-proof: canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed -->
 <!-- supervisor-runtime: script=scripts/claude-cli-supervisor.cjs selftest=scripts/claude-cli-supervisor.selftest.cjs test-harness=scripts/claude-cli-supervisor.test-harness.cjs production-test-exports=forbidden review-target-execution=materialized adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN -->
-<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-same-tab codex-task-binding=false permission-mode=plan evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->
+<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-dedicated-window-or-existing startup-claim=required-for-automatic-launch codex-task-binding=false permission-mode=plan evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->
 <!-- stable-rules-only -->
 
 本协议用于 Codex 或 PM 在本机启动、续接、监督 Claude Code CLI/K3 并与其双向协作。它解决的是会话可见、问题及时回答、输出不遗漏和派单前复核，不新增命令白名单，也不替代 `docs/agent-operating-contract.md` 的权限、ownership、GitHub 写入或效率规则。
@@ -18,7 +18,7 @@
 | 模式 | 保证边界 | 当前用途 |
 |---|---|---|
 | `native-task-bound` | Codex 宿主原生、调用方不可伪造的 `threadId + terminalHandle + terminalGeneration` capability | 最高保证等级；当前 Codex Desktop 尚未接入 native bridge，缺能力时继续 `TERMINAL_VISIBILITY_UNPROVEN` |
-| `external-visible-readonly` | 精确 macOS Terminal window id、当时窗口标题、TTY、Claude PID/session、同标签页 challenge-response 与 transcript 回读 | 只允许固定 SHA、只读异构复核；不要求把用户已打开的 Terminal 窗口绑定到当前 Codex task |
+| `external-visible-readonly` | 精确 macOS Terminal window id、当时窗口标题、TTY、Claude PID/session、同可见会话 challenge-response 与 transcript 回读 | 只允许固定 SHA、只读异构复核；自动启动只进入新建专用窗口，也可附着用户已准备好的可见 Claude 会话，都不要求绑定当前 Codex task |
 
 “没有 Codex 内置终端句柄”不等于“无法控制用户现有可见终端”。外部模式承认后一种能力，但不会把它标成 host-native 或不可伪造；收据必须明确 `codexTaskBindingRequired=false`。
 
@@ -26,7 +26,16 @@
 
 两种模式都以 adapter API v2 接入。**生产 CLI 不加载 `--adapter=<文件>`，生产模块也不导出任何 fake-adapter 测试入口**：任意仓库外/仓库内 JavaScript 文件都能伪报 `attached/visible`。回归测试只能由测试进程显式加载专用 harness；生产 runtime 不得 import、命名或重新导出该 harness，不能用 `NODE_ENV`、环境变量或布尔值伪造信任边界。
 
-`native-task-bound` 只接受 Codex Desktop 原生 bridge 在同一进程给出的 capability；当前宿主缺该 bridge，所以该模式的生产 `run/answer/ack-stop` 仍非零退出。`external-visible-readonly` 只接受生产模块内建的 macOS Terminal same-tab adapter；它可以把已认领的精确窗口带到前台，但不新建窗口、不切换到别的 tab；每次操作前重新核对 Terminal、window id、selected tab 与 TTY，不加载调用方代码，也不使用 System Events/Accessibility 键盘注入：
+`native-task-bound` 只接受 Codex Desktop 原生 bridge 在同一进程给出的 capability；当前宿主缺该 bridge，所以该模式的生产 `run/answer/ack-stop` 仍非零退出。`external-visible-readonly` 只接受生产模块内建的 macOS Terminal 原生 adapter：自动启动先用 Terminal 自身 `do script` 新建一个前台专用窗口并回读 claim；`attach-existing` 则只附着已由用户准备好的精确可见 Claude 会话。它不会把自动启动命令投入不透明的已有 tab；每次操作前重新核对 Terminal、window id、selected tab 与 TTY，不加载调用方代码，也不使用 System Events/Accessibility 键盘注入。
+
+自动启动前先单独领取专用窗口；该命令只返回动态回执，不启动 Claude：
+
+```bash
+node scripts/claude-cli-supervisor.cjs claim \
+  --cwd='<经校验的绝对 worktree 根目录>'
+```
+
+只有在新窗口执行的随机 challenge 变换结果被同一 Terminal window/TTY 回读后，`claim` 才输出 JSON。回执有效期五分钟，必须原样放入 request；过期、重绑窗口/TTY、回读 proof 消失或窗口已有 Claude 都返回 `VISIBLE_CLI_CONTROL_UNAVAILABLE`。然后才可运行：
 
 ```bash
 node scripts/claude-cli-supervisor.cjs run \
@@ -61,7 +70,7 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
     "windowId": 12345,
     "windowTitle": "启动时现场读取的窗口标题",
     "tty": "/dev/ttysNNN",
-    "startup": "launch-in-idle-tab",
+    "startup": "launch-in-dedicated-window",
     "claudeSessionId": "预生成 UUID",
     "expectedClaudeVersion": "现场批准的精确版本",
     "expectedEffort": "现场批准且 transcript 可证明的 effort",
@@ -70,12 +79,28 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
     "reviewTargetSha": "完整 40 位 candidate SHA",
     "skillName": "coreone",
     "skillPath": "目标 worktree 内 Skill 的绝对路径",
-    "skillSha256": "完整 64 位 SHA-256"
+    "skillSha256": "完整 64 位 SHA-256",
+    "claim": {
+      "schemaVersion": 1,
+      "claimId": "claim 命令返回的 UUID",
+      "claimedAt": "claim 命令返回的 ISO-8601 时间",
+      "expiresAt": "claim 命令返回的 ISO-8601 时间",
+      "cwd": "/absolute/verified/worktree",
+      "terminalApp": "Terminal",
+      "windowId": 12345,
+      "windowTitle": "claim 完成时回读的窗口标题",
+      "tty": "/dev/ttysNNN",
+      "challenge": "COREONE_CLAIM_<random>",
+      "response": "claim 命令返回的变换结果",
+      "proofMarker": "claim 命令返回的 marker",
+      "proofPayloadBase64": "claim 命令返回的 payload",
+      "proofSha256": "claim 命令返回的完整 SHA-256"
+    }
   }
 }
 ```
 
-`attach-existing` 还必须提供现场 Claude PID 与同 session transcript 路径；`launch-in-idle-tab` 反而禁止预填 PID/transcript，由监督器在同一空闲可见标签页启动后发现并回读。已有标签页仍被其他 Claude 占用时返回 `VISIBLE_CLI_CONTROL_UNAVAILABLE`，不得自动退出、杀死或接管它。
+`attach-existing` 必须提供现场 Claude PID 与同 session transcript 路径，且不接受 launch claim；`launch-in-dedicated-window` 禁止预填 PID/transcript，必须提供上述完整 claim，由监督器在该专用窗口启动后发现并回读 Claude 身份。历史值 `launch-in-idle-tab` 不再合法：已有 tab 的 shell 输入缓冲、前台 TUI 与提交时序无法在自动启动前可靠证明为空。任何路径都不得自动退出、杀死或接管用户已有的 Claude。
 
 `minimumClaudeVersion` 是任务启动时由操作者/宿主按已批准版本策略注入的动态下限，不写死在稳定协议。prompt 文件必须是普通非 symlink 文件；监督状态只保存 prompt SHA-256，不保存正文。
 
@@ -83,7 +108,7 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
 
 | 方法 | 必须证明 |
 |---|---|
-| `createTerminal` | 在当前 `threadId` 中按监督器给出的 `taskId+sessionId+generation` 幂等键同步创建并打开前端终端；返回 `status=attached`、`visible=true`、稳定 handle、同一 generation 与原样幂等键；`queued` 不合格 |
+| `createTerminal` | native 模式在当前 `threadId` 中按 `taskId+sessionId+generation` 幂等键同步创建并打开前端终端；外部自动启动模式只附着已由 `claim` 新建并现场回读的专用窗口。两者都返回 `status=attached`、`visible=true`、稳定 handle、同一 generation 与原样幂等键；`queued` 不合格 |
 | `attachTerminal` | native 模式在 Codex app/task 重启后按同一幂等键重新附着；外部模式重新核对同一 Terminal window id/TTY/Claude PID/session/transcript。两者都不能改用另一个终端 |
 | `writeTerminal` | 向同一 handle 写 canary、控制者回答和前台 CLI 输入；visibility canary 必须走不会注入 Claude 前台输入的宿主 marker 通道；返回 `accepted=true` |
 | `readTerminal` | 应用侧按 cursor 增量回读同一 handle；返回绑定后的 `threadId/handle/generation`、`attached/visible`、真实输出、EOF、运行工具、结构化 question/stop，以及同 `sessionId` 的结构化进程终态 |
@@ -132,8 +157,8 @@ answer 路径会重新做同句柄 canary，再把答案写回原终端；不得
 
 执行任何 Claude 命令前，先完成所选模式对应的终端证明：
 
-1. native 模式确认当前 task 已附着原生终端；外部模式确认 exact Terminal app/window id、启动时标题、前台 selected tab 与 TTY。外部标签页已有另一个 Claude 时不得接管。
-2. 通过准备承载 Claude 的**同一个句柄或同一个外部 tab**写入不含秘密的随机 challenge。native 用 out-of-band marker；外部要求返回提示中没有原样给出的变换结果，并从同一窗口或同 session transcript 回读。
+1. native 模式确认当前 task 已附着原生终端；外部自动启动先执行 `claim`，确认它新建了 exact Terminal app/window id、claim 完成时标题、前台 selected tab 与 TTY；`attach-existing` 则核对用户已准备好的同等身份与 Claude PID/session/transcript。已有会话不得被自动启动路径接管。
+2. 通过准备承载 Claude 的**同一个句柄、专用窗口或已附着会话**写入不含秘密的随机 challenge。native 用 out-of-band marker；外部要求返回提示中没有原样给出的变换结果，并从同一窗口或同 session transcript 回读。
 3. 写入、回读、身份或 challenge 任一不存在、失败或来自不同对象时停止：native 报 `TERMINAL_VISIBILITY_UNPROVEN`，外部报 `VISIBLE_CLI_CONTROL_UNAVAILABLE`。不得转用工具 PTY、后台进程、日志文件或另一个终端继续。
 
 证明通过后，才在该同一桌面终端执行目标 worktree 的只读探针。native 模式仍按其固定默认；外部模式的 effort 必须来自 request，并由实际 transcript 再确认：
@@ -156,7 +181,7 @@ claude --effort '<该模式批准的精确 effort>' --name '<可识别任务名>
 - SemVer 的数字标识符按十进制数字串长度和字典序比较，不转为 JavaScript `Number`；超出安全整数范围的版本也必须保持双向对称顺序。
 - effort 不在本机 `claude --help` 声明集合、启动后实际值不同或 transcript 无法确认时停止派单；不得因 `claude --effort <值> --version` 返回 0 就认定支持，也不得静默降级。
 - 外部模式必须使用 `permission-mode=plan`；已有 session 为 `bypassPermissions`、`acceptEdits` 或其他可写模式时拒绝复用。它只允许只读固定 SHA 复核；GitHub 写入/评论、Issue/PR 修改、权限/身份变化、合并、发布、部署和对外发送均保留人工关卡。
-- 必须在已经通过 canary 的同一可见终端以前台交互方式启动或复用。不得使用工具 PTY、`--print`、`--bg`、`nohup`、shell 后台符号、输出重定向、另开隐藏 Claude 或隐藏子任务代替。不得因 System Events 键盘注入缺 Accessibility 权限就要求用户改权限；使用 Terminal 自身 same-tab 接口，具体提交行为由 challenge 回读验收。
+- 必须在已经通过 canary 的同一可见终端以前台交互方式启动或复用。不得使用工具 PTY、`--print`、`--bg`、`nohup`、shell 后台符号、输出重定向、另开隐藏 Claude 或隐藏子任务代替。不得因 System Events 键盘注入缺 Accessibility 权限就要求用户改权限；使用 Terminal 自身的窗口/tab `do script` 接口，具体提交行为由 challenge 回读验收。
 - 启动成功后，控制者立即在当前任务回报任务名、cwd、session id、Claude 版本、实际 effort，以及 canary 写入与应用回读均成功的“桌面终端已附着”状态。若其中任何一项未核实，不得声称会话已接通或终端可见。
 
 ## 3. 输出消费与五分钟节奏
