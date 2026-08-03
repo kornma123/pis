@@ -14,17 +14,22 @@ const {
   ackStopSupervisorWithTestAdapter: ackStopSupervisor,
   answerSupervisorWithTestAdapter: answerSupervisor,
   runSupervisorWithTestAdapter: runSupervisorImplementation,
+  runExternalVisibleSupervisor,
 } = require('./claude-cli-supervisor.test-harness.cjs');
 const {
   FAILURE,
   compareVersions,
   runFactGate,
   supervisorStateFile,
+  validateRequest,
 } = productionRuntime;
 
 let passed = 0;
 let failed = 0;
+let externalPassed = 0;
+let externalFailed = 0;
 const failedScenarios = [];
+const EXTERNAL_VISIBLE_RUNTIME_MARKER = '<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-same-tab codex-task-binding=false permission-mode=plan evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->';
 const EXPECTED_SCENARIOS = Object.freeze([
   'queued terminal is not visible proof',
   'different app terminal handle fails closed',
@@ -69,6 +74,18 @@ const EXPECTED_SCENARIOS = Object.freeze([
   'R0 fact gate does not accept an active contract as finished',
   'R0 fact gate accepts a verified start state followed by finish-r0 removal',
 ]);
+const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
+  'external visible review rejects an unbound or mutable target contract',
+  'external visible fixed SHA review separates and proves all four evidence layers',
+  'external visible review rejects a writable Claude permission mode',
+  'external visible review invalidates a changed candidate before terminal input',
+  'external visible review rejects a different Terminal TTY identity',
+  'external visible review cannot report COMPLETE without behavior acceptance',
+  'external visible protocol extension marker is machine checked',
+  'external visible shell probe does not treat version success as effort proof',
+  'external visible COMPLETE revalidates the same transcript turn after restart',
+  'external visible COMPLETE becomes stale after an unrelated later turn',
+]);
 
 async function check(name, fn) {
   const scenarioIndex = passed + failed;
@@ -88,6 +105,24 @@ async function check(name, fn) {
   }
 }
 
+async function checkExternal(name, fn) {
+  const scenarioIndex = externalPassed + externalFailed;
+  if (EXTERNAL_EXPECTED_SCENARIOS[scenarioIndex] !== name) {
+    throw new Error(
+      `external selftest scenario manifest drift at ${scenarioIndex}: ` +
+      `${JSON.stringify(name)} !== ${JSON.stringify(EXTERNAL_EXPECTED_SCENARIOS[scenarioIndex])}`,
+    );
+  }
+  try {
+    await fn();
+    externalPassed += 1;
+  } catch (error) {
+    externalFailed += 1;
+    failedScenarios.push(name);
+    process.stderr.write(`  FAIL ${name}\n${error.stack || error.message}\n`);
+  }
+}
+
 function request(overrides = {}) {
   return {
     taskId: 'gov-visible-terminal',
@@ -102,6 +137,151 @@ function request(overrides = {}) {
     questionTimeoutMs: 300_000,
     ...overrides,
   };
+}
+
+function externalRequest(overrides = {}) {
+  const target = overrides.reviewTargetSha || 'c'.repeat(40);
+  const skillSha256 = overrides.skillSha256 || 'd'.repeat(64);
+  return request({
+    supervisionMode: 'external-visible-readonly',
+    externalVisibleTerminal: {
+      action: 'fixed-sha-readonly-review',
+      terminalApp: 'Terminal',
+      windowId: 12081,
+      windowTitle: 'COREONE fixed SHA review',
+      tty: '/dev/ttys000',
+      startup: 'launch-in-idle-tab',
+      claudeSessionId: '11111111-1111-4111-8111-111111111111',
+      expectedClaudeVersion: '2.1.220',
+      expectedEffort: 'xhigh',
+      expectedPermissionMode: 'plan',
+      repositoryFullName: 'kornma123/pis',
+      reviewTargetSha: target,
+      skillName: 'coreone',
+      skillPath: '/repo/.claude/skills/coreone/SKILL.md',
+      skillSha256,
+      ...(overrides.externalVisibleTerminal || {}),
+    },
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(
+        ([key]) => !['externalVisibleTerminal', 'reviewTargetSha', 'skillSha256'].includes(key),
+      ),
+    ),
+  });
+}
+
+function makeExternalRuntime(options = {}) {
+  let launched = false;
+  const messages = [];
+  const target = options.reviewTargetSha || 'c'.repeat(40);
+  const skillSha256 = options.skillSha256 || 'd'.repeat(64);
+  const permissionMode = options.permissionMode || 'plan';
+  const tty = options.tty || '/dev/ttys000';
+  let transcriptSha256 = options.transcriptSha256 || 'e'.repeat(64);
+  const snapshot = () => ({
+    transcriptPath: '/fake/11111111-1111-4111-8111-111111111111.jsonl',
+    transcriptSha256,
+    recordCount: 10 + messages.length,
+    metadata: {
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      claudeVersion: '2.1.220',
+      cwd: '/repo',
+      effort: 'xhigh',
+      permissionMode,
+      model: 'k3',
+    },
+    messages: messages.map((message, index) => ({
+      index: 9 + index,
+      ...message,
+    })),
+  });
+  const runtime = {
+    async inspectTerminal() {
+      return {
+        terminalApp: 'Terminal',
+        frontmost: true,
+        frontWindow: true,
+        selected: true,
+        windowId: 12081,
+        windowTitle: 'COREONE fixed SHA review',
+        tty,
+        busy: launched,
+        contents: '/repo',
+      };
+    },
+    claudeProcess() {
+      return launched ? { pid: 4321, tty: 'ttys000', command: 'claude' } : null;
+    },
+    async writeTerminal(_binding, input, purpose) {
+      if (purpose === 'launch-visible-claude') launched = true;
+      if (purpose === 'visibility-proof' && launched) {
+        const canary = input.match(/COREONE_TERMINAL_PROBE_[A-Za-z0-9_]+/)?.[0];
+        assert.ok(canary, 'visible-session canary missing');
+        messages.push({ role: 'user', text: input });
+        messages.push({ role: 'assistant', text: canary.split('').reverse().join('') });
+        transcriptSha256 = 'f'.repeat(64);
+      }
+      if (purpose === 'fixed-sha-review-prompt') {
+        const challenge = input.match(/COREONE_PROMPT_CHALLENGE_[0-9a-f]+/i)?.[0];
+        assert.ok(challenge, 'review prompt challenge missing');
+        messages.push({ role: 'assistant', text: [
+          `COREONE_PROMPT_ACK ${challenge.split('').reverse().join('')}`,
+          `COREONE_SKILL_DISCOVERED sha256=${skillSha256}`,
+          ...(options.completion === false
+            ? []
+            : [`COREONE_REVIEW_COMPLETE target=${target} verdict=PASS`]),
+        ].join('\n') });
+      }
+      return { accepted: true };
+    },
+    async waitForTerminalText(_binding, expected) {
+      let contents = `/repo\n${expected}`;
+      if (/^COREONE_SHELL_PROBE_[0-9a-f]+_END$/.test(expected)) {
+        const marker = expected.replace(/_END$/, '');
+        const encoded = Buffer.from(JSON.stringify({
+          cwd: '/repo',
+          worktreeRoot: '/repo',
+          claudePath: '/usr/local/bin/claude',
+          claudeVersion: options.shellProbeVersion || '2.1.220',
+          effortSupported: options.effortSupported !== false,
+        })).toString('base64');
+        contents = `${marker}:${encoded}:${expected}`;
+      }
+      return {
+        terminalApp: 'Terminal',
+        frontmost: true,
+        frontWindow: true,
+        selected: true,
+        windowId: 12081,
+        windowTitle: 'COREONE fixed SHA review',
+        tty,
+        busy: launched,
+        contents,
+      };
+    },
+    async waitForClaudeProcess() {
+      assert.equal(launched, true, 'Claude process requested before visible launch');
+      return { pid: 4321, tty: 'ttys000', command: 'claude' };
+    },
+    async waitForTranscript(_sessionId, _path, predicate) {
+      const value = snapshot();
+      assert.equal(predicate(value), true, 'requested transcript predicate was not met');
+      return value;
+    },
+    async verifyStatic() {
+      return {
+        skillSha256,
+        reviewTargetSha: options.staticReviewTargetSha || target,
+        repositoryFullName: 'kornma123/pis',
+      };
+    },
+  };
+  runtime.injectUnrelatedTurn = () => {
+    messages.push({ role: 'user', text: 'unrelated later request' });
+    messages.push({ role: 'assistant', text: 'unrelated later response' });
+    transcriptSha256 = 'a'.repeat(64);
+  };
+  return runtime;
 }
 
 function runSupervisor(input, adapter, optionOverrides = {}) {
@@ -299,6 +479,63 @@ async function blockedResult(adapter, requestOverrides = {}, optionOverrides = {
       testOnlyAdapter: true,
       ...optionOverrides,
     });
+  } finally {
+    state.cleanup();
+  }
+}
+
+async function runExternalCase(options = {}) {
+  const state = temporaryStateFile();
+  const target = options.reviewTargetSha || 'c'.repeat(40);
+  try {
+    return await runExternalVisibleSupervisor(
+      externalRequest({
+        reviewTargetSha: target,
+        ...(options.requestOverrides || {}),
+      }),
+      makeExternalRuntime({
+        reviewTargetSha: target,
+        ...(options.runtimeOptions || {}),
+      }),
+      {
+        stateFile: state.file,
+        factGate: passFactGate,
+        maxCycles: 2,
+        randomUUID: () => '22222222-2222-4222-8222-222222222222',
+        captureInitialGitState: () => ({
+          head: options.initialHead || target,
+          branch: 'task-external-review',
+          gitDir: '/repo/.git',
+          tree: 'b'.repeat(40),
+        }),
+      },
+    );
+  } finally {
+    state.cleanup();
+  }
+}
+
+async function runExternalRestartCase(injectUnrelatedTurn = false) {
+  const state = temporaryStateFile();
+  const input = externalRequest();
+  const runtime = makeExternalRuntime();
+  const options = {
+    stateFile: state.file,
+    factGate: passFactGate,
+    maxCycles: 2,
+    randomUUID: () => '22222222-2222-4222-8222-222222222222',
+    captureInitialGitState: () => ({
+      head: 'c'.repeat(40),
+      branch: 'task-external-review',
+      gitDir: '/repo/.git',
+      tree: 'b'.repeat(40),
+    }),
+  };
+  try {
+    const first = await runExternalVisibleSupervisor(input, runtime, options);
+    assert.equal(first.status, 'COMPLETE');
+    if (injectUnrelatedTurn) runtime.injectUnrelatedTurn();
+    return await runExternalVisibleSupervisor(input, runtime, options);
   } finally {
     state.cleanup();
   }
@@ -2258,9 +2495,127 @@ module.exports = {
     }
   });
 
-  if (failed > 0) {
+  await checkExternal('external visible review rejects an unbound or mutable target contract', async () => {
+    assert.throws(
+      () => validateRequest(request({
+        supervisionMode: 'external-visible-readonly',
+        externalVisibleTerminal: {
+          terminalApp: 'Terminal',
+          tty: '/dev/ttys000',
+        },
+      })),
+      (error) => {
+        assert.equal(error.reason, FAILURE.STATE_BINDING_MISMATCH);
+        assert.match(error.message, /fixed SHA|externalVisibleTerminal/i);
+        return true;
+      },
+    );
+  });
+
+  await checkExternal('external visible fixed SHA review separates and proves all four evidence layers', async () => {
+    const result = await runExternalCase();
+    assert.equal(result.status, 'COMPLETE');
+    assert.equal(result.supervisionMode, 'external-visible-readonly');
+    assert.equal(result.codexTaskBindingRequired, false);
+    assert.equal(result.externalSession.reviewTargetSha, 'c'.repeat(40));
+    assert.equal(result.externalSession.permissionMode, 'plan');
+    assert.equal(result.externalSession.transcriptSha256, 'e'.repeat(64));
+    assert.deepEqual(
+      Object.fromEntries(
+        Object.entries(result.evidenceLayers).map(([name, value]) => [name, value.status]),
+      ),
+      {
+        STATIC_INSTALL: 'PASS',
+        SKILL_DISCOVERY: 'PASS',
+        VISIBLE_SESSION_CANARY: 'PASS',
+        REVIEW_BEHAVIOR_ACCEPTANCE: 'PASS',
+      },
+    );
+  });
+
+  await checkExternal('external visible review rejects a writable Claude permission mode', async () => {
+    const result = await runExternalCase({
+      runtimeOptions: { permissionMode: 'bypassPermissions' },
+    });
+    assert.equal(result.status, 'BLOCKED');
+    assert.equal(result.reason, FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION);
+    assert.notEqual(
+      result.evidenceLayers.REVIEW_BEHAVIOR_ACCEPTANCE.status,
+      'PASS',
+    );
+  });
+
+  await checkExternal('external visible review invalidates a changed candidate before terminal input', async () => {
+    const result = await runExternalCase({ initialHead: 'f'.repeat(40) });
+    assert.equal(result.status, 'BLOCKED');
+    assert.equal(result.reason, FAILURE.REVIEW_TARGET_DRIFT);
+    assert.equal(result.terminalHandle, null);
+  });
+
+  await checkExternal('external visible review rejects a different Terminal TTY identity', async () => {
+    const result = await runExternalCase({
+      runtimeOptions: { tty: '/dev/ttys999' },
+    });
+    assert.equal(result.status, 'BLOCKED');
+    assert.equal(result.reason, FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE);
+  });
+
+  await checkExternal('external visible review cannot report COMPLETE without behavior acceptance', async () => {
+    const result = await runExternalCase({
+      runtimeOptions: { completion: false },
+    });
+    assert.notEqual(result.status, 'COMPLETE');
+    assert.equal(
+      result.evidenceLayers.REVIEW_BEHAVIOR_ACCEPTANCE.status,
+      'UNVERIFIED',
+    );
+  });
+
+  await checkExternal('external visible protocol extension marker is machine checked', async () => {
+    const protocol = fs.readFileSync(
+      path.join(__dirname, '..', 'docs', 'claude-code-cli-supervision.md'),
+      'utf8',
+    );
+    assert.equal(
+      protocol.split(EXTERNAL_VISIBLE_RUNTIME_MARKER).length - 1,
+      1,
+    );
+    const helpResult = spawnSync(
+      process.execPath,
+      [path.join(__dirname, 'claude-cli-supervisor.cjs'), 'run', '--help'],
+      { encoding: 'utf8' },
+    );
+    assert.equal(helpResult.status, 0, helpResult.stderr);
+    assert.match(helpResult.stdout, /external-visible-readonly/);
+    assert.match(helpResult.stdout, /permission-mode=plan/);
+  });
+
+  await checkExternal('external visible shell probe does not treat version success as effort proof', async () => {
+    const result = await runExternalCase({
+      runtimeOptions: { effortSupported: false },
+    });
+    assert.equal(result.status, 'BLOCKED');
+    assert.equal(result.reason, FAILURE.CLAUDE_EFFORT_UNSUPPORTED);
+    assert.equal(result.evidenceLayers.STATIC_INSTALL.status, 'UNVERIFIED');
+  });
+
+  await checkExternal('external visible COMPLETE revalidates the same transcript turn after restart', async () => {
+    const result = await runExternalRestartCase(false);
+    assert.equal(result.status, 'COMPLETE');
+    assert.equal(result.externalSession.transcriptSha256, 'f'.repeat(64));
+    assert.equal(result.evidenceLayers.REVIEW_BEHAVIOR_ACCEPTANCE.status, 'PASS');
+  });
+
+  await checkExternal('external visible COMPLETE becomes stale after an unrelated later turn', async () => {
+    const result = await runExternalRestartCase(true);
+    assert.equal(result.status, 'BLOCKED');
+    assert.equal(result.reason, FAILURE.STALE_COMPLETION);
+  });
+
+  if (failed + externalFailed > 0) {
     process.stderr.write(
-      `claude-cli-supervisor selftest: FAIL (${failed} failed; ${passed} passed)\n` +
+      `claude-cli-supervisor selftest: FAIL (` +
+      `${failed + externalFailed} failed; ${passed + externalPassed} passed)\n` +
       `${failedScenarios.join('\n')}\n`,
     );
     process.exitCode = 1;
@@ -2271,6 +2626,13 @@ module.exports = {
     `claude-cli-supervisor selftest: PASS (${passed} scenarios; ` +
     `manifest-sha256=${manifestSha256})\n`,
   );
+  if (process.argv.includes('--external-summary')) {
+    process.stdout.write(
+      `claude-cli-supervisor external-visible extension: PASS (` +
+      `${externalPassed} scenarios; manifest-sha256=` +
+      `${digest(EXTERNAL_EXPECTED_SCENARIOS.join('\0'))})\n`,
+    );
+  }
 })().catch((error) => {
   console.error(error.stack || error.message);
   process.exit(1);

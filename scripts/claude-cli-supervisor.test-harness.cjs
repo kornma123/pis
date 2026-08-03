@@ -39,6 +39,14 @@ module.exports = {
       adapterCapability: TEST_ONLY_ADAPTER_CAPABILITY,
     });
   },
+  runExternalVisibleSupervisor(input, runtime, options = {}) {
+    const request = validateRequest(input);
+    const adapter = createExternalVisibleTerminalAdapter(request, runtime);
+    return runSupervisor(request, adapter, {
+      ...options,
+      adapterCapability: EXTERNAL_VISIBLE_ADAPTER_CAPABILITY,
+    });
+  },
 };
 `;
   const instrumented = new Module(`${RUNTIME_PATH}#test-harness`, module);

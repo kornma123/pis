@@ -4,17 +4,29 @@
 <!-- supervisor-defaults: effort=ultracode poll-seconds=300 desktop-terminal=attached-readwrite backend-tool-pty=not-visible background=false stable-eof-reads=2 question-interrupt=immediate session-reuse=true -->
 <!-- terminal-proof: canary-write-and-app-readback=required same-handle=true missing-capability=fail-closed -->
 <!-- supervisor-runtime: script=scripts/claude-cli-supervisor.cjs selftest=scripts/claude-cli-supervisor.selftest.cjs test-harness=scripts/claude-cli-supervisor.test-harness.cjs production-test-exports=forbidden review-target-execution=materialized adapter-api=2 capability=host-native-unforgeable file-adapter=test-only terminal-generation=required lease=task-exclusive state-cas=true structured-exit=required canary=out-of-band-marker probe=structured state=git-external visibility-failure=TERMINAL_VISIBILITY_UNPROVEN -->
+<!-- external-visible-runtime: mode=external-visible-readonly action=fixed-sha-readonly-review surface=macos-terminal-same-tab codex-task-binding=false permission-mode=plan evidence-layers=STATIC_INSTALL,SKILL_DISCOVERY,VISIBLE_SESSION_CANARY,REVIEW_BEHAVIOR_ACCEPTANCE hidden-pty=forbidden print-mode=forbidden github-write=forbidden candidate-drift=fail-closed visibility-failure=VISIBLE_CLI_CONTROL_UNAVAILABLE -->
 <!-- stable-rules-only -->
 
 本协议用于 Codex 或 PM 在本机启动、续接、监督 Claude Code CLI/K3 并与其双向协作。它解决的是会话可见、问题及时回答、输出不遗漏和派单前复核，不新增命令白名单，也不替代 `docs/agent-operating-contract.md` 的权限、ownership、GitHub 写入或效率规则。
 
 本地终端输出轮询不是 GitHub 轮询。GitHub 仍只按共用契约 §9 的低频、串行、经授权路径读写。
 
-## 0. 可执行入口与宿主 adapter
+## 0. 两种保证模式与唯一可执行入口
+
+本协议区分两个不能互相冒充的保证等级：
+
+| 模式 | 保证边界 | 当前用途 |
+|---|---|---|
+| `native-task-bound` | Codex 宿主原生、调用方不可伪造的 `threadId + terminalHandle + terminalGeneration` capability | 最高保证等级；当前 Codex Desktop 尚未接入 native bridge，缺能力时继续 `TERMINAL_VISIBILITY_UNPROVEN` |
+| `external-visible-readonly` | 精确 macOS Terminal window id、当时窗口标题、TTY、Claude PID/session、同标签页 challenge-response 与 transcript 回读 | 只允许固定 SHA、只读异构复核；不要求把用户已打开的 Terminal 窗口绑定到当前 Codex task |
+
+“没有 Codex 内置终端句柄”不等于“无法控制用户现有可见终端”。外部模式承认后一种能力，但不会把它标成 host-native 或不可伪造；收据必须明确 `codexTaskBindingRequired=false`。
 
 仓库内唯一生产监督入口是 `scripts/claude-cli-supervisor.cjs`，回归入口是 `scripts/claude-cli-supervisor.selftest.cjs`，测试专用装载器是 `scripts/claude-cli-supervisor.test-harness.cjs`。监督器拥有状态机、同句柄校验、Claude 探针、session/prompt 绑定、增量读取、问题中断、双读 EOF、独立 Git/scope/R0 事实闸和 Git 外恢复状态；它不拥有 Codex Desktop 前端终端。
 
-宿主以 adapter API v2 接入。**生产 CLI 不加载 `--adapter=<文件>`，生产模块也不导出任何 fake-adapter 测试入口**：任意仓库外/仓库内 JavaScript 文件都能自报 `attached/visible`。回归测试只能由测试进程显式加载专用 harness；生产 runtime 不得 import、命名或重新导出该 harness，不能用 `NODE_ENV`、环境变量或布尔值伪造信任边界。生产入口只接受 Codex Desktop 原生桥在同一进程内给出的、调用方文件/环境变量无法伪造且绑定 `taskId + threadId + sessionId + terminalGeneration` 的 capability；当前宿主尚未提供该 native binding，所以生产 `run` 必须始终非零退出并报告 `TERMINAL_VISIBILITY_UNPROVEN`：
+两种模式都以 adapter API v2 接入。**生产 CLI 不加载 `--adapter=<文件>`，生产模块也不导出任何 fake-adapter 测试入口**：任意仓库外/仓库内 JavaScript 文件都能伪报 `attached/visible`。回归测试只能由测试进程显式加载专用 harness；生产 runtime 不得 import、命名或重新导出该 harness，不能用 `NODE_ENV`、环境变量或布尔值伪造信任边界。
+
+`native-task-bound` 只接受 Codex Desktop 原生 bridge 在同一进程给出的 capability；当前宿主缺该 bridge，所以该模式的生产 `run/answer/ack-stop` 仍非零退出。`external-visible-readonly` 只接受生产模块内建的 macOS Terminal same-tab adapter；它可以把已认领的精确窗口带到前台，但不新建窗口、不切换到别的 tab；每次操作前重新核对 Terminal、window id、selected tab 与 TTY，不加载调用方代码，也不使用 System Events/Accessibility 键盘注入：
 
 ```bash
 node scripts/claude-cli-supervisor.cjs run \
@@ -27,7 +39,7 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
 {
   "taskId": "stable-task-id",
   "taskName": "可识别且唯一的任务名",
-  "threadId": "当前 Codex task id",
+  "threadId": "native 模式为当前 Codex task id；外部模式仅为审计关联 id",
   "cwd": "/absolute/verified/worktree",
   "promptFile": "/absolute/private/prompt.txt",
   "minimumClaudeVersion": "2.0.0",
@@ -38,18 +50,45 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
 }
 ```
 
+外部可见模式还必须携带动态、完整的只读复核合同；下列值只是字段形状，不是稳定默认值：
+
+```json
+{
+  "supervisionMode": "external-visible-readonly",
+  "externalVisibleTerminal": {
+    "action": "fixed-sha-readonly-review",
+    "terminalApp": "Terminal",
+    "windowId": 12345,
+    "windowTitle": "启动时现场读取的窗口标题",
+    "tty": "/dev/ttysNNN",
+    "startup": "launch-in-idle-tab",
+    "claudeSessionId": "预生成 UUID",
+    "expectedClaudeVersion": "现场批准的精确版本",
+    "expectedEffort": "现场批准且 transcript 可证明的 effort",
+    "expectedPermissionMode": "plan",
+    "repositoryFullName": "owner/repo",
+    "reviewTargetSha": "完整 40 位 candidate SHA",
+    "skillName": "coreone",
+    "skillPath": "目标 worktree 内 Skill 的绝对路径",
+    "skillSha256": "完整 64 位 SHA-256"
+  }
+}
+```
+
+`attach-existing` 还必须提供现场 Claude PID 与同 session transcript 路径；`launch-in-idle-tab` 反而禁止预填 PID/transcript，由监督器在同一空闲可见标签页启动后发现并回读。已有标签页仍被其他 Claude 占用时返回 `VISIBLE_CLI_CONTROL_UNAVAILABLE`，不得自动退出、杀死或接管它。
+
 `minimumClaudeVersion` 是任务启动时由操作者/宿主按已批准版本策略注入的动态下限，不写死在稳定协议。prompt 文件必须是普通非 symlink 文件；监督状态只保存 prompt SHA-256，不保存正文。
 
-adapter 元数据必须声明 `apiVersion=2`、`surface=codex-desktop-terminal`、`sameHandleReadWrite=true`、`canaryDelivery=out-of-band-marker` 与 `structuredProbe=true`。原生 capability 和每个调用/返回值都必须绑定并回传同一 `threadId + terminalHandle + terminalGeneration`；handle 或 generation 任一漂移立即失败关闭：
+原生 adapter 元数据必须声明 `apiVersion=2`、`surface=codex-desktop-terminal`、`sameHandleReadWrite=true`、`canaryDelivery=out-of-band-marker` 与 `structuredProbe=true`。外部 adapter 必须声明 `surface=external-visible-terminal`、`readOnly=true` 与 `canaryDelivery=same-visible-session-challenge-response`。每个调用/返回值都必须绑定并回传同一 handle/generation；handle、generation、window id、TTY、Claude PID/session 或 fixed SHA 任一漂移立即失败关闭。
 
 | 方法 | 必须证明 |
 |---|---|
 | `createTerminal` | 在当前 `threadId` 中按监督器给出的 `taskId+sessionId+generation` 幂等键同步创建并打开前端终端；返回 `status=attached`、`visible=true`、稳定 handle、同一 generation 与原样幂等键；`queued` 不合格 |
-| `attachTerminal` | Codex app/task 重启后，按同一幂等键把已保存的同一 handle 重新附着到当前任务并原样回执；不能改用另一个终端 |
+| `attachTerminal` | native 模式在 Codex app/task 重启后按同一幂等键重新附着；外部模式重新核对同一 Terminal window id/TTY/Claude PID/session/transcript。两者都不能改用另一个终端 |
 | `writeTerminal` | 向同一 handle 写 canary、控制者回答和前台 CLI 输入；visibility canary 必须走不会注入 Claude 前台输入的宿主 marker 通道；返回 `accepted=true` |
 | `readTerminal` | 应用侧按 cursor 增量回读同一 handle；返回绑定后的 `threadId/handle/generation`、`attached/visible`、真实输出、EOF、运行工具、结构化 question/stop，以及同 `sessionId` 的结构化进程终态 |
-| `probeTerminal` | 新启动前在同一终端运行 `pwd`、worktree root、Claude 路径/版本和 `--effort ultracode` 支持探针；恢复时必须用宿主进程/会话查询等不向仍活着的 Claude 注入命令的方式复核，返回结构化结果 |
-| `launchClaude` | 在该 handle 的前台使用唯一 name/session id 和精确 `--effort ultracode` 启动，并以 prompt hash 回执证明已注入；接受监督器生成的 `taskId+sessionId+generation` 幂等键并原样回执 |
+| `probeTerminal` | 新启动前在同一终端运行 `pwd`、worktree root、Claude 路径/版本探针；恢复时用进程与 transcript 元数据复核实际 version、effort、permission mode、cwd/session。`claude --effort <值> --version` 只证明版本命令接受参数，**不能**证明实际会话采用该 effort |
+| `launchClaude` | 在该 handle 的前台使用唯一 name/session id 启动；native 使用其固定默认，外部使用 request 的精确 effort 与 `permission-mode=plan`。prompt challenge、Skill digest 和 session/transcript 元数据共同证明已注入 |
 | `resumeClaude` | 复用原 session id 与同一幂等键；进程仍在时回报 `alreadyRunning`，否则用原 id `--resume`，不得新建重复会话 |
 
 同一 task 的 `run/answer/ack-stop` 受 Git 外独占 lease 保护，状态文件每次写入做 revision CAS；并发控制者只能得到 `SUPERVISOR_LEASE_HELD`，不得第二次 create/launch。应用或任务异常退出后，仅在 owner PID 已确定不存在（`ESRCH`）时自动回收旧 lease；owner 仍存活或证据不可解析时继续失败关闭。
@@ -68,44 +107,56 @@ answer 路径会重新做同句柄 canary，再把答案写回原终端；不得
 
 以下已知失败形态全部属于回归负例：打开动作只返回 `queued`；应用回读显示未附着；回读的是主 checkout 的人工终端而非目标 handle；工具 PTY 能完成但前端不可见。它们只能报告 `TERMINAL_VISIBILITY_UNPROVEN` 或 `TERMINAL_HANDLE_MISMATCH`，不得声称 Claude 已启动，更不得把点击/输入步骤转交 PM。
 
-**前端集成 owner / trigger**：owner 是 Codex Desktop terminal bridge 的宿主集成维护者；当宿主同时提供“当前 task 同步创建/附着前端终端、稳定 handle+generation、同绑定写入、应用侧同绑定回读、原生不可伪造 capability、结构化 session 终态”时触发接线。接线验收必须先让确定场景清单的 supervisor selftest 全绿，再用无秘密 canary 做真实同绑定 smoke；只有该 smoke 通过才允许受控 Claude 启动。仓库治理 owner 维护本脚本、状态机、测试和协议，不得用仓库代码伪造宿主可见性。
+**前端集成 owner / trigger**：Codex Desktop terminal bridge 的宿主维护者仍拥有 native 模式；出现原生 capability 后再接线，不由外部模式冒充。仓库治理 owner 维护外部只读模式、状态机、测试和协议；每次真实使用仍须先做无秘密 challenge-response，不能把一次历史 smoke 当永久通行证。
+
+## 0.1 四层证据不得折叠
+
+外部模式的 typed receipt 必须分别列出：
+
+1. `STATIC_INSTALL`：Claude 可执行对象与目标 worktree 内 Skill 普通文件、精确 digest；
+2. `SKILL_DISCOVERY`：同一 Claude session 实际读取 Skill，并回报它独立计算的相同 digest；
+3. `VISIBLE_SESSION_CANARY`：同一 window/TTY 的随机 challenge-response；预期响应不得原样写在提示中；
+4. `REVIEW_BEHAVIOR_ACCEPTANCE`：同一 transcript 对精确 candidate SHA 给出结构化终态，transcript SHA-256 已回读。
+
+四层任一为 `UNVERIFIED/FAIL` 时，整体不得称 runtime/review PASS。static install PASS 不代表 Skill 已发现；canary PASS 不代表行为验收完成；行为 PASS 也不构成代码结论 PASS，更不构成修复、合并、发布或部署授权。
 
 ## 1. 单一控制面
 
-- 当前用户可见的 Codex 根任务或 PM 是唯一控制者；一个 owned task 同时只保留一个受监督 Claude CLI 会话。
-- “用户可见终端”必须同时满足：它出现在当前 Codex Desktop 任务的终端界面中；应用侧能回读其输出；控制者能通过同一个执行句柄向它写入。`exec_command(..., tty:true)`、shell 的 TTY、工具调用返回的 PTY/session id 或进程仍存活，都只证明后端有伪终端，**不能**证明用户在桌面端看得到。
+- 当前用户可见的 Codex 根任务或 PM 是唯一控制者；一个 owned task 同时只保留一个受监督 Claude CLI 会话。外部模式的 `threadId` 只是审计关联，不是原生绑定证明。
+- “用户可见终端”必须同时满足：它是前台 Terminal 的精确 window/selected tab/TTY，控制者能向同一 tab 写入，并能从该窗口或同 session transcript 回读。`exec_command(..., tty:true)`、shell TTY、工具返回的 PTY/session id 或进程存活都不能单独证明这一点。
 - 只有应用侧只读回读、没有同一终端的写入能力，也不构成可监督会话：控制者无法及时回答 Claude 的提问。宿主不提供“同一终端可写 + 应用侧可回读”能力时，必须 fail-closed，不得用隐藏工具 PTY 代替。
 - 控制者保存任务名、仓库绝对路径、Claude session id、桌面终端执行句柄、最后已消费输出位置和启动 canary 证明。不得把 token、环境变量值、凭据或私密数据写进会话名、命令、评论或日志。
 - Claude 负责在同一会话中明确报告 `ACTIVE`、`WAITING_CONTROLLER`、`VERIFYING`、`COMPLETE` 或 `BLOCKED`；控制者负责读取、判断和回写，不把无人应答造成的停顿算作 Claude 的阻塞。
 
 ## 2. 启动和续接
 
-执行任何 Claude 命令前，先完成桌面终端证明：
+执行任何 Claude 命令前，先完成所选模式对应的终端证明：
 
-1. 用宿主应用的终端回读能力确认当前任务已附着终端；明确返回“未附着”时，记录 `BLOCKED: DESKTOP_TERMINAL_NOT_ATTACHED` 并停止。
-2. 通过准备承载 Claude 的**同一个执行句柄**写入一次不含秘密的随机 canary（例如 `COREONE_TERMINAL_PROBE_<uuid>`），再由宿主应用回读当前任务终端；只有读回完全相同的 canary 才算证明通过。
-3. canary 写入与应用回读任一能力不存在、失败或来自不同句柄时，记录 `BLOCKED: DESKTOP_TERMINAL_CONTROL_UNAVAILABLE` 并停止。不得转用工具侧 PTY、后台进程、日志文件或另一个终端继续。
+1. native 模式确认当前 task 已附着原生终端；外部模式确认 exact Terminal app/window id、启动时标题、前台 selected tab 与 TTY。外部标签页已有另一个 Claude 时不得接管。
+2. 通过准备承载 Claude 的**同一个句柄或同一个外部 tab**写入不含秘密的随机 challenge。native 用 out-of-band marker；外部要求返回提示中没有原样给出的变换结果，并从同一窗口或同 session transcript 回读。
+3. 写入、回读、身份或 challenge 任一不存在、失败或来自不同对象时停止：native 报 `TERMINAL_VISIBILITY_UNPROVEN`，外部报 `VISIBLE_CLI_CONTROL_UNAVAILABLE`。不得转用工具 PTY、后台进程、日志文件或另一个终端继续。
 
-证明通过后，才在该同一桌面终端执行目标 worktree 的只读探针：
+证明通过后，才在该同一桌面终端执行目标 worktree 的只读探针。native 模式仍按其固定默认；外部模式的 effort 必须来自 request，并由实际 transcript 再确认：
 
 ```bash
 command -v claude
 claude --version
-claude --effort ultracode --version
+claude --help
 ```
 
 新会话使用预先生成并保存的 UUID；续接必须复用原 session id：
 
 ```bash
-claude --effort ultracode --name '<可识别任务名>' --session-id '<uuid>'
-claude --effort ultracode --name '<可识别任务名>' --resume '<原 session id>'
+claude --effort '<该模式批准的精确 effort>' --name '<可识别任务名>' --session-id '<uuid>'
+claude --effort '<该模式批准的精确 effort>' --name '<可识别任务名>' --resume '<原 session id>'
 ```
 
-- `--effort ultracode` 是默认且必须显式传入的启动参数。模型沿用当时有效配置；只有用户或固定 handoff 明确指定模型时才传 `--model`，不得把会过期的模型名写成长期默认。
+- `native-task-bound` 的既有默认仍是 `ultracode`，在 native bridge 接线前不得伪称可运行。`external-visible-readonly` 不继承这个未经实际 session 证明的默认：启动参数必须等于 request 的 `expectedEffort`，并从 transcript 元数据读回相同值；当前设备曾验证的 `xhigh` 只是动态证据，不是跨设备常量。
 - Claude 版本按严格 SemVer 比较；prerelease 低于相同 core 的稳定版（例如 `2.0.0-beta.1 < 2.0.0`），不得只比较前三段数字后放行。
 - SemVer 的数字标识符按十进制数字串长度和字典序比较，不转为 JavaScript `Number`；超出安全整数范围的版本也必须保持双向对称顺序。
-- 只有用户明确指定其他 effort 时才可覆盖默认值。CLI 不支持 `ultracode`、启动后显示降级或实际 effort 无法确认时，停止派单并如实报告；不得静默退回 `xhigh`、`high` 或其他级别。
-- 必须在已经通过 canary 证明的同一 Codex Desktop 任务终端以前台交互方式启动。不得使用工具调用分配的 PTY、`--bg`、`nohup`、shell 后台符号、输出重定向或隐藏子任务代替；`--tmux` 仅在用户明确要求、桌面端可见 attach 入口已验证且控制者仍能同句柄读写时使用。
+- effort 不在本机 `claude --help` 声明集合、启动后实际值不同或 transcript 无法确认时停止派单；不得因 `claude --effort <值> --version` 返回 0 就认定支持，也不得静默降级。
+- 外部模式必须使用 `permission-mode=plan`；已有 session 为 `bypassPermissions`、`acceptEdits` 或其他可写模式时拒绝复用。它只允许只读固定 SHA 复核；GitHub 写入/评论、Issue/PR 修改、权限/身份变化、合并、发布、部署和对外发送均保留人工关卡。
+- 必须在已经通过 canary 的同一可见终端以前台交互方式启动或复用。不得使用工具 PTY、`--print`、`--bg`、`nohup`、shell 后台符号、输出重定向、另开隐藏 Claude 或隐藏子任务代替。不得因 System Events 键盘注入缺 Accessibility 权限就要求用户改权限；使用 Terminal 自身 same-tab 接口，具体提交行为由 challenge 回读验收。
 - 启动成功后，控制者立即在当前任务回报任务名、cwd、session id、Claude 版本、实际 effort，以及 canary 写入与应用回读均成功的“桌面终端已附着”状态。若其中任何一项未核实，不得声称会话已接通或终端可见。
 
 ## 3. 输出消费与五分钟节奏
@@ -148,7 +199,7 @@ claude --effort ultracode --name '<可识别任务名>' --resume '<原 session i
 
 | 当前状态 | 控制者动作 | 下一状态 |
 |---|---|---|
-| `STARTING` | 同句柄 canary 写入 + 应用回读、探针、显式 `ultracode`、记录 session id | `ACTIVE` / `BLOCKED` |
+| `STARTING` | 模式绑定 + 同 tab challenge-response、探针、实际 effort/permission/transcript 回读、记录 session id | `ACTIVE` / `BLOCKED` |
 | `ACTIVE` | 输出唤醒优先，最长五分钟消费增量 | `ACTIVE` / `WAITING_CONTROLLER` / `VERIFYING` |
 | `WAITING_CONTROLLER` | 立即回答原 CLI；需新增权限时才问用户 | `ACTIVE` / `BLOCKED` |
 | `VERIFYING` | 两次稳定读取 + 独立事实闸 | `ACTIVE` / `COMPLETE` / `BLOCKED` |
