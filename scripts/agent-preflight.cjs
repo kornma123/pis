@@ -13,6 +13,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const vm = require('node:vm')
+const zlib = require('node:zlib')
 const { execFileSync, spawnSync } = require('node:child_process')
 
 const CONTRACT_PATH = 'docs/agent-operating-contract.md'
@@ -2340,12 +2341,12 @@ function inspectAuthority(root, args, checks) {
 
   function visibleMarkdown(value, options = {}) {
     const lines = value.split(/\r?\n/)
+    const referenceDefinitions = parseMarkdownReferenceDefinitions(value)
     const visible = []
     let fence = null
     let htmlComment = false
     let rawHtmlTag = null
     let listContinuationIndent = null
-    let referenceState = null
 
     function stripHtmlComments(value) {
       let current = value
@@ -2367,7 +2368,7 @@ function inspectAuthority(root, args, checks) {
       }
     }
 
-    for (const rawLine of lines) {
+    for (const [lineIndex, rawLine] of lines.entries()) {
       let line = rawLine
       if (/^ {0,3}>[ \t]?/.test(line)) {
         if (!options.includeBlockquotes) {
@@ -2444,29 +2445,7 @@ function inspectAuthority(root, args, checks) {
         continue
       }
 
-      if (referenceState === 'destination') {
-        if (!line.trim()) {
-          referenceState = null
-          visible.push('')
-          continue
-        }
-        if (/^ {0,3}(?:<[^>\r\n]+>|\S+)(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^)]*\)))?[ \t]*$/.test(line)) {
-          referenceState = 'title'
-          visible.push('')
-          continue
-        }
-        referenceState = null
-      } else if (referenceState === 'title') {
-        if (/^ {0,3}(?:"[^"]*"|'[^']*'|\([^)]*\))[ \t]*$/.test(line)) {
-          referenceState = null
-          visible.push('')
-          continue
-        }
-        referenceState = null
-      }
-      const definition = line.match(/^ {0,3}\[(?:\\.|[^\]\\\r\n])+\]:[ \t]*(.*)$/)
-      if (definition) {
-        referenceState = definition[1].trim() ? 'title' : 'destination'
+      if (referenceDefinitions.lineIndexes.has(lineIndex)) {
         visible.push('')
         continue
       }
@@ -2482,41 +2461,15 @@ function inspectAuthority(root, args, checks) {
   function navigableMarkdown(value) {
     return visibleMarkdown(value, { includeBlockquotes: true })
   }
-  const MARKDOWN_TEXT_ENTITIES = Object.freeze({
-    AMP: '&',
-    amp: '&',
-    apos: "'",
-    ast: '*',
-    bsol: '\\',
-    colon: ':',
-    comma: ',',
-    equals: '=',
-    excl: '!',
-    GT: '>',
-    gt: '>',
-    lcub: '{',
-    lpar: '(',
-    LSQB: '[',
-    lsqb: '[',
-    LT: '<',
-    lt: '<',
-    nbsp: ' ',
-    NewLine: ' ',
-    num: '#',
-    period: '.',
-    plus: '+',
-    quest: '?',
-    QUOT: '"',
-    quot: '"',
-    rcub: '}',
-    rpar: ')',
-    RSQB: ']',
-    rsqb: ']',
-    semi: ';',
-    sol: '/',
-    Tab: ' ',
-    verbar: '|',
-  })
+  // Generated from WHATWG entities.json on 2026-08-03. It contains every
+  // semicolon-terminated HTML5 entity whose decoded value is ASCII or changes
+  // under the NFKC/default-ignorable/separator normalization used by this gate.
+  // 396 entries; decoded JSON sha256=c35a73153f9913114ae28d9148bc3301c35c1a6043feaa861ab7913c00c795db.
+  const MARKDOWN_TEXT_ENTITIES = Object.freeze(JSON.parse(zlib.brotliDecompressSync(Buffer.from(
+    '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',
+    'base64',
+  )).toString('utf8')))
+  const LITERAL_MARKDOWN_MARKER = '\ue000'
   function decodeMarkdownTextEntity(source, index) {
     const match = source.slice(index).match(/^&(?:#([0-9]+)|#[xX]([0-9A-Fa-f]+)|([A-Za-z][A-Za-z0-9]+));/)
     if (!match) return null
@@ -2554,31 +2507,301 @@ function inspectAuthority(root, args, checks) {
     }
     return -1
   }
-  function inlineHtmlTagEnd(source, start) {
-    if (!/^<\/?[A-Za-z][A-Za-z0-9-]*(?=[ \t/>])/.test(source.slice(start))) return -1
-    let quote = null
+  function consumeLinkWhitespace(source, start, maxLineEndings = 1) {
+    let index = start
+    let lineEndings = 0
+    while (index < source.length) {
+      if (source[index] === ' ' || source[index] === '\t') {
+        index += 1
+        continue
+      }
+      if (source[index] === '\r' || source[index] === '\n') {
+        lineEndings += 1
+        if (lineEndings > maxLineEndings) return null
+        if (source[index] === '\r' && source[index + 1] === '\n') index += 2
+        else index += 1
+        continue
+      }
+      break
+    }
+    return index
+  }
+  function linkDestinationEnd(source, start) {
+    if (source[start] === '<') {
+      for (let index = start + 1; index < source.length; index += 1) {
+        const character = source[index]
+        if (character === '\r' || character === '\n') return -1
+        if (character === '\\' && index + 1 < source.length) {
+          index += 1
+          continue
+        }
+        if (character === '<') return -1
+        if (character === '>') return index + 1
+      }
+      return -1
+    }
+    let depth = 0
+    let index = start
+    for (; index < source.length; index += 1) {
+      const character = source[index]
+      const codePoint = character.codePointAt(0)
+      if (character === '\\' && index + 1 < source.length) {
+        index += 1
+        continue
+      }
+      if (character === ' ' || character === '\t' || character === '\r' || character === '\n' || codePoint <= 0x1f || codePoint === 0x7f) break
+      if (character === '(') {
+        depth += 1
+        if (depth > 32) return -1
+      } else if (character === ')') {
+        if (depth === 0) return -1
+        depth -= 1
+      }
+    }
+    return index > start && depth === 0 ? index : -1
+  }
+  function linkTitleEnd(source, start) {
+    const opening = source[start]
+    const closing = opening === '(' ? ')' : opening
+    if (opening !== '"' && opening !== "'" && opening !== '(') return -1
     for (let index = start + 1; index < source.length; index += 1) {
       const character = source[index]
-      if (quote) {
-        if (character === quote) quote = null
-      } else if (character === '"' || character === "'") {
-        quote = character
-      } else if (character === '>') {
-        return index
+      if (character === '\\' && index + 1 < source.length) {
+        index += 1
+        continue
+      }
+      if (opening === '(' && character === '(') return -1
+      if (character === closing) return index + 1
+    }
+    return -1
+  }
+  function validInlineLinkContent(source) {
+    const contentStart = consumeLinkWhitespace(source, 0)
+    if (contentStart === null) return false
+    if (contentStart === source.length) return true
+    if (contentStart > 0 && /["'(]/.test(source[contentStart])) {
+      const titleEnd = linkTitleEnd(source, contentStart)
+      if (titleEnd >= 0 && !/\r?\n[ \t]*\r?\n/.test(source.slice(contentStart, titleEnd))) {
+        const end = consumeLinkWhitespace(source, titleEnd)
+        if (end === source.length) return true
+      }
+    }
+    const destinationEnd = linkDestinationEnd(source, contentStart)
+    if (destinationEnd < 0) return false
+    const afterDestination = consumeLinkWhitespace(source, destinationEnd)
+    if (afterDestination === null) return false
+    if (afterDestination === source.length) return true
+    if (afterDestination === destinationEnd) return false
+    const titleEnd = linkTitleEnd(source, afterDestination)
+    if (titleEnd < 0 || /\r?\n[ \t]*\r?\n/.test(source.slice(afterDestination, titleEnd))) return false
+    return consumeLinkWhitespace(source, titleEnd) === source.length
+  }
+  function validReferenceDefinitionTail(source) {
+    const destinationStart = consumeLinkWhitespace(source, 0)
+    if (destinationStart === null || destinationStart === source.length) return false
+    const destinationEnd = linkDestinationEnd(source, destinationStart)
+    if (destinationEnd < 0) return false
+    const afterDestination = consumeLinkWhitespace(source, destinationEnd)
+    if (afterDestination === null) return false
+    if (afterDestination === source.length) return true
+    if (afterDestination === destinationEnd) return false
+    const titleEnd = linkTitleEnd(source, afterDestination)
+    if (titleEnd < 0 || /\r?\n[ \t]*\r?\n/.test(source.slice(afterDestination, titleEnd))) return false
+    const end = consumeLinkWhitespace(source, titleEnd, Number.POSITIVE_INFINITY)
+    return end === source.length
+  }
+  function markdownContainerPayload(rawLine) {
+    let line = rawLine
+    while (/^ {0,3}>[ \t]?/.test(line)) line = line.replace(/^ {0,3}>[ \t]?/, '')
+    const listItem = line.match(/^ {0,3}(?:[*+-]|\d{1,9}[.)])[ \t]+/)
+    if (listItem) line = line.slice(listItem[0].length)
+    return line
+  }
+  function normalizeReferenceLabel(value) {
+    let normalized = ''
+    for (let index = 0; index < value.length;) {
+      if (value[index] === '\\' && index + 1 < value.length && /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(value[index + 1])) {
+        normalized += value[index + 1]
+        index += 2
+        continue
+      }
+      if (value[index] === '&') {
+        const entity = decodeMarkdownTextEntity(value, index)
+        if (entity) {
+          normalized += entity.text
+          index += entity.length
+          continue
+        }
+      }
+      normalized += value[index]
+      index += 1
+    }
+    return normalized.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US')
+  }
+  function parseMarkdownReferenceDefinitions(value) {
+    const lines = value.split(/\r?\n/)
+    const payloads = lines.map(markdownContainerPayload)
+    const labels = new Set()
+    const lineIndexes = new Set()
+    let fence = null
+    let htmlComment = false
+    let rawHtmlTag = null
+    for (let index = 0; index < payloads.length; index += 1) {
+      const line = payloads[index]
+      if (fence) {
+        const closing = line.match(/^ {0,3}([`~]+)[ \t]*$/)
+        if (
+          closing &&
+          closing[1][0] === fence.marker &&
+          closing[1].length >= fence.length &&
+          [...closing[1]].every((character) => character === fence.marker)
+        ) fence = null
+        continue
+      }
+      if (htmlComment) {
+        if (line.includes('-->')) htmlComment = false
+        continue
+      }
+      const commentStart = line.indexOf('<!--')
+      if (commentStart >= 0) {
+        if (line.indexOf('-->', commentStart + 4) < 0) htmlComment = true
+        continue
+      }
+      if (rawHtmlTag) {
+        if (new RegExp(`</${rawHtmlTag}[ \\t]*>`, 'i').test(line)) rawHtmlTag = null
+        continue
+      }
+      const rawHtmlOpening = line.match(/^ {0,3}<(script|pre|style|template)(?=[ \t>])[^>]*>/i)
+      if (rawHtmlOpening) {
+        const tag = rawHtmlOpening[1].toLowerCase()
+        if (!new RegExp(`</${tag}[ \\t]*>`, 'i').test(line)) rawHtmlTag = tag
+        continue
+      }
+      const opening = line.match(/^ {0,3}(`{3,}|~{3,})([^\r\n]*)$/)
+      if (opening && !(opening[1][0] === '`' && opening[2].includes('`'))) {
+        fence = { marker: opening[1][0], length: opening[1].length }
+        continue
+      }
+      const definition = line.match(/^ {0,3}\[((?:\\.|[^\]\\\r\n]){1,999})\]:[ \t]*(.*)$/)
+      if (!definition) continue
+      const candidateLines = [definition[2]]
+      for (let end = index; end < Math.min(payloads.length, index + 8); end += 1) {
+        if (end > index) {
+          if (!payloads[end].trim()) break
+          candidateLines.push(payloads[end])
+        }
+        if (!validReferenceDefinitionTail(candidateLines.join('\n'))) continue
+        labels.add(normalizeReferenceLabel(definition[1]))
+        for (let lineIndex = index; lineIndex <= end; lineIndex += 1) lineIndexes.add(lineIndex)
+        index = end
+        break
+      }
+    }
+    return { labels, lineIndexes }
+  }
+  function inlineHtmlTagEnd(source, start) {
+    if (source[start] !== '<') return -1
+    let index = start + 1
+    const closing = source[index] === '/'
+    if (closing) index += 1
+    const name = source.slice(index).match(/^[A-Za-z][A-Za-z0-9-]*/)
+    if (!name) return -1
+    index += name[0].length
+    function consumeTagWhitespace(position) {
+      let current = position
+      let lineEndings = 0
+      while (current < source.length) {
+        if (source[current] === ' ' || source[current] === '\t') current += 1
+        else if (source[current] === '\r' || source[current] === '\n') {
+          lineEndings += 1
+          if (lineEndings > 1) return null
+          if (source[current] === '\r' && source[current + 1] === '\n') current += 2
+          else current += 1
+        } else break
+      }
+      return current
+    }
+    if (closing) {
+      const end = consumeTagWhitespace(index)
+      return end !== null && source[end] === '>' ? end : -1
+    }
+    while (index < source.length) {
+      const beforeWhitespace = index
+      const afterWhitespace = consumeTagWhitespace(index)
+      if (afterWhitespace === null) return -1
+      index = afterWhitespace
+      if (source[index] === '>') return index
+      if (source[index] === '/' && source[index + 1] === '>') return index + 1
+      if (index === beforeWhitespace) return -1
+      const attribute = source.slice(index).match(/^[A-Za-z_:][A-Za-z0-9_.:-]*/)
+      if (!attribute) return -1
+      index += attribute[0].length
+      const afterName = consumeTagWhitespace(index)
+      if (afterName === null) return -1
+      index = afterName
+      if (source[index] !== '=') continue
+      index += 1
+      const valueStart = consumeTagWhitespace(index)
+      if (valueStart === null || valueStart >= source.length) return -1
+      index = valueStart
+      if (source[index] === '"' || source[index] === "'") {
+        const quote = source[index]
+        index += 1
+        while (index < source.length && source[index] !== quote) index += 1
+        if (source[index] !== quote) return -1
+        index += 1
+      } else {
+        const value = source.slice(index).match(/^[^ \t\r\n"'=<>`]+/)
+        if (!value) return -1
+        index += value[0].length
       }
     }
     return -1
   }
-  function renderedMarkdownInlineText(source) {
+  function codeSpanAt(source, start) {
+    let runLength = 0
+    while (source[start + runLength] === '`') runLength += 1
+    for (let index = start + runLength; index < source.length;) {
+      if (source[index] !== '`') {
+        index += 1
+        continue
+      }
+      let closingLength = 0
+      while (source[index + closingLength] === '`') closingLength += 1
+      if (closingLength === runLength) {
+        let content = source.slice(start + runLength, index).replace(/\r?\n/g, ' ')
+        if (/^ .* $/.test(content) && /[^ ]/.test(content)) content = content.slice(1, -1)
+        return { end: index + closingLength, content }
+      }
+      index += closingLength
+    }
+    return null
+  }
+  function protectLiteralMarkdownMarkers(value) {
+    return value.replace(/[`*_]/g, LITERAL_MARKDOWN_MARKER)
+  }
+  function hiddenSyntaxLineBreaks(value) {
+    return value.replace(/[^\r\n]/g, '')
+  }
+  function renderedMarkdownInlineText(source, options = {}) {
+    const referenceLabels = options.referenceLabels || new Set()
     let visible = ''
     for (let index = 0; index < source.length;) {
       const character = source[index]
+      if (character === '`') {
+        const codeSpan = codeSpanAt(source, index)
+        if (codeSpan) {
+          visible += protectLiteralMarkdownMarkers(codeSpan.content)
+          index = codeSpan.end
+          continue
+        }
+      }
       if (
         character === '\\' &&
         index + 1 < source.length &&
         /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(source[index + 1])
       ) {
-        visible += source[index + 1]
+        visible += /[`*_]/.test(source[index + 1]) ? LITERAL_MARKDOWN_MARKER : source[index + 1]
         index += 2
         continue
       }
@@ -2586,14 +2809,25 @@ function inspectAuthority(root, args, checks) {
       if (labelStart >= 0) {
         const labelEnd = matchingInlineDelimiter(source, labelStart, '[', ']')
         if (labelEnd >= 0) {
-          visible += renderedMarkdownInlineText(source.slice(labelStart + 1, labelEnd))
+          const label = source.slice(labelStart + 1, labelEnd)
+          visible += renderedMarkdownInlineText(label, options)
           let next = labelEnd + 1
           if (source[next] === '(') {
             const destinationEnd = matchingInlineDelimiter(source, next, '(', ')')
-            if (destinationEnd >= 0) next = destinationEnd + 1
+            if (destinationEnd >= 0 && validInlineLinkContent(source.slice(next + 1, destinationEnd))) {
+              visible += hiddenSyntaxLineBreaks(source.slice(next, destinationEnd + 1))
+              next = destinationEnd + 1
+            }
           } else if (source[next] === '[') {
             const referenceEnd = matchingInlineDelimiter(source, next, '[', ']')
-            if (referenceEnd >= 0) next = referenceEnd + 1
+            if (referenceEnd >= 0) {
+              const explicitReference = source.slice(next + 1, referenceEnd)
+              const reference = normalizeReferenceLabel(explicitReference || label)
+              if (referenceLabels.has(reference)) {
+                visible += hiddenSyntaxLineBreaks(source.slice(next, referenceEnd + 1))
+                next = referenceEnd + 1
+              }
+            }
           }
           index = next
           continue
@@ -2602,6 +2836,7 @@ function inspectAuthority(root, args, checks) {
       if (character === '<') {
         const tagEnd = inlineHtmlTagEnd(source, index)
         if (tagEnd >= 0) {
+          visible += hiddenSyntaxLineBreaks(source.slice(index, tagEnd + 1))
           index = tagEnd + 1
           continue
         }
@@ -2619,8 +2854,8 @@ function inspectAuthority(root, args, checks) {
     }
     return visible
   }
-  function renderedMarkdownText(value) {
-    return value.split(/\r?\n/).map(renderedMarkdownInlineText).join('\n')
+  function renderedMarkdownText(value, options = {}) {
+    return renderedMarkdownInlineText(value, options)
   }
   function normalizeAtxHeading(line) {
     return line.trim().replace(/[ \t]+#+[ \t]*$/, '')
@@ -2923,7 +3158,9 @@ function inspectAuthority(root, args, checks) {
     const text = contents[file] || ''
     if (!/(?:^|\/)(?:[^/]+\.md|AGENTS\.md|CLAUDE\.md)$/i.test(file)) return text
     const navigable = navigableMarkdown(text)
-    return options.renderInline === false ? navigable : renderedMarkdownText(navigable)
+    if (options.renderInline === false) return navigable
+    const referenceDefinitions = parseMarkdownReferenceDefinitions(text)
+    return renderedMarkdownText(navigable, { referenceLabels: referenceDefinitions.labels })
   }
   const dynamicFindings = []
   for (const file of stableFiles) {

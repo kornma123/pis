@@ -1875,6 +1875,69 @@ for (const rule of [
   })
 }
 
+for (const mode of ['develop', 'review']) {
+  for (const claim of [
+    '> Current required&ThinSpace;checks on master: gate and vitest',
+    '> Current required&ensp;checks on master: gate and vitest',
+    '> Current requ&NoBreak;ired checks on master: gate and vitest',
+    '> [Query GitHub live](Current required checks on master: gate and vitest)',
+    '> [Query GitHub live][Current required checks on master: gate and vitest]',
+    '> ![Query GitHub live][Current required checks on master: gate and vitest]',
+    '> </span Current required checks on master: gate and vitest>',
+    '> [Query GitHub live](</checks> "title\n>\n> Current required checks on master: gate and vitest")',
+    '> [Query GitHub live][Current required checks on master: gate and vitest]\n>\n> <!--\n> [Current required checks on master: gate and vitest]: /checks\n> -->',
+    '> [Query GitHub live][Current required checks on master: gate and vitest]\n>\n> <script>\n> [Current required checks on master: gate and vitest]: /checks\n> </script>',
+    '> ```\n> ```~\n> [Current required checks on master: gate and vitest]: /checks\n> ```\n>\n> [Query GitHub live][Current required checks on master: gate and vitest]',
+  ]) {
+    check(`GOV-005 R17: rendered-visible CommonMark claim is rejected in ${mode}: ${claim}`, () => {
+      const repo = setupRepo()
+      try {
+        append(repo.work, '.claude/rules/coreone-guardrails.md', `\n${claim}\n`)
+        const args = ['--mode=develop', '--rules-only']
+        if (mode === 'review') {
+          git(repo.work, ['add', '.claude/rules/coreone-guardrails.md'])
+          git(repo.work, ['commit', '-q', '-m', 'add rendered-visible CI claim'])
+          args.splice(0, args.length, '--mode=review', '--target-ref=HEAD', '--rules-only')
+        }
+        expectDynamicFactDrift(
+          run(repo.work, args),
+          '.claude/rules/coreone-guardrails.md: current CI enforcement claim',
+        )
+      } finally {
+        fs.rmSync(repo.tmp, { recursive: true, force: true })
+      }
+    })
+  }
+}
+
+for (const mode of ['develop', 'review']) {
+  for (const rule of [
+    '> <span\n>   title="Current required checks on master: gate and vitest">Query GitHub live.</span>',
+    '> [ref]: /url "title\n> Current required checks on master: gate and vitest"',
+    '> [Query GitHub live][Current required checks on master: gate and vitest]\n>\n> [Current required checks on master: gate and vitest]: /checks',
+    '> Current requ\\*ired\\* checks on master: gate and vitest',
+    '> `Current required checks on master&colon; gate and vitest`',
+  ]) {
+    check(`GOV-005 R17: hidden or literal CommonMark text remains allowed in ${mode}: ${rule}`, () => {
+      const repo = setupRepo()
+      try {
+        append(repo.work, '.claude/rules/coreone-guardrails.md', `\n${rule}\n`)
+        const args = ['--mode=develop', '--rules-only']
+        if (mode === 'review') {
+          git(repo.work, ['add', '.claude/rules/coreone-guardrails.md'])
+          git(repo.work, ['commit', '-q', '-m', 'add hidden CommonMark control'])
+          args.splice(0, args.length, '--mode=review', '--target-ref=HEAD', '--rules-only')
+        }
+        const result = run(repo.work, args)
+        expectVerdict(result, 'PASS', 0)
+        assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+      } finally {
+        fs.rmSync(repo.tmp, { recursive: true, force: true })
+      }
+    })
+  }
+}
+
 for (const rule of [
   '# gate is not a required status check; query GitHub live',
   '# gate is not currently a required status check; query GitHub live',
