@@ -86,6 +86,7 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external visible review rejects a different Terminal TTY identity',
   'external visible review cannot report COMPLETE without behavior acceptance',
   'external review protocol rejects embedded and ambiguous terminal markers',
+  'external review protocol requires a controller answer between terminal records',
   'external typed authority questions cannot be downgraded or auto-answered',
   'external visible protocol extension marker is machine checked',
   'external startup separates lightweight handshake from Skill review delivery',
@@ -355,7 +356,15 @@ function makeExternalRuntime(options = {}) {
         stats.reviewPrompts.push(input);
         assert.match(input, /COREONE_REVIEW_REQUEST_[0-9a-f]+/i);
         messages.push({ role: 'user', text: input });
-        if (Array.isArray(options.reviewAssistantTexts)) {
+        if (Array.isArray(options.reviewMessages)) {
+          for (const message of options.reviewMessages) {
+            assert.ok(
+              message && ['assistant', 'user'].includes(message.role),
+              'reviewMessages entries require an assistant or user role',
+            );
+            messages.push({ role: message.role, text: String(message.text || '') });
+          }
+        } else if (Array.isArray(options.reviewAssistantTexts)) {
           for (const text of options.reviewAssistantTexts) {
             messages.push({ role: 'assistant', text });
           }
@@ -2843,6 +2852,64 @@ module.exports = {
         'PASS',
       );
     }
+  });
+
+  await checkExternal('external review protocol requires a controller answer between terminal records', async () => {
+    const target = 'c'.repeat(40);
+    const question =
+      'COREONE_REVIEW_QUESTION id=q-ownership kind=ownership text=Who authorizes this scope?';
+    const complete = `COREONE_REVIEW_COMPLETE target=${target} verdict=PASS`;
+    const blockedSequences = [
+      [
+        { role: 'assistant', text: question },
+        { role: 'assistant', text: complete },
+      ],
+      [
+        { role: 'assistant', text: question },
+        { role: 'assistant', text: question },
+      ],
+      [
+        { role: 'assistant', text: question },
+        { role: 'user', text: 'The controller answered this question once.' },
+        { role: 'assistant', text: question },
+      ],
+      [
+        { role: 'assistant', text: complete },
+        { role: 'assistant', text: question },
+      ],
+      [
+        { role: 'assistant', text: question },
+        { role: 'user', text: 'COREONE_TERMINAL_PROBE_NOT_AN_ANSWER' },
+        { role: 'assistant', text: 'REWSNA_NA_TON_EBORP_LANIMRET_ENOEROC' },
+        { role: 'assistant', text: complete },
+      ],
+    ];
+    for (const reviewMessages of blockedSequences) {
+      const result = await runExternalCase({
+        runtimeOptions: { reviewMessages },
+      });
+      assert.equal(result.status, 'BLOCKED', JSON.stringify(reviewMessages));
+      assert.equal(result.reason, FAILURE.EVIDENCE_LAYER_UNPROVEN);
+      assert.notEqual(
+        result.evidenceLayers.REVIEW_BEHAVIOR_ACCEPTANCE.status,
+        'PASS',
+      );
+    }
+
+    const answered = await runExternalCase({
+      runtimeOptions: {
+        reviewMessages: [
+          { role: 'assistant', text: question },
+          { role: 'user', text: 'The controller authorizes read-only review only.' },
+          { role: 'assistant', text: complete },
+        ],
+      },
+    });
+    assert.equal(answered.status, 'COMPLETE');
+    assert.equal(
+      answered.evidenceLayers.REVIEW_BEHAVIOR_ACCEPTANCE.status,
+      'PASS',
+    );
   });
 
   await checkExternal('external typed authority questions cannot be downgraded or auto-answered', async () => {

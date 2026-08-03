@@ -3921,6 +3921,15 @@ function parseExternalReviewRecord(text) {
   return candidate;
 }
 
+function isExternalControllerAnswerMessage(message) {
+  if (message?.role !== 'user') return false;
+  const text = String(message.text || '');
+  if (!text.trim()) return false;
+  return !/(?:COREONE_STARTUP_HANDSHAKE_ONLY|COREONE_PROMPT_CHALLENGE_[0-9a-f]+|COREONE_REVIEW_REQUEST_[0-9a-f]+|COREONE_TERMINAL_PROBE_[A-Za-z0-9_]+)/.test(
+    text,
+  );
+}
+
 function externalReviewProtocol(snapshot) {
   const records = [];
   for (const message of snapshot.messages) {
@@ -3939,9 +3948,54 @@ function externalReviewProtocol(snapshot) {
       },
     );
   }
+  const questionIds = new Set();
+  let latest = null;
+  for (const record of records) {
+    if (record.type === 'question') {
+      if (questionIds.has(record.id)) {
+        throw new SupervisorFailure(
+          FAILURE.EVIDENCE_LAYER_UNPROVEN,
+          'external review repeated a question terminal record',
+          { questionId: record.id },
+        );
+      }
+      questionIds.add(record.id);
+    }
+    if (!latest) {
+      latest = record;
+      continue;
+    }
+    if (latest.type === 'complete') {
+      throw new SupervisorFailure(
+        FAILURE.EVIDENCE_LAYER_UNPROVEN,
+        'external review emitted a terminal record after completion',
+        {
+          previousType: latest.type,
+          currentType: record.type,
+        },
+      );
+    }
+    const controllerAnswers = snapshot.messages.filter(
+      (message) =>
+        message.index > latest.message.index &&
+        message.index < record.message.index &&
+        isExternalControllerAnswerMessage(message),
+    );
+    if (controllerAnswers.length === 0) {
+      throw new SupervisorFailure(
+        FAILURE.EVIDENCE_LAYER_UNPROVEN,
+        'external review replaced an unanswered question terminal record',
+        {
+          questionId: latest.id,
+          nextType: record.type,
+        },
+      );
+    }
+    latest = record;
+  }
   return {
     records,
-    latest: records.at(-1) || null,
+    latest,
   };
 }
 
