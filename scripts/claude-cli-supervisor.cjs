@@ -3376,6 +3376,28 @@ function externalTerminalHandle(binding) {
   return `external:${binding.terminalApp}:${binding.windowId}:${binding.tty}`;
 }
 
+function assertExternalClaudeCommand(processInfo, binding) {
+  if (binding.startup !== 'launch-in-idle-tab') return;
+  const command = String(processInfo?.command || '');
+  const required = [
+    `--effort ${binding.expectedEffort}`,
+    `--permission-mode ${binding.expectedPermissionMode}`,
+    `--session-id ${binding.claudeSessionId}`,
+  ];
+  const failures = required.filter((value) => !command.includes(value));
+  if (
+    !/(?:^|\/)claude\s/.test(command) ||
+    /(?:^|\s)(?:-p|--print)(?:\s|$)/.test(command) ||
+    failures.length > 0
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION,
+      'visible Claude process command does not match the fixed read-only launch contract',
+      { failures, printMode: /(?:^|\s)(?:-p|--print)(?:\s|$)/.test(command) },
+    );
+  }
+}
+
 function assistantTextAfter(snapshot, cursor = 0) {
   const start = Number(cursor || 0);
   return snapshot.messages
@@ -3419,6 +3441,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
 
   async function inspectBoundClaude() {
     const processInfo = await runtime.waitForClaudeProcess(binding, claudePid);
+    assertExternalClaudeCommand(processInfo, binding);
     claudePid = processInfo.pid;
     const snapshot = await runtime.waitForTranscript(
       request.externalVisibleTerminal.claudeSessionId,
@@ -3530,7 +3553,11 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         binding.startup === 'launch-in-idle-tab' &&
         !claudePid
       ) {
-        delivered = `printf '%s\\n' $(printf '%s' ${shellQuote(input.canary)} | rev)`;
+        const canarySource = [
+          `const token=${JSON.stringify(input.canary)}`,
+          "process.stdout.write(token.split('').reverse().join('')+'\\n')",
+        ].join(';');
+        delivered = `node -e ${shellQuote(canarySource)}`;
       }
       const receipt = await runtime.writeTerminal(binding, delivered, input.purpose);
       if (receipt?.accepted !== true) {
@@ -3750,6 +3777,7 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
         ].join(' ');
         await runtime.writeTerminal(binding, command, 'launch-visible-claude');
         const processInfo = await runtime.waitForClaudeProcess(binding);
+        assertExternalClaudeCommand(processInfo, binding);
         claudePid = processInfo.pid;
       } else {
         await inspectBoundClaude();

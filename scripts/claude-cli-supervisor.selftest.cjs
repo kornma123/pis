@@ -88,6 +88,7 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external visible COMPLETE becomes stale after an unrelated later turn',
   'external visible prelaunch failure retries the shell without inventing a Claude session',
   'macOS Terminal TUI submit waits before the same-tab empty submit',
+  'external visible launch rejects a process that dropped plan mode or session flags',
 ]);
 
 async function check(name, fn) {
@@ -182,6 +183,8 @@ function makeExternalRuntime(options = {}) {
   const permissionMode = options.permissionMode || 'plan';
   const tty = options.tty || '/dev/ttys000';
   let transcriptSha256 = options.transcriptSha256 || 'e'.repeat(64);
+  const processCommand = options.processCommand ||
+    'claude --effort xhigh --permission-mode plan --session-id 11111111-1111-4111-8111-111111111111';
   const snapshot = () => ({
     transcriptPath: '/fake/11111111-1111-4111-8111-111111111111.jsonl',
     transcriptSha256,
@@ -214,9 +217,13 @@ function makeExternalRuntime(options = {}) {
       };
     },
     claudeProcess() {
-      return launched ? { pid: 4321, tty: 'ttys000', command: 'claude' } : null;
+      return launched ? { pid: 4321, tty: 'ttys000', command: processCommand } : null;
     },
     async writeTerminal(_binding, input, purpose) {
+      if (purpose === 'visibility-proof' && !launched) {
+        assert.match(input, /^node -e /);
+        assert.doesNotMatch(input, /\$\(/);
+      }
       if (purpose === 'launch-visible-claude') launched = true;
       if (purpose === 'visibility-proof' && launched) {
         const canary = input.match(/COREONE_TERMINAL_PROBE_[A-Za-z0-9_]+/)?.[0];
@@ -282,7 +289,7 @@ function makeExternalRuntime(options = {}) {
     },
     async waitForClaudeProcess() {
       assert.equal(launched, true, 'Claude process requested before visible launch');
-      return { pid: 4321, tty: 'ttys000', command: 'claude' };
+      return { pid: 4321, tty: 'ttys000', command: processCommand };
     },
     async waitForTranscript(_sessionId, _path, predicate) {
       const value = snapshot();
@@ -2687,6 +2694,15 @@ module.exports = {
       { type: 'delay', milliseconds: 350 },
       { type: 'write', input: '' },
     ]);
+  });
+
+  await checkExternal('external visible launch rejects a process that dropped plan mode or session flags', async () => {
+    const result = await runExternalCase({
+      runtimeOptions: { processCommand: 'claude printf accidental-shell-buffer' },
+    });
+    assert.equal(result.status, 'BLOCKED');
+    assert.equal(result.reason, FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION);
+    assert.equal(result.evidenceLayers.SKILL_DISCOVERY.status, 'UNVERIFIED');
   });
 
   if (failed + externalFailed > 0) {
