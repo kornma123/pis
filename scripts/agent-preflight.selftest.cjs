@@ -1748,6 +1748,68 @@ check('GOV-005 R14: a question does not hide an independent affirmative sentence
   }
 })
 
+for (const mode of ['develop', 'review']) {
+  check(`GOV-005 R15: rendered blockquote current-CI claim is rejected in ${mode}`, () => {
+    const repo = setupRepo()
+    try {
+      append(
+        repo.work,
+        '.claude/rules/coreone-guardrails.md',
+        '\n> - GitHub 现场的 master 当前无 branch protection / ruleset，因此没有形式上的 required checks。\n',
+      )
+      const args = ['--mode=develop', '--rules-only']
+      if (mode === 'review') {
+        git(repo.work, ['add', '.claude/rules/coreone-guardrails.md'])
+        git(repo.work, ['commit', '-q', '-m', 'add blockquoted stale CI claim'])
+        args.splice(0, args.length, '--mode=review', '--target-ref=HEAD', '--rules-only')
+      }
+      expectDynamicFactDrift(
+        run(repo.work, args),
+        '.claude/rules/coreone-guardrails.md: current CI enforcement claim',
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const claim of [
+  '# required status checks on master are gate and vitest',
+  '# current required checks on master: gate and vitest',
+  '# required checks as of 2026-08-03: gate and vitest',
+]) {
+  check(`GOV-005 R15: bounded modifier cannot hide a required-check enumeration: ${claim}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${claim}\n`)
+      expectDynamicFactDrift(
+        run(repo.work, ['--mode=develop', '--rules-only']),
+        '.github/workflows/build-discipline.yml: current CI enforcement claim',
+      )
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const rule of [
+  '# required status checks on master are not gate or vitest; query GitHub live',
+  '# required checks as of 2026-08-03 are unverified; query GitHub live',
+  '# required checks on master must be queried live before merge',
+]) {
+  check(`GOV-005 R15: bounded modifier with negation or live-query wording remains allowed: ${rule}`, () => {
+    const repo = setupRepo()
+    try {
+      append(repo.work, '.github/workflows/build-discipline.yml', `\n${rule}\n`)
+      const result = run(repo.work, ['--mode=develop', '--rules-only'])
+      expectVerdict(result, 'PASS', 0)
+      assert.equal(result.json.checks.find((item) => item.id === 'drift.dynamic-facts')?.status, 'PASS')
+    } finally {
+      fs.rmSync(repo.tmp, { recursive: true, force: true })
+    }
+  })
+}
+
 for (const rule of [
   '# gate is not a required status check; query GitHub live',
   '# gate is not currently a required status check; query GitHub live',

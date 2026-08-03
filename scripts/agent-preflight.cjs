@@ -2781,7 +2781,7 @@ function inspectAuthority(root, args, checks) {
   }
   function stableFactText(file) {
     const text = contents[file] || ''
-    return /(?:^|\/)(?:[^/]+\.md|AGENTS\.md|CLAUDE\.md)$/i.test(file) ? visibleMarkdown(text) : text
+    return /(?:^|\/)(?:[^/]+\.md|AGENTS\.md|CLAUDE\.md)$/i.test(file) ? navigableMarkdown(text) : text
   }
   const dynamicFindings = []
   for (const file of stableFiles) {
@@ -2893,14 +2893,14 @@ function inspectAuthority(root, args, checks) {
       return scoped
     }
     const patterns = [
-      ['required-context-assignment', /\brequired[ \t]+(?:status[ \t]+checks?|contexts?)\b[ \t]*(?:=|:)[ \t]*(?!none\b|disabled\b|unverified\b)[A-Za-z0-9_.-]+\b/i],
+      ['required-context-assignment', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b(?:(?!\b(?:is|are|remain|include|includes|contain|contains|listed|not|no|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject|must|should|may|can|could|would|if|whether|query|ask)\b)[^:=\r\n]){0,40}(?:=|:)[ \t]*(?!none\b|disabled\b|unverified\b)[A-Za-z0-9_.-]+\b/i],
       ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[ \t]+(?:is|are)[ \t]+(?:(?:currently|still)[ \t]+)?(?:an?[ \t]+)?required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
       ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[ \t]+(?:remains?|continues?[ \t]+to[ \t]+be)[ \t]+(?:an?[ \t]+)?required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
       ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[ \t]*(?:已是|已经是|当前是|现为|是|为)[ \t]*\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
       ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[^\r\n]{0,40}(?:已是|已经是|当前是|现为|[ \t](?:是|为)[ \t])[^\r\n]{0,40}\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
       ['required-context-stability', /\brequired(?:[ \t]+status)?[ \t]+contexts?\b[^\r\n]{0,40}(?:不变|unchanged|仍(?:为|是)|保持)/i],
       ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,20}\b(?:include|includes|contain|contains|are[ \t]+listed[ \t]+as)\b/i],
-      ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[ \t]+(?:are|remain)[ \t]+(?!(?:not|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject)\b)[A-Za-z0-9_.-]+\b/i],
+      ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b(?:(?!\b(?:is|are|remain|include|includes|contain|contains|listed|not|no|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject|must|should|may|can|could|would|if|whether|query|ask)\b)[^:=\r\n]){0,40}\b(?:are|remain)[ \t]+(?!(?:not|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject)\b)[A-Za-z0-9_.-]+\b/i],
       ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[ \t]+(?:currently|still)[ \t]+(?:are|remain)[ \t]+(?!(?:not|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject)\b)[A-Za-z0-9_.-]+\b/i],
       ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,20}(?:包含|包括|列为)/i],
       ['current-required-context-list', /\b(?:current(?:ly)?|active)[ \t]+required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,40}\b(?:include|includes|contain|contains|are[ \t]+(?!(?:not|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject)\b)[A-Za-z0-9_.-]+\b)/i],
