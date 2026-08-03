@@ -90,6 +90,7 @@ const EXTERNAL_EXPECTED_SCENARIOS = Object.freeze([
   'external visible protocol extension marker is machine checked',
   'external startup separates lightweight handshake from Skill review delivery',
   'external startup refocuses the exact visible surface before review delivery',
+  'external focus waits for macOS activation before a bound write',
   'external supervisor has no Claude termination path for slow work',
   'external visible canary uses the task wait budget for max effort',
   'external visible shell probe does not treat version success as effort proof',
@@ -227,6 +228,7 @@ function makeExternalRuntime(options = {}) {
   let effortSupported = options.effortSupported !== false;
   let startupAcceptanceFailures = Number(options.startupAcceptanceFailures || 0);
   let failNextStartupAcceptance = false;
+  let focusActivationDelay = 0;
   const messages = [];
   const stats = {
     launchWrites: 0,
@@ -272,12 +274,20 @@ function makeExternalRuntime(options = {}) {
   const runtime = {
     async focusTerminal() {
       stats.focusCalls += 1;
-      frontmost = true;
+      focusActivationDelay = Number(
+        options.focusActivationDelayInspections || 0,
+      );
+      frontmost = focusActivationDelay === 0;
     },
     async inspectTerminal() {
+      const inspectedFrontmost = frontmost;
+      if (focusActivationDelay > 0) {
+        focusActivationDelay -= 1;
+        if (focusActivationDelay === 0) frontmost = true;
+      }
       return {
         terminalApp: 'Terminal',
-        frontmost,
+        frontmost: inspectedFrontmost,
         frontWindow: true,
         selected: true,
         windowId: 12081,
@@ -2930,6 +2940,13 @@ module.exports = {
     assert.ok(runtime);
     assert.equal(runtime.stats.reviewPromptWrites, 1);
     assert.ok(runtime.stats.focusCalls >= 2);
+  });
+
+  await checkExternal('external focus waits for macOS activation before a bound write', async () => {
+    const result = await runExternalCase({
+      runtimeOptions: { focusActivationDelayInspections: 2 },
+    });
+    assert.equal(result.status, 'COMPLETE');
   });
 
   await checkExternal('external supervisor has no Claude termination path for slow work', async () => {

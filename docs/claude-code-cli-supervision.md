@@ -110,7 +110,7 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
 |---|---|
 | `createTerminal` | native 模式在当前 `threadId` 中按 `taskId+sessionId+generation` 幂等键同步创建并打开前端终端；外部自动启动模式只附着已由 `claim` 新建并现场回读的专用窗口。两者都返回 `status=attached`、`visible=true`、稳定 handle、同一 generation 与原样幂等键；`queued` 不合格 |
 | `attachTerminal` | native 模式在 Codex app/task 重启后按同一幂等键重新附着；外部模式重新核对同一 Terminal window id/TTY/session/transcript。前台 PID 仍在时核对其命令；PID 已证实不存在时保留原 window/TTY/session，交给 `resumeClaude`，不能改用另一个终端 |
-| `writeTerminal` | 向同一 handle 写 canary、控制者回答和前台 CLI 输入；每次写入前都重新聚焦并现场复核同一 app/window id/selected TTY，不能把前一阶段的前台状态跨等待复用；visibility canary 必须走不会注入 Claude 前台输入的宿主 marker 通道；返回 `accepted=true` |
+| `writeTerminal` | 向同一 handle 写 canary、控制者回答和前台 CLI 输入；每次写入前都重新聚焦并现场复核同一 app/window id/selected TTY，不能把前一阶段的前台状态跨等待复用。macOS `activate()` 与 frontmost 回读可异步生效；只可对 `frontmost/frontWindow` 做有界等待，window/TTY/title/selected tab 任一不同仍立即失败关闭；visibility canary 必须走不会注入 Claude 前台输入的宿主 marker 通道；返回 `accepted=true` |
 | `readTerminal` | 应用侧按 cursor 增量回读同一 handle；外部模式必须长轮询 transcript 变化或结构化问题/终态，无新记录时不得空转忙循环。返回绑定后的 `threadId/handle/generation`、`attached/visible`、真实输出、EOF、运行工具、结构化 question/stop，以及同 `sessionId` 的结构化进程终态 |
 | `probeTerminal` | 新启动前在同一终端运行 `pwd`、worktree root、Claude 路径/版本探针；Claude 路径必须从当前可见 shell 继承的 `PATH` 解析，不得另起 login shell 导致另一套 PATH。恢复时用进程与 transcript 元数据复核实际 executable、version、effort、permission mode、cwd/session。`claude --effort <值> --version` 只证明版本命令接受参数，**不能**证明实际会话采用该 effort |
 | `launchClaude` | 在该 handle 的前台使用唯一 name/session id 启动；native 使用其固定默认，外部使用 request 的精确 effort 与 `permission-mode=plan`。外部模式先发送不调用 Skill、不展开复核的轻量 digest/challenge 握手；收到同 session ACK 后再显式 `/<skill>` 投递带唯一 marker 的复核消息，并以 transcript 中的 user message 证明已注入。Skill/权威链的长读取属于后续复核，不得与启动握手合并后再用一分钟误杀 |

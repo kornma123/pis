@@ -3982,9 +3982,26 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
     if (typeof runtime.focusTerminal === 'function') {
       await runtime.focusTerminal(binding);
     }
-    const inspected = await runtime.inspectTerminal(binding);
-    assertExternalSurface(binding, inspected, options);
-    return inspected;
+    const activationDeadline = Date.now() + 3_000;
+    while (true) {
+      const inspected = await runtime.inspectTerminal(binding);
+      try {
+        assertExternalSurface(binding, inspected, options);
+        return inspected;
+      } catch (error) {
+        const failures = Array.isArray(error.details?.failures)
+          ? error.details.failures
+          : [];
+        const activationPending =
+          error.reason === FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE &&
+          failures.length > 0 &&
+          failures.every((failure) =>
+            ['frontmost', 'frontWindow'].includes(failure),
+          );
+        if (!activationPending || Date.now() >= activationDeadline) throw error;
+        await delay(100);
+      }
+    }
   }
 
   async function writeBoundTerminal(input, purpose) {
