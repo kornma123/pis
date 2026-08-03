@@ -2421,9 +2421,8 @@ function inspectAuthority(root, args, checks) {
       if (rawHtmlOpening) {
         const tag = rawHtmlOpening[1].toLowerCase()
         const attributes = rawHtmlOpening[2] || ''
-        const nonRendered = ['script', 'pre', 'style', 'template'].includes(tag) ||
+        const nonRendered = ['script', 'style', 'template'].includes(tag) ||
           /(?:^|[ \t])hidden(?:[ \t=]|$)/i.test(attributes) ||
-          /(?:^|[ \t])aria-hidden[ \t]*=[ \t]*(?:"true"|'true'|true)(?:[ \t]|$)/i.test(attributes) ||
           /(?:^|[ \t])style[ \t]*=[ \t]*(?:"[^"]*display[ \t]*:[ \t]*none|'[^']*display[ \t]*:[ \t]*none)/i.test(attributes)
         if (nonRendered) {
           const closing = new RegExp(`</${tag}[ \t]*>`, 'i')
@@ -2617,6 +2616,17 @@ function inspectAuthority(root, args, checks) {
     if (listItem) line = line.slice(listItem[0].length)
     return line
   }
+  function markdownContainerLine(rawLine) {
+    let line = rawLine
+    let blockquoteDepth = 0
+    while (/^ {0,3}>[ \t]?/.test(line)) {
+      line = line.replace(/^ {0,3}>[ \t]?/, '')
+      blockquoteDepth += 1
+    }
+    const listItem = line.match(/^ {0,3}(?:[*+-]|\d{1,9}[.)])[ \t]+/)
+    if (listItem) line = line.slice(listItem[0].length)
+    return { payload: line, container: `quote:${blockquoteDepth}`, startsList: Boolean(listItem) }
+  }
   function normalizeReferenceLabel(value) {
     let normalized = ''
     for (let index = 0; index < value.length;) {
@@ -2636,18 +2646,30 @@ function inspectAuthority(root, args, checks) {
       normalized += value[index]
       index += 1
     }
-    return normalized.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US')
+    return normalized
+      .trim()
+      .replace(/[ \t\r\n]+/g, ' ')
+      .toLowerCase()
+      .toUpperCase()
   }
   function parseMarkdownReferenceDefinitions(value) {
     const lines = value.split(/\r?\n/)
-    const payloads = lines.map(markdownContainerPayload)
+    const containerLines = lines.map(markdownContainerLine)
+    const payloads = containerLines.map(({ payload }) => payload)
     const labels = new Set()
     const lineIndexes = new Set()
     let fence = null
     let htmlComment = false
     let rawHtmlTag = null
+    let paragraphContainer = null
     for (let index = 0; index < payloads.length; index += 1) {
       const line = payloads[index]
+      const container = containerLines[index].container
+      if (!line.trim()) {
+        paragraphContainer = null
+        continue
+      }
+      if (containerLines[index].startsList) paragraphContainer = null
       if (fence) {
         const closing = line.match(/^ {0,3}([`~]+)[ \t]*$/)
         if (
@@ -2656,46 +2678,64 @@ function inspectAuthority(root, args, checks) {
           closing[1].length >= fence.length &&
           [...closing[1]].every((character) => character === fence.marker)
         ) fence = null
+        paragraphContainer = null
         continue
       }
       if (htmlComment) {
         if (line.includes('-->')) htmlComment = false
+        paragraphContainer = null
         continue
       }
       const commentStart = line.indexOf('<!--')
       if (commentStart >= 0) {
         if (line.indexOf('-->', commentStart + 4) < 0) htmlComment = true
+        paragraphContainer = null
         continue
       }
       if (rawHtmlTag) {
         if (new RegExp(`</${rawHtmlTag}[ \\t]*>`, 'i').test(line)) rawHtmlTag = null
+        paragraphContainer = null
         continue
       }
       const rawHtmlOpening = line.match(/^ {0,3}<(script|pre|style|template)(?=[ \t>])[^>]*>/i)
       if (rawHtmlOpening) {
         const tag = rawHtmlOpening[1].toLowerCase()
         if (!new RegExp(`</${tag}[ \\t]*>`, 'i').test(line)) rawHtmlTag = tag
+        paragraphContainer = null
         continue
       }
       const opening = line.match(/^ {0,3}(`{3,}|~{3,})([^\r\n]*)$/)
       if (opening && !(opening[1][0] === '`' && opening[2].includes('`'))) {
         fence = { marker: opening[1][0], length: opening[1].length }
+        paragraphContainer = null
         continue
       }
       const definition = line.match(/^ {0,3}\[((?:\\.|[^\]\\\r\n]){1,999})\]:[ \t]*(.*)$/)
-      if (!definition) continue
+      if (!definition || paragraphContainer === container) {
+        if (/^ {0,3}(?:#{1,6}(?:[ \t]+|$)|(?:\*[ \t]*){3,}[ \t]*$|(?:_[ \t]*){3,}[ \t]*$|(?:-[ \t]*){3,}[ \t]*$)/.test(line)) {
+          paragraphContainer = null
+        } else {
+          paragraphContainer = container
+        }
+        continue
+      }
       const candidateLines = [definition[2]]
+      let parsed = false
       for (let end = index; end < Math.min(payloads.length, index + 8); end += 1) {
         if (end > index) {
           if (!payloads[end].trim()) break
+          if (containerLines[end].container !== container || containerLines[end].startsList) break
           candidateLines.push(payloads[end])
         }
         if (!validReferenceDefinitionTail(candidateLines.join('\n'))) continue
         labels.add(normalizeReferenceLabel(definition[1]))
         for (let lineIndex = index; lineIndex <= end; lineIndex += 1) lineIndexes.add(lineIndex)
         index = end
+        paragraphContainer = null
+        parsed = true
         break
       }
+      if (!parsed) paragraphContainer = container
     }
     return { labels, lineIndexes }
   }
@@ -2844,7 +2884,7 @@ function inspectAuthority(root, args, checks) {
       if (character === '&') {
         const entity = decodeMarkdownTextEntity(source, index)
         if (entity) {
-          visible += entity.text
+          visible += entity.text.replace(/[\t\n\f\r ]+/g, ' ')
           index += entity.length
           continue
         }
