@@ -233,7 +233,7 @@ function makeExternalRuntime(options = {}) {
   const tty = options.tty || '/dev/ttys000';
   let transcriptSha256 = options.transcriptSha256 || 'e'.repeat(64);
   const processCommand = options.processCommand ||
-    'claude --effort xhigh --permission-mode plan --session-id 11111111-1111-4111-8111-111111111111';
+    '/usr/local/bin/claude.exe --effort xhigh --permission-mode plan --session-id 11111111-1111-4111-8111-111111111111';
   const claim = options.claim || makeExternalClaim();
   const liveClaimProof = `${claim.proofMarker}:${claim.proofPayloadBase64}:${claim.proofMarker}_END`;
   const snapshot = () => ({

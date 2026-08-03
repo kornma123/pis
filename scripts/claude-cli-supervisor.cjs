@@ -3427,7 +3427,7 @@ function terminalProcessSnapshot(tty) {
 
 function visibleClaudeProcess(tty) {
   const matches = terminalProcessSnapshot(tty).filter(
-    (item) => /(?:^|\/|\s)claude(?:\s|$)/i.test(item.command) &&
+    (item) => /(?:^|\/|\s)claude(?:\.exe)?(?:\s|$)/i.test(item.command) &&
       !/claude-cli-supervisor/.test(item.command),
   );
   if (matches.length > 1) {
@@ -3739,7 +3739,7 @@ function assertExternalClaudeCommand(processInfo, binding) {
   ];
   const failures = required.filter((value) => !command.includes(value));
   if (
-    !/(?:^|\/)claude\s/.test(command) ||
+    !/(?:^|\/)claude(?:\.exe)?\s/.test(command) ||
     /(?:^|\s)(?:-p|--print)(?:\s|$)/.test(command) ||
     failures.length > 0
   ) {
