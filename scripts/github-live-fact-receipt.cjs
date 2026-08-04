@@ -5,7 +5,9 @@ const childProcess = require('node:child_process')
 const RECEIPT_VERSION = 'coreone-github-live-fact-receipt/v1'
 const SHA_PATTERN = /^[0-9a-f]{40}$/i
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
-const DECISIONS = new Set(['claim', 'handoff', 'merge', 'preflight', 'review'])
+const DECISIONS = new Set(['anchor', 'claim', 'handoff', 'merge', 'preflight', 'review'])
+const LEASE_STATES = new Set(['active', 'historical', 'superseded'])
+const OVERLAP_STATES = new Set(['blocked', 'clear', 'superseded'])
 
 class LiveFactReadError extends Error {
   constructor(code, message, status = null) {
@@ -79,6 +81,18 @@ function normalizeOptions(options) {
   const candidateSha = options?.candidateSha == null
     ? null
     : String(options.candidateSha).trim().toLowerCase()
+  const reviewedTreeSha = options?.reviewedTreeSha == null
+    ? null
+    : String(options.reviewedTreeSha).trim().toLowerCase()
+  const benchmarkBaseSha = options?.benchmarkBaseSha == null
+    ? null
+    : String(options.benchmarkBaseSha).trim().toLowerCase()
+  const successorPr = options?.successorPr == null ? null : Number(options.successorPr)
+  const supersedesPr = options?.supersedesPr == null ? null : Number(options.supersedesPr)
+  const leaseState = options?.leaseState == null ? null : String(options.leaseState).trim()
+  const overlapDisposition = options?.overlapDisposition == null
+    ? null
+    : String(options.overlapDisposition).trim()
 
   if (!REPOSITORY_PATTERN.test(repository)) throw new Error('repository must be exact owner/name')
   if (!DECISIONS.has(decision)) throw new Error(`decision must be one of ${[...DECISIONS].join(', ')}`)
@@ -93,8 +107,27 @@ function normalizeOptions(options) {
   if (candidateSha != null && !SHA_PATTERN.test(candidateSha)) {
     throw new Error('candidate SHA must be full 40-hex')
   }
+  if (reviewedTreeSha != null && !SHA_PATTERN.test(reviewedTreeSha)) {
+    throw new Error('reviewed tree SHA must be full 40-hex')
+  }
+  if (benchmarkBaseSha != null && !SHA_PATTERN.test(benchmarkBaseSha)) {
+    throw new Error('benchmark base SHA must be full 40-hex')
+  }
+  for (const [name, value] of [['successor PR', successorPr], ['supersedes PR', supersedesPr]]) {
+    if (value != null && (!Number.isInteger(value) || value <= 0)) {
+      throw new Error(`${name} must be a positive integer`)
+    }
+  }
+  if (leaseState != null && !LEASE_STATES.has(leaseState)) throw new Error('lease state is invalid')
+  if (overlapDisposition != null && !OVERLAP_STATES.has(overlapDisposition)) {
+    throw new Error('overlap disposition is invalid')
+  }
   if (decision === 'merge' && (prNumber == null || candidateSha == null)) {
     throw new Error('merge decision requires PR and candidate SHA')
+  }
+  if (decision === 'anchor' &&
+      (prNumber == null || candidateSha == null || reviewedTreeSha == null || benchmarkBaseSha == null)) {
+    throw new Error('anchor decision requires PR, candidate, reviewed tree, and benchmark base SHAs')
   }
   return {
     repository,
@@ -103,6 +136,12 @@ function normalizeOptions(options) {
     issueNumber,
     prNumber,
     candidateSha,
+    reviewedTreeSha,
+    benchmarkBaseSha,
+    successorPr,
+    supersedesPr,
+    leaseState,
+    overlapDisposition,
     now: String(options?.now || new Date().toISOString()),
   }
 }
@@ -219,6 +258,7 @@ function normalizeObject(raw, kind, provenance) {
       merged: Boolean(raw.merged),
       headSha: String(raw.head.sha).toLowerCase(),
       headRef: raw.head.ref,
+      headRepository: raw.head?.repo?.full_name ? String(raw.head.repo.full_name) : null,
       baseSha: raw.base.sha ? String(raw.base.sha).toLowerCase() : null,
       baseRef: raw.base.ref,
       labels: normalizeLabels(raw.labels, kind),
@@ -247,6 +287,7 @@ function objectVersion(object) {
       merged: object.merged,
       headSha: object.headSha,
       headRef: object.headRef,
+      headRepository: object.headRepository,
       baseSha: object.baseSha,
       baseRef: object.baseRef,
       labels: object.labels,
@@ -260,6 +301,12 @@ function objectVersion(object) {
   })
 }
 
+function typedAnchor(value, source, readAt, reachability = null) {
+  const anchor = { value, source, readAt }
+  if (reachability) anchor.reachability = reachability
+  return anchor
+}
+
 function resolveLiveFacts(options, transport = createGhTransport()) {
   const input = normalizeOptions(options)
   const receipt = {
@@ -270,6 +317,9 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
     target: { branch: input.targetBranch, sha: null, protected: null },
     object: null,
     candidate: input.candidateSha,
+    anchors: null,
+    lifecycle: null,
+    relationships: null,
     protection: {
       source: 'none',
       activeRulesets: [],
@@ -314,6 +364,14 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
     }
     receipt.target.sha = String(branch.commit.sha).toLowerCase()
     receipt.target.protected = typeof branch.protected === 'boolean' ? branch.protected : null
+    let remoteMasterSha = receipt.target.sha
+    if (input.targetBranch !== defaultBranch) {
+      const remoteMaster = get(`repos/${input.repository}/branches/${defaultBranch}`, 'remote-master')
+      if (!SHA_PATTERN.test(String(remoteMaster?.commit?.sha || ''))) {
+        throw new LiveFactReadError('SCHEMA_INVALID', 'remote master commit SHA is missing')
+      }
+      remoteMasterSha = String(remoteMaster.commit.sha).toLowerCase()
+    }
 
     const rulesetSummaries = list(`repos/${input.repository}/rulesets`, null)
     const rulesets = []
@@ -360,9 +418,9 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
         rule?.type === 'required_status_checks' &&
         rule.parameters?.strict_required_status_checks_policy === true)) ||
       classic?.required_status_checks?.strict === true
-    if (input.decision === 'merge' && receipt.protection.requiredChecks.length === 0) {
+    if (['anchor', 'merge'].includes(input.decision) && receipt.protection.requiredChecks.length === 0) {
       diagnostic(receipt, 'FAIL', 'REQUIRED_CHECK_POLICY_MISSING',
-        'merge decision has no applicable required checks')
+        `${input.decision} decision has no applicable required checks`)
     }
 
     const kind = input.prNumber != null ? 'pr' : input.issueNumber != null ? 'issue' : null
@@ -406,11 +464,12 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
       if (!receipt.candidate) receipt.candidate = receipt.object.headSha
     }
 
+    let candidateCommit = null
+    let candidateReachable = receipt.candidate == null ? null : true
     if (receipt.candidate) {
-      let candidateReachable = true
       try {
-        const commit = get(`repos/${input.repository}/commits/${receipt.candidate}`, 'candidate-commit')
-        if (String(commit?.sha || '').toLowerCase() !== receipt.candidate) {
+        candidateCommit = get(`repos/${input.repository}/commits/${receipt.candidate}`, 'candidate-commit')
+        if (String(candidateCommit?.sha || '').toLowerCase() !== receipt.candidate) {
           diagnostic(receipt, 'FAIL', 'CANDIDATE_REACHABILITY_MISMATCH', 'commit readback SHA differs')
         }
       } catch (error) {
@@ -502,6 +561,114 @@ function resolveLiveFacts(options, transport = createGhTransport()) {
       }
     }
 
+    if (input.decision === 'anchor') {
+      if (receipt.object?.kind !== 'pr') {
+        throw new LiveFactReadError('SCHEMA_INVALID', 'anchor decision requires a PR object')
+      }
+      if (receipt.object.baseRef !== input.targetBranch) {
+        diagnostic(receipt, 'FAIL', 'PR_BASE_REF_MISMATCH',
+          `PR base ${receipt.object.baseRef} does not equal target ${input.targetBranch}`)
+      }
+
+      receipt.relationships = {
+        successorPr: input.successorPr,
+        supersedesPr: input.supersedesPr,
+        candidateLease: { state: input.leaseState, authority: 'GOV-008' },
+        overlapDisposition: { state: input.overlapDisposition, authority: 'GOV-010' },
+      }
+
+      if (!candidateReachable) {
+        receipt.lifecycle = { state: 'unreachable' }
+      } else {
+        const candidateTreeSha = String(candidateCommit?.commit?.tree?.sha || '').toLowerCase()
+        if (!SHA_PATTERN.test(candidateTreeSha)) {
+          throw new LiveFactReadError('SCHEMA_INVALID', 'candidate commit tree SHA is missing')
+        }
+        if (candidateTreeSha !== input.reviewedTreeSha) {
+          diagnostic(receipt, 'FAIL', 'REVIEWED_TREE_MISMATCH',
+            `reviewed tree ${input.reviewedTreeSha} does not equal candidate tree ${candidateTreeSha}`)
+        }
+
+        let benchmarkReachability = 'reachable'
+        try {
+          const benchmark = get(
+            `repos/${input.repository}/commits/${input.benchmarkBaseSha}`,
+            'benchmark-base-commit',
+          )
+          if (String(benchmark?.sha || '').toLowerCase() !== input.benchmarkBaseSha) {
+            diagnostic(receipt, 'FAIL', 'BENCHMARK_BASE_MISMATCH',
+              'benchmark commit readback SHA differs')
+          }
+        } catch (error) {
+          const failure = readError(error)
+          if (![404, 422].includes(failure.status)) throw failure
+          benchmarkReachability = 'unreachable'
+          diagnostic(receipt, 'FAIL', 'BENCHMARK_BASE_UNREACHABLE',
+            `${input.benchmarkBaseSha} is unreachable`)
+        }
+
+        if (!REPOSITORY_PATTERN.test(receipt.object.headRepository || '')) {
+          throw new LiveFactReadError('SCHEMA_INVALID', 'PR head repository is missing')
+        }
+        let branchState = 'reachable'
+        try {
+          const headBranch = get(
+            `repos/${receipt.object.headRepository}/git/ref/heads/${receipt.object.headRef}`,
+            'candidate-head-branch',
+          )
+          if (String(headBranch?.object?.sha || '').toLowerCase() !== receipt.candidate) {
+            diagnostic(receipt, 'FAIL', 'CANDIDATE_BRANCH_MOVED',
+              `candidate branch no longer points to ${receipt.candidate}`)
+          }
+        } catch (error) {
+          const failure = readError(error)
+          if (failure.status !== 404) throw failure
+          branchState = 'deleted'
+          receipt.sources.push({
+            label: 'candidate-head-branch',
+            path: `repos/${receipt.object.headRepository}/git/ref/heads/${receipt.object.headRef}`,
+            complete: true,
+            result: 'HTTP_404',
+          })
+          if (receipt.object.state === 'open' && !receipt.object.merged) {
+            diagnostic(receipt, 'FAIL', 'ACTIVE_CANDIDATE_BRANCH_DELETED',
+              'open PR candidate branch is deleted')
+          }
+        }
+
+        const lifecycleState = receipt.object.merged
+          ? 'merged-reachable'
+          : receipt.object.state === 'closed'
+            ? branchState === 'deleted' ? 'historical-branch-deleted' : 'historical-reachable'
+            : branchState === 'deleted' ? 'active-branch-deleted' : 'active'
+        receipt.lifecycle = { state: lifecycleState }
+        receipt.anchors = {
+          candidateHeadSha: typedAnchor(receipt.candidate, 'pr.head.sha', input.now, 'reachable'),
+          reviewedTreeSha: typedAnchor(input.reviewedTreeSha, 'fixed-review.tree', input.now, 'reachable'),
+          prBaseRef: typedAnchor(receipt.object.baseRef, 'pr.base.ref', input.now),
+          prBaseTipShaAtRead: typedAnchor(receipt.target.sha, 'target-branch.commit.sha', input.now, 'reachable'),
+          benchmarkBaseSha: typedAnchor(
+            input.benchmarkBaseSha,
+            'caller.benchmark-base',
+            input.now,
+            benchmarkReachability,
+          ),
+          mergeBaseSha: typedAnchor(
+            receipt.candidateRelationship?.mergeBaseSha,
+            'compare.merge_base_commit.sha',
+            input.now,
+            'reachable',
+          ),
+          remoteMasterSha: typedAnchor(
+            remoteMasterSha,
+            `repository.default_branch:${defaultBranch}`,
+            input.now,
+            'reachable',
+          ),
+        }
+      }
+    }
+
     if (receipt.object) {
       const finalPath = receipt.object.kind === 'pr'
         ? `repos/${input.repository}/pulls/${number}`
@@ -545,6 +712,12 @@ function parseCli(argv) {
     else if (key === 'issue') options.issueNumber = value
     else if (key === 'pr') options.prNumber = value
     else if (key === 'candidate') options.candidateSha = value
+    else if (key === 'reviewed-tree') options.reviewedTreeSha = value
+    else if (key === 'benchmark-base') options.benchmarkBaseSha = value
+    else if (key === 'successor-pr') options.successorPr = value
+    else if (key === 'supersedes-pr') options.supersedesPr = value
+    else if (key === 'lease-state') options.leaseState = value
+    else if (key === 'overlap-disposition') options.overlapDisposition = value
     else throw new Error(`unknown argument --${key}`)
   }
   return options
