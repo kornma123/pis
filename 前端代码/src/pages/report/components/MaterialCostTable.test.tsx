@@ -42,8 +42,7 @@ function renderAndGetChangeCell(data: MaterialRow[]) {
   )
   const row = screen.getByText('测试物料').closest('tr')
   expect(row).not.toBeNull()
-  // 表格列序：物料名称/规格型号/消耗数量/消耗金额/占比/同比变化
-  return within(row as HTMLElement).getAllByRole('cell')[5]
+  return within(row as HTMLElement).getByTestId('material-change-rate')
 }
 
 function expectUncomputable(cell: HTMLElement) {
@@ -120,7 +119,7 @@ describe('MaterialCostTable 同比变化 fail-closed', () => {
     const { rerender } = render(<MaterialCostTable {...props} />)
     const cellText = () => {
       const row = screen.getByText('测试物料').closest('tr') as HTMLElement
-      return within(row).getAllByRole('cell')[5].textContent
+      return within(row).getByTestId('material-change-rate').textContent
     }
     const first = cellText()
     rerender(<MaterialCostTable {...props} />)

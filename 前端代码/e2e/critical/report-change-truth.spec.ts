@@ -6,10 +6,10 @@ import { apiLogin, loginThroughUi } from './fixtures'
  *
  * 覆盖拆分（诚实口径）：
  * - 第一个用例走**真实页面 + 真实后端 API**：真实建库（物料→入库→出库）后，
- *   当前真实后端硬编码 changeRate:0，页面必须把合法 0 保真显示为 0%，
- *   且重复加载不得出现随机数。
- * - 其余用例覆盖真实后端**当前无法产出**的合同分支（changeRate 为 null / 缺键 /
- *   正 / 负）：后端变化率公式未冻结且属 Issue #31 严格排除域，这些分支只能在
+ *   当前真实后端对未计算同期变化返回 changeRate:null，页面必须 fail-closed 显示
+ *   「不可计算」，且重复加载不得出现随机数。
+ * - 其余用例覆盖真实后端当前无法产出的合同分支（changeRate 缺键 / 正 / 负，
+ *   以及未来公式可能产出的合法 0）：变化率公式未冻结且属 Issue #31 严格排除域，只能在
  *   网络边界构造响应 payload。拦截发生在生产链路（页面/路由/axios/解析/渲染）
  *   之外的上游边界，不 mock 应用本身，也不以源码正则代替行为断言。
  */
@@ -93,12 +93,14 @@ async function seedRealCostRow(request: APIRequestContext, token: string, suffix
   return materialName
 }
 
-/** 同比变化列在当前可见表格中的单元格（项目表第 8 列 / 物料表第 6 列）。 */
-function changeCells(page: Parameters<typeof loginThroughUi>[0], columnIndex: number) {
+/** 同比变化列在当前可见表格中的单元格；稳定标识不依赖列顺序。 */
+function changeCells(
+  page: Parameters<typeof loginThroughUi>[0],
+  testId: 'project-change-rate' | 'material-change-rate',
+) {
   const changeHeader = page.getByRole('columnheader', { name: '同比变化' })
   const table = page.locator('table', { has: changeHeader })
-  // 「加载中...」「暂无数据」行只有单个 colspan 单元格，不会被 nth-child 命中
-  return table.locator(`tbody tr td:nth-child(${columnIndex})`)
+  return table.getByTestId(testId)
 }
 
 async function openMaterialTab(page: Parameters<typeof loginThroughUi>[0]) {
@@ -106,7 +108,7 @@ async function openMaterialTab(page: Parameters<typeof loginThroughUi>[0]) {
 }
 
 test.describe('critical report change-truth', () => {
-  test('real API: legit 0 renders as 0% on both tables and stays deterministic across reloads', async ({ page, request }) => {
+  test('real API: uncomputed null renders as 不可计算 on both tables and stays deterministic across reloads', async ({ page, request }) => {
     const token = await apiLogin(request, 'admin')
     const suffix = `${Date.now()}-${Math.floor(Math.random() * 100000)}`
     const materialName = await seedRealCostRow(request, token, suffix)
@@ -115,37 +117,36 @@ test.describe('critical report change-truth', () => {
     await page.goto('/cost-analysis')
     await expect(page.getByRole('heading', { name: '物料成本分析' })).toBeVisible()
 
-    const assertAllLegitZero = async (columnIndex: number) => {
-      const cells = changeCells(page, columnIndex)
+    const assertAllUncomputable = async (testId: 'project-change-rate' | 'material-change-rate') => {
+      const cells = changeCells(page, testId)
       await expect(cells.first()).toBeVisible()
       const count = await cells.count()
       expect(count).toBeGreaterThan(0)
       for (let index = 0; index < count; index += 1) {
-        // 真实后端当前每行返回 changeRate:0 → 合法 0 必须保真为 0%（含趋势 badge）
-        await expect(cells.nth(index)).toHaveText('0%')
-        await expect(cells.nth(index).locator('svg')).toHaveCount(1)
-        await expect(cells.nth(index)).not.toContainText('不可计算')
+        await expect(cells.nth(index)).toHaveText('不可计算')
+        await expect(cells.nth(index)).not.toContainText('%')
+        await expect(cells.nth(index).locator('svg')).toHaveCount(0)
       }
       return count
     }
 
     // 检测项目成本 tab（默认）：真实出库（无项目）聚合为项目行
-    const projectCount = await assertAllLegitZero(8)
+    const projectCount = await assertAllUncomputable('project-change-rate')
     expect(projectCount).toBeGreaterThan(0)
 
-    // 物料消耗分析 tab：刚建的真实物料行必须出现且为 0%
+    // 物料消耗分析 tab：刚建的真实物料行必须出现且诚实显示不可计算
     await openMaterialTab(page)
-    await assertAllLegitZero(6)
+    await assertAllUncomputable('material-change-rate')
     const materialRow = page.locator('table tbody tr', { hasText: materialName })
     await expect(materialRow).toHaveCount(1)
-    await expect(materialRow.locator('td').nth(5)).toHaveText('0%')
+    await expect(materialRow.getByTestId('material-change-rate')).toHaveText('不可计算')
 
     // 重复加载不得随机：真实 API 下两张表前后两次渲染完全一致
-    const before = await changeCells(page, 6).allTextContents()
+    const before = await changeCells(page, 'material-change-rate').allTextContents()
     await page.reload()
     await openMaterialTab(page)
-    await assertAllLegitZero(6)
-    const after = await changeCells(page, 6).allTextContents()
+    await assertAllUncomputable('material-change-rate')
+    const after = await changeCells(page, 'material-change-rate').allTextContents()
     expect(after).toEqual(before)
   })
 
@@ -181,8 +182,11 @@ test.describe('critical report change-truth', () => {
     await page.goto('/cost-analysis')
     await expect(page.getByRole('heading', { name: '物料成本分析' })).toBeVisible()
 
-    const assertAllUncomputable = async (columnIndex: number, expectedRows: number) => {
-      const cells = changeCells(page, columnIndex)
+    const assertAllUncomputable = async (
+      testId: 'project-change-rate' | 'material-change-rate',
+      expectedRows: number,
+    ) => {
+      const cells = changeCells(page, testId)
       await expect(cells.first()).toBeVisible()
       const count = await cells.count()
       expect(count).toBe(expectedRows)
@@ -194,16 +198,16 @@ test.describe('critical report change-truth', () => {
       }
     }
 
-    await assertAllUncomputable(8, 2)
+    await assertAllUncomputable('project-change-rate', 2)
     await openMaterialTab(page)
-    await assertAllUncomputable(6, 2)
+    await assertAllUncomputable('material-change-rate', 2)
 
     // 重复加载不得随机：null 分支两次加载渲染必须完全一致
-    const before = await changeCells(page, 6).allTextContents()
+    const before = await changeCells(page, 'material-change-rate').allTextContents()
     await page.reload()
     await openMaterialTab(page)
-    await assertAllUncomputable(6, 2)
-    const after = await changeCells(page, 6).allTextContents()
+    await assertAllUncomputable('material-change-rate', 2)
+    const after = await changeCells(page, 'material-change-rate').allTextContents()
     expect(after).toEqual(before)
   })
 
@@ -239,8 +243,11 @@ test.describe('critical report change-truth', () => {
     await page.goto('/cost-analysis')
     await expect(page.getByRole('heading', { name: '物料成本分析' })).toBeVisible()
 
-    const expectBadges = async (columnIndex: number, expected: string[]) => {
-      const cells = changeCells(page, columnIndex)
+    const expectBadges = async (
+      testId: 'project-change-rate' | 'material-change-rate',
+      expected: string[],
+    ) => {
+      const cells = changeCells(page, testId)
       await expect(cells.first()).toBeVisible()
       const count = await cells.count()
       expect(count).toBe(expected.length)
@@ -252,8 +259,8 @@ test.describe('critical report change-truth', () => {
       }
     }
 
-    await expectBadges(8, ['0%', '+12.5%', '-7%'])
+    await expectBadges('project-change-rate', ['0%', '+12.5%', '-7%'])
     await openMaterialTab(page)
-    await expectBadges(6, ['0%', '+3%', '-2.5%'])
+    await expectBadges('material-change-rate', ['0%', '+3%', '-2.5%'])
   })
 })

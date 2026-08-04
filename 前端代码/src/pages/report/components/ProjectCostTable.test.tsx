@@ -47,8 +47,7 @@ function renderAndGetChangeCell(data: ProjectRow[]) {
   )
   const row = screen.getByText('测试项目').closest('tr')
   expect(row).not.toBeNull()
-  // 表格列序：排名/检测项目/分类/成本金额/占比/病例数/单病例成本/同比变化/操作
-  return within(row as HTMLElement).getAllByRole('cell')[7]
+  return within(row as HTMLElement).getByTestId('project-change-rate')
 }
 
 function expectUncomputable(cell: HTMLElement) {
@@ -130,7 +129,7 @@ describe('ProjectCostTable 同比变化 fail-closed', () => {
     const { rerender } = render(<ProjectCostTable {...props} />)
     const cellText = () => {
       const row = screen.getByText('测试项目').closest('tr') as HTMLElement
-      return within(row).getAllByRole('cell')[7].textContent
+      return within(row).getByTestId('project-change-rate').textContent
     }
     const first = cellText()
     rerender(<ProjectCostTable {...props} />)

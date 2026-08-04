@@ -83,7 +83,7 @@ export function MaterialCostTable({
                       <td className="px-4 py-3 text-right text-gray-600">{m.consumption.toLocaleString()} {m.consumptionUnit}</td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(m.totalCost)}</td>
                       <td className="px-4 py-3 text-right text-gray-600">{(m.ratio * 100).toFixed(1)}%</td>
-                      <td className="px-4 py-3 text-right">
+                      <td data-testid="material-change-rate" className="px-4 py-3 text-right">
                         {changeRate === null ? (
                           <span className="text-xs text-gray-400">不可计算</span>
                         ) : (

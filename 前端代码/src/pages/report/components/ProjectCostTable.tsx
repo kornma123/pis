@@ -143,7 +143,7 @@ export function ProjectCostTable({
                     <td className="px-4 py-3 text-right text-gray-600">{(p.ratio * 100).toFixed(1)}%</td>
                     <td className="px-4 py-3 text-right text-gray-600">{p.sampleCount.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right text-gray-600">{formatCurrency(p.unitCost)}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td data-testid="project-change-rate" className="px-4 py-3 text-right">
                       {changeRate === null ? (
                         <span className="text-xs text-gray-400">不可计算</span>
                       ) : (
