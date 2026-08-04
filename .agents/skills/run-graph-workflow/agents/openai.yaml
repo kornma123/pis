@@ -1,0 +1,6 @@
+interface:
+  display_name: "Graph Engineering 工作流"
+  short_description: "为复杂任务建立可验证、可交接、可停止的任务图工作流"
+  default_prompt: "使用 $run-graph-workflow 先判断是否值得建图；遇到关键歧义时逐题 grill 并锁定决策，再在明确边界、验证和人工关卡下推进。"
+policy:
+  allow_implicit_invocation: true

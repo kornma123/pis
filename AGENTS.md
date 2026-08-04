@@ -14,4 +14,5 @@ Codex 和其他遵循 `AGENTS.md` 的工具，开始任何工作前必须完整�
 - 当前环境实际可用的工具、技能和协作能力以会话清单为准；不要从历史文档推断能力。
 - 直接面向用户的最终回复按共用契约 §6.1「所有用户交付会话的产品化结尾」收口；本入口不复制字段。
 - 做需求 / 前端 mockup / 写码 / 真跑验收 / 报告结论类任务时，按质量 Loop 家族唯一入口 `docs/COREONE-质量Loop总览-2026-07-12.md` 选对应循环（规则细则以工作模型与共用契约为准，本入口不复制）。
+- 多阶段、跨模块、跨 Agent / 跨设备、需要独立验证或高风险的复杂任务，同时使用项目级 `run-graph-workflow` Skill（`.agents/skills/run-graph-workflow/SKILL.md`）做 Graph 判定与任务图编排。它只编排现有契约和质量 Loop，不是第二套权威；小而明确的低风险任务仍走快速路径。
 - 使用 Claude Code 处理 PRD 时，统一视为当前会话的 PRD 阶段，并读取 `docs/Claude-Code-PRD-GitHub协作范式.md`。PM 定稿只结束 PRD 内容闸；还须有合并后的 PRD、PM 确认的工程 Issue 和新一轮 ownership / preflight，才可切换到 mockup 或写码阶段。

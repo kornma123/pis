@@ -50,6 +50,12 @@ jobs:
         run: node scripts/agent-preflight.selftest.cjs
       - name: Agent contract drift check
         run: node scripts/agent-preflight.cjs --mode=review --target-ref=HEAD --rules-only --no-worktree-report
+      # 项目级 Graph Skill：锁定私有分发仓库的固定 release，并防止 Codex canonical payload
+      # 与 Claude 薄适配入口漂移。校验完全本地化，不在公开 CI 访问私有源仓库。
+      - name: Project Graph workflow selftest
+        run: node scripts/check-project-workflow.selftest.cjs
+      - name: Project Graph workflow lock
+        run: node scripts/check-project-workflow.cjs
       # Claude Code 跨设备任务守卫：确保任务合同、owned/excluded files 与交接状态机持续可执行。
       - name: Claude task guard selftest
         run: node scripts/claude-task.selftest.cjs
