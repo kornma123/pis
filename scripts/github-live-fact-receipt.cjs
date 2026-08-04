@@ -5,7 +5,9 @@ const childProcess = require('node:child_process')
 const RECEIPT_VERSION = 'coreone-github-live-fact-receipt/v1'
 const SHA_PATTERN = /^[0-9a-f]{40}$/i
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
-const DECISIONS = new Set(['anchor', 'claim', 'handoff', 'merge', 'preflight', 'review'])
+const DECISIONS = new Set(['anchor', 'claim', 'dependency', 'handoff', 'merge', 'preflight', 'review'])
+const DEPENDENCY_RECEIPT_VERSION = 'coreone-github-issue-dependency-graph/v1'
+const DEPENDENCY_QUERY = `query($owner:String!,$name:String!,$number:Int!,$blockedAfter:String,$blockingAfter:String){repository(owner:$owner,name:$name){issue(number:$number){number state updatedAt body blockedBy(first:100,after:$blockedAfter){nodes{number}pageInfo{hasNextPage endCursor}}blocking(first:100,after:$blockingAfter){nodes{number}pageInfo{hasNextPage endCursor}}}}}`
 
 class LiveFactReadError extends Error {
   constructor(code, message, status = null) {
@@ -67,6 +69,46 @@ function createGhTransport() {
       }
       return { items, complete: true, pages: pages.length }
     },
+    issueDependencies({ repository, number }) {
+      const [owner, name] = repository.split('/')
+      const result = { blockedBy: [], blocking: [] }
+      let blockedAfter = null
+      let blockingAfter = null
+      let blockedDone = false
+      let blockingDone = false
+      let identity = null
+      for (let pages = 1; pages <= 20 && (!blockedDone || !blockingDone); pages += 1) {
+        const args = ['api', 'graphql', '-f', `query=${DEPENDENCY_QUERY}`, '-F', `owner=${owner}`,
+          '-F', `name=${name}`, '-F', `number=${number}`]
+        if (blockedAfter) args.push('-F', `blockedAfter=${blockedAfter}`)
+        if (blockingAfter) args.push('-F', `blockingAfter=${blockingAfter}`)
+        const payload = runGhJson(args)
+        if (payload?.errors?.length) throw new LiveFactReadError('GRAPHQL_ERROR', JSON.stringify(payload.errors))
+        const issue = payload?.data?.repository?.issue
+        if (!issue) throw new LiveFactReadError('HTTP_404', `Issue #${number} not found`, 404)
+        if (!identity) identity = { number: issue.number, state: issue.state, updatedAt: issue.updatedAt, body: issue.body || '' }
+        for (const [key, done] of [['blockedBy', blockedDone], ['blocking', blockingDone]]) {
+          if (done) continue
+          const connection = issue[key]
+          if (!Array.isArray(connection?.nodes) || typeof connection?.pageInfo?.hasNextPage !== 'boolean') {
+            throw new LiveFactReadError('SCHEMA_INVALID', `${key} dependency page is incomplete`)
+          }
+          result[key].push(...connection.nodes.map((item) => item?.number))
+          const next = connection.pageInfo.hasNextPage
+          const cursor = connection.pageInfo.endCursor
+          if (key === 'blockedBy') {
+            blockedDone = !next || !cursor
+            blockedAfter = next ? cursor : null
+          } else {
+            blockingDone = !next || !cursor
+            blockingAfter = next ? cursor : null
+          }
+        }
+      }
+      return { ...identity,
+        blockedBy: { items: result.blockedBy, complete: blockedDone },
+        blocking: { items: result.blocking, complete: blockingDone } }
+    },
   }
 }
 
@@ -122,6 +164,9 @@ function normalizeOptions(options) {
   }
   if (decision === 'merge' && (prNumber == null || candidateSha == null)) {
     throw new Error('merge decision requires PR and candidate SHA')
+  }
+  if (decision === 'dependency' && issueNumber == null) {
+    throw new Error('dependency decision requires an Issue')
   }
   if (decision === 'anchor' &&
       (prNumber == null || candidateSha == null || reviewedTreeSha == null || benchmarkBaseSha == null)) {
@@ -303,6 +348,102 @@ function typedAnchor(value, source, readAt, reachability = null) {
   const anchor = { value, source, readAt }
   if (reachability) anchor.reachability = reachability
   return anchor
+}
+
+function normalizeDependencyNode(raw, expected) {
+  if (!raw || raw.number !== expected || !['OPEN', 'CLOSED'].includes(raw.state) ||
+      typeof raw.updatedAt !== 'string' || typeof raw.body !== 'string') {
+    throw new LiveFactReadError('SCHEMA_INVALID', `Issue #${expected} dependency identity/state is incomplete`)
+  }
+  for (const key of ['blockedBy', 'blocking']) {
+    if (!Array.isArray(raw[key]?.items) || typeof raw[key]?.complete !== 'boolean' ||
+        raw[key].items.some((number) => !Number.isInteger(number) || number <= 0)) {
+      throw new LiveFactReadError('SCHEMA_INVALID', `Issue #${expected} ${key} schema is incomplete`)
+    }
+  }
+  return raw
+}
+
+function resolveDependencyGraph(options, transport = createGhTransport()) {
+  const input = normalizeOptions({ ...options, decision: 'dependency' })
+  const root = input.issueNumber
+  const receipt = { version: DEPENDENCY_RECEIPT_VERSION, repository: input.repository,
+    root, queriedAt: input.now, source: 'github-native', reconcileOwner: 'Issue#124',
+    nodes: [], edges: [], activeBlockers: [], resolvedBlockers: [], disposition: 'UNVERIFIED',
+    pagination: { complete: true }, migrationPreview: [], diagnostics: [], verdict: 'UNVERIFIED' }
+  const nodes = new Map()
+  const edges = new Map()
+  const queued = new Set([root])
+  const queue = [root]
+  try {
+    while (queue.length) {
+      const number = queue.shift()
+      const node = normalizeDependencyNode(
+        transport.issueDependencies({ repository: input.repository, number }), number)
+      nodes.set(number, node)
+      if (/<!--\s*coreone-dependencies:start\s*-->/i.test(node.body)) {
+        diagnostic(receipt, 'FAIL', 'DEPENDENCY_MULTIPLE_AUTHORITIES',
+          `Issue #${number} has a typed fallback beside native authority`)
+      }
+      for (const key of ['blockedBy', 'blocking']) {
+        if (!node[key].complete) {
+          receipt.pagination.complete = false
+          diagnostic(receipt, 'UNVERIFIED', 'PAGINATION_INCOMPLETE', `Issue #${number} ${key} pagination is incomplete`)
+        }
+        const local = new Set()
+        for (const related of node[key].items) {
+          if (local.has(related)) diagnostic(receipt, 'FAIL', 'DEPENDENCY_DUPLICATE_EDGE',
+            `Issue #${number} ${key} repeats #${related}`)
+          local.add(related)
+          const from = key === 'blockedBy' ? related : number
+          const to = key === 'blockedBy' ? number : related
+          if (from === to) diagnostic(receipt, 'FAIL', 'DEPENDENCY_SELF_LOOP', `Issue #${number} depends on itself`)
+          const edgeKey = `${from}->${to}`
+          if (!edges.has(edgeKey)) edges.set(edgeKey, { from, to, witnesses: new Set() })
+          edges.get(edgeKey).witnesses.add(`${number}.${key}`)
+          if (!queued.has(related)) { queued.add(related); queue.push(related) }
+        }
+      }
+    }
+    for (const edge of edges.values()) {
+      const expected = [`${edge.to}.blockedBy`, `${edge.from}.blocking`]
+      if (expected.some((witness) => !edge.witnesses.has(witness))) {
+        diagnostic(receipt, 'FAIL', 'DEPENDENCY_DIRECTION_CONTRADICTION',
+          `edge ${edge.from}->${edge.to} lacks reciprocal native direction`)
+      }
+    }
+    const indegree = new Map([...nodes.keys()].map((number) => [number, 0]))
+    for (const edge of edges.values()) indegree.set(edge.to, (indegree.get(edge.to) || 0) + 1)
+    const zero = [...indegree].filter(([, count]) => count === 0).map(([number]) => number)
+    let visited = 0
+    while (zero.length) {
+      const number = zero.shift(); visited += 1
+      for (const edge of edges.values()) if (edge.from === number && indegree.has(edge.to)) {
+        indegree.set(edge.to, indegree.get(edge.to) - 1)
+        if (indegree.get(edge.to) === 0) zero.push(edge.to)
+      }
+    }
+    if (visited !== nodes.size) diagnostic(receipt, 'FAIL', 'DEPENDENCY_CYCLE', 'native dependency graph contains a cycle')
+    const direct = [...edges.values()].filter((edge) => edge.to === root).map((edge) => edge.from)
+    receipt.activeBlockers = direct.filter((number) => nodes.get(number)?.state === 'OPEN').sort((a, b) => a - b)
+    receipt.resolvedBlockers = direct.filter((number) => nodes.get(number)?.state === 'CLOSED').sort((a, b) => a - b)
+    for (const node of nodes.values()) for (const match of node.body.matchAll(/depends on\b([^\n]*)/gi)) {
+      const numbers = [...match[1].matchAll(/#(\d+)/g)].map((item) => Number(item[1]))
+      if (!numbers.length) receipt.migrationPreview.push({ issue: node.number, text: match[0].trim(), disposition: 'MANUAL_REVIEW' })
+      for (const blocker of numbers) receipt.migrationPreview.push({ issue: node.number, blocker,
+        disposition: edges.has(`${blocker}->${node.number}`) ? 'MAPPED' : 'MISSING_NATIVE' })
+    }
+    receipt.nodes = [...nodes.values()].map(({ number, state, updatedAt }) => ({ number, state, updatedAt }))
+      .sort((left, right) => left.number - right.number)
+    receipt.edges = [...edges.values()].map(({ from, to }) => ({ from, to }))
+      .sort((left, right) => left.from - right.from || left.to - right.to)
+    receipt.disposition = receipt.activeBlockers.length ? 'BLOCKED' : 'READY'
+  } catch (error) {
+    const failure = readError(error)
+    diagnostic(receipt, 'UNVERIFIED', 'DEPENDENCY_READ_UNVERIFIED', `${failure.code}: ${failure.message}`)
+  }
+  receipt.verdict = finalVerdict(receipt)
+  return receipt
 }
 
 function resolveLiveFacts(options, transport = createGhTransport()) {
@@ -723,7 +864,10 @@ function parseCli(argv) {
 
 function main() {
   try {
-    const receipt = resolveLiveFacts(parseCli(process.argv.slice(2)))
+    const options = parseCli(process.argv.slice(2))
+    const receipt = options.decision === 'dependency'
+      ? resolveDependencyGraph(options)
+      : resolveLiveFacts(options)
     process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`)
     process.exitCode = receipt.verdict === 'PASS' ? 0 : 1
   } catch (error) {
@@ -740,5 +884,6 @@ module.exports = {
   RECEIPT_VERSION,
   createGhTransport,
   normalizeOptions,
+  resolveDependencyGraph,
   resolveLiveFacts,
 }
