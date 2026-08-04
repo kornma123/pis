@@ -9,6 +9,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const {
   beginIssueCreationLedger,
   assertClaudeImplementationOwnership,
+  assertTaskImplementationOwnership,
   assertSafeGhCommand,
   assertSafeGitCommand,
   assertSafeNodeCommand,
@@ -32,6 +33,7 @@ const {
   parsePmApprovalMarker,
   parsePrdRef,
   parseRequirementAcceptanceMap,
+  materializePrCreateCommand,
   replaceOwnerLease,
   resolveIssueCreationManifestPath,
   shouldBlockStop,
@@ -262,6 +264,18 @@ for (const [name, owned] of [
     () => assertClaudeImplementationOwnership('implementation', owned),
     /Claude Code.*实现|ownership exception|所有权例外/,
     name,
+  );
+}
+assert.doesNotThrow(() =>
+  assertTaskImplementationOwnership('Codex', 'implementation', ['scripts/claude-task.cjs']),
+);
+assert.doesNotThrow(() =>
+  assertTaskImplementationOwnership('Codex（当前治理主会话）', 'implementation', ['后端代码/server/src/routes/a.ts']),
+);
+for (const scope of [['前端代码/src/App.tsx'], ['前端代码/src/App.tsx', '后端代码/server/src/a.ts'], ['**']]) {
+  assert.throws(
+    () => assertTaskImplementationOwnership('Codex', 'implementation', scope),
+    /Codex.*前端|Codex.*混合|Codex.*宽范围/,
   );
 }
 assert.doesNotThrow(() =>
@@ -5602,13 +5616,36 @@ assert.doesNotThrow(() =>
 );
 assert.equal(issueCommentWriteState.githubWrite, true);
 const prCreateWriteState = { mode: 'governed', issue: 12, branch: 'claude/frontend-task' };
-assert.doesNotThrow(() =>
+assert.throws(() =>
   assertSafeGhCommand(
     shellTokens('gh pr create --head claude/frontend-task --base master --title x --body y'),
     prCreateWriteState,
   ),
+  /PR body|Issue.*交接|合同/,
 );
-assert.equal(prCreateWriteState.githubWrite, true);
+const validPrBody = reflectionPrBody(strongLeastConfidence, strongBiggestMissing).replaceAll('#81', '#12');
+const validPrCreateState = { mode: 'governed', issue: 12, branch: 'codex/entry-wiring' };
+const validPrCreateTokens = ['gh', 'pr', 'create', '--head', 'codex/entry-wiring', '--base', 'master',
+  '--title', 'entry wiring', '--body', validPrBody];
+assert.doesNotThrow(() => assertSafeGhCommand(validPrCreateTokens, validPrCreateState, repositoryRoot));
+assert.equal(validPrCreateState.githubWrite, true);
+assert.equal(validPrCreateState.prCreateBody, validPrBody);
+assert.deepEqual(materializePrCreateCommand(validPrCreateTokens, validPrCreateState.prCreateBody), validPrCreateTokens);
+for (const alias of [['-H', 'attacker-branch'], ['-B', 'attacker-base']]) {
+  assert.throws(() => assertSafeGhCommand(
+    [...validPrCreateTokens, ...alias],
+    { mode: 'governed', issue: 12, branch: 'codex/entry-wiring' }, repositoryRoot,
+  ), /短选项别名/);
+}
+assert.throws(() => assertSafeGhCommand(
+  ['gh', 'pr', 'create', '--head', 'codex/entry-wiring', '--base', 'master', '--title', 'x'],
+  { mode: 'governed', issue: 12, branch: 'codex/entry-wiring' }, repositoryRoot,
+), /body.*唯一|body.*确定/i);
+assert.throws(() => assertSafeGhCommand(
+  ['gh', 'pr', 'create', '--head', 'codex/entry-wiring', '--base', 'master', '--title', 'x', '--body',
+    validPrBody.replaceAll('#12', '#99')],
+  { mode: 'governed', issue: 12, branch: 'codex/entry-wiring' }, repositoryRoot,
+), /活动 Issue #12/);
 assert.throws(() => assertSafeGhCommand(shellTokens('gh issue close 12'), { mode: 'governed', issue: 12 }));
 assert.throws(() => assertSafeGhCommand(shellTokens('gh issue edit 12 --body changed'), { mode: 'governed', issue: 12 }));
 assert.throws(() => assertSafeGhCommand(shellTokens('gh issue comment 12 --repo other/repo --body ok'), { mode: 'governed', issue: 12 }));
