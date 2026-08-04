@@ -26,6 +26,8 @@ description: COREONE 仓库的本地工作路由。处理任何 PRD、功能、B
 
 `/feature-development` 只是兼容入口，不能绕过本 Skill 直接写码。
 
+若任务涉及多阶段真实依赖、跨模块集成、跨 Agent / 跨设备交接、高失败代价或必须独立验证，在完成上述权威路由后再调用项目 `/run-graph-workflow` 做 Graph 判定和编排。它不改写本 Skill、operating contract 或质量 Loop；单文件、低风险且验收明确的任务仍走单 Agent 快速路径。
+
 实现 / 复核按 `docs/agent-operating-contract.md` §4 分域：前端（`前端代码/**` 及 UI/交互制品）由 Claude Code CLI/K3 实现、Codex fixed-SHA 复核；后端（`后端代码/**` 及 API/数据库/认证/服务端）由 Codex 实现、Claude Code CLI/K3 fixed-SHA 复核。混合任务优先按可独立验收边界拆票；不能拆时，须由 PM 在实时 handoff 明确单一实现 owner 与异构 reviewer。规则生效前的在途例外只保存在对应 handoff，不进入本稳定 Skill。
 
 ## 2. 受治理交付任务第一次修改前交付本地任务合同

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "kornma123/kornma-pm-work",
+    "ref": "run-graph-workflow-v1.4.2",
+    "commit": "8f7a3d15dc36a445640a7246007eaa7d0d416ed8",
+    "path": "workflows/run-graph-workflow/payload/run-graph-workflow",
+    "tree": "89c0b0c47b7c1f1360ded14e4f914349bf798164",
+    "version": "1.4.2"
+  },
+  "canonical_path": ".agents/skills/run-graph-workflow",
+  "claude_adapter_path": ".claude/skills/run-graph-workflow/SKILL.md",
+  "files": {
+    ".agents/skills/run-graph-workflow/SKILL.md": "9a6956b24eec99c717ece4efeb1c67c9d145ac608b20e65275279bec1454d1c0",
+    ".agents/skills/run-graph-workflow/agents/openai.yaml": "a3ba6804ff80cac53bc975b86d4c1036d858242d8b916b4fad021825624e39fa",
+    ".agents/skills/run-graph-workflow/references/decision-grill-gate.md": "3441f08312c0ce680788aede7203d8e9235dc48dbe1182fb7dce25aef330f05c",
+    ".agents/skills/run-graph-workflow/references/portable-graph-handoff.md": "2047039451d1766ecb643f4e3961d0124fec1efa9f58c339781af65d9ebff50e",
+    ".agents/skills/run-graph-workflow/scripts/self_check.py": "045931d8e610a3a1576979d17bc205312218dff24281d08bd9827bc832858c3b",
+    ".agents/skills/run-graph-workflow/skill-package.json": "e9f8968956ad5e408a34c5d2aec2940e992cbe9b5bf0da78e20b008c1810964c",
+    ".claude/skills/run-graph-workflow/SKILL.md": "3c071c24b390d6f8f0a718bbf5cf02a394c7bbdad2aee6cf74b09683874e5da0"
+  }
+}
