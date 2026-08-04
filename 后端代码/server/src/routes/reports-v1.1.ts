@@ -33,7 +33,7 @@ router.get('/cost-by-project', (req, res) => {
         unitCost: r.sample_count > 0 ? r.total_cost / r.sample_count : 0,
         totalCost: r.total_cost || 0,
         ratio: totalCost > 0 ? ((r.total_cost || 0) / totalCost * 100).toFixed(1) : 0,
-        changeRate: 0, changeDirection: 'down' as const,
+        changeRate: null, changeDirection: 'down' as const,
       })),
     })
   } catch (err: any) { error(res, err.message) }
@@ -67,7 +67,7 @@ router.get('/cost-by-material', (req, res) => {
         consumption: r.consumption, consumptionUnit: r.consumption_unit,
         totalCost: r.total_cost,
         ratio: totalCost > 0 ? (r.total_cost / totalCost * 100).toFixed(1) : 0,
-        changeRate: 0, changeDirection: 'down' as const,
+        changeRate: null, changeDirection: 'down' as const,
       })),
       trend: [],
     })
