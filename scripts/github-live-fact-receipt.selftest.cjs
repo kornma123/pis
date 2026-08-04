@@ -9,6 +9,10 @@ const {
 const REPO = 'kornma123/pis'
 const HEAD = '8a77d6b5073a4b6d0dccb14141b06aedaebd44bc'
 const OTHER = '1111111111111111111111111111111111111111'
+const TREE = '2222222222222222222222222222222222222222'
+const BENCHMARK = '3333333333333333333333333333333333333333'
+const MASTER = '14ffe0318543b8a8565973af1221cad211e3deb0'
+const RELEASE = '4444444444444444444444444444444444444444'
 const REQUIRED = ['vitest', 'gate', 'e2e-required', 'secret-scan']
 
 function makeTransport(options = {}) {
@@ -39,9 +43,15 @@ function makeTransport(options = {}) {
         return { full_name: options.repositoryFullName || REPO, default_branch: 'master' }
       }
       if (path === `repos/${REPO}/branches/master`) {
-        return { name: 'master', protected: true, commit: { sha: '14ffe0318543b8a8565973af1221cad211e3deb0' } }
+        return { name: 'master', protected: true, commit: { sha: options.masterSha || MASTER } }
       }
-      if (path === `repos/${REPO}/branches/master/protection`) {
+      if (path === `repos/${REPO}/branches/release`) {
+        return { name: 'release', protected: true, commit: { sha: RELEASE } }
+      }
+      if ([
+        `repos/${REPO}/branches/master/protection`,
+        `repos/${REPO}/branches/release/protection`,
+      ].includes(path)) {
         if (options.classicProtection) return options.classicProtection
         throw new LiveFactReadError('HTTP_404', 'Branch not protected', 404)
       }
@@ -77,10 +87,16 @@ function makeTransport(options = {}) {
           number: options.prNumberResponse || 127,
           state: changed && options.finalPrState ? options.finalPrState : options.prState || 'open',
           merged: changed && options.finalPrMerged === true,
-          head: { sha: head, ref: 'codex/example' },
           base: {
-            sha: '14ffe0318543b8a8565973af1221cad211e3deb0',
-            ref: changed && options.finalPrBaseRef ? options.finalPrBaseRef : 'master',
+            sha: options.prBaseSha || MASTER,
+            ref: changed && options.finalPrBaseRef
+              ? options.finalPrBaseRef
+              : options.prBaseRef || 'master',
+          },
+          head: {
+            sha: head,
+            ref: 'codex/example',
+            repo: { full_name: REPO },
           },
           updated_at: changed && options.finalPrUpdatedAt
             ? options.finalPrUpdatedAt
@@ -114,7 +130,17 @@ function makeTransport(options = {}) {
       }
       if (path === `repos/${REPO}/commits/${HEAD}`) {
         if (options.unreachable) throw new LiveFactReadError('HTTP_422', 'No commit found', 422)
-        return { sha: HEAD }
+        return { sha: HEAD, commit: { tree: { sha: options.candidateTree || TREE } } }
+      }
+      if (path === `repos/${REPO}/commits/${BENCHMARK}`) {
+        if (options.benchmarkUnreachable) {
+          throw new LiveFactReadError('HTTP_422', 'No commit found', 422)
+        }
+        return { sha: BENCHMARK }
+      }
+      if (path === `repos/${REPO}/git/ref/heads/codex/example`) {
+        if (options.branchDeleted) throw new LiveFactReadError('HTTP_404', 'Reference not found', 404)
+        return { ref: 'refs/heads/codex/example', object: { sha: options.branchSha || HEAD } }
       }
       if (path === `repos/${REPO}/commits/${HEAD}/status`) {
         if (options.statusFailure) throw new LiveFactReadError('HTTP_422', 'No commit found', 422)
@@ -131,6 +157,15 @@ function makeTransport(options = {}) {
           },
           ahead_by: 1,
           behind_by: options.compareStatus === 'diverged' ? 1 : 0,
+        }
+      }
+      if (path === `repos/${REPO}/compare/${RELEASE}...${HEAD}`) {
+        return {
+          status: 'ahead',
+          base_commit: { sha: RELEASE },
+          merge_base_commit: { sha: RELEASE },
+          ahead_by: 1,
+          behind_by: 0,
         }
       }
       throw new Error(`unexpected GET ${path}`)
@@ -162,6 +197,24 @@ function resolveMerge(transport, extra = {}) {
     prNumber: 127,
     candidateSha: HEAD,
     now: '2026-08-04T01:00:00.000Z',
+    ...extra,
+  }, transport)
+}
+
+function resolveAnchor(transport, extra = {}) {
+  return resolveLiveFacts({
+    repository: REPO,
+    decision: 'anchor',
+    targetBranch: 'master',
+    prNumber: 127,
+    candidateSha: HEAD,
+    reviewedTreeSha: TREE,
+    benchmarkBaseSha: BENCHMARK,
+    successorPr: 127,
+    supersedesPr: 80,
+    leaseState: 'active',
+    overlapDisposition: 'superseded',
+    now: '2026-08-04T02:00:00.000Z',
     ...extra,
   }, transport)
 }
@@ -419,6 +472,88 @@ test('compare response base stays bound to the requested target SHA', () => {
   const receipt = resolveMerge(makeTransport({ compareBase: OTHER }))
   assert.equal(receipt.verdict, 'FAIL')
   assert(receipt.diagnostics.some((item) => item.code === 'COMPARISON_BASE_MISMATCH'))
+})
+
+test('anchor decision emits seven distinct typed anchors with provenance', () => {
+  const receipt = resolveAnchor(makeTransport(), {
+    leaseState: 'future-lease-state',
+    overlapDisposition: 'future-overlap-state',
+  })
+  assert.equal(receipt.verdict, 'PASS')
+  assert.equal(receipt.anchors.candidateHeadSha.value, HEAD)
+  assert.equal(receipt.anchors.reviewedTreeSha.value, TREE)
+  assert.equal(receipt.anchors.prBaseRef.value, 'master')
+  assert.equal(receipt.anchors.prBaseTipShaAtRead.value, MASTER)
+  assert.equal(receipt.anchors.benchmarkBaseSha.value, BENCHMARK)
+  assert.equal(receipt.anchors.mergeBaseSha.value, MASTER)
+  assert.equal(receipt.anchors.remoteMasterSha.value, MASTER)
+  assert.equal(receipt.anchors.candidateHeadSha.reachability, 'reachable')
+  assert.equal(receipt.lifecycle.state, 'active')
+  assert.deepEqual(receipt.relationships, {
+    successorPr: 127,
+    supersedesPr: 80,
+    candidateLease: { state: 'future-lease-state', authority: 'Issue#122' },
+    overlapDisposition: { state: 'future-overlap-state', authority: 'Issue#124' },
+  })
+})
+
+test('reviewed tree must equal the candidate commit tree', () => {
+  const receipt = resolveAnchor(makeTransport({ candidateTree: OTHER }))
+  assert.equal(receipt.verdict, 'FAIL')
+  assert(receipt.diagnostics.some((item) => item.code === 'REVIEWED_TREE_MISMATCH'))
+})
+
+test('benchmark base must remain reachable', () => {
+  const receipt = resolveAnchor(makeTransport({ benchmarkUnreachable: true }))
+  assert.equal(receipt.verdict, 'FAIL')
+  assert(receipt.diagnostics.some((item) => item.code === 'BENCHMARK_BASE_UNREACHABLE'))
+})
+
+test('non-master PR base stays distinct from remote master', () => {
+  const receipt = resolveAnchor(makeTransport({
+    prBaseRef: 'release',
+    prBaseSha: RELEASE,
+    rulesetInclude: ['~ALL'],
+  }), {
+    targetBranch: 'release',
+  })
+  assert.equal(receipt.verdict, 'PASS')
+  assert.equal(receipt.anchors.prBaseRef.value, 'release')
+  assert.equal(receipt.anchors.prBaseTipShaAtRead.value, RELEASE)
+  assert.equal(receipt.anchors.remoteMasterSha.value, MASTER)
+  assert.notEqual(receipt.anchors.prBaseTipShaAtRead.value, receipt.anchors.remoteMasterSha.value)
+})
+
+test('unexpected PR base ref fails the anchor decision', () => {
+  const receipt = resolveAnchor(makeTransport({ prBaseRef: 'release', prBaseSha: RELEASE }))
+  assert.equal(receipt.verdict, 'FAIL')
+  assert(receipt.diagnostics.some((item) => item.code === 'PR_BASE_REF_MISMATCH'))
+})
+
+test('closed but reachable candidates remain historical, never active', () => {
+  const receipt = resolveAnchor(makeTransport({ prState: 'closed' }), { leaseState: 'historical' })
+  assert.equal(receipt.verdict, 'PASS')
+  assert.equal(receipt.lifecycle.state, 'historical-reachable')
+})
+
+test('closed deleted branches can remain historical when the commit is reachable', () => {
+  const receipt = resolveAnchor(makeTransport({ prState: 'closed', branchDeleted: true }), {
+    leaseState: 'historical',
+  })
+  assert.equal(receipt.verdict, 'PASS')
+  assert.equal(receipt.lifecycle.state, 'historical-branch-deleted')
+})
+
+test('an active candidate branch deletion fails closed', () => {
+  const receipt = resolveAnchor(makeTransport({ branchDeleted: true }))
+  assert.equal(receipt.verdict, 'FAIL')
+  assert(receipt.diagnostics.some((item) => item.code === 'ACTIVE_CANDIDATE_BRANCH_DELETED'))
+})
+
+test('a force-moved candidate branch invalidates the anchor receipt', () => {
+  const receipt = resolveAnchor(makeTransport({ branchSha: OTHER }))
+  assert.equal(receipt.verdict, 'FAIL')
+  assert(receipt.diagnostics.some((item) => item.code === 'CANDIDATE_BRANCH_MOVED'))
 })
 
 process.stdout.write(`github live-fact receipt selftest: ${passed}/${passed} passed\n`)
