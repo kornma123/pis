@@ -13,6 +13,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const vm = require('node:vm')
+const zlib = require('node:zlib')
 const { execFileSync, spawnSync } = require('node:child_process')
 
 const CONTRACT_PATH = 'docs/agent-operating-contract.md'
@@ -61,13 +62,33 @@ const PM_AI_WORK_MODEL_FILES = [
   'docs/工作模型-通用版-PM+AI-vibe-coding-2026-06-30.md',
   'docs/工作模型-COREONE项目版-2026-06-30.md',
 ]
+const QUALITY_LOOP_OVERVIEW_PATH = 'docs/COREONE-质量Loop总览-2026-07-12.md'
+const QUALITY_LOOP_CONTRACT_PATH = 'docs/COREONE-质量Loop契约-2026-07-12.md'
+const QUALITY_LOOP_STAGE_ENTRIES = [
+  ['docs/COREONE-PRD质量Loop-2026-07-12.md', '# COREONE PRD 质量 Loop（薄入口 · 需求整理）'],
+  ['docs/COREONE-前端Mockup质量Loop-2026-07-12.md', '# COREONE 前端 Mockup 质量 Loop（薄入口）'],
+  ['docs/COREONE-写码质量Loop-2026-07-12.md', '# COREONE 写码质量 Loop（薄入口 · 实现阶段）'],
+  ['docs/COREONE-真跑验收质量Loop-2026-07-12.md', '# COREONE 真跑验收质量 Loop（薄入口）'],
+  ['docs/COREONE-报告结论质量Loop-2026-07-12.md', '# COREONE 报告/结论质量 Loop（薄入口 · 调研·审计·评估·复盘）'],
+]
+const CURRENT_CI_ENFORCEMENT_FILES = [
+  'docs/golden-registry.md',
+  '.github/workflows/build-discipline.yml',
+  '.github/workflows/backend-tests.yml',
+  '.claude/rules/coreone-guardrails.md',
+]
 const AUTHORITY_FILES = [
   ...ENTRYPOINTS,
   CONTRACT_PATH,
   PM_DECISIONS_PATH,
   'docs/agent-handoffs/TEMPLATE.md',
   ...PM_AI_WORK_MODEL_FILES,
+  QUALITY_LOOP_OVERVIEW_PATH,
+  QUALITY_LOOP_CONTRACT_PATH,
+  ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => file),
   'docs/golden-registry.md',
+  '.github/workflows/build-discipline.yml',
+  '.github/workflows/backend-tests.yml',
   '.claude/rules/coreone-guardrails.md',
   '.claude/rules/pr-governance.md',
   '.claude/rules/codex-cli-usage.md',
@@ -2303,6 +2324,7 @@ function inspectAuthority(root, args, checks) {
     CLAUDE_CLI_SUPERVISOR_TEST_HARNESS_PATH,
     CLAUDE_CLI_SUPERVISOR_DEPENDENCY_PATH,
     CLAUDE_COREONE_SKILL_PATH,
+    ...CURRENT_CI_ENFORCEMENT_FILES,
   ]) {
     if (existsAtSource(root, file, source)) contents[file] = readSource(root, file, source)
   }
@@ -2317,14 +2339,774 @@ function inspectAuthority(root, args, checks) {
     addCheck(checks, 'authority.contract-id', 'PASS', `shared contract: ${CONTRACT_ID}`)
   }
 
+  function visibleMarkdown(value, options = {}) {
+    const lines = value.split(/\r?\n/)
+    const referenceDefinitions = parseMarkdownReferenceDefinitions(value)
+    const visible = []
+    let fence = null
+    let htmlComment = false
+    let rawHtmlTag = null
+    let listContinuationIndent = null
+
+    function stripHtmlComments(value) {
+      let current = value
+      while (true) {
+        if (htmlComment) {
+          const end = current.indexOf('-->')
+          if (end < 0) return ''
+          htmlComment = false
+          current = current.slice(end + 3)
+        }
+        const start = current.indexOf('<!--')
+        if (start < 0) return current
+        const end = current.indexOf('-->', start + 4)
+        if (end < 0) {
+          htmlComment = true
+          return current.slice(0, start)
+        }
+        current = `${current.slice(0, start)}${current.slice(end + 3)}`
+      }
+    }
+
+    for (const [lineIndex, rawLine] of lines.entries()) {
+      let line = rawLine
+      if (/^ {0,3}>[ \t]?/.test(line)) {
+        if (!options.includeBlockquotes) {
+          visible.push('')
+          continue
+        }
+        while (/^ {0,3}>[ \t]?/.test(line)) line = line.replace(/^ {0,3}>[ \t]?/, '')
+      }
+      const listItem = line.match(/^( {0,3})(?:[*+-]|\d{1,9}[.)])([ \t]+)/)
+      if (listItem) {
+        listContinuationIndent = listItem[0].length
+        line = line.slice(listContinuationIndent)
+      } else {
+        const indentation = (line.match(/^[ \t]*/) || [''])[0].replace(/\t/g, '    ').length
+        if (line.trim() && listContinuationIndent !== null && indentation >= listContinuationIndent) {
+          line = line.slice(Math.min(listContinuationIndent, line.length))
+        } else if (line.trim() && indentation < 4) {
+          listContinuationIndent = null
+        }
+      }
+
+      if (fence) {
+        const closing = line.match(/^ {0,3}([`~]+)[ \t]*$/)
+        if (
+          closing &&
+          closing[1][0] === fence.marker &&
+          closing[1].length >= fence.length &&
+          [...closing[1]].every((character) => character === fence.marker)
+        ) fence = null
+        visible.push('')
+        continue
+      }
+      line = stripHtmlComments(line)
+      if (!line && htmlComment) {
+        visible.push('')
+        continue
+      }
+
+      if (rawHtmlTag) {
+        const closing = new RegExp(`</${rawHtmlTag}[ \t]*>`, 'i')
+        const match = line.match(closing)
+        if (!match) {
+          visible.push('')
+          continue
+        }
+        line = line.slice((match.index || 0) + match[0].length)
+        rawHtmlTag = null
+      }
+      const rawHtmlOpening = line.match(/^ {0,3}<([A-Za-z][A-Za-z0-9-]*)([^>]*)>/)
+      if (rawHtmlOpening) {
+        const tag = rawHtmlOpening[1].toLowerCase()
+        const attributes = rawHtmlOpening[2] || ''
+        const nonRendered = ['script', 'style', 'template'].includes(tag) ||
+          /(?:^|[ \t])hidden(?:[ \t=]|$)/i.test(attributes) ||
+          /(?:^|[ \t])style[ \t]*=[ \t]*(?:"[^"]*display[ \t]*:[ \t]*none|'[^']*display[ \t]*:[ \t]*none)/i.test(attributes)
+        if (nonRendered) {
+          const closing = new RegExp(`</${tag}[ \t]*>`, 'i')
+          const match = line.match(closing)
+          if (!match && !/\/[ \t]*>$/.test(rawHtmlOpening[0])) rawHtmlTag = tag
+          else if (match) line = line.slice((match.index || 0) + match[0].length)
+          else line = ''
+          if (!line.trim() || rawHtmlTag) {
+            visible.push('')
+            continue
+          }
+        }
+      }
+
+      const opening = line.match(/^ {0,3}(`{3,}|~{3,})([^\r\n]*)$/)
+      if (opening && !(opening[1][0] === '`' && opening[2].includes('`'))) {
+        fence = { marker: opening[1][0], length: opening[1].length }
+        visible.push('')
+        continue
+      }
+
+      if (referenceDefinitions.lineIndexes.has(lineIndex)) {
+        visible.push('')
+        continue
+      }
+
+      if (/^(?: {4}|\t)/.test(line)) {
+        visible.push('')
+        continue
+      }
+      visible.push(line)
+    }
+    return visible.join('\n')
+  }
+  function navigableMarkdown(value) {
+    return visibleMarkdown(value, { includeBlockquotes: true })
+  }
+  // Generated from WHATWG entities.json on 2026-08-03. It contains every
+  // semicolon-terminated HTML5 entity whose decoded value is ASCII or changes
+  // under the NFKC/default-ignorable/separator normalization used by this gate.
+  // 396 entries; decoded JSON sha256=c35a73153f9913114ae28d9148bc3301c35c1a6043feaa861ab7913c00c795db.
+  const MARKDOWN_TEXT_ENTITIES = Object.freeze(JSON.parse(zlib.brotliDecompressSync(Buffer.from(
+    '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',
+    'base64',
+  )).toString('utf8')))
+  const LITERAL_MARKDOWN_MARKER = '\ue000'
+  function decodeMarkdownTextEntity(source, index) {
+    const match = source.slice(index).match(/^&(?:#([0-9]+)|#[xX]([0-9A-Fa-f]+)|([A-Za-z][A-Za-z0-9]+));/)
+    if (!match) return null
+    if (match[1] || match[2]) {
+      const codePoint = Number.parseInt(match[1] || match[2], match[1] ? 10 : 16)
+      const invalid = !Number.isInteger(codePoint) || codePoint <= 0 || codePoint > 0x10ffff ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff)
+      return { length: match[0].length, text: invalid ? '\ufffd' : String.fromCodePoint(codePoint) }
+    }
+    const decoded = MARKDOWN_TEXT_ENTITIES[match[3]]
+    return decoded === undefined ? null : { length: match[0].length, text: decoded }
+  }
+  function matchingInlineDelimiter(source, start, opening, closing) {
+    let depth = 0
+    let quote = null
+    for (let index = start; index < source.length; index += 1) {
+      const character = source[index]
+      if (character === '\\') {
+        index += 1
+        continue
+      }
+      if (quote) {
+        if (character === quote) quote = null
+        continue
+      }
+      if ((opening === '(') && (character === '"' || character === "'")) {
+        quote = character
+        continue
+      }
+      if (character === opening) depth += 1
+      else if (character === closing) {
+        depth -= 1
+        if (depth === 0) return index
+      }
+    }
+    return -1
+  }
+  function consumeLinkWhitespace(source, start, maxLineEndings = 1) {
+    let index = start
+    let lineEndings = 0
+    while (index < source.length) {
+      if (source[index] === ' ' || source[index] === '\t') {
+        index += 1
+        continue
+      }
+      if (source[index] === '\r' || source[index] === '\n') {
+        lineEndings += 1
+        if (lineEndings > maxLineEndings) return null
+        if (source[index] === '\r' && source[index + 1] === '\n') index += 2
+        else index += 1
+        continue
+      }
+      break
+    }
+    return index
+  }
+  function linkDestinationEnd(source, start) {
+    if (source[start] === '<') {
+      for (let index = start + 1; index < source.length; index += 1) {
+        const character = source[index]
+        if (character === '\r' || character === '\n') return -1
+        if (character === '\\' && index + 1 < source.length) {
+          index += 1
+          continue
+        }
+        if (character === '<') return -1
+        if (character === '>') return index + 1
+      }
+      return -1
+    }
+    let depth = 0
+    let index = start
+    for (; index < source.length; index += 1) {
+      const character = source[index]
+      const codePoint = character.codePointAt(0)
+      if (character === '\\' && index + 1 < source.length) {
+        index += 1
+        continue
+      }
+      if (character === ' ' || character === '\t' || character === '\r' || character === '\n' || codePoint <= 0x1f || codePoint === 0x7f) break
+      if (character === '(') {
+        depth += 1
+        if (depth > 32) return -1
+      } else if (character === ')') {
+        if (depth === 0) return -1
+        depth -= 1
+      }
+    }
+    return index > start && depth === 0 ? index : -1
+  }
+  function linkTitleEnd(source, start) {
+    const opening = source[start]
+    const closing = opening === '(' ? ')' : opening
+    if (opening !== '"' && opening !== "'" && opening !== '(') return -1
+    for (let index = start + 1; index < source.length; index += 1) {
+      const character = source[index]
+      if (character === '\\' && index + 1 < source.length) {
+        index += 1
+        continue
+      }
+      if (opening === '(' && character === '(') return -1
+      if (character === closing) return index + 1
+    }
+    return -1
+  }
+  function validInlineLinkContent(source) {
+    const contentStart = consumeLinkWhitespace(source, 0)
+    if (contentStart === null) return false
+    if (contentStart === source.length) return true
+    if (contentStart > 0 && /["'(]/.test(source[contentStart])) {
+      const titleEnd = linkTitleEnd(source, contentStart)
+      if (titleEnd >= 0 && !/\r?\n[ \t]*\r?\n/.test(source.slice(contentStart, titleEnd))) {
+        const end = consumeLinkWhitespace(source, titleEnd)
+        if (end === source.length) return true
+      }
+    }
+    const destinationEnd = linkDestinationEnd(source, contentStart)
+    if (destinationEnd < 0) return false
+    const afterDestination = consumeLinkWhitespace(source, destinationEnd)
+    if (afterDestination === null) return false
+    if (afterDestination === source.length) return true
+    if (afterDestination === destinationEnd) return false
+    const titleEnd = linkTitleEnd(source, afterDestination)
+    if (titleEnd < 0 || /\r?\n[ \t]*\r?\n/.test(source.slice(afterDestination, titleEnd))) return false
+    return consumeLinkWhitespace(source, titleEnd) === source.length
+  }
+  function validReferenceDefinitionTail(source) {
+    const destinationStart = consumeLinkWhitespace(source, 0)
+    if (destinationStart === null || destinationStart === source.length) return false
+    const destinationEnd = linkDestinationEnd(source, destinationStart)
+    if (destinationEnd < 0) return false
+    const afterDestination = consumeLinkWhitespace(source, destinationEnd)
+    if (afterDestination === null) return false
+    if (afterDestination === source.length) return true
+    if (afterDestination === destinationEnd) return false
+    const titleEnd = linkTitleEnd(source, afterDestination)
+    if (titleEnd < 0 || /\r?\n[ \t]*\r?\n/.test(source.slice(afterDestination, titleEnd))) return false
+    const end = consumeLinkWhitespace(source, titleEnd, Number.POSITIVE_INFINITY)
+    return end === source.length
+  }
+  function markdownContainerPayload(rawLine) {
+    let line = rawLine
+    while (/^ {0,3}>[ \t]?/.test(line)) line = line.replace(/^ {0,3}>[ \t]?/, '')
+    const listItem = line.match(/^ {0,3}(?:[*+-]|\d{1,9}[.)])[ \t]+/)
+    if (listItem) line = line.slice(listItem[0].length)
+    return line
+  }
+  function markdownContainerLine(rawLine) {
+    let line = rawLine
+    let blockquoteDepth = 0
+    while (/^ {0,3}>[ \t]?/.test(line)) {
+      line = line.replace(/^ {0,3}>[ \t]?/, '')
+      blockquoteDepth += 1
+    }
+    const listItem = line.match(/^ {0,3}(?:[*+-]|\d{1,9}[.)])[ \t]+/)
+    if (listItem) line = line.slice(listItem[0].length)
+    return {
+      payload: line,
+      container: `quote:${blockquoteDepth}`,
+      blockquoteDepth,
+      startsList: Boolean(listItem),
+    }
+  }
+  function normalizeReferenceLabel(value) {
+    let normalized = ''
+    for (let index = 0; index < value.length;) {
+      if (value[index] === '\\' && index + 1 < value.length && /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(value[index + 1])) {
+        normalized += value[index + 1]
+        index += 2
+        continue
+      }
+      if (value[index] === '&') {
+        const entity = decodeMarkdownTextEntity(value, index)
+        if (entity) {
+          normalized += entity.text
+          index += entity.length
+          continue
+        }
+      }
+      normalized += value[index]
+      index += 1
+    }
+    return normalized
+      .trim()
+      .replace(/[ \t\r\n]+/g, ' ')
+      .toLowerCase()
+      .toUpperCase()
+  }
+  function parseMarkdownReferenceDefinitions(value) {
+    const lines = value.split(/\r?\n/)
+    const containerLines = lines.map(markdownContainerLine)
+    const payloads = containerLines.map(({ payload }) => payload)
+    const labels = new Set()
+    const lineIndexes = new Set()
+    let fence = null
+    let htmlComment = false
+    let rawHtmlTag = null
+    let paragraphQuoteDepth = null
+    for (let index = 0; index < payloads.length; index += 1) {
+      const line = payloads[index]
+      const container = containerLines[index].container
+      const blockquoteDepth = containerLines[index].blockquoteDepth
+      if (!line.trim()) {
+        paragraphQuoteDepth = null
+        continue
+      }
+      if (containerLines[index].startsList) paragraphQuoteDepth = null
+      if (fence) {
+        const closing = line.match(/^ {0,3}([`~]+)[ \t]*$/)
+        if (
+          closing &&
+          closing[1][0] === fence.marker &&
+          closing[1].length >= fence.length &&
+          [...closing[1]].every((character) => character === fence.marker)
+        ) fence = null
+        paragraphQuoteDepth = null
+        continue
+      }
+      if (htmlComment) {
+        if (line.includes('-->')) htmlComment = false
+        paragraphQuoteDepth = null
+        continue
+      }
+      const commentStart = line.indexOf('<!--')
+      if (commentStart >= 0) {
+        if (line.indexOf('-->', commentStart + 4) < 0) htmlComment = true
+        paragraphQuoteDepth = null
+        continue
+      }
+      if (rawHtmlTag) {
+        if (new RegExp(`</${rawHtmlTag}[ \\t]*>`, 'i').test(line)) rawHtmlTag = null
+        paragraphQuoteDepth = null
+        continue
+      }
+      const rawHtmlOpening = line.match(/^ {0,3}<(script|pre|style|template)(?=[ \t>])[^>]*>/i)
+      if (rawHtmlOpening) {
+        const tag = rawHtmlOpening[1].toLowerCase()
+        if (!new RegExp(`</${tag}[ \\t]*>`, 'i').test(line)) rawHtmlTag = tag
+        paragraphQuoteDepth = null
+        continue
+      }
+      const opening = line.match(/^ {0,3}(`{3,}|~{3,})([^\r\n]*)$/)
+      if (opening && !(opening[1][0] === '`' && opening[2].includes('`'))) {
+        fence = { marker: opening[1][0], length: opening[1].length }
+        paragraphQuoteDepth = null
+        continue
+      }
+      const definition = line.match(/^ {0,3}\[((?:\\.|[^\]\\\r\n]){1,999})\]:[ \t]*(.*)$/)
+      const continuesParagraph = paragraphQuoteDepth !== null && blockquoteDepth <= paragraphQuoteDepth
+      if (!definition || continuesParagraph) {
+        if (/^ {0,3}(?:#{1,6}(?:[ \t]+|$)|(?:\*[ \t]*){3,}[ \t]*$|(?:_[ \t]*){3,}[ \t]*$|(?:-[ \t]*){3,}[ \t]*$)/.test(line)) {
+          paragraphQuoteDepth = null
+        } else {
+          paragraphQuoteDepth = blockquoteDepth
+        }
+        continue
+      }
+      const candidateLines = [definition[2]]
+      let parsed = false
+      for (let end = index; end < Math.min(payloads.length, index + 8); end += 1) {
+        if (end > index) {
+          if (!payloads[end].trim()) break
+          if (containerLines[end].container !== container || containerLines[end].startsList) break
+          candidateLines.push(payloads[end])
+        }
+        if (!validReferenceDefinitionTail(candidateLines.join('\n'))) continue
+        labels.add(normalizeReferenceLabel(definition[1]))
+        for (let lineIndex = index; lineIndex <= end; lineIndex += 1) lineIndexes.add(lineIndex)
+        index = end
+        paragraphQuoteDepth = null
+        parsed = true
+        break
+      }
+      if (!parsed) paragraphQuoteDepth = blockquoteDepth
+    }
+    return { labels, lineIndexes }
+  }
+  function inlineHtmlTagEnd(source, start) {
+    if (source[start] !== '<') return -1
+    let index = start + 1
+    const closing = source[index] === '/'
+    if (closing) index += 1
+    const name = source.slice(index).match(/^[A-Za-z][A-Za-z0-9-]*/)
+    if (!name) return -1
+    index += name[0].length
+    function consumeTagWhitespace(position) {
+      let current = position
+      let lineEndings = 0
+      while (current < source.length) {
+        if (source[current] === ' ' || source[current] === '\t') current += 1
+        else if (source[current] === '\r' || source[current] === '\n') {
+          lineEndings += 1
+          if (lineEndings > 1) return null
+          if (source[current] === '\r' && source[current + 1] === '\n') current += 2
+          else current += 1
+        } else break
+      }
+      return current
+    }
+    if (closing) {
+      const end = consumeTagWhitespace(index)
+      return end !== null && source[end] === '>' ? end : -1
+    }
+    while (index < source.length) {
+      const beforeWhitespace = index
+      const afterWhitespace = consumeTagWhitespace(index)
+      if (afterWhitespace === null) return -1
+      index = afterWhitespace
+      if (source[index] === '>') return index
+      if (source[index] === '/' && source[index + 1] === '>') return index + 1
+      if (index === beforeWhitespace) return -1
+      const attribute = source.slice(index).match(/^[A-Za-z_:][A-Za-z0-9_.:-]*/)
+      if (!attribute) return -1
+      index += attribute[0].length
+      const afterName = consumeTagWhitespace(index)
+      if (afterName === null) return -1
+      index = afterName
+      if (source[index] !== '=') continue
+      index += 1
+      const valueStart = consumeTagWhitespace(index)
+      if (valueStart === null || valueStart >= source.length) return -1
+      index = valueStart
+      if (source[index] === '"' || source[index] === "'") {
+        const quote = source[index]
+        index += 1
+        while (index < source.length && source[index] !== quote) index += 1
+        if (source[index] !== quote) return -1
+        index += 1
+      } else {
+        const value = source.slice(index).match(/^[^ \t\r\n"'=<>`]+/)
+        if (!value) return -1
+        index += value[0].length
+      }
+    }
+    return -1
+  }
+  function codeSpanAt(source, start) {
+    let runLength = 0
+    while (source[start + runLength] === '`') runLength += 1
+    for (let index = start + runLength; index < source.length;) {
+      if (source[index] !== '`') {
+        index += 1
+        continue
+      }
+      let closingLength = 0
+      while (source[index + closingLength] === '`') closingLength += 1
+      if (closingLength === runLength) {
+        let content = source.slice(start + runLength, index).replace(/\r?\n/g, ' ')
+        if (/^ .* $/.test(content) && /[^ ]/.test(content)) content = content.slice(1, -1)
+        return { end: index + closingLength, content }
+      }
+      index += closingLength
+    }
+    return null
+  }
+  function protectLiteralMarkdownMarkers(value) {
+    return value.replace(/[`*_]/g, LITERAL_MARKDOWN_MARKER)
+  }
+  function hiddenSyntaxLineBreaks(value) {
+    return value.replace(/[^\r\n]/g, '')
+  }
+  function renderedMarkdownInlineText(source, options = {}) {
+    const referenceLabels = options.referenceLabels || new Set()
+    let visible = ''
+    for (let index = 0; index < source.length;) {
+      const character = source[index]
+      if (character === '`') {
+        const codeSpan = codeSpanAt(source, index)
+        if (codeSpan) {
+          visible += protectLiteralMarkdownMarkers(codeSpan.content)
+          index = codeSpan.end
+          continue
+        }
+      }
+      if (
+        character === '\\' &&
+        index + 1 < source.length &&
+        /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/.test(source[index + 1])
+      ) {
+        visible += /[`*_]/.test(source[index + 1]) ? LITERAL_MARKDOWN_MARKER : source[index + 1]
+        index += 2
+        continue
+      }
+      const labelStart = character === '[' ? index : (character === '!' && source[index + 1] === '[' ? index + 1 : -1)
+      if (labelStart >= 0) {
+        const labelEnd = matchingInlineDelimiter(source, labelStart, '[', ']')
+        if (labelEnd >= 0) {
+          const label = source.slice(labelStart + 1, labelEnd)
+          visible += renderedMarkdownInlineText(label, options)
+          let next = labelEnd + 1
+          if (source[next] === '(') {
+            const destinationEnd = matchingInlineDelimiter(source, next, '(', ')')
+            if (destinationEnd >= 0 && validInlineLinkContent(source.slice(next + 1, destinationEnd))) {
+              visible += hiddenSyntaxLineBreaks(source.slice(next, destinationEnd + 1))
+              next = destinationEnd + 1
+            }
+          } else if (source[next] === '[') {
+            const referenceEnd = matchingInlineDelimiter(source, next, '[', ']')
+            if (referenceEnd >= 0) {
+              const explicitReference = source.slice(next + 1, referenceEnd)
+              const reference = normalizeReferenceLabel(explicitReference || label)
+              if (referenceLabels.has(reference)) {
+                visible += hiddenSyntaxLineBreaks(source.slice(next, referenceEnd + 1))
+                next = referenceEnd + 1
+              }
+            }
+          }
+          index = next
+          continue
+        }
+      }
+      if (character === '<') {
+        const tagEnd = inlineHtmlTagEnd(source, index)
+        if (tagEnd >= 0) {
+          visible += hiddenSyntaxLineBreaks(source.slice(index, tagEnd + 1))
+          index = tagEnd + 1
+          continue
+        }
+      }
+      if (character === '&') {
+        const entity = decodeMarkdownTextEntity(source, index)
+        if (entity) {
+          visible += entity.text.replace(/[\t\n\f\r ]+/g, ' ')
+          index += entity.length
+          continue
+        }
+      }
+      visible += character
+      index += 1
+    }
+    return visible
+  }
+  function renderedMarkdownText(value, options = {}) {
+    return renderedMarkdownInlineText(value, options)
+  }
+  function normalizeAtxHeading(line) {
+    return line.trim().replace(/[ \t]+#+[ \t]*$/, '')
+  }
+  function firstVisibleLine(value) {
+    return visibleMarkdown(value).split(/\r?\n/).map(normalizeAtxHeading).find(Boolean) || ''
+  }
+  function visibleHeadingLines(value) {
+    return visibleMarkdown(value).split(/\r?\n/).map(normalizeAtxHeading).filter((line) => /^##[ \t]/.test(line))
+  }
+  function countExactPathReferences(value, target) {
+    const canonicalTarget = String(target || '')
+      .normalize('NFKC')
+      .replace(/\p{Default_Ignorable_Code_Point}/gu, '')
+    let remaining = String(value || '')
+      .normalize('NFKC')
+      .replace(/\p{Default_Ignorable_Code_Point}/gu, '')
+    let count = 0
+    remaining = remaining.replace(
+      /!?\[(?:\\.|[^\]\\\r\n])*\]\([ \t]*(?:<([^>\r\n]+)>|([^\s)\r\n]+))(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^)]*\)))?[ \t]*\)/g,
+      (match, enclosedDestination, bareDestination) => {
+        const destination = (enclosedDestination || bareDestination || '').trim()
+        if (destination === canonicalTarget) count += 1
+        return ' '.repeat(match.length)
+      },
+    )
+    remaining = remaining.replace(/(`+)([^`\r\n]*)\1/g, (match, _ticks, content) => {
+      if (content.trim() === canonicalTarget) count += 1
+      return ' '.repeat(match.length)
+    })
+    remaining = remaining.replace(/!?\[(?:\\.|[^\]\\\r\n])+\](?:\[(?:\\.|[^\]\\\r\n])*\])?/g, (match) => ' '.repeat(match.length))
+    const pathCharacter = /[\p{L}\p{N}\p{M}._~:@%/?#=-]/u
+    let offset = 0
+    while (offset <= remaining.length - canonicalTarget.length) {
+      const index = remaining.indexOf(canonicalTarget, offset)
+      if (index < 0) break
+      const before = index > 0 ? remaining[index - 1] : ''
+      const afterIndex = index + canonicalTarget.length
+      const after = afterIndex < remaining.length ? remaining[afterIndex] : ''
+      if ((!before || !pathCharacter.test(before)) && (!after || !pathCharacter.test(after))) count += 1
+      offset = index + canonicalTarget.length
+    }
+    return count
+  }
+
   const entryResolution = {}
   for (const entry of ENTRYPOINTS) {
     const text = contents[entry] || ''
-    const references = (text.match(new RegExp(CONTRACT_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length
+    const references = countExactPathReferences(navigableMarkdown(text), CONTRACT_PATH)
     entryResolution[entry] = { contractPath: references ? CONTRACT_PATH : null, references, lines: text.split('\n').length }
     if (references !== 1) addCheck(checks, `adapter.${entry}`, 'FAIL', `${entry} must point exactly once to ${CONTRACT_PATH}`, [`found ${references} reference(s)`])
     else if (entryResolution[entry].lines > 80) addCheck(checks, `adapter.${entry}`, 'FAIL', `${entry} is not a thin adapter`, [`${entryResolution[entry].lines} lines; maximum 80`])
     else addCheck(checks, `adapter.${entry}`, 'PASS', `${entry} resolves to the shared contract`)
+  }
+  function requireHeadingPatterns(findings, file, headings, requirements) {
+    for (const [label, pattern] of requirements) {
+      if (!headings.some((heading) => pattern.test(heading))) findings.push(`${file}: missing visible structure heading ${label}`)
+    }
+  }
+  function exactHeadingPattern(heading) {
+    return new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
+  }
+  function requireMeaningfulSections(findings, file, value, requirements) {
+    const lines = visibleMarkdown(value).split(/\r?\n/)
+    for (const [label, pattern] of requirements) {
+      const start = lines.findIndex((line) => pattern.test(normalizeAtxHeading(line)))
+      if (start < 0) continue
+      const body = []
+      for (let index = start + 1; index < lines.length; index += 1) {
+        const line = lines[index].trim()
+        if (/^##[ \t]/.test(normalizeAtxHeading(line))) break
+        if (line) body.push(line)
+      }
+      const rawBody = body.join(' ')
+      const normalizedBody = rawBody
+        .replace(new RegExp(QUALITY_LOOP_CONTRACT_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '')
+        .replace(/[`*_#|>:[\]()（）-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      const compactBody = normalizedBody.replace(/\s+/g, '').toLocaleLowerCase('en-US')
+      const distinctCharacters = new Set([...compactBody]).size
+      const placeholderOnly = /^(?:TODO\b|TBD\b|TBC\b|FIXME\b|XXX\b|placeholder\b|coming[ \t]+soon\b|details?[ \t]+will[ \t]+be[ \t]+(?:added|completed|filled)\b|to be (?:added|completed|confirmed|determined|done)\b|占位|待补|待完善|待定|待确认|稍后补|后续补)/i.test(normalizedBody)
+      const lowDiversity = compactBody.length >= 8 && distinctCharacters <= Math.max(1, Math.floor(compactBody.length / 8))
+      if (placeholderOnly || lowDiversity || normalizedBody.length < 8) {
+        findings.push(`${file}: visible section ${label} has no non-placeholder body evidence`)
+      }
+    }
+  }
+
+  const qualityLoopFindings = []
+  for (const file of [...ENTRYPOINTS, CONTRACT_PATH]) {
+    const references = countExactPathReferences(navigableMarkdown(contents[file] || ''), QUALITY_LOOP_OVERVIEW_PATH)
+    if (references !== 1) qualityLoopFindings.push(`${file}: expected exactly one ${QUALITY_LOOP_OVERVIEW_PATH} route; found ${references}`)
+  }
+  const qualityLoopOverview = visibleMarkdown(contents[QUALITY_LOOP_OVERVIEW_PATH] || '')
+  const qualityLoopOverviewRoutes = navigableMarkdown(contents[QUALITY_LOOP_OVERVIEW_PATH] || '')
+  const overviewHeading = firstVisibleLine(contents[QUALITY_LOOP_OVERVIEW_PATH] || '')
+  if (overviewHeading !== '# COREONE 质量 Loop 总览（唯一路由入口）') {
+    qualityLoopFindings.push(`${QUALITY_LOOP_OVERVIEW_PATH}: identity heading mismatch`)
+  }
+  const overviewStructure = [
+    ['## 家族地图', /^## 家族地图$/],
+    ['## 主链', /^## 主链$/],
+    ['## 路由表', /^## 路由表$/],
+    ['## 给 PM 的大白话', /^## 给 PM 的大白话$/],
+  ]
+  requireHeadingPatterns(
+    qualityLoopFindings,
+    QUALITY_LOOP_OVERVIEW_PATH,
+    visibleHeadingLines(contents[QUALITY_LOOP_OVERVIEW_PATH] || ''),
+    overviewStructure,
+  )
+  requireMeaningfulSections(qualityLoopFindings, QUALITY_LOOP_OVERVIEW_PATH, contents[QUALITY_LOOP_OVERVIEW_PATH] || '', overviewStructure)
+  const contractRoutes = countExactPathReferences(qualityLoopOverviewRoutes, QUALITY_LOOP_CONTRACT_PATH)
+  if (contractRoutes !== 1) {
+    qualityLoopFindings.push(`${QUALITY_LOOP_OVERVIEW_PATH}: expected exactly one ${QUALITY_LOOP_CONTRACT_PATH} route; found ${contractRoutes}`)
+  }
+  const qualityLoopContractHeading = firstVisibleLine(contents[QUALITY_LOOP_CONTRACT_PATH] || '')
+  if (qualityLoopContractHeading !== '# COREONE 质量 Loop 契约') {
+    qualityLoopFindings.push(`${QUALITY_LOOP_CONTRACT_PATH}: identity heading mismatch`)
+  }
+  const contractStructure = [
+    ['## 0. 家族地图', exactHeadingPattern('## 0. 家族地图（读这一段就知道去哪）')],
+    ['## 1. 六步骨架', exactHeadingPattern('## 1. 六步骨架（每一轮都走，多数由 AI 独自走）')],
+    ['## 6. 复核堆栈', exactHeadingPattern('## 6. 复核堆栈 L0 / L1（替换旧草稿 5 处散写的「强制异构复核」）')],
+    ['## 7. 共享护栏', exactHeadingPattern('## 7. 共享护栏（防跑偏 / 空转 / 打转 / 偷改 / 漂移）')],
+  ]
+  requireHeadingPatterns(
+    qualityLoopFindings,
+    QUALITY_LOOP_CONTRACT_PATH,
+    visibleHeadingLines(contents[QUALITY_LOOP_CONTRACT_PATH] || ''),
+    contractStructure,
+  )
+  requireMeaningfulSections(qualityLoopFindings, QUALITY_LOOP_CONTRACT_PATH, contents[QUALITY_LOOP_CONTRACT_PATH] || '', contractStructure)
+  const stageHeadings = {
+    'docs/COREONE-PRD质量Loop-2026-07-12.md': [
+      '## 0. 位置',
+      '## 1. 本阶段增量（契约之外，PRD 特有）',
+      '## 2. PRD 特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+      '## 4. 会话注入块（开工贴给 AI）',
+      '## 5. 给 PM 的大白话',
+    ],
+    'docs/COREONE-前端Mockup质量Loop-2026-07-12.md': [
+      '## 0. 位置',
+      '## 1. 本阶段增量（契约之外，Mockup 特有）',
+      '## 2. Mockup 特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+      '## 4. 会话注入块（开工贴给 AI）',
+      '## 5. 给 PM 的大白话',
+    ],
+    'docs/COREONE-写码质量Loop-2026-07-12.md': [
+      '## 0. 位置 + 分档',
+      '## 1. 本阶段增量（契约之外，写码特有）',
+      '## 2. 写码特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+      '## 4. 会话注入块（开工贴给 AI）',
+      '## 5. 给 PM 的大白话',
+    ],
+    'docs/COREONE-真跑验收质量Loop-2026-07-12.md': [
+      '## 0. 位置',
+      '## 1. 本阶段增量（契约之外，验收特有）',
+      '## 2. 验收特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+      '## 4. 会话注入块（开工贴给 AI）',
+      '## 5. 给 PM 的大白话',
+    ],
+    'docs/COREONE-报告结论质量Loop-2026-07-12.md': [
+      '## 0. 位置与使命',
+      '## 1. 本阶段增量（契约之外，报告特有）',
+      '## 2. 报告特有退出追加项（叠加契约「通用定稿退出模板」，不重写那四条）',
+      '## 5. 会话注入块（开工贴给 AI）',
+      '## 6. 给 PM 的大白话',
+    ],
+  }
+  for (const [file, expectedHeading] of QUALITY_LOOP_STAGE_ENTRIES) {
+    const overviewRoutes = countExactPathReferences(qualityLoopOverviewRoutes, file)
+    if (overviewRoutes !== 1) {
+      qualityLoopFindings.push(`${QUALITY_LOOP_OVERVIEW_PATH}: expected exactly one ${file} route; found ${overviewRoutes}`)
+    }
+    const stageEntry = navigableMarkdown(contents[file] || '')
+    if (firstVisibleLine(contents[file] || '') !== expectedHeading) {
+      qualityLoopFindings.push(`${file}: identity heading mismatch`)
+    }
+    const expectedSections = stageHeadings[file] || []
+    const stageStructure = [
+      ['## 0. 位置', exactHeadingPattern(expectedSections[0] || '')],
+      ['## 1. 本阶段增量', exactHeadingPattern(expectedSections[1] || '')],
+      ['## 2. 退出追加项', exactHeadingPattern(expectedSections[2] || '')],
+      ['会话注入块', exactHeadingPattern(expectedSections[3] || '')],
+      ['给 PM 的大白话', exactHeadingPattern(expectedSections[4] || '')],
+    ]
+    requireHeadingPatterns(
+      qualityLoopFindings,
+      file,
+      visibleHeadingLines(contents[file] || ''),
+      stageStructure,
+    )
+    requireMeaningfulSections(qualityLoopFindings, file, contents[file] || '', stageStructure.filter(([label]) => label !== '会话注入块'))
+    const contractReferences = countExactPathReferences(stageEntry, QUALITY_LOOP_CONTRACT_PATH)
+    if (contractReferences !== 1) {
+      qualityLoopFindings.push(`${file}: expected exactly one ${QUALITY_LOOP_CONTRACT_PATH} route; found ${contractReferences}`)
+    }
+  }
+  if (qualityLoopFindings.length) {
+    addCheck(checks, 'authority.quality-loop-route', 'FAIL', 'quality Loop authority identity or route has drifted', qualityLoopFindings)
+  } else {
+    addCheck(checks, 'authority.quality-loop-route', 'PASS', 'entrypoints and operating contract resolve through the canonical quality Loop overview to its contract and five stage entries')
   }
 
   const supervision = contents[CLAUDE_CLI_SUPERVISION_PATH] || ''
@@ -2358,8 +3140,8 @@ function inspectAuthority(root, args, checks) {
     ...inspectClaudeSupervisorAssets(root, source, contents),
   )
   for (const file of [...ENTRYPOINTS, CONTRACT_PATH, CLAUDE_COREONE_SKILL_PATH]) {
-    const text = contents[file] || ''
-    const routes = text.split(CLAUDE_CLI_SUPERVISION_PATH).length - 1
+    const text = navigableMarkdown(contents[file] || '')
+    const routes = countExactPathReferences(text, CLAUDE_CLI_SUPERVISION_PATH)
     if (routes !== 1) supervisionFindings.push(`${file}: expected exactly one ${CLAUDE_CLI_SUPERVISION_PATH} route; found ${routes}`)
   }
   if (supervisionFindings.length) {
@@ -2398,12 +3180,42 @@ function inspectAuthority(root, args, checks) {
   if (highRiskFindings.length) addCheck(checks, 'drift.high-risk-rules', 'FAIL', 'high-risk retired instructions found in active entry documents', highRiskFindings)
   else addCheck(checks, 'drift.high-risk-rules', 'PASS', 'no retired agent/workbench/direct-push/bulk-stage instruction in active entries')
 
-  const stableFiles = ['AGENTS.md', 'CLAUDE.md', CONTRACT_PATH, '.claude/rules/pr-governance.md', ...PM_AI_WORK_MODEL_FILES]
+  const stableFiles = [
+    'AGENTS.md',
+    'CLAUDE.md',
+    CONTRACT_PATH,
+    '.claude/rules/pr-governance.md',
+    '.claude/rules/codex-cli-usage.md',
+    ...PM_AI_WORK_MODEL_FILES,
+    QUALITY_LOOP_OVERVIEW_PATH,
+    'README.md',
+  ]
+  const currentCiStableFiles = [
+    ...stableFiles,
+    QUALITY_LOOP_CONTRACT_PATH,
+    ...QUALITY_LOOP_STAGE_ENTRIES.map(([file]) => file),
+  ]
+  function canonicalizeGovernanceLine(value) {
+    return String(value || '')
+      .normalize('NFKC')
+      .replace(/\p{Default_Ignorable_Code_Point}/gu, '')
+      .replace(/\p{Z}/gu, ' ')
+  }
+  function stableFactText(file, options = {}) {
+    const text = contents[file] || ''
+    if (!/(?:^|\/)(?:[^/]+\.md|AGENTS\.md|CLAUDE\.md)$/i.test(file)) return text
+    const navigable = navigableMarkdown(text)
+    if (options.renderInline === false) return navigable
+    const referenceDefinitions = parseMarkdownReferenceDefinitions(text)
+    return renderedMarkdownText(navigable, { referenceLabels: referenceDefinitions.labels })
+  }
   const dynamicFindings = []
   for (const file of stableFiles) {
-    const text = contents[file] || ''
+    // SHA/PR/test-result policy also classifies link destinations and source-level wrappers.
+    // Preserve that established syntax surface; only current-CI prose needs rendered inline text.
+    const text = stableFactText(file, { renderInline: false })
     // 动态事实必须在同一行形成完整语义；逐行检查避免 `## Tests\n\n1.` 被跨段拼成计数。
-    const lines = text.split(/\r?\n/)
+    const lines = text.split(/\r?\n/).map(canonicalizeGovernanceLine)
     const plainLines = lines.map((line) => line.replace(/[`*_]/g, ''))
     // 裸值只把完整 40-hex Git object id 当 SHA；7-39 hex 必须有 Git 语义上下文或 commit URL。
     // 这样既抓 short SHA，又不把 compact UUID / MD5 ETag 当成提交。
@@ -2447,13 +3259,144 @@ function inspectAuthority(root, args, checks) {
       dynamicFindings.push(`${file}: literal test count`)
     }
   }
+  function classifyCurrentCiClaim(rawClause) {
+    const clause = canonicalizeGovernanceLine(rawClause)
+      .replace(/[`*_]/g, '')
+      .trim()
+    if (!clause) return null
+    function isNegatedMatch(value) {
+      return (
+        /\b(?:is|are)[ \t]+not[ \t]+(?:an?[ \t]+)?required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i.test(value) ||
+        /\b(?:do|does)(?:[ \t]+not|n['’]t)(?:[ \t]+[A-Za-z]+ly)?[ \t]+(?:include|contain)\b/i.test(value) ||
+        /\bneither\b[^\r\n,，]{0,120}\b(?:is|are|remains?)[ \t]+(?:an?[ \t]+)?required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i.test(value) ||
+        /\bneither\b[^\r\n,，]{0,120}\bnor\b/i.test(value) ||
+        /\bnone[ \t]+of[ \t]+(?:the[ \t]+)?required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i.test(value) ||
+        /(?:不是|并非|未被|没有被|不表示|不代表)[^\r\n]{0,80}\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)?\b/i.test(value) ||
+        /(?:不包含|不包括)/.test(value)
+      )
+    }
+    function localNegationPrefix(matchIndex) {
+      const prefix = clause.slice(0, matchIndex)
+      const boundaries = [...prefix.matchAll(/[,，]|\b(?:and|or|but|however|yet|while|whereas)\b|且|并(?:且)?|以及|或(?:者)?|而(?:且|是)?|但(?:是)?|不过|然而/gi)]
+      const boundary = boundaries.at(-1)
+      return boundary ? prefix.slice(boundary.index + boundary[0].length) : prefix
+    }
+    function hasCompleteCiPredicate(value) {
+      return (
+        patterns.some(([, pattern]) => pattern.test(value)) ||
+        /\b[A-Za-z0-9_.-]+\b[ \t]+(?:is|are)[ \t]+not[ \t]+(?:an?[ \t]+)?required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i.test(value) ||
+        /\b(?:required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?))\b[^\r\n]{0,30}\b(?:do|does)[ \t]+not[ \t]+(?:include|contain)\b/i.test(value) ||
+        /\b[A-Za-z0-9_.-]+\b[^\r\n]{0,30}(?:不是|并非|未被|没有被)[^\r\n]{0,30}\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)?\b/i.test(value)
+      )
+    }
+    function localPrefix(matchIndex) {
+      const prefix = clause.slice(0, matchIndex)
+      const boundaries = [...prefix.matchAll(/\b(?:but|however|yet|while|whereas)\b|而(?:且|是)?|但(?:是)?|不过|然而/gi)]
+      const boundary = boundaries.at(-1)
+      let scoped = boundary ? prefix.slice(boundary.index + boundary[0].length) : prefix
+      const questions = [...scoped.matchAll(/\bwhether\b|是否/gi)]
+      const question = questions.at(-1)
+      if (question) {
+        const questionEnd = question.index + question[0].length
+        const outerConditional = /\bif\b|如果|若/i.test(scoped.slice(0, question.index))
+        const strongBoundaries = [...scoped.matchAll(/[.。!?！？:：—]/g)].filter((item) => item.index > questionEnd)
+        const strongBoundary = strongBoundaries.at(-1)
+        const questionBody = strongBoundary ? scoped.slice(questionEnd, strongBoundary.index).trim() : ''
+        if (strongBoundary && questionBody) {
+          scoped = scoped.slice(strongBoundary.index + strongBoundary[0].length)
+        } else if (!outerConditional) {
+          const coordinators = [...scoped.matchAll(/\b(?:and|or)\b|并(?:且)?|以及|或(?:者)?|而(?:且|是)?/gi)]
+            .filter((item) => item.index > questionEnd && item.index < matchIndex)
+          const completedCoordinator = coordinators.find((item) => (
+            hasCompleteCiPredicate(scoped.slice(questionEnd, item.index))
+          ))
+          if (completedCoordinator) {
+            scoped = scoped.slice(completedCoordinator.index + completedCoordinator[0].length)
+          }
+          const commas = [...scoped.matchAll(/[,，]/g)].filter((item) => item.index > question.index)
+          const comma = commas.at(-1)
+          if (comma) scoped = scoped.slice(comma.index + comma[0].length)
+        }
+      }
+      return scoped
+    }
+    const patterns = [
+      ['required-context-assignment', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b(?:(?!\b(?:is|are|remain|include|includes|contain|contains|listed|not|no|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject|must|should|may|can|could|would|if|whether|query|ask)\b)[^:=\r\n]){0,40}(?:=|:)[ \t]*(?!(?:none|disabled|unknown|unverified|undetermined|unspecified|unset|dynamic|variable|runtime|live|subject|query|check|verify|ask|must|should|may|can|could|would|if|whether)\b)[A-Za-z0-9_.-]+\b/i],
+      ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[ \t]+(?:is|are)[ \t]+(?:(?:currently|still)[ \t]+)?(?:an?[ \t]+)?required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
+      ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[ \t]+(?:remains?|continues?[ \t]+to[ \t]+be)[ \t]+(?:an?[ \t]+)?required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
+      ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[ \t]*(?:已是|已经是|当前是|现为|是|为)[ \t]*\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
+      ['required-context-predicate', /\b[A-Za-z0-9_.-]+\b[^\r\n]{0,40}(?:已是|已经是|当前是|现为|[ \t](?:是|为)[ \t])[^\r\n]{0,40}\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b/i],
+      ['required-context-stability', /\brequired(?:[ \t]+status)?[ \t]+contexts?\b[^\r\n]{0,40}(?:不变|unchanged|仍(?:为|是)|保持)/i],
+      ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,20}\b(?:include|includes|contain|contains|are[ \t]+listed[ \t]+as)\b/i],
+      ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b(?:(?!\b(?:is|are|remain|include|includes|contain|contains|listed|not|no|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject|must|should|may|can|could|would|if|whether|query|ask)\b)[^:=\r\n]){0,40}\b(?:are|remain)[ \t]*(?:[:=][ \t]*)?(?!(?:not|none|unknown|unverified|queried|determined|undetermined|unspecified|unset|dynamic|variable|runtime|live|subject|query|check|verify|ask|must|should|may|can|could|would|if|whether)\b)[A-Za-z0-9_.-]+\b/i],
+      ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[ \t]+(?:currently|still)[ \t]+(?:are|remain)[ \t]+(?!(?:not|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject)\b)[A-Za-z0-9_.-]+\b/i],
+      ['required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,20}(?:包含|包括|列为)/i],
+      ['current-required-context-list', /\b(?:current(?:ly)?|active)[ \t]+required(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,40}\b(?:include|includes|contain|contains|are[ \t]+(?!(?:not|none|unknown|unverified|queried|determined|dynamic|variable|runtime|live|subject)\b)[A-Za-z0-9_.-]+\b)/i],
+      ['current-required-context-list', /\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,20}\bcurrently\b[^\r\n]{0,20}\b(?:include|includes|contain|contains)\b/i],
+      ['current-required-context-list', /(?:当前|现有|目前)[^\r\n]{0,20}\brequired(?:[ \t]+status)?[ \t]+(?:checks?|contexts?)\b[^\r\n]{0,40}(?:包含|包括|现为|当前为)/i],
+      ['current-test-snapshot', /(?:\bcurrent(?:ly)?\b|当前|现有|目前)[^\r\n]{0,50}(?:\b\d+[ \t]*(?:tests?|test[- \t]+cases?)\b|\d+[ \t]*(?:(?:个|项|条|例|套)[ \t]*)?测试)/i],
+      ['current-test-snapshot', /(?:\bcurrent(?:ly)?\b|当前|现有|目前)[^\r\n]{0,40}(?:tests?[- \t]+count|test[- \t]+cases?(?:[- \t]+count)?|测试(?:数量|总数|用例数)?)[^\r\n]{0,20}\b\d+\b/i],
+      ['current-test-snapshot', /\bcurrent(?:ly)?[ \t]+test[ \t]+suite\b[^\r\n]{0,40}\b(?:has|contains|includes|totals?|is|are)[ \t]+\d+[ \t]+(?:test[ \t]+)?cases?\b/i],
+      ['current-test-snapshot', /\bthere[ \t]+(?:is|are)[ \t]+currently[ \t]+\d+[ \t]+(?:tests?|cases?)[ \t]+in[ \t]+the[ \t]+test[ \t]+suite\b/i],
+      ['current-test-snapshot', /\b(?:tests?|test[- \t]+cases?)\b[^\r\n]{0,20}\bcurrent(?:ly)?\b[^\r\n]{0,20}\b(?:total|count|number|are|is)?[ \t]*\d+\b/i],
+      ['current-test-snapshot', /(?:测试用例|测试)[^\r\n]{0,20}(?:当前|现有|目前)[^\r\n]{0,20}\b\d+\b[ \t]*(?:个|项|条|例|套)?/i],
+      ['missing-protection-assertion', /(?:master|main|默认分支)[^\r\n]{0,100}(?:当前[ \t]*)?(?:无|没有|不存在)[^\r\n]{0,80}(?:branch[ \t]+protection|rulesets?|required[ \t]+checks?)/i],
+      ['missing-protection-assertion', /(?:master|main)[^\r\n]{0,40}(?:currently[ \t]+)?(?:has|have)[ \t]+no[ \t]+(?:branch[ \t]+protection|rulesets?|required[ \t]+checks?)/i],
+      ['disabled-protection-assertion', /(?:branch[ \t]+protection|rulesets?)[ \t]*(?:为|=|is|are)[ \t]*(?:\[\]|空|none|disabled|未启用)/i],
+    ]
+    for (const [category, pattern] of patterns) {
+      const matcher = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`)
+      for (const match of clause.matchAll(matcher)) {
+        const negationContext = `${localNegationPrefix(match.index)}${match[0]}`
+        if (isNegatedMatch(match[0]) || isNegatedMatch(negationContext)) continue
+        const suffix = clause.slice(match.index + match[0].length)
+        const directQuestionTail = /^[ \t]*[?？][ \t]*$/u.test(suffix)
+        const particleQuestionTail = /^[ \t]*(?:吗|么|呢)[ \t]*(?:[?？][ \t]*)?(?:[,，][ \t]*(?:(?:query|check|verify)\b|查询|回读|现场)[^\r\n]*)?$/iu.test(suffix)
+        if (directQuestionTail || particleQuestionTail) continue
+        const prefix = localPrefix(match.index)
+        if (/\b(?:if|whether)\b/i.test(prefix) || /(?:如果|若|是否)/.test(prefix)) continue
+        return category
+      }
+    }
+    return null
+  }
+  function splitCurrentCiClauses(value) {
+    const clauses = []
+    const matcher = /[;；。!?！？\u2028\u2029]+|\.(?=[ \t]*(?:$|[A-Z#]))/g
+    let start = 0
+    for (const match of value.matchAll(matcher)) {
+      const end = (match.index || 0) + match[0].length
+      clauses.push(value.slice(start, end))
+      start = end
+    }
+    clauses.push(value.slice(start))
+    return clauses
+  }
+  for (const file of [...new Set([...currentCiStableFiles, ...CURRENT_CI_ENFORCEMENT_FILES])]) {
+    const renderedLines = stableFactText(file).split(/\r?\n/)
+    const sourceLines = String(contents[file] || '').split(/\r?\n/)
+    const lineCount = Math.max(renderedLines.length, sourceLines.length)
+    for (let index = 0; index < lineCount; index += 1) {
+      const renderedCategory = splitCurrentCiClauses(canonicalizeGovernanceLine(renderedLines[index] || ''))
+        .map((clause) => classifyCurrentCiClaim(clause))
+        .find(Boolean)
+      const sourceCategory = renderedCategory ? null : splitCurrentCiClauses(canonicalizeGovernanceLine(sourceLines[index] || ''))
+        .map((clause) => classifyCurrentCiClaim(clause))
+        .find(Boolean)
+      const category = renderedCategory || sourceCategory
+      if (category) {
+        const evidence = renderedCategory ? category : `${category}; source-fail-closed`
+        dynamicFindings.push(`${file}: current CI enforcement claim at line ${index + 1} [${evidence}]`)
+      }
+    }
+  }
   const governance = contents['.claude/rules/pr-governance.md'] || ''
   const liveLedgerHeading = /^#{1,6}[ \t]*(?:(?:live|current|active)[ \t]+PR[ \t]+(?:ledger|board|status)|(?:当前|实时|活跃)[ \t]*PR[ \t]*(?:台账|看板|状态))/im.test(governance)
   const liveLedgerTable = /^\|[^\r\n|]*(?:PR|编号)[^\r\n]*\|[^\r\n|]*(?:Status|状态)[^\r\n]*\|/im.test(governance) &&
     /^\|[^\r\n|]*#?\d+[^\r\n|]*\|[^\r\n|]*(?:OPEN|MERGED|CLOSED|BLOCKED|已合并|未合并|已关闭|阻塞)[^\r\n|]*\|/im.test(governance)
   if (liveLedgerHeading || liveLedgerTable || /活跃\s*PR\s*看板|\b(?:OPEN|MERGED|BLOCKED)\s*\(20\d\d-/i.test(governance)) dynamicFindings.push('.claude/rules/pr-governance.md: live-status ledger')
   if (dynamicFindings.length) addCheck(checks, 'drift.dynamic-facts', 'FAIL', 'dynamic runtime facts found in stable authority documents', dynamicFindings)
-  else addCheck(checks, 'drift.dynamic-facts', 'PASS', 'stable authority documents contain no literal PR/SHA/test-count snapshot')
+  else addCheck(checks, 'drift.dynamic-facts', 'PASS', 'stable authority documents contain no literal PR/SHA/test-count snapshot or current CI-enforcement assertion')
 
   const pmDecisionFindings = inspectFrozenPmDecisions(contents[PM_DECISIONS_PATH] || '')
   if (pmDecisionFindings.length) addCheck(checks, 'drift.pm-decisions', 'FAIL', 'frozen PM decisions changed', pmDecisionFindings)
@@ -2625,5 +3568,7 @@ module.exports = {
   CLAUDE_CLI_SUPERVISOR_SELFTEST_PATH,
   CLAUDE_CLI_SUPERVISOR_RUNTIME,
   PM_DECISIONS_PATH,
+  QUALITY_LOOP_OVERVIEW_PATH,
+  QUALITY_LOOP_CONTRACT_PATH,
   AUTHORITY_FILES,
 }
