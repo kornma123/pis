@@ -3854,9 +3854,13 @@ function assertExternalClaudeCommand(processInfo, binding) {
 }
 
 function externalQuestionTextRequiresAuthority(text) {
-  return /(?:\b(?:permission|authori[sz]e|ownership|owner|github|issue|pull request|comment|write|edit|modify|push|git\s+add|open\s+(?:a\s+)?pr|create\s+(?:a\s+)?(?:commit|branch|pull request|pr|file)|delete|remove|merge|publish|deploy|release|send|scope expansion)\b|\u6743\u9650|\u6388\u6743|\u6240\u6709\u6743|\u8d23\u4efb\u4eba|\u5199\u5165|\u4fee\u6539|\u8bc4\u8bba|\u5408\u5e76|\u53d1\u5e03|\u90e8\u7f72|\u5bf9\u5916\u53d1\u9001)/i.test(
-    String(text),
-  );
+  const source = String(text);
+  const nonReadonlyPermissionRequest =
+    /\b(?:may|can|should|could|shall|would)\s+i\s+(?:please\s+)?(?!(?:inspect|read|check|query|verify|review|examine|locate|find|list|show|compare)\b)/i.test(
+      source,
+    );
+  return nonReadonlyPermissionRequest ||
+    /(?:\b(?:permission|authori[sz]e|ownership|owner|github|issue|pull request|comment|write|edit|modify|push|git\s+add|open\s+(?:a\s+)?pr|create\s+(?:a\s+)?(?:commit|branch|pull request|pr|file)|delete|remove|merge|publish|deploy|release|send|scope expansion)\b|\u6743\u9650|\u6388\u6743|\u6240\u6709\u6743|\u8d23\u4efb\u4eba|\u5199\u5165|\u4fee\u6539|\u8bc4\u8bba|\u5408\u5e76|\u53d1\u5e03|\u90e8\u7f72|\u5bf9\u5916\u53d1\u9001)/i.test(source);
 }
 
 function parseExternalReviewRecord(text) {
@@ -4311,8 +4315,15 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
       )
         ? completionCandidate
         : null;
-      const question = protocol.latest?.type === 'question'
+      const questionCandidate = protocol.latest?.type === 'question'
         ? protocol.latest
+        : null;
+      const question = questionCandidate && !snapshot.messages.some(
+        (message) =>
+          message.index > questionCandidate.message.index &&
+          isExternalControllerAnswerMessage(message),
+      )
+        ? questionCandidate
         : null;
       const complete = Boolean(completion);
       return boundResult(input, {

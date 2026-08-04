@@ -330,6 +330,9 @@ function makeExternalRuntime(options = {}) {
         messages.push({ role: 'assistant', text: canary.split('').reverse().join('') });
         transcriptSha256 = 'f'.repeat(64);
       }
+      if (purpose === 'controller-answer') {
+        messages.push({ role: 'user', text: input });
+      }
       if (purpose === 'startup-handshake-prompt') {
         stats.handshakePromptWrites += 1;
         stats.handshakePrompts.push(input);
@@ -2964,6 +2967,10 @@ module.exports = {
       'May I create a commit?',
       'Should I run git add now?',
       'May I open a PR?',
+      'May I commit these changes?',
+      'May I stage these files?',
+      'May I submit a PR?',
+      'May I make a new branch?',
     ]) {
       let autoAnswers = 0;
       let runtime = null;
@@ -2989,6 +2996,20 @@ module.exports = {
         text,
       );
     }
+
+    let safeAutoAnswers = 0;
+    const safeReadOnlyQuestion = await runExternalCase({
+      runtimeOptions: {
+        reviewAssistantText:
+          'COREONE_REVIEW_QUESTION id=q-readonly kind=evidence text=May I inspect the existing evidence path?',
+      },
+      onQuestion: async () => {
+        safeAutoAnswers += 1;
+        return { action: 'answer', text: 'Inspect the existing path only.' };
+      },
+    });
+    assert.equal(safeReadOnlyQuestion.status, 'ACTIVE');
+    assert.equal(safeAutoAnswers, 1);
 
     const state = temporaryStateFile();
     const claim = makeExternalClaim();
