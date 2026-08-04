@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
 const assert = require('node:assert/strict')
+const childProcess = require('node:child_process')
 const {
+  createGhTransport,
   LiveFactReadError,
+  resolveDependencyGraph,
   resolveLiveFacts,
 } = require('./github-live-fact-receipt.cjs')
 
@@ -217,6 +220,38 @@ function resolveAnchor(transport, extra = {}) {
     now: '2026-08-04T02:00:00.000Z',
     ...extra,
   }, transport)
+}
+
+function dependencyNode(number, options = {}) {
+  return {
+    number,
+    state: options.state || 'OPEN',
+    updatedAt: options.updatedAt || `2026-08-04T0${number % 10}:00:00Z`,
+    body: options.body || '',
+    blockedBy: { items: options.blockedBy || [], complete: options.blockedByComplete !== false, pages: 1 },
+    blocking: { items: options.blocking || [], complete: options.blockingComplete !== false, pages: 1 },
+  }
+}
+
+function makeDependencyTransport(nodes, options = {}) {
+  return {
+    issueDependencies({ number }) {
+      if (options.failNumber === number) {
+        throw new LiveFactReadError(options.failCode || 'HTTP_403', 'dependency read failed', 403)
+      }
+      const node = nodes[number]
+      if (!node) throw new LiveFactReadError('HTTP_404', `Issue #${number} not found`, 404)
+      return structuredClone(node)
+    },
+  }
+}
+
+function resolveDependencies(nodes, options = {}) {
+  return resolveDependencyGraph({
+    repository: REPO,
+    issueNumber: 124,
+    now: '2026-08-04T04:10:00.000Z',
+  }, makeDependencyTransport(nodes, options))
 }
 
 let passed = 0
@@ -554,6 +589,102 @@ test('a force-moved candidate branch invalidates the anchor receipt', () => {
   const receipt = resolveAnchor(makeTransport({ branchSha: OTHER }))
   assert.equal(receipt.verdict, 'FAIL')
   assert(receipt.diagnostics.some((item) => item.code === 'CANDIDATE_BRANCH_MOVED'))
+})
+
+test('native dependency DAG preserves direction and open versus closed blocker policy', () => {
+  const graph = resolveDependencies({
+    124: dependencyNode(124, { blockedBy: [122, 123], body: 'Depends on #122 and #123.' }),
+    122: dependencyNode(122, { state: 'CLOSED', blocking: [124] }),
+    123: dependencyNode(123, { blocking: [124] }),
+  })
+  assert.equal(graph.verdict, 'PASS')
+  assert.equal(graph.disposition, 'BLOCKED')
+  assert.deepEqual(graph.activeBlockers, [123])
+  assert.deepEqual(graph.resolvedBlockers, [122])
+  assert(graph.migrationPreview.every((item) => item.disposition === 'MAPPED'))
+})
+
+test('closed blockers release the root while reopened blockers block it again', () => {
+  const closed = resolveDependencies({
+    124: dependencyNode(124, { blockedBy: [123] }),
+    123: dependencyNode(123, { state: 'CLOSED', blocking: [124] }),
+  })
+  const reopened = resolveDependencies({
+    124: dependencyNode(124, { blockedBy: [123] }),
+    123: dependencyNode(123, { state: 'OPEN', blocking: [124] }),
+  })
+  assert.equal(closed.disposition, 'READY')
+  assert.equal(reopened.disposition, 'BLOCKED')
+})
+
+test('self-loop, two-node cycle, and reversed reciprocal edges fail closed', () => {
+  const self = resolveDependencies({ 124: dependencyNode(124, { blockedBy: [124], blocking: [124] }) })
+  const cycle = resolveDependencies({
+    124: dependencyNode(124, { blockedBy: [123], blocking: [123] }),
+    123: dependencyNode(123, { blockedBy: [124], blocking: [124] }),
+  })
+  assert.equal(self.verdict, 'FAIL')
+  assert(self.diagnostics.some((item) => item.code === 'DEPENDENCY_SELF_LOOP'))
+  assert.equal(cycle.verdict, 'FAIL')
+  assert(cycle.diagnostics.some((item) => item.code === 'DEPENDENCY_CYCLE'))
+})
+
+test('duplicate edges and missing reciprocal direction witnesses fail closed', () => {
+  const duplicate = resolveDependencies({
+    124: dependencyNode(124, { blockedBy: [123, 123] }),
+    123: dependencyNode(123, { blocking: [124] }),
+  })
+  const contradiction = resolveDependencies({
+    124: dependencyNode(124, { blockedBy: [123] }),
+    123: dependencyNode(123),
+  })
+  assert(duplicate.diagnostics.some((item) => item.code === 'DEPENDENCY_DUPLICATE_EDGE'))
+  assert(contradiction.diagnostics.some((item) => item.code === 'DEPENDENCY_DIRECTION_CONTRADICTION'))
+})
+
+test('pagination ambiguity and dependency read errors never become an empty PASS', () => {
+  const incomplete = resolveDependencies({
+    124: dependencyNode(124, { blockedBy: [123], blockedByComplete: false }),
+    123: dependencyNode(123, { blocking: [124] }),
+  })
+  const forbidden = resolveDependencies({ 124: dependencyNode(124) }, { failNumber: 124 })
+  const missing = resolveDependencies({ 124: dependencyNode(124, { blockedBy: [999] }) })
+  assert.equal(incomplete.verdict, 'UNVERIFIED')
+  assert.equal(incomplete.pagination.complete, false)
+  assert.equal(forbidden.verdict, 'UNVERIFIED')
+  assert.equal(missing.verdict, 'UNVERIFIED')
+})
+
+test('native transport rejects hasNextPage without a cursor', () => {
+  const original = childProcess.execFileSync
+  childProcess.execFileSync = () => JSON.stringify({ data: { repository: { issue: {
+    number: 124, state: 'OPEN', updatedAt: '2026-08-04T04:00:00Z', body: '',
+    blockedBy: { nodes: [], pageInfo: { hasNextPage: true, endCursor: null } },
+    blocking: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+  } } } })
+  try {
+    assert.throws(() => createGhTransport().issueDependencies({ repository: REPO, number: 124 }),
+      (error) => error instanceof LiveFactReadError && error.code === 'SCHEMA_INVALID')
+  } finally {
+    childProcess.execFileSync = original
+  }
+})
+
+test('typed fallback marker beside native authority fails with one reconcile owner', () => {
+  const graph = resolveDependencies({
+    124: dependencyNode(124, { body: '<!-- coreone-dependencies:start -->' }),
+  })
+  assert.equal(graph.verdict, 'FAIL')
+  assert.equal(graph.reconcileOwner, 'Issue#124')
+  assert(graph.diagnostics.some((item) => item.code === 'DEPENDENCY_MULTIPLE_AUTHORITIES'))
+})
+
+test('migration stays preview-only and reports prose without a native edge', () => {
+  const graph = resolveDependencies({
+    124: dependencyNode(124, { body: 'Depends on #121.\nDepends on GOV-007.' }),
+  })
+  assert.equal(graph.verdict, 'PASS')
+  assert.deepEqual(graph.migrationPreview.map((item) => item.disposition), ['MISSING_NATIVE', 'MANUAL_REVIEW'])
 })
 
 process.stdout.write(`github live-fact receipt selftest: ${passed}/${passed} passed\n`)
