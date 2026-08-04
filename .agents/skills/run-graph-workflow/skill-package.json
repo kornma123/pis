@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "package_id": "run-graph-workflow",
+  "version": "1.4.2",
+  "format": "agent-skills",
+  "installer_provenance": "run-graph-workflow-portable-kit-v1",
+  "canonical_user_path": ".agents/skills/run-graph-workflow",
+  "source_repository": "kornma123/kornma-pm-work",
+  "source_path": "workflows/run-graph-workflow",
+  "release_tag": "run-graph-workflow-v1.4.2",
+  "native_hosts": [
+    "codex-desktop",
+    "claude-code-cli"
+  ]
+}

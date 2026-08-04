@@ -9,6 +9,7 @@ Claude Code 会话开始任何工作前必须完整读取唯一共用契约：
 ## 本地自动路由
 
 - 项目级 Skill `.claude/skills/coreone/SKILL.md` 是 Claude Code 的本地工作路由。遇到 PRD、功能、Bug、Issue/PR、代码、测试、复核或跨设备接手时自动调用；不要等用户重复粘贴 GitHub 规则。
+- 项目级 `/run-graph-workflow` 入口位于 `.claude/skills/run-graph-workflow/SKILL.md`，它只适配到 `.agents/skills/run-graph-workflow` 的唯一完整副本。复杂多阶段、跨 Agent / 跨设备或高风险任务先做 Graph 判定；现有 COREONE 契约、质量 Loop 和 ownership 门始终优先。
 - PRD、功能、Bug、Issue/PR、测试、复核、验收或跨设备交付任务，第一次修改前必须先输出 Skill 定义的 `LOCAL TASK CONTRACT`。缺 PRD/Issue、owner、阶段闸点、owned/excluded files 或 preflight 时，停在补合同阶段，不直接写码。R0 琐碎可逆修改不强制新建 Issue，但写入前仍用 `claude-task.cjs start-r0` 声明本地 owned files，目标检查后用 `finish-r0` 收尾。
 - 新想法 / 未定需求 → `/coreone-prd`；已定稿 PRD / “按 PRD 继续” → `/coreone-deliver-prd`；`/feature-development` 只是兼容入口，必须回到同一 Skill，不能另走旧脚手架。
 - PRD 驱动任务以 `PRD path@merged SHA + AC IDs + 工程 Issue` 为最小下游输入；当前实施矩阵写回 Issue/PR，不只留在 Claude 对话中。
