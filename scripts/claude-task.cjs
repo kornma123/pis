@@ -5097,7 +5097,8 @@ function commandHandoff(argv) {
   if (!HANDOFF_STATUSES.has(status)) {
     throw new Error(`--status 必须是 ${[...HANDOFF_STATUSES].join(' / ')}。`);
   }
-  const priorLease = active.state.ownerLease;
+  const priorLease = active.state.ownerLease; const claimActor = priorLease?.nextTrigger?.match(/^handoff-required@(.+)$/)?.[1] || active.state.ownerSaga?.actor;
+  if (priorLease && !priorLease.legacy && currentGitHubActor(root) !== claimActor) throw new Error('handoff actor 与 claim lease 不一致。');
   const live = priorLease && !priorLease.legacy
     ? JSON.parse(run('gh', ['issue', 'view', String(active.state.issue), '--json', 'body,updatedAt'], { cwd: root }).stdout)
     : null;
@@ -5117,6 +5118,7 @@ function commandHandoff(argv) {
   if (handoff.parsed.kind !== 'issue') {
     throw new Error(`handoff 必须是活动 Issue #${active.state.issue} 的普通评论，不使用 PR 评论。`);
   }
+  if (priorLease && !priorLease.legacy && currentGitHubActor(root) !== claimActor) throw new Error('handoff actor 在 evidence 回读后已漂移。');
   if (live && !released) {
     const receipt = JSON.parse(run(process.execPath, [path.join(root, 'scripts', 'github-live-fact-receipt.cjs'),
       `--repo=${repoIdentity(root).nameWithOwner}`, '--decision=handoff', '--target=master',
@@ -5130,7 +5132,7 @@ function commandHandoff(argv) {
     try {
       runGitHubWrite(root, ['issue', 'edit', String(active.state.issue), '--body', replaceOwnerLease(live.body, nextLease)], {
         beforeWrite: () => { const current = JSON.parse(run('gh', ['issue', 'view', String(active.state.issue), '--json', 'body,updatedAt'], { cwd: root }).stdout);
-          if (sha256(current.body) !== sha256(live.body) || current.updatedAt !== live.updatedAt) throw new Error('handoff lease CAS snapshot 已漂移。'); } });
+          if (currentGitHubActor(root) !== claimActor || sha256(current.body) !== sha256(live.body) || current.updatedAt !== live.updatedAt) throw new Error('handoff lease CAS snapshot 已漂移。'); } });
       const readback = JSON.parse(run('gh', ['issue', 'view', String(active.state.issue), '--json', 'body'], { cwd: root }).stdout);
       if (JSON.stringify(parseOwnerLease(readback.body)) !== JSON.stringify(nextLease)) throw new Error('handoff lease 写后回读不一致。');
     } catch (error) {
