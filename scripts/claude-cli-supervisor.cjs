@@ -3860,7 +3860,7 @@ function externalQuestionTextRequiresAuthority(text) {
       source,
     );
   return nonReadonlyPermissionRequest ||
-    /(?:\b(?:permission|authori[sz]e|ownership|owner|github|issue|pull request|comment|write|edit|modify|push|git\s+add|open\s+(?:a\s+)?pr|create\s+(?:a\s+)?(?:commit|branch|pull request|pr|file)|delete|remove|merge|publish|deploy|release|send|scope expansion)\b|\u6743\u9650|\u6388\u6743|\u6240\u6709\u6743|\u8d23\u4efb\u4eba|\u5199\u5165|\u4fee\u6539|\u8bc4\u8bba|\u5408\u5e76|\u53d1\u5e03|\u90e8\u7f72|\u5bf9\u5916\u53d1\u9001)/i.test(source);
+    /(?:\b(?:permission|authori[sz]e|ownership|owner|github|issue|pull request|comment|write|edit|modify|push|commit|stage|git\s+add|open\s+(?:a\s+)?pr|submit\s+(?:a\s+)?(?:pull request|pr)|make\s+(?:a\s+)?(?:new\s+)?branch|create\s+(?:a\s+)?(?:commit|branch|pull request|pr|file)|delete|remove|merge|publish|deploy|release|send|scope expansion)\b|\u6743\u9650|\u6388\u6743|\u6240\u6709\u6743|\u8d23\u4efb\u4eba|\u5199\u5165|\u4fee\u6539|\u8bc4\u8bba|\u5408\u5e76|\u53d1\u5e03|\u90e8\u7f72|\u5bf9\u5916\u53d1\u9001)/i.test(source);
 }
 
 function parseExternalReviewRecord(text) {

@@ -2971,6 +2971,8 @@ module.exports = {
       'May I stage these files?',
       'May I submit a PR?',
       'May I make a new branch?',
+      'May I inspect the evidence and then commit these changes?',
+      'May I, please commit these changes?',
     ]) {
       let autoAnswers = 0;
       let runtime = null;
