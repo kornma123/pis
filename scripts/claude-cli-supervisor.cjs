@@ -21,15 +21,56 @@ const { matchesAny } = require('./agent-preflight.cjs');
 const ADAPTER_API_VERSION = 2;
 const DEFAULT_EFFORT = 'ultracode';
 const DEFAULT_POLL_MS = 300_000;
+const MAX_VISIBLE_WAIT_MS = 10 * 60 * 1000;
 const REQUIRED_STABLE_EOF_READS = 2;
-const STATE_SCHEMA_VERSION = 2;
+const STATE_SCHEMA_VERSION = 3;
 const MAX_PROMPT_BYTES = 256 * 1024;
 const AUTHORITY_RECEIPT_MAX_AGE_MS = 10 * 60 * 1000;
 const AUTHORITY_RECEIPT_CLOCK_SKEW_MS = 60 * 1000;
 const CLAUDE_TASK_STATE_VERSION = 2;
 const CLAUDE_TASK_STATE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const CLAUDE_TASK_STATE_CLOCK_SKEW_MS = 120 * 1000;
+const EXTERNAL_TERMINAL_CLAIM_SCHEMA_VERSION = 1;
+const EXTERNAL_TERMINAL_CLAIM_TTL_MS = 5 * 60 * 1000;
+const EXTERNAL_TERMINAL_CLAIM_CLOCK_SKEW_MS = 30 * 1000;
 const TEST_ONLY_ADAPTER_CAPABILITY = Symbol('coreone-test-only-terminal-adapter');
+const EXTERNAL_VISIBLE_ADAPTER_CAPABILITY = Symbol(
+  'coreone-external-visible-terminal-adapter',
+);
+
+const SUPERVISION_MODE = Object.freeze({
+  NATIVE_TASK_BOUND: 'native-task-bound',
+  EXTERNAL_VISIBLE_READONLY: 'external-visible-readonly',
+});
+
+const EXTERNAL_VISIBLE_ACTION = 'fixed-sha-readonly-review';
+const EXTERNAL_VISIBLE_EFFORTS = new Set([
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]);
+const EXTERNAL_REVIEW_QUESTION_KINDS = new Map([
+  ['clarification', false],
+  ['evidence', false],
+  ['permission', true],
+  ['ownership', true],
+  ['product-direction', true],
+  ['github-write', true],
+  ['write', true],
+  ['merge', true],
+  ['publish', true],
+  ['deploy', true],
+  ['release', true],
+  ['external-send', true],
+]);
+const EVIDENCE_LAYER = Object.freeze({
+  STATIC_INSTALL: 'STATIC_INSTALL',
+  SKILL_DISCOVERY: 'SKILL_DISCOVERY',
+  VISIBLE_SESSION_CANARY: 'VISIBLE_SESSION_CANARY',
+  REVIEW_BEHAVIOR_ACCEPTANCE: 'REVIEW_BEHAVIOR_ACCEPTANCE',
+});
 
 const FAILURE = Object.freeze({
   TERMINAL_VISIBILITY_UNPROVEN: 'TERMINAL_VISIBILITY_UNPROVEN',
@@ -38,6 +79,7 @@ const FAILURE = Object.freeze({
   CWD_MISMATCH: 'CWD_MISMATCH',
   CLAUDE_CLI_MISSING: 'CLAUDE_CLI_MISSING',
   CLAUDE_CLI_VERSION_TOO_OLD: 'CLAUDE_CLI_VERSION_TOO_OLD',
+  CLAUDE_CLI_VERSION_MISMATCH: 'CLAUDE_CLI_VERSION_MISMATCH',
   CLAUDE_EFFORT_UNSUPPORTED: 'CLAUDE_EFFORT_UNSUPPORTED',
   PROMPT_INJECTION_UNPROVEN: 'PROMPT_INJECTION_UNPROVEN',
   CLAUDE_RESUME_UNPROVEN: 'CLAUDE_RESUME_UNPROVEN',
@@ -52,6 +94,10 @@ const FAILURE = Object.freeze({
   R0_CONTRACT_UNPROVEN: 'R0_CONTRACT_UNPROVEN',
   STATE_BINDING_MISMATCH: 'STATE_BINDING_MISMATCH',
   FACT_GATE_FAILED: 'FACT_GATE_FAILED',
+  VISIBLE_CLI_CONTROL_UNAVAILABLE: 'VISIBLE_CLI_CONTROL_UNAVAILABLE',
+  EVIDENCE_LAYER_UNPROVEN: 'EVIDENCE_LAYER_UNPROVEN',
+  READONLY_REVIEW_CONTRACT_VIOLATION: 'READONLY_REVIEW_CONTRACT_VIOLATION',
+  REVIEW_TARGET_DRIFT: 'REVIEW_TARGET_DRIFT',
 });
 
 class SupervisorFailure extends Error {
@@ -89,6 +135,239 @@ function sameStringArray(left, right) {
   );
 }
 
+function validateSha256(value, label) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(normalized)) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      `${label} must be a full lowercase SHA-256`,
+    );
+  }
+  return normalized;
+}
+
+function validateCommitSha(value, label = 'reviewTargetSha') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(normalized)) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      `${label} must be a full 40-character commit SHA`,
+    );
+  }
+  return normalized;
+}
+
+function validateSingleLine(value, label, maximum = 512) {
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized.length > maximum || /[\r\n\0]/.test(normalized)) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      `${label} must be one non-empty visible line`,
+    );
+  }
+  return normalized;
+}
+
+function reverseAscii(value) {
+  return String(value).split('').reverse().join('');
+}
+
+function externalTerminalClaimMarker(claimId) {
+  return `COREONE_TERMINAL_CLAIM_${String(claimId).replaceAll('-', '')}`;
+}
+
+function normalizeExternalTerminalClaim(input, requestCwd) {
+  if (!input || Array.isArray(input) || typeof input !== 'object') {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'a dedicated visible Terminal launch requires a machine-readable claim receipt',
+    );
+  }
+  const normalized = {
+    schemaVersion: Number(input.schemaVersion),
+    claimId: String(input.claimId || '').trim(),
+    claimedAt: String(input.claimedAt || '').trim(),
+    expiresAt: String(input.expiresAt || '').trim(),
+    cwd: canonicalPath(String(input.cwd || '')),
+    terminalApp: String(input.terminalApp || '').trim(),
+    windowId: Number(input.windowId),
+    windowTitle: validateSingleLine(
+      input.windowTitle,
+      'externalVisibleTerminal.claim.windowTitle',
+    ),
+    tty: String(input.tty || '').trim(),
+    challenge: validateSingleLine(
+      input.challenge,
+      'externalVisibleTerminal.claim.challenge',
+    ),
+    response: validateSingleLine(
+      input.response,
+      'externalVisibleTerminal.claim.response',
+    ),
+    proofMarker: validateSingleLine(
+      input.proofMarker,
+      'externalVisibleTerminal.claim.proofMarker',
+    ),
+    proofPayloadBase64: validateSingleLine(
+      input.proofPayloadBase64,
+      'externalVisibleTerminal.claim.proofPayloadBase64',
+      4096,
+    ),
+    proofSha256: validateSha256(
+      input.proofSha256,
+      'externalVisibleTerminal.claim.proofSha256',
+    ),
+  };
+  const failures = [];
+  const claimedAtMs = Date.parse(normalized.claimedAt);
+  const expiresAtMs = Date.parse(normalized.expiresAt);
+  if (normalized.schemaVersion !== EXTERNAL_TERMINAL_CLAIM_SCHEMA_VERSION) {
+    failures.push('schemaVersion');
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    normalized.claimId,
+  )) failures.push('claimId');
+  if (!Number.isFinite(claimedAtMs) || !Number.isFinite(expiresAtMs)) {
+    failures.push('claimTime');
+  } else if (
+    expiresAtMs <= claimedAtMs ||
+    expiresAtMs - claimedAtMs > EXTERNAL_TERMINAL_CLAIM_TTL_MS
+  ) {
+    failures.push('claimLifetime');
+  }
+  if (normalized.cwd !== requestCwd) failures.push('cwd');
+  if (normalized.terminalApp !== 'Terminal') failures.push('terminalApp');
+  if (!Number.isInteger(normalized.windowId) || normalized.windowId < 1) {
+    failures.push('windowId');
+  }
+  if (!/^\/dev\/ttys[0-9]+$/.test(normalized.tty)) failures.push('tty');
+  if (!/^COREONE_CLAIM_[0-9a-f]{32}$/i.test(normalized.challenge)) {
+    failures.push('challenge');
+  }
+  if (normalized.response !== reverseAscii(normalized.challenge)) failures.push('response');
+  if (normalized.proofMarker !== externalTerminalClaimMarker(normalized.claimId)) {
+    failures.push('proofMarker');
+  }
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized.proofPayloadBase64)) {
+    failures.push('proofPayloadBase64');
+  }
+  let proof = null;
+  let proofJson = '';
+  try {
+    proofJson = Buffer.from(normalized.proofPayloadBase64, 'base64').toString('utf8');
+    proof = JSON.parse(proofJson);
+  } catch {
+    failures.push('proofPayload');
+  }
+  if (sha256(proofJson) !== normalized.proofSha256) failures.push('proofSha256');
+  const expectedProof = {
+    schemaVersion: normalized.schemaVersion,
+    claimId: normalized.claimId,
+    claimedAt: normalized.claimedAt,
+    expiresAt: normalized.expiresAt,
+    cwd: normalized.cwd,
+    challenge: normalized.challenge,
+    response: normalized.response,
+  };
+  if (JSON.stringify(proof) !== JSON.stringify(expectedProof)) failures.push('proofBinding');
+  if (failures.length > 0) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'dedicated visible Terminal claim receipt is malformed or mutable',
+      { failures },
+    );
+  }
+  return normalized;
+}
+
+function normalizeExternalVisibleTerminal(input, requestCwd) {
+  if (!input || Array.isArray(input) || typeof input !== 'object') {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'external visible terminal fixed SHA contract is required',
+    );
+  }
+  const startup = String(input.startup || '').trim();
+  const windowId = Number(input.windowId);
+  const claudePid = input.claudePid === undefined || input.claudePid === null
+    ? null
+    : Number(input.claudePid);
+  const transcriptPath = input.transcriptPath
+    ? canonicalPath(String(input.transcriptPath))
+    : null;
+  const skillPath = canonicalPath(String(input.skillPath || ''));
+  const claim = input.claim === undefined || input.claim === null
+    ? null
+    : normalizeExternalTerminalClaim(input.claim, requestCwd);
+  const normalized = {
+    action: String(input.action || '').trim(),
+    terminalApp: String(input.terminalApp || '').trim(),
+    windowId,
+    windowTitle: validateSingleLine(input.windowTitle, 'externalVisibleTerminal.windowTitle'),
+    tty: String(input.tty || '').trim(),
+    startup,
+    claudePid,
+    claudeSessionId: String(input.claudeSessionId || '').trim(),
+    transcriptPath,
+    expectedClaudeVersion: String(input.expectedClaudeVersion || '').trim(),
+    expectedEffort: String(input.expectedEffort || '').trim(),
+    expectedPermissionMode: String(input.expectedPermissionMode || '').trim(),
+    repositoryFullName: String(input.repositoryFullName || '').trim(),
+    reviewTargetSha: validateCommitSha(input.reviewTargetSha),
+    skillName: String(input.skillName || '').trim(),
+    skillPath,
+    claim,
+    skillSha256: validateSha256(
+      input.skillSha256,
+      'externalVisibleTerminal.skillSha256',
+    ),
+  };
+  const failures = [];
+  if (normalized.action !== EXTERNAL_VISIBLE_ACTION) failures.push('action');
+  if (normalized.terminalApp !== 'Terminal') failures.push('terminalApp');
+  if (!Number.isInteger(windowId) || windowId < 1) failures.push('windowId');
+  if (!/^\/dev\/ttys[0-9]+$/.test(normalized.tty)) failures.push('tty');
+  if (!['attach-existing', 'launch-in-dedicated-window'].includes(startup)) {
+    failures.push('startup');
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    normalized.claudeSessionId,
+  )) failures.push('claudeSessionId');
+  if (!parseVersion(normalized.expectedClaudeVersion)) failures.push('expectedClaudeVersion');
+  if (!EXTERNAL_VISIBLE_EFFORTS.has(normalized.expectedEffort)) failures.push('expectedEffort');
+  if (normalized.expectedPermissionMode !== 'bypassPermissions') failures.push('expectedPermissionMode');
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalized.repositoryFullName)) {
+    failures.push('repositoryFullName');
+  }
+  if (!/^[A-Za-z0-9._-]{1,128}$/.test(normalized.skillName)) failures.push('skillName');
+  const expectedSkillRoot = `${requestCwd}${path.sep}`;
+  if (!path.isAbsolute(skillPath) || !skillPath.startsWith(expectedSkillRoot)) {
+    failures.push('skillPath');
+  }
+  if (startup === 'attach-existing') {
+    if (!Number.isInteger(claudePid) || claudePid < 1) failures.push('claudePid');
+    if (!transcriptPath || !path.isAbsolute(transcriptPath)) failures.push('transcriptPath');
+    if (claim !== null) failures.push('attachExistingMustNotClaimLaunch');
+  } else if (claudePid !== null || transcriptPath !== null) {
+    failures.push('launchIdentityMustBeDiscovered');
+  } else if (!claim) {
+    failures.push('dedicatedWindowClaim');
+  } else {
+    if (claim.terminalApp !== normalized.terminalApp) failures.push('claimTerminalApp');
+    if (claim.windowId !== normalized.windowId) failures.push('claimWindowId');
+    if (claim.windowTitle !== normalized.windowTitle) failures.push('claimWindowTitle');
+    if (claim.tty !== normalized.tty) failures.push('claimTty');
+  }
+  if (failures.length > 0) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'external visible terminal fixed SHA contract is incomplete or mutable',
+      { failures },
+    );
+  }
+  return normalized;
+}
+
 function validateRequest(input) {
   if (!input || Array.isArray(input) || typeof input !== 'object') {
     throw new SupervisorFailure(
@@ -97,6 +376,9 @@ function validateRequest(input) {
     );
   }
   const rawCwd = String(input.cwd || '');
+  const supervisionMode = String(
+    input.supervisionMode || SUPERVISION_MODE.NATIVE_TASK_BOUND,
+  ).trim();
   const request = {
     ...input,
     taskId: String(input.taskId || '').trim(),
@@ -109,6 +391,9 @@ function validateRequest(input) {
     excluded: Array.isArray(input.excluded) ? input.excluded.map(normalizePath) : [],
     risk: String(input.risk || '').trim(),
     questionTimeoutMs: Number(input.questionTimeoutMs ?? DEFAULT_POLL_MS),
+    supervisionMode,
+    codexTaskBindingRequired:
+      supervisionMode === SUPERVISION_MODE.NATIVE_TASK_BOUND,
   };
   if (!/^[A-Za-z0-9._-]{3,128}$/.test(request.taskId)) {
     throw new SupervisorFailure(
@@ -177,6 +462,23 @@ function validateRequest(input) {
     throw new SupervisorFailure(
       FAILURE.STATE_BINDING_MISMATCH,
       'questionTimeoutMs must be a positive finite number',
+    );
+  }
+  if (!Object.values(SUPERVISION_MODE).includes(supervisionMode)) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'supervisionMode must select a supported evidence mode',
+    );
+  }
+  if (supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY) {
+    request.externalVisibleTerminal = normalizeExternalVisibleTerminal(
+      input.externalVisibleTerminal,
+      request.cwd,
+    );
+  } else if (input.externalVisibleTerminal !== undefined) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'externalVisibleTerminal is only valid for external-visible-readonly mode',
     );
   }
   return request;
@@ -285,8 +587,14 @@ function validateAdapter(adapter, options = {}) {
     'launchClaude',
     'resumeClaude',
   ];
+  if (options.adapterCapability === EXTERNAL_VISIBLE_ADAPTER_CAPABILITY) {
+    requiredMethods.push('revalidateBehavior');
+  }
   const missing = requiredMethods.filter((name) => typeof adapter?.[name] !== 'function');
-  if (options.adapterCapability !== TEST_ONLY_ADAPTER_CAPABILITY) {
+  const testCapability = options.adapterCapability === TEST_ONLY_ADAPTER_CAPABILITY;
+  const externalCapability =
+    options.adapterCapability === EXTERNAL_VISIBLE_ADAPTER_CAPABILITY;
+  if (!testCapability && !externalCapability) {
     throw new SupervisorFailure(
       FAILURE.TERMINAL_VISIBILITY_UNPROVEN,
       'no native Codex Desktop terminal capability verifier is integrated',
@@ -297,13 +605,19 @@ function validateAdapter(adapter, options = {}) {
       },
     );
   }
+  const nativeShape =
+    adapter?.surface === 'codex-desktop-terminal' &&
+    adapter?.canaryDelivery === 'out-of-band-marker';
+  const externalShape =
+    adapter?.surface === 'external-visible-terminal' &&
+    adapter?.canaryDelivery === 'same-visible-session-challenge-response' &&
+    adapter?.readOnly === true;
   if (
     !adapter ||
     adapter.apiVersion !== ADAPTER_API_VERSION ||
-    adapter.surface !== 'codex-desktop-terminal' ||
     adapter.sameHandleReadWrite !== true ||
-    adapter.canaryDelivery !== 'out-of-band-marker' ||
     adapter.structuredProbe !== true ||
+    (externalCapability ? !externalShape : !nativeShape) ||
     missing.length > 0
   ) {
     throw new SupervisorFailure(
@@ -315,6 +629,7 @@ function validateAdapter(adapter, options = {}) {
         surface: adapter?.surface ?? null,
         sameHandleReadWrite: adapter?.sameHandleReadWrite === true,
         canaryDelivery: adapter?.canaryDelivery ?? null,
+        readOnly: adapter?.readOnly === true,
         structuredProbe: adapter?.structuredProbe === true,
         missing,
       },
@@ -393,12 +708,20 @@ function stateBinding(request) {
     owned: request.owned,
     excluded: request.excluded,
     risk: request.risk,
+    supervisionMode: request.supervisionMode,
+    codexTaskBindingRequired: request.codexTaskBindingRequired,
+    externalVisibleTerminal:
+      request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY
+        ? request.externalVisibleTerminal
+        : null,
   };
 }
 
 function createState(request, options) {
   const sessionId = validateHandle(
-    String((options.randomUUID || crypto.randomUUID)()),
+    request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY
+      ? request.externalVisibleTerminal.claudeSessionId
+      : String((options.randomUUID || crypto.randomUUID)()),
     'sessionId',
   );
   const binding = stateBinding(request);
@@ -419,6 +742,14 @@ function createState(request, options) {
     started: false,
     cursor: null,
     terminalProof: null,
+    evidenceLayers: Object.fromEntries(
+      Object.values(EVIDENCE_LAYER).map((layer) => [layer, {
+        status: 'UNVERIFIED',
+        verifiedAtMs: null,
+        evidenceSha256: null,
+      }]),
+    ),
+    externalSession: null,
     probe: null,
     stableEofReads: 0,
     lastTailSha256: null,
@@ -437,6 +768,75 @@ function createState(request, options) {
   };
 }
 
+function markEvidenceLayer(state, layer, evidence, clock) {
+  if (!Object.values(EVIDENCE_LAYER).includes(layer)) {
+    throw new SupervisorFailure(
+      FAILURE.EVIDENCE_LAYER_UNPROVEN,
+      `unknown evidence layer ${layer}`,
+    );
+  }
+  state.evidenceLayers = state.evidenceLayers || {};
+  state.evidenceLayers[layer] = {
+    status: 'PASS',
+    verifiedAtMs: clock(),
+    evidenceSha256: sha256(JSON.stringify(evidence || {})),
+  };
+}
+
+function assertExternalEvidenceComplete(state) {
+  if (state.supervisionMode !== SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY) return;
+  const missing = Object.values(EVIDENCE_LAYER).filter(
+    (layer) => state.evidenceLayers?.[layer]?.status !== 'PASS',
+  );
+  if (missing.length > 0) {
+    throw new SupervisorFailure(
+      FAILURE.EVIDENCE_LAYER_UNPROVEN,
+      'external visible review has not passed every independent evidence layer',
+      { missing },
+    );
+  }
+}
+
+async function revalidateExternalBehavior(adapter, request, state, options) {
+  if (request.supervisionMode !== SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY) return;
+  const acceptance = await adapter.revalidateBehavior({
+    terminalHandle: state.terminalHandle,
+    terminalGeneration: state.terminalGeneration,
+    threadId: request.threadId,
+    sessionId: state.sessionId,
+    reviewTargetSha: request.externalVisibleTerminal.reviewTargetSha,
+    transcriptPrefixSha256: state.externalSession?.transcriptPrefixSha256,
+  });
+  assertTerminalBinding(state, acceptance, 'revalidateBehavior');
+  if (
+    acceptance?.status !== 'PASS' ||
+    acceptance?.reviewTargetSha !== request.externalVisibleTerminal.reviewTargetSha ||
+    !/^[0-9a-f]{64}$/.test(String(acceptance?.transcriptSha256 || '')) ||
+    acceptance?.transcriptPrefixSha256 !==
+      state.externalSession?.transcriptPrefixSha256
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.STALE_COMPLETION,
+      'external review behavior receipt is no longer the latest admissible turn',
+      { acceptance: acceptance || null },
+    );
+  }
+  state.externalSession = {
+    ...(state.externalSession || {}),
+    transcriptSha256: acceptance.transcriptSha256,
+    transcriptPrefixSha256: acceptance.transcriptPrefixSha256,
+    reviewVerdict: acceptance.verdict || state.externalSession?.reviewVerdict || null,
+    behaviorAcceptedAt:
+      acceptance.acceptedAt || state.externalSession?.behaviorAcceptedAt || null,
+  };
+  markEvidenceLayer(
+    state,
+    EVIDENCE_LAYER.REVIEW_BEHAVIOR_ACCEPTANCE,
+    acceptance,
+    options.clock,
+  );
+}
+
 function validateStateBinding(state, request) {
   const expected = stateBinding(request);
   const mismatches = [];
@@ -448,11 +848,19 @@ function validateStateBinding(state, request) {
     'promptSha256',
     'minimumClaudeVersion',
     'risk',
+    'supervisionMode',
+    'codexTaskBindingRequired',
   ]) {
     if (state[key] !== expected[key]) mismatches.push(key);
   }
   if (!sameStringArray(state.owned, expected.owned)) mismatches.push('owned');
   if (!sameStringArray(state.excluded, expected.excluded)) mismatches.push('excluded');
+  if (
+    JSON.stringify(state.externalVisibleTerminal || null) !==
+    JSON.stringify(expected.externalVisibleTerminal || null)
+  ) {
+    mismatches.push('externalVisibleTerminal');
+  }
   if (mismatches.length > 0) {
     throw new SupervisorFailure(
       FAILURE.STATE_BINDING_MISMATCH,
@@ -540,6 +948,8 @@ function publicResult(state, overrides = {}) {
     sessionName: state.sessionName,
     terminalHandle: state.terminalHandle,
     terminalGeneration: state.terminalGeneration,
+    supervisionMode: state.supervisionMode || SUPERVISION_MODE.NATIVE_TASK_BOUND,
+    codexTaskBindingRequired: state.codexTaskBindingRequired !== false,
     cwd: state.cwd,
     promptInjected: state.promptInjected,
     cursor: state.cursor,
@@ -548,6 +958,7 @@ function publicResult(state, overrides = {}) {
       ? {
           id: state.pendingQuestion.id,
           kind: state.pendingQuestion.kind,
+          text: state.pendingQuestion.text,
           textSha256: state.pendingQuestion.textSha256,
           requiresAuthority: state.pendingQuestion.requiresAuthority,
           firstSeenAtMs: state.pendingQuestion.firstSeenAtMs,
@@ -567,6 +978,8 @@ function publicResult(state, overrides = {}) {
         }
       : null,
     probe: state.probe,
+    evidenceLayers: state.evidenceLayers || null,
+    externalSession: state.externalSession || null,
     factGate: state.factGate || null,
     failure: state.failure || null,
     ...overrides,
@@ -585,6 +998,8 @@ function block(stateFile, state, failure, clock) {
 }
 
 async function proveTerminalVisibility(adapter, request, state, options) {
+  const external =
+    request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY;
   const existingHandle = state.terminalHandle;
   const idempotencyKey = sha256(
     `${request.taskId}\0${state.sessionId}\0${state.terminalGeneration}\0terminal`,
@@ -598,6 +1013,7 @@ async function proveTerminalVisibility(adapter, request, state, options) {
         taskId: request.taskId,
         sessionId: state.sessionId,
         idempotencyKey,
+        started: state.started === true,
       })
     : await adapter.createTerminal({
         threadId: request.threadId,
@@ -607,6 +1023,7 @@ async function proveTerminalVisibility(adapter, request, state, options) {
         sessionId: state.sessionId,
         terminalGeneration: state.terminalGeneration,
         idempotencyKey,
+        started: state.started === true,
       });
 
   if (
@@ -617,7 +1034,9 @@ async function proveTerminalVisibility(adapter, request, state, options) {
   ) {
     throw new SupervisorFailure(
       FAILURE.TERMINAL_VISIBILITY_UNPROVEN,
-      'terminal was not synchronously and idempotently attached in the current Codex task',
+      external
+        ? 'the exact user-visible external terminal was not synchronously attached'
+        : 'terminal was not synchronously and idempotently attached in the current Codex task',
       {
         status: attachResult?.status ?? null,
         visible: attachResult?.visible === true,
@@ -637,7 +1056,9 @@ async function proveTerminalVisibility(adapter, request, state, options) {
   if (attachResult.threadId !== request.threadId) {
     throw new SupervisorFailure(
       FAILURE.TERMINAL_VISIBILITY_UNPROVEN,
-      'terminal attachment is not bound to the current Codex thread',
+      external
+        ? 'external terminal receipt is not bound to the controller correlation id'
+        : 'terminal attachment is not bound to the current Codex thread',
       {
         expectedThreadId: request.threadId,
         actualThreadId: attachResult.threadId ?? null,
@@ -649,13 +1070,22 @@ async function proveTerminalVisibility(adapter, request, state, options) {
   const canary = `COREONE_TERMINAL_PROBE_${String(
     (options.randomUUID || crypto.randomUUID)(),
   ).replace(/[^A-Za-z0-9]/g, '_')}`;
+  const expectedCanaryResponse = external
+    ? canary.split('').reverse().join('')
+    : canary;
   const writeResult = await adapter.writeTerminal({
     terminalHandle,
     terminalGeneration: state.terminalGeneration,
     threadId: request.threadId,
-    input: canary,
+    input: external
+      ? `Reverse only the ASCII characters in ${canary} and return only the result.`
+      : canary,
+    canary,
+    expectedCanaryResponse,
     purpose: 'visibility-proof',
-    delivery: 'out-of-band-marker',
+    delivery: external
+      ? 'same-visible-session-challenge-response'
+      : 'out-of-band-marker',
   });
   assertTerminalBinding(state, writeResult, 'writeTerminal');
   if (writeResult?.accepted !== true) {
@@ -672,23 +1102,33 @@ async function proveTerminalVisibility(adapter, request, state, options) {
     cursor: state.cursor,
     purpose: 'visibility-proof',
     canary,
-    maxWaitMs: Math.min(DEFAULT_POLL_MS, 30_000),
+    expectedCanaryResponse,
+    maxWaitMs: external
+      ? Math.min(
+          Math.max(request.questionTimeoutMs, DEFAULT_POLL_MS),
+          MAX_VISIBLE_WAIT_MS,
+        )
+      : Math.min(DEFAULT_POLL_MS, 30_000),
   });
   assertTerminalBinding(state, readResult, 'readTerminal');
   if (
     readResult?.attached !== true ||
     readResult?.visible !== true ||
     readResult?.threadId !== request.threadId ||
-    !String(readResult?.output || '').includes(canary)
+    !String(readResult?.output || '').includes(expectedCanaryResponse)
   ) {
     throw new SupervisorFailure(
       FAILURE.TERMINAL_VISIBILITY_UNPROVEN,
-      'the current Codex task did not read back the exact canary from the same handle',
+      external
+        ? 'the exact external visible session did not return the canary challenge response'
+        : 'the current Codex task did not read back the exact canary from the same handle',
       {
         attached: readResult?.attached === true,
         visible: readResult?.visible === true,
         threadId: readResult?.threadId ?? null,
-        canaryObserved: String(readResult?.output || '').includes(canary),
+        canaryObserved: String(readResult?.output || '').includes(
+          expectedCanaryResponse,
+        ),
       },
     );
   }
@@ -697,11 +1137,25 @@ async function proveTerminalVisibility(adapter, request, state, options) {
     terminalHandle,
     terminalGeneration: state.terminalGeneration,
     canarySha256: sha256(canary),
+    responseSha256: sha256(expectedCanaryResponse),
+    supervisionMode: request.supervisionMode,
+    surfaceEvidence: attachResult.evidence || null,
     verifiedAtMs: options.clock(),
   };
+  markEvidenceLayer(
+    state,
+    EVIDENCE_LAYER.VISIBLE_SESSION_CANARY,
+    state.terminalProof,
+    options.clock,
+  );
 }
 
-async function probeClaude(adapter, request, state) {
+async function probeClaude(adapter, request, state, options) {
+  const external =
+    request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY;
+  const expectedEffort = external
+    ? request.externalVisibleTerminal.expectedEffort
+    : DEFAULT_EFFORT;
   const probe = await adapter.probeTerminal({
     terminalHandle: state.terminalHandle,
     terminalGeneration: state.terminalGeneration,
@@ -709,14 +1163,14 @@ async function probeClaude(adapter, request, state) {
     taskId: request.taskId,
     sessionId: state.sessionId,
     cwd: request.cwd,
-    effort: DEFAULT_EFFORT,
+    effort: expectedEffort,
     resume: state.started,
     commands: [
       'pwd',
       'git rev-parse --show-toplevel',
       'command -v claude',
       'claude --version',
-      `claude --effort ${DEFAULT_EFFORT} --version`,
+      `claude --effort ${expectedEffort} --version`,
     ],
   });
   assertTerminalBinding(state, probe, 'probeTerminal');
@@ -754,14 +1208,84 @@ async function probeClaude(adapter, request, state) {
       },
     );
   }
-  if (probe.effortSupported !== true || probe.actualEffort !== DEFAULT_EFFORT) {
+  if (probe.effortSupported !== true || probe.actualEffort !== expectedEffort) {
     throw new SupervisorFailure(
       FAILURE.CLAUDE_EFFORT_UNSUPPORTED,
-      'Claude CLI did not prove exact ultracode effort support',
+      'Claude CLI did not prove the exact requested effort in the visible session',
       {
         effortSupported: probe.effortSupported === true,
         actualEffort: probe.actualEffort ?? null,
+        expectedEffort,
       },
+    );
+  }
+  if (external) {
+    const contract = request.externalVisibleTerminal;
+    const externalFailures = [];
+    if (probe.permissionMode !== 'bypassPermissions') externalFailures.push('permissionMode');
+    if (probe.reviewTargetSha !== contract.reviewTargetSha) {
+      externalFailures.push('reviewTargetSha');
+    }
+    if (probe.repositoryFullName !== contract.repositoryFullName) {
+      externalFailures.push('repositoryFullName');
+    }
+    if (canonicalPath(probe.skillPath || '') !== contract.skillPath) {
+      externalFailures.push('skillPath');
+    }
+    if (probe.skillSha256 !== contract.skillSha256 || probe.skillInstalled !== true) {
+      externalFailures.push('skillSha256');
+    }
+    const prelaunch =
+      probe.prelaunch === true &&
+      (
+        contract.startup === 'launch-in-dedicated-window' ||
+        state.started === true
+      );
+    if (
+      probe.claudeSessionId !== state.sessionId ||
+      (!prelaunch && (
+        !Number.isInteger(Number(probe.claudePid)) ||
+        Number(probe.claudePid) < 1 ||
+        !path.isAbsolute(String(probe.transcriptPath || ''))
+      ))
+    ) {
+      externalFailures.push('visibleClaudeSession');
+    }
+    if (externalFailures.length > 0) {
+      throw new SupervisorFailure(
+        externalFailures.includes('reviewTargetSha')
+          ? FAILURE.REVIEW_TARGET_DRIFT
+          : FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION,
+        'external visible Claude session does not satisfy the fixed SHA read-only contract',
+        { externalFailures },
+      );
+    }
+    state.externalSession = {
+      ...(state.externalSession || {}),
+      terminalApp: contract.terminalApp,
+      windowId: contract.windowId,
+      tty: contract.tty,
+      windowTitle: probe.windowTitle,
+      claudePid: prelaunch ? null : Number(probe.claudePid),
+      claudeSessionId: probe.claudeSessionId,
+      claudeVersion: probe.claudeVersion,
+      effort: probe.actualEffort,
+      permissionMode: probe.permissionMode,
+      transcriptPath: prelaunch ? null : canonicalPath(probe.transcriptPath),
+      transcriptSha256: probe.transcriptSha256 || null,
+      reviewTargetSha: probe.reviewTargetSha,
+      repositoryFullName: probe.repositoryFullName,
+    };
+    markEvidenceLayer(
+      state,
+      EVIDENCE_LAYER.STATIC_INSTALL,
+      {
+        claudePath: probe.claudePath,
+        claudeVersion: probe.claudeVersion,
+        skillPath: contract.skillPath,
+        skillSha256: contract.skillSha256,
+      },
+      options.clock,
     );
   }
   state.probe = {
@@ -770,10 +1294,23 @@ async function probeClaude(adapter, request, state) {
     claudePath: probe.claudePath,
     claudeVersion: probe.claudeVersion,
     actualEffort: probe.actualEffort,
+    ...(external
+      ? {
+          permissionMode: probe.permissionMode,
+          reviewTargetSha: probe.reviewTargetSha,
+          repositoryFullName: probe.repositoryFullName,
+          skillSha256: probe.skillSha256,
+        }
+      : {}),
   };
 }
 
-async function launchOrResume(adapter, request, state) {
+async function launchOrResume(adapter, request, state, options) {
+  const external =
+    request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY;
+  const expectedEffort = external
+    ? request.externalVisibleTerminal.expectedEffort
+    : DEFAULT_EFFORT;
   const idempotencyKey = sha256(
     `${request.taskId}\0${state.sessionId}\0${state.terminalGeneration}\0claude`,
   );
@@ -786,14 +1323,14 @@ async function launchOrResume(adapter, request, state) {
       cwd: request.cwd,
       sessionId: state.sessionId,
       sessionName: state.sessionName,
-      effort: DEFAULT_EFFORT,
+      effort: expectedEffort,
       idempotencyKey,
     });
     assertTerminalBinding(state, result, 'resumeClaude');
     if (
       (result?.resumed !== true && result?.alreadyRunning !== true) ||
       result?.sessionId !== state.sessionId ||
-      result?.actualEffort !== DEFAULT_EFFORT ||
+      result?.actualEffort !== expectedEffort ||
       result?.idempotencyKey !== idempotencyKey
     ) {
       throw new SupervisorFailure(
@@ -813,7 +1350,7 @@ async function launchOrResume(adapter, request, state) {
     cwd: request.cwd,
     sessionId: state.sessionId,
     sessionName: state.sessionName,
-    effort: DEFAULT_EFFORT,
+    effort: expectedEffort,
     prompt: request.prompt,
     promptSha256,
     idempotencyKey,
@@ -822,7 +1359,7 @@ async function launchOrResume(adapter, request, state) {
   if (
     result?.started !== true ||
     result?.sessionId !== state.sessionId ||
-    result?.actualEffort !== DEFAULT_EFFORT ||
+    result?.actualEffort !== expectedEffort ||
     result?.idempotencyKey !== idempotencyKey
   ) {
     throw new SupervisorFailure(
@@ -838,6 +1375,53 @@ async function launchOrResume(adapter, request, state) {
       FAILURE.PROMPT_INJECTION_UNPROVEN,
       'the task prompt was not positively acknowledged by hash',
     );
+  }
+  if (external) {
+    const contract = request.externalVisibleTerminal;
+    if (
+      result.skillDiscovered !== true ||
+      result.skillInvoked !== true ||
+      result.skillSha256 !== contract.skillSha256 ||
+      result.reviewTargetSha !== contract.reviewTargetSha ||
+      result.permissionMode !== 'bypassPermissions' ||
+      result.promptChallengeAccepted !== true ||
+      result.reviewPromptTranscriptBound !== true
+    ) {
+      throw new SupervisorFailure(
+        FAILURE.EVIDENCE_LAYER_UNPROVEN,
+        'Claude did not prove Skill discovery and prompt acceptance in the same visible session',
+        {
+          skillDiscovered: result.skillDiscovered === true,
+          skillInvoked: result.skillInvoked === true,
+          skillSha256: result.skillSha256 || null,
+          reviewTargetSha: result.reviewTargetSha || null,
+          permissionMode: result.permissionMode || null,
+          promptChallengeAccepted: result.promptChallengeAccepted === true,
+          reviewPromptTranscriptBound:
+            result.reviewPromptTranscriptBound === true,
+        },
+      );
+    }
+    markEvidenceLayer(
+      state,
+      EVIDENCE_LAYER.SKILL_DISCOVERY,
+      {
+        skillName: contract.skillName,
+        skillSha256: contract.skillSha256,
+        reviewTargetSha: contract.reviewTargetSha,
+        promptSha256,
+      },
+      options.clock,
+    );
+    state.externalSession = {
+      ...(state.externalSession || {}),
+      claudePid: Number(result.claudePid),
+      transcriptPath: canonicalPath(result.transcriptPath),
+      transcriptSha256: result.transcriptSha256,
+      claudeVersion: result.claudeVersion,
+      effort: result.actualEffort,
+      permissionMode: result.permissionMode,
+    };
   }
   state.started = true;
   state.promptInjected = true;
@@ -867,6 +1451,7 @@ function latchQuestion(state, question, now) {
   state.pendingQuestion = {
     id: normalized.id,
     kind: normalized.kind,
+    text: normalized.text,
     textSha256: normalized.textSha256,
     requiresAuthority: normalized.requiresAuthority,
     firstSeenAtMs: normalized.firstSeenAtMs,
@@ -1372,6 +1957,19 @@ async function runFactGate(input) {
     }
     const currentHead = git(cwd, ['rev-parse', 'HEAD']).trim();
     const currentTree = git(cwd, ['rev-parse', 'HEAD^{tree}']).trim();
+    if (
+      input.fixedReviewTargetSha &&
+      currentHead !== input.fixedReviewTargetSha
+    ) {
+      throw new SupervisorFailure(
+        FAILURE.REVIEW_TARGET_DRIFT,
+        'fixed review target changed before behavior acceptance',
+        {
+          expected: input.fixedReviewTargetSha,
+          actual: currentHead,
+        },
+      );
+    }
     if (input.initialHead) {
       const ancestry = spawnSync(
         'git',
@@ -1397,6 +1995,20 @@ async function runFactGate(input) {
       ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
     );
     const statusPaths = [...new Set(parseStatusPaths(statusOutput))].sort();
+    if (input.fixedReviewTargetSha && statusPaths.length > 0) {
+      return {
+        ok: false,
+        reason: FAILURE.REVIEW_TARGET_DRIFT,
+        checks: ['git-root', 'gitdir', 'branch', 'fixed-sha-head'],
+        details: {
+          message:
+            'fixed SHA review requires a clean index, worktree, and untracked set',
+          currentHead,
+          fixedReviewTargetSha: input.fixedReviewTargetSha,
+          dirtyPaths: statusPaths,
+        },
+      };
+    }
     const committedPaths = input.initialHead
       ? historyChangedPaths(cwd, input.initialHead, currentHead)
       : [];
@@ -1566,6 +2178,18 @@ function latchOutputProtocolFailure(read, state, clock) {
 
 function assertCleanSessionExit(read, state) {
   const session = read?.session;
+  const externalTurnComplete =
+    state.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY &&
+    session?.sessionId === state.sessionId &&
+    session?.status === 'turn-complete' &&
+    session?.processRunning === true &&
+    session?.pendingQuestion === false &&
+    session?.runningTool === false &&
+    read?.runningTool !== true &&
+    !state.pendingQuestion &&
+    !state.stopRequest &&
+    !state.outputProtocolFailure;
+  if (externalTurnComplete) return;
   if (
     !session ||
     session.sessionId !== state.sessionId ||
@@ -1630,6 +2254,10 @@ function factGateInput(request, state) {
     owned: request.owned,
     excluded: request.excluded,
     risk: request.risk,
+    fixedReviewTargetSha:
+      request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY
+        ? request.externalVisibleTerminal.reviewTargetSha
+        : null,
   };
 }
 
@@ -1716,6 +2344,11 @@ function leaseBlockedResult(input, stateFile) {
     sessionName: state?.sessionName || null,
     terminalHandle: state?.terminalHandle || null,
     terminalGeneration: state?.terminalGeneration || null,
+    supervisionMode:
+      state?.supervisionMode || input?.supervisionMode || SUPERVISION_MODE.NATIVE_TASK_BOUND,
+    codexTaskBindingRequired:
+      state?.codexTaskBindingRequired ??
+      input?.supervisionMode !== SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY,
     cwd: state?.cwd || canonicalPath(input?.cwd || process.cwd()),
     promptInjected: state?.promptInjected === true,
     cursor: state?.cursor || null,
@@ -1723,6 +2356,8 @@ function leaseBlockedResult(input, stateFile) {
     pendingQuestion: state?.pendingQuestion || null,
     stopRequest: state?.stopRequest || null,
     probe: state?.probe || null,
+    evidenceLayers: state?.evidenceLayers || null,
+    externalSession: state?.externalSession || null,
     factGate: state?.factGate || null,
     failure: {
       message: 'another controller holds the task-exclusive supervisor lease',
@@ -1759,25 +2394,63 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
     adapterValidated = true;
     if (createdState) {
       const initialGit = options.captureInitialGitState(request.cwd);
+      if (
+        request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY &&
+        initialGit.head !== request.externalVisibleTerminal.reviewTargetSha
+      ) {
+        throw new SupervisorFailure(
+          FAILURE.REVIEW_TARGET_DRIFT,
+          'worktree HEAD does not equal the fixed review target SHA',
+          {
+            expected: request.externalVisibleTerminal.reviewTargetSha,
+            actual: initialGit.head,
+          },
+        );
+      }
       state.initialHead = initialGit.head;
       state.initialBranch = initialGit.branch;
       state.initialGitDir = initialGit.gitDir;
       state.initialTree = initialGit.tree;
       state.initialR0Evidence = r0EvidenceForRequest(request.cwd, request);
+      if (
+        request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY
+      ) {
+        const initialFactGate = await options.factGate(
+          factGateInput(request, state),
+        );
+        state.factGate = initialFactGate;
+        if (!initialFactGate?.ok) {
+          throw new SupervisorFailure(
+            initialFactGate?.reason || FAILURE.FACT_GATE_FAILED,
+            'fixed SHA facts were not clean before the first terminal input',
+            initialFactGate?.details || {},
+          );
+        }
+      }
       persist(options.stateFile, state, options.clock);
     } else {
       assertCompleteInitialGitBinding(state);
+      if (
+        request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY &&
+        state.initialHead !== request.externalVisibleTerminal.reviewTargetSha
+      ) {
+        throw new SupervisorFailure(
+          FAILURE.REVIEW_TARGET_DRIFT,
+          'persisted supervisor state is bound to another review candidate',
+        );
+      }
     }
 
     if (state.status === 'STOPPED') {
       await proveTerminalVisibility(adapter, request, state, options);
-      await probeClaude(adapter, request, state);
+      await probeClaude(adapter, request, state, options);
       persist(options.stateFile, state, options.clock);
       return publicResult(state);
     }
     if (state.status === 'COMPLETE') {
       await proveTerminalVisibility(adapter, request, state, options);
-      await probeClaude(adapter, request, state);
+      await probeClaude(adapter, request, state, options);
+      await revalidateExternalBehavior(adapter, request, state, options);
       const freshFactGate = await options.factGate(factGateInput(request, state));
       if (!freshFactGate?.ok) {
         throw new SupervisorFailure(
@@ -1814,7 +2487,7 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
     state.blockedReason = null;
     state.failure = null;
     await proveTerminalVisibility(adapter, request, state, options);
-    await probeClaude(adapter, request, state);
+    await probeClaude(adapter, request, state, options);
     if (state.stopRequest) {
       state.status = 'WAITING_CONTROLLER';
       state.blockedReason = 'CLAUDE_STOP_REQUESTED';
@@ -1840,7 +2513,7 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
       return publicResult(state);
     }
     if (!awaitingSecondEofRead) {
-      await launchOrResume(adapter, request, state);
+      await launchOrResume(adapter, request, state, options);
     }
     state.status = awaitingSecondEofRead ? 'VERIFYING' : 'ACTIVE';
     state.blockedReason = null;
@@ -1869,6 +2542,43 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
         );
       }
       state.cursor = read.cursor ?? state.cursor;
+
+      if (
+        request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY &&
+        read.behaviorAcceptance
+      ) {
+        const acceptance = read.behaviorAcceptance;
+        const contract = request.externalVisibleTerminal;
+        if (
+          acceptance.status !== 'PASS' ||
+          acceptance.reviewTargetSha !== contract.reviewTargetSha ||
+          !/^[0-9a-f]{64}$/.test(String(acceptance.transcriptSha256 || '')) ||
+          !/^[0-9a-f]{64}$/.test(
+            String(acceptance.transcriptPrefixSha256 || ''),
+          )
+        ) {
+          throw new SupervisorFailure(
+            acceptance.reviewTargetSha !== contract.reviewTargetSha
+              ? FAILURE.REVIEW_TARGET_DRIFT
+              : FAILURE.EVIDENCE_LAYER_UNPROVEN,
+            'review behavior acceptance is incomplete or bound to another candidate',
+            { acceptance },
+          );
+        }
+        state.externalSession = {
+          ...(state.externalSession || {}),
+          transcriptSha256: acceptance.transcriptSha256,
+          transcriptPrefixSha256: acceptance.transcriptPrefixSha256,
+          reviewVerdict: acceptance.verdict || null,
+          behaviorAcceptedAt: acceptance.acceptedAt || null,
+        };
+        markEvidenceLayer(
+          state,
+          EVIDENCE_LAYER.REVIEW_BEHAVIOR_ACCEPTANCE,
+          acceptance,
+          options.clock,
+        );
+      }
 
       latchOutputProtocolFailure(read, state, options.clock);
       const interruptObservedAtMs = options.clock();
@@ -1913,6 +2623,7 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
         state.status = 'VERIFYING';
         persist(options.stateFile, state, options.clock);
         if (state.stableEofReads >= REQUIRED_STABLE_EOF_READS) {
+          assertExternalEvidenceComplete(state);
           const factGate = await options.factGate(factGateInput(request, state));
           state.factGate = factGate;
           if (!factGate?.ok) {
@@ -1965,6 +2676,12 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
         owned: Array.isArray(input?.owned) ? input.owned : [],
         excluded: Array.isArray(input?.excluded) ? input.excluded : [],
         risk: String(input?.risk || 'R1'),
+        supervisionMode: String(
+          input?.supervisionMode || SUPERVISION_MODE.NATIVE_TASK_BOUND,
+        ),
+        codexTaskBindingRequired:
+          input?.supervisionMode !== SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY,
+        externalVisibleTerminal: input?.externalVisibleTerminal || null,
       };
       state = {
         schemaVersion: STATE_SCHEMA_VERSION,
@@ -1980,6 +2697,14 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
         started: false,
         cursor: null,
         terminalProof: null,
+        evidenceLayers: Object.fromEntries(
+          Object.values(EVIDENCE_LAYER).map((layer) => [layer, {
+            status: 'UNVERIFIED',
+            verifiedAtMs: null,
+            evidenceSha256: null,
+          }]),
+        ),
+        externalSession: null,
         probe: null,
         stableEofReads: 0,
         lastTailSha256: null,
@@ -2031,6 +2756,9 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
         sessionName: null,
         terminalHandle: null,
         terminalGeneration: null,
+        supervisionMode:
+          request?.supervisionMode || SUPERVISION_MODE.NATIVE_TASK_BOUND,
+        codexTaskBindingRequired: request?.codexTaskBindingRequired !== false,
         cwd: request?.cwd || canonicalPath(input?.cwd || process.cwd()),
         promptInjected: false,
         cursor: null,
@@ -2038,6 +2766,8 @@ async function runSupervisor(input, adapterInput, optionOverrides = {}) {
         pendingQuestion: null,
         stopRequest: null,
         probe: null,
+        evidenceLayers: null,
+        externalSession: null,
         factGate: null,
         failure: { message: error.message, details: error.details || {} },
       };
@@ -2163,8 +2893,8 @@ async function answerSupervisorUnlocked(input, adapterInput, answerInput, option
         )
       : null;
     await proveTerminalVisibility(adapter, request, state, options);
-    await probeClaude(adapter, request, state);
-    await launchOrResume(adapter, request, state);
+    await probeClaude(adapter, request, state, options);
+    await launchOrResume(adapter, request, state, options);
     const writeResult = await adapter.writeTerminal({
       terminalHandle: state.terminalHandle,
       terminalGeneration: state.terminalGeneration,
@@ -2287,7 +3017,7 @@ async function ackStopSupervisorUnlocked(
     const receipt = normalizeStopReceipt(receiptInput, state.stopRequest);
     const adapter = validateAdapter(adapterInput, options);
     await proveTerminalVisibility(adapter, request, state, options);
-    await probeClaude(adapter, request, state);
+    await probeClaude(adapter, request, state, options);
     state.stopAcknowledgement = {
       ...receipt,
       receiptSha256: sha256(JSON.stringify(receipt)),
@@ -2338,6 +3068,7 @@ function parseCliArgs(argv) {
     answerFile: null,
     authorizationReceiptFile: null,
     ackFile: null,
+    cwd: null,
     maxCycles: Number.POSITIVE_INFINITY,
   };
   for (const raw of rest) {
@@ -2348,12 +3079,15 @@ function parseCliArgs(argv) {
     else if (raw.startsWith('--authorization-receipt=')) {
       args.authorizationReceiptFile = raw.slice('--authorization-receipt='.length);
     } else if (raw.startsWith('--ack-file=')) args.ackFile = raw.slice(11);
+    else if (raw.startsWith('--cwd=')) args.cwd = raw.slice(6);
     else if (raw.startsWith('--max-cycles=')) args.maxCycles = Number(raw.slice(13));
     else throw new Error(`unknown argument: ${raw}`);
   }
-  if (!['ack-stop', 'answer', 'run', 'status'].includes(args.command)) {
-    throw new Error('command must be ack-stop, answer, run, or status');
+  if (!['ack-stop', 'answer', 'claim', 'run', 'status'].includes(args.command)) {
+    throw new Error('command must be ack-stop, answer, claim, run, or status');
   }
+  if (args.command === 'claim' && !args.cwd) throw new Error('--cwd is required for claim');
+  if (args.command !== 'claim' && args.cwd) throw new Error('--cwd is only valid for claim');
   if (
     args.maxCycles !== Number.POSITIVE_INFINITY &&
     (!Number.isInteger(args.maxCycles) || args.maxCycles < 1)
@@ -2365,6 +3099,7 @@ function parseCliArgs(argv) {
 
 function help() {
   console.log(`Usage:
+  node scripts/claude-cli-supervisor.cjs claim --cwd=<absolute-worktree-root>
   node scripts/claude-cli-supervisor.cjs run --request=<json> [--max-cycles=N]
   node scripts/claude-cli-supervisor.cjs answer --request=<json> --answer-file=<text> [--authorization-receipt=<json>]
   node scripts/claude-cli-supervisor.cjs ack-stop --request=<json> --ack-file=<json>
@@ -2372,13 +3107,21 @@ function help() {
 
 Request JSON:
   taskId, taskName, threadId, cwd, promptFile, minimumClaudeVersion,
-  owned[], excluded[], risk=R0|R1|R2|R3, questionTimeoutMs
+  owned[], excluded[], risk=R0|R1|R2|R3, questionTimeoutMs,
+  supervisionMode=native-task-bound|external-visible-readonly
 
 Production CLI does not load adapter modules from files. API v2 requires a
 native, host-unforgeable Codex Desktop capability bound to taskId, threadId,
-sessionId, and terminalGeneration. That bridge is not integrated yet, so run,
-answer, and ack-stop fail closed with TERMINAL_VISIBILITY_UNPROVEN. File-backed
-adapters are accepted only by the in-process selftest harness.`);
+sessionId, and terminalGeneration for native-task-bound mode. That bridge is not
+integrated yet, so native run/answer/ack-stop fail closed with
+TERMINAL_VISIBILITY_UNPROVEN. external-visible-readonly uses the built-in macOS
+Terminal visible-window adapter and requires a complete fixed-SHA request contract,
+permission-mode=bypassPermissions, four independent evidence layers, and no GitHub/write/
+merge/release/deploy authority. Automatic launch requires a fresh claim from a
+new dedicated frontmost Terminal window; opaque existing tabs are never used as
+automatic launch targets. A user-prepared visible Claude session can instead use
+attach-existing. File-backed adapters are accepted only by the in-process
+selftest harness.`);
 }
 
 function readRegularFile(file, label) {
@@ -2413,6 +3156,1573 @@ function supervisorStateFile(request) {
   return path.join(stateRoot, `${sha256(request.taskId).slice(0, 24)}.json`);
 }
 
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'"'"'`)}'`;
+}
+
+function runSystem(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
+    timeout: options.timeoutMs || 30_000,
+    cwd: options.cwd,
+  });
+  if (result.error || result.status !== 0) {
+    throw new SupervisorFailure(
+      FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+      `${path.basename(command)} external visible terminal operation failed`,
+      {
+        status: result.status,
+        signal: result.signal || null,
+        error: result.error?.message || null,
+        stderr: String(result.stderr || '').trim().slice(0, 2_000),
+      },
+    );
+  }
+  return String(result.stdout || '');
+}
+
+function terminalJxa(source, args = []) {
+  const output = runSystem('/usr/bin/osascript', [
+    '-l',
+    'JavaScript',
+    '-e',
+    source,
+    '--',
+    ...args.map(String),
+  ]);
+  try {
+    return JSON.parse(output.trim());
+  } catch (error) {
+    throw new SupervisorFailure(
+      FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+      'Terminal returned an invalid structured receipt',
+      { message: error.message },
+    );
+  }
+}
+
+const TERMINAL_INSPECT_JXA = `
+function run(argv) {
+  const terminal = Application('Terminal');
+  const windowId = Number(argv[0]);
+  const expectedTty = String(argv[1]);
+  const windows = terminal.windows();
+  const targetWindow = windows.find((item) => Number(item.id()) === windowId);
+  if (!targetWindow) throw new Error('window-not-found');
+  const tabs = targetWindow.tabs();
+  const targetTab = tabs.find((item) => String(item.tty()) === expectedTty);
+  if (!targetTab) throw new Error('tty-not-found');
+  const selected = String(targetWindow.selectedTab().tty()) === expectedTty;
+  const frontWindow = windows.length > 0 && Number(windows[0].id()) === windowId;
+  return JSON.stringify({
+    terminalApp: 'Terminal',
+    frontmost: Boolean(terminal.frontmost()),
+    windowId: Number(targetWindow.id()),
+    windowTitle: String(targetWindow.name()),
+    tty: String(targetTab.tty()),
+    busy: Boolean(targetTab.busy()),
+    selected,
+    frontWindow,
+    contents: String(targetTab.contents()),
+  });
+}`;
+
+const TERMINAL_WRITE_JXA = `
+function run(argv) {
+  const terminal = Application('Terminal');
+  const windowId = Number(argv[0]);
+  const expectedTty = String(argv[1]);
+  const input = String(argv[2]);
+  const windows = terminal.windows();
+  const targetWindow = windows.find((item) => Number(item.id()) === windowId);
+  if (!targetWindow) throw new Error('window-not-found');
+  const targetTab = targetWindow.tabs().find((item) => String(item.tty()) === expectedTty);
+  if (!targetTab) throw new Error('tty-not-found');
+  if (String(targetWindow.selectedTab().tty()) !== expectedTty) {
+    throw new Error('tty-not-selected');
+  }
+  if (windows.length === 0 || Number(windows[0].id()) !== windowId) {
+    throw new Error('window-not-front');
+  }
+  if (!terminal.frontmost()) throw new Error('terminal-not-frontmost');
+  terminal.doScript(input, {in: targetTab});
+  return JSON.stringify({
+    accepted: true,
+    windowId: Number(targetWindow.id()),
+    windowTitle: String(targetWindow.name()),
+    tty: String(targetTab.tty()),
+  });
+}`;
+
+const TERMINAL_FOCUS_JXA = `
+function run(argv) {
+  const terminal = Application('Terminal');
+  const windowId = Number(argv[0]);
+  const expectedTty = String(argv[1]);
+  const targetWindow = terminal.windows().find(
+    (item) => Number(item.id()) === windowId,
+  );
+  if (!targetWindow) throw new Error('window-not-found');
+  if (String(targetWindow.selectedTab().tty()) !== expectedTty) {
+    throw new Error('tty-not-selected');
+  }
+  terminal.activate();
+  targetWindow.index = 1;
+  return JSON.stringify({focused:true,windowId,tty:expectedTty});
+}`;
+
+const TERMINAL_CREATE_DEDICATED_JXA = `
+function run(argv) {
+  const terminal = Application('Terminal');
+  const command = String(argv[0]);
+  const beforeWindowIds = terminal.windows().map((item) => Number(item.id()));
+  const createdTab = terminal.doScript(command);
+  terminal.activate();
+  delay(0.25);
+  const windows = terminal.windows();
+  const afterWindowIds = windows.map((item) => Number(item.id()));
+  const addedWindowIds = afterWindowIds.filter(
+    (windowId) => !beforeWindowIds.includes(windowId),
+  );
+  if (addedWindowIds.length !== 1) throw new Error('dedicated-window-not-created');
+  const targetWindow = windows.find(
+    (item) => Number(item.id()) === addedWindowIds[0],
+  );
+  if (!targetWindow) throw new Error('dedicated-window-not-found');
+  const tty = String(createdTab.tty());
+  if (String(targetWindow.selectedTab().tty()) !== tty) {
+    throw new Error('dedicated-tty-not-selected');
+  }
+  targetWindow.index = 1;
+  return JSON.stringify({
+    terminalApp: 'Terminal',
+    beforeWindowIds,
+    afterWindowIds,
+    addedWindowIds,
+    windowId: Number(targetWindow.id()),
+    windowTitle: String(targetWindow.name()),
+    tty,
+  });
+}`;
+
+function inspectMacTerminal(binding) {
+  return terminalJxa(TERMINAL_INSPECT_JXA, [binding.windowId, binding.tty]);
+}
+
+async function writeMacTerminal(binding, input, primitives = {}) {
+  const jxa = primitives.terminalJxa || terminalJxa;
+  const pause = primitives.delay || delay;
+  const receipt = jxa(TERMINAL_WRITE_JXA, [
+    binding.windowId,
+    binding.tty,
+    input,
+  ]);
+  // Terminal 2.14 can insert into a foreground TUI on the first do-script and
+  // submit on a second empty do-script. This is an adapter detail; readback,
+  // never the extra submit itself, decides whether delivery succeeded.
+  await pause(350);
+  jxa(TERMINAL_WRITE_JXA, [binding.windowId, binding.tty, '']);
+  return receipt;
+}
+
+function focusMacTerminal(binding) {
+  return terminalJxa(TERMINAL_FOCUS_JXA, [binding.windowId, binding.tty]);
+}
+
+function externalTerminalClaimProof(claim) {
+  return `${claim.proofMarker}:${claim.proofPayloadBase64}:${claim.proofMarker}_END`;
+}
+
+async function claimDedicatedMacTerminal(cwd, primitives = {}) {
+  const jxa = primitives.terminalJxa || terminalJxa;
+  const inspect = primitives.inspectTerminal || inspectMacTerminal;
+  const focus = primitives.focusTerminal || focusMacTerminal;
+  const wait = primitives.waitFor || waitFor;
+  const clock = primitives.clock || Date.now;
+  const randomUUID = primitives.randomUUID || crypto.randomUUID;
+  const randomBytes = primitives.randomBytes || crypto.randomBytes;
+  const canonicalCwd = canonicalPath(cwd);
+  const stat = fs.lstatSync(canonicalCwd);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new SupervisorFailure(
+      FAILURE.CWD_MISMATCH,
+      'claim cwd must be a regular worktree directory',
+    );
+  }
+  const worktreeRoot = canonicalPath(
+    git(canonicalCwd, ['rev-parse', '--show-toplevel']).trim(),
+  );
+  if (worktreeRoot !== canonicalCwd) {
+    throw new SupervisorFailure(
+      FAILURE.CWD_MISMATCH,
+      'claim cwd must equal the Git worktree root',
+      { cwd: canonicalCwd, worktreeRoot },
+    );
+  }
+  const claimedAtMs = Number(clock());
+  const claimedAt = new Date(claimedAtMs).toISOString();
+  const expiresAt = new Date(claimedAtMs + EXTERNAL_TERMINAL_CLAIM_TTL_MS).toISOString();
+  const claimId = String(randomUUID());
+  const challenge = `COREONE_CLAIM_${randomBytes(16).toString('hex')}`;
+  const response = reverseAscii(challenge);
+  const proofMarker = externalTerminalClaimMarker(claimId);
+  const proof = {
+    schemaVersion: EXTERNAL_TERMINAL_CLAIM_SCHEMA_VERSION,
+    claimId,
+    claimedAt,
+    expiresAt,
+    cwd: canonicalCwd,
+    challenge,
+    response,
+  };
+  const proofJson = JSON.stringify(proof);
+  const proofPayloadBase64 = Buffer.from(proofJson, 'utf8').toString('base64');
+  const proofSha256 = sha256(proofJson);
+  const claimSource = [
+    "const [marker,claimId,claimedAt,expiresAt,challenge]=process.argv.slice(1)",
+    "const response=challenge.split('').reverse().join('')",
+    `const proof={schemaVersion:${EXTERNAL_TERMINAL_CLAIM_SCHEMA_VERSION},claimId,claimedAt,expiresAt,cwd:process.cwd(),challenge,response}`,
+    "process.stdout.write(marker+':'+Buffer.from(JSON.stringify(proof)).toString('base64')+':'+marker+'_END\\n')",
+  ].join(';');
+  const command = [
+    `cd -- ${shellQuote(canonicalCwd)}`,
+    '&&',
+    shellQuote(process.execPath),
+    '-e',
+    shellQuote(claimSource),
+    shellQuote(proofMarker),
+    shellQuote(claimId),
+    shellQuote(claimedAt),
+    shellQuote(expiresAt),
+    shellQuote(challenge),
+  ].join(' ');
+  const creation = jxa(TERMINAL_CREATE_DEDICATED_JXA, [command]);
+  if (
+    creation?.terminalApp !== 'Terminal' ||
+    !Number.isInteger(creation?.windowId) ||
+    !/^\/dev\/ttys[0-9]+$/.test(String(creation?.tty || '')) ||
+    !Array.isArray(creation?.addedWindowIds) ||
+    creation.addedWindowIds.length !== 1 ||
+    creation.addedWindowIds[0] !== creation.windowId ||
+    creation.beforeWindowIds?.includes(creation.windowId)
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+      'Terminal did not return one newly-created dedicated window',
+      { creation: creation || null },
+    );
+  }
+  const binding = {
+    terminalApp: 'Terminal',
+    windowId: creation.windowId,
+    tty: creation.tty,
+  };
+  await focus(binding);
+  const expectedProof = `${proofMarker}:${proofPayloadBase64}:${proofMarker}_END`;
+  const inspected = typeof primitives.waitForClaimProof === 'function'
+    ? await primitives.waitForClaimProof(binding, expectedProof)
+    : await wait(async () => {
+      const candidate = await inspect(binding);
+      return String(candidate?.contents || '').includes(expectedProof) ? candidate : null;
+    }, {
+      timeoutMs: 30_000,
+      message: 'dedicated Terminal claim proof was not read back from the new window',
+    });
+  const receipt = {
+    ...proof,
+    terminalApp: 'Terminal',
+    windowId: creation.windowId,
+    windowTitle: validateSingleLine(
+      inspected.windowTitle,
+      'dedicated Terminal window title',
+    ),
+    tty: creation.tty,
+    proofMarker,
+    proofPayloadBase64,
+    proofSha256,
+  };
+  assertExternalSurface(receipt, inspected, { initial: true });
+  return receipt;
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function waitFor(check, options = {}) {
+  const timeoutMs = Math.min(
+    Number(options.timeoutMs || 30_000),
+    MAX_VISIBLE_WAIT_MS,
+  );
+  const intervalMs = Math.max(50, Number(options.intervalMs || 250));
+  const started = Date.now();
+  let lastError = null;
+  while (Date.now() - started <= timeoutMs) {
+    try {
+      const result = await check();
+      if (result) return result;
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(intervalMs);
+  }
+  if (lastError) throw lastError;
+  throw new SupervisorFailure(
+    FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+    options.message || 'visible terminal evidence did not appear before the deadline',
+  );
+}
+
+function terminalProcessSnapshot(tty) {
+  const shortTty = path.basename(tty);
+  const output = runSystem('/bin/ps', ['-axo', 'pid=,ppid=,tty=,stat=,command=']);
+  return output
+    .split('\n')
+    .map((line) => {
+      const match = line.match(/^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+([\s\S]+)$/);
+      if (!match) return null;
+      return {
+        pid: Number(match[1]),
+        ppid: Number(match[2]),
+        tty: match[3],
+        stat: match[4],
+        command: match[5],
+      };
+    })
+    .filter((item) => item && item.tty === shortTty);
+}
+
+function visibleClaudeProcess(tty) {
+  const matches = terminalProcessSnapshot(tty).filter(
+    (item) => /(?:^|\/|\s)claude(?:\.exe)?(?:\s|$)/i.test(item.command) &&
+      !/claude-cli-supervisor/.test(item.command),
+  );
+  if (matches.length > 1) {
+    throw new SupervisorFailure(
+      FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+      'more than one Claude process is attached to the claimed TTY',
+      { pids: matches.map((item) => item.pid) },
+    );
+  }
+  return matches[0] || null;
+}
+
+function transcriptCandidates(sessionId) {
+  const projects = path.join(require('node:os').homedir(), '.claude', 'projects');
+  if (!fs.existsSync(projects)) return [];
+  const result = [];
+  for (const project of fs.readdirSync(projects, { withFileTypes: true })) {
+    if (!project.isDirectory()) continue;
+    const candidate = path.join(projects, project.name, `${sessionId}.jsonl`);
+    if (!fs.existsSync(candidate)) continue;
+    const stat = fs.lstatSync(candidate);
+    if (stat.isFile() && !stat.isSymbolicLink()) result.push(canonicalPath(candidate));
+  }
+  return [...new Set(result)];
+}
+
+function resolveTranscriptPath(sessionId, requestedPath = null) {
+  if (requestedPath) {
+    const absolute = canonicalPath(requestedPath);
+    const projectsRoot = canonicalPath(
+      path.join(require('node:os').homedir(), '.claude', 'projects'),
+    );
+    if (!fs.existsSync(absolute)) {
+      throw new SupervisorFailure(
+        FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+        'claimed Claude transcript does not exist',
+      );
+    }
+    const stat = fs.lstatSync(absolute);
+    if (
+      !absolute.startsWith(`${projectsRoot}${path.sep}`) ||
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      path.basename(absolute) !== `${sessionId}.jsonl`
+    ) {
+      throw new SupervisorFailure(
+        FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+        'claimed Claude transcript is not a regular session-bound JSONL file',
+      );
+    }
+    return absolute;
+  }
+  const matches = transcriptCandidates(sessionId);
+  if (matches.length !== 1) {
+    throw new SupervisorFailure(
+      FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+      'Claude transcript discovery did not resolve exactly one session file',
+      { matches: matches.length },
+    );
+  }
+  return matches[0];
+}
+
+function transcriptText(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((item) => item && item.type === 'text')
+    .map((item) => String(item.text || ''))
+    .join('\n');
+}
+
+function readClaudeTranscript(sessionId, requestedPath = null) {
+  const transcriptPath = resolveTranscriptPath(sessionId, requestedPath);
+  const raw = fs.readFileSync(transcriptPath, 'utf8');
+  const records = raw
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  const metadata = {
+    sessionId: null,
+    claudeVersion: null,
+    cwd: null,
+    effort: null,
+    permissionMode: null,
+    model: null,
+  };
+  const messages = [];
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (record.sessionId) metadata.sessionId = String(record.sessionId);
+    if (record.version) metadata.claudeVersion = String(record.version);
+    if (record.cwd) metadata.cwd = canonicalPath(record.cwd);
+    if (record.effort) metadata.effort = String(record.effort);
+    if (record.permissionMode) metadata.permissionMode = String(record.permissionMode);
+    if (record.message?.model) metadata.model = String(record.message.model);
+    const role = record.message?.role || (
+      ['assistant', 'user'].includes(record.type) ? record.type : null
+    );
+    const text = transcriptText(record.message?.content);
+    if (role && text) messages.push({ index, role, text });
+  }
+  if (metadata.sessionId !== sessionId) {
+    throw new SupervisorFailure(
+      FAILURE.STATE_BINDING_MISMATCH,
+      'transcript session id does not match the claimed visible Claude session',
+      { expected: sessionId, actual: metadata.sessionId },
+    );
+  }
+  return {
+    transcriptPath,
+    transcriptSha256: sha256(raw),
+    recordCount: records.length,
+    metadata,
+    messages,
+  };
+}
+
+function currentRepositoryIdentity(cwd) {
+  const remote = git(cwd, ['remote', 'get-url', 'origin']).trim();
+  const match = remote.match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/i);
+  return match ? `${match[1]}/${match[2]}` : null;
+}
+
+function verifyExternalStaticContract(request) {
+  const contract = request.externalVisibleTerminal;
+  const stat = fs.lstatSync(contract.skillPath);
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new SupervisorFailure(
+      FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION,
+      'review Skill must be a regular non-symlink file',
+    );
+  }
+  const skillSha256 = sha256(fs.readFileSync(contract.skillPath, 'utf8'));
+  const reviewTargetSha = git(request.cwd, ['rev-parse', 'HEAD']).trim().toLowerCase();
+  const repositoryFullName = currentRepositoryIdentity(request.cwd);
+  if (
+    skillSha256 !== contract.skillSha256 ||
+    reviewTargetSha !== contract.reviewTargetSha ||
+    repositoryFullName !== contract.repositoryFullName
+  ) {
+    throw new SupervisorFailure(
+      reviewTargetSha !== contract.reviewTargetSha
+        ? FAILURE.REVIEW_TARGET_DRIFT
+        : FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION,
+      'local Skill, repository identity, or fixed review SHA changed',
+      {
+        skillSha256,
+        reviewTargetSha,
+        repositoryFullName,
+      },
+    );
+  }
+  return { skillSha256, reviewTargetSha, repositoryFullName };
+}
+
+function defaultExternalVisibleRuntime() {
+  return {
+    focusTerminal: focusMacTerminal,
+    inspectTerminal: inspectMacTerminal,
+    writeTerminal: writeMacTerminal,
+    claudeProcess: visibleClaudeProcess,
+    readTranscript: readClaudeTranscript,
+    verifyStatic: verifyExternalStaticContract,
+    async waitForTerminalText(binding, expected, timeoutMs) {
+      return waitFor(() => {
+        const inspected = inspectMacTerminal(binding);
+        return inspected.contents.includes(expected) ? inspected : null;
+      }, {
+        timeoutMs,
+        message: 'same-tab Terminal readback did not contain the expected response',
+      });
+    },
+    async waitForTerminalMatch(binding, pattern, timeoutMs) {
+      return waitFor(() => {
+        const inspected = inspectMacTerminal(binding);
+        pattern.lastIndex = 0;
+        return pattern.test(inspected.contents) ? inspected : null;
+      }, {
+        timeoutMs,
+        message: 'same-tab Terminal readback did not contain the structured receipt',
+      });
+    },
+    async waitForClaudeProcess(binding, expectedPid = null) {
+      return waitFor(() => {
+        const processInfo = visibleClaudeProcess(binding.tty);
+        if (!processInfo) return null;
+        if (expectedPid && processInfo.pid !== expectedPid) {
+          throw new SupervisorFailure(
+            FAILURE.STATE_BINDING_MISMATCH,
+            'visible Claude PID changed',
+            { expectedPid, actualPid: processInfo.pid },
+          );
+        }
+        return processInfo;
+      }, { message: 'Claude did not become visible on the claimed TTY' });
+    },
+    async waitForTranscript(sessionId, transcriptPath, predicate, timeoutMs = 60_000) {
+      return waitFor(() => {
+        let snapshot;
+        try {
+          snapshot = readClaudeTranscript(sessionId, transcriptPath);
+        } catch (error) {
+          if (
+            error.reason === FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE ||
+            error.code === 'ENOENT'
+          ) return null;
+          throw error;
+        }
+        return predicate(snapshot) ? snapshot : null;
+      }, { timeoutMs, message: 'Claude transcript evidence did not appear before the deadline' });
+    },
+    async waitForTranscriptUpdate(sessionId, transcriptPath, cursor, timeoutMs) {
+      const maximum = Math.min(Number(timeoutMs || DEFAULT_POLL_MS), MAX_VISIBLE_WAIT_MS);
+      const started = Date.now();
+      let latest = null;
+      while (Date.now() - started <= maximum) {
+        try {
+          latest = readClaudeTranscript(sessionId, transcriptPath);
+        } catch (error) {
+          if (
+            error.reason !== FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE &&
+            error.code !== 'ENOENT'
+          ) throw error;
+        }
+        if (latest) {
+          const tail = latestAssistantText(latest);
+          if (
+            latest.recordCount > Number(cursor || 0) ||
+            /COREONE_REVIEW_(?:COMPLETE|QUESTION)\b/.test(tail)
+          ) {
+            return { snapshot: latest, changed: true };
+          }
+        }
+        const remaining = maximum - (Date.now() - started);
+        if (remaining <= 0) break;
+        await delay(Math.min(250, remaining));
+      }
+      if (latest) return { snapshot: latest, changed: false };
+      throw new SupervisorFailure(
+        FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+        'Claude transcript was unavailable throughout the visible supervision poll',
+      );
+    },
+  };
+}
+
+function assertExternalSurface(binding, inspected, options = {}) {
+  const failures = [];
+  if (inspected?.terminalApp !== binding.terminalApp) failures.push('terminalApp');
+  if (Number(inspected?.windowId) !== binding.windowId) failures.push('windowId');
+  if (inspected?.tty !== binding.tty) failures.push('tty');
+  if (inspected?.frontmost !== true) failures.push('frontmost');
+  if (inspected?.frontWindow !== true) failures.push('frontWindow');
+  if (inspected?.selected !== true) failures.push('selectedTab');
+  if (options.initial && inspected?.windowTitle !== binding.windowTitle) {
+    failures.push('windowTitle');
+  }
+  if (failures.length > 0) {
+    throw new SupervisorFailure(
+      FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+      'the claimed Terminal window or TTY is not the current user-visible surface',
+      { failures },
+    );
+  }
+}
+
+function assertDedicatedTerminalClaim(binding, inspected, now = Date.now()) {
+  if (binding.startup !== 'launch-in-dedicated-window') return;
+  const claim = binding.claim;
+  const claimedAtMs = Date.parse(claim.claimedAt);
+  const expiresAtMs = Date.parse(claim.expiresAt);
+  const failures = [];
+  if (now + EXTERNAL_TERMINAL_CLAIM_CLOCK_SKEW_MS < claimedAtMs) {
+    failures.push('claimFromFuture');
+  }
+  if (now > expiresAtMs) failures.push('claimExpired');
+  if (
+    claim.terminalApp !== binding.terminalApp ||
+    claim.windowId !== binding.windowId ||
+    claim.windowTitle !== binding.windowTitle ||
+    claim.tty !== binding.tty
+  ) {
+    failures.push('terminalIdentity');
+  }
+  if (!String(inspected?.contents || '').includes(externalTerminalClaimProof(claim))) {
+    failures.push('liveProofReadback');
+  }
+  if (failures.length > 0) {
+    throw new SupervisorFailure(
+      FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+      'dedicated Terminal claim is stale, different, or not visible in the claimed window',
+      { failures, claimId: claim.claimId },
+    );
+  }
+}
+
+function externalTerminalHandle(binding) {
+  return `external:${binding.terminalApp}:${binding.windowId}:${binding.tty}`;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function externalCommandHasArgument(command, flag, value) {
+  const escapedFlag = escapeRegExp(flag);
+  const escapedValue = escapeRegExp(value);
+  return new RegExp(
+    `(?:^|\\s)${escapedFlag}(?:=|\\s+)(?:'${escapedValue}'|"${escapedValue}"|${escapedValue})(?=\\s|$)`,
+  ).test(command);
+}
+
+function assertExternalClaudeCommand(processInfo, binding) {
+  const command = String(processInfo?.command || '');
+  const freshSession = externalCommandHasArgument(
+    command,
+    '--session-id',
+    binding.claudeSessionId,
+  );
+  const resumedSession = externalCommandHasArgument(
+    command,
+    '--resume',
+    binding.claudeSessionId,
+  );
+  const failures = [];
+  if (!externalCommandHasArgument(command, '--effort', binding.expectedEffort)) {
+    failures.push('effort');
+  }
+  if (!externalCommandHasArgument(
+    command,
+    '--permission-mode',
+    binding.expectedPermissionMode,
+  )) {
+    failures.push('permissionMode');
+  }
+  if (freshSession === resumedSession) failures.push('exactSessionMode');
+  const forbiddenMode =
+    /(?:^|\s)(?:-p|--print|--bg|--fork-session)(?:\s|=|$)/.test(command);
+  if (
+    !/(?:^|\/)claude(?:\.exe)?\s/.test(command) ||
+    forbiddenMode ||
+    failures.length > 0
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION,
+      'visible Claude process command does not match the fixed read-only launch contract',
+      {
+        failures,
+        freshSession,
+        resumedSession,
+        forbiddenMode,
+      },
+    );
+  }
+}
+
+function externalQuestionTextRequiresAuthority(text) {
+  const source = String(text);
+  const nonReadonlyPermissionRequest =
+    /\b(?:may|can|should|could|shall|would)\s+i\s+(?:please\s+)?(?!(?:inspect|read|check|query|verify|review|examine|locate|find|list|show|compare)\b)/i.test(
+      source,
+    );
+  return nonReadonlyPermissionRequest ||
+    /(?:\b(?:permission|authori[sz]e|ownership|owner|github|issue|pull request|comment|write|edit|modify|push|commit|stage|git\s+add|open\s+(?:a\s+)?pr|submit\s+(?:a\s+)?(?:pull request|pr)|make\s+(?:a\s+)?(?:new\s+)?branch|create\s+(?:a\s+)?(?:commit|branch|pull request|pr|file)|delete|remove|merge|publish|deploy|release|send|scope expansion)\b|\u6743\u9650|\u6388\u6743|\u6240\u6709\u6743|\u8d23\u4efb\u4eba|\u5199\u5165|\u4fee\u6539|\u8bc4\u8bba|\u5408\u5e76|\u53d1\u5e03|\u90e8\u7f72|\u5bf9\u5916\u53d1\u9001)/i.test(source);
+}
+
+function parseExternalReviewRecord(text) {
+  const source = String(text || '');
+  const markerMatches = source.match(
+    /COREONE_REVIEW_(?:COMPLETE|QUESTION)/g,
+  ) || [];
+  if (markerMatches.length === 0) return null;
+  const lines = source.split(/\r?\n/);
+  const lastNonemptyLine = lines.reduce(
+    (latest, line, index) => (line.length > 0 ? index : latest),
+    -1,
+  );
+  const candidates = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const complete = line.match(
+      /^COREONE_REVIEW_COMPLETE target=([0-9a-f]{40}) verdict=(PASS|FAIL|BLOCKED)$/,
+    );
+    if (complete) {
+      candidates.push({
+        type: 'complete',
+        lineIndex: index,
+        reviewTargetSha: complete[1],
+        verdict: complete[2],
+      });
+    }
+    const question = line.match(
+      /^COREONE_REVIEW_QUESTION id=([A-Za-z0-9._-]+) kind=([A-Za-z0-9._-]+) text=([^\r\n]+)$/,
+    );
+    if (question) {
+      const kind = question[2];
+      if (!EXTERNAL_REVIEW_QUESTION_KINDS.has(kind)) {
+        throw new SupervisorFailure(
+          FAILURE.EVIDENCE_LAYER_UNPROVEN,
+          'external review emitted an unknown question kind',
+          { kind },
+        );
+      }
+      candidates.push({
+        type: 'question',
+        lineIndex: index,
+        id: question[1],
+        kind,
+        text: question[3],
+        requiresAuthority:
+          EXTERNAL_REVIEW_QUESTION_KINDS.get(kind) === true ||
+          externalQuestionTextRequiresAuthority(question[3]),
+      });
+    }
+  }
+  const candidate = candidates[0] || null;
+  const fenceCountBeforeCandidate = candidate
+    ? (lines.slice(0, candidate.lineIndex).join('\n').match(/```/g) || []).length
+    : 0;
+  if (
+    markerMatches.length !== 1 ||
+    candidates.length !== 1 ||
+    candidate.lineIndex !== lastNonemptyLine ||
+    fenceCountBeforeCandidate % 2 !== 0
+  ) {
+    throw new SupervisorFailure(
+      FAILURE.EVIDENCE_LAYER_UNPROVEN,
+      'external review terminal record is embedded, quoted, repeated, or ambiguous',
+      {
+        markerCount: markerMatches.length,
+        canonicalRecordCount: candidates.length,
+        finalLine: candidate?.lineIndex === lastNonemptyLine,
+        fenced: fenceCountBeforeCandidate % 2 !== 0,
+      },
+    );
+  }
+  return candidate;
+}
+
+function isExternalControllerAnswerMessage(message) {
+  if (message?.role !== 'user') return false;
+  const text = String(message.text || '');
+  if (!text.trim()) return false;
+  return !/(?:COREONE_STARTUP_HANDSHAKE_ONLY|COREONE_PROMPT_CHALLENGE_[0-9a-f]+|COREONE_REVIEW_REQUEST_[0-9a-f]+|COREONE_TERMINAL_PROBE_[A-Za-z0-9_]+)/.test(
+    text,
+  );
+}
+
+function externalReviewProtocol(snapshot) {
+  const records = [];
+  for (const message of snapshot.messages) {
+    if (message.role !== 'assistant') continue;
+    const record = parseExternalReviewRecord(message.text);
+    if (record) records.push({ ...record, message });
+  }
+  const completions = records.filter((record) => record.type === 'complete');
+  if (completions.length > 1) {
+    throw new SupervisorFailure(
+      FAILURE.EVIDENCE_LAYER_UNPROVEN,
+      'external review emitted multiple completion records',
+      {
+        completionCount: completions.length,
+        verdicts: completions.map((record) => record.verdict),
+      },
+    );
+  }
+  const questionIds = new Set();
+  let latest = null;
+  for (const record of records) {
+    if (record.type === 'question') {
+      if (questionIds.has(record.id)) {
+        throw new SupervisorFailure(
+          FAILURE.EVIDENCE_LAYER_UNPROVEN,
+          'external review repeated a question terminal record',
+          { questionId: record.id },
+        );
+      }
+      questionIds.add(record.id);
+    }
+    if (!latest) {
+      latest = record;
+      continue;
+    }
+    if (latest.type === 'complete') {
+      throw new SupervisorFailure(
+        FAILURE.EVIDENCE_LAYER_UNPROVEN,
+        'external review emitted a terminal record after completion',
+        {
+          previousType: latest.type,
+          currentType: record.type,
+        },
+      );
+    }
+    const controllerAnswers = snapshot.messages.filter(
+      (message) =>
+        message.index > latest.message.index &&
+        message.index < record.message.index &&
+        isExternalControllerAnswerMessage(message),
+    );
+    if (controllerAnswers.length === 0) {
+      throw new SupervisorFailure(
+        FAILURE.EVIDENCE_LAYER_UNPROVEN,
+        'external review replaced an unanswered question terminal record',
+        {
+          questionId: latest.id,
+          nextType: record.type,
+        },
+      );
+    }
+    latest = record;
+  }
+  return {
+    records,
+    latest,
+  };
+}
+
+function externalTranscriptPrefixSha256(snapshot, lastMessageIndex) {
+  const messages = snapshot.messages
+    .filter((message) => message.index <= lastMessageIndex)
+    .map((message) => ({
+      index: message.index,
+      role: message.role,
+      text: message.text,
+    }));
+  return sha256(JSON.stringify(messages));
+}
+
+function assistantTextAfter(snapshot, cursor = 0) {
+  const start = Number(cursor || 0);
+  return snapshot.messages
+    .filter((message) => message.role === 'assistant' && message.index >= start)
+    .map((message) => message.text)
+    .join('\n');
+}
+
+function latestAssistantText(snapshot) {
+  const messages = snapshot.messages.filter((message) => message.role === 'assistant');
+  return messages.length > 0 ? messages[messages.length - 1].text : '';
+}
+
+function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
+  const binding = request.externalVisibleTerminal;
+  const runtime = runtimeInput || defaultExternalVisibleRuntime();
+  const terminalHandle = externalTerminalHandle(binding);
+  let visibilityCursor = 0;
+  let transcriptPath = binding.transcriptPath;
+  let claudePid = binding.claudePid;
+  let claudeLaunchPath = null;
+  let lastVisibilityCanary = null;
+  let lastVisibilityResponse = null;
+
+  function boundResult(input, values = {}) {
+    return {
+      terminalHandle,
+      terminalGeneration: input.terminalGeneration,
+      threadId: input.threadId,
+      ...values,
+    };
+  }
+
+  async function inspectBoundSurface(options = {}) {
+    if (typeof runtime.focusTerminal === 'function') {
+      await runtime.focusTerminal(binding);
+    }
+    const activationDeadline = Date.now() + 3_000;
+    while (true) {
+      const inspected = await runtime.inspectTerminal(binding);
+      try {
+        assertExternalSurface(binding, inspected, options);
+        return inspected;
+      } catch (error) {
+        const failures = Array.isArray(error.details?.failures)
+          ? error.details.failures
+          : [];
+        const activationPending =
+          error.reason === FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE &&
+          failures.length > 0 &&
+          failures.every((failure) =>
+            ['frontmost', 'frontWindow'].includes(failure),
+          );
+        if (!activationPending || Date.now() >= activationDeadline) throw error;
+        await delay(100);
+      }
+    }
+  }
+
+  async function writeBoundTerminal(input, purpose) {
+    await inspectBoundSurface();
+    const receipt = await runtime.writeTerminal(binding, input, purpose);
+    if (receipt?.accepted !== true) {
+      throw new SupervisorFailure(
+        FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+        'the exact visible Terminal surface did not acknowledge the write',
+        { purpose },
+      );
+    }
+    return receipt;
+  }
+
+  async function inspectBoundClaude(preloadedSnapshot = null) {
+    const processInfo = await runtime.waitForClaudeProcess(binding, claudePid);
+    assertExternalClaudeCommand(processInfo, binding);
+    claudePid = processInfo.pid;
+    const snapshot = preloadedSnapshot || await runtime.waitForTranscript(
+      request.externalVisibleTerminal.claudeSessionId,
+      transcriptPath,
+      () => true,
+    );
+    transcriptPath = snapshot.transcriptPath;
+    const metadata = snapshot.metadata;
+    if (
+      metadata.cwd !== request.cwd ||
+      metadata.claudeVersion !== binding.expectedClaudeVersion ||
+      metadata.effort !== binding.expectedEffort ||
+      metadata.permissionMode !== binding.expectedPermissionMode
+    ) {
+      throw new SupervisorFailure(
+        FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION,
+        'visible Claude transcript metadata does not match the fixed read-only request',
+        {
+          cwd: metadata.cwd,
+          claudeVersion: metadata.claudeVersion,
+          effort: metadata.effort,
+          permissionMode: metadata.permissionMode,
+        },
+      );
+    }
+    return { processInfo, snapshot };
+  }
+
+  return {
+    apiVersion: ADAPTER_API_VERSION,
+    surface: 'external-visible-terminal',
+    sameHandleReadWrite: true,
+    canaryDelivery: 'same-visible-session-challenge-response',
+    structuredProbe: true,
+    readOnly: true,
+    async createTerminal(input) {
+      const inspected = await inspectBoundSurface({ initial: true });
+      const existing = await runtime.claudeProcess(binding.tty);
+      if (binding.startup === 'launch-in-dedicated-window') {
+        assertDedicatedTerminalClaim(binding, inspected);
+        if (existing) {
+          throw new SupervisorFailure(
+            FAILURE.VISIBLE_CLI_CONTROL_UNAVAILABLE,
+            'the newly claimed dedicated Terminal window already contains a Claude process',
+            { pid: existing.pid },
+          );
+        }
+      }
+      if (binding.startup === 'attach-existing') {
+        if (!existing || existing.pid !== binding.claudePid) {
+          throw new SupervisorFailure(
+            FAILURE.STATE_BINDING_MISMATCH,
+            'the claimed existing Claude PID is not attached to the exact TTY',
+          );
+        }
+        await inspectBoundClaude();
+      }
+      return boundResult(input, {
+        status: 'attached',
+        visible: true,
+        idempotencyKey: input.idempotencyKey,
+        evidence: {
+          terminalApp: binding.terminalApp,
+          windowId: binding.windowId,
+          windowTitle: inspected.windowTitle,
+          tty: binding.tty,
+          codexTaskBindingRequired: false,
+        },
+      });
+    },
+    async attachTerminal(input) {
+      if (input.terminalHandle !== terminalHandle) {
+        throw new SupervisorFailure(
+          FAILURE.TERMINAL_HANDLE_MISMATCH,
+          'persisted external terminal handle changed',
+        );
+      }
+      const inspected = await inspectBoundSurface();
+      if (input.started === true) {
+        const existing = await runtime.claudeProcess(binding.tty);
+        if (existing) {
+          assertExternalClaudeCommand(existing, binding);
+          claudePid = existing.pid;
+          await inspectBoundClaude();
+        } else {
+          claudePid = null;
+        }
+      } else if (binding.startup === 'launch-in-dedicated-window') {
+        const existing = await runtime.claudeProcess(binding.tty);
+        if (existing) {
+          assertExternalClaudeCommand(existing, binding);
+          claudePid = existing.pid;
+          await inspectBoundClaude();
+        } else {
+          assertDedicatedTerminalClaim(binding, inspected);
+        }
+      }
+      return boundResult(input, {
+        status: 'attached',
+        visible: true,
+        idempotencyKey: input.idempotencyKey,
+        evidence: {
+          terminalApp: binding.terminalApp,
+          windowId: binding.windowId,
+          windowTitle: inspected.windowTitle,
+          tty: binding.tty,
+          codexTaskBindingRequired: false,
+        },
+      });
+    },
+    async writeTerminal(input) {
+      let delivered = input.input;
+      if (input.purpose === 'visibility-proof') {
+        lastVisibilityCanary = input.canary;
+        lastVisibilityResponse = input.expectedCanaryResponse;
+        const existing = await runtime.claudeProcess(binding.tty);
+        if (existing) {
+          assertExternalClaudeCommand(existing, binding);
+          claudePid = existing.pid;
+        } else {
+          claudePid = null;
+        }
+      }
+      if (
+        input.purpose === 'visibility-proof' &&
+        !claudePid
+      ) {
+        const canarySource = [
+          `const token=${JSON.stringify(input.canary)}`,
+          "process.stdout.write(token.split('').reverse().join('')+'\\n')",
+        ].join(';');
+        delivered = `node -e ${shellQuote(canarySource)}`;
+      }
+      await writeBoundTerminal(delivered, input.purpose);
+      return boundResult(input, { accepted: true });
+    },
+    async readTerminal(input) {
+      await inspectBoundSurface();
+      if (input.purpose === 'visibility-proof') {
+        if (!claudePid) {
+          await runtime.waitForTerminalText(
+            binding,
+            input.expectedCanaryResponse,
+            input.maxWaitMs,
+          );
+          return boundResult(input, {
+            attached: true,
+            visible: true,
+            cursor: '0',
+            output: input.expectedCanaryResponse,
+            eof: false,
+            running: false,
+          });
+        }
+        const snapshot = await runtime.waitForTranscript(
+          binding.claudeSessionId,
+          transcriptPath,
+          (candidate) => assistantTextAfter(candidate, visibilityCursor).includes(
+            input.expectedCanaryResponse,
+          ),
+          input.maxWaitMs,
+        );
+        transcriptPath = snapshot.transcriptPath;
+        visibilityCursor = snapshot.recordCount;
+        return boundResult(input, {
+          attached: true,
+          visible: true,
+          cursor: String(visibilityCursor),
+          output: input.expectedCanaryResponse,
+          eof: false,
+          running: true,
+        });
+      }
+      const cursor = Number(input.cursor || 0);
+      let preloadedSnapshot = null;
+      if (typeof runtime.waitForTranscriptUpdate === 'function') {
+        const update = await runtime.waitForTranscriptUpdate(
+          binding.claudeSessionId,
+          transcriptPath,
+          cursor,
+          input.maxWaitMs,
+        );
+        preloadedSnapshot = update?.snapshot || update;
+      }
+      const { snapshot } = await inspectBoundClaude(preloadedSnapshot);
+      const output = assistantTextAfter(snapshot, cursor);
+      const tail = latestAssistantText(snapshot);
+      const protocol = externalReviewProtocol(snapshot);
+      const completionCandidate = protocol.latest?.type === 'complete'
+        ? protocol.latest
+        : null;
+      const laterMessages = completionCandidate
+        ? snapshot.messages.filter(
+          (message) => message.index > completionCandidate.message.index,
+        )
+        : [];
+      const laterMessagesAreVisibilityProof =
+        completionCandidate &&
+        lastVisibilityCanary &&
+        lastVisibilityResponse &&
+        laterMessages.length > 0 &&
+        laterMessages.every((message) =>
+          (message.role === 'user' && message.text.includes(lastVisibilityCanary)) ||
+          (message.role === 'assistant' && message.text.includes(lastVisibilityResponse)),
+        ) &&
+        laterMessages.some(
+          (message) =>
+            message.role === 'assistant' &&
+            message.text.includes(lastVisibilityResponse),
+        );
+      const completion = completionCandidate && (
+        laterMessages.length === 0 || laterMessagesAreVisibilityProof
+      )
+        ? completionCandidate
+        : null;
+      const questionCandidate = protocol.latest?.type === 'question'
+        ? protocol.latest
+        : null;
+      const question = questionCandidate && !snapshot.messages.some(
+        (message) =>
+          message.index > questionCandidate.message.index &&
+          isExternalControllerAnswerMessage(message),
+      )
+        ? questionCandidate
+        : null;
+      const complete = Boolean(completion);
+      return boundResult(input, {
+        attached: true,
+        visible: true,
+        cursor: String(snapshot.recordCount),
+        output,
+        tail: completion ? completionCandidate.message.text : tail,
+        eof: complete,
+        running: !complete,
+        runningTool: false,
+        question: question && !complete
+          ? {
+              id: question.id,
+              kind: question.kind,
+              text: question.text,
+              requiresAuthority: question.requiresAuthority,
+            }
+          : null,
+        session: complete
+          ? {
+              sessionId: binding.claudeSessionId,
+              status: 'turn-complete',
+              processRunning: true,
+              pendingQuestion: false,
+              runningTool: false,
+            }
+          : null,
+        behaviorAcceptance: complete
+          ? {
+              status: 'PASS',
+              reviewTargetSha: completion.reviewTargetSha,
+              verdict: completion.verdict,
+              transcriptSha256: snapshot.transcriptSha256,
+              transcriptPrefixSha256: externalTranscriptPrefixSha256(
+                snapshot,
+                completion.message.index,
+              ),
+              acceptedAt: new Date().toISOString(),
+            }
+          : null,
+      });
+    },
+    async probeTerminal(input) {
+      await inspectBoundSurface();
+      const staticEvidence = await runtime.verifyStatic(request);
+      if (!claudePid) {
+        const marker = `COREONE_SHELL_PROBE_${crypto.randomBytes(8).toString('hex')}`;
+        const probeSource = [
+          "const {execFileSync}=require('node:child_process')",
+          "const run=(command,args=[])=>execFileSync(command,args,{encoding:'utf8'}).trim()",
+          "const claudePath=run('/usr/bin/which',['claude'])",
+          "const claudeVersion=run(claudePath,['--version'])",
+          "const help=run(claudePath,['--help'])",
+          `const data={cwd:process.cwd(),worktreeRoot:run('git',['rev-parse','--show-toplevel']),claudePath,claudeVersion,effortSupported:help.includes(${JSON.stringify(binding.expectedEffort)})}`,
+          `process.stdout.write(${JSON.stringify(`${marker}:`)}+Buffer.from(JSON.stringify(data)).toString('base64')+${JSON.stringify(`:${marker}_END\\n`)})`,
+        ].join(';');
+        const script = `cd -- ${shellQuote(request.cwd)} && node -e ${shellQuote(probeSource)}`;
+        await writeBoundTerminal(script, 'structured-shell-probe');
+        const pattern = new RegExp(
+          `${marker}:([A-Za-z0-9+/=]+):${marker}_END`,
+          'g',
+        );
+        const inspected = typeof runtime.waitForTerminalMatch === 'function'
+          ? await runtime.waitForTerminalMatch(binding, pattern, 30_000)
+          : await runtime.waitForTerminalText(binding, `${marker}_END`, 30_000);
+        pattern.lastIndex = 0;
+        const matches = [...String(inspected.contents || '').matchAll(pattern)];
+        let shellProbe = null;
+        try {
+          shellProbe = JSON.parse(
+            Buffer.from(matches.at(-1)?.[1] || '', 'base64').toString('utf8'),
+          );
+        } catch {
+          // The structured validation below reports one stable failure class.
+        }
+        const normalizedVisibleVersion = parseVersion(
+          shellProbe?.claudeVersion,
+        )?.raw || null;
+        const versionMatches =
+          normalizedVisibleVersion !== null &&
+          compareVersions(
+            normalizedVisibleVersion,
+            binding.expectedClaudeVersion,
+          ) === 0;
+        if (
+          canonicalPath(shellProbe?.cwd || '') !== request.cwd ||
+          canonicalPath(shellProbe?.worktreeRoot || '') !== request.cwd ||
+          !path.isAbsolute(String(shellProbe?.claudePath || '')) ||
+          !versionMatches ||
+          shellProbe?.effortSupported !== true
+        ) {
+          const cwdMismatch =
+            canonicalPath(shellProbe?.cwd || '') !== request.cwd ||
+            canonicalPath(shellProbe?.worktreeRoot || '') !== request.cwd;
+          throw new SupervisorFailure(
+            cwdMismatch
+              ? FAILURE.CWD_MISMATCH
+              : !versionMatches
+                ? FAILURE.CLAUDE_CLI_VERSION_MISMATCH
+                : FAILURE.CLAUDE_EFFORT_UNSUPPORTED,
+            'same-tab shell probe did not prove cwd, Claude version, and effort support',
+            {
+              cwd: shellProbe?.cwd || null,
+              worktreeRoot: shellProbe?.worktreeRoot || null,
+              claudePath: shellProbe?.claudePath || null,
+              claudeVersion: shellProbe?.claudeVersion || null,
+              effortSupported: shellProbe?.effortSupported === true,
+            },
+          );
+        }
+        claudeLaunchPath = canonicalPath(shellProbe.claudePath);
+        return boundResult(input, {
+          cwd: request.cwd,
+          worktreeRoot: request.cwd,
+          claudePath: shellProbe.claudePath,
+          claudeVersion: normalizedVisibleVersion,
+          effortSupported: true,
+          actualEffort: binding.expectedEffort,
+          permissionMode: binding.expectedPermissionMode,
+          reviewTargetSha: staticEvidence.reviewTargetSha,
+          repositoryFullName: staticEvidence.repositoryFullName,
+          skillPath: binding.skillPath,
+          skillSha256: staticEvidence.skillSha256,
+          skillInstalled: true,
+          claudeSessionId: binding.claudeSessionId,
+          claudePid: null,
+          transcriptPath: null,
+          transcriptSha256: null,
+          windowTitle: inspected.windowTitle,
+          prelaunch: true,
+        });
+      }
+      const { processInfo, snapshot } = await inspectBoundClaude();
+      return boundResult(input, {
+        cwd: snapshot.metadata.cwd,
+        worktreeRoot: snapshot.metadata.cwd,
+        claudePath: '/visible-terminal/claude',
+        claudeVersion: snapshot.metadata.claudeVersion,
+        effortSupported: true,
+        actualEffort: snapshot.metadata.effort,
+        permissionMode: snapshot.metadata.permissionMode,
+        reviewTargetSha: staticEvidence.reviewTargetSha,
+        repositoryFullName: staticEvidence.repositoryFullName,
+        skillPath: binding.skillPath,
+        skillSha256: staticEvidence.skillSha256,
+        skillInstalled: true,
+        claudeSessionId: binding.claudeSessionId,
+        claudePid: processInfo.pid,
+        transcriptPath: snapshot.transcriptPath,
+        transcriptSha256: snapshot.transcriptSha256,
+        windowTitle: (await inspectBoundSurface()).windowTitle,
+      });
+    },
+    async launchClaude(input) {
+      let priorSnapshot = null;
+      if (binding.startup === 'launch-in-dedicated-window' && !claudePid) {
+        if (!claudeLaunchPath || !path.isAbsolute(claudeLaunchPath)) {
+          throw new SupervisorFailure(
+            FAILURE.CLAUDE_CLI_MISSING,
+            'the exact visible-shell Claude executable was not retained from the prelaunch probe',
+          );
+        }
+        const command = [
+          `cd -- ${shellQuote(request.cwd)}`,
+          '&&',
+          shellQuote(claudeLaunchPath),
+          '--effort',
+          shellQuote(binding.expectedEffort),
+          '--permission-mode',
+          shellQuote(binding.expectedPermissionMode),
+          '--name',
+          shellQuote(input.sessionName),
+          '--session-id',
+          shellQuote(binding.claudeSessionId),
+        ].join(' ');
+        await writeBoundTerminal(command, 'launch-visible-claude');
+        const processInfo = await runtime.waitForClaudeProcess(binding);
+        assertExternalClaudeCommand(processInfo, binding);
+        claudePid = processInfo.pid;
+      } else {
+        ({ snapshot: priorSnapshot } = await inspectBoundClaude());
+      }
+      const challenge = `COREONE_PROMPT_CHALLENGE_${sha256(input.prompt).slice(0, 16)}`;
+      const expectedChallenge = challenge.split('').reverse().join('');
+      const handshakePrompt = [
+        'COREONE_STARTUP_HANDSHAKE_ONLY.',
+        'Do not invoke a Skill, read the repository authority chain, begin the review, or modify anything yet.',
+        `Use one read-only command to compute the SHA-256 of ${binding.skillPath}.`,
+        `Reverse only the ASCII characters in ${challenge}.`,
+        'Return exactly these two evidence lines, then stop this turn:',
+        `COREONE_PROMPT_ACK ${expectedChallenge}`,
+        'COREONE_SKILL_DISCOVERED sha256=<computed-sha256>',
+      ].join('\n');
+      const reviewDeliveryMarker =
+        `COREONE_REVIEW_REQUEST_${sha256(`${input.promptSha256}\0${binding.reviewTargetSha}`).slice(0, 16)}`;
+      const reviewPrompt = [
+        `/${binding.skillName}`,
+        reviewDeliveryMarker,
+        'COREONE external-visible-readonly fixed-SHA review.',
+        'Do not edit files, change permissions or identity, write GitHub, comment, merge, publish, deploy, or send externally.',
+        `The same session already proved Skill digest ${binding.skillSha256}; invoke and follow ${binding.skillPath}.`,
+        `Review only repository ${binding.repositoryFullName} at exact candidate ${binding.reviewTargetSha}.`,
+        input.prompt,
+        'If controller input is required, use exactly one kind from clarification, evidence, permission, ownership, product-direction, github-write, write, merge, publish, deploy, release, external-send.',
+        'Then output one standalone final line: COREONE_REVIEW_QUESTION id=<id> kind=<kind> text=<single-line question>.',
+        `Only when the review turn is fully finished, output one standalone final line: COREONE_REVIEW_COMPLETE target=${binding.reviewTargetSha} verdict=<PASS|FAIL|BLOCKED>.`,
+        'Never quote, prefix, suffix, explain, repeat, or combine terminal records.',
+      ].join('\n');
+      let acceptanceSnapshot = priorSnapshot;
+      const priorAssistantText = priorSnapshot
+        ? assistantTextAfter(priorSnapshot, 0)
+        : '';
+      const handshakeAlreadyAccepted =
+        priorAssistantText.includes(`COREONE_PROMPT_ACK ${expectedChallenge}`) &&
+        priorAssistantText.includes(
+          `COREONE_SKILL_DISCOVERED sha256=${binding.skillSha256}`,
+        );
+      const handshakeAlreadyInjected = priorSnapshot?.messages.some(
+        (message) =>
+          message.role === 'user' &&
+          message.text.includes(challenge) &&
+          message.text.includes('COREONE_STARTUP_HANDSHAKE_ONLY'),
+      ) === true;
+      if (!handshakeAlreadyAccepted) {
+        if (!handshakeAlreadyInjected) {
+          await writeBoundTerminal(
+            handshakePrompt,
+            'startup-handshake-prompt',
+          );
+        }
+        acceptanceSnapshot = await runtime.waitForTranscript(
+          binding.claudeSessionId,
+          transcriptPath,
+          (candidate) => {
+            const text = assistantTextAfter(candidate, 0);
+            return text.includes(`COREONE_PROMPT_ACK ${expectedChallenge}`) &&
+              text.includes(
+                `COREONE_SKILL_DISCOVERED sha256=${binding.skillSha256}`,
+              );
+          },
+          Math.min(
+            Math.max(request.questionTimeoutMs, DEFAULT_POLL_MS),
+            MAX_VISIBLE_WAIT_MS,
+          ),
+        );
+      }
+      transcriptPath = acceptanceSnapshot?.transcriptPath || transcriptPath;
+      const reviewPromptAlreadyInjected = acceptanceSnapshot?.messages.some(
+        (message) =>
+          message.role === 'user' &&
+          message.text.includes(reviewDeliveryMarker) &&
+          message.text.includes(binding.reviewTargetSha) &&
+          message.text.includes(binding.skillPath),
+      ) === true;
+      if (!reviewPromptAlreadyInjected) {
+        await writeBoundTerminal(reviewPrompt, 'fixed-sha-review-prompt');
+      }
+      const snapshot = await runtime.waitForTranscript(
+        binding.claudeSessionId,
+        transcriptPath,
+        (candidate) => candidate.messages.some(
+          (message) =>
+            message.role === 'user' &&
+            message.text.includes(reviewDeliveryMarker) &&
+            message.text.includes(binding.reviewTargetSha) &&
+            message.text.includes(binding.skillPath),
+        ),
+        60_000,
+      );
+      transcriptPath = snapshot.transcriptPath;
+      const processInfo = await runtime.waitForClaudeProcess(binding, claudePid);
+      claudePid = processInfo.pid;
+      if (
+        snapshot.metadata.cwd !== request.cwd ||
+        snapshot.metadata.effort !== binding.expectedEffort ||
+        snapshot.metadata.permissionMode !== 'bypassPermissions' ||
+        snapshot.metadata.claudeVersion !== binding.expectedClaudeVersion
+      ) {
+        throw new SupervisorFailure(
+          FAILURE.READONLY_REVIEW_CONTRACT_VIOLATION,
+          'new visible Claude session did not retain the exact read-only runtime identity',
+        );
+      }
+      return boundResult(input, {
+        started: true,
+        promptInjected: true,
+        promptSha256: input.promptSha256,
+        promptChallengeAccepted: true,
+        sessionId: binding.claudeSessionId,
+        actualEffort: binding.expectedEffort,
+        permissionMode: snapshot.metadata.permissionMode,
+        skillDiscovered: true,
+        skillInvoked: true,
+        skillSha256: binding.skillSha256,
+        reviewTargetSha: binding.reviewTargetSha,
+        reviewPromptTranscriptBound: true,
+        claudePid,
+        claudeVersion: snapshot.metadata.claudeVersion,
+        transcriptPath: snapshot.transcriptPath,
+        transcriptSha256: snapshot.transcriptSha256,
+        idempotencyKey: input.idempotencyKey,
+      });
+    },
+    async resumeClaude(input) {
+      const existing = await runtime.claudeProcess(binding.tty);
+      if (existing) {
+        assertExternalClaudeCommand(existing, binding);
+        claudePid = existing.pid;
+        const { snapshot } = await inspectBoundClaude();
+        return boundResult(input, {
+          resumed: false,
+          alreadyRunning: true,
+          sessionId: binding.claudeSessionId,
+          actualEffort: snapshot.metadata.effort,
+          idempotencyKey: input.idempotencyKey,
+        });
+      }
+      if (!claudeLaunchPath || !path.isAbsolute(claudeLaunchPath)) {
+        throw new SupervisorFailure(
+          FAILURE.CLAUDE_CLI_MISSING,
+          'the exact visible-shell Claude executable was not retained for same-session resume',
+        );
+      }
+      const command = [
+        `cd -- ${shellQuote(request.cwd)}`,
+        '&&',
+        shellQuote(claudeLaunchPath),
+        '--effort',
+        shellQuote(binding.expectedEffort),
+        '--permission-mode',
+        shellQuote(binding.expectedPermissionMode),
+        '--name',
+        shellQuote(input.sessionName),
+        '--resume',
+        shellQuote(binding.claudeSessionId),
+      ].join(' ');
+      await writeBoundTerminal(command, 'resume-visible-claude');
+      const processInfo = await runtime.waitForClaudeProcess(binding);
+      assertExternalClaudeCommand(processInfo, binding);
+      claudePid = processInfo.pid;
+      const { snapshot } = await inspectBoundClaude();
+      return boundResult(input, {
+        resumed: true,
+        alreadyRunning: false,
+        sessionId: binding.claudeSessionId,
+        actualEffort: snapshot.metadata.effort,
+        idempotencyKey: input.idempotencyKey,
+      });
+    },
+    async revalidateBehavior(input) {
+      if (input.terminalHandle !== terminalHandle) {
+        throw new SupervisorFailure(
+          FAILURE.TERMINAL_HANDLE_MISMATCH,
+          'external behavior revalidation used another terminal handle',
+        );
+      }
+      const { snapshot } = await inspectBoundClaude();
+      const protocol = externalReviewProtocol(snapshot);
+      const completion =
+        protocol.latest?.type === 'complete' &&
+        protocol.latest.reviewTargetSha === binding.reviewTargetSha
+          ? protocol.latest
+          : null;
+      const laterMessages = completion
+        ? snapshot.messages.filter((message) => message.index > completion.message.index)
+        : [];
+      const laterAdmissible =
+        completion &&
+        lastVisibilityCanary &&
+        lastVisibilityResponse &&
+        laterMessages.length > 0 &&
+        laterMessages.every((message) =>
+          (message.role === 'user' && message.text.includes(lastVisibilityCanary)) ||
+          (message.role === 'assistant' && message.text.includes(lastVisibilityResponse)),
+        ) &&
+        laterMessages.some(
+          (message) =>
+            message.role === 'assistant' && message.text.includes(lastVisibilityResponse),
+        );
+      const transcriptPrefixSha256 = completion
+        ? externalTranscriptPrefixSha256(snapshot, completion.message.index)
+        : null;
+      const prefixAdmissible =
+        /^[0-9a-f]{64}$/.test(String(input.transcriptPrefixSha256 || '')) &&
+        transcriptPrefixSha256 === input.transcriptPrefixSha256;
+      return boundResult(input, {
+        status: laterAdmissible && prefixAdmissible ? 'PASS' : 'FAIL',
+        reviewTargetSha: binding.reviewTargetSha,
+        verdict: completion?.verdict || null,
+        transcriptSha256: snapshot.transcriptSha256,
+        transcriptPrefixSha256,
+        acceptedAt:
+          laterAdmissible && prefixAdmissible ? new Date().toISOString() : null,
+      });
+    },
+  };
+}
+
 function unavailableAdapter() {
   const unavailable = async () => ({
     status: 'unavailable',
@@ -2435,10 +4745,14 @@ function unavailableAdapter() {
   };
 }
 
-function loadAdapter(file) {
+function loadAdapter(file, request) {
   if (file) {
     // Deliberately do not resolve, stat, or require the caller-controlled path.
     // A file module cannot carry an unforgeable Codex Desktop host capability.
+    return unavailableAdapter();
+  }
+  if (request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY) {
+    return createExternalVisibleTerminalAdapter(request);
   }
   return unavailableAdapter();
 }
@@ -2449,6 +4763,11 @@ async function main() {
     args = parseCliArgs(process.argv);
     if (args.help) {
       help();
+      return;
+    }
+    if (args.command === 'claim') {
+      const receipt = await claimDedicatedMacTerminal(args.cwd);
+      process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
       return;
     }
     const request = loadCliRequest(args.requestFile);
@@ -2474,7 +4793,10 @@ async function main() {
       );
       return;
     }
-    const adapter = loadAdapter(args.adapterFile);
+    const adapter = loadAdapter(args.adapterFile, request);
+    const adapterOptions = request.supervisionMode === SUPERVISION_MODE.EXTERNAL_VISIBLE_READONLY
+      ? { adapterCapability: EXTERNAL_VISIBLE_ADAPTER_CAPABILITY }
+      : {};
     if (args.command === 'answer') {
       if (!args.answerFile) throw new Error('--answer-file is required for answer');
       const answer = readRegularFile(args.answerFile, 'answer');
@@ -2486,6 +4808,7 @@ async function main() {
         authorizationReceipt,
       }, {
         stateFile,
+        ...adapterOptions,
       });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       if (result.status === 'BLOCKED') process.exitCode = 1;
@@ -2497,6 +4820,7 @@ async function main() {
       const receipt = JSON.parse(readRegularFile(args.ackFile, 'ack-stop receipt'));
       const result = await ackStopSupervisor(request, adapter, receipt, {
         stateFile,
+        ...adapterOptions,
       });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       if (result.status === 'BLOCKED') process.exitCode = 1;
@@ -2506,6 +4830,7 @@ async function main() {
     const result = await runSupervisor(request, adapter, {
       stateFile,
       maxCycles: args.maxCycles,
+      ...adapterOptions,
     });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (result.status === 'BLOCKED') process.exitCode = 1;

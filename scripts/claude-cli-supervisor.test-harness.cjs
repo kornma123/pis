@@ -39,6 +39,31 @@ module.exports = {
       adapterCapability: TEST_ONLY_ADAPTER_CAPABILITY,
     });
   },
+  runExternalVisibleSupervisor(input, runtime, options = {}) {
+    const request = validateRequest(input);
+    const adapter = createExternalVisibleTerminalAdapter(request, runtime);
+    return runSupervisor(request, adapter, {
+      ...options,
+      adapterCapability: EXTERNAL_VISIBLE_ADAPTER_CAPABILITY,
+    });
+  },
+  answerExternalVisibleSupervisor(input, runtime, answer, options = {}) {
+    const request = validateRequest(input);
+    const adapter = createExternalVisibleTerminalAdapter(request, runtime);
+    return answerSupervisor(request, adapter, answer, {
+      ...options,
+      adapterCapability: EXTERNAL_VISIBLE_ADAPTER_CAPABILITY,
+    });
+  },
+  submitMacTerminalWithTestPrimitives(binding, input, primitives) {
+    return writeMacTerminal(binding, input, primitives);
+  },
+  claimDedicatedMacTerminalWithTestPrimitives(cwd, primitives) {
+    return claimDedicatedMacTerminal(cwd, primitives);
+  },
+  makeSupervisorFailureForTest(reason, message, details = {}) {
+    return new SupervisorFailure(reason, message, details);
+  },
 };
 `;
   const instrumented = new Module(`${RUNTIME_PATH}#test-harness`, module);
