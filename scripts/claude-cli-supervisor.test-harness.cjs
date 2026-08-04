@@ -47,6 +47,14 @@ module.exports = {
       adapterCapability: EXTERNAL_VISIBLE_ADAPTER_CAPABILITY,
     });
   },
+  answerExternalVisibleSupervisor(input, runtime, answer, options = {}) {
+    const request = validateRequest(input);
+    const adapter = createExternalVisibleTerminalAdapter(request, runtime);
+    return answerSupervisor(request, adapter, answer, {
+      ...options,
+      adapterCapability: EXTERNAL_VISIBLE_ADAPTER_CAPABILITY,
+    });
+  },
   submitMacTerminalWithTestPrimitives(binding, input, primitives) {
     return writeMacTerminal(binding, input, primitives);
   },

@@ -12,6 +12,7 @@ const { spawnSync } = require('node:child_process');
 const productionRuntime = require('./claude-cli-supervisor.cjs');
 const {
   ackStopSupervisorWithTestAdapter: ackStopSupervisor,
+  answerExternalVisibleSupervisor,
   answerSupervisorWithTestAdapter: answerSupervisor,
   claimDedicatedMacTerminalWithTestPrimitives,
   makeSupervisorFailureForTest,
@@ -456,6 +457,13 @@ function makeExternalRuntime(options = {}) {
     messages.push({ role: 'assistant', text: 'unrelated later response' });
     transcriptSha256 = 'a'.repeat(64);
   };
+  runtime.replaceTranscriptWithCompletionOnly = () => {
+    messages.splice(0, messages.length, {
+      role: 'assistant',
+      text: `COREONE_REVIEW_COMPLETE target=${target} verdict=PASS`,
+    });
+    transcriptSha256 = 'b'.repeat(64);
+  };
   runtime.setEffortSupported = (value) => {
     effortSupported = value === true;
   };
@@ -703,7 +711,10 @@ async function runExternalCase(options = {}) {
   }
 }
 
-async function runExternalRestartCase(injectUnrelatedTurn = false) {
+async function runExternalRestartCase(
+  injectUnrelatedTurn = false,
+  replaceTranscript = false,
+) {
   const state = temporaryStateFile();
   const claim = makeExternalClaim();
   const input = externalRequest({ externalVisibleTerminal: { claim } });
@@ -724,6 +735,7 @@ async function runExternalRestartCase(injectUnrelatedTurn = false) {
     const first = await runExternalVisibleSupervisor(input, runtime, options);
     assert.equal(first.status, 'COMPLETE');
     if (injectUnrelatedTurn) runtime.injectUnrelatedTurn();
+    if (replaceTranscript) runtime.replaceTranscriptWithCompletionOnly();
     return await runExternalVisibleSupervisor(input, runtime, options);
   } finally {
     state.cleanup();
@@ -975,10 +987,9 @@ async function runExternalRestartCase(injectUnrelatedTurn = false) {
       });
       assert.equal(first.status, 'WAITING_CONTROLLER');
       assert.equal(first.reason, 'QUESTION_RESPONSE_REQUIRED');
-      assert.equal(
-        fs.readFileSync(state.file, 'utf8').includes('May I widen the owned scope?'),
-        false,
-      );
+      const persistedQuestion = JSON.parse(fs.readFileSync(state.file, 'utf8'))
+        .pendingQuestion;
+      assert.equal(persistedQuestion.text, 'May I widen the owned scope?');
 
       now += 300_001;
       const secondAdapter = makeAdapter({
@@ -2948,6 +2959,85 @@ module.exports = {
       );
     }
 
+    for (const text of [
+      'May I push this branch?',
+      'May I create a commit?',
+      'Should I run git add now?',
+      'May I open a PR?',
+    ]) {
+      let autoAnswers = 0;
+      let runtime = null;
+      const result = await runExternalCase({
+        captureRuntime(value) {
+          runtime = value;
+        },
+        runtimeOptions: {
+          reviewAssistantText:
+            `COREONE_REVIEW_QUESTION id=q-disguised kind=evidence text=${text}`,
+        },
+        onQuestion: async () => {
+          autoAnswers += 1;
+          return { action: 'answer', text: 'unauthorized automatic answer' };
+        },
+      });
+      assert.equal(result.status, 'WAITING_CONTROLLER', text);
+      assert.equal(result.pendingQuestion.requiresAuthority, true, text);
+      assert.equal(autoAnswers, 0, text);
+      assert.equal(
+        runtime.stats.writePurposes.includes('controller-answer'),
+        false,
+        text,
+      );
+    }
+
+    const state = temporaryStateFile();
+    const claim = makeExternalClaim();
+    const input = externalRequest({ externalVisibleTerminal: { claim } });
+    const runtime = makeExternalRuntime({
+      claim,
+      reviewAssistantText:
+        'COREONE_REVIEW_QUESTION id=q-evidence kind=evidence text=Which existing evidence path should I inspect?',
+    });
+    const options = {
+      stateFile: state.file,
+      factGate: passFactGate,
+      maxCycles: 2,
+      randomUUID: () => '22222222-2222-4222-8222-222222222222',
+      captureInitialGitState: () => ({
+        head: 'c'.repeat(40),
+        branch: 'task-external-review',
+        gitDir: '/repo/.git',
+        tree: 'b'.repeat(40),
+      }),
+    };
+    try {
+      const waiting = await runExternalVisibleSupervisor(input, runtime, options);
+      assert.equal(waiting.status, 'WAITING_CONTROLLER');
+      assert.equal(
+        waiting.pendingQuestion.text,
+        'Which existing evidence path should I inspect?',
+      );
+      const persisted = JSON.parse(fs.readFileSync(state.file, 'utf8'));
+      assert.equal(
+        persisted.pendingQuestion.text,
+        'Which existing evidence path should I inspect?',
+      );
+      const answered = await answerExternalVisibleSupervisor(
+        input,
+        runtime,
+        'Inspect the already-owned evidence directory only.',
+        options,
+      );
+      assert.equal(answered.status, 'ACTIVE');
+      assert.equal(answered.pendingQuestion, null);
+      assert.equal(
+        runtime.stats.writePurposes.includes('controller-answer'),
+        true,
+      );
+    } finally {
+      state.cleanup();
+    }
+
     const unknown = await runExternalCase({
       runtimeOptions: {
         reviewAssistantText:
@@ -3199,6 +3289,10 @@ module.exports = {
     assert.equal(result.status, 'COMPLETE');
     assert.equal(result.externalSession.transcriptSha256, 'f'.repeat(64));
     assert.equal(result.evidenceLayers.REVIEW_BEHAVIOR_ACCEPTANCE.status, 'PASS');
+
+    const replaced = await runExternalRestartCase(false, true);
+    assert.equal(replaced.status, 'BLOCKED');
+    assert.equal(replaced.reason, FAILURE.STALE_COMPLETION);
   });
 
   await checkExternal('external visible COMPLETE becomes stale after an unrelated later turn', async () => {

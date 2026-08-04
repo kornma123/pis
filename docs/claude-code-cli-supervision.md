@@ -118,7 +118,7 @@ request JSON 只保存调度合同，不内嵌 prompt 正文：
 
 同一 task 的 `run/answer/ack-stop` 受 Git 外独占 lease 保护，状态文件每次写入做 revision CAS；并发控制者只能得到 `SUPERVISOR_LEASE_HELD`，不得第二次 create/launch。应用或任务异常退出后，仅在 owner PID 已确定不存在（`ESRCH`）时自动回收旧 lease；owner 仍存活或证据不可解析时继续失败关闭。
 
-外部自动启动是有副作用的三阶段操作：先出现精确 Claude 进程，再用轻量独立回合取得 Skill digest 与 prompt ACK，最后才显式调用 Skill 投递复核。阶段间等待可能使 Terminal 失去前台，因此启动命令、握手和正式复核三次写入都必须在写入前重新聚焦并现场复核同一 app/window id/selected TTY；仅凭先前 canary 或前一阶段的窗口状态不得继续。若控制器在任一阶段之间退出，重试必须在已持久的同一 terminal handle 上核对精确 launch command、session id、runtime metadata 与 transcript；全部匹配时从最后一个已证明阶段续接，不得再启动进程、重复握手或重复投递复核。Claude 原生后台 agent 可以是同一可见会话的内部实现，但后台 fork 的输出单独不能充当第四层行为验收；结果必须回传原前台 session，并从该可见会话的当前 transcript 或终端回读确认。无已持久 handle、任一身份不匹配或 transcript 中出现无关后续回合时仍 fail-closed。
+外部自动启动是有副作用的三阶段操作：先出现精确 Claude 进程，再用轻量独立回合取得 Skill digest 与 prompt ACK，最后才显式调用 Skill 投递复核。阶段间等待可能使 Terminal 失去前台，因此启动命令、握手和正式复核三次写入都必须在写入前重新聚焦并现场复核同一 app/window id/selected TTY；仅凭先前 canary 或前一阶段的窗口状态不得继续。若控制器在任一阶段之间退出，重试必须在已持久的同一 terminal handle 上核对精确 launch command、session id、runtime metadata 与 transcript；全部匹配时从最后一个已证明阶段续接，不得再启动进程、重复握手或重复投递复核。COMPLETE 首次验收还要保存截至该 record 的 canonical transcript prefix digest；重启重验只接受保留同一 prefix、随后仅追加本轮 canary 的 transcript，截断、替换或丢失握手/Skill/review prompt 历史均 fail-closed。Claude 原生后台 agent 可以是同一可见会话的内部实现，但后台 fork 的输出单独不能充当第四层行为验收；结果必须回传原前台 session，并从该可见会话的当前 transcript 或终端回读确认。无已持久 handle、任一身份不匹配或 transcript 中出现无关后续回合时仍 fail-closed。
 
 调度者收到 `WAITING_CONTROLLER` 后，在权限与 scope 不扩大的问题上可通过库 API 的 `onQuestion` 立即回答，或调用：
 
@@ -128,9 +128,9 @@ node scripts/claude-cli-supervisor.cjs answer \
   --answer-file='<控制者答案文本>'
 ```
 
-answer 路径会重新做同句柄 canary，再把答案写回原终端；不得要求 PM 点击、切换、粘贴或输入。外部协议只接受封闭 question kind：`clarification/evidence` 默认不扩权；`permission/ownership/product-direction/github-write/write/merge/publish/deploy/release/external-send` 必须 `requiresAuthority=true`；未知 kind、引用/前后缀/重复/冲突的 terminal record，或同一回合同时出现 QUESTION 与 COMPLETE，均 fail-closed。一个 QUESTION 只能在 transcript 中出现后续、非 canary/handshake/review-prompt 的 `user` 回答后，才可被下一条 QUESTION 或 COMPLETE 取代；无回答的跨 assistant `QUESTION → COMPLETE` 不得压掉待处理问题。需要新增权限、ownership、产品方向或 GitHub 写入的问题会持久锁存，禁止 `onQuestion` 自动回答；只有附带 `--authorization-receipt=<JSON>` 的显式回答才可解除。回执必须精确绑定 `threadId + sessionId + terminalHandle + terminalGeneration + questionId + questionTextSha256`，另含 decision id、授权人、授权时间和范围；过期、过早、未来时间或任一上下文不一致均稳定拒绝。结构化 stop 同样跨重启锁存，只能由 `ack-stop --ack-file=<JSON>` 显式确认，确认后会话进入 `STOPPED`，不得自动 resume。
+answer 路径会重新做同句柄 canary，再把答案写回原终端；不得要求 PM 点击、切换、粘贴或输入。待答问题的原文与 hash 必须保存在 Git 外、权限 `0600` 的 task state，并在 `run/status` 回执中返回，使 Codex 重启或续接后仍知道要回答什么；回答成功后原文随 pending question 一并清除。外部协议只接受封闭 question kind：`clarification/evidence` 默认不扩权；`permission/ownership/product-direction/github-write/write/merge/publish/deploy/release/external-send` 必须 `requiresAuthority=true`。模型即使把问题伪标为 `clarification/evidence`，文本中出现 push/commit/git add/open PR/create file 等写入语义仍必须升级为 authority question；未知 kind、引用/前后缀/重复/冲突的 terminal record，或同一回合同时出现 QUESTION 与 COMPLETE，均 fail-closed。一个 QUESTION 只能在 transcript 中出现后续、非 canary/handshake/review-prompt 的 `user` 回答后，才可被下一条 QUESTION 或 COMPLETE 取代；无回答的跨 assistant `QUESTION → COMPLETE` 不得压掉待处理问题。需要新增权限、ownership、产品方向或 GitHub 写入的问题会持久锁存，禁止 `onQuestion` 自动回答；只有附带 `--authorization-receipt=<JSON>` 的显式回答才可解除。回执必须精确绑定 `threadId + sessionId + terminalHandle + terminalGeneration + questionId + questionTextSha256`，另含 decision id、授权人、授权时间和范围；过期、过早、未来时间或任一上下文不一致均稳定拒绝。结构化 stop 同样跨重启锁存，只能由 `ack-stop --ack-file=<JSON>` 显式确认，确认后会话进入 `STOPPED`，不得自动 resume。
 
-恢复状态保存在 `git rev-parse --git-path coreone/claude-cli-supervisor/<task-hash>.json`，位于 Git 外且按 worktree 隔离。Codex app/task 重启后用同一 request 重跑 `run`：监督器校验 thread/task/prompt/scope、初始 branch 与 per-worktree gitdir 绑定，重新证明原 terminal handle/generation，再以原 Claude session id 续接；raw prompt、问题正文、token、终端原文和凭据都不落状态文件。线程迁移没有隐式 fallback；当前 runtime 未实现授权 handoff，所以 thread 变化一律 `STATE_BINDING_MISMATCH`。
+恢复状态保存在 `git rev-parse --git-path coreone/claude-cli-supervisor/<task-hash>.json`，位于 Git 外、按 worktree 隔离且权限为 `0600`。Codex app/task 重启后用同一 request 重跑 `run`：监督器校验 thread/task/prompt/scope、初始 branch 与 per-worktree gitdir 绑定，重新证明原 terminal handle/generation，再以原 Claude session id 续接；仅待答问题原文与 hash 为恢复 answer 链而暂存，raw prompt、token、终端全文和凭据仍不落状态文件。线程迁移没有隐式 fallback；当前 runtime 未实现授权 handoff，所以 thread 变化一律 `STATE_BINDING_MISMATCH`。
 
 以下已知失败形态全部属于回归负例：打开动作只返回 `queued`；应用回读显示未附着；回读的是主 checkout 的人工终端而非目标 handle；工具 PTY 能完成但前端不可见。它们只能报告 `TERMINAL_VISIBILITY_UNPROVEN` 或 `TERMINAL_HANDLE_MISMATCH`，不得声称 Claude 已启动，更不得把点击/输入步骤转交 PM。
 
@@ -143,7 +143,7 @@ answer 路径会重新做同句柄 canary，再把答案写回原终端；不得
 1. `STATIC_INSTALL`：Claude 可执行对象与目标 worktree 内 Skill 普通文件、精确 digest；
 2. `SKILL_DISCOVERY`：同一 Claude session 实际读取 Skill，并回报它独立计算的相同 digest；
 3. `VISIBLE_SESSION_CANARY`：同一 window/TTY 的随机 challenge-response；预期响应不得原样写在提示中；
-4. `REVIEW_BEHAVIOR_ACCEPTANCE`：同一 transcript 对精确 candidate SHA 给出结构化终态，transcript SHA-256 已回读。
+4. `REVIEW_BEHAVIOR_ACCEPTANCE`：同一 transcript 对精确 candidate SHA 给出结构化终态，transcript SHA-256 已回读，并保存截至终态的 canonical prefix digest 供重启时证明 append-only。
 
 四层任一为 `UNVERIFIED/FAIL` 时，整体不得称 runtime/review PASS。static install PASS 不代表 Skill 已发现；canary PASS 不代表行为验收完成；行为 PASS 也不构成代码结论 PASS，更不构成修复、合并、发布或部署授权。
 

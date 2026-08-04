@@ -805,12 +805,15 @@ async function revalidateExternalBehavior(adapter, request, state, options) {
     threadId: request.threadId,
     sessionId: state.sessionId,
     reviewTargetSha: request.externalVisibleTerminal.reviewTargetSha,
+    transcriptPrefixSha256: state.externalSession?.transcriptPrefixSha256,
   });
   assertTerminalBinding(state, acceptance, 'revalidateBehavior');
   if (
     acceptance?.status !== 'PASS' ||
     acceptance?.reviewTargetSha !== request.externalVisibleTerminal.reviewTargetSha ||
-    !/^[0-9a-f]{64}$/.test(String(acceptance?.transcriptSha256 || ''))
+    !/^[0-9a-f]{64}$/.test(String(acceptance?.transcriptSha256 || '')) ||
+    acceptance?.transcriptPrefixSha256 !==
+      state.externalSession?.transcriptPrefixSha256
   ) {
     throw new SupervisorFailure(
       FAILURE.STALE_COMPLETION,
@@ -821,6 +824,7 @@ async function revalidateExternalBehavior(adapter, request, state, options) {
   state.externalSession = {
     ...(state.externalSession || {}),
     transcriptSha256: acceptance.transcriptSha256,
+    transcriptPrefixSha256: acceptance.transcriptPrefixSha256,
     reviewVerdict: acceptance.verdict || state.externalSession?.reviewVerdict || null,
     behaviorAcceptedAt:
       acceptance.acceptedAt || state.externalSession?.behaviorAcceptedAt || null,
@@ -954,6 +958,7 @@ function publicResult(state, overrides = {}) {
       ? {
           id: state.pendingQuestion.id,
           kind: state.pendingQuestion.kind,
+          text: state.pendingQuestion.text,
           textSha256: state.pendingQuestion.textSha256,
           requiresAuthority: state.pendingQuestion.requiresAuthority,
           firstSeenAtMs: state.pendingQuestion.firstSeenAtMs,
@@ -1256,6 +1261,7 @@ async function probeClaude(adapter, request, state, options) {
       );
     }
     state.externalSession = {
+      ...(state.externalSession || {}),
       terminalApp: contract.terminalApp,
       windowId: contract.windowId,
       tty: contract.tty,
@@ -1445,6 +1451,7 @@ function latchQuestion(state, question, now) {
   state.pendingQuestion = {
     id: normalized.id,
     kind: normalized.kind,
+    text: normalized.text,
     textSha256: normalized.textSha256,
     requiresAuthority: normalized.requiresAuthority,
     firstSeenAtMs: normalized.firstSeenAtMs,
@@ -2545,7 +2552,10 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
         if (
           acceptance.status !== 'PASS' ||
           acceptance.reviewTargetSha !== contract.reviewTargetSha ||
-          !/^[0-9a-f]{64}$/.test(String(acceptance.transcriptSha256 || ''))
+          !/^[0-9a-f]{64}$/.test(String(acceptance.transcriptSha256 || '')) ||
+          !/^[0-9a-f]{64}$/.test(
+            String(acceptance.transcriptPrefixSha256 || ''),
+          )
         ) {
           throw new SupervisorFailure(
             acceptance.reviewTargetSha !== contract.reviewTargetSha
@@ -2558,6 +2568,7 @@ async function runSupervisorUnlocked(input, adapterInput, optionOverrides = {}) 
         state.externalSession = {
           ...(state.externalSession || {}),
           transcriptSha256: acceptance.transcriptSha256,
+          transcriptPrefixSha256: acceptance.transcriptPrefixSha256,
           reviewVerdict: acceptance.verdict || null,
           behaviorAcceptedAt: acceptance.acceptedAt || null,
         };
@@ -3843,7 +3854,7 @@ function assertExternalClaudeCommand(processInfo, binding) {
 }
 
 function externalQuestionTextRequiresAuthority(text) {
-  return /(?:\b(?:permission|authori[sz]e|ownership|owner|github|issue|pull request|comment|write|edit|modify|merge|publish|deploy|release|send|scope expansion)\b|\u6743\u9650|\u6388\u6743|\u6240\u6709\u6743|\u8d23\u4efb\u4eba|\u5199\u5165|\u4fee\u6539|\u8bc4\u8bba|\u5408\u5e76|\u53d1\u5e03|\u90e8\u7f72|\u5bf9\u5916\u53d1\u9001)/i.test(
+  return /(?:\b(?:permission|authori[sz]e|ownership|owner|github|issue|pull request|comment|write|edit|modify|push|git\s+add|open\s+(?:a\s+)?pr|create\s+(?:a\s+)?(?:commit|branch|pull request|pr|file)|delete|remove|merge|publish|deploy|release|send|scope expansion)\b|\u6743\u9650|\u6388\u6743|\u6240\u6709\u6743|\u8d23\u4efb\u4eba|\u5199\u5165|\u4fee\u6539|\u8bc4\u8bba|\u5408\u5e76|\u53d1\u5e03|\u90e8\u7f72|\u5bf9\u5916\u53d1\u9001)/i.test(
     String(text),
   );
 }
@@ -3997,6 +4008,17 @@ function externalReviewProtocol(snapshot) {
     records,
     latest,
   };
+}
+
+function externalTranscriptPrefixSha256(snapshot, lastMessageIndex) {
+  const messages = snapshot.messages
+    .filter((message) => message.index <= lastMessageIndex)
+    .map((message) => ({
+      index: message.index,
+      role: message.role,
+      text: message.text,
+    }));
+  return sha256(JSON.stringify(messages));
 }
 
 function assistantTextAfter(snapshot, cursor = 0) {
@@ -4325,6 +4347,10 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
               reviewTargetSha: completion.reviewTargetSha,
               verdict: completion.verdict,
               transcriptSha256: snapshot.transcriptSha256,
+              transcriptPrefixSha256: externalTranscriptPrefixSha256(
+                snapshot,
+                completion.message.index,
+              ),
               acceptedAt: new Date().toISOString(),
             }
           : null,
@@ -4667,12 +4693,20 @@ function createExternalVisibleTerminalAdapter(request, runtimeInput = null) {
           (message) =>
             message.role === 'assistant' && message.text.includes(lastVisibilityResponse),
         );
+      const transcriptPrefixSha256 = completion
+        ? externalTranscriptPrefixSha256(snapshot, completion.message.index)
+        : null;
+      const prefixAdmissible =
+        /^[0-9a-f]{64}$/.test(String(input.transcriptPrefixSha256 || '')) &&
+        transcriptPrefixSha256 === input.transcriptPrefixSha256;
       return boundResult(input, {
-        status: laterAdmissible ? 'PASS' : 'FAIL',
+        status: laterAdmissible && prefixAdmissible ? 'PASS' : 'FAIL',
         reviewTargetSha: binding.reviewTargetSha,
         verdict: completion?.verdict || null,
         transcriptSha256: snapshot.transcriptSha256,
-        acceptedAt: laterAdmissible ? new Date().toISOString() : null,
+        transcriptPrefixSha256,
+        acceptedAt:
+          laterAdmissible && prefixAdmissible ? new Date().toISOString() : null,
       });
     },
   };
